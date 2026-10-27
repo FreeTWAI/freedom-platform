@@ -377,3 +377,43 @@ test('layout replay of an open dialog starts a fresh closed session rather than 
     assert.equal(s.events.at(-1).reason,'dismiss');assert.equal(s.events.at(-1).origin,s.origin);
   });
 });
+
+test('helper secondary buttons own a paired theme surface instead of the dark global fallback',()=>{
+  // Declaration/token contract only, not a CSS cascade or browser acceptance claim.
+  const css=readFileSync(new URL('../../apps/portal-web/src/modules/platform-helper/helper.css',import.meta.url),'utf8');
+  const rule=css.match(/\.platform-helper \.btn-secondary\s*\{([^}]+)\}/)?.[1];
+  assert.ok(rule,'helper must own its secondary surface');
+  assert.match(rule,/background:\s*var\(--bg-elev\)/);
+  assert.match(rule,/color:\s*var\(--ink\)/);
+  assert.match(rule,/border:\s*1px solid var\(--line\)/);
+  assert.match(css,/\.platform-helper \.btn-secondary:hover:not\(:disabled\)/);
+  assert.match(css,/\.platform-helper \.btn-secondary:focus-visible/);
+  assert.match(css,/outline:\s*2px solid var\(--focus\)/);
+});
+test('all helper appearance palettes pair readable text and focus with the actual surface tokens',async()=>{
+  const {EXPERIENCE_PROFILES}=await import('../../apps/portal-web/src/experience-profiles.js');
+  function tokens(file:string){
+    const css=readFileSync(new URL(`../../apps/portal-web/src/${file}`,import.meta.url),'utf8');
+    return Object.fromEntries([...css.matchAll(/(--(?:ink|bg-elev|focus))\s*:\s*(#[\da-fA-F]+)/g)].map(match=>[match[1],match[2]]));
+  }
+  function luminance(hex:string){
+    const expanded=hex.length===4?'#'+[...hex.slice(1)].map(c=>c+c).join(''):hex;
+    const rgb=[1,3,5].map(i=>parseInt(expanded.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+    return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+  }
+  function ratio(a:string,b:string){const values=[luminance(a),luminance(b)].sort((x,y)=>x-y);return (values[1]+.05)/(values[0]+.05);}
+  for(const profile of Object.values(EXPERIENCE_PROFILES)){
+    const palette={...tokens('styles.css'),...tokens('rpg-theme.css'),...(profile.baseTheme!=='dark'?tokens('light-theme.css'):{}),...(profile.baseTheme==='versefolk'?tokens('versefolk-theme.css'):{}),...(profile.skin==='dragon'?tokens('dragon-theme.css'):{})};
+    assert.ok(ratio(palette['--ink'],palette['--bg-elev'])>=4.5,profile.id+' text');
+    assert.ok(ratio(palette['--focus'],palette['--bg-elev'])>=3,profile.id+' focus');
+  }
+});
+test('isolated helper fixture loads real appearance CSS, not only a data-theme label',()=>{
+  const source=readFileSync(new URL('../e2e/platform-helper-fixture.ts',import.meta.url),'utf8');
+  const main=readFileSync(new URL('../../apps/portal-web/src/main.tsx',import.meta.url),'utf8');
+  const styles=[...main.matchAll(/import ['"]\.\/([^'"]+\.css)['"]/g)].map(match=>match[1]);
+  assert.ok(styles.includes('light-theme.css')&&styles.includes('dragon-theme.css'));
+  let previous=-1;
+  for(const file of styles){const index=source.indexOf(`import '../../apps/portal-web/src/${file}'`);assert.ok(index>previous,file+' must follow actual main CSS order');previous=index;}
+  assert.ok(source.indexOf("import {PlatformHelper}")>previous,'helper CSS follows the main styles as in the lazy App');
+});
