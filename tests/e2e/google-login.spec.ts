@@ -91,6 +91,16 @@ test('provider cancellation consumes state without completing login or reflectin
   await expect(result.getByRole('status')).toContainText('已取消這次 Google 授權');expect(completed).toBe(0);expect(cancelled).toBe(1);expect(page.url()).not.toContain('error');await expect(page.getByText('UNTRUSTED_PROVIDER_TEXT')).toHaveCount(0);
 });
 
+for(const [entry,heading] of [['/#newbie-village','新手村任務'],['/#community-hub','社群入口總覽'],['/#tester-map','測試員地圖']])test(`provider cancellation takes precedence over anonymous entry ${entry}`,async({page})=>{
+  let cancelled=0;
+  await page.route('**/api/v1/auth/google/cancel',async route=>{cancelled++;await route.fulfill({json:{cancelled:true}})});
+  await remember(page,entry);await callback(page,`state=${STATE}&error=access_denied`);
+  const result=page.getByRole('region',{name:'完成 Google 登入',exact:true});
+  await expect(result).toBeVisible();await expect(result.getByRole('status')).toContainText('已取消這次 Google 授權');
+  await expect(page.getByRole('heading',{name:heading,exact:true})).toHaveCount(0);
+  expect(new URL(page.url()).hash).toBe(new URL(entry,'http://localhost').hash);expect(cancelled).toBe(1);
+});
+
 for(const entry of ['https://attacker.example/','//attacker.example/','/google/callback?code=secret','/?return_to=https%3A%2F%2Fattacker.example%2F','/#reset-password/'+STATE])test(`rejects unsafe saved continuity: ${entry}`,async({page})=>{
   let completed=0;await page.route('**/api/v1/auth/google/complete',async route=>{completed++;await route.fulfill({json:PROOF})});
   await remember(page,entry);await callback(page);await expect(page.getByRole('alert')).toContainText('未完成或已失效');expect(new URL(page.url()).pathname).toBe('/');expect(new URL(page.url()).search).toBe('');expect(completed).toBe(0);
