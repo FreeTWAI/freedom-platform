@@ -54,7 +54,7 @@ export function SkillInstall({bookId}:{bookId:string}){
       <p role="status" aria-live="polite" className={'skill-install-status '+status.kind}>{status.text}</p>
       {commands&&<div className="stack"><p className="field-hint">macOS／Linux</p><pre className="skill-intro-command"><code>{commands.shell}</code></pre><p className="field-hint">Windows PowerShell</p><pre className="skill-intro-command"><code>{commands.powershell}</code></pre></div>}
       <p className="field-hint">{folderSupported?'按「一鍵安裝」後選擇 '+where.userPath+'（選到上一層的 .claude 等資料夾也可以）。這類資料夾預設隱藏：macOS 按 Cmd＋Shift＋.，Windows 可在網址列貼上路徑。':'這個瀏覽器不能直接寫入資料夾；桌面版 Chrome 或 Edge 可以一鍵安裝。'}</p>
-      <p className="field-hint">安裝的是工坊收錄版本，每個檔案都會先核對內容。網頁只能寫入你選的那個資料夾，不會讀取其他檔案；資料夾內的 .freedom-install.json 只記錄版本與指紋。</p>
+      <p className="field-hint">安裝的是工坊收錄版本，每個檔案都會先核對內容。遇到既有非空技能資料夾或偵測到同名檔案出現時會停止；安裝器永不刪除檔案，失敗可能留下部分檔案。網頁只能寫入你選的那個資料夾，不會讀取其他檔案；資料夾內的 .freedom-install.json 只記錄版本與指紋。</p>
     </div>
   </details>;
 }
