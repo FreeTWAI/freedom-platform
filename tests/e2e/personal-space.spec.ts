@@ -113,6 +113,8 @@ test('PERSONAL-SPACE-UI-08: language/theme panels preserve an account form draft
  await login(page);await page.getByRole('link',{name:'編輯資料與分享設定',exact:true}).click();await expect(page).toHaveURL(/#account$/);const input=page.getByLabel('社群顯示名稱',{exact:true});await input.fill('尚未儲存的本人草稿');
  for(const label of ['English','日本語','한국어','Español','繁體中文']){await openSettingsPanel(page,'language');const option=page.getByRole('menuitemradio',{name:label,exact:true});await option.click();await expect(option).toBeFocused();await expect(input).toHaveValue('尚未儲存的本人草稿');await closeSettingsMenu(page);}
  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'自由工坊－夜航',exact:true}).click();await closeSettingsMenu(page);await expect(input).toHaveValue('尚未儲存的本人草稿');
+ // This journey intentionally leaves the unsaved form; accept only this confirmation.
+ page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');expect(dialog.message()).toContain('尚未儲存');void dialog.accept();});
  await page.locator('.settings-menu-button').click();await page.goBack();await expect(page).toHaveURL(/#profile$/);await expect(page.getByRole('menu')).toHaveCount(0);
 });
 

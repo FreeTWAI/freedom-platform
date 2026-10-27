@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { connect } from 'node:net';
 import sharp from 'sharp';
-import { navigate, signOut } from './navigation.js';
+import { navigate, signOut, openAccountSettings } from './navigation.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 import { DEMO_USERS } from '../../packages/testing/seed.js';
 import { test, expect, type APIResponse, type Page } from './fixtures.js';
@@ -54,6 +54,7 @@ async function loginAs(page: Page, email: string) {
   await page.getByRole('button', { name: '登入', exact: true }).click();
   await expect(page.getByRole('button', { name: '設定', exact: true })).toBeVisible();
   await navigate(page, '我的名片');
+  await openAccountSettings(page, '更換頭像', '查看目前的會員名片');
 }
 
 async function saveAvatar(page: Page, color: string) {
@@ -71,6 +72,7 @@ async function saveAvatar(page: Page, color: string) {
   await expect.poll(() => savedPhoto.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(256);
   await page.reload();
   await navigate(page, '我的名片');
+  await openAccountSettings(page, '更換頭像', '查看目前的會員名片');
   await expect(savedPhoto).toHaveAttribute('src', avatarUrl!);
   await expect.poll(() => savedPhoto.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(256);
   const response = await page.request.get(avatarUrl!);
