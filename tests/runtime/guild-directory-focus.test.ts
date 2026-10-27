@@ -35,3 +35,18 @@ test('secondary editor cancel uses the visible summary when tools are collapsed 
 test('secondary editor cancel never focuses a hidden or disconnected fallback', () => {
   for (const state of ['closed', 'hidden', 'disconnected']) assert.deepEqual(run('missing', state), ['close']);
 });
+
+test('public verifier opens and checks advanced member filters before selecting them', () => {
+  const verifier = readFileSync(new URL('../../scripts/verify-public.mjs', import.meta.url), 'utf8');
+  const sections = [...verifier.matchAll(/await navigate\(page, '工坊夥伴'\);([\s\S]*?)await screenshot\('public-member-directory-mobile\.png'\);/g)];
+  assert.equal(sections.length, 1, 'fail closed when the member-directory section boundary changes');
+  const section = sections[0][1];
+  const click = section.indexOf("await page.locator('.member-directory .directory-advanced > summary').click();");
+  const opened = section.indexOf("await expect(page.locator('.member-directory .directory-advanced')).toHaveAttribute('open','');");
+  assert.ok(click >= 0, 'click the scoped advanced-filter summary');
+  assert.ok(opened > click, 'assert the disclosure is open after clicking its summary');
+  for (const name of ['依公會篩選', '排序方式']) {
+    const selection = section.indexOf(`await page.getByRole('combobox',{name:'${name}',exact:true}).selectOption(`);
+    assert.ok(selection > opened, `${name} selection must follow the open assertion`);
+  }
+});
