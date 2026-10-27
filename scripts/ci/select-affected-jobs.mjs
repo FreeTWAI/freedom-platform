@@ -1,7 +1,7 @@
 // Conservative job selection for .github/workflows/verify.yml.
 // Operator-only changes use existing deploy and integrity coverage on PR/main.
-// Other pull requests narrow inside the explicit docs allowlist or the fixed
-// frontend leaf or informational handoff profiles below. An ordinary modification of the exact root
+// Other pull requests narrow through docs, frontend leaf, guild presentation
+// or minimal profiles. An ordinary modification of the exact root
 // README may use docs mode; its mandatory context role remains unchanged.
 // Leaf edits retain all runtime/browser/static
 // jobs and require unchanged, compatible baseline/candidate descriptor graphs.
@@ -16,6 +16,7 @@ import { appendFileSync } from 'node:fs';
 import { isAbsolute, resolve, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCTIONS, owns } from '../../packages/contribution-tools/context.mjs';
+import { isModuleSourcePath } from '../../packages/contribution-tools/modules.mjs';
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
@@ -49,23 +50,149 @@ export const ALWAYS_ON_INTEGRITY_COMMANDS = Object.freeze([
 export const DOCS_ALLOWLIST_PREFIXES = Object.freeze([
   'docs/development/', 'docs/design/', 'docs/plans/', 'docs/releases/',
 ]);
-// scripts/update-inventory.py rewrites this manifest for every hashed source
-// change. It remains under docs/platform-plan/ for every other classification.
+// Historical snapshot; CI and main source archives use Git objects. The exact
+// legacy manifest may still accompany otherwise qualifying changes.
 export const GENERATED_INVENTORY_PATH = 'docs/platform-plan/verification/2026-09-20-file-inventory.json';
 
-// Informational handoffs only. Runtime/spec/control documents and every dated
-// rollout JSON remain full; a filename or a candidate declaration is no schema.
-export const HANDOFF_DOCS_PATHS = Object.freeze([
-  'docs/platform-plan/execution/commerce/work-plan.md',
-  'docs/platform-plan/execution/supplier-console/work-plan.md',
-  'docs/platform-plan/execution/guild-launchpad/README.md',
-  'docs/platform-plan/execution/unified-foundation/closeout.md',
-  'docs/platform-plan/execution/unified-foundation/current-state.json',
+// These profiles select existing jobs only. Consumer evidence and exclusions are
+// documented in affected-jobs.md; ownership metadata alone does not execute docs.
+export const MINIMAL_JOB_PROFILES = Object.freeze({
+  ci_tools: Object.freeze([]),
+  ci_tools_document_inputs: Object.freeze(['governance-consumers']),
+  plan_receipt_docs: Object.freeze([]),
+  plan_document_inputs: Object.freeze(['governance-consumers']),
+  module_app_markdown: Object.freeze([]),
+});
+const minimalJobs = reason => Object.hasOwn(MINIMAL_JOB_PROFILES, reason) ? MINIMAL_JOB_PROFILES[reason] : null;
+const PLAN_INPUTS = new Set([
+  'execution/unified-foundation/current-state.json',
+  'execution/first-work-batch.md', 'execution/acceptance-matrix.md',
+  'execution/milestones.md', 'execution/spec-index.md',
+].map(path => 'docs/platform-plan/' + path));
+const MODULE_MARKDOWN_INPUTS = new Set([
+  'modules/agent-commerce/operations/notifications/README.md',
+  'modules/module-registry/platform-hold.md',
 ]);
-export const HANDOFF_DOCS_JOBS = Object.freeze(['governance-consumers']);
-const HANDOFF_DOCS_REASON = 'informational_handoff_docs';
-const handoffOwner = path => path === HANDOFF_DOCS_PATHS[1] ? 'supplier-console'
-  : HANDOFF_DOCS_PATHS.slice(3).includes(path) ? 'governance' : null;
+function planDocument(path) {
+  return path.startsWith('docs/platform-plan/') && /\.(?:md|json|yaml|yml|csv|txt)$/.test(path)
+    && !(path.startsWith('docs/platform-plan/contracts/') && !path.endsWith('.md'))
+    && !path.startsWith('docs/platform-plan/contracts/tests/')
+    && !path.startsWith('docs/platform-plan/execution/tools/')
+    && !hiddenSegment(path) && !path.endsWith('/AGENTS.md');
+}
+function planInput(path) {
+  return PLAN_INPUTS.has(path) || path.startsWith('docs/platform-plan/execution/specs/')
+    || path.startsWith('docs/platform-plan/execution/guild-launchpad/');
+}
+const RETIRED_WORKER_FILES = Object.freeze([
+  'packages/contribution-tools/circleci-worker-status.mjs',
+  'packages/contribution-tools/test/circleci-worker-status.test.mjs',
+]);
+const CI_TOOL_FILES = new Set([
+  '.github/workflows/verify.yml', 'governance/schemas/module.schema.json',
+  'packages/contribution-tools/context.mjs', 'packages/contribution-tools/modules.mjs',
+  'packages/contribution-tools/test/context.test.mjs', 'packages/contribution-tools/test/modules.test.mjs',
+  'packages/contribution-tools/test/modules-repository.test.mjs',
+  'scripts/ci/select-affected-jobs.mjs', 'scripts/ci/select-affected-jobs.test.mjs',
+  'scripts/ci/guild-presentation-profile.test.mjs',
+]);
+const CI_TOOL_DOCS = new Set(['governance/README.md', 'packages/contribution-tools/worker-unit-routing.md',
+  'scripts/ci/affected-jobs.md', 'scripts/ci/release-inventory.md', 'scripts/repository-bootstrap/consumer-source-profiles.md']);
+const RETIRED_WORKER_STEPS = "      - name: Checkout the pinned worker status guard\n        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n        with:\n          repository: ${{ job.workflow_repository }}\n          ref: ${{ job.workflow_sha }}\n          path: .freedom/worker-status\n          persist-credentials: false\n      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\n        with:\n          node-version: '24'\n      - name: Require CircleCI worker success for an identical same-repository PR tree\n        id: worker-provider\n        env:\n          GH_STATUS_TOKEN: ${{ github.token }}\n        run: node .freedom/worker-status/packages/contribution-tools/circleci-worker-status.mjs\n";
+export function ciToolsWorkflowProven(before, after) {
+  const clean = text => text.split('\n').filter(line => !line.trimStart().startsWith('#')).join('\n');
+  if (typeof before !== 'string' || typeof after !== 'string' || before.length > 128000 || after.length > 128000) return false;
+  if (clean(before) === clean(after)) return true;
+  const marker='\n  static-worker:\n';
+  if(before.split(marker).length!==2)return false;
+  const start=before.indexOf(marker)+marker.length,rest=before.slice(start);
+  const next=rest.search(/\n  [a-z][a-z0-9-]*:\n/),end=next<0?before.length:start+next;
+  const block=before.slice(start,end),condition="        if: steps.worker-provider.outputs.run_github == 'true'\n";
+  if(block.split('\n').some(line=>/^ {1,3}\S/.test(line)&&!line.trimStart().startsWith('#'))
+    ||[RETIRED_WORKER_STEPS,'      statuses: read\n',condition].some(part=>block.split(part).length!==2))return false;
+  const changed=block.replace(RETIRED_WORKER_STEPS,'').replace('      statuses: read\n','').replace(condition,'');
+  return clean(before.slice(0,start)+changed+before.slice(end)) === clean(after);
+}
+export function ciToolsSchemaProven(before, after) {
+  try {
+    const a=JSON.parse(before),b=JSON.parse(after);
+    if (![64,256].includes(a.properties.owned_paths.maxItems) || b.properties.owned_paths.maxItems !== 256) return false;
+    a.properties.owned_paths.maxItems=256;
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch { return false; }
+}
+export function decideCiToolsProfile(input) {
+  const full = {profile:'full',reason:'outside_ci_tools'};
+  if (input?.event !== 'pull_request' || input.diffComplete !== true || input.nonExecutableBlobsProven !== true
+    || input.descriptorsProven !== true || !input.changes?.length || input.changes.length > CHANGE_LIMIT) return full;
+  const paths=input.changes.map(c=>c.path), deleted=input.changes.filter(c=>c.status==='D').map(c=>c.path);
+  if (new Set(paths).size !== paths.length || !paths.some(p=>CI_TOOL_FILES.has(p)||RETIRED_WORKER_FILES.includes(p))
+    || deleted.length && !sameSet(deleted,RETIRED_WORKER_FILES)) return full;
+  for (const c of input.changes) {
+    if (c.status === 'D' && RETIRED_WORKER_FILES.includes(c.path) && !c.previousPath) continue;
+    if (c.status !== 'M' || c.previousPath || !safeRepoPath(c.path) || RUNTIME_TEXT.has(c.path)
+      || !(CI_TOOL_FILES.has(c.path)||CI_TOOL_DOCS.has(c.path)||isDocsAllowlisted(c.path)||planDocument(c.path))) return full;
+  }
+  try {
+    const graphs=[validatedDescriptorGraph(input.baseline),validatedDescriptorGraph(input.candidate)];
+    if (!sameSet([...graphs[0].keys()],[...graphs[1].keys()])) return full;
+    for(const [id,d]of graphs[0]) if(JSON.stringify(d)!==JSON.stringify(graphs[1].get(id))) return full;
+    const impact=selectImpact({baseline:input.baseline,candidate:input.candidate,changedPaths:[],scopes:['governance']});
+    if(impact.module_ids.some(id=>!['governance','contribution-experience','shared-release'].includes(id))) return full;
+    for(const graph of graphs) for(const id of impact.module_ids)
+      if(!sameSet(graph.get(id).tests,DELIVERY_SUITES[id]??[])) return full;
+  } catch {return full;}
+  const reason=paths.some(planInput)?'ci_tools_document_inputs':'ci_tools';
+  return {profile:reason,reason};
+}
+function ciToolsSourcesProven(root,base,candidate,diff) {
+  const read=(sha,path)=>runGit(root,['show','--end-of-options',`${sha}:${path}`]).toString('utf8');
+  if (!ciToolsWorkflowProven(read(base,'.github/workflows/verify.yml'),read(candidate,'.github/workflows/verify.yml'))) return false;
+  if(diff.changes.some(c=>c.path==='governance/schemas/module.schema.json')
+    && !ciToolsSchemaProven(read(base,'governance/schemas/module.schema.json'),read(candidate,'governance/schemas/module.schema.json'))) return false;
+  const ts=loadGuildPresentationParsers()?.ts;if(!ts)return false;
+  const cache=new Map(), libraryTargets=['packages/contribution-tools/context.mjs','packages/contribution-tools/modules.mjs','governance/schemas/module.schema.json'];
+  for(const [sha,files]of [[base,diff.baseFiles],[candidate,diff.candidateFiles]]) {
+    let count=0,bytes=0;
+    for(const [path,entry]of files) {
+      if(!/\.(?:[cm]?[jt]s|[jt]sx|ya?ml)$/.test(path))continue;
+      if(++count>4096||entry.type!=='blob'||!['100644','100755'].includes(entry.mode))return false;
+      if(!cache.has(entry.oid))cache.set(entry.oid,read(sha,path));const source=cache.get(entry.oid);bytes+=Buffer.byteLength(source);
+      if(Buffer.byteLength(source)>2000000||bytes>64000000)return false;
+      if(/\.ya?ml$/.test(path)) {
+        if(sha===candidate && /(?:circleci-worker-status|worker-provider|\.freedom\/worker-status)/.test(source))return false;
+        continue;
+      }
+      for(const {fileName}of ts.preProcessFile(source,true,true).importedFiles) {
+        if(!fileName.startsWith('.'))continue;
+        const target=posix.normalize(posix.join(posix.dirname(path),fileName));
+        if(sha===candidate && RETIRED_WORKER_FILES.includes(target))return false;
+        if(libraryTargets.includes(target) && !path.startsWith('packages/contribution-tools/')
+          && !path.startsWith('scripts/ci/') && path!=='scripts/freedom.mjs')return false;
+      }
+    }
+  }
+  return true;
+}
+
+export function decideMinimalProfile(input) {
+  const fallback = {profile: 'full', reason: 'outside_minimal_profiles'};
+  if (input?.event !== 'pull_request' || input.diffComplete !== true
+    || !Array.isArray(input.changes) || !input.changes.length || input.changes.length > CHANGE_LIMIT
+    || input.nonExecutableBlobsProven === false || input.descriptorsProven === false
+    || !input.baseline?.length || !input.candidate?.length) return fallback;
+  const paths = input.changes.map(change => change?.path);
+  if (new Set(paths).size !== paths.length || input.changes.some(change => statusReason(change)
+    || !safeRepoPath(change.path))) return fallback;
+  try { for (const graph of [input.baseline, input.candidate]) validatedDescriptorGraph(graph); }
+  catch { return fallback; }
+  let reason;
+  if (paths.every(planDocument)) reason = paths.some(planInput) ? 'plan_document_inputs' : 'plan_receipt_docs';
+  else if (paths.every(path => /^(?:modules|apps)\/.+\.md$/.test(path) && !hiddenSegment(path)
+    && !path.endsWith('/AGENTS.md') && !RUNTIME_TEXT.has(path) && !MODULE_MARKDOWN_INPUTS.has(path)
+    && !guildPresentationPath(path))) reason = 'module_app_markdown';
+  return reason ? {profile: reason, reason} : fallback;
+}
 
 // Host-owned paths and expected module obligations, never a candidate glob or
 // executable command. New files, public sharing/auth helpers, guide contracts,
@@ -182,6 +309,26 @@ export function deliveryVerifyWiringOnly(before, after) {
   return left !== null && right !== null && left === right;
 }
 
+export function unownedLiteralLoadersProven(path,source,ts=loadGuildPresentationParsers()?.ts) {
+  if(!ts||Buffer.byteLength(source)>524288)return false;
+  const file=ts.createSourceFile(path,source,ts.ScriptTarget.Latest,true);
+  if(file.parseDiagnostics.length)return false;
+  let valid=true,nodes=0;
+  const visit=(node,depth=0)=>{
+    if(!valid||++nodes>30000||depth>128){valid=false;return;}
+    if(ts.isCallExpression(node)) {
+      if(node.expression.kind===ts.SyntaxKind.ImportKeyword
+        ||ts.isIdentifier(node.expression)&&node.expression.text==='require') {
+        if(node.arguments.length!==1||!ts.isStringLiteral(node.arguments[0]))valid=false;
+      }
+      if(ts.isIdentifier(node.expression)&&['eval','Function','createRequire'].includes(node.expression.text))valid=false;
+    }
+    if(ts.isNewExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='Function')valid=false;
+    ts.forEachChild(node,child=>visit(child,depth+1));
+  };
+  visit(file);return valid;
+}
+
 export function deliveryCoverageProven(graphs, paths, snapshots) {
   const media = paths.some(path => deliveryOwner(path) === 'media-migration');
   const control = paths.some(path => deliveryOwner(path) === 'governance');
@@ -221,6 +368,8 @@ export function deliveryCoverageProven(graphs, paths, snapshots) {
       if (++literalCount > 4096 || entry.type !== 'blob' || !['100644','100755'].includes(entry.mode)) return false;
       const source = read(path); literalBytes += Buffer.byteLength(source);
       if (Buffer.byteLength(source) > 2000000 || literalBytes > 64000000) return false;
+      if (isModuleSourcePath(path) && ![...graph.values()].some(d=>owns(d,path))
+        && !unownedLiteralLoadersProven(path,source,ts)) return false;
       for (const {fileName} of ts.preProcessFile(source, true, true).importedFiles) {
         if (!fileName.startsWith('.')) continue;
         const target = posix.normalize(posix.join(posix.dirname(path), fileName)).replace(/\.[cm]?js$/, '.ts');
@@ -288,8 +437,8 @@ function decision(mode, reason, selected) {
   return Object.freeze({
     mode, reason,
     jobs: Object.freeze(Object.fromEntries(SELECTABLE_JOBS.map(id => [id, mode === 'affected'
-      ? (reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS : reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS
-        : reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS).includes(id) : selected]))),
+      ? (minimalJobs(reason) ?? (reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS
+        : reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS : FRONTEND_LEAF_JOBS)).includes(id) : selected]))),
   });
 }
 const full = reason => decision('full', reason, true);
@@ -348,6 +497,8 @@ export function decideAffectedJobs(input) {
   if (typeof event !== 'string' || !EVENT.test(event) || event !== 'pull_request') return full('non_pull_request');
   if (input.diffComplete !== true || !Array.isArray(input.changes) || input.changes.length > CHANGE_LIMIT) return full('diff_unproven');
   if (input.changes.length === 0) return full('empty_diff');
+  const minimal = decideMinimalProfile(input);
+  if (minimal.profile !== 'full') return decision('affected', minimal.reason, false);
   const reasons = [];
   const paths = [];
   let inventoryCompanion = false;
@@ -398,46 +549,6 @@ export function decideAffectedJobs(input) {
   }
   if (impact.module_ids.length || impact.tests.length) return full('baseline_candidate_union');
   return docs();
-}
-
-export function decideHandoffDocsProfile(input) {
-  const fallback = reason => ({profile: 'full', reason});
-  if (input?.event !== 'pull_request') return fallback('non_pull_request');
-  if (input.diffComplete !== true || !Array.isArray(input.changes) || !input.changes.length
-    || input.changes.length > CHANGE_LIMIT || input.nonExecutableBlobsProven !== true) return fallback('handoff_diff_unproven');
-  const paths = input.changes.map(change => change?.path);
-  if (new Set(paths).size !== paths.length || input.changes.some(change => statusReason(change) || change.status !== 'M'
-    || (!HANDOFF_DOCS_PATHS.includes(change.path) && change.path !== GENERATED_INVENTORY_PATH))) return fallback('outside_handoff_docs');
-  const documents = paths.filter(path => path !== GENERATED_INVENTORY_PATH);
-  if (!documents.length) return fallback('outside_handoff_docs');
-  if (input.descriptorsProven !== true || !input.baseline?.length || !input.candidate?.length) return fallback('descriptors_unproven');
-  try {
-    const graphs = [validatedDescriptorGraph(input.baseline), validatedDescriptorGraph(input.candidate)];
-    if (!sameSet([...graphs[0].keys()], [...graphs[1].keys()])) throw Error();
-    for (const [id, value] of graphs[0]) if (JSON.stringify(value) !== JSON.stringify(graphs[1].get(id))) throw Error();
-    for (const descriptors of [input.baseline, input.candidate]) {
-      for (const path of documents) {
-        if (RUNTIME_TEXT.has(path) || descriptors.some(descriptor => descriptor.instructions.includes(path))) throw Error();
-        const owners = descriptors.filter(descriptor => owns(descriptor, path));
-        const expected = handoffOwner(path);
-        if (!sameSet(owners.map(owner => owner.module_id), expected ? [expected] : [])) throw Error();
-        if (owners.some(owner => owner.owner_role !== 'foundation' || !sameSet(owner.dependencies,
-          expected === 'supplier-console' ? ['agent-commerce', 'hosted-distribution', 'asset-lifecycle'] : [])
-          || !sameSet(owner.tests, expected === 'supplier-console' ? ['runtime.full', 'e2e.harness'] : ['governance.unit', 'runtime.full']))) throw Error();
-      }
-    }
-    // Preserve known ownership/reverse-consumer obligations before selecting the
-    // fixed documentation check. commerce-publication imports the supplier-console
-    // contract, making it a known consumer. General context impact is unchanged.
-    const owned = documents.filter(handoffOwner), supplier = owned.some(path => handoffOwner(path) === 'supplier-console');
-    const governance = owned.some(path => handoffOwner(path) === 'governance');
-    const impact = selectImpact({baseline: input.baseline, candidate: input.candidate, changedPaths: owned});
-    if (impact.unknown_paths.length || !sameSet(impact.module_ids,
-      [...(supplier ? ['supplier-console', 'guild-supply', 'application-composition', 'commerce-publication'] : []), ...(governance ? ['governance'] : [])])
-      || !sameSet(impact.tests, [...new Set([...(supplier ? ['e2e.harness', 'runtime.full', 'runtime.guild-blocks'] : []),
-        ...(governance ? ['governance.unit', 'runtime.full'] : [])])])) throw Error();
-    return {profile: HANDOFF_DOCS_REASON, reason: HANDOFF_DOCS_REASON};
-  } catch { return fallback('handoff_impact_unproven'); }
 }
 
 /** Explain the actual reverse-dependency closure before permitting the guild lane.
@@ -733,8 +844,11 @@ export function collectRepositoryDecision({ repository, event, base = '', head =
   const delivery = collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch});
   if (delivery) return delivery;
   if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
-  const handoff = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideHandoffDocsProfile);
-  if (handoff.profile === HANDOFF_DOCS_REASON) return decision('affected', handoff.reason, false);
+  const tools = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideCiToolsProfile);
+  if (['ci_tools','ci_tools_document_inputs'].includes(tools.profile)) return decision('affected',tools.reason,false);
+  if (tools.reason === 'ci_tools_sources_unproven') return full(tools.reason);
+  const minimal = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideMinimalProfile);
+  if (Object.hasOwn(MINIMAL_JOB_PROFILES, minimal.profile)) return decision('affected', minimal.reason, false);
   const guild = collectRepositoryGuildDecision({repository, event, base, head, candidate, pullRequest, allowFetch});
   if (guild.profile === GUILD_PRESENTATION_PROFILE.id) return decision('affected', guild.reason, false);
   if (['guild_source_dependencies_unproven', 'guild_impact_unproven'].includes(guild.reason)) return full(guild.reason);
@@ -748,7 +862,7 @@ export function collectRepositoryDecision({ repository, event, base = '', head =
   return decideAffectedJobs({
     event, diffComplete: true, changes: diff.changes,
     baseline: baseline.descriptors, candidate: headGraph.descriptors,
-    descriptorsProven: baseline.ok && headGraph.ok,
+    descriptorsProven: baseline.ok && headGraph.ok, nonExecutableBlobsProven: false,
   });
 }
 
@@ -839,7 +953,15 @@ function collectIntegrationProfile({ repository, event, base = '', head = '', ca
     const baseline = loadModuleDescriptors(root, base), current = loadModuleDescriptors(root, candidate);
     const result = decide({ event, diffComplete: diff?.ok === true, changes: diff?.changes ?? [],
       baseline: baseline.descriptors, candidate: current.descriptors, descriptorsProven: baseline.ok && current.ok,
-      nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true });
+      nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true || decide === decideCiToolsProfile && diff?.ok === true
+        && diff.changes.every(change => change.status === 'D' && RETIRED_WORKER_FILES.includes(change.path)
+          ? regularBlob(diff.baseFiles.get(change.path)) && !diff.candidateFiles.has(change.path)
+          : regularBlob(diff.baseFiles.get(change.path)) && regularBlob(diff.candidateFiles.get(change.path)))
+        || decide === decideMinimalProfile && diff?.ok === true
+        && diff.changes.every(change => [diff.baseFiles.get(change.path), diff.candidateFiles.get(change.path)]
+          .every(entry => !entry || entry.type === 'blob' && entry.mode === '100644')) });
+    if (['ci_tools','ci_tools_document_inputs'].includes(result.profile) && !ciToolsSourcesProven(root,base,candidate,diff))
+      return {profile:'full',reason:'ci_tools_sources_unproven'};
     if (result.profile === GUILD_PRESENTATION_PROFILE.id) {
       const modules = new Set(diff.changes.map(change => guildPresentationPath(change.path)?.leaf.module).filter(Boolean));
       const parsers = loadGuildPresentationParsers();
@@ -883,10 +1005,10 @@ export function decisionFromNeeds(needs) {
   if (outputs.mode === 'full' && !selectedAll) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'docs' && !selectedNone) return { ok: false, reason: 'decision_inconsistent' };
   if (outputs.mode === 'affected') {
-    const profile = outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
+    const profile = minimalJobs(outputs.reason) ?? (outputs.reason === 'frontend_leaf_profiles' ? FRONTEND_LEAF_JOBS
       : outputs.reason === DELIVERY_TOOLING_REASON ? DELIVERY_TOOLING_JOBS
       : outputs.reason === 'guild_presentation_dependency_closure' ? GUILD_PRESENTATION_JOBS
-        : outputs.reason === HANDOFF_DOCS_REASON ? HANDOFF_DOCS_JOBS : null;
+        : null);
     if (!profile || SELECTABLE_JOBS.some(id => jobs[id] !== profile.includes(id))) return { ok: false, reason: 'decision_inconsistent' };
   }
   if (jobs['runtime-full'] !== jobs['runtime-aggregate']) return { ok: false, reason: 'runtime_selection_split' };
