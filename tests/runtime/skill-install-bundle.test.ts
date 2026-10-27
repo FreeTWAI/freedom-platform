@@ -64,7 +64,7 @@ for(const redirect of ['tree','SKILL.md'] as const)test('install bundle rejects 
     'https://api.github.com/repos/FreeTWAI/freedom-skill-demo/git/trees/'+commit+'?recursive=1',
     ...(redirect==='SKILL.md'?['https://raw.githubusercontent.com/FreeTWAI/freedom-skill-demo/'+commit+'/SKILL.md']:[]),
   ]);
-  assert.equal(calls.includes(redirectTarget),false,'redirect target is never fetched');
+  assert.equal(calls.some(url=>url===redirectTarget),false,'redirect target is never fetched');
   assert.ok(redirects.every(value=>value==='manual'));
 });
 
