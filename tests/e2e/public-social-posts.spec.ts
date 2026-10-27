@@ -166,7 +166,9 @@ test('PUBLIC-POST-06 closed registration metadata removes join controls and dire
   const post=await createPost(author,`暫停註冊仍可閱讀-${randomUUID()}`);await setSharing(author,post.post_id,true);
   // Client capability fixture only; server rejection is covered by the public
   // runtime tests. This local browser harness deliberately enables registration.
-  await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),registration_enabled:false}});});
+  const siteResponse=await page.request.get('/api/v1/site');expect(siteResponse.ok()).toBe(true);
+  const site=await siteResponse.json();
+  await page.route('**/api/v1/site',async route=>{await route.fulfill({status:200,contentType:'application/json',json:{...site,registration_enabled:false}});});
   let registrations=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/auth/register')registrations++;});
   await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(post.note);
   await expect(page.locator('a[href*="join=1"]:visible')).toHaveCount(0);
