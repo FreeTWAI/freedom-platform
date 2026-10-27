@@ -43,6 +43,8 @@ import { PUBLIC_REVALIDATION_SCRIPT } from '../../../packages/shared/public-reva
 import { createPositioningRoutes } from './routes/positioning.js';
 import { listGuildCategories } from '../../../modules/positioning/guild-categories.js';
 import { createCommerceRoutes } from './routes/commerce.js';
+import {createMemberProfileRoutes} from './routes/member-profiles.js';
+import {registerPublicMemberProfiles} from './features/public-member-profiles.js';
 import { createMemberRoutes } from './routes/members.js';
 import { createMemberReportingRoutes } from './routes/member-reporting.js';
 import { checkAvatarUploadHeaders, createAvatarRoutes, isAvatarUpload } from './routes/avatars.js';
@@ -468,6 +470,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.get('/api/v1/community',c=>c.json(communityCatalog));
   if(runtime.arEnabled===true&&runtime.arAssetStore)app.route('/api/v1',createPublicArRoutes(pool,runtime.arAssetStore));
   registerPublicMemberCardRoutes(app, featureContext);
+  registerPublicMemberProfiles(app, featureContext);
   registerPublicEventMediaRoutes(app, featureContext);
   registerPublicPromotion(app,pool,runtime,origin);
   registerPublicSocialPosts(app,pool,runtime);
@@ -540,6 +543,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   registerWorkRoutes(app, featureContext);
   if(runtime.arEnabled===true&&runtime.arAssetStore)app.route('/api/v1',createMemberArRoutes(pool,runtime.arAssetStore));
   app.route('/api/v1',createMemberRoutes(pool));
+  app.route('/api/v1',createMemberProfileRoutes(pool));
   if(runtime.memberReportingEnabled===true)app.route('/api/v1',createMemberReportingRoutes(pool,runtime.messageImageAssetStore));
   app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true,commerceOrderNotificationsInstalled(runtime)));
   app.route('/api/v1',createCommunityEventRoutes(pool,runtime.eventEmailSender,origin,runtime));

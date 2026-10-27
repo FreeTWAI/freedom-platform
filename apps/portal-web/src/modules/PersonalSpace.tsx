@@ -55,13 +55,14 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
           {current.hero.positioning_title&&<p>{current.hero.positioning_title}</p>}
         </div>
       </> : <div className="personal-space-identity"><h2>{t('nav.profile')}</h2><p role="status">{current?.profileError?t('space.profileError'):t('space.profileLoading')}</p></div>}
-      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a></div>
+      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a><a className="btn btn-secondary btn-small" href="#profile?view=settings">對外個人頁與可見範圍</a></div>
       {!!current?.hero?.guilds.length&&<details className="personal-space-memberships">
         <summary>{t('space.guilds')} <span>({current.hero.guilds.length})</span></summary>
         <ul className="personal-space-guilds" aria-label={t('space.guilds')}>{current.hero.guilds.map(guild=><li key={guild.guild_key}>{guild.name}</li>)}</ul>
       </details>}
     </section>
     <p className="hint personal-space-private">{t('space.privacy')}</p>
+
     <section className="personal-space-content stack" aria-label={t('space.content')}>
       <div className="section-head"><h2>{t('nav.my-content')}</h2><div className="actions">{contentEnabled&&<a href="#my-content" className="btn btn-secondary btn-small">{t('space.manage')}</a>}<button className="btn btn-secondary btn-small" type="button" onClick={retry}>{t('space.refresh')}</button></div></div>
       {!contentEnabled?<p className="empty">{t('space.disabled')}</p>:<>

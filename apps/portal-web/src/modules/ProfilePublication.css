@@ -1,0 +1,19 @@
+.profile-publication { width:100%; max-width:48rem; margin-inline:auto; min-width:0; }
+.profile-publication .profile-name { overflow-wrap:anywhere; margin:0; }
+.profile-publication .profile-bio { white-space:pre-wrap; overflow-wrap:anywhere; }
+.profile-publication .profile-links { padding-inline-start:1.25rem; overflow-wrap:anywhere; }
+.profile-publication .profile-link-editor { display:grid; grid-template-columns:1fr 2fr auto; gap:.75rem; align-items:end; }
+.profile-publication .profile-link-editor > * { min-width:0; }
+.profile-publication .profile-visibility { display:grid; gap:.5rem; }
+.profile-publication .profile-visibility label { display:flex; gap:.65rem; align-items:center; min-height:44px; }
+.profile-publication input,.profile-publication textarea { max-width:100%; font-size:1rem; }
+.profile-publication .profile-preview { border:1px solid var(--line); border-radius:16px; padding:1rem; }
+.directory-member-profile-link { color:inherit; border-radius:12px; text-decoration:none; }
+.directory-member-profile-link:focus-visible { outline:2px solid currentColor; outline-offset:4px; }
+@media(max-width:540px) { .profile-publication .profile-link-editor { grid-template-columns:1fr; } }
+
+.profile-publication .btn { min-height:44px; white-space:normal; }
+.personal-space-hero-actions { gap:.5rem; flex-wrap:wrap; }
+
+.profile-publication .btn-secondary { background:var(--bg-elev); color:var(--ink); border-color:var(--line); }
+.profile-publication .btn-secondary:hover:not(:disabled),.profile-publication .btn-secondary:focus-visible { border-color:var(--focus); }
