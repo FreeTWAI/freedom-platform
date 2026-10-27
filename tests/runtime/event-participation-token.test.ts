@@ -14,7 +14,7 @@ test('participation capability never reads a query, full URL, encoded token or a
   for(const hash of ['',token,`participation=${token}`,`?participation=${token}`,`https://example.test/events/1#participation=${token}`,
     `#event/1?participation=${token}`,`#Participation=${token}`,`#participation=${token}&other=1`,
     `#participation=${token}#home`,`#participation=${token}?next=1`,`#participation=${encodeURIComponent('/'.repeat(43))}`,
-    `#participation=${token.replace('A','%41')}`,`#participation=${token.slice(1)}`,`#participation=${token}a`,
+    `#participation=${'%41'+token.slice(1)}`,`#participation=${token.slice(1)}`,`#participation=${token}a`,
     `#participation=${'/'.repeat(43)}`,`#participation=${'+'.repeat(43)}`,`#participation=${'中'.repeat(43)}`,
     ` #participation=${token}`,`#participation=${token} `,`#participation=${token.slice(0,21)}\n${token.slice(22)}`]){
     assert.equal(readEventParticipationToken(hash),null,JSON.stringify(hash));
