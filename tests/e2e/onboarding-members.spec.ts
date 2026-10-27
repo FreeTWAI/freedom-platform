@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 import { navigate, signOut } from './navigation.js';
 import { randomUUID } from 'node:crypto';
@@ -46,27 +47,27 @@ async function completeOrientation(page:Page){
 }
 test('member changes community name and optional identity, sees persisted cards and can hide the label on mobile',async({page})=>{
   const email=await register(page,'名片選項測試');await completeOrientation(page);
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'更多個人資料（選填）','查看目前的會員名片');
   const name=page.getByLabel('社群顯示名稱',{exact:true}),identity=page.getByRole('combobox',{name:'我是（選填）',exact:true});
   await expect(identity).toHaveValue('');await expect(identity.locator('option')).toHaveText(['不顯示','男','女','外星人','AI']);
-  await expect(page.getByText('建議使用你在社群最常用的名字，方便夥伴認出你。',{exact:true})).toBeVisible();
+  await expect(page.getByText('大家會看到這個名字。',{exact:true})).toBeVisible();
   await name.fill('社群常用的測試名字');await identity.selectOption('alien');
-  await page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true}).click();
+  await page.getByRole('button',{name:'儲存修改',exact:true}).click();
   await expect(page.locator('.account-panel .member-card')).toContainText('社群常用的測試名字');
   await expect(page.locator('.account-panel .member-card').getByLabel('自我介紹：外星人',{exact:true})).toBeVisible();
-  await page.reload();await expect(name).toHaveValue('社群常用的測試名字');await expect(identity).toHaveValue('alien');
+  await page.reload();await openAccountSettings(page,'更多個人資料（選填）');await expect(name).toHaveValue('社群常用的測試名字');await expect(identity).toHaveValue('alien');
   await navigate(page,'工坊夥伴');await page.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill('社群常用的測試名字');
   const row=page.getByRole('article',{name:'社群常用的測試名字',exact:true});await expect(row.getByLabel('自我介紹：外星人',{exact:true})).toBeVisible();
   await signOut(page);
   await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(password);await page.getByRole('button',{name:'登入',exact:true}).click();
-  await navigate(page, '我的名片');await expect(identity).toHaveValue('alien');await expect(name).toHaveValue('社群常用的測試名字');
+  await navigate(page, '我的名片');await openAccountSettings(page,'更多個人資料（選填）','查看目前的會員名片');await expect(identity).toHaveValue('alien');await expect(name).toHaveValue('社群常用的測試名字');
   await page.setViewportSize({width:320,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/member-identity-phone.png',fullPage:true});
-  await identity.selectOption('');await page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true}).click();
-  await expect(page.getByText('個人資料與每一項聯絡方式的可見範圍已保存。',{exact:true})).toBeVisible();
+  await identity.selectOption('');await page.getByRole('button',{name:'儲存修改',exact:true}).click();
+  await expect(page.getByText('修改已儲存。',{exact:true})).toBeVisible();
   await expect(page.locator('.member-card').getByLabel('自我介紹：外星人',{exact:true})).toHaveCount(0);
-  await page.reload();await expect(identity).toHaveValue('');await expect(name).toHaveValue('社群常用的測試名字');
+  await page.reload();await openAccountSettings(page,'更多個人資料（選填）');await expect(identity).toHaveValue('');await expect(name).toHaveValue('社群常用的測試名字');
 });
 test('new member completes required positioning, chooses primary guild and gets a persistent member card',async({page})=>{
   const email=await register(page,'工坊新夥伴');
@@ -84,7 +85,7 @@ test('new member completes required positioning, chooses primary guild and gets 
   await page.goto('/#retail');
   await expect(page.getByRole('heading',{name:'我可以賣東西',exact:true}).first()).toBeVisible();
   await expect(page).toHaveURL(/#retail$/);
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'誰能看到我');
   await expect(page.getByRole('heading',{name:'我的名片',level:1,exact:true})).toBeVisible();
   await expect(page.getByLabel('聯絡 E-mail',{exact:true})).toHaveValue(email);
   await expect(page.getByLabel('聯絡 E-mail',{exact:true})).toHaveJSProperty('readOnly',true);
@@ -95,11 +96,11 @@ test('new member completes required positioning, chooses primary guild and gets 
   await audiences.getByRole('checkbox',{name:'公會夥伴',exact:true}).check();
   await expect(audiences.getByRole('checkbox',{name:'不公開',exact:true})).not.toBeChecked();
   const profileRequest=page.waitForRequest(request=>request.url().endsWith('/api/v1/me/account')&&request.method()==='POST');
-  await page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true}).click();
+  await page.getByRole('button',{name:'儲存修改',exact:true}).click();
   const profileBody=(await profileRequest).postDataJSON();
   expect(profileBody.contacts.email).toEqual({audiences:[]});
   expect(profileBody.contacts.discord).toEqual({value:'new.member',audiences:['friends','guild']});
-  await expect(page.getByText('個人資料與每一項聯絡方式的可見範圍已保存。')).toBeVisible();
+  await expect(page.getByText('修改已儲存。')).toBeVisible();
   await navigate(page, '職業公會');await expect(page.locator('.primary-guild')).toHaveCount(1);
   await expect(page.locator('.primary-guild .guild-master .guild-leadership-name')).toHaveText('待任命');
   await expect(page.locator('.guild-card').first()).toHaveClass(/primary-guild/);
@@ -128,7 +129,7 @@ test('new member completes required positioning, chooses primary guild and gets 
 
   await navigate(page, '工坊夥伴');await expect(page.getByRole('heading',{name:/工坊新夥伴/})).toBeVisible();
   await signOut(page);await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(password);await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.locator('.shell')).toBeVisible();await navigate(page, '我的名片');await expect(page.getByLabel('Discord 帳號',{exact:true})).toHaveValue('new.member');
+  await expect(page.locator('.shell')).toBeVisible();await navigate(page, '我的名片');await openAccountSettings(page,'誰能看到我');await expect(page.getByLabel('Discord 帳號',{exact:true})).toHaveValue('new.member');
   const restoredAudiences=page.getByRole('group',{name:'Discord 帳號可見範圍',exact:true});
   await expect(restoredAudiences.getByRole('checkbox',{name:'平台好友',exact:true})).toBeChecked();
   await expect(restoredAudiences.getByRole('checkbox',{name:'公會夥伴',exact:true})).toBeChecked();
@@ -138,9 +139,9 @@ test('new member completes required positioning, chooses primary guild and gets 
   await restoredAudiences.getByRole('checkbox',{name:'不公開',exact:true}).check();
   await expect(restoredAudiences.getByRole('checkbox',{name:'平台公開',exact:true})).not.toBeChecked();
   await expect(restoredAudiences.getByRole('checkbox',{name:'公會夥伴',exact:true})).not.toBeChecked();
-  await page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true}).click();
-  await expect(page.getByText('個人資料與每一項聯絡方式的可見範圍已保存。')).toBeVisible();
-  await page.reload();
+  await page.getByRole('button',{name:'儲存修改',exact:true}).click();
+  await expect(page.getByText('修改已儲存。')).toBeVisible();
+  await page.reload();await openAccountSettings(page,'誰能看到我');
   await expect(page.getByRole('group',{name:'Discord 帳號可見範圍',exact:true}).getByRole('checkbox',{name:'不公開',exact:true})).toBeChecked();
   await expect(page.getByLabel('聯絡 E-mail',{exact:true})).toHaveValue(email);
   await page.screenshot({path:'test-results/member-onboarding-desktop.png',fullPage:true});
@@ -158,7 +159,7 @@ test('member explicitly approves then revokes a scoped supplier client read conn
   await register(page,'客戶端連線夥伴');await completeOrientation(page);
   const start=await page.request.post('/api/v1/client-connections/start',{headers:{Origin:e2eOrigin()},data:{kind:'supplier',client_name:'我的供應端測試客戶端'}});expect(start.status()).toBe(201);
   const pending=await start.json();
-  await navigate(page, '我的名片');await page.getByLabel('客戶端一次性代碼',{exact:true}).fill(pending.user_code);
+  await navigate(page, '我的名片');await openAccountSettings(page,'連結 GitHub 與其他工具');await page.getByLabel('客戶端一次性代碼',{exact:true}).fill(pending.user_code);
   await page.getByRole('button',{name:'查看連線請求',exact:true}).click();await expect(page.getByText('你自己的商品與供貨條件',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'確認並允許這次讀取連線',exact:true}).click();await expect(page.getByText('讀取連線已核准，請回到你的客戶端繼續。')).toBeVisible();
   const poll=await page.request.post('/api/v1/client-connections/poll',{headers:{Origin:e2eOrigin()},data:{device_secret:pending.device_secret}});expect(poll.status()).toBe(200);
@@ -228,7 +229,7 @@ test('skill trees preserve choices across screen sizes and show only three featu
   await expect(page.locator('.home-member-skills .pill')).toHaveCount(3);
   await expect(page.locator('.home-member-skills')).toContainText('手工皮革製作');
   await expect(page.locator('.member-card')).not.toContainText('這是我的私人補充');
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'查看目前的會員名片');
   const details=page.locator('.member-full-profile');await expect(details).not.toHaveAttribute('open');
   await details.locator('summary').click();for(const choice of choices)await expect(details).toContainText(choice.label);
   await expect(details).toContainText('我的錄音設備');
@@ -334,7 +335,7 @@ test('re-exploration preserves the confirmed profile until completion and keeps 
   await expect(result).not.toContainText('新的研究整理');
   expect(publicPosition(await (await page.request.get(memberPath)).json())).toEqual(publicPosition(before));
   expect((await (await page.request.get('/api/v1/me/skill-books')).json()).items).toEqual(beforeBooks);
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'查看目前的會員名片');
   await expect(page.locator('.member-profile-card .ecard-capabilities')).toContainText('原本的教學整理');
   await expect(page.locator('.member-card')).not.toContainText('草稿裡的私人職業');
   await navigate(page, '我的定位');

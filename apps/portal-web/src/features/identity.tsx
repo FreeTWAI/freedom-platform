@@ -13,7 +13,7 @@ export const identityFeatures = {
   profile: {moduleId: "personal-content", placement: 'page', render: ({client,session,site}) => <PersonalSpace key={session.user.user_id+':'+client.sessionGeneration} client={client} session={session} contentEnabled={site?.personal_content_enabled===true}/>},
   "account": {
     moduleId: "member-card", placement: 'page',
-    render: ({client, session, site, selectTab}) => <><AccountPanel client={client} session={session} onNavigate={selectTab} />{site?.notification_preferences_enabled===true&&<NotificationPreferencesPanel key={session.user.user_id+':'+session.csrf_token} client={client} followingEnabled={site.community_relations_enabled===true}/>}</>,
+    render: ({client, session, site, selectTab, registerPageLeave}) => <AccountPanel client={client} session={session} onNavigate={selectTab} registerLeave={registerPageLeave}>{site?.notification_preferences_enabled===true&&<details className="account-settings-more"><summary>通知設定</summary><NotificationPreferencesPanel key={session.user.user_id+':'+session.csrf_token} client={client} followingEnabled={site.community_relations_enabled===true}/></details>}</AccountPanel>,
   },
   "todos": {
     moduleId: "work", placement: 'page',

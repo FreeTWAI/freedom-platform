@@ -189,3 +189,19 @@ export async function reachByKeyboard(page:Page,target:Locator){
   expect(await target.evaluate(element=>getComputedStyle(element).outlineStyle)).not.toBe('none');
   expect(await target.evaluate(element=>parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
 }
+
+/** Open only the account settings needed by this journey, through visible controls. */
+export async function openAccountSettings(page:Page,...labels:string[]){
+  await expect(page.locator('.account-panel')).toBeVisible();
+  for(const label of labels){
+    const text=page.locator('.account-panel').getByText(label,{exact:true});
+    const target=text.locator('xpath=ancestor-or-self::summary/parent::details');
+    await expect(target).toHaveCount(1);
+    const parents=target.locator('xpath=ancestor::details');
+    for(let index=0;index<await parents.count();index++){
+      const parent=parents.nth(index);
+      if(!await parent.evaluate(element=>(element as HTMLDetailsElement).open))await parent.locator(':scope > summary').click();
+    }
+    if(!await target.evaluate(element=>(element as HTMLDetailsElement).open))await target.locator(':scope > summary').click();
+  }
+}

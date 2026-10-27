@@ -67,7 +67,8 @@
     "packages/shared/tenant-list-cursor.ts",
     "apps/portal-web/src/modules/shared.tsx",
     "packages/shared/html.ts",
-    "packages/shared/skill-acquisition.ts"
+    "packages/shared/skill-acquisition.ts",
+    "apps/portal-web/src/modules/authoring-drafts.ts"
   ],
   "dependencies": [],
   "contract_families": [],

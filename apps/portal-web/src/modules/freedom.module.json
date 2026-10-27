@@ -8,6 +8,7 @@
   "dependencies": [
     "assets",
     "command-core",
+    "shared",
     "tenant-workspaces",
     "work"
   ],
@@ -85,7 +86,11 @@
     "tests/runtime/totp.test.ts",
     "tests/runtime/portal-totp.test.ts",
     "modules/identity-membership/service.ts",
-    "tests/e2e/totp.spec.ts"
+    "tests/e2e/totp.spec.ts",
+    "apps/portal-web/src/modules/AccountSettings.css",
+    "tests/e2e/membership-settings.spec.ts",
+    "apps/portal-web/src/modules/account-settings-leave.ts",
+    "tests/runtime/account-settings-leave.test.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [
