@@ -1,0 +1,54 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "community-hub",
+  "owner_role": "community",
+  "owned_paths": [
+    "modules/community-hub/**",
+    "apps/portal-web/src/modules/CommunityHub.tsx",
+    "apps/portal-web/src/modules/CommunityHub.css",
+    "tests/runtime/community-hub.test.ts",
+    "tests/e2e/community-hub.spec.ts"
+  ],
+  "public_exports": [
+    "modules/community-hub/index.ts"
+  ],
+  "dependencies": [
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "DESIGN.md",
+    "modules/community-hub/README.md"
+  ],
+  "invariants": [
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "community-hub.public-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/CommunityHub.tsx",
+      "operations": [
+        "community-hub.static.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "community-hub.member-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/CommunityHub.tsx",
+      "operations": [
+        "community-hub.static.read"
+      ],
+      "auth_profile": "member-session"
+    }
+  ]
+}

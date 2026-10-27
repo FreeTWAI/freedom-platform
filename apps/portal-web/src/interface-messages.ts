@@ -2,6 +2,23 @@
 // All supported languages must have the same keys. Member-authored content is
 // not an interface message and must never be substituted by this catalog.
 export const interfaceMessages = {
+  "nav.community-hub": ["社群入口總覽","Community hub","コミュニティ一覧","커뮤니티 허브","Comunidades"],
+  "communityHub.intro": ["自由工坊共同經營的社群與參與方向，從這裡找到交流夥伴。","Find communities co-run by Freedom Workshop and ways to participate.","自由工坊が共同運営するコミュニティと参加方法を紹介します。","자유공방이 공동 운영하는 커뮤니티와 참여 방법을 찾아보세요.","Encuentra comunidades gestionadas junto a Freedom Workshop y formas de participar."],
+  "communityHub.groups": ["社群列表","Community groups","コミュニティグループ","커뮤니티 목록","Grupos de la comunidad"],
+  "communityHub.work": ["我們正在做什麼","What we are working on","取り組んでいること","우리가 하는 일","En qué estamos trabajando"],
+  "communityHub.workIntro": ["一起交流工具、學習技能、分享作品與組隊協作；站內參與入口依原登入與權限開放。","Exchange tools, learn skills, share work and collaborate. Platform pages keep their existing sign-in and access requirements.","ツール交流、スキル学習、作品共有、チーム活動。各ページのログインと権限条件はそのまま適用されます。","도구 교류, 기술 학습, 작업 공유와 팀 협업에 참여하세요. 기존 로그인 및 접근 조건이 적용됩니다.","Intercambiamos herramientas, aprendemos y colaboramos. Las páginas mantienen sus requisitos de acceso."],
+  "communityHub.open": ["查看社群入口總覽","Open community hub","コミュニティ一覧を開く","커뮤니티 허브 열기","Ver comunidades"],
+  "communityHub.back": ["返回登入","Back to sign in","ログインに戻る","로그인으로 돌아가기","Volver al inicio de sesión"],
+  "communityHub.newTab": ["（在新分頁開啟）"," (opens in a new tab)","（新しいタブで開く）"," (새 탭에서 열림)"," (abre en otra pestaña)"],
+  "communityHub.work.tasks": ["尋找可參與的社群任務。","Find community tasks to join.","参加できるタスクを探す。","참여할 커뮤니티 작업을 찾아보세요.","Encuentra tareas para participar."],
+  "communityHub.work.events": ["參加交流活動與聚會。","Join events and meetups.","イベントや交流会に参加する。","행사와 모임에 참여하세요.","Participa en eventos y encuentros."],
+  "communityHub.work.cocreation": ["一起討論與共創作品。","Discuss and create together.","一緒に話し合い、作品を作る。","함께 논의하고 만드세요.","Conversa y crea en comunidad."],
+  "communityHub.work.squads": ["找夥伴組隊協作。","Form squads and collaborate.","仲間とチームで協力する。","팀을 꾸려 협업하세요.","Forma equipos y colabora."],
+  "communityHub.work.opensource": ["分享開源工具與投稿。","Share open-source tools and contributions.","オープンソースのツールを共有する。","오픈소스 도구와 기여를 공유하세요.","Comparte herramientas y aportes de código abierto."],
+  "communityHub.work.skills": ["閱讀技能書並動手練習。","Read skill books and practice.","スキルブックで学び、実践する。","기술서를 읽고 연습하세요.","Lee libros de habilidades y practica."],
+  "communityHub.work.social": ["交流近況、提問與心得。","Share updates, questions and insights.","近況、質問、学びを共有する。","근황, 질문과 경험을 나누세요.","Comparte novedades, preguntas y aprendizajes."],
+  "communityHub.work.highlights": ["回顧活動精華與分享。","Explore event highlights.","イベントの記録を見る。","행사 하이라이트를 살펴보세요.","Explora lo destacado de los eventos."],
+  "communityHub.work.guilds": ["探索公會的專業與資源。","Explore guild expertise and resources.","ギルドの専門分野や資料を探す。","길드의 전문성과 자료를 찾아보세요.","Explora los recursos y especialidades de los gremios."],
   "nav.newbie-village": ["新手村任務", "Newbie Village Quests", "はじめの村クエスト", "초보 마을 퀘스트", "Misiones de la aldea inicial"],
   "nv.intro": ["AI 時代定位：做自己、過生活、用強項。原始題目與作者內容保留繁體中文。", "AI-era direction: personality, lifestyle and capability. Original questions and author content remain in Traditional Chinese.", "AI時代の方向性：自分・暮らし・強み。原文は繁体字中国語です。", "AI 시대 방향: 성격, 생활, 강점. 원문은 번체 중국어입니다.", "Orientación en la era de IA: personalidad, vida y fortalezas. El contenido original está en chino tradicional."],
   "nv.privacy": ["這不是診斷測驗。作答、方向卡、進度與勳章只存在這台瀏覽器，不傳給教練或伺服器；不是官方紀錄、XP 或獎勵。", "This is not a diagnostic assessment. Answers, drafts, progress and badges stay in this browser; nothing is sent to coaches or servers. These are not official records, XP or rewards.", "診断テストではありません。回答・下書き・進捗・バッジはこのブラウザ内だけに保存され、コーチやサーバーには送信されません。公式記録や報酬ではありません。", "진단 검사가 아닙니다. 답변, 초안, 진행 상황과 배지는 이 브라우저에만 저장되며 코치나 서버로 전송되지 않습니다. 공식 기록이나 보상이 아닙니다.", "No es una prueba diagnóstica. Respuestas, borradores, progreso e insignias quedan en este navegador; no se envían a entrenadores ni servidores. No son registros oficiales ni recompensas."],
