@@ -60,7 +60,7 @@ function base64(bytes:Uint8Array){
 type TreeEntry={path:string;type:string;sha:string;size?:number};
 async function readTree(fetcher:Fetcher,source:SkillInstallSource,token?:string|null):Promise<TreeEntry[]>{
   const response=await fetcher('https://api.github.com/repos/'+source.owner+'/'+source.repo+'/git/trees/'+source.commit+'?recursive=1',{
-    redirect:'error',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    redirect:'manual',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers:{Accept:'application/vnd.github+json','User-Agent':'Freedom-Workshop-Skill-Install',...(token?{Authorization:'Bearer '+token}:{})},
   });
   if(response.status===404)throw new Problem(404,'skill_source_unavailable','找不到這本技能書的收錄版本。');
@@ -82,7 +82,7 @@ export async function buildSkillInstallBundle(source:SkillInstallSource,fetcher:
   const queue=[...entries];
   const worker=async()=>{
     for(let entry=queue.shift();entry;entry=queue.shift()){
-      const response=await fetcher('https://raw.githubusercontent.com/'+source.owner+'/'+source.repo+'/'+source.commit+'/'+entry.path.split('/').map(encodeURIComponent).join('/'),{redirect:'error',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS)});
+      const response=await fetcher('https://raw.githubusercontent.com/'+source.owner+'/'+source.repo+'/'+source.commit+'/'+entry.path.split('/').map(encodeURIComponent).join('/'),{redirect:'manual',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS)});
       if(!response.ok)throw new Problem(503,'skill_source_unreachable','暫時無法讀取技能書來源，請稍後再試。',60);
       const bytes=new Uint8Array(await response.arrayBuffer());
       if(bytes.length>SKILL_INSTALL_LIMITS.fileBytes||await gitBlobSha1(bytes)!==entry.sha)throw new Problem(502,'skill_source_mismatch','技能書內容與收錄版本不一致，已停止安裝。');

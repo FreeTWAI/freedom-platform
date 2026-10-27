@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {createSkillInstallRoutes} from '../../apps/platform-api/src/routes/skill-install.js';
-import {gitBlobSha1,skillInstallSource,skillFolderName,isSafeBundlePath} from '../../modules/skill-install/index.js';
+import {createSkillInstallBundleLoader,gitBlobSha1,skillInstallSource,skillFolderName,isSafeBundlePath} from '../../modules/skill-install/index.js';
 import {communityCatalog,type SkillBook} from '../../modules/community/catalog.js';
 import {parseInstallBundle,installReceipt,buildInstallZip,copyText,installCommands,SkillInstallError} from '../../apps/portal-web/src/modules/skill-install-client.js';
 
@@ -13,25 +13,31 @@ const commit='a'.repeat(40);
 const book=(id:string,extra:Partial<SkillBook>={}):SkillBook=>({id,title:id,repository_url:'https://github.com/FreeTWAI/freedom-skill-'+id,description:'',kind:'starter',fork_url:'',license_status:'MIT',upstream_url:'',source_commit:commit,introduction_url:null,...extra});
 const encoder=new TextEncoder();
 
-async function fakeGitHub(files:Record<string,string>,{tamper,truncated}:{tamper?:string;truncated?:boolean}={}){
+const redirectTarget='https://redirect.example.invalid/skill';
+async function fakeGitHub(files:Record<string,string>,{tamper,truncated,redirect}:{tamper?:string;truncated?:boolean;redirect?:'tree'|'SKILL.md'}={}){
   const tree=await Promise.all(Object.entries(files).map(async([path,text])=>({path,type:'blob',sha:await gitBlobSha1(encoder.encode(text)),size:encoder.encode(text).length})));
   const calls:string[]=[];
-  const fetcher=(async(input:string|URL|Request)=>{
-    const url=String(input);calls.push(url);
-    if(url.startsWith('https://api.github.com/repos/'))return Response.json({sha:commit,truncated:truncated??false,tree:[...tree,{path:'templates',type:'tree',sha:'b'.repeat(40)}]});
+  const redirects:(RequestRedirect|undefined)[]=[];
+  const fetcher=(async(input:string|URL|Request,init?:RequestInit)=>{
+    const url=String(input);calls.push(url);redirects.push(init?.redirect);
+    if(url.startsWith('https://api.github.com/repos/')){
+      if(redirect==='tree')return new Response(null,{status:302,headers:{Location:redirectTarget}});
+      return Response.json({sha:commit,truncated:truncated??false,tree:[...tree,{path:'templates',type:'tree',sha:'b'.repeat(40)}]});
+    }
     const prefix=/^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[0-9a-f]{40}\//.exec(url);
     const path=prefix&&decodeURIComponent(url.slice(prefix[0].length));
+    if(path&&path===redirect)return new Response(null,{status:302,headers:{Location:redirectTarget}});
     if(path&&path in files)return new Response(path===tamper?files[path]+'x':files[path]);
     return new Response('missing',{status:404});
   }) as typeof fetch;
-  return {fetcher,calls};
+  return {fetcher,calls,redirects};
 }
 const skill='---\nname: freedom-demo\ndescription: demo\n---\n# Demo\n';
 
 function hasInstallCode(code:string){return (error:unknown)=>error instanceof SkillInstallError&&error.code===code;}
 
 test('install bundle is pinned, verified, excludes development files and is cached per commit',async()=>{
-  const {fetcher,calls}=await fakeGitHub({'SKILL.md':skill,'templates/notes.md':'筆記 ✓','.github/workflows/ci.yml':'x','tests/test_a.py':'x'});
+  const {fetcher,calls,redirects}=await fakeGitHub({'SKILL.md':skill,'templates/notes.md':'筆記 ✓','.github/workflows/ci.yml':'x','tests/test_a.py':'x'});
   const app=createSkillInstallRoutes(fetcher,()=>null,[book('demo')]);
   const response=await app.request('/api/v1/skills/demo/install-bundle');
   assert.equal(response.status,200);
@@ -42,11 +48,24 @@ test('install bundle is pinned, verified, excludes development files and is cach
   assert.equal(data.commit,commit);
   assert.deepEqual(data.files.map((file:{path:string})=>file.path),['SKILL.md','templates/notes.md']);
   assert.ok(calls.every(url=>url.includes(commit)),'every request names the exact commit');
+  assert.deepEqual(redirects,['manual','manual','manual'],'tree and raw file fetches never follow redirects');
   const parsed=await parseInstallBundle(data);
   assert.equal(new TextDecoder().decode(parsed.files[1].bytes),'筆記 ✓');
   const before=calls.length;
   assert.equal((await app.request('/api/v1/skills/demo/install-bundle')).status,200);
   assert.equal(calls.length,before,'second read is served from the commit cache');
+});
+
+for(const redirect of ['tree','SKILL.md'] as const)test('install bundle rejects a redirect from '+redirect+' without following it',async()=>{
+  const {fetcher,calls,redirects}=await fakeGitHub({'SKILL.md':skill},{redirect});
+  const load=createSkillInstallBundleLoader(fetcher,undefined,[book('demo')]);
+  await assert.rejects(load('demo'),{status:503,code:'skill_source_unreachable'});
+  assert.deepEqual(calls,[
+    'https://api.github.com/repos/FreeTWAI/freedom-skill-demo/git/trees/'+commit+'?recursive=1',
+    ...(redirect==='SKILL.md'?['https://raw.githubusercontent.com/FreeTWAI/freedom-skill-demo/'+commit+'/SKILL.md']:[]),
+  ]);
+  assert.equal(calls.includes(redirectTarget),false,'redirect target is never fetched');
+  assert.ok(redirects.every(value=>value==='manual'));
 });
 
 test('install bundle refuses unknown, unpinned, non-skill, tampered and unsafe sources',async()=>{
