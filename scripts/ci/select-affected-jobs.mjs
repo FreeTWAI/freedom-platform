@@ -1,5 +1,6 @@
 // Conservative job selection for .github/workflows/verify.yml.
 // Operator-only changes use existing deploy and integrity coverage on PR/main.
+// Bounded CI tools also use mandatory integrity coverage on proven main pushes.
 // Other pull requests narrow through docs, frontend leaf, guild presentation
 // or minimal profiles. An ordinary modification of the exact root
 // README may use docs mode; its mandatory context role remains unchanged.
@@ -8,7 +9,7 @@
 // The exact generated inventory manifest may accompany qualifying edits; owning that one metadata file does not widen the decision, and the file
 // is not itself an allowlisted document. source-integrity verifies immutable migrations and local links; main archives
 // generate and restore a complete inventory. Rename, delete, copy, mode change, unknown paths,
-// merge_group, push, and other governance, security, or shared-runtime paths keep
+// merge_group, other pushes, and other governance, security, or shared-runtime paths keep
 // every selectable job. The aggregate accepts a skip only for a job this
 // decision left unselected; failure and cancellation do not pass.
 import { execFileSync } from 'node:child_process';
@@ -123,7 +124,7 @@ export function ciToolsSchemaProven(before, after) {
 }
 export function decideCiToolsProfile(input) {
   const full = {profile:'full',reason:'outside_ci_tools'};
-  if (input?.event !== 'pull_request' || input.diffComplete !== true || input.nonExecutableBlobsProven !== true
+  if (!['pull_request', 'push'].includes(input?.event) || input.diffComplete !== true || input.nonExecutableBlobsProven !== true
     || input.descriptorsProven !== true || !input.changes?.length || input.changes.length > CHANGE_LIMIT) return full;
   const paths=input.changes.map(c=>c.path), deleted=input.changes.filter(c=>c.status==='D').map(c=>c.path);
   if (new Set(paths).size !== paths.length || !paths.some(p=>CI_TOOL_FILES.has(p)||RETIRED_WORKER_FILES.includes(p))
@@ -840,13 +841,13 @@ function loadTrees(repository, base, head) {
       [baseTree.files.get(change.path), headTree.files.get(change.path)].every(entry => entry?.type === 'blob' && entry.mode === '100644'))};
   } catch { return null; }
 }
-export function collectRepositoryDecision({ repository, event, base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}) {
+export function collectRepositoryDecision({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}) {
+  const tools = collectIntegrationProfile({repository, event, ref, base, head, candidate, pullRequest, allowFetch}, decideCiToolsProfile);
+  if (['ci_tools','ci_tools_document_inputs'].includes(tools.profile)) return decision('affected',tools.reason,false);
   const delivery = collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch});
   if (delivery) return delivery;
-  if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
-  const tools = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideCiToolsProfile);
-  if (['ci_tools','ci_tools_document_inputs'].includes(tools.profile)) return decision('affected',tools.reason,false);
   if (tools.reason === 'ci_tools_sources_unproven') return full(tools.reason);
+  if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
   const minimal = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideMinimalProfile);
   if (Object.hasOwn(MINIMAL_JOB_PROFILES, minimal.profile)) return decision('affected', minimal.reason, false);
   const guild = collectRepositoryGuildDecision({repository, event, base, head, candidate, pullRequest, allowFetch});
@@ -934,9 +935,10 @@ function collectDeliveryToolingProfile({repository, event, base, head, candidate
 // prove the browser checkout. Any missing evidence keeps the complete suite.
 export function collectRepositoryE2eDecision(input = {}) { return collectIntegrationProfile(input, decideE2eProfile); }
 export function collectRepositoryGuildDecision(input = {}) { return collectIntegrationProfile(input, decideGuildPresentationProfile); }
-function collectIntegrationProfile({ repository, event, base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}, decide) {
+function collectIntegrationProfile({ repository, event, ref = '', base = '', head = '', candidate = '', pullRequest = '', allowFetch = false } = {}, decide) {
   const fallback = reason => ({ profile: 'full', reason });
-  if (event !== 'pull_request') return fallback('non_pull_request');
+  const mainPush = decide === decideCiToolsProfile && event === 'push' && ref === 'refs/heads/main';
+  if (event !== 'pull_request' && !mainPush) return fallback('non_pull_request');
   if (typeof repository !== 'string' || !isAbsolute(repository)
     || ![base, head, candidate].every(value => SHA.test(value))) return fallback('candidate_unproven');
   const root = resolve(repository);
@@ -948,7 +950,8 @@ function collectIntegrationProfile({ repository, event, base = '', head = '', ca
       || !ensureCommit(root, base, '', allowFetch) || !ensureCommit(root, head, pullRequest, allowFetch)) return fallback('candidate_unproven');
     const parents = runGit(root, ['cat-file', '-p', candidate]).toString().split('\n\n')[0]
       .split('\n').filter(line => line.startsWith('parent ')).map(line => line.slice(7));
-    if (parents.length !== 2 || parents[0] !== base || parents[1] !== head) return fallback('candidate_unproven');
+    if (parents[0] !== base || (mainPush ? head !== candidate : parents.length !== 2 || parents[1] !== head))
+      return fallback('candidate_unproven');
     const diff = loadTrees(root, base, candidate);
     const baseline = loadModuleDescriptors(root, base), current = loadModuleDescriptors(root, candidate);
     const result = decide({ event, diffComplete: diff?.ok === true, changes: diff?.changes ?? [],
@@ -1074,7 +1077,7 @@ function main() {
     console.error('invalid_selection_arguments'); process.exitCode = 2; return;
   }
   const selection = collectRepositoryDecision({
-    repository: args.repository, event: args.event, base: args.base ?? '', head: args.head ?? '', candidate: args.candidate ?? '',
+    repository: args.repository, event: args.event, ref: process.env.GITHUB_REF ?? '', base: args.base ?? '', head: args.head ?? '', candidate: args.candidate ?? '',
     pullRequest: args.pullRequest, allowFetch: args.allowFetch,
   });
   appendFileSync(args.githubOutput, githubOutput(selection));
