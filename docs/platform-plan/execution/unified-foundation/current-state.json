@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-25T19:47:57.703216+00:00",
+  "recorded_at": "2026-10-26T13:57:27.111935+00:00",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -14,225 +14,190 @@
   },
   "merged_source": {
     "repository": "FreeTWAI/freedom-platform",
-    "sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-    "tree": "8a056bda0dd776ae3efa0f9cd5b2feeb2d307f7b",
-    "observed_at": "2026-10-25T19:43:59.340Z",
+    "sha": "274f0614208552e73c734108e73494503cf30c66",
+    "tree": "5e2388bc9e5d91fbdbebc18a5678d9e5206ee9b9",
+    "observed_at": "2026-10-26T13:48:57.954Z",
     "observation_kind": "Exact merged main source/archive/checkout, completed main Verify/CodeQL records and per-environment deployment receipts; observed_at is the final GET Worker-binding time.",
-    "runtime_release_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+    "runtime_release_source": "274f0614208552e73c734108e73494503cf30c66",
     "release_source_verify": {
       "conclusion": "success",
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "head": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "run": 40219224039,
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "head": "274f0614208552e73c734108e73494503cf30c66",
+      "run": 40323233554,
       "attempt": 1,
       "tree_equals_merged_release": true,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json"
     },
     "main_verify_observation": {
-      "observed_at": "2026-10-25T19:43:59.340Z",
-      "main": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "main_tree": "8a056bda0dd776ae3efa0f9cd5b2feeb2d307f7b",
-      "main_pr": 1067,
-      "main_merged_at": "2026-10-25T18:01:00Z",
-      "integrated_head": "3ade1cf5651163fc99f1515519aca9a61b75eec3",
-      "main_verify_run": 40219224039,
+      "observed_at": "2026-10-26T13:48:57.954Z",
+      "main": "274f0614208552e73c734108e73494503cf30c66",
+      "main_tree": "5e2388bc9e5d91fbdbebc18a5678d9e5206ee9b9",
+      "main_pr": 1090,
+      "main_merged_at": "2026-10-26T12:31:45Z",
+      "integrated_head": "90e9a6c6a7e45c32ae65ba5b293078ee80830923",
+      "main_verify_run": 40323233554,
       "main_verify_last_reported_status": "completed",
       "main_verify_conclusion": "success",
       "main_verify_successful_job_count": 17,
-      "main_codeql_run": 40219224127,
+      "main_codeql_run": 40323233590,
       "main_codeql_last_reported_status": "completed",
       "main_codeql_conclusion": "success",
       "main_codeql_successful_job_count": 3,
       "main_ci_complete": true,
-      "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/1067",
-      "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40219224039",
-      "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40219224127",
+      "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/1090",
+      "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40323233554",
+      "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40323233590",
       "deployed_by_existing_receipt": true,
-      "deployment_evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "deployment_evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
       "limitation": "Exact merged-main CI passed; public-readonly production smoke does not establish member UX acceptance.",
       "main_verify_attempt": 1
     },
-    "limitation": "Selected 1f7aee36/schema189 observed on both environments; schema and 36bec661/189 floor unchanged. Flags unchanged; drop-shipment absent/OFF. Member UX not_run; dated snapshots retained.",
+    "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。",
     "migrations_beyond_observed_runtime": [],
     "previous_main_verify_observation": {
-      "observed_at": "2026-10-25T11:57:09.343Z",
-      "main": "758cabe2d7756d19f4b972ed66982b00ba2bae58",
-      "main_tree": "7b5e2d9f86133fc318062821b454393deb6c6d1d",
-      "main_pr": 1026,
-      "main_merged_at": "2026-10-25T08:14:49Z",
-      "integrated_head": "2f79e575e7e8ba7ce7b699ceeee9db16eed16ba6",
-      "main_verify_run": 40175861457,
+      "observed_at": "2026-10-26T05:00:16.860Z",
+      "main": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "main_tree": "ddc7515fe2df3ffc83728277dec6fb015d4586f3",
+      "main_pr": 1071,
+      "main_merged_at": "2026-10-25T23:25:12Z",
+      "integrated_head": "794be7c25225c36d9bb022721b0fd4fcda79b2f2",
+      "main_verify_run": 40244683057,
       "main_verify_last_reported_status": "completed",
       "main_verify_conclusion": "success",
       "main_verify_successful_job_count": 17,
-      "main_codeql_run": 40175861736,
+      "main_codeql_run": 40244683121,
       "main_codeql_last_reported_status": "completed",
       "main_codeql_conclusion": "success",
       "main_codeql_successful_job_count": 3,
       "main_ci_complete": true,
-      "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/1026",
-      "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40175861457",
-      "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40175861736",
+      "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/1071",
+      "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40244683057",
+      "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40244683121",
       "deployed_by_existing_receipt": true,
-      "deployment_evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-758cabe2-2026-10-25.json",
+      "deployment_evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
       "limitation": "Exact merged-main CI passed; public-readonly production smoke does not establish member UX acceptance.",
       "main_verify_attempt": 1
     },
-    "runtime_release_source_scope": "Actual Worker source on both environments, read-only schema equality gates, production public smoke, four successful backup restores and dispatcher/timer receipts; member UX acceptance is not_run.",
+    "runtime_release_source_scope": "兩環境S11／schema189、READ ONLY ledger gate、production公開smoke與nightly重綁；無發布備份，會員UX not_run。",
     "previous_release_source_verify": {
       "conclusion": "success",
-      "source": "758cabe2d7756d19f4b972ed66982b00ba2bae58",
-      "head": "758cabe2d7756d19f4b972ed66982b00ba2bae58",
-      "run": 40175861457,
+      "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "head": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "run": 40244683057,
       "attempt": 1,
       "tree_equals_merged_release": true,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-758cabe2-2026-10-25.json"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json"
     }
   },
   "deployment": {
     "production": {
       "url": "https://freetwai.com/",
-      "observed_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "observed_at": "2026-10-25T19:43:59.340Z",
+      "observed_release_sha": "274f0614208552e73c734108e73494503cf30c66",
+      "observed_at": "2026-10-26T13:48:57.954Z",
       "health": {
         "http": 200,
         "status": "ok",
         "mode": "public",
         "runtime": "cloudflare-workers",
-        "release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "release_sha": "274f0614208552e73c734108e73494503cf30c66",
         "cache_control_no_store": true
       },
-      "worker_version": "656e04a5-6088-4389-a22f-905dd7790783",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-      "status": "deployed_public_smoke_and_restores_passed_operator_bound_natural_backup_pending",
-      "last_operator_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "limitation": "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance. The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF. The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src. Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP. Schema 189 to 189; no migrations, new floor or automatic retry. READ ONLY deploy gates require exact equality with the retained 188-row ledger (historical gap 022). Q2 floors remain 36bec661/189 in both environments; compatible forward repair retains paid-cancellation/drop-shipment, material policy and ten production coordinate constraints. At most #1058 changes the member experience by skipping one redundant render at the end of AbsurdDaily. #1042 is inert: FREEDOM_STORE_POLICIES_ENABLED is absent/OFF and checkout is OFF in both environments; both must be enabled by the owner before buyers see the policy-consent flow. Other changes are tests, docs or behavior-preserving refactor. Four selected backup sets passed remote readback, isolated DB/object restore and cleanup. Before runs are Q3 installed after-wrapper captures with Q4 pointers; after runs are in Q4. Two additional passed staging captures are superseded, not failures. created_at is capture creation, not completion. S8 was never received, bound or deployed. Three main Verify attempts and their timings are operator history without raw S8 CI evidence in Q4; successful S9 helper counters do not rewrite that history. Before each backup the operator ran IO, final-hop TCP mtr and DB RTT checks. Final-hop probe loss was observed with stable latency; this is not a loss-free path. Network samples are operator history; /tmp/fp-diag outputs are not repository evidence and are not copied. Both READ ONLY rehearsals returned rehearsed_readonly_not_deploy_authorized with schema189, 188 ledger rows and floor36bec661. Production timerPrecondition is the constant timers_active_expected label while both observed timers are inactive, as required after step 7 at RUNBOOK step 10b. Rehearsals are not deploy authorization. The retained followup-2 sandbox audit refused four managed mount modes. The orchestrator later passed the full audit outside the sandbox at RUNBOOK steps 0 and 1, both exit 0, before candidate creation. Reviewed stdout counts are operator history, not repository evidence. The documentation job did not rerun the kit or relax checks. Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention all is separate. Second-operator recovery, T-047, original 168 requirements and human outcomes remain unresolved. Natural scheduled execution remains not_observed_for_new_wrapper despite active/enabled restored timers. Member UX, second-operator recovery, live rollback, original 168 requirements and T-047 remain unverified. This documentation job only checked retained evidence and immutable local git objects. Remote state, signatures, database.dump and restored object payloads were not revalidated. File mtimes are labelled as approximate observations, not embedded operation timestamps.",
-      "health_observation": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
-      "worker_binding_observed_at": "2026-10-25T19:43:59.340Z",
-      "health_observed_at": "2026-10-25T19:32:15.364Z",
+      "worker_version": "145cd129-3d8a-49af-aa4e-5b5b7947c079",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "status": "deployed_public_smoke_passed_natural_backup_pending",
+      "last_operator_release_sha": "274f0614208552e73c734108e73494503cf30c66",
+      "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。",
+      "health_observation": "本次deploy health符合S11；production另有public smoke。",
+      "worker_binding_observed_at": "2026-10-26T13:48:57.954Z",
+      "health_observed_at": "2026-10-26T13:49:11.564Z",
       "health_observed_between": {
-        "start": "2026-10-25T19:32:06.081Z",
-        "end": "2026-10-25T19:32:15.364Z"
+        "start": "2026-10-26T13:49:11.561Z",
+        "end": "2026-10-26T13:49:22.873Z"
       },
-      "health_observed_at_basis": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
-      "worker_binding_observed_at_basis": "Final GET binding checked exact source/version/100-percent traffic/28 feature and retention bindings/route; health times remain separate."
+      "health_observed_at_basis": "Production smoke healthAttempts內嵌時間；staging deploy health無獨立時間，binding觀察為上界。",
+      "worker_binding_observed_at_basis": "release-receipt.json active_readback_attempts內嵌時間。"
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
-      "observed_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "observed_at": "2026-10-25T19:43:59.340Z",
+      "observed_release_sha": "274f0614208552e73c734108e73494503cf30c66",
+      "observed_at": "2026-10-26T13:46:06.318Z",
       "health": {
         "http": 200,
         "status": "ok",
         "mode": "staging",
         "runtime": "cloudflare-workers",
-        "release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "release_sha": "274f0614208552e73c734108e73494503cf30c66",
         "cache_control_no_store": true
       },
-      "worker_version": "75a94c52-dbd4-4b6a-9324-618b69a29397",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-      "status": "deployed_health_and_restores_passed_no_public_smoke_operator_bound_natural_backup_pending",
-      "last_operator_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "limitation": "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance. The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF. The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src. Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP. Schema 189 to 189; no migrations, new floor or automatic retry. READ ONLY deploy gates require exact equality with the retained 188-row ledger (historical gap 022). Q2 floors remain 36bec661/189 in both environments; compatible forward repair retains paid-cancellation/drop-shipment, material policy and ten production coordinate constraints. At most #1058 changes the member experience by skipping one redundant render at the end of AbsurdDaily. #1042 is inert: FREEDOM_STORE_POLICIES_ENABLED is absent/OFF and checkout is OFF in both environments; both must be enabled by the owner before buyers see the policy-consent flow. Other changes are tests, docs or behavior-preserving refactor. Four selected backup sets passed remote readback, isolated DB/object restore and cleanup. Before runs are Q3 installed after-wrapper captures with Q4 pointers; after runs are in Q4. Two additional passed staging captures are superseded, not failures. created_at is capture creation, not completion. S8 was never received, bound or deployed. Three main Verify attempts and their timings are operator history without raw S8 CI evidence in Q4; successful S9 helper counters do not rewrite that history. Before each backup the operator ran IO, final-hop TCP mtr and DB RTT checks. Final-hop probe loss was observed with stable latency; this is not a loss-free path. Network samples are operator history; /tmp/fp-diag outputs are not repository evidence and are not copied. Both READ ONLY rehearsals returned rehearsed_readonly_not_deploy_authorized with schema189, 188 ledger rows and floor36bec661. Production timerPrecondition is the constant timers_active_expected label while both observed timers are inactive, as required after step 7 at RUNBOOK step 10b. Rehearsals are not deploy authorization. The retained followup-2 sandbox audit refused four managed mount modes. The orchestrator later passed the full audit outside the sandbox at RUNBOOK steps 0 and 1, both exit 0, before candidate creation. Reviewed stdout counts are operator history, not repository evidence. The documentation job did not rerun the kit or relax checks. Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention all is separate. Second-operator recovery, T-047, original 168 requirements and human outcomes remain unresolved. Natural scheduled execution remains not_observed_for_new_wrapper despite active/enabled restored timers. Member UX, second-operator recovery, live rollback, original 168 requirements and T-047 remain unverified. This documentation job only checked retained evidence and immutable local git objects. Remote state, signatures, database.dump and restored object payloads were not revalidated. File mtimes are labelled as approximate observations, not embedded operation timestamps.",
-      "health_observation": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
-      "worker_binding_observed_at": "2026-10-25T19:43:59.340Z",
+      "worker_version": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "status": "deployed_public_smoke_passed_natural_backup_pending",
+      "last_operator_release_sha": "274f0614208552e73c734108e73494503cf30c66",
+      "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。",
+      "health_observation": "本次deploy health符合S11；production另有public smoke。",
+      "worker_binding_observed_at": "2026-10-26T13:46:06.318Z",
       "health_observed_at": null,
-      "health_observed_between": null,
-      "health_observed_at_basis": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
-      "worker_binding_observed_at_basis": "Final GET binding checked exact source/version/100-percent traffic/28 feature and retention bindings/route; health times remain separate."
+      "health_observed_between": {
+        "start": null,
+        "end": "2026-10-26T13:46:06.318Z"
+      },
+      "health_observed_at_basis": "Production smoke healthAttempts內嵌時間；staging deploy health無獨立時間，binding觀察為上界。",
+      "worker_binding_observed_at_basis": "release-receipt.json active_readback_attempts內嵌時間。"
     },
     "last_operator_rollout": {
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "at": "2026-10-25T19:44:03.881729+00:00",
-      "kind": "operator_observed_private_receipts_with_sanitized_public_summary",
-      "scope": "Main 1f7aee36: At most #1058 skips one redundant AbsurdDaily terminal render; other changes are tests, docs, refactor or behind OFF flags. #1042 store policies absent/OFF and checkout OFF. Schema 189, 36bec661/189 rollback floor, 28 settings, routes and cron unchanged.",
-      "status": "deployed_production_smoke_and_restores_passed_operator_bound_natural_backup_pending",
-      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-      "receipt_sha256": "5454d9aed5b1eb7be282e2a558f11fcbbf04bd5882e96c65de82c30f1209739d",
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "at": "2026-10-26T13:49:45.532745+00:00",
+      "kind": "sanitized_operator_observations",
+      "scope": "S11兩環境發布、公開smoke與nightly重綁；無發布備份。",
+      "status": "deployed_public_smoke_passed_natural_backup_pending",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "receipt_sha256": "3f7d3f7c476b699218436dc9a1cb5fe98ea38e31e9dbebb60ac1799968fe800a",
       "database_migrations_applied": {
         "staging": [],
         "production": []
       },
       "worker_versions": {
-        "staging": "75a94c52-dbd4-4b6a-9324-618b69a29397",
-        "production": "656e04a5-6088-4389-a22f-905dd7790783"
+        "staging": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
+        "production": "145cd129-3d8a-49af-aa4e-5b5b7947c079"
       },
-      "evidence_cutoff_at": "2026-10-25T19:44:09.636836+00:00",
-      "limitation": "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance. The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF. The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src. Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP. Schema 189 to 189; no migrations, new floor or automatic retry. READ ONLY deploy gates require exact equality with the retained 188-row ledger (historical gap 022). Q2 floors remain 36bec661/189 in both environments; compatible forward repair retains paid-cancellation/drop-shipment, material policy and ten production coordinate constraints. At most #1058 changes the member experience by skipping one redundant render at the end of AbsurdDaily. #1042 is inert: FREEDOM_STORE_POLICIES_ENABLED is absent/OFF and checkout is OFF in both environments; both must be enabled by the owner before buyers see the policy-consent flow. Other changes are tests, docs or behavior-preserving refactor. Four selected backup sets passed remote readback, isolated DB/object restore and cleanup. Before runs are Q3 installed after-wrapper captures with Q4 pointers; after runs are in Q4. Two additional passed staging captures are superseded, not failures. created_at is capture creation, not completion. S8 was never received, bound or deployed. Three main Verify attempts and their timings are operator history without raw S8 CI evidence in Q4; successful S9 helper counters do not rewrite that history. Before each backup the operator ran IO, final-hop TCP mtr and DB RTT checks. Final-hop probe loss was observed with stable latency; this is not a loss-free path. Network samples are operator history; /tmp/fp-diag outputs are not repository evidence and are not copied. Both READ ONLY rehearsals returned rehearsed_readonly_not_deploy_authorized with schema189, 188 ledger rows and floor36bec661. Production timerPrecondition is the constant timers_active_expected label while both observed timers are inactive, as required after step 7 at RUNBOOK step 10b. Rehearsals are not deploy authorization. The retained followup-2 sandbox audit refused four managed mount modes. The orchestrator later passed the full audit outside the sandbox at RUNBOOK steps 0 and 1, both exit 0, before candidate creation. Reviewed stdout counts are operator history, not repository evidence. The documentation job did not rerun the kit or relax checks. Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention all is separate. Second-operator recovery, T-047, original 168 requirements and human outcomes remain unresolved. Natural scheduled execution remains not_observed_for_new_wrapper despite active/enabled restored timers. Member UX, second-operator recovery, live rollback, original 168 requirements and T-047 remain unverified. This documentation job only checked retained evidence and immutable local git objects. Remote state, signatures, database.dump and restored object payloads were not revalidated. File mtimes are labelled as approximate observations, not embedded operation timestamps."
+      "evidence_cutoff_at": "2026-10-26T13:49:45.532745+00:00",
+      "limitation": "僅核對保留的本機 evidence 與 Git 物件，未重查遠端或重跑 kit；公開 smoke 不代表會員UX驗收。真人手機／Safari、登入會員旅程、第二操作者、live rollback、原168項與T-047未驗項保留。"
     },
     "last_production_rollout": {
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "at": "2026-10-25T19:43:59.340Z",
-      "worker_version": "656e04a5-6088-4389-a22f-905dd7790783",
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "at": "2026-10-26T13:48:57.954Z",
+      "worker_version": "145cd129-3d8a-49af-aa4e-5b5b7947c079",
+      "status": "deployed_public_smoke_passed_natural_backup_pending",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "scope": "首試部署／health／readback；無發布備份。",
+      "timestamp_basis": "active_readback_attempts內嵌時間。"
+    },
+    "last_staging_rollout": {
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "at": "2026-10-26T13:46:06.318Z",
+      "worker_version": "68498d53-eee2-4dd7-98a0-c0ead27e4b54",
+      "status": "deployed_public_smoke_passed_natural_backup_pending",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "scope": "首試部署／health／readback；無發布備份。",
+      "timestamp_basis": "active_readback_attempts內嵌時間。"
+    },
+    "previous_production_rollout": {
+      "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "at": "2026-10-26T05:00:16.860Z",
+      "worker_version": "b03e839f-17b3-4a06-88ed-fa7f53aaa4d4",
       "status": "deployed_public_smoke_and_restores_passed_operator_bound_natural_backup_pending",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
       "scope": "Public read-only HTTP, exact-source CSP and existing asset/anonymous-denial checks; no production member login, orders or real human acceptance.",
       "timestamp_basis": "Latest read-only Worker-binding observation; health, backup and timer times remain independently recorded. Staging member UX was not run."
     },
-    "last_staging_rollout": {
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "at": "2026-10-25T19:43:59.340Z",
-      "worker_version": "75a94c52-dbd4-4b6a-9324-618b69a29397",
+    "previous_staging_rollout": {
+      "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "at": "2026-10-26T05:00:16.860Z",
+      "worker_version": "7677d18e-3403-40b2-9cae-cd2527dddfdf",
       "status": "deployed_health_and_restores_passed_no_public_smoke_operator_bound_natural_backup_pending",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
       "scope": "No staging acceptance window per owner instruction; deployment health/homepage and final Worker binding were checked.",
       "timestamp_basis": "Latest read-only Worker-binding observation; health, backup and timer times remain independently recorded. Staging member UX was not run."
-    },
-    "previous_production_rollout": {
-      "source": "2bd62c256185f209dd936a8d811dc3c5d3b0d051",
-      "at": "2026-10-12T17:39:11.987365+00:00",
-      "kind": "operator_observed_private_receipts_with_sanitized_public_summary",
-      "scope": "Separate supplier product management, cooperation and reservations into three workspaces; retain unsaved form input while switching; show the new-product form on demand. No database migrations, member permissions or feature-flag changes.",
-      "status": "complete",
-      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-r23-2026-10-12.json",
-      "receipt_sha256": "a4a5ca0b3a4adc4c2886b0c57171d98d95ac15896c07df986cde7b6512eab246",
-      "selected_checks": {
-        "staging": {
-          "public_http": 40,
-          "member_browser": 43
-        },
-        "production": {
-          "public_http": 40,
-          "account_http": 25
-        }
-      },
-      "database_migrations_applied": {
-        "staging": [],
-        "production": []
-      },
-      "worker_versions": {
-        "staging": "608fd38f-a8ad-4bf5-9d20-bd1bab35905a",
-        "production": "51ca6d86-43bf-4cce-aec7-48616020870e"
-      },
-      "limitation": "Live staging acceptance uses newly registered synthetic members and the existing synthetic officer through the normal UI. Owned synthetic supply, retail and unpaid reservation data is cleaned up; this is not a human usability test."
-    },
-    "previous_staging_rollout": {
-      "source": "2bd62c256185f209dd936a8d811dc3c5d3b0d051",
-      "at": "2026-10-12T17:39:11.987365+00:00",
-      "kind": "operator_observed_private_receipts_with_sanitized_public_summary",
-      "scope": "Separate supplier product management, cooperation and reservations into three workspaces; retain unsaved form input while switching; show the new-product form on demand. No database migrations, member permissions or feature-flag changes.",
-      "status": "complete",
-      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-r23-2026-10-12.json",
-      "receipt_sha256": "a4a5ca0b3a4adc4c2886b0c57171d98d95ac15896c07df986cde7b6512eab246",
-      "selected_checks": {
-        "staging": {
-          "public_http": 40,
-          "member_browser": 43
-        },
-        "production": {
-          "public_http": 40,
-          "account_http": 25
-        }
-      },
-      "database_migrations_applied": {
-        "staging": [],
-        "production": []
-      },
-      "worker_versions": {
-        "staging": "608fd38f-a8ad-4bf5-9d20-bd1bab35905a",
-        "production": "51ca6d86-43bf-4cce-aec7-48616020870e"
-      },
-      "limitation": "Live staging acceptance uses newly registered synthetic members and the existing synthetic officer through the normal UI. Owned synthetic supply, retail and unpaid reservation data is cleaned up; this is not a human usability test."
     },
     "earlier_production_rollout": {
       "source": "3685d6266a6cd9c1dbe023bf595140f5035a02f5",
@@ -910,10 +875,10 @@
       "ledger_rows": 188,
       "through_number": 189,
       "source_digest_drift": 0,
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
       "kind": "read_only_deploy_gate_exact_ledger_equality",
-      "limitation": "No migrations. Successful deploy gates require exact 188-row ledger equality with schema-unchanged.json; retained READ ONLY rehearsals also establish the same ledger and floor. Rehearsal times use labelled file mtimes; no separate timestamped formal deploy-gate query receipt is retained. HTTP and isolated restores remain separate."
+      "limitation": "schema189／188列，成功deploy gate要求READ ONLY精確ledger相等；無migration或新floor。"
     },
     "staging_observed": {
       "environment": "staging",
@@ -921,56 +886,65 @@
       "through_number": 189,
       "applied": [],
       "pending": [],
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "at": "2026-10-25T19:03:41.004516+00:00",
-      "observed_between": null,
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "at": null,
+      "observed_between": {
+        "start": null,
+        "end": "2026-10-26T13:46:06.318Z"
+      },
       "kind": "read_only_deploy_gate_exact_ledger_equality",
       "role": "freedom_staging_next_migrator",
       "source_digest_drift": 0,
       "post_checks": "READ ONLY exact 188-row ledger equality required; schema189 and Q2 floor unchanged. Roles, TLS, material policy and retained guards checked; isolated restore is separate.",
-      "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json.",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json"
+      "timestamp_basis": "成功deploy gate要求READ ONLY ledger相等；binding時間僅為上界，無獨立query timestamp。",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json"
     },
     "production_observed": {
       "environment": "production",
       "through_number": 189,
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "at": "2026-10-25T19:30:28.418767+00:00",
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "at": null,
       "kind": "read_only_deploy_gate_exact_ledger_equality",
       "ledger_exact": true,
       "migrations_applied": [],
       "remote_writes": false,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-      "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json.",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "timestamp_basis": "成功deploy gate要求READ ONLY ledger相等；binding時間僅為上界，無獨立query timestamp。",
       "ledger_rows": 188,
       "role": "freedom_next_migrator",
       "source_digest_drift": 0,
-      "pending": []
-    },
-    "production_last_reported": "Successful 1f7aee36 deploy gate requires READ ONLY exact 188-row ledger equality; no migration or new floor. Q2 confirmed 36bec661/schema189 floor retained; after-backup separately restored ledger, material policy and ten coordinate constraints. Retained production READ ONLY rehearsal separately confirms schema189, 188 rows and floor36bec661 with timers inactive as expected at step10b; its labelled file mtime is used for the schema observation.",
-    "fresh_live_ledger_read": {
-      "staging": {
-        "at": "2026-10-25T19:03:41.004516+00:00",
-        "rows": 188,
-        "through_number": 189,
-        "last_applied": "189_hosted_drop_ship.sql",
-        "source_digest_drift": 0,
-        "kind": "read_only_deploy_gate_exact_ledger_equality",
-        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-        "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json."
-      },
-      "production": {
-        "at": "2026-10-25T19:30:28.418767+00:00",
-        "rows": 188,
-        "through_number": 189,
-        "last_applied": "189_hosted_drop_ship.sql",
-        "source_digest_drift": 0,
-        "kind": "read_only_deploy_gate_exact_ledger_equality",
-        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-        "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json."
+      "pending": [],
+      "observed_between": {
+        "start": null,
+        "end": "2026-10-26T13:48:57.954Z"
       }
     },
-    "limitation": "Ledger evidence is the authenticated operator query, separate from HTTP health. Re-read before future schema/recovery operations.",
+    "production_last_reported": "S11成功deploy gate要求READ ONLY精確188列ledger相等；schema189與36bec661／189下限不變，無migration、新floor或發布備份；無獨立timestamped query receipt。",
+    "fresh_live_ledger_read": {
+      "staging": {
+        "at": null,
+        "rows": 188,
+        "through_number": 189,
+        "last_applied": "189_hosted_drop_ship.sql",
+        "source_digest_drift": 0,
+        "kind": "read_only_deploy_gate_exact_ledger_equality",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+        "timestamp_basis": "成功deploy gate所需唯讀核對，無獨立query timestamp；非rehearsal。",
+        "observed_no_later_than": "2026-10-26T13:46:06.318Z"
+      },
+      "production": {
+        "at": null,
+        "rows": 188,
+        "through_number": 189,
+        "last_applied": "189_hosted_drop_ship.sql",
+        "source_digest_drift": 0,
+        "kind": "read_only_deploy_gate_exact_ledger_equality",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+        "timestamp_basis": "成功deploy gate所需唯讀核對，無獨立query timestamp；非rehearsal。",
+        "observed_no_later_than": "2026-10-26T13:48:57.954Z"
+      }
+    },
+    "limitation": "S11成功deploy gate要求READ ONLY ledger逐列相等；無獨立timestamped查詢receipt、無本輪rehearsal／migration；歷史觀察另存。",
     "declared_historical_number_gaps": [
       22
     ],
@@ -994,11 +968,11 @@
       }
     },
     "main_migrations_beyond_observed_release": {
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "runtime_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "runtime_observed_at": "2026-10-25T19:43:59.340Z",
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "runtime_source": "274f0614208552e73c734108e73494503cf30c66",
+      "runtime_observed_at": "2026-10-26T13:48:57.954Z",
       "migrations": [],
-      "limitation": "Selected 1f7aee36 deployed; no migration diff from 758cabe2, schema189 unchanged. This is a release-source observation, not a claim about later repository main."
+      "limitation": "S11已部署；相較S10無migration，schema189不變。"
     }
   },
   "topology": {
@@ -1112,9 +1086,9 @@
     },
     "limitation": "Merged or deployed source does not enable default-off features or establish full acceptance; see the release flags and receipt.",
     "release_flags": {
-      "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "observed_at": "2026-10-25T19:43:59.340Z",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "source": "274f0614208552e73c734108e73494503cf30c66",
+      "observed_at": "2026-10-26T13:48:57.954Z",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
       "by_environment": {
         "staging": {
           "commerce_console": true,
@@ -1143,7 +1117,7 @@
           "commerce_drop_ship": false
         }
       },
-      "other_flags": "The 27 prior flags plus FREEDOM_COMMERCE_CONTACT_RETENTION=all are identical before/after (28 settings, 37 vars each). All 20 absent flags remain OFF, including drop-shipment and store policies; checkout remains OFF, so #1042 is inert. Full maps in receipt."
+      "other_flags": "27 flags加contact retention all共28設定，以before／after集合比對相等，各37 vars；checkout／交易Email仍OFF，兩個tester quest名稱僅文件且未設定。完整maps見S11收據。"
     },
     "hosted_store": {
       "source": "14f82aa29860c805e63edb98e9cb1f85eccd251f",
@@ -1343,45 +1317,19 @@
   },
   "recovery": {
     "daily_operator_source": {
-      "staging": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "production": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77"
+      "staging": "274f0614208552e73c734108e73494503cf30c66",
+      "production": "274f0614208552e73c734108e73494503cf30c66"
     },
     "last_rollout_backup_release_pins": {
-      "staging": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "production": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "wrapper_sha256": "64bdeee1b9bbd34d191db507ed25d9b23efa024734b33a835399708500b477fd",
-      "at": "2026-10-25T19:44:03.881729+00:00",
-      "operator_source": {
-        "staging": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-        "production": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77"
-      },
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "staging": "274f0614208552e73c734108e73494503cf30c66",
+      "production": "274f0614208552e73c734108e73494503cf30c66",
+      "wrapper_sha256": "476945eb329b8dec87413ecd9087f1882a9206acb636c48a186d50d7861fa16c",
+      "at": "2026-10-26T13:49:45.532745+00:00",
+      "operator_source": "274f0614208552e73c734108e73494503cf30c66",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
       "selected_release_dispatcher_installed": true,
-      "production_after_backup_passed": true,
-      "staging_after_backup_passed": true,
       "scheduled_run_of_new_operator_observed": false,
-      "bindings": {
-        "staging": {
-          "setId": "f646857e-aac7-4d52-8d63-29a97ac0816c",
-          "completedSha256": "d2c84b2a0b219092fe25b82e0e68f89c92ca61d530bfa758874e72a9e6ad918d",
-          "wrapper": "run-after-staging-backup",
-          "wrapperSha256": "e2cc06ef72d89a3682cf3d6cbe07e9fff83ec85708e5cb0e491622e60ddbc3d1",
-          "adapter": "backup-adapter.after-staging.mts",
-          "adapterSha256": "ad27b3a06655a80e5a5eeed34fa15cf3c645d4ebe7d62fe4b131543b7922f765",
-          "pins": "successor-runtime-pins.sha256",
-          "pinsSha256": "c9bf74549ed7a717d7d6bbf9b08b89169af48090b681a9cf9b036c1af37140d3"
-        },
-        "production": {
-          "setId": "e7b182bc-8ce8-4006-ab4e-b90a6b189d26",
-          "completedSha256": "380946ae314262592b974fba9f4c663c1ed887a416e19f4d619bd8a244947b33",
-          "wrapper": "run-after-production-backup",
-          "wrapperSha256": "47d668c6e8d8348c8171997d4f2817e1b3d99676769c3813f9b94a75498975ba",
-          "adapter": "backup-adapter.after-production.mts",
-          "adapterSha256": "bd5e37784f231c033644ddedee4d97395c8009721ede86e610f8ad60663b23d0",
-          "pins": "successor-runtime-pins.sha256",
-          "pinsSha256": "c9bf74549ed7a717d7d6bbf9b08b89169af48090b681a9cf9b036c1af37140d3"
-        }
-      }
+      "scope": "僅nightly adapter重綁，無發布備份；舊backup sets保留歷史效力。"
     },
     "production_rollout_backups": [
       {
@@ -2305,6 +2253,32 @@
         "cleanup_verified": true,
         "receipt_sha256": "380946ae314262592b974fba9f4c663c1ed887a416e19f4d619bd8a244947b33",
         "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json"
+      },
+      {
+        "label": "Main b14916cc before",
+        "set_id": "ee172b97-4154-46ac-b26c-97864e908a6c",
+        "source_release": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "schema": 189,
+        "status": "passed",
+        "created_at": "2026-10-26T03:59:00.330Z",
+        "restore": "database_and_objects_restored",
+        "remote_readback": "verified",
+        "cleanup_verified": true,
+        "receipt_sha256": "fe3aaea25d8f64acc2ff2d41a29d05e26b33f33a758f532402cea7905461dd0b",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json"
+      },
+      {
+        "label": "Main b14916cc after",
+        "set_id": "acc0a813-f953-4f88-aeb9-df756960eaea",
+        "source_release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "schema": 189,
+        "status": "passed",
+        "created_at": "2026-10-26T04:49:12.253Z",
+        "restore": "database_and_objects_restored",
+        "remote_readback": "verified",
+        "cleanup_verified": true,
+        "receipt_sha256": "d45139fe25fc09f48d9fee385e9de1b87d77edb2d38277af600c201e35ff3793",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json"
       }
     ],
     "staging_rollout_backups": [
@@ -3172,6 +3146,32 @@
         "cleanup_verified": true,
         "receipt_sha256": "d2c84b2a0b219092fe25b82e0e68f89c92ca61d530bfa758874e72a9e6ad918d",
         "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json"
+      },
+      {
+        "label": "Main b14916cc before",
+        "set_id": "7b71eb09-06f3-46ee-8bce-208d7f6d0824",
+        "source_release": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "schema": 189,
+        "status": "passed",
+        "created_at": "2026-10-26T03:32:58.807Z",
+        "restore": "database_and_objects_restored",
+        "remote_readback": "verified",
+        "cleanup_verified": true,
+        "receipt_sha256": "5bba58e003d43234fe234f8de2736e3ca39d107446463649714782b84f992733",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json"
+      },
+      {
+        "label": "Main b14916cc after",
+        "set_id": "ab983996-ea80-4b66-8b6b-8189831725ae",
+        "source_release": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+        "schema": 189,
+        "status": "passed",
+        "created_at": "2026-10-26T03:46:02.903Z",
+        "restore": "database_and_objects_restored",
+        "remote_readback": "verified",
+        "cleanup_verified": true,
+        "receipt_sha256": "c4d3a3e5ffc067efee57525015e651ac9f0ddcb2547ea53b88bcec4706da84c5",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json"
       }
     ],
     "scheduled_drill_source": "89f64ace3b9c24e493fc367b1b489dc8749ee20e",
@@ -3184,40 +3184,15 @@
       "Same-host isolated current-schema restore passed; a second authorized operator in a new environment is not yet accepted",
       "GC/OFF daily mode remains selected; retention executor and historical unsettled PUT remain open"
     ],
-    "operator_source_note": "Both environments 1f7aee36/schema189; floor 36bec661/189 unchanged. Four backups passed readback/isolated restore/cleanup. S8 three unsuccessful CI attempts and two passed-but-superseded staging captures preserved. Read-only rehearsals retain actual timer states and final-hop probe loss remains an operator observation. Dispatcher 64bdeee1 and original timers restored; member UX and natural execution remain unverified.",
+    "operator_source_note": "依owner決定，本次沒有before／after備份或backup gate，故省略備份／restore／pause／restore timer欄位；每日備份為資料復原點，Git為程式復原點。Timers維持active；deploy-start.mjs與dispatcher每步拒絕03:00–05:45Z或backup service active／PID非0。",
     "current_operator_scheduled_run": {
-      "observed_at": "2026-10-25T19:44:03.881729+00:00",
-      "status": "not_observed_for_new_operator",
-      "operator_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
-      "dispatcher_sha256": "64bdeee1b9bbd34d191db507ed25d9b23efa024734b33a835399708500b477fd",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-      "timers": {
-        "staging": {
-          "active": "active",
-          "enabled": "enabled",
-          "calendar_utc": "03:30:00",
-          "randomized_delay": "5min",
-          "persistent": "yes",
-          "next_scheduled_utc": "2026-10-26T03:32:43Z",
-          "service_active": "inactive",
-          "service_pid": 0,
-          "service_argv_unchanged": true,
-          "natural_scheduled_execution": "not_observed_for_new_wrapper"
-        },
-        "production": {
-          "active": "active",
-          "enabled": "enabled",
-          "calendar_utc": "04:30:00",
-          "randomized_delay": "5min",
-          "persistent": "yes",
-          "next_scheduled_utc": "2026-10-26T04:33:02Z",
-          "service_active": "inactive",
-          "service_pid": 0,
-          "service_argv_unchanged": true,
-          "natural_scheduled_execution": "not_observed_for_new_wrapper"
-        }
-      },
-      "limitation": "Active/enabled original timers and manual release restores do not establish natural scheduled execution or second-operator recovery. Prior Persistent catch-up remains in dated history."
+      "observed_at": "2026-10-26T13:49:45.532745+00:00",
+      "status": "not_observed_for_new_wrapper",
+      "operator_source": "274f0614208552e73c734108e73494503cf30c66",
+      "dispatcher_sha256": "476945eb329b8dec87413ecd9087f1882a9206acb636c48a186d50d7861fa16c",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-274f0614-2026-10-26.json",
+      "timers": "stayed_active",
+      "limitation": "首次S11自然備份為10/27約03:34Z staging／04:33Z production，尚未觀察；dispatcher安裝不等於備份。"
     },
     "rollback": {
       "current_schema": {
@@ -8866,6 +8841,574 @@
           }
         }
       }
+    },
+    {
+      "recorded_at": "2026-10-25T19:47:57.703216+00:00",
+      "merged_source": {
+        "repository": "FreeTWAI/freedom-platform",
+        "sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "tree": "8a056bda0dd776ae3efa0f9cd5b2feeb2d307f7b",
+        "observed_at": "2026-10-25T19:43:59.340Z",
+        "observation_kind": "Exact merged main source/archive/checkout, completed main Verify/CodeQL records and per-environment deployment receipts; observed_at is the final GET Worker-binding time.",
+        "runtime_release_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "release_source_verify": {
+          "conclusion": "success",
+          "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "head": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "run": 40219224039,
+          "attempt": 1,
+          "tree_equals_merged_release": true,
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json"
+        },
+        "main_verify_observation": {
+          "observed_at": "2026-10-25T19:43:59.340Z",
+          "main": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "main_tree": "8a056bda0dd776ae3efa0f9cd5b2feeb2d307f7b",
+          "main_pr": 1067,
+          "main_merged_at": "2026-10-25T18:01:00Z",
+          "integrated_head": "3ade1cf5651163fc99f1515519aca9a61b75eec3",
+          "main_verify_run": 40219224039,
+          "main_verify_last_reported_status": "completed",
+          "main_verify_conclusion": "success",
+          "main_verify_successful_job_count": 17,
+          "main_codeql_run": 40219224127,
+          "main_codeql_last_reported_status": "completed",
+          "main_codeql_conclusion": "success",
+          "main_codeql_successful_job_count": 3,
+          "main_ci_complete": true,
+          "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/1067",
+          "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40219224039",
+          "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40219224127",
+          "deployed_by_existing_receipt": true,
+          "deployment_evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+          "limitation": "Exact merged-main CI passed; public-readonly production smoke does not establish member UX acceptance.",
+          "main_verify_attempt": 1
+        },
+        "limitation": "Selected 1f7aee36/schema189 observed on both environments; schema and 36bec661/189 floor unchanged. Flags unchanged; drop-shipment absent/OFF. Member UX not_run; dated snapshots retained.",
+        "migrations_beyond_observed_runtime": [],
+        "previous_main_verify_observation": {
+          "observed_at": "2026-10-25T11:57:09.343Z",
+          "main": "758cabe2d7756d19f4b972ed66982b00ba2bae58",
+          "main_tree": "7b5e2d9f86133fc318062821b454393deb6c6d1d",
+          "main_pr": 1026,
+          "main_merged_at": "2026-10-25T08:14:49Z",
+          "integrated_head": "2f79e575e7e8ba7ce7b699ceeee9db16eed16ba6",
+          "main_verify_run": 40175861457,
+          "main_verify_last_reported_status": "completed",
+          "main_verify_conclusion": "success",
+          "main_verify_successful_job_count": 17,
+          "main_codeql_run": 40175861736,
+          "main_codeql_last_reported_status": "completed",
+          "main_codeql_conclusion": "success",
+          "main_codeql_successful_job_count": 3,
+          "main_ci_complete": true,
+          "merge_url": "https://github.com/FreeTWAI/freedom-platform/pull/1026",
+          "main_verify_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40175861457",
+          "main_codeql_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40175861736",
+          "deployed_by_existing_receipt": true,
+          "deployment_evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-758cabe2-2026-10-25.json",
+          "limitation": "Exact merged-main CI passed; public-readonly production smoke does not establish member UX acceptance.",
+          "main_verify_attempt": 1
+        },
+        "runtime_release_source_scope": "Actual Worker source on both environments, read-only schema equality gates, production public smoke, four successful backup restores and dispatcher/timer receipts; member UX acceptance is not_run.",
+        "previous_release_source_verify": {
+          "conclusion": "success",
+          "source": "758cabe2d7756d19f4b972ed66982b00ba2bae58",
+          "head": "758cabe2d7756d19f4b972ed66982b00ba2bae58",
+          "run": 40175861457,
+          "attempt": 1,
+          "tree_equals_merged_release": true,
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-758cabe2-2026-10-25.json"
+        }
+      },
+      "environments": {
+        "production": {
+          "url": "https://freetwai.com/",
+          "observed_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "observed_at": "2026-10-25T19:43:59.340Z",
+          "health": {
+            "http": 200,
+            "status": "ok",
+            "mode": "public",
+            "runtime": "cloudflare-workers",
+            "release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+            "cache_control_no_store": true
+          },
+          "worker_version": "656e04a5-6088-4389-a22f-905dd7790783",
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+          "status": "deployed_public_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+          "last_operator_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "limitation": "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance. The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF. The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src. Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP. Schema 189 to 189; no migrations, new floor or automatic retry. READ ONLY deploy gates require exact equality with the retained 188-row ledger (historical gap 022). Q2 floors remain 36bec661/189 in both environments; compatible forward repair retains paid-cancellation/drop-shipment, material policy and ten production coordinate constraints. At most #1058 changes the member experience by skipping one redundant render at the end of AbsurdDaily. #1042 is inert: FREEDOM_STORE_POLICIES_ENABLED is absent/OFF and checkout is OFF in both environments; both must be enabled by the owner before buyers see the policy-consent flow. Other changes are tests, docs or behavior-preserving refactor. Four selected backup sets passed remote readback, isolated DB/object restore and cleanup. Before runs are Q3 installed after-wrapper captures with Q4 pointers; after runs are in Q4. Two additional passed staging captures are superseded, not failures. created_at is capture creation, not completion. S8 was never received, bound or deployed. Three main Verify attempts and their timings are operator history without raw S8 CI evidence in Q4; successful S9 helper counters do not rewrite that history. Before each backup the operator ran IO, final-hop TCP mtr and DB RTT checks. Final-hop probe loss was observed with stable latency; this is not a loss-free path. Network samples are operator history; /tmp/fp-diag outputs are not repository evidence and are not copied. Both READ ONLY rehearsals returned rehearsed_readonly_not_deploy_authorized with schema189, 188 ledger rows and floor36bec661. Production timerPrecondition is the constant timers_active_expected label while both observed timers are inactive, as required after step 7 at RUNBOOK step 10b. Rehearsals are not deploy authorization. The retained followup-2 sandbox audit refused four managed mount modes. The orchestrator later passed the full audit outside the sandbox at RUNBOOK steps 0 and 1, both exit 0, before candidate creation. Reviewed stdout counts are operator history, not repository evidence. The documentation job did not rerun the kit or relax checks. Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention all is separate. Second-operator recovery, T-047, original 168 requirements and human outcomes remain unresolved. Natural scheduled execution remains not_observed_for_new_wrapper despite active/enabled restored timers. Member UX, second-operator recovery, live rollback, original 168 requirements and T-047 remain unverified. This documentation job only checked retained evidence and immutable local git objects. Remote state, signatures, database.dump and restored object payloads were not revalidated. File mtimes are labelled as approximate observations, not embedded operation timestamps.",
+          "health_observation": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
+          "worker_binding_observed_at": "2026-10-25T19:43:59.340Z",
+          "health_observed_at": "2026-10-25T19:32:15.364Z",
+          "health_observed_between": {
+            "start": "2026-10-25T19:32:06.081Z",
+            "end": "2026-10-25T19:32:15.364Z"
+          },
+          "health_observed_at_basis": "Public smoke checked exact-source health within its recorded window; completion is not a separate health query.",
+          "worker_binding_observed_at_basis": "Final GET binding checked exact source/version/100-percent traffic/28 feature and retention bindings/route; health times remain separate."
+        },
+        "staging": {
+          "url": "https://staging.freetwai.com/",
+          "observed_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "observed_at": "2026-10-25T19:43:59.340Z",
+          "health": {
+            "http": 200,
+            "status": "ok",
+            "mode": "staging",
+            "runtime": "cloudflare-workers",
+            "release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+            "cache_control_no_store": true
+          },
+          "worker_version": "75a94c52-dbd4-4b6a-9324-618b69a29397",
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+          "status": "deployed_health_and_restores_passed_no_public_smoke_operator_bound_natural_backup_pending",
+          "last_operator_release_sha": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "limitation": "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance. The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF. The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src. Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP. Schema 189 to 189; no migrations, new floor or automatic retry. READ ONLY deploy gates require exact equality with the retained 188-row ledger (historical gap 022). Q2 floors remain 36bec661/189 in both environments; compatible forward repair retains paid-cancellation/drop-shipment, material policy and ten production coordinate constraints. At most #1058 changes the member experience by skipping one redundant render at the end of AbsurdDaily. #1042 is inert: FREEDOM_STORE_POLICIES_ENABLED is absent/OFF and checkout is OFF in both environments; both must be enabled by the owner before buyers see the policy-consent flow. Other changes are tests, docs or behavior-preserving refactor. Four selected backup sets passed remote readback, isolated DB/object restore and cleanup. Before runs are Q3 installed after-wrapper captures with Q4 pointers; after runs are in Q4. Two additional passed staging captures are superseded, not failures. created_at is capture creation, not completion. S8 was never received, bound or deployed. Three main Verify attempts and their timings are operator history without raw S8 CI evidence in Q4; successful S9 helper counters do not rewrite that history. Before each backup the operator ran IO, final-hop TCP mtr and DB RTT checks. Final-hop probe loss was observed with stable latency; this is not a loss-free path. Network samples are operator history; /tmp/fp-diag outputs are not repository evidence and are not copied. Both READ ONLY rehearsals returned rehearsed_readonly_not_deploy_authorized with schema189, 188 ledger rows and floor36bec661. Production timerPrecondition is the constant timers_active_expected label while both observed timers are inactive, as required after step 7 at RUNBOOK step 10b. Rehearsals are not deploy authorization. The retained followup-2 sandbox audit refused four managed mount modes. The orchestrator later passed the full audit outside the sandbox at RUNBOOK steps 0 and 1, both exit 0, before candidate creation. Reviewed stdout counts are operator history, not repository evidence. The documentation job did not rerun the kit or relax checks. Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention all is separate. Second-operator recovery, T-047, original 168 requirements and human outcomes remain unresolved. Natural scheduled execution remains not_observed_for_new_wrapper despite active/enabled restored timers. Member UX, second-operator recovery, live rollback, original 168 requirements and T-047 remain unverified. This documentation job only checked retained evidence and immutable local git objects. Remote state, signatures, database.dump and restored object payloads were not revalidated. File mtimes are labelled as approximate observations, not embedded operation timestamps.",
+          "health_observation": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
+          "worker_binding_observed_at": "2026-10-25T19:43:59.340Z",
+          "health_observed_at": null,
+          "health_observed_between": null,
+          "health_observed_at_basis": "Deployment receipt confirmed exact-source health and homepage without a separate timestamp; the final GET Worker-binding time is not used as the health time.",
+          "worker_binding_observed_at_basis": "Final GET binding checked exact source/version/100-percent traffic/28 feature and retention bindings/route; health times remain separate."
+        }
+      },
+      "last_operator_rollout": {
+        "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "at": "2026-10-25T19:44:03.881729+00:00",
+        "kind": "operator_observed_private_receipts_with_sanitized_public_summary",
+        "scope": "Main 1f7aee36: At most #1058 skips one redundant AbsurdDaily terminal render; other changes are tests, docs, refactor or behind OFF flags. #1042 store policies absent/OFF and checkout OFF. Schema 189, 36bec661/189 rollback floor, 28 settings, routes and cron unchanged.",
+        "status": "deployed_production_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+        "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+        "receipt_sha256": "5454d9aed5b1eb7be282e2a558f11fcbbf04bd5882e96c65de82c30f1209739d",
+        "database_migrations_applied": {
+          "staging": [],
+          "production": []
+        },
+        "worker_versions": {
+          "staging": "75a94c52-dbd4-4b6a-9324-618b69a29397",
+          "production": "656e04a5-6088-4389-a22f-905dd7790783"
+        },
+        "evidence_cutoff_at": "2026-10-25T19:44:09.636836+00:00",
+        "limitation": "No staging acceptance window. Member UX, real phones/Safari and authenticated production journeys remain not_run; CI, deployment and public smoke do not establish member acceptance. The 27 prior live flags plus contact retention all (28 settings, 37 vars per environment), routes and cron are unchanged. No new live FREEDOM_* name. Hosted drop-shipment has schema189 but its flag is absent and OFF; checkout and transaction email remain OFF. The live production / header was verified to include \"frame-src https://www.youtube-nocookie.com;\"; the live Worker CSP on /pay/ecpay/ followed by 43 A characters was verified to omit frame-src. Cloudflare Access returned 302 before the Worker on production /admin and /admin/github/callback; liveAdminWorkerCsp=not_observed_access_protected, adminCspSource=exact_source_function. Checking the exact deployed source function does not establish observation of live admin Worker CSP. Schema 189 to 189; no migrations, new floor or automatic retry. READ ONLY deploy gates require exact equality with the retained 188-row ledger (historical gap 022). Q2 floors remain 36bec661/189 in both environments; compatible forward repair retains paid-cancellation/drop-shipment, material policy and ten production coordinate constraints. At most #1058 changes the member experience by skipping one redundant render at the end of AbsurdDaily. #1042 is inert: FREEDOM_STORE_POLICIES_ENABLED is absent/OFF and checkout is OFF in both environments; both must be enabled by the owner before buyers see the policy-consent flow. Other changes are tests, docs or behavior-preserving refactor. Four selected backup sets passed remote readback, isolated DB/object restore and cleanup. Before runs are Q3 installed after-wrapper captures with Q4 pointers; after runs are in Q4. Two additional passed staging captures are superseded, not failures. created_at is capture creation, not completion. S8 was never received, bound or deployed. Three main Verify attempts and their timings are operator history without raw S8 CI evidence in Q4; successful S9 helper counters do not rewrite that history. Before each backup the operator ran IO, final-hop TCP mtr and DB RTT checks. Final-hop probe loss was observed with stable latency; this is not a loss-free path. Network samples are operator history; /tmp/fp-diag outputs are not repository evidence and are not copied. Both READ ONLY rehearsals returned rehearsed_readonly_not_deploy_authorized with schema189, 188 ledger rows and floor36bec661. Production timerPrecondition is the constant timers_active_expected label while both observed timers are inactive, as required after step 7 at RUNBOOK step 10b. Rehearsals are not deploy authorization. The retained followup-2 sandbox audit refused four managed mount modes. The orchestrator later passed the full audit outside the sandbox at RUNBOOK steps 0 and 1, both exit 0, before candidate creation. Reviewed stdout counts are operator history, not repository evidence. The documentation job did not rerun the kit or relax checks. Restore remains quarantined. Backup GC/retention and PITR remain disabled; contact-retention all is separate. Second-operator recovery, T-047, original 168 requirements and human outcomes remain unresolved. Natural scheduled execution remains not_observed_for_new_wrapper despite active/enabled restored timers. Member UX, second-operator recovery, live rollback, original 168 requirements and T-047 remain unverified. This documentation job only checked retained evidence and immutable local git objects. Remote state, signatures, database.dump and restored object payloads were not revalidated. File mtimes are labelled as approximate observations, not embedded operation timestamps."
+      },
+      "last_production_rollout": {
+        "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "at": "2026-10-25T19:43:59.340Z",
+        "worker_version": "656e04a5-6088-4389-a22f-905dd7790783",
+        "status": "deployed_public_smoke_and_restores_passed_operator_bound_natural_backup_pending",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+        "scope": "Public read-only HTTP, exact-source CSP and existing asset/anonymous-denial checks; no production member login, orders or real human acceptance.",
+        "timestamp_basis": "Latest read-only Worker-binding observation; health, backup and timer times remain independently recorded. Staging member UX was not run."
+      },
+      "last_staging_rollout": {
+        "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "at": "2026-10-25T19:43:59.340Z",
+        "worker_version": "75a94c52-dbd4-4b6a-9324-618b69a29397",
+        "status": "deployed_health_and_restores_passed_no_public_smoke_operator_bound_natural_backup_pending",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+        "scope": "No staging acceptance window per owner instruction; deployment health/homepage and final Worker binding were checked.",
+        "timestamp_basis": "Latest read-only Worker-binding observation; health, backup and timer times remain independently recorded. Staging member UX was not run."
+      },
+      "schema": {
+        "last_observed_live": {
+          "ledger_rows": 188,
+          "through_number": 189,
+          "source_digest_drift": 0,
+          "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+          "kind": "read_only_deploy_gate_exact_ledger_equality",
+          "limitation": "No migrations. Successful deploy gates require exact 188-row ledger equality with schema-unchanged.json; retained READ ONLY rehearsals also establish the same ledger and floor. Rehearsal times use labelled file mtimes; no separate timestamped formal deploy-gate query receipt is retained. HTTP and isolated restores remain separate."
+        },
+        "staging_observed": {
+          "environment": "staging",
+          "ledger_rows": 188,
+          "through_number": 189,
+          "applied": [],
+          "pending": [],
+          "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "at": "2026-10-25T19:03:41.004516+00:00",
+          "observed_between": null,
+          "kind": "read_only_deploy_gate_exact_ledger_equality",
+          "role": "freedom_staging_next_migrator",
+          "source_digest_drift": 0,
+          "post_checks": "READ ONLY exact 188-row ledger equality required; schema189 and Q2 floor unchanged. Roles, TLS, material policy and retained guards checked; isolated restore is separate.",
+          "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json.",
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json"
+        },
+        "production_observed": {
+          "environment": "production",
+          "through_number": 189,
+          "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "at": "2026-10-25T19:30:28.418767+00:00",
+          "kind": "read_only_deploy_gate_exact_ledger_equality",
+          "ledger_exact": true,
+          "migrations_applied": [],
+          "remote_writes": false,
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+          "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json.",
+          "ledger_rows": 188,
+          "role": "freedom_next_migrator",
+          "source_digest_drift": 0,
+          "pending": []
+        },
+        "production_last_reported": "Successful 1f7aee36 deploy gate requires READ ONLY exact 188-row ledger equality; no migration or new floor. Q2 confirmed 36bec661/schema189 floor retained; after-backup separately restored ledger, material policy and ten coordinate constraints. Retained production READ ONLY rehearsal separately confirms schema189, 188 rows and floor36bec661 with timers inactive as expected at step10b; its labelled file mtime is used for the schema observation.",
+        "fresh_live_ledger_read": {
+          "staging": {
+            "at": "2026-10-25T19:03:41.004516+00:00",
+            "rows": 188,
+            "through_number": 189,
+            "last_applied": "189_hosted_drop_ship.sql",
+            "source_digest_drift": 0,
+            "kind": "read_only_deploy_gate_exact_ledger_equality",
+            "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+            "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json."
+          },
+          "production": {
+            "at": "2026-10-25T19:30:28.418767+00:00",
+            "rows": 188,
+            "through_number": 189,
+            "last_applied": "189_hosted_drop_ship.sql",
+            "source_digest_drift": 0,
+            "kind": "read_only_deploy_gate_exact_ledger_equality",
+            "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+            "timestamp_basis": "Retained READ ONLY rehearsal receipt mtime, not embedded query time or formal deploy-gate completion; schema189/188 rows/floor verified in rehearsal.json."
+          }
+        },
+        "limitation": "Ledger evidence is the authenticated operator query, separate from HTTP health. Re-read before future schema/recovery operations.",
+        "declared_historical_number_gaps": [
+          22
+        ],
+        "gap_evidence": "deploy/cloudflare/environments.json#/database_defaults/migrations/known_gaps",
+        "historical_row_security_observation": {
+          "staging": {
+            "tables": 33,
+            "policies": 46,
+            "forced": 0,
+            "security_definers_referencing_rls": 0,
+            "runtime_bypass": false,
+            "backup_bypass": true
+          },
+          "production": {
+            "tables": 33,
+            "policies": 46,
+            "forced": 0,
+            "security_definers_referencing_rls": 0,
+            "runtime_bypass": false,
+            "backup_bypass": true
+          }
+        },
+        "main_migrations_beyond_observed_release": {
+          "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "runtime_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "runtime_observed_at": "2026-10-25T19:43:59.340Z",
+          "migrations": [],
+          "limitation": "Selected 1f7aee36 deployed; no migration diff from 758cabe2, schema189 unchanged. This is a release-source observation, not a claim about later repository main."
+        }
+      },
+      "release_flags": {
+        "source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+        "observed_at": "2026-10-25T19:43:59.340Z",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+        "by_environment": {
+          "staging": {
+            "commerce_console": true,
+            "commerce_checkout": false,
+            "commerce_email": false,
+            "commerce_quarantine": false,
+            "supplier_console": true,
+            "distribution_photos": true,
+            "supply_material_media": true,
+            "supply_material_uploads": true,
+            "short_videos": true,
+            "commerce_contact_retention": "all",
+            "commerce_drop_ship": false
+          },
+          "production": {
+            "commerce_console": true,
+            "commerce_checkout": false,
+            "commerce_email": false,
+            "commerce_quarantine": false,
+            "supplier_console": true,
+            "distribution_photos": false,
+            "supply_material_media": false,
+            "supply_material_uploads": false,
+            "short_videos": true,
+            "commerce_contact_retention": "all",
+            "commerce_drop_ship": false
+          }
+        },
+        "other_flags": "The 27 prior flags plus FREEDOM_COMMERCE_CONTACT_RETENTION=all are identical before/after (28 settings, 37 vars each). All 20 absent flags remain OFF, including drop-shipment and store policies; checkout remains OFF, so #1042 is inert. Full maps in receipt."
+      },
+      "recovery_operator": {
+        "daily_operator_source": {
+          "staging": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "production": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77"
+        },
+        "last_rollout_backup_release_pins": {
+          "staging": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "production": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "wrapper_sha256": "64bdeee1b9bbd34d191db507ed25d9b23efa024734b33a835399708500b477fd",
+          "at": "2026-10-25T19:44:03.881729+00:00",
+          "operator_source": {
+            "staging": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+            "production": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77"
+          },
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+          "selected_release_dispatcher_installed": true,
+          "production_after_backup_passed": true,
+          "staging_after_backup_passed": true,
+          "scheduled_run_of_new_operator_observed": false,
+          "bindings": {
+            "staging": {
+              "setId": "f646857e-aac7-4d52-8d63-29a97ac0816c",
+              "completedSha256": "d2c84b2a0b219092fe25b82e0e68f89c92ca61d530bfa758874e72a9e6ad918d",
+              "wrapper": "run-after-staging-backup",
+              "wrapperSha256": "e2cc06ef72d89a3682cf3d6cbe07e9fff83ec85708e5cb0e491622e60ddbc3d1",
+              "adapter": "backup-adapter.after-staging.mts",
+              "adapterSha256": "ad27b3a06655a80e5a5eeed34fa15cf3c645d4ebe7d62fe4b131543b7922f765",
+              "pins": "successor-runtime-pins.sha256",
+              "pinsSha256": "c9bf74549ed7a717d7d6bbf9b08b89169af48090b681a9cf9b036c1af37140d3"
+            },
+            "production": {
+              "setId": "e7b182bc-8ce8-4006-ab4e-b90a6b189d26",
+              "completedSha256": "380946ae314262592b974fba9f4c663c1ed887a416e19f4d619bd8a244947b33",
+              "wrapper": "run-after-production-backup",
+              "wrapperSha256": "47d668c6e8d8348c8171997d4f2817e1b3d99676769c3813f9b94a75498975ba",
+              "adapter": "backup-adapter.after-production.mts",
+              "adapterSha256": "bd5e37784f231c033644ddedee4d97395c8009721ede86e610f8ad60663b23d0",
+              "pins": "successor-runtime-pins.sha256",
+              "pinsSha256": "c9bf74549ed7a717d7d6bbf9b08b89169af48090b681a9cf9b036c1af37140d3"
+            }
+          }
+        },
+        "operator_source_note": "Both environments 1f7aee36/schema189; floor 36bec661/189 unchanged. Four backups passed readback/isolated restore/cleanup. S8 three unsuccessful CI attempts and two passed-but-superseded staging captures preserved. Read-only rehearsals retain actual timer states and final-hop probe loss remains an operator observation. Dispatcher 64bdeee1 and original timers restored; member UX and natural execution remain unverified.",
+        "current_operator_scheduled_run": {
+          "observed_at": "2026-10-25T19:44:03.881729+00:00",
+          "status": "not_observed_for_new_operator",
+          "operator_source": "1f7aee36d9ba2424e4eeddf9f0399fec95aeca77",
+          "dispatcher_sha256": "64bdeee1b9bbd34d191db507ed25d9b23efa024734b33a835399708500b477fd",
+          "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+          "timers": {
+            "staging": {
+              "active": "active",
+              "enabled": "enabled",
+              "calendar_utc": "03:30:00",
+              "randomized_delay": "5min",
+              "persistent": "yes",
+              "next_scheduled_utc": "2026-10-26T03:32:43Z",
+              "service_active": "inactive",
+              "service_pid": 0,
+              "service_argv_unchanged": true,
+              "natural_scheduled_execution": "not_observed_for_new_wrapper"
+            },
+            "production": {
+              "active": "active",
+              "enabled": "enabled",
+              "calendar_utc": "04:30:00",
+              "randomized_delay": "5min",
+              "persistent": "yes",
+              "next_scheduled_utc": "2026-10-26T04:33:02Z",
+              "service_active": "inactive",
+              "service_pid": 0,
+              "service_argv_unchanged": true,
+              "natural_scheduled_execution": "not_observed_for_new_wrapper"
+            }
+          },
+          "limitation": "Active/enabled original timers and manual release restores do not establish natural scheduled execution or second-operator recovery. Prior Persistent catch-up remains in dated history."
+        },
+        "rollback": {
+          "current_schema": {
+            "staging": 189,
+            "production": 189
+          },
+          "known_gaps": [
+            22
+          ],
+          "rule": "Forward repair retaining private-content, disbanded-squad, comment-image, retracted-message and outcome-source ACL readers; no blanket downgrade to R15 after new writes. Once message-image persistence is activated, retain media.message-image.asset.v1; stop new uploads with persistence_allowed=false while preserving authorized existing reads. Preserve enrolled TOTP enforcement and its environment-specific encryption key; R15 password-only login is not a compatible rollback after enrollment. After shared-reservation writes retain commerce.hosted-shared-reservation.v1 and schema 161 even with admission OFF; preserve restore quarantine and current-authority reconciliation. Schema162 requires commerce.hosted-inventory-reservation.v1 and its retained full ledger even with new admission OFF. Use the new compatible writer or forward repair; no pre162 Worker-only rollback. T-047 remains unresolved. Schema164 additionally requires commerce.hosted-supply-catalog.v1. Preserve both floors; no pre164 Worker-only rollback. Before null-slug supply writes all historical profiles and selections must retain retail shape. No replica/old Worker may serve new null-slug data. Schema165 additionally requires opensource.sharing-visibility.v1; pre165 readers can expose withdrawn content and are forbidden. Both environments retain schema166 and github.freetwai-repository-transfer.v1; pre166 Worker rollback is forbidden. Production additionally retains the separately recorded ten operator coordinate constraints; this does not establish all-writer quiescence. Schema167/170/171 floors also remain retained with admission OFF; pre171 Worker rollback is forbidden. Preserve AR target, hosted checkout/payment and supply-material capability readers. Schema172 additionally retains media.distribution-photo.asset.v1 and media.server-policy.v1; admission OFF does not permit pre172 readers. Preserve the full retained floor, including prior private-content and authorization capabilities. After migrations173-185, both environments require c140a346/schema185 as the rollback floor, including guest-invitation credit binding, publication readers and self-shipment records even while new flags remain OFF. No rollback to cf7e518b/schema172; use compatible forward repair. Migrations186-187 raise both floors to54961dd8/schema187, retaining journal and contact-redaction compatibility. No Worker rollback to c140a346/schema185; use compatible forward repair. Migrations188-189 raise both floors to36bec661/schema189, retaining paid-cancellation and drop-shipment compatibility even with admission OFF. No Worker rollback to54961dd8/schema187; use compatible forward repair.",
+          "live_rollback_drill": "not_run",
+          "gc_and_retention": "OFF; historical assets retained",
+          "restored_environment_exposure": "Quarantine and reconcile current authorization; worker rollback does not restore the database or object storage.",
+          "pre162_worker_rollback_valid": false,
+          "post_migration_recovery": "Use compatible forward repair retaining complete188-row schema189 ledger, minimum source36bec661, paid-cancellation and drop-shipment compatibility even with admission OFF, all prior capabilities, material policy and production coordinate constraints. Migrations188-189 committed in both databases. Keep restored data quarantined pending current-authority reconciliation; T-047 remains unresolved.",
+          "required_capabilities": [
+            "avatar.asset-bridge.v1",
+            "avatar.legacy-bytes.v1",
+            "commerce.hosted-checkout.v1",
+            "commerce.hosted-inventory-reservation.v1",
+            "commerce.hosted-payment.v1",
+            "commerce.hosted-shared-reservation.v1",
+            "commerce.hosted-supply-catalog.v1",
+            "commerce.shop-service-authority.v1",
+            "execution.agent-connection-record.v1",
+            "execution.bootstrap-session.v1",
+            "execution.bootstrap-status.v1",
+            "execution.device-authorization.v1",
+            "execution.member-device-management.v1",
+            "execution.member-model-settings.v1",
+            "execution.member-prerequisites.v1",
+            "execution.member-run-record.v1",
+            "execution.model-broker-bridge.v1",
+            "execution.model-credential-custody.v1",
+            "execution.model-credential-ingest.v1",
+            "execution.model-credential-preparation.v1",
+            "execution.model-text-step.v1",
+            "execution.openrouter-selection.v1",
+            "execution.runtime-enrollment.v1",
+            "github.freetwai-repository-transfer.v1",
+            "media.comment-image.asset.v1",
+            "media.distribution-photo.asset.v1",
+            "media.domain-gc.v1",
+            "media.event-banner.asset.v1",
+            "media.event-highlight.asset.v1",
+            "media.event-video.asset.v1",
+            "media.message-image.asset.v1",
+            "media.server-policy.v1",
+            "media.service-cover.asset.v1",
+            "media.skill-image.asset.v1",
+            "media.social-preview-create.v1",
+            "media.social-thumbnail.asset.v1",
+            "media.storefront-product-photo.asset.v1",
+            "media.supply-material.asset.v1",
+            "media.write-effects.v1",
+            "opensource.sharing-visibility.v1",
+            "platform.legacy.v1",
+            "work.explicit-wire.v1",
+            "work.personal-owner-acl.v1",
+            "work.private-human-result.v1",
+            "work.private-model-result.v1",
+            "work.server-policy.v1"
+          ],
+          "pre164_worker_rollback_valid": false,
+          "pre165_worker_rollback_valid": false,
+          "required_capabilities_by_environment": {
+            "staging": [
+              "avatar.asset-bridge.v1",
+              "avatar.legacy-bytes.v1",
+              "commerce.hosted-checkout.v1",
+              "commerce.hosted-inventory-reservation.v1",
+              "commerce.hosted-payment.v1",
+              "commerce.hosted-shared-reservation.v1",
+              "commerce.hosted-supply-catalog.v1",
+              "commerce.shop-service-authority.v1",
+              "execution.agent-connection-record.v1",
+              "execution.bootstrap-session.v1",
+              "execution.bootstrap-status.v1",
+              "execution.device-authorization.v1",
+              "execution.member-device-management.v1",
+              "execution.member-model-settings.v1",
+              "execution.member-prerequisites.v1",
+              "execution.member-run-record.v1",
+              "execution.model-broker-bridge.v1",
+              "execution.model-credential-custody.v1",
+              "execution.model-credential-ingest.v1",
+              "execution.model-credential-preparation.v1",
+              "execution.model-text-step.v1",
+              "execution.openrouter-selection.v1",
+              "execution.runtime-enrollment.v1",
+              "github.freetwai-repository-transfer.v1",
+              "media.comment-image.asset.v1",
+              "media.distribution-photo.asset.v1",
+              "media.domain-gc.v1",
+              "media.event-banner.asset.v1",
+              "media.event-highlight.asset.v1",
+              "media.event-video.asset.v1",
+              "media.message-image.asset.v1",
+              "media.server-policy.v1",
+              "media.service-cover.asset.v1",
+              "media.skill-image.asset.v1",
+              "media.social-preview-create.v1",
+              "media.social-thumbnail.asset.v1",
+              "media.storefront-product-photo.asset.v1",
+              "media.supply-material.asset.v1",
+              "media.write-effects.v1",
+              "opensource.sharing-visibility.v1",
+              "platform.legacy.v1",
+              "work.explicit-wire.v1",
+              "work.personal-owner-acl.v1",
+              "work.private-human-result.v1",
+              "work.private-model-result.v1",
+              "work.server-policy.v1"
+            ],
+            "production": [
+              "avatar.asset-bridge.v1",
+              "avatar.legacy-bytes.v1",
+              "commerce.hosted-checkout.v1",
+              "commerce.hosted-inventory-reservation.v1",
+              "commerce.hosted-payment.v1",
+              "commerce.hosted-shared-reservation.v1",
+              "commerce.hosted-supply-catalog.v1",
+              "commerce.shop-service-authority.v1",
+              "execution.agent-connection-record.v1",
+              "execution.bootstrap-session.v1",
+              "execution.bootstrap-status.v1",
+              "execution.device-authorization.v1",
+              "execution.member-device-management.v1",
+              "execution.member-model-settings.v1",
+              "execution.member-prerequisites.v1",
+              "execution.member-run-record.v1",
+              "execution.model-broker-bridge.v1",
+              "execution.model-credential-custody.v1",
+              "execution.model-credential-ingest.v1",
+              "execution.model-credential-preparation.v1",
+              "execution.model-text-step.v1",
+              "execution.openrouter-selection.v1",
+              "execution.runtime-enrollment.v1",
+              "github.freetwai-repository-transfer.v1",
+              "media.comment-image.asset.v1",
+              "media.distribution-photo.asset.v1",
+              "media.domain-gc.v1",
+              "media.event-banner.asset.v1",
+              "media.event-highlight.asset.v1",
+              "media.event-video.asset.v1",
+              "media.message-image.asset.v1",
+              "media.server-policy.v1",
+              "media.service-cover.asset.v1",
+              "media.skill-image.asset.v1",
+              "media.social-preview-create.v1",
+              "media.social-thumbnail.asset.v1",
+              "media.storefront-product-photo.asset.v1",
+              "media.supply-material.asset.v1",
+              "media.write-effects.v1",
+              "opensource.sharing-visibility.v1",
+              "platform.legacy.v1",
+              "work.explicit-wire.v1",
+              "work.personal-owner-acl.v1",
+              "work.private-human-result.v1",
+              "work.private-model-result.v1",
+              "work.server-policy.v1"
+            ]
+          },
+          "pre166_worker_rollback_valid": {
+            "staging": false,
+            "production": false
+          },
+          "pre167_worker_rollback_valid": {
+            "staging": false,
+            "production": false
+          },
+          "pre170_worker_rollback_valid": {
+            "staging": false,
+            "production": false
+          },
+          "pre171_worker_rollback_valid": {
+            "staging": false,
+            "production": false
+          },
+          "required_capabilities_basis": "Retain the prior capability union and committed schema189 floor verified by migration and isolated after-backup restore; absent flags remain OFF.",
+          "pre172_worker_rollback_valid": {
+            "staging": false,
+            "production": false
+          }
+        }
+      }
+    },
+    {
+      "recorded_at": "2026-10-26T05:24:55.334791+00:00",
+      "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
+      "scope": "完整S10部署／備份／timer證據保留於原收據。"
     }
   ]
 }

@@ -1,0 +1,55 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "newbie-village",
+  "owner_role": "community",
+  "owned_paths": [
+    "modules/newbie-village/**",
+    "apps/portal-web/src/modules/NewbieVillage.tsx",
+    "apps/portal-web/src/modules/NewbieVillage.css",
+    "tests/runtime/newbie-village.test.ts",
+    "tests/e2e/newbie-village.spec.ts"
+  ],
+  "public_exports": [
+    "modules/newbie-village/index.ts"
+  ],
+  "dependencies": [
+    "shared",
+    "community"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "DESIGN.md",
+    "modules/newbie-village/README.md"
+  ],
+  "invariants": [
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "newbie-village.public-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/NewbieVillage.tsx",
+      "operations": [
+        "newbie-village.static.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "newbie-village.member-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/NewbieVillage.tsx",
+      "operations": [
+        "newbie-village.static.read"
+      ],
+      "auth_profile": "member-session"
+    }
+  ]
+}

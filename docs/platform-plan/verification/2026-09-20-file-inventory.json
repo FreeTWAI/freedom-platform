@@ -174,13 +174,13 @@
     },
     {
       "path": ".github/workflows/shared-backup.yml",
-      "bytes": 4183,
-      "sha256": "391b782d92f93a69e8c994f456453c46bb77e917e2c12b93e9c00dab427adc23"
+      "bytes": 4443,
+      "sha256": "f35fed4184e9f3f4f03015d2441dfaa4e0823b8edf5448dd7ac773db9a6f3bd0"
     },
     {
       "path": ".github/workflows/shared-release.yml",
-      "bytes": 5854,
-      "sha256": "d632a5c30c86fa1b2f112c267ab5c8a9f0adf9422cb54d2db8faa3cf5e35e93e"
+      "bytes": 6121,
+      "sha256": "a310578b3c63c5a41f2f7101968f2c4a414f4bf621b66f57e3a20da316ffca33"
     },
     {
       "path": ".github/workflows/skill-book-upstreams.yml",
@@ -199,8 +199,8 @@
     },
     {
       "path": ".github/workflows/verify.yml",
-      "bytes": 37004,
-      "sha256": "102a2b620b96f716ad7f8e1044c7609923603a019b958d0135d01819732e2ac8"
+      "bytes": 37457,
+      "sha256": "1bd2c17e229402e4b8be61caf97f1cbc71c479bb7746dd04f8f0dc2073b35ce5"
     },
     {
       "path": "apps/freedom.module.json",
@@ -1009,13 +1009,13 @@
     },
     {
       "path": "apps/portal-web/public/social-post.css",
-      "bytes": 4191,
-      "sha256": "0b605fb6c36390c2b6ec3ba37ea2d6b3dd5d5c21944e225b9c527592a0848403"
+      "bytes": 4686,
+      "sha256": "0871852a8124987d593122d34a7a89750542da67dac370faf4cf4d167d29603f"
     },
     {
       "path": "apps/portal-web/public/social-post.js",
-      "bytes": 5139,
-      "sha256": "4dd663602ca87e0e3c6229b9b429b3862019cf58acce9534094e0d49e7be8ccb"
+      "bytes": 5196,
+      "sha256": "e5994fbb1b584dad44b3c4f7c2dc44a997b6a70795cf4421006824c68d6c9839"
     },
     {
       "path": "apps/portal-web/public/art/versefolk-cooperation.webp",
@@ -2149,723 +2149,18 @@
     },
     {
       "path": "apps/portal-web/public/games/absurd-daily/cash.jpg",
-      "bytes": 42052,
-      "sha256": "459257390cdc775e0d59c184177096ad47509ed5960dc8fecb8f536c3d9d3034"
+      "bytes": 50390,
+      "sha256": "b2ce82fa250c2ab1194fa1618570972ae311657017d17c40800ed7690d8c4b99"
     },
     {
       "path": "apps/portal-web/public/games/absurd-daily/photo.jpg",
-      "bytes": 61048,
-      "sha256": "21b37d937de7760429eb5884ba69c1b12725e758fa6a057bc0e3a20566540224"
+      "bytes": 74580,
+      "sha256": "9f74ae564502f865fe75312c70f293fac9e94893f4ff02bc74446fc4d1655fbb"
     },
     {
       "path": "apps/portal-web/public/games/absurd-daily/stamp.jpg",
-      "bytes": 42458,
-      "sha256": "b3526d9bfa4d75b78372b755f9caf58e945b7f3aef85c570eb0d0a1c0d2d99e7"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/avocado-toast.webp",
-      "bytes": 10480,
-      "sha256": "9f8a2630581eb8c2afa689e10e2da201b6c41ac604a0a01752d0718d1e2e50ef"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/baked-sweet-potato.webp",
-      "bytes": 10422,
-      "sha256": "8837405e8c806c14bb027be7659296dad229989b1f1e477a11e4c454416b6a05"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/banana-smoothie.webp",
-      "bytes": 7566,
-      "sha256": "503b7dc9df2769d57a9d74bc37e6138262ce8a20b0ae24bc2831d0b7101a0cfd"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/beef-noodle-soup.webp",
-      "bytes": 10648,
-      "sha256": "6c681758a08a0493f11a27453cc14e4f832b86f15cf349d7a0dca7cdedfa0284"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/beef-tacos.webp",
-      "bytes": 9200,
-      "sha256": "f6c10db0264e1419b8812ff1feaba989b0fc9c86360dac969f9e246f1eeb7bc7"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/bibimbap.webp",
-      "bytes": 10174,
-      "sha256": "0f52d059f46c5ce81e7d1faf832f4e0cad5f1ff67e0e3eeadb181ddd4ab57a3d"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/braised-pork-rice.webp",
-      "bytes": 9946,
-      "sha256": "078c9988df05a5b5e10ad48e29a60688d56cd0c396ad22c9f7a276407f517b10"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/breakfast-waffles.webp",
-      "bytes": 13352,
-      "sha256": "bcd3ff68aff41c8d3363fba1ff779339de3491d656c113de3a1700e7c42f337a"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/bulgogi.webp",
-      "bytes": 10502,
-      "sha256": "fc2549f98dacf80a78d00774508e921273b2a4f316029f377172d9db309bed04"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/butter-chicken.webp",
-      "bytes": 9686,
-      "sha256": "d513ed24fc77f48ed248d4ff39e543b409abd73a2f6552b744b7a012b0d1a92e"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/caramel-pudding.webp",
-      "bytes": 8278,
-      "sha256": "b68fe62bd8cb378a86c0269f8f2d29606f1fce3ca278a4ff540e18e245e4f95a"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/cheeseburger.webp",
-      "bytes": 9288,
-      "sha256": "9d1102165a46364e4c6118890c1c1a385ed05fe6f42aaa929c18b9baa07cb737"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/chicken-egg-bowl.webp",
-      "bytes": 9794,
-      "sha256": "071c78101047131c3046b313d461616b6e16fea9e9657204cfc16827f5076321"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/chocolate-brownie.webp",
-      "bytes": 9138,
-      "sha256": "10a982a8e6145cc39f81da8481cbb39c21773391f8e14ff98c33d211229f5eff"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/chocolate-cookies.webp",
-      "bytes": 10738,
-      "sha256": "8917048c36e2c5958540c41d612150d169e68a967e1b0088820b56ae73718d72"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/club-sandwich.webp",
-      "bytes": 10188,
-      "sha256": "3d5e7f5d6df791792b724d8689a635e1831a1279fc246c3215b07da6971a3269"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/corn-dog.webp",
-      "bytes": 11306,
-      "sha256": "501d601c1f71a82603c16d34db642484378e81fa58c533d0f960acc2dbca750d"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/cream-risotto.webp",
-      "bytes": 9340,
-      "sha256": "1d0f6da2a5a8999892042f521465f4248eeb51d5b717ab1623e53bb4ef1f7e49"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/cupcakes.webp",
-      "bytes": 12478,
-      "sha256": "4ed083a8ac299202552bd38dece6aa69a90ea50fb3109670bd8505756ad7ec27"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/doenjang-soup.webp",
-      "bytes": 9240,
-      "sha256": "d66af78b36d0cc8cb82fdd42179990071020601295a7ab92e15bbabe81a5847e"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/egg-fried-rice.webp",
-      "bytes": 9652,
-      "sha256": "d56f864649ed72bdd25b39582921e2620aced911b323ccd16de8aaa1e445b716"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/egg-tarts.webp",
-      "bytes": 11488,
-      "sha256": "d39749031463e47775695fd9c2642e7be2c02b6b06c4b51c4084165e61bb9ce1"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/fish-and-chips.webp",
-      "bytes": 9782,
-      "sha256": "31eb95b527dae07cbb53b9b40571b787ae568a0c6aa4cb36e3ae36475868330d"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/fresh-spring-rolls.webp",
-      "bytes": 10906,
-      "sha256": "591fbb7416edf90f4b24396887bb7e342da970cfae57a79125013d5be3b67313"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/fruit-tea.webp",
-      "bytes": 7590,
-      "sha256": "d79bc112ee70ee2b73a3e7ab737ac7fd18eea4b2e39f56c9b7378ade1a1568c2"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/garden-salad.webp",
-      "bytes": 9900,
-      "sha256": "7089a55d402dd43a7ebb533271104e449f598cee016c9038da22be211d57b33b"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/gimbap.webp",
-      "bytes": 10786,
-      "sha256": "dd1764ef398f54b10d892381047e81c6f450a133ab632f215a81aea648687afb"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/glazed-doughnuts.webp",
-      "bytes": 11230,
-      "sha256": "d9f433ea102e12c49b6073d3e3f36cb7d916453900197674725da4f5ba7c9f87"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/hot-chocolate.webp",
-      "bytes": 7654,
-      "sha256": "f7a51246160127a5ffeca0653082c5d58cb7e0478293c009be4570dd4365fe02"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/ice-cream-sundae.webp",
-      "bytes": 7684,
-      "sha256": "c128de78d9ef3fb59e7f64ae0a6a9aa1b551e0a3a7ed5e2cfa8e4ebe57d8ee3d"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/italian-meatballs.webp",
-      "bytes": 10346,
-      "sha256": "4e682c9e2257ed7ded6421cb950b12227fe1d1890ad540b3f2b1fe570615b097"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/japanese-curry.webp",
-      "bytes": 10068,
-      "sha256": "013cd3167323cb6f93aad2110f7fad7e921dba7c8011fcffcb5f8a5ed777096c"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/kimchi-fried-rice.webp",
-      "bytes": 10130,
-      "sha256": "16796402161f376c05624fbae4432116851b2035fd8e56537f580b9c1551aa24"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/korean-fried-chicken.webp",
-      "bytes": 10812,
-      "sha256": "a51fa1592950d8dd245bb469dfdc78683752e7889e5410b9bd5b3ea72cb092c5"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/korean-pancake.webp",
-      "bytes": 12910,
-      "sha256": "1bc9dafdebb994c5ed7743b36ee1f800fa339a02510352faab4e13a2de08e0c1"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/lasagna.webp",
-      "bytes": 10594,
-      "sha256": "731428e3c093e7427e87c5a615e51348a592e00ff8b16828f4583182ae3c0599"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/macarons.webp",
-      "bytes": 8742,
-      "sha256": "92477b7f013a6453f699810f4b33c44af54c0102b684d484f12f2997e493e947"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/mango-shaved-ice.webp",
-      "bytes": 9026,
-      "sha256": "6c8e0251a862d9994f763fd3daad9f68df75ab98e0402cded760cf3a400fc6e6"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/margherita-pizza.webp",
-      "bytes": 15430,
-      "sha256": "6fd447981aa8414f62b97177cfe1ab0b85b41140734723d773362db7722eb6a7"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/matcha-latte.webp",
-      "bytes": 7642,
-      "sha256": "67b78cada7563f77d9ff1beaf1503088995e3fb92aed3064a3d805770ea260f9"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/miso-soup.webp",
-      "bytes": 8930,
-      "sha256": "645b69f2849ad4a1e171979ccd2e82ee37b011a430ddbaeec46c87415de14e0b"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/mushroom-risotto.webp",
-      "bytes": 9464,
-      "sha256": "a93d7913ce7ab04743c39e470ade21b30b825bf082842a8326e4b2b44ae19bf9"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/oyster-omelette.webp",
-      "bytes": 13104,
-      "sha256": "632303f6d18ac8a08248e657070434b2fff912a54a1f7c81e17d824b8384fdea"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/pearl-milk-tea.webp",
-      "bytes": 7848,
-      "sha256": "600f88908a8c2f0a3adc9e69f849647c8b23416dd1d806897824b2c894286f5e"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/pesto-pasta.webp",
-      "bytes": 9256,
-      "sha256": "62b1c40440fc51462ff9d981dd42b2f174c05621d6ae463685366a0423124079"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/plant-burger.webp",
-      "bytes": 8972,
-      "sha256": "3acfa12b27a1a329083c89e8ce8adc6f2cb1f61e8cf730c3141d74be99b41027"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/popcorn-chicken.webp",
-      "bytes": 9744,
-      "sha256": "dcfbddbb0d94dfd390eb15617c772f93006647ffcef2a6cd0077f4fe5c2e8448"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/pumpkin-soup.webp",
-      "bytes": 9244,
-      "sha256": "24c66bfe8d77e8bb1287c89fa4008bbca57e3ca5728b81e10804a810a00e561b"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/rice-balls.webp",
-      "bytes": 7582,
-      "sha256": "d9e37277d4b0b8047e48b0e6fad592e6a84e9d4329a20f94d242df0c250c8b1f"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/roasted-vegetables.webp",
-      "bytes": 10014,
-      "sha256": "c947606c0976113fadae6b4acdabb0fdb7b05a8216733592728094a1afec0b20"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/rolled-omelette.webp",
-      "bytes": 7678,
-      "sha256": "497e2ef8fbf88ed78ca3fbbc15a794060a98aa99588a881e9486398857bad80c"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/salmon-sushi.webp",
-      "bytes": 9242,
-      "sha256": "ec7106195e7123e6cbb79b94b4acbf9cd93a7cd096740a039b3371fcc07d40cc"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/scallion-pancake.webp",
-      "bytes": 12586,
-      "sha256": "258aaf63e28ce3c7d50816b24914f0419bb8400d26e35cc0bb4be86476247085"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/seafood-paella.webp",
-      "bytes": 12622,
-      "sha256": "cf4d819e7d26939ae2de55a1e06c4766e1604469462b26e318e3f784ceebe1b5"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/shawarma.webp",
-      "bytes": 9516,
-      "sha256": "89dcf5fd270cf1144acf54388bcd815d6b5b83fd5b902195ebd764f71eedda4d"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/steak-dinner.webp",
-      "bytes": 13590,
-      "sha256": "bf92a5f3f155d4eb8c4d512817490c0b70415aea820ba8b118428a4085d3a579"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/strawberry-cake.webp",
-      "bytes": 9726,
-      "sha256": "a240f8d9e70b217fbfd7302559fa73667faeda5a5ff4df8e1343b1d87e9a5254"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/taiwan-fish-cake.webp",
-      "bytes": 8988,
-      "sha256": "516eed68192bf6e11cc3abbff046d9a6aedddf5eb1934a3d55e43a2475df9aa9"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tempura.webp",
-      "bytes": 9524,
-      "sha256": "ec66a48867c3125a8fd208eb7f33ea21b9f1dde2c1fb98303bd87636589b2fbf"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tiramisu.webp",
-      "bytes": 9736,
-      "sha256": "b8a6c69bb6bd3b2103108fbd952207a8dbacaf4d1a588dfba8a5976fed0000b6"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tomato-spaghetti.webp",
-      "bytes": 9694,
-      "sha256": "ddc08fdc48850a30fd8ac39bb8c34cb9782d3e15331f15401b42eaa430e96ab3"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tonkotsu-ramen.webp",
-      "bytes": 10284,
-      "sha256": "6942f61e63c8c2ea99ae1ec22f284a295442aa28ee405533954f7dc7d7abe760"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/tteokbokki.webp",
-      "bytes": 10066,
-      "sha256": "e64ae3736b20a2bda93e8e1743953f62923b6497b7f7cbe316b6f9986634d32a"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/vegetable-skewers.webp",
-      "bytes": 10562,
-      "sha256": "1fb538deea08f0c681920c3f809e9edc78caba6e3a61c22be2eac49720232b47"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/wholegrain-rice-ball.webp",
-      "bytes": 7520,
-      "sha256": "dea54934d0e4b012a7f770da10607208b94a34b36833520f4dfbc1f034b1ceb9"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/cooking/3d/yuzu-soda.webp",
-      "bytes": 7928,
-      "sha256": "24a3a163b30bd4042084709b146a6eabd3e17cd7ef955943660a43641687a8c9"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/avocado-toast.webp",
-      "bytes": 34718,
-      "sha256": "d13dd98508119063f8477169b70a45ffb2c1de2be5fdee38f8a2cc0156b6ae5c"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/baked-sweet-potato.webp",
-      "bytes": 33796,
-      "sha256": "a2e863751e4e083466db6040115ad68819b064c7bb651ac477d00ed90a3a9d26"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/banana-smoothie.webp",
-      "bytes": 33106,
-      "sha256": "ef9629879071cd4af30fea9a549c70497130e88f20cd91663af64605b3cc0481"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/beef-noodle-soup.webp",
-      "bytes": 40930,
-      "sha256": "8ca9705d69d6dd3aa71d87306a60fd345b0ea67dddc7fb4091943e8df9cee7a4"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/beef-tacos.webp",
-      "bytes": 40376,
-      "sha256": "719ab9248f77edf3438a91a202d3476e71efeb0713e4fa8629c4f9871ea38660"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/bibimbap.webp",
-      "bytes": 40758,
-      "sha256": "6907ca457781ed9341b0a21bf1bf785848967271e832a3f78608c9eca72f6538"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/braised-pork-rice.webp",
-      "bytes": 34508,
-      "sha256": "c6ca15e35941a682dc2e5a66224a21ad93c9c57bd63f208deedd8fce91293361"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/breakfast-waffles.webp",
-      "bytes": 20508,
-      "sha256": "d2f75ab11c17c6a5ae298cda1d941ed528334881d204aaaf2a75953498e25e8b"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/bulgogi.webp",
-      "bytes": 45454,
-      "sha256": "79b868ae816b153e921e679094dad2d1b07eba750a169fe608ca959ae6dbd784"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/butter-chicken.webp",
-      "bytes": 35286,
-      "sha256": "c198e1cb2abc9371f9185535cd66da1571c88efff76d6b4612a9f6d75264e337"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/caramel-pudding.webp",
-      "bytes": 29962,
-      "sha256": "a67525ecf26d633daac5bf2410660fbb5ddc03bcfde8d048aeb41043571148d1"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cash.webp",
-      "bytes": 31790,
-      "sha256": "7b1f85732c18560afef1ad341fbc23ff268f61ea4eff9f09e4375e3e9e389982"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chair.webp",
-      "bytes": 31926,
-      "sha256": "8b47bd9697e5aab57f2b442b0f13871708e25455ff3cdac9517eb655bca51f7a"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cheeseburger.webp",
-      "bytes": 29360,
-      "sha256": "8d97c298bf45cd88c888a6216394fb384203ea6cf654cae584092e27a7a1568c"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chicken-egg-bowl.webp",
-      "bytes": 36460,
-      "sha256": "611b6cc196a208b9af3c0cf2003e7e9f0e6421440d62465a4fecdf7b15027515"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chocolate-brownie.webp",
-      "bytes": 27872,
-      "sha256": "0c58121a040d01616ce92034b9e669e563380895d3747db2e094dc60d8461774"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chocolate-cookies.webp",
-      "bytes": 33636,
-      "sha256": "c8d63e9425f24d901e5252edf1ba9c364e8c4fa2e393f15cf650d1cf6122a2be"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/club-sandwich.webp",
-      "bytes": 28834,
-      "sha256": "cbc9c2fa2b09685e298dae0e2b08a4d004be65527189d63848b291a71bffe8cf"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/corn-dog.webp",
-      "bytes": 45838,
-      "sha256": "8b98db12a45c0eaa6c69a06e2f0f96c0a5a616b3a824017bfe43e5d22f04d332"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cream-risotto.webp",
-      "bytes": 37598,
-      "sha256": "3325090596e2714b3550f1063e3e989506b04a272f49e6f8869297fac39f614e"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cupcakes.webp",
-      "bytes": 27162,
-      "sha256": "e6399a23dbf582d8bfb79fd2f1afd2d59b28e95ef5e8526348777d46b307f997"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/doenjang-soup.webp",
-      "bytes": 33056,
-      "sha256": "80d07d8804b63409ea8fece3d5c1870ea452aab9b91675cc1bcee8fe4985f2ce"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/egg-fried-rice.webp",
-      "bytes": 38708,
-      "sha256": "b5edc7c783c179a54b655c720c82667a2a852386f22e3037d683d8255fe6bd97"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/egg-tarts.webp",
-      "bytes": 35380,
-      "sha256": "2ee03f41f89d7fe010363aa368530a3222265e627a9447ebef62e87bd59d9006"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/fish-and-chips.webp",
-      "bytes": 40324,
-      "sha256": "7579dc0a01f689576dae44b136b893942a26bc84e2180d676660e6ef2eea7420"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/fresh-spring-rolls.webp",
-      "bytes": 35348,
-      "sha256": "76df67a8a96de4c288b5a79db08d1dfec809cccc04a33cc9d0bcf4f5e8c337af"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/fruit-tea.webp",
-      "bytes": 35918,
-      "sha256": "6865ef2a847cde82ea27a0aad5d4bedfc60022958a7947e10a9cdb7d5c7d83a8"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/garden-salad.webp",
-      "bytes": 38948,
-      "sha256": "9bfb3be65a2cb523cc9fd674b824b8660e0cb319e90da338d9844c0767d84860"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/gimbap.webp",
-      "bytes": 38340,
-      "sha256": "df09023ed70fd6d1f2942b7b50d601b48d4d8c40ee600a655cb841c2c7b69c79"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/glazed-doughnuts.webp",
-      "bytes": 24810,
-      "sha256": "e6d2c47c0e6e281b615b95e7c60eff77e4c51243bd7b46fa44d8548138d53a80"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/holiday.webp",
-      "bytes": 36138,
-      "sha256": "fb52632eeaa6597c9bc19689c9cd59782fb2efd3114c0009a99159ce0402bc95"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/hot-chocolate.webp",
-      "bytes": 41900,
-      "sha256": "c1558e40f8c3cbcfd33a2c1308ccc0a81e56f48e30093cc21fd43f57a36fba61"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/ice-cream-sundae.webp",
-      "bytes": 32042,
-      "sha256": "0c6a5882951762516c4f6c86fb89f3f4c101bb807d603c1892b48c31a801fe02"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/italian-meatballs.webp",
-      "bytes": 34634,
-      "sha256": "a5dfaf38b8f8b65cf86bb4888d01bdd1e2e1282f0677ca9b62e100ca0f80a8c9"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/japanese-curry.webp",
-      "bytes": 34472,
-      "sha256": "5d70a0d689005eba9cd5c0780cea3c1f582e8ff2d55f3ad4e904c9545e592584"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/kimchi-fried-rice.webp",
-      "bytes": 38914,
-      "sha256": "2fd42b9f8d97903ebf5ab2f5f715a9c2e57e908f75c8ae4337b8945389acd2ed"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/korean-fried-chicken.webp",
-      "bytes": 42568,
-      "sha256": "d40a4ab71bbc83f72bc612c291d2a2c87af22790cc4bc8a39ccbc5edbc151836"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/korean-pancake.webp",
-      "bytes": 41168,
-      "sha256": "11823521f8540ef3df0c526353afa6fb1327a8f8f216be55c56ba1bbf6cc9201"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/lasagna.webp",
-      "bytes": 38924,
-      "sha256": "feafd4798a03f17e5e6c03cd55cd8832193d6a486347df006188dc7c3cc4dd9e"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/macarons.webp",
-      "bytes": 26832,
-      "sha256": "436b325ee3366ea94e5c979295420100595058a91a501c1c7deb7b2249303148"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/mango-shaved-ice.webp",
-      "bytes": 33348,
-      "sha256": "b0998059c482f9453c4fd19fef089887356c3a18557a9527c04999827b4860ec"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/margherita-pizza.webp",
-      "bytes": 37010,
-      "sha256": "02ad1f7f9bc7598fbdded838d54dcca364c61c1afc45094fb135245d28a62043"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/matcha-latte.webp",
-      "bytes": 33274,
-      "sha256": "1045bd27e051b6f7feea4b5db1c380c628270436d2cc1641b2b1d953f80d7986"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/miso-soup.webp",
-      "bytes": 31306,
-      "sha256": "d513335cc2538f335a08b6b857747d49a54f6b4ca3ab11ab580c221624404e20"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/mushroom-risotto.webp",
-      "bytes": 37764,
-      "sha256": "c748b27b59e8126d29dbc9ad824d5d40d42ce4bd925cce08e7d73e0409bb581a"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/oyster-omelette.webp",
-      "bytes": 45168,
-      "sha256": "5773034198c6bd9a056c6e71654c326553a16bba2f2f1e11c93b7ccd657f82d1"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/pearl-milk-tea.webp",
-      "bytes": 28120,
-      "sha256": "c2b8611eb8e513029134bdbbfc05a39021c342011ad7458e5072ce87ed0b4e40"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/pesto-pasta.webp",
-      "bytes": 34756,
-      "sha256": "de49d5771312402ed9384d7d4ce701064a43aa1581364743464ce4d7db88ff32"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/photo.webp",
-      "bytes": 28562,
-      "sha256": "7719d71c674594e0612f6d4d6d5cbd2a8832f31b899401bd80dffb5a11c9d531"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/plant-burger.webp",
-      "bytes": 37148,
-      "sha256": "7367bc2dfc06623dfb77c27e35f2e89082cbfd01e2cfb8385b1eab3822bbc075"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/popcorn-chicken.webp",
-      "bytes": 40688,
-      "sha256": "170338c04066bd5cb29a3058275c49372822e815fbaf46b9d68619f3025cece0"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/pumpkin-soup.webp",
-      "bytes": 35738,
-      "sha256": "c796c1770e2f4a841dcede4e80d7e385e8714af18642bd127bcd349092c581a8"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/rice-balls.webp",
-      "bytes": 27272,
-      "sha256": "f4045a235b81e6a178ff8035b3531d1ea702652595357eecc01f1cfa4c21e1fa"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/roasted-vegetables.webp",
-      "bytes": 43196,
-      "sha256": "86cfdeb9192a1d3f8b4f9b4c500888bcd50de1c990c28b2d4551bb83d32a7b63"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/rolled-omelette.webp",
-      "bytes": 36860,
-      "sha256": "7e9d2856ef8fe18da34f334fd2e48cec4afed34540bf59bdbbbee2d02970c60d"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/salmon-sushi.webp",
-      "bytes": 31222,
-      "sha256": "643faa3d2fbe08253a36e5614bb57072b9f7a9c6d13318ef7a83b0fd17fb9113"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/scallion-pancake.webp",
-      "bytes": 39832,
-      "sha256": "fce6aa43b0a4bda75d2ea6c64982a58a22d05183c042e026ed760fb0b15465be"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/seafood-paella.webp",
-      "bytes": 39860,
-      "sha256": "501fcd16b0583c5664559e84d9e645f6bf48c5a3ca65103702f284009b97a9ba"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/shawarma.webp",
-      "bytes": 38674,
-      "sha256": "73470f6f4309474be087903185386cd31ef50c3fd6ee27752ab7e61f0faf5223"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/stamp.webp",
-      "bytes": 26242,
-      "sha256": "15a5c2f45d289c7575b0cf5100a8fd7e6ce62617aefd700f453bfc4509b1bb53"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/steak-dinner.webp",
-      "bytes": 33710,
-      "sha256": "55835220a70c9fcff4621c3fb5888e70870e1f90e775f784f13b5c89fd9867c8"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/strawberry-cake.webp",
-      "bytes": 28206,
-      "sha256": "90bc4b8ff0df10397927596a3564d34a2fbf5642e656b646d3d236684f8c6dec"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/taiwan-fish-cake.webp",
-      "bytes": 41224,
-      "sha256": "86d8381fbb2ff657d6f9fb802ff7a7fee3233de891b7868395cdba1ef4ea0349"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tempura.webp",
-      "bytes": 35050,
-      "sha256": "fca2184e50c80891fb9ef5c9df2fbaa828965f5549125d063b20e4f0f9bf7279"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tiramisu.webp",
-      "bytes": 43664,
-      "sha256": "fa2175940ba1ca417360903774c7215ee6572397d3d763602ed9c1e9ca017ac1"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tofu.webp",
-      "bytes": 22448,
-      "sha256": "54cbd6a56d53981610b35f1cd51bb97b8514c30cb375bc0245c26559e1df997a"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tomato-spaghetti.webp",
-      "bytes": 41902,
-      "sha256": "7140683e07fb0c8016b0df394ce1a271c5f9808a387b97798e60c0e10b4fabc5"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tonkotsu-ramen.webp",
-      "bytes": 36102,
-      "sha256": "cf6164dbd9f4d5e12cc47d5fb047bb1947ecd79c59914fd692cfdb8e7d07f009"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tteokbokki.webp",
-      "bytes": 36364,
-      "sha256": "214efd83cc2be22a598a64d4500b225763568527a12c1db0a354bd01f86de236"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/vegetable-skewers.webp",
-      "bytes": 38134,
-      "sha256": "861f9710d4615bd00f429a8095b0f5267a8e6ae6b284c40d2aa38c75476f9c5f"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/wholegrain-rice-ball.webp",
-      "bytes": 34706,
-      "sha256": "65171d4b72246361f24de30e6560086e357d7daa2b2b45d9ecf1bbb7ff547dc1"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/illustrated/yuzu-soda.webp",
-      "bytes": 33096,
-      "sha256": "721965ace90554f7ca00686cb405b11d3e867bf60f905e900a6c4ffbd6bfd0c2"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
-      "bytes": 12752,
-      "sha256": "0adf8209cb2031be733c2bc61e20c20457c54387f7a5f8212c4c159f1f428f47"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/party/holiday.webp",
-      "bytes": 22006,
-      "sha256": "7bbe26b9c20ebdae30a97695a6b2257a1278fc030c58353ff078e60faaeea467"
-    },
-    {
-      "path": "apps/portal-web/public/games/absurd-daily/party/tofu.webp",
-      "bytes": 18560,
-      "sha256": "4cced85dec94c79bb15977458ef586e23ce3bba8617069e23579d367bdd35ff3"
+      "bytes": 50377,
+      "sha256": "a06e768e78b787814c60c56e9f422d77d8cb00bcb88b7ca4520ad8f3d6be5708"
     },
     {
       "path": "apps/portal-web/public/journal-assets/78f6ad158a6ce19acb92468fb1d7075513be3f07aea68aa23a148b68e6a57d59.png",
@@ -2944,8 +2239,8 @@
     },
     {
       "path": "apps/portal-web/src/App.tsx",
-      "bytes": 66974,
-      "sha256": "29b27b5acde2e410ff7194a3362dcf75055f6868eae13eb54b4ae8ca6718b245"
+      "bytes": 70054,
+      "sha256": "bcb3c51439638238004f94b16dd456ce27702b498cbb318a6d6b90a967f14408"
     },
     {
       "path": "apps/portal-web/src/AppInstall.css",
@@ -2999,8 +2294,8 @@
     },
     {
       "path": "apps/portal-web/src/Navigation.tsx",
-      "bytes": 10317,
-      "sha256": "a34b698fe289e8917516e9aeff168c89f2924fd698118d8b671435e802a0b573"
+      "bytes": 10789,
+      "sha256": "b0c380e9d8de26db9a52e62b869d3a6e06d60aedd7fd25ef842686e89d35119b"
     },
     {
       "path": "apps/portal-web/src/PageTools.css",
@@ -3049,8 +2344,8 @@
     },
     {
       "path": "apps/portal-web/src/WorkshopIcon.tsx",
-      "bytes": 2670,
-      "sha256": "cdb6ed205630f0cd3c89b72e01dadf5e21a3bdede4bfebfc3b62e633d64bc5d7"
+      "bytes": 2798,
+      "sha256": "15c43bed08784a1265f93b1cb8bd3fa19d7b0df0412f0f9e07de0805dd2ebe6c"
     },
     {
       "path": "apps/portal-web/src/WorkspaceCompanionLayout.css",
@@ -3109,8 +2404,8 @@
     },
     {
       "path": "apps/portal-web/src/interface-messages.ts",
-      "bytes": 73098,
-      "sha256": "2e4ae81e0d1549ecf6eff0973e4872cadfb30874afbee6a7595a684286ace8ac"
+      "bytes": 101056,
+      "sha256": "162e0cc8eb958c42badf68984e29eed7eb5f917f9a51185fd865f7b0ccb07ef9"
     },
     {
       "path": "apps/portal-web/src/language.tsx",
@@ -3134,8 +2429,8 @@
     },
     {
       "path": "apps/portal-web/src/page-help.ts",
-      "bytes": 20107,
-      "sha256": "98b5693d08dbacef5a88621e83a843335eb33325bae10bd5f1ebffcace1b325a"
+      "bytes": 21142,
+      "sha256": "b03886dd5e54bda00ccbef7cef06d8144dbd6c08ffdf2f823382eac642c5ffd2"
     },
     {
       "path": "apps/portal-web/src/portal-feedback.tsx",
@@ -3184,8 +2479,8 @@
     },
     {
       "path": "apps/portal-web/src/types.ts",
-      "bytes": 4218,
-      "sha256": "d4b3706cf4bae85c467720f8c4efd082adbb8f921e40f42b107f35b71fb19d4e"
+      "bytes": 4252,
+      "sha256": "54dbe87114512fa2a281f184aad4f3be0d0ac34b119c49d82627ee27a6043c90"
     },
     {
       "path": "apps/portal-web/src/useLocalAction.ts",
@@ -3214,8 +2509,8 @@
     },
     {
       "path": "apps/portal-web/src/features/community.tsx",
-      "bytes": 4162,
-      "sha256": "b163192050f6979548d32f20cc568d538a63131ebf49ea53fb73b232584370c4"
+      "bytes": 4566,
+      "sha256": "b9c602477a3be28d7921896fcce83fd25e4ea7c663be3187c861ec5cf1523bdf"
     },
     {
       "path": "apps/portal-web/src/features/composition.ts",
@@ -3234,8 +2529,8 @@
     },
     {
       "path": "apps/portal-web/src/features/metadata.ts",
-      "bytes": 4859,
-      "sha256": "4f2e9cf80c83c74eaed5087e71f417e6822ef5dbe7390abdd44ccabed3a1570d"
+      "bytes": 5188,
+      "sha256": "c87cdfa30d5da3efe1c23f5abe622e256bb1cac03c830a9f9391ffc8348bf8e5"
     },
     {
       "path": "apps/portal-web/src/features/registry.tsx",
@@ -3254,23 +2549,13 @@
     },
     {
       "path": "apps/portal-web/src/games/AbsurdDaily.tsx",
-      "bytes": 39495,
-      "sha256": "662cbc7410bed5eb33e8afd0580a70b695127985989dfed9aa34ff7ddd20775c"
-    },
-    {
-      "path": "apps/portal-web/src/games/GameCover.tsx",
-      "bytes": 1081,
-      "sha256": "9d06100f2a5eb422ccf584dd92d50769c360bf05206b2667e998e1ac7c67adbe"
+      "bytes": 30194,
+      "sha256": "8ac27486ffa15a6c05be448ca9f346f5f30c6f7da984bb4e5bc7450ba3c13ec1"
     },
     {
       "path": "apps/portal-web/src/games/GameDraftInbox.tsx",
-      "bytes": 2748,
-      "sha256": "55bb3d5b63a45281c8391a7ab6e223de5bf786abc975cf6a8f7aed3a970f4f1a"
-    },
-    {
-      "path": "apps/portal-web/src/games/ResultShare.tsx",
-      "bytes": 3087,
-      "sha256": "8fe9c8a9f4224c766a0a3fdd4648c4e1366e90fa9dcde876347978a567f04964"
+      "bytes": 2685,
+      "sha256": "9cf4427e3ab57f7da04b041ac3bdc708127d6726143c55010dc9709282ec2072"
     },
     {
       "path": "apps/portal-web/src/games/arcade.css",
@@ -3278,214 +2563,29 @@
       "sha256": "cf3ec6a07a94e5a3d3b1b673e4cce402b7c3163d495f8a48e65356c9814608ce"
     },
     {
-      "path": "apps/portal-web/src/games/diagnostics.ts",
-      "bytes": 302,
-      "sha256": "792e81f69ed8bbf42739c12b3b2729fa05a0e7d5737974f1183c15c63bd6da4f"
-    },
-    {
       "path": "apps/portal-web/src/games/domain.ts",
       "bytes": 9786,
       "sha256": "6d582c91e25bc2411cb7a9c83b2190034ad640a2053e184f4033db8b16bf3bd1"
     },
     {
-      "path": "apps/portal-web/src/games/illustration-theme.css",
-      "bytes": 12036,
-      "sha256": "5a0098b323276ac73f05f738b1d9e59a55104cc8e81ed587b690dcddc86fb65a"
-    },
-    {
       "path": "apps/portal-web/src/games/result-bridge.ts",
-      "bytes": 2739,
-      "sha256": "7afc6b52e50af253990c68b0f3b679070701f54d8b43a5a053f778e25b7647cf"
+      "bytes": 2464,
+      "sha256": "c492e6b8bb19fc6a2679058137a1b906cd9d9a8e3e38b95a8237f4d6ddc578d0"
     },
     {
       "path": "apps/portal-web/src/games/result-card.ts",
-      "bytes": 4820,
-      "sha256": "41369e5bb4460e3093f3cd4512871203fcab30fbef8ec221865083bef6db572c"
-    },
-    {
-      "path": "apps/portal-web/src/games/result-share.ts",
-      "bytes": 1107,
-      "sha256": "2aec22b2b406a46132ed0220a10fc243a321719772130f8b0cc8a45ee014b03d"
-    },
-    {
-      "path": "apps/portal-web/src/games/shotengai.css",
-      "bytes": 18919,
-      "sha256": "ca7b9261f514106f3d0d0ac53e16fa63b1fedc5461e45f998090cb97bb06e226"
-    },
-    {
-      "path": "apps/portal-web/src/games/stage-batch.ts",
-      "bytes": 1909,
-      "sha256": "d0213d99a03f5325af54b923ee730c0f824621f6d66b0971d28a868c83e0f2b4"
+      "bytes": 4448,
+      "sha256": "ec6ed03120b26538f94fabdf038dece31f37a94522198901a917373e08ca731d"
     },
     {
       "path": "apps/portal-web/src/games/stage.ts",
-      "bytes": 34633,
-      "sha256": "b40803b5694b741a51b683a010535a523fd1bcc9976197806e3b8a7d711549eb"
-    },
-    {
-      "path": "apps/portal-web/src/games/toy-console.css",
-      "bytes": 41614,
-      "sha256": "2bb95698524aefd33c6aa614dbb725b38424a68aafbe8f8f9387c41b2d1640a9"
+      "bytes": 34903,
+      "sha256": "ae7e9ed4965bc155650b7c221300c180bc2d05a6fdf9d82ea31d96975071e968"
     },
     {
       "path": "apps/portal-web/src/games/toy-theme.css",
       "bytes": 8867,
       "sha256": "865322c3299f4298c1494c6590708d2d1d47b293eac0f6fe7564017f976d64c1"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/ArcadeLobby.tsx",
-      "bytes": 10987,
-      "sha256": "1b4c3e5566335175dd21df1bd729f5d442ff29e220d1321703d56c2903437a73"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/CookingGame.tsx",
-      "bytes": 23974,
-      "sha256": "20c446e855a8529b4f3a0f1df5f9dd186d62186b5da1f89ec6b5fa4e60f59c32"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/CookingIllustration.tsx",
-      "bytes": 11148,
-      "sha256": "be7d63b5bbc3e950cef9a07d7e2eef3ef2354a22e68137069f1d8a44bf46c7a6"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/CookingScene.tsx",
-      "bytes": 5670,
-      "sha256": "c81e5554c7b2061680744d6abaf05fc28426e6b8eac95978e775e4bdeedc9fa7"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/DishShowcase.tsx",
-      "bytes": 4656,
-      "sha256": "1469a7b66d495850489e65a1059cb5a6e382ea063ffeb8efbccfbf64a8e28f14"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/FoodArt.tsx",
-      "bytes": 780,
-      "sha256": "ce48a483f8bc8aa02e0649789249b76e78ea951146b41e608efc807f2e0ee9c5"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/IngredientIcon.tsx",
-      "bytes": 4165,
-      "sha256": "0b903a27d6890d17c38db4851432b694856694f02d2e4ce69232a4a36d3af25c"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/MarketGame.tsx",
-      "bytes": 18100,
-      "sha256": "b5e7fa7a12d21df8e6b50ab2587f700a20354458e39592b9732803c25625236d"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/MarketScore.tsx",
-      "bytes": 359,
-      "sha256": "82e8f77c68680e5dcd67018dd90ddfefdc44fde4e0ee610766013d1d288c769c"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/catalog.ts",
-      "bytes": 17986,
-      "sha256": "d63de1257b681027a73f8134526c0d19431f3035d218dff9e8252c7f64dc214a"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/cues.ts",
-      "bytes": 1285,
-      "sha256": "ebdfa94e6f92bfb717ce0e079a95a61d43d8438485a8f82e7b125e1660058a57"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/dish-designs.ts",
-      "bytes": 5498,
-      "sha256": "ac7ef44291ae647d5dc87323f599deb107e5294e4d658e5e06923b2fdfe42283"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/dish-model.ts",
-      "bytes": 20416,
-      "sha256": "8f23fd84193069eac32e354d914dbe72f3fd0aa5dc684844af943f83cf7c24dd"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/dish-stage.ts",
-      "bytes": 3703,
-      "sha256": "77bf034d4a22264f2b5a6c21bac5a9a6fcb89d3b25c18f1b1ebebd75fbfd6212"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/domain.ts",
-      "bytes": 11438,
-      "sha256": "272675ed349a020cdeed557ae89abc9182ae2a890c29185a0173f4dcdac937de"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/food-geometry.ts",
-      "bytes": 7089,
-      "sha256": "17696fb15efe1c2e429780eec5b6c188b64d27d2653dc5bfc0529f172ae2aea8"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/food-kit.ts",
-      "bytes": 5396,
-      "sha256": "65b3980b5c0bc0a513f8e6f0dac53c493e7e005b3bec20496bb1ce7ec19ab76f"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/food-studio.ts",
-      "bytes": 1348,
-      "sha256": "67d2b4e027402627bb00e8e42c94fd27da39320fbf93d0ea04c85dde11edb743"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/food-surfaces.ts",
-      "bytes": 4394,
-      "sha256": "e3b120c37e7d9081d9a50ca535f4fb88ed85f50155b892f71621b4184dc62eb6"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/kitchen-stage.ts",
-      "bytes": 15555,
-      "sha256": "246ecc6a66848cef6584d6299c28244cf366d4458ae12e65b4126dbd5d7eee7b"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/lobby.css",
-      "bytes": 17807,
-      "sha256": "3a04bcb68f6fc4feb6117164b82d2a1d11755e5bbc334dafab7914fb7ce700e7"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/market-domain.ts",
-      "bytes": 12923,
-      "sha256": "8340ac2f6bbcf13a98a5d55f1f2fee21561737be1d1b22091ac6db3ca6fe6430"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/market-food.ts",
-      "bytes": 10404,
-      "sha256": "cd5b74ba1614150b1c597b3919bf982830b1b1c4ba3337fe436bd7ddaa0a016f"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/market-stage.ts",
-      "bytes": 9382,
-      "sha256": "5d6295cf9dbd7c80cdab97611ffc1f089825dc12e26c304534ef991817c00ae7"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/market.css",
-      "bytes": 8334,
-      "sha256": "5561b2fe634596053abecf8c94c80a482889e5d16e69785e29ba17bd2b9fd6ef"
-    },
-    {
-      "path": "apps/portal-web/src/games/cooking/storage.ts",
-      "bytes": 5750,
-      "sha256": "fdd15769117443b58cb6781b302346e06b7079a54e77e6d2994ebba769bb0f6c"
-    },
-    {
-      "path": "apps/portal-web/src/games/party/PartyGame.tsx",
-      "bytes": 15064,
-      "sha256": "9ea061cbae18742010615d553ab11f15c76b1dc351ef5848348534f2db5e669e"
-    },
-    {
-      "path": "apps/portal-web/src/games/party/catalog.ts",
-      "bytes": 1831,
-      "sha256": "17281aa0e2ff9ca0ee648001f1e9b8ae7937003ce22633564096626217e86200"
-    },
-    {
-      "path": "apps/portal-web/src/games/party/domain.ts",
-      "bytes": 9126,
-      "sha256": "b9599a91c79f68a97354cc0de0d8bd156511fa06dfde62ace461ec3da19b23bc"
-    },
-    {
-      "path": "apps/portal-web/src/games/party/party.css",
-      "bytes": 10045,
-      "sha256": "de67d7b0d7445483d8da0af5d79a175ecb7a173fc31c41b0be8cd5e968827460"
-    },
-    {
-      "path": "apps/portal-web/src/games/party/stage.ts",
-      "bytes": 18367,
-      "sha256": "e34c020c43e35367a7e1c67e67a541eb0e1ecd92a9fa830f871fb693fdf284cd"
     },
     {
       "path": "apps/portal-web/src/guild-blocks/GuildBlockState.tsx",
@@ -3739,8 +2839,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/Community.tsx",
-      "bytes": 14006,
-      "sha256": "0a38df0c92b48f9bc6cdf4009c0169608daa3b1154d1ad1a2c40d80f1ea60253"
+      "bytes": 14542,
+      "sha256": "163cd3f093be4b980d51b56ecba53f058f68750eb1f0ea42f36dcbc858d1b181"
     },
     {
       "path": "apps/portal-web/src/modules/CommunityHistory.css",
@@ -4214,8 +3314,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/MemberHome.tsx",
-      "bytes": 19034,
-      "sha256": "445f6917817342ed6ab096d59315b3e7aaa5dc100d8850c5e6165278f08406c5"
+      "bytes": 19016,
+      "sha256": "2aadcb1c96f635b0c3d78198edac4a9c247efa41711ee72c73802b174e341199"
     },
     {
       "path": "apps/portal-web/src/modules/MemberMessages.tsx",
@@ -4354,18 +3454,18 @@
     },
     {
       "path": "apps/portal-web/src/modules/PersonalSpace.css",
-      "bytes": 1914,
-      "sha256": "9de04531e106d3fc1df3ff4abd03152a73940e366c7cd7c6d5a9e432e09f4cf0"
+      "bytes": 2937,
+      "sha256": "e2a244121a28f100eccd9ee2669fbffaf0aa94ce901072195213858c28f90be5"
     },
     {
       "path": "apps/portal-web/src/modules/PersonalSpace.tsx",
-      "bytes": 11236,
-      "sha256": "6603114890cc7202d3a1e73395a36f95b2cbbe72e3f824a0f56a002630e6d8f0"
+      "bytes": 13458,
+      "sha256": "31a78de85a46177aa5ff23baca3afdd04d6bf73c3b1b472a88fb13dd39b47efd"
     },
     {
       "path": "apps/portal-web/src/modules/PlatformLogo.tsx",
-      "bytes": 1175,
-      "sha256": "3b4be8b69d2ae475f6ee923e0d71008abba9024752fdd521f1d56f9800338ef4"
+      "bytes": 1205,
+      "sha256": "81747b86216601949666c33e52a780412e20f682b76be1fe3b6c68fe16791e80"
     },
     {
       "path": "apps/portal-web/src/modules/PositioningActionCard.tsx",
@@ -4603,11 +3703,6 @@
       "sha256": "fe00f1f7180f18ec93deb3bcacdedc687cf4dedf1027397f2b94f875d04ec0d0"
     },
     {
-      "path": "apps/portal-web/src/modules/TenantMembersSection.tsx",
-      "bytes": 3065,
-      "sha256": "f7a7429b4ff3f6b0c27634eb29bec3dd65b10da3b45fabd3b18c7007452db19c"
-    },
-    {
       "path": "apps/portal-web/src/modules/TenantSelector.tsx",
       "bytes": 1257,
       "sha256": "37964caa851c32897e03ee67a8050edb04e925f34468bb054906c75228b29c76"
@@ -4804,8 +3899,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/personal-space-model.ts",
-      "bytes": 2536,
-      "sha256": "ab0243591ec8928a11ab2a78311c87071fd3b2d614f7ed256ce1a83cfe9c962c"
+      "bytes": 4798,
+      "sha256": "183dcb0a80267eeb2de7e7c3596bfecb695233eb65f56fe42b5f016ba56f5e18"
     },
     {
       "path": "apps/portal-web/src/modules/production-result-reader.ts",
@@ -4876,11 +3971,6 @@
       "path": "apps/portal-web/src/modules/task-board-loading.ts",
       "bytes": 4048,
       "sha256": "6e75144fb2d04eba56e105ab7c0910ba866b9f83a0965ac73587dca4fa911cf7"
-    },
-    {
-      "path": "apps/portal-web/src/modules/tenant-member-grants.ts",
-      "bytes": 1719,
-      "sha256": "fa1bf72b74a927ebad055520f19f977ba04ff036df024b4f866fdb6411b58bf8"
     },
     {
       "path": "apps/portal-web/src/modules/tenant-workspaces.css",
@@ -4994,13 +4084,13 @@
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/GuideHost.tsx",
-      "bytes": 3994,
-      "sha256": "3cde7e04b8b4fcbefc8f35b79ba322bf64ebb6faae09de96b1bbe169e8bdbd2e"
+      "bytes": 4398,
+      "sha256": "65a2da6c599a360614bf7b6b579fe4d7bf6d250fa85da7fe38ae361607553894"
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/ai-sister-pages.ts",
-      "bytes": 4021,
-      "sha256": "1e60de46daa4ac17a56416b2061c07350ac621176d6921f97d2f1ddd257fcc72"
+      "bytes": 4129,
+      "sha256": "ff79815d06708c92f428527eee9077ad14d583822e47767f77bf58d2918ece5a"
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/ai-sister-release-pin.ts",
@@ -5034,8 +4124,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/page-support.ts",
-      "bytes": 5633,
-      "sha256": "57cfbd016c3dbda0543920728b49fc7cc50ec5e9c29797b72f768c14289fc78b"
+      "bytes": 5862,
+      "sha256": "e5e56733d8fcd48fbedc7aa70d86a5c42184549dff44ae29068377c6b41e9bc8"
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/release-pin.ts",
@@ -5044,8 +4134,8 @@
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/engine/GuideEngine.tsx",
-      "bytes": 42399,
-      "sha256": "b7e5311881b9c3ea50e12635ddced92b4d35a7a41e343ff3596d062df0083f19"
+      "bytes": 45434,
+      "sha256": "82a6a8b1b239e2e4fbcbdce573ed22980bf99fb93ab5120b6043ad9e60ce90af"
     },
     {
       "path": "apps/portal-web/src/modules/newcomer-guides/engine/GuideGallery.tsx",
@@ -15389,8 +14479,8 @@
     },
     {
       "path": "deploy/cloudflare/test/media-restore-container.test.mjs",
-      "bytes": 2921,
-      "sha256": "61b68d8c2f7bd4588f9723d2f120a2c97aa59c28da1405b4925b5b1202d84b7f"
+      "bytes": 3544,
+      "sha256": "f9f8aa9dec6173290083568f010c09d7cff4e10ebe90517baf75ee4627c38e34"
     },
     {
       "path": "deploy/cloudflare/test/media-wrangler.test.mjs",
@@ -15514,8 +14604,8 @@
     },
     {
       "path": "deploy/cloudflare/test/shared-release.test.mjs",
-      "bytes": 109269,
-      "sha256": "75fd6d835245d98a896001b267ceecf567e0f3063d61b45a1c18e5e13076fba7"
+      "bytes": 136389,
+      "sha256": "228e7c5cfbcaa657e04ae6644a4566c90f7175927fee2f88a4194f0f84d03c7a"
     },
     {
       "path": "deploy/cloudflare/test/shop-key-policy.test.mjs",
@@ -15554,18 +14644,18 @@
     },
     {
       "path": "deploy/shared-release/AGENTS.md",
-      "bytes": 2822,
-      "sha256": "ce045b1173c31a3fbbe0ecbe3e127f79c82db629850cf3b0a553bf706bbb5c5b"
+      "bytes": 3159,
+      "sha256": "66e36864979f3a018067168db49c6c9590deffa398a936abfc4f7d085f673c90"
     },
     {
       "path": "deploy/shared-release/README.md",
-      "bytes": 21409,
-      "sha256": "6f5b043823d8e08d9e94bcf615225315c2f97b3c251f48ecec097dd8047b5b12"
+      "bytes": 25116,
+      "sha256": "3b8747b7a420f24dc9d44c9f1e79c301b523cadfaebdba515996b978963b32e1"
     },
     {
       "path": "deploy/shared-release/admission.mjs",
-      "bytes": 14789,
-      "sha256": "0bd61460e6cb888190a263ff8b086551ea032a16220f63ed3de0a739a6d70f9b"
+      "bytes": 15868,
+      "sha256": "d230a2ba5ba0b135c3acd83cb85520cc0b8df4ef60d1f7b055a930bbd9200a4e"
     },
     {
       "path": "deploy/shared-release/artifacts.mjs",
@@ -15574,13 +14664,13 @@
     },
     {
       "path": "deploy/shared-release/backup-cli.mjs",
-      "bytes": 4955,
-      "sha256": "beecac3c78ed1bd0e0831bbd97a25dd933a6be06bf4d703ffbf7d4a8c5ceccb6"
+      "bytes": 5508,
+      "sha256": "a3397b58397ca8c4e88f3c3c8fe19a5937b86f121ec6b3f262a0c2f525ebbbb7"
     },
     {
       "path": "deploy/shared-release/cli.mjs",
-      "bytes": 8450,
-      "sha256": "078ab41e5cc4d220dc205686777c724d4247414b74b9b2e205408791469c00be"
+      "bytes": 8444,
+      "sha256": "f76600ad3bbbf00110f688468084a4640125cefa615594e81cd8e71108a1634e"
     },
     {
       "path": "deploy/shared-release/environment-check.mjs",
@@ -15599,13 +14689,13 @@
     },
     {
       "path": "deploy/shared-release/operator-protocol.md",
-      "bytes": 19793,
-      "sha256": "00adb3fa066df32cb022bb840f9fd84b518c78c258621825d5e102d14dd20ca2"
+      "bytes": 22161,
+      "sha256": "37df8ffd20381352660a3cd77b960e92c2cc9723afc3b81290cce69d96ba2dab"
     },
     {
       "path": "deploy/shared-release/operator.mjs",
-      "bytes": 14714,
-      "sha256": "5f6a0fdb80470397d127ec56300886761e863e049e8ae2a040998632e219de68"
+      "bytes": 17786,
+      "sha256": "126c5bea6a645fffe63528a7518861737a4398c83139d8bacfdd492466ecf216"
     },
     {
       "path": "deploy/shared-release/receipt-archive.py",
@@ -15614,8 +14704,8 @@
     },
     {
       "path": "deploy/shared-release/scheduled-admission.mjs",
-      "bytes": 7406,
-      "sha256": "2b70cc0d1f91819dd8ecde5e50ac9255a0a1a17cb603b743c63ef38c9e0bd076"
+      "bytes": 13462,
+      "sha256": "22fa99148eb5281533338e2f0360e4bab027e8bcd542e590abf26ca4be01113d"
     },
     {
       "path": "deploy/shared-release/image/Dockerfile",
@@ -15639,8 +14729,8 @@
     },
     {
       "path": "deploy/shared-release/portable/backup.mjs",
-      "bytes": 12250,
-      "sha256": "5587615e8d965d321d91df5fd4dde90b34f728e011981da426b9075220a1e843"
+      "bytes": 12458,
+      "sha256": "bf87b1e382c22037c2ca79d03db4e3a41afd0a8439e4dc845f31e5a833ec1126"
     },
     {
       "path": "deploy/shared-release/portable/build.mjs",
@@ -15669,8 +14759,8 @@
     },
     {
       "path": "deploy/shared-release/portable/config.mjs",
-      "bytes": 3415,
-      "sha256": "b5f6561a52314f30f9783a2b48d11513b7877258fecb5e88a84676a28ac37d16"
+      "bytes": 3501,
+      "sha256": "d759117a2546f2ef54cae7617586cb12e338bbb8f3d02d8c7e568f40a3973a44"
     },
     {
       "path": "deploy/shared-release/portable/control-store.mjs",
@@ -15689,13 +14779,13 @@
     },
     {
       "path": "deploy/shared-release/portable/entry.mjs",
-      "bytes": 14114,
-      "sha256": "a758fcde34dd8ba35b1da774a235287727c5d40babd64836c858cb0ff6d1efbc"
+      "bytes": 16888,
+      "sha256": "871ef487dc2b045224be251ee7ad4250ada1cf57d194fd152ffe89bff373a27c"
     },
     {
       "path": "deploy/shared-release/portable/floor.mjs",
-      "bytes": 17660,
-      "sha256": "eedba52d7178ef6485b28f26fae43d64f079ab9202124d9d4fe4bd8d5095eee3"
+      "bytes": 21160,
+      "sha256": "e83614f78c65f875c738d86074217af36ebf8ccda164eed112bd789e5bebd193"
     },
     {
       "path": "deploy/shared-release/portable/intent.mjs",
@@ -15709,8 +14799,8 @@
     },
     {
       "path": "deploy/shared-release/portable/migration.mjs",
-      "bytes": 16974,
-      "sha256": "97f40b03ae75c1fa027f96602e5d8157fa1fb94f2a42e98b2b0d84073f38f484"
+      "bytes": 19158,
+      "sha256": "8244bc7e000c0c1ac231f0f3852c1110f68f93fdba45fe729455d26d5427a214"
     },
     {
       "path": "deploy/shared-release/portable/postgres.mjs",
@@ -15724,8 +14814,8 @@
     },
     {
       "path": "deploy/shared-release/test/backup-integration.mjs",
-      "bytes": 14480,
-      "sha256": "6b4a76347c5907ba010e22047e81562701cef37b3baa514420844a077d80a857"
+      "bytes": 18317,
+      "sha256": "6c87068f0ee81b2d8d2c8c29f137d182d15a9d4de58a8c96b181cef055ab34a3"
     },
     {
       "path": "deploy/shared-release/test/image-native.mjs",
@@ -15734,8 +14824,8 @@
     },
     {
       "path": "deploy/shared-release/test/migration-integration.mjs",
-      "bytes": 10668,
-      "sha256": "5e10f28f1e87a76fe6208bd5ea393f602e6c1b8b474caccab29e412c8e086cdb"
+      "bytes": 12244,
+      "sha256": "d17cf257ceefb0d03c1ea686667a054f7e808c841e355cde67c0cf3a788c738b"
     },
     {
       "path": "deploy/shared-release/test/postgres-integration.mjs",
@@ -15959,8 +15049,8 @@
     },
     {
       "path": "docs/development/absurd-daily.md",
-      "bytes": 42716,
-      "sha256": "02387ef477df366b396aac0db16a75cff0fbdd2129e9c50ba045a878a49a7f24"
+      "bytes": 12497,
+      "sha256": "309d645741908a62430c892bec20847e51677f2d46b697f0c961e96c5898d0be"
     },
     {
       "path": "docs/development/agent-development-guide.md",
@@ -17599,8 +16689,8 @@
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/README.md",
-      "bytes": 44997,
-      "sha256": "33ca5d6c3b975df9d34a02e9994fbbdb6a0d4e1b2dc961d880669e68e92f5fa7"
+      "bytes": 46474,
+      "sha256": "1e7d40e0311d0f23e3fa50b72b7e48b01a6d855195213a9bd3c2018f5755757f"
     },
     {
       "path": "docs/platform-plan/execution/guild-launchpad/SP-00-baseline-traceability.md",
@@ -18084,8 +17174,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/closeout.md",
-      "bytes": 127323,
-      "sha256": "4d89545da52644a49d700154d896440f10804e1d8a377b5ddfa2ab4fd5f90358"
+      "bytes": 131009,
+      "sha256": "538300be5fd0d994f514359c73c5793816579208564094924c318a4afed96ccf"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/composition-evidence-2026-10-05.json",
@@ -18104,8 +17194,8 @@
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/current-state.json",
-      "bytes": 552041,
-      "sha256": "1b34e8bc587ed3ec7c8bcd9529917a67ac1d20a65ee9029860787404e27039db"
+      "bytes": 608696,
+      "sha256": "040b16a8202f678b1a4c3cb3e43bde5f6058478d345fbb60a2478a67e39b361c"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/daily-snapshot-pins-evidence-2026-10-05.json",
@@ -18236,11 +17326,6 @@
       "path": "docs/platform-plan/execution/unified-foundation/rollout-commerce-cohorts-2026-10-20.json",
       "bytes": 46160,
       "sha256": "9abab1958bae6029b0b59d5dd89bc9e833a8e564b42c213ff93c8cc5d3bb19b7"
-    },
-    {
-      "path": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
-      "bytes": 75278,
-      "sha256": "5454d9aed5b1eb7be282e2a558f11fcbbf04bd5882e96c65de82c30f1209739d"
     },
     {
       "path": "docs/platform-plan/execution/unified-foundation/rollout-main-36bec661-2026-10-25.json",
@@ -19483,184 +18568,14 @@
       "sha256": "11c77539fe2be7b9e74b3ca58b45373e2b2efed1dff390e5bde1b78903b90007"
     },
     {
-      "path": "modules/absurd-daily/COOKING.md",
-      "bytes": 14653,
-      "sha256": "f94bec2fe75eac68cdf2fb7fe1e764b1980b79e21c2523ef9a7909555ed82bbf"
-    },
-    {
-      "path": "modules/absurd-daily/PARTY.md",
-      "bytes": 10024,
-      "sha256": "05d19a4d271a4a2670d149927e5ce8d47aed5fa95dd631a267d428ed7787a125"
-    },
-    {
-      "path": "modules/absurd-daily/PLAYABILITY.md",
-      "bytes": 34974,
-      "sha256": "de5b99486bf20c52a51bf3de12cda07840226ee4199c7d0b8bb56bc3aa5b04ed"
-    },
-    {
       "path": "modules/absurd-daily/README.md",
-      "bytes": 5861,
-      "sha256": "bf08dcd884b17724daf208e805e838f21d633de7d2a88bece2275dc0c00181b7"
-    },
-    {
-      "path": "modules/absurd-daily/cooking-3d-art.json",
-      "bytes": 35080,
-      "sha256": "67da79293b9a0a8fd5420e61e6dd5b2617f1567334827034bfe97f73a5c95056"
-    },
-    {
-      "path": "modules/absurd-daily/cooking-art.json",
-      "bytes": 21522,
-      "sha256": "fba2b8ed316b0f8d4b64cf8f7b12a9269873b571b90dc603e8d5d3bb8b9c0eb6"
+      "bytes": 1210,
+      "sha256": "f4c0ea46946cf15a866d0f22ed63f0c43fe24f74dbf7b2d7176d9c93a023b1f3"
     },
     {
       "path": "modules/absurd-daily/freedom.module.json",
-      "bytes": 1180,
-      "sha256": "c8c1a787073d8598ed509601987ea13bbd1ec980943b9e4ee36721dd58819db2"
-    },
-    {
-      "path": "modules/absurd-daily/illustrated-art.json",
-      "bytes": 34557,
-      "sha256": "2f9e2367e6013dfcdfc60754ca69d8430faf7858939b694002cf09240fd49d60"
-    },
-    {
-      "path": "modules/absurd-daily/party-art.json",
-      "bytes": 2578,
-      "sha256": "e705f1e587c6cba41a83bfc74ba7ff09215c8a2bfb462f93fd97db57b2781e5e"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/bakery.txt",
-      "bytes": 2139,
-      "sha256": "7e7605f35aae686d69670bb976c81b1e804a406728f075b6070093dae619a1d1"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/corn-dog-direction.txt",
-      "bytes": 2192,
-      "sha256": "666438dd987419dfc72bb698c8e1517bfd637d395f7c6fbf7a47e885ec526392"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/drinks.txt",
-      "bytes": 2146,
-      "sha256": "7d2f58f9967aa5acfce2f3f1b9b4bdbc15d3f0d7266398532cf0c6029d9b5857"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/italy.txt",
-      "bytes": 2161,
-      "sha256": "cf372e94639d4aac5c68a60a72810276e933c90dcdd5b22220b1bf41695add5f"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/japan.txt",
-      "bytes": 2183,
-      "sha256": "37394bde15bacb04d5aefb5241dbc1ebd7ac44625675daae6579806d72680859"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/korea.txt",
-      "bytes": 2214,
-      "sha256": "10e4239900dd4ae253f56f2133ceea25a015fc7a290d524327c3fed49c4069f3"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/party.txt",
-      "bytes": 2453,
-      "sha256": "9ca147b566048269d17525b6f95fed57cc92e0de4a6181054f0ca3ad9fab568a"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/taiwan.txt",
-      "bytes": 2278,
-      "sha256": "6ad3f078a78543678be5168efa0ee242e0b2841f07094babc7cfc0134863c848"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/vegetables.txt",
-      "bytes": 2141,
-      "sha256": "e2a434d0d073e1abc08462b47c5332a7ba1ec1629c9d135f4b0b5efa6cb720db"
-    },
-    {
-      "path": "modules/absurd-daily/art-prompts/world.txt",
-      "bytes": 2323,
-      "sha256": "9a1ea889ec8b1f0a85a08452127f523520d3228a69b7a5eb406d9b9dc0bbaa25"
-    },
-    {
-      "path": "modules/absurd-daily/review/corn-dog-illustrated-ready-20261026.png",
-      "bytes": 197813,
-      "sha256": "8a97dda0f24c1f30ea8970c58db39fd804dc45d7889b69bc86b491f2285567cb"
-    },
-    {
-      "path": "modules/absurd-daily/review/current-corn-dog-share-20261025.png",
-      "bytes": 507966,
-      "sha256": "45618d54ef8b8582a4d5ca2759e080450865beb0cd6437664e7dbcb700f8dd23"
-    },
-    {
-      "path": "modules/absurd-daily/review/current-lobby-desktop-20261025.png",
-      "bytes": 921457,
-      "sha256": "bcc99e862ca6de4ce8de4f8c2609f87e1a06c8a3e3bc3f58a0fe202c8e72256e"
-    },
-    {
-      "path": "modules/absurd-daily/review/current-lobby-phone-20261025.png",
-      "bytes": 621516,
-      "sha256": "052bc5393389b89a4ab64560ec89ecce17bb1373f2ffdba1bc937b285694f79a"
-    },
-    {
-      "path": "modules/absurd-daily/review/current-score-only-20261025.png",
-      "bytes": 151928,
-      "sha256": "0538e057122744a6ef9afec19cc95130b802fee38bb4201cc067454c72460a2b"
-    },
-    {
-      "path": "modules/absurd-daily/review/current-steak-iron-phone-20261025.png",
-      "bytes": 163245,
-      "sha256": "a99bd9bfc16db18f988b3ed0a8d1b35a68762d591d185b492fc693b735066ea0"
-    },
-    {
-      "path": "modules/absurd-daily/review/current-steak-iron-share-20261025.png",
-      "bytes": 629704,
-      "sha256": "9676e6cd06d52c8f08d2103a0aa81b1779c520a9fed599b23eb77f4ada855f4a"
-    },
-    {
-      "path": "modules/absurd-daily/review/illustrated-kitchen-phone-20261026.png",
-      "bytes": 1279602,
-      "sha256": "001cf8b57e54d683fbd6cb22e1c101b57741ca396b72a00bb570a3b7a1aabfd5"
-    },
-    {
-      "path": "modules/absurd-daily/review/illustrated-lobby-desktop-20261026.png",
-      "bytes": 1787786,
-      "sha256": "68f47e65e255cd1adacecbd3be3e2e02f23f383c698e6a94d0ae74de2ff7eba3"
-    },
-    {
-      "path": "modules/absurd-daily/review/native-ceramic-20261025.png",
-      "bytes": 392530,
-      "sha256": "fdcd128727fae8f135ac3516733b6464edc21978168ae672cb2b208cb5d7b2ad"
-    },
-    {
-      "path": "modules/absurd-daily/review/native-corn-dog-20261025.png",
-      "bytes": 335132,
-      "sha256": "a99e6b633ee7a77ab6f45c915ebb8449028aad4242b0a97146116f09a9277c9f"
-    },
-    {
-      "path": "modules/absurd-daily/review/native-corn-dog-rotation-20261025.mp4",
-      "bytes": 285177,
-      "sha256": "dbfd8cd714fe2f8b85a6f1d8e0edce4d23cc9d73b3d7fca20f9cd93eafa9d79d"
-    },
-    {
-      "path": "modules/absurd-daily/review/native-steak-iron-20261025.png",
-      "bytes": 386072,
-      "sha256": "e179e32e26f671bfbd193982bae9cea5000d1d628086bfd0af4cefa923208071"
-    },
-    {
-      "path": "modules/absurd-daily/review/party-lobby-desktop.png",
-      "bytes": 486351,
-      "sha256": "8425bdc3936414315e254cb8891d3bb2af9ba47afce42604212b0b759cdf5a7d"
-    },
-    {
-      "path": "modules/absurd-daily/review/party-phone.png",
-      "bytes": 106185,
-      "sha256": "fb30db613672cd75365c389a419f52274fcf3c60aa975765a305f2ab862ad7be"
-    },
-    {
-      "path": "modules/absurd-daily/review/playroom-desktop.png",
-      "bytes": 729966,
-      "sha256": "4a97b415f7aabf6739c52ac8b447e9d95818afe7ebe093a168448c68c2f357f0"
-    },
-    {
-      "path": "modules/absurd-daily/review/playroom-phone.png",
-      "bytes": 379498,
-      "sha256": "2469b9c7d287b5532d1f2f403e8e5461ae9cb68f225e769c4dfa46b0d5443072"
+      "bytes": 1128,
+      "sha256": "752d110fb48aa95ccdf915dfa1b6c101ddfdfde5f7b16ccca4cd606a706ce18f"
     },
     {
       "path": "modules/agent-commerce/README.md",
@@ -22009,8 +20924,8 @@
     },
     {
       "path": "modules/community/member-skill-books.ts",
-      "bytes": 9448,
-      "sha256": "79e6847b71b513620259a66a468557ecf969da49f6580ca41d5e69d9e2b39fa8"
+      "bytes": 9878,
+      "sha256": "54382ecfe098b2b60a8d13c0bb66b49b060f5b2c7b9863ff782a426987067d09"
     },
     {
       "path": "modules/community/moderation.ts",
@@ -22039,8 +20954,8 @@
     },
     {
       "path": "modules/community/public-social-post-page.ts",
-      "bytes": 5787,
-      "sha256": "112816222da03cdfd0e1c01889e3af77c6332342a2fa664a029d983fa540e976"
+      "bytes": 8700,
+      "sha256": "55d88d2cbaa731e6b89ab6022ae4ed5e0003ca3369613ab643b85b9e9cca05c6"
     },
     {
       "path": "modules/community/public-social-posts.ts",
@@ -22101,11 +21016,6 @@
       "path": "modules/community/discovery-portal/freedom.module.json",
       "bytes": 1431,
       "sha256": "f17554672905a4bdd8cb37b2d8c102570784eb3909fd24178c17f4a81d316945"
-    },
-    {
-      "path": "modules/community/discovery-portal/skill-book-uses.ts",
-      "bytes": 1337,
-      "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
     },
     {
       "path": "modules/community/outcomes/freedom.module.json",
@@ -22499,8 +21409,8 @@
     },
     {
       "path": "modules/development/pages.ts",
-      "bytes": 31568,
-      "sha256": "0fd334741b2fc3d78a9f06518742fd5d90db2cb23cf0e7410074820c965a00ee"
+      "bytes": 33036,
+      "sha256": "783a582c8e885fd8c706be9f82916b51ddea1e42a28535677e221a3696cdf5e1"
     },
     {
       "path": "modules/development/service.ts",
@@ -22629,8 +21539,8 @@
     },
     {
       "path": "modules/guild-workspace/launchpad-config.ts",
-      "bytes": 37712,
-      "sha256": "7bfd122d8e8abdbacaf1fce6cdb0c29ecbc7b2dbf64b7d54b06d0d0148a21f73"
+      "bytes": 37876,
+      "sha256": "34f253a50fa56bdc91ba48eff3725c6db1650ba2a552fbb34bc7de4278bf0b99"
     },
     {
       "path": "modules/guild-workspace/launchpad-layout-guards.ts",
@@ -23144,8 +22054,8 @@
     },
     {
       "path": "modules/portal-shell/freedom.module.json",
-      "bytes": 3478,
-      "sha256": "f2c84dc6532dbbf534a51c915a8b55c719dbb5b82ebd5beb46abd540f0224adf"
+      "bytes": 3699,
+      "sha256": "18f22f3013402b02860b6eac3bac5c09ba469dca0ce811f24a72f1982c1c54c5"
     },
     {
       "path": "modules/positioning/assessment.ts",
@@ -23704,8 +22614,8 @@
     },
     {
       "path": "packages/contribution-tools/pinned-suites.mjs",
-      "bytes": 6610,
-      "sha256": "6f476de083f34868d1e2848ae1b1603db7cd829061311a7526b350ffb5b338b3"
+      "bytes": 6793,
+      "sha256": "09a1c13019b360969c68d77b0ac2dfd981b2c51476d68c2848272a297e088988"
     },
     {
       "path": "packages/contribution-tools/process-env.mjs",
@@ -23994,8 +22904,8 @@
     },
     {
       "path": "packages/contribution-tools/test/pinned-suite.test.mjs",
-      "bytes": 35200,
-      "sha256": "8e3477d272ffae02f34e95a9b306f517f65952aa0262084bba3658c2d3f2d3b6"
+      "bytes": 36359,
+      "sha256": "5c32670915d1e883a54bc0afdfbdfd6446a98f3c892629c66778a57b33218a80"
     },
     {
       "path": "packages/contribution-tools/test/reconcile-issue-closures.test.mjs",
@@ -24279,8 +23189,8 @@
     },
     {
       "path": "packages/media-migration/backup-daily.ts",
-      "bytes": 14383,
-      "sha256": "f13c48ff3d36b9b36927ce805ffa608b967886a2520e9a606f9598d7926dccca"
+      "bytes": 14721,
+      "sha256": "5f6ba7cababa22d49c1fb079cd04a25d139f8f2cbfc3e673cf8ac82933b57424"
     },
     {
       "path": "packages/media-migration/backup-evidence.ts",
@@ -24309,8 +23219,8 @@
     },
     {
       "path": "packages/media-migration/freedom.module.json",
-      "bytes": 4857,
-      "sha256": "2e1d14895f3f8b444b0906385d14c9e571cd4eadb2cadab36ad3f173f74adc86"
+      "bytes": 4920,
+      "sha256": "88108bb8970aaa89b184e767c876fc6cf7b0c29dbce2b1b4a07cc92bd92bbd09"
     },
     {
       "path": "packages/media-migration/inventory.ts",
@@ -24504,8 +23414,8 @@
     },
     {
       "path": "packages/shared/freedom.module.json",
-      "bytes": 3264,
-      "sha256": "343777987495768991737bffdab17647dc6b15a2525257508565d229d85b30ec"
+      "bytes": 3160,
+      "sha256": "f4b235db873996b3d2b292c3b946ebb584071dc64b10d1af75e3baccca3dc1f3"
     },
     {
       "path": "packages/shared/github-leaderboard.ts",
@@ -24989,8 +23899,8 @@
     },
     {
       "path": "scripts/ci/affected-jobs.md",
-      "bytes": 9629,
-      "sha256": "05ed1818c7b307b2073b2ba241cc32c9e68043540957db6e5b83d64baf5609d7"
+      "bytes": 14731,
+      "sha256": "b200e83bdee7c3ad1149c351f06d79b37ff20503fc6939c0d7c7d5c7ed1aa116"
     },
     {
       "path": "scripts/ci/broker-bridge-check.mjs",
@@ -25069,13 +23979,13 @@
     },
     {
       "path": "scripts/ci/select-affected-jobs.mjs",
-      "bytes": 45014,
-      "sha256": "a6309bb4b64aaad4d6a5df7333ab01f0e44971d1d1afb8d36be00239a3abf075"
+      "bytes": 60981,
+      "sha256": "2ed111cf724d687fddc3cc89c9647565ac0b4fa4ff8c21b9736b6578f3388632"
     },
     {
       "path": "scripts/ci/select-affected-jobs.test.mjs",
-      "bytes": 92055,
-      "sha256": "cef3c45598ab1ea2c48bba5e6723a572daa504b4bf7bbbd15c403e486d64a2fe"
+      "bytes": 109636,
+      "sha256": "2bff3513ea2b3f1b19d2f1b5b80c313b1220a69741275fcf4e2c806738ae7268"
     },
     {
       "path": "scripts/ci/test_release_source_archive.py",
@@ -25164,8 +24074,8 @@
     },
     {
       "path": "tests/e2e/absurd-daily.spec.ts",
-      "bytes": 95107,
-      "sha256": "cd5f887dae67c8fc44bed0bf246c0e61e8e694e10e50dcb0b3b366cda171050d"
+      "bytes": 20327,
+      "sha256": "c17309caf787e1bbaf701a414f3de95c7da125f9fec4e3f385c87859861e2eb6"
     },
     {
       "path": "tests/e2e/account-deactivation.spec.ts",
@@ -25209,8 +24119,8 @@
     },
     {
       "path": "tests/e2e/ai-sister-guides.spec.ts",
-      "bytes": 17603,
-      "sha256": "4c2c2768b7d3c011d337633b668db1df49e5ba3f27b8ca6f491d9a6f616cffc8"
+      "bytes": 18392,
+      "sha256": "1c7cf1fa1e3b7a4ff386eb30842a73bbd1119e396b9c4962e1e148464b8fb96b"
     },
     {
       "path": "tests/e2e/audit-identity-final.spec.ts",
@@ -25501,11 +24411,6 @@
       "path": "tests/e2e/guild-launchpad.spec.ts",
       "bytes": 41912,
       "sha256": "eac5549136863b02e64f9dd197917aafb5bc6ef8686715caa3720c46939808d8"
-    },
-    {
-      "path": "tests/e2e/guild-member-operations.spec.ts",
-      "bytes": 7560,
-      "sha256": "86e4cab6f5fb4773d7253ad53626953edca26b18872435540e9c845a9e8dd2f2"
     },
     {
       "path": "tests/e2e/guild-member-tiers.spec.ts",
@@ -25809,8 +24714,8 @@
     },
     {
       "path": "tests/e2e/newcomer-guides.spec.ts",
-      "bytes": 72821,
-      "sha256": "feb214eb225316a6c88a2b0455b173cff27ec500893bcd01269d18b16f7d6ddc"
+      "bytes": 73207,
+      "sha256": "6cb7330a555def588aa5e030e387beb96a3209f1b737c2a3a22b49a3644b1060"
     },
     {
       "path": "tests/e2e/notification-bell-actions.spec.ts",
@@ -25869,8 +24774,8 @@
     },
     {
       "path": "tests/e2e/personal-space.spec.ts",
-      "bytes": 18837,
-      "sha256": "7ed54f318e8b5290d332d7031aa91568e7d8ce3c24b035a60917900aa8423c4e"
+      "bytes": 29200,
+      "sha256": "b6ce19621df2eb24a8c9e6bb7e367035463a8379e919aeb6f6f8fea79c03cadc"
     },
     {
       "path": "tests/e2e/platform-purpose.spec.ts",
@@ -25889,8 +24794,8 @@
     },
     {
       "path": "tests/e2e/public-social-posts.spec.ts",
-      "bytes": 34147,
-      "sha256": "79547879d59971d25a44f166675ee2e352c11aeffd381677f38777ead9141d4c"
+      "bytes": 38269,
+      "sha256": "b50d09e8719736bf17aec336d8840d4b64c3ddf3aae26e4f76db789d5ed90ea1"
     },
     {
       "path": "tests/e2e/quick-join.ts",
@@ -25954,8 +24859,8 @@
     },
     {
       "path": "tests/e2e/shared-feedback-language.spec.ts",
-      "bytes": 17861,
-      "sha256": "80e1d73257b9336ffafa9c08b008b01cd5c660c8f8ae15b68befb4327d549c35"
+      "bytes": 24901,
+      "sha256": "4977d15029a392d8c13ca19a4b2b8d1d14873f99dfff19473db61ea4f93bffa3"
     },
     {
       "path": "tests/e2e/sharing-authoring-fixture.ts",
@@ -26429,8 +25334,8 @@
     },
     {
       "path": "tests/runtime/absurd-daily.test.ts",
-      "bytes": 40907,
-      "sha256": "20c212b8d2100f5e028de10d9f2bf87a9a9f0b770e76f6146d7976ba8340398f"
+      "bytes": 11333,
+      "sha256": "94e15a5f9eb75923c0999b0efb442f7667f942d3aa05f96aa1d0d5674eb5015f"
     },
     {
       "path": "tests/runtime/account-deactivation-ui.test.ts",
@@ -27204,13 +26109,8 @@
     },
     {
       "path": "tests/runtime/guild-launchpad.test.ts",
-      "bytes": 59997,
-      "sha256": "3b67cf9d612bb237fb894b2cf769baf2bc906b40b04560cddbac7fc302dbe23f"
-    },
-    {
-      "path": "tests/runtime/guild-member-operation.test.ts",
-      "bytes": 8818,
-      "sha256": "f243f4bef8adcb1a137026ebdcce9b8a5fa9c957b0940032e6e1ff1231405cee"
+      "bytes": 60238,
+      "sha256": "442fdf7666e37da60112f9af12b5d4fd7cc846366c1b3295b6ccfa993d24c843"
     },
     {
       "path": "tests/runtime/guild-member-tier-fixture.test.ts",
@@ -27643,11 +26543,6 @@
       "sha256": "8125efc679d5d9ee30050f93e30eb1b4c336e02fa07333c1d85e20e5bdc19e17"
     },
     {
-      "path": "tests/runtime/market-cooking.test.ts",
-      "bytes": 6103,
-      "sha256": "b9302d1366be2501167368d3d1907911f462438cb37c4c43c00862a223a76bbb"
-    },
-    {
       "path": "tests/runtime/media-accepted-formats-playback.test.ts",
       "bytes": 6042,
       "sha256": "37ef45fabc2e1939257acc8dc66e1b8090d1f0538c6cdaa8709847724501ebf3"
@@ -27664,8 +26559,8 @@
     },
     {
       "path": "tests/runtime/media-backup-daily.test.ts",
-      "bytes": 6571,
-      "sha256": "c08d5266ba00764e9b228cf96de524d8679a864180204b7d002c5b290f54c507"
+      "bytes": 7750,
+      "sha256": "24cca89d2135a0cdf18443edc07262b25bda3b1412cf28b2e135b8cf421a9890"
     },
     {
       "path": "tests/runtime/media-backup-evidence.test.ts",
@@ -28054,8 +26949,8 @@
     },
     {
       "path": "tests/runtime/newcomer-guides.test.ts",
-      "bytes": 8218,
-      "sha256": "9598cf60e4c4613044cadfd4d932dedaa7640357b773c6e8d83f3f0b6c473b9a"
+      "bytes": 22132,
+      "sha256": "6caa0d2364633d5f0e5f97a6c96206f3b2ea74fff9c43efe376042065863a89a"
     },
     {
       "path": "tests/runtime/notification-events.test.ts",
@@ -28184,8 +27079,8 @@
     },
     {
       "path": "tests/runtime/personal-space.test.ts",
-      "bytes": 5183,
-      "sha256": "8048414d84e9550e34882696384694e585e2862c9d1560e19a0ee202b65da5ef"
+      "bytes": 11750,
+      "sha256": "df11b5aee4218a0723e10c309d021555a87565b911a9ec66bcb64b9130857850"
     },
     {
       "path": "tests/runtime/platform-admin.test.ts",
@@ -28319,13 +27214,13 @@
     },
     {
       "path": "tests/runtime/public-social-post-page.test.ts",
-      "bytes": 8617,
-      "sha256": "c830ddf8530786507c130dad45c96ecf19d7f21620501439e63820363486272b"
+      "bytes": 13008,
+      "sha256": "13805138578a32821ea53aa842ca222b751f9cc2912e1c5ce44d9b5dbadd86dc"
     },
     {
       "path": "tests/runtime/public-social-post-script.test.ts",
-      "bytes": 3085,
-      "sha256": "77f752b608789bf7ab8925362f001f0e58891ad89688ef6965904c49fdebb2eb"
+      "bytes": 5752,
+      "sha256": "78545d9022b9662d494186901d92072fff29cc0f4dddd8ca81ab38e15bf46479"
     },
     {
       "path": "tests/runtime/public-social-posts-runtime-role.test.ts",
@@ -28334,8 +27229,8 @@
     },
     {
       "path": "tests/runtime/public-social-posts.test.ts",
-      "bytes": 29164,
-      "sha256": "9e87d773f563e91a98bc111431a895edcdb8bd53dbe9e1ece3b78c554a269532"
+      "bytes": 29247,
+      "sha256": "84b5d180f066dd73124e3e4efa32e180afdd7b37001b107582e9c4591eb95aed"
     },
     {
       "path": "tests/runtime/published-skills.test.ts",
@@ -28573,11 +27468,6 @@
       "sha256": "554845d5f39344d05a261e301430e416c8510a684c22917e60328ecb1b8533d3"
     },
     {
-      "path": "tests/runtime/social-feed-write-order.test.ts",
-      "bytes": 39243,
-      "sha256": "0c509effa8e40a08cc7705c5de9374db044e3de9846407231ea4e8f3113976a7"
-    },
-    {
       "path": "tests/runtime/social-feed.test.ts",
       "bytes": 43476,
       "sha256": "4e49ec65d4d1ec90f9c245563dfb3dec5f721841e06d58b584fcebca5ea5e046"
@@ -28596,11 +27486,6 @@
       "path": "tests/runtime/social-post-edit.test.ts",
       "bytes": 9261,
       "sha256": "db05a33bd61b67742acd0bac9ea0a5975786b33490dfc842d8421773030c6d4b"
-    },
-    {
-      "path": "tests/runtime/social-post-editor.test.ts",
-      "bytes": 12578,
-      "sha256": "95ec4ab8dccf88524de873ff2264caa2f6e856773c0b474cf2258c98e7e7a43b"
     },
     {
       "path": "tests/runtime/social-post-task.test.ts",
@@ -28861,11 +27746,6 @@
       "path": "tests/runtime/tenant-list-cursor.test.ts",
       "bytes": 5440,
       "sha256": "43a2bb74788e166afedf55b9922d3d788831f34349896004a039c7154810b9f9"
-    },
-    {
-      "path": "tests/runtime/tenant-members-section.test.ts",
-      "bytes": 13548,
-      "sha256": "ee3224d3f80fa0ecc21e6bf71c14548d664344fa804a831baa87237af7af4401"
     },
     {
       "path": "tests/runtime/tenant-membership-identity.test.ts",
@@ -29316,6 +28196,256 @@
       "path": "tests/worker/private-ai-fixtures/sender.ts",
       "bytes": 429,
       "sha256": "eef09b6bca21963702cd2c8942467a4ca337aff441af38bc4b3cea34bd747942"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-main-1f7aee36-2026-10-25.json",
+      "bytes": 75278,
+      "sha256": "5454d9aed5b1eb7be282e2a558f11fcbbf04bd5882e96c65de82c30f1209739d"
+    },
+    {
+      "path": "modules/community/discovery-portal/skill-book-uses.ts",
+      "bytes": 1337,
+      "sha256": "0c5e21ad3fcf5cd329ec60bed5e5c83af31cf09edd38186f596cc446a40badd0"
+    },
+    {
+      "path": "apps/portal-web/src/modules/TenantMembersSection.tsx",
+      "bytes": 3065,
+      "sha256": "f7a7429b4ff3f6b0c27634eb29bec3dd65b10da3b45fabd3b18c7007452db19c"
+    },
+    {
+      "path": "apps/portal-web/src/modules/tenant-member-grants.ts",
+      "bytes": 1719,
+      "sha256": "fa1bf72b74a927ebad055520f19f977ba04ff036df024b4f866fdb6411b58bf8"
+    },
+    {
+      "path": "tests/e2e/guild-member-operations.spec.ts",
+      "bytes": 7560,
+      "sha256": "86e4cab6f5fb4773d7253ad53626953edca26b18872435540e9c845a9e8dd2f2"
+    },
+    {
+      "path": "tests/runtime/guild-member-operation.test.ts",
+      "bytes": 8818,
+      "sha256": "f243f4bef8adcb1a137026ebdcce9b8a5fa9c957b0940032e6e1ff1231405cee"
+    },
+    {
+      "path": "tests/runtime/social-feed-write-order.test.ts",
+      "bytes": 39243,
+      "sha256": "0c509effa8e40a08cc7705c5de9374db044e3de9846407231ea4e8f3113976a7"
+    },
+    {
+      "path": "tests/runtime/social-post-editor.test.ts",
+      "bytes": 12578,
+      "sha256": "95ec4ab8dccf88524de873ff2264caa2f6e856773c0b474cf2258c98e7e7a43b"
+    },
+    {
+      "path": "tests/runtime/tenant-members-section.test.ts",
+      "bytes": 13548,
+      "sha256": "ee3224d3f80fa0ecc21e6bf71c14548d664344fa804a831baa87237af7af4401"
+    },
+    {
+      "path": "apps/portal-web/src/PlatformHelperHost.tsx",
+      "bytes": 6220,
+      "sha256": "ee65239df4c8fadaf89857791ca8ac685b987622e5ef4054f8dd005874a6333b"
+    },
+    {
+      "path": "apps/portal-web/src/modules/NewbieVillage.css",
+      "bytes": 1323,
+      "sha256": "f2839380660ec978212d7b24cf17399006bd09c54f14524e98fb2750666dd941"
+    },
+    {
+      "path": "apps/portal-web/src/modules/NewbieVillage.tsx",
+      "bytes": 9907,
+      "sha256": "83125167cff33a1e3cc2fea4e45d8ba56433b596fbb297bd9181b6d4a5c365d6"
+    },
+    {
+      "path": "apps/portal-web/src/modules/TesterMap.css",
+      "bytes": 5711,
+      "sha256": "005e44c330801801e7b85b48ba857d23111a50efde91973aac1a89e500253c1f"
+    },
+    {
+      "path": "apps/portal-web/src/modules/TesterMap.tsx",
+      "bytes": 17113,
+      "sha256": "6799ecc507f720b23abf8cb1e93e0c32c25827f81832817998b8958c069ef278"
+    },
+    {
+      "path": "apps/portal-web/src/modules/platform-helper/PlatformHelper.tsx",
+      "bytes": 9736,
+      "sha256": "79d63587b573f81e32d7c2c1ab369468b5eef624b2396a559db955477d4edebf"
+    },
+    {
+      "path": "apps/portal-web/src/modules/platform-helper/freedom.module.json",
+      "bytes": 887,
+      "sha256": "456143b8cb9f2c65a176b6af761ae69cfa1dbba0930a9394187731f27dbc3fba"
+    },
+    {
+      "path": "apps/portal-web/src/modules/platform-helper/helper.css",
+      "bytes": 1728,
+      "sha256": "bf948ff322f15a59bd4011beeb6e8b1195209a6569ee9a5a91398cc4ccdb5514"
+    },
+    {
+      "path": "apps/portal-web/src/modules/platform-helper/knowledge.ts",
+      "bytes": 3005,
+      "sha256": "fed2e17e24aa963043be97fbd5bef90bc6eda538971d08194749fa5eecdcda16"
+    },
+    {
+      "path": "apps/portal-web/src/modules/platform-helper/model.ts",
+      "bytes": 3430,
+      "sha256": "47bab478cadb2c8f4b86b132cde10c6d6260ac85eb69cfb7d0307b10c9ae4630"
+    },
+    {
+      "path": "docs/development/platform-helper.md",
+      "bytes": 18090,
+      "sha256": "4a739e6a4740a39cfcc2506ddab83e7404784b8d54f9c575c552049263c0ecc5"
+    },
+    {
+      "path": "modules/newbie-village/COORDINATION.md",
+      "bytes": 3003,
+      "sha256": "81949b485d18d296aa1b30de81c129120fcb66ae42300983d85c4f31647dbc40"
+    },
+    {
+      "path": "modules/newbie-village/README.md",
+      "bytes": 4094,
+      "sha256": "10f42471390c53b37c02fcd41c1c1da395707d173e90171f328c153e9d1bc5c1"
+    },
+    {
+      "path": "modules/newbie-village/content.ts",
+      "bytes": 57345,
+      "sha256": "0c793aa9ff0e3e6976baca42e8eed96683826891e3785224e92cb9f34f294db9"
+    },
+    {
+      "path": "modules/newbie-village/draft.ts",
+      "bytes": 921,
+      "sha256": "7d3808007ea64aa5d4fa632f3df80033c7240f95f77f17abeab1593c6538150e"
+    },
+    {
+      "path": "modules/newbie-village/freedom.module.json",
+      "bytes": 1282,
+      "sha256": "991d52938b63f46a7a64ddae0cb4705e2db554e1591e02725151fe7aa13df0fe"
+    },
+    {
+      "path": "modules/newbie-village/guilds.ts",
+      "bytes": 8085,
+      "sha256": "508655737f755156230858e095e62b75b25d676bfabc870756439dae02148576"
+    },
+    {
+      "path": "modules/newbie-village/index.ts",
+      "bytes": 148,
+      "sha256": "3ef553e9d6d9f5689310f8bd1948d9bcbbaf113372a6b35e7d08c33eafddabb8"
+    },
+    {
+      "path": "modules/newbie-village/progress.ts",
+      "bytes": 1217,
+      "sha256": "537fe14b8e69d1a614c97ecca65ab9219e70be255294c101b69c761e4c5bcb0d"
+    },
+    {
+      "path": "modules/newbie-village/scoring.ts",
+      "bytes": 2827,
+      "sha256": "f31b54a175933772e3da4e202b99400d3574368be60447b1c81760dac48b1f0d"
+    },
+    {
+      "path": "modules/tester-map/COORDINATION.md",
+      "bytes": 5924,
+      "sha256": "f1505d2593493caddcc28f6e085c90958a07d63c28a5db584a96c246a83dfc46"
+    },
+    {
+      "path": "modules/tester-map/README.md",
+      "bytes": 2956,
+      "sha256": "276bd0f3fbe5281ca3777f3fb762a2a9a884b53cedcf16175a93144d9ae72dbf"
+    },
+    {
+      "path": "modules/tester-map/areas.ts",
+      "bytes": 39877,
+      "sha256": "90c1446bcc5eddadf6f673aa14d1acd10a5efc1151efed53291a96a93fdb9756"
+    },
+    {
+      "path": "modules/tester-map/coverage.ts",
+      "bytes": 5304,
+      "sha256": "6666879060e503e3db3fc0454b9278452330c6da3aa58870e7ee2734b4a283bd"
+    },
+    {
+      "path": "modules/tester-map/freedom.module.json",
+      "bytes": 1209,
+      "sha256": "e7036d2738faa78c4659def185945f2b4bec9ec718b9a614e491cf109e2dc790"
+    },
+    {
+      "path": "modules/tester-map/index.ts",
+      "bytes": 1121,
+      "sha256": "399f46353f004b0631ed0fdd230a448b1b355be183871db92c1a20e79f31d65e"
+    },
+    {
+      "path": "modules/tester-map/progress.ts",
+      "bytes": 5394,
+      "sha256": "7f965644a96fe88854439ba6878abdcb05923bbe204581c1ca5a9333c497e06e"
+    },
+    {
+      "path": "modules/tester-map/quest.ts",
+      "bytes": 58425,
+      "sha256": "0e204918b40a247a043856991d5751004f5f421e0f8998081222bd0d9ef4e3a2"
+    },
+    {
+      "path": "modules/tester-map/service.ts",
+      "bytes": 3540,
+      "sha256": "a0b169b5dcac6e88c4f23772b74e6ff6645522ac5dc57643bf547d7d452fdce2"
+    },
+    {
+      "path": "tests/e2e/newbie-village.spec.ts",
+      "bytes": 5526,
+      "sha256": "aee5769cc8bf6c29dbf17c695ab829133e264b972b51514af75583bfcf662362"
+    },
+    {
+      "path": "tests/e2e/platform-helper-fixture.ts",
+      "bytes": 3176,
+      "sha256": "89c89e8ae70f80a3cb65f35f239577600695f1e0893838d315b2159792178515"
+    },
+    {
+      "path": "tests/e2e/platform-helper-host.spec.ts",
+      "bytes": 11226,
+      "sha256": "7b40c2fc5b32288757bf96fc193963961d02f714e2698f8536ca542d2f6160a5"
+    },
+    {
+      "path": "tests/e2e/platform-helper.spec.ts",
+      "bytes": 8124,
+      "sha256": "4b9e73d0ea89952dabc0f6b8aa04a65b65d10c390bfb95a3f87b890ee6e85ceb"
+    },
+    {
+      "path": "tests/e2e/tester-map.spec.ts",
+      "bytes": 10585,
+      "sha256": "30eacedfa9288461e0fa2b969e745734024c4c7b46bc3c31be2af7795286e18f"
+    },
+    {
+      "path": "tests/runtime/newbie-village.test.ts",
+      "bytes": 11508,
+      "sha256": "bf28b2478aada315ec6c7033f09ad58184a7cb70299725a88885840bc86a3b7c"
+    },
+    {
+      "path": "tests/runtime/platform-helper-host.test.ts",
+      "bytes": 11716,
+      "sha256": "75b248f2bf11396e8fb3ff46945b8d86e1092b2bbf4f6ca43c17157123dad70f"
+    },
+    {
+      "path": "tests/runtime/platform-helper.test.ts",
+      "bytes": 32264,
+      "sha256": "ea20507e3473f21beee0152795babf0633af04c810d335e98d3e5987e76ec77b"
+    },
+    {
+      "path": "tests/runtime/tester-map.test.ts",
+      "bytes": 18754,
+      "sha256": "11f5d925b2976d826c281b58ad8ba7e582b5cc1dba904b335fe5c6519004861b"
+    },
+    {
+      "path": "docs/platform-plan/execution/unified-foundation/rollout-main-b14916cc-2026-10-26.json",
+      "bytes": 93537,
+      "sha256": "75de89ab7167ceb161833c6401a01c2603931627a6e253929095b84932aee1d3"
+    },
+    {
+      "path": "deploy/shared-release/portable/backup-recovery.mjs",
+      "bytes": 5171,
+      "sha256": "7411a7930a2a6c5eaffb99296a7c11df9b34dd9e5dcc7e2d91df61e73264ba38"
+    },
+    {
+      "path": "packages/media-migration/backup-diagnostics.ts",
+      "bytes": 2166,
+      "sha256": "5557d0aa7d0bcd216727a95bc8d60b8671263437e146cdedaf32166b6fae0baf"
     }
   ]
 }

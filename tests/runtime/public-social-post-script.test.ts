@@ -7,8 +7,10 @@ const source=readFileSync(new URL('../../apps/portal-web/public/social-post.js',
 const postId='17c80987-1d06-4eb3-9cc4-5cc03a4987ec';
 const relatedId='4c80966b-af02-4173-93d3-943fda1c9242';
 
-async function pageClient(domPostId:string,domRelatedId:string){
+async function pageClient(domPostId:string,domRelatedId:string,options:{member?:boolean;registration?:boolean;publicStatus?:number}={}){
   const requests:string[]=[];
+  const listeners=new Map<string,()=>void>(),description={textContent:''},join={hidden:false},status={textContent:''};
+  let removed=false,reloaded=false,metadataRemoved=false;
   const login={href:'/initial',textContent:''};
   const related={
     href:'/initial' as string|null,textContent:'',
@@ -17,25 +19,29 @@ async function pageClient(domPostId:string,domRelatedId:string){
   };
   const article={getAttribute:(name:string)=>name==='data-public-post'?domPostId:'test-projection-version'};
   const document={
+    title:'公開分享',visibilityState:'visible',body:{replaceChildren(){removed=true;}},
     documentElement:{dataset:{}},
-    querySelector:(selector:string)=>selector==='[data-public-post]'?article:selector==='[data-post-login]'?login:null,
-    querySelectorAll:(selector:string)=>selector==='[data-related-post]'?[related]:[],
-    addEventListener() {},
+    querySelector:(selector:string)=>selector==='[data-public-post]'?article:selector==='[data-post-login]'?login:selector==='[data-invite-description]'?description:selector==='[data-post-join]'?join:selector==='[data-reading-status]'?status:null,
+    querySelectorAll:(selector:string)=>selector==='[data-related-post]'?[related]:selector.startsWith('meta[')?[{remove(){metadataRemoved=true;}}]:[],
+    addEventListener(event:string,listener:()=>void){listeners.set(event,listener);},
   };
   const fetch=async(path:string)=>{
     requests.push(path);
     return {
-      ok:true,status:200,
-      json:async()=>path==='/api/v1/session'?{user:{user_id:'synthetic-member'}}:{registration_enabled:true},
+      ok:!path.includes('/shared-posts/')||options.publicStatus!==404,status:path.includes('/shared-posts/')?(options.publicStatus??200):200,
+      json:async()=>path==='/api/v1/session'?(options.member===false?{}:{user:{user_id:'synthetic-member'}}):path==='/api/v1/site'?{registration_enabled:options.registration!==false}:{version:'test-projection-version'},
     };
   };
   runInNewContext(source,{
-    document,window:{addEventListener(){}},location:{reload(){}},
+    document,window:{addEventListener(event:string,listener:()=>void){listeners.set(event,listener);}},location:{reload(){reloaded=true;}},
     localStorage:{getItem(){return null;}},fetch,
     AbortController,setTimeout,clearTimeout,
   });
   await new Promise<void>(resolve=>setTimeout(resolve,0));
-  return {requests,login,related};
+  return {requests,login,related,description,join,status,document,
+    async dispatch(event:string){listeners.get(event)?.();await new Promise<void>(resolve=>setTimeout(resolve,0));},
+    cleared:()=>({removed,reloaded,metadataRemoved}),
+  };
 }
 
 test('untrusted root post attribute never starts capabilities or public requests',async()=>{
@@ -68,4 +74,29 @@ test('valid UUID attributes continue to use only canonical same-origin routes',a
   assert.equal(state.login.href,'/?social-post='+postId+'#social');
   assert.equal(state.related.href,'/posts/'+relatedId);
   assert.deepEqual(state.requests.sort(),['/api/v1/session','/api/v1/site']);
+  assert.equal(state.login.textContent,'回原貼文提問與分享心得');
+  assert.ok(state.description.textContent.includes('留言依原有會員資格開放'));
+  assert.equal(state.join.hidden,true);
+});
+
+test('anonymous and registration-paused readers keep the exact post return without resource, member-feed or write requests',async()=>{
+  for(const registration of [true,false]){
+    const state=await pageClient(postId,relatedId,{member:false,registration});
+    assert.equal(state.login.href,'/?post_return='+postId+'#account');
+    assert.equal(state.login.textContent,'登入回原貼文交流');
+    assert.equal(state.join.hidden,!registration);
+    assert.ok(state.description.textContent.includes('回到這則貼文'));
+    await state.dispatch('focus');
+    assert.deepEqual(state.requests,['/api/v1/session','/api/v1/site','/api/v1/public/shared-posts/'+postId,'/api/v1/session','/api/v1/site']);
+    await state.dispatch('pagehide');await state.dispatch('focus');
+    assert.equal(state.requests.length,5,'leaving must not start further work');
+  }
+});
+
+test('withdrawal clears the entire resource-bearing document and metadata before reload, with no capability refresh',async()=>{
+  const state=await pageClient(postId,relatedId,{publicStatus:404});
+  await state.dispatch('visibilitychange');
+  assert.deepEqual(state.cleared(),{removed:true,reloaded:true,metadataRemoved:true});
+  assert.equal(state.document.title,'自由工坊');
+  assert.deepEqual(state.requests,['/api/v1/session','/api/v1/site','/api/v1/public/shared-posts/'+postId]);
 });

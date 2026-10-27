@@ -30,6 +30,14 @@ function verifyBackup(proof, intent, capture, sourceSha) {
     && proof.cleanupVerified === true && proof.exposure === 'quarantine', 'release_floor_backup_unverified');
 }
 
+function legacyEvidence(value) {
+  check(value?.format === 'freedom.verified-legacy-deployment/v1' && ['staging-next', 'next'].includes(value.target)
+    && isSha(value.sourceSha) && isSha(value.sourceTree)
+    && [value.deploymentId, value.statusId, value.admittedRunId, value.admittedRunAttempt].every(id => Number.isSafeInteger(id) && id > 0)
+    && Number.isFinite(Date.parse(value.completedAt)) && Array.isArray(value.verification) && value.verification.length === 2,
+  'release_floor_legacy_evidence_invalid');
+}
+
 /** Pure replay. The store authenticates all record bytes against its seed and
  * chain; isAncestor is the image's fixed Git graph check, never a config program.
  * Success proofs are produced by the installed operator, not caller booleans. */
@@ -47,7 +55,18 @@ export function replayReleaseFloor(chain, { isAncestor }) {
   for (const item of chain.slice(1)) {
     const event = item.record.data;
     check(event?.format === 'freedom.shared-floor-event/v1', 'release_floor_event_invalid');
-    if (event.kind === 'begin' || event.kind === 'backup-begin') {
+    if (event.kind === 'legacy-source-adopted') {
+      const proof = event.proof, evidence = proof?.evidence; legacyEvidence(evidence);
+      check(state.pending === null && proof.previousSourceSha === state.sourceSha
+        && evidence.sourceSha !== state.sourceSha && isAncestor(state.sourceSha, evidence.sourceSha)
+        && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
+        && proof.materialPolicySha256 === state.materialPolicySha256 && proof.readOnly === true
+        && Number.isFinite(Date.parse(proof.observedAt)) && Date.parse(proof.observedAt) >= Date.parse(evidence.completedAt),
+      'release_floor_legacy_adoption_invalid');
+      state.sourceSha = evidence.sourceSha; state.deployedSourceSha = evidence.sourceSha; state.sourceTree = evidence.sourceTree;
+      continue;
+    }
+    if (event.kind === 'begin' || event.kind === 'backup-begin' || event.kind === 'release-begin-v2') {
       check(state.pending === null, 'release_floor_unsettled'); request(event.request);
       const backup = event.kind === 'backup-begin';
       if (backup) check(event.request.sourceSha === state.sourceSha && state.deployedSourceSha === state.sourceSha
@@ -57,14 +76,48 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && ledger(candidate.schemaLedger) >= state.schemaVersion, 'release_floor_candidate_invalid');
       same(candidate.schemaLedger.slice(0, state.schemaLedger.length), state.schemaLedger, 'release_floor_ledger_rewind');
       check(isAncestor(state.sourceSha, candidate.sourceSha), 'release_floor_source_rewind');
-      state.pending = { kind: backup ? 'backup' : 'release', request: structuredClone(event.request), candidate: structuredClone(candidate),
+      const independentRelease = event.kind === 'release-begin-v2';
+      if (independentRelease) {
+        check(event.request.releaseKind === 'independent', 'release_floor_code_request_invalid');
+      }
+      state.pending = { kind: backup ? 'backup' : independentRelease ? 'code' : 'release', request: structuredClone(event.request), candidate: structuredClone(candidate),
         previousSourceSha: state.deployedSourceSha, stage: 0, intents: {} };
       continue;
     }
     const pending = state.pending;
-    const stages = pending?.kind === 'backup' ? ['backup'] : STAGES;
+    const stages = pending?.kind === 'backup' ? ['backup'] : pending?.kind === 'code' ? ['migration', 'deploy', 'health', 'handoff'] : STAGES;
     check(pending && event.runId === pending.request.runId && event.runAttempt === pending.request.runAttempt
       && event.stage === stages[pending.stage], 'release_floor_stage_mismatch');
+    if (event.kind === 'backup-abandoned') {
+      const proof = event.proof, capture = pending.intents['backup:capture-policy'], recovery = proof?.recovery;
+      const beginOnly = !capture && Object.keys(pending.intents).length === 0
+        && recovery?.failureBoundary === 'before_capture' && proof?.failureBoundary === 'before_capture';
+      if (proof?.legacyPredecessor) {
+        legacyEvidence(proof.legacyPredecessor);
+        check(beginOnly && isAncestor(state.sourceSha, proof.legacyPredecessor.sourceSha)
+          && proof.legacyPredecessor.admittedRunId === proof.settledBy?.runId
+          && proof.legacyPredecessor.admittedRunAttempt === proof.settledBy?.runAttempt,
+        'release_floor_legacy_recovery_invalid');
+      }
+      check(pending.kind === 'backup' && pending.stage === 0 && (beginOnly || (capture && Object.keys(pending.intents).length === 1))
+        && proof?.format === 'freedom.abandoned-backup/v1' && recovery?.format === 'freedom.verified-failed-backup/v1'
+        && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'controllerSha', 'operatorImage', 'configSha256']
+          .every(key => recovery[key] === pending.request[key])
+        && isDigest(recovery.receiptSha256) && /^sha256:[a-f0-9]{64}$/.test(recovery.artifactDigest ?? '')
+        && Number.isSafeInteger(recovery.artifactId) && recovery.artifactId > 0
+        && Number.isFinite(Date.parse(recovery.completedAt)) && Number.isFinite(Date.parse(proof.observedAt))
+        && Date.parse(proof.observedAt) >= Date.parse(recovery.completedAt)
+        && proof.sourceSha === state.sourceSha && proof.sourceTree === state.sourceTree
+        && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
+        && proof.materialPolicySha256 === state.materialPolicySha256
+        && proof.maintenanceEnabled === false && proof.domainMaintenanceEnabled === false && proof.deletionFences === 0
+        && proof.captureBackendAbsent === true && (beginOnly || proof.captureRevision === capture.revision)
+        && proof.sourcePins === 'retained' && proof.archiveIntent === 'absent', 'release_floor_backup_recovery_invalid');
+      request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
+      check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,
+        'release_floor_backup_recovery_invalid');
+      state.pending = null; continue;
+    }
     if (event.kind === 'intent') {
       const allowed = { 'backup-before': ['capture-policy', 'archive'], migration: ['commit'], deploy: ['publish'],
         health: [], 'backup-after': ['capture-policy', 'archive'], handoff: [], backup: ['capture-policy', 'archive'] }[event.stage];
@@ -109,6 +162,11 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       check(pending.intents[event.stage + ':capture-policy'], 'release_floor_capture_intent_missing');
       verifyBackup(proof, pending.intents[event.stage + ':archive'], pending.intents[event.stage + ':capture-policy'],
         event.stage === 'backup-before' ? pending.previousSourceSha : pending.candidate.sourceSha);
+    } else if (event.stage === 'migration' && pending.kind === 'code' && !pending.committed) {
+      check(pending.kind === 'code' && Object.keys(pending.intents).length === 0 && proof?.outcome === 'unchanged' && proof.readOnly === true
+        && proof.ledgerVerified === true && proof.runtimeGrantsVerified === true
+        && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
+        && proof.ledgerSha256 === migrationLedgerDigest(pending.candidate.schemaLedger), 'release_floor_schema_unverified');
     } else if (event.stage === 'migration') {
       const commit = pending.intents['migration:commit'];
       check(pending.committed && commit && /^[1-9][0-9]*$/.test(commit.transactionId) && proof?.transactionId === commit.transactionId
@@ -122,14 +180,17 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       check(proof?.sourceSha === pending.candidate.sourceSha && proof.statusCode === 200
         && proof.schemaVerified === true && proof.smokePassed === true, 'release_floor_health_unverified');
     } else if (event.stage === 'handoff') {
-      // The controller must authenticate this completed scheduled run/artifact
-      // with GitHub (as for staging provenance), not trust a generic R2 marker.
-      const schedule = proof?.schedule;
-      check(proof?.cleanupVerified === true && schedule?.format === 'freedom.verified-scheduled-backup/v1'
-        && Number.isSafeInteger(schedule.runId) && schedule.runId > 0
-        && schedule.operatorImage === pending.request.operatorImage && schedule.configSha256 === pending.request.configSha256
-        && isDigest(schedule.receiptSha256) && Number.isFinite(Date.parse(schedule.completedAt)),
-      'release_floor_schedule_unverified');
+      if (pending.kind === 'code') {
+        check(proof?.cleanupVerified === true && proof.migrationVerified === true, 'release_floor_code_handoff_invalid');
+        state.sourceSha = pending.candidate.sourceSha; state.sourceTree = pending.candidate.sourceTree;
+      } else {
+        const schedule = proof?.schedule;
+        check(proof?.cleanupVerified === true && schedule?.format === 'freedom.verified-scheduled-backup/v1'
+          && Number.isSafeInteger(schedule.runId) && schedule.runId > 0
+          && schedule.operatorImage === pending.request.operatorImage && schedule.configSha256 === pending.request.configSha256
+          && isDigest(schedule.receiptSha256) && Number.isFinite(Date.parse(schedule.completedAt)),
+        'release_floor_schedule_unverified');
+      }
     }
     pending.stage++;
     if (pending.stage === stages.length) state.pending = null;
@@ -148,7 +209,7 @@ function gitAncestor(sourceRoot, before, after) {
   } catch { return false; }
 }
 
-// A legacy schema floor can predate code-only releases. A separately provisioned
+// A legacy schema floor can predate independent releases. A separately provisioned
 // v2 seed may adopt that already deployed descendant, but never new schema bytes.
 // Read the immutable Git object, not the current checkout or live DB as authority.
 function verifyAdoptedSource(sourceRoot, legacy, baseline) {
@@ -223,6 +284,16 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
   };
   return Object.freeze({
     state() { return structuredClone(current.state); },
+    verifyLegacySource(evidence) {
+      legacyEvidence(evidence);
+      check(evidence.target === store.target, 'release_floor_legacy_target_changed');
+      verifyAdoptedSource(sourceRoot, { migration: { release: current.state.sourceSha, tree: current.state.sourceTree } },
+        { ...current.state, sourceSha: evidence.sourceSha, sourceTree: evidence.sourceTree });
+    },
+    async adoptLegacySource(proof) {
+      this.verifyLegacySource(proof.evidence);
+      return append({ kind: 'legacy-source-adopted', proof });
+    },
     async assertCurrent() {
       const actual = await store.load();
       check(actual.at(-1).sha256 === current.head.sha256, 'release_floor_external_state_changed');
@@ -233,8 +304,14 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       return verifyCoordinateFence(q, coordinates, { restored });
     },
     verifyConstraints(q, options) { return verifyCoordinateFence(q, coordinates, options); },
+    async beginIndependent(request, candidate) { return append({ kind: 'release-begin-v2', request, candidate }); },
     async begin(request, candidate) { return append({ kind: 'begin', request, candidate }); },
     async beginBackup(request) { return append({ kind: 'backup-begin', request }); },
+    async abandonBackup(proof) {
+      check(current.state.pending?.kind === 'backup', 'release_floor_not_started');
+      const { runId, runAttempt } = current.state.pending.request;
+      return append({ kind: 'backup-abandoned', runId, runAttempt, stage: 'backup', proof });
+    },
     async intent(stage, operation, proof) {
       check(current.state.pending, 'release_floor_not_started');
       const { runId, runAttempt } = current.state.pending.request;

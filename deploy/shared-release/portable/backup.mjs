@@ -68,6 +68,7 @@ export async function runPortableBackup({ context, workRoot, pool, role, mainten
   await privateBackupRoot(workRoot);
   let root, archive, objects, policy, restored, mf, restoreRoot, before;
   let archiveSha256, outbound = 0;
+  let snapshotDump = 'not_started';
   const assertHeld = () => { context.signal.throwIfAborted(); lease.assertHeld(); };
   const verifyControl = async target => {
     const actual = await observeBackupControl(target);
@@ -124,8 +125,11 @@ export async function runPortableBackup({ context, workRoot, pool, role, mainten
         options: { maintenance: createAssetMaintenance(maintenancePool, { store: source, enabled: true }), source, destination: objects,
           maxObjects: 1000, maxBytes: 64 * 1024 * 1024,
           databaseSnapshot: { async write(input) {
-            assertHeld(); const value = await writeSnapshotDump({ binDirectory, connection, output: dump, input, execute, signal: context.signal });
-            assertHeld(); return value;
+            snapshotDump = 'running';
+            try {
+              assertHeld(); const value = await writeSnapshotDump({ binDirectory, connection, output: dump, input, execute, signal: context.signal });
+              assertHeld(); snapshotDump = 'completed'; return value;
+            } catch (error) { snapshotDump = 'failed'; throw error; }
           } } } };
     },
     async publishAndOpen() {
@@ -178,5 +182,5 @@ export async function runPortableBackup({ context, workRoot, pool, role, mainten
       return { gc: await observeMediaGcState(pool), ownedResourcesRemaining: 0 };
     },
   });
-  return Object.freeze({ ...result, archiveSha256: archiveSha256 ?? null });
+  return Object.freeze({ ...result, archiveSha256: archiveSha256 ?? null, snapshotDump });
 }

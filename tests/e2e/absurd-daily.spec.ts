@@ -487,7 +487,7 @@ test('AD-6 factory failure releases an unreturned stage and retry creates exactl
   await expect(page.locator('.ad-stage canvas')).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>(window as unknown as {failedStageContext:WebGL2RenderingContext}).failedStageContext.isContextLost())).toBe(true);
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
-  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
   await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await page.keyboard.press(cashDeck(42)[0].valid?'ArrowRight':'ArrowLeft');

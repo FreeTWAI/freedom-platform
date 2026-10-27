@@ -30,9 +30,10 @@ export function validatePortableConfig(value, target) {
   return Object.freeze({ ...structuredClone(value), fixed: resources[target] });
 }
 
-export function portableConnections(config, credentials) {
+export function portableConnections(config, credentials, { includeBackup = true } = {}) {
   const result = {};
   for (const [name, suffix, field] of [['migrator', '_migrator', 'migrationDatabaseUrl'], ['runtime', '_app', 'runtimeDatabaseUrl'], ['backup', '_backup', 'backupDatabaseUrl']]) {
+    if (name === 'backup' && !includeBackup) continue;
     const role = config.database.name + suffix, login = role + '.' + config.database.loginSuffix;
     const env = remotePostgresEnvironment(credentials[field], { database: config.database.name, role, login });
     check(env.PGHOST === config.database.host && env.PGPORT === config.database.port, 'release_config_database_host_changed');

@@ -7,7 +7,8 @@
     "apps/portal-web/src/features/**",
     "tests/runtime/portal-feature-registry.test.ts",
     "apps/portal-web/src/guild-blocks/GuildDirectoryPage.tsx",
-    "apps/portal-web/src/modules/TaskBoardPanel.tsx"
+    "apps/portal-web/src/modules/TaskBoardPanel.tsx",
+    "apps/portal-web/src/modules/TaskBoardPanel.css"
   ],
   "public_exports": [
     "apps/portal-web/src/features/registry.tsx",
