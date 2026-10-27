@@ -1067,7 +1067,7 @@ async function controlFixture(t) {
   };
   const options = { accountId: 'a'.repeat(32), bucket: 'fixture-backups', target, epoch, seedSha256,
     token: 'synthetic-control-token', lease, fetchImpl };
-  return { directory, map, prefix, seedKey, seedSha256, options, store: createControlStore(options),
+  return { directory, map, prefix, seedKey, seedSha256, options, controller, store: createControlStore(options),
     setMode(value) { mode = value; }, puts() { return puts; } };
 }
 
@@ -1082,10 +1082,126 @@ test('external control journal pins its seed and validates every paginated prede
   assert.equal(f.puts(), 1);
   await assert.rejects(createControlStore({ ...f.options, seedSha256: 'f'.repeat(64) }).load(), /release_control_history_gap_or_fork/);
   const original = f.map.get(next.key); f.map.set(next.key, Buffer.from(original)); f.map.get(next.key)[20] ^= 1;
-  await assert.rejects(f.store.load(), /release_control_chain_read_failed/);
+  await assert.rejects(f.store.load(), /release_control_digest_mismatch/);
   f.map.set(next.key, original);
   f.map.set(f.prefix + 'records/00000001-' + 'f'.repeat(64) + '.json', original);
   await assert.rejects(f.store.load(), /release_control_history_gap_or_fork/);
+});
+
+test('control GET retries transient transport and HTTP failures with the same pinned bytes', async t => {
+  const f = await controlFixture(t); let reads = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) {
+      reads++;
+      if (reads === 1) throw new TypeError('synthetic private network details');
+      if (reads === 2) return new Response(null, { status: 503 });
+    }
+    return f.options.fetchImpl(url, options);
+  } });
+  const chain = await store.load();
+  assert.equal(chain.length, 1); assert.equal(chain[0].sha256, f.seedSha256);
+  assert.equal(reads, 3); assert.equal(f.puts(), 0);
+});
+
+test('control GET retries interrupted listing and record bodies within one shared budget', async t => {
+  const interrupted = () => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new Uint8Array([123])); controller.error(new TypeError('synthetic private stream details'));
+  } }));
+  const f = await controlFixture(t); let lists = 0, reads = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (new URL(url).searchParams.has('prefix') && ++lists === 1) return interrupted();
+    if (url.endsWith(f.seedKey)) {
+      reads++;
+      if (reads === 1) throw new TypeError('synthetic network interruption');
+      if (reads === 2) return interrupted();
+    }
+    return f.options.fetchImpl(url, options);
+  } });
+  assert.equal((await store.load())[0].sha256, f.seedSha256);
+  assert.equal(lists, 2); assert.equal(reads, 3); assert.equal(f.puts(), 0);
+  reads = 0;
+  const failed = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; return interrupted(); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(failed.load(), /release_control_read_network_failed/);
+  assert.equal(reads, 3); assert.equal(f.puts(), 0);
+});
+
+for (const [status, code] of [[429, 'release_control_read_rate_limited'], [503, 'release_control_read_unavailable'],
+  [null, 'release_control_read_network_failed']]) {
+  test(`control GET exhausts a finite retry budget and retains ${code}`, async t => {
+    const f = await controlFixture(t); let reads = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      if (url.endsWith(f.seedKey)) {
+        reads++;
+        if (status === null) throw new TypeError('synthetic private network details');
+        return new Response(null, { status, headers: { 'retry-after': '0' } });
+      }
+      return f.options.fetchImpl(url, options);
+    } });
+    await assert.rejects(store.load(), error => error.message === code);
+    assert.equal(reads, 3); assert.equal(f.puts(), 0);
+  });
+}
+
+test('control GET distinguishes its deadline without retrying authorization or digest failures', async t => {
+  const f = await controlFixture(t);
+  for (const status of [401, 403, 404]) {
+    let reads = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      if (url.endsWith(f.seedKey)) { reads++; return new Response(null, { status }); }
+      return f.options.fetchImpl(url, options);
+    } });
+    await assert.rejects(store.load(), /release_control_read_failed/); assert.equal(reads, 1);
+  }
+  let reads = 0;
+  const corrupt = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; return new Response('corrupt'); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(corrupt.load(), /release_control_digest_mismatch/); assert.equal(reads, 1);
+  reads = 0;
+  const oversized = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; return new Response(Buffer.alloc(f.map.get(f.seedKey).length + 1)); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(oversized.load(), /release_cloudflare_response_limit/); assert.equal(reads, 1);
+  t.mock.method(AbortSignal, 'timeout', () => AbortSignal.abort(new DOMException('synthetic deadline', 'TimeoutError')));
+  reads = 0;
+  const timed = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; options.signal.throwIfAborted(); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(timed.load(), /release_control_read_timeout/); assert.equal(reads, 3); assert.equal(f.puts(), 0);
+});
+
+for (const after of ['300', '0000300']) test(`control GET stops ${after}-second backoff when the release lease is lost`, async t => {
+  const f = await controlFixture(t); let reads = 0, timer;
+  t.after(() => clearTimeout(timer));
+  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) {
+      reads++; timer = setTimeout(() => f.controller.abort(Error('release_lease_lost')), 1);
+      return new Response(null, { status: 429, headers: { 'retry-after': after } });
+    }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(store.load(), /release_lease_lost/); assert.equal(reads, 1); assert.equal(f.puts(), 0);
+});
+
+test('control GET stops instead of retrying before an excessive provider delay', async t => {
+  const f = await controlFixture(t);
+  for (const after of ['301', '1000000', '0000301', '9'.repeat(1000)]) {
+    let reads = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      if (url.endsWith(f.seedKey)) {
+        reads++; return new Response(null, { status: 429, headers: { 'retry-after': after } });
+      }
+      return f.options.fetchImpl(url, options);
+    } });
+    await assert.rejects(store.load(), /release_control_read_rate_limited/);
+    assert.equal(reads, 1); assert.equal(f.puts(), 0);
+  }
 });
 
 test('control intent survives an unknown PUT and setup ownership loss submits zero PUTs', async t => {
@@ -1913,7 +2029,7 @@ test('legacy pre-adoption failure preserves predecessor for retry; later failure
     };
     const passed = [{name: 'preflight', reportedStatus: 'passed'}];
     const failed = await invoke(async ({onProgress}) => {
-      if (boundary === 'preflight') await onProgress([{name: 'preflight', reportedStatus: 'failed', failureCode: 'release_floor_unsettled', controlReadFailure: { operation: 'append_readback', httpStatus: 503 } }]);
+      if (boundary === 'preflight') await onProgress([{name: 'preflight', reportedStatus: 'failed', failureCode: 'release_floor_unsettled'}]);
       if (boundary === 'after-adoption') await onProgress([...passed, {name: 'migration', reportedStatus: 'failed'}]);
       if (boundary === 'uncertain-post') {
         // The operator's progress observer catches callback errors. Final creation
@@ -1925,7 +2041,6 @@ test('legacy pre-adoption failure preserves predecessor for retry; later failure
     });
     assert.equal(failed.status, 'failed'); assert.equal(executions, 1, failed.error);
     assert.equal(failed.providerOutcome, 'unknown_until_confirmed');
-    if (boundary === 'preflight') assert.deepEqual(failed.operatorProgress[0].controlReadFailure, { operation: 'append_readback', httpStatus: 503 });
     if (['pull', 'preflight'].includes(boundary)) {
       assert.equal(posts, 0); assert.equal(deployments[0].id, 100); assert.equal(failed.deploymentId, undefined);
       const retried = await invoke(async ({onProgress}) => {
@@ -2785,7 +2900,7 @@ test('all failed operator phases record fixed codes and public progress filters 
   for (const [error, expected] of [
     [Object.assign(Error('private'), { code: 'release_floor_unsettled' }), 'release_floor_unsettled'],
     [Error('release_floor_unsettled'), 'release_floor_unsettled'],
-    [Object.assign(Error('release_control_read_failed'), { controlReadFailure: { operation: 'append_readback', httpStatus: 503, url: 'PRIVATE', headers: 'PRIVATE', body: 'PRIVATE', message: 'PRIVATE' } }), 'release_control_read_failed'],
+    [Object.assign(Error('release_control_read_unavailable'), { controlReadFailure: { operation: 'append_readback', httpStatus: 503, url: 'PRIVATE', transport: 'PRIVATE', cause: 'PRIVATE' } }), 'release_control_read_unavailable'],
     [Object.assign(Error('release_floor_unsettled'), { code: 'INVALID' }), 'release_floor_unsettled'],
     [Object.assign(Error('release_private_token_abc123'), { code: 'P0001' }), 'release_operation_failed'],
     [Object.assign(Error('private'), { code: 'release_private_token_abc123' }), 'release_operation_failed'],
@@ -2911,7 +3026,7 @@ test('backup diagnostic cause walk is bounded, preserves specific codes and vali
       phaseCode: 'backup_database_sqlstate_23505', cleanupCode: 'backup_network_econnreset' });
 });
 
-test('control read diagnostics preserve bounded locations and HTTP status without retries', async t => {
+test('control read diagnostics preserve bounded locations and HTTP status without changing the three-attempt GET budget', async t => {
   for (const operation of ['list', 'chain_record', 'authority', 'append_existence', 'append_readback', 'append_list']) {
     const f = await controlFixture(t); let armed = false, putSeen = false, failures = 0;
     const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
@@ -2931,10 +3046,10 @@ test('control read diagnostics preserve bounded locations and HTTP status withou
       : ['list', 'chain_record'].includes(operation) ? () => store.load()
       : () => store.append({ previous: head, data: { state: 'synthetic' }, intentDirectory: f.directory });
     await assert.rejects(action(), error => {
-      assert.deepEqual(error.controlReadFailure, { operation, httpStatus: 429, ...(operation === 'chain_record' ? { cause: 'release_control_read_failed' } : {}) });
+      assert.deepEqual(error.controlReadFailure, { operation, httpStatus: 429 });
       assert(!JSON.stringify(error).includes('PRIVATE')); return true;
     });
-    assert.equal(failures, 1);
+    assert.equal(failures, 3);
     assert.equal(f.puts(), ['append_readback', 'append_list'].includes(operation) ? 1 : 0);
   }
 });
@@ -2943,8 +3058,8 @@ test('control transport failure never fabricates HTTP status or leaks original e
   const f = await controlFixture(t);
   const store = createControlStore({ ...f.options, fetchImpl: async () => { throw Object.assign(Error('PRIVATE https://secret.invalid/token'), { status: 429, headers: 'PRIVATE' }); } });
   await assert.rejects(store.load(), error => {
-    assert.equal(error.message, 'release_control_read_failed');
-    assert.deepEqual(error.controlReadFailure, { operation: 'list', transport: 'network' });
+    assert.equal(error.message, 'release_control_read_network_failed');
+    assert.deepEqual(error.controlReadFailure, { operation: 'list' });
     assert(!JSON.stringify(error).includes('PRIVATE')); return true;
   });
   assert.equal(f.puts(), 0);
@@ -2967,58 +3082,17 @@ test('public control diagnostics strip private fields and reject malformed value
   }
 });
 
-test('control transport classes prioritize a lost lease over timeout without exposing exception data', async t => {
-  for (const [aborted, name, transport] of [[true, 'TimeoutError', 'lease_aborted'], [false, 'TimeoutError', 'timeout'], [false, 'TypeError', 'network']]) {
-    const f = await controlFixture(t), controller = new AbortController();
-    const store = createControlStore({ ...f.options, lease: { signal: controller.signal, assertHeld() {} }, fetchImpl: async () => {
-      if (aborted) controller.abort(Error('PRIVATE lease reason'));
-      throw Object.assign(Error('PRIVATE URL/token'), { name, status: 429, headers: 'PRIVATE' });
-    } });
-    await assert.rejects(store.load(), error => {
-      assert.equal(error.message, 'release_control_read_failed');
-      assert.deepEqual(error.controlReadFailure, { operation: 'list', transport });
-      assert.deepEqual(publicControlReadFailure(error.controlReadFailure), { operation: 'list', transport });
-      assert(!JSON.stringify(error).includes('PRIVATE')); return true;
-    });
-    assert.equal(f.puts(), 0);
-  }
-});
 
-test('chain failures preserve fixed non-HTTP causes through entry and public progress', async t => {
-  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
-  const source = entry.slice(entry.indexOf('const phase = async ') + 'const phase = '.length, entry.indexOf('\n  const backup ='));
-  for (const kind of ['digest', 'size', 'json', 'limit', 'lease', 'unknown']) {
-    const f = await controlFixture(t); let seedKey = f.seedKey, seedSha256 = f.seedSha256;
-    if (kind === 'json') {
-      const bytes = Buffer.from('not JSON'); seedSha256 = hash(bytes); seedKey = f.prefix + 'records/00000000-' + seedSha256 + '.json';
-      f.map.clear(); f.map.set(seedKey, bytes);
-    }
-    let assertions = 0;
-    const store = createControlStore({ ...f.options, seedSha256,
-      lease: { signal: f.options.lease.signal, assertHeld() { if (kind === 'lease' && ++assertions === 2) throw Error('release_lease_not_held'); } },
-      fetchImpl: async (url, options) => {
-        const response = await f.options.fetchImpl(url, options);
-        if (new URL(url).searchParams.has('prefix')) {
-          if (kind !== 'size') return response;
-          const value = await response.json(); value.result[0].size++; return Response.json(value);
-        }
-        if (kind === 'digest') return new Response(Buffer.alloc(f.map.get(seedKey).length, 32));
-        if (kind === 'limit') return new Response(Buffer.alloc(f.map.get(seedKey).length + 1, 32));
-        if (kind === 'unknown') return new Response(new ReadableStream({ start(c) { c.error(Error('PRIVATE unknown cause')); } }));
-        return response;
-      } });
-    const expectedCause = { digest: 'release_control_digest_mismatch', size: 'release_control_size_changed', json: 'release_control_json_invalid',
-      limit: 'release_cloudflare_response_limit', lease: 'release_lease_not_held' }[kind];
-    const value = resultFixture(); value.phases = [];
-    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'publicControlReadFailure', 'return ' + source)(
-      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode, publicControlReadFailure);
-    await assert.rejects(phase('preflight', () => store.load()), /release_control_chain_read_failed/);
-    const projected = operatorProgress(value, request(), installation, 'e'.repeat(64))[0];
-    assert.equal(projected.failureCode, 'release_control_chain_read_failed');
-    assert.deepEqual(projected.controlReadFailure, { operation: 'chain_record', ...(expectedCause ? { cause: expectedCause } : {}) });
-    assert(!JSON.stringify(value).includes('PRIVATE')); assert(!JSON.stringify(projected).includes('PRIVATE'));
-    assert.equal(f.puts(), 0);
-  }
-  assert.deepEqual(publicControlReadFailure({ operation: 'chain_record', cause: 'release_PRIVATE_secret', message: 'PRIVATE' }), { operation: 'chain_record' });
-  assert.equal(publicControlReadFailure({ operation: 'authority', transport: 'PRIVATE' }), undefined);
+test('terminal GET diagnostics never retain an earlier HTTP status after network failure', async t => {
+  const f = await controlFixture(t); let calls = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async () => {
+    calls++;
+    if (calls === 1) return new Response('PRIVATE', { status: 429 });
+    throw Object.assign(Error('PRIVATE provider detail'), { status: 503 });
+  } });
+  await assert.rejects(store.load(), error => {
+    assert.equal(error.message, 'release_control_read_network_failed');
+    assert.deepEqual(error.controlReadFailure, { operation: 'list' }); return true;
+  });
+  assert.equal(calls, 3); assert.equal(f.puts(), 0);
 });

@@ -5,7 +5,9 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import { requireRelease as check, isDigest, isReleaseFailureCode } from '../admission.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
+import { requireRelease as check, isDigest } from '../admission.mjs';
+import { isReleaseFailureCode } from '../failure-codes.mjs';
 import { boundedResponseBytes } from './cloudflare.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
 
@@ -37,35 +39,78 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
   const root = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucket}/objects`;
   const objectUrl = key => root + '/' + key.split('/').map(encodeURIComponent).join('/');
   const assertHeld = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
-  const readFailure = (code, operation, httpStatus) => Object.assign(Error(code), {
-    controlReadFailure: { operation, ...(Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? { httpStatus } : {}) } });
-  const request = async (url, body, operation) => {
+  const requestRaw = async (url, body, consume, diagnostic) => {
     assertHeld();
-    try {
-      return await fetchImpl(url, { method: body ? 'PUT' : 'GET', redirect: 'error',
+    const send = async timeout => {
+      delete diagnostic.httpStatus;
+      const response = await fetchImpl(url, { method: body ? 'PUT' : 'GET', redirect: 'error',
         headers: { Authorization: 'Bearer ' + token, 'Cache-Control': 'no-store', ...(body ? { 'Content-Type': 'application/json' } : {}) },
-        signal: AbortSignal.any([lease.signal, AbortSignal.timeout(30000)]), ...(body ? { body } : {}) });
-    } catch (error) {
-      if (body) throw Error('release_control_write_unknown');
-      const failure = readFailure('release_control_read_failed', operation);
-      failure.controlReadFailure.transport = lease.signal.aborted ? 'lease_aborted' : error?.name === 'TimeoutError' ? 'timeout' : 'network';
-      throw failure;
+        signal: AbortSignal.any([lease.signal, timeout]), ...(body ? { body } : {}) });
+      diagnostic.httpStatus = response.status; return response;
+    };
+    // A PUT with an unknown outcome must never be repeated. Only GET transport
+    // failures and transient HTTP responses receive a bounded retry.
+    if (body) {
+      try { return await send(AbortSignal.timeout(30000)); }
+      catch { throw Error('release_control_write_unknown'); }
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      assertHeld();
+      const timeout = AbortSignal.timeout(30000); let code, wait = 250 * (attempt + 1);
+      try {
+        const response = await send(timeout);
+        if (response.status !== 429 && ![500, 502, 503, 504].includes(response.status)) {
+          const value = await consume(response); assertHeld(); return value;
+        }
+        code = response.status === 429 ? 'release_control_read_rate_limited' : 'release_control_read_unavailable';
+        const after = response.headers.get('retry-after');
+        await response.body?.cancel().catch(() => {});
+        if (/^\d+$/.test(after ?? '')) {
+          // Respect the provider's delay. A larger window stops this operation
+          // rather than retrying early or holding the lease without a bound.
+          const seconds = after.replace(/^0+/, '') || '0';
+          if (seconds.length > 3 || Number(seconds) > 300) throw Error(code);
+          wait = Math.max(wait, Number(seconds) * 1000);
+        }
+      } catch (error) {
+        assertHeld();
+        // Content/status guards fail immediately; interrupted response streams
+        // share the fetch retry budget and deadline, not a second retry loop.
+        if (isReleaseFailureCode(error?.code) || isReleaseFailureCode(error?.message)) throw error;
+        delete diagnostic.httpStatus;
+        code = timeout.aborted ? 'release_control_read_timeout' : 'release_control_read_network_failed';
+      }
+      if (attempt === 2) throw Error(code);
+      delete diagnostic.httpStatus;
+      try { await delay(wait, undefined, { signal: lease.signal }); }
+      catch { assertHeld(); throw Error('release_control_read_failed'); }
     }
   };
+  // Observe only the terminal GET attempt; prior transient statuses never survive a later transport failure.
+  const request = async (url, body, consume = response => response, operation) => {
+    const diagnostic = {};
+    try { return await requestRaw(url, body, consume, diagnostic); }
+    catch (error) {
+      if (!body && error && typeof error === 'object') error.controlReadFailure = { operation,
+        ...(Number.isInteger(diagnostic.httpStatus) && diagnostic.httpStatus >= 100 && diagnostic.httpStatus <= 599
+          ? { httpStatus: diagnostic.httpStatus } : {}) };
+      throw error;
+    }
+  };
+  const bytes = (url, limit, code, operation) => request(url, undefined, async response => {
+    if (response.status !== 200) { await response.body?.cancel().catch(() => {}); throw Error(code); }
+    return boundedResponseBytes(response, limit);
+  }, operation);
   const read = async (key, expected, limit, operation) => {
-    const response = await request(objectUrl(key), undefined, operation);
-    if (response.status !== 200) { await response.body?.cancel(); throw readFailure('release_control_read_failed', operation, response.status); }
-    const bytes = await boundedResponseBytes(response, limit);
-    check(digest(bytes) === expected, 'release_control_digest_mismatch'); return { bytes, value: parse(bytes) };
+    const value = await bytes(objectUrl(key), limit, 'release_control_read_failed', operation);
+    check(digest(value) === expected, 'release_control_digest_mismatch'); return { bytes: value, value: parse(value) };
   };
   const list = async (operation = 'list') => {
     const keys = new Map(), cursors = new Set(); let cursor;
     for (let page = 0; page < 16; page++) {
       const url = new URL(root); url.searchParams.set('prefix', records); url.searchParams.set('per_page', '1000');
       if (cursor) url.searchParams.set('cursor', cursor);
-      const response = await request(url.href, undefined, operation);
-      if (response.status !== 200) { await response.body?.cancel(); throw readFailure('release_control_list_failed', operation, response.status); }
-      const body = parse(await boundedResponseBytes(response, 2_000_000));
+      const body = parse(await bytes(url.href, 2_000_000, 'release_control_list_failed', operation));
       check(body.success === true && Array.isArray(body.result) && body.result.length <= 1000, 'release_control_list_invalid');
       for (const item of body.result) {
         check(typeof item.key === 'string' && item.key.startsWith(records) && !keys.has(item.key)
@@ -97,9 +142,9 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
       }));
       const failed = batch.find(item => item.status === 'rejected');
       if (failed) {
-        const error = Error('release_control_chain_read_failed');
-        const cause = [failed.reason?.code, failed.reason?.message].find(isReleaseFailureCode);
-        error.controlReadFailure = { operation: 'chain_record', ...failed.reason?.controlReadFailure, ...(cause ? { cause } : {}) };
+        const error = Error([failed.reason?.code, failed.reason?.message].find(isReleaseFailureCode)
+          ?? 'release_control_chain_read_failed');
+        if (failed.reason?.controlReadFailure) error.controlReadFailure = failed.reason.controlReadFailure;
         throw error;
       }
       values.push(...batch.map(item => item.value));
@@ -132,8 +177,8 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
         const bytes = encode(record), sha256 = digest(bytes), key = records + fileName(generation, sha256);
         check(bytes.length <= MAX_RECORD && generation < 4096, 'release_control_record_limit');
         await intent(intentDirectory, generation, { target, epoch, generation, key, sha256, outcome: 'unknown', automaticRetry: false });
-        const existing = await request(objectUrl(key), undefined, 'append_existence'); const absent = existing.status === 404; await existing.body?.cancel();
-        if (!absent) throw readFailure('release_control_key_exists', 'append_existence', existing.status);
+        const existing = await request(objectUrl(key), undefined, undefined, 'append_existence'); const absent = existing.status === 404; await existing.body?.cancel();
+        if (!absent) throw Object.assign(Error('release_control_key_exists'), { controlReadFailure: { operation: 'append_existence', httpStatus: existing.status } });
         // Check ownership after all preceding awaits, directly before the PUT.
         const response = await request(objectUrl(key), bytes);
         const ok = response.ok; await response.body?.cancel(); check(ok, 'release_control_write_unknown');
