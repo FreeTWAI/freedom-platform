@@ -30,13 +30,19 @@ Successful public receipts use `release_confirmed` and
 and new receipts with their own phase contract, never check-mode receipts.
 
 An optional failed-backup run reference authenticates the original terminal
-workflow/artifact before any BEGIN-only reconciliation. Its failed inner preflight
-and `snapshotDump: not_started` plus the authenticated empty-intent journal are
-necessary, not sufficient: independent Worker/DB/floor/GC/backend observations
-under the lease must pass before append-only abandonment. No seed reset, deletion,
-archive/capture-intent recovery or backup-success assertion is part of deploy.
-Daily receipts now retain independent allowlisted `phaseCode` and `cleanupCode`;
-raw error strings and provider detail never enter these fields.
+workflow/artifact before reconciliation. Failed inner preflight with
+`snapshotDump: not_started` retains the BEGIN-only boundary. Failed capture with
+that same dump status is `before_dump`: either no intent exists, or the sole
+capture-policy intent still matches the exact pre-mutation policy digest (excluding
+generation). A committed capture revision uses the existing cleanup readback path.
+Independent Worker/DB/floor/GC/backend observations under the lease must pass before
+append-only abandonment. Legacy-predecessor recovery remains BEGIN-only; archive
+intents always refuse. No seed reset, deletion or backup-success assertion is allowed.
+Every failed operator phase records a bounded `release_[a-z0-9_]{1,80}` `failureCode`
+(code, then message, otherwise `release_operation_failed`). Public progress and the
+step summary expose it only for the last failed phase. Daily receipts also retain
+independent allowlisted `phaseCode` and `cleanupCode`, including standard SQLSTATE
+and fixed network identifiers; raw errors, causes and provider details stay private.
 
 The rest of this document describes retained legacy and backup contracts where
 seven phases, scheduler handoff or `backupDatabaseUrl` are mentioned.
@@ -96,8 +102,9 @@ to `result.json`; the controller discards raw process output.
 | `floor` | Independently provisioned UUID `epoch` and `seedSha256` |
 | `migrationProfile` | Reviewed `freedom.migrations/legacy-v1`, `first: 1`, exact approved `last`, `known_gaps: [22]` |
 
-Worker names and public origins are fixed by target. Flags, secrets and bindings
-are preserved from observed state, matched to the retained floor. Material policy
+Worker names and public origins are fixed by target. Secrets and bindings start
+from observed state, matched to the retained floor; only reviewed source decisions
+below may change boolean plain-text feature flags. Material policy
 and coordinate authority come from original pinned legacy bytes. The config
 cannot choose programs, commands, feature decisions, arbitrary origins or roles.
 The controller binds the exact UTF-8 config bytes; the entry validates all fields.
@@ -109,15 +116,45 @@ The controller binds the exact UTF-8 config bytes; the entry validates all field
 | `preflight` | Read actual Worker/source and DB identities; compare retained rollback floor and complete ledger, preserve existing flags/secrets/bindings, acquire the same DB backup/release lease as scheduled and legacy operators, maintain heartbeat throughout |
 | `backup-before` | Capture the previously deployed release using the existing exported DB snapshot, maintenance pins and object evidence; immutable offsite archive, full readback; isolated DB/object restore and floor/policy checks; cleanup and GC-off readback |
 | `migration` | Use the reviewed installed migration runner and exact catalog; expected DB/role/schema checks; preserve transactional migrations plus runtime grants, final ledger checks and explicit commit outcome; observe an uncertain commit instead of rerunning |
-| `deploy` | Build/package only the selected reviewed source using pinned tools; preserve current bindings/flags/secrets; invoke Wrangler once and retain provider confirmation |
+| `deploy` | Build/package only the selected reviewed source using pinned tools; 僅套用該 SHA 的 owner 旗標決策，保留其他 bindings／flags／secrets；invoke Wrangler once and retain provider confirmation |
 | `health` | Read the actual public health endpoint and schema evidence, verify exact release SHA and approved smoke observations; HTTP 200 alone is insufficient |
 | `backup-after` | Capture and offsite-readback the new source/schema, then restore DB and objects in owned isolated services, retain floor/material-policy/quarantine checks, cleanup |
 | `handoff` | Advance the external retained floor at the approved point, confirm scheduled backup ownership still works, settle all owned temporary resources and maintenance pins, release the lease |
 
 Use the existing daily backup pipeline's source/object/restore semantics, not only
-`pg_dump`. Do not change application feature flags during this infrastructure port.
+`pg_dump`.
 Only owner-recorded feature decisions authorize flag values; Environment config
-does not independently approve a new flag. The controller invokes Wrangler once;
+does not independently approve a new flag.
+
+旗標變更須以經 code owner 審查的 PR 編輯 released source 的
+`deploy/shared-release/flag-decisions.json`（`freedom.shared-release.flag-decisions/v1`）：
+`targets` 僅接受 `staging-next`／`next`，各 target 最多 64 筆；每筆只有
+`value`（字串 `"true"`／`"false"`）、`decidedBy`、`decidedAt`（`YYYY-MM-DD`）及
+`record`（`https://github.com/FreeTWAI/freedom-platform/` 下、最多 160 字元的 HTTPS URL）。
+名稱總長最多 64 字元，只接受 `^FREEDOM_[A-Z0-9_]+_ENABLED$`，不接受其他變數，
+也不能覆寫 secret 或其他 binding 類型。所有未知欄位 fail closed。
+決策可累積至每 target 64 筆，與 live 不同的變更每次發布最多 16 筆，另查核以
+16 筆最大 metadata 推導的序列化預算，確保重複欄位仍符合 operator／公開收據大小限制。
+超限在 floor begin／provider publish 前以 `release_flag_changes_too_many` 拒絕；
+`check`／`plan` 亦拒絕。`plan` 未讀 live，保守地將本 target 決策視為變更。
+需要變更多個旗標時，請拆成多次發布。
+合併後正常發布該精確 main SHA，先 staging-next，再依既有 staging 成功准入發布 next。
+移除 entry 不會把旗標關閉；必須明設 `"false"`。缺檔表示沒有決策，保留舊設定及 hash。
+
+決策僅讀取准入 source SHA 的 Git blob，不能由 workflow input、環境設定、
+`RELEASE_CONFIG_JSON` 或網路提供。render 從 live bindings 套用本 target 決策，保留
+`keep_vars` 及 topology／runtime 查核；新版本的觀察與 post-check 比對預期 hash。
+舊版本 propagation 觀察仍比對 predecessor hash，不觸發再次部署。
+begin candidate 記錄預期 `bindingsSha256`；確認 deploy phase 成功後才更新 state，
+使 backup-after 與後續備份／發布讀取新 hash。schema COMMIT 不會提前套用旗標；
+之後若失敗仍保留 unsettled journal。缺少此欄位的舊 chain 完全沿用原 replay 行為。
+
+`plan`／`check` 與公開 JSON 收據僅白名單列出 `name/from/to/record`。
+plan 的 `from: null` 表示未觀察；check 的 `null` 表示 live 缺少該變數，兩者均不套用設定。
+Ted 於 2026-10-27 決定兩環境的 `FREEDOM_COMMUNITY_RELATIONS_ENABLED="true"`，
+既有 `FREEDOM_COMMUNITY_SEARCH_ENABLED` 仍依 live 保留。
+
+The controller invokes Wrangler once;
 pinned Wrangler 4.138 can internally retry a version upload up to three attempts
 on retryable network/API errors. This is not exactly-once provider mutation. Provider
 deployment-list and edge-health propagation use bounded reads, preserving every
@@ -303,7 +340,8 @@ Additional required successful evidence fields:
 Exit zero only after every actual operation and cleanup succeeds. On failure,
 persist a bound progress record and exit nonzero; never continue to later phases.
 Unknown mutation outcomes require readback/reconciliation, not automatic replay.
-The controller projects phase names/status/times only into public receipts;
+The controller projects phase names/status/times, the last failed phase's fixed `failureCode`
+and validated public flag changes into public receipts;
 an interrupted run's progress is explicitly a report, not confirmed completion.
 Schema validation authenticates neither the image nor the provider observations:
 image review, environment pins and actual staging acceptance remain necessary.

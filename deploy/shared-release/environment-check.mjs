@@ -1,22 +1,37 @@
 // Read-only installation diagnostics. No image, floor installation, deployment
 // switch or natural backup is needed to check the newly stored credentials.
 import { createHash } from 'node:crypto';
-import { requireRelease as check, isDigest, isSha } from './admission.mjs';
+import { requireRelease as check, isDigest, isSha, isReleaseFailureCode } from './admission.mjs';
 import { validatePortableConfig } from './portable/config.mjs';
 import { boundedResponseBytes } from './portable/cloudflare.mjs';
 import { createWorkerDeployer } from './portable/deploy.mjs';
+import { applyFlagDecisions } from './portable/flag-decisions.mjs';
 
 const secret = value => typeof value === 'string' && value.length > 0
   && value.length <= 4096 && !/[\r\n\0]/.test(value);
 
-export async function checkEnvironment(env, target, { fetchImpl = fetch } = {}) {
+function environmentConfig(env, target) {
   check(typeof env.RELEASE_CONFIG_JSON === 'string' && Buffer.byteLength(env.RELEASE_CONFIG_JSON) <= 262144
     && isDigest(env.RELEASE_CONFIG_SHA256)
     && createHash('sha256').update(env.RELEASE_CONFIG_JSON).digest('hex') === env.RELEASE_CONFIG_SHA256,
   'release_config_pin_mismatch');
   let value;
   try { value = JSON.parse(env.RELEASE_CONFIG_JSON); } catch { check(false, 'release_config_json_invalid'); }
-  const config = validatePortableConfig(value, target), results = [];
+  return validatePortableConfig(value, target);
+}
+
+// Large accumulated decision files need a live delta before invoking the
+// operator. This uses only Worker GETs, never unrelated readiness permissions.
+export async function checkFlagDecisions(env, target, flagDecisions, { fetchImpl = fetch } = {}) {
+  const config = environmentConfig(env, target);
+  check(secret(env.CLOUDFLARE_API_TOKEN), 'release_cloudflare_credentials_missing');
+  const live = await createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target,
+    token: env.CLOUDFLARE_API_TOKEN, signal: AbortSignal.timeout(180_000), fetchImpl }).inspect();
+  return applyFlagDecisions({ target, bindings: live.bindings, decisions: flagDecisions }).flagChanges;
+}
+
+export async function checkEnvironment(env, target, { fetchImpl = fetch, flagDecisions } = {}) {
+  const config = environmentConfig(env, target), results = [];
   const report = { format: 'freedom.shared-environment-check/v1', target, configSha256: env.RELEASE_CONFIG_SHA256,
     readOnly: true, checks: results, databaseCredentials: 'not_checked', writePermissions: 'not_checked',
     backupAndRestore: 'not_run', deployment: 'not_run' };
@@ -27,7 +42,7 @@ export async function checkEnvironment(env, target, { fetchImpl = fetch } = {}) 
     catch (error) {
       // Explicit projection: never publish provider bodies, headers, URLs,
       // credential values or exception messages (including malformed inputs).
-      result.error = /^release_[a-z_]+$/.test(error?.code ?? '') ? error.code : 'release_environment_check_failed';
+      result.error = isReleaseFailureCode(error?.code) ? error.code : 'release_environment_check_failed';
       if (Number.isInteger(error?.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599) result.httpStatus = error.httpStatus;
       return false;
     }
@@ -82,6 +97,10 @@ export async function checkEnvironment(env, target, { fetchImpl = fetch } = {}) 
     check(live.bindings.find(row => row.name === 'MEDIA')?.bucket_name === config.mediaBucket,
       'release_environment_media_mismatch');
     report.observedSourceSha = live.sourceSha;
+    if (flagDecisions) {
+      report.flagChanges = applyFlagDecisions({ target, bindings: live.bindings, decisions: flagDecisions }).flagChanges;
+      report.flagChangesObservation = 'live';
+    }
   });
   for (const [name, bucket] of [['media_object_listing', config.mediaBucket], ['backup_object_listing', config.backupBucket]]) {
     await run(name, async () => {

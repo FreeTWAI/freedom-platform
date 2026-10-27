@@ -12,6 +12,7 @@ export type PortalFeatureContext = {
   site: SiteConfig | null;
   locationHash: string;
   selectTab: (tab: TabId, hash?: string) => void;
+  openHomeJournal: () => boolean;
   friendScope: 'accepted' | 'incoming';
   notificationTarget: (BellAction & { sequence: number }) | null;
   headerMember: MemberCardData | null;

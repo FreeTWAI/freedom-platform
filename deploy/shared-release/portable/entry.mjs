@@ -3,21 +3,22 @@ import { constants } from 'node:fs';
 import { open, mkdir, rename } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { Pool } from 'pg';
-import { releasePhases, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha } from '../admission.mjs';
+import { releasePhases, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha, releaseFailureCode } from '../admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult } from '../operator.mjs';
 import { BACKUP_PHASES } from '../scheduled-admission.mjs';
-import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from './config.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
 import { acquireReleaseLease } from './lease.mjs';
 import { createControlStore } from './control-store.mjs';
 import { openReleaseFloor } from './floor.mjs';
-import { createWorkerDeployer } from './deploy.mjs';
+import { createWorkerDeployer, assertReleasePredecessor } from './deploy.mjs';
 import { createCloudflareRecoveryTransport, waitForPublicRelease } from './cloudflare.mjs';
 import { buildApplication, verifyApplicationSource } from './build.mjs';
+import { applyFlagDecisions, readFlagDecisions } from './flag-decisions.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
 import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema } from './migration.mjs';
 import { runPortableBackup } from './backup.mjs';
+import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
@@ -74,7 +75,7 @@ export async function main(args = process.argv.slice(2)) {
     const item = { name, status: 'running', startedAt: new Date().toISOString() }; result.phases.push(item); await save(path, result);
     try { Object.assign(item, await operation(), { status: 'passed', completedAt: new Date().toISOString() }); }
     catch (error) {
-      Object.assign(item, { status: 'failed', completedAt: new Date().toISOString() });
+      Object.assign(item, { status: 'failed', failureCode: releaseFailureCode(error), completedAt: new Date().toISOString() });
       if (error.backupFailure) item.backupFailure = error.backupFailure;
       throw error;
     }
@@ -87,8 +88,7 @@ export async function main(args = process.argv.slice(2)) {
     const value = await runPortableBackup({ context, workRoot, pool: pools.backup, role: connections.backup.role,
       maintenancePool: pools.migrator, maintenanceRole: connections.migrator.role,
       runtimeRole: connections.runtime.role, lease, transport, connection: connections.backup.env, binDirectory: BIN,
-      expected: { sourceSha, bindingsSha256: state.bindingsSha256, ledgerSha256: migrationLedgerDigest(state.schemaLedger),
-        materialPolicySha256: state.materialPolicySha256, schemaVersion: state.schemaVersion },
+      expected: backupExpectation(state, sourceSha),
       retainIntent: (operation, proof) => floor.intent(stage, operation, proof),
       verifyRetainedFloor: (pool, options) => floor.verifyDatabase(pool, options) });
     if (value.status !== 'passed' || value.exposure !== 'quarantine_not_approved_for_exposure') {
@@ -116,9 +116,13 @@ export async function main(args = process.argv.slice(2)) {
       floor = await openReleaseFloor({ store, sourceRoot: SOURCE, intentDirectory: await directory('control-intents') });
       deployer = createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
         token: credentials.cloudflareApiToken, signal: lease.signal });
+      // Refuse oversized changes before recovery/adoption can write the floor.
+      // Build/render checks again against the verified predecessor before begin.
+      if (!isBackup) applyFlagDecisions({ target: config.target, bindings: (await deployer.inspect()).bindings,
+        decisions: readFlagDecisions({ sourceRoot: SOURCE, sourceSha: request.sourceSha }) });
       let recovery;
       if (request.recoverRunId) {
-        if (independentRelease) check(request.recoveryEvidence?.failureBoundary === 'before_capture', 'release_backup_recovery_boundary_invalid');
+        if (independentRelease) check(['before_capture', 'before_dump'].includes(request.recoveryEvidence?.failureBoundary), 'release_backup_recovery_boundary_invalid');
         const previous = floor.state();
         recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, database: config.database.name, role: connections.migrator.role, deployer, lease,
           request: independentRelease ? { ...request, mode: 'backup', event: 'workflow_dispatch',
@@ -127,8 +131,7 @@ export async function main(args = process.argv.slice(2)) {
       if (independentRelease) await adoptLegacyPredecessor({ floor, pool: pools.migrator, deployer, lease, request });
       const state = floor.state(); check(state.pending === null, 'release_floor_unsettled');
       before = await deployer.inspect();
-      check(before.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
-        && before.bindingsSha256 === state.bindingsSha256, 'release_entry_predecessor_changed');
+      assertReleasePredecessor(before, state);
       await floor.verifyDatabase(pools.migrator);
       transport = createCloudflareRecoveryTransport({ accountId: config.accountId, target: config.target,
         mediaBucket: config.mediaBucket, backupBucket: config.backupBucket, token: credentials.cloudflareApiToken, signal: lease.signal });
@@ -149,8 +152,10 @@ export async function main(args = process.argv.slice(2)) {
         unchangedProof = await verifyUnchangedSchema({ pool: pools.migrator, runtimePool: pools.runtime,
           database: config.database.name, plan, expected, lease, floor });
       }
-      if (!independentRelease) await floor.begin(request, { sourceSha: request.sourceSha, sourceTree: request.sourceTree, schemaLedger: plan.afterLedger });
-      return { leaseHeld: true, sourceCompatible: true, retainedFloorVerified: true, flagsPreserved: true, previousSourceSha: before.sourceSha };
+      if (!independentRelease) await floor.begin(request, { sourceSha: request.sourceSha, sourceTree: request.sourceTree,
+        schemaLedger: plan.afterLedger, bindingsSha256: built.bindingsSha256 });
+      return { leaseHeld: true, sourceCompatible: true, retainedFloorVerified: true, flagsPreserved: true,
+        previousSourceSha: before.sourceSha, flagChanges: built.flagChanges };
     });
     if (isBackup) {
       await phase('backup', async () => (await backup('backup', request.sourceSha)).proof);
@@ -163,7 +168,7 @@ export async function main(args = process.argv.slice(2)) {
     if (independentRelease) {
       await phase('migration', async () => {
         const begin = () => floor.beginIndependent(request, { sourceSha: request.sourceSha,
-          sourceTree: request.sourceTree, schemaLedger: plan.afterLedger });
+          sourceTree: request.sourceTree, schemaLedger: plan.afterLedger, bindingsSha256: built.bindingsSha256 });
         if (plan.pending.length === 0) { lease.assertHeld(); await begin(); }
         const proof = plan.pending.length === 0
           ? unchangedProof

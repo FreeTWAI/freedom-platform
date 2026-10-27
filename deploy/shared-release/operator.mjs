@@ -1,5 +1,5 @@
-import { releasePhases } from './admission.mjs';
-import { BACKUP_DIAGNOSTIC_CODES } from '../../packages/media-migration/backup-diagnostics.ts';
+import { isReleaseFailureCode, releasePhases } from './admission.mjs';
+import { isBackupDiagnosticCode } from '../../packages/media-migration/backup-diagnostics.ts';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -7,6 +7,7 @@ import { mkdir, open, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PHASES, requireRelease, isSha, isDigest } from './admission.mjs';
 import { BACKUP_PHASES } from './scheduled-admission.mjs';
+import { publicFlagChanges } from './portable/flag-decisions.mjs';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = value => JSON.stringify(value, null, 2) + '\n';
@@ -98,6 +99,7 @@ export function validateOperatorResult(value, admission, installation, requestDi
     requireRelease(handoff.cleanupVerified === true && handoff.leaseReleased === true
       && handoff.retainedFloorAdvanced === true, 'release_handoff_incomplete');
     return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+      ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),
       startedAt: new Date(Date.parse(phase.startedAt)).toISOString(), completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
   }
   const [preflight, before, migration, deploy, health, after, handoff] = value.phases;
@@ -117,8 +119,9 @@ export function validateOperatorResult(value, admission, installation, requestDi
   requireRelease(handoff.scheduledBackupsVerified === true && handoff.cleanupVerified === true
     && handoff.leaseReleased === true && handoff.retainedFloorAdvanced === true,
   'release_handoff_incomplete');
-  // Fixed fields only: arbitrary operator text, paths and URLs never reach public receipts.
+  // Fixed fields only; flag record URLs must pass the repository URL whitelist.
   return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+    ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),
     startedAt: new Date(Date.parse(phase.startedAt)).toISOString(),
     completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
 }
@@ -169,10 +172,14 @@ export function operatorProgress(value, admission, installation, requestDigest) 
     const diagnostic = ['backup', 'backup-before', 'backup-after'].includes(phase.name) && phase.status === 'failed'
       && stages.includes(failure?.stage) && codes.includes(failure?.code) && typeof failure.cleanupVerified === 'boolean'
       ? { backupFailure: { stage: failure.stage, code: failure.code, cleanupVerified: failure.cleanupVerified,
-        ...Object.fromEntries(['phaseCode', 'cleanupCode'].filter(key => BACKUP_DIAGNOSTIC_CODES.includes(failure[key]))
+        ...Object.fromEntries(['phaseCode', 'cleanupCode'].filter(key => isBackupDiagnosticCode(failure[key]))
           .map(key => [key, failure[key]])),
         ...(['not_started', 'running', 'failed', 'completed'].includes(failure.snapshotDump) ? { snapshotDump: failure.snapshotDump } : {}) } } : {};
-    return { name: phase.name, reportedStatus: phase.status, ...diagnostic };
+    return { name: phase.name, reportedStatus: phase.status, ...diagnostic,
+      ...(i === value.phases.length - 1 && phase.status === 'failed' && isReleaseFailureCode(phase.failureCode)
+        ? { failureCode: phase.failureCode } : {}),
+      ...(['preflight', 'deploy'].includes(phase.name) && phase.flagChanges !== undefined
+        ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}) };
   });
 }
 
@@ -229,7 +236,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     await readProgress();
     // Keep failure details bounded even for a malformed/private provider exception.
     const failure = Object.assign(new Error('release_operator_failed'), { code: 'release_operator_failed', operatorProgress: progress });
-    if (typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)) failure.code = error.code;
+    if (isReleaseFailureCode(error?.code)) failure.code = error.code;
     throw failure;
   } finally {
     clearInterval(timer);

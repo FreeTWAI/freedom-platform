@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { requireRelease as check, isSha } from '../admission.mjs';
 import { boundedResponseBytes } from './cloudflare.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
+import { readFlagDecisions, applyFlagDecisions } from './flag-decisions.mjs';
 
 const TARGETS = {
   'staging-next': { worker: 'freedom-platform-staging-next', origin: 'https://staging.freetwai.com', env: 'staging', database: 'freedom_staging_next' },
@@ -58,9 +59,13 @@ function bindingSet(bindings) {
   }
 }
 
-/** Values come from the observed active Worker, whose digest the enclosing
- * controller compares with the approved retained state. No input can add a flag,
- * secret, route, binding, build command or arbitrary executable. */
+export function assertReleasePredecessor(before, state) {
+  check(before.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
+    && before.bindingsSha256 === state.bindingsSha256, 'release_entry_predecessor_changed');
+}
+
+/** Start with observed bindings; only reviewed decisions from the exact source
+ * SHA may change boolean plain-text feature flags. */
 export function renderWorkerConfig({ target, source, sourceRoot, sourceSha, before }) {
   check(Object.hasOwn(TARGETS, target) && isSha(sourceSha) && before.target === target, 'release_deploy_target_invalid');
   const spec = TARGETS[target], root = resolve(sourceRoot), env = source.env?.[target];
@@ -89,8 +94,10 @@ export function renderWorkerConfig({ target, source, sourceRoot, sourceSha, befo
   const vars = Object.fromEntries(before.bindings.filter(b => b.type === 'plain_text').map(b => [b.name, b.text]));
   check(vars.APP_ORIGIN === spec.origin && vars.FREEDOM_ENV === spec.env && vars.FREEDOM_DATABASE_NAME === spec.database
     && vars.FREEDOM_RELEASE_SHA === before.sourceSha && vars.FREEDOM_TRUST_CF_CONNECTING_IP === 'true', 'release_deploy_live_variables_invalid');
-  vars.FREEDOM_RELEASE_SHA = sourceSha;
-  return {
+  const expected = applyFlagDecisions({ target, bindings: before.bindings, decisions: readFlagDecisions({ sourceRoot, sourceSha }) });
+  expected.bindings.find(row => row.name === 'FREEDOM_RELEASE_SHA').text = sourceSha;
+  bindingSet(expected.bindings);
+  const config = {
     name: spec.worker, main: join(root, source.main), compatibility_date: source.compatibility_date,
     compatibility_flags: source.compatibility_flags, alias, workers_dev: false, preview_urls: false,
     // Preserve routes already owned by this Worker. Never alter DNS or Access.
@@ -102,8 +109,9 @@ export function renderWorkerConfig({ target, source, sourceRoot, sourceSha, befo
     images: { binding: 'IMAGES' },
     r2_buckets: before.bindings.filter(b => b.type === 'r2_bucket').map(b => ({ binding: b.name, bucket_name: b.bucket_name })),
     send_email: before.bindings.filter(b => b.type === 'send_email').map(b => ({ name: b.name, allowed_sender_addresses: b.allowed_sender_addresses })),
-    vars,
+    vars: Object.fromEntries(expected.bindings.filter(b => b.type === 'plain_text').map(b => [b.name, b.text])),
   };
+  return { config, ...expected, bindingsSha256: hash(retained(expected.bindings)) };
 }
 
 /** Fixed image-owned Wrangler, bounded output/time, no shell or inherited env.
@@ -196,7 +204,7 @@ export function createWorkerDeployer({ accountId, zoneId, target, token, signal,
     before = structuredClone(before); source = structuredClone(source);
     const assertHeld = () => { signal.throwIfAborted(); lease.assertHeld(); };
     assertHeld(); await privateBackupRoot(workRoot);
-    const config = renderWorkerConfig({ target, sourceSha, before, source, sourceRoot });
+    const expected = renderWorkerConfig({ target, sourceSha, before, source, sourceRoot }), { config } = expected;
     same(await inspect(), before, 'release_deploy_predecessor_changed');
     await persist(workRoot, 'wrangler.publish.json', config);
     const intent = { sourceSha, previousSourceSha: before.sourceSha, previousVersion: before.versionId,
@@ -218,14 +226,15 @@ export function createWorkerDeployer({ accountId, zoneId, target, token, signal,
       }
       const matched = observed.sourceSha === sourceSha && observed.versionId === result.versionId;
       await persist(workRoot, `deploy-observation-${attempt}.json`, { attempt, sourceSha: observed.sourceSha, versionId: observed.versionId, matched });
-      check(hash(retained(observed.bindings)) === before.bindingsSha256, 'release_deploy_bindings_changed');
+      check(hash(retained(observed.bindings)) === (matched ? expected.bindingsSha256 : before.bindingsSha256), 'release_deploy_bindings_changed');
       if (matched) {
         const after = await inspect();
         check(after.sourceSha === sourceSha && after.versionId === result.versionId
-          && after.bindingsSha256 === before.bindingsSha256 && after.topologySha256 === before.topologySha256
+          && after.bindingsSha256 === expected.bindingsSha256 && after.topologySha256 === before.topologySha256
           && after.runtimeSha256 === before.runtimeSha256, 'release_deploy_preservation_failed');
         assertHeld(); await persist(workRoot, 'deploy-completed.json', { sourceSha, versionId: result.versionId, observations: attempt });
-        return { sourceSha, providerConfirmed: true, versionId: result.versionId, observations: attempt };
+        return { sourceSha, providerConfirmed: true, versionId: result.versionId, observations: attempt,
+          bindingsSha256: expected.bindingsSha256, flagChanges: expected.flagChanges };
       }
       check(observed.sourceSha === before.sourceSha && observed.versionId === before.versionId, 'release_deploy_unexpected_active_version');
       if (attempt < 10) await sleep(3000);

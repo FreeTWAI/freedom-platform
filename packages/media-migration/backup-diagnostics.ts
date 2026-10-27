@@ -1,28 +1,250 @@
 /** Public diagnostics are fixed identifiers, never provider messages or arbitrary codes. */
 export const BACKUP_DIAGNOSTIC_CODES: readonly string[] = Object.freeze([
-  'daily_backup_phase_failed', 'daily_backup_cleanup_failed', 'daily_backup_aborted',
-  'daily_backup_target_mismatch', 'daily_backup_gc_not_disabled', 'daily_backup_evidence_required',
-  'daily_backup_remote_mismatch', 'daily_backup_restore_mismatch', 'daily_backup_ports_invalid',
-  'daily_backup_policy_mismatch', 'daily_backup_protection_lost',
-  'release_backup_target_mismatch', 'release_backup_worker_changed', 'release_backup_control_mismatch',
-  'release_backup_ledger_invalid', 'release_backup_policy_invalid', 'release_backup_sequence_writer_unfenced',
-  'release_backup_gc_not_disabled', 'release_backup_cleanup_failed', 'gc_observation_unavailable',
-  'release_floor_database_ledger_changed', 'release_floor_external_state_changed',
-  'release_coordinate_postgres_version', 'release_coordinate_inventory_count',
-  'release_coordinate_constraint_changed', 'release_coordinate_definition_changed',
-  'release_capture_policy_unsettled', 'release_capture_policy_changed', 'release_capture_policy_cleanup_failed',
-  'release_lease_lost', 'release_lease_not_held',
-  'backup_database_permission_denied', 'backup_database_query_cancelled', 'backup_database_connection_failed',
+  'backup_database_connection_failed',
+  'backup_database_permission_denied',
+  'backup_database_query_cancelled',
+  'daily_backup_aborted',
+  'daily_backup_cleanup_failed',
+  'daily_backup_evidence_required',
+  'daily_backup_gc_not_disabled',
+  'daily_backup_phase_failed',
+  'daily_backup_policy_mismatch',
+  'daily_backup_ports_invalid',
+  'daily_backup_protection_lost',
+  'daily_backup_remote_mismatch',
+  'daily_backup_restore_mismatch',
+  'daily_backup_target_mismatch',
+  'gc_observation_unavailable',
+  'release_archive_input_invalid',
+  'release_archive_intent_exists',
+  'release_archive_intent_failed',
+  'release_archive_intent_invalid',
+  'release_archive_key_not_absent',
+  'release_archive_readback_failed',
+  'release_archive_readback_mismatch',
+  'release_archive_retry_forbidden',
+  'release_archive_upload_unconfirmed',
+  'release_archive_upload_unknown',
+  'release_backup_archive_failed',
+  'release_backup_archive_input_invalid',
+  'release_backup_archive_mode_invalid',
+  'release_backup_cleanup_failed',
+  'release_backup_control_exists',
+  'release_backup_control_mismatch',
+  'release_backup_delete_forbidden',
+  'release_backup_directory_invalid',
+  'release_backup_gc_not_disabled',
+  'release_backup_input_invalid',
+  'release_backup_ledger_invalid',
+  'release_backup_member_invalid',
+  'release_backup_member_limit',
+  'release_backup_member_missing',
+  'release_backup_object_invalid',
+  'release_backup_policy_invalid',
+  'release_backup_range_unsupported',
+  'release_backup_sequence_writer_unfenced',
+  'release_backup_target_mismatch',
+  'release_backup_transport_mismatch',
+  'release_backup_worker_changed',
+  'release_capture_policy_changed',
+  'release_capture_policy_cleanup_failed',
+  'release_capture_policy_identity_invalid',
+  'release_capture_policy_input_invalid',
+  'release_capture_policy_intent_exists',
+  'release_capture_policy_retry_forbidden',
+  'release_capture_policy_unsettled',
+  'release_cloudflare_credentials_missing',
+  'release_cloudflare_json_invalid',
+  'release_cloudflare_read_failed',
+  'release_cloudflare_resources_invalid',
+  'release_cloudflare_response_invalid',
+  'release_cloudflare_response_limit',
+  'release_control_append_invalid',
+  'release_control_authority_invalid',
+  'release_control_chain_invalid',
+  'release_control_chain_read_failed',
+  'release_control_concurrent_writer',
+  'release_control_cursor_invalid',
+  'release_control_digest_mismatch',
+  'release_control_head_changed',
+  'release_control_history_gap_or_fork',
+  'release_control_history_limit',
+  'release_control_input_invalid',
+  'release_control_json_invalid',
+  'release_control_key_exists',
+  'release_control_list_failed',
+  'release_control_list_invalid',
+  'release_control_object_invalid',
+  'release_control_read_failed',
+  'release_control_readback_mismatch',
+  'release_control_record_limit',
+  'release_control_size_changed',
+  'release_control_write_unknown',
+  'release_coordinate_authority_invalid',
+  'release_coordinate_authority_required',
+  'release_coordinate_constraint_changed',
+  'release_coordinate_definition_changed',
+  'release_coordinate_extension_invalid',
+  'release_coordinate_inventory_binding_invalid',
+  'release_coordinate_inventory_count',
+  'release_coordinate_inventory_fields',
+  'release_coordinate_inventory_invalid',
+  'release_coordinate_ledger_changed',
+  'release_coordinate_migration_changed',
+  'release_coordinate_postgres_version',
+  'release_coordinate_retained_floor_invalid',
+  'release_coordinate_saved_inventory_changed',
+  'release_coordinate_staging_scope_invalid',
+  'release_coordinate_tables_changed',
+  'release_coordinate_variant_binding_invalid',
+  'release_coordinate_variants_invalid',
+  'release_floor_',
+  'release_floor_adoption_catalog_changed',
+  'release_floor_adoption_catalog_invalid',
+  'release_floor_adoption_source_invalid',
+  'release_floor_adoption_source_unavailable',
+  'release_floor_adoption_tree_invalid',
+  'release_floor_archive_intent_invalid',
+  'release_floor_backup_recovery_invalid',
+  'release_floor_backup_source_changed',
+  'release_floor_backup_unverified',
+  'release_floor_candidate_invalid',
+  'release_floor_capture_intent_invalid',
+  'release_floor_capture_intent_missing',
+  'release_floor_code_handoff_invalid',
+  'release_floor_code_request_invalid',
+  'release_floor_commit_intent_invalid',
+  'release_floor_commit_ledger_changed',
+  'release_floor_commit_unverified',
+  'release_floor_database_ledger_changed',
+  'release_floor_deploy_bindings_unverified',
+  'release_floor_deploy_unverified',
+  'release_floor_event_invalid',
+  'release_floor_external_state_changed',
+  'release_floor_health_unverified',
+  'release_floor_history_invalid',
+  'release_floor_intent_invalid',
+  'release_floor_intent_retry_forbidden',
+  'release_floor_ledger_invalid',
+  'release_floor_ledger_rewind',
+  'release_floor_legacy_adoption_invalid',
+  'release_floor_legacy_authority_invalid',
+  'release_floor_legacy_evidence_invalid',
+  'release_floor_legacy_ledger_changed',
+  'release_floor_legacy_policy_changed',
+  'release_floor_legacy_recovery_invalid',
+  'release_floor_legacy_target_changed',
+  'release_floor_not_started',
+  'release_floor_publish_intent_invalid',
+  'release_floor_request_invalid',
+  'release_floor_schedule_unverified',
+  'release_floor_schema_invalid',
+  'release_floor_schema_unverified',
+  'release_floor_seed_invalid',
+  'release_floor_seed_state_invalid',
+  'release_floor_source_invalid',
+  'release_floor_source_rewind',
+  'release_floor_stage_mismatch',
+  'release_floor_unsettled',
+  'release_health_access_target_invalid',
+  'release_health_input_invalid',
+  'release_health_source_not_propagated',
+  'release_lease_busy',
+  'release_lease_cleanup_failed',
+  'release_lease_identity_invalid',
+  'release_lease_lost',
+  'release_lease_not_held',
+  'release_lease_target_invalid',
+  'release_lease_unlock_failed',
+  'release_object_contract_missing',
+  'release_object_digest_mismatch',
+  'release_object_metadata_invalid',
+  'release_object_range_unsupported',
+  'release_object_read_failed',
+  'release_pg_aborted',
+  'release_pg_connection_invalid',
+  'release_pg_disk_required',
+  'release_pg_dump_invalid',
+  'release_pg_environment_invalid',
+  'release_pg_isolation_cleanup_failed',
+  'release_pg_isolation_invalid',
+  'release_pg_output_failed',
+  'release_pg_output_limit',
+  'release_pg_pool_cleanup_failed',
+  'release_pg_process_cleanup_failed',
+  'release_pg_process_failed',
+  'release_pg_process_input_invalid',
+  'release_pg_process_timeout',
+  'release_pg_restore_input_invalid',
+  'release_pg_restore_target_invalid',
+  'release_pg_snapshot_invalid',
+  'release_pg_socket_path_invalid',
+  'release_pg_target_invalid',
+  'release_pg_tls_required',
+  'release_pg_version_invalid',
+  'release_pg_work_directory_invalid',
+  'release_source_media_readonly',
+  'release_staging_access_required',
+  'release_worker_bindings_invalid',
+  'release_worker_maintenance_enabled',
+  'release_worker_source_invalid',
 ]);
+const NETWORK_CODES = new Set([
+  'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EHOSTUNREACH', 'ENETUNREACH',
+  'EAI_AGAIN', 'ENOTFOUND', 'ECONNABORTED', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET',
+  'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+]);
+const FIXED_CODES = [
+  'backup_database_lock_timeout', 'backup_database_resources_exhausted', 'backup_database_conflict',
+  'backup_database_connection_terminated', 'backup_database_connect_timeout', 'backup_database_query_timeout',
+  'backup_operation_aborted', 'backup_disabled', 'backup_invalid_target', 'backup_target_mismatch',
+  'backup_snapshot_mismatch', 'backup_capture_failed',
+];
+export function isBackupDiagnosticCode(code: unknown): code is string {
+  return typeof code === 'string' && (BACKUP_DIAGNOSTIC_CODES.includes(code) || FIXED_CODES.includes(code)
+    || /^backup_database_sqlstate_(?:[0-9][0-9a-z]|f0|hv|p0|xx)[0-9a-z]{3}$/.test(code)
+    || (code.startsWith('backup_network_') && code === code.toLowerCase()
+      && NETWORK_CODES.has(code.slice('backup_network_'.length).toUpperCase())));
+}
+
 export function backupDiagnosticCode(error: unknown, fallback: string): string {
-  const value = error as { code?: unknown; message?: unknown } | null;
-  // PostgreSQL SQLSTATEs are translated; SQL text/detail/connection strings never leave the process.
+  // PostgreSQL SQLSTATEs are public identifiers; SQL text/detail/connection strings never leave the process.
   const database: Record<string, string> = { '42501': 'backup_database_permission_denied',
-    '57014': 'backup_database_query_cancelled', '08001': 'backup_database_connection_failed',
-    '08006': 'backup_database_connection_failed', '57P01': 'backup_database_connection_failed' };
-  if (typeof value?.code === 'string' && Object.hasOwn(database, value.code)) return database[value.code];
-  for (const code of [value?.code, value?.message]) {
-    if (typeof code === 'string' && BACKUP_DIAGNOSTIC_CODES.includes(code)) return code;
-  }
-  return fallback;
+    '57014': 'backup_database_query_cancelled', '57P01': 'backup_database_connection_failed',
+    '55P03': 'backup_database_lock_timeout', '40001': 'backup_database_conflict', '40P01': 'backup_database_conflict' };
+  // These are fixed pg/pg-pool messages, never echoed into a diagnostic.
+  const messages: Record<string, string> = {
+    'Connection terminated unexpectedly': 'backup_database_connection_terminated',
+    'timeout exceeded when trying to connect': 'backup_database_connect_timeout',
+    'Query read timeout': 'backup_database_query_timeout',
+    'Connection terminated due to connection timeout': 'backup_database_connect_timeout',
+  };
+  const resolve = (input: unknown, depth: number): string => {
+    const value = input as { code?: unknown; message?: unknown; name?: unknown; cause?: unknown } | null;
+    const code = value?.code;
+    if (typeof code === 'string') {
+      if (NETWORK_CODES.has(code)) return 'backup_network_' + code.toLowerCase();
+      if (Object.hasOwn(database, code)) return database[code];
+      if (/^(?:[0-9][0-9A-Z]|F0|HV|P0|XX)[0-9A-Z]{3}$/.test(code)) {
+        if (code.startsWith('53')) return 'backup_database_resources_exhausted';
+        if (code.startsWith('08') || ['57P02', '57P03'].includes(code)) return 'backup_database_connection_failed';
+        return 'backup_database_sqlstate_' + code.toLowerCase();
+      }
+    }
+    let identifier;
+    for (const candidate of [code, value?.message]) {
+      if (typeof candidate === 'string' && /^(release|daily_backup|backup|gc)_[a-z0-9_]{1,80}$/.test(candidate)) {
+        identifier = candidate; break;
+      }
+    }
+    if (identifier && identifier !== 'backup_capture_failed' && identifier !== fallback) return identifier;
+    if (typeof value?.message === 'string' && Object.hasOwn(messages, value.message)) return messages[value.message];
+    if (depth < 3 && value?.cause !== undefined) {
+      const cause = resolve(value.cause, depth + 1);
+      if (cause !== fallback && cause !== 'backup_capture_failed') return cause;
+    }
+    if (value?.name === 'AbortError') return 'backup_operation_aborted';
+    return identifier ?? fallback;
+  };
+  return resolve(error, 0);
 }
