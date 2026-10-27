@@ -1,7 +1,8 @@
 import {openSettingsPanel} from './settings-menu-helpers.js';
-import {openChat,closeChat,navigate} from './navigation.js';
+import {openChat,closeChat,navigate,openFeatureSearch} from './navigation.js';
 import {test,expect,type Page} from './fixtures.js';
 import {mkdirSync} from 'node:fs';
+import {measureRouteReadiness, type RouteScenario} from './route-performance.js';
 
 async function login(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
@@ -10,6 +11,51 @@ async function login(page:Page){
   await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
   await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
 }
+
+test('a fresh anonymous context records first-load readiness without timing login',async({page},info)=>{
+  await measureRouteReadiness({page,info,scenario:'cold_anonymous',
+    action:()=>page.goto('/',{waitUntil:'domcontentloaded'}),
+    heading:()=>expect(page.getByRole('heading',{name:'登入',level:2,exact:true})).toBeVisible(),
+    ready:async()=>{
+      await expect(page.getByLabel('電子郵件',{exact:true})).toBeEnabled();
+      await expect(page.getByLabel('密碼',{exact:true})).toBeEnabled();
+      await expect(page.getByRole('button',{name:'登入',exact:true})).toBeEnabled();
+      await expect(page.getByRole('alert')).toHaveCount(0);
+    }});
+});
+
+test('accepted same-session home and feed navigation records first and repeat readiness',async({page,e2eAuthPool},info)=>{
+  // Only this owned synthetic row is created/removed; no shared quota reset,
+  // route stub, private cache, production account or product write is involved.
+  const text='效能量測專用合成貼文';
+  let ids:string[]=[];
+  let id='';
+  const ready=async()=>{
+    const feed=page.locator('.social-zone');
+    await expect(feed).toHaveAttribute('aria-busy','false');
+    await expect(feed.getByRole('alert')).toHaveCount(0);
+    await expect(feed.locator(`[id="social-post-${id}"] .social-note`)).toHaveText(text);
+    await expect(feed.locator(`[id="social-post-${id}"]`)).toBeVisible();
+  };
+  try{
+    const inserted=await e2eAuthPool.query<{post_id:string}>(`INSERT INTO community_social_posts(community_id,author_user_id,kind,url,platform,title,note,state)
+      SELECT community_id,user_id,'note',NULL,'other',$1,$1,'active' FROM users WHERE email='maker@local.test' RETURNING post_id`,[text]);
+    ids=inserted.rows.map(row=>row.post_id);
+    expect(inserted.rowCount).toBe(1);id=ids[0];
+    await login(page);await ready(); // Authentication and initial home load are not warm samples.
+    for(const [scenario,name] of [
+      ['warm_home_social','社群分享'],['warm_social_home','會員首頁'],['warm_home_social_repeat','社群分享'],
+    ] as const satisfies ReadonlyArray<readonly [RouteScenario,string]>){
+      // Prepare the visible menu before timing on every route, including mobile
+      // where an accepted route closes the preceding menu.
+      await openFeatureSearch(page);await page.getByLabel('搜尋功能',{exact:true}).fill(name);
+      const target=page.getByRole('navigation',{name:'主要工作區'}).getByRole('region',{name:'功能搜尋結果'}).getByRole('button',{name,exact:true});
+      await expect(target).toBeVisible();
+      await measureRouteReadiness({page,info,scenario,clickTarget:target,action:()=>target.click(),
+        heading:()=>expect(page.getByRole('heading',{name,level:1,exact:true})).toBeVisible(),ready});
+    }
+  }finally{if(ids.length)await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id=ANY($1::uuid[])',[ids]);}
+});
 
 test('real login ACK can wait while the member gets immediate foreground feedback',async({page},info)=>{
   await page.setViewportSize({width:320,height:800});await page.goto('/');
