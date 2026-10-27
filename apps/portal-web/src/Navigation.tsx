@@ -4,8 +4,6 @@ import type { TabId } from './types';
 import {useLanguage} from './language';
 import type {InterfaceMessage} from './interface-messages';
 
-import '../../../modules/portal-shell/commerce-navigation.css';
-
 import { TAB_TITLES } from './features/metadata';
 export { TAB_TITLES } from './features/metadata';
 
