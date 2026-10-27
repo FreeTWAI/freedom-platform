@@ -1,4 +1,4 @@
-import {ACESFilmicToneMapping,Box3,Color,DirectionalLight,Group,HemisphereLight,InstancedMesh,Mesh,Object3D,PerspectiveCamera,PCFSoftShadowMap,Plane,Raycaster,Scene,Vector2,Vector3,WebGLRenderer} from 'three';
+import {ACESFilmicToneMapping,Box3,Color,DirectionalLight,Group,HemisphereLight,InstancedMesh,Mesh,Object3D,PerspectiveCamera,PCFSoftShadowMap,Plane,Raycaster,Scene,Vector2,Vector3,WebGLRenderer,type Intersection} from 'three';
 import {foodStudio} from './food-studio';
 import {bakeRigidGroup} from '../stage-batch';
 import {FoodKit,cookedColor} from './food-kit';
@@ -6,6 +6,16 @@ import {marketFood} from './market-food';
 import type {MarketRun} from './market-domain';
 
 export type MarketStage={hit:(point:{x:number;y:number})=>{point:{x:number;y:number};index:number|null}|null;update:(run:MarketRun)=>void;capture:()=>string;stats:()=>{calls:number;triangles:number;geometries:number;textures:number};dispose:()=>void};
+/** Batched toppings retain ownership on every vertex of the hit triangle. */
+export function marketHitPortion(hit:Intersection<Object3D>,root:Object3D):number|null{
+ const attribute=hit.object instanceof Mesh?hit.object.geometry.getAttribute('marketPortion'):undefined,face=hit.face;
+ if(attribute?.itemSize===1&&face&&[face.a,face.b,face.c].every(i=>Number.isInteger(i)&&i>=0&&i<attribute.count)){
+  const index=attribute.getX(face.a);
+  if(Number.isInteger(index)&&index>=0&&index<16&&attribute.getX(face.b)===index&&attribute.getX(face.c)===index)return index;
+ }
+ for(let node:Object3D|null=hit.object;node&&node!==root;node=node.parent)if(typeof node.userData.portion==='number')return node.userData.portion;
+ return null;
+}
 /** UX-9: close-up worktop; bounded geometry, shared materials, explicit scene ownership. */
 export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
  const renderer=new WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power'}),scene=new Scene(),kit=new FoodKit(),work=new Group(),foodRoot=new Group(),spit=new Group(),light=new DirectionalLight('#fff5e4',2.4);
@@ -29,7 +39,7 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
    const box=host.getBoundingClientRect(),scale=Math.min(box.width/768,box.height/640),width=768*scale,height=640*scale;if(!width||!height)return null;
    const x=(point.x*box.width-(box.width-width)/2)/width,y=(point.y*box.height-(box.height-height)/2)/height;if(x<0||x>1||y<0||y>1)return null;
    ndc.set(x*2-1,1-y*2);ray.setFromCamera(ndc,camera);const closest=ray.intersectObjects(foodRoot.children,true)[0];let index:number|null=null,location:Vector3;
-   if(closest){location=closest.point;for(let node:typeof closest.object|null=closest.object;node&&node!==foodRoot;node=node.parent)if(typeof node.userData.portion==='number'){index=node.userData.portion;break;}}
+   if(closest){location=closest.point;index=marketHitPortion(closest,foodRoot);}
    else{if(!ray.ray.intersectPlane(plane,intersection))return null;location=intersection;}
    const px=location.x/3.4+.5,py=location.z/2.5+.5;if(px<0||px>1||py<0||py>1)return null;return {index,point:{x:px,y:py}};
   };

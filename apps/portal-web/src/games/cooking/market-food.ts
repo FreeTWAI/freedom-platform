@@ -1,4 +1,4 @@
-import {Box3,Color,Group,Mesh,Raycaster,Vector3,type BufferGeometry} from 'three';
+import {Box3,Color,Float32BufferAttribute,Group,Mesh,Raycaster,Vector3,type BufferGeometry} from 'three';
 import {FoodKit,cookedColor} from './food-kit';
 import {bakeRigidGroup} from '../stage-batch';
 import {INGREDIENTS,newMarket,type MarketRun,type MarketId} from './market-domain';
@@ -44,7 +44,10 @@ export function marketFood(run:MarketRun,kit:FoodKit){
     const index=meatIndex++,single=meatCount===1,x=single?-.28:(index%2-.5)*1.7,z=single?-.1:Math.floor(index/2)*.18,y=base+Math.floor(index/2)*.34;
     const visible=p.side?p.a:p.b,hidden=p.side?p.b:p.a,shade=(c:number)=>c>1?'#'+new Color('#ffffff').lerp(new Color('#3c2818'),Math.min(1,(c-1)*1.8)).getHexString():'#ffffff';
     const meat=new Mesh(kit.cutlet,[kit.mat(shade(visible),visible>.3?'sear':'meat'),kit.mat(shade(hidden),hidden>.3?'sear':'meat'),kit.mat('#af8059','sear')]);meat.position.set(x,y+(result?.255:.22),z);meat.scale.set(single?.95:.7,.85,single?.95:.7);meat.rotation.y=.2+index*.37;meat.castShadow=meat.receiveShadow=true;meat.userData.portion=portionIndex;root.add(meat);
-    if(visible>.25){const butter=kit.block(root,'#e8c77f',x+.3,y+(result?.555:.52),z,.23,.055,.2);butter.rotation.y=.3;}
+    if(visible>.25){const butter=kit.block(root,'#e8c77f',x+.3,y+(result?.555:.52),z,.23,.055,.2);butter.rotation.y=.3;
+     // Keep per-face picking ownership through rigid batching without adding draws.
+     if(!result){butter.geometry=butter.geometry.clone();butter.geometry.setAttribute('marketPortion',new Float32BufferAttribute(new Float32Array(butter.geometry.getAttribute('position').count).fill(portionIndex),1));transient.push(butter.geometry);}
+    }
    }else{
     const positions:Record<string,[number,number]>={potato:[1.15,-.55],broccoli:[1.35,.45],egg:[-.9,.85]},[x,z]=positions[p.kind]??[Math.cos(sideIndex*2.4)*1.65,Math.sin(sideIndex*2.4)*.95];
     const garnish=new Group();root.add(garnish);vegetable(p.kind,x,0,z,.35,garnish);
