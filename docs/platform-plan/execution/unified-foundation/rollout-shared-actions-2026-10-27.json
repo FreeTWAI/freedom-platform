@@ -1624,6 +1624,25 @@
       "status": "ok",
       "releaseSha": "f2c9b2fd14173e8d552771618590fdb2dc915142"
     },
-    "scope": "Staging workflow passed. Production workflow failed at lease cleanup after deployment and health; later independent under-lease readback confirms completed journal, DB/Worker source and released lock. Original failures remain unchanged. No new backup, floor reset, member acceptance or second-operator restore."
+    "scope": "Staging workflow passed. Production workflow failed at lease cleanup after deployment and health; later independent under-lease readback confirms completed journal, DB/Worker source and released lock. Original failures remain unchanged. No new backup, floor reset, member acceptance or second-operator restore.",
+    "productionSessionReadback": {
+      "observedAt": "2026-10-27T18:21:22.570Z",
+      "target": "next",
+      "failedRun": 40556772743,
+      "readOnly": true,
+      "remoteWrites": 0,
+      "exactAdvisoryKey": {
+        "namespace": "freedom.daily.recovery.current_database()",
+        "total": 0,
+        "granted": 0
+      },
+      "remainingSessions": {
+        "remaining_migrator_or_backup": 0,
+        "shared_operator": 0,
+        "dump_or_capture": 0
+      },
+      "status": "exact_key_unoccupied_and_no_migrator_backup_capture_sessions",
+      "completedAt": "2026-10-27T18:21:26.662Z"
+    }
   }
 }

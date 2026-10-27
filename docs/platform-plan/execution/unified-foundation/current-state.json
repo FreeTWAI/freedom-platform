@@ -106,7 +106,13 @@
         "lease_acquired_and_released": true,
         "database_worker_verified": true,
         "remote_persistent_writes": 0,
-        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json"
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
+        "session_readback": {
+          "observed_at": "2026-10-27T18:21:26.662Z",
+          "exact_key_locks": 0,
+          "other_migrator_backup_operator_dump_capture_sessions": 0,
+          "read_only": true
+        }
       }
     },
     "staging": {

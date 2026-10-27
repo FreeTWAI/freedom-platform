@@ -13,7 +13,7 @@
 ## 2026-10-27 18:17 UTC：f2c9b2fd 已部署，正式 workflow 清理失敗另列
 
 兩環境已上 `f2c9b2fd`，含 #1144 控制紀錄 GET 修正。[staging](https://github.com/FreeTWAI/freedom-platform/actions/runs/40554821303) 五階段成功；[正式站](https://github.com/FreeTWAI/freedom-platform/actions/runs/40556772743) 完成部署與健康檢查，最後 handoff 報 `release_lease_cleanup_failed`，workflow 與 GitHub deployment 狀態仍保留 failure。
-18:16:08–18:16:21Z 重新取得同一個 advisory lease，唯讀核對 pinned journal generation 32／pending=null、DB、Worker 版本與 bindings，並正常釋放。最後 handoff 記錄已存在，先前的鎖已不再占用；沒有持久寫入或重複部署。18:17:56Z 公開 health 為 HTTP 200、`ok`、同版本。
+18:16:08–18:16:21Z 重新取得同一個 advisory lease，唯讀核對 pinned journal generation 32／pending=null、DB、Worker 版本與 bindings，並正常釋放。最後 handoff 記錄已存在，先前的鎖已不再占用；沒有持久寫入或重複部署。18:17:56Z 公開 health 為 HTTP 200、`ok`、同版本。18:21Z 另以 READ ONLY 查精確 advisory key，鎖為 0；排除查核自身後，同 DB migrator／backup／operator／dump／capture sessions 為 0，沒有終止任何 session。
 
 該 source 的 main Verify／CodeQL 與新版映像建置／獨立下載驗證均成功；兩環境使用相同固定 digest。CI 沿既有 delivery_tooling，不重跑無關產品／UI 測試。
 GET 暫時錯誤最多共三次、遵守五分鐘內 Retry-After；較長等待、權限／內容不符及 lease 中斷停止。PUT 與未知寫入不自動重送。
