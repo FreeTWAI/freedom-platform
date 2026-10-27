@@ -672,7 +672,7 @@ test('CK-3: the playroom browses all game types, pages dishes and separates favo
   const open=await page.getByRole('button',{name:'開始製作黃金蛋炒飯',exact:true}).boundingBox(),favorite=await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).boundingBox();expect(open!.y+open!.height).toBeLessThanOrEqual(favorite!.y);await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).click();await expect(page).toHaveURL(/\/play$/);
   await page.getByRole('button',{name:'觀察攝影 1',exact:true}).click();await expect(page.locator('.ad-game-card')).toHaveCount(1);await expect(page.locator('.ck-recipe-card')).toHaveCount(0);
   await page.getByRole('button',{name:'反應手速 5',exact:true}).click();await expect(page.locator('.ad-game-card')).toHaveCount(2);await expect(page.locator('.pt-party-card')).toHaveCount(3);await page.getByRole('button',{name:'料理小遊戲 66',exact:true}).click();await expect(page.locator('.ck-recipe-card')).toHaveCount(16);
-  await page.getByRole('button',{name:/♡ 我的收藏/}).click();await expect(page.locator('.ck-recipe-card')).toHaveCount(1);await page.getByRole('button',{name:'這道我來做',exact:true}).click();await expect(page.getByRole('button',{name:'開火，開始做！',exact:true})).toBeVisible();await page.getByRole('button',{name:'← 大廳',exact:true}).click();await expect(page.getByRole('combobox',{name:'食譜篩選',exact:true})).toHaveValue('favorite');await expect(page.locator('.ck-recipe-card')).toHaveCount(1);
+  await page.getByRole('button',{name:/♡ 我的收藏/}).click();await expect(page.locator('.ck-recipe-card')).toHaveCount(1);await page.getByRole('button',{name:'這道我來做',exact:true}).click();await expectNativeMarketReady(page);await page.getByRole('button',{name:'← 大廳',exact:true}).click();await expect(page.getByRole('combobox',{name:'食譜篩選',exact:true})).toHaveValue('favorite');await expect(page.locator('.ck-recipe-card')).toHaveCount(1);
 });
 
 
@@ -690,7 +690,14 @@ test('UX-8: a delayed real dish-view module has a finite fallback, ignores late 
 
 // UX-9: drive the production UI. Virtual foreground frames shorten cooking, never seed a finished score.
 async function marketTime(page:Page,ms:number){while(ms>0){const delta=Math.min(ms,1000);await page.clock.fastForward(delta);ms-=delta;}}
-async function marketOpen(page:Page,id:MarketId){await page.clock.install();await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);await expect(page.getByRole('button',{name:'開火，開始做！',exact:true})).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await page.clock.runFor(20);}
+async function expectNativeMarketReady(page:Page){
+  const game=page.locator('.mk-game');
+  await expect(game.getByRole('button',{name:'開火，開始做！',exact:true})).toBeVisible({timeout:15_000});
+  await expect(game.locator('.mk-fallback')).toHaveCount(0);
+  await expect(game.locator('.mk-canvas canvas')).toHaveCount(1);
+  await expect(game.getByRole('status').filter({hasText:'正在準備料理台…'})).toHaveCount(0);
+}
+async function marketOpen(page:Page,id:MarketId){await page.clock.install();await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);await expectNativeMarketReady(page);await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await page.clock.runFor(20);}
 async function marketButton(page:Page,name:string){await marketTime(page,400);await page.getByRole('button',{name,exact:true}).click();}
 async function marketAdd(page:Page,name:string){await marketTime(page,400);await page.locator('.mk-ingredients').getByRole('button',{name:new RegExp(`^${name} `)}).click();}
 for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[])test(`UX-9: ${id} cooks through actual controls to its own inspectable, downloadable and shareable result`,async({page},testInfo)=>{
@@ -713,7 +720,7 @@ test('UX-9: delayed native cooking module falls back after 15 seconds and reject
 });
 
 test('UX-1/9: lobby can cold-open both a legacy game and a free kitchen without a cooking checkpoint',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/play');await page.locator('.ad-game-card').first().getByRole('button').click();await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();expect(new URL(page.url()).searchParams.get('game')).toBe('photo');await page.goto('/play');await page.getByRole('button',{name:'開始製作酥炸熱狗',exact:true}).click();await expect(page.getByRole('button',{name:'開火，開始做！',exact:true})).toBeVisible();expect(new URL(page.url()).searchParams.get('recipe')).toBe('corn-dog');expect(errors).toEqual([]);
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/play');await page.locator('.ad-game-card').first().getByRole('button').click();await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();expect(new URL(page.url()).searchParams.get('game')).toBe('photo');await page.goto('/play');await page.getByRole('button',{name:'開始製作酥炸熱狗',exact:true}).click();await expectNativeMarketReady(page);expect(new URL(page.url()).searchParams.get('recipe')).toBe('corn-dog');expect(errors).toEqual([]);
 });
 
 
