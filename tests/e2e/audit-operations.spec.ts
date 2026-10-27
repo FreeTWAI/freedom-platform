@@ -195,7 +195,8 @@ test('every operations page fits desktop and phone with one h1 and labelled fiel
     await page.setViewportSize(size);
     await login(page);
     for (const [id, label] of memberPages) {
-      await navigate(page, label);
+      const navigationLabel = id === 'supplier' ? 'AI 整理供貨商品' : id === 'retail' ? 'AI 製作銷售網站' : label;
+      await navigate(page, navigationLabel);
       await expect(page.getByRole('heading', { name: label, level: 1, exact: true })).toBeVisible();
       await settled(page);
       expect(await layoutProblems(page), `${id} ${viewport}`).toEqual({ overflow: false, offenders: [], unlabeled: [], h1: 1 });
