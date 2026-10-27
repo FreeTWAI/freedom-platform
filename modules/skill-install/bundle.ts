@@ -2,11 +2,11 @@ import {communityCatalog,type SkillBook} from '../community/catalog.js';
 import {Problem} from '../../packages/shared/problem.js';
 
 /**
- * 技能書一鍵安裝的檔案包。
+ * 技能書安裝的檔案包。
  *
  * 只服務目錄內已收錄、且鎖定 40 碼 source_commit 的技能書，不接受任意 repo 或分支，
  * 因此不會變成任意 GitHub 代理。commit 不可變，檔案包可長期快取。
- * 每個檔案以 git blob SHA-1 對照 tree 驗證；瀏覽器端再驗一次後才寫入本機。
+ * 每個檔案以 git blob SHA-1 對照 tree 驗證；瀏覽器端再驗一次後才提供 zip 下載。
  * 這是「讀取收錄版本」，不是 SPEC-SKL-03 的 MemberSkillInstallation，也不產生 verified 狀態。
  */
 export const SKILL_INSTALL_BUNDLE_FORMAT='freedom.skill-install-bundle/v1';
@@ -101,7 +101,7 @@ export function createSkillInstallBundleLoader(fetcher:Fetcher=globalThis.fetch,
   const cache=new Map<string,Promise<SkillInstallBundle>>();
   return async(bookId:string)=>{
     const source=skillInstallSource(bookId,books);
-    if(!source)throw new Problem(404,'skill_install_unavailable','這本技能書沒有可一鍵安裝的收錄版本。');
+    if(!source)throw new Problem(404,'skill_install_unavailable','這本技能書沒有可安裝的收錄版本。');
     const key=source.owner+'/'+source.repo+'@'+source.commit+'#'+source.book_id;
     let pending=cache.get(key);
     if(!pending){
