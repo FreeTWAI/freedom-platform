@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 import {createSkillInstallRoutes} from '../../apps/platform-api/src/routes/skill-install.js';
 import {gitBlobSha1,skillInstallSource,skillFolderName,isSafeBundlePath} from '../../modules/skill-install/index.js';
 import {communityCatalog,type SkillBook} from '../../modules/community/catalog.js';
-import {parseInstallBundle,installReceipt,buildInstallZip,installCommands,SkillInstallError} from '../../apps/portal-web/src/modules/skill-install-client.js';
+import {parseInstallBundle,installReceipt,buildInstallZip,copyText,installCommands,SkillInstallError} from '../../apps/portal-web/src/modules/skill-install-client.js';
 
 const commit='a'.repeat(40);
 const book=(id:string,extra:Partial<SkillBook>={}):SkillBook=>({id,title:id,repository_url:'https://github.com/FreeTWAI/freedom-skill-'+id,description:'',kind:'starter',fork_url:'',license_status:'MIT',upstream_url:'',source_commit:commit,introduction_url:null,...extra});
@@ -103,6 +103,14 @@ test('client and UI do not offer direct folder writes',async()=>{
   }
 });
 
+test('copyText reports success only after a clipboard write resolves',async()=>{
+  const writes:string[]=[];
+  assert.equal(await copyText({writeText:async text=>{writes.push(text);}},'install command'),true);
+  assert.deepEqual(writes,['install command']);
+  assert.equal(await copyText({writeText:async()=>{throw new Error('clipboard denied');}},'install command'),false);
+  assert.equal(await copyText(undefined,'install command'),false);
+});
+
 test('PowerShell commands stop on errors, stage pinned archives and remove only their temp directory',()=>{
   for(const target of ['claude-code','codex','openclaw'] as const){
     const {powershell}=installCommands({name:'freedom-demo',repository:'FreeTWAI/freedom-skill-demo',commit},target);
@@ -111,10 +119,11 @@ test('PowerShell commands stop on errors, stage pinned archives and remove only 
     assert.ok(powershell.includes('Join-Path $env:TEMP ([guid]::NewGuid().ToString())'));
     assert.ok(powershell.includes('Expand-Archive -LiteralPath $z -DestinationPath $t'));
     assert.ok(powershell.includes('Test-Path -LiteralPath "$s\\SKILL.md" -PathType Leaf'));
-    const check=powershell.indexOf('if (Test-Path -LiteralPath $dest)'),create=powershell.indexOf('New-Item -ItemType Directory -Path $dest | Out-Null'),copy=powershell.indexOf('Get-ChildItem -LiteralPath $s -Force | Copy-Item -Destination $dest -Recurse');
-    assert.ok(check>0&&create>check&&copy>create);
-    assert.doesNotMatch(powershell,/Move-Item|New-Item[^;]*-Force[^;]*\$dest|New-Item[^;]*\$dest[^;]*-Force/);
-    assert.match(powershell.slice(check,create),/throw "「freedom-demo」資料夾已經存在/);
+    assert.ok(powershell.includes('New-Item -ItemType Directory -Force -Path $d | Out-Null'));
+    const check=powershell.indexOf('if (Test-Path -LiteralPath $dest)'),move=powershell.indexOf('[System.IO.Directory]::Move($s,$dest)');
+    assert.ok(check>0&&move>check);
+    assert.doesNotMatch(powershell,/Copy-Item|Move-Item|New-Item[^;]*\$dest/);
+    assert.match(powershell.slice(check,move),/throw "「freedom-demo」資料夾已經存在/);
     assert.deepEqual(powershell.match(/Remove-Item[^}]+/g),['Remove-Item -LiteralPath $t -Recurse -Force ']);
     assert.ok(powershell.includes('finally { Remove-Item -LiteralPath $t -Recurse -Force }'));
   }
