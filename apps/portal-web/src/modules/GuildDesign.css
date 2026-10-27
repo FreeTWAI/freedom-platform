@@ -276,7 +276,7 @@ html[data-theme="dark"] .guilds-panel .guild-application-status.is-declined { ba
 }
 
 @media (max-width: 760px) {
-  .guilds-panel .guild-hub-heading .actions { width: 100%; }
+  .guilds-panel .guild-hub-heading .actions { max-width: 100%; }
   .guilds-panel .guild-hub-heading .btn { min-height: 44px; padding: .5rem .7rem; font-size: .875rem; }
   .guilds-panel .guild-overview { font-size: .875rem; }
   .guild-directory-tools { gap: .65rem; }
@@ -354,3 +354,13 @@ html[data-theme="dark"] .guilds-panel .guild-application-status.is-declined { ba
 .guild-community-start{grid-column:1/-1;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--bg-elev);color:var(--ink)}
 .guild-community-start p{margin:0 0 12px}
 @media(max-width:540px){.guild-community-overview{grid-template-columns:minmax(0,1fr);gap:16px}.guild-community-nav{gap:6px}.guild-community-nav .btn{flex:1 1 calc(50% - 6px)}}
+
+/* Keep discovery primary; optional filters and tools retain native keyboard behavior. */
+.guild-directory-options { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .5rem 1rem; min-width: 0; }
+.guild-directory-disclosure { min-width: 0; max-width: 100%; }
+.guild-directory-disclosure > summary { min-height: 44px; padding: .5rem .25rem; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; }
+.guild-directory-disclosure > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.guild-directory-disclosure[open] { flex-basis: 100%; }
+.guild-directory-settings { display: grid; justify-items: start; gap: .75rem; padding-block: .5rem; }
+.guild-directory-settings .btn { min-height: 44px; max-width: 100%; white-space: normal; }
+.guilds-panel .guild-filter-result { margin: 0; color: var(--muted); font-size: .875rem; }

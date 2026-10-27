@@ -10,10 +10,13 @@ const SocialZone = lazy(() => import('../modules/SocialZone').then(m => ({defaul
 const MemberServices = lazy(() => import('../modules/MemberServices').then(m => ({default: m.MemberServices})))
 const PromotionBoards = lazy(() => import('../modules/PromotionBoards').then(m => ({default: m.PromotionBoards})))
 const EventHighlights = lazy(() => import('../modules/EventHighlights').then(m => ({default: m.EventHighlights})))
+const TesterMap = lazy(() => import('../modules/TesterMap').then(m => ({default: m.TesterMap})))
+const NewbieVillage = lazy(() => import('../modules/NewbieVillage').then(m => ({default: m.NewbieVillage})))
 const TaskBoardPanel = lazy(() => import('../modules/TaskBoardPanel').then(m => ({default: m.TaskBoardPanel})))
 
 // Page entries only compose existing features. Session, navigation and leave guards stay in the shell.
 export const communityFeatures = {
+  "newbie-village": {moduleId:"newbie-village",placement:"page",render:()=> <NewbieVillage/>},
   "community": {
     moduleId: "community", placement: 'page',
     render: ({client, selectTab}) => <CommunityPanel client={client} onNavigate={selectTab} />,
@@ -53,6 +56,10 @@ export const communityFeatures = {
   "promotion": {
     moduleId: "community", placement: 'page',
     render: ({client}) => <PromotionBoards client={client} />,
+  },
+  "tester-map": {
+    moduleId: "tester-map", placement: 'page',
+    render: () => <TesterMap />,
   },
   messages: {
     moduleId: 'member-communications', placement: 'overlay',

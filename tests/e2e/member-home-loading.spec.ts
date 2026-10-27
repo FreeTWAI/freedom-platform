@@ -93,10 +93,10 @@ test('home resumes unfinished work without waiting for grants or task board', as
   try {
     await login(page);
     await expect.poll(() => waiting).toBeGreaterThanOrEqual(2);
-    await expect(guidance(page).getByRole('button', {name: '回到我的工作', exact: true})).toBeVisible();
+    await expect(guidance(page).getByRole('button', {name: '回到任務協作', exact: true})).toBeVisible();
     await expect(guidance(page).getByRole('button', {name: '閱讀技能書', exact: true})).toHaveCount(0);
   } finally { held.release(); }
-  await expect(guidance(page).getByRole('button', {name: '回到我的工作', exact: true})).toBeVisible();
+  await expect(guidance(page).getByRole('button', {name: '回到任務協作', exact: true})).toBeVisible();
 });
 
 test('failed grant lookup leaves ordinary navigation and confirmed tasks available', async ({page}) => {
@@ -134,7 +134,7 @@ test('automatic same-guild refresh keeps the open book, claim draft, focus and w
     public: {book_id: book.book_id, status: 'unclaimed', label: '尚未認領', verified: [], attributed_author: null},
   });
   await login(page);
-  const resume = guidance(page).getByRole('button', {name: '回到我的工作', exact: true});
+  const resume = guidance(page).getByRole('button', {name: '回到任務協作', exact: true});
   await expect(resume).toBeVisible();
   const originalResume = await resume.elementHandle();
   await guidance(page).getByRole('button', {name: '閱讀技能書', exact: true}).click();
@@ -307,7 +307,7 @@ test('leaving and returning to the primary guild discards the old suggestions un
   await stub(page, '/api/v1/task-board/preview', {items: []});
   await login(page);
   const openBook = guidance(page).getByRole('button', {name: '閱讀技能書', exact: true});
-  const resume = guidance(page).getByRole('button', {name: '回到我的工作', exact: true});
+  const resume = guidance(page).getByRole('button', {name: '回到任務協作', exact: true});
   await expect(openBook).toBeVisible();
   await expect(resume).toBeVisible();
   const oldBook = await openBook.elementHandle(), oldResume = await resume.elementHandle();

@@ -23,8 +23,9 @@ on:
 # qualifying edits and is not itself allowlisted. Five exact informational
 # handoff documents retain governance-consumers after clean integration proof;
 # rollout JSON, specs and every other platform-plan path retain full selection.
-# Push, merge queue, rename, delete, unknown, other governance, security, and
-# shared-runtime changes keep the full set.
+# Operator-only releases/backup changes select deploy-preflight on PR and main;
+# source-integrity already covers selector/governance controls. Other push,
+# merge queue, rename, delete, unknown and shared-runtime changes keep the full set.
 # The selector, the verify aggregate, the runtime partition runner, the runtime aggregate and every node:test, pytest and browser suite runner come from job.workflow_sha, checked out at .freedom/trusted.
 # The pinned runner derives each file set from the candidate tree and requires complete per-file and per-case evidence.
 # Candidate package scripts, globs and runner files do not define a required test suite.
@@ -74,8 +75,8 @@ jobs:
         id: decision
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CANDIDATE_SHA: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
@@ -718,3 +719,9 @@ jobs:
         run: docker pull mirror.gcr.io/library/postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
       - name: Verify both migration entrypoints against isolated PostgreSQL
         run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.migration-postgres
+      - name: Verify native snapshot dump and isolated restore for the shared release operator
+        run: node --import tsx .freedom/trusted/deploy/shared-release/test/postgres-integration.mjs --source .
+      - name: Typecheck delivery changes and their TypeScript consumers
+        run: node node_modules/typescript/bin/tsc --noEmit
+      - name: Verify complete daily backup orchestration evidence
+        run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.daily-backup

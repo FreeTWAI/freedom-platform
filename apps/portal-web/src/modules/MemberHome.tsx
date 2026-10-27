@@ -29,7 +29,7 @@ const shortcuts: { id: TabId; title: string }[] = [
 // The third next-step button follows real work facts, in this order: a claim of mine that is not finished (/dashboard, work.ts),
 // then the open task board, then work sharing. Titles stay on their own pages and no count is shown.
 const taskActions = {
-  resume: { tab: 'workbench', label: '回到我的工作', hint: '你有認領中的工作還沒結案，可以回到「我的工作」繼續。' },
+  resume: { tab: 'workbench', label: '回到任務協作', hint: '你有認領中的工作還沒結案，可以回到「任務協作」繼續。' },
   tasks: { tab: 'tasks', label: '查看社群任務', hint: '社群任務板有開放中的任務，可自行挑選一件參與。' },
   showcase: { tab: 'showcase', label: '分享作品與需求', hint: null },
 } satisfies Record<string, { tab: TabId; label: string; hint: string | null }>;
