@@ -1182,11 +1182,23 @@ test('control GET stops its retry backoff when the release lease is lost', async
   const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
     if (url.endsWith(f.seedKey)) {
       reads++; timer = setTimeout(() => f.controller.abort(Error('release_lease_lost')), 1);
-      return new Response(null, { status: 429, headers: { 'retry-after': '999999' } });
+      return new Response(null, { status: 429, headers: { 'retry-after': '300' } });
     }
     return f.options.fetchImpl(url, options);
   } });
   await assert.rejects(store.load(), /release_lease_lost/); assert.equal(reads, 1); assert.equal(f.puts(), 0);
+});
+
+test('control GET stops instead of retrying before an excessive provider delay', async t => {
+  const f = await controlFixture(t); let reads = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) {
+      reads++; return new Response(null, { status: 429, headers: { 'retry-after': '301' } });
+    }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(store.load(), /release_control_read_rate_limited/);
+  assert.equal(reads, 1); assert.equal(f.puts(), 0);
 });
 
 test('control intent survives an unknown PUT and setup ownership loss submits zero PUTs', async t => {
