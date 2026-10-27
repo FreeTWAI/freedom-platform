@@ -478,7 +478,8 @@ test('interrupted chunk publication leaves no manifest and never follows a plant
   assert.equal(await readFile(join(outside, 'unchanged.json'), 'utf8'), 'outside original bytes');
 });
 
-test('unknown entry retains all baseline/candidate dependency rules while dependency bodies remain private', async t => {
+test('unknown entry warns and retains all baseline/candidate dependency rules while dependency bodies remain private', async t => {
+  const warning = t.mock.method(console, 'warn', () => {});
   const f = await fixture(t), dependent = descriptor('portal', ['apps/portal/**']);
   dependent.dependencies = ['governance']; dependent.instructions = ['docs/portal.md'];
   await put(f.root, 'apps/portal/freedom.module.json', pretty(dependent));
@@ -500,5 +501,11 @@ test('unknown entry retains all baseline/candidate dependency rules while depend
   assert(!serialized.includes('fixture-sensitive-registry-marker'));
   assert(d.manifest.binding.version_inputs.some(input => input.path === 'package-lock.json' && input.sha256 && !('content' in input)));
   const complete = await readContextDelivery(f.root, d.manifestPath, { complete: true });
-  assert.equal(complete.value.complete, false); assert.deepEqual(complete.blockers, ['surface_unmapped']);
+  assert.equal(complete.value.complete, true); assert.deepEqual(complete.blockers, []);
+  assert(warning.mock.calls.length > 0);
+  assert(warning.mock.calls.every(call => {
+    const message = JSON.parse(call.arguments[0]);
+    return message.severity === 'warning' && message.code === 'surface_unmapped'
+      && message.unknown_paths.includes('new-queue/handler.mjs');
+  }));
 });

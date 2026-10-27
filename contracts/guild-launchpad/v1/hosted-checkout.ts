@@ -100,6 +100,7 @@ const cartLine=z.object({sku,title:z.string().nullable(),options,unit_price_mino
   state:z.enum(['ok','insufficient','unavailable','revision_changed']),available:z.number().int().nonnegative().optional()}).strict();
 const cartGroup=z.object({group_ref:groupRef,amount_minor:money}).strict();
 export const CartQuoteResponseSchema=z.object({publication_revision:Version,currency:CurrencySchema,lines:z.array(cartLine).min(1).max(50),
+  required_consents:z.array(consent.extend({label:text.min(1).max(120),url:z.string().regex(/^\/shops\/[a-z0-9][a-z0-9-]*\/policies\/(?:shipping|returns|privacy|terms)$(?![\s\S])/)}).strict()).max(20),
   merchandise_total_minor:money,discounts:z.array(z.never()).max(0),delivery_options:z.array(CartDeliveryOptionSchema).max(6),shipping:z.discriminatedUnion('state',[
     z.object({state:z.literal('quoted'),method:ShippingMethodRefSchema,groups:z.array(cartGroup).min(1).max(50),total_minor:money}).strict(),
     z.object({state:z.literal('unavailable'),method:ShippingMethodRefSchema,groups:z.array(z.never()).max(0),total_minor:z.null(),lines:z.array(z.object({sku,reason:ShippingUnavailableReasonSchema}).strict()).min(1).max(50)}).strict(),

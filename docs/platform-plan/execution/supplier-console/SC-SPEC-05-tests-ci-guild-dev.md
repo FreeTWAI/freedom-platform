@@ -179,7 +179,7 @@ S2、S3 新增的路由、測試與素材檔案也登記在同一個 descriptor�
 3. `npm run contracts:build`、`npm run build`（瀏覽器與依賴 dist 的 runtime 測試都要先 build）。
 4. 目標 runtime 測試，再跑 `npm test` 全套；都用拋棄式資料庫。
 5. 目標 E2E（`npm run test:e2e -- tests/e2e/supplier-console.spec.ts …`），再跑受影響的既有 spec。
-6. `python3 scripts/update-inventory.py`、`npm run verify:inventory`。
+6. 日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
 7. 檢查 diff 不含 `/home/`、`/tmp/`、token、cookie 或客戶資料；截圖只存 `test-results/`。
 
 本機結果不是可信 CI 證據；它只決定能不能交給 CI。

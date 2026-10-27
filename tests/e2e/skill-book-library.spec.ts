@@ -362,10 +362,16 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   const share=page.getByRole('dialog',{name:`分享「${item.title}」`,exact:true});await expect(share).toBeVisible();
   await expect(share.locator('.skill-share-url')).toHaveText(new RegExp(`/development/submissions/${id}\\?intro=[12]$`));
   await share.getByRole('button',{name:'關閉分享預覽',exact:true}).click();
+  const uses=shelf.getByRole('combobox',{name:'依內容與技術用途篩選',exact:true});
+  await uses.selectOption('圖片');
+  await expect(shelf.locator(`[data-submission-id="${id}"]`)).toHaveCount(0); // Submissions have no curated use mapping.
+  await shelf.getByRole('button',{name:'清除篩選',exact:true}).click();
+  await expect(card).toBeVisible();
+  await expect(shelf.getByRole('status')).toHaveText(`顯示 ${shelfTotal} / ${shelfTotal} 本社群技能書`);
   const search=shelf.getByLabel('搜尋社群技能書',{exact:true});
   await search.fill('綠豆');await expect(cards).toHaveCount(1);await expect(cards.first()).toHaveAttribute('data-book-id','ai-manga-translator');
   await expect(shelf.getByRole('status')).toHaveText(`顯示 1 / ${shelfTotal} 本社群技能書`);
-  await search.fill('沒有這本書');await expect(cards).toHaveCount(0);await expect(shelf.getByText('沒有符合的社群技能書。',{exact:true})).toBeVisible();
+  await search.fill('沒有這本書');await expect(cards).toHaveCount(0);await expect(shelf.getByText('沒有符合的社群技能書。試試另一個關鍵字或用途。',{exact:true})).toBeVisible();
   await page.screenshot({path:'test-results/community-skill-books.png'});
 });
 
@@ -442,8 +448,8 @@ test('reading-first library gives newcomers a clear entry and recoverable search
   await expect(page.getByRole('heading',{name:'社群技能書',exact:true})).toBeFocused();
   const community=page.locator('.community-skill-library'),communitySearch=community.getByRole('searchbox',{name:'搜尋社群技能書',exact:true});
   await communitySearch.fill('no-such-skill-unique-fixture');
-  await expect(community.getByText('沒有符合的社群技能書。',{exact:true})).toBeVisible();
-  await community.getByRole('button',{name:'清除社群搜尋',exact:true}).click();
+  await expect(community.getByText('沒有符合的社群技能書。試試另一個關鍵字或用途。',{exact:true})).toBeVisible();
+  await community.getByRole('button',{name:'清除篩選',exact:true}).click();
   await expect(communitySearch).toHaveValue('');await expect(communitySearch).toBeFocused();
   await page.getByRole('link',{name:'查看公會技能書 ↓',exact:true}).click();
   await expect(page.getByRole('heading',{name:'公會指定技能書',exact:true})).toBeFocused();
@@ -540,3 +546,31 @@ for (const theme of ['light', 'dark', 'versefolk'] as const) {
     });
   }
 }
+
+
+for(const width of [1280,390])test(`both shelves combine content uses, business purposes and text, and reset at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:844});
+  const guild=await openLibrary(page),community=page.locator('.community-skill-library');
+  for(const [shelf,searchLabel,id,use,category,total,noun] of [
+    [guild,'搜尋技能書','social-post','文字','內容與行銷',29,'技能書'],
+    [community,'搜尋社群技能書','photo-border-remover','圖片','內容與行銷',24,'社群技能書'],
+  ] as const){
+    const search=shelf.getByRole('searchbox',{name:searchLabel,exact:true});
+    const uses=shelf.getByRole('combobox',{name:'依內容與技術用途篩選',exact:true});
+    const business=shelf.getByRole('combobox',{name:'依工坊用途篩選',exact:true});
+    await uses.selectOption(use);
+    await expect(shelf.locator(`article[data-book-id="${id}"]`)).toBeVisible();
+    await business.selectOption(category);
+    await expect(shelf.locator(`article[data-book-id="${id}"]`)).toBeVisible();
+    await search.fill('no-matching-purpose-fixture');
+    await expect(shelf.getByRole('status')).toContainText(`顯示 0 / ${total} 本${noun}`);
+    await expect(shelf.getByText(`沒有符合的${noun}。試試另一個關鍵字或用途。`,{exact:true})).toBeVisible();
+    await shelf.getByRole('button',{name:'清除篩選',exact:true}).click();
+    await expect(search).toBeFocused();await expect(search).toHaveValue('');
+    await expect(uses).toHaveValue('');await expect(business).toHaveValue('');
+    await expect(shelf.getByRole('status')).toContainText(`顯示 ${total} / ${total} 本${noun}`);
+    expect(await shelf.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
+  }
+  // An unmapped catalog book remains readable in All.
+  await expect(community.locator('article[data-book-id="hrflow"]')).toBeVisible();
+});

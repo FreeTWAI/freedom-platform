@@ -37,10 +37,13 @@ async function history(start=1,count=25,peer=1){
     FROM generate_series($4::int,$5::int) n RETURNING message_id`,[DEMO_COMMUNITY,accounts[0].id,accounts[peer].id,start,start+count-1]);
   return result.rows.map(row=>row.message_id as string);
 }
-async function member(browser:Browser,baseURL:string){
+async function member(browser:Browser,baseURL:string,installClock=false){
   const context=await browser.newContext({baseURL,viewport:{width:1280,height:900}});contexts.push(context);
   await context.route(url=>!['localhost','127.0.0.1'].includes(url.hostname),route=>route.abort());
-  const page=await context.newPage();await page.goto('/#messages');
+  const page=await context.newPage();
+  // Install before navigation so the mounted polling interval uses the controllable clock.
+  if(installClock)await page.clock.install();
+  await page.goto('/#messages');
   await page.getByLabel('電子郵件',{exact:true}).fill(accounts[0].email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.messages-categories')).toBeVisible();return page;
 }
@@ -183,7 +186,7 @@ test('a superseded quiet response still in flight cannot overlap queued paging',
 for(const advertised of [true,false])test(`one pending receipt in 200 loaded messages uses ${advertised?'the bounded lookup':'legacy history on an older server'}`,async({browser,baseURL},info)=>{
   const ids=await history(1,200),ordered=await orderedMessages(),oldest=ordered[0];
   await db.query('UPDATE member_direct_messages SET read_at=NULL WHERE message_id=$1',[oldest]);
-  const page=await member(browser,baseURL!),root=`/api/v1/me/conversations/${accounts[1].id}`,historyReads:number[]=[],receiptReads:string[][]=[];
+  const page=await member(browser,baseURL!,true),root=`/api/v1/me/conversations/${accounts[1].id}`,historyReads:number[]=[],receiptReads:string[][]=[];
   await page.route(url=>url.pathname===root+'/messages',async route=>{
     const response=await route.fetch(),body=await response.json();
     if(!advertised)delete body.receipt_lookup;
@@ -193,9 +196,11 @@ for(const advertised of [true,false])test(`one pending receipt in 200 loaded mes
   page.on('request',request=>{const url=new URL(request.url());if(request.method()==='GET'&&url.pathname===root+'/receipts')receiptReads.push((url.searchParams.get('message_ids')??'').split(','));});
   const panel=await openDirect(page);
   // Pause only after the genuine login and first thread render, not during initial Suspense.
-  await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
+  await page.clock.pauseAt(new Date(Date.now()+1000));
   for(let count=40;count<=200;count+=20){await older(page).click();await expect(panel.locator('.messages-bubbles li')).toHaveCount(count);}
   await allMessages(page,ids);const draft=panel.locator('.messages-compose textarea');await draft.fill('回條核對保留草稿');
+  // Loaded rows remain visible during a quiet receipt refresh; exclude that refresh from the manual-read baseline.
+  await expect(reread(page)).toHaveAttribute('aria-disabled','false');
   const historyBefore=historyReads.length,receiptBefore=receiptReads.length;
   const completedRead=page.waitForResponse(response=>{const url=new URL(response.url());return advertised?url.pathname===root+'/receipts':url.pathname===root+'/messages'&&url.searchParams.get('offset')==='180';});
   await reread(page).click();await (await completedRead).finished();await expect(reread(page)).toHaveAttribute('aria-disabled','false');
@@ -213,7 +218,7 @@ for(const advertised of [true,false])test(`one pending receipt in 200 loaded mes
 test('a held receipt lookup cannot apply its late failure to a newly selected peer',async({browser,baseURL})=>{
   await history();const oldest=(await orderedMessages())[0];await db.query('UPDATE member_direct_messages SET read_at=NULL WHERE message_id=$1',[oldest]);
   await history(1,1,2);
-  const page=await member(browser,baseURL!),panel=await openDirect(page);await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
+  const page=await member(browser,baseURL!,true),panel=await openDirect(page);await page.clock.pauseAt(new Date(Date.now()+1000));
   await older(page).click();await expect(panel.locator('.messages-bubbles li')).toHaveCount(25);
   const entered=signal(),released=signal(),finished=signal();releaseHeld.push(released.resolve);
   await page.route(url=>url.pathname===`/api/v1/me/conversations/${accounts[1].id}/receipts`,async route=>{
@@ -234,7 +239,7 @@ test('retraction during a receipt lookup still refreshes older content and its q
   await db.query('UPDATE member_direct_messages SET body=$2,read_at=NULL WHERE message_id=$1',[original,privateBody]);
   await db.query(`INSERT INTO member_direct_messages(message_id,community_id,sender_ref,recipient_ref,body,reply_to_message_id,created_at,read_at)
     VALUES($1,$2,$3,$4,'合成：引用仍保留',$5,timestamptz '2026-09-01T00:00:01.500Z',now())`,[reply,DEMO_COMMUNITY,accounts[1].id,accounts[0].id,original]);ids.push(reply);
-  const page=await member(browser,baseURL!),panel=await openDirect(page);await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
+  const page=await member(browser,baseURL!,true),panel=await openDirect(page);await page.clock.pauseAt(new Date(Date.now()+1000));
   await older(page).click();await expect(panel.locator(`[data-message-id="${reply}"]`)).toContainText(privateBody);
   const entered=signal(),released=signal(),finished=signal();releaseHeld.push(released.resolve);
   await page.route(url=>url.pathname===`/api/v1/me/conversations/${accounts[1].id}/receipts`,async route=>{

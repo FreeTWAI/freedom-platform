@@ -82,17 +82,18 @@ test('EXIF orientation, transparent small images, and invalid replacement preser
 
 test('external link thumbnails accept normal photos and replacements use the same automatic preparation', async ({page}) => {
   await login(page); await page.keyboard.press('Escape');
-  await page.locator('.social-composer-start').getByRole('button', {name: '分享外部連結', exact: true}).click();
-  const dialog = page.getByRole('dialog', {name: '分享外部連結', exact: true});
+  await page.locator('.social-composer-start').getByRole('button', {name: '建立貼文', exact: true}).click();
+  await page.getByRole('checkbox', {name: '加入連結預覽（選填）', exact: true}).check();
+  const dialog = page.getByRole('dialog', {name: '建立貼文', exact: true});
   const title = `E2E 連結原始照片 ${Date.now()}`;
-  await dialog.getByLabel('連結', {exact: true}).fill(`https://example.org/photo-${Date.now()}`);
-  await dialog.getByLabel('標題（選填）').fill(title);
+  await dialog.getByLabel('預覽連結', {exact: true}).fill(`https://example.org/photo-${Date.now()}`);
+  await dialog.getByLabel('預覽標題（選填）').fill(title);
   const photo = {name: 'large.png', mimeType: 'image/png', buffer: await sharp({create: {width: 2400, height: 1600, channels: 3, background: '#2a6f4b'}}).png({compressionLevel: 0}).toBuffer()};
   const sizes: Promise<number>[] = [];
   page.on('response', response => {const request = response.request(); if (request.method() === 'PUT' && request.url().includes('/thumbnail')) sizes.push(request.allHeaders().then(headers => Number(headers['content-length'])));});
-  await dialog.getByLabel('縮圖（選填，會自動調整大小）').setInputFiles(photo);
-  await expect(dialog.getByText('已選擇：large.png')).toBeVisible();
-  await dialog.getByRole('button', {name: '分享貼文', exact: true}).click();
+  await dialog.getByLabel('貼文圖片（選填）').setInputFiles(photo);
+  await expect(dialog.getByRole('img', {name: '待發布圖片預覽'})).toBeVisible();
+  await dialog.getByRole('button', {name: '發布貼文', exact: true}).click();
   await expect(dialog).toBeHidden(); await selectSocialFeed(page, '全部動態');
   const card = page.locator('.social-card').filter({has: page.getByRole('heading', {name: title, exact: true})});
   await expect(card.locator('img.social-thumb')).toHaveJSProperty('naturalWidth', 640);
@@ -109,7 +110,9 @@ test('dense photos are reduced to the upload budget and oversized or animated he
   const noisy = await sharp(randomFillSync(Buffer.alloc(1400 * 1400 * 3)), {raw: {width: 1400, height: 1400, channels: 3}}).png().toBuffer();
   await picker.setInputFiles({name: 'detail.png', mimeType: 'image/png', buffer: noisy});
   const preview = composer.getByRole('img', {name: '待發布圖片預覽'});
-  await expect(preview).toBeVisible();
+  // Dense noise can require several async encodes; wait for the actual preview,
+  // not a five-second performance target. Keep the overall test budget unchanged.
+  await expect(preview).toBeVisible({timeout: 15_000});
   expect(await preview.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeLessThan(1400);
   const sent = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/social-posts/notes'));
   await composer.getByRole('button', {name: '發布貼文', exact: true}).click();

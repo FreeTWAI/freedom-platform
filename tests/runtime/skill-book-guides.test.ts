@@ -1,3 +1,4 @@
+import {matchesSkillBookUse,skillBookUses,skillBookUseMap} from '../../modules/community/discovery-portal/skill-book-uses.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {communityCatalog,skillBooksForGuild} from '../../modules/community/catalog.js';
@@ -86,4 +87,24 @@ test('covers accept catalog or granted-book identities and star links stay on an
   const source={repository_url:'https://github.com/FreeTWAI/claude-skill-social-post',upstream_url:'https://github.com/Hao0321/claude-skill-social-post'};
   assert.equal(skillBookStarUrl(source),source.upstream_url);
   for(const upstream_url of ['https://github.com.evil.invalid/owner/repo','https://token@github.com/owner/repo','javascript:alert(1)','https://github.com/owner/repo/issues','https://github.com:8443/owner/repo'])assert.equal(skillBookStarUrl({...source,upstream_url}),null);
+});
+
+
+test('content uses are explicit, multi-valued and independent of business categories',()=>{
+  assert.deepEqual(skillBookUses,['文字','圖片','影片','語音','系統架構']);
+  for(const [id,uses] of Object.entries(skillBookUseMap)){
+    assert.ok(skillBookGuides[id],`mapped ID ${id} must have a pinned guide`);
+    assert.equal(new Set(uses).size,uses.length);
+    for(const use of uses)assert.ok(skillBookUses.includes(use));
+  }
+  assert.ok(matchesSkillBookUse('video-to-podcast-toolkit','影片'));
+  assert.ok(matchesSkillBookUse('video-to-podcast-toolkit','語音'));
+  assert.ok(matchesSkillBookUse('social-post','文字'));
+  assert.ok(matchesSkillBookUse('agent-kit','系統架構'));
+  assert.equal(matchesSkillBookUse('social-post','內容與行銷'),false);
+  assert.equal(matchesSkillBookUse('photo-border-remover','語音'),false);
+  for(const id of [undefined,'unknown-image-video-voice','constructor','__proto__','career-guide']){
+    assert.equal(matchesSkillBookUse(id,''),true);
+    for(const use of skillBookUses)assert.equal(matchesSkillBookUse(id,use),false);
+  }
 });

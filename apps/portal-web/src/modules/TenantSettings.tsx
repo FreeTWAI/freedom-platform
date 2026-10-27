@@ -1,46 +1,21 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent } from 'react';
-import type { InstanceCapabilitiesInput, InvitationView, InviteRole, MemberView, RecoveryCaseView, TenantView, TransferView, WorkspaceView } from '../../../../contracts/guild-launchpad/v1/tenant';
+import type { InvitationView, InviteRole, MemberView, RecoveryCaseView, TenantView, TransferView, WorkspaceView } from '../../../../contracts/guild-launchpad/v1/tenant';
 import { ApiError, type PortalClient } from '../api';
 import type { SessionPayload } from '../types';
 import { TenantSelector, roleLabel } from './TenantSelector';
+import { TenantMembersSection } from './TenantMembersSection';
+import { grantsForRole, removedGrants, type RoleChange } from './tenant-member-grants';
 import './tenant-workspaces.css';
 
 type Page<T> = { items: T[]; next_cursor: string | null; source_version: string };
 type Attempt = { key: string; path: string; body: unknown; ifMatch?: string; tenantId: string | null; notice?: string };
 type DirectoryPerson = { user_id: string; nickname: string };
 type AfterRole = TransferView['from_role_after'];
-type RoleChange = { member: MemberView; role: InviteRole; removed: InstanceCapabilitiesInput };
 const INVITE_ROLES = ['admin', 'operator', 'viewer'] as const;
 const AFTER_ROLES = ['admin', 'operator', 'viewer', 'revoked'] as const;
 const AFTER_LABEL: Record<AfterRole, string> = { admin: '管理員', operator: '操作者', viewer: '檢視者', revoked: '已撤銷' };
 const TRANSFER_HOURS = [1, 6, 24] as const;
 const UNRESOLVED_ALERT = '上一個操作的結果還在確認。請先按「再確認一次」，或重新送出原本的操作。';
-const WORK_PERMISSION_LABELS: Record<string, string> = {
-  'work:read': '讀取', 'work:create': '建立', 'work:write': '編輯', 'work:archive': '封存', 'work:result.write': '上傳成果',
-};
-
-function grantsForRole(member: MemberView, role: InviteRole): InstanceCapabilitiesInput {
-  if (role === 'admin') return [];
-  return member.instance_capabilities.map(grant => ({
-    instance_id: grant.instance_id,
-    capabilities: grant.capabilities.filter(key => role === 'operator' || key.endsWith(':read')),
-  })).filter(grant => grant.capabilities.length > 0);
-}
-
-function removedGrants(member: MemberView, next: InstanceCapabilitiesInput): InstanceCapabilitiesInput {
-  return member.instance_capabilities.map(grant => ({
-    instance_id: grant.instance_id,
-    capabilities: grant.capabilities.filter(key => !next.some(entry => entry.instance_id === grant.instance_id && entry.capabilities.includes(key))),
-  })).filter(grant => grant.capabilities.length > 0);
-}
-
-function grantSummary(grants: MemberView['instance_capabilities']) {
-  return grants.filter(grant => grant.capabilities.length > 0).map(grant => {
-    const moduleName = grant.capabilities.some(key => key.startsWith('work:')) ? '人工工作 ' : '';
-    return `${moduleName}…${grant.instance_id.slice(-6)}：${grant.capabilities.map(key => WORK_PERMISSION_LABELS[key] ?? key).join('、')}`;
-  }).join('；');
-}
-
 function attemptSlot(tenantId: string | null) { return tenantId ?? ''; }
 function sameRequest(attempt: Attempt, path: string, body: unknown, ifMatch?: string) {
   return attempt.path === path && JSON.stringify(attempt.body) === JSON.stringify(body) && attempt.ifMatch === ifMatch;
@@ -643,29 +618,8 @@ export function TenantSettings({ client, session, enabled }: { client: PortalCli
         <label className="field">新工作區名稱<input value={newWorkspace} maxLength={120} required onChange={event => setNewWorkspace(event.target.value)}/></label>
         <div className="actions"><button className="btn btn-ghost" type="submit">建立工作區</button></div>
       </form>}
-      <section className="stack" aria-label="成員">
-        <h2>成員</h2>
-        <ul className="stack tenant-rows">{members.map(member => <li key={member.principal_id} className="tenant-row">
-          <p>{member.display_name}・{roleLabel(member.role)}・{member.status === 'active' ? '使用中' : '已撤銷'}</p>
-          {grantSummary(member.instance_capabilities) && <p className="field-hint tenant-member-grants">{grantSummary(member.instance_capabilities)}</p>}
-          {canManage && member.status === 'active' && member.role !== 'owner' && member.principal_id !== tenant.my_membership.principal_id && <div className="actions tenant-member-actions">
-            <div className="field tenant-member-role">
-              <label htmlFor={`tenant-member-role-${member.principal_id}`}>角色</label>
-              <select id={`tenant-member-role-${member.principal_id}`} value={roleChange?.member.principal_id === member.principal_id ? roleChange.role : member.role} disabled={changingMember !== null} onChange={event => updateRole(member, event.target.value as InviteRole)}>
-                {inviteChoices.map(role => <option key={role} value={role}>{roleLabel(role)}</option>)}
-              </select>
-            </div>
-            <button type="button" className="btn btn-ghost" disabled={changingMember !== null} onClick={() => void changeMember(member, 'revoked')}>撤銷</button>
-          </div>}
-          {roleChange?.member.principal_id === member.principal_id && <section aria-label="確認角色變更" aria-live="polite">
-            <p>改為{roleLabel(roleChange.role)}將移除以下實例權限：{grantSummary(roleChange.removed)}。</p>
-            <div className="actions">
-              <button type="button" className="btn btn-ghost" disabled={changingMember !== null} onClick={() => void changeMember(roleChange.member, 'active', roleChange.role)}>確認變更</button>
-              <button type="button" className="btn btn-ghost" disabled={changingMember !== null} onClick={() => setRoleChange(null)}>取消</button>
-            </div>
-          </section>}
-        </li>)}</ul>
-      </section>
+      <TenantMembersSection members={members} tenant={tenant} canManage={canManage} changingMember={changingMember}
+        roleChange={roleChange} inviteChoices={inviteChoices} updateRole={updateRole} changeMember={changeMember} setRoleChange={setRoleChange}/>
       {canInvite && <form className="stack" onSubmit={event => void findPeople(event)}>
         <h2>邀請成員</h2>
         <label className="field">搜尋夥伴<input type="search" value={search} maxLength={80} onChange={event => setSearch(event.target.value)}/></label>
