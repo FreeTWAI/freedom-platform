@@ -1,3 +1,4 @@
+import './WorkbenchPanel.css'
 import React, { useCallback, useEffect, useState } from 'react'
 import { requireCursorPage, requireDashboard } from '../api'
 import { client, usePortal, describeError, isOwnRef, type ActionError, type PortalContextValue } from '../portal-session'
@@ -101,7 +102,7 @@ export function WorkbenchPanel() {
       <Section title="其他社群工作" description="未列在上方的社群工作；開放中的可直接認領。">
         <WorkItemList items={catalog} empty="目前沒有其他社群工作。你可以在頁尾發布一張，或載入較早的工作。" pending={pending} mutate={mutate} onChanged={load} />
         {pageError&&<p role="alert" className="banner banner-error">{pageError}</p>}
-        {nextCursor&&<div className="actions"><button type="button" className="btn btn-secondary btn-small" disabled={loadingMore} onClick={()=>void loadMore()}>{loadingMore?'正在載入…':'載入較早的社群工作'}</button></div>}
+        {nextCursor&&<div className="actions"><button type="button" className="btn btn-secondary btn-small workbench-load-more" disabled={loadingMore} onClick={()=>void loadMore()}>{loadingMore?'正在載入…':'載入較早的社群工作'}</button></div>}
       </Section>
 
       <Section title="待你回饋" description="只列出目前指派給你的項目。實際貢獻者不能審自己的提交。">

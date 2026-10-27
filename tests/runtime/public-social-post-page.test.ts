@@ -1,7 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {publicSocialPostHtml,unavailableSocialPostHtml} from '../../modules/community/public-social-post-page.js';
+import {publicPostCatalogResources,publicSocialPostHtml,unavailableSocialPostHtml} from '../../modules/community/public-social-post-page.js';
+import {communityCatalog} from '../../modules/community/catalog.js';
 import type {PublicSocialPostPage} from '../../modules/community/public-social-posts.js';
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from '../../apps/portal-web/src/modules/public-post-return.js';
 
@@ -28,6 +29,63 @@ test('post return accepts one UUID and keeps public reading, legacy member inten
 function page():PublicSocialPostPage{
   return {version:'a'.repeat(64),post:{post_id:id,kind:'note',title:'A "title" <tag>',note:'完整內文\n<script>alert(1)</script>\n'+('持續閱讀。'.repeat(120)),url:null,created_at:'2026-10-22T00:00:00.000Z',edited_at:null,author:{display_name:'作者 <img src=x>'},image_url:'/api/v1/public/shared-posts/'+id+'/image'},related:[{post_id:other,title:'另一則 <title>',summary:'這是公開摘要 <script>',author:{display_name:'另一位作者'},path:'/posts/'+other}]};
 }
+
+const origin='https://freetwai.com';
+const skillIds=['local-workspace-mcp','editkin','positioning-companion','freedom-party-guild-lounge'];
+const skillPath=(id:string)=>'/development/skills/'+id;
+
+test('public text resolves at most three distinct known catalog resources in mention order without forwarding share queries',()=>{
+  const note=`先試：${origin}${skillPath(skillIds[0])}?intro=17。\n${skillPath(skillIds[0])}\n[剪輯](${skillPath(skillIds[1])})\n「${origin}${skillPath(skillIds[2])}」\n${skillPath(skillIds[3])}`;
+  const resources=publicPostCatalogResources(note,origin);
+  assert.deepEqual(resources.map(item=>item.id),skillIds.slice(0,3));
+  assert.deepEqual(resources.map(item=>item.path),skillIds.slice(0,3).map(skillPath));
+  for(const item of resources)assert.equal(item.title,communityCatalog.skill_books.find(book=>book.id===item.id)!.title);
+  assert.equal(publicPostCatalogResources(skillPath(skillIds[0])+'.',origin).length,1);
+  assert.equal(publicPostCatalogResources('[Local Workspace MCP]('+skillPath(skillIds[0])+')',origin).length,1);
+  assert.equal(publicPostCatalogResources('http://127.0.0.1:4311'+skillPath(skillIds[0]),'http://127.0.0.1:4311').length,1);
+});
+
+test('resource parser rejects foreign, ambiguous, encoded, credential, protocol and unknown paths as whole tokens',()=>{
+  const path=skillPath(skillIds[0]);
+  for(const note of [
+    'https://elsewhere.test'+path,origin+'.evil.test'+path,origin+'@evil.test'+path,
+    'https://evil.test@freetwai.com'+path,'//freetwai.com'+path,'//'+path,
+    'javascript:'+path,'data:text/plain,'+path,'javascript:'+origin+path,
+    'https://evil.test/?next=('+path+')','https://evil.test/?next=['+path+']',
+    'https://evil.test/?next="'+path+'"','https://evil.test/?next=（'+path+'）',
+    'https://evil.test/?next=推薦：'+path,'https://evil.test/?next=[技能]('+path+')',
+    '[外站](https://evil.test/?next=('+path+'))',origin+'/?next=('+path+')',
+    origin+':443'+path,'http://freetwai.com'+path,origin+'\\'+path,
+    '/private/..'+path,'/development/skills/../skills/'+skillIds[0],
+    path+'/',path+'/SKILL.md',path+'%2fsecret',path+'%5csecret',path+'\\secret',
+    path.replace('/skills/','%2fskills%2f'),path.replace('local','%6cocal'),
+    '/development/skills/not-a-catalog-book','/development/submissions/'+id,
+    path+'?token=private',path+'?intro=1&token=private',path+'#private',path+'?intro=0',path+'?intro=1000',
+  ])assert.deepEqual(publicPostCatalogResources(note,origin),[],note);
+  for(const configured of ['javascript:alert(1)',origin+'/untrusted',origin+'?host=evil','https://user@freetwai.com','not an origin']){
+    assert.deepEqual(publicPostCatalogResources(origin+path,configured),[],configured);
+    assert.equal(publicPostCatalogResources(path,configured).length,1,'safe root-relative reference remains local');
+  }
+});
+
+test('resource HTML is escaped, no-JS and body-only; it neither claims authorship nor exposes a new public list',()=>{
+  const source=page(),book=communityCatalog.skill_books.find(item=>item.id===skillIds[0])!,title=book.title;
+  source.post.note=`我的用法 <script>alert(1)</script>\n${origin}${skillPath(book.id)}?intro=7`;
+  try{
+    book.title='資源 <img src=x onerror="alert(1)"> & 原作';
+    const html=publicSocialPostHtml(source,origin,true);
+    assert.ok(html.includes('href="'+skillPath(book.id)+'"'));
+    assert.ok(html.includes('資源 &lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; 原作'));
+    assert.ok(html.includes('原作與授權見資源頁'));assert.ok(html.includes('登入回原貼文交流'));
+    assert.ok(html.includes('留言依原有會員資格開放'));assert.ok(html.includes('content="noindex,nofollow"'));
+    assert.ok(!html.includes('href="'+skillPath(book.id)+'?'));assert.ok(!html.includes('<img src=x'));
+    assert.ok(!html.includes('data-post-follow'));assert.ok(!html.includes('data-post-bookmark'));
+  }finally{book.title=title;}
+  source.post.note='沒有提到技能資源';source.post.title=origin+skillPath(book.id);source.post.url=origin+skillPath(book.id);
+  source.related[0].summary=skillPath(book.id);
+  assert.ok(!publicSocialPostHtml(source,origin,false).includes('class="catalog-resources"'));
+  assert.ok(!unavailableSocialPostHtml(id).includes('catalog-resources'));
+});
 
 test('server HTML provides complete escaped content, real same-origin login paths, public OG and external scripts without JavaScript',()=>{
   const source=page(),html=publicSocialPostHtml(source,'https://freetwai.com',true);

@@ -79,3 +79,75 @@ test('NEWBIE-003 blocked storage stays usable and reports that progress cannot p
   await page.getByRole('button',{name:'下一題',exact:true}).click();
   await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[1].q);
 });
+
+// Use the real main.tsx theme imports and persisted profiles, not an isolated CSS fixture.
+async function expectNewbieActionColors(action:import('@playwright/test').Locator,focused=false){
+  const observed=await action.evaluate(element=>{
+    const style=getComputedStyle(element);
+    function luminance(value:string){
+      const parts=value.match(/[\d.]+/g)!.map(Number);
+      if(parts.length>3&&parts[3]!==1)throw Error('Expected opaque action colors');
+      const rgb=parts.slice(0,3).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+      return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+    }
+    function ratio(a:string,b:string){const values=[luminance(a),luminance(b)].sort((x,y)=>x-y);return (values[1]+.05)/(values[0]+.05);}
+    return {text:ratio(style.color,style.backgroundColor),focus:ratio(style.outlineColor,style.backgroundColor),
+      outline:style.outlineStyle,width:parseFloat(style.outlineWidth),opacity:Number(style.opacity),
+      focusVisible:element.matches(':focus-visible'),height:element.getBoundingClientRect().height};
+  });
+  // Disabled controls are exempt from WCAG text contrast. These checks concern
+  // their uncomposited theme colors and retained disabled styling, not a WCAG claim.
+  expect(observed.text).toBeGreaterThanOrEqual(4.5);
+  expect(observed.height).toBeGreaterThanOrEqual(44);
+  if(await action.isDisabled())expect(observed.opacity).toBeLessThan(1);
+  else expect(observed.opacity).toBe(1);
+  if(focused){expect(observed.focusVisible).toBe(true);expect(observed.outline).not.toBe('none');expect(observed.width).toBeGreaterThanOrEqual(2);expect(observed.focus).toBeGreaterThanOrEqual(3);}
+}
+async function expectNewbieActions(page:import('@playwright/test').Page){
+  const actions=page.locator('.newbie-village .btn');
+  expect(await actions.count()).toBeGreaterThanOrEqual(9);
+  for(const action of await actions.all()){
+    await action.scrollIntoViewIfNeeded();await expect(action).toBeVisible();await expectNewbieActionColors(action);
+    if(await action.isEnabled()){
+      await action.hover();await expectNewbieActionColors(action);
+      await action.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');
+      await expect(action).toBeFocused();await expectNewbieActionColors(action,true);
+    }
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+}
+for(const profile of ['light','dark','versefolk','guide-dragon','guide-ai-sister'])test(`NEWBIE-004 actual ${profile} actions retain contrast across quiz, results and disabled states`,async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(value=>localStorage.setItem('freedom-theme',value),profile);
+  await page.goto('/#newbie-village');
+  await expect(page.locator('html')).toHaveAttribute('data-experience-profile',profile);
+  await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[0].q);
+  const quiz=page.locator('#nv-quiz');
+  await expect(quiz.getByRole('button',{name:'上一題',exact:true})).toBeDisabled();
+  await expect(quiz.getByRole('button',{name:'下一題',exact:true})).toBeDisabled();
+  await expectNewbieActions(page);
+  await quiz.locator('input').first().check();
+  const next=quiz.getByRole('button',{name:'下一題',exact:true});
+  await expect(next).toBeEnabled();await expectNewbieActionColors(next);await next.hover();await expectNewbieActionColors(next);
+  await next.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');await expect(next).toBeFocused();await expectNewbieActionColors(next,true);
+  await next.press('Enter');await expect(quiz.locator('legend')).toHaveText(QUESTIONS_V2[1].q);
+  const previous=quiz.getByRole('button',{name:'上一題',exact:true});await expect(previous).toBeEnabled();await expectNewbieActionColors(previous);
+  await previous.click();await expect(quiz.locator('legend')).toHaveText(QUESTIONS_V2[0].q);
+  // Complete real UI flow; no production data, fabricated server result or storage bypass.
+  for(let i=0;i<15;i++){
+    await quiz.locator('input').first().check();
+    const advance=quiz.getByRole('button',{name:i===14?'查看結果':'下一題',exact:true});
+    await expectNewbieActionColors(advance);await advance.click();
+  }
+  await expect(page.getByRole('heading',{name:'我的定位草稿',exact:true})).toBeVisible();
+  await page.locator('#nv-card').getByLabel('過生活底線',{exact:true}).fill('合成測試：每週三小時');
+  await page.locator('#nv-card').getByLabel('第一週行動',{exact:true}).fill('合成測試：寫一份筆記');
+  await page.locator('#nv-checkin textarea').fill('合成測試回顧');
+  await expect(page.getByRole('button',{name:'複製方向卡草稿',exact:true})).toBeVisible();
+  await expectNewbieActions(page);
+  await page.setViewportSize({width:320,height:640});await expectNewbieActions(page);
+  // Reset remains the existing local-only action and restores real disabled states.
+  await page.getByRole('button',{name:'清除本機作答與進度',exact:true}).click();
+  await expect(quiz.locator('legend')).toHaveText(QUESTIONS_V2[0].q);
+  await expect(quiz.getByRole('button',{name:'下一題',exact:true})).toBeDisabled();
+});

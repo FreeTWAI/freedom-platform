@@ -8,7 +8,13 @@
 
 本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=b14916ccd75cff70bcd4ba979088ddd8c3d88583 release.staging=b14916ccd75cff70bcd4ba979088ddd8c3d88583 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=274f0614208552e73c734108e73494503cf30c66 release.staging=274f0614208552e73c734108e73494503cf30c66 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+截至2026-10-26 13:49 UTC，兩環境S11 `274f0614`／schema189發布完成：技能書用途篩選、社群／公會操作修補、搜尋帶詞、站內助手、測試員地圖與新手村；任務進度／勳章僅本機。無migration，旗標與 `36bec661`／189下限不變；shared路徑未啟用。依owner決定無發布備份，nightly已重綁但10/27首次自然備份未觀察；production公開smoke14項通過，會員UX與M1／完整計畫仍未驗收。詳見[本次發布收據](../unified-foundation/rollout-main-274f0614-2026-10-26.json)及[現況快照](../unified-foundation/current-state.json)。
+
+### 2026-10-26 05:13 歷史發布
+
+以下保留S10當時觀察；最新部署以上方S11收據為準。
 
 截至2026-10-26 05:13 UTC，兩環境已部署 `b14916cc`／schema189，接續 `1f7aee36`；會員取得手機導覽收合與改名、公會目錄主題篩選／符合數量、公會管理用途說明／討論優先與頁內收合保留草稿，以及活動首次載入期間的提交gate。HostedStore拆區無預期行為變更；#1038 shared Actions已合併但release／backup未啟用，本次用本機Q5；checkout／交易Email仍OFF，storefront焦點修補沒有開放新購物流程，既有授權訂單路徑未驗。無migration，188列ledger及 `36bec661`／189回退下限、28設定／37 vars／路由／cron不變。詳見[本次發布收據](../unified-foundation/rollout-main-b14916cc-2026-10-26.json)及[現況快照](../unified-foundation/current-state.json)。
 

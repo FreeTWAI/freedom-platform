@@ -6,6 +6,7 @@ import { CommunityHistory } from './CommunityHistory';
 import {MemberContributionOutcomes,WorkContributionRoles} from './ContributionOutcomes';
 import {appendTaskItems,createTaskRead} from './task-board-loading';
 import './MemberExperience.css';
+import './TaskBoardPanel.css';
 
 type Project = {project_id:string;title:string;goal:string;repository_url:string;repository_full_name:string};
 type Issue = {number:number;title:string;url:string;labels:string[];assignees:string[]};
@@ -137,7 +138,7 @@ function TaskBoardContent({client,onNavigate}: Props) {
       <div className="experience-heading"><h2>工坊工作</h2><span>{page?`${visibleWorks.length} 件`:(loading?'讀取中':error?'暫時無法讀取':'—')}</span></div>
       {visibleWorks.length?<div className="experience-grid">{visibleWorks.map(item=><article className="card experience-card" key={item.work_item_id}><div className="experience-card-head"><div><span className="experience-kicker">{item.state==='open'?'開放認領':item.state==='accepted'?'已驗收':'認領中'}</span><h3>{item.title}</h3></div></div><p className="multiline-text">{item.objective}</p><p><strong>參與收穫：</strong><span className="multiline-text">{item.gain}</span></p><p className="muted">認領期限：{formatIsoLocal(item.claim_window_expires_at)}</p><WorkContributionRoles client={client} workItemId={item.work_item_id} onChanged={()=>setOutcomeRevision(value=>value+1)}/><div className="experience-actions"><button className="btn btn-primary" type="button" onClick={()=>onNavigate('workbench')}>{item.state==='open'?'查看並認領':'查看工作紀錄'}</button></div></article>)}</div>:page&&!loading&&!error&&!pageError&&!composing&&<p className="empty">目前沒有符合條件的工坊工作。</p>}
       {pageError&&<p role="alert" className="banner banner-error">{pageError}已載入的工作仍保留，可以重試。</p>}
-      {nextCursor&&<div className="actions"><button type="button" className="btn btn-secondary btn-small" disabled={loading||loadingMore||composing} onClick={loadMore}>{loadingMore?'正在載入…':pageError?'重試載入較早的工坊工作':'載入較早的工坊工作'}</button></div>}
+      {nextCursor&&<div className="actions"><button type="button" className="btn btn-secondary btn-small task-board-load-more" disabled={loading||loadingMore||composing} onClick={loadMore}>{loadingMore?'正在載入…':pageError?'重試載入較早的工坊工作':'載入較早的工坊工作'}</button></div>}
     </section>
     <section className="stack" aria-label="GitHub 共創專案" aria-busy={projectLoading}>
       <div className="experience-heading"><h2>GitHub 共創 Issue</h2><span>以原專案為準</span></div>

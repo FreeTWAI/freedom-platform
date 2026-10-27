@@ -10,6 +10,19 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-26 main 274f0614 發布完成（搜尋、導覽助手與本機任務）
+
+截至13:49 UTC，兩環境已由S10 `b14916cc` 更新為S11 `274f0614`／schema189；見[發布收據](rollout-main-274f0614-2026-10-26.json)。
+技能書加入用途／分類篩選；社群統一文字／連結發文，改善失敗重試、舊讀覆蓋與未知結果確認；公會公告及操作保留原意圖並隔離遲到回應。
+功能搜尋可帶詞進社群搜尋；新增確定性站內導覽助手、測試員地圖與新手村；進度／勳章僅本機，非XP或正式驗收，無同步／排行榜。
+六個first-parent merges為 #1076／#1079／#1078／#1085／#1087／#1090；shared工具已合併但未啟用，本次由本機Q6發布。
+Main Verify 40323233554 attempt1的17 jobs、CodeQL 40323233590的3 jobs成功；READ ONLY ledger188列、schema189與 `36bec661`／189回退下限不變，無migration。
+27旗標加contact retention `all`共28設定、各37 vars不變；checkout／交易Email仍OFF，兩個tester quest旗標僅文件、未設定。
+Owner原話：「部署流程不要去管備份了. 我們平常有備份就好 + github 本來就有版本的概念, 搞什麼」；本次無before／after備份或backup gate，每日備份為資料復原點、Git為程式復原點。
+Timers維持active；deploy／dispatcher步驟拒絕03:00–05:45Z及backup service active。Nightly重綁 `14279926`→`c723ae3d`→`476945eb`，10/27約03:34Z／04:33Z首次S11自然備份尚未觀察。
+兩環境首試部署成功；production公開smoke14項通過、health首試符合；admin為Access302，僅驗精確來源CSP，未觀察live admin Worker CSP。
+Kit follow-up容量中斷後同session續跑；會員UX、真人手機／Safari、第二操作者、live rollback、原168項與T-047未驗項保留。
+
 ## 2026-10-26 main b14916cc 發布完成（導覽、公會與活動載入）
 
 截至05:13 UTC，兩環境已部署 `b14916cc`／schema189，接續 `1f7aee36`／189；完整證據見[發布收據](rollout-main-b14916cc-2026-10-26.json)。
