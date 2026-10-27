@@ -3,6 +3,66 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {transformSync} from 'esbuild';
+import {parseDishInit,parseDishView,parseDishReply,nextDishView} from '../../apps/portal-web/src/games/cooking/dish-worker-protocol.js';
+import {newMarket} from '../../apps/portal-web/src/games/cooking/market-domain.js';
+
+test('UX-15f worker initialization validates bounded canvas, recipe and actual market snapshot',()=>{
+ // Structural protocol unit test only; this class is not native rendering evidence.
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'OffscreenCanvas');class Canvas{}
+ Object.defineProperty(globalThis,'OffscreenCanvas',{configurable:true,value:Canvas});
+ try{
+  const valid={version:1,kind:'init',owner:1,canvas:new Canvas(),recipe:'corn-dog',pixelRatio:1.5,snapshot:newMarket('corn-dog',42)};
+  assert.ok(parseDishInit(valid));assert.notEqual(parseDishInit(valid)?.snapshot,valid.snapshot);
+  for(const patch of [{version:2},{owner:NaN},{pixelRatio:Infinity},{pixelRatio:2},{recipe:'missing'},{canvas:{}},{snapshot:newMarket('steak-dinner',42)},{snapshot:{...valid.snapshot,portions:Array(17).fill({})}},{snapshot:null},{extra:true}])assert.equal(parseDishInit({...valid,...patch}),null);
+ }finally{if(previous)Object.defineProperty(globalThis,'OffscreenCanvas',previous);else Reflect.deleteProperty(globalThis,'OffscreenCanvas');}
+});
+
+test('UX-15f dish worker messages reject stale owners, sequences, unknown fields and nonfinite views',()=>{
+ const valid={version:1,kind:'view',owner:7,sequence:1,angle:-.12,zoom:1.38};
+ assert.deepEqual(parseDishView(valid,7,0),valid);
+ for(const patch of [{version:2},{owner:8},{sequence:0},{sequence:1.5},{angle:NaN},{angle:7},{zoom:.79},{zoom:1.71},{capture:true}])assert.equal(parseDishView({...valid,...patch},7,0),null);
+ assert.equal(parseDishView(valid,7,1),null);
+ const reply={version:1,kind:'ready',owner:7,sequence:0,stats:{calls:3,triangles:300,geometries:4,textures:2}};
+ assert.deepEqual(parseDishReply(reply,7),reply);assert.equal(parseDishReply(reply,8),null);
+ for(const stats of [{calls:1},{...reply.stats,textures:Infinity},{...reply.stats,calls:-1},{...reply.stats,secret:'no'}])assert.equal(parseDishReply({...reply,stats},7),null);
+ assert.equal(parseDishReply({...reply,extra:true},7),null);
+ assert.deepEqual(parseDishReply({version:1,kind:'failed',owner:7},7),{version:1,kind:'failed',owner:7});
+});
+
+test('UX-15f absolute dish view coalescing preserves clamp, turn and reset order',()=>{
+ let view=nextDishView({angle:0,zoom:1},'reset',0,'steak-dinner');assert.deepEqual(view,{angle:-.12,zoom:1.26});
+ view=nextDishView(view,'zoom',5,'steak-dinner');view=nextDishView(view,'zoom',-.2,'steak-dinner');assert.equal(view.zoom,1.5);
+ view=nextDishView(view,'turn',100,'steak-dinner');assert.ok(Math.abs(view.angle)<Math.PI*2);
+ assert.equal(nextDishView(view,'turn',NaN,'steak-dinner'),view);
+ assert.deepEqual(nextDishView(view,'reset',0,'rice-balls'),{angle:-.12,zoom:1.38});
+});
+
+test('UX-15f actual dish worker client has one bounded in-flight view and terminates stale owners',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/dish-preview-worker.ts',import.meta.url),'utf8').replaceAll('import.meta.url',JSON.stringify('https://example.test/assets/dish-preview-worker.js'));
+ const workers:any[]=[],canvases:any[]=[],module={exports:{} as any},timers=new Map<number,{fn:()=>void;ms:number}>();let timerId=0,throwPost=false;
+ class FakeWorker{onmessage:any;onerror:any;onmessageerror:any;messages:any[]=[];terminated=0;constructor(){workers.push(this);}postMessage(message:any){if(throwPost)throw Error('transfer failed');this.messages.push(message);}terminate(){this.terminated++;}}
+ class FakeCanvas{width=0;height=0;removed=0;setAttribute(){}transferControlToOffscreen(){return {};}remove(){this.removed++;}}
+ runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{module,exports:module.exports,require:()=>({nextDishView,parseDishReply}),Worker:FakeWorker,OffscreenCanvas:class{},HTMLCanvasElement:FakeCanvas,document:{createElement(){const c=new FakeCanvas();canvases.push(c);return c;}},URL,devicePixelRatio:4,setTimeout:(fn:()=>void,ms:number)=>{timers.set(++timerId,{fn,ms});return timerId;},clearTimeout:(id:number)=>timers.delete(id)});
+ let ready=0,lost=0,updates=0;const preview=module.exports.createDishPreview({append(){}},'steak-dinner',()=>ready++,()=>lost++,()=>updates++),worker=workers[0];
+ assert.equal(worker.messages.length,1);const owner=worker.messages[0].owner;assert.equal(worker.messages[0].pixelRatio,1.5);
+ const stats={calls:3,triangles:200,geometries:5,textures:4};
+ worker.onmessage({data:{version:1,kind:'ready',owner,sequence:0,stats}});assert.equal(ready,1);
+ preview.turn(.3);assert.equal(preview.pending(),true);for(let i=0;i<500;i++)preview.zoom(i%2?.02:-.03);preview.reset();preview.zoom(-.2);
+ assert.equal(worker.messages.length,2);const first=worker.messages[1];
+ worker.onmessage({data:{version:1,kind:'rendered',owner,sequence:first.sequence,stats}});
+ assert.equal(worker.messages.length,3);assert.equal(preview.pending(),true);assert.equal(worker.messages[2].zoom,1.06);assert.equal(worker.messages[2].angle,-.12);
+ worker.onmessage({data:{version:1,kind:'rendered',owner,sequence:worker.messages[2].sequence,stats}});assert.equal(worker.messages.length,3);assert.equal(updates,4);assert.equal(preview.pending(),false);
+ const late=worker.onmessage;preview.dispose();preview.dispose();late({data:{version:1,kind:'ready',owner,sequence:0,stats}});
+ assert.equal(worker.terminated,1);assert.equal(canvases[0].removed,1);assert.equal(ready,1);assert.equal(lost,0);
+ const other=module.exports.createDishPreview({append(){}},'rice-balls',()=>ready++,()=>lost++,()=>updates++),next=workers[1];
+ next.onmessage({data:{version:1,kind:'ready',owner,sequence:0,stats}});assert.equal(lost,1);assert.equal(next.terminated,1);other.turn(1);assert.equal(next.messages.length,1);
+ const stalled=module.exports.createDishPreview({append(){}},'rice-balls',()=>ready++,()=>lost++,()=>updates++),third=workers[2],thirdOwner=third.messages[0].owner;
+ third.onmessage({data:{version:1,kind:'ready',owner:thirdOwner,sequence:0,stats}});stalled.turn(.2);
+ assert.equal(timers.size,1);const deadline=[...timers.values()][0];assert.equal(deadline.ms,15000);const lateAck=third.onmessage;deadline.fn();
+ assert.equal(third.terminated,1);assert.equal(lost,2);assert.equal(timers.size,0);lateAck({data:{version:1,kind:'rendered',owner:thirdOwner,sequence:1,stats}});assert.equal(lost,2);
+ throwPost=true;assert.throws(()=>module.exports.createDishPreview({append(){}},'rice-balls',()=>{},()=>{},()=>{}),/transfer failed/);assert.equal(workers[3].terminated,1);assert.equal(canvases[3].removed,1);
+
+});
 import {GAMES,seconds} from '../../apps/portal-web/src/games/domain.js';
 import {beginStamps,cashDeck,challengeUrl,gradePhoto,newCash,newStamps,pause,photoPose,resume,RULES,seedOf,sortCash,stamp,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_KEY,HANDOFF_TTL,parseGameDraft,readGameDraft,saveGameDraft,clearGameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
