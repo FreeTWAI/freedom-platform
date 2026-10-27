@@ -1,9 +1,26 @@
 # 共用發布入口
 
-這個變更把選版、GitHub 權限檢查、環境憑證入口、發布紀錄與結果收據接到
-`Shared release` Actions，並串接資料庫／媒體備份、遠端讀回與隔離還原。
-完整發布 entry、OCI image 建置入口和自然備份 workflow 已接入原始碼，
-**尚未完成 hosted runner 的完整發布。** `plan` 成功只代表版本與 GitHub 權限通過，不能當作環境已準備好。
+一般程式發布使用 `releaseKind: independent`：preflight → migration（無待執行 SQL 時唯讀確認；有則走已核准交易）→ deploy → health → handoff。
+不等待日常備份、不執行發布前後的 dump／遠端讀回／隔離還原，也不需要備份 DB 憑證。
+日常 `Shared backup` 保留每日 **05:43 UTC**、完整備份／讀回／還原／清理與獨立收據。
+GitHub 版本歷史只保存程式，不能當作資料庫備份。
+
+已核准 main 的待執行 migration 使用原 immutable catalog／SQL policy、交易執行器、lease、ledger prefix、
+COMMIT intent 與確認後 floor；不要求新備份。DDL 是資料變更，不能當作可逆程式更新；
+破壞性 SQL 仍須在來源審查中明確評估，未知 COMMIT 結果停止且不自動重試／回滾。
+跨環境 Actions concurrency 與 DB advisory lease 保留，正在執行的備份或 migration 不會被取消。
+舊 journal 仍依原七階段 replay；新 `release-begin-v2` 保留四個 journal stages；有 migration 時確認 COMMIT 即更新 schema floor，
+無 migration 時先完成唯讀檢查才建立 journal，健康查核後完成發布。
+
+若前次備份留下 BEGIN-only journal，可在 deploy 選填 `recover_backup_run_id`。
+這只允許可信、已結束的失敗收據證明尚未進入 capture，且 journal 沒有任何 intent；
+持有同一 lease 後重新查 Worker、原 floor／ledger／material policy、GC OFF、零 deletion fences
+及沒有目前維護角色的 capture backend，才 append abandonment，保留原失敗。
+這不是備份成功，也不執行新備份。capture／archive／migration／deploy intent 或任何不確定狀態仍拒絕。
+尚未確認 live run 的 journal 符合此條件，不可據此聲稱現場已恢復。
+
+以下安裝紀錄為具日期的歷史觀察；新 controller 與新 digest-pinned image 都須通過審查／CI 並安裝，
+本補丁及本機測試不表示已部署。`plan`、`check` 成功也不表示已發布。
 
 2026-10-26 安裝進度：兩環境的 account-owned Cloudflare token、原始 floor／config
 與私人 image 已安裝；[staging 唯讀查核](https://github.com/FreeTWAI/freedom-platform/actions/runs/40276457566)
