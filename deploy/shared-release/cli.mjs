@@ -6,13 +6,15 @@ import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitIn
   requireStaging, requireLegacyPredecessor, requireRelease } from './admission.mjs';
 import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
-import { checkEnvironment } from './environment-check.mjs';
+import { checkEnvironment, checkFlagDecisions } from './environment-check.mjs';
+import { MAX_FLAG_CHANGES, readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const publicError = error => typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)
   ? error.code : 'release_operation_failed';
 
-export async function main(env = process.env, { api: suppliedApi, executeOperator = runOperator } = {}) {
+export async function main(env = process.env, { api: suppliedApi, executeOperator = runOperator,
+  controllerRoot = fileURLToPath(new URL('../../', import.meta.url)) } = {}) {
   const output = resolve(env.PUBLIC_RECEIPT_DIRECTORY ?? 'release-public');
   await mkdir(output, { recursive: true, mode: 0o700 });
   const receipt = { format: 'freedom.shared-release/v1', status: 'rejected', startedAt: new Date().toISOString(),
@@ -24,6 +26,13 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     api = suppliedApi ?? githubClient(env.GH_TOKEN);
     const admission = await admitRelease(request, api);
     Object.assign(receipt, { ...admission, format: 'freedom.shared-release/v1', status: 'admitted' });
+    const flagDecisions = readFlagDecisions({ sourceRoot: resolve(request.mode === 'deploy' && env.RELEASE_COMMAND === 'execute'
+      ? env.RELEASE_SOURCE_DIRECTORY ?? 'source' : controllerRoot),
+    sourceSha: admission.sourceSha });
+    // Only plan lacks a live comparison. Accumulated decisions that already
+    // match live must not consume the change budget in check/deploy.
+    receipt.flagChanges = request.mode === 'plan' ? plannedFlagChanges(flagDecisions, request.target) : [];
+    receipt.flagChangesObservation = 'not_checked';
     if (env.RELEASE_COMMAND === 'admit') {
       if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT,
         `source_sha=${admission.sourceSha}\ntarget=${admission.target}\nmode=${admission.mode}\n`);
@@ -33,7 +42,11 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       return;
     }
     if (request.mode === 'check') {
-      receipt.environmentCheck = await checkEnvironment(env, request.target);
+      receipt.environmentCheck = await checkEnvironment(env, request.target, { flagDecisions });
+      if (receipt.environmentCheck.flagChangesObservation === 'live') {
+        receipt.flagChanges = publicFlagChanges(receipt.environmentCheck.flagChanges);
+        receipt.flagChangesObservation = 'live';
+      }
       receipt.environmentReadiness = 'read_only_checks_only';
       receipt.providerOutcome = 'no_mutations';
       receipt.status = receipt.environmentCheck.status === 'passed' ? 'checks_passed' : 'checks_failed';
@@ -44,6 +57,10 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     const installation = admitInstallation(env);
     receipt.operatorImage = installation.image;
     receipt.configSha256 = installation.configSha256;
+    if (Object.keys(flagDecisions.targets[request.target] ?? {}).length > MAX_FLAG_CHANGES) {
+      receipt.flagChanges = await checkFlagDecisions(env, request.target, flagDecisions);
+      receipt.flagChangesObservation = 'live';
+    }
     const recoveryEvidence = admission.recoverRunId ? await requireFailedBackup(api, admission, installation) : undefined;
     if (recoveryEvidence) receipt.backupReconciliation = recoveryEvidence;
     receipt.stagingEvidence = await requireStaging(api, admission, installation);
@@ -95,6 +112,8 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
       onProgress: async phases => {
         receipt.operatorProgress = phases;
+        const flags = phases.find(phase => phase.flagChanges)?.flagChanges;
+        if (flags) { receipt.flagChanges = publicFlagChanges(flags); receipt.flagChangesObservation = 'live'; }
         await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
         if (phases[0]?.name === 'preflight' && phases[0].reportedStatus === 'passed') await createDeployment();
         const current = phases.at(-1);
@@ -107,6 +126,8 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
         ...(request.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID,
           stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}),
       } });
+    const flags = receipt.phases.find(phase => phase.name === 'deploy')?.flagChanges;
+    if (flags) { receipt.flagChanges = publicFlagChanges(flags); receipt.flagChangesObservation = 'live'; }
     // Fast runs may finish before the periodic progress reader observes preflight.
     await createDeployment();
     receipt.providerOutcome = 'release_confirmed';
@@ -133,6 +154,8 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
         + `- Requested by: ${receipt.original.login}; run by: ${receipt.triggeredBy.login}\n` : '')
       + `- Provider outcome: \`${receipt.providerOutcome}\`\n`
       + (receipt.error ? `- Stopped: \`${receipt.error}\`\n` : '')
+      + (receipt.flagChanges ? `- Flag comparison: ${receipt.flagChangesObservation} (plan null means unobserved)\n`
+        + receipt.flagChanges.map(change => `- ${change.name}: ${change.from ?? 'null'} → ${change.to}; ${change.record}\n`).join('') : '')
       + (receipt.environmentReadiness === 'not_checked' ? '- Plan only: environment/operator readiness has not been checked.\n' : '')
       + (receipt.environmentCheck ? '\n' + receipt.environmentCheck.checks.map(item => `- ${item.name}: ${item.status}`
         + (item.error ? ` (${item.error}${item.httpStatus ? ', HTTP ' + item.httpStatus : ''})` : '')).join('\n')

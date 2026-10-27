@@ -94,7 +94,7 @@ export async function buildApplication({ sourceRoot, sourceSha, sourceTree, work
   const assets = await directoryDigest(join(app, 'apps/portal-web/dist'));
   check(assets.records.some(row => row.path === 'index.html'), 'release_build_index_missing');
   const source = parseJsonc(await readFile(join(app, 'wrangler.jsonc'), 'utf8'));
-  const config = renderWorkerConfig({ target, source, sourceRoot: app, sourceSha, before });
+  const { config, bindingsSha256, flagChanges } = renderWorkerConfig({ target, source, sourceRoot: app, sourceSha, before });
   const configPath = join(root, 'wrangler.dry-run.json'), bundle = join(root, 'worker');
   await writeFile(configPath, JSON.stringify(config) + '\n', { mode: 0o600, flag: 'wx' });
   await invoke(process.execPath, ['/opt/freedom/node_modules/wrangler/bin/wrangler.js', 'deploy', '--dry-run',
@@ -106,7 +106,7 @@ export async function buildApplication({ sourceRoot, sourceSha, sourceTree, work
     packageLockSha256: createHash('sha256').update(await readFile(join(app, 'package-lock.json'))).digest('hex'),
     builtAt: new Date().toISOString(), providerMutation: false };
   await writeFile(join(root, 'built.json'), JSON.stringify(receipt) + '\n', { mode: 0o600, flag: 'wx' });
-  return { ...receipt, root: app, source, async assertUnchanged() {
+  return { ...receipt, root: app, source, bindingsSha256, flagChanges, async assertUnchanged() {
     signal.throwIfAborted(); await verifyApplicationSource(app, sourceSha, sourceTree, { untracked: false });
     check((await directoryDigest(join(app, 'apps/portal-web/dist'))).sha256 === assets.sha256
       && (await directoryDigest(bundle)).sha256 === worker.sha256, 'release_build_outputs_changed');
