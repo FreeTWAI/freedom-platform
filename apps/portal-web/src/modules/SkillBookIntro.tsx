@@ -12,6 +12,7 @@ import {client} from '../portal-session';
 import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';
 import {StorefrontBookUsage} from './SkillBookUsage';
 import {isStorefrontReading} from './skill-book-commerce-references';
+import {SkillInstall} from './SkillInstall';
 
 export type IntroBook={id?:string;book_id?:string;title:string;description:string;summary_override?:string;repository_url:string;fork_url?:string|null;introduction_url?:string|null;upstream_url?:string;source_commit?:string|null;license_status?:string;guide?:SkillBookGuide;cover_url?:string;star_url?:string;official_guild_keys?:string[]};
 export function httpsLink(value?:string|null){
@@ -49,6 +50,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
         {upstream&&<p className="field-hint">{guide?.author_name&&<>來源標示的{guide.credit_role??'作者'}：{guide.author_name} · </>}原作：{source?.hostname==='github.com'?source.pathname.slice(1):upstream}</p>}
         {guide&&/^[0-9a-f]{40}$/.test(guide.source_commit)&&<p className="field-hint">指南閱讀版本：<code>{guide.source_commit.slice(0,12)}</code> · 核對日期：{guide.reviewed_at}</p>}
         <div className="actions skill-intro-primary-actions">{guide&&<button type="button" className="btn btn-primary" aria-controls={`${id}-practice`} onClick={()=>{if(practice.current){practice.current.open=true;practice.current.scrollIntoView({block:'start'});practice.current.querySelector('summary')?.focus();}}}>開始練習 ↓</button>}{upstream&&<a className={`btn ${guide?'btn-ghost':'btn-primary'}`} href={upstream} target="_blank" rel="noopener noreferrer">開啟原作 ↗</a>}{website&&<a className="btn btn-ghost" href={website} target="_blank" rel="noopener noreferrer">前往作者網站 ↗</a>}{reading&&<a className="btn btn-ghost" href={reading} target="_blank" rel="noopener noreferrer">閱讀技能書 ↗</a>}</div>
+        {open&&bookId&&book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<SkillInstall key={bookId} bookId={bookId}/>}
         {guide&&<><div className="skill-intro-outcome"><p className="eyebrow">練習成果</p><p className="skill-intro-example">{guide.first_result}</p></div>
           <details ref={practice} id={`${id}-practice`} className="skill-intro-details skill-intro-start" open><summary>練習與設定</summary><div className="stack"><section><h3>準備</h3><ul>{guide.prerequisites.map(item=><li key={item}>{item}</li>)}</ul></section><section><h3>練習</h3><ol>{guide.first_steps.map(step=><li key={step}>{step}</li>)}</ol></section>{guide.quickstart&&<section className="stack"><h3>啟動指令</h3><p className="field-hint">{guide.quickstart.context}</p><pre ref={quickstartCode} tabIndex={-1} className="skill-intro-command"><code>{guide.quickstart.commands}</code></pre>{open&&<QuickstartCopy key={guide.quickstart.commands} commands={guide.quickstart.commands} onSelect={()=>{
               const element=quickstartCode.current,selection=window.getSelection();
