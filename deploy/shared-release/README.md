@@ -196,6 +196,12 @@ Operator 取得原共用 DB lease 後，再讀回未變更的 Worker、ledger、
 
 ## 執行與失敗處理
 
+發布紀錄的 GET 遇到網路／逾時、HTTP 429 或 500／502／503／504 時最多讀取三次，
+每次仍受原 30 秒期限與 DB lease 限制；等待有上限，lease 中斷即停止。
+完整鏈、digest、大小與權威檢查保留，認證拒絕、缺漏與內容不符不重試。
+公開失敗碼區分讀取網路、逾時、限流與暫時不可用，不輸出原始錯誤或私有內容。
+這個讀取處理不重送 PUT，也不自動重做 migration 或部署；未知寫入結果仍先讀回對帳。
+
 workflow/controller 固定在 `job.workflow_sha`；應用程式使用所選版本的獨立 checkout。
 兩者都須位於 main 歷史。選版工作沒有環境 secrets。執行工作重新查 GitHub 權限與 CI，
 再使用該環境的設定。GitHub Deployment 明確登記所選應用版本，避免誤記為 controller 版本。

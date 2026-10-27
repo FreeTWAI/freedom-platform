@@ -1067,7 +1067,7 @@ async function controlFixture(t) {
   };
   const options = { accountId: 'a'.repeat(32), bucket: 'fixture-backups', target, epoch, seedSha256,
     token: 'synthetic-control-token', lease, fetchImpl };
-  return { directory, map, prefix, seedKey, seedSha256, options, store: createControlStore(options),
+  return { directory, map, prefix, seedKey, seedSha256, options, controller, store: createControlStore(options),
     setMode(value) { mode = value; }, puts() { return puts; } };
 }
 
@@ -1082,10 +1082,111 @@ test('external control journal pins its seed and validates every paginated prede
   assert.equal(f.puts(), 1);
   await assert.rejects(createControlStore({ ...f.options, seedSha256: 'f'.repeat(64) }).load(), /release_control_history_gap_or_fork/);
   const original = f.map.get(next.key); f.map.set(next.key, Buffer.from(original)); f.map.get(next.key)[20] ^= 1;
-  await assert.rejects(f.store.load(), /release_control_chain_read_failed/);
+  await assert.rejects(f.store.load(), /release_control_digest_mismatch/);
   f.map.set(next.key, original);
   f.map.set(f.prefix + 'records/00000001-' + 'f'.repeat(64) + '.json', original);
   await assert.rejects(f.store.load(), /release_control_history_gap_or_fork/);
+});
+
+test('control GET retries transient transport and HTTP failures with the same pinned bytes', async t => {
+  const f = await controlFixture(t); let reads = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) {
+      reads++;
+      if (reads === 1) throw new TypeError('synthetic private network details');
+      if (reads === 2) return new Response(null, { status: 503 });
+    }
+    return f.options.fetchImpl(url, options);
+  } });
+  const chain = await store.load();
+  assert.equal(chain.length, 1); assert.equal(chain[0].sha256, f.seedSha256);
+  assert.equal(reads, 3); assert.equal(f.puts(), 0);
+});
+
+test('control GET retries interrupted listing and record bodies within one shared budget', async t => {
+  const interrupted = () => new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new Uint8Array([123])); controller.error(new TypeError('synthetic private stream details'));
+  } }));
+  const f = await controlFixture(t); let lists = 0, reads = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (new URL(url).searchParams.has('prefix') && ++lists === 1) return interrupted();
+    if (url.endsWith(f.seedKey)) {
+      reads++;
+      if (reads === 1) throw new TypeError('synthetic network interruption');
+      if (reads === 2) return interrupted();
+    }
+    return f.options.fetchImpl(url, options);
+  } });
+  assert.equal((await store.load())[0].sha256, f.seedSha256);
+  assert.equal(lists, 2); assert.equal(reads, 3); assert.equal(f.puts(), 0);
+  reads = 0;
+  const failed = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; return interrupted(); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(failed.load(), /release_control_read_network_failed/);
+  assert.equal(reads, 3); assert.equal(f.puts(), 0);
+});
+
+for (const [status, code] of [[429, 'release_control_read_rate_limited'], [503, 'release_control_read_unavailable'],
+  [null, 'release_control_read_network_failed']]) {
+  test(`control GET exhausts a finite retry budget and retains ${code}`, async t => {
+    const f = await controlFixture(t); let reads = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      if (url.endsWith(f.seedKey)) {
+        reads++;
+        if (status === null) throw new TypeError('synthetic private network details');
+        return new Response(null, { status, headers: { 'retry-after': '0' } });
+      }
+      return f.options.fetchImpl(url, options);
+    } });
+    await assert.rejects(store.load(), error => error.message === code);
+    assert.equal(reads, 3); assert.equal(f.puts(), 0);
+  });
+}
+
+test('control GET distinguishes its deadline without retrying authorization or digest failures', async t => {
+  const f = await controlFixture(t);
+  for (const status of [401, 403, 404]) {
+    let reads = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      if (url.endsWith(f.seedKey)) { reads++; return new Response(null, { status }); }
+      return f.options.fetchImpl(url, options);
+    } });
+    await assert.rejects(store.load(), /release_control_read_failed/); assert.equal(reads, 1);
+  }
+  let reads = 0;
+  const corrupt = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; return new Response('corrupt'); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(corrupt.load(), /release_control_digest_mismatch/); assert.equal(reads, 1);
+  reads = 0;
+  const oversized = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; return new Response(Buffer.alloc(f.map.get(f.seedKey).length + 1)); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(oversized.load(), /release_cloudflare_response_limit/); assert.equal(reads, 1);
+  t.mock.method(AbortSignal, 'timeout', () => AbortSignal.abort(new DOMException('synthetic deadline', 'TimeoutError')));
+  reads = 0;
+  const timed = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) { reads++; options.signal.throwIfAborted(); }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(timed.load(), /release_control_read_timeout/); assert.equal(reads, 3); assert.equal(f.puts(), 0);
+});
+
+test('control GET stops its retry backoff when the release lease is lost', async t => {
+  const f = await controlFixture(t); let reads = 0, timer;
+  t.after(() => clearTimeout(timer));
+  const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+    if (url.endsWith(f.seedKey)) {
+      reads++; timer = setTimeout(() => f.controller.abort(Error('release_lease_lost')), 1);
+      return new Response(null, { status: 429, headers: { 'retry-after': '999999' } });
+    }
+    return f.options.fetchImpl(url, options);
+  } });
+  await assert.rejects(store.load(), /release_lease_lost/); assert.equal(reads, 1); assert.equal(f.puts(), 0);
 });
 
 test('control intent survives an unknown PUT and setup ownership loss submits zero PUTs', async t => {
