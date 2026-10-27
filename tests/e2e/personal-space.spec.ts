@@ -162,13 +162,14 @@ test('PERSONAL-SPACE-UI-12: per-card retry preserves page, other cards and scrol
   await login(page);await page.getByRole('button',{name:'下一頁',exact:true}).click();
   const failed=page.getByRole('article',{name:'貼文：我的創作 7',exact:true}),other=page.getByRole('article',{name:'貼文：我的創作 8',exact:true});
   const retry=failed.getByRole('button',{name:'再試一次',exact:true});await expect(retry).toBeVisible();await expect(other).toContainText('本人貼文正文 8');
-  await retry.scrollIntoViewIfNeeded();const before={scroll:await page.evaluate(()=>scrollY),reads:[...reads],inventory:inventoryReads};
+  await retry.scrollIntoViewIfNeeded();const before={scroll:await page.evaluate(()=>scrollY),height:await failed.evaluate(card=>card.getBoundingClientRect().height),reads:[...reads],inventory:inventoryReads};
   // Same-task native activations exercise the window before React commits disabled.
   await retry.focus();await retry.evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
   await expect(retry).toBeDisabled();await expect(retry).toHaveAttribute('aria-busy','true');await expect.poll(()=>attempts).toBe(2);
+  expect(await failed.evaluate(card=>card.getBoundingClientRect().height)).toBe(before.height);expect(await other.evaluate(card=>card.style.minHeight)).toBe('');
   await expect(other).toContainText('本人貼文正文 8');await expect(page.locator('.personal-space-pagination span')).toHaveText('第 2 / 2 頁');
   expect(await page.evaluate(()=>scrollY)).toBe(before.scroll);expect(reads).toEqual(before.reads);expect(inventoryReads).toBe(before.inventory);
-  release();await expect(failed).toContainText('本人貼文正文 7');await expect(failed.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();await expect(failed.getByRole('button',{name:'再試一次',exact:true})).toHaveCount(0);
+  release();await expect(failed).toContainText('本人貼文正文 7');await expect(failed.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();expect(await failed.evaluate(card=>card.style.minHeight)).toBe('');await expect(failed.getByRole('button',{name:'再試一次',exact:true})).toHaveCount(0);
   await expect(page.locator('.personal-space-pagination span')).toHaveText('第 2 / 2 頁');expect(reads).toEqual(before.reads);expect(inventoryReads).toBe(before.inventory);await expect.poll(()=>attempts).toBe(2);
  }finally{release();}
 });
@@ -210,7 +211,7 @@ test('PERSONAL-SPACE-UI-16: a repeated transient failure keeps keyboard retry av
  await synthetic(page,1);let attempts=0;
  await page.route(`**/api/v1/social-posts?post_id=${id(1)}`,route=>++attempts<=2?route.fulfill({status:503,json:{}}):route.fulfill({json:{items:[preview(1)]}}));
  await login(page);const card=page.getByRole('article',{name:'貼文：我的創作 1',exact:true}),retry=card.getByRole('button',{name:'再試一次',exact:true});
- await retry.focus();await page.keyboard.press('Enter');await expect.poll(()=>attempts).toBe(2);await expect(retry).toBeEnabled();await expect(retry).toBeFocused();
+ await retry.focus();await page.keyboard.press('Enter');await expect.poll(()=>attempts).toBe(2);await expect(retry).toBeEnabled();await expect(retry).toBeFocused();expect(await card.evaluate(element=>element.style.minHeight)).toBe('');
  await page.keyboard.press('Enter');await expect(card).toContainText('本人貼文正文 1');await expect(card.getByRole('link',{name:'開啟貼文與留言'})).toBeFocused();await expect.poll(()=>attempts).toBe(3);
 });
 
