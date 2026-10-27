@@ -19,8 +19,10 @@ export async function hashPasswordAsync(password:string) {
   const salt=randomBytes(16).toString('hex');return `${salt}:${(await derive(password,salt)).toString('hex')}`;
 }
 export async function verifyMemberPassword(q: PoolClient, userId: string, password: string): Promise<boolean> {
-  const user = (await q.query<{ password_hash: string; active: boolean }>('SELECT password_hash, active FROM users WHERE user_id=$1 FOR SHARE', [userId])).rows[0];
-  return matches(password, user?.active ? user.password_hash : unknownUserHash());
+  const user = (await q.query<{ password_hash: string | null; active: boolean }>('SELECT password_hash, active FROM users WHERE user_id=$1 FOR SHARE', [userId])).rows[0];
+  const eligible = Boolean(user?.active && user.password_hash);
+  const valid = await matches(password, eligible ? user!.password_hash! : unknownUserHash());
+  return eligible && valid;
 }
 async function matches(password: string, saved: string) {
   const [salt,expected] = saved.split(':');
@@ -34,7 +36,7 @@ let dummyHash: string | undefined;
 const unknownUserHash = () => dummyHash ??= `${randomBytes(16).toString('hex')}:${randomBytes(64).toString('hex')}`;
 // Absolute lifetime from login or registration; no sliding renewal (#107).
 export const SESSION_LIFETIME_SECONDS = 30*24*60*60;
-/** Used only after a password check or a locked, valid one-use mailbox proof. */
+/** Used only after a password check, locked one-use mailbox proof, or verified provider identity plus platform MFA. */
 export async function createMemberSession(q:PoolClient,user:Omit<Actor,'session_hash'|'csrf_token'>) {
   const token=randomBytes(32).toString('base64url'),csrf=randomBytes(32).toString('base64url');
   await q.query(`INSERT INTO sessions VALUES($1,$2,$3,now()+make_interval(secs=>$4),NULL)`,[tokenHash(token),user.user_id,csrf,SESSION_LIFETIME_SECONDS]);

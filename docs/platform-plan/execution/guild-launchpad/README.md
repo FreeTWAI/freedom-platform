@@ -6,9 +6,11 @@
 
 ## 目前狀態
 
+本分支另含預設關閉的 Google 身分候選 migration190；`repo_max_migration` 只反映來源上限，不代表正式套用、啟用登入或部署。下方具日期的 applied schema、release、旗標與驗收紀錄維持已合併 main 的原值。
+
 本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=274f0614208552e73c734108e73494503cf30c66 release.staging=274f0614208552e73c734108e73494503cf30c66 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=274f0614208552e73c734108e73494503cf30c66 release.staging=274f0614208552e73c734108e73494503cf30c66 flag.production=true flag.staging=true repo_max_migration=190 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 截至2026-10-26 13:49 UTC，兩環境S11 `274f0614`／schema189發布完成：技能書用途篩選、社群／公會操作修補、搜尋帶詞、站內助手、測試員地圖與新手村；任務進度／勳章僅本機。無migration，旗標與 `36bec661`／189下限不變；shared路徑未啟用。依owner決定無發布備份，nightly已重綁但10/27首次自然備份未觀察；production公開smoke14項通過，會員UX與M1／完整計畫仍未驗收。詳見[本次發布收據](../unified-foundation/rollout-main-274f0614-2026-10-26.json)及[現況快照](../unified-foundation/current-state.json)。
 

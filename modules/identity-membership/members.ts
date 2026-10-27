@@ -68,6 +68,15 @@ export async function registerMember(pool:Pool,raw:unknown,options:{communityId?
   await authRateLimit(pool,'registration-email',email,3);
   const passwordHash=await hashPasswordAsync(body.password);
   return transaction(pool,async q=>{
+    const user=await createRegisteredMember(q,{email,nickname,passwordHash,contacts:{...emptyContacts(),...body.contacts}},options);
+    const token=randomBytes(32).toString('base64url'),csrf=randomBytes(32).toString('base64url');
+    await q.query(`INSERT INTO sessions VALUES($1,$2,$3,now()+make_interval(secs=>$4),NULL)`,[tokenHash(token),user.user_id,csrf,SESSION_LIFETIME_SECONDS]);
+    return {token,actor:{...user,session_hash:tokenHash(token),csrf_token:csrf} as Actor};
+  });
+}
+/** Shared registration initializer: no session or provider/email ownership inference. */
+export async function createRegisteredMember(q:PoolClient,input:{email:string;nickname:string;passwordHash:string|null;contacts:ReturnType<typeof emptyContacts>},options:{communityId?:string;allowSingleCommunity:boolean}) {
+  const {email,nickname,passwordHash,contacts}=input;
     let communityId=options.communityId;
     if(communityId)z.uuid().parse(communityId);
     else {
@@ -79,13 +88,9 @@ export async function registerMember(pool:Pool,raw:unknown,options:{communityId?
     const user=(await q.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
       VALUES($1,$2,$3,$4,$5,$6,true) ON CONFLICT(email) DO NOTHING RETURNING user_id,community_id,email,display_name,profession_membership_ref,onboarding_required,onboarding_completed_at`,[randomUUID(),communityId,email,nickname,passwordHash,randomUUID()])).rows[0];
     requireCondition(user,409,'account_unavailable','無法使用這個註冊資料；已有帳號請登入。');
-    const contacts={...emptyContacts(),...body.contacts};
     await q.query('INSERT INTO member_accounts(user_id,community_id,contacts) VALUES($1,$2,$3)',[user.user_id,communityId,JSON.stringify(contacts)]);
     await ensureRegisteredPreferenceSet(q,communityId!,user.user_id);
-    const token=randomBytes(32).toString('base64url'),csrf=randomBytes(32).toString('base64url');
-    await q.query(`INSERT INTO sessions VALUES($1,$2,$3,now()+make_interval(secs=>$4),NULL)`,[tokenHash(token),user.user_id,csrf,SESSION_LIFETIME_SECONDS]);
-    return {token,actor:{...user,session_hash:tokenHash(token),csrf_token:csrf} as Actor};
-  });
+  return user;
 }
 async function ensureAccount(q:Pool|PoolClient,actor:Actor) {
   await q.query('INSERT INTO member_accounts(user_id,community_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[actor.user_id,actor.community_id]);
@@ -93,8 +98,8 @@ async function ensureAccount(q:Pool|PoolClient,actor:Actor) {
 export async function accountView(pool:Pool,actor:Actor) {
   return readWithMemberSession(pool,actor,async q=>{
     await ensureAccount(q,actor);
-    const row=(await q.query(`SELECT a.*,u.email,u.display_name,u.email_verified_at,u.created_at,u.created_at_source FROM member_accounts a JOIN users u USING(user_id) WHERE a.user_id=$1 AND a.community_id=$2`,[actor.user_id,actor.community_id])).rows[0];
-    return {user_id:row.user_id,nickname:row.display_name,identity_label:row.identity_label,joined_at:row.created_at?new Date(row.created_at).toISOString():null,joined_at_source:row.created_at_source,login_email:row.email,email_verified:Boolean(row.email_verified_at),contacts:Object.fromEntries(Object.entries(normalizedContacts(row.contacts,row.email)).map(([key,value])=>[key,{...value,verified:false}])),aggregate_version:row.aggregate_version,avatar:await avatarMetadata(q,actor)};
+    const row=(await q.query(`SELECT a.*,u.email,u.display_name,u.email_verified_at,(u.password_hash IS NOT NULL) AS has_password,u.created_at,u.created_at_source FROM member_accounts a JOIN users u USING(user_id) WHERE a.user_id=$1 AND a.community_id=$2`,[actor.user_id,actor.community_id])).rows[0];
+    return {user_id:row.user_id,nickname:row.display_name,identity_label:row.identity_label,joined_at:row.created_at?new Date(row.created_at).toISOString():null,joined_at_source:row.created_at_source,login_email:row.email,email_verified:Boolean(row.email_verified_at),has_password:row.has_password,contacts:Object.fromEntries(Object.entries(normalizedContacts(row.contacts,row.email)).map(([key,value])=>[key,{...value,verified:false}])),aggregate_version:row.aggregate_version,avatar:await avatarMetadata(q,actor)};
   });
 }
 export async function saveAccount(pool:Pool,input:Command) {

@@ -58,6 +58,7 @@
     "tests/e2e/connection-feedback-layout.spec.ts",
     "tests/e2e/local-action-feedback.spec.ts",
     "tests/e2e/page-tools-notification.spec.ts",
+    "apps/portal-web/src/modules/GoogleSignIn.tsx",
     "apps/portal-web/src/PlatformHelperHost.tsx",
     "tests/runtime/platform-helper-host.test.ts",
     "tests/runtime/platform-helper-host-observation.test.ts",
@@ -83,6 +84,8 @@
     "shared",
     "social-feed",
     "absurd-daily",
+    "google-identity",
+    "google-identity-ui",
     "platform-helper"
   ],
   "contract_families": [],

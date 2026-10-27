@@ -12,7 +12,7 @@ import { DAG_MIGRATIONS, LEGACY_MIGRATIONS, MIGRATION_V2_GUARD } from '../../../
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const NOW = 1790899200000;
-const CAPABILITIES = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1'];
+const CAPABILITIES = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1'];
 function fixture() {
   const scan = checkMigrations(join(ROOT, 'migrations'), loadManifest().database_defaults.migrations);
   const candidate = { source_sha: 'a'.repeat(40), artifact_sha256: 'b'.repeat(64) };
@@ -297,7 +297,7 @@ for (const source of ['enable_shapes', 'enabled_shapes', 'written_shapes', 'roll
     const f = fixture();
     const container = source === 'enable_shapes' ? f.input : source === 'rollback_floor_shapes' ? f.host : f.host.observation;
     container[source] = ['avatar.asset.v1', 'work.private-human-result.v1'];
-    f.host.release_records[0].capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
+    f.host.release_records[0].capabilities = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
     const result = evaluate(f);
     assert.equal(result.status, 'incompatible');
     for (const capability of ['avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1']) {
@@ -364,7 +364,7 @@ test('editorial and scoped-chat migrations preserve host approval and authority 
   assert.deepEqual(f.scan.ledger.filter(row => /^(112|113)_/.test(row.name)).map(row => row.name), ['112_member_card_editorial.sql', '113_chat_stickers_replies.sql']);
   const result = evaluate(f);
   assert.equal(result.status, 'compatible');
-  assert.deepEqual(result.required_capabilities, ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1']);
+  assert.deepEqual(result.required_capabilities, ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'identity.passwordless-null-safe.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1']);
   for (const field of ['deployment_authority', 'execution_authority', 'restore_proof']) assert.equal(result[field], false);
   for (const filename of ['112_member_card_editorial.sql', '113_chat_stickers_replies.sql']) {
     const renamed = fixture();
@@ -572,7 +572,7 @@ test('historical capability floor survives disabled/empty shapes for every mixed
     f.host.observation.active_releases = [other];
     f.host.release_records.push({ ...structuredClone(f.host.release_records[0]), ...other });
     f.host.rollback_floor.capabilities = ['work.server-policy.v1'];
-    f.host.release_records[missing === 'candidate' ? 0 : 1].capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1'];
+    f.host.release_records[missing === 'candidate' ? 0 : 1].capabilities = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1'];
     const result = evaluate(f); assert.equal(result.status, 'incompatible'); assert.equal(result.checked_releases, 2);
     assert.ok(result.issues.some(i => i.capability === 'work.server-policy.v1'));
   }
@@ -591,7 +591,7 @@ test('recovery comparison is exact beyond safe integers and increasing generatio
   assert.deepEqual(codes(evaluate(f)), ['historical_recovery_regression']);
   f.host.target.recovery_generation = f.host.observation.target.recovery_generation = '9007199254740994';
   f.host.rollback_floor.capabilities = ['work.server-policy.v1'];
-  f.host.release_records[0].capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1'];
+  f.host.release_records[0].capabilities = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1','work.explicit-wire.v1'];
   assert.ok(evaluate(f).issues.some(i => i.capability === 'work.server-policy.v1'));
   f.host.release_records[0].capabilities.push('work.server-policy.v1');
   assert.equal(evaluate(f).status, 'compatible'); assert.equal(evaluate(f).restore_proof, false);
@@ -1819,4 +1819,102 @@ for(const history of ['enable_shapes','enabled_shapes','written_shapes','rollbac
  f.host.rollback_floor.capabilities.push('commerce.hosted-drop-ship.v1');
  const prior=prefix(f.scan,188);f.host.observation.schema_ledger=prior.ledger;f.host.observation.schema_ledger_digest=prior.ledger_digest;f.host.release_records[0].schema_ledger_digests.push(prior.ledger_digest);
  assert.notEqual(evaluate(f).status,'compatible','retained consent cannot be served by a schema188 observation');
+});
+
+const NULL_SAFE_PASSWORD = 'identity.passwordless-null-safe.v1';
+function googleHostVersion(f, version) {
+  if (version === 'v3') {
+    f.host.schema = 'freedom.release-compatibility-host/v3';
+    f.host.migration_profile = { format: DAG_MIGRATIONS,
+      legacy: { format: LEGACY_MIGRATIONS, first: 1, last: Number(f.scan.ledger.at(-1).name.slice(0, 3)), known_gaps: [22] },
+      legacy_ledger: structuredClone(f.scan.ledger) };
+  }
+  return f;
+}
+for (const version of ['v2', 'v3']) {
+  test(`schema190 ${version} exact approved NULL-safe source is compatible without enabling Google`, () => {
+    const f = googleHostVersion(fixtureAt(190), version), result = evaluate(f);
+    assert.equal(f.scan.ledger.at(-1).name, '190_google_identity.sql');
+    assert.equal(result.status, 'compatible'); assert.deepEqual(result.issues, []);
+    assert.deepEqual(result.required_shapes, []);
+    assert(result.required_capabilities.includes(NULL_SAFE_PASSWORD));
+    for (const field of ['deployment_authority','execution_authority','restore_proof']) assert.equal(result[field], false);
+  });
+  for (const missing of ['candidate', 'active']) test(`schema190 ${version} rejects ${missing} without NULL-safe capability with Google off`, () => {
+    const f = googleHostVersion(fixtureAt(190), version);
+    const active = { source_sha: 'c'.repeat(40), artifact_sha256: 'd'.repeat(64) };
+    f.host.observation.active_releases = [active];
+    f.host.release_records.push({ ...structuredClone(f.host.release_records[0]), ...active, evidence_id: 'synthetic-old-active' });
+    assert.equal(evaluate(f).status, 'compatible');
+    const record = f.host.release_records[missing === 'candidate' ? 0 : 1];
+    record.capabilities = record.capabilities.filter(c => c !== NULL_SAFE_PASSWORD);
+    const result = evaluate(f); assert.equal(result.status, 'incompatible'); assert.equal(result.checked_releases, 2);
+    assert.deepEqual(result.required_shapes, []);
+    assert(result.issues.some(i => i.code === 'release_capability_missing' && i.capability === NULL_SAFE_PASSWORD && i.source_sha === record.source_sha));
+  });
+  test(`schema190 ${version} retained ledger cannot be erased by a schema189 restore and plan`, () => {
+    const f = fixtureAt(190), older = prefix(f.scan, 189);
+    f.host.rollback_floor.schema_ledger = structuredClone(f.scan.ledger);
+    f.host.rollback_floor.schema_ledger_digest = f.scan.ledger_digest;
+    f.scan = older; f.host.observation.schema_ledger = structuredClone(older.ledger);
+    f.host.observation.schema_ledger_digest = older.ledger_digest;
+    f.host.release_records[0].schema_ledger_digests = [older.ledger_digest];
+    f.host.release_records[0].capabilities = f.host.release_records[0].capabilities.filter(c => c !== NULL_SAFE_PASSWORD);
+    googleHostVersion(f, version);
+    const result = evaluate(f); assert.equal(result.status, 'incompatible');
+    assert(codes(result).includes('historical_schema_floor_mismatch'));
+    assert(result.required_capabilities.includes(NULL_SAFE_PASSWORD));
+    assert(result.issues.some(i => i.code === 'release_capability_missing' && i.capability === NULL_SAFE_PASSWORD));
+  });
+}
+test('schema189 alone does not require NULL-safe password capability', () => {
+  const f = fixtureAt(189);
+  f.host.release_records[0].capabilities = f.host.release_records[0].capabilities.filter(c => c !== NULL_SAFE_PASSWORD);
+  const result = evaluate(f); assert.equal(result.status, 'compatible');
+  assert(!result.required_capabilities.includes(NULL_SAFE_PASSWORD));
+});
+test('retained NULL-safe capability cannot be acknowledged with schema189 history', () => {
+  const f = fixtureAt(189); f.host.rollback_floor.capabilities = [NULL_SAFE_PASSWORD];
+  const result = evaluate(f); assert.equal(result.status, 'incompatible');
+  assert(result.issues.some(i => i.code === 'shape_schema_missing' && i.shape === NULL_SAFE_PASSWORD));
+  assert(result.issues.some(i => i.code === 'historical_shape_schema_missing' && i.shape === NULL_SAFE_PASSWORD));
+});
+test('planned190 cannot erase retained NULL-safe capability schema floor on observed189', () => {
+  const f = fixtureAt(190), older = prefix(f.scan, 189);
+  f.host.rollback_floor.capabilities = [NULL_SAFE_PASSWORD];
+  f.host.observation.schema_ledger = older.ledger; f.host.observation.schema_ledger_digest = older.ledger_digest;
+  f.host.release_records[0].schema_ledger_digests.push(older.ledger_digest);
+  const result = evaluate(f); assert.equal(result.status, 'incompatible');
+  assert(result.issues.some(i => i.code === 'historical_shape_schema_missing' && i.shape === NULL_SAFE_PASSWORD));
+});
+test('schema190 exact names and SQL/approval digests remain mandatory', () => {
+  const f = fixtureAt(190); f.host.release_records[0].schema_ledger_digests = [prefix(f.scan, 189).ledger_digest];
+  assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+  const changed = fixtureAt(190); changed.scan.ledger.at(-1).sha256 = 'd'.repeat(64);
+  changed.scan.ledger_digest = compatibilityLedgerDigest(changed.scan.ledger);
+  assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+  const renamed = fixtureAt(190); renamed.scan.ledger.at(-1).name = '190_unreviewed.sql';
+  renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
+  assert.deepEqual(codes(evaluate(renamed)), ['schema_unknown']);
+  const future = fixtureAt(190); future.scan.ledger.push({name: '191_unreviewed.sql', sha256: 'e'.repeat(64)});
+  future.scan.ledger_digest = compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)), ['schema_unknown']);
+});
+
+for (const missing of ['active', 'candidate']) test(`schema190 v3 mixed DAG refuses NULL-unsafe ${missing} without borrowing later node support`, () => {
+  const catalog = catalogs(), f = v3Fixture(catalog.ab, catalog.ab.ledger);
+  assert(legacyOf(f.scan).some(row => row.name === '190_google_identity.sql'));
+  assert(f.scan.ledger.some(row => row.name.startsWith('v2_')));
+  const active = { source_sha: 'e'.repeat(40), artifact_sha256: 'f'.repeat(64) };
+  f.host.observation.active_releases = [active];
+  f.host.release_records.push({ ...structuredClone(f.host.release_records[0]), ...active, evidence_id: 'synthetic-mixed-dag-active' });
+  assert.equal(evaluate(f).status, 'compatible');
+  const record = f.host.release_records[missing === 'candidate' ? 0 : 1];
+  record.capabilities = record.capabilities.filter(value => value !== NULL_SAFE_PASSWORD);
+  const result = evaluate(f);
+  assert.equal(result.status, 'incompatible'); assert.equal(result.checked_releases, 2);
+  assert.deepEqual(result.required_shapes, []);
+  assert(result.required_capabilities.includes(NULL_SAFE_PASSWORD));
+  assert(result.issues.some(issue => issue.code === 'release_capability_missing' && issue.capability === NULL_SAFE_PASSWORD && issue.source_sha === record.source_sha));
+  for (const flag of ['deployment_authority', 'execution_authority', 'restore_proof']) assert.equal(result[flag], false);
 });
