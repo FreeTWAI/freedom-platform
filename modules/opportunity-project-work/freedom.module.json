@@ -51,6 +51,8 @@
     "tests/e2e/journeys.spec.ts",
     "tests/e2e/core-services.spec.ts",
     "apps/portal-web/src/modules/WorkbenchPanel.tsx",
+    "apps/portal-web/src/modules/WorkbenchPanel.css",
+    "tests/runtime/workbench-appearance.test.ts",
     "apps/portal-web/src/modules/ShowcasePanel.tsx",
     "apps/portal-web/src/modules/EngagementPanel.tsx",
     "scripts/verify-guild-work.mjs",
