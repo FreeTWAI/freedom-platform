@@ -6,9 +6,11 @@
 
 ## 目前狀態
 
+個人頁隱私候選（Draft #1135）新增暫編 migration 190，僅更新 repository 程式碼最大編號；尚未合併或部署，不改變下列 operator 觀察、已套用 migration、旗標或驗收狀態。
+
 本次發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=274f0614208552e73c734108e73494503cf30c66 release.staging=274f0614208552e73c734108e73494503cf30c66 flag.production=true flag.staging=true repo_max_migration=189 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=274f0614208552e73c734108e73494503cf30c66 release.staging=274f0614208552e73c734108e73494503cf30c66 flag.production=true flag.staging=true repo_max_migration=190 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 截至2026-10-26 13:49 UTC，兩環境S11 `274f0614`／schema189發布完成：技能書用途篩選、社群／公會操作修補、搜尋帶詞、站內助手、測試員地圖與新手村；任務進度／勳章僅本機。無migration，旗標與 `36bec661`／189下限不變；shared路徑未啟用。依owner決定無發布備份，nightly已重綁但10/27首次自然備份未觀察；production公開smoke14項通過，會員UX與M1／完整計畫仍未驗收。詳見[本次發布收據](../unified-foundation/rollout-main-274f0614-2026-10-26.json)及[現況快照](../unified-foundation/current-state.json)。
 
