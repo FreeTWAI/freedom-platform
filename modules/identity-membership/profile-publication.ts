@@ -5,7 +5,7 @@ import {z} from 'zod';
 import {command,checkVersion,journal,type Command} from '../../packages/db/index.js';
 import {readWithMemberSession} from '../../packages/db/member-session.js';
 import {requireCondition} from '../../packages/shared/problem.js';
-import {ProfilePublicationInput,visitorProfile,MemberVisitorProfile,defaultProfileLayout} from '../../packages/shared/member-profile.js';
+import {ProfilePublicationInput,visitorProfile,ownerPublicationProfile,profileBlockVisible,MemberVisitorProfile,defaultProfileLayout} from '../../packages/shared/member-profile.js';
 import type {Actor} from './service.js';
 import {assertInteractionMember} from './blocks.js';
 
@@ -18,7 +18,7 @@ const fields=`p.display_name,p.bio,p.links,p.layout,${profileCoverProjectionSql}
 export async function profilePublicationSettings(q:Query,actor:Actor){
   await assertInteractionMember(q,actor);
   const row=(await q.query(`SELECT p.visibility,${fields},p.include_cover,p.cover_version::text AS cover_version,p.aggregate_version FROM member_profile_publications p WHERE p.user_id=$1 AND p.community_id=$2`,[actor.user_id,actor.community_id])).rows[0];
-  return row?{visibility:row.visibility,...visitorProfile(row),include_cover:row.include_cover,cover_version:row.cover_version,aggregate_version:String(row.aggregate_version)}:{visibility:'private',display_name:'',bio:'',links:[],avatar_url:null,layout:structuredClone(defaultProfileLayout),cover:null,include_cover:false,cover_version:null,aggregate_version:null};
+  return row?{visibility:row.visibility,...ownerPublicationProfile(row),include_cover:row.include_cover,cover_version:row.cover_version,aggregate_version:String(row.aggregate_version)}:{visibility:'private',display_name:'',bio:'',links:[],avatar_url:null,layout:structuredClone(defaultProfileLayout),cover:null,include_cover:false,cover_version:null,aggregate_version:null};
 }
 export async function saveProfilePublication(pool:Pool,input:Command){
   const body=ProfilePublicationInput.parse(input.body);
@@ -60,8 +60,9 @@ export async function memberVisitorProfile(q:Query,actor:Actor,rawId:string,opti
     WHERE ${memberProfileAuthoritySql()}`,[actor.community_id,actor.user_id,id])).rows[0];
   requireCondition(row,404,'profile_not_found','找不到可閱讀的個人空間。');
   const self=Boolean(row.is_self),state=row.friendship_state??'none';
-  const badge=certificationEnabled?certificationBadge(row.certification_state,row.show_community_certification):undefined,title=socialEnabled?titleProjection(row.social_title_id):null;
-  return MemberVisitorProfile.parse({profile:visitorProfile(row),...(badge?{community_certification:badge}:{}),...(title?{social_achievement:title}:{}),actions:{is_self:self,
+  const profile=visitorProfile(row),showRecognition=profileBlockVisible(profile,'recognition');
+  const badge=certificationEnabled&&showRecognition?certificationBadge(row.certification_state,row.show_community_certification):undefined,title=socialEnabled&&showRecognition?titleProjection(row.social_title_id):null;
+  return MemberVisitorProfile.parse({profile,...(badge?{community_certification:badge}:{}),...(title?{social_achievement:title}:{}),actions:{is_self:self,
     friendship:{state,requester_ref:row.requester_ref??null,aggregate_version:row.friendship_version===null||row.friendship_version===undefined?null:String(row.friendship_version)},
     can_request:!self&&(state==='none'||state==='removed'),can_accept:!self&&state==='pending'&&row.requester_ref===id,can_message:!self}});
 }

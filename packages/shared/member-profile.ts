@@ -46,8 +46,22 @@ export function canReadVisitorProfile(input:{visibility:ProfileVisibilityValue;o
   if(input.anonymous)return input.visibility==='public';
   return input.viewerReady&&input.sameCommunity&&(input.self||(!input.blocked&&input.visibility!=='private'));
 }
-export function visitorProfile(row:{display_name:string;bio:string;links:unknown;layout?:unknown;cover?:unknown}):VisitorProfileData{
+type PublicationRow={display_name:string;bio:string;links:unknown;layout?:unknown;cover?:unknown};
+/** Owner-only editable snapshot. Hidden values must survive settings reads and saves. */
+export function ownerPublicationProfile(row:PublicationRow):VisitorProfileData{
   return VisitorProfile.parse({display_name:row.display_name,bio:row.bio,links:row.links,avatar_url:null,layout:row.layout,cover:row.cover??null});
+}
+export function profileBlockVisible(profile:VisitorProfileData,id:z.infer<typeof ProfileBlockId>):boolean{
+  return profile.layout.blocks.some(block=>block.id===id&&block.visible);
+}
+/** Visitor responses omit hidden content, not merely its rendered elements.
+ * Keep the bounded DTO shape with empty values; never mutate the stored/owner snapshot. */
+export function visitorProfile(row:PublicationRow):VisitorProfileData{
+  const profile=ownerPublicationProfile(row);
+  if(!profileBlockVisible(profile,'about'))profile.layout.about='';
+  if(!profileBlockVisible(profile,'featured'))profile.layout.featured=[];
+  if(!profileBlockVisible(profile,'links'))profile.links=[];
+  return profile;
 }
 /** Authenticated-only envelope. Never used by the anonymous route. */
 export const MemberVisitorProfile=z.object({profile:VisitorProfile,community_certification:z.object({kind:z.literal('community_certification'),label:z.literal('社群認證'),description:z.literal(CERTIFICATION_DESCRIPTION)}).strict().optional(),social_achievement:z.object({title_id:z.string().regex(/^(chat|participation)_(1|7|30|90|365)$/),label:z.string().min(1).max(30),policy_version:z.literal('social_days_v1'),description:z.string().max(200)}).strict().optional(),actions:z.object({

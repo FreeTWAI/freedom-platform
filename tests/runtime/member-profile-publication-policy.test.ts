@@ -40,3 +40,18 @@ test('raw controls and normalized overlong URLs are rejected before public text 
  assert.equal(ProfilePublicationInput.safeParse({...body,links:[{label:'網站',url:'https://example.test/path?q=one#section'}]}).success,true);
  assert.equal(ProfilePublicationInput.parse({...body,display_name:'  literal <script>  '}).display_name,'literal <script>','text remains literal; React rendering must escape, not interpret markup');
 });
+
+test('visitor projection removes every hidden block payload without mutating owner-editable values',()=>{
+ const source={display_name:'public identity',bio:'public short bio',links:[{label:'link marker',url:'https://example.test/link-marker'}],
+  layout:{...structuredClone(defaultProfileLayout),about:'about marker',featured:[{title:'featured marker',description:'description marker',url:'https://example.test/featured-marker'}]},cover:{version:'2',generation:'3'}};
+ for(let mask=0;mask<16;mask++){
+  const input=structuredClone(source);input.layout.blocks.forEach((block,index)=>{block.visible=Boolean(mask&(1<<index));});
+  const before=structuredClone(input),value=visitorProfile(input);
+  assert.equal(value.layout.about,mask&1?source.layout.about:'');
+  assert.deepEqual(value.layout.featured,mask&2?source.layout.featured:[]);
+  assert.deepEqual(value.links,mask&4?source.links:[]);
+  assert.equal(value.display_name,source.display_name);assert.equal(value.bio,source.bio);assert.deepEqual(value.cover,source.cover);
+  assert.deepEqual(input,before,'projection must not erase hidden values in a reused owner snapshot');
+  const {cover,...editable}=input;assert.deepEqual(ProfilePublicationInput.parse({...editable,visibility:'members'}).layout,input.layout,'input/save contract retains hidden values');
+ }
+});

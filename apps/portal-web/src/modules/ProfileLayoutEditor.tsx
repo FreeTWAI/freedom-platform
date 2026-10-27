@@ -18,7 +18,7 @@ export function ProfileLayoutEditor({value,onChange,disabled}:{value:ProfileLayo
    </div>)}
    {value.featured.length<6&&<button type="button" className="btn btn-secondary btn-small" onClick={()=>update({featured:[...value.featured,{title:'',description:'',url:''}]})}>新增精選作品</button>}
   </div></details>
-  <details><summary className="profile-editor-summary">顯示哪些區塊、先後順序</summary><p className="hint">勾選要顯示的區塊，再用上移、下移調整。沒有內容的區塊不會顯示。</p><ol className="profile-block-order">
+  <details><summary className="profile-editor-summary">顯示哪些區塊、先後順序</summary><p className="hint">勾選要給訪客看的區塊，再用上移、下移調整。儲存後，這個個人頁不會把未勾選區塊的內容傳給訪客，自己仍可在這裡編輯。顯示名稱、一句話介紹與已選封面不受這些勾選影響。</p><ol className="profile-block-order">
    {value.blocks.map((block,index)=><li key={block.id}><label><input type="checkbox" checked={block.visible} onChange={event=>update({blocks:value.blocks.map(item=>item.id===block.id?{...item,visible:event.target.checked}:item)})}/>{profileBlockLabels[block.id]}</label><button type="button" className="btn btn-secondary btn-small" disabled={disabled||index===0} aria-label={`上移${profileBlockLabels[block.id]}`} onClick={()=>onChange(moveProfileBlock(value,block.id,-1))}>上移</button><button type="button" className="btn btn-secondary btn-small" disabled={disabled||index===value.blocks.length-1} aria-label={`下移${profileBlockLabels[block.id]}`} onClick={()=>onChange(moveProfileBlock(value,block.id,1))}>下移</button></li>)}
   </ol><p className="hint">稱號和社群認證須在<a href="#account">帳號設定</a>另外同意展示；只會向符合個人頁隱私規則的登入會員顯示。認證不代表管理員審核過每段介紹與連結。</p></details>
  </fieldset>;

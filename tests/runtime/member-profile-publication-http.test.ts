@@ -75,3 +75,41 @@ test('revoked or not-consented certification cannot project through an admitted 
   assert.equal(result.community_certification,undefined);assert.equal(result.social_achievement,undefined);
  }
 });
+
+test('public HTTP and member visitor envelopes withhold hidden payloads, including self view',async()=>{
+ const source={...row,links:[{label:'private-link-marker',url:'https://example.test/private-link-marker'}],
+  layout:{...structuredClone(defaultProfileLayout),about:'private-about-marker',featured:[{title:'private-work-marker',description:'private-description-marker',url:'https://example.test/private-work-marker'}]},
+  certification_state:'active',show_community_certification:true,social_title_id:'chat_7'};
+ const actor={community_id:'community',user_id:id} as any;
+ for(let mask=0;mask<16;mask++){
+  const current=structuredClone(source);current.layout.blocks.forEach((block,index)=>{block.visible=Boolean(mask&(1<<index));});
+  const q={query:async()=>({rows:[current]})};const app=new Hono();registerPublicMemberProfiles(app as any,{pool:q} as any);
+  const response=await app.request('/api/v1/public/member-profiles/'+id,{headers:{Cookie:'session=ignored'}});
+  assert.equal(response.status,200);const anonymous=await response.json();
+  assert.equal(anonymous.layout.about,mask&1?source.layout.about:'');assert.deepEqual(anonymous.layout.featured,mask&2?source.layout.featured:[]);assert.deepEqual(anonymous.links,mask&4?source.links:[]);
+  assert.equal('community_certification' in anonymous,false);assert.equal('social_achievement' in anonymous,false);
+  for(const self of [false,true]){
+   const member=await memberVisitorProfile({query:async()=>({rows:[{...current,is_self:self}]})} as any,actor,id,{communityCertificationEnabled:true,socialAchievementsEnabled:true});
+   assert.deepEqual(member.profile,anonymous);
+   assert.equal(Boolean(member.community_certification),Boolean(mask&8));assert.equal(Boolean(member.social_achievement),Boolean(mask&8));
+   const json=JSON.stringify(member);if(!(mask&1))assert(!json.includes('private-about-marker'));if(!(mask&2))assert(!json.includes('private-work-marker')&&!json.includes('private-description-marker'));if(!(mask&4))assert(!json.includes('private-link-marker'));if(!(mask&8))assert(!json.includes('chat_7')&&!json.includes('community_certification'));
+  }
+  assert.equal(current.layout.about,source.layout.about,'projection does not mutate owner storage');
+ }
+});
+
+test('owner settings and input round trip preserve hidden content while visitor projection remains empty',async()=>{
+ const {profilePublicationSettings}=await import('../../modules/identity-membership/profile-publication.js');
+ const {ProfilePublicationInput,ProfilePublicationSettingsSchema}=await import('../../packages/shared/member-profile.js');
+ const saved={...row,visibility:'members',links:[{label:'saved link',url:'https://example.test/saved'}],
+  layout:{...structuredClone(defaultProfileLayout),about:'saved hidden about',featured:[{title:'saved work',description:'kept',url:'https://example.test/work'}],blocks:defaultProfileLayout.blocks.map(block=>({...block,visible:false}))},
+  include_cover:false,cover_version:null,aggregate_version:7};
+ const calls:string[]=[];const q={query:async(sql:string)=>{calls.push(sql);return {rows:sql.includes(' AS ready ')?[{ready:true}]:[saved]};}};
+ const owner=ProfilePublicationSettingsSchema.parse(await profilePublicationSettings(q as any,{community_id:'community',user_id:id} as any));
+ assert.deepEqual(owner.layout,saved.layout);assert.deepEqual(owner.links,saved.links);assert.equal(owner.aggregate_version,'7');
+ assert.equal(calls.length,2);assert.match(calls[1],/p.user_id=\$1 AND p.community_id=\$2/);
+ const input=ProfilePublicationInput.parse({visibility:owner.visibility,display_name:owner.display_name,bio:owner.bio,links:owner.links,layout:owner.layout,include_cover:owner.include_cover,cover_version:owner.cover_version});
+ assert.deepEqual(input.layout,saved.layout);assert.deepEqual(input.links,saved.links);
+ const visitor=await publicVisitorProfile({query:async()=>({rows:[saved]})} as any,id);
+ assert.equal(visitor.layout.about,'');assert.deepEqual(visitor.layout.featured,[]);assert.deepEqual(visitor.links,[]);
+});

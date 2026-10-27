@@ -76,3 +76,18 @@ unconditionally mounted, so eventual deployment requires the integrated schema f
 Local pure/SSR/mock-HTTP checks are not a DB/privacy proof. Native browser, PostgreSQL,
 restricted-role grants and real concurrent races for customization remain `not_run` here;
 hosted checks of older ab8 text-only candidate are distinct evidence.
+
+
+## Hidden-block visitor data boundary
+
+A saved block with `visible=false` withholds that block's content from both anonymous
+and authenticated visitor JSON (including the owner's visitor view), not only rendering.
+The bounded response shape remains stable: hidden `about` becomes an empty string,
+`featured` and top-level `links` become empty arrays. Hidden `recognition` omits both
+member-envelope certification and social-title payloads; enabling the block still requires
+the existing independent feature flags, consent and award/review predicates.
+The owner-only settings endpoint retains the full saved content for editing and round trips;
+local draft preview never publishes it. Display name, short bio and explicitly selected
+cover are outside these four blocks and continue to follow the overall publication ACL.
+This does not retract previously received copies, change legacy directory/e-card visibility,
+or establish whole-platform privacy, deployment, actual PostgreSQL or native-browser evidence.
