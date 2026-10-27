@@ -3,6 +3,8 @@
 /.github/CODEOWNERS @teddashh @detna-vibe-coding
 /.github/workflows/ @teddashh @detna-vibe-coding
 /.github/actions/ @teddashh @detna-vibe-coding
+/deploy/shared-release/ @teddashh @detna-vibe-coding
+/deploy/cloudflare/test/shared-release.test.mjs @teddashh @detna-vibe-coding
 /.circleci/ @teddashh @detna-vibe-coding
 /scripts/ci/ @teddashh @detna-vibe-coding
 /scripts/runtime-full.mjs @teddashh @detna-vibe-coding

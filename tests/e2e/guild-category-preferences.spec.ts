@@ -355,6 +355,7 @@ test('the demo community keeps the legacy primary and secondary guild page', asy
   try {
     await navigate(session.page, '職業公會');
     await expect(session.page.getByRole('heading', {name: '主要與次要公會', exact: true})).toBeVisible();
+    await session.page.locator('.guild-tools-disclosure > summary').click();
     await expect(session.page.getByRole('button', {name: '設定次要公會', exact: true})).toBeVisible();
     await expect(session.page.getByRole('group', {name: '社群架構開發主力', exact: true})).toHaveCount(0);
   } finally {

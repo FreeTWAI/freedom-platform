@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import {test,expect,type Page} from './fixtures.js';
+import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
@@ -10,7 +10,9 @@ async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
   // photo round between clicks and starve keyboard actions on the other games.
   await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});
   await page.goto(`/play?game=${game}&seed=42`);
-  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+  // Functional synchronization allows the existing 15s product import bound;
+  // this is not a startup performance assertion. Never auto-retry a failed load.
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
   await page.getByRole('button',{name:game==='stamp'?'先蓋一張練習紙':'開始這一局',exact:true}).click();
 }
@@ -69,8 +71,11 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
 });
 
+// Hosted #1044 exhausted 120s after ~108s in the first 29 input/clock pairs.
+// Budget both full cash rounds for recovery/share assertions before teardown;
+// retain desktop rendering, real inputs, and all individual assertion deadlines.
 test('AD-5 sort exact million, recover denied storage, cancel system share, and hand off without a post',async({page})=>{
-  test.setTimeout(120_000);await openGame(page,'cash');const posts:string[]=[];
+  test.setTimeout(180_000);await openGame(page,'cash');const posts:string[]=[];
   page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
   await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
@@ -101,6 +106,37 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   expect(posts).toEqual([]);
 });
 
+test('AD-5 final cash capture failure retries the completed scene without replaying classification',async({page})=>{
+  test.setTimeout(180_000);await openGame(page,'cash');
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  const deck=cashDeck(42);
+  for(const card of deck.slice(0,29)){
+    await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');
+    await page.clock.fastForward(175);
+  }
+  await page.evaluate(()=>{
+    const original=HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL=function(...args){
+      if(this.width===960&&this.height===720&&args[0]==='image/jpeg'){
+        HTMLCanvasElement.prototype.toDataURL=original;
+        throw Error('Synthetic final capture failure');
+      }
+      return original.apply(this,args);
+    };
+  });
+  await page.keyboard.press(deck[29].valid?'ArrowRight':'ArrowLeft');
+  await expect(page.locator('.ad-notice')).toContainText('完成次數不會重算');
+  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 30 / 30');
+  await expect(page.locator('.ad-result-heading')).toHaveCount(0);
+  await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
+  await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  const image=page.locator('.ad-result-photo > img');
+  await expect(image).toHaveJSProperty('naturalWidth',960);
+  await expect(image).toHaveJSProperty('naturalHeight',720);
+  await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
 test('AD-7 guest result survives login, shows current author, and publishes only after confirmation',async({page,e2eAuthPool})=>{
   await page.goto('/?game-share=1#home');const draft=await artifact();await putArtifact(page,draft);
   try {
@@ -126,6 +162,45 @@ test('AD-7 guest result survives login, shows current author, and publishes only
   }
 });
 
+test('AD-6 stage import times out, ignores late completion, and recovers only after explicit Retry',async({page})=>{
+  const now=new Date('2026-10-23T00:00:00Z');
+  await page.clock.install({time:now});
+  await page.clock.pauseAt(new Date(now.getTime()+60_000));
+  let capture!:(route:Route)=>void;
+  const requested=new Promise<Route>(resolve=>{capture=resolve;});
+  // Hold the real production stage chunk, not a fake renderer. Returning from
+  // the handler leaves the route pending until the explicit fulfill below.
+  await page.route(/\/assets\/stage-[^/]+\.js(?:\?.*)?$/,route=>{capture(route);});
+  // A pending module can delay load; DOMContentLoaded does not await this lazy import.
+  await page.goto('/play?game=cash&seed=42',{waitUntil:'domcontentloaded'});
+  const route=await requested,response=await route.fetch(),stageUrl=route.request().url();
+  const start=page.getByRole('button',{name:'開始這一局',exact:true});
+  const retry=page.getByRole('button',{name:'重試場景',exact:true});
+  const alert=page.getByRole('alert'),canvas=page.locator('.ad-stage canvas');
+  await expect(page.locator('.ad-stage-cover').getByRole('status')).toHaveText('正在佈置現場…');
+  await page.clock.fastForward(14_999);
+  await expect(alert).toHaveCount(0);await expect(retry).toHaveCount(0);
+  await expect(start).toHaveCount(0);await expect(canvas).toHaveCount(0);
+  await page.clock.fastForward(1);
+  await expect(alert).toHaveText('遊戲場景載入較久。請重試，或回遊樂場。');
+  await expect(retry).toBeVisible();await expect(start).toHaveCount(0);
+  await route.fulfill({response});
+  // Await evaluation of the same module, not merely its HTTP response, before
+  // checking that the expired generation cannot create a scene or expose Start.
+  await page.evaluate(async url=>{await import(url);},stageUrl);
+  await expect(alert).toHaveText('遊戲場景載入較久。請重試，或回遊樂場。');
+  await expect(retry).toBeVisible();await expect(start).toHaveCount(0);
+  await expect(canvas).toHaveCount(0);
+  await expect(page.locator('[data-game-stage="ready"]')).toHaveCount(0);
+  await retry.click();
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
+  await expect(alert).toHaveCount(0);await expect(retry).toHaveCount(0);
+  await expect(canvas).toHaveCount(1);await expect(start).toBeVisible();
+  await start.click();
+  await page.keyboard.press(cashDeck(42)[0].valid?'ArrowRight':'ArrowLeft');
+  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 1 / 30');
+});
+
 test('AD-6 render exception recovers paused, keeps progress and resumes action cooldowns only on Continue',async({page})=>{
   test.setTimeout(120_000);await openGame(page,'cash');
   const deck=cashDeck(42),progress=page.locator('.ad-controls .ad-meta');
@@ -142,6 +217,8 @@ test('AD-6 render exception recovers paused, keeps progress and resumes action c
   await page.clock.fastForward(16);
   await expect(page.getByRole('alert')).toHaveText('3D 畫面暫時中斷。按重試恢復這一局。');
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
+  // Reconstruction has the same bounded readiness phase as initial load and import retry.
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   const resume=page.getByRole('button',{name:'繼續這一局',exact:true});
   await expect(resume).toBeVisible();await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
   await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
@@ -172,7 +249,7 @@ test('AD-6 factory failure releases an unreturned stage and retry creates exactl
   await expect(page.locator('.ad-stage canvas')).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>(window as unknown as {failedStageContext:WebGL2RenderingContext}).failedStageContext.isContextLost())).toBe(true);
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
-  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
   await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await page.keyboard.press(cashDeck(42)[0].valid?'ArrowRight':'ArrowLeft');

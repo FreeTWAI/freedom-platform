@@ -1,3 +1,4 @@
+import {useLanguage} from '../language';
 import {personalPostPath} from './personal-space-model';
 import { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { requireItems } from '../api';
@@ -26,6 +27,7 @@ export function personalContentActionPath(item: PersonalContentItem, action: str
 }
 
 export function MyContent() {
+  const {t}=useLanguage();
   const { session } = usePortal();
   const [items, setItems] = useState<PersonalContentItem[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [selected, setSelected] = useState<string | null>(selectedShowcase), [creating, setCreating] = useState(false);
@@ -48,6 +50,7 @@ export function MyContent() {
   if (creating || selected) return <PageLoadBoundary label="私人作品編輯" resetKey={selected ?? 'new'}><ShowcaseDraftEditor key={selected ?? 'new'} id={selected} onChanged={() => void load()} onClose={close}/></PageLoadBoundary>;
   const shown = items.filter(item => filter === 'all' || item.kind === filter);
   return <div className="stack personal-content">
+    <div><a className="btn btn-secondary btn-small" href="#profile">{t('space.back')}</a></div>
     <section className="card stack"><div className="section-head"><h2>草稿與已發布內容</h2><div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={() => setCreating(true)}>新增私人作品草稿</button><a className="btn btn-secondary btn-small" href="#opensource">投稿技能</a><a className="btn btn-secondary btn-small" href="#events">建立活動</a></div></div>
       <p className="hint">狀態、可見範圍與操作由原始作品、投稿及活動紀錄提供。保存草稿不會發布。</p>
       <label className="field">內容類型<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">全部</option>{Object.entries(kinds).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>

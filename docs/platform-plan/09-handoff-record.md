@@ -25,7 +25,7 @@ FW-01 至 FW-12 的現有契約測試納入全套重跑；FW-12 retract typed re
 
 九個 GitHub repositories 已在接續盤點時查得；本次程式只在 `freedom-platform` 收斂。完整 56 packages／12 runtimes、正式登入供應商、production／staging、雲端與外部連接尚未取得本次可驗證完成證據。原工作樹保留，使用獨立 continuation checkout 完成開發。
 
-現行檔案 inventory 為 [2026-09-20-file-inventory.json](./verification/2026-09-20-file-inventory.json)，以 `python3 scripts/update-inventory.py` 重建、`npm run verify:inventory` 驗證。排除依賴、建置產物、測試產物、環境密鑰與 manifest 自身；舊 inventory 不再冒充現行檔案雜湊。
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
 
 以下第 1–6 節保留 **2026-09-19 時點紀錄**。「尚未實作」「未跑」應按該時點與指定測試範圍解讀；本次 runtime／瀏覽器測試以新版本紀錄為準，T01–T34、UAT、真人與 provider 驗收仍不能據此宣稱完成。
 
@@ -74,10 +74,9 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r docs/platform-plan/contracts/tests/requirements-static.txt
 PYTHONDONTWRITEBYTECODE=1 python -m pytest docs/platform-plan/contracts/tests -q -p no:cacheprovider
-python docs/platform-plan/verification/verify_revision.py
 ```
 
-第二支程式驗證交付manifest雜湊、檔案清單及Markdown相對檔案連結，不執行product code。若已修改原始檔，manifest mismatch是合理結果，請重新建立新版本evidence，不能把舊manifest當新內容的證明。虛擬環境、cache與Git metadata不納入manifest。
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
 
 原09章指向的 `/home/ted-h/tmp-scratch/...` 私有腳本不在原ZIP中，本次沒有執行；不可假稱它們驗證通過。本版可重跑工具均隨ZIP附上。
 

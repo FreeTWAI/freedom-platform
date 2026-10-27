@@ -28,7 +28,8 @@ async function registerJoined(page:Page,profile='guide-ai-sister'){
 async function openGuide(page:Page){
   await widget(page).getByRole('button',{name:'問本頁',exact:true}).click();
   await expect(widget(page)).toHaveAttribute('data-load-state','ready');
-  const skip=panel(page).getByRole('button',{name:'顯示全文',exact:true});if(await skip.isVisible())await skip.click();
+  // Natural completion can remove the optional skip button before a click.
+  await expect(panel(page).locator('.page-spirit-line')).toHaveAttribute('data-typing','false',{timeout:4000});
 }
 async function selectTheme(page:Page,label:string){
   const settings=page.getByRole('button',{name:'設定',exact:true});
@@ -67,7 +68,7 @@ test('member selects one character; it persists across reload and changes outfit
   await openGuide(page);
   await expect(panel(page).locator('.page-spirit-line')).toContainText('我是 Kimi。');
   await panel(page).getByRole('button',{name:'結束交談',exact:true}).click();
-  await navigate(page,'我的工作');await expect(widget(page)).toHaveAttribute('data-character-id','kimi');
+  await navigate(page,'任務協作');await expect(widget(page)).toHaveAttribute('data-character-id','kimi');
   await expect(widget(page)).toHaveAttribute('data-outfit-id','workplace');await openGuide(page);
   await expect(widget(page).locator('.page-spirit-art')).toHaveAttribute('src',asset('kimi/workplace-outfit'));
   await panel(page).getByRole('button',{name:'結束交談',exact:true}).click();await navigate(page,'會員首頁');
@@ -111,7 +112,7 @@ test('current outfit uses real dialogue reactions and cleans guide focus when ch
   await selectTheme(page,'新手導覽－龍娘');await expect(widget(page)).toHaveAttribute('data-character-id','home');
   await expect(page.locator('[data-page-spirit-guide-target="true"]')).toHaveCount(0);
   await selectTheme(page,'新手導覽－AI Sister');await expect(widget(page)).toHaveAttribute('data-character-id','claude');
-  await navigate(page,'私人工作與 AI');await expect(widget(page)).toHaveCount(0);
+  await navigate(page,'私人 AI 工作室');await expect(widget(page)).toHaveCount(0);
   await navigate(page,'會員首頁');await expect(widget(page)).toHaveCount(1);
   await signOut(page);await expect(widget(page)).toHaveCount(0);await expect(page.locator('.guide-gallery')).toHaveCount(0);
 });
@@ -182,7 +183,13 @@ test('selecting another companion preserves the page input and cancels its old g
 test('character selector is only disclosed by its action, restores keyboard focus and closes on outside help',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'});await registerJoined(page);
   const change=widget(page).getByRole('button',{name:'換角色',exact:true}),select=widget(page).getByRole('combobox',{name:'導覽角色'});
-  await expect(widget(page).locator('.page-spirit-entry-actions button')).toHaveText(['問本頁','帶我看','換角色']);
+  await expect(widget(page).locator('.page-spirit-entry-actions button')).toHaveText(['問本頁','帶我看','問路','換角色']);
+  const helperShortcut=widget(page).getByRole('button',{name:'問路助手',exact:true});
+  await expect(helperShortcut).toHaveText('問路');await expect(helperShortcut).toHaveAttribute('aria-haspopup','dialog');
+  const helperId=await page.locator('.platform-helper-host').getByRole('button',{name:'問路助手',exact:true}).getAttribute('aria-controls');expect(helperId).toBeTruthy();
+  await expect(helperShortcut).toHaveAttribute('aria-controls',helperId!);await helperShortcut.click();
+  const helperDialog=page.getByRole('dialog',{name:'站內問路助手・非生成式 AI',exact:true});await expect(helperDialog).toHaveCount(1);await expect(helperDialog).toHaveAttribute('id',helperId!);
+  await page.keyboard.press('Escape');await expect(helperShortcut).toBeFocused();
   await expect(change).toHaveAttribute('aria-expanded','false');await expect(select).toHaveCount(0);
   await change.focus();await page.keyboard.press('Enter');await expect(select).toBeFocused();
   await expect(change).toHaveAttribute('aria-expanded','true');await expect(widget(page)).toHaveAttribute('data-load-state','idle');

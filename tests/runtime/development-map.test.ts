@@ -4,6 +4,8 @@ import {existsSync,readFileSync} from 'node:fs';
 import type {Pool} from 'pg';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {developmentPages} from '../../modules/development/pages.js';
+import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata.js';
+import {interfaceMessages} from '../../apps/portal-web/src/interface-messages.js';
 import {developmentMap,markdownBody} from '../../modules/development/service.js';
 import {PUBLIC_AUTHOR_CLAIM_SQL} from '../../modules/community/repo-author-claims.js';
 
@@ -19,6 +21,15 @@ const pool={query:(sql:string)=>{
  privateQueries++;throw new Error('public guidance accessed private database');
 }} as unknown as Pool;
 const app=createApp(pool,origin);
+
+for(const [id,title] of [['private-ai','私人 AI 工作室'],['workbench','任務協作'],['showcase','作品與合作']] as const){
+ test(`${id} keeps the same title in navigation, page heading and page tools`,()=>{
+  assert.equal(interfaceMessages[`nav.${id}`][0],title);
+  assert.equal(TAB_TITLES[id],title);
+  // PageTools uses this title for its group, dialog name and visible heading.
+  assert.equal(developmentPages.find(page=>page.id===id)?.title,title);
+ });
+}
 
 test('every workspace page and entry flow maps to existing source, tests and an actual managed repository',()=>{
  const map=developmentMap(),repos=new Set(map.repositories.map(repo=>repo.repository));
