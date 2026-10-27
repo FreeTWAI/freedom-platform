@@ -2931,7 +2931,7 @@ test('control read diagnostics preserve bounded locations and HTTP status withou
       : ['list', 'chain_record'].includes(operation) ? () => store.load()
       : () => store.append({ previous: head, data: { state: 'synthetic' }, intentDirectory: f.directory });
     await assert.rejects(action(), error => {
-      assert.deepEqual(error.controlReadFailure, { operation, httpStatus: 429 });
+      assert.deepEqual(error.controlReadFailure, { operation, httpStatus: 429, ...(operation === 'chain_record' ? { cause: 'release_control_read_failed' } : {}) });
       assert(!JSON.stringify(error).includes('PRIVATE')); return true;
     });
     assert.equal(failures, 1);
@@ -2944,7 +2944,7 @@ test('control transport failure never fabricates HTTP status or leaks original e
   const store = createControlStore({ ...f.options, fetchImpl: async () => { throw Object.assign(Error('PRIVATE https://secret.invalid/token'), { status: 429, headers: 'PRIVATE' }); } });
   await assert.rejects(store.load(), error => {
     assert.equal(error.message, 'release_control_read_failed');
-    assert.deepEqual(error.controlReadFailure, { operation: 'list' });
+    assert.deepEqual(error.controlReadFailure, { operation: 'list', transport: 'network' });
     assert(!JSON.stringify(error).includes('PRIVATE')); return true;
   });
   assert.equal(f.puts(), 0);
@@ -2965,4 +2965,60 @@ test('public control diagnostics strip private fields and reject malformed value
   for (const value of [null, [], 'PRIVATE', { operation: 'https://secret.invalid' }, ...[0, 99, 600, 429.1, '429', NaN, null].map(httpStatus => ({ operation: 'authority', httpStatus }))]) {
     assert.equal(publicControlReadFailure(value), undefined);
   }
+});
+
+test('control transport classes prioritize a lost lease over timeout without exposing exception data', async t => {
+  for (const [aborted, name, transport] of [[true, 'TimeoutError', 'lease_aborted'], [false, 'TimeoutError', 'timeout'], [false, 'TypeError', 'network']]) {
+    const f = await controlFixture(t), controller = new AbortController();
+    const store = createControlStore({ ...f.options, lease: { signal: controller.signal, assertHeld() {} }, fetchImpl: async () => {
+      if (aborted) controller.abort(Error('PRIVATE lease reason'));
+      throw Object.assign(Error('PRIVATE URL/token'), { name, status: 429, headers: 'PRIVATE' });
+    } });
+    await assert.rejects(store.load(), error => {
+      assert.equal(error.message, 'release_control_read_failed');
+      assert.deepEqual(error.controlReadFailure, { operation: 'list', transport });
+      assert.deepEqual(publicControlReadFailure(error.controlReadFailure), { operation: 'list', transport });
+      assert(!JSON.stringify(error).includes('PRIVATE')); return true;
+    });
+    assert.equal(f.puts(), 0);
+  }
+});
+
+test('chain failures preserve fixed non-HTTP causes through entry and public progress', async t => {
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  const source = entry.slice(entry.indexOf('const phase = async ') + 'const phase = '.length, entry.indexOf('\n  const backup ='));
+  for (const kind of ['digest', 'size', 'json', 'limit', 'lease', 'unknown']) {
+    const f = await controlFixture(t); let seedKey = f.seedKey, seedSha256 = f.seedSha256;
+    if (kind === 'json') {
+      const bytes = Buffer.from('not JSON'); seedSha256 = hash(bytes); seedKey = f.prefix + 'records/00000000-' + seedSha256 + '.json';
+      f.map.clear(); f.map.set(seedKey, bytes);
+    }
+    let assertions = 0;
+    const store = createControlStore({ ...f.options, seedSha256,
+      lease: { signal: f.options.lease.signal, assertHeld() { if (kind === 'lease' && ++assertions === 2) throw Error('release_lease_not_held'); } },
+      fetchImpl: async (url, options) => {
+        const response = await f.options.fetchImpl(url, options);
+        if (new URL(url).searchParams.has('prefix')) {
+          if (kind !== 'size') return response;
+          const value = await response.json(); value.result[0].size++; return Response.json(value);
+        }
+        if (kind === 'digest') return new Response(Buffer.alloc(f.map.get(seedKey).length, 32));
+        if (kind === 'limit') return new Response(Buffer.alloc(f.map.get(seedKey).length + 1, 32));
+        if (kind === 'unknown') return new Response(new ReadableStream({ start(c) { c.error(Error('PRIVATE unknown cause')); } }));
+        return response;
+      } });
+    const expectedCause = { digest: 'release_control_digest_mismatch', size: 'release_control_size_changed', json: 'release_control_json_invalid',
+      limit: 'release_cloudflare_response_limit', lease: 'release_lease_not_held' }[kind];
+    const value = resultFixture(); value.phases = [];
+    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'publicControlReadFailure', 'return ' + source)(
+      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode, publicControlReadFailure);
+    await assert.rejects(phase('preflight', () => store.load()), /release_control_chain_read_failed/);
+    const projected = operatorProgress(value, request(), installation, 'e'.repeat(64))[0];
+    assert.equal(projected.failureCode, 'release_control_chain_read_failed');
+    assert.deepEqual(projected.controlReadFailure, { operation: 'chain_record', ...(expectedCause ? { cause: expectedCause } : {}) });
+    assert(!JSON.stringify(value).includes('PRIVATE')); assert(!JSON.stringify(projected).includes('PRIVATE'));
+    assert.equal(f.puts(), 0);
+  }
+  assert.deepEqual(publicControlReadFailure({ operation: 'chain_record', cause: 'release_PRIVATE_secret', message: 'PRIVATE' }), { operation: 'chain_record' });
+  assert.equal(publicControlReadFailure({ operation: 'authority', transport: 'PRIVATE' }), undefined);
 });

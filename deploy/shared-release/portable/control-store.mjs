@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import { requireRelease as check, isDigest } from '../admission.mjs';
+import { requireRelease as check, isDigest, isReleaseFailureCode } from '../admission.mjs';
 import { boundedResponseBytes } from './cloudflare.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
 
@@ -45,7 +45,12 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
       return await fetchImpl(url, { method: body ? 'PUT' : 'GET', redirect: 'error',
         headers: { Authorization: 'Bearer ' + token, 'Cache-Control': 'no-store', ...(body ? { 'Content-Type': 'application/json' } : {}) },
         signal: AbortSignal.any([lease.signal, AbortSignal.timeout(30000)]), ...(body ? { body } : {}) });
-    } catch { throw body ? Error('release_control_write_unknown') : readFailure('release_control_read_failed', operation); }
+    } catch (error) {
+      if (body) throw Error('release_control_write_unknown');
+      const failure = readFailure('release_control_read_failed', operation);
+      failure.controlReadFailure.transport = lease.signal.aborted ? 'lease_aborted' : error?.name === 'TimeoutError' ? 'timeout' : 'network';
+      throw failure;
+    }
   };
   const read = async (key, expected, limit, operation) => {
     const response = await request(objectUrl(key), undefined, operation);
@@ -93,7 +98,8 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
       const failed = batch.find(item => item.status === 'rejected');
       if (failed) {
         const error = Error('release_control_chain_read_failed');
-        if (failed.reason?.controlReadFailure) error.controlReadFailure = failed.reason.controlReadFailure;
+        const cause = [failed.reason?.code, failed.reason?.message].find(isReleaseFailureCode);
+        error.controlReadFailure = { operation: 'chain_record', ...failed.reason?.controlReadFailure, ...(cause ? { cause } : {}) };
         throw error;
       }
       values.push(...batch.map(item => item.value));

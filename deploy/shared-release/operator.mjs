@@ -159,7 +159,10 @@ export function publicControlReadFailure(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)
     || !['list', 'chain_record', 'authority', 'append_existence', 'append_readback', 'append_list'].includes(value.operation)) return undefined;
   if (value.httpStatus !== undefined && (!Number.isInteger(value.httpStatus) || value.httpStatus < 100 || value.httpStatus > 599)) return undefined;
-  return { operation: value.operation, ...(value.httpStatus !== undefined ? { httpStatus: value.httpStatus } : {}) };
+  if (value.transport !== undefined && !['lease_aborted', 'timeout', 'network'].includes(value.transport)) return undefined;
+  return { operation: value.operation, ...(value.httpStatus !== undefined ? { httpStatus: value.httpStatus } : {}),
+    ...(value.transport !== undefined ? { transport: value.transport } : {}),
+    ...(isReleaseFailureCode(value.cause) ? { cause: value.cause } : {}) };
 }
 
 export function operatorProgress(value, admission, installation, requestDigest) {
