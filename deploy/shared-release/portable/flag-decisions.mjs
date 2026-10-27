@@ -7,12 +7,25 @@ const PATH = 'deploy/shared-release/flag-decisions.json';
 const FORMAT = 'freedom.shared-release.flag-decisions/v1';
 const TARGETS = ['staging-next', 'next'];
 const FLAG = /^FREEDOM_[A-Z0-9_]+_ENABLED$/;
+// Receipts repeat changes in preflight, progress and deploy. Leave room under
+// both 65,536-byte result/archive limits without dropping any bound fields.
+const MAX_DECISIONS_PER_TARGET = 64;
+const MAX_FLAG_NAME_LENGTH = 64;
+const MAX_FLAG_RECORD_LENGTH = 160;
+export const MAX_FLAG_CHANGES = 16;
+const MAX_FLAG_CHANGES_BYTES = Buffer.byteLength(JSON.stringify(Array.from({ length: MAX_FLAG_CHANGES }, () => ({
+  name: 'X'.repeat(MAX_FLAG_NAME_LENGTH), from: 'false', to: 'false',
+  // Canonical URLs are ASCII without controls; allow JSON escaping each byte.
+  record: '\\'.repeat(MAX_FLAG_RECORD_LENGTH),
+}))));
+const checkChangesBudget = flagChanges => check(flagChanges.length <= MAX_FLAG_CHANGES
+  && Buffer.byteLength(JSON.stringify(flagChanges)) <= MAX_FLAG_CHANGES_BYTES, 'release_flag_changes_too_many');
 const boolean = value => value === 'true' || value === 'false';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const keys = (value, names) => object(value) && Object.keys(value).length === names.length
   && names.every(name => Object.hasOwn(value, name));
 const recordUrl = value => {
-  if (typeof value !== 'string' || value.length > 512
+  if (typeof value !== 'string' || value.length > MAX_FLAG_RECORD_LENGTH
     || !value.startsWith('https://github.com/FreeTWAI/freedom-platform/')) return false;
   try {
     const url = new URL(value);
@@ -25,9 +38,9 @@ export function validateFlagDecisions(value) {
   check(keys(value, ['format', 'targets']) && value.format === FORMAT && object(value.targets)
     && Object.keys(value.targets).every(target => TARGETS.includes(target)), 'release_flag_decisions_invalid');
   for (const decisions of Object.values(value.targets)) {
-    check(object(decisions) && Object.keys(decisions).length <= 64, 'release_flag_decisions_invalid');
+    check(object(decisions) && Object.keys(decisions).length <= MAX_DECISIONS_PER_TARGET, 'release_flag_decisions_invalid');
     for (const [name, decision] of Object.entries(decisions)) {
-      check(FLAG.test(name) && keys(decision, ['value', 'decidedBy', 'decidedAt', 'record'])
+      check(name.length <= MAX_FLAG_NAME_LENGTH && FLAG.test(name) && keys(decision, ['value', 'decidedBy', 'decidedAt', 'record'])
         && boolean(decision.value) && typeof decision.decidedBy === 'string'
         && decision.decidedBy.trim() === decision.decidedBy && decision.decidedBy.length > 0
         && decision.decidedBy.length <= 128 && !/[\x00-\x1f\x7f]/.test(decision.decidedBy)
@@ -77,18 +90,23 @@ export function applyFlagDecisions({ target, bindings, decisions }) {
     else expected.push({ name, type: 'plain_text', text: decision.value });
     flagChanges.push({ name, from, to: decision.value, record: decision.record });
   }
+  checkChangesBudget(flagChanges);
   return { bindings: expected, flagChanges };
 }
 
 // An explicit whitelist, including in operator progress/failure receipts.
 export function publicFlagChanges(value) {
-  check(Array.isArray(value) && value.length <= 64, 'release_flag_changes_invalid');
+  check(Array.isArray(value), 'release_flag_changes_invalid');
   check(new Set(value.map(item => item?.name)).size === value.length, 'release_flag_changes_invalid');
-  return value.map(item => {
-    check(object(item) && FLAG.test(item.name) && (item.from === null || boolean(item.from))
+  check(value.length <= MAX_FLAG_CHANGES, 'release_flag_changes_too_many');
+  const flagChanges = value.map(item => {
+    check(object(item) && typeof item.name === 'string' && item.name.length <= MAX_FLAG_NAME_LENGTH
+      && FLAG.test(item.name) && (item.from === null || boolean(item.from))
       && boolean(item.to) && item.from !== item.to && recordUrl(item.record), 'release_flag_changes_invalid');
     return { name: item.name, from: item.from, to: item.to, record: item.record };
   });
+  checkChangesBudget(flagChanges);
+  return flagChanges;
 }
 
 export function plannedFlagChanges(decisions, target) {

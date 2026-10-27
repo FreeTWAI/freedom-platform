@@ -6,8 +6,8 @@ import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitIn
   requireStaging, requireLegacyPredecessor, requireRelease } from './admission.mjs';
 import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
-import { checkEnvironment } from './environment-check.mjs';
-import { readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
+import { checkEnvironment, checkFlagDecisions } from './environment-check.mjs';
+import { MAX_FLAG_CHANGES, readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const publicError = error => typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)
@@ -29,7 +29,9 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     const flagDecisions = readFlagDecisions({ sourceRoot: resolve(request.mode === 'deploy' && env.RELEASE_COMMAND === 'execute'
       ? env.RELEASE_SOURCE_DIRECTORY ?? 'source' : controllerRoot),
     sourceSha: admission.sourceSha });
-    receipt.flagChanges = plannedFlagChanges(flagDecisions, request.target);
+    // Only plan lacks a live comparison. Accumulated decisions that already
+    // match live must not consume the change budget in check/deploy.
+    receipt.flagChanges = request.mode === 'plan' ? plannedFlagChanges(flagDecisions, request.target) : [];
     receipt.flagChangesObservation = 'not_checked';
     if (env.RELEASE_COMMAND === 'admit') {
       if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT,
@@ -55,6 +57,10 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     const installation = admitInstallation(env);
     receipt.operatorImage = installation.image;
     receipt.configSha256 = installation.configSha256;
+    if (Object.keys(flagDecisions.targets[request.target] ?? {}).length > MAX_FLAG_CHANGES) {
+      receipt.flagChanges = await checkFlagDecisions(env, request.target, flagDecisions);
+      receipt.flagChangesObservation = 'live';
+    }
     const recoveryEvidence = admission.recoverRunId ? await requireFailedBackup(api, admission, installation) : undefined;
     if (recoveryEvidence) receipt.backupReconciliation = recoveryEvidence;
     receipt.stagingEvidence = await requireStaging(api, admission, installation);

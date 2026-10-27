@@ -14,6 +14,7 @@ import { openReleaseFloor } from './floor.mjs';
 import { createWorkerDeployer, assertReleasePredecessor } from './deploy.mjs';
 import { createCloudflareRecoveryTransport, waitForPublicRelease } from './cloudflare.mjs';
 import { buildApplication, verifyApplicationSource } from './build.mjs';
+import { applyFlagDecisions, readFlagDecisions } from './flag-decisions.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
 import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema } from './migration.mjs';
 import { runPortableBackup } from './backup.mjs';
@@ -115,6 +116,10 @@ export async function main(args = process.argv.slice(2)) {
       floor = await openReleaseFloor({ store, sourceRoot: SOURCE, intentDirectory: await directory('control-intents') });
       deployer = createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
         token: credentials.cloudflareApiToken, signal: lease.signal });
+      // Refuse oversized changes before recovery/adoption can write the floor.
+      // Build/render checks again against the verified predecessor before begin.
+      if (!isBackup) applyFlagDecisions({ target: config.target, bindings: (await deployer.inspect()).bindings,
+        decisions: readFlagDecisions({ sourceRoot: SOURCE, sourceSha: request.sourceSha }) });
       let recovery;
       if (request.recoverRunId) {
         if (independentRelease) check(request.recoveryEvidence?.failureBoundary === 'before_capture', 'release_backup_recovery_boundary_invalid');

@@ -28,6 +28,8 @@ image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、
 這類首次接手在 operator 通過 preflight（含版本銜接）後才建立新的 GitHub Deployment，
 避免 image 下載或唯讀檢查失敗時，新紀錄遮住原本可信的舊發布。失敗的 Actions 收據仍保留；
 缺少 Deployment 不證明沒有副作用，重做前仍須讀回原 journal，未知 intent 不放行。
+一般（非 legacy）發布則在 controller 旗標預算檢查後、operator 啟動前建立 Deployment 並寫入
+`in_progress`；任一 GitHub 寫入失敗即停止，不進入 provider 或 floor 寫入。
 
 以下安裝紀錄為具日期的歷史觀察；新 controller 與新 digest-pinned image 都須通過審查／CI 並安裝，
 本補丁及本機測試不表示已部署。`plan`、`check` 成功也不表示已發布。
@@ -208,8 +210,11 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 移除 entry **不會關閉**旗標；關閉須明確設定 `"false"`。缺少整個檔案時完全保留舊行為。
 
 決策僅從准入 SHA 的 Git blob 讀取，不讀 workflow input、Environment config 或網路。
-只允許 `FREEDOM_*_ENABLED` 的 plain-text 布林旗標，每 target 最多 64 筆；未知欄位、
-其他變數或 binding 類型一律拒絕。`plan` 列出決策（`from: null` 表示未讀線上舊值，
+只允許 `FREEDOM_*_ENABLED` 的 plain-text 布林旗標，名稱總長最多 64 字元、決策網址最多
+160 字元，每 target 最多保存 64 筆決策；與 live 不同的變更每次發布最多 16 筆，
+另查核序列化 metadata 預算，超限在 begin／publish 前以 `release_flag_changes_too_many` 拒絕。
+需要變更多個旗標時，請拆成多次發布。`plan` 未讀 live，保守地將本 target 決策視為變更。
+未知欄位、其他變數或 binding 類型一律拒絕。`plan` 列出決策（`from: null` 表示未讀線上舊值，
 不代表已新增）；`check` 用唯讀觀察列出實際差異（此時 `null` 表示線上不存在）。
 發布收據只公開 `name/from/to/record`；確認部署後 floor 採用預期 bindings hash，
 後續備份與發布沿用新 hash。未知部署結果仍停止對帳，不自動重試。

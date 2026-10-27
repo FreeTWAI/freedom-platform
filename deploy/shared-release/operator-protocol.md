@@ -124,9 +124,14 @@ does not independently approve a new flag.
 `deploy/shared-release/flag-decisions.json`（`freedom.shared-release.flag-decisions/v1`）：
 `targets` 僅接受 `staging-next`／`next`，各 target 最多 64 筆；每筆只有
 `value`（字串 `"true"`／`"false"`）、`decidedBy`、`decidedAt`（`YYYY-MM-DD`）及
-`record`（`https://github.com/FreeTWAI/freedom-platform/` 下的 HTTPS URL）。
-名稱只接受 `^FREEDOM_[A-Z0-9_]+_ENABLED$`，不接受其他變數，
+`record`（`https://github.com/FreeTWAI/freedom-platform/` 下、最多 160 字元的 HTTPS URL）。
+名稱總長最多 64 字元，只接受 `^FREEDOM_[A-Z0-9_]+_ENABLED$`，不接受其他變數，
 也不能覆寫 secret 或其他 binding 類型。所有未知欄位 fail closed。
+決策可累積至每 target 64 筆，與 live 不同的變更每次發布最多 16 筆，另查核以
+16 筆最大 metadata 推導的序列化預算，確保重複欄位仍符合 operator／公開收據大小限制。
+超限在 floor begin／provider publish 前以 `release_flag_changes_too_many` 拒絕；
+`check`／`plan` 亦拒絕。`plan` 未讀 live，保守地將本 target 決策視為變更。
+需要變更多個旗標時，請拆成多次發布。
 合併後正常發布該精確 main SHA，先 staging-next，再依既有 staging 成功准入發布 next。
 移除 entry 不會把旗標關閉；必須明設 `"false"`。缺檔表示沒有決策，保留舊設定及 hash。
 
