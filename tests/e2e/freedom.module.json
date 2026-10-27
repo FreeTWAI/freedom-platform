@@ -52,20 +52,16 @@
     "scripts/ci/pinned-guild-preview.config.mjs",
     "packages/testing/e2e-admin.ts",
     "packages/testing/e2e-auth-isolation.ts",
-    "packages/testing/e2e-origin.ts",
-    "tests/e2e/route-performance.ts",
-    "tests/runtime/route-performance.test.ts"
+    "packages/testing/e2e-origin.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [
     "tests/e2e/fixtures.ts",
     "tests/e2e/navigation.ts",
-    "tests/e2e/quick-join.ts",
-    "tests/e2e/route-performance.ts"
+    "tests/e2e/quick-join.ts"
   ],
   "surfaces": [],
   "tests": [
-    "e2e.harness",
-    "runtime.full"
+    "e2e.harness"
   ]
 }

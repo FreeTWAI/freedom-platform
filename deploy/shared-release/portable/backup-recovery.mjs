@@ -24,7 +24,14 @@ export async function reconcileFailedBackup({ floor, pool, database, role, deplo
   const held = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
   held(); await floor.assertCurrent();
   const worker = await deployer.inspect();
-  check(worker.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
+  const legacy = request.legacyPredecessor;
+  const advanced = worker.sourceSha !== state.deployedSourceSha;
+  if (advanced) {
+    check(beginOnly && legacy?.sourceSha === worker.sourceSha && legacy.admittedRunId === request.runId
+      && legacy.admittedRunAttempt === request.runAttempt, 'release_backup_recovery_worker_changed');
+    floor.verifyLegacySource(legacy);
+  }
+  check((advanced || worker.sourceSha === state.deployedSourceSha) && state.sourceSha === state.deployedSourceSha
     && worker.bindingsSha256 === state.bindingsSha256, 'release_backup_recovery_worker_changed');
   const q = await pool.connect(); let observations;
   try {
@@ -59,7 +66,42 @@ export async function reconcileFailedBackup({ floor, pool, database, role, deplo
       operatorImage: request.operatorImage, configSha256: request.configSha256 },
     sourceSha: state.sourceSha, sourceTree: state.sourceTree, bindingsSha256: state.bindingsSha256,
     ledgerSha256: migrationLedgerDigest(state.schemaLedger), materialPolicySha256: state.materialPolicySha256, ...observations,
+    ...(advanced ? { legacyPredecessor: legacy } : {}),
     sourcePins: 'retained', archiveIntent: 'absent', observedAt: new Date().toISOString() };
   await floor.abandonBackup(proof);
   return { previousRunId: evidence.runId, previousRunAttempt: evidence.runAttempt, status: 'abandoned_after_readback' };
+}
+
+/** Adopt an already successful legacy deployment without changing schema,
+ * bindings, original seed or recovery authority. This only appends a transition. */
+export async function adoptLegacyPredecessor({ floor, pool, deployer, lease, request }) {
+  const state = floor.state(), evidence = request.legacyPredecessor;
+  const held = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
+  held(); await floor.assertCurrent();
+  const before = await deployer.inspect();
+  if (before.sourceSha === state.deployedSourceSha) return;
+  check(request.releaseKind === 'independent' && state.pending === null && state.sourceSha === state.deployedSourceSha
+    && evidence?.sourceSha === before.sourceSha && evidence.admittedRunId === request.runId
+    && evidence.admittedRunAttempt === request.runAttempt && evidence.target === request.target
+    && before.bindingsSha256 === state.bindingsSha256, 'release_legacy_predecessor_changed');
+  floor.verifyLegacySource(evidence);
+  const q = await pool.connect();
+  try {
+    await q.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await q.query("SET LOCAL statement_timeout='30000'; SET LOCAL lock_timeout='3000'");
+    await floor.verifyDatabase(q);
+    const material = (await q.query(`SELECT purpose,mode,policy_lock,policy_revision,persistence_allowed,
+      retained_byte_limit::text AS retained_byte_limit FROM domain_media_storage_policy ORDER BY purpose`)).rows;
+    check(createHash('sha256').update(JSON.stringify(material)).digest('hex') === state.materialPolicySha256,
+      'release_legacy_policy_changed');
+    await q.query('ROLLBACK');
+  } catch (error) { await q.query('ROLLBACK').catch(() => {}); throw error; }
+  finally { q.release(); }
+  held(); await floor.assertCurrent();
+  const after = await deployer.inspect();
+  check(after.sourceSha === before.sourceSha && after.bindingsSha256 === before.bindingsSha256,
+    'release_legacy_predecessor_changed');
+  await floor.adoptLegacySource({ evidence, previousSourceSha: state.sourceSha, bindingsSha256: state.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(state.schemaLedger), materialPolicySha256: state.materialPolicySha256,
+    readOnly: true, observedAt: new Date().toISOString() });
 }
