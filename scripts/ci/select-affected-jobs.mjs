@@ -16,6 +16,7 @@ import { appendFileSync } from 'node:fs';
 import { isAbsolute, resolve, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCTIONS, owns } from '../../packages/contribution-tools/context.mjs';
+import { isModuleSourcePath } from '../../packages/contribution-tools/modules.mjs';
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
@@ -56,6 +57,8 @@ export const GENERATED_INVENTORY_PATH = 'docs/platform-plan/verification/2026-09
 // These profiles select existing jobs only. Consumer evidence and exclusions are
 // documented in affected-jobs.md; ownership metadata alone does not execute docs.
 export const MINIMAL_JOB_PROFILES = Object.freeze({
+  ci_tools: Object.freeze([]),
+  ci_tools_document_inputs: Object.freeze(['governance-consumers']),
   plan_receipt_docs: Object.freeze([]),
   plan_document_inputs: Object.freeze(['governance-consumers']),
   module_app_markdown: Object.freeze([]),
@@ -81,6 +84,97 @@ function planInput(path) {
   return PLAN_INPUTS.has(path) || path.startsWith('docs/platform-plan/execution/specs/')
     || path.startsWith('docs/platform-plan/execution/guild-launchpad/');
 }
+const RETIRED_WORKER_FILES = Object.freeze([
+  'packages/contribution-tools/circleci-worker-status.mjs',
+  'packages/contribution-tools/test/circleci-worker-status.test.mjs',
+]);
+const CI_TOOL_FILES = new Set([
+  '.github/workflows/verify.yml', 'governance/schemas/module.schema.json',
+  'packages/contribution-tools/context.mjs', 'packages/contribution-tools/modules.mjs',
+  'packages/contribution-tools/test/context.test.mjs', 'packages/contribution-tools/test/modules.test.mjs',
+  'packages/contribution-tools/test/modules-repository.test.mjs',
+  'scripts/ci/select-affected-jobs.mjs', 'scripts/ci/select-affected-jobs.test.mjs',
+  'scripts/ci/guild-presentation-profile.test.mjs',
+]);
+const CI_TOOL_DOCS = new Set(['governance/README.md', 'packages/contribution-tools/worker-unit-routing.md',
+  'scripts/ci/affected-jobs.md', 'scripts/ci/release-inventory.md', 'scripts/repository-bootstrap/consumer-source-profiles.md']);
+const RETIRED_WORKER_STEPS = "      - name: Checkout the pinned worker status guard\n        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n        with:\n          repository: ${{ job.workflow_repository }}\n          ref: ${{ job.workflow_sha }}\n          path: .freedom/worker-status\n          persist-credentials: false\n      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\n        with:\n          node-version: '24'\n      - name: Require CircleCI worker success for an identical same-repository PR tree\n        id: worker-provider\n        env:\n          GH_STATUS_TOKEN: ${{ github.token }}\n        run: node .freedom/worker-status/packages/contribution-tools/circleci-worker-status.mjs\n";
+export function ciToolsWorkflowProven(before, after) {
+  const clean = text => text.split('\n').filter(line => !line.trimStart().startsWith('#')).join('\n');
+  if (typeof before !== 'string' || typeof after !== 'string' || before.length > 128000 || after.length > 128000) return false;
+  if (clean(before) === clean(after)) return true;
+  const marker='\n  static-worker:\n';
+  if(before.split(marker).length!==2)return false;
+  const start=before.indexOf(marker)+marker.length,rest=before.slice(start);
+  const next=rest.search(/\n  [a-z][a-z0-9-]*:\n/),end=next<0?before.length:start+next;
+  const block=before.slice(start,end),condition="        if: steps.worker-provider.outputs.run_github == 'true'\n";
+  if(block.split('\n').some(line=>/^ {1,3}\S/.test(line)&&!line.trimStart().startsWith('#'))
+    ||[RETIRED_WORKER_STEPS,'      statuses: read\n',condition].some(part=>block.split(part).length!==2))return false;
+  const changed=block.replace(RETIRED_WORKER_STEPS,'').replace('      statuses: read\n','').replace(condition,'');
+  return clean(before.slice(0,start)+changed+before.slice(end)) === clean(after);
+}
+export function ciToolsSchemaProven(before, after) {
+  try {
+    const a=JSON.parse(before),b=JSON.parse(after);
+    if (![64,256].includes(a.properties.owned_paths.maxItems) || b.properties.owned_paths.maxItems !== 256) return false;
+    a.properties.owned_paths.maxItems=256;
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch { return false; }
+}
+export function decideCiToolsProfile(input) {
+  const full = {profile:'full',reason:'outside_ci_tools'};
+  if (input?.event !== 'pull_request' || input.diffComplete !== true || input.nonExecutableBlobsProven !== true
+    || input.descriptorsProven !== true || !input.changes?.length || input.changes.length > CHANGE_LIMIT) return full;
+  const paths=input.changes.map(c=>c.path), deleted=input.changes.filter(c=>c.status==='D').map(c=>c.path);
+  if (new Set(paths).size !== paths.length || !paths.some(p=>CI_TOOL_FILES.has(p)||RETIRED_WORKER_FILES.includes(p))
+    || deleted.length && !sameSet(deleted,RETIRED_WORKER_FILES)) return full;
+  for (const c of input.changes) {
+    if (c.status === 'D' && RETIRED_WORKER_FILES.includes(c.path) && !c.previousPath) continue;
+    if (c.status !== 'M' || c.previousPath || !safeRepoPath(c.path) || RUNTIME_TEXT.has(c.path)
+      || !(CI_TOOL_FILES.has(c.path)||CI_TOOL_DOCS.has(c.path)||isDocsAllowlisted(c.path)||planDocument(c.path))) return full;
+  }
+  try {
+    const graphs=[validatedDescriptorGraph(input.baseline),validatedDescriptorGraph(input.candidate)];
+    if (!sameSet([...graphs[0].keys()],[...graphs[1].keys()])) return full;
+    for(const [id,d]of graphs[0]) if(JSON.stringify(d)!==JSON.stringify(graphs[1].get(id))) return full;
+    const impact=selectImpact({baseline:input.baseline,candidate:input.candidate,changedPaths:[],scopes:['governance']});
+    if(impact.module_ids.some(id=>!['governance','contribution-experience','shared-release'].includes(id))) return full;
+    for(const graph of graphs) for(const id of impact.module_ids)
+      if(!sameSet(graph.get(id).tests,DELIVERY_SUITES[id]??[])) return full;
+  } catch {return full;}
+  const reason=paths.some(planInput)?'ci_tools_document_inputs':'ci_tools';
+  return {profile:reason,reason};
+}
+function ciToolsSourcesProven(root,base,candidate,diff) {
+  const read=(sha,path)=>runGit(root,['show','--end-of-options',`${sha}:${path}`]).toString('utf8');
+  if (!ciToolsWorkflowProven(read(base,'.github/workflows/verify.yml'),read(candidate,'.github/workflows/verify.yml'))) return false;
+  if(diff.changes.some(c=>c.path==='governance/schemas/module.schema.json')
+    && !ciToolsSchemaProven(read(base,'governance/schemas/module.schema.json'),read(candidate,'governance/schemas/module.schema.json'))) return false;
+  const ts=loadGuildPresentationParsers()?.ts;if(!ts)return false;
+  const cache=new Map(), libraryTargets=['packages/contribution-tools/context.mjs','packages/contribution-tools/modules.mjs','governance/schemas/module.schema.json'];
+  for(const [sha,files]of [[base,diff.baseFiles],[candidate,diff.candidateFiles]]) {
+    let count=0,bytes=0;
+    for(const [path,entry]of files) {
+      if(!/\.(?:[cm]?[jt]s|[jt]sx|ya?ml)$/.test(path))continue;
+      if(++count>4096||entry.type!=='blob'||!['100644','100755'].includes(entry.mode))return false;
+      if(!cache.has(entry.oid))cache.set(entry.oid,read(sha,path));const source=cache.get(entry.oid);bytes+=Buffer.byteLength(source);
+      if(Buffer.byteLength(source)>2000000||bytes>64000000)return false;
+      if(/\.ya?ml$/.test(path)) {
+        if(sha===candidate && /(?:circleci-worker-status|worker-provider|\.freedom\/worker-status)/.test(source))return false;
+        continue;
+      }
+      for(const {fileName}of ts.preProcessFile(source,true,true).importedFiles) {
+        if(!fileName.startsWith('.'))continue;
+        const target=posix.normalize(posix.join(posix.dirname(path),fileName));
+        if(sha===candidate && RETIRED_WORKER_FILES.includes(target))return false;
+        if(libraryTargets.includes(target) && !path.startsWith('packages/contribution-tools/')
+          && !path.startsWith('scripts/ci/') && path!=='scripts/freedom.mjs')return false;
+      }
+    }
+  }
+  return true;
+}
+
 export function decideMinimalProfile(input) {
   const fallback = {profile: 'full', reason: 'outside_minimal_profiles'};
   if (input?.event !== 'pull_request' || input.diffComplete !== true
@@ -215,6 +309,26 @@ export function deliveryVerifyWiringOnly(before, after) {
   return left !== null && right !== null && left === right;
 }
 
+export function unownedLiteralLoadersProven(path,source,ts=loadGuildPresentationParsers()?.ts) {
+  if(!ts||Buffer.byteLength(source)>524288)return false;
+  const file=ts.createSourceFile(path,source,ts.ScriptTarget.Latest,true);
+  if(file.parseDiagnostics.length)return false;
+  let valid=true,nodes=0;
+  const visit=(node,depth=0)=>{
+    if(!valid||++nodes>30000||depth>128){valid=false;return;}
+    if(ts.isCallExpression(node)) {
+      if(node.expression.kind===ts.SyntaxKind.ImportKeyword
+        ||ts.isIdentifier(node.expression)&&node.expression.text==='require') {
+        if(node.arguments.length!==1||!ts.isStringLiteral(node.arguments[0]))valid=false;
+      }
+      if(ts.isIdentifier(node.expression)&&['eval','Function','createRequire'].includes(node.expression.text))valid=false;
+    }
+    if(ts.isNewExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='Function')valid=false;
+    ts.forEachChild(node,child=>visit(child,depth+1));
+  };
+  visit(file);return valid;
+}
+
 export function deliveryCoverageProven(graphs, paths, snapshots) {
   const media = paths.some(path => deliveryOwner(path) === 'media-migration');
   const control = paths.some(path => deliveryOwner(path) === 'governance');
@@ -254,6 +368,8 @@ export function deliveryCoverageProven(graphs, paths, snapshots) {
       if (++literalCount > 4096 || entry.type !== 'blob' || !['100644','100755'].includes(entry.mode)) return false;
       const source = read(path); literalBytes += Buffer.byteLength(source);
       if (Buffer.byteLength(source) > 2000000 || literalBytes > 64000000) return false;
+      if (isModuleSourcePath(path) && ![...graph.values()].some(d=>owns(d,path))
+        && !unownedLiteralLoadersProven(path,source,ts)) return false;
       for (const {fileName} of ts.preProcessFile(source, true, true).importedFiles) {
         if (!fileName.startsWith('.')) continue;
         const target = posix.normalize(posix.join(posix.dirname(path), fileName)).replace(/\.[cm]?js$/, '.ts');
@@ -728,6 +844,9 @@ export function collectRepositoryDecision({ repository, event, base = '', head =
   const delivery = collectDeliveryToolingProfile({repository, event, base, head, candidate, pullRequest, allowFetch});
   if (delivery) return delivery;
   if (event !== 'pull_request') return decideAffectedJobs({ event, diffComplete: false, changes: [], baseline: [], candidate: [] });
+  const tools = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideCiToolsProfile);
+  if (['ci_tools','ci_tools_document_inputs'].includes(tools.profile)) return decision('affected',tools.reason,false);
+  if (tools.reason === 'ci_tools_sources_unproven') return full(tools.reason);
   const minimal = collectIntegrationProfile({repository, event, base, head, candidate, pullRequest, allowFetch}, decideMinimalProfile);
   if (Object.hasOwn(MINIMAL_JOB_PROFILES, minimal.profile)) return decision('affected', minimal.reason, false);
   const guild = collectRepositoryGuildDecision({repository, event, base, head, candidate, pullRequest, allowFetch});
@@ -834,9 +953,15 @@ function collectIntegrationProfile({ repository, event, base = '', head = '', ca
     const baseline = loadModuleDescriptors(root, base), current = loadModuleDescriptors(root, candidate);
     const result = decide({ event, diffComplete: diff?.ok === true, changes: diff?.changes ?? [],
       baseline: baseline.descriptors, candidate: current.descriptors, descriptorsProven: baseline.ok && current.ok,
-      nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true || decide === decideMinimalProfile && diff?.ok === true
+      nonExecutableBlobsProven: diff?.nonExecutableBlobsProven === true || decide === decideCiToolsProfile && diff?.ok === true
+        && diff.changes.every(change => change.status === 'D' && RETIRED_WORKER_FILES.includes(change.path)
+          ? regularBlob(diff.baseFiles.get(change.path)) && !diff.candidateFiles.has(change.path)
+          : regularBlob(diff.baseFiles.get(change.path)) && regularBlob(diff.candidateFiles.get(change.path)))
+        || decide === decideMinimalProfile && diff?.ok === true
         && diff.changes.every(change => [diff.baseFiles.get(change.path), diff.candidateFiles.get(change.path)]
           .every(entry => !entry || entry.type === 'blob' && entry.mode === '100644')) });
+    if (['ci_tools','ci_tools_document_inputs'].includes(result.profile) && !ciToolsSourcesProven(root,base,candidate,diff))
+      return {profile:'full',reason:'ci_tools_sources_unproven'};
     if (result.profile === GUILD_PRESENTATION_PROFILE.id) {
       const modules = new Set(diff.changes.map(change => guildPresentationPath(change.path)?.leaf.module).filter(Boolean));
       const parsers = loadGuildPresentationParsers();

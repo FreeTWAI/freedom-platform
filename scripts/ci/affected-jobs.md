@@ -206,3 +206,31 @@ shared-release. It runs for release-only changes too. Limits are 4,096 files,
 This is a direct relative literal-import boundary, not comprehensive proof about computed
 loaders, arbitrary executable strings or transitive imports. Existing stricter
 media-boundary parser checks and mandatory ownership validation remain separate.
+
+
+## Bounded CI tools coverage
+
+`ci_tools` selects no heavy job: mandatory source integrity already runs selector,
+governance and pinned-suite contract tests. `ci_tools_document_inputs` adds the
+existing governance-consumers job only when a known plan-document input changes.
+The profile covers exact selector/context/module tooling files and their existing
+tests, supporting prose, and only the module schema's owned-path limit increase
+from 64 to 256. Other schema changes, runtime files and unknown source stay broad.
+
+The sole deletion allowance is the paired retirement of `circleci-worker-status.mjs`
+and its test. Both must be ordinary blobs before deletion. Verify must equal its
+baseline after removing precisely the obsolete provider checkout/status step,
+its statuses permission and the condition on the existing pinned worker suite;
+all other executable workflow bytes remain unchanged. Candidate source/workflows
+must contain no remaining direct import or workflow reference to that helper.
+The source check also rejects outside direct consumers of the changed context,
+module and schema libraries. Complete descriptor graphs remain unchanged and the
+reviewed governance reverse closure retains its existing unit-test mapping.
+No commit/tree pins, general deletion exemption or new test platform are used.
+
+Ownership warnings do not permit an unowned product source to add an unresolved
+computed import/require, eval or Function loader and still select delivery-only
+checks. This small check uses the existing product-source scope; harmless unowned
+sources and literal unrelated imports remain warnings. It is not general
+JavaScript or transitive dependency analysis. Source-integrity and aggregate
+failure semantics, CodeQL and non-author review remain required.

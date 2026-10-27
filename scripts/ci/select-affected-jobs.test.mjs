@@ -10,7 +10,7 @@ import {
   ALWAYS_ON_INTEGRITY_COMMANDS, DOCS_ALLOWLIST_PREFIXES, GENERATED_INVENTORY_PATH, JOB_OUTPUT_KEYS, SELECTABLE_JOBS, FRONTEND_LEAF_PROFILES, FRONTEND_LEAF_JOBS,
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
   deliveryDailyRegistryAddition, deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
-  MINIMAL_JOB_PROFILES, decideMinimalProfile,
+  MINIMAL_JOB_PROFILES, decideMinimalProfile, decideCiToolsProfile, ciToolsWorkflowProven, ciToolsSchemaProven,
 } from './select-affected-jobs.mjs';
 
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
@@ -1602,4 +1602,86 @@ test('owned outside source cannot introduce literal delivery consumers without a
         `const x=import('${target}');`,`const x=require('${target}');`,`type T=import('${target}').T;`])
         assert.equal(prove(source),false,changed+': '+source);
   }
+});
+
+
+async function ciToolsWorkflowFixture() {
+  const after=await readFile(workflowPath,'utf8'),block=jobBlock(after,'static-worker');
+  const beforeBlock=block.replace('      contents: read\n','      contents: read\n      statuses: read\n')
+    .replace('    steps:\n','    steps:\n'+"      - name: Checkout the pinned worker status guard\n        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4\n        with:\n          repository: ${{ job.workflow_repository }}\n          ref: ${{ job.workflow_sha }}\n          path: .freedom/worker-status\n          persist-credentials: false\n      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4\n        with:\n          node-version: '24'\n      - name: Require CircleCI worker success for an identical same-repository PR tree\n        id: worker-provider\n        env:\n          GH_STATUS_TOKEN: ${{ github.token }}\n        run: node .freedom/worker-status/packages/contribution-tools/circleci-worker-status.mjs\n")
+    .replace('      - run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.worker-unit\n',
+      "      - run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.worker-unit\n        if: steps.worker-provider.outputs.run_github == 'true'\n");
+  return {before:after.replace(block,beforeBlock),after};
+}
+test('CI-tools proof permits only provider retirement and the bounded module schema increase',async()=>{
+  const {before,after}=await ciToolsWorkflowFixture();
+  assert.equal(ciToolsWorkflowProven(before,after),true);
+  assert.equal(ciToolsWorkflowProven(after,after),true);
+  for(const changed of [after.replace('--suite ci.worker-unit','--suite ci.unknown'),
+    after.replace('timeout-minutes: 40','timeout-minutes: 41'),after+'permissions:\n  contents: write\n',
+    after.replace('node node_modules/typescript/bin/tsc --noEmit','echo skipped')])
+    assert.equal(ciToolsWorkflowProven(before,changed),false);
+  const schema=JSON.parse(await readFile(join(root,'governance/schemas/module.schema.json'),'utf8'));
+  const old=structuredClone(schema);old.properties.owned_paths.maxItems=64;
+  assert.equal(ciToolsSchemaProven(JSON.stringify(old),JSON.stringify(schema)),true);
+  for(const mutate of [s=>s.properties.owned_paths.maxItems=512,s=>s.properties.owned_paths.minItems=0,s=>delete s.required]){
+    const changed=structuredClone(schema);mutate(changed);assert.equal(ciToolsSchemaProven(JSON.stringify(old),JSON.stringify(changed)),false);
+  }
+});
+
+test('unowned computed delivery loaders cannot use the ownership-warning path',()=>{
+  const loaded=loadModuleDescriptors(root,'HEAD');assert.equal(loaded.ok,true);
+  const graph=new Map(loaded.descriptors.map(d=>[d.module_id,d])),path='modules/community/unowned-loader.ts';
+  assert.ok(!loaded.descriptors.some(d=>owns(d,path)));
+  const files=new Map([[path,{mode:'100644',type:'blob',oid:oid()}]]);
+  for(const changed of ['deploy/shared-release/operator.mjs','packages/media-migration/backup-daily.ts']){
+    const prove=source=>deliveryCoverageProven([graph,graph],[changed],[{graph,files,read:()=>source}]);
+    assert.equal(prove('export const harmless=1;'),true);
+    assert.equal(prove("const fs=import('node:fs');"),true);
+    for(const source of ["const target=process.env.TARGET; import(target);",
+      "const target=process.env.TARGET; require(target);",
+      "const target='../../deploy/shared-release/'; import(target+'operator.mjs');",
+      "const name='operator'; import(`../../deploy/shared-release/${name}.mjs`);",
+      "const f=new Function('return import(process.env.TARGET)');"])
+      assert.equal(prove(source),false,source);
+  }
+});
+
+test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps runtime deletions broad',async t=>{
+  const directory=await mkdtemp(join(tmpdir(),'fp-ci-tools-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const env={...verificationEnvironment(),GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'CI Fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_NAME:'CI Fixture',GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
+  const git=(args,input)=>execFileSync('git',['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{input,encoding:'utf8',stdio:['pipe','pipe','pipe'],env}).trim();
+  const put=async(path,body)=>{await mkdir(dirname(join(directory,path)),{recursive:true});await writeFile(join(directory,path),body);};
+  const commit=()=>{git(['add','.']);git(['commit','-qm','fixture']);return git(['rev-parse','HEAD']);};
+  const integrate=(base,head)=>{const candidate=git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);return {repository:directory,event:'pull_request',base,head,candidate};};
+  git(['init','-q','-b','main']);
+  const catalog=execFileSync('git',['-C',root,'ls-tree','-r','--name-only','HEAD'],{encoding:'utf8'}).trim().split('\n').filter(p=>p.endsWith('/freedom.module.json')||p==='freedom.module.json');
+  for(const path of catalog)await put(path,execFileSync('git',['-C',root,'show','HEAD:'+path],{encoding:'utf8'}));
+  const workflows=await ciToolsWorkflowFixture();await put('.github/workflows/verify.yml',workflows.before);
+  const schema=JSON.parse(await readFile(join(root,'governance/schemas/module.schema.json'),'utf8'));const old=structuredClone(schema);old.properties.owned_paths.maxItems=64;
+  await put('governance/schemas/module.schema.json',JSON.stringify(old));
+  const retired=['packages/contribution-tools/circleci-worker-status.mjs','packages/contribution-tools/test/circleci-worker-status.test.mjs'];
+  for(const path of [...retired,'packages/contribution-tools/context.mjs','packages/contribution-tools/test/context.test.mjs','packages/db/command-core.ts'])await put(path,'export const fixture=true;\n');
+  const state='docs/platform-plan/execution/unified-foundation/current-state.json';await put(state,'{}');
+  const base=commit();
+  await put('.github/workflows/verify.yml',workflows.after);await put('governance/schemas/module.schema.json',JSON.stringify(schema));
+  await put('packages/contribution-tools/context.mjs','export const updated=true;\n');
+  for(const path of retired)await rm(join(directory,path));
+  const head=commit(),input=integrate(base,head),selected=minimalSelection('ci_tools');
+  assert.deepEqual(collectRepositoryDecision(input),selected);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,allResults('skipped'))).ok,true);
+  assert.equal(evaluateVerifyAggregate(needsFor(selected,allResults('skipped'),{integrity:'failure'})).ok,false);
+  for(const mutate of [
+    async()=>rm(join(directory,'packages/db/command-core.ts')),
+    async()=>put('packages/db/command-core.ts','export const runtimeChanged=true;'),
+    async()=>put(retired[0],'export const restored=true;'),
+    async()=>put('packages/contribution-tools/test/context.test.mjs',"import '../circleci-worker-status.mjs';"),
+    async()=>put('.github/workflows/verify.yml',workflows.after.replace('--suite ci.worker-unit','--suite ci.unknown')),
+    async()=>put('governance/schemas/module.schema.json',JSON.stringify({...schema,required:[]})),
+  ]){
+    git(['checkout','-q',input.candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
+    git(['checkout','-q',head]);await mutate();assert.equal(collectRepositoryDecision(integrate(base,commit())).mode,'full');
+  }
+  git(['checkout','-q',head]);await put(state,'{ "updated":true }');
+  assert.deepEqual(collectRepositoryDecision(integrate(base,commit())),minimalSelection('ci_tools_document_inputs'));
 });
