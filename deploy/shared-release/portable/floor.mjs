@@ -93,6 +93,16 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       const proof = event.proof, capture = pending.intents['backup:capture-policy'], recovery = proof?.recovery;
       const beginOnly = !capture && Object.keys(pending.intents).length === 0
         && recovery?.failureBoundary === 'before_capture' && proof?.failureBoundary === 'before_capture';
+      const beforeDump = recovery?.failureBoundary === 'before_dump' && proof?.failureBoundary === 'before_dump';
+      const unstarted = beforeDump && !capture && Object.keys(pending.intents).length === 0
+        && proof.capturePolicyIntent === 'absent' && !Object.hasOwn(proof, 'captureRevision')
+        && !Object.hasOwn(proof, 'capturePolicy') && !Object.hasOwn(proof, 'policySha256');
+      const unmutated = beforeDump && capture && Object.keys(pending.intents).length === 1
+        && proof.capturePolicy === 'not_committed' && proof.policySha256 === capture.before
+        && !Object.hasOwn(proof, 'captureRevision') && !Object.hasOwn(proof, 'capturePolicyIntent');
+      const captured = capture && Object.keys(pending.intents).length === 1 && proof?.captureRevision === capture.revision
+        && !Object.hasOwn(proof, 'capturePolicy') && !Object.hasOwn(proof, 'policySha256')
+        && !Object.hasOwn(proof, 'capturePolicyIntent');
       if (proof?.legacyPredecessor) {
         legacyEvidence(proof.legacyPredecessor);
         check(beginOnly && isAncestor(state.sourceSha, proof.legacyPredecessor.sourceSha)
@@ -100,7 +110,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
           && proof.legacyPredecessor.admittedRunAttempt === proof.settledBy?.runAttempt,
         'release_floor_legacy_recovery_invalid');
       }
-      check(pending.kind === 'backup' && pending.stage === 0 && (beginOnly || (capture && Object.keys(pending.intents).length === 1))
+      check(pending.kind === 'backup' && pending.stage === 0 && (beginOnly || unstarted || unmutated || captured)
         && proof?.format === 'freedom.abandoned-backup/v1' && recovery?.format === 'freedom.verified-failed-backup/v1'
         && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'controllerSha', 'operatorImage', 'configSha256']
           .every(key => recovery[key] === pending.request[key])
@@ -112,7 +122,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
         && proof.materialPolicySha256 === state.materialPolicySha256
         && proof.maintenanceEnabled === false && proof.domainMaintenanceEnabled === false && proof.deletionFences === 0
-        && proof.captureBackendAbsent === true && (beginOnly || proof.captureRevision === capture.revision)
+        && proof.captureBackendAbsent === true && (beginOnly || unstarted || unmutated || captured)
         && proof.sourcePins === 'retained' && proof.archiveIntent === 'absent', 'release_floor_backup_recovery_invalid');
       request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
       check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,

@@ -1,4 +1,4 @@
-import { backupDiagnosticCode } from './backup-diagnostics.js';
+import { backupDiagnosticCode, isBackupDiagnosticCode } from './backup-diagnostics.js';
 import type { Pool } from 'pg';
 import type { ObjectStore } from '../asset-storage/index.js';
 import { createConsistentAssetBackup } from './backup-coordinator.js';
@@ -163,7 +163,8 @@ export async function runDailyBackup(raw: DailyBackupContext, adapter: DailyBack
     protectedAfterRestore = context.gcSafety === 'snapshot-pins';
   } catch (error) {
     failedStage = stage;
-    phaseCode = backupDiagnosticCode(error, 'daily_backup_phase_failed');
+    const diagnostic = backupDiagnosticCode(error, 'daily_backup_phase_failed');
+    phaseCode = isBackupDiagnosticCode(diagnostic) ? diagnostic : 'daily_backup_phase_failed';
     code = error instanceof DailyBackupError ? error.code : 'daily_backup_phase_failed';
   } finally {
     stage = 'cleanup';
@@ -178,7 +179,8 @@ export async function runDailyBackup(raw: DailyBackupContext, adapter: DailyBack
       } else if (before && assessPostDumpSupersetWindow(before, result.gc).status !== 'superset_window_safe') fail('daily_backup_gc_not_disabled');
       cleanupVerified = true;
     } catch (error) {
-      cleanupCode = backupDiagnosticCode(error, 'daily_backup_cleanup_failed');
+      const diagnostic = backupDiagnosticCode(error, 'daily_backup_cleanup_failed');
+      cleanupCode = isBackupDiagnosticCode(diagnostic) ? diagnostic : 'daily_backup_cleanup_failed';
       failedStage ??= 'cleanup'; code = 'daily_backup_cleanup_failed';
     }
   }

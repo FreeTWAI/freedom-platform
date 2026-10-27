@@ -31,11 +31,13 @@ COMMIT intent 與確認後 floor；不要求新備份。DDL 是資料變更，�
 舊 journal 仍依原七階段 replay；新 `release-begin-v2` 保留四個 journal stages；有 migration 時確認 COMMIT 即更新 schema floor，
 無 migration 時先完成唯讀檢查才建立 journal，健康查核後完成發布。
 
-若前次備份留下 BEGIN-only journal，可在 deploy 選填 `recover_backup_run_id`。
-這只允許可信、已結束的失敗收據證明尚未進入 capture，且 journal 沒有任何 intent；
+若前次備份留下可驗證的未完成 journal，可在 deploy 選填 `recover_backup_run_id`。
+可信、已結束的失敗收據須證明尚未進入 capture 且沒有 intent，或 capture 失敗但 dump 尚未開始；
+後者接受沒有 intent、唯一 capture-policy intent 的原始 policy digest 仍完全相符，
+或原 revision 已提交且通過既有清理讀回；
 持有同一 lease 後重新查 Worker、原 floor／ledger／material policy、GC OFF、零 deletion fences
 及沒有目前維護角色的 capture backend，才 append abandonment，保留原失敗。
-這不是備份成功，也不執行新備份。capture／archive／migration／deploy intent 或任何不確定狀態仍拒絕。
+這不是備份成功，也不執行新備份。archive／migration／deploy intent、額外 intent 或任何不確定狀態仍拒絕。
 2026-10-27 正式發布已對帳失敗備份 `40315670754`，追加 abandonment 後完成發布；
 該備份仍是失敗紀錄。日常發布不需再填這個 run ID。
 
@@ -182,10 +184,15 @@ Operator 取得原共用 DB lease 後，再讀回未變更的 Worker、ledger、
 確認原 capture backend 已結束、維護開關關閉且沒有刪除 fence，才追加
 `backup-abandoned` 歷史紀錄並開始新的備份。所有來源 pins 與原失敗證據保留。
 
-這條接續只適用於 **backup-only、已有 capture-policy intent、尚無 archive intent**。
+既有 capture revision 路徑仍要求唯一 capture-policy intent；新增 `before_dump` 邊界只接受
+沒有 intent，或 policy（僅排除 generation）與 intent 的 `before` digest 完全相符且尚未提交。
+兩者也可由獨立 deploy 接續；legacy predecessor 仍只限原 BEGIN-only 路徑。任何 archive intent 都拒絕。
 上傳結果不明、migration／deploy 失敗、舊程序仍存活、設定或狀態已改變都拒絕；
 不覆寫 seed、不刪 journal、不自動重送 PUT，也不能以此取得自然排程成功證據。
-新的失敗收據會顯示固定的備份階段、snapshot dump 進度與清理結果，不包含原始錯誤或憑證。
+每個失敗 operator 階段都記錄固定 `failureCode`；公開收據只發布最後失敗階段的合法
+`release_` 識別碼，Summary 同步顯示，無合法識別碼時為 `release_operation_failed`。
+備份另保留階段、snapshot dump 進度、清理結果與固定 SQLSTATE／網路診斷碼；
+不包含原始錯誤、cause 或憑證。
 
 ## 執行與失敗處理
 

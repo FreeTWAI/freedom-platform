@@ -1,5 +1,5 @@
-import { releasePhases } from './admission.mjs';
-import { BACKUP_DIAGNOSTIC_CODES } from '../../packages/media-migration/backup-diagnostics.ts';
+import { isReleaseFailureCode, releasePhases } from './admission.mjs';
+import { isBackupDiagnosticCode } from '../../packages/media-migration/backup-diagnostics.ts';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -172,10 +172,12 @@ export function operatorProgress(value, admission, installation, requestDigest) 
     const diagnostic = ['backup', 'backup-before', 'backup-after'].includes(phase.name) && phase.status === 'failed'
       && stages.includes(failure?.stage) && codes.includes(failure?.code) && typeof failure.cleanupVerified === 'boolean'
       ? { backupFailure: { stage: failure.stage, code: failure.code, cleanupVerified: failure.cleanupVerified,
-        ...Object.fromEntries(['phaseCode', 'cleanupCode'].filter(key => BACKUP_DIAGNOSTIC_CODES.includes(failure[key]))
+        ...Object.fromEntries(['phaseCode', 'cleanupCode'].filter(key => isBackupDiagnosticCode(failure[key]))
           .map(key => [key, failure[key]])),
         ...(['not_started', 'running', 'failed', 'completed'].includes(failure.snapshotDump) ? { snapshotDump: failure.snapshotDump } : {}) } } : {};
     return { name: phase.name, reportedStatus: phase.status, ...diagnostic,
+      ...(i === value.phases.length - 1 && phase.status === 'failed' && isReleaseFailureCode(phase.failureCode)
+        ? { failureCode: phase.failureCode } : {}),
       ...(['preflight', 'deploy'].includes(phase.name) && phase.flagChanges !== undefined
         ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}) };
   });

@@ -3,15 +3,13 @@ import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitInstallation,
-  requireStaging, requireLegacyPredecessor, requireRelease } from './admission.mjs';
+  requireStaging, requireLegacyPredecessor, requireRelease, releaseFailureCode } from './admission.mjs';
 import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
 import { checkEnvironment, checkFlagDecisions } from './environment-check.mjs';
 import { MAX_FLAG_CHANGES, readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
-const publicError = error => typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)
-  ? error.code : 'release_operation_failed';
 
 export async function main(env = process.env, { api: suppliedApi, executeOperator = runOperator,
   controllerRoot = fileURLToPath(new URL('../../', import.meta.url)) } = {}) {
@@ -135,7 +133,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     await status('success', 'Release, schema verification and health confirmed');
     receipt.status = 'passed';
   } catch (error) {
-    receipt.status = 'failed'; receipt.error = publicError(error);
+    receipt.status = 'failed'; receipt.error = releaseFailureCode(error);
     if (deployment?.id && api) {
       try {
         await api(`/repos/${REPOSITORY}/deployments/${deployment.id}/statuses`, { method: 'POST', body: {
@@ -153,6 +151,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       + (receipt.sourceSha ? `- Version: \`${receipt.sourceSha}\`\n- Environment: \`${receipt.target}\`\n`
         + `- Requested by: ${receipt.original.login}; run by: ${receipt.triggeredBy.login}\n` : '')
       + `- Provider outcome: \`${receipt.providerOutcome}\`\n`
+      + (receipt.operatorProgress?.at(-1)?.failureCode ? `- Failed phase: \`${receipt.operatorProgress.at(-1).failureCode}\`\n` : '')
       + (receipt.error ? `- Stopped: \`${receipt.error}\`\n` : '')
       + (receipt.flagChanges ? `- Flag comparison: ${receipt.flagChangesObservation} (plan null means unobserved)\n`
         + receipt.flagChanges.map(change => `- ${change.name}: ${change.from ?? 'null'} → ${change.to}; ${change.record}\n`).join('') : '')

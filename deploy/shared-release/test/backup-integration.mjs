@@ -175,6 +175,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
           return result;
         } };
     } };
+    const preCapturePolicy = (await pool.query('SELECT to_jsonb(p) value FROM asset_maintenance_policy p WHERE singleton')).rows[0].value;
     let failedCapture;
     const uncertain = await run({ maintenancePool: uncertainPool, retainIntent: async (operation, proof) => {
       assert.equal(operation, 'capture-policy'); failedCapture = proof;
@@ -205,6 +206,38 @@ export async function verifyBackup({ root, openCluster, execute }) {
     recovery.request.recoveryEvidence.failureBoundary = 'before_capture';
     assert.equal((await reconcileFailedBackup(recovery)).status, 'abandoned_after_readback');
     assert.equal(abandoned, 2);
+    // Restore every pre-capture field except the monotonic generation. The
+    // recovery digest deliberately excludes only that capture counter.
+    const committedPolicy = (await pool.query('SELECT to_jsonb(p) value FROM asset_maintenance_policy p WHERE singleton')).rows[0].value;
+    const restorePolicy = async value => {
+      const columns = Object.keys(value).filter(key => !['singleton', 'generation'].includes(key));
+      assert(columns.every(key => /^[a-z_]+$/.test(key)));
+      await pool.query(`UPDATE asset_maintenance_policy SET (${columns.join(',')}) =
+        (SELECT ${columns.join(',')} FROM jsonb_populate_record(NULL::asset_maintenance_policy,$1::jsonb)) WHERE singleton`,
+      [JSON.stringify(value)]);
+    };
+    await restorePolicy(preCapturePolicy);
+    assert.equal((await observeMediaGcState(pool)).policySha256, failedCapture.before);
+    state.pending.intents = { 'backup:capture-policy': failedCapture };
+    recovery.request.recoveryEvidence.failureBoundary = 'before_dump';
+    const originalAbandon = floor.abandonBackup;
+    floor.abandonBackup = async proof => {
+      assert.equal(proof.failureBoundary, 'before_dump'); assert.equal(proof.capturePolicy, 'not_committed');
+      assert.equal(proof.policySha256, failedCapture.before); assert(!Object.hasOwn(proof, 'captureRevision'));
+      await originalAbandon(proof);
+    };
+    assert.equal((await reconcileFailedBackup(recovery)).status, 'abandoned_after_readback');
+    assert.equal(abandoned, 3);
+    state.pending.intents = {};
+    floor.abandonBackup = async proof => {
+      assert.equal(proof.failureBoundary, 'before_dump'); assert.equal(proof.capturePolicyIntent, 'absent');
+      assert(!Object.hasOwn(proof, 'capturePolicy')); assert(!Object.hasOwn(proof, 'captureRevision'));
+      await originalAbandon(proof);
+    };
+    assert.equal((await reconcileFailedBackup(recovery)).status, 'abandoned_after_readback');
+    assert.equal(abandoned, 4);
+    floor.abandonBackup = originalAbandon;
+    await restorePolicy(committedPolicy);
     state.pending.intents = { 'backup:capture-policy': failedCapture };
     delete recovery.request.recoveryEvidence.failureBoundary;
 
@@ -217,7 +250,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
       state.pending.intents['backup:capture-policy'].pid = row.pid;
       await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
     } finally { backend.release(true); }
-    assert.equal(abandoned, 2);
+    assert.equal(abandoned, 4);
     // The legacy code-only rollout changed the Worker after a failed BEGIN.
     // Recovery and adoption must still use real read-only ledger/policy checks.
     const legacy = { format: 'freedom.verified-legacy-deployment/v1', target: 'staging-next',
@@ -226,7 +259,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
     recovery.request.legacyPredecessor = legacy;
     recovery.deployer = { inspect: async () => ({ sourceSha: legacy.sourceSha, bindingsSha256: state.bindingsSha256 }) };
     floor.verifyLegacySource = evidence => assert.deepEqual(evidence, legacy); // Git/catalog proof is covered by real Git fixtures.
-    await reconcileFailedBackup(recovery); assert.equal(abandoned, 3);
+    await reconcileFailedBackup(recovery); assert.equal(abandoned, 5);
     state.pending = null; let adopted = 0;
     floor.adoptLegacySource = async proof => { assert.equal(proof.readOnly, true); assert.equal(proof.previousSourceSha, old.sourceSha); adopted++; };
     await adoptLegacyPredecessor({ ...recovery, request: { ...recovery.request, releaseKind: 'independent', mode: 'deploy' } });
