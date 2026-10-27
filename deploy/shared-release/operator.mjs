@@ -236,7 +236,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     await readProgress();
     // Keep failure details bounded even for a malformed/private provider exception.
     const failure = Object.assign(new Error('release_operator_failed'), { code: 'release_operator_failed', operatorProgress: progress });
-    if (typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)) failure.code = error.code;
+    if (isReleaseFailureCode(error?.code)) failure.code = error.code;
     throw failure;
   } finally {
     clearInterval(timer);

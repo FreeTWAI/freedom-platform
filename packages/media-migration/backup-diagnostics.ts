@@ -202,7 +202,7 @@ const FIXED_CODES = [
 ];
 export function isBackupDiagnosticCode(code: unknown): code is string {
   return typeof code === 'string' && (BACKUP_DIAGNOSTIC_CODES.includes(code) || FIXED_CODES.includes(code)
-    || /^backup_database_sqlstate_(?:[0-9]{2}|f0|hv|p0|xx)[0-9a-z]{3}$/.test(code)
+    || /^backup_database_sqlstate_(?:[0-9][0-9a-z]|f0|hv|p0|xx)[0-9a-z]{3}$/.test(code)
     || (code.startsWith('backup_network_') && code === code.toLowerCase()
       && NETWORK_CODES.has(code.slice('backup_network_'.length).toUpperCase())));
 }
@@ -225,7 +225,7 @@ export function backupDiagnosticCode(error: unknown, fallback: string): string {
     if (typeof code === 'string') {
       if (NETWORK_CODES.has(code)) return 'backup_network_' + code.toLowerCase();
       if (Object.hasOwn(database, code)) return database[code];
-      if (/^(?:[0-9]{2}|F0|HV|P0|XX)[0-9A-Z]{3}$/.test(code)) {
+      if (/^(?:[0-9][0-9A-Z]|F0|HV|P0|XX)[0-9A-Z]{3}$/.test(code)) {
         if (code.startsWith('53')) return 'backup_database_resources_exhausted';
         if (code.startsWith('08') || ['57P02', '57P03'].includes(code)) return 'backup_database_connection_failed';
         return 'backup_database_sqlstate_' + code.toLowerCase();

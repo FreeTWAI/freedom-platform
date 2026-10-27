@@ -3,17 +3,19 @@ import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-rele
 import { backupDiagnosticCode, isBackupDiagnosticCode } from '../../../packages/media-migration/backup-diagnostics.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink, realpath, statfs } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink, realpath, statfs, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { RELEASE_FAILURE_CODES } from '../../shared-release/failure-codes.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
-  admitInstallation, requireStaging, requireLegacyPredecessor, githubClient, releaseFailureCode } from '../../shared-release/admission.mjs';
+  admitInstallation, requireStaging, requireLegacyPredecessor, githubClient, releaseFailureCode, isReleaseFailureCode } from '../../shared-release/admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
-import { decodeReceiptArchive } from '../../shared-release/artifacts.mjs';
+import { decodeReceiptArchive, artifactReader } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
 import { backupObjectStore, backupTar, bytesStream, newBackupDirectories } from '../../shared-release/portable/backup-storage.mjs';
 import { openCapturePolicy } from '../../shared-release/portable/capture-policy.mjs';
@@ -2640,6 +2642,141 @@ test('floor replay accepts exactly the before-dump proofs and refuses each mutat
   }
 });
 
+// Scan source text rather than importing it: this also works in the plain-Node preflight suite.
+async function releaseSourceLiterals() {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  const excluded = resolve(root, 'deploy/shared-release/failure-codes.mjs');
+  const walk = async directory => {
+    const paths = [];
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.name === 'test') continue;
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) paths.push(...await walk(path));
+      else if (entry.name.endsWith('.mjs') && path !== excluded) paths.push(path);
+    }
+    return paths;
+  };
+  const resolveImport = async path => {
+    const candidates = [path, path.replace(/\.js$/, '.ts'),
+      ...['.ts', '.mjs', '.js', '.tsx', '/index.ts', '/index.mjs', '/index.js'].map(suffix => path + suffix)];
+    for (const candidate of candidates) {
+      try { if ((await stat(candidate)).isFile()) return candidate; }
+      catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error; }
+    }
+    assert.fail(`Unresolved static relative import: ${relative(root, path)}`);
+  };
+  const pending = await walk(resolve(root, 'deploy/shared-release')), seen = new Set(), codes = new Set();
+  while (pending.length) {
+    const path = pending.pop();
+    if (seen.has(path) || path === excluded) continue;
+    assert(!relative(root, path).startsWith('..'), 'source imports stay inside the repository');
+    seen.add(path);
+    const source = await readFile(path, 'utf8');
+    assert(!/release_\$\{/.test(source), `dynamic release identifier in ${relative(root, path)}`);
+    for (const [, , code] of source.matchAll(/(['"`])(release_[a-z0-9_]{1,80})\1/g)) codes.add(code);
+    for (const [, , specifier] of source.matchAll(/(?:^|\n)\s*(?:import|export)\s+[^;'"`]*?\s+from\s*(['"])(\.[^'"]+)\1/g)) {
+      const target = await resolveImport(resolve(dirname(path), specifier));
+      if (!target.includes('/node_modules/')) pending.push(target);
+    }
+  }
+  // Guard the transitive TS and MJS dependencies called out by the backup boundary.
+  for (const path of ['packages/media-migration/backup-diagnostics.ts', 'packages/asset-storage/index.ts',
+    'modules/assets/maintenance.ts', 'packages/db/migration-plan.mjs']) assert(seen.has(resolve(root, path)), path);
+  return codes;
+}
+
+test('release failure allowlist equals every source literal in the static relative import closure', async () => {
+  const source = await releaseSourceLiterals(), allowed = new Set(RELEASE_FAILURE_CODES);
+  assert(Object.isFrozen(RELEASE_FAILURE_CODES));
+  assert.equal(allowed.size, RELEASE_FAILURE_CODES.length, 'no duplicates');
+  assert.deepEqual(RELEASE_FAILURE_CODES, [...RELEASE_FAILURE_CODES].sort());
+  for (const code of RELEASE_FAILURE_CODES) {
+    assert.match(code, /^release_[a-z0-9_]{1,80}$/);
+    assert(source.has(code), `allowlist entry removed from source: ${code}`);
+    assert(isReleaseFailureCode(code));
+  }
+  for (const code of source) assert(allowed.has(code), `source identifier missing from allowlist: ${code}`);
+  assert.deepEqual(allowed, source);
+});
+
+test('release failure membership rejects shape-valid unknown codes and accepts the first known candidate', () => {
+  for (const error of [{ code: 'P0001', message: 'release_private_token_abc123' },
+    { code: 'release_private_token_abc123' }, { message: 'release_not_a_real_code' }]) {
+    assert.equal(releaseFailureCode(error), 'release_operation_failed');
+    assert(!isReleaseFailureCode(error.code)); assert(!isReleaseFailureCode(error.message));
+  }
+  assert.equal(releaseFailureCode({ code: 'release_private_token_abc123', message: 'release_lease_lost' }), 'release_lease_lost');
+  assert.equal(releaseFailureCode({ code: 'release_floor_unsettled', message: 'release_lease_lost' }), 'release_floor_unsettled');
+});
+
+test('release CLI receipts and summaries omit unknown codes and P0001 exception messages', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'release-error-membership-'));
+  const exitCode = process.exitCode;
+  t.after(async () => { process.exitCode = exitCode; await rm(root, { recursive: true, force: true }); });
+  for (const [index, error] of [
+    { code: 'P0001', message: 'release_private_token_abc123' },
+    { code: 'release_private_token_abc123' }, { message: 'release_not_a_real_code' },
+    { code: 'release_private_token_abc123', message: 'release_lease_lost' },
+  ].entries()) {
+    const output = join(root, String(index)), summary = join(root, `${index}.md`);
+    await releaseMain({ ...environment(), RELEASE_COMMAND: 'admit', PUBLIC_RECEIPT_DIRECTORY: output,
+      GITHUB_STEP_SUMMARY: summary }, { api: async () => { throw error; } });
+    const receipt = JSON.parse(await readFile(join(output, 'receipt.json'), 'utf8'));
+    assert.equal(receipt.status, 'failed');
+    assert.equal(receipt.error, index === 3 ? 'release_lease_lost' : 'release_operation_failed');
+    assert((await readFile(summary, 'utf8')).includes(`- Stopped: \`${receipt.error}\``));
+    for (const text of [JSON.stringify(receipt), await readFile(summary, 'utf8')])
+      assert(!text.includes('release_private_token_abc123') && !text.includes('release_not_a_real_code'));
+  }
+  process.exitCode = exitCode;
+});
+
+test('operator failures preserve only source-owned codes with the existing fallback', async t => {
+  for (const code of ['release_private_token_abc123', 'release_not_a_real_code', 'release_lease_lost']) {
+    const fixture = await operatorFixture(t), run = fixture.options.run;
+    await assert.rejects(runOperator({ ...fixture.options, run: async (command, args, ...rest) => {
+      if (args[0] === 'run') throw Object.assign(Error('release_private_token_abc123'), { code });
+      return run(command, args, ...rest);
+    } }), { code: code === 'release_lease_lost' ? code : 'release_operator_failed' });
+  }
+});
+
+test('backup CLI catch projects only known codes and keeps its own fallback', async () => {
+  // No backup CLI injection harness exists. Execute its actual catch projection with inert ports.
+  const source = await readFile(new URL('../../shared-release/backup-cli.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('  } catch (error) {') + '  } catch (error) {'.length;
+  const project = new Function('receipt', 'error', 'isReleaseFailureCode', 'process',
+    source.slice(start, source.indexOf('\n  } finally {', start)));
+  for (const error of [{ code: 'P0001', message: 'release_private_token_abc123' },
+    { code: 'release_private_token_abc123' }, { code: 'release_not_a_real_code' }, { code: 'release_lease_lost' }]) {
+    const receipt = {}, process = {};
+    project(receipt, error, isReleaseFailureCode, process);
+    assert.equal(receipt.error, error.code === 'release_lease_lost' ? error.code : 'release_backup_failed');
+    assert.equal(receipt.status, 'failed'); assert.equal(process.exitCode, 1);
+  }
+});
+
+test('environment checks omit unknown codes and keep known identifiers', async t => {
+  const fixture = await environmentCheckFixture(t);
+  for (const code of ['release_private_token_abc123', 'release_not_a_real_code', 'release_lease_lost']) {
+    const error = Object.assign(Error('release_private_token_abc123'), { code });
+    const report = await checkEnvironment(fixture.env, 'staging-next', { fetchImpl: async () => ({
+      get status() { throw error; },
+    }) });
+    assert.equal(report.checks[0].error, code === 'release_lease_lost' ? code : 'release_environment_check_failed');
+    assert(!JSON.stringify(report).includes('release_private_token_abc123'));
+  }
+});
+
+test('artifact reader preserves only known staging codes and keeps its download fallback', async () => {
+  const artifact = { id: 1, digest: 'sha256:' + 'a'.repeat(64), size_in_bytes: 1 };
+  for (const code of ['release_staging_private_token_abc123', 'release_private_token_abc123',
+    'release_lease_lost', 'release_staging_archive_invalid']) {
+    const read = artifactReader(REPOSITORY, 'fixture', async () => { throw Object.assign(Error('private'), { code }); });
+    await assert.rejects(read(artifact), { code: code === 'release_staging_archive_invalid' ? code : 'release_staging_download_failed' });
+  }
+});
+
 test('all failed operator phases record fixed codes and public progress filters every other field', async () => {
   // Execute the entry's actual phase closure with only its persistence ports replaced.
   const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
@@ -2648,6 +2785,10 @@ test('all failed operator phases record fixed codes and public progress filters 
     [Object.assign(Error('private'), { code: 'release_floor_unsettled' }), 'release_floor_unsettled'],
     [Error('release_floor_unsettled'), 'release_floor_unsettled'],
     [Object.assign(Error('release_floor_unsettled'), { code: 'INVALID' }), 'release_floor_unsettled'],
+    [Object.assign(Error('release_private_token_abc123'), { code: 'P0001' }), 'release_operation_failed'],
+    [Object.assign(Error('private'), { code: 'release_private_token_abc123' }), 'release_operation_failed'],
+    [Error('release_not_a_real_code'), 'release_operation_failed'],
+    [Object.assign(Error('release_lease_lost'), { code: 'release_private_token_abc123' }), 'release_lease_lost'],
     [Error('connect ECONNREFUSED 10.1.2.3:5432'), 'release_operation_failed'],
     [Object.assign(Error('private'), { code: 'release_' + 'a'.repeat(81) }), 'release_operation_failed'],
     [Object.assign(Error('private'), { code: 'release_bad\nsecret' }), 'release_operation_failed'],
@@ -2668,7 +2809,7 @@ test('all failed operator phases record fixed codes and public progress filters 
     const progress = operatorProgress(value, request(), installation, 'e'.repeat(64));
     assert.equal(progress[0].failureCode, undefined);
     assert.equal(progress[1].failureCode, status === 'failed' ? 'release_floor_unsettled' : undefined);
-    for (const invalid of ['connect ECONNREFUSED 10.1.2.3:5432', 'release_', 'release_BAD', 'release_bad\n', {}, null]) {
+    for (const invalid of ['release_private_token_abc123', 'release_not_a_real_code', 'connect ECONNREFUSED 10.1.2.3:5432', 'release_', 'release_BAD', 'release_bad\n', {}, null]) {
       value.phases[1].failureCode = invalid;
       assert.equal(operatorProgress(value, request(), installation, 'e'.repeat(64))[1].failureCode, undefined);
     }
@@ -2689,7 +2830,7 @@ test('backup diagnostic allowlist covers every fixed portable backup release ide
 
 test('backup diagnostics keep Node errno codes out of SQLSTATEs and continue resolving errors', () => {
   const fallback = 'daily_backup_phase_failed';
-  for (const code of ['EPERM', 'EBADF', 'EROFS', 'EBUSY', 'EINTR']) {
+  for (const code of ['EPERM', 'EBADF', 'EROFS', 'EBUSY', 'EINTR', 'ENOENT']) {
     for (const error of [{ code }, { cause: { code } }, { cause: { cause: { code } } }]) {
       const result = backupDiagnosticCode(error, fallback);
       assert.equal(result, fallback); assert(!result.startsWith('backup_database_sqlstate_'));
@@ -2709,6 +2850,8 @@ test('backup diagnostics translate public SQLSTATEs, fixed network codes and pg 
     '40001': 'conflict', '40P01': 'conflict', '08001': 'connection_failed', '08006': 'connection_failed',
     '08003': 'connection_failed', '08P01': 'connection_failed', '57P01': 'connection_failed',
     '57P02': 'connection_failed', '57P03': 'connection_failed', '23505': 'sqlstate_23505', 'XX000': 'sqlstate_xx000',
+    '3D000': 'sqlstate_3d000', '3F000': 'sqlstate_3f000', '0A000': 'sqlstate_0a000',
+    '2BP01': 'sqlstate_2bp01', '0LP01': 'sqlstate_0lp01',
     'F0000': 'sqlstate_f0000', 'HV000': 'sqlstate_hv000', 'P0001': 'sqlstate_p0001', '57P05': 'sqlstate_57p05',
   };
   for (const [code, suffix] of Object.entries(mappings)) {
