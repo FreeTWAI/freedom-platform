@@ -36,17 +36,33 @@ test('secondary editor cancel never focuses a hidden or disconnected fallback', 
   for (const state of ['closed', 'hidden', 'disconnected']) assert.deepEqual(run('missing', state), ['close']);
 });
 
-test('public verifier opens and checks advanced member filters before selecting them', () => {
+test('public verifier opens the search form advanced filters before selecting them, matching the markup', () => {
+  const membership = readFileSync(new URL('../../apps/portal-web/src/modules/Membership.tsx', import.meta.url), 'utf8');
+  const forms = [...membership.matchAll(/<form className="directory-filters" role="search" aria-label="尋找工坊夥伴"[^>]*>[\s\S]*?<\/form>/g)];
+  assert.equal(forms.length, 1, 'fail closed when the member search form boundary changes');
+  const form = forms[0][0];
+  const details = [...form.matchAll(/<details className="directory-advanced">[\s\S]*?<\/details>/g)];
+  assert.equal(details.length, 1, 'the search form contains one advanced-filter disclosure');
+  assert.match(details[0][0], /<summary>[\s\S]*?<\/summary>/, 'the disclosure has a summary');
+  for (const name of ['依公會篩選', '排序方式']) {
+    assert.match(details[0][0], new RegExp(`<label\\b[^>]*>${name}<select\\b`), `${name} is labelled inside the disclosure`);
+  }
+  assert.doesNotMatch(form, /className="member-directory/, 'the results container is outside the search form');
+
   const verifier = readFileSync(new URL('../../scripts/verify-public.mjs', import.meta.url), 'utf8');
   const sections = [...verifier.matchAll(/await navigate\(page, '工坊夥伴'\);([\s\S]*?)await screenshot\('public-member-directory-mobile\.png'\);/g)];
   assert.equal(sections.length, 1, 'fail closed when the member-directory section boundary changes');
   const section = sections[0][1];
-  const click = section.indexOf("await page.locator('.member-directory .directory-advanced > summary').click();");
-  const opened = section.indexOf("await expect(page.locator('.member-directory .directory-advanced')).toHaveAttribute('open','');");
-  assert.ok(click >= 0, 'click the scoped advanced-filter summary');
+  const locators = [...section.matchAll(/const (\w+)=page\.getByRole\('search',\{name:'尋找工坊夥伴',exact:true\}\);/g)];
+  assert.equal(locators.length, 1, 'locate the unique member search form by role and accessible name');
+  const locator = locators[0][1];
+  const click = section.indexOf(`await ${locator}.locator('.directory-advanced > summary').click();`);
+  const opened = section.indexOf(`await expect(${locator}.locator('.directory-advanced')).toHaveAttribute('open','');`);
+  assert.ok(click > locators[0].index!, 'click the advanced-filter summary within the search form');
   assert.ok(opened > click, 'assert the disclosure is open after clicking its summary');
   for (const name of ['依公會篩選', '排序方式']) {
-    const selection = section.indexOf(`await page.getByRole('combobox',{name:'${name}',exact:true}).selectOption(`);
+    const selection = section.search(new RegExp(`await\\s+\\w+\\.getByRole\\('combobox',\\{name:'${name}',exact:true\\}\\)\\.selectOption\\(`));
     assert.ok(selection > opened, `${name} selection must follow the open assertion`);
   }
+  assert.doesNotMatch(section, /\.member-directory\s+\.directory-advanced/, 'advanced filters are not descendants of the results container');
 });
