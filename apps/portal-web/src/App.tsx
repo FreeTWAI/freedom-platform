@@ -1031,6 +1031,7 @@ function tabTitle(tab: TabId): string {
 function tabFromHash(launchpadEnabled: boolean): TabId {
   const value = window.location.hash.slice(1)
   if(parseProfileRoute(window.location.hash))return 'profile'
+  if(value==='account?view=recognition')return 'account'
   if(isMessagesHash(window.location.hash))return 'home'
   if(value === 'reservations' || value.startsWith('reservations/'))return 'reservations'
   if(value.split('?')[0]==='community-search')return 'community-search'

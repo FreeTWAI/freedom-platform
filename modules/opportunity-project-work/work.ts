@@ -171,7 +171,7 @@ async function scopedClaim(q:PoolClient,actor:Actor,id:string,review:boolean,loc
   } else requireCondition(claim.claimant_ref===actor.user_id,403,'claim_owner_required','只能操作自己的認領。');
   return claim;
 }
-export async function changeClaim(pool:Pool,input:Command,id:string,action:'start'|'submit'|'begin-review'|'decide') {
+export async function changeClaim(pool:Pool,input:Command,id:string,action:'start'|'submit'|'begin-review'|'decide',onAccepted?:(q:PoolClient,community:string,id:string)=>Promise<void>) {
   const body=action==='submit'?submitInput.parse(input.body):action==='decide'?decideInput.parse(input.body):z.object({}).strict().parse(input.body);
   const reviewing=action==='begin-review'||action==='decide';
   return command(pool,input,q=>scopedClaim(q,input.actor,id,reviewing),async q=>{
@@ -196,6 +196,7 @@ export async function changeClaim(pool:Pool,input:Command,id:string,action:'star
         const work=(await q.query("UPDATE work_items SET state='accepted',aggregate_version=aggregate_version+1 WHERE work_item_id=$1 RETURNING *",[claim.work_item_id])).rows[0];
         await q.query('INSERT INTO contributions(contribution_id,claim_id,user_id,community_id,work_item_id,decision_id,title,summary,artifact_ref) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[randomUUID(),id,claim.claimant_ref,input.actor.community_id,claim.work_item_id,decisionId,work.title,submission.summary,submission.artifact_ref]);
         await journal(q,input.actor,'work_item',work.work_item_id,work.aggregate_version,'apply_accepted_result_policy',{claim_id:id});
+        if(onAccepted)await onAccepted(q,input.actor.community_id,claim.work_item_id);
         event='freedom.work.submission.accepted.v1';
       }
     }

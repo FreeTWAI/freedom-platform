@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {test,expect,type Page} from './fixtures.js';
 
 // Synthetic demo account only; the password is restored at the end so later specs keep signing in.
@@ -17,6 +18,7 @@ async function login(page:Page,password:string){
   await page.goto('/#account');
   await page.getByLabel('電子郵件',{exact:true}).fill(EMAIL);await page.getByLabel('密碼',{exact:true}).fill(password);
   await page.getByRole('button',{name:'登入',exact:true}).click();
+  await openAccountSettings(page,'帳號與安全');
   await expect(page.getByRole('heading',{name:'登入與安全'})).toBeVisible();
 }
 async function changePassword(page:Page,current:string,next:string){
@@ -66,6 +68,7 @@ test('a member rotates the password, sees other devices signed out, and can end 
   await expect(otherPage.getByRole('alert')).toContainText('帳號或密碼不正確');
   await otherPage.getByLabel('密碼',{exact:true}).fill(ROTATED);
   await otherPage.getByRole('button',{name:'登入',exact:true}).click();
+  await openAccountSettings(otherPage,'帳號與安全');
   await expect(otherPage.getByRole('heading',{name:'登入與安全'})).toBeVisible();
 
   // Ending other sessions from the first device signs the second one out again.

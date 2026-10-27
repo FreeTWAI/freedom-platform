@@ -9,7 +9,10 @@
     "assets",
     "command-core",
     "tenant-workspaces",
-    "work"
+    "work",
+    "shared",
+    "asset-lifecycle",
+    "social-achievements"
   ],
   "format": "freedom.module/v1",
   "instructions": [
@@ -99,7 +102,17 @@
     "apps/portal-web/src/modules/profile-publication-route.ts",
     "tests/runtime/profile-publication-controller.test.ts",
     "tests/e2e/profile-publication.spec.ts",
-    "migrations/190_member_profile_publications.sql"
+    "migrations/190_member_profile_publications.sql",
+    "apps/portal-web/src/modules/AccountSettings.css",
+    "tests/e2e/membership-settings.spec.ts",
+    "apps/portal-web/src/modules/account-settings-leave.ts",
+    "tests/runtime/account-settings-leave.test.ts",
+    "apps/portal-web/src/modules/ProfileDesign.tsx",
+    "apps/portal-web/src/modules/ProfileLayoutEditor.tsx",
+    "apps/portal-web/src/modules/ProfileCoverEditor.tsx",
+    "tests/runtime/profile-customization-policy.test.ts",
+    "migrations/191_member_profile_customization.sql",
+    "tests/e2e/onboarding-members.spec.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [

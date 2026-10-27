@@ -226,6 +226,9 @@ const FOUNDATION_NAMES = [
   '189_hosted_drop_ship.sql',
   // Explicitly consented profile records only; recognition grants no publication or release authority.
   '190_member_profile_publications.sql',
+  '191_member_profile_customization.sql',
+  '192_member_community_certifications.sql',
+  '193_social_achievements.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

@@ -35,3 +35,44 @@ Pure policy/schema與synthetic HTTP檢查不等於PostgreSQL ACL／並行交易�
 
 顯示名稱、自介、連結皆為本人提供的內容，不是平台或管理員背書。控制字元在 trim 前拒絕，遵守既有名片單行文字規則；HTTPS連結禁止帳密並限制原始與URL解析後長度，僅渲染外連，不由伺服器抓取。React以文字節點顯示，不解讀HTML。
 未來社群認證屬帳號層級的人工審核、可撤銷標記，不代表每段自介、名稱或外連已經審核。整合前必須明確決定改名／版本變更政策與對外帳號層級說明，並遵守本人展示同意與此投影ACL；不能直接把目前文字或連結視為已認證。此候選沒有任何認證欄位。
+
+## Local customization candidate (not deployed)
+
+The separate candidate extends the explicit publication, never the private `/me/content`
+workspace or legacy directory/e-card. Layout is a strict bounded object: four themes,
+five accent presets, four CSS-only cover patterns, plain-text about, at most six manually
+entered HTTPS featured links, and the complete ordered/visible four-block list. There is
+no arbitrary HTML/CSS/font/remote-image input and no automatic Work or private inventory
+projection. Preview/cancel/reset are local; saving persists the whole publication via its
+existing CSRF/idempotency/CAS protocol. Resetting appearance does not change visibility or
+identity text. Recognition slots do not award anything: social titles/community certification
+remain independently consented authenticated projections from their separate candidates.
+Community certification is account-level, not review of every user-written bio or link.
+
+Own covers use a separate `member.profile-cover` Asset purpose and existing generic
+ObjectStore transport, not account-avatar URLs. Static JPEG/PNG/WebP input is capped at
+4 MiB and must fully decode, reject animation, strip metadata and normalize to a bounded
+1600×600 WebP (512 KiB maximum). Upload creates a private immutable retained version;
+it does not change the currently published image. Explicit `include_cover` and the exact
+version are saved with publication settings. Cancel leaves private staged images available
+for explicit removal. At most three unselected drafts may admit another upload; deselecting
+an existing cover can expose a fourth retained draft, all discoverable. Selected versions
+cannot be retired until the publication stops selecting them. Retired bytes remain charged;
+this candidate does not activate physical GC or claim deletion from backups.
+
+Publication text and bytes share the same canonical SQL ACL. Member bytes repeat active
+session/community/readiness/block checks; public bytes always use anonymous authority,
+even with cookies. Every byte read validates exact publication generation + selected cover
+version before and after verified object-store I/O, with no DB locks across that I/O.
+Responses are no-store, no ETag/304, noindex and same-origin; DTOs contain only version and
+generation, never Asset/object IDs or private URLs. A public profile remains visible to a
+blocked person who signs out; the editor explicitly warns about this limit.
+
+Provisional migration191 adds layout/consent columns and the closed Asset domain while
+preserving migration190 bytes. The new policy row defaults unavailable: storage binding,
+quota, retention, and production policy activation are operator decisions outside this
+code grant. UI displays real availability instead of a fake successful upload. Routes are
+unconditionally mounted, so eventual deployment requires the integrated schema first.
+Local pure/SSR/mock-HTTP checks are not a DB/privacy proof. Native browser, PostgreSQL,
+restricted-role grants and real concurrent races for customization remain `not_run` here;
+hosted checks of older ab8 text-only candidate are distinct evidence.

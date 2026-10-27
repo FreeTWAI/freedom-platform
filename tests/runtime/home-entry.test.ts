@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {parseProfileRoute} from '../../apps/portal-web/src/modules/profile-publication-route.js';
 import {activateHomeLink} from '../../apps/portal-web/src/brand-home-link.js';
 
 type HomeLinkEvent = Parameters<typeof activateHomeLink>[0];
@@ -93,7 +94,7 @@ function navigationHistoryHarness(initialHash='#stores/supply') {
   const state={mobileOpen:true,focus:'menu',focused:0,scrolled:0,logs:0,replaced:0,blocked:false};
   const location={get href(){return href},get hash(){return new URL(href).hash},pathname:'/',search:''};
   const context:any={window:{location,history:{state:null,replaceState(_state:unknown,_title:string,url:string){href=new URL(url,href).href;state.replaced++;},pushState(){throw Error('Unexpected history push')},go(){throw Error('Unexpected history traversal')}}},document:{activeElement:{closest:(selector:string)=>state.focus==='menu'&&selector==='#workspace-navigation'?{}:null}},
-    launchpadEnabled:true,TAB_TITLES,eventIdFromLocation:()=>null,isMessagesHash:(hash:string)=>hash.split('?')[0]==='#messages',isMessagesHistoryEntry:()=>false,
+    launchpadEnabled:true,TAB_TITLES,parseProfileRoute,eventIdFromLocation:()=>null,isMessagesHash:(hash:string)=>hash.split('?')[0]==='#messages',isMessagesHistoryEntry:()=>false,
     acceptedHash:{current:initialHash},messageLocation:{current:{href,state:null}},messageHistoryTransition:{current:null},pageLeaveGuard:{current:()=>!state.blocked},previousTab:{current:'stores'},tab:'stores',locationHash:initialHash,
     mainContent:{current:{focus(){state.focus='main';state.focused++;}}},workspaceTopbar:{current:{scrollIntoView(){state.scrolled++;}}},
     setMobileOpen:(value:boolean)=>{state.mobileOpen=value;},setLocationHash:(value:string)=>{context.locationHash=value;},setTab:(value:string)=>{context.tab=value;},setNotificationTarget:()=>{},setMessagesOpen:()=>{},openMessages:()=>{},consoleChannel:(x:string)=>x,tabTitle:(x:string)=>x,TAB_GUIDANCE:{},logConsoleEvent:()=>{state.logs++;},
@@ -192,4 +193,15 @@ test('outside controls keep native pointer focus and focusin never cancels a def
 });
 test('inside navigation and the menu toggle are not outside dismissals',()=>{
   for(const where of ['inside','toggle']){const h=outsideDismissHarness();assert.equal(h.event('pointerdown',where).defaultPrevented,false);assert.deepEqual(h.state.closed,[]);}
+});
+
+for(const target of ['#profile','#profile?view=settings','#profile?member=30000000-0000-4000-8000-000000000001','#profile?member=invalid'])test(`actual history parser delegates profile route ${target} without bypassing focus or leave guards`,()=>{
+ const h=navigationHistoryHarness();h.move(target);assert.equal(h.context.tab,'profile');assert.equal(h.state.mobileOpen,false);assert.equal(h.state.focus,'main');assert.equal(h.state.scrolled,1);assert.equal(h.state.logs,1);
+ const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(target);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);assert.equal(blocked.state.mobileOpen,true);
+});
+
+test('recognition account entry uses existing guarded history and rejects unknown account query destinations',()=>{
+ const h=navigationHistoryHarness();h.move('#account?view=recognition');assert.equal(h.context.tab,'account');assert.equal(h.state.focus,'main');assert.equal(h.state.mobileOpen,false);
+ const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move('#account?view=recognition');assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);
+ const invalid=navigationHistoryHarness();invalid.move('#account?view=unknown');assert.equal(invalid.context.tab,'home');
 });

@@ -37,7 +37,8 @@
     "tests/runtime/guild-workspace-writer.test.ts",
     "tests/runtime/guild-member-operation.test.ts",
     "tests/e2e/guild-member-operations.spec.ts",
-    "tests/e2e/guild-members.spec.ts"
+    "tests/e2e/guild-members.spec.ts",
+    "tests/e2e/onboarding-members.spec.ts"
   ],
   "public_exports": [
     "modules/positioning/guild-search.ts",
@@ -69,11 +70,15 @@
   "tests": [
     "runtime.full"
   ],
-  "surfaces": [{
-    "surface_id": "positioning.guild-search",
-    "kind": "http",
-    "entry": "apps/platform-api/src/routes/positioning.ts",
-    "operations": ["positioning.guild-search.read"],
-    "auth_profile": "member-session"
-  }]
+  "surfaces": [
+    {
+      "surface_id": "positioning.guild-search",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/positioning.ts",
+      "operations": [
+        "positioning.guild-search.read"
+      ],
+      "auth_profile": "member-session"
+    }
+  ]
 }

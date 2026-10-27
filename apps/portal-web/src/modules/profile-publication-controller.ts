@@ -1,6 +1,6 @@
 import type {SharingMutationState} from './authoring-drafts';
 import {VisitorProfile,type VisitorProfileData} from '../../../../packages/shared/member-profile';
-export function profilePublicationPreview(draft:Pick<VisitorProfileData,'display_name'|'bio'|'links'>){return VisitorProfile.safeParse({display_name:draft.display_name,bio:draft.bio,links:draft.links,avatar_url:null});}
+export function profilePublicationPreview(draft:Pick<VisitorProfileData,'display_name'|'bio'|'links'>&Partial<Pick<VisitorProfileData,'layout'>>){return VisitorProfile.safeParse({display_name:draft.display_name,bio:draft.bio,links:draft.links,avatar_url:null,layout:draft.layout,cover:null});}
 
 /** Read the command store at navigation time, not a previous React render. */
 export function profileMutationBlocksLeave(state:SharingMutationState|null){return Boolean(state?.live()&&(state.snapshot.busy||state.snapshot.lastFailureUnknown));}

@@ -42,6 +42,8 @@ export const TESTER_FLAGS = {
   community_discovery_enabled: 'off',
   member_blocking_enabled: 'on',
   member_reporting_enabled: 'off',
+  // Local candidate default only; not part of the dated public-site observation.
+  social_achievements_enabled: 'off',
   community_search_enabled: 'on',
   community_relations_enabled: 'off',
   unified_sharing_enabled: 'off',
@@ -163,6 +165,7 @@ export const TESTER_AREAS: readonly TesterArea[] = [
       { id: 'profile.space', pages: ['profile'], href: '#profile', redesign: [1010], name: ['#profile 本人空間（非公開牆）', '#profile personal space (not a public wall)', '#profile 個人スペース（公開ウォールではない）', '#profile 개인 공간(공개 담벼락 아님)', '#profile espacio personal (no es un muro público)'] },
       { id: 'profile.menu', pages: ['profile', 'account'], redesign: [1010], name: ['頭像選單：語言（5 種）與外觀（5 種）', 'Avatar menu: language (5) and appearance (5)', 'アバターメニュー：言語（5）と外観（5）', '아바타 메뉴: 언어(5)와 테마(5)', 'Menú del avatar: idioma (5) y apariencia (5)'] },
       { id: 'profile.card', pages: ['account'], href: '#account', name: ['我的名片、頭像與公開範圍', 'Profile card, avatar and visibility', '名刺・アバター・公開範囲', '프로필 카드 · 아바타 · 공개 범위', 'Tarjeta, avatar y visibilidad'] },
+      { id: 'profile.social-titles', pages: ['account'], flag: 'social_achievements_enabled', name: ['自願累積社群稱號（未啟用候選）', 'Opt-in social titles (disabled candidate)', '任意参加の称号（無効の候補）', '선택 참여 칭호(비활성 후보)', 'Títulos voluntarios (candidato desactivado)'] },
       { id: 'profile.security', pages: ['account'], href: '#account', name: ['兩步驟驗證、更換 Email 與停用帳號', 'Two-step verification, email change and deactivation', '2段階認証・メール変更・アカウント停止', '2단계 인증 · 이메일 변경 · 계정 비활성화', 'Verificación en dos pasos, cambio de email y desactivación'] },
       { id: 'profile.content', pages: ['my-content'], href: '#my-content', flag: 'personal_content_enabled', name: ['我的內容：草稿與發布狀態', 'My content: drafts and publishing status', '自分のコンテンツ：下書きと公開状況', '내 콘텐츠: 초안과 게시 상태', 'Mi contenido: borradores y estado'] },
       { id: 'profile.todos', pages: ['todos'], href: '#todos', name: ['入門指南', 'Getting started', 'はじめに', '시작 안내', 'Primeros pasos'] },

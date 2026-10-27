@@ -1,20 +1,21 @@
+import {openAccountSettings} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import {test,expect,type Page} from './member-feature-fixture.js';
 import {DEMO_PASSWORD,DEMO_COMMUNITY,DEMO_USERS} from '../../packages/testing/seed.js';
 import {signOut} from './navigation.js';
 
-async function login(page:Page,email='maker@local.test'){
+async function login(page:Page,email='maker@local.test',preferences=true){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
-  await page.goto('/#account');
+  await page.goto('/#account');if(preferences)await openAccountSettings(page,'通知設定');
 }
 test.describe('default-off notification preferences',()=>{
   test.use({memberFeatures:{}});
   test('default OFF hides preferences and rejects routes before authentication',async({page,request})=>{
     expect((await request.get('/api/v1/me/notification-preferences')).status()).toBe(404);
     expect((await request.get('/api/v1/me/notification-preferences/summary')).status()).toBe(404);
-    await login(page);await expect(page.getByRole('heading',{name:'通知偏好',exact:true})).toHaveCount(0);
+    await login(page,'maker@local.test',false);await expect(page.getByRole('heading',{name:'通知偏好',exact:true})).toHaveCount(0);
     expect(await page.evaluate(async()=>(await (await fetch('/api/v1/site')).json()).notification_preferences_enabled)).toBe(false);
   });
 });
@@ -30,7 +31,7 @@ test.describe('enabled notification preferences',()=>{
     await panel.getByLabel('頻道類型').selectOption('world');const channels=panel.locator('.notification-preferences-channels input');await expect(channels.first()).toBeVisible();await channels.first().check();
     await expect(panel.getByLabel('未啟用／預設未訂閱')).toBeDisabled();
     await panel.getByRole('button',{name:'儲存通知偏好',exact:true}).focus();await page.keyboard.press('Enter');await expect(panel.getByText('通知偏好已儲存。',{exact:true})).toBeVisible();
-    await page.reload();await expect(panel.getByLabel('好友邀請與結果')).toHaveValue('summary');await expect(panel.getByLabel('小隊邀請與加入結果')).toHaveValue('off');await expect(panel.getByLabel('啟用安靜時段')).toBeChecked();
+    await page.reload();await openAccountSettings(page,'通知設定');await expect(panel.getByLabel('好友邀請與結果')).toHaveValue('summary');await expect(panel.getByLabel('小隊邀請與加入結果')).toHaveValue('off');await expect(panel.getByLabel('啟用安靜時段')).toBeChecked();
     await panel.getByLabel('頻道類型').selectOption('world');await expect(channels.first()).toBeChecked();
     const before=(await e2eAuthPool.query('SELECT notification_id,read_at FROM member_notifications ORDER BY notification_id')).rows;
     await panel.getByRole('button',{name:'預覽目前摘要',exact:true}).click();await expect(panel.getByText(/產生時間：/)).toBeVisible();

@@ -113,6 +113,8 @@ test('PERSONAL-SPACE-UI-08: language/theme panels preserve an account form draft
  await login(page);await page.getByRole('link',{name:'編輯資料與分享設定',exact:true}).click();await expect(page).toHaveURL(/#account$/);const input=page.getByLabel('社群顯示名稱',{exact:true});await input.fill('尚未儲存的本人草稿');
  for(const label of ['English','日本語','한국어','Español','繁體中文']){await openSettingsPanel(page,'language');const option=page.getByRole('menuitemradio',{name:label,exact:true});await option.click();await expect(option).toBeFocused();await expect(input).toHaveValue('尚未儲存的本人草稿');await closeSettingsMenu(page);}
  await openSettingsPanel(page,'appearance');await page.getByRole('menuitemradio',{name:'自由工坊－夜航',exact:true}).click();await closeSettingsMenu(page);await expect(input).toHaveValue('尚未儲存的本人草稿');
+ // This journey intentionally leaves the unsaved form; accept only this confirmation.
+ page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');expect(dialog.message()).toContain('尚未儲存');void dialog.accept();});
  await page.locator('.settings-menu-button').click();await page.goBack();await expect(page).toHaveURL(/#profile$/);await expect(page.getByRole('menu')).toHaveCount(0);
 });
 
@@ -234,7 +236,7 @@ for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px
  expect(actionBox.y).toBeGreaterThanOrEqual(Math.max(identityBox.y+identityBox.height,avatarBox.y+avatarBox.height));
  expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
  await expect(action.getByRole('link')).toHaveCount(2);
- for(const [name,href] of [['編輯資料與分享設定','#account'],['對外個人頁與可見範圍','#profile?view=settings']]){
+ for(const [name,href] of [['編輯資料與分享設定','#account'],['佈置主頁','#profile?view=settings']]){
   const link=action.getByRole('link',{name,exact:true});await expect(link).toBeVisible();await expect(link).toHaveAttribute('href',href);
   const box=(await link.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
  }
@@ -247,5 +249,5 @@ for(const width of [320,375,390,768,1280])test(`PERSONAL-SPACE-UI-17: ${width}px
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.keyboard.press('Space');await expect(details).not.toHaveAttribute('open');await expect(summary).toBeFocused();
  longIdentity=true;await page.getByRole('button',{name:'重新整理',exact:true}).click();await expect(identity).toContainText('VeryLongUnbrokenCreatorName'.repeat(5));
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link',{name:'編輯資料與分享設定',exact:true})).toHaveAttribute('href','#account');await expect(action.getByRole('link',{name:'對外個人頁與可見範圍',exact:true})).toHaveAttribute('href','#profile?view=settings');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(action.getByRole('link',{name:'編輯資料與分享設定',exact:true})).toHaveAttribute('href','#account');await expect(action.getByRole('link',{name:'佈置主頁',exact:true})).toHaveAttribute('href','#profile?view=settings');
 });

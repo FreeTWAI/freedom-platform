@@ -39,7 +39,8 @@
     "skill-submissions",
     "social-feed",
     "tenant-workspaces",
-    "work"
+    "work",
+    "community-certification"
   ],
   "format": "freedom.module/v1",
   "instructions": [

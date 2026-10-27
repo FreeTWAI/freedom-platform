@@ -20,12 +20,12 @@ test('owner preview does not save, public needs explicit consent, unknown result
   if(route.request().method()==='GET')return route.fulfill({json:stored});
   attempts.push({body:route.request().postDataJSON(),key:route.request().headers()['idempotency-key']??null});
   if(attempts.length===1)return route.abort('failed');
-  const body=route.request().postDataJSON();stored={...body,avatar_url:null,aggregate_version:'1'};return route.fulfill({json:stored});
+  const {confirm_public,...body}=route.request().postDataJSON();stored={...body,avatar_url:null,aggregate_version:'1'};return route.fulfill({json:stored});
  });
  await login(page);await page.goto('/#profile?view=settings');await expect(page.getByRole('heading',{name:'對外個人頁',exact:true})).toBeVisible();await expect(page.getByRole('link',{name:'前往資料與帳號設定，管理分享名片'})).toHaveAttribute('href','#account');
  await page.getByLabel('顯示名稱',{exact:true}).fill('我的公開名稱');await page.getByLabel('一句話介紹',{exact:true}).fill('預覽中的自介');await page.getByRole('button',{name:'新增連結'}).click();await page.getByLabel('連結名稱 1',{exact:true}).fill('我的作品連結');await page.getByLabel('HTTPS 網址 1',{exact:true}).fill('https://example.test/my-work');await page.getByRole('radio',{name:'任何人（免登入）'}).check();
  await page.getByRole('button',{name:'草稿外觀預覽'}).click();await expect(page.getByRole('heading',{name:'尚未儲存的草稿預覽'})).toBeVisible();await expect(page.getByRole('heading',{name:'我的公開名稱'})).toBeVisible();await expect(page.locator('.profile-preview').getByText('預覽中的自介',{exact:true})).toBeVisible();await expect(page.locator('.profile-preview').getByRole('link',{name:'我的作品連結'})).toHaveAttribute('href','https://example.test/my-work');expect(attempts).toHaveLength(0);
- await expect(page.getByRole('button',{name:'確認公開',exact:true})).toBeDisabled();await page.getByRole('checkbox',{name:'我確認公開以上文字與連結'}).check();await page.getByRole('button',{name:'確認公開',exact:true}).click();
+ await expect(page.getByRole('button',{name:'確認公開',exact:true})).toBeDisabled();await page.getByRole('checkbox',{name:'我確認公開以上文字、連結與已勾選的封面'}).check();await page.getByRole('button',{name:'確認公開',exact:true}).click();
  await expect(page.getByRole('button',{name:'確認原儲存結果'})).toBeVisible();await page.getByRole('button',{name:'確認原儲存結果'}).click();
  await expect(page.getByText('個人頁與可見範圍已儲存。')).toBeVisible();expect(attempts).toHaveLength(2);expect(attempts[0]).toEqual(attempts[1]);
 });
@@ -40,4 +40,35 @@ test('member incoming action is explicit; profile view does not write',async({pa
 for(const width of [320,390])test(`profile editor ${width}px keeps fields within viewport`,async({page})=>{
  await page.setViewportSize({width,height:844});await page.route('**/api/v1/me/profile-publication',route=>route.fulfill({json:settings}));await login(page);await page.goto('/#profile?view=settings');await expect(page.getByLabel('顯示名稱',{exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test('customization preview, reorder, cancel and reset are local until explicit save; private cover staging needs consent',async({page})=>{
+ const {defaultProfileLayout}=await import('../../packages/shared/member-profile.js');
+ let stored={...settings,display_name:'我的個人頁',layout:structuredClone(defaultProfileLayout),include_cover:false,cover_version:null as string|null,cover:null,aggregate_version:'1'};
+ const writes:Record<string,unknown>[]=[];let coverWrites=0;
+ await page.route('**/api/v1/me/profile-publication',route=>{if(route.request().method()==='GET')return route.fulfill({json:stored});const {confirm_public,...body}=route.request().postDataJSON();writes.push(body);stored={...stored,...body,aggregate_version:String(Number(stored.aggregate_version)+1)};return route.fulfill({json:stored});});
+ await page.route('**/api/v1/me/profile-cover',route=>{if(route.request().method()==='GET')return route.fulfill({json:{version:coverWrites?'2':'1',present:!!coverWrites,upload_available:true,reason:null,draft_versions:coverWrites?['2']:[]}});coverWrites++;return route.fulfill({json:{version:'2',present:true}});});
+ await page.route('**/api/v1/me/profile-cover/image?*',route=>route.fulfill({status:404}));
+ await login(page);await page.goto('/#profile?view=settings');await page.getByLabel('主題',{exact:true}).selectOption('night');await page.getByText('關於我與精選作品',{exact:true}).click();await page.getByLabel('關於我',{exact:true}).fill('自己的空間\n第二行');await page.getByRole('button',{name:'新增精選作品'}).click();await page.getByLabel('作品名稱 1',{exact:true}).fill('我的手作');await page.getByLabel('作品 HTTPS 網址 1',{exact:true}).fill('https://example.test/handmade');
+ await page.getByText('顯示哪些區塊、先後順序',{exact:true}).click();await page.getByRole('button',{name:'上移精選作品',exact:true}).click();await page.getByRole('button',{name:'草稿外觀預覽'}).click();const preview=page.locator('.profile-preview');await expect(preview.locator('[data-profile-theme="night"]')).toBeVisible();await expect(preview.getByRole('link',{name:'我的手作'})).toHaveAttribute('href','https://example.test/handmade');expect(writes).toHaveLength(0);
+ await page.getByRole('button',{name:'取消修改',exact:true}).click();await expect(page.getByLabel('主題',{exact:true})).toHaveValue('paper');expect(writes).toHaveLength(0);
+ await page.getByLabel('選擇封面圖片',{exact:true}).setInputFiles({name:'cover.png',mimeType:'image/png',buffer:Buffer.from('synthetic upload; server decoding covered separately')});await page.getByRole('button',{name:'上傳並預覽封面'}).click();await expect(page.getByText('封面已存成私人草稿。確認預覽並勾選使用後，再按儲存個人頁。')).toBeVisible();expect(coverWrites).toBe(1);expect(writes).toHaveLength(0);
+ const consent=page.getByRole('checkbox',{name:'使用這張封面，依個人頁可見範圍展示'});await expect(consent).not.toBeChecked();await consent.check();await page.getByRole('button',{name:'儲存',exact:true}).click();await expect(page.getByText('個人頁與可見範圍已儲存。')).toBeVisible();expect(writes[0]).toMatchObject({visibility:'private',include_cover:true,cover_version:'2'});
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'恢復預設外觀'}).click();expect(writes).toHaveLength(1);await page.getByRole('button',{name:'儲存',exact:true}).click();await expect.poll(()=>writes.length).toBe(2);expect(writes[1]).toMatchObject({visibility:'private',include_cover:false,cover_version:null});
+});
+
+test('cover ambiguous upload keeps identical file key and CAS through a later conflict',async({page})=>{
+ const attempts:{body:string|null;key:string|undefined;version:string|undefined}[]=[];
+ await page.route('**/api/v1/me/profile-publication',route=>route.fulfill({json:{...settings,display_name:'封面測試'}}));
+ await page.route('**/api/v1/me/profile-cover',route=>{
+  if(route.request().method()==='GET')return route.fulfill({json:{version:'1',present:false,upload_available:true,reason:null,draft_versions:[]}});
+  const request=route.request();attempts.push({body:request.postData(),key:request.headers()['idempotency-key'],version:request.headers()['if-match']});
+  if(attempts.length===1)return route.abort('failed');
+  if(attempts.length===2)return route.fulfill({status:412,json:{title:'版本已更新',status:412,code:'version_conflict'}});
+  return route.fulfill({json:{version:'2',present:true}});
+ });
+ await page.route('**/api/v1/me/profile-cover/image?*',route=>route.fulfill({status:404}));
+ await login(page);await page.goto('/#profile?view=settings');await page.getByLabel('選擇封面圖片',{exact:true}).setInputFiles({name:'cover.png',mimeType:'image/png',buffer:Buffer.from('synthetic unchanged cover bytes')});await page.getByRole('button',{name:'上傳並預覽封面'}).click();
+ const recover=page.getByRole('button',{name:'確認原封面操作',exact:true});await expect(recover).toBeVisible();await expect(page.getByRole('button',{name:'返回本人空間',exact:true})).toBeDisabled();await recover.click();await expect(recover).toBeEnabled();await expect(page.getByRole('button',{name:'返回本人空間',exact:true})).toBeDisabled();await expect(page.getByLabel('選擇封面圖片',{exact:true})).toBeDisabled();await recover.click();
+ await expect(page.getByText('封面已存成私人草稿。確認預覽並勾選使用後，再按儲存個人頁。')).toBeVisible();expect(attempts).toHaveLength(3);expect(attempts[1]).toEqual(attempts[0]);expect(attempts[2]).toEqual(attempts[0]);await expect(page.getByRole('button',{name:'返回本人空間',exact:true})).toBeEnabled();
 });

@@ -1,3 +1,4 @@
+import {defaultProfileLayout} from '../../packages/shared/member-profile.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {ProfilePublicationInput,VisitorProfile,visitorProfile,canReadVisitorProfile} from '../../packages/shared/member-profile.js';
@@ -14,7 +15,7 @@ test('publication is strict, text-only and requires fresh explicit public confir
 });
 test('DTO allowlist never spreads private/account fields',()=>{
   const value=visitorProfile({...body,email:'secret',orders:['secret'],avatar_url:'/private/avatar',aggregate_version:9} as any);
-  assert.deepEqual(value,{display_name:body.display_name,bio:body.bio,links:[],avatar_url:null});
+  assert.deepEqual(value,{display_name:body.display_name,bio:body.bio,links:[],avatar_url:null,layout:defaultProfileLayout,cover:null});
   for(const key of ['visibility','contacts','email','actions'])assert.throws(()=>VisitorProfile.parse({...value,[key]:'not allowed'}));
 });
 test('self/member/guest/private/blocked matrix; public can be read signed out',()=>{

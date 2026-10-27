@@ -1,3 +1,4 @@
+import {defaultProfileLayout} from '../../packages/shared/member-profile.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createProfileReader,profilePublicationPreview,profileMutationBlocksLeave} from '../../apps/portal-web/src/modules/profile-publication-controller.js';
@@ -37,7 +38,7 @@ test('StrictMode stop/start ignores first request and allows one new request; fa
 test('draft preview projects only visitor fields and accepts valid drafts with visibility',()=>{
  const draft={visibility:'private',display_name:'Draft preview',bio:'Valid draft',links:[]};
  const result=profilePublicationPreview(draft);assert.equal(result.success,true);
- if(result.success)assert.deepEqual(result.data,{display_name:'Draft preview',bio:'Valid draft',links:[],avatar_url:null});
+ if(result.success)assert.deepEqual(result.data,{display_name:'Draft preview',bio:'Valid draft',links:[],avatar_url:null,layout:defaultProfileLayout,cover:null});
  assert.equal(profilePublicationPreview({...draft,display_name:''}).success,false);
 });
 
@@ -68,4 +69,49 @@ test('directory link eligibility never throws or constructs routes for invalid I
  for(const value of ['member-0','',null,undefined,123,'javascript:alert(1)',`${id}&view=settings`,`${id}/`,{}])assert.equal(directoryVisitorProfileHref(value),null);
  assert.throws(()=>visitorProfileHash('member-0'),/Invalid member id/);
  assert.deepEqual(parseProfileRoute('#profile?member=member-0'),{kind:'invalid'});
+});
+
+test('strict response decoding retains original tuple/key on malformed 2xx until valid replay; late account responses cannot settle',async()=>{
+ const {setSharingDraftAccount,sharingMutationState}=await import('../../apps/portal-web/src/modules/authoring-drafts.js');
+ const {performModuleMutation}=await import('../../apps/portal-web/src/modules/shared.js');
+ const {ProfilePublicationSettingsSchema}=await import('../../packages/shared/member-profile.js');
+ setSharingDraftAccount('decode-owner',401);const state=sharingMutationState({userId:'decode-owner',type:'profile-publication-settings'});
+ const requests:{body:unknown;options:unknown}[]=[];let resolve:(value:unknown)=>void=()=>{};
+ const client={post:(_path:string,body:unknown,options:unknown)=>{requests.push({body,options});return new Promise(yes=>{resolve=yes;});}} as unknown as import('../../apps/portal-web/src/api.js').PortalClient;
+ const body={visibility:'private',display_name:'Owner',bio:'',links:[],confirm_public:false};
+ const decode=(value:unknown)=>ProfilePublicationSettingsSchema.parse(value);
+ const first=performModuleMutation(client,state,'/me/profile-publication',body,'1',decode);assert.equal(profileMutationBlocksLeave(state),true);resolve({aggregate_version:'2'});assert.equal(await first,undefined);
+ assert.equal(state.snapshot.lastFailureUnknown,true);assert.equal(profileMutationBlocksLeave(state),true);assert.equal(state.keys.size,1);
+ const retry=performModuleMutation(client,state,'/me/profile-publication',body,'1',decode);assert.deepEqual(requests[0],requests[1]);
+ resolve({visibility:'private',display_name:'Owner',bio:'',links:[],avatar_url:null,aggregate_version:'2'});assert.equal((await retry)?.aggregate_version,'2');assert.equal(state.keys.size,0);assert.equal(profileMutationBlocksLeave(state),false);
+ let decoded=0;const late=performModuleMutation(client,state,'/me/profile-publication',body,'2',value=>{decoded++;return decode(value);});
+ setSharingDraftAccount('other-owner',402);resolve({visibility:'private',display_name:'Old owner private text',bio:'',links:[],avatar_url:null,aggregate_version:'3'});assert.equal(await late,undefined);assert.equal(decoded,0);assert.equal(profileMutationBlocksLeave(state),false);
+});
+
+test('decoder-enabled ambiguous tuple remains unknown after later 412/422; initially confirmed 412 stays recoverable',async()=>{
+ const {setSharingDraftAccount,sharingMutationState}=await import('../../apps/portal-web/src/modules/authoring-drafts.js');
+ const {performModuleMutation}=await import('../../apps/portal-web/src/modules/shared.js');
+ const {ApiError}=await import('../../apps/portal-web/src/api.js');
+ setSharingDraftAccount('unknown-history',501);const state=sharingMutationState({userId:'unknown-history',type:'profile-publication-settings'});
+ const calls:unknown[]=[];let reply:unknown={bad:true},failure:unknown;
+ const client={post:async(path:string,body:unknown,options:unknown)=>{calls.push({path,body,options});if(failure)throw failure;return reply;}} as unknown as import('../../apps/portal-web/src/api.js').PortalClient;
+ const decode=(value:unknown)=>{if((value as {saved?:boolean}).saved!==true)throw Error('malformed');return value;};
+ failure=new ApiError({message:'Initial confirmed conflict',status:412,definitiveResponse:true});await performModuleMutation(client,state,'/profile',{text:'initial'},'1',decode);assert.equal(state.keys.size,0);assert.equal(state.snapshot.lastFailureUnknown,false);
+ failure=undefined;await performModuleMutation(client,state,'/profile',{text:'ambiguous'},'1',decode);const original=calls.at(-1);assert.equal(state.keys.size,1);assert.equal(profileMutationBlocksLeave(state),true);
+ for(const status of [412,422,403,401]){failure=new ApiError({message:'Later rejection',status});await performModuleMutation(client,state,'/profile',{text:'ambiguous'},'1',decode);assert.deepEqual(calls.at(-1),original);assert.equal(state.keys.size,1);assert.equal(profileMutationBlocksLeave(state),true);}
+ failure=undefined;reply={saved:true};await performModuleMutation(client,state,'/profile',{text:'ambiguous'},'1',decode);assert.deepEqual(calls.at(-1),original);assert.equal(state.keys.size,0);assert.equal(profileMutationBlocksLeave(state),false);
+});
+
+test('decoder-enabled profile commands retain first malformed 412/422 and later definitive rejection until same-key success',async()=>{
+ const {setSharingDraftAccount,sharingMutationState}=await import('../../apps/portal-web/src/modules/authoring-drafts.js');
+ const {performModuleMutation}=await import('../../apps/portal-web/src/modules/shared.js');
+ const {PortalClient}=await import('../../apps/portal-web/src/api.js');
+ const original=globalThis.fetch;let generation=600;
+ try{for(const status of [412,422])for(const malformed of ['<html>gateway</html>','','{}','[]',JSON.stringify({type:'about:blank',title:'Mismatch',status:409})]){
+  const client=new PortalClient();client.csrfToken='synthetic-profile-test';setSharingDraftAccount('profile-provenance',++generation);const state=sharingMutationState({userId:'profile-provenance',type:'profile-publication-settings'});const calls:unknown[]=[];let attempt=0;
+  globalThis.fetch=async(_url,init)=>{calls.push({body:init?.body,key:new Headers(init?.headers).get('Idempotency-Key'),version:new Headers(init?.headers).get('If-Match')});attempt++;return attempt===1?new Response(malformed,{status}):attempt===2?Response.json({type:'about:blank',title:'Conflict',status:412},{status:412}):Response.json({saved:true});};
+  const decode=(value:unknown)=>{assert.equal((value as any).saved,true);return value;};
+  for(let i=0;i<2;i++){await performModuleMutation(client,state,'/profile',{name:'original'},'1',decode);assert.equal(state.keys.size,1);assert.equal(profileMutationBlocksLeave(state),true);}
+  await performModuleMutation(client,state,'/profile',{name:'original'},'1',decode);assert.equal(state.keys.size,0);assert.equal(profileMutationBlocksLeave(state),false);assert.deepEqual(calls[0],calls[1]);assert.deepEqual(calls[0],calls[2]);
+ }}finally{globalThis.fetch=original;}
 });

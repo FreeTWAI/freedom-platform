@@ -1,0 +1,21 @@
+/* Disclosure keeps editors mounted: collapsing a section never loses a draft. */
+.account-settings { min-width: 0; }
+.account-settings-intro { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
+.account-settings-section > summary { cursor:pointer; min-height:44px; padding:12px 0; }
+.account-settings-section > summary strong { font-size:1.15rem; }
+.account-settings-section > summary span { display:block; margin:4px 0 0 1.2em; color:var(--muted); font-size:1rem; }
+.account-settings-body { margin-top:16px; min-width:0; }
+.account-settings-more > summary { cursor:pointer; padding:12px 4px; min-height:44px; }
+.account-settings-more > :not(summary) { margin-top:12px; }
+.account-settings summary:focus-visible { outline:3px solid var(--focus); outline-offset:3px; border-radius:6px; }
+.account-settings .btn, .account-settings input:not([type=checkbox]):not([type=radio]), .account-settings select, .account-settings .checkbox-row { min-height:44px; }
+.account-settings .checkbox-row { align-items:center; }
+.account-settings .contact-row { min-width:0; overflow-wrap:anywhere; }
+.account-settings .contact-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); }
+.account-settings .account-settings-more .card { max-width:100%; }
+@media(max-width:600px) {
+  .account-settings input, .account-settings select { font-size:16px; }
+  .account-settings-section { padding:16px; }
+  .account-settings .actions { flex-wrap:wrap; }
+}
+.account-settings .contact-row { grid-template-columns:minmax(0,1fr); align-items:start; }

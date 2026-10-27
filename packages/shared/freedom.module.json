@@ -41,7 +41,11 @@
     "apps/portal-web/src/modules/ExpeditionDesign.css",
     "apps/portal-web/src/modules/ModuleDiscovery.css",
     "apps/portal-web/src/modules/authoring-drafts.ts",
-    "packages/shared/member-profile.ts"
+    "packages/shared/member-profile.ts",
+    "packages/shared/profile-authority.ts",
+    "packages/shared/community-certification.ts",
+    "apps/portal-web/src/modules/CommunityCertificationBadge.tsx",
+    "apps/portal-web/src/modules/CommunityCertificationBadge.css"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/auth/PasswordField.tsx",
@@ -69,7 +73,11 @@
     "apps/portal-web/src/modules/shared.tsx",
     "packages/shared/html.ts",
     "packages/shared/skill-acquisition.ts",
-    "packages/shared/member-profile.ts"
+    "packages/shared/member-profile.ts",
+    "apps/portal-web/src/modules/authoring-drafts.ts",
+    "packages/shared/profile-authority.ts",
+    "apps/portal-web/src/modules/CommunityCertificationBadge.tsx",
+    "apps/portal-web/src/modules/CommunityCertificationBadge.css"
   ],
   "dependencies": [],
   "contract_families": [],

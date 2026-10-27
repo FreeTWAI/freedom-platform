@@ -16,7 +16,7 @@ const states:Record<string,InterfaceMessage>={draft:'space.state.draft',active:'
 const audiences:Record<string,InterfaceMessage>={private:'space.audience.private',community:'space.audience.community',public:'space.audience.public',workshop:'space.audience.workshop',guild:'space.audience.guild',open:'space.audience.open',referral:'space.audience.referral'};
 
 /** Signed-in owner's space, not a share capability or an author-directory endpoint. */
-export function PersonalSpace({client,session,contentEnabled}:{client:PortalClient;session:SessionPayload;contentEnabled:boolean}){
+export function PersonalSpace({client,session,contentEnabled,recognitionEnabled=false}:{client:PortalClient;session:SessionPayload;contentEnabled:boolean;recognitionEnabled?:boolean}){
   const {t}=useLanguage();
   const owner=session.user.user_id,generation=client.sessionGeneration;
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[revision,setRevision]=useState(0),[loading,setLoading]=useState(true);
@@ -55,7 +55,7 @@ export function PersonalSpace({client,session,contentEnabled}:{client:PortalClie
           {current.hero.positioning_title&&<p>{current.hero.positioning_title}</p>}
         </div>
       </> : <div className="personal-space-identity"><h2>{t('nav.profile')}</h2><p role="status">{current?.profileError?t('space.profileError'):t('space.profileLoading')}</p></div>}
-      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a><a className="btn btn-secondary btn-small" href="#profile?view=settings">對外個人頁與可見範圍</a></div>
+      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a><a className="btn btn-secondary btn-small" href="#profile?view=settings">佈置主頁</a>{recognitionEnabled&&<a className="btn btn-secondary btn-small" href="#account?view=recognition">我的稱號與認證</a>}</div>
       {!!current?.hero?.guilds.length&&<details className="personal-space-memberships">
         <summary>{t('space.guilds')} <span>({current.hero.guilds.length})</span></summary>
         <ul className="personal-space-guilds" aria-label={t('space.guilds')}>{current.hero.guilds.map(guild=><li key={guild.guild_key}>{guild.name}</li>)}</ul>

@@ -42,7 +42,7 @@ test('no auto-publication; private/member/public opt-in, block, revocation and D
  assert.equal((await request(`/public/member-profiles/${owner.id}`)).status,404);
  assert.equal((await request('/me/profile-publication',owner,{...draft,visibility:'public'},saved.data.aggregate_version)).status,422);
  saved=await request('/me/profile-publication',owner,{...draft,visibility:'public',confirm_public:true},saved.data.aggregate_version);assert.equal(saved.status,200);
- const anonymous=await request(`/public/member-profiles/${owner.id}`);assert.equal(anonymous.status,200);assert.deepEqual(Object.keys(anonymous.data).sort(),['avatar_url','bio','display_name','links']);
+ const anonymous=await request(`/public/member-profiles/${owner.id}`);assert.equal(anonymous.status,200);assert.deepEqual(Object.keys(anonymous.data).sort(),['avatar_url','bio','cover','display_name','layout','links']);assert.equal(anonymous.data.cover,null);assert.equal(anonymous.data.layout.theme,'paper');for(const forbidden of ['email','contacts','orders','posts','asset_id','object_key','actions'])assert.equal(forbidden in anonymous.data,false);
  // Exercise actual SQL block predicate independently of feature-gated block UI.
  await pool.query("INSERT INTO member_interaction_blocks(community_id,owner_ref,target_ref,state) SELECT community_id,$1,$2,'active' FROM users WHERE user_id=$1",[viewer.id,owner.id]);
  assert.equal((await request(`/members/${owner.id}/profile`,viewer)).status,404);

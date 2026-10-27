@@ -140,6 +140,7 @@ export type PlatformRuntime = {
   memberBlockingEnabled?: boolean;
   /** Explicit release setting; reporting routes remain unavailable unless exactly true. */
   memberReportingEnabled?: boolean;
+  socialAchievementsEnabled?: boolean;
   /** Explicit release setting for community content search. Absent or false leaves routes unregistered. */
   communitySearchEnabled?: boolean;
   /** Additive sharing navigation only; domain authorization remains authoritative. */
@@ -159,6 +160,8 @@ export type PlatformRuntime = {
   eventParticipationEnabled?: boolean;
   /** Admin-only participation report and search outcome signals. */
   participationMetricsEnabled?: boolean;
+  /** Manual community certification. Absent/false keeps routes and badges unavailable. */
+  communityCertificationEnabled?: boolean;
   /** Opt-in linked GitHub Star prerequisite for skill grants and full-tier promotion. */
   skillBookStarGateEnabled?: boolean;
 };

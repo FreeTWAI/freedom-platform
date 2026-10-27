@@ -9,6 +9,7 @@ export type CoverageEntry = { status: CoverageStatus; issues?: readonly number[]
 
 export const TESTER_COVERAGE_UPDATED_AT = '2026-10-25';
 export const TESTER_COVERAGE: Record<string, CoverageEntry> = {
+  'profile.social-titles': { status: '未測' },
   // 入口、註冊與加入
   'entry.preview': { status: '未測' },
   'entry.register': { status: '未測' },

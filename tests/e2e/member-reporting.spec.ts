@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type BrowserContext,type Page} from './member-feature-fixture.js';
@@ -74,10 +75,11 @@ for(const width of [1440,768,390,320])for(const [themeName,theme] of themes){
       await page.route(url=>url.pathname==='/api/v1/me/account'||url.pathname===`/api/v1/members/${ids[0]}`,async route=>{
         const response=await route.fetch();await profileGate;await route.fulfill({response});
       });
-      await navigate(page,'我的名片');
+      await navigate(page,'我的名片');await openAccountSettings(page,'帳號與安全');
       const ownReports=page.getByRole('button',{name:'我的檢舉案件',exact:true});
       await expect(ownReports).toBeVisible();releaseProfile!();
-      await expect(page.locator('.account-panel > .member-card')).toBeVisible();
+      await openAccountSettings(page,'查看目前的會員名片');
+      await expect(page.locator('.account-panel .member-card')).toBeVisible();
       await expect(page.getByRole('textbox',{name:'社群顯示名稱',exact:true})).toHaveValue(names[0]);
       await ownReports.click();await expect(ownReports).toHaveAttribute('aria-expanded','true');
       await expect(page.getByRole('heading',{name:'我的檢舉案件',exact:true})).toBeVisible();await expect(page.locator('article').filter({hasText:'已收到'}).first()).toBeVisible();
@@ -142,7 +144,7 @@ test.describe('reporting disabled',()=>{
   test.use({memberFeatures:{}});
   test('no reporting entry or authenticated evidence route is installed by default',async({page})=>{
     await page.goto('/#home');await page.getByLabel('電子郵件',{exact:true}).fill(DEMO_USERS[0].email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);await page.getByRole('button',{name:'登入',exact:true}).click();
-    await expect(page.locator('.shell')).toBeVisible();await navigate(page,'我的名片');
+    await expect(page.locator('.shell')).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'帳號與安全');
     await expect(page.getByRole('button',{name:'我的檢舉案件',exact:true})).toHaveCount(0);await expect(page.getByRole('region',{name:'平台檢舉案件',exact:true})).toHaveCount(0);
     const id=randomUUID();for(const path of ['/me/reports','/admin/reports',`/admin/reports/${id}`,`/admin/reports/${id}/image`])expect((await page.request.get('/api/v1'+path)).status(),path).toBe(404);
     expect((await (await page.request.get('/api/v1/site')).json()).member_reporting_enabled).toBe(false);

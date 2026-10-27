@@ -1,3 +1,6 @@
+import {CommunityCertificationBadge} from './CommunityCertificationBadge';
+import type {ReactNode} from 'react';
+import {ProfileDesign} from './ProfileDesign';
 import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {VisitorProfile as PublicSchema,MemberVisitorProfile as MemberSchema,type VisitorProfileData,type MemberVisitorProfileData} from '../../../../packages/shared/member-profile';
 import type {PortalClient} from '../api';
@@ -8,8 +11,8 @@ import {useModuleMutation} from './shared';
 import './ProfilePublication.css';
 
 type Props={client:PortalClient;id:string;session?:SessionPayload;onLogin?:()=>void;onMessage?:(id:string)=>void;onEdit?:()=>void;registerLeave?:(guard:((hash:string|null)=>boolean)|null)=>void};
-export function ProfileText({profile}:{profile:VisitorProfileData}){
- return <><h2 className="profile-name">{profile.display_name}</h2>{profile.bio&&<p className="profile-bio">{profile.bio}</p>}{profile.links.length>0&&<ul className="profile-links">{profile.links.map((link,index)=><li key={index}><a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a></li>)}</ul>}</>;
+export function ProfileText({profile,coverUrl,recognition}:{profile:VisitorProfileData;coverUrl?:string|null;recognition?:ReactNode}){
+ return <ProfileDesign profile={profile} coverUrl={coverUrl} recognition={recognition}/>;
 }
 export function VisitorProfile(props:Props){
  return <VisitorProfileContent key={`${props.session?.user.user_id??'guest'}:${props.client.sessionGeneration}:${props.id}`} {...props}/>;
@@ -44,10 +47,13 @@ function VisitorProfileContent({client,id,session,onLogin,onMessage,onEdit,regis
   if(result!==undefined){setPending(null);setNotice('好友關係已更新。');void reader.refresh();}
  }
  const actions=value?.actions as MemberVisitorProfileData['actions']|null|undefined;
+ const badge=owner&&value&&'community_certification' in value?value.community_certification:undefined;
+ const title=owner&&value&&'social_achievement' in value?value.social_achievement:undefined;
+ const recognition=badge||title?<>{badge&&<CommunityCertificationBadge badge={badge}/>} {title&&<details className="social-achievement-title"><summary>社群稱號 · {title.label}</summary><p>{title.description}</p></details>}</>:null;
  return <section className="profile-publication stack" aria-label="個人頁">
   {state.status==='loading'&&<p role="status">正在讀取個人頁…</p>}
   {state.status==='error'&&<div className="card stack"><h2>目前無法查看此個人頁</h2><p>這個頁面目前無法提供給你閱讀。</p><button className="btn btn-secondary btn-small" onClick={()=>void reader.refresh()}>重新讀取</button>{!owner&&onLogin&&<button className="btn btn-secondary btn-small" onClick={onLogin}>登入後查看</button>}</div>}
-  {value&&<article className="card stack"><ProfileText profile={value.profile}/>
+  {value&&<article className="card stack"><ProfileText profile={value.profile} recognition={recognition} coverUrl={value.profile.cover?`/api/v1/${owner?`members/${id}/profile`:`public/member-profiles/${id}`}/cover?v=${encodeURIComponent(value.profile.cover.version)}&generation=${encodeURIComponent(value.profile.cover.generation)}`:null}/>
    {actions?.is_self?<><p className="hint">這是你已儲存的個人頁外觀，不代表所有訪客都能看見。</p><button className="btn btn-secondary btn-small" onClick={onEdit}>編輯對外個人頁</button></>:actions?<div className="actions">
     {actions.can_request&&<button className="btn btn-secondary btn-small" disabled={busy||lastFailureUnknown} onClick={()=>void act('request',actions.friendship.aggregate_version??undefined)}>邀請成為好友</button>}
     {actions.friendship.state==='pending'&&!actions.can_accept&&<span>好友邀請已送出，等待回覆</span>}
