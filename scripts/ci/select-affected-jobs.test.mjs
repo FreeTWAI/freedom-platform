@@ -1725,7 +1725,10 @@ test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps 
 test('browser spec selection retains its actual execution coverage and rejects mixed or unproven changes', () => {
   const input = {event:'pull_request',diffComplete:true,nonExecutableBlobsProven:true,descriptorsProven:true,
     baseline:narrow(),candidate:narrow(),changes:[edited('tests/e2e/public-social-posts.spec.ts')]};
-  for (const event of ['pull_request','push']) assert.equal(decideBrowserSpecProfile({...input,event}).profile,'browser_specs_only');
+  for (const event of ['pull_request','push']) {
+    for (const spec of ['public-social-posts','newcomer-guides','ai-sister-guides','social-feed','guild-workspace','guild-member-tiers'])
+      assert.equal(decideBrowserSpecProfile({...input,event,changes:[edited(`tests/e2e/${spec}.spec.ts`)]}).profile,'browser_specs_only');
+  }
   for (const change of [undefined,edited('tests/e2e/new.spec.ts','A'),edited('tests/e2e/public-social-posts.spec.ts','D'),
     edited('tests/e2e/fixtures.ts'),edited('tests/e2e/nested/example.spec.ts'),edited('playwright.config.ts'),
     edited('tests/runtime/public-social-post-page.test.ts'),edited('apps/portal-web/src/App.tsx'),
@@ -1738,7 +1741,7 @@ test('browser spec selection retains its actual execution coverage and rejects m
     assert.equal(decideBrowserSpecProfile({...input,...extra}).profile,'full');
   assert.deepEqual(MINIMAL_JOB_PROFILES.browser_specs_only,['ui-e2e']);
   assert.deepEqual(PINNED_SUITES['ci.browser-spec-consumers'].files,
-    ['tests/runtime/public-social-post-page.test.ts','tests/runtime/newcomer-guides.test.ts']);
+    ['tests/runtime/public-social-post-page.test.ts', 'tests/runtime/newcomer-guides.test.ts', 'tests/runtime/social-share.test.ts', 'tests/runtime/social-feed-write-order.test.ts', 'tests/runtime/guild-workspace-writer.test.ts', 'tests/runtime/guild-member-tier-fixture.test.ts']);
   assert.equal(PINNED_SUITES['ci.browser-spec-consumers'].database,false);
 });
 
@@ -1792,6 +1795,12 @@ test('CI tools admit only the exact browser coverage wiring and fixed consumer r
   const registry=await readFile(join(root,'packages/contribution-tools/pinned-suites.mjs'),'utf8');
   const addition=registry.split('\n').find(line=>line.startsWith("  'ci.browser-spec-consumers':"))+'\n';
   const old=registry.replace(addition,'');assert.equal(ciToolsBrowserRegistryProven(old,registry),true);
+  // Losing any actual spec-body consumer must reject the narrow registry change.
+  for (const file of PINNED_SUITES['ci.browser-spec-consumers'].files) {
+    const removed=addition.replace(`'${file}', `,'').replace(`, '${file}'`,'');
+    assert.notEqual(removed,addition);
+    assert.equal(ciToolsBrowserRegistryProven(old,registry.replace(addition,removed)),false,file);
+  }
   for(const changed of [registry.replace(addition,addition.replace('public-social-post-page.test.ts','unknown.test.ts')),
     registry.replace(addition,addition.replace('database: false','database: true')),registry.replace("'ci.worker-unit'","'ci.unknown'")])
     assert.equal(ciToolsBrowserRegistryProven(old,changed),false);

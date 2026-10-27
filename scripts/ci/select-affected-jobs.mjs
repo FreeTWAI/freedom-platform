@@ -104,7 +104,7 @@ const CI_TOOL_DOCS = new Set(['governance/README.md', 'packages/contribution-too
   'scripts/ci/affected-jobs.md', 'scripts/ci/release-inventory.md', 'scripts/repository-bootstrap/consumer-source-profiles.md']);
 const BROWSER_SPEC_TYPECHECK = "      - name: Typecheck browser-only changes\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        run: node node_modules/typescript/bin/tsc --noEmit\n";
 const BROWSER_SPEC_CONSUMERS = "      - name: Check existing browser-spec consumers\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.browser-spec-consumers\n";
-const BROWSER_SPEC_SUITE = "  'ci.browser-spec-consumers': Object.freeze({ files: Object.freeze(['tests/runtime/public-social-post-page.test.ts', 'tests/runtime/newcomer-guides.test.ts']), loader: 'tsx', database: false, timeoutMs: 180000, env: Object.freeze([]) }),\n";
+const BROWSER_SPEC_SUITE = "  'ci.browser-spec-consumers': Object.freeze({ files: Object.freeze(['tests/runtime/public-social-post-page.test.ts', 'tests/runtime/newcomer-guides.test.ts', 'tests/runtime/social-share.test.ts', 'tests/runtime/social-feed-write-order.test.ts', 'tests/runtime/guild-workspace-writer.test.ts', 'tests/runtime/guild-member-tier-fixture.test.ts']), loader: 'tsx', database: false, timeoutMs: 180000, env: Object.freeze([]) }),\n";
 export function ciToolsBrowserRegistryProven(before, after) {
   if (before === after) return true;
   const marker = 'export const PINNED_SUITES = Object.freeze({\n';
@@ -221,7 +221,7 @@ export function decideMinimalProfile(input) {
   return reason ? {profile: reason, reason} : fallback;
 }
 
-// Existing browser specs keep their browser plan, typecheck and two known
+// Existing browser specs keep their browser plan, typecheck and the known
 // runtime source consumers without the unrelated runtime matrix. Require an
 // unchanged graph and ordinary content-only integration diff.
 export function decideBrowserSpecProfile(input) {

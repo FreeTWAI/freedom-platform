@@ -13,9 +13,11 @@ The `browser_specs_only` profile handles ordinary modifications of existing
 `tests/e2e/<kebab-case>.spec.ts` files. The unchanged product and complete module
 graph do not need another runtime matrix, Worker restore drill or deployment
 preflight. The existing **ui-e2e** job retains the complete browser plan and adds
-the same TypeScript check normally supplied by static-worker. Two existing
-runtime files actually read browser-spec bodies: `public-social-post-page` and
-`newcomer-guides`. Their controlled race/ACK cases remain in the small, fixed
+the same TypeScript check normally supplied by static-worker. Six existing
+runtime files read browser-spec bodies: `public-social-post-page`,
+`newcomer-guides`, `social-share`, `social-feed-write-order`,
+`guild-workspace-writer` and `guild-member-tier-fixture`. Their controlled
+race/ACK, request forwarding and partial setup/cleanup failure cases remain in the small, fixed
 `ci.browser-spec-consumers` suite in the same job; no database or new runner is
 needed. It retains the pinned runner's missing/empty/skip/failure rejection.
 Source integrity,
@@ -104,7 +106,7 @@ may accompany a leaf; they cannot introduce another module obligation.
 | `affected`: plan_receipt_docs / module_app_markdown | 無 heavy jobs |
 | `affected`: plan_document_inputs | Governance consumers |
 | `affected`: delivery tooling | Deploy preflight (PR and direct main successor) |
-| `affected`: browser_specs_only | Complete browser plan, TypeScript and two existing consumer test files in ui-e2e (PR and direct main successor) |
+| `affected`: browser_specs_only | Complete browser plan, TypeScript and six existing consumer test files in ui-e2e (PR and direct main successor) |
 
 The frontend profile omits `governance-consumers`, `deploy-preflight` and the
 separate guild-presentation job. It does
