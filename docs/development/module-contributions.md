@@ -129,3 +129,5 @@ git diff --check
 需要資料庫的測試先準備獨立、可丟棄的 PostgreSQL；CLI 使用明確的 `TEST_DATABASE_URL`，設定規則見 [本機 runtime](local-runtime.md) 與 [governance](../../governance/README.md)。缺資料庫、瀏覽器或固定行為證據時，寫實際的 `not_run` / unavailable 與原因；`verify` 的 exit 2 不是成功，也不要求為了開 PR 假造所有驗收已完成。新功能模組目前仍會保留 `registration_behavior_audit_required`；即使選定測試通過，也要列出 runtime 註冊與行為審查的未驗項。不要為了消除檢查錯誤重建歷史 inventory；依本次 PR 實際套用的 CI 要求執行，source-boundaries 與 pin 轉換狀態見 [驗證說明](../../scripts/ci/release-inventory.md)。
 
 最後 push 自己的分支，建立 PR 到中央 `main`。使用自動帶入的 PR 模板交代問題、結果、模組、跨模組依賴、實跑命令與未驗項。新功能若需要 migration 或旗標，再說明其啟用條件與回退限制。PR、CI 成功與功能正式啟用是不同狀態；合併及部署依既有 [貢獻發布途徑](contribution-release-paths.md) 辦理。
+
+寫清楚本輪完成條件、未驗項目與原因；卡點與下一棒依既有[發布途徑](contribution-release-paths.md)由維護者更新同一則摘要。
