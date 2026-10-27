@@ -28,9 +28,14 @@ export function SupplierOrdersLink({client, tenantId, instanceId}: SellerRoute &
 export function HostedSupplierOrders({client,route}:{client:PortalClient;route:SellerRoute}) {
   const [page,setPage]=useState<SupplierReservationPage|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
   const [retailEnabled, setRetailEnabled] = useState<boolean | null>(null);
+  const [failedPage, setFailedPage] = useState<{client:PortalClient;session:number;root:string;cursor:string|undefined}|null>(null);
+  const sessionGeneration = client.sessionGeneration;
   const controller=useRef(new AbortController()),ticket=useRef(0),generation=useRef(client.sessionGeneration);
   const root=`/tenants/${route.tenantId}/storefronts/${route.instanceId}/supply-reservations`;
+  const scope = useRef({client,root,session:sessionGeneration});
+  scope.current = {client,root,session:sessionGeneration};
   useEffect(()=>{
+    setFailedPage(null);
     controller.current=new AbortController();generation.current=client.sessionGeneration;void load();
     const signal = controller.current.signal, session = client.sessionGeneration;
     setRetailEnabled(null);
@@ -40,17 +45,25 @@ export function HostedSupplierOrders({client,route}:{client:PortalClient;route:S
       if (!signal.aborted && session === client.sessionGeneration) setRetailEnabled(profile.retail_enabled);
     }).catch(() => {});
     return ()=>{controller.current.abort();ticket.current++;};
-  },[client,root]);
-  async function load(cursor?:string) {
-    const signal = controller.current.signal;
+  },[client,root,sessionGeneration]);
+  async function load(cursor?:string, retrying=false) {
+    const signal = controller.current.signal, session = client.sessionGeneration;
+    if (signal.aborted || generation.current !== session) return;
+    if (!retrying) setFailedPage(null);
     const current=++ticket.current;setLoading(true);setError('');setPage(null);
-    const live=()=>!signal.aborted && current===ticket.current && generation.current===client.sessionGeneration;
+    const live=()=>!signal.aborted && current===ticket.current && session===client.sessionGeneration
+      && scope.current.client===client && scope.current.root===root && scope.current.session===session;
     try {
       const result=SupplierReservationPageSchema.parse(await client.get(root+'?limit=20'+(cursor?`&cursor=${encodeURIComponent(cursor)}`:''),{signal}));
-      if(live())setPage(result);
-    }catch(cause){if(live())setError(cause instanceof ApiError?cause.message:'暫時無法確認供貨訂單，請重新查詢。');}
+      if(live()){setPage(result);setFailedPage(null);}
+    }catch(cause){if(live()){
+      setError(cause instanceof ApiError?cause.message:'暫時無法確認供貨訂單，請重新查詢。');
+      setFailedPage({client,session,root,cursor});
+    }}
     finally{if(live())setLoading(false);}
   }
+  // Retry is ephemeral and belongs to this exact client/session/store, not the last rendered page.
+  const retryPage = failedPage && failedPage.client===client && failedPage.session===client.sessionGeneration && failedPage.root===root ? failedPage : null;
   return <div className="hosted-store stack">
     <div className="actions">
       <a className="btn btn-ghost" href={`#stores/${route.tenantId}/${route.instanceId}/supply`}>返回供貨商品庫</a>
@@ -60,6 +73,9 @@ export function HostedSupplierOrders({client,route}:{client:PortalClient;route:S
     <h2>供貨訂單</h2><p className="banner" role="note">本頁只顯示你供應商品的 30 分鐘預留，不包含付款後的履約單。預留尚未付款或安排出貨；供貨金額不是請款紀錄。</p>
     <div className="actions"><button className="btn btn-ghost" disabled={loading} onClick={()=>void load()}>更新供貨訂單</button></div>
     <p role="status">{loading?'正在確認供貨訂單…':''}</p>{error&&<p role="alert" className="banner banner-error">{error}</p>}
+    {retryPage&&<div className="actions"><button type="button" className="btn btn-secondary btn-small" disabled={loading} onClick={()=>{
+      if (retryPage.client===scope.current.client && retryPage.root===scope.current.root && retryPage.session===client.sessionGeneration) void load(retryPage.cursor,true);
+    }}>重試載入這一頁</button></div>}
     {page&&<>{!page.items.length&&<p>這一頁沒有供貨預留。</p>}
       <ul className="stack">{page.items.map(order=><li className="hosted-store-product stack" key={order.order_id}>
         <h3>{order.store.name} · {order.state==='reserved'?'預留中':order.state==='cancelled'?'已取消':'已到期'}</h3>
