@@ -1661,7 +1661,7 @@ test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps 
   const schema=JSON.parse(await readFile(join(root,'governance/schemas/module.schema.json'),'utf8'));const old=structuredClone(schema);old.properties.owned_paths.maxItems=64;
   await put('governance/schemas/module.schema.json',JSON.stringify(old));
   const retired=['packages/contribution-tools/circleci-worker-status.mjs','packages/contribution-tools/test/circleci-worker-status.test.mjs'];
-  for(const path of [...retired,'packages/contribution-tools/context.mjs','packages/contribution-tools/test/context.test.mjs','packages/db/command-core.ts'])await put(path,'export const fixture=true;\n');
+  for(const path of [...retired,'scripts/ci/select-affected-jobs.mjs','packages/contribution-tools/context.mjs','packages/contribution-tools/test/context.test.mjs','packages/db/command-core.ts'])await put(path,'export const fixture=true;\n');
   const state='docs/platform-plan/execution/unified-foundation/current-state.json';await put(state,'{}');
   const base=commit();
   await put('.github/workflows/verify.yml',workflows.after);await put('governance/schemas/module.schema.json',JSON.stringify(schema));
@@ -1669,6 +1669,31 @@ test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps 
   for(const path of retired)await rm(join(directory,path));
   const head=commit(),input=integrate(base,head),selected=minimalSelection('ci_tools');
   assert.deepEqual(collectRepositoryDecision(input),selected);
+  const push = value => ({...value,event:'push',ref:'refs/heads/main',head:value.candidate});
+  const pushInput=push(input);
+  assert.deepEqual(collectRepositoryDecision(pushInput),selected);
+  for(const extra of [{ref:''},{ref:'refs/heads/topic'},{ref:'refs/tags/main'},
+    {event:'merge_group'},{head},{base:head},{candidate:head},{head:oid('0')},{base:oid('0')}])
+    assert.equal(collectRepositoryDecision({...pushInput,...extra}).mode,'full',JSON.stringify(extra));
+  const tree=git(['rev-parse',head+'^{tree}']);
+  for(const parents of [[head,base],[head]]) {
+    const forged=git(['commit-tree',tree,...parents.flatMap(p=>['-p',p])],'wrong first parent\n');
+    git(['checkout','-q',forged]);
+    assert.equal(collectRepositoryDecision({...pushInput,head:forged,candidate:forged}).mode,'full');
+  }
+  git(['checkout','-q',input.candidate]);
+  assert.deepEqual(collectRepositoryDecision(pushInput),selected);
+  await put('packages/contribution-tools/context.mjs','// dirty\n');
+  assert.equal(collectRepositoryDecision(pushInput).mode,'full');
+  git(['checkout','--','packages/contribution-tools/context.mjs']);
+  await put('untracked.txt','untracked');
+  assert.equal(collectRepositoryDecision(pushInput).mode,'full');
+  await rm(join(directory,'untracked.txt'));
+  assert.deepEqual(collectRepositoryDecision(pushInput),selected);
+  // A direct single-parent successor is valid too; no historical merge object is required.
+  git(['checkout','-q',head]);
+  assert.deepEqual(collectRepositoryDecision({...pushInput,head,candidate:head}),selected);
+  git(['checkout','-q',input.candidate]);
   assert.equal(evaluateVerifyAggregate(needsFor(selected,allResults('skipped'))).ok,true);
   assert.equal(evaluateVerifyAggregate(needsFor(selected,allResults('skipped'),{integrity:'failure'})).ok,false);
   for(const mutate of [
@@ -1680,8 +1705,18 @@ test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps 
     async()=>put('governance/schemas/module.schema.json',JSON.stringify({...schema,required:[]})),
   ]){
     git(['checkout','-q',input.candidate]);assert.deepEqual(collectRepositoryDecision(input),selected);
-    git(['checkout','-q',head]);await mutate();assert.equal(collectRepositoryDecision(integrate(base,commit())).mode,'full');
+    git(['checkout','-q',head]);await mutate();
+    const mixed=integrate(base,commit());
+    assert.equal(collectRepositoryDecision(mixed).mode,'full');
+    assert.equal(collectRepositoryDecision(push(mixed)).mode,'full');
   }
   git(['checkout','-q',head]);await put(state,'{ "updated":true }');
-  assert.deepEqual(collectRepositoryDecision(integrate(base,commit())),minimalSelection('ci_tools_document_inputs'));
+  const documentInput=integrate(base,commit());
+  assert.deepEqual(collectRepositoryDecision(documentInput),minimalSelection('ci_tools_document_inputs'));
+  assert.deepEqual(collectRepositoryDecision(push(documentInput)),minimalSelection('ci_tools_document_inputs'));
+  git(['checkout','-q',head]);
+  await put('scripts/ci/select-affected-jobs.mjs','export const selectorChanged=true;');
+  const toolingOnly=integrate(head,commit());
+  assert.deepEqual(collectRepositoryDecision(toolingOnly),selected);
+  assert.deepEqual(collectRepositoryDecision(push(toolingOnly)),selected);
 });
