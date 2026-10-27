@@ -23,7 +23,7 @@ export const communityFeatures = {
   },
   "community-search": {
     moduleId: "community-search", placement: 'page',
-    render: ({client, session, site}) => (site?.community_search_enabled === true ? <CommunitySearch key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} authKey={`${session.user.user_id}:${client.sessionGeneration}`} relationsEnabled={site.community_relations_enabled === true}/> : <p>社群內容搜尋尚未開放。</p>),
+    render: ({client, session, site}) => (site?.community_search_enabled === true ? <CommunitySearch key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} authKey={`${session.user.user_id}:${client.sessionGeneration}`} relationsEnabled={site.community_relations_enabled === true} guildSearchEnabled={site.guild_launchpad_enabled === true}/> : <p>社群內容搜尋尚未開放。</p>),
   },
   "my-content": {
     moduleId: "personal-content", placement: 'page',

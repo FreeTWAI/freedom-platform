@@ -557,7 +557,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createClientConnectionRoutes(pool));
   app.route('/api/v1',createJournalMemberRoutes(pool));
   app.route('/api/v1',createSkillSubmissionRoutes(pool,origin,runtime.githubMetricsToken,runtime));
-  app.route('/api/v1',createPositioningRoutes(pool,{guildLaunchpadEnabled:runtime.guildLaunchpadEnabled===true}));
+  app.route('/api/v1',createPositioningRoutes(pool,{guildLaunchpadEnabled:runtime.guildLaunchpadEnabled===true,communitySearchEnabled:runtime.communitySearchEnabled===true}));
   app.route('/api/v1',createCommerceRoutes(pool));
   app.route('/api/v1',createAgentCommerceRoutes(pool,origin,shopHost));
   app.route('/api/v1', createOpenSourceRoutes(pool,runtime.githubMetricsToken,loadSocial));
