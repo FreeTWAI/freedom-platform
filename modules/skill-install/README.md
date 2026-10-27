@@ -17,7 +17,7 @@
 - commit 不可變，以 repo@commit 在記憶體快取（最多 32 份）。有 `GITHUB_METRICS_TOKEN` 時用它提高 API 額度。
 - 前端走同源 API（CSP `connect-src 'self'` 不變），寫入前再驗一次每個檔案與 manifest digest。
 - 安裝方式：Chrome／Edge 以 File System Access API 寫入使用者選定的資料夾；其他瀏覽器下載 zip；或複製鎖 commit 的 shell／PowerShell 指令。
-- 更新：資料夾內有 `.freedom-install.json` 才視為本工具安裝並整批替換；沒有收據的既有資料夾須使用者確認才覆寫。
+- 更新：既有非空資料夾一律不覆寫，不以 `.freedom-install.json` 授予覆寫權；要更新請先自行移走或刪除舊資料夾再安裝，或改用下載 zip。shell／PowerShell 指令先在暫存資料夾下載與解壓縮，確認 `SKILL.md` 後才移入，目的資料夾已存在就拒絕安裝。
 
 ## 與 SPEC-SKL-03 的界線
 

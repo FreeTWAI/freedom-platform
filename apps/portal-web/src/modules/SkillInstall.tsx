@@ -25,7 +25,7 @@ export function SkillInstall({bookId}:{bookId:string}){
     // 先開選擇視窗（必須在使用者點擊的當下），同時下載檔案包。
     const pending=bundle(),root=await pickSkillsFolder(target),value=await pending;
     const result=await writeBundleToFolder(root,value,target,message=>window.confirm(message));
-    return (result.updated?'已更新':'已安裝')+'「'+value.name+'」到 '+result.where+'（版本 '+value.commit.slice(0,12)+'，'+value.files.length+' 個檔案）。重新開啟 '+where.label+' 後即可使用。';
+    return '已安裝「'+value.name+'」到 '+result.where+'（版本 '+value.commit.slice(0,12)+'，'+value.files.length+' 個檔案）。重新開啟 '+where.label+' 後即可使用。';
   });
   const downloadZip=()=>run(async()=>{
     const value=await bundle(),link=document.createElement('a');
