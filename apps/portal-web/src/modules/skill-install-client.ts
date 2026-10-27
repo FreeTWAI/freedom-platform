@@ -1,7 +1,7 @@
 /**
- * 技能書一鍵安裝（瀏覽器端）。
+ * 技能書安裝（瀏覽器端）。
  * 檔案包來自同源 /api/v1/skills/:id/install-bundle（CSP connect-src 'self'），
- * 寫入前逐檔重算 git blob SHA-1 與 manifest digest，任何不符就整批放棄。
+ * 下載前逐檔重算 git blob SHA-1 與 manifest digest，任何不符就整批放棄。
  */
 export const SKILL_INSTALL_RECEIPT_FILE='.freedom-install.json';
 export const SKILL_INSTALL_TARGETS={
@@ -56,71 +56,9 @@ export async function fetchInstallBundle(bookId:string,signal?:AbortSignal){
 }
 
 /** 本機收據：只有版本與指紋，不含路徑、帳號或檔案內容。不是平台的 verified 安裝紀錄。 */
-export function installReceipt(bundle:InstallBundle,target:SkillInstallTarget,method:'folder'|'zip'){
+export function installReceipt(bundle:InstallBundle,target:SkillInstallTarget,method:'zip'){
   return {schema:'freedom.local-install-receipt/v0',package:{book_id:bundle.book_id,name:bundle.name,repository:bundle.repository,commit:bundle.commit},
     target,method,manifest_digest:bundle.manifest_digest,file_count:bundle.files.length,installed_at:new Date().toISOString()};
-}
-
-// ---- 寫入資料夾（File System Access API；Chrome／Edge 桌面版） ----
-type WritableLike={write(data:Uint8Array|string):Promise<void>;close():Promise<void>};
-type FileHandleLike={createWritable():Promise<WritableLike>};
-export type DirectoryHandleLike={name:string;getDirectoryHandle(name:string,options?:{create?:boolean}):Promise<DirectoryHandleLike>;getFileHandle(name:string,options?:{create?:boolean}):Promise<FileHandleLike>;keys():AsyncIterable<string>;requestPermission?(options:{mode:'readwrite'}):Promise<string>};
-type PickerWindow=Window&{showDirectoryPicker?:(options:{id?:string;mode?:'readwrite'})=>Promise<DirectoryHandleLike>};
-
-export function supportsFolderInstall(){return typeof window!=='undefined'&&window.isSecureContext&&typeof (window as PickerWindow).showDirectoryPicker==='function';}
-export async function pickSkillsFolder(target:SkillInstallTarget){
-  const picker=(window as PickerWindow).showDirectoryPicker;
-  if(!picker||!window.isSecureContext)throw new SkillInstallError('unsupported','這個瀏覽器不能直接寫入資料夾，請改用下載。');
-  try{return await picker({id:'freedom-skills-'+target,mode:'readwrite'});}
-  catch(error){if(error instanceof DOMException&&error.name==='AbortError')throw new SkillInstallError('cancelled','已取消。');throw error;}
-}
-
-const AGENT_HOME=new Set(['.claude','.codex','.openclaw','.agents']);
-export async function writeBundleToFolder(root:DirectoryHandleLike,bundle:InstallBundle,target:SkillInstallTarget,confirm:(message:string)=>Promise<boolean>|boolean){
-  if(root.requestPermission&&await root.requestPermission({mode:'readwrite'})!=='granted')throw new SkillInstallError('denied','沒有取得寫入權限。');
-  let base=root,where=root.name;
-  if(root.name!=='skills'&&root.name!==bundle.name){
-    // 選到 .claude 等 agent 家目錄時，自動放進底下的 skills。
-    if(AGENT_HOME.has(root.name)){base=await root.getDirectoryHandle('skills',{create:true});where=root.name+'/skills';}
-    else if(!await confirm('你選的資料夾是「'+root.name+'」，不是 skills。仍要裝在這裡嗎？'))throw new SkillInstallError('cancelled','已取消。');
-  }
-  let folder:DirectoryHandleLike|undefined=root.name===bundle.name?root:undefined;
-  if(!folder){
-    try{folder=await base.getDirectoryHandle(bundle.name,{create:false});}
-    catch(error){if(!(error instanceof Error)||error.name!=='NotFoundError')throw error;}
-  }
-  if(folder!==root)where+='/'+bundle.name;
-  const exists=()=>new SkillInstallError('exists','「'+bundle.name+'」資料夾已經存在。為了不動到裡面的檔案，這次沒有覆寫；要更新請先自行移走或刪除這個資料夾再安裝，或改用下載 zip。');
-  if(folder)for await(const _ of folder.keys())throw exists();
-  // File System Access API 沒有 exclusive create；安裝器只拒絕偵測到的衝突，永不刪除檔案。
-  async function createFile(directory:DirectoryHandleLike,name:string){
-    try{await directory.getFileHandle(name,{create:false});}
-    catch(error){
-      if(!(error instanceof Error)||error.name!=='NotFoundError')throw error;
-      return directory.getFileHandle(name,{create:true});
-    }
-    throw new SkillInstallError('conflict','安裝途中「'+bundle.name+'」資料夾裡出現同名檔案，已停止；沒有刪除任何檔案。請確認資料夾內容後再處理，或改用下載 zip。');
-  }
-  try{
-    if(!folder){
-      folder=await base.getDirectoryHandle(bundle.name,{create:true});
-      for await(const _ of folder.keys())throw exists();
-    }
-    for(const file of bundle.files){
-      const parts=file.path.split('/');let directory=folder;
-      for(const segment of parts.slice(0,-1))directory=await directory.getDirectoryHandle(segment,{create:true});
-      const handle=await createFile(directory,parts[parts.length-1]);
-      const writable=await handle.createWritable();
-      await writable.write(file.bytes);await writable.close();
-    }
-    const handle=await createFile(folder,SKILL_INSTALL_RECEIPT_FILE);
-    const receipt=await handle.createWritable();
-    await receipt.write(JSON.stringify(installReceipt(bundle,target,'folder'),null,2)+'\n');await receipt.close();
-  }catch(error){
-    if(error instanceof SkillInstallError&&(error.code==='conflict'||error.code==='exists'))throw error;
-    throw new SkillInstallError('write_failed','安裝沒有完成，「'+bundle.name+'」資料夾裡可能留下部分檔案；沒有刪除任何檔案。請確認後自行刪除再重新安裝，或改用下載 zip。');
-  }
-  return {where};
 }
 
 // ---- zip（store 模式，無相依） ----

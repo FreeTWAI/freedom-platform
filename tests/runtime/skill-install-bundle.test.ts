@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 import {createSkillInstallRoutes} from '../../apps/platform-api/src/routes/skill-install.js';
 import {gitBlobSha1,skillInstallSource,skillFolderName,isSafeBundlePath} from '../../modules/skill-install/index.js';
 import {communityCatalog,type SkillBook} from '../../modules/community/catalog.js';
-import {parseInstallBundle,writeBundleToFolder,buildInstallZip,installCommands,SkillInstallError,SKILL_INSTALL_RECEIPT_FILE,type DirectoryHandleLike} from '../../apps/portal-web/src/modules/skill-install-client.js';
+import {parseInstallBundle,installReceipt,buildInstallZip,installCommands,SkillInstallError} from '../../apps/portal-web/src/modules/skill-install-client.js';
 
 const commit='a'.repeat(40);
 const book=(id:string,extra:Partial<SkillBook>={}):SkillBook=>({id,title:id,repository_url:'https://github.com/FreeTWAI/freedom-skill-'+id,description:'',kind:'starter',fork_url:'',license_status:'MIT',upstream_url:'',source_commit:commit,introduction_url:null,...extra});
@@ -28,46 +28,6 @@ async function fakeGitHub(files:Record<string,string>,{tamper,truncated}:{tamper
 }
 const skill='---\nname: freedom-demo\ndescription: demo\n---\n# Demo\n';
 
-type MemoryNode={dirs:Map<string,MemoryNode>;files:Map<string,string>};
-const memoryNode=():MemoryNode=>({dirs:new Map(),files:new Map()});
-type MemoryOperation='directory'|'file'|'createWritable'|'write'|'close'|'remove';
-function memoryHandle(name:string,state:MemoryNode,operations:string[]=[],fail?:(operation:MemoryOperation,path:string)=>boolean,interleave?:(operation:MemoryOperation,path:string,create?:boolean)=>void,path=''):DirectoryHandleLike&{removeEntry(child:string):Promise<void>}{
-  function record(operation:MemoryOperation,child:string,create?:boolean){
-    const location=path+'/'+child;operations.push(operation+':'+location);
-    interleave?.(operation,location,create);
-    if(fail?.(operation,location))throw new Error('injected '+operation+' failure');
-    return location;
-  }
-  return {name,
-    async getDirectoryHandle(child,options){
-      const location=record('directory',child,options?.create);let next=state.dirs.get(child);
-      if(!next){
-        if(state.files.has(child))throw new DOMException('not a directory','TypeMismatchError');
-        if(!options?.create)throw new DOMException('missing','NotFoundError');
-        next=memoryNode();state.dirs.set(child,next);
-      }
-      return memoryHandle(child,next,operations,fail,interleave,location);
-    },
-    async getFileHandle(child,options){
-      record('file',child,options?.create);
-      if(!state.files.has(child)){
-        if(!options?.create)throw new DOMException('missing','NotFoundError');
-        state.files.set(child,'');
-      }
-      return {async createWritable(){record('createWritable',child);let text='';return {
-        async write(data){record('write',child);text+=typeof data==='string'?data:new TextDecoder().decode(data);},
-        async close(){record('close',child);state.files.set(child,text);},
-      };}};
-    },
-    async removeEntry(child){record('remove',child);assert.fail('installer must never remove entries');},
-    async *keys(){yield* state.dirs.keys();yield* state.files.keys();},
-    async requestPermission(){return 'granted';},
-  };
-}
-async function clientBundle(){
-  const {fetcher}=await fakeGitHub({'SKILL.md':skill,'templates/notes.md':'notes'});
-  return parseInstallBundle(await (await createSkillInstallRoutes(fetcher,undefined,[book('demo')]).request('/api/v1/skills/demo/install-bundle')).json());
-}
 function hasInstallCode(code:string){return (error:unknown)=>error instanceof SkillInstallError&&error.code===code;}
 
 test('install bundle is pinned, verified, excludes development files and is cached per commit',async()=>{
@@ -115,7 +75,7 @@ test('only pinned GitHub catalog books are offered',()=>{
   for(const item of pinned)assert.match(item.source_commit!,/^[0-9a-f]{40}$/);
 });
 
-test('client rejects a tampered bundle and writes a verified bundle with a path-free receipt',async()=>{
+test('client rejects a tampered bundle and builds a verified zip with a path-free receipt',async()=>{
   const {fetcher}=await fakeGitHub({'SKILL.md':skill,'templates/notes.md':'notes'});
   const data=await (await createSkillInstallRoutes(fetcher,undefined,[book('demo')]).request('/api/v1/skills/demo/install-bundle')).json();
   await assert.rejects(parseInstallBundle({...data,files:data.files.map((file:{path:string;content_base64:string})=>file.path==='SKILL.md'?{...file,content_base64:btoa('changed')}:file)}),/驗證失敗/);
@@ -124,20 +84,9 @@ test('client rejects a tampered bundle and writes a verified bundle with a path-
   await assert.rejects(parseInstallBundle({...data,repository:'FreeTWAI'}),hasInstallCode('bundle_invalid'));
   const bundle=await parseInstallBundle(data);
 
-  const home=memoryNode();
-  const first=await writeBundleToFolder(memoryHandle('.claude',home),bundle,'claude-code',()=>false);
-  assert.deepEqual(first,{where:'.claude/skills/freedom-demo'});
-  const installed=home.dirs.get('skills')!.dirs.get('freedom-demo')!;
-  assert.equal(installed.files.get('SKILL.md'),skill);
-  assert.equal(installed.dirs.get('templates')!.files.get('notes.md'),'notes');
-  const receipt=JSON.parse(installed.files.get(SKILL_INSTALL_RECEIPT_FILE)!);
+  const receipt=installReceipt(bundle,'claude-code','zip');
   assert.equal(receipt.package.commit,commit);assert.equal(receipt.manifest_digest,bundle.manifest_digest);
   assert.doesNotMatch(JSON.stringify(receipt),/\.claude|skills\/|\/home|\/Users/i,'receipt holds no local paths');
-  installed.files.set('stale.md','old');
-  await assert.rejects(writeBundleToFolder(memoryHandle('skills',home.dirs.get('skills')!),bundle,'claude-code',()=>true),hasInstallCode('exists'));
-  assert.equal(installed.files.get('stale.md'),'old','reinstall preserves files dropped by the new version');
-  assert.equal(installed.files.get('SKILL.md'),skill);
-  assert.equal(installed.files.get(SKILL_INSTALL_RECEIPT_FILE),JSON.stringify(receipt,null,2)+'\n');
 
   const zip=new Uint8Array(await buildInstallZip(bundle,'codex').arrayBuffer());
   assert.deepEqual([...zip.slice(0,4)],[0x50,0x4b,0x03,0x04]);
@@ -147,121 +96,11 @@ test('client rejects a tampered bundle and writes a verified bundle with a path-
   assert.ok(commands.powershell.includes('/zip/'+commit));
 });
 
-for(const receipt of [true,false])test('folder install refuses a non-empty folder '+(receipt?'with':'without')+' a receipt without writes',async()=>{
-  const bundle=await clientBundle(),home=memoryNode(),existing=memoryNode(),nested=memoryNode(),operations:string[]=[];
-  nested.files.set('mine.md','nested content');existing.dirs.set('my-notes',nested);existing.files.set('mine.md','keep');
-  if(receipt)existing.files.set(SKILL_INSTALL_RECEIPT_FILE,'previous receipt');
-  home.dirs.set(bundle.name,existing);
-  const before=structuredClone(home);
-  await assert.rejects(writeBundleToFolder(memoryHandle('skills',home,operations),bundle,'claude-code',()=>assert.fail('overwrite must never ask for confirmation')),error=>{
-    assert.ok(hasInstallCode('exists')(error));
-    assert.equal((error as SkillInstallError).message,'「freedom-demo」資料夾已經存在。為了不動到裡面的檔案，這次沒有覆寫；要更新請先自行移走或刪除這個資料夾再安裝，或改用下載 zip。');
-    return true;
-  });
-  assert.deepEqual(home,before);
-  assert.deepEqual(operations,['directory:/'+bundle.name],'only the existence lookup may run');
-});
-
-for(const preexisting of [false,true])test('folder write failure retains partial files in a '+(preexisting?'pre-existing empty folder':'newly created folder')+' without removing anything',async()=>{
-  const bundle=await clientBundle(),home=memoryNode(),sibling=memoryNode(),empty=memoryNode(),operations:string[]=[];
-  sibling.files.set('mine.md','keep');home.dirs.set('other-skill',sibling);
-  if(preexisting)home.dirs.set(bundle.name,empty);
-  await assert.rejects(writeBundleToFolder(memoryHandle('skills',home,operations,(operation,path)=>operation==='createWritable'&&path.endsWith('/notes.md')),bundle,'codex',()=>false),error=>{
-    assert.ok(hasInstallCode('write_failed')(error));
-    assert.equal((error as SkillInstallError).message,'安裝沒有完成，「freedom-demo」資料夾裡可能留下部分檔案；沒有刪除任何檔案。請確認後自行刪除再重新安裝，或改用下載 zip。');
-    assert.doesNotMatch((error as SkillInstallError).message,/已移除|已清理/);return true;
-  });
-  assert.deepEqual(sibling.files,new Map([['mine.md','keep']]));
-  assert.equal(home.dirs.get('other-skill'),sibling);
-  assert.deepEqual([...home.dirs.keys()].sort(),['freedom-demo','other-skill']);
-  const installed=home.dirs.get(bundle.name)!;
-  assert.equal(installed.files.get('SKILL.md'),skill);
-  assert.equal(installed.dirs.get('templates')!.files.get('notes.md'),'');
-  assert.equal(installed.files.has(SKILL_INSTALL_RECEIPT_FILE),false);
-  assert.ok(!operations.some(op=>op.startsWith('remove:')));
-  if(preexisting)assert.equal(installed,empty);
-});
-
-for(const [operation,suffix] of [['directory','/templates'],['write','/notes.md'],['write','/'+SKILL_INSTALL_RECEIPT_FILE],['close','/'+SKILL_INSTALL_RECEIPT_FILE]] as const){
-  test('folder install retains partial files in an empty selected skill folder after '+operation+' fails at '+suffix,async()=>{
-    const bundle=await clientBundle(),empty=memoryNode(),operations:string[]=[];
-    await assert.rejects(writeBundleToFolder(memoryHandle(bundle.name,empty,operations,(op,path)=>op===operation&&path.endsWith(suffix)),bundle,'codex',()=>assert.fail('selected skill folder needs no confirmation')),hasInstallCode('write_failed'));
-    assert.equal(empty.files.get('SKILL.md'),skill);
-    if(suffix!=='/templates')assert.equal(empty.dirs.get('templates')!.files.get('notes.md'),suffix==='/notes.md'?'':'notes');
-    if(suffix==='/'+SKILL_INSTALL_RECEIPT_FILE)assert.equal(empty.files.get(SKILL_INSTALL_RECEIPT_FILE),'');
-    assert.ok(!operations.some(op=>op.startsWith('remove:')));
-  });
-}
-
-test('folder install refuses a folder populated between the missing lookup and get-or-create',async()=>{
-  const bundle=await clientBundle(),home=memoryNode(),theirs=memoryNode(),operations:string[]=[];
-  theirs.files.set('theirs.md','their content');
-  const handle=memoryHandle('skills',home,operations,undefined,(op,path,create)=>{
-    if(op==='directory'&&path==='/'+bundle.name&&create)home.dirs.set(bundle.name,theirs);
-  });
-  await assert.rejects(writeBundleToFolder(handle,bundle,'codex',()=>false),hasInstallCode('exists'));
-  assert.equal(home.dirs.get(bundle.name),theirs);
-  assert.deepEqual(theirs.files,new Map([['theirs.md','their content']]));
-  assert.equal(theirs.dirs.size,0);
-  assert.deepEqual(operations,['directory:/'+bundle.name,'directory:/'+bundle.name]);
-});
-
-for(const file of ['SKILL.md','templates/notes.md',SKILL_INSTALL_RECEIPT_FILE])test('folder install detects an interleaved '+file+' without replacing or removing it',async()=>{
-  const bundle=await clientBundle(),home=memoryNode(),operations:string[]=[];let injected=false;
-  const handle=memoryHandle('skills',home,operations,undefined,(op,path,create)=>{
-    if(!injected&&op==='file'&&path==='/'+bundle.name+'/'+file&&create===false){
-      const folder=home.dirs.get(bundle.name)!;
-      (file.startsWith('templates/')?folder.dirs.get('templates')!:folder).files.set(file.split('/').at(-1)!,'their content');
-      injected=true;
-    }
-  });
-  await assert.rejects(writeBundleToFolder(handle,bundle,'codex',()=>false),error=>{
-    assert.ok(hasInstallCode('conflict')(error));
-    assert.equal((error as SkillInstallError).message,'安裝途中「freedom-demo」資料夾裡出現同名檔案，已停止；沒有刪除任何檔案。請確認資料夾內容後再處理，或改用下載 zip。');return true;
-  });
-  assert.equal(injected,true);
-  const folder=home.dirs.get(bundle.name)!;
-  assert.equal((file.startsWith('templates/')?folder.dirs.get('templates')!:folder).files.get(file.split('/').at(-1)!),'their content');
-  assert.ok(!operations.some(op=>op.startsWith('remove:')));
-  assert.ok(!operations.includes('createWritable:/'+bundle.name+'/'+file));
-  if(file==='SKILL.md'){
-    assert.deepEqual(folder.files,new Map([['SKILL.md','their content']]));assert.equal(folder.dirs.size,0);
-    assert.ok(!operations.some(op=>op.startsWith('write:')));
-  }else assert.equal(folder.files.get('SKILL.md'),skill);
-});
-
-test('folder install propagates existence lookup errors without creating or removing anything',async()=>{
-  const bundle=await clientBundle(),home=memoryNode(),operations:string[]=[],handle=memoryHandle('skills',home,operations);
-  const error=new DOMException('cannot read','NotAllowedError');
-  handle.getDirectoryHandle=async(_name,options)=>{assert.deepEqual(options,{create:false});throw error;};
-  await assert.rejects(writeBundleToFolder(handle,bundle,'codex',()=>false),actual=>actual===error);
-  assert.deepEqual(home,memoryNode());assert.deepEqual(operations,[]);
-});
-
-test('folder write failure preserves interleaved entries in a pre-existing empty folder without cleanup',async()=>{
-  const bundle=await clientBundle(),empty=memoryNode(),operations:string[]=[];
-  const handle=memoryHandle(bundle.name,empty,operations,(op,path)=>op==='write'&&path==='/templates/notes.md',(op,path)=>{
-    if(op==='write'&&path==='/templates/notes.md'){
-      empty.files.set('theirs.md','their root content');
-      empty.dirs.get('templates')!.files.set('theirs.md','their nested content');
-    }
-  });
-  await assert.rejects(writeBundleToFolder(handle,bundle,'codex',()=>false),hasInstallCode('write_failed'));
-  assert.equal(empty.files.get('SKILL.md'),skill);
-  assert.equal(empty.files.get('theirs.md'),'their root content');
-  assert.deepEqual(empty.dirs.get('templates')!.files,new Map([['notes.md',''],['theirs.md','their nested content']]));
-  assert.ok(!operations.some(op=>op.startsWith('remove:')));
-});
-
-test('folder install retains selected-folder confirmation and supports an empty skill folder',async()=>{
-  const bundle=await clientBundle(),home=memoryNode();let confirmations=0;
-  await assert.rejects(writeBundleToFolder(memoryHandle('custom',home),bundle,'codex',()=>{confirmations++;return false;}),hasInstallCode('cancelled'));
-  assert.deepEqual(home,memoryNode());assert.equal(confirmations,1);
-  assert.deepEqual(await writeBundleToFolder(memoryHandle('custom',home),bundle,'codex',()=>true),{where:'custom/freedom-demo'});
-  const empty=memoryNode();
-  assert.deepEqual(await writeBundleToFolder(memoryHandle(bundle.name,empty),bundle,'codex',()=>false),{where:bundle.name});
-  assert.equal(empty.files.get('SKILL.md'),skill);
-  await assert.rejects(writeBundleToFolder(memoryHandle(bundle.name,empty),bundle,'codex',()=>true),hasInstallCode('exists'));
+test('client and UI do not offer direct folder writes',async()=>{
+  for(const path of ['apps/portal-web/src/modules/skill-install-client.ts','apps/portal-web/src/modules/SkillInstall.tsx']){
+    const source=await readFile(path,'utf8');
+    assert.doesNotMatch(source,/showDirectoryPicker|getFileHandle|createWritable/,'direct folder writes need an exclusive-create primitive; see #1110 review');
+  }
 });
 
 test('PowerShell commands stop on errors, stage pinned archives and remove only their temp directory',()=>{
