@@ -131,4 +131,4 @@ WebChatMCP.js 與 Human Mode 的會員各有 100 則原文，原先優先考慮�
 - 需瀏覽器與隔離資料庫，這次 `not_run`：`tests/e2e/skill-book-library.spec.ts`、`audit-skills.spec.ts`。書架期望為 29 本公會技能書與 24 本社群技能書。
 - `scripts/verify-public.mjs` 同步 53 本／59 個 repo 的精確期望；這次未執行公開部署驗收。
 - 前輪實跑結果在 job dir `skill-books.report.md`；本輪精修、實跑與未驗項另記 `skill-books-polish.report.md`，不把本機測試當成可信 CI／正式部署證據。context 的 `surface_unmapped` blocker 也保留，不為本次擴大修改治理 descriptors。
-- 本輪完成後重跑 `node scripts/freedom.mjs prepare --base-ref cf7e518b129786fb4c8a23d587982a7df06c25bb --paths <changed paths>`、檔案 inventory 更新、`verify_revision.py` 與 `git diff --check`。
+- 本輪完成後重跑 `node scripts/freedom.mjs prepare --base-ref cf7e518b129786fb4c8a23d587982a7df06c25bb --paths <changed paths>` 與 `git diff --check`。
