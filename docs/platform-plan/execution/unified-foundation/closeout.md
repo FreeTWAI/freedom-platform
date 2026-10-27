@@ -10,6 +10,55 @@
 [R2／AP](source-acceptance.md) 的原文、最低證據層級及所有 168 個 ID。
 歷史 handoff／release-readiness 保留當時證據，不再維護另一份 current 狀態。
 
+## 2026-10-27 18:17 UTC：f2c9b2fd 已部署，正式 workflow 清理失敗另列
+
+兩環境已上 `f2c9b2fd`，含 #1144 控制紀錄 GET 修正。[staging](https://github.com/FreeTWAI/freedom-platform/actions/runs/40554821303) 五階段成功；[正式站](https://github.com/FreeTWAI/freedom-platform/actions/runs/40556772743) 完成部署與健康檢查，最後 handoff 報 `release_lease_cleanup_failed`，workflow 與 GitHub deployment 狀態仍保留 failure。
+18:16:08–18:16:21Z 重新取得同一個 advisory lease，唯讀核對 pinned journal generation 32／pending=null、DB、Worker 版本與 bindings，並正常釋放。最後 handoff 記錄已存在，先前的鎖已不再占用；沒有持久寫入或重複部署。18:17:56Z 公開 health 為 HTTP 200、`ok`、同版本。18:21Z 另以 READ ONLY 查精確 advisory key，鎖為 0；排除查核自身後，同 DB migrator／backup／operator／dump／capture sessions 為 0，沒有終止任何 session。
+
+該 source 的 main Verify／CodeQL 與新版映像建置／獨立下載驗證均成功；兩環境使用相同固定 digest。CI 沿既有 delivery_tooling，不重跑無關產品／UI 測試。
+GET 暫時錯誤最多共三次、遵守五分鐘內 Retry-After；較長等待、權限／內容不符及 lease 中斷停止。PUT 與未知寫入不自動重送。
+正式站較早 `40541461789` 兩次 GET 失敗、`40555710003` 建置失敗全部保留；後者已先結清原備份，再於本機建置失敗。18:04Z 持鎖讀回證實沒有發布意圖、DB／Worker 未變，才發起不帶 recovery hint 的 `40556772743`。GET、建置與最後鎖清理失敗的具體原因仍未確認，不能推定為已證實限流或網路中斷。
+原失敗備份 `40492346184` 的 pending 已由較早 staging 發布及 next `40555710003` preflight 結清；原備份仍為失敗，沒有新備份或 floor reset。[收據 followup_control_read_fix](rollout-shared-actions-2026-10-27.json)分別保存原 artifact、digest、workflow 結果與後續唯讀證據。
+
+社群關係依 #1123 啟用；staging 較早已開，本次旗標無變更，next 本次開啟。Checkout／交易 Email 未改；migration catalog 與 `34390b12` 相同。
+四帳號已讀回 admin，Environment 已安裝服務憑證與同一映像；可在 Shared release 用自己的帳號選已驗證 SHA，先 staging-next、後 next。實際操作者依紀錄，不能把 arum 的既有 plan 寫成 deploy。
+發布側已解除後續 main 等待。新映像首次自然備份成功、真人會員流程、第二操作者還原與原 168 項未驗項分開追蹤；本次不宣稱全流程全綠。
+以下歷史觀察保留各自時間。
+
+## 2026-10-27 13:30 UTC 接續：34390b12 已部署，下一版待結清失敗備份
+
+兩環境已由共用 Actions 部署 `34390b12`：staging 09:26 UTC、production 09:32 UTC，五階段均通過。
+已重新核對兩份 artifact digest 與執行身分；正式站 13:28 UTC 回讀 HTTP 200、`status=ok`、同 SHA。
+[收據的 followup_1330_utc](rollout-shared-actions-2026-10-27.json)保留完整依據。接續程式原先因兩筆相同請求而停止，後來一筆成功、一筆取消；本輪只讀回結果，沒有重複部署。
+
+四人仍有 repo admin，兩環境部署開關開啟、沒有人工 reviewer 等待。arum 已以自己的帳號完成 [plan](https://github.com/FreeTWAI/freedom-platform/actions/runs/40502413062)；這只驗 GitHub 准入，deploy 被刻意跳過，不能寫成他已實際部署。
+主線 `4d248428` 的 Verify／CodeQL 均成功，但目前成功部署版本仍是 `34390b12`。
+
+新的自然排程 [40492346184](https://github.com/FreeTWAI/freedom-platform/actions/runs/40492346184) 已觀察到，兩環境都在 capture 失敗、dump 未開始。這和早上已結清的手動備份是不同事件。
+後續 staging 部署及手動備份仍失敗；原操作者讀回指出備份 pending 尚未結清，本輪沒有另讀 live DB，也沒有宣稱已恢復。
+修正 [#1133](https://github.com/FreeTWAI/freedom-platform/pull/1133) 已由 detna 審查，整合 [#1134](https://github.com/FreeTWAI/freedom-platform/pull/1134) 驗證中。
+沿原操作線完成合併與新 image 安裝，再用原失敗 run ID 經既有 recovery 入口先 staging、後 next；不重設 floor、不為部署重做備份。
+最小 CI [#1121](https://github.com/FreeTWAI/freedom-platform/pull/1121) 已通過適用 CI、待獨立審查，不加入這批固定範圍。
+原 168 項、功能旗標、會員驗收與第二操作者還原狀態不因這次觀察改成通過。以下早上的紀錄保留其當時範圍。
+
+## 2026-10-27 共用 Actions 發布與備份接手
+
+兩環境已透過 `Shared release` 部署 `1db28383`，staging 04:56 UTC、production 05:02 UTC 完成。
+preflight、migration、deploy、health、handoff 五階段均成功；[具日期收據](rollout-shared-actions-2026-10-27.json)保存來源 CI、工具 image、Actions run、artifact digest 與正式站 HTTP 200 回讀。
+`teddashh`、`arumwu`、`Hao0321`、`detna-vibe-coding` 權限均已核對；兩環境部署與備份開關已啟用。
+四人可用自己的 GitHub 帳號從 [Shared release](https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml) 選已驗證的完整 SHA，先 staging-next、再同版本 next，mode 選 deploy；日常 recovery run ID 留空。
+使用 Environment 服務憑證與短效映像下載授權，不需操作者的個人機器或分發個人金鑰。
+
+本輪 staging 手動備份全程成功。正式環境 Actions 在完成備份紀錄後收尾失敗；持有原 lease 讀回完整紀錄鏈、DB ledger、Worker 與清理狀態後，確認備份／遠端讀回／隔離 DB 與物件還原／清理已完成、無未結案操作。
+原 Actions 失敗保留，精確收尾錯誤原因未確認；沒有為取得綠燈重做整份備份。備份不加入普通發布前置。
+每日 05:43 UTC 的新 image 自然排程尚未觀察，手動成功不冒充自然成功；舊 timer 退役由原維運線接續。
+這些實跑的操作者均為 teddashh，其他三人的實際操作與第二操作者還原仍待觀察。
+原 seed／floor 與 schema189 保留；正式環境舊 BEGIN-only 備份失敗已讀回對帳，原失敗沒有改寫為成功。
+
+主線已前進到 `ea84b93c`，07:16 UTC 查核時 Verify attempt 2 仍執行中、CodeQL 成功；不能當成已部署。
+這次沒有啟用 checkout、交易 Email 或其他新商務旗標，也沒有執行登入會員旅程；原 168 項、T-047、真人手機／Safari與 live rollback 的未驗項保留。
+以下舊發布紀錄保留各自日期與證據邊界。
+
 ## 2026-10-26 main 274f0614 發布完成（搜尋、導覽助手與本機任務）
 
 截至13:49 UTC，兩環境已由S10 `b14916cc` 更新為S11 `274f0614`／schema189；見[發布收據](rollout-main-274f0614-2026-10-26.json)。
