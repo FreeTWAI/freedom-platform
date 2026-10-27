@@ -12,7 +12,7 @@ const json = value => JSON.stringify(value, null, 2) + '\n';
 const publicError = error => typeof error?.code === 'string' && /^release_[a-z_]+$/.test(error.code)
   ? error.code : 'release_operation_failed';
 
-export async function main(env = process.env) {
+export async function main(env = process.env, { api: suppliedApi, executeOperator = runOperator } = {}) {
   const output = resolve(env.PUBLIC_RECEIPT_DIRECTORY ?? 'release-public');
   await mkdir(output, { recursive: true, mode: 0o700 });
   const receipt = { format: 'freedom.shared-release/v1', status: 'rejected', startedAt: new Date().toISOString(),
@@ -21,7 +21,7 @@ export async function main(env = process.env) {
   try {
     requireRelease(['admit', 'execute'].includes(env.RELEASE_COMMAND), 'release_command_invalid');
     const request = requestFromEnvironment(env);
-    api = githubClient(env.GH_TOKEN);
+    api = suppliedApi ?? githubClient(env.GH_TOKEN);
     const admission = await admitRelease(request, api);
     Object.assign(receipt, { ...admission, format: 'freedom.shared-release/v1', status: 'admitted' });
     if (env.RELEASE_COMMAND === 'admit') {
@@ -62,32 +62,41 @@ export async function main(env = process.env) {
     const temporaryRoot = join(env.RUNNER_TEMP, `shared-release-${request.runId}-${request.runAttempt}`);
     await mkdir(temporaryRoot, { mode: 0o700 });
     const runUrl = `https://github.com/${REPOSITORY}/actions/runs/${request.runId}/attempts/${request.runAttempt}`;
-    deployment = await api(`/repos/${REPOSITORY}/deployments`, { method: 'POST', body: {
-      ref: admission.sourceSha, task: 'deploy', auto_merge: false, required_contexts: [],
-      environment: request.target, production_environment: request.target === 'next',
-      transient_environment: false, description: 'Shared release; exact-source checks recorded in Actions',
-      payload: { format: 'freedom.shared-release/v1', operatorImage: installation.image,
-        controllerSha: request.controllerSha, configSha256: installation.configSha256,
-        runId: request.runId, runAttempt: request.runAttempt,
-        actor: admission.original, triggeredBy: admission.triggeredBy },
-    } });
-    requireRelease(Number.isSafeInteger(deployment.id) && deployment.id > 0
-      && deployment.sha === admission.sourceSha, 'release_deployment_identity_invalid');
-    receipt.deploymentId = deployment.id;
+    let deploymentCreation;
+    // A legacy handoff must not hide its authenticated predecessor with a new
+    // failed Deployment before adoption. After preflight, the journal owns the
+    // adopted source and every later intent. Keep a single creation promise:
+    // an uncertain GitHub POST is never repeated by progress/final callbacks.
+    const createDeployment = () => deploymentCreation ??= (async () => {
+      deployment = await api(`/repos/${REPOSITORY}/deployments`, { method: 'POST', body: {
+        ref: admission.sourceSha, task: 'deploy', auto_merge: false, required_contexts: [],
+        environment: request.target, production_environment: request.target === 'next',
+        transient_environment: false, description: 'Shared release; exact-source checks recorded in Actions',
+        payload: { format: 'freedom.shared-release/v1', operatorImage: installation.image,
+          controllerSha: request.controllerSha, configSha256: installation.configSha256,
+          runId: request.runId, runAttempt: request.runAttempt,
+          actor: admission.original, triggeredBy: admission.triggeredBy },
+      } });
+      requireRelease(Number.isSafeInteger(deployment.id) && deployment.id > 0
+        && deployment.sha === admission.sourceSha, 'release_deployment_identity_invalid');
+      receipt.deploymentId = deployment.id;
+      await status('in_progress', 'Schema compatibility, deployment and health checks in progress');
+    })();
     const status = (state, description) => api(`/repos/${REPOSITORY}/deployments/${deployment.id}/statuses`, {
       method: 'POST', body: { state, description, log_url: runUrl, auto_inactive: false },
     });
-    await status('in_progress', 'Schema compatibility, deployment and health checks in progress');
+    if (!admission.legacyPredecessor) await createDeployment();
     receipt.status = 'running';
     receipt.providerOutcome = 'unknown_until_confirmed';
     // Persist an honest in-progress record before any remote mutation. Abrupt cancellation
     // cannot turn this into a success; GitHub deployment may remain in_progress for reconciliation.
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
-    receipt.phases = await runOperator({ admission, installation, recoveryEvidence, sourceRoot: source, temporaryRoot,
+    receipt.phases = await executeOperator({ admission, installation, recoveryEvidence, sourceRoot: source, temporaryRoot,
       registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
       onProgress: async phases => {
         receipt.operatorProgress = phases;
         await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
+        if (phases[0]?.name === 'preflight' && phases[0].reportedStatus === 'passed') await createDeployment();
         const current = phases.at(-1);
         if (current) process.stdout.write(`Release phase: ${current.name} (${current.reportedStatus})\n`);
       },
@@ -98,6 +107,8 @@ export async function main(env = process.env) {
         ...(request.target === 'staging-next' ? { stagingAccessClientId: env.CF_ACCESS_CLIENT_ID,
           stagingAccessClientSecret: env.CF_ACCESS_CLIENT_SECRET } : {}),
       } });
+    // Fast runs may finish before the periodic progress reader observes preflight.
+    await createDeployment();
     receipt.providerOutcome = 'release_confirmed';
     receipt.operatorEvidence = 'validated-independent-release/v1';
     await status('success', 'Release, schema verification and health confirmed');

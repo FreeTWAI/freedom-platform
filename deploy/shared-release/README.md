@@ -25,6 +25,9 @@ image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、
 與座標限制，才追加 `legacy-source-adopted`。不重設 seed、不改 schema、不抹除舊紀錄。
 若同時有 BEGIN-only 備份失敗，先依原失敗收據與唯讀檢查追加 abandonment，再銜接版本。
 有 capture／archive／migration／deploy intent、未核准版本、schema 或設定變動仍會停止。
+這類首次接手在 operator 通過 preflight（含版本銜接）後才建立新的 GitHub Deployment，
+避免 image 下載或唯讀檢查失敗時，新紀錄遮住原本可信的舊發布。失敗的 Actions 收據仍保留；
+缺少 Deployment 不證明沒有副作用，重做前仍須讀回原 journal，未知 intent 不放行。
 
 以下安裝紀錄為具日期的歷史觀察；新 controller 與新 digest-pinned image 都須通過審查／CI 並安裝，
 本補丁及本機測試不表示已部署。`plan`、`check` 成功也不表示已發布。

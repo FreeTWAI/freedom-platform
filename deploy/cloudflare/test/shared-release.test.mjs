@@ -28,6 +28,7 @@ import { validatePortableConfig, portableConnections } from '../../shared-releas
 import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
 import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
+import { main as releaseMain } from '../../shared-release/cli.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -1838,6 +1839,77 @@ function legacyEvidenceFixture(extra = {}) {
     deploymentId: 100, statusId: 101, admittedRunId: 12, admittedRunAttempt: 1,
     completedAt: '2026-10-26T00:00:00Z', verification: [{workflow: '.github/workflows/verify.yml'}, {workflow: '.github/workflows/codeql.yml'}], ...extra };
 }
+
+test('legacy pre-adoption failure preserves predecessor for retry; later failures and uncertain POST stay recorded', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'legacy-retry-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const previousExitCode = process.exitCode; t.after(() => { process.exitCode = previousExitCode; });
+  const source = join(root, 'source'); await mkdir(source);
+  fixtureGit(source, ['init', '-q']); await writeFile(join(source, 'app.txt'), 'synthetic source');
+  fixtureGit(source, ['add', '.']); fixtureGit(source, ['commit', '-qm', 'fixture']);
+  const sourceSha = fixtureGit(source, ['rev-parse', 'HEAD']), sourceTree = fixtureGit(source, ['rev-parse', 'HEAD^{tree}']);
+  const creator = {login: 'teddashh', id: OPERATORS.teddashh};
+  let runId = 200;
+  for (const boundary of ['pull', 'preflight', 'after-adoption', 'uncertain-post']) {
+    const deployments = [{id: 100, environment: 'staging-next', task: 'deploy', sha: sourceSha, payload: {}, creator}];
+    const statuses = []; let posts = 0, executions = 0;
+    const read = fixtureApi(path => path.includes('/deployments?') ? deployments
+      : path.includes('/statuses?') ? [{id: 101, state: 'success', creator, created_at: '2026-10-26T00:00:00Z'}]
+      : path.includes('/commits/') ? {sha: sourceSha, commit: {tree: {sha: sourceTree}}} : undefined);
+    const api = async (path, options) => {
+      if (options?.method === 'POST') {
+        if (path.endsWith('/deployments')) {
+          posts++; deployments.unshift({...options.body, sha: options.body.ref, id: 200, creator});
+          if (boundary === 'uncertain-post') throw Error('synthetic reply lost after POST');
+          return deployments[0];
+        }
+        assert(path.endsWith('/deployments/200/statuses')); statuses.push(options.body.state); return {};
+      }
+      const value = await read(path);
+      if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = sourceSha;
+      return value;
+    };
+    const invoke = async executeOperator => {
+      const runner = join(root, String(++runId)); await mkdir(runner);
+      process.exitCode = previousExitCode;
+      await releaseMain({...environment(), PATH: process.env.PATH, RELEASE_SHA: sourceSha, RELEASE_MODE: 'deploy', RELEASE_COMMAND: 'execute',
+        GITHUB_RUN_ID: String(runId), GITHUB_RUN_ATTEMPT: '1', RUNNER_TEMP: runner, RELEASE_SOURCE_DIRECTORY: source,
+        RELEASE_ENABLED: 'true', RELEASE_OPERATOR_IMAGE: installation.image, RELEASE_CONFIG_SHA256: installation.configSha256,
+        PUBLIC_RECEIPT_DIRECTORY: join(runner, 'public')}, {api, executeOperator: async options => {
+          executions++; assert.equal(options.admission.legacyPredecessor.deploymentId, 100);
+          return executeOperator(options);
+        }});
+      return JSON.parse(await readFile(join(runner, 'public/receipt.json'), 'utf8'));
+    };
+    const passed = [{name: 'preflight', reportedStatus: 'passed'}];
+    const failed = await invoke(async ({onProgress}) => {
+      if (boundary === 'preflight') await onProgress([{name: 'preflight', reportedStatus: 'failed'}]);
+      if (boundary === 'after-adoption') await onProgress([...passed, {name: 'migration', reportedStatus: 'failed'}]);
+      if (boundary === 'uncertain-post') {
+        // The operator's progress observer catches callback errors. Final creation
+        // must still surface the original uncertainty, never send a second POST.
+        await onProgress(passed).catch(() => {}); await onProgress(passed).catch(() => {});
+        return codeResult().value.phases;
+      }
+      throw Object.assign(Error('synthetic failed boundary'), {code: boundary === 'pull' ? 'release_registry_pull_failed' : 'release_operator_failed'});
+    });
+    assert.equal(failed.status, 'failed'); assert.equal(executions, 1, failed.error);
+    assert.equal(failed.providerOutcome, 'unknown_until_confirmed');
+    if (['pull', 'preflight'].includes(boundary)) {
+      assert.equal(posts, 0); assert.equal(deployments[0].id, 100); assert.equal(failed.deploymentId, undefined);
+      const retried = await invoke(async ({onProgress}) => {
+        await onProgress(passed); await onProgress(passed);
+        assert.equal(posts, 1); return codeResult().value.phases;
+      });
+      assert.equal(retried.status, 'passed'); assert.equal(retried.deploymentId, 200);
+      assert.equal(posts, 1); assert.deepEqual(statuses, ['in_progress', 'success']);
+    } else {
+      assert.equal(posts, 1); assert.equal(deployments[0].id, 200);
+      if (boundary === 'after-adoption') assert.deepEqual(statuses, ['in_progress', 'failure']);
+      else assert.deepEqual(statuses, []);
+    }
+  }
+});
 
 test('legacy predecessor requires latest successful authorized deployment and exact main CI', async () => {
   const creator = { login: 'teddashh', id: OPERATORS.teddashh };
