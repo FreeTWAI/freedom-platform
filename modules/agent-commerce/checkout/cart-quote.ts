@@ -70,5 +70,5 @@ export async function cartQuote(q:PoolClient,store:CheckoutStore,input:CartQuote
     payment_options=[{method:'immediate_card',available,reason:available?null:'payment_profile_unavailable'}];
   }
   return CartQuoteResponseSchema.parse({publication_revision:publication.revision,currency:p.currency,lines,merchandise_total_minor:merchandise,discounts:[],delivery_options,shipping,
-    total_minor,payment_options});
+    total_minor,payment_options,required_consents:await ports.policies?.required(q,p)??[]});
 }

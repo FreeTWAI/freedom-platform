@@ -9,7 +9,8 @@ test('platform product sources retain valid module ownership and dependency refe
   const root = fileURLToPath(new URL('../../../', import.meta.url));
   const report = await checkModules(root);
   assert.ok(report.checked_source_count > 0, 'scan the real product source tree');
-  assert.deepEqual(report.unknown_paths, [], 'new product sources need an owning freedom.module.json');
+  assert.deepEqual(report.warnings, report.unknown_paths.map(path => ({ code: 'surface_unmapped', path })),
+    'unmapped sources remain visible warnings; the selector retains full fallback');
   assert.deepEqual(report.issues, [], 'module dependencies and referenced files must remain valid');
   assert.equal(report.status, 'passed');
 });

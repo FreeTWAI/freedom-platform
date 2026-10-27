@@ -18,13 +18,12 @@ on:
 # paths or descriptor/owner/dependency drift retain full selection. The two
 # reviewed guild leaves use their complete presentation lane plus static-worker,
 # only after proving the exact clean integration tree and dependency closure.
-# The exact generated manifest
-# docs/platform-plan/verification/2026-09-20-file-inventory.json may accompany
-# qualifying edits and is not itself allowlisted. Five exact informational
-# handoff documents retain governance-consumers after clean integration proof;
-# rollout JSON, specs and every other platform-plan path retain full selection.
-# Push, merge queue, rename, delete, unknown, other governance, security, and
-# shared-runtime changes keep the full set.
+# Plan/receipt docs and unread module/app Markdown skip heavy jobs after exact
+# integration proof; known document inputs retain their consumer job/profile.
+# Historical inventory metadata may accompany qualifying edits; CI uses Git objects.
+# Operator-only releases/backup changes select deploy-preflight on PR and main;
+# source-integrity already covers selector/governance controls. Other push,
+# merge queue, rename, delete, unknown and shared-runtime changes keep the full set.
 # The selector, the verify aggregate, the runtime partition runner, the runtime aggregate and every node:test, pytest and browser suite runner come from job.workflow_sha, checked out at .freedom/trusted.
 # The pinned runner derives each file set from the candidate tree and requires complete per-file and per-case evidence.
 # Candidate package scripts, globs and runner files do not define a required test suite.
@@ -74,8 +73,8 @@ jobs:
         id: decision
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CANDIDATE_SHA: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
@@ -520,7 +519,6 @@ jobs:
   static-worker:
     permissions:
       contents: read
-      statuses: read
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     needs: select
@@ -544,21 +542,6 @@ jobs:
       TEST_DATABASE_URL: postgresql://freedom_local:local-development-only@127.0.0.1:5432/fp_foundation_ci
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - name: Checkout the pinned worker status guard
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
-          path: .freedom/worker-status
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '24'
-      - name: Require CircleCI worker success for an identical same-repository PR tree
-        id: worker-provider
-        env:
-          GH_STATUS_TOKEN: ${{ github.token }}
-        run: node .freedom/worker-status/packages/contribution-tools/circleci-worker-status.mjs
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Same immutable PR integration / merge-group candidate in every job.
@@ -611,7 +594,6 @@ jobs:
           test "$(git -C .freedom/trusted rev-parse HEAD)" = "$PINNED_SHA"
           test -z "$(git -C .freedom/trusted status --porcelain)"
       - run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.worker-unit
-        if: steps.worker-provider.outputs.run_github == 'true'
         env:
           TEST_DATABASE_URL: postgresql://freedom_local@127.0.0.1:5432/fp_foundation_ci
       - run: npm run test:media-restore
@@ -718,3 +700,9 @@ jobs:
         run: docker pull mirror.gcr.io/library/postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
       - name: Verify both migration entrypoints against isolated PostgreSQL
         run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.migration-postgres
+      - name: Verify native snapshot dump and isolated restore for the shared release operator
+        run: node --import tsx .freedom/trusted/deploy/shared-release/test/postgres-integration.mjs --source .
+      - name: Typecheck delivery changes and their TypeScript consumers
+        run: node node_modules/typescript/bin/tsc --noEmit
+      - name: Verify complete daily backup orchestration evidence
+        run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.daily-backup

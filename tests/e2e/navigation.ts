@@ -69,7 +69,7 @@ export async function navigate(page: Page, name: string) {
     return;
   }
   await closeChat(page);
-  if (['我的名片', '待辦清單'].includes(name)) {
+  if (['我的名片', '入門指南'].includes(name)) {
     const settings = page.getByRole('button', { name: '設定', exact: true });
     if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
     await page.getByRole('menuitem', { name:name==='我的名片'?'資料與帳號設定':name, exact: true }).click();

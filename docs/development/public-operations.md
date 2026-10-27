@@ -16,7 +16,9 @@
 
 ## 發布順序
 
-1. 通過 TypeScript、build、runtime、跨倉、瀏覽器、contract 和 inventory checks；把精確 commit 推到 main。
+日期 inventory 僅為歷史快照；PR CI 與 main pushes 使用 Git objects。
+
+1. 通過 TypeScript、build、runtime、跨倉、瀏覽器和 contract checks；把精確 commit 推到 main。
 2. 在新 release clone 安裝依賴、build；備份已運行的同環境 DB。
 3. 以同環境 DB role 執行已審查 migration。首次只新增空 community，不複製示範資料。原子切换 current，再啟動 `freedom-public.service`。
 4. 確認 loopback health、public /site、沒有示範帳提示，以及拒絕匿名會員 API。

@@ -1,6 +1,7 @@
+import {matchesSkillBookUse} from '../../../../modules/community/discovery-portal/skill-book-uses';
 import {useEffect,useId,useRef,useState} from 'react';
 import type {PortalClient} from '../api';
-import {isGuildBook,loadCommunityCatalog,matchesSkillSearch,type CatalogBook} from './Community';
+import {SkillBookPurposeFilters,isGuildBook,loadCommunityCatalog,matchesSkillSearch,type CatalogBook} from './Community';
 import {SkillBookCard,httpsLink} from './SkillBookIntro';
 import {SkillBookCover} from './SkillBookCover';
 import {CommunityBadge} from './SkillBookBadges';
@@ -22,7 +23,7 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
   const [books,setBooks]=useState<CatalogBook[]|null>(null),[bookError,setBookError]=useState(false);
   const [items,setItems]=useState<Submission[]|null>(null),[itemError,setItemError]=useState(false);
   const searchInput=useRef<HTMLInputElement>(null);
-  const [retry,setRetry]=useState(0),[search,setSearch]=useState(''),discovery=useSkillDiscovery();
+  const [retry,setRetry]=useState(0),[search,setSearch]=useState(''),[category,setCategory]=useState(''),[use,setUse]=useState(''),discovery=useSkillDiscovery();
   useEffect(()=>{
     let active=true;setBookError(false);
     void loadCommunityCatalog(client).then(data=>{if(active)setBooks(data.skill_books);}).catch(()=>{if(active)setBookError(true);});
@@ -37,18 +38,19 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
   // Approved guild bindings arrive with discovery; wait for it (or its failure) so a guild book never flashes on this shelf.
   const designationsKnown=Boolean(discovery.data||discovery.error);
   const entries:Entry[]=[...(items??[]).map(item=>({kind:'submission' as const,item})),...(books??[]).filter(book=>!isGuildBook(book,meta.get(book.id),guildIds)).map(book=>({kind:'book' as const,book}))];
-  const shown=entries.filter(entry=>entry.kind==='submission'?matchesSkillSearch(search,[entry.item.title,entry.item.description,entry.item.source.repository_full_name])
+  const categories=[...new Set(entries.flatMap(entry=>entry.kind==='book'&&entry.book.guide?.beginner?.category?[entry.book.guide.beginner.category]:[]))];
+  const shown=entries.filter(entry=>matchesSkillBookUse(entry.kind==='book'?entry.book.id:undefined,use)&&(!category||(entry.kind==='book'&&entry.book.guide?.beginner?.category===category))).filter(entry=>entry.kind==='submission'?matchesSkillSearch(search,[entry.item.title,entry.item.description,entry.item.source.repository_full_name])
     :matchesSkillSearch(search,[entry.book.title,entry.book.description,entry.book.guide?.author_name,entry.book.upstream_url,...Object.values(entry.book.guide?.beginner??{})]));
   const loading=(books===null&&!bookError)||(items===null&&!itemError)||!designationsKnown;
   return <div className="stack community-skill-library">
     {(bookError||itemError)&&<div role="alert"><p>{bookError&&itemError?'社群技能書暫時無法載入。':'部分社群技能書暫時無法載入。'}</p><button type="button" className="btn btn-ghost" onClick={()=>setRetry(value=>value+1)}>重新載入社群技能書</button></div>}
     {loading?<p role="status">正在載入社群技能書…</p>:entries.length>0?<>
-      <div className="skill-library-filters"><label className="field">搜尋社群技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：漫畫、角色、交易…"/></label>{search&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');searchInput.current?.focus();}}>清除社群搜尋</button>}</div>
+      <div className="skill-library-filters"><label className="field">搜尋社群技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：漫畫、角色、交易…"/></label><SkillBookPurposeFilters category={category} onCategory={setCategory} use={use} onUse={setUse} categories={categories}/>{(search||category||use)&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');setCategory('');setUse('');searchInput.current?.focus();}}>清除篩選</button>}</div>
       <p className="skill-library-count" role="status">顯示 {shown.length} / {entries.length} 本社群技能書</p>
       <div className="card-grid community-book-grid">{shown.map(entry=>entry.kind==='submission'
         ?<SubmissionBookCard key={`submission:${entry.item.submission_id}`} item={entry.item}/>
         :<SkillBookCard key={entry.book.id} book={entry.book} className="community-book" headingLevel={3} community/>)}</div>
-      {!shown.length&&<p className="muted">沒有符合的社群技能書。</p>}
+      {!shown.length&&<p className="muted">沒有符合的社群技能書。試試另一個關鍵字或用途。</p>}
     </>:!bookError&&!itemError&&<p className="muted">目前還沒有社群技能書。</p>}
   </div>;
 }

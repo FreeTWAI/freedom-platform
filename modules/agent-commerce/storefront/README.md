@@ -211,7 +211,10 @@ Every page remains noindex/no-store. Plain text is escaped, blank
 lines form paragraphs, single newlines form line breaks, and there is no Markdown,
 HTML or auto-linking. Seller Email/phone are text. Only rendered legal content
 loads `shop-policies.css`. Products link to published shipping/returns. Terms are
-linked in About/footer only and imply no buyer consent.
+linked in About/footer. 公開顯示本身不表示買家同意；啟用結帳且安裝政策功能時，
+cart quote 會列出目前 publication 有正文的政策版本、繁中標籤與公開網址，
+買家須在核對訂單前勾選「我已閱讀並同意本店的」及所有政策連結。
+政策在 quote 後更新時會重新報價並要求重新閱讀勾選；已同意的版本保留在訂單 terms。
 
 A published business name replaces the original responsibility statement with the
 fixed seller sentence. Empty descriptions omit the contradictory missing-contact
@@ -240,10 +243,9 @@ C1 format choices: seller limits in the independent `storefront-policies` contra
 1–3650, default 14; all display only. The editor's checklist contains headings only.
 The privacy statement is versioned and highlighted for supplier-sourced selections;
 accepted supply pricing is not a drop-ship agreement (`fulfilment/rules/consent.ts`
-still supplies `not_agreed`). No checkout gate, consent, AI drafting, order link,
-payment/admission rule or readiness item is added. Existing checkout terms already
-retain publication identity/revision; later order evidence can build on that without
-this slice changing checkout or orders. The strict readiness contract stays eight.
+still supplies `not_agreed`). 原 C1 切片未加入買家同意；後續 checkout-policy-consent 已接上目前發布政策的版本確認，
+詳見 [checkout 同意契約](../checkout/README.md#買家確認商店政策)。未加入 AI drafting、
+order policy links、payment/admission 規則或 readiness 項目；readiness 契約仍是八項。
 
 Verification entry points: four `storefront-policies-{render,sql,commands,publication}`
 runtime files and the default-mode `hosted-store-policies.spec.ts` (ten tests, real

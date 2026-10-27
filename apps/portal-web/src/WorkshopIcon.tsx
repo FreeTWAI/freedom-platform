@@ -2,6 +2,7 @@ import type { TabId } from './types';
 
 // Interface glyphs remain vectors; the original brand artwork is never redrawn.
 const paths: Record<TabId, string> = {
+  "newbie-village":"M4 20V5l8-2 8 2v15M8 8h8M8 12h8M8 16h5",
   profile:'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 9v-2a8 8 0 0 1 16 0v2',
   ar:'M4 8V4h4m8 0h4v4m0 8v4h-4m-8 0H4v-4M8 8h8v8H8Z',
   'community-search':'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm6-2 5 5',
@@ -36,6 +37,7 @@ const paths: Record<TabId, string> = {
   services:'M4 7h16v13H4Zm0 4h16M8 7V5a4 4 0 0 1 8 0v2',
   promotion:'M4 20V10m8 10V4m8 16v-7',
   highlights:'M4 8h11v11H4Zm5-4h13v11M8 13.5l4-2.2v4.4Z',
+  'tester-map':'m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Zm6-3v15m6-12v15',
 };
 export function WorkshopIcon({ name }: { name: TabId }) {
   return <svg className="workshop-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={paths[name]}/></svg>;
