@@ -376,3 +376,18 @@ assert.equal(passed,12);
 `;
   await runInNewContext(`${source}\n(async()=>{${harness}})()`,{assert,t,partyOf,Blob,File,DOMException,AbortController,queueMicrotask});
 });
+
+test('UX-15d optional dish scheduling waits for primary settlement, bounds only its own wait, and cleans stale owners',()=>{
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/deferred-preview.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code;
+  const timers=new Map<number,{fn:()=>void;ms:number}>(),frames=new Map<number,()=>void>();let id=0,starts=0;
+  const context={exports:{},module:{exports:{} as {deferOptionalPreview:(start:()=>void)=>{release:()=>void;dispose:()=>void}}},window:{setTimeout(fn:()=>void,ms:number){timers.set(++id,{fn,ms});return id;},clearTimeout(key:number){timers.delete(key);}},requestAnimationFrame(fn:()=>void){frames.set(++id,fn);return id;},cancelAnimationFrame(key:number){frames.delete(key);}};
+  runInNewContext(source,context);const create=()=>context.module.exports.deferOptionalPreview(()=>starts++);
+  const flushFrame=()=>{const jobs=[...frames.values()];frames.clear();jobs.forEach(fn=>fn());};
+  const flushTask=()=>{const jobs=[...timers.entries()].filter(([,job])=>job.ms===0);jobs.forEach(([key,job])=>{timers.delete(key);job.fn();});};
+  for(const settlement of ['PNG success','PNG error']){const owner=create();assert.equal(timers.size,1,settlement);assert.equal(frames.size,0);const before=starts;owner.release();assert.equal(starts,before);assert.equal(timers.size,0);flushFrame();assert.equal(starts,before);flushTask();assert.equal(starts,before+1);owner.release();flushFrame();flushTask();assert.equal(starts,before+1);owner.dispose();}
+  const held=create(),deadline=[...timers.values()][0];assert.equal(deadline.ms,15000);deadline.fn();flushFrame();flushTask();const started=starts;held.release();flushFrame();flushTask();assert.equal(starts,started,'late PNG does not rebuild the stage or change PNG state');held.dispose();
+  const stale=create(),staleDeadline=[...timers.values()][0];stale.dispose();staleDeadline.fn();stale.release();assert.equal(frames.size,0);assert.equal(timers.size,0);
+  const beforeFrame=create();beforeFrame.release();const staleFrame=[...frames.values()][0];beforeFrame.dispose();staleFrame();assert.equal(timers.size,0);assert.equal(frames.size,0);
+  const beforeTask=create();beforeTask.release();flushFrame();const staleTask=[...timers.values()][0];beforeTask.dispose();staleTask.fn();assert.equal(starts,started);assert.equal(timers.size,0);
+  const replacement=create();replacement.release();flushFrame();flushTask();assert.equal(starts,started+1);replacement.dispose();
+});

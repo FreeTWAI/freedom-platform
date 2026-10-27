@@ -895,3 +895,35 @@ test('UX-11: touching a real corn dog selects and flips that piece; lifted food 
  const dressed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(dressed.portions.every(p=>p.lifted&&p.coated&&p.drain>=3000)).toBe(true);expect(dressed.sauces).toHaveLength(1);expect(dressed.sauces[0].points.length).toBeGreaterThan(2);await page.screenshot({path:testInfo.outputPath('corn-dog-dressing.png'),fullPage:true});
  await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await page.clock.resume();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();expect(errors).toEqual([]);
 });
+
+// Real PNG encoding with only callback delivery held. Native rendering remains
+// required; these tests do not replace the unchanged five-second download test.
+for(const outcome of ['success','error','late'] as const)test(`UX-15d: dish preview defers for primary PNG (${outcome})`,async({page})=>{
+  test.setTimeout(60000);const f=kitchenCheckpoint('result');
+  await page.addInitScript(run=>{
+    sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run}));
+    const original=HTMLCanvasElement.prototype.toBlob;
+    const held:Array<()=>void>=[];let fail=false;
+    (window as unknown as {pngGate:{pending:()=>number;release:(error:boolean)=>void}}).pngGate={pending:()=>held.length,release(error){fail=error;held.splice(0).forEach(fn=>fn());}};
+    HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){
+      if(type==='image/png'&&this.width===960&&this.height===1200){original.call(this,blob=>held.push(()=>callback(fail?null:blob)),type,quality);return;}
+      original.call(this,callback,type,quality);
+    };
+  },f.run);
+  await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);
+  await expect.poll(()=>page.evaluate(()=>(window as unknown as {pngGate:{pending:()=>number}}).pngGate.pending())).toBeGreaterThan(0);
+  await expect(page.locator('[data-dish-view="waiting"]')).toBeVisible();
+  await expect(page.locator('.ck-dish-canvas canvas')).toHaveCount(0);
+  const download=page.getByRole('link',{name:'下載完整成果 PNG',exact:true});await expect(download).toHaveCount(0);
+  if(outcome==='late'){
+    // Only the optional view has a maximum defer. PNG stays pending, not failed.
+    await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:30000});
+    await expect(download).toHaveCount(0);await expect(page.getByRole('button',{name:'重試產生成果圖',exact:true})).toBeDisabled();
+  }
+  const old=outcome==='late'?await page.locator('.ck-dish-canvas canvas').elementHandle():null;
+  await page.evaluate(error=>(window as unknown as {pngGate:{release:(error:boolean)=>void}}).pngGate.release(error),outcome==='error');
+  if(outcome!=='error')await expect(download).toBeVisible();
+  else {await expect(download).toHaveCount(0);await expect(page.getByRole('button',{name:'重試產生成果圖',exact:true})).toBeEnabled();}
+  await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});
+  if(old){expect(await old.evaluate(canvas=>canvas===document.querySelector('.ck-dish-canvas canvas'))).toBe(true);await old.dispose();}
+});
