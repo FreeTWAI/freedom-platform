@@ -16,8 +16,8 @@ const dumpEvidence = z.object({ sha256: z.string().regex(/^[0-9a-f]{64}$/),
   byteSize: z.number().int().positive().max(1024 * 1024 * 1024) }).strict();
 export class ConsistentBackupError extends Error {
   constructor(readonly code: 'backup_disabled' | 'backup_invalid_target' | 'backup_target_mismatch'
-    | 'backup_snapshot_mismatch' | 'backup_capture_failed') {
-    super(code); this.name = 'ConsistentBackupError';
+    | 'backup_snapshot_mismatch' | 'backup_capture_failed', options?: { cause?: unknown }) {
+    super(code, options); this.name = 'ConsistentBackupError';
   }
 }
 export interface DatabaseSnapshotWriter {
@@ -116,7 +116,7 @@ export async function createConsistentAssetBackup(pool: Pool, options: {
   } catch (error) {
     if (!exporterError && error instanceof ConsistentBackupError) throw error;
     // Operator logs may record a fixed code; never propagate SQL/store secrets.
-    throw new ConsistentBackupError('backup_capture_failed');
+    throw new ConsistentBackupError('backup_capture_failed', { cause: exporterError ?? error });
   } finally {
     if (exporter) {
       let destroyed = false;

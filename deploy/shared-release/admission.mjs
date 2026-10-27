@@ -14,6 +14,8 @@ export const releasePhases = request => {
 export const requireRelease = (condition, code) => {
   if (!condition) throw Object.assign(new Error(code), { code });
 };
+export const isReleaseFailureCode = value => typeof value === 'string' && /^release_[a-z0-9_]{1,80}$/.test(value);
+export const releaseFailureCode = error => [error?.code, error?.message].find(isReleaseFailureCode) ?? 'release_operation_failed';
 export const isSha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export const isDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const positiveId = value => Number.isSafeInteger(value) && value > 0;
