@@ -60,7 +60,9 @@
     "apps/portal-web/src/modules/SocialPostOptimizer.tsx",
     "apps/portal-web/src/modules/SocialPostOptimizer.css",
     "apps/portal-web/src/social-post-task.ts",
-    "apps/portal-web/src/modules/social-sharing.css"
+    "apps/portal-web/src/modules/social-sharing.css",
+    "apps/portal-web/src/modules/SocialPostBookmark.tsx",
+    "tests/e2e/social-post-bookmark.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [

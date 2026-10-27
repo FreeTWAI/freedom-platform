@@ -47,7 +47,7 @@ export const communityFeatures = {
   },
   "social": {
     moduleId: "social-feed", placement: 'page',
-    render: ({client, session, site, notificationTarget, headerMember}) => <SocialZone client={client} shortVideos={site?.short_videos_enabled===true} viewer={{name: headerMember?.nickname??session.user.display_name, avatarUrl: headerMember?.avatar_url}} focusPost={notificationTarget?.tab==='social'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined}/>,
+    render: ({client, session, site, notificationTarget, headerMember}) => <SocialZone bookmarksEnabled={site?.community_search_enabled===true && site.community_relations_enabled===true} client={client} shortVideos={site?.short_videos_enabled===true} viewer={{name: headerMember?.nickname??session.user.display_name, avatarUrl: headerMember?.avatar_url}} focusPost={notificationTarget?.tab==='social'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined}/>,
   },
   "services": {
     moduleId: "community", placement: 'page',
