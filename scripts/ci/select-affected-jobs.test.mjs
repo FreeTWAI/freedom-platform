@@ -11,6 +11,7 @@ import {
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
   deliveryDailyRegistryAddition, deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
   MINIMAL_JOB_PROFILES, decideMinimalProfile, decideCiToolsProfile, ciToolsWorkflowProven, ciToolsSchemaProven,
+  decideBrowserSpecProfile, ciToolsBrowserRegistryProven,
 } from './select-affected-jobs.mjs';
 
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
@@ -1719,4 +1720,79 @@ test('CI-tools actual graph Git fixture admits only the obsolete pair and keeps 
   const toolingOnly=integrate(head,commit());
   assert.deepEqual(collectRepositoryDecision(toolingOnly),selected);
   assert.deepEqual(collectRepositoryDecision(push(toolingOnly)),selected);
+});
+
+test('browser spec selection retains its actual execution coverage and rejects mixed or unproven changes', () => {
+  const input = {event:'pull_request',diffComplete:true,nonExecutableBlobsProven:true,descriptorsProven:true,
+    baseline:narrow(),candidate:narrow(),changes:[edited('tests/e2e/public-social-posts.spec.ts')]};
+  for (const event of ['pull_request','push']) assert.equal(decideBrowserSpecProfile({...input,event}).profile,'browser_specs_only');
+  for (const change of [undefined,edited('tests/e2e/new.spec.ts','A'),edited('tests/e2e/public-social-posts.spec.ts','D'),
+    edited('tests/e2e/fixtures.ts'),edited('tests/e2e/nested/example.spec.ts'),edited('playwright.config.ts'),
+    edited('tests/runtime/public-social-post-page.test.ts'),edited('apps/portal-web/src/App.tsx'),
+    {...input.changes[0],previousPath:'tests/e2e/old.spec.ts'},edited('tests/e2e/../runtime/example.spec.ts')])
+    assert.equal(decideBrowserSpecProfile({...input,changes:[change]}).profile,'full');
+  for (const extra of [{event:'merge_group'},{event:'workflow_dispatch'},{diffComplete:false},{nonExecutableBlobsProven:false},
+    {descriptorsProven:false},{baseline:[]},{changes:[]},{changes:[...input.changes,...input.changes]},
+    {changes:[...input.changes,edited('scripts/e2e-server.ts')]},
+    {candidate:[moduleDescriptor('example',['modules/example/**'],{tests:['runtime.full']})]}])
+    assert.equal(decideBrowserSpecProfile({...input,...extra}).profile,'full');
+  assert.deepEqual(MINIMAL_JOB_PROFILES.browser_specs_only,['ui-e2e']);
+  assert.deepEqual(PINNED_SUITES['ci.browser-spec-consumers'].files,
+    ['tests/runtime/public-social-post-page.test.ts','tests/runtime/newcomer-guides.test.ts']);
+  assert.equal(PINNED_SUITES['ci.browser-spec-consumers'].database,false);
+});
+
+test('browser-only Git selection binds integration content, main topology, file modes and clean checkout', async t => {
+  const directory=await mkdtemp(join(tmpdir(),'fp-browser-select-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const env={...verificationEnvironment(),GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',GIT_AUTHOR_NAME:'CI Fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_NAME:'CI Fixture',GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
+  const git=(args,input)=>execFileSync('git',['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{input,encoding:'utf8',stdio:['pipe','pipe','pipe'],env}).trim();
+  const put=async(path,body)=>{await mkdir(dirname(join(directory,path)),{recursive:true});await writeFile(join(directory,path),body);};
+  const commit=()=>{git(['add','.']);git(['commit','-qm','fixture']);return git(['rev-parse','HEAD']);};
+  const integrate=(base,head)=>{const candidate=git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);return {repository:directory,event:'pull_request',base,head,candidate};};
+  const push=input=>({...input,event:'push',ref:'refs/heads/main',head:input.candidate});
+  git(['init','-q','-b','main']);
+  for(const d of narrow())await put(`modules/${d.module_id}/freedom.module.json`,JSON.stringify(d));
+  const spec='tests/e2e/public-social-posts.spec.ts';await put(spec,'// before\n');
+  await put('tests/e2e/fixtures.ts','// fixture\n');await put('.gitignore','tests/e2e/generated.spec.ts\n');
+  await put('scripts/ci/select-affected-jobs.mjs','throw Error("candidate selector must never execute");');
+  const base=commit();await put(spec,'// after\n');const head=commit(),input=integrate(base,head);
+  const selected=minimalSelection('browser_specs_only');
+  assert.deepEqual(collectRepositoryDecision(input),selected);assert.deepEqual(collectRepositoryDecision(push(input)),selected);
+  const cli=spawnSync(process.execPath,[selector,'--event','push','--repository',directory,'--base',base,'--head',input.candidate,'--candidate',input.candidate,'--github-output',join(directory,'.git','outputs')],{encoding:'utf8',env:{...env,GITHUB_REF:'refs/heads/main'}});
+  assert.equal(cli.status,0,cli.stderr);assert.deepEqual(JSON.parse(cli.stdout),selected);
+  for(const extra of [{event:'merge_group'},{candidate:head},{head:base},{base:head}])assert.equal(collectRepositoryDecision({...input,...extra}).mode,'full');
+  for(const extra of [{ref:''},{ref:'refs/heads/topic'},{head},{base:head}])assert.equal(collectRepositoryDecision({...push(input),...extra}).mode,'full');
+  await put(spec,'dirty');assert.equal(collectRepositoryDecision(input).mode,'full');git(['checkout','--',spec]);
+  await put('tests/e2e/generated.spec.ts','ignored');assert.equal(collectRepositoryDecision(input).mode,'full');await rm(join(directory,'tests/e2e/generated.spec.ts'));
+  for(const mutate of [async()=>put('tests/e2e/fixtures.ts','changed'),async()=>put('tests/e2e/added.spec.ts','added'),
+    async()=>put('modules/example/freedom.module.json',JSON.stringify(moduleDescriptor('example',['modules/example/**'],{tests:['runtime.full']}))),
+    async()=>git(['mv',spec,'tests/e2e/renamed.spec.ts']),async()=>rm(join(directory,spec))]){
+    git(['checkout','-q',head]);await mutate();const mixed=integrate(base,commit());
+    assert.equal(collectRepositoryDecision(mixed).mode,'full');assert.equal(collectRepositoryDecision(push(mixed)).mode,'full');
+  }
+  git(['checkout','-q',head]);git(['update-index','--chmod=+x',spec]);git(['commit','-qm','mode']);
+  git(['checkout','--',spec]);
+  assert.equal(collectRepositoryDecision(integrate(base,git(['rev-parse','HEAD']))).mode,'full');
+  const reversed=git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',head,'-p',base],'reversed\n');git(['checkout','-q',reversed]);
+  assert.equal(collectRepositoryDecision({...push(input),head:reversed,candidate:reversed}).mode,'full');
+  git(['checkout','-q',head]);assert.deepEqual(collectRepositoryDecision({...push(input),head,candidate:head}),selected);
+});
+
+test('CI tools admit only the exact browser coverage wiring and fixed consumer registry addition', async () => {
+  const workflow=await readFile(workflowPath,'utf8'),typecheck="      - name: Typecheck browser-only changes\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        run: node node_modules/typescript/bin/tsc --noEmit\n",
+    consumers="      - name: Check existing browser-spec consumers\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.browser-spec-consumers\n";
+  const before=workflow.replace(typecheck,'').replace(consumers,'');
+  assert.equal(ciToolsWorkflowProven(before,workflow),true);
+  assert.ok(jobBlock(workflow,'ui-e2e').includes(typecheck));assert.ok(jobBlock(workflow,'ui-e2e').includes(consumers));
+  for(const changed of [workflow.replace(typecheck,''),workflow.replace(consumers,''),workflow.replace('--suite ci.browser-spec-consumers','--suite ci.worker-unit'),
+    workflow.replace(typecheck,typecheck.replace("'browser_specs_only'","'full'")),
+    workflow.replace(typecheck,'').replace('\n  static-worker:\n','\n  static-worker:\n'+typecheck),
+    workflow.replace('node node_modules/typescript/bin/tsc --noEmit','echo skipped')])
+    assert.equal(ciToolsWorkflowProven(before,changed),false);
+  const registry=await readFile(join(root,'packages/contribution-tools/pinned-suites.mjs'),'utf8');
+  const addition=registry.split('\n').find(line=>line.startsWith("  'ci.browser-spec-consumers':"))+'\n';
+  const old=registry.replace(addition,'');assert.equal(ciToolsBrowserRegistryProven(old,registry),true);
+  for(const changed of [registry.replace(addition,addition.replace('public-social-post-page.test.ts','unknown.test.ts')),
+    registry.replace(addition,addition.replace('database: false','database: true')),registry.replace("'ci.worker-unit'","'ci.unknown'")])
+    assert.equal(ciToolsBrowserRegistryProven(old,changed),false);
 });
