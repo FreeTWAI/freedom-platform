@@ -47,7 +47,7 @@ test('member helper host resets accepted same-tab routes and a fresh login gener
   await expect(launcher(page)).toHaveCount(0);await login(page);await launcher(page).click();await expect(question(page)).toHaveValue('');
 });
 test('member helper host transfers focus after accepted same-tab helper navigation',async({page})=>{
-  await login(page);await navigate(page,'我的供貨商品庫');await expect(page).toHaveURL(/#stores\/supply$/);
+  await login(page);await navigate(page,'供貨商品管理');await expect(page).toHaveURL(/#stores\/supply$/);
   await launcher(page).click();await helper(page).getByRole('button',{name:'開店／賣東西',exact:true}).click();
   await helper(page).getByRole('button',{name:'前往我的商店',exact:true}).click();
   await expect(page).toHaveURL(/#stores$/);await expect(helper(page)).not.toBeVisible();await expect(page.locator('#main-content')).toBeFocused();

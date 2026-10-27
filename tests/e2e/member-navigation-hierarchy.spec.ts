@@ -26,7 +26,7 @@ test('home and global navigation reach the same supply catalog and preserve hist
   await expect(navigation).toBeHidden();await expect(page.locator('#main-content')).toBeFocused();
   await page.goBack();await expect(page).toHaveURL(/#stores\/supply$/);
   await page.reload();await expect(page.getByRole('heading',{name:'我的供貨商品庫',level:1,exact:true})).toBeVisible();
-  await navigate(page,'我的供貨商品庫');
+  await navigate(page,'供貨商品管理');
   await expect(page.getByRole('navigation',{name:'主要工作區'})).toBeHidden();
   await expect(page.locator('#main-content')).toBeFocused();
   await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);

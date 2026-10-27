@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { WorkshopIcon } from './WorkshopIcon';
 import type { TabId } from './types';
 import {useLanguage} from './language';
@@ -9,6 +9,13 @@ export { TAB_TITLES } from './features/metadata';
 
 const primary: TabId[] = ['home', 'profile', 'guilds', 'skills'];
 const keywords:Partial<Record<TabId,string>>={ar:'相機 圖案 掃描 衣服 海報 名片',messages:'聊天室 對話 私訊',members:'人才 找夥伴 媒合',skills:'學習 資源 免費',tasks:'任務 貢獻 參與','private-ai':'私人工作與 AI 私人 AI 工作室 草稿 模型 執行',workbench:'我的工作 任務協作 認領任務 提交成果',showcase:'作品與需求 作品與合作 分享 展示 需求 找人',opensource:'投稿 提交 上傳 GitHub 開源 工具 技能',supplier:'商品 商店 供應商',retail:'電商 販售 商店',account:'個人資料 設定 暱稱',friends:'朋友 好友 私訊',business:'業務 工作區 邀請',reservations:'預留 訂單 查詢 取消',stores:'商店 開店 店鋪 商品 上架 發布','tester-map':'測試 測試週 回報 問題 社群測試'};
+const commerceLabels: Partial<Record<TabId, InterfaceMessage>> = {
+  reservations: 'nav.commerceOrders', supplier: 'nav.commerceSupplier', retail: 'nav.commerceRetail',
+};
+const commercePurposes: Partial<Record<TabId, InterfaceMessage>> = {
+  stores: 'nav.commerceStorePurpose', reservations: 'nav.commerceOrdersPurpose', marketing: 'nav.commerceMarketingPurpose',
+  supplier: 'nav.commerceSupplierPurpose', retail: 'nav.commerceRetailPurpose',
+};
 const groups: { label: string; pages: TabId[] }[] = [
   { label: '社群參與', pages: ['ar','events', 'tasks', 'highlights'] },
   { label: '認識夥伴', pages: ['members', 'friends', 'positioning', 'newbie-village', 'squads', 'cocreation'] },
@@ -22,6 +29,7 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
   current: TabId; onSelect: (id: TabId, hash?: string) => void; currentHash?: string; canManageGuild: boolean; guildLaunchpadEnabled: boolean; communitySearchEnabled: boolean; personalContentEnabled: boolean; mobileOpen: boolean; onCloseMobile?: (returnFocus: boolean) => void;
 }) {
   const {t}=useLanguage();
+  const navigationId = useId();
   const groupKeys:Record<string,InterfaceMessage>={'社群參與':'nav.participation','認識夥伴':'nav.people','分享推廣':'nav.promotionGroup','創作與合作':'nav.creation','供貨與銷售':'nav.commerce','管理':'nav.management'};
   const [query,setQuery]=useState('');
   const [moreOpen, setMoreOpen] = useState(false);
@@ -78,14 +86,17 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
     };
   }, [mobileOpen]);
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const searchMatches = (Object.keys(TAB_TITLES) as TabId[]).filter(id=>(id!=='community-search'||communitySearchEnabled)&&(id!=='my-content'||personalContentEnabled)&&(id!=='guild-workspace'||canManageGuild)&&(id!=='business'||guildLaunchpadEnabled)&&`${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''}`.toLocaleLowerCase().includes(normalizedQuery));
-  const supplyMatches = guildLaunchpadEnabled && `${t('stores.supplyTitle')} 供應商 供貨 商品庫`.toLocaleLowerCase().includes(normalizedQuery);
+  const searchMatches = (Object.keys(TAB_TITLES) as TabId[]).filter(id=>(id!=='community-search'||communitySearchEnabled)&&(id!=='my-content'||personalContentEnabled)&&(id!=='guild-workspace'||canManageGuild)&&(id!=='business'||guildLaunchpadEnabled)&&`${t(commerceLabels[id] ?? `nav.${id}`)} ${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''} ${commercePurposes[id] ? t(commercePurposes[id]) : ''}`.toLocaleLowerCase().includes(normalizedQuery));
+  const supplyMatches = guildLaunchpadEnabled && `${t('nav.commerceSupply')} ${t('stores.supplyTitle')} ${t('nav.commerceSupplyPurpose')} 供應商 供貨 商品庫`.toLocaleLowerCase().includes(normalizedQuery);
   const supplySelected = /^#stores\/(?:supply$|[^/]+\/[^/]+\/supply(?:-orders)?(?:[/?]|$))/.test(currentHash);
-  const item = (id: TabId, title: InterfaceMessage = `nav.${id}`, hash = `#${id}`, grouped = false) => {
+  const item = (id: TabId, title: InterfaceMessage = commerceLabels[id] ?? `nav.${id}`, hash = `#${id}`, grouped = false) => {
     const active = (current === id || (id === 'profile' && current === 'my-content') || (grouped && id === 'showcase' && activeGroupTab === 'showcase')) && (id !== 'stores' || supplySelected === (hash === '#stores/supply'));
-    return <button key={hash} type="button" className={`nav-item${active ? ' is-active' : ''}`}
+    const purpose = hash === '#stores/supply' ? 'nav.commerceSupplyPurpose' : commercePurposes[id];
+    const itemId = `${navigationId}-${hash.slice(1).replaceAll('/', '-')}`;
+    return <button key={hash} type="button" className={`nav-item${purpose ? ' nav-commerce-item' : ''}${active ? ' is-active' : ''}`}
+      aria-labelledby={purpose ? `${itemId}-label` : undefined} aria-describedby={purpose ? `${itemId}-purpose` : undefined}
       aria-current={active ? 'page' : undefined} onClick={() => {setMoreOpen(false);setQuery('');onSelect(id, hash)}}>
-      <WorkshopIcon name={id}/><span>{t(title)}</span>
+      <WorkshopIcon name={id}/>{purpose ? <span className="nav-commerce-copy"><span id={`${itemId}-label`}>{t(title)}</span><span id={`${itemId}-purpose`} className="nav-commerce-purpose">{t(purpose)}</span></span> : <span>{t(title)}</span>}
     </button>;
   };
   return <>{mobileOpen && <div className="mobile-nav-backdrop" aria-hidden="true"/>}<nav ref={nav} id="workspace-navigation" className={`nav workspace-navigation${mobileOpen ? ' is-open' : ''}`} aria-label={t('nav.main')} onKeyDown={event=>{if(event.key!=='Escape'||!moreOpen)return;event.stopPropagation();if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;event.preventDefault();setMoreOpen(false);moreTrigger.current?.focus()}}>
@@ -96,14 +107,23 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
       <div className="nav-more-content">
     <label className="nav-search"><span className="sr-only">{t('nav.search')}</span><input ref={searchRef} type="search" autoComplete="off" value={query} onChange={event=>setQuery(event.target.value)} maxLength={80} placeholder={t('nav.example')} onKeyDown={event=>{if(event.key==='Escape'&&query&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();event.stopPropagation();setQuery('')}}}/></label>
     <p className="field-hint" role="status" aria-atomic="true">{normalizedQuery && !supplyMatches && searchMatches.length===0 ? <>{t('nav.results')} · 0. {t('nav.searchHint')}</> : ''}</p>
-    {query.trim()?<div className="nav-search-results" role="region" aria-label={t('nav.results')}>{supplyMatches && item('stores', 'stores.supplyTitle', '#stores/supply')}{searchMatches.map(id => item(id))}{(supplyMatches || searchMatches.length > 0) && <p className="field-hint">{t('nav.searchHint')}</p>}</div>:<>
+    {query.trim()?<div className="nav-search-results" role="region" aria-label={t('nav.results')}>{supplyMatches && item('stores', 'nav.commerceSupply', '#stores/supply')}{searchMatches.map(id => item(id))}{(supplyMatches || searchMatches.length > 0) && <p className="field-hint">{t('nav.searchHint')}</p>}</div>:<>
     {groups.map(group => <details className="nav-section" key={group.label} open={expanded.includes(group.label)}>
       <summary onClick={event => { event.preventDefault(); setExpanded(value => value.includes(group.label) ? value.filter(label => label !== group.label) : [...value, group.label]); }}>
         {t(groupKeys[group.label])}<span aria-hidden="true">⌄</span>
       </summary>
       <div className="nav-section-items">
-        {group.label === '供貨與銷售' && guildLaunchpadEnabled && item('stores', 'stores.supplyTitle', '#stores/supply')}
-        {group.pages.filter(id => (id !== 'my-content' || personalContentEnabled) && (id !== 'guild-workspace' || canManageGuild) && (id !== 'business' || guildLaunchpadEnabled)).map(id => item(id, `nav.${id}`, `#${id}`, true))}
+        {group.label === '供貨與銷售' ? <div className="nav-commerce-groups">
+          <div className="nav-commerce-group" role="group" aria-labelledby={`${navigationId}-commerce-platform`}>
+            <p id={`${navigationId}-commerce-platform`} className="nav-commerce-heading">{t('nav.commercePlatform')}</p>
+            {guildLaunchpadEnabled && item('stores', 'nav.commerceSupply', '#stores/supply')}
+            {(['stores', 'reservations', 'marketing'] as TabId[]).map(id => item(id))}
+          </div>
+          <div className="nav-commerce-group" role="group" aria-labelledby={`${navigationId}-commerce-ai`}>
+            <p id={`${navigationId}-commerce-ai`} className="nav-commerce-heading">{t('nav.commerceAi')}</p>
+            {(['supplier', 'retail'] as TabId[]).map(id => item(id))}
+          </div>
+        </div> : group.pages.filter(id => (id !== 'my-content' || personalContentEnabled) && (id !== 'guild-workspace' || canManageGuild) && (id !== 'business' || guildLaunchpadEnabled)).map(id => item(id, `nav.${id}`, `#${id}`, true))}
         {group.label === '管理' && <a className="nav-item" href="/admin">{t('nav.admin')} <span aria-hidden="true">↗</span></a>}
       </div>
     </details>)}

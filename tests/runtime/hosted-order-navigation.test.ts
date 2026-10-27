@@ -19,7 +19,7 @@ test('buyer order navigation uses the order-list label in every supported langua
   assert.equal(interfaceText('zh-Hant', 'nav.reservations'), TAB_TITLES.reservations);
   const markup = renderToStaticMarkup(createElement(Navigation, {current: 'reservations', onSelect() {},
     canManageGuild: false, guildLaunchpadEnabled: false, communitySearchEnabled: false, personalContentEnabled: false, mobileOpen: true}));
-  assert.match(markup, /我的訂單/);
+  assert.match(markup, /購買與預留紀錄/);
   assert.doesNotMatch(markup, /查詢我的預留/);
 });
 

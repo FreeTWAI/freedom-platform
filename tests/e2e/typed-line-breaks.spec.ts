@@ -113,7 +113,7 @@ test('typed multi-line text keeps its line breaks on the pages that show it', as
     await expect(skill).toBeVisible();
     expect(await rendered(skill.locator('p.skill-library-purpose'))).toBe(skillDescription);
 
-    await navigate(page, '我可以賣東西');
+    await navigate(page, 'AI 製作銷售網站');
     await page.getByText('查看舊版商品與合作資料', { exact: true }).click();
     const store = card(page, storeName);
     await expect(store).toBeVisible();
