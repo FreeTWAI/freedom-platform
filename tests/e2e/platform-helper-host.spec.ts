@@ -1,4 +1,4 @@
-import {test,expect,type Page} from './fixtures.js';
+import {test,expect,type Page,type Locator} from './fixtures.js';
 import {navigate,openPageTools,openChat,closeChat,signOut} from './navigation.js';
 import {pageHelp} from '../../apps/portal-web/src/page-help.js';
 import {PORTAL_FEATURE_METADATA} from '../../apps/portal-web/src/features/metadata.js';
@@ -97,4 +97,33 @@ test('member toolbar helper remains available when selected character release is
   await page.addInitScript(()=>localStorage.setItem('freedom-theme','guide-dragon'));
   await page.route('**/api/v1/guide-packs/release',async route=>{const response=await route.fetch();const data=await response.json();await route.fulfill({response,json:{...data,enabled:false}});});
   await login(page);await expect(page.locator('.page-spirit-widget')).toHaveCount(0);await launcher(page).click();await expect(question(page)).toBeFocused();
+});
+
+async function expectHelperContrast(button:Locator){
+  const ratio=await button.evaluate(element=>{
+    const style=getComputedStyle(element);
+    function luminance(value:string){
+      const parts=value.match(/[\d.]+/g)!.map(Number);
+      if(parts.length>3&&parts[3]!==1)throw Error('Expected opaque helper colors');
+      const rgb=parts.slice(0,3).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+      return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+    }
+    const values=[luminance(style.color),luminance(style.backgroundColor)].sort((a,b)=>a-b);
+    return (values[1]+.05)/(values[0]+.05);
+  });
+  expect(ratio).toBeGreaterThanOrEqual(4.5);
+}
+for(const profile of ['light','dark','versefolk','guide-dragon','guide-ai-sister'])test(`member homepage helper contrast uses actual ${profile} profile`,async({page})=>{
+  await page.setViewportSize({width:390,height:640});
+  await page.addInitScript(value=>localStorage.setItem('freedom-theme',value),profile);await login(page);
+  await expect(page.locator('html')).toHaveAttribute('data-experience-profile',profile);
+  await expectHelperContrast(launcher(page));await launcher(page).hover();await expectHelperContrast(launcher(page));
+  await launcher(page).focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');await expect(launcher(page)).toBeFocused();await expectHelperContrast(launcher(page));
+  await launcher(page).press('Enter');await expect(question(page)).toBeFocused();
+  expect(await helper(page).getByRole('button').count()).toBeGreaterThanOrEqual(6);
+  for(const button of await helper(page).getByRole('button').all())await expectHelperContrast(button);
+  await helper(page).getByRole('button',{name:'學 AI',exact:true}).click();
+  await expect(helper(page).getByRole('button',{name:'前往技能書架',exact:true})).toBeVisible();
+  for(const button of await helper(page).getByRole('button').all())await expectHelperContrast(button);
+  await page.keyboard.press('Escape');await expect(launcher(page)).toBeFocused();
 });

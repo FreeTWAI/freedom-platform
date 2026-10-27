@@ -57,6 +57,37 @@ test('a recipient opens the exact old shared post after login; removed content s
  }
 });
 
+test('likes-list retries restart a reopened list but preserve the cursor for a failed next page',async({page,e2eAuthPool})=>{
+ await login(page);const sessionResponse=await page.request.get('/api/v1/session');expect(sessionResponse.status()).toBe(200);const session=await sessionResponse.json();
+ const schema=e2eSchema(process.env.FREEDOM_E2E_SCHEMA),postId=crypto.randomUUID(),text=`按讚名單重試 ${postId}`;
+ expect((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema).toBe(schema);
+ // Read-only interaction fixture: do not consume the shared maker's publishing quota.
+ const inserted=await e2eAuthPool.query(`INSERT INTO "${schema}".community_social_posts(post_id,community_id,author_user_id,kind,platform,title,note,state,created_at,updated_at)
+  SELECT $1,community_id,user_id,'note','other',$3,$3,'active',timestamptz '2000-01-01',timestamptz '2000-01-01' FROM "${schema}".users WHERE user_id=$2 RETURNING post_id`,[postId,session.user.user_id,text]);
+ expect(inserted.rows.map(row=>row.post_id)).toEqual([postId]);
+ const first={user_id:crypto.randomUUID(),display_name:'第一頁按讚會員'},second={user_id:crypto.randomUUID(),display_name:'第二頁按讚會員'};
+ const cursors:(string|null)[]=[];let firstReads=0,nextReads=0;
+ await page.route(`**/api/v1/social-posts/${postId}/likes*`,async route=>{
+  const cursor=new URL(route.request().url()).searchParams.get('cursor');cursors.push(cursor);
+  if(cursor===null?++firstReads===2:++nextReads===1)return route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'按讚名單暫時無法載入，請重試。'})});
+  return route.fulfill({json:cursor===null?{items:[first],next_cursor:'next-page'}:{items:[first,second],next_cursor:null}});
+ });
+ await page.goto(`/?social-post=${postId}#social`);const post=card(page,text),trigger=post.getByRole('button',{name:'查看按讚名單',exact:true});
+ await expect(post).toHaveCount(1);await trigger.click();const people=page.getByRole('dialog',{name:'按讚名單',exact:true});
+ await expect(people).toContainText(first.display_name);await expect(people.getByRole('button',{name:'更多按讚會員',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(trigger).toBeFocused();await trigger.click();
+ await expect(people.getByRole('alert')).toBeVisible();await expect(people.locator('.social-person')).toHaveCount(0);
+ await people.getByRole('button',{name:'重試',exact:true}).click();
+ await expect(people).toContainText(first.display_name);expect(cursors).toEqual([null,null,null]);
+ await people.getByRole('button',{name:'更多按讚會員',exact:true}).click();await expect(people.getByRole('alert')).toBeVisible();
+ await expect(people).toContainText(first.display_name);await expect(people.locator('.social-person')).toHaveCount(1);
+ await people.getByRole('button',{name:'重試',exact:true}).click();await expect(people).toContainText(second.display_name);
+ await expect(people.locator('.social-person')).toHaveCount(2);await expect(people.getByRole('alert')).toHaveCount(0);
+ await expect(people.getByRole('button',{name:'更多按讚會員',exact:true})).toHaveCount(0);
+ expect(cursors).toEqual([null,null,null,'next-page','next-page']);
+ await people.getByRole('button',{name:'關閉名單',exact:true}).click();await expect(trigger).toBeFocused();
+});
+
 test('wall tools publish topics, mentions, check-ins and pictures; social comments and share controls work at every width',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await login(page);
  await page.getByRole('button',{name:'建立貼文',exact:true}).click();

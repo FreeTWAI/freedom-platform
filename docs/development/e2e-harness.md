@@ -51,10 +51,10 @@ workflow pin、測試選取、worker 數、重試或資料隔離，也不宣稱 
 
 `playwright.config.ts` 的 webServer 另固定帶上 `FREEDOM_E2E_GUIDE_FIXTURE=1` 與 `FREEDOM_E2E_GITHUB_FIXTURES=1`，以及這一輪的 `FREEDOM_E2E_SCHEMA`。`reuseExistingServer` 是 false。
 
-## Pinned CI 的容量界線（source 候選 2026-10-25）
+## Pinned CI 的容量界線（source 候選 2026-10-27）
 
-此 source 對 default 整輪給 60 分鐘；private-AI、avatar-asset、message-image、store-photo 與
-notification-preferences 各為 30 分鐘上限。`ui-e2e` job 的整體上限為 75 分鐘，容納安裝／建置、
+此 source 對 default 整輪給 75 分鐘；private-AI、avatar-asset、message-image、store-photo 與
+notification-preferences 各為 30 分鐘上限。`ui-e2e` job 的整體上限為 95 分鐘，容納安裝／建置、
 default、五個 fixture 輪次與收尾。這是有限的整體上限，不承諾五輪各自耗盡最大上限時仍能
 全部跑完。單一案例 timeout、1 worker、0 retries、完整檔案／案例選擇、預期 skip
 政策與結果驗證不變。逾時仍以 SIGINT 進入 Playwright teardown，由 webServer
@@ -62,10 +62,10 @@ default、五個 fixture 輪次與收尾。這是有限的整體上限，不承�
 仍記 `test_timeout` 並停止後續輪次，不以不完整報告算通過。
 預算是 trusted source 常數，candidate config、CLI 參數與環境不能自行調大。
 
-本次把 full default 從兩片改為三片：先以相同設定執行一次不分片的 `--list`，
+現行 full default 使用三片：先以相同設定執行一次不分片的 `--list`，
 再同時跑原生 Playwright `--shard 1/3`、`2/3`、`3/3`，埠分別為
 14311、14312、14313，每片有自己的隨機 `fp_e2e_*` schema、webServer 與單一 worker。
-三片與 discovery 共用原 60 分鐘期限；任一片失敗即取消其餘兩片，fixture 輪次
+三片與 discovery 共用 75 分鐘期限；任一片失敗即取消其餘兩片，fixture 輪次
 仍依序執行、不分片。三份有序且綁定 current/total 的報告都必須有實際 exit status
 與 SHA-256，互斥的案例聯集必須等於 discovery，完整檔案與跨輪 skip-to-pass 規則不變。
 診斷先保留 listing 與三份 raw report，再處理 trace；workflow 的遞迴 artifact 目錄
@@ -83,7 +83,7 @@ default、五個 fixture 輪次與收尾。這是有限的整體上限，不承�
 三片平均約 `1508 / 3 = 503` 項。原兩片合計每項約 2.4 秒是整體吞吐量的換算，
 不是單片每項耗時：第一片實測為 `3561 / 772 ≈ 4.6` 秒／項。
 以約 4.8 秒／項保守估計，`1508 / 3 × 4.8 / 60 ≈ 40.2` 分鐘；若直接乘 2.4
-會得到約 20 分鐘，少算原兩片並行的因素。預期每片約 40 分鐘，保留至 60 分鐘
+會得到約 20 分鐘，少算原兩片並行的因素。當時預期每片約 40 分鐘，保留至原 60 分鐘
 的約 20 分鐘餘裕給 ubuntu-24.04 公開 repo runner 的 4 vCPU／16 GB 資源競爭、
 檔案分片不均與啟停。這是容量估算，三個 Chromium、Node 與共用 PostgreSQL 的
 實際 CPU／記憶體與耗時需由本 PR CI 量測；本機不跑完整瀏覽器套件。

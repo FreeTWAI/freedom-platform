@@ -74,15 +74,33 @@ export function PlatformHelperHost(props:PlatformHelperHostProps){
   useLayoutEffect(()=>{
     const element=root.current;if(!element)return;
     const doc=element.ownerDocument,view=doc.defaultView;if(!view)return;
-    const inspect=()=>setSurfaceBlocked(hasForeignHelperBlocker(element));
+    let active=true,frame:number|null=null;
+    const inspect=()=>{
+      if(!active)return;
+      if(frame!==null){view.cancelAnimationFrame(frame);frame=null;}
+      setSurfaceBlocked(hasForeignHelperBlocker(element));
+    };
+    // Keep every mutation trigger: ancestor and sibling CSS can change a
+    // blocker's visibility. Only combine deliveries within the same frame.
+    const schedule=()=>{if(active&&frame===null)frame=view.requestAnimationFrame(()=>{frame=null;inspect();});};
     inspect();
-    const observer=new view.MutationObserver(inspect);
+    const observer=new view.MutationObserver(schedule);
     observer.observe(doc.body,{subtree:true,childList:true,attributes:true,attributeFilter:['open','hidden','aria-hidden','aria-modal','role','class','style']});
     doc.addEventListener('toggle',inspect,true);doc.addEventListener('focusin',inspect,true);view.addEventListener('resize',inspect);
-    return()=>{observer.disconnect();doc.removeEventListener('toggle',inspect,true);doc.removeEventListener('focusin',inspect,true);view.removeEventListener('resize',inspect);};
-  },[]);
+    return()=>{active=false;if(frame!==null)view.cancelAnimationFrame(frame);frame=null;observer.disconnect();doc.removeEventListener('toggle',inspect,true);doc.removeEventListener('focusin',inspect,true);view.removeEventListener('resize',inspect);};
+  },[scope]);
   const snapshot=memberHelperKnowledge(props.availablePageIds,props.guildLaunchpadEnabled);
-  return <div ref={root} className="platform-helper-host">
+  return <div ref={root} className="platform-helper-host" onClickCapture={event=>{
+    // The toolbar bypasses the character bridge. Recheck its admission now,
+    // including nonmodal shell surfaces that appeared before the next frame.
+    // Do not intercept the open dialog's controls or any other host's clicks.
+    const launcher=event.currentTarget.querySelector<HTMLButtonElement>(':scope > .platform-helper > button[aria-haspopup="dialog"][aria-expanded="false"]');
+    if(!launcher||!event.currentTarget.contains(launcher)||!launcher.contains(event.target as Node))return;
+    const foreignBlocked=hasForeignHelperBlocker(event.currentTarget);
+    if(memberHelperBlocked(latest.current)||foreignBlocked){
+      event.preventDefault();event.stopPropagation();setSurfaceBlocked(foreignBlocked);
+    }
+  }}>
     <PlatformHelper key={JSON.stringify([props.sessionGeneration,props.routeIdentity])} pageId={props.pageId}
       accountScope={String(props.sessionGeneration)} {...snapshot} blocked={blocked}
       controllerRef={setController} onDialogChange={change=>bridge.current?.change(change)}

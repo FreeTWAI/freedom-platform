@@ -58,3 +58,16 @@ Jason 與 Hao 哥授權此 repo 使用本機 source 的題目與內容；保留�
 
 來源位於作者授權的本機 `/workspace/newbie-village-logs/source/`，不作 runtime 依賴。
 原作結果示例照錄，框架只作受啟發的反思改寫，不宣稱心理測量驗證。
+
+## 外觀回歸邊界
+
+本模組的 plain 測驗按鈕與 secondary 按鈕／連結以 `--ink` 和 `--bg-elev`
+成對取色，hover／鍵盤焦點沿用 `--focus`；不改全站 `.btn`，不覆蓋 primary、
+danger 或 ghost 語意變體。保留原觸控尺寸、disabled 狀態、題目、計分與本機資料流程。
+Runtime 測試檢查實際 CSS 宣告與五種 profile 色盤，是 source contract，非瀏覽器驗收。
+E2E 直接開正式 app 入口（載入 main.tsx 的真實主題 CSS），五種 profile 均檢查
+作答與結果頁全部 action 的 computed 色彩、hover、鍵盤焦點、390／320px 寬度，
+包含 plain「下一題／查看結果」與真正 disabled 控制項。
+Disabled 檢查保留 opacity 與未合成色彩，不宣稱 disabled 適用 WCAG 文字對比門檻。
+既有完整測驗、複製、語言與阻擋儲存回歸保留；實跑／not_run 另記於 PR，
+本節不是部署、手機實測或全站對比完成證據。
