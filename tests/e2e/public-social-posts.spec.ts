@@ -167,13 +167,19 @@ test('PUBLIC-POST-06 closed registration metadata removes join controls and dire
   // Client capability fixture only; server rejection is covered by the public
   // runtime tests. This local browser harness deliberately enables registration.
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),registration_enabled:false}});});
-  let registrations=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/auth/register')registrations++;});
-  await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(post.note);
-  await expect(page.locator('a[href*="join=1"]:visible')).toHaveCount(0);
-  await page.goto(loginPath(post.post_id,true));await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();
-  await expect(page.getByRole('button',{name:'建立帳號',exact:true})).toHaveCount(0);
-  await expect(page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true})).toHaveCount(0);
-  await page.locator(`a[href="${publicPath(post.post_id)}"]`).click();await expect(publicArticle(page)).toContainText(post.note);expect(registrations).toBe(0);
+  try{
+    let registrations=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/auth/register')registrations++;});
+    await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(post.note);
+    await expect(page.locator('a[href*="join=1"]:visible')).toHaveCount(0);
+    await page.goto(loginPath(post.post_id,true));await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();
+    await expect(page.getByRole('button',{name:'建立帳號',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true})).toHaveCount(0);
+    await page.locator(`a[href="${publicPath(post.post_id)}"]`).click();await expect(publicArticle(page)).toContainText(post.note);expect(registrations).toBe(0);
+  }finally{
+    // The returned article is server-rendered before its site metadata settles.
+    // Drain this page's only route before context teardown disposes its response.
+    await page.unrouteAll({behavior:'wait'});
+  }
 });
 
 test('PUBLIC-POST-07 editing invalidates consent; reopening the reviewed version and withdrawing update HTML, JSON, image and preview metadata',async({author,page})=>{
