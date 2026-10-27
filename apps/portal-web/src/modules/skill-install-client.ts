@@ -82,12 +82,18 @@ export function buildInstallZip(bundle:InstallBundle,target:SkillInstallTarget){
   return new Blob([...parts,...central,end].map(part=>part.slice().buffer),{type:'application/zip'});
 }
 
+export async function copyText(clipboard:{writeText(text:string):Promise<void>}|undefined,text:string):Promise<boolean>{
+  if(!clipboard)return false;
+  try{await clipboard.writeText(text);return true;}
+  catch{return false;}
+}
+
 // ---- CLI ----
 export function installCommands(bundle:Pick<InstallBundle,'name'|'repository'|'commit'>,target:SkillInstallTarget){
   const where=SKILL_INSTALL_TARGETS[target],repo=bundle.repository.split('/')[1],extracted=repo+'-'+bundle.commit;
   const home=where.userPath.replace('~','$HOME'),exists='「'+bundle.name+'」資料夾已經存在，這次沒有覆寫；要更新請先自行移走或刪除舊資料夾，或改用下載 zip。';
   return {
     shell:'(t=$(mktemp -d) || exit 1; trap \'install_status=$?; rm -rf "$t" || install_status=$?; exit "$install_status"\' EXIT; curl -fsSL "https://codeload.github.com/'+bundle.repository+'/tar.gz/'+bundle.commit+'" -o "$t/bundle.tar.gz" && tar -xzf "$t/bundle.tar.gz" -C "$t" && test -f "$t/'+extracted+'/SKILL.md" && { staged="$t/'+extracted+'"; dest="'+home+'/'+bundle.name+'"; mkdir -p "'+home+'" || exit 1; if [ -e "$dest" ] || [ -L "$dest" ]; then printf \'%s\\n\' \''+exists+'\' >&2; exit 1; fi; mkdir "$dest" || exit 1; cp -R "$staged/." "$dest/" || { printf \'%s\\n\' \'安裝沒有完成，資料夾裡可能留下部分檔案；沒有刪除任何檔案。請確認後自行處理，或改用下載 zip。\' >&2; exit 1; }; })',
-    powershell:"$ErrorActionPreference='Stop'; $d=\""+where.windowsPath+'"; $dest="$d\\'+bundle.name+'"; $t=Join-Path $env:TEMP ([guid]::NewGuid().ToString()); New-Item -ItemType Directory -Path $t | Out-Null; try { $z=Join-Path $t "bundle.zip"; Invoke-WebRequest "https://codeload.github.com/'+bundle.repository+'/zip/'+bundle.commit+'" -OutFile $z; Expand-Archive -LiteralPath $z -DestinationPath $t; $s=Join-Path $t "'+extracted+'"; if (!(Test-Path -LiteralPath "$s\\SKILL.md" -PathType Leaf)) { throw "找不到 SKILL.md，已停止安裝。" }; if (Test-Path -LiteralPath $dest) { throw "'+exists+'" }; New-Item -ItemType Directory -Force -Path $d | Out-Null; New-Item -ItemType Directory -Path $dest | Out-Null; Get-ChildItem -LiteralPath $s -Force | Copy-Item -Destination $dest -Recurse } finally { Remove-Item -LiteralPath $t -Recurse -Force }',
+    powershell:"$ErrorActionPreference='Stop'; $d=\""+where.windowsPath+'"; $dest="$d\\'+bundle.name+'"; $t=Join-Path $env:TEMP ([guid]::NewGuid().ToString()); New-Item -ItemType Directory -Path $t | Out-Null; try { $z=Join-Path $t "bundle.zip"; Invoke-WebRequest "https://codeload.github.com/'+bundle.repository+'/zip/'+bundle.commit+'" -OutFile $z; Expand-Archive -LiteralPath $z -DestinationPath $t; $s=Join-Path $t "'+extracted+'"; if (!(Test-Path -LiteralPath "$s\\SKILL.md" -PathType Leaf)) { throw "找不到 SKILL.md，已停止安裝。" }; if (Test-Path -LiteralPath $dest) { throw "'+exists+'" }; New-Item -ItemType Directory -Force -Path $d | Out-Null; [System.IO.Directory]::Move($s,$dest) } finally { Remove-Item -LiteralPath $t -Recurse -Force }',
   };
 }

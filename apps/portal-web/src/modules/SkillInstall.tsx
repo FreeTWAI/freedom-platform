@@ -1,5 +1,5 @@
 import {useId,useRef,useState} from 'react';
-import {SKILL_INSTALL_TARGETS,SkillInstallError,buildInstallZip,fetchInstallBundle,installCommands,type InstallBundle,type SkillInstallTarget} from './skill-install-client';
+import {SKILL_INSTALL_TARGETS,SkillInstallError,buildInstallZip,copyText,fetchInstallBundle,installCommands,type InstallBundle,type SkillInstallTarget} from './skill-install-client';
 import './SkillInstall.css';
 
 type Status={kind:'idle'|'busy'|'done'|'error';text:string};
@@ -29,8 +29,9 @@ export function SkillInstall({bookId}:{bookId:string}){
   });
   const showCommands=()=>run(async()=>{
     const value=installCommands(await bundle(),target);setCommands(value);
-    await navigator.clipboard?.writeText(value.shell).catch(()=>{});
-    return '已複製 macOS／Linux 指令；Windows 請用下方 PowerShell。';
+    return await copyText(navigator.clipboard,value.shell)
+      ?'已複製 macOS／Linux 指令；Windows 請用下方 PowerShell。'
+      :'無法自動複製；指令在下方，請自行選取複製（macOS／Linux 用第一段，Windows 用 PowerShell）。';
   });
   const busy=status.kind==='busy';
   return <details className="skill-intro-details skill-install">
