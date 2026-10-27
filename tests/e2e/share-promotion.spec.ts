@@ -204,6 +204,92 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
 });
 
+// Controlled capabilities: this case never opens LINE/Telegram or sends a message.
+type PromotionTestWindow = Window & {
+  promotionOpens: { url: string; target: string | undefined; features: string | undefined; active: boolean }[];
+  promotionCapabilities: { kind: 'share' | 'copy'; value: ShareData | string; resolve: () => void; reject: (error: Error) => void }[];
+  promotionOpenThrows: boolean;
+};
+async function controlPromotionCapabilities(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as PromotionTestWindow;
+    w.promotionOpens = []; w.promotionCapabilities = []; w.promotionOpenThrows = false;
+    window.open = (url, target, features) => {
+      w.promotionOpens.push({ url: String(url), target, features, active: navigator.userActivation.isActive });
+      if (w.promotionOpenThrows) throw new DOMException('Controlled browser denial', 'NotAllowedError');
+      // noopener can return null even when a window opens; it is not a delivery receipt.
+      return null;
+    };
+    const hold = (kind: 'share' | 'copy', value: ShareData | string) => new Promise<void>((resolve, reject) => {
+      w.promotionCapabilities.push({ kind, value, resolve, reject });
+    });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: (value: ShareData) => hold('share', value) });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (value: string) => hold('copy', value) } });
+  });
+}
+
+test('platform choices hand the canonical referral URL to LINE and Telegram only after an explicit click', async ({ page, context }) => {
+  const externalRequests: string[] = [];
+  await context.route(/https:\/\/(social-plugins\.line\.me|t\.me)\//, async route => {
+    externalRequests.push(route.request().url()); await route.abort();
+  });
+  await login(page);
+  await controlPromotionCapabilities(page);
+  await navigate(page, '推廣排行榜');
+  await page.evaluate(() => {
+    const address = new URL(location.href); address.searchParams.set('private-share', 'never-export');
+    history.replaceState(history.state, '', address);
+  });
+  let release!: () => void, arrived!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const requested = new Promise<void>(resolve => { arrived = resolve; });
+  const bodies: unknown[] = [];
+  await page.route('**/api/v1/promotion/links', async route => {
+    bodies.push(route.request().postDataJSON());
+    const response = await route.fetch(); arrived(); await held; await route.fulfill({ response });
+  }, { times: 1 });
+  expect(bodies).toEqual([]);
+  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens)).toEqual([]);
+  await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
+  try {
+    await requested;
+    await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true })).toBeDisabled();
+    expect(externalRequests).toEqual([]);
+  } finally { release(); }
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  expect(bodies).toEqual([{ kind: 'platform', target: 'workshop' }]);
+  const url = await dialog.locator('.skill-share-url').innerText();
+  const text = await dialog.locator('.skill-share-text').innerText();
+  expect(new URL(url).search).toBe(''); expect(new URL(url).hash).toBe('');
+  expect(url).not.toContain('never-export');
+  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens)).toEqual([]);
+  for (const [index, name, endpoint] of [
+    [0, 'LINE', 'https://social-plugins.line.me/lineit/share'],
+    [1, 'Telegram', 'https://t.me/share/url'],
+  ] as const) {
+    const button = dialog.getByRole('button', { name: `${name} 分享 ↗`, exact: true });
+    await button.focus(); await page.keyboard.press('Enter');
+    const calls = await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionOpens);
+    expect(calls).toHaveLength(index + 1);
+    expect(calls[index]).toEqual({ url: `${endpoint}?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, target: '_blank', features: 'noopener,noreferrer', active: true });
+    await expect(dialog.getByRole('status')).toHaveText(`請在 ${name} 完成分享；若未開啟，可複製連結。`);
+    await expect(dialog).not.toContainText('分享已送出');
+  }
+  expect(externalRequests).toEqual([]);
+  expect(await page.evaluate(() => (window as unknown as PromotionTestWindow).promotionCapabilities)).toEqual([]);
+  await page.setViewportSize({ width: 320, height: 900 }); await noOverflow(page);
+  expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await page.evaluate(() => { (window as unknown as PromotionTestWindow).promotionOpenThrows = true; });
+  await dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true }).click();
+  const manual = dialog.getByLabel('手動複製分享內容', { exact: true });
+  await expect(manual).toHaveValue(`${text}\n${url}`); await expect(manual).toBeFocused();
+  await expect(dialog.getByRole('status')).toHaveText('無法開啟 LINE 分享，請選取並複製下方內容');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden(); await expect(page.getByRole('button', { name: '分享自由工坊', exact: true })).toBeFocused();
+});
+
 test('the home share button stays as compact as the profile button', async ({ page }) => {
   await login(page);
   await themeOf(page, 'light');
@@ -272,6 +358,8 @@ test('the social zone previews, shares, replaces and keeps a thumbnail', async (
 
   await youtube.getByRole('button', { name: '推廣原文', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「E2E 示範影片」', exact: true });
+  await expect(dialog.getByRole('button', { name: 'LINE 分享 ↗', exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Telegram 分享 ↗', exact: true })).toHaveCount(0);
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const go = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
