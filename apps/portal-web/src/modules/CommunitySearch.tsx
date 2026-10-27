@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { communitySearchKinds, communitySearchTopics, communitySearchKindLabels, communitySearchTopicLabels, communitySearchPageSchema, type CommunitySearchPage } from '../../../../packages/shared/community-search';
+import { communitySearchKinds, communitySearchTopics, communitySearchKindLabels, communitySearchTopicLabels, communitySearchPageSchema, guildSearchPageSchema, type CommunitySearchPage, type GuildSearchPage } from '../../../../packages/shared/community-search';
 import { ApiError, type PortalClient } from '../api';
 import { CommunityRelationsProvider, CommunityRelations, CommunityBookmarkButton, CommunityAuthorFollowButton } from './CommunityRelations';
 import {createCommunitySearch, communityListHistoryForSession, type CommunityListHistory} from './community-search-controller';
@@ -10,29 +10,53 @@ type Mine = { kind: Kind; id: string; title: string; topics: Topic[]; aggregate_
 const readQuery = () => new URLSearchParams(window.location.hash.split('?')[1] ?? '').toString();
 const onSearchPage = () => /^#community-search(?:\?|$)/.test(window.location.hash);
 const message = (error: unknown) => error instanceof Error ? error.message : '無法載入，請重試。';
+type GuildRequest = {q: string; query: string; signal: AbortSignal; revision: number; generation: number};
+const guildNotice = '只搜尋公會名稱與簡介，不套用私人書籤或追蹤清單，也不計入社群內容筆數。';
+function guildQuery(query: string, enabled: boolean): string | null {
+  const params = new URLSearchParams(query), q = (params.get('q') ?? '').trim();
+  if (!enabled || !q || q.length > 80 || /[\u0000-\u001f\u007f]/.test(q)
+    || params.get('kinds') || params.get('topics')) return null;
+  return q;
+}
+async function readGuilds(client: PortalClient, q: string, signal: AbortSignal, cursor?: string): Promise<GuildSearchPage> {
+  const params = new URLSearchParams({view: 'search', q, limit: '5'});
+  if (cursor) params.set('cursor', cursor);
+  return guildSearchPageSchema.parse(await client.get<unknown>(`/guilds/directory?${params}`, {signal, suppressConsole: true}));
+}
 
-export function CommunitySearch({ client, authKey, relationsEnabled = false }: { client: PortalClient; authKey: string | null; relationsEnabled?: boolean }) {
+export function CommunitySearch({ client, authKey, relationsEnabled = false, guildSearchEnabled = false }: { client: PortalClient; authKey: string | null; relationsEnabled?: boolean; guildSearchEnabled?: boolean }) {
   const lifetime = `${authKey ?? 'anonymous'}:${client.sessionGeneration}`;
   const navigation = authKey && relationsEnabled ? communityListHistoryForSession(client, authKey) : undefined;
   return authKey && relationsEnabled
-    ? <CommunityRelationsProvider key={lifetime} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled navigation={navigation} /></CommunityRelationsProvider>
-    : <SearchContent key={lifetime} client={client} authKey={authKey} relationsEnabled={false}/>;
+    ? <CommunityRelationsProvider key={lifetime} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled navigation={navigation} guildSearchEnabled={guildSearchEnabled} /></CommunityRelationsProvider>
+    : <SearchContent key={lifetime} client={client} authKey={authKey} relationsEnabled={false} guildSearchEnabled={guildSearchEnabled}/>;
 }
 
-function SearchContent({ client, authKey, relationsEnabled, navigation }: { client: PortalClient; authKey: string | null; relationsEnabled: boolean; navigation?: CommunityListHistory }) {
+function SearchContent({ client, authKey, relationsEnabled, navigation, guildSearchEnabled }: { client: PortalClient; authKey: string | null; relationsEnabled: boolean; navigation?: CommunityListHistory; guildSearchEnabled: boolean }) {
   const generation = client.sessionGeneration;
+  const guildEnabled = Boolean(authKey) && guildSearchEnabled;
+  const revision = useRef(0);
+  const [guildRequest, setGuildRequest] = useState<GuildRequest | null>(null);
+  const currentGuildRequest = useRef<GuildRequest | null>(null);
   const search = useMemo(() => createCommunitySearch<CommunitySearchPage>({
     query: readQuery(),
     generation: () => client.sessionGeneration,
-    read: async (query, signal) => communitySearchPageSchema.parse(
-      await client.get<unknown>(`/community-search?${query}`, {signal, suppressConsole: true})),
+    read: async (query, signal) => {
+      // Issue a separate result channel at the existing committed-query read,
+      // not on input/IME edits. Neither response waits for the other channel.
+      const q = guildQuery(query, guildEnabled);
+      const request = q === null ? null : {q, query, signal, revision: ++revision.current, generation: client.sessionGeneration};
+      currentGuildRequest.current = request;
+      setGuildRequest(request);
+      return communitySearchPageSchema.parse(await client.get<unknown>(`/community-search?${query}`, {signal, suppressConsole: true}));
+    },
     writeQuery: (query, mode) => {
       if (!onSearchPage()) return;
       const hash = `#community-search${query ? `?${query}` : ''}`;
       if (mode === 'push') window.history.pushState(window.history.state, '', hash);
       else window.history.replaceState(window.history.state, '', hash);
     },
-  }), [client, authKey, generation]);
+  }), [client, authKey, generation, guildEnabled]);
   const state = useSyncExternalStore(search.subscribe, search.getSnapshot, search.getSnapshot);
   const query = useMemo(() => new URLSearchParams(state.query), [state.query]);
   const input = useRef<HTMLInputElement>(null);
@@ -56,16 +80,19 @@ function SearchContent({ client, authKey, relationsEnabled, navigation }: { clie
       window.removeEventListener('online', refreshResults);
       window.removeEventListener('pageshow', refreshResults);
       document.removeEventListener('visibilitychange', refreshResults);
+      currentGuildRequest.current = null;
       search.stop();
     };
   }, [search]);
   const page = state.page;
+  const guildQ = guildQuery(state.query, guildEnabled);
   const failed = state.status === 'error';
   const busy = !state.composing && ['idle', 'waiting', 'loading'].includes(state.status);
   return <div className="stack community-content-search">
     {relationsEnabled && navigation && <CommunityRelations client={client} navigation={navigation}/>}
     <section className="card stack" aria-label="社群內容搜尋條件">
       <p className="muted">搜尋貼文、作品、技能書與活動；只顯示目前可閱讀的內容。這不是導覽的「搜尋功能」。</p>
+      {guildEnabled && <p className="field-hint">輸入關鍵字且未選內容類型或主題時，也會另外搜尋公會名稱與簡介。</p>}
       <form className="stack" onSubmit={event => {event.preventDefault(); search.submit();}}>
         <label className="field">關鍵字<input ref={input} type="search" maxLength={80} value={state.draft}
           onChange={event => search.edit(event.target.value)}
@@ -97,8 +124,51 @@ function SearchContent({ client, authKey, relationsEnabled, navigation }: { clie
       </article>)}
       {page?.next_cursor && <button type="button" className="btn btn-secondary btn-small" onClick={() => {search.next(page.next_cursor!); results.current?.focus();}}>下一頁</button>}
     </section>
+    {guildQ !== null && !state.composing && guildRequest?.query === state.query && !guildRequest.signal.aborted
+      && guildRequest.generation === client.sessionGeneration
+      && <GuildSearchResults key={guildRequest.revision} client={client} request={guildRequest} isCurrent={() => currentGuildRequest.current === guildRequest}/>}
     {authKey && <MyContentTopics key={`${authKey}:${generation}`} client={client} onSaved={() => search.refresh(true)} />}
   </div>;
+}
+
+function GuildSearchResults({client, request, isCurrent}: {client: PortalClient; request: GuildRequest; isCurrent: () => boolean}) {
+  const [state, setState] = useState<{page: GuildSearchPage | null; error: unknown; busy: boolean; cursor: string}>({page: null, error: null, busy: true, cursor: ''});
+  const pending = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
+  const region = useRef<HTMLElement>(null);
+  const {q, generation} = request;
+  useEffect(() => {
+    mounted.current = true;
+    let active = true;
+    const abort = () => {pending.current?.abort(); pending.current = null;};
+    request.signal.addEventListener('abort', abort);
+    // StrictMode's discarded mount must not dispatch an extra catalog read.
+    void Promise.resolve().then(() => {if (active) load('');});
+    return () => { active = false; mounted.current = false; abort(); request.signal.removeEventListener('abort', abort); };
+  }, [client, q, generation]);
+  function load(cursor: string) {
+    if (pending.current || !mounted.current || !isCurrent() || request.signal.aborted || generation !== client.sessionGeneration) return;
+    const controller = new AbortController(); pending.current = controller;
+    const live = () => mounted.current && isCurrent() && pending.current === controller && !controller.signal.aborted && !request.signal.aborted && generation === client.sessionGeneration;
+    setState({page: null, error: null, busy: true, cursor});
+    void readGuilds(client, q, controller.signal, cursor).then(page => {
+      if (live()) setState({page, error: null, busy: false, cursor});
+    }, error => {
+      if (live()) setState({page: null, error, busy: false, cursor});
+    }).finally(() => {if (pending.current === controller) pending.current = null;});
+  }
+  return <section ref={region} tabIndex={-1} className="card stack" aria-label="會員公會搜尋結果" aria-busy={state.busy}>
+    <h2>公會</h2><p className="field-hint">{guildNotice}</p>
+    {state.busy && <p role="status">正在搜尋公會…</p>}
+    {state.error !== null && <><p role="alert">{message(state.error)}</p><button type="button" className="btn btn-secondary btn-small" onClick={() => {load(state.cursor); region.current?.focus();}}>重試公會搜尋</button></>}
+    {state.page?.items.length === 0 && <p role="status">沒有符合關鍵字的公會。</p>}
+    {state.page && state.page.items.length > 0 && <p role="status" className="field-hint">本頁顯示 {state.page.items.length} 個公會。</p>}
+    {state.page?.items.map(item => <article className="stack" key={item.guild_key}><h3><a href={item.path}>{item.name}</a></h3><p>{item.purpose}</p></article>)}
+    <div className="actions">
+      {state.cursor && <button type="button" className="btn btn-secondary btn-small" disabled={state.busy} onClick={() => {load(''); region.current?.focus();}}>公會回第一頁</button>}
+      {state.page?.next_cursor && <button type="button" className="btn btn-secondary btn-small" disabled={state.busy} onClick={() => {load(state.page!.next_cursor!); region.current?.focus();}}>公會下一頁</button>}
+    </div>
+  </section>;
 }
 
 function MyContentTopics({ client, onSaved }: { client: PortalClient; onSaved: () => void }) {

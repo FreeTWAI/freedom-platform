@@ -12,6 +12,7 @@ import {client} from '../portal-session';
 import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';
 import {StorefrontBookUsage} from './SkillBookUsage';
 import {isStorefrontReading} from './skill-book-commerce-references';
+import {SkillInstall} from './SkillInstall';
 
 export type IntroBook={id?:string;book_id?:string;title:string;description:string;summary_override?:string;repository_url:string;fork_url?:string|null;introduction_url?:string|null;upstream_url?:string;source_commit?:string|null;license_status?:string;guide?:SkillBookGuide;cover_url?:string;star_url?:string;official_guild_keys?:string[]};
 export function httpsLink(value?:string|null){
@@ -19,7 +20,7 @@ export function httpsLink(value?:string|null){
 }
 export function SkillBookIntro({book,guildName,label='閱讀技能書',community=false,describedBy,disabled=false}:{book:IntroBook;guildName?:string;label?:string;community?:boolean;describedBy?:string;disabled?:boolean}){
   const [open,setOpen]=useState(false),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),id=useId();
-  const practice=useRef<HTMLDetailsElement>(null);
+  const practice=useRef<HTMLDetailsElement>(null),quickstartCode=useRef<HTMLPreElement>(null);
   const [cooperation,setCooperation]=useState<{purpose:string;summary:string}|null>(null),[cooperationError,setCooperationError]=useState('');
   const [illustration,setIllustration]=useState<{bookId:string;url:string;alt:string}|null>(null);
   const bookId=book.id??book.book_id,discovery=useSkillDiscovery(),summaryOverride=discovery.data?.books.find(item=>item.book_id===bookId)?.summary_override??book.summary_override;
@@ -49,8 +50,13 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
         {upstream&&<p className="field-hint">{guide?.author_name&&<>來源標示的{guide.credit_role??'作者'}：{guide.author_name} · </>}原作：{source?.hostname==='github.com'?source.pathname.slice(1):upstream}</p>}
         {guide&&/^[0-9a-f]{40}$/.test(guide.source_commit)&&<p className="field-hint">指南閱讀版本：<code>{guide.source_commit.slice(0,12)}</code> · 核對日期：{guide.reviewed_at}</p>}
         <div className="actions skill-intro-primary-actions">{guide&&<button type="button" className="btn btn-primary" aria-controls={`${id}-practice`} onClick={()=>{if(practice.current){practice.current.open=true;practice.current.scrollIntoView({block:'start'});practice.current.querySelector('summary')?.focus();}}}>開始練習 ↓</button>}{upstream&&<a className={`btn ${guide?'btn-ghost':'btn-primary'}`} href={upstream} target="_blank" rel="noopener noreferrer">開啟原作 ↗</a>}{website&&<a className="btn btn-ghost" href={website} target="_blank" rel="noopener noreferrer">前往作者網站 ↗</a>}{reading&&<a className="btn btn-ghost" href={reading} target="_blank" rel="noopener noreferrer">閱讀技能書 ↗</a>}</div>
+        {open&&bookId&&book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<SkillInstall key={bookId} bookId={bookId}/>}
         {guide&&<><div className="skill-intro-outcome"><p className="eyebrow">練習成果</p><p className="skill-intro-example">{guide.first_result}</p></div>
-          <details ref={practice} id={`${id}-practice`} className="skill-intro-details skill-intro-start" open><summary>練習與設定</summary><div className="stack"><section><h3>準備</h3><ul>{guide.prerequisites.map(item=><li key={item}>{item}</li>)}</ul></section><section><h3>練習</h3><ol>{guide.first_steps.map(step=><li key={step}>{step}</li>)}</ol></section>{guide.quickstart&&<section className="stack"><h3>啟動指令</h3><p className="field-hint">{guide.quickstart.context}</p><pre className="skill-intro-command"><code>{guide.quickstart.commands}</code></pre></section>}{(book.id??book.book_id)&&<a href={`/development/skills/${encodeURIComponent((book.id??book.book_id)!)}`} target="_blank" rel="noopener noreferrer">完整指南 ↗</a>}</div></details>
+          <details ref={practice} id={`${id}-practice`} className="skill-intro-details skill-intro-start" open><summary>練習與設定</summary><div className="stack"><section><h3>準備</h3><ul>{guide.prerequisites.map(item=><li key={item}>{item}</li>)}</ul></section><section><h3>練習</h3><ol>{guide.first_steps.map(step=><li key={step}>{step}</li>)}</ol></section>{guide.quickstart&&<section className="stack"><h3>啟動指令</h3><p className="field-hint">{guide.quickstart.context}</p><pre ref={quickstartCode} tabIndex={-1} className="skill-intro-command"><code>{guide.quickstart.commands}</code></pre>{open&&<QuickstartCopy key={guide.quickstart.commands} commands={guide.quickstart.commands} onSelect={()=>{
+              const element=quickstartCode.current,selection=window.getSelection();
+              if(!element||!selection)return;
+              element.focus();const range=document.createRange();range.selectNodeContents(element);selection.removeAllRanges();selection.addRange(range);
+            }}/>}</section>}{(book.id??book.book_id)&&<a href={`/development/skills/${encodeURIComponent((book.id??book.book_id)!)}`} target="_blank" rel="noopener noreferrer">完整指南 ↗</a>}</div></details>
           <details className="skill-intro-details"><summary>功能與使用範圍</summary><div className="stack"><p className="field-hint">以下為原作收錄版本的功能說明，站內應用另依其版本資料。</p><p className="skill-intro-status">{guide.status}</p><p className="muted">{guide.audience.join('、')}</p><ul className="skill-intro-features">{guide.features.map(feature=><li key={feature}>{feature}</li>)}</ul></div></details>
         </>}
         {open&&illustration&&illustration.bookId===bookId&&<figure className="skill-intro-illustration"><img src={illustration.url} alt={illustration.alt} width="1200" height="630" decoding="async" onError={()=>setIllustration(null)}/><figcaption>功能示意圖，非實際操作截圖。</figcaption></figure>}
@@ -63,6 +69,32 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
         <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><SkillBookSourceAccount book={book}/>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at} · 依以下收錄版本，不代表外部服務今天的運作狀態。</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
       </div>
     </dialog>
+  </>;
+}
+
+
+// Copy is an explicit, local action, not installation or execution. Mount only
+// while the dialog is open so late clipboard results cannot survive reopening.
+function QuickstartCopy({commands,onSelect}:{commands:string;onSelect:()=>void}) {
+  const [status,setStatus]=useState<'idle'|'pending'|'copied'|'failed'>('idle');
+  const mounted=useRef(true),pending=useRef(false);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  async function copy() {
+    if(pending.current)return;
+    pending.current=true;setStatus('pending');
+    try {
+      if(!navigator.clipboard?.writeText)throw new Error('clipboard_unavailable');
+      await navigator.clipboard.writeText(commands);
+      if(mounted.current)setStatus('copied');
+    } catch {
+      if(mounted.current)setStatus('failed');
+    } finally {pending.current=false;}
+  }
+  return <>
+    <div className="actions"><button type="button" className="btn btn-ghost btn-small" aria-disabled={status==='pending'} onClick={()=>void copy()}>{status==='pending'?'正在複製…':'複製指令'}</button>{status==='failed'&&<button type="button" className="btn btn-ghost btn-small" onClick={onSelect}>選取指令</button>}</div>
+    <p className="field-hint">只複製文字，不會執行或安裝；請先確認上方準備條件與適用環境，再自行選擇要執行的指令。</p>
+    {status==='copied'&&<p role="status" className="field-hint">指令已複製，尚未執行。</p>}
+    {status==='failed'&&<p role="status" className="field-hint">未能複製，請選取指令後使用系統複製，或長按文字手動複製。</p>}
   </>;
 }
 

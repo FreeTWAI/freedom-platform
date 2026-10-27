@@ -99,7 +99,7 @@ test('completed member submits an event and sees accepted-work facts without pro
   await page.locator('.page-tools-menu > summary').click();
   await expect(page.locator('.game-console')).toHaveCount(0);
   await expect(page.locator('.development-context')).toHaveCount(0);
-  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('.floating-messages')!).backgroundColor)).toBe('rgb(255, 255, 255)');
+  await expect(page.locator('.floating-messages')).toHaveCSS('background-color','color(srgb 1 1 1 / 0.75)');
   await page.screenshot({path:'test-results/member-home-light.png',fullPage:true});
   await navigate(page,'社群活動');
   await expect(page.getByRole('heading',{name:'社群活動',level:1})).toBeVisible();
