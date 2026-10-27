@@ -1,8 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createElement} from 'react';
+import {createElement,Fragment} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {defaultProfileLayout,ProfileLayout,ProfilePublicationInput,VisitorProfile,moveProfileBlock} from '../../packages/shared/member-profile.js';
+import {ProfileLayoutEditor} from '../../apps/portal-web/src/modules/ProfileLayoutEditor.js';
 import {ProfileDesign} from '../../apps/portal-web/src/modules/ProfileDesign.js';
 import {PortalClient} from '../../apps/portal-web/src/api.js';
 const layout=()=>structuredClone(defaultProfileLayout);
@@ -60,4 +61,21 @@ test('recognition respects the same ordered hidden block and anonymous DTO rejec
  custom.blocks.find(b=>b.id==='recognition')!.visible=false;
  const hidden=renderToStaticMarkup(createElement(ProfileDesign,{profile:{...profile,layout:custom},recognition}));assert(!hidden.includes('earned marker'));
  for(const key of ['community_certification','social_achievement','statement','days','peer_ids'])assert.equal(VisitorProfile.safeParse({...profile,[key]:{}}).success,false);
+});
+
+
+test('layout editor labels identify only their controls, hint is a description and repeated editors have unique IDs',()=>{
+ const html=renderToStaticMarkup(createElement(Fragment,{},...Array.from({length:2},()=>createElement(ProfileLayoutEditor,{value:layout(),onChange:()=>{},disabled:false}))));
+ const ids:string[]=[];
+ for(const [label,tag] of [['主題','select'],['重點顏色','select'],['封面圖樣','select'],['關於我','textarea']]){
+  const matches=[...html.matchAll(new RegExp(`<label for="([^"]+)">${label}</label>`,'g'))];assert.equal(matches.length,2,label);
+  for(const match of matches){const id=match[1];ids.push(id);assert(html.includes(`<${tag} id="${id}"`),label);}
+ }
+ assert.equal(new Set(ids).size,8);
+ for(const match of html.matchAll(/<textarea id="([^"]+)" aria-describedby="([^"]+)"/g)){
+  assert(html.includes(`<span id="${match[2]}" class="hint">可以換行，最多 1600 字；不支援網頁程式碼。</span>`));
+ }
+ assert.equal([...html.matchAll(/<textarea id="[^"]+" aria-describedby="[^"]+"/g)].length,2);
+ assert(!/<label[^>]*>[^<]*<(?:select|textarea)/.test(html));
+ const disabled=renderToStaticMarkup(createElement(ProfileLayoutEditor,{value:layout(),onChange:()=>{},disabled:true}));assert(disabled.includes('<fieldset class="fieldset stack" disabled="">'));
 });

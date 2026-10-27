@@ -25,6 +25,8 @@ import {EmailVerificationPanel} from './EmailVerification';
 import {guildLabel} from './GuildName';
 import {SECTION_LABELS} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
 import {AccountSecurity} from './AccountSecurity';
+import {GoogleAccount} from './GoogleAccount';
+import {PasswordSetup} from './PasswordSetup';
 import {MemberContributionOutcomes} from './ContributionOutcomes';
 
 type Audience='public'|'friends'|'squad'|'guild';
@@ -32,7 +34,7 @@ type IdentityLabel='male'|'female'|'alien'|'ai';
 const identityLabels:Record<IdentityLabel,string>={male:'男',female:'女',alien:'外星人',ai:'AI'};
 function IdentityBadge({value}:{value?:IdentityLabel|null}){return value&&identityLabels[value]?<span className="badge" aria-label={`自我介紹：${identityLabels[value]}`}>{identityLabels[value]}</span>:null;}
 type Contact={value:string;audiences:Audience[];verified?:boolean};
-type Account={user_id:string;avatar:AvatarMetadata;nickname:string;identity_label:IdentityLabel|null;login_email:string;email_verified:boolean;contacts:Record<'email'|'discord'|'github'|'line',Contact>;aggregate_version:number};
+type Account={user_id:string;avatar:AvatarMetadata;nickname:string;identity_label:IdentityLabel|null;login_email:string;email_verified:boolean;has_password:boolean;contacts:Record<'email'|'discord'|'github'|'line',Contact>;aggregate_version:number};
 type GuildRef={guild_key:string;name:string;alias?:string;joined_at?:string|null};
 export type GuildRoster={member_tier:'intern'|'full';aggregate_version:number;expert_aggregate_version:number|null;expert_active:boolean};
 export type CategoryPrimary={category:'internal'|'external'|'professional_industry';label:string;guild:GuildRef|null};
@@ -183,13 +185,15 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
       <summary><strong>帳號與安全</strong><span>密碼、登入裝置和進階設定</span></summary>
       <div className="stack account-settings-body">
         {account&&<EmailVerificationPanel client={client} email={account.login_email} verified={account.email_verified}/>}
-        <AccountSecurity client={client} onAccountChanged={refreshSecurityVersion}/>
-        <details className="account-settings-more"><summary>兩步驟驗證</summary>{account&&<TotpSettings key={session.user.user_id} client={client} email={account.login_email}/>}</details>
-        <details className="account-settings-more"><summary>更換登入信箱</summary>{account&&<EmailChangePanel client={client} email={account.login_email}/>}</details>
+        {account&&<GoogleAccount client={client} hasPassword={account.has_password!==false}/>}
+        {account?.has_password===false&&<PasswordSetup client={client} email={account.login_email}/>}
+        <AccountSecurity client={client} hasPassword={account?account.has_password!==false:false} onAccountChanged={refreshSecurityVersion}/>
+        <details className="account-settings-more"><summary>兩步驟驗證</summary>{account&&account.has_password!==false&&<TotpSettings key={session.user.user_id} client={client} email={account.login_email}/>}</details>
+        <details className="account-settings-more"><summary>更換登入信箱</summary>{account&&account.has_password!==false&&<EmailChangePanel client={client} email={account.login_email}/>}</details>
         {typeof children==='function'?children(childGuards.register):children}
         <details ref={connectionsRef} className="account-settings-more" data-account-connections><summary>連結 GitHub 與其他工具</summary><GitHubConnectionPanel/><ClientConnections client={client}/></details>
         <OwnReports client={client}/>
-        <details className="account-settings-more"><summary>停用帳號</summary>{account&&<AccountDeactivation client={client} version={account.aggregate_version} disabled={locked}/>}</details>
+        <details className="account-settings-more"><summary>停用帳號</summary>{account&&account.has_password!==false&&<AccountDeactivation client={client} version={account.aggregate_version} disabled={locked}/>}</details>
       </div>
     </details>
   </section>;

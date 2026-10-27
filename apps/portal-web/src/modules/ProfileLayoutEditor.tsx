@@ -1,14 +1,16 @@
+import {useId} from 'react';
 import {moveProfileBlock,profileBlockLabels,type ProfileLayoutData} from '../../../../packages/shared/member-profile';
 export function ProfileLayoutEditor({value,onChange,disabled}:{value:ProfileLayoutData;onChange:(next:ProfileLayoutData)=>void;disabled:boolean}){
+ const id=useId();
  const update=(patch:Partial<ProfileLayoutData>)=>onChange({...value,...patch});
  return <fieldset className="fieldset stack" disabled={disabled}><legend>佈置我的個人頁</legend>
   <details open><summary className="profile-editor-summary">顏色與背景</summary><div className="profile-design-options">
-   <label className="field">主題<select value={value.theme} onChange={event=>update({theme:event.target.value as ProfileLayoutData['theme']})}><option value="paper">明亮紙頁</option><option value="night">深夜星空</option><option value="sage">森林手帳</option><option value="rose">暖粉相簿</option></select></label>
-   <label className="field">重點顏色<select value={value.accent} onChange={event=>update({accent:event.target.value as ProfileLayoutData['accent']})}><option value="violet">紫羅蘭</option><option value="blue">海洋藍</option><option value="teal">湖水綠</option><option value="berry">莓果紅</option><option value="amber">琥珀棕</option></select></label>
-   <label className="field">封面圖樣<select value={value.cover_style} onChange={event=>update({cover_style:event.target.value as ProfileLayoutData['cover_style']})}><option value="horizon">山稜</option><option value="grid">方格</option><option value="constellation">星點</option><option value="waves">波紋</option></select></label>
+   <div className="field"><label htmlFor={`${id}-theme`}>主題</label><select id={`${id}-theme`} value={value.theme} onChange={event=>update({theme:event.target.value as ProfileLayoutData['theme']})}><option value="paper">明亮紙頁</option><option value="night">深夜星空</option><option value="sage">森林手帳</option><option value="rose">暖粉相簿</option></select></div>
+   <div className="field"><label htmlFor={`${id}-accent`}>重點顏色</label><select id={`${id}-accent`} value={value.accent} onChange={event=>update({accent:event.target.value as ProfileLayoutData['accent']})}><option value="violet">紫羅蘭</option><option value="blue">海洋藍</option><option value="teal">湖水綠</option><option value="berry">莓果紅</option><option value="amber">琥珀棕</option></select></div>
+   <div className="field"><label htmlFor={`${id}-cover`}>封面圖樣</label><select id={`${id}-cover`} value={value.cover_style} onChange={event=>update({cover_style:event.target.value as ProfileLayoutData['cover_style']})}><option value="horizon">山稜</option><option value="grid">方格</option><option value="constellation">星點</option><option value="waves">波紋</option></select></div>
   </div><p className="hint">沒有使用自己的封面圖片時，會顯示所選圖樣。</p></details>
   <details><summary className="profile-editor-summary">關於我與精選作品</summary><div className="stack">
-   <label className="field">關於我<textarea maxLength={1600} rows={6} value={value.about} onChange={event=>update({about:event.target.value})}/><span className="hint">可以換行，最多 1600 字；不支援網頁程式碼。</span></label>
+   <div className="field"><label htmlFor={`${id}-about`}>關於我</label><textarea id={`${id}-about`} aria-describedby={`${id}-about-help`} maxLength={1600} rows={6} value={value.about} onChange={event=>update({about:event.target.value})}/><span id={`${id}-about-help`} className="hint">可以換行，最多 1600 字；不支援網頁程式碼。</span></div>
    <h3>精選作品（最多六個）</h3><p className="hint">只加入你親自填寫的作品名稱與 HTTPS 連結，不會抓取網站或自動公開私人作品。</p>
    {value.featured.map((work,index)=><div className="profile-featured-editor stack" key={index}>
     <label className="field">作品名稱 {index+1}<input required maxLength={80} value={work.title} onChange={event=>update({featured:value.featured.map((item,i)=>i===index?{...item,title:event.target.value}:item)})}/></label>

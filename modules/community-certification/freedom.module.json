@@ -5,7 +5,7 @@
   "owned_paths": [
     "modules/community-certification/**",
     "apps/platform-api/src/routes/community-certification.ts",
-    "migrations/192_member_community_certifications.sql",
+    "migrations/193_member_community_certifications.sql",
     "tests/runtime/community-certification.test.ts",
     "tests/runtime/community-certification-policy.test.ts",
     "tests/e2e/community-certification.spec.ts",

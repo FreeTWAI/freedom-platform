@@ -10,7 +10,7 @@ function when(value: string | null) {
   return new Date(value).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
 }
 
-export function AccountSecurity({ client, onAccountChanged }: { client: PortalClient; onAccountChanged: () => Promise<void> }) {
+export function AccountSecurity({ client, onAccountChanged, hasPassword=true }: { client: PortalClient; onAccountChanged: () => Promise<void>; hasPassword?:boolean }) {
   const [current, setCurrent] = useState(''), [next, setNext] = useState(''), [confirm, setConfirm] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false), [passwordError, setPasswordError] = useState(''), [passwordNotice, setPasswordNotice] = useState('');
   const [sessions, setSessions] = useState<SessionList | null>(null), [sessionError, setSessionError] = useState(''), [sessionNotice, setSessionNotice] = useState(''), [sessionBusy, setSessionBusy] = useState(false);
@@ -31,8 +31,11 @@ export function AccountSecurity({ client, onAccountChanged }: { client: PortalCl
     return()=>{mounted.current=false;loadSequence.current++;lifecycle.current++;};
   }, [loadSessions,generation]);
 
+  useEffect(()=>{if(!hasPassword){setCurrent('');setNext('');setConfirm('');setPasswordError('');setPasswordNotice('');}},[hasPassword]);
+
   async function changePassword(event: FormEvent) {
     event.preventDefault();
+    if(!hasPassword||passwordBusy)return;
     setPasswordError(''); setPasswordNotice('');
     if (next !== confirm) { setPasswordError('兩次輸入的新密碼不一致。'); return; }
     if (next === current) { setPasswordError('新密碼不能與目前密碼相同。'); return; }
@@ -65,7 +68,7 @@ export function AccountSecurity({ client, onAccountChanged }: { client: PortalCl
   const others = sessions ? sessions.items.filter(item => !item.current).length : 0;
   return <section className="card stack account-security" aria-labelledby="account-security-heading">
     <h3 id="account-security-heading">登入與安全</h3>
-    <form className="stack" onSubmit={changePassword} aria-label="修改密碼">
+    {hasPassword&&<form className="stack" onSubmit={changePassword} aria-label="修改密碼">
       <h4>修改密碼</h4>
       <Status error={passwordError} notice={passwordNotice}/>
       <label className="field">目前密碼<input type="password" autoComplete="current-password" required maxLength={200} value={current} onChange={event => setCurrent(event.target.value)} disabled={passwordBusy}/></label>
@@ -73,7 +76,7 @@ export function AccountSecurity({ client, onAccountChanged }: { client: PortalCl
       <p id="new-password-hint" className="field-hint">12 到 128 個字元；更新後其他裝置會被登出，這個裝置維持登入。</p>
       <label className="field">再次輸入新密碼<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirm} onChange={event => setConfirm(event.target.value)} disabled={passwordBusy}/></label>
       <div className="actions"><button className="btn btn-primary" disabled={passwordBusy} aria-busy={passwordBusy}>{passwordBusy ? '更新中…' : '更新密碼'}</button></div>
-    </form>
+    </form>}
     <div className="stack" aria-labelledby="sessions-heading">
       <h4 id="sessions-heading">登入中的裝置</h4>
       <Status error={sessionError} notice={sessionNotice}/>

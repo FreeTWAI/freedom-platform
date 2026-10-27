@@ -38,6 +38,11 @@ export function NewbieVillage(){
       {q.options.map((option,i)=><label className="nv-option" key={i} lang="zh-Hant"><input type={q.multi?'checkbox':'radio'} name={`nv-question-${index}`} checked={selected.includes(i)} disabled={!!q.multi&&!selected.includes(i)&&selected.length===(q.maxSelect??1)} onChange={()=>toggle(i)}/><span>{option.text}</span></label>)}</fieldset>
       <div className="nv-actions"><button className="btn btn-secondary btn-small" disabled={index===0} onClick={()=>changeQuestion(index-1)}>{t('nv.previous')}</button><button className="btn btn-small" disabled={!selected.length} onClick={()=>{if(index<14)changeQuestion(index+1);else if(completeAnswers(p.answers)){finish('quiz');focusQuestion.current=true;setShowResult(true)}}}>{t(index===14?'nv.results':'nv.next')}</button></div></>:<>
       <h3 tabIndex={-1} ref={questionRef}>{t('nv.resultTitle')}</h3><h4 lang="zh-Hant">{career.name}</h4><p lang="zh-Hant">{career.plainIntro}</p>
+      <section className="card stack nv-next-step" aria-labelledby="nv-next-step-title" data-testid="nv-next-step">
+        <h4 id="nv-next-step-title">{t('nv.nextStep')}</h4>
+        <h5>{t('nv.firstWeek')}</h5><ol lang="zh-Hant">{career.actions.map(a=><li key={a}>{a}</li>)}</ol>
+        <p>{t('nv.suggestion')}</p>{suggestedCareers.map(c=><div key={c}><strong lang="zh-Hant">{CLASSES_V2[c].name}</strong>{CAREER_GUILDS[c].map(g=><div key={g.guildId}><a href={`#guilds/${g.guildId}`}>{g.name}</a><p lang="zh-Hant">{g.justification}</p></div>)}</div>)}
+      </section>
       <div className="nv-dimensions" lang="zh-Hant">{DIMENSIONS.map(d=><div key={d}><strong>{DIMENSION_META_V2[d].label}</strong><p>{CLASSES_V2[result.dimensionWinners[d]].name}</p></div>)}</div>
       <h4>{t('nv.baseline')}</h4><p className="nv-preserve" lang="zh-Hant">{baseline}</p>
       <svg viewBox="0 0 400 400" role="img" aria-label="六軸雷達：答題分數加權的職業特徵示意，不是能力診斷" className="nv-radar">
@@ -46,8 +51,6 @@ export function NewbieVillage(){
         {RADAR_AXES_V2.map((axis,i)=>{const [x,y]=point(i,6.3).split(',');return <text key={axis.key} x={x} y={y} textAnchor="middle" dominantBaseline="middle">{axis.label}<tspan x={x} dy="18">{result.axes[axis.key]} / 5</tspan></text>})}
       </svg>
       <details lang="zh-Hant"><summary>計分與雷達怎麼算？</summary><p>各選項分數相加；複選超過一項時，每項乘 0.7。三維度各自加總，最高分是該維度的職業。同分依原始順序：{Object.values(CLASSES_V2).map(c=>c.name).join('、')}。</p><p>雷達用全部職業分數加權作者的六軸特徵，除以總分，最低 1，四捨五入至 0.5。這是作答偏好示意，不是實際能力評量。</p><ol>{QUESTIONS_V2.map((question,i)=><li key={i}>{question.q}<ul>{p.answers[i].map(j=><li key={j}>{question.options[j].text}：{Object.entries(question.options[j].scores).map(([key,n])=>`${CLASSES_V2[key as keyof typeof CLASSES_V2].name} +${n}`).join('、')}</li>)}</ul></li>)}</ol></details>
-      <p>{t('nv.suggestion')}</p>{suggestedCareers.map(c=><div key={c}><strong lang="zh-Hant">{CLASSES_V2[c].name}</strong>{CAREER_GUILDS[c].map(g=><div key={g.guildId}><a href={`#guilds/${g.guildId}`}>{g.name}</a><p lang="zh-Hant">{g.justification}</p></div>)}</div>)}
-      <h4>{t('nv.firstWeek')}</h4><ol lang="zh-Hant">{career.actions.map(a=><li key={a}>{a}</li>)}</ol>
       <h4>{t('nv.day')}</h4><ul lang="zh-Hant">{extra.dayInLife.map(x=><li key={x.time}>{x.time} · {x.act}</li>)}</ul>
       <h4>{t('nv.rhythm')}</h4><ul lang="zh-Hant">{extra.monthPlan.map(x=><li key={x.week}>{x.week} · {x.goal}</li>)}</ul>
       <h4>{t('nv.stuck')}</h4><ul lang="zh-Hant">{extra.painPoints.map(x=><li key={x.pain}>{x.pain} → {x.solution}</li>)}</ul>

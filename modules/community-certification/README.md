@@ -40,7 +40,8 @@ authenticated envelope 增 optional community_certification。匿名 schema/read
 
 ## Schema 與驗收
 
-190 為 main043 最小空號；依 Ted 指示各獨立分支可暫用，後合併者重編。
+main bdcbb742 已納入 Google migration190。本整合候選依序使用主頁191、
+封面192、認證193、稱號194；合併前仍須核對主線最大號，未表示已套用。
 不修改歷史 SQL，不加 known_gaps，不自動回填/授勳/grant。
 新 source 啟用前必須套 canonical migration 並由既有 operator 核對 runtime 權限；
 本候選不執行 DB 或授權角色變更。

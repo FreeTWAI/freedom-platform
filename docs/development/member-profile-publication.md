@@ -1,7 +1,7 @@
 # 個人空間訪客投影：第一階段後端候選
 
 基準 `4d2484286a82e5795826ffe9e743cbaef33b86a6`。已提交 [Draft PR #1135](https://github.com/FreeTWAI/freedom-platform/pull/1135)，未部署、未啟用；**完整功能尚未完成**。
-依 [Ted #1135 最新更正](https://github.com/FreeTWAI/freedom-platform/pull/1135#issuecomment-6442736697)，本地改用main最小空號 `190_member_profile_publications.sql`。與 #1043 同號是明確允許的暫定碰撞；後合併者由Ted同步檔名、部署last、preflight期望與release recognition後改號。沒有修改known_gaps或引入GoogleSQL。先前191缺190的失敗收據保留。新表的精確檔名納入FOUNDATION_NAMES，只代表辨識schema，不授予公開、合併或部署權限；runtime grants／隔離DB／原生驗證仍未執行。
+依 [Ted #1135 最新更正](https://github.com/FreeTWAI/freedom-platform/pull/1135#issuecomment-6442736697)，本地改用main最小空號 `191_member_profile_publications.sql`。與 #1043 同號是明確允許的暫定碰撞；後合併者由Ted同步檔名、部署last、preflight期望與release recognition後改號。沒有修改known_gaps或引入GoogleSQL。先前191缺190的失敗收據保留。新表的精確檔名納入FOUNDATION_NAMES，只代表辨識schema，不授予公開、合併或部署權限；runtime grants／隔離DB／原生驗證仍未執行。
 
 ## 獨立同意與範圍
 
@@ -68,8 +68,9 @@ Responses are no-store, no ETag/304, noindex and same-origin; DTOs contain only 
 generation, never Asset/object IDs or private URLs. A public profile remains visible to a
 blocked person who signs out; the editor explicitly warns about this limit.
 
-Provisional migration191 adds layout/consent columns and the closed Asset domain while
-preserving migration190 bytes. The new policy row defaults unavailable: storage binding,
+After Google identity migration190 entered main, migration192 adds layout/consent
+columns and the closed Asset domain after profile migration191. Google190 and all
+earlier historical SQL bytes remain unchanged. The new policy row defaults unavailable: storage binding,
 quota, retention, and production policy activation are operator decisions outside this
 code grant. UI displays real availability instead of a fake successful upload. Routes are
 unconditionally mounted, so eventual deployment requires the integrated schema first.

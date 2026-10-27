@@ -1,3 +1,6 @@
+import {googleAvailable,startGoogleLogin,completeGoogleLogin,cancelGoogleLogin,googleIdentityStatus,unlinkGoogleIdentity} from '../../../../modules/identity-membership/google/service.js';
+import {cancelOtherGoogleFlow,googleCookieVerifier,setGoogleFlowCookie,clearGoogleFlowCookie} from './authentication.js';
+import {readSessionCookie} from '../session-cookie.js';
 import { sessionCookieName } from '../session-cookie.js';
 import { deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
@@ -13,6 +16,28 @@ import type { PlatformFeatureApp, PlatformFeatureContext } from './context.js';
 export function registerMemberAccountRoutes(app: PlatformFeatureApp, context: PlatformFeatureContext) {
   const { pool, origin, freedomEnv, runtime, authNetwork } = context;
   const COOKIE=sessionCookieName(origin),secureCookies=freedomEnv!=='local';
+  const google=()=>googleAvailable(runtime.googleLogin,Boolean(runtime.passwordEmailSender))?runtime.googleLogin:undefined;
+  app.get('/api/v1/me/google',async c=>{c.header('Cache-Control','no-store');return c.json({...await googleIdentityStatus(pool,c.get('actor')),enabled:Boolean(google())});});
+  app.post('/api/v1/me/google/start',async c=>{
+    const actor=c.get('actor');await authRateLimit(pool,'google-link-user',actor.user_id,8);await authRateLimit(pool,'google-link-network',authNetwork(c),20);
+    const body=z.object({password:z.string().min(1).max(200)}).strict().parse(await c.req.json());
+    const result=await startGoogleLogin(pool,google(),origin,readSessionCookie(c.req.header('Cookie'),origin),actor,body.password);
+    setGoogleFlowCookie(c,origin,result.verifier);c.header('Cache-Control','no-store');return c.json({url:result.url});
+  });
+  app.post('/api/v1/me/google/complete',async c=>{
+    const actor=c.get('actor');await authRateLimit(pool,'google-link-complete-user',actor.user_id,15);
+    const body=z.object({state:z.string().length(43),code:z.string().min(1).max(4096)}).strict().parse(await c.req.json());
+    const result=await completeGoogleLogin(pool,google(),origin,{...body,verifier:googleCookieVerifier(c,origin),rawSession:readSessionCookie(c.req.header('Cookie'),origin)},{communityId:runtime.registrationCommunityId(),allowSingleCommunity:freedomEnv==='local'},actor);
+    clearGoogleFlowCookie(c,origin);c.header('Cache-Control','no-store');return c.json(result);
+  });
+  app.post('/api/v1/me/google/cancel',async c=>{
+    const body=z.object({state:z.string().length(43)}).strict().parse(await c.req.json());
+    const result=await cancelGoogleLogin(pool,body.state,googleCookieVerifier(c,origin),readSessionCookie(c.req.header('Cookie'),origin),c.get('actor'));clearGoogleFlowCookie(c,origin);return c.json(result);
+  });
+  app.post('/api/v1/me/google/unlink',async c=>{
+    const actor=c.get('actor');await authRateLimit(pool,'google-unlink-user',actor.user_id,8);await authRateLimit(pool,'google-unlink-network',authNetwork(c),20);
+    const body=z.object({password:z.string().min(1).max(200),identity_id:z.uuid()}).strict().parse(await c.req.json());return c.json(await unlinkGoogleIdentity(pool,actor,body.password,body.identity_id));
+  });
   app.get('/api/v1/session',c=>c.json(sessionView(c.get('actor'))));
   app.post('/api/v1/me/account/email-change/request',async c=>{
     requireCondition(runtime.eventEmailSender,503,'email_change_unavailable','Email 變更郵件服務尚未設定。');
@@ -32,5 +57,5 @@ export function registerMemberAccountRoutes(app: PlatformFeatureApp, context: Pl
     await pool.query('INSERT INTO member_client_errors(community_id,user_id,action,error_code,http_status) VALUES($1,$2,$3,$4,$5)',[actor.community_id,actor.user_id,body.action,body.error_code,body.http_status??null]);
     return c.json({recorded:true},201);
   });
-  app.post('/api/v1/auth/logout',async c=>{await pool.query('UPDATE sessions SET revoked_at=now() WHERE token_hash=$1',[c.get('actor').session_hash]);deleteCookie(c,COOKIE,{path:'/',secure:secureCookies,httpOnly:true,sameSite:'Strict'});return c.json({logged_out:true});});
+  app.post('/api/v1/auth/logout',async c=>{await cancelOtherGoogleFlow(pool,c,origin);await pool.query('UPDATE sessions SET revoked_at=now() WHERE token_hash=$1',[c.get('actor').session_hash]);deleteCookie(c,COOKIE,{path:'/',secure:secureCookies,httpOnly:true,sameSite:'Strict'});clearGoogleFlowCookie(c,origin);return c.json({logged_out:true});});
 }

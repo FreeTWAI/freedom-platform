@@ -43,7 +43,8 @@
     "shared",
     "supplier-console",
     "tenant-workspaces",
-    "work"
+    "work",
+    "google-identity"
   ],
   "contract_families": [],
   "client_profiles": [

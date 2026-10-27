@@ -31,6 +31,13 @@ async function post(path: string, body: unknown, secure = false, headers: Record
   const raw = await response.json();
   return { response, raw, status: response.status, data: outcome.parse(raw), cookie: response.headers.get('set-cookie')?.split(';')[0] };
 }
+function assertGoogleFlowDeletion(cookie: string, at: string) {
+  const secure = at.startsWith('https:');
+  assert.deepEqual(cookie.split('; ').sort(), [
+    `${secure ? '__Host-freedom_google_flow' : 'freedom_google_flow'}=`,
+    'Max-Age=0', 'Path=/', 'HttpOnly', 'SameSite=Strict', ...(secure ? ['Secure'] : []),
+  ].sort());
+}
 async function lockAccount() {
   for (let i = 0; i < 10; i++) assert.equal((await post('/auth/login', { email, password: 'wrong-password' })).status, 401);
   assert.equal((await post('/auth/login', { email, password: DEMO_PASSWORD })).status, 429);
@@ -220,7 +227,17 @@ for (const scenario of [
   assert.equal((await app.request(origin + '/api/v1/session', { headers: { Cookie: old.cookie } })).status, 200);
   const recovered = await post('/auth/reset/confirm', { token: other, password: newPassword });
   assert.equal(recovered.status, 200, 'the other still-valid mailbox proof remains usable');
-  assert.equal(recovered.cookie === undefined, scenario.mfa);
+  const cookies = recovered.response.headers.getSetCookie();
+  assert.equal(cookies.length, scenario.mfa ? 1 : 2, 'recovery must append the Google flow deletion, including when TOTP is required');
+  if (scenario.mfa) {
+    assertGoogleFlowDeletion(cookies[0], origin);
+    assert.doesNotMatch(cookies.join('; '), /(?:^|; )(?:__Host-freedom_session|freedom_local_session)=/);
+  } else {
+    assert.match(cookies[0], /^freedom_local_session=/);
+    for (const attribute of ['HttpOnly', 'SameSite=Strict', 'Path=/', 'Max-Age=2592000']) assert.ok(cookies[0].split('; ').includes(attribute), attribute);
+    assert.equal(cookies[0].split('; ').includes('Secure'), false); assert.doesNotMatch(cookies[0], /(?:^|;\s*)Domain=/i);
+    assertGoogleFlowDeletion(cookies[1], origin);
+  }
   if (scenario.mfa) {
     assert.deepEqual(recovered.raw, { reset: true, totp_required: true, expires_after_minutes: 30 });
     assert.deepEqual((await pool.query('SELECT * FROM member_totp WHERE user_id=$1', [userId])).rows, priorMfa);
@@ -242,10 +259,11 @@ for (const secure of [true, false]) test(`${secure ? 'HTTPS' : 'HTTP loopback'} 
   assert.equal(recovered.raw.reset, true); assert.equal(recovered.raw.expires_after_minutes, 30);
   assert.deepEqual(Object.keys(recovered.raw.user).sort(), ['display_name', 'email', 'profession_membership_ref', 'user_id']);
   assert.equal(recovered.data.user?.user_id, DEMO_USERS[0].user_id);
-  const cookies = recovered.response.headers.getSetCookie(); assert.equal(cookies.length, 1);
+  const cookies = recovered.response.headers.getSetCookie(); assert.equal(cookies.length, 2);
   assert.match(cookies[0], secure ? /^__Host-freedom_session=/ : /^freedom_local_session=/);
   for (const attribute of ['HttpOnly', 'SameSite=Strict', 'Path=/', 'Max-Age=2592000']) assert.ok(cookies[0].split('; ').includes(attribute), attribute);
   assert.equal(cookies[0].split('; ').includes('Secure'), secure); assert.doesNotMatch(cookies[0], /(?:^|;\s*)Domain=/i);
+  assertGoogleFlowDeletion(cookies[1], at);
   assert(!JSON.stringify(recovered.raw).includes(recovered.cookie.split('=')[1]));
   for (const old of [first, second]) {
     assert.notEqual(recovered.cookie, old.cookie);

@@ -84,5 +84,6 @@ DB: `tests/runtime/social-achievements.test.ts` requires explicit disposable
 `TEST_DATABASE_URL`; never use default, production, desktop or discovered DB.
 Browser: `tests/e2e/social-achievements.spec.ts` uses existing fixture and must follow
 production build. These are source test requirements, not claims they were executed.
-Integrated local migration 193 follows profile190/cover191/certification192; final ordering still needs integration review with certification
-and profile candidates; do not alter `known_gaps` or historical SQL.
+Integrated candidate migration194 follows main Google190, profile191, cover192 and
+certification193. Recheck the main maximum before merge; do not alter `known_gaps`
+or historical SQL. This numbering is source integration, not an applied schema.

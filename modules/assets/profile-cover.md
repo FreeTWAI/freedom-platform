@@ -46,7 +46,7 @@ Do not put object identifiers in profile DTOs: project only `cover.version` and
 `cover.generation` under the canonical text profile ACL in the same SQL statement.
 
 The reviewed SQL proposal is consolidated in local migration
-`191_member_profile_customization.sql`, following profile publication190. Exact installed CHECK predicates and fixed-search-path functions
+`192_member_profile_customization.sql`, following profile publication191. Exact installed CHECK predicates and fixed-search-path functions
 are extended, not replaced by older snapshots. Existing closed GC admission
 continues to reject this purpose: retired versions remain retained and charged.
 Physical cleanup requires a separate reviewed reference/backup/write-effect

@@ -394,6 +394,9 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run contracts:build
+      - name: Typecheck browser-only changes
+        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}
+        run: node node_modules/typescript/bin/tsc --noEmit
       - run: npm run build
       - name: Checkout the pinned runner
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -409,6 +412,9 @@ jobs:
         run: |
           test "$(git -C .freedom/trusted rev-parse HEAD)" = "$PINNED_SHA"
           test -z "$(git -C .freedom/trusted status --porcelain)"
+      - name: Check existing browser-spec consumers
+        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}
+        run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.browser-spec-consumers
       - name: Run the pinned browser plan for the exact integration tree
         env:
           EVENT_NAME: ${{ github.event_name }}

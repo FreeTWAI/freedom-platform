@@ -12,7 +12,7 @@ const LEGACY_FILE = /^[0-9]{3}_[a-z0-9_]+\.sql$/;
 const DAG_NAME = /^v2_(\d{8}T\d{9}Z)_([0-9a-f]{16})_([a-z][a-z0-9_]{0,63})\.sql$/;
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,159}$/;
 const ENVIRONMENTS = ['next', 'staging-next'];
-const CAPABILITIES = ['commerce.hosted-drop-ship.v1', 'commerce.paid-cancellation.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-self-ship.v1', 'commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'commerce.shop-service-authority.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'avatar.legacy-bytes.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1', 'execution.member-run-record.v1', 'execution.runtime-enrollment.v1', 'execution.agent-connection-record.v1', 'execution.bootstrap-status.v1', 'execution.device-authorization.v1', 'execution.bootstrap-session.v1', 'execution.member-prerequisites.v1', 'execution.model-text-step.v1', 'work.private-model-result.v1', 'execution.model-credential-custody.v1', 'execution.model-broker-bridge.v1', 'execution.model-credential-ingest.v1', 'execution.member-model-settings.v1', 'execution.member-device-management.v1', 'media.server-policy.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.supply-offer-photo.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.write-effects.v1', 'media.domain-gc.v1'];
+const CAPABILITIES = ['identity.passwordless-null-safe.v1', 'commerce.hosted-drop-ship.v1', 'commerce.paid-cancellation.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-self-ship.v1', 'commerce.hosted-payment.v1', 'commerce.hosted-checkout.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'commerce.hosted-supply-catalog.v1', 'commerce.hosted-inventory-reservation.v1', 'commerce.hosted-shared-reservation.v1', 'commerce.shop-service-authority.v1', 'execution.model-credential-preparation.v1', 'execution.openrouter-selection.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'avatar.legacy-bytes.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1', 'execution.member-run-record.v1', 'execution.runtime-enrollment.v1', 'execution.agent-connection-record.v1', 'execution.bootstrap-status.v1', 'execution.device-authorization.v1', 'execution.bootstrap-session.v1', 'execution.member-prerequisites.v1', 'execution.model-text-step.v1', 'work.private-model-result.v1', 'execution.model-credential-custody.v1', 'execution.model-broker-bridge.v1', 'execution.model-credential-ingest.v1', 'execution.member-model-settings.v1', 'execution.member-device-management.v1', 'media.server-policy.v1', 'media.service-cover.asset.v1', 'media.event-banner.asset.v1', 'media.event-video.asset.v1', 'media.social-thumbnail.asset.v1', 'media.skill-image.asset.v1', 'media.event-highlight.asset.v1', 'media.message-image.asset.v1', 'media.comment-image.asset.v1', 'media.storefront-product-photo.asset.v1', 'media.supply-material.asset.v1', 'media.supply-offer-photo.asset.v1', 'media.distribution-photo.asset.v1', 'media.social-preview-create.v1', 'media.write-effects.v1', 'media.domain-gc.v1'];
 const SHAPES = Object.freeze({
   'commerce.hosted-drop-ship.v1': { migration: 189, capabilities: ['commerce.hosted-drop-ship.v1','commerce.hosted-self-ship.v1','commerce.hosted-checkout.v1'] },
   'commerce.paid-cancellation.v1': { migration: 188, capabilities: ['commerce.paid-cancellation.v1','commerce.hosted-checkout.v1'] },
@@ -224,11 +224,12 @@ const FOUNDATION_NAMES = [
   '187_checkout_contact_retention.sql',
   '188_paid_order_cancellation.sql',
   '189_hosted_drop_ship.sql',
+  '190_google_identity.sql',
   // Explicitly consented profile records only; recognition grants no publication or release authority.
-  '190_member_profile_publications.sql',
-  '191_member_profile_customization.sql',
-  '192_member_community_certifications.sql',
-  '193_social_achievements.sql',
+  '191_member_profile_publications.sql',
+  '192_member_profile_customization.sql',
+  '193_member_community_certifications.sql',
+  '194_social_achievements.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
@@ -580,6 +581,9 @@ export function evaluateReleaseCompatibility(input, { scan, host } = {}) {
   // every reader/writer to preserve the supply-only privacy boundary.
   // Exact credited invitation identity must survive every guest writer, even
   // while guest admission is disabled.
+  // Provider-only credentials and Google lifecycle fencing survive flag OFF.
+  // Recognition never approves a binary or enables an identity provider.
+  if (Math.max(plannedLast, floorLast) >= 190) required.add('identity.passwordless-null-safe.v1');
   if (Math.max(plannedLast, floorLast) >= 178) required.add('community.guest-invitation-credit.v1');
   if (Math.max(plannedLast, floorLast) >= 169) required.add('commerce.hosted-payment.v1');
   if (Math.max(plannedLast, floorLast) >= 187) required.add('commerce.checkout-contact-retention.v1');
@@ -608,6 +612,10 @@ export function evaluateReleaseCompatibility(input, { scan, host } = {}) {
       if (plannedLast < SHAPES[shape].migration) issue('shape_schema_missing', { shape });
       if (observedLast < SHAPES[shape].migration) issue('historical_shape_schema_missing', { shape });
     }
+  }
+  if (floor.capabilities.includes('identity.passwordless-null-safe.v1')) {
+    if (plannedLast < 190) issue('shape_schema_missing', { shape: 'identity.passwordless-null-safe.v1' });
+    if (observedLast < 190) issue('historical_shape_schema_missing', { shape: 'identity.passwordless-null-safe.v1' });
   }
   if (floor.capabilities.includes('media.write-effects.v1')) {
     if (plannedLast < 108) issue('shape_schema_missing', { shape: 'media.write-effects.v1' });

@@ -238,3 +238,12 @@ for(const reason of ['unmount','navigation','closed','detached','modal','other-c
  if(reason==='other-control')h.document.activeElement={id:'nickname'};
  h.flush();assert.equal(h.focused,0);
 });
+
+test('actual guest-profile entry cannot preempt a Google callback or password reset',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
+ const expression=source.match(/if\(([^\n]+?)\)return <div[^\n]+?<VisitorProfile/);assert.ok(expression,'actual guest profile entry predicate');
+ const context={googleCallback:null as unknown,resetToken:null as unknown,profileLoginRequested:false,profileRoute:{kind:'visitor',id:'synthetic'},canOpenGuestProfile:()=>true,locationHash:'#profile/synthetic',window:{location:{search:''}}};
+ const allowed=()=>runInNewContext(expression[1],context);assert.equal(allowed(),true);
+ context.googleCallback={intent:'login'};assert.equal(allowed(),false);context.googleCallback={intent:'link'};assert.equal(allowed(),false);
+ context.googleCallback=null;context.resetToken='reset';assert.equal(allowed(),false);context.resetToken=null;context.profileLoginRequested=true;assert.equal(allowed(),false);
+});
