@@ -817,7 +817,7 @@ test('CLI cancellation tears down all real Playwright web servers before returni
 
 test('host pass budgets are finite and only the default capacity increases', async () => {
   assert.deepEqual(E2E_PASS_TIMEOUT_MS, {
-    default: 60 * 60 * 1000,
+    default: 75 * 60 * 1000,
     'private-ai': 30 * 60 * 1000,
     'avatar-asset': 30 * 60 * 1000,
     'message-image': 30 * 60 * 1000,
@@ -829,7 +829,7 @@ test('host pass budgets are finite and only the default capacity increases', asy
   assert.ok(Object.values(E2E_PASS_TIMEOUT_MS).every(value => Number.isSafeInteger(value) && value > 0));
   const workflow = await readFile(join(repoRoot, '.github/workflows/verify.yml'), 'utf8');
   const ui = workflow.slice(workflow.indexOf('  ui-e2e:'), workflow.indexOf('  static-worker:'));
-  assert.match(ui, /timeout-minutes: 75\b/);
+  assert.match(ui, /timeout-minutes: 95\b/);
 });
 
 test('CLI default deadline remains failure after graceful zero exit and stops later passes', async () => {

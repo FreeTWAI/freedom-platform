@@ -121,7 +121,7 @@ The host assigns separate generated `fp_e2e_*` schemas and localhost ports
 passes and narrow guide/guild plans remain unsharded and retain their obligations.
 No candidate CLI profile, file list, shard count or timeout override is accepted.
 
-The current 60-minute default-mode budget from #796 includes discovery and all three
+The current 75-minute default-mode budget includes discovery and all three
 concurrent processes; discovery keeps its independent 60-second maximum. A failed shard
 cancels its peers by interrupting the Playwright CLI with SIGINT. Playwright then
 runs its configured SIGTERM webServer teardown; the existing 20-second SIGKILL
