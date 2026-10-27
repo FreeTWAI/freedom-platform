@@ -1,5 +1,6 @@
 import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
 import {activateHomeLink} from './brand-home-link';
+import {requestHomeJournalOpen} from './modules/member-home-loading';
 import {PasswordField} from './modules/auth/PasswordField';
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
@@ -987,6 +988,10 @@ function Workspace({
             {renderPortalFeature(tab, {
               client, session, site, locationHash, selectTab, friendScope, notificationTarget, headerMember,
               registerPageLeave, replaceBuyerLocation, onSessionExpired,
+              openHomeJournal: () => requestHomeJournalOpen(() => {
+                if (pageLeaveGuard.current && !pageLeaveGuard.current(null)) return false;
+                return canEndConsoleSession() && (!messageLeaveGuard.current || messageLeaveGuard.current());
+              }),
               openMemberMessage: id => { selectTab('messages'); setNotificationTarget({tab:'messages', resource_id:id, sequence:++notificationSequence.current}); },
               showIncomingFriends: () => { selectTab('friends'); setFriendScope('incoming'); },
             })}

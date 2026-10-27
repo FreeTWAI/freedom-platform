@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {PortalClient} from '../../apps/portal-web/src/api.js';
 import {
-  createHomeReadCycle, observeHomeReturns, loadHomeNextSteps, resolveHomeJournalUrl,
+  createHomeReadCycle, observeHomeReturns, loadHomeNextSteps, resolveHomeJournalUrl, requestHomeJournalOpen,
   type HomeReadClient, type HomeTaskAction,
 } from '../../apps/portal-web/src/modules/member-home-loading.js';
 
@@ -10,6 +10,13 @@ test('journal entry accepts only the fixed public aiSNS root', () => {
   assert.equal(resolveHomeJournalUrl(), 'https://aisns.evitina.tw/');
   assert.equal(resolveHomeJournalUrl('https://aisns.evitina.tw/'), 'https://aisns.evitina.tw/');
   for (const value of [null, '', 1, '/journal', 'javascript:alert(1)', 'https://freetwai.evitina.tw/', '//aisns.evitina.tw/', 'https://aisns.evitina.tw.evil.example/', 'https://aisns.evitina.tw@evil.example/', 'https://aisns.evitina.tw/?token=secret', 'https://aisns.evitina.tw/review/private', 'https://aisns.evitina.tw/#private', '/api/v1/private/drafts']) assert.equal(resolveHomeJournalUrl(value), null);
+});
+
+test('a refused journal document transition checks the guard before touching storage or location', () => {
+  let prompts = 0;
+  // Node has neither sessionStorage nor window: touching either would throw.
+  assert.equal(requestHomeJournalOpen(() => { prompts++; return false; }), false);
+  assert.equal(prompts, 1);
 });
 
 function deferred<T>() {

@@ -6,6 +6,8 @@ The default build destination is that exact HTTPS root. `VITE_COMMUNITY_JOURNAL_
 
 The platform CSP adds aiSNS to `frame-src` only on `/`, excluding self-origin frames and retaining the optional YouTube policy. Admin, payment handoff, API and native journal paths gain no aiSNS frame permission. aiSNS must independently allow `https://freetwai.com` and `https://staging.freetwai.com` in its `frame-ancestors`; this was observed on its public response on 2026-10-24 UTC, and the release operator must recheck it. Sandbox permissions allow scripts, the source's own origin, forms (required for the site's client-side search submit handler) and user-opened links, but no parent navigation or automatic downloads. aiSNS retains its own `form-action 'none'` policy. Parent credentials and private platform data are not sent into the frame.
 
+Ted 於 2026-10-27 核准沿用外部 aiSNS iframe。啟動時記住文件原始路徑；從 `/device`、活動或名片入口經 SPA 回首頁後，按「閱讀共創誌」會先經既有離開防護，再整頁導向 `/`，取得首頁的 CSP。只有這次點擊會在同源 `sessionStorage` 留下 30 秒內有效、讀取即移除的開啟意圖；不使用網址參數，外部連結無法自動開啟。取消離開不留下意圖、不載入 iframe。原始文件已是 `/` 時仍原地開啟；儲存空間不可用時先回首頁，再由會員點擊開啟。這次不擴大任何其他路徑的 CSP。
+
 The already-merged native `/journal`, `/journal/manage`, APIs, assets and migration 186 remain intact. They are separate from this homepage embed; existing data is not removed or rewritten. The protocol below documents that retained implementation, not a prerequisite to viewing aiSNS. This change does not run a content import, assign an editor, publish a draft, or authorize merge/deployment.
 
 ## Ownership and release

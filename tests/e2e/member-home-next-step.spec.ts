@@ -55,7 +55,7 @@ for (const [width,height] of [[1440,1000],[360,780],[375,667],[390,844],[430,932
     await page.setViewportSize({width, height});
     const outbound: {authorization: string | undefined; cookie: string | undefined; referer: string | undefined}[] = [];
     await context.route('https://aisns.evitina.tw/**', async route => {
-      const headers = route.request().headers();
+      const headers = await route.request().allHeaders();
       outbound.push({authorization: headers.authorization, cookie: headers.cookie, referer: headers.referer});
       const article = new URL(route.request().url()).pathname !== '/';
       await route.fulfill({contentType: 'text/html; charset=utf-8', headers: {'Referrer-Policy': 'no-referrer'}, body: article
@@ -63,6 +63,11 @@ for (const [width,height] of [[1440,1000],[360,780],[375,667],[390,844],[430,932
         : '<h1>合成共創日誌</h1><form onsubmit="event.preventDefault();document.getElementById(&quot;search-result&quot;).hidden=false"><input aria-label="搜尋日誌"><button>搜尋測試</button></form><p id="search-result" hidden>合成搜尋結果</p><a href="/journal/2026-10-22">閱讀測試文章</a><script>addEventListener("keydown", e => {if(e.key === "Escape") parent.postMessage("freedom-journal:close", "*")})</script>'});
     });
     await login(page, false);
+    // Positive control: the same header API must observe the platform session
+    // cookie on an authenticated, same-origin browser request.
+    const sessionRequest = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/session');
+    expect(await page.evaluate(async () => (await fetch('/api/v1/session')).status)).toBe(200);
+    expect((await (await sessionRequest).allHeaders()).cookie).toMatch(/(?:^|;\s*)freedom_local_session=/);
     await openHomeGuide(page);
     const entry = page.getByRole('region', {name: '共創日誌', exact: true});
     await expect(entry).toBeVisible();
@@ -123,6 +128,91 @@ for (const [width,height] of [[1440,1000],[360,780],[375,667],[390,844],[430,932
     await page.screenshot({path: `${shots}/journal-entry-${width}-${height}.png`, fullPage: true});
   });
 }
+
+for (const width of [1440, 390]) test(`deep-link document returns home before opening the journal once with the home CSP at ${width}px`, async ({page, context}) => {
+  await page.setViewportSize({width, height: 844});
+  const violations: string[] = [], outbound: string[] = [], documents: string[] = [];
+  await page.exposeFunction('recordJournalCspViolation', (blocked: string) => violations.push(blocked));
+  await page.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', event => {
+      // Check frame policy across documents; Playwright's injected scripts can
+      // themselves produce unrelated script-src/eval events.
+      if (event.effectiveDirective === 'frame-src')
+        (window as unknown as {recordJournalCspViolation: (blocked: string) => void}).recordJournalCspViolation(event.blockedURI);
+    });
+  });
+  page.on('request', request => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documents.push(new URL(request.url()).pathname); });
+  await context.route('https://aisns.evitina.tw/**', async route => {
+    outbound.push(route.request().url());
+    await route.fulfill({contentType: 'text/html; charset=utf-8', body: '<h1>深連結回首頁的共創誌</h1>'});
+  });
+  await login(page, false);
+  const deepLink = await page.goto('/device');
+  expect(deepLink!.headers()['content-security-policy']).not.toContain('https://aisns.evitina.tw');
+  await page.getByRole('link', {name: '自由工坊 · 會員首頁', exact: true}).click();
+  await expect(page.getByRole('heading', {name: '會員首頁', level: 1, exact: true})).toBeVisible();
+  await openHomeGuide(page);
+  await expect(page).toHaveURL(/\/#home$/);
+  expect(documents).toEqual(['/', '/device']);
+  expect(outbound).toHaveLength(0);
+  await expect(page.locator('iframe[title="共創日誌內容"]')).toHaveCount(0);
+  const homeResponse = page.waitForResponse(response => response.request().isNavigationRequest() && new URL(response.url()).pathname === '/');
+  await page.getByRole('button', {name: '閱讀共創誌', exact: true}).click();
+  expect((await homeResponse).headers()['content-security-policy']).toContain('frame-src https://aisns.evitina.tw');
+  await expect(page.frameLocator('iframe[title="共創日誌內容"]').getByRole('heading', {name: '深連結回首頁的共創誌'})).toBeVisible();
+  expect(documents).toEqual(['/', '/device', '/']);
+  expect(outbound).toEqual(['https://aisns.evitina.tw/']);
+  expect(violations).toEqual([]);
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole('button', {name: '關閉共創日誌'}).click();
+  await expect(page.getByRole('button', {name: '閱讀共創誌', exact: true})).toBeFocused();
+  await page.reload();
+  await openHomeGuide(page);
+  await expect(page.locator('iframe[title="共創日誌內容"]')).toHaveCount(0);
+  expect(outbound).toHaveLength(1);
+});
+
+test('cancelling unsaved event navigation keeps the deep-link document and loads no journal', async ({page, context}) => {
+  const outbound: string[] = [];
+  await context.route('https://aisns.evitina.tw/**', async route => {
+    outbound.push(route.request().url());
+    await route.fulfill({contentType: 'text/html; charset=utf-8', body: '<h1>共創誌</h1>'});
+  });
+  await login(page, false);
+  await page.goto('/device');
+  await navigate(page, '社群活動');
+  await page.getByRole('button', {name: '＋ 提交活動', exact: true}).click();
+  const draft = page.getByLabel('活動名稱', {exact: true});
+  await draft.fill('取消離開保留的活動草稿');
+  const previousUrl = page.url();
+  const prompt = page.waitForEvent('dialog');
+  const click = page.getByRole('link', {name: '自由工坊 · 會員首頁', exact: true}).click();
+  const confirmation = await prompt;
+  expect(confirmation.type()).toBe('confirm');
+  expect(confirmation.message()).toContain('尚未儲存');
+  await confirmation.dismiss();
+  await click;
+  await expect(page).toHaveURL(previousUrl);
+  await expect(draft).toHaveValue('取消離開保留的活動草稿');
+  await expect(page.locator('iframe[title="共創日誌內容"]')).toHaveCount(0);
+  expect(outbound).toHaveLength(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('freedom-home-journal-open'))).toBeNull();
+});
+
+test('external journal parameters and expired session intent cannot auto-open the journal', async ({page, context}) => {
+  const outbound: string[] = [];
+  await context.route('https://aisns.evitina.tw/**', async route => {
+    outbound.push(route.request().url());
+    await route.fulfill({contentType: 'text/html; charset=utf-8', body: '<h1>共創誌</h1>'});
+  });
+  await login(page, false);
+  await page.evaluate(() => sessionStorage.setItem('freedom-home-journal-open', String(Date.now() - 60_000)));
+  await page.goto('/?journal=open#home');
+  await openHomeGuide(page);
+  await expect(page.locator('iframe[title="共創日誌內容"]')).toHaveCount(0);
+  expect(outbound).toHaveLength(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('freedom-home-journal-open'))).toBeNull();
+});
 
 function suggestion(page: Page) {
   return page.getByRole('region', { name: '公會與技能書建議', exact: true });
