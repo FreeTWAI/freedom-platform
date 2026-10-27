@@ -18,7 +18,11 @@ async function fixture(){
   const doc={body:{},defaultView:view,querySelectorAll:(selector:string)=>{scans++;return nodes.filter(node=>selector.split(',').includes(node.selector));},addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)};
   const launcher:any={expanded:'false',contains:(target:any)=>target===launcher||target===icon};
   const icon={};const other={},dialogControl={};
-  const root:any={ownerDocument:doc,contains:(target:any)=>[launcher,icon,dialogControl].includes(target),querySelector:()=>launcher.expanded==='false'?launcher:null};
+  const root:any={ownerDocument:doc,contains:(target:any)=>[launcher,icon,dialogControl].includes(target),querySelector:(selector:string)=>{
+    // Fail closed on unsupported selectors; do not pretend to implement CSS syntax.
+    assert.equal(selector,':scope > .platform-helper > button[aria-haspopup="dialog"][aria-expanded="false"]','unexpected launcher selector');
+    return launcher.expanded==='false'?launcher:null;
+  }};
   const hooks={useRef:(value:unknown)=>refs[refIndex++]??(refs[refIndex-1]={current:value}),useState:(value:unknown)=>{const i=stateIndex++;if(!(i in states))states[i]=value;return[states[i],(next:unknown)=>{sets++;states[i]=typeof next==='function'?(next as Function)(states[i]):next;}];},useLayoutEffect:(fn:()=>void|(()=>void),dependencies:unknown[])=>{effects.push(fn);effectDependencies.push(dependencies);}};
   const module={exports:{} as any},require=createRequire(import.meta.url);
   new Function('module','exports','require',bundle.outputFiles[0].text)(module,module.exports,(id:string)=>id==='react'?hooks:require(id));
@@ -93,4 +97,19 @@ test('capture consults current shell state without waiting for an old render',as
   for(const state of [{mobileOpen:true},{messagesOpen:true},{pending:true},{accessExpired:true},{sessionGeneration:-1}]){
     const f=await fixture();const retained=f.capture;assert.equal(typeof retained,'function');f.render(state);assert.deepEqual(f.click(f.launcher,retained),{prevented:1,stopped:1});assert.equal(f.blocked,false,'shell blocking must not latch a nonexistent foreign surface');f.cleanup();
   }
+});
+
+test('launcher query double rejects wrong or invalid selectors instead of silently returning a button',async()=>{
+  const f=await fixture();
+  const selector=':scope > .platform-helper > button[aria-haspopup="dialog"][aria-expanded="false"]';
+  assert.equal(f.root.querySelector(selector),f.launcher);
+  // This is an exact selector-contract double, not a browser CSS parser.
+  // Unexpected selectors must fail the test, including valid but wrong selectors.
+  for(const wrong of [':scope > .wrong-helper > button[aria-haspopup="dialog"][aria-expanded="false"]',
+    ':scope > .platform-helper > button[aria-haspopup="dialog"][aria-expanded="true"]',
+    '.platform-helper button', '[']){
+    assert.throws(()=>f.root.querySelector(wrong),/unexpected launcher selector/);
+  }
+  f.launcher.expanded='true';assert.equal(f.root.querySelector(selector),null);
+  f.cleanup();
 });
