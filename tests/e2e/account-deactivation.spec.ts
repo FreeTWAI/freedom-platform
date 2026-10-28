@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 import {navigate} from './navigation.js';
@@ -36,7 +37,7 @@ test('committed deactivation with a lost response exits the member shell on retr
   const questions=page.locator('.quick-start .guild-question');await expect(questions.first()).toBeVisible();
   for(const question of await questions.all())await question.getByRole('radio').first().check();
   await page.getByRole('button',{name:'加入公會，開始參與',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true,level:1})).toBeVisible();await navigate(page,'我的名片');
+  await expect(page.getByRole('heading',{name:'會員首頁',exact:true,level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'停用帳號');
   const form=page.getByRole('form',{name:'停用帳號',exact:true});let attempts=0;
   const passwordForm=page.getByRole('form',{name:'修改密碼',exact:true});
   await expect(passwordForm).toBeVisible();
@@ -65,7 +66,7 @@ for(const [operation,conflict] of [['password',false],['sessions',false],['passw
   const questions=page.locator('.quick-start .guild-question');await expect(questions.first()).toBeVisible();
   for(const question of await questions.all())await question.getByRole('radio').first().check();
   await page.getByRole('button',{name:'加入公會，開始參與',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true,level:1})).toBeVisible();await navigate(page,'我的名片');
+  await expect(page.getByRole('heading',{name:'會員首頁',exact:true,level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'停用帳號');
   const nickname=page.getByLabel('社群顯示名稱',{exact:true});await nickname.fill('Unsaved profile draft');
   if(conflict){
     await e2eAuthPool.query('UPDATE users SET display_name=$1 WHERE email=$2',['Another device profile',email]);

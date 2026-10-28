@@ -11,6 +11,7 @@ import {PageTools} from '../PageTools';
 import type {PortalClient} from '../api';
 
 const AdminGitHubSetup=lazy(()=>import('./AdminGitHubSetup').then(module=>({default:module.AdminGitHubSetup})));
+const AdminCommunityCertification=lazy(()=>import('./AdminCommunityCertification').then(module=>({default:module.AdminCommunityCertification})));
 const AdminAuthorClaims=lazy(()=>import('./AdminAuthorClaims').then(module=>({default:module.AdminAuthorClaims})));
 const AdminStoreAdmissions=lazy(()=>import('./AdminStoreAdmissions').then(module=>({default:module.AdminStoreAdmissions})));
 const AdminReviewCenter=lazy(()=>import('./AdminReviewCenter').then(module=>({default:module.AdminReviewCenter})));
@@ -18,7 +19,7 @@ const AdminGuildWorkspace=lazy(()=>import('./GuildWorkspace').then(module=>({def
 const AdminGuildManagement=lazy(()=>import('./AdminGuildManagement').then(module=>({default:module.AdminGuildManagement})));
 
 type Admin = {admin_id:string;email:string;display_name:string;role:string;community_id:string};
-type Bootstrap = {admin:Admin;csrf_token:string;available_skill_books:{id:string;title:string}[];pending_guild_appointments?:{guild_key:string;name:string;state:'pending'|'bound';bound_user_id:string|null}[];summary:{members:number;active_members:number;pending_guild_applications:number;guilds:number;admins:number}};
+type Bootstrap = {community_certification_enabled?:boolean;admin:Admin;csrf_token:string;available_skill_books:{id:string;title:string}[];pending_guild_appointments?:{guild_key:string;name:string;state:'pending'|'bound';bound_user_id:string|null}[];summary:{members:number;active_members:number;pending_guild_applications:number;guilds:number;admins:number}};
 type AccessState='pending'|'ready'|'pending_removal'|'revoked';
 type MemberAdmin={admin_id:string;active:boolean;aggregate_version:number;access_state:AccessState};
 type Member = {platform_admin?:MemberAdmin|null;user_id:string;email:string;display_name:string;active:boolean;is_test_account:boolean;onboarding_required:boolean;onboarding_completed_at:string|null;onboarding_entry_mode?:'assessment'|'quick';aggregate_version:number;guilds:{guild_key:string;name:string}[]};
@@ -28,12 +29,12 @@ type AdminNomination = {aggregate_version?:number;access_state?:AccessState;user
 type Audit = {audit_id?:string;admin_name?:string;actor_email?:string;actor_name?:string;actor_display_name?:string;action:string;reason:string;target_ref?:string;target_id?:string;target_type?:string;created_at?:string;at?:string};
 type ClientError = {error_id:string;user_id:string;display_name:string;action:string;error_code:string;http_status:number|null;created_at:string};
 type PendingEvent={event_id:string;title:string;description:string;organizer_name:string;guild_name:string|null;starts_at:string;location:string;aggregate_version:number};
-type AdminTab = 'store-admissions'|'members'|'guild-applications'|'guilds'|'admins'|'author-claims'|'review-center'|'guild-workspace'|'events'|'github'|'audit'|'errors';
+type AdminTab = 'community-certifications'|'store-admissions'|'members'|'guild-applications'|'guilds'|'admins'|'author-claims'|'review-center'|'guild-workspace'|'events'|'github'|'audit'|'errors';
 type ApplicationState='pending'|'approved'|'declined'|'all';
 const accessLabel=(state?:AccessState)=>state==='ready'?'可登入管理頁':state==='pending'?'登入權限同步中':state==='pending_removal'?'停用同步中':state==='revoked'?'登入權限已停用':'登入權限待確認';
 const adminGroups:{label:string;items:[AdminTab,string][] }[]=[
   {label:'商店與交易',items:[['store-admissions','商店准入']]},
-  {label:'人員與權限',items:[['members','會員管理'],['admins','管理員名單'],['author-claims','作者認領審核']]},
+  {label:'人員與權限',items:[['members','會員管理'],['admins','管理員名單'],['author-claims','作者認領審核'],['community-certifications','社群認證審核']]},
   {label:'公會與活動',items:[['guilds','公會管理'],['guild-applications','公會申請'],['guild-workspace','會長與維護者'],['events','公開活動審核']]},
   {label:'系統',items:[['github','GitHub 連結'],['audit','操作紀錄'],['errors','系統錯誤日誌']]},
   {label:'專案維護',items:[['review-center','PR 審核']]},
@@ -47,6 +48,8 @@ function locationTab():AdminTab{
 const moduleOptions=[['guilds','公會交流'],['engagement','社群參與'],['positioning','定位與陪跑'],['supplier','供貨'],['retail','商店與銷售'],['opensource','開源作品'],['marketing','行銷'],['workbench','互助協作']];
 export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
   const client=useRef(new AdminClient()).current;
+  const certificationGuards=useRef(new Set<()=>boolean>());
+  const registerCertificationLeave=useCallback((guard:()=>boolean)=>{certificationGuards.current.add(guard);return()=>{certificationGuards.current.delete(guard);};},[]);
   const [bootstrap,setBootstrap]=useState<Bootstrap|null>(null),[bootError,setBootError]=useState(''),[booting,setBooting]=useState(true),[tab,setTab]=useState<AdminTab>(locationTab);
   const [githubParameters]=useState(()=>window.location.pathname==='/admin/github/callback'?new URLSearchParams(window.location.search):null);
   const githubCompletion=useRef<{owner:string;promise:Promise<SetupStatus>}|null>(null);
@@ -103,6 +106,7 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
   }
   function selectTab(next:AdminTab,push=true){
     const changed=next!==view.current.tab;
+    if(changed&&[...certificationGuards.current].some(guard=>!guard())){setError('請先確認社群認證審核結果，再切換工作區。');if(!push){const url=new URL(window.location.href);url.searchParams.set('view',view.current.tab);window.history.replaceState(null,'',url);}return;}
     if(changed){++loadSequence.current;view.current.tab=next;setTab(next);setError('');setNotice('');focusContent.current=true;}
     if(push&&changed){const url=new URL(window.location.href);url.searchParams.set('view',next);window.history.pushState(null,'',url);}
     if(mobileNav)closeNavigation();setNavQuery('');
@@ -128,7 +132,7 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
   async function memberSearch(event:FormEvent){event.preventDefault();appliedQuery.current=query.trim();await load();}
 
   const refreshSummary=()=>void start();
-  const filteredGroups=adminGroups.map(group=>({...group,items:group.items.filter(([,label])=>`${group.label} ${label}`.toLocaleLowerCase().includes(navQuery.trim().toLocaleLowerCase()))})).filter(group=>group.items.length);
+  const filteredGroups=adminGroups.map(group=>({...group,items:group.items.filter(([key])=>key!=='community-certifications'||bootstrap?.community_certification_enabled===true).filter(([,label])=>`${group.label} ${label}`.toLocaleLowerCase().includes(navQuery.trim().toLocaleLowerCase()))})).filter(group=>group.items.length);
   const credentialsMatch=`系統 系統憑證`.includes(navQuery.trim());
   const navigation=<nav className="admin-tabs" aria-label="平台管理選單"><div className="admin-nav-heading"><strong>管理工作區</strong>{mobileNav&&<button type="button" className="btn btn-ghost" aria-label="關閉管理選單" onClick={closeNavigation}>×</button>}</div><label className="admin-nav-search"><span>搜尋管理功能</span><input type="search" value={navQuery} onChange={event=>setNavQuery(event.target.value)} placeholder="找功能…" maxLength={60}/></label>{filteredGroups.map(group=><div className="admin-nav-group" key={group.label} role="group" aria-label={group.label}><span className="admin-nav-label">{group.label}</span><div className="admin-nav-items">{group.items.map(([key,label])=><button type="button" className={tab===key?'admin-nav-link is-current':'admin-nav-link'} aria-current={tab===key?'page':undefined} aria-label={label} key={key} onClick={()=>selectTab(key)}><span>{label}</span>{key==='guild-applications'&&bootstrap&&bootstrap.summary.pending_guild_applications>0&&<span className="admin-nav-count">{bootstrap.summary.pending_guild_applications}</span>}</button>)}</div></div>)}{credentialsMatch&&<button type="button" className="admin-nav-link" onClick={openCredentials}>系統憑證</button>}{!filteredGroups.length&&!credentialsMatch&&<p className="muted">找不到符合的管理功能。</p>}</nav>;
   return <main className="admin-layout admin-workspace"><header className="admin-header"><div className="brand"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="52" height="40"/><div><p className="eyebrow">FREEDOM WORKSHOP</p><h1>平台管理</h1></div></div><div className="admin-page-actions"><PageTools pageId="admin" client={memberClient} compact/><a className="btn btn-ghost" href="/">返回自由工坊</a></div></header>
@@ -152,6 +156,7 @@ export function AdminPanel({memberClient}:{memberClient?:PortalClient}={}){
       {tab==='guilds'&&<PageLoadBoundary label={adminLabels[tab]}><AdminGuildManagement client={client} guilds={guilds} busy={busy} loading={loading} error={accessExpired?'':error} onReload={()=>load()} onProfile={(guild,body)=>mutate(`/guilds/${encodeURIComponent(guild.guild_key)}/profile`,body,guild.catalog_version)} onExpert={(guild,userId,active,reason,version)=>mutate(`/guilds/${encodeURIComponent(guild.guild_key)}/experts`,{user_id:userId,active,reason},version)} onSave={(guild,userId,reason)=>mutate(`/guilds/${encodeURIComponent(guild.guild_key)}/master`,{user_id:userId,reason},guild.officer_version)}/></PageLoadBoundary>}
       {tab==='events'&&<section className="stack"><div className="card-head"><h2>公開活動審核</h2><button className="btn btn-ghost" type="button" disabled={busy||loading} onClick={()=>void load()}>更新</button></div><p className="muted">所有會員都能提交。平台管理員可審核全部活動；指定公會的現任會長也可審核該公會活動。審核後會發系統公告與通知。</p><div className="card-grid">{pendingEvents.map(item=><article key={item.event_id} className="card stack"><div className="card-head"><h3>{item.title}</h3><span className="badge">待審核</span></div><p className="multiline-text">{item.description}</p><p className="muted">發佈者：{item.organizer_name} · 主辦：{item.guild_name??'未指定公會'} · 開始：{new Date(item.starts_at).toLocaleString('zh-TW')}</p><p className="muted">地點或連結：{item.location}</p><EventReviewForm busy={busy} onReview={(decision,reason)=>mutate(`/events/${item.event_id}/review`,{decision,reason},item.aggregate_version)}/></article>)}</div>{!loading&&!pendingEvents.length&&!error&&<p className="muted">目前沒有待審核活動。</p>}</section>}
       {tab==='admins'&&<section className="stack" id="admin-list"><div className="card-head"><h2>管理員名單</h2><button type="button" className="btn btn-ghost" disabled={busy||loading} onClick={()=>{setAccessRefresh(value=>value+1);void load();}}>更新登入狀態</button></div><p className="muted">管理員擁有平台全部管理權限。調整管理權限不會變更會員帳號狀態。</p><div className="card-grid">{admins.map((admin,index)=><article className="card stack admin-permission-card" key={admin.admin_id??index}><div className="card-head"><h3>{admin.display_name??'待確認人選'}</h3><span className="badge">{admin.active?'管理權限已啟用':'管理權限已停用'}</span></div><p>{admin.email??'登入身分待確認'}</p><p className="muted">超級管理員 · 平台全部管理權限</p><p className={`admin-access-state admin-access-${admin.access_state??'unknown'}`}>{accessLabel(admin.access_state)}</p>{admin.access_state==='pending_removal'&&<p className="field-hint">管理操作已停用，正在更新登入名單。</p>}<p className="field-hint">{admin.identity_binding==='verified_email_match'?'有已驗證的同信箱會員帳號':admin.identity_binding==='unverified_email_match'?'同信箱會員尚未驗證，不視為身分綁定':'尚未建立同信箱會員帳號'}。</p>{admin.admin_id===bootstrap.admin.admin_id?<p className="field-hint">目前登入的管理員</p>:admin.admin_id&&admin.aggregate_version&&<AdminPermissionControl key={`${admin.admin_id}-${admin.aggregate_version}`} action={admin.active?'deactivate':'activate'} person={{display_name:admin.display_name??'管理員',email:admin.email??''}} busy={busy} onSubmit={reason=>mutate(`/admins/${admin.admin_id}/status`,{active:!admin.active,reason,confirmed:true},admin.aggregate_version)}/>}</article>)}</div></section>}
+      {tab==='community-certifications'&&bootstrap.community_certification_enabled===true&&<PageLoadBoundary label={adminLabels[tab]}><AdminCommunityCertification client={client} registerLeave={registerCertificationLeave}/></PageLoadBoundary>}
       {tab==='author-claims'&&<PageLoadBoundary label={adminLabels[tab]}><AdminAuthorClaims client={client} busy={busy} onMutate={mutate}/></PageLoadBoundary>}
       {tab==='store-admissions'&&<PageLoadBoundary label={adminLabels[tab]}><AdminStoreAdmissions client={client} busy={busy} onMutate={mutate}/></PageLoadBoundary>}
       {tab==='review-center'&&<PageLoadBoundary label={adminLabels[tab]}><AdminReviewCenter client={client} busy={busy} onMutate={mutate}/></PageLoadBoundary>}

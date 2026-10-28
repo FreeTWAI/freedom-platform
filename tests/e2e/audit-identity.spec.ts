@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import { mkdirSync } from 'node:fs';
 import { navigate, openHomeGuide } from './navigation.js';
 import { test, expect, type Page } from './fixtures.js';
@@ -126,18 +127,20 @@ for (const [label, viewport] of viewports) {
 test('account contacts align each field with its choices and state the privacy rules once', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await register(page, '名片審查'); await onboard(page);
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'誰能看到我','更多個人資料（選填）','查看目前的會員名片');
   await expect(page.getByRole('combobox', { name: '我是（選填）', exact: true }).locator('option')).toHaveText(['不顯示', '男', '女', '外星人', 'AI']);
   await expect(page.getByLabel('社群顯示名稱', { exact: true })).toBeVisible();
-  await expect(page.getByText(/「平台公開」涵蓋所有已登入的工坊會員/)).toHaveCount(1);
+  await expect(page.getByText(/「平台公開」是所有已登入的工坊會員/)).toHaveCount(1);
   await expect(page.getByText(/社群帳號由本人填寫，尚未驗證身分/)).toHaveCount(1);
   for (const name of ['聯絡 E-mail', 'Discord 帳號', 'GitHub 帳號', 'LINE ID']) {
     const input = await page.getByRole('textbox', { name, exact: true }).boundingBox();
     const choices = page.getByRole('group', { name: `${name}可見範圍`, exact: true });
     await expect(choices).toHaveAttribute('aria-describedby', 'contact-audience-hint');
     const box = await choices.boundingBox();
-    expect(Math.abs(input!.y - box!.y), `${name} field floats away from its choices`).toBeLessThan(48);
-    expect(box!.height, `${name} choices stay compact`).toBeLessThan(160);
+    const gap=box!.y-(input!.y+input!.height);
+    expect(gap, `${name} choices follow their contact field`).toBeGreaterThanOrEqual(0);
+    expect(gap, `${name} choices stay close to their field`).toBeLessThanOrEqual(80);
+    for(const choice of await choices.locator('label').all())expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
   // Checking public still explains why narrower audiences are disabled.
   const line = page.getByRole('group', { name: 'LINE ID可見範圍', exact: true });

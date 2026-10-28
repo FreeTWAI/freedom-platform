@@ -21,7 +21,8 @@
     "modules/identity-membership/auth-pruning.ts",
     "tests/runtime/auth-pruning.test.ts",
     "tests/worker/source-network.test.ts",
-    "apps/portal-web/src/modules/AvatarEditor.tsx"
+    "apps/portal-web/src/modules/AvatarEditor.tsx",
+    "tests/e2e/avatar.spec.ts"
   ],
   "public_exports": [
     "modules/identity-membership/members.ts",

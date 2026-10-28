@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
@@ -36,7 +37,7 @@ test('mobile newcomer sees all guilds, can filter and enters after one choice wi
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('a shared card opens anonymously, survives reload, rotates and can be disabled',async({page,browser})=>{
-  await signup(page,'分享名片作者');await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();await navigate(page,'我的名片');
+  await signup(page,'分享名片作者');await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
   const settings=page.getByRole('region',{name:'分享我的工坊名片'});
   await expect(settings.getByRole('checkbox',{name:'在分享頁顯示我的頭像'})).not.toBeChecked();
   await settings.getByRole('button',{name:'建立分享連結'}).click();
@@ -54,7 +55,7 @@ test('a shared card opens anonymously, survives reload, rotates and can be disab
   }finally{await guestContext.close();}
 });
 test('invited visitor signs up, returns to the card and becomes a friend only after acceptance',async({page,browser})=>{
-  await signup(page,'邀請發起人');await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();await navigate(page,'我的名片');
+  await signup(page,'邀請發起人');await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
   const sharing=page.getByRole('region',{name:'分享我的工坊名片'});await sharing.getByRole('button',{name:'建立分享連結'}).click();const openCard=sharing.getByRole('link',{name:'開啟名片',exact:true});await expect(openCard).toBeVisible();const url=await openCard.getAttribute('href');
   const context=await browser.newContext(),guest=await context.newPage();let releaseAccept=()=>{};
   try{

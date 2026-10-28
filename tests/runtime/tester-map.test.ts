@@ -80,6 +80,9 @@ test('tester-map: features cover every flag in /api/v1/site and mark observed-of
   for (const feature of features) assert.equal(isDefaultOff(feature), feature.flag !== undefined && TESTER_FLAGS[feature.flag] === 'off', feature.id);
   // Reporting is off, so the map cannot send testers to in-site reporting.
   assert.equal(isDefaultOff(features.find(feature => feature.id === 'people.reporting')!), true);
+  assert.equal(TESTER_FLAGS.community_certification_enabled, 'off');
+  assert.equal(isDefaultOff(features.find(feature => feature.id === 'profile.community-certification')!), true);
+  assert.equal(TESTER_COVERAGE['profile.community-certification'].status, '未測');
   assert.ok(features.some(feature => feature.access === 'admin') && features.some(feature => feature.access === 'guild-manager'));
 });
 

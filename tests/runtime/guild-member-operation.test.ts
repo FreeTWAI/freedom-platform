@@ -14,7 +14,9 @@ const auth=between(apiSource,'export class PortalClient {','  onUnauthorized:');
 const AuthClient=runInNewContext(stripTypeScriptTypes(auth.replace('export ','')+'}')+';PortalClient',{Map});
 const errorCode=between(apiSource,'export class ApiError extends Error {','export type InstanceSelectionCandidate');
 const ApiFailure=runInNewContext(stripTypeScriptTypes(errorCode.replace('export ',''))+';ApiError',{Error});
-const mutationCode=shared.slice(shared.indexOf('export function useModuleMutation(')).replace(/^export /gm,'');
+// Preserve the real module-level decoder history used on successful mutations.
+const mutationPrelude=between(shared,'const decoderUnknownRequests =','export function useModuleMutation(');
+const mutationCode=(mutationPrelude+shared.slice(shared.indexOf('export function useModuleMutation('))).replace(/^export /gm,'');
 assert.ok(shared.indexOf('export function useModuleMutation(')>=0);
 const loadCode=between(source,'  const load = useCallback(','\n  useEffect(');
 const applyCode=between(source,'  async function apply(','\n  function submit(');

@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
 import {Pool} from 'pg';
@@ -154,7 +155,7 @@ test('a legacy member completes profile and positioning todos through the real U
     expect(grants.length).toBe(joined.skill_books.length);expect(grants.every(row=>row.guild_key===GUILD)).toBe(true);
 
     // One private social link completes the task; it never needs to be public.
-    await follow(page,'social-link','前往我的名片新增連結','account','我的名片');
+    await follow(page,'social-link','前往我的名片新增連結','account','我的名片');await openAccountSettings(page,'個人網站與社群連結');
     const links=page.locator('.social-links-editor');
     await links.getByRole('button',{name:'＋ 新增連結',exact:true}).click();
     const form=links.getByRole('form',{name:'新增社群連結',exact:true});await expect(form.getByLabel('不公開',{exact:true})).toBeChecked();
@@ -168,7 +169,7 @@ test('a legacy member completes profile and positioning todos through the real U
     await expectStates(page,{'social-link':'done',avatar:'todo',onboarding:'todo'});await expect(cta(page,'social-link','到我的名片管理社群連結')).toBeVisible();
 
     // A real avatar upload through the account editor.
-    await follow(page,'avatar','前往我的名片上傳頭像','account','我的名片');
+    await follow(page,'avatar','前往我的名片上傳頭像','account','我的名片');await openAccountSettings(page,'更換頭像');
     const editor=page.locator('.avatar-editor'),photo=await sharp({create:{width:64,height:64,channels:3,background:'#c4ff20'}}).png().toBuffer();
     await editor.getByLabel('選擇頭像',{exact:true}).setInputFiles({name:'synthetic-todos-avatar.png',mimeType:'image/png',buffer:photo});
     await expect(editor.getByRole('img',{name:'頭像預覽',exact:true})).toBeVisible();

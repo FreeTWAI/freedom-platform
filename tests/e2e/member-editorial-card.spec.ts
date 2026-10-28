@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync,readFileSync} from 'node:fs';
 import sharp from 'sharp';
@@ -18,7 +19,7 @@ async function signup(page:Page){
   await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('Hao');await page.getByLabel('電子郵件',{exact:true}).fill(`editorial-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-editorial-password');await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
-  await quickJoin(page);await navigate(page,'我的名片');
+  await quickJoin(page);await navigate(page,'我的名片');await openAccountSettings(page,'更換頭像','分享名片設定（免登入）','查看目前的會員名片');
 }
 
 test('real profile fills the template, opt-in QR and downloaded image follow rotation and revocation',async({page,browser,e2eAuthPool})=>{
@@ -71,7 +72,7 @@ test('real profile fills the template, opt-in QR and downloaded image follow rot
 test('long names, absent avatar and empty optional fields fit mobile; profile edits update the preview',async({page,browser})=>{
   test.setTimeout(120000);await signup(page);
   const settings=page.getByRole('region',{name:'分享我的工坊名片'}),preview=settings.getByRole('complementary',{name:'名片預覽'}),longName='W'.repeat(60);
-  await page.locator('.account-settings').getByLabel('社群顯示名稱',{exact:true}).fill(longName);await page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true}).click();
+  await page.locator('.account-settings').getByLabel('社群顯示名稱',{exact:true}).fill(longName);await page.getByRole('button',{name:'儲存修改',exact:true}).click();
   await expect(preview.locator('.ecard-name')).toHaveText(longName);await settings.getByRole('button',{name:'建立分享連結',exact:true}).click();const url=await shareUrl(settings);
   const privateCard=page.locator('.member-profile-card');
   for(const theme of ['light','dark','versefolk']){

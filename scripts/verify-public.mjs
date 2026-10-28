@@ -107,7 +107,7 @@ async function navigate(page, name) {
   if (['我的名片', '待辦清單'].includes(name)) {
     const settings=page.getByRole('button',{name:'設定',exact:true});
     if(await settings.getAttribute('aria-expanded')!=='true')await settings.click();
-    await page.getByRole('menuitem',{name,exact:true}).click();
+    await page.getByRole('menuitem',{name:name==='我的名片'?'資料與帳號設定':name,exact:true}).click();
     return;
   }
   const menu=page.getByRole('button',{name:'開啟選單',exact:true});
@@ -119,6 +119,21 @@ async function navigate(page, name) {
   const group=target.locator('xpath=ancestor::details[1]');
   if(await group.count()&&!await group.evaluate(element=>element.open))await group.locator(':scope > summary').click();
   await target.click();
+}
+
+// Open only the named account disclosures through their real user controls.
+async function openAccountSettings(page, ...labels) {
+  await expect(page.locator('.account-panel')).toBeVisible();
+  for (const label of labels) {
+    const target = page.locator('.account-panel').getByText(label, { exact: true }).locator('xpath=ancestor-or-self::summary/parent::details');
+    await expect(target).toHaveCount(1);
+    const parents = target.locator('xpath=ancestor::details');
+    for (let index = 0; index < await parents.count(); index++) {
+      const parent = parents.nth(index);
+      if (!await parent.evaluate(element => element.open)) await parent.locator(':scope > summary').click();
+    }
+    if (!await target.evaluate(element => element.open)) await target.locator(':scope > summary').click();
+  }
 }
 
 // 登出 is the last item of the profile menu behind 設定.
@@ -464,6 +479,7 @@ try {
   stage = 'member card and privacy';
   await navigate(page, '我的名片');
   await expect(page.getByRole('heading', { name: '我的名片', level: 1, exact: true })).toBeVisible();
+  await openAccountSettings(page, '更換頭像', '查看目前的會員名片');
   const avatarFixture=await sharp({create:{width:320,height:240,channels:3,background:'#3044ff'}}).png().toBuffer();
   const editor=page.locator('.avatar-editor');
   await editor.getByLabel('選擇頭像',{exact:true}).setInputFiles({name:'synthetic-verification.png',mimeType:'image/png',buffer:avatarFixture});
@@ -474,18 +490,20 @@ try {
   expect(typeof avatarUrl).toBe('string');
   expect((await anonymous.get(origin+avatarUrl)).status()).toBe(401);
   await page.reload({waitUntil:'networkidle'});
+  await openAccountSettings(page, '更換頭像', '查看目前的會員名片');
   await expect(page.locator('.member-card .member-avatar-photo img')).toHaveAttribute('src',avatarUrl);
   await expect.poll(()=>page.locator('.member-card .member-avatar-photo img').evaluate(image=>image.naturalWidth)).toBe(256);
   await editor.getByRole('button',{name:'移除頭像',exact:true}).click();
   await expect(editor.getByRole('status')).toHaveText('頭像已移除。');
   expect((await page.request.get(origin+avatarUrl)).status()).toBe(404);
   console.log('Own avatar HTTPS upload, normalized image, private visibility, reload and removal: PASS');
+  await openAccountSettings(page, '誰能看到我');
   await page.getByLabel('Discord 帳號', { exact: true }).fill(privateContact);
   const audiences = page.getByRole('group', { name: 'Discord 帳號可見範圍', exact: true });
   await audiences.getByRole('checkbox', { name: '平台好友', exact: true }).check();
   await audiences.getByRole('checkbox', { name: '公會夥伴', exact: true }).check();
-  await page.getByRole('button', { name: '保存個人資料與公開範圍', exact: true }).click();
-  await expect(page.getByText('個人資料與每一項聯絡方式的可見範圍已保存。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '儲存修改', exact: true }).click();
+  await expect(page.getByText('修改已儲存。', { exact: true })).toBeVisible();
   const accountResponse = await page.request.get(origin + '/api/v1/me/account');
   expect(accountResponse.status()).toBe(200);
   const account = await accountResponse.json();
@@ -516,6 +534,7 @@ try {
   const visibleSocial=await (await page.request.get(origin+'/api/v1/members/'+record.user_id+'/social-links')).json();
   expect(visibleSocial.total).toBe(2);
   await page.reload({waitUntil:'networkidle'});
+  await openAccountSettings(page, '查看目前的會員名片');
   await expect(page.locator('.member-card').getByRole('link',{name:/部署驗證粉絲團二・已更新/})).toBeVisible();
   await expect(page.locator('.member-card').getByRole('link',{name:/部署驗證 IG/})).toBeVisible();
   console.log('Multiple same-platform social links, paged persistence, individual edit/delete and anonymous privacy: PASS');
@@ -857,22 +876,26 @@ try {
   if (renewedCookie) secrets.push(renewedCookie.value);
   expect(Boolean(renewedCookie?.secure && renewedCookie?.httpOnly && renewedCookie?.sameSite === 'Strict')).toBe(true);
   await navigate(page, '我的名片');
+  await openAccountSettings(page, '誰能看到我');
   await expect(page.getByLabel('Discord 帳號', { exact: true })).toHaveValue(privateContact);
   await expect(page.getByRole('group', { name: 'Discord 帳號可見範圍', exact: true }).getByRole('checkbox', { name: '平台好友', exact: true })).toBeChecked();
   await expect(page.getByRole('group', { name: 'Discord 帳號可見範圍', exact: true }).getByRole('checkbox', { name: '公會夥伴', exact: true })).toBeChecked();
   await page.reload({ waitUntil: 'networkidle' });
+  await openAccountSettings(page, '誰能看到我');
   await expect(page.getByLabel('Discord 帳號', { exact: true })).toHaveValue(privateContact);
   await noVisibleError();
   await noOverflow('Reloaded mobile account overflow');
   stage='community display name and optional member-card label';
+  await openAccountSettings(page, '更多個人資料（選填）', '查看目前的會員名片');
   const renamed=nickname+'・名片驗證';
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(renamed);
   const identity=page.getByRole('combobox',{name:'我是（選填）',exact:true});
   await expect(identity.locator('option')).toHaveText(['不顯示','男','女','外星人','AI']);
   await identity.selectOption('alien');
-  await page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true}).click();
+  await page.getByRole('button',{name:'儲存修改',exact:true}).click();
   await expect(page.locator('.member-card').getByLabel('自我介紹：外星人',{exact:true})).toBeVisible();
   await page.reload({waitUntil:'domcontentloaded'});
+  await openAccountSettings(page, '更多個人資料（選填）', '查看目前的會員名片');
   await expect(identity).toHaveValue('alien');await expect(page.getByLabel('社群顯示名稱',{exact:true})).toHaveValue(renamed);
   const renamedSession=await (await page.request.get(origin+'/api/v1/session')).json();
   expect(renamedSession.user.display_name).toBe(renamed);
@@ -882,8 +905,8 @@ try {
   await page.setViewportSize({width:320,height:844});await noOverflow('Optional member identity mobile overflow');
   await screenshot('public-member-identity-mobile.png');
   await identity.selectOption('');await page.getByLabel('社群顯示名稱',{exact:true}).fill(nickname);
-  await page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true}).click();
-  await expect(page.getByText('個人資料與每一項聯絡方式的可見範圍已保存。',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'儲存修改',exact:true}).click();
+  await expect(page.getByText('修改已儲存。',{exact:true})).toBeVisible();
   await expect(page.locator('.member-card').getByLabel('自我介紹：外星人',{exact:true})).toHaveCount(0);
   const clearedProfile=await (await page.request.get(origin+'/api/v1/me/account')).json();
   expect(clearedProfile.identity_label).toBeNull();expect(clearedProfile.nickname).toBe(nickname);

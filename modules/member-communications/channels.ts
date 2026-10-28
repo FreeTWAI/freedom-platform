@@ -214,7 +214,7 @@ export async function channelActivity(pool:Pool,actor:Actor,rawKind:string,rawKe
   });
 }
 
-export async function sendChannelMessage(pool:Pool,input:Command,rawKind:string,rawKey:string):Promise<ChannelMessage>{
+export async function sendChannelMessage(pool:Pool,input:Command,rawKind:string,rawKey:string,onCreated?:(q:PoolClient,community:string,id:string)=>Promise<void>):Promise<ChannelMessage>{
   const target=room(rawKind,rawKey),body=ChannelMessageInput.parse(input.body),actor=input.actor;
   // Receipts keep only the message id, so message text never enters command
   // receipts, journals or outbox. Membership is rechecked before any replay.
@@ -238,6 +238,7 @@ export async function sendChannelMessage(pool:Pool,input:Command,rawKind:string,
       [actor.community_id,target.kind,target.key])).rows[0].last_sequence;
     const row=(await q.query(`INSERT INTO member_channel_messages(community_id,kind,channel_key,sequence,sender_ref,body,sticker_id,reply_to_message_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp()) RETURNING message_id`,
       [actor.community_id,target.kind,target.key,sequence,actor.user_id,storedMessageBody(body),body.sticker_id??null,body.reply_to_message_id??null])).rows[0];
+    if(target.kind==='world'&&onCreated)await onCreated(q,actor.community_id,row.message_id);
     return {message_id:row.message_id as string};
   });
   // Read back under a fresh membership check, so a leave after the write cannot
