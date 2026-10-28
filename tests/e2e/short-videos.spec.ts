@@ -14,7 +14,7 @@ async function login(page: Page) {
 test.describe('Short feed ON',()=>{
 test.use({memberFeatures:{shortVideosEnabled:true}});
 test('members swipe through shared YouTube links in a scrollbar-free feed; players come only from the allowed origin and other sources never get one', async ({page, e2eAuthPool, baseURL}, testInfo) => {
-  const {violations, thirdPartyReports, drain} = await collectShortVideoCsp(page, baseURL!);
+  const {violations, thirdPartyReports, lifecycleDiagnostics, drain} = await collectShortVideoCsp(page, baseURL!);
   await login(page);
   const base = (await e2eAuthPool.query('SELECT community_id, user_id AS author_user_id FROM users WHERE email=$1', ['maker@local.test'])).rows[0];
   expect(base).toBeTruthy();
@@ -144,6 +144,7 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally {
     try {
+      await testInfo.attach('csp-lifecycle-diagnostics', {body: JSON.stringify(lifecycleDiagnostics), contentType: 'application/json'});
       await testInfo.attach('third-party-csp-reports', {body: JSON.stringify(thirdPartyReports), contentType: 'application/json'});
     } finally {
       if (ids.length) await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
@@ -170,7 +171,7 @@ test.describe('Short CSP collector browser controls', () => {
       frame.src = 'https://www.youtube-nocookie.com/embed/aaaaaaaaaaa'; document.body.append(frame);
     });
     await expect.poll(() => collected.violations.some(event => event.mainFrame && event.disposition === 'enforce'
-      && event.effectiveDirective === 'frame-src' && event.blockedURI.startsWith('https://www.youtube-nocookie.com'))).toBe(true);
+      && event.effectiveDirective === 'frame-src' && new URL(event.blockedURI).origin === 'https://www.youtube-nocookie.com')).toBe(true);
     expect(collected.thirdPartyReports).toEqual([]);
   });
   });
@@ -211,6 +212,40 @@ test.describe('Short CSP collector browser controls', () => {
       && event.effectiveDirective.startsWith('script-src'))).toBe(true);
     expect(collected.thirdPartyReports).toEqual([]);
   });
+
+  for (const target of ['platform', 'youtube'] as const) for (const failure of ['missing-init', 'detach'] as const) {
+    test(`real ${target} inherited blank ${failure} preserves the platform checkpoint boundary`, async ({page, baseURL}) => {
+      const collected = await collectShortVideoCsp(page, baseURL!);
+      const fixtureURL = `${baseURL}/__short-csp-lifecycle-control`;
+      const childURL = target === 'platform' ? `${baseURL}/__short-csp-child`
+        : 'https://www.youtube-nocookie.com/embed/aaaaaaaaaaa';
+      await page.route(childURL, route => route.fulfill({contentType: 'text/html', body: '<!doctype html><body></body>'}));
+      await page.route(fixtureURL, route => route.fulfill({contentType: 'text/html',
+        body: `<!doctype html><iframe src="${childURL}"></iframe>`}));
+      await page.goto(fixtureURL);
+      const child = page.frames().find(frame => frame.url() === childURL)!;
+      await child.evaluate(() => { document.body.append(document.createElement('iframe')); });
+      await expect.poll(() => child.childFrames().length).toBe(1);
+      const blank = child.childFrames()[0];
+      if (failure === 'missing-init') {
+        await blank.evaluate(() => { delete (window as unknown as {drainShortVideoCsp?: unknown}).drainShortVideoCsp; });
+      } else {
+        const detached = page.waitForEvent('framedetached', frame => frame === blank);
+        await child.evaluate(() => { document.querySelector('iframe')!.remove(); });
+        await detached;
+      }
+      if (target === 'platform') {
+        await expect(collected.drain()).rejects.toThrow(failure === 'missing-init'
+          ? 'collector is not initialized' : 'without an observation checkpoint');
+      } else {
+        await collected.drain();
+        expect(collected.lifecycleDiagnostics.some(item => item.scope === 'external'
+          && item.reason === (failure === 'missing-init' ? 'missing-init' : 'detached')
+          && item.frameOrigin === 'blank')).toBe(true);
+      }
+      expect(collected.violations).toEqual([]);
+    });
+  }
 
   for (const target of ['platform', 'youtube'] as const) for (const disposition of ['enforce', 'report'] as const) {
     test(`real ${target} ${disposition} script violation is classified without console text`, async ({page, baseURL}) => {

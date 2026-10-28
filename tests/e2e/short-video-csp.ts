@@ -30,11 +30,38 @@ export function classifyShortVideoCsp(record: ShortVideoCspRecord, platformURL: 
 export async function collectShortVideoCsp(page: Page, platformURL: string) {
   const violations: ShortVideoCspRecord[] = [], thirdPartyReports: ShortVideoCspRecord[] = [];
   const drainedFrames = new WeakSet<Frame>();
-  let undrainedDetachment = false;
+  type Scope = 'main' | 'platform' | 'external' | 'unknown';
+  type Observation = {scope: Scope; frameOrigin: string; parentOrigin: string};
+  const observations = new WeakMap<Frame, Observation>();
+  const lifecycleDiagnostics: (Observation & {reason: 'detached' | 'missing-init'})[] = [];
+  let undrainedDetachment: Observation | undefined;
+  const platformOrigin = origin(platformURL);
+  // Cache ancestry while attached: Playwright may clear parentFrame on detach.
+  // These labels contain no URL paths, query strings, fragments or credentials.
+  const remember = (frame: Frame): Observation => {
+    const parent = frame.parentFrame();
+    const parentObservation = parent ? observations.get(parent) ?? remember(parent) : undefined;
+    const frameOrigin = origin(frame.url());
+    const blank = frame.url() === 'about:blank' || frame.url() === 'about:srcdoc' || frame.url() === '';
+    const scope: Scope = frame === page.mainFrame() ? 'main' : !platformOrigin ? 'unknown'
+      : frameOrigin ? (frameOrigin === platformOrigin ? 'platform' : 'external')
+      : blank && parentObservation ? (parentObservation.scope === 'main' ? 'platform' : parentObservation.scope)
+      : 'unknown';
+    const observation = {scope, frameOrigin: frameOrigin ?? (blank ? 'blank' : 'unknown'),
+      parentOrigin: parentObservation?.frameOrigin ?? 'none'};
+    observations.set(frame, observation);
+    return observation;
+  };
+  for (const frame of page.frames()) remember(frame);
+  page.on('frameattached', remember);
   page.on('framedetached', frame => {
-    if (!drainedFrames.has(frame)) undrainedDetachment = true;
+    const observation = observations.get(frame) ?? remember(frame);
+    if (!drainedFrames.has(frame)) {
+      if (observation.scope === 'external') lifecycleDiagnostics.push({...observation, reason: 'detached'});
+      else undrainedDetachment ??= observation;
+    }
   });
-  page.on('framenavigated', frame => { drainedFrames.delete(frame); });
+  page.on('framenavigated', frame => { drainedFrames.delete(frame); remember(frame); });
   await page.exposeBinding('recordShortVideoCsp', (source, event: ShortVideoCspEvent) => {
     drainedFrames.delete(source.frame);
     const record = {...event, frameURL: source.frame.url(), mainFrame: source.frame === page.mainFrame()};
@@ -66,19 +93,41 @@ export async function collectShortVideoCsp(page: Page, platformURL: string) {
       } catch { deliveryFailed = true; }
     });
   });
-  const drain = async () => {
-    if (undrainedDetachment) throw new Error('Short CSP frame detached without an observation checkpoint');
-    for (const frame of page.frames()) {
-      // Missing initialization, rejected delivery or detachment during the barrier
-      // must fail, not turn an incomplete observation into an empty-array pass.
-      await frame.evaluate(async () => {
-        const drain = (window as unknown as {drainShortVideoCsp?: () => Promise<void>}).drainShortVideoCsp;
-        if (!drain) throw new Error('Short CSP collector is not initialized');
-        await drain();
-      });
-      drainedFrames.add(frame);
-    }
-    if (undrainedDetachment) throw new Error('Short CSP frame detached without an observation checkpoint');
+  const assertLifecycle = () => {
+    if (undrainedDetachment) throw new Error(`Short CSP frame detached without an observation checkpoint: ${JSON.stringify(undrainedDetachment)}`);
   };
-  return {violations, thirdPartyReports, drain};
+  const drain = async () => {
+    assertLifecycle();
+    for (const frame of page.frames()) {
+      const observation = observations.get(frame) ?? remember(frame);
+      // All observable events retain the same strict classification. Completeness
+      // is required for main/platform/unknown documents, not transient external
+      // player documents. No full external lifecycle guarantee is claimed.
+      let initialized: boolean;
+      try {
+        initialized = await frame.evaluate(async () => {
+          const drain = (window as unknown as {drainShortVideoCsp?: () => Promise<void>}).drainShortVideoCsp;
+          if (!drain) return false;
+          await drain();
+          return true;
+        });
+      } catch (error) {
+        if (observation.scope === 'external' && frame.isDetached()
+          && observations.get(frame)?.scope === 'external') continue;
+        throw error;
+      }
+      if (observations.get(frame) !== observation
+        && (observation.scope !== 'external' || observations.get(frame)?.scope !== 'external'))
+        throw new Error('Short CSP frame navigated during observation checkpoint');
+      if (!initialized) {
+        if (observation.scope !== 'external')
+          throw new Error(`Short CSP collector is not initialized: ${JSON.stringify(observation)}`);
+        lifecycleDiagnostics.push({...observation, reason: 'missing-init'});
+      } else if (observations.get(frame) === observation) {
+        drainedFrames.add(frame);
+      }
+    }
+    assertLifecycle();
+  };
+  return {violations, thirdPartyReports, lifecycleDiagnostics, drain};
 }

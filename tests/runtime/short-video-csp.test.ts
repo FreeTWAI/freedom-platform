@@ -66,7 +66,7 @@ async function transportHarness(transport: (deliver: () => void) => Promise<void
   let bound: (source: {frame: typeof frame}, event: ShortVideoCspEvent) => void;
   let detached = false, evaluationFails = false;
   let onDetached: (value: typeof frame) => void = () => {};
-  const frame = {url: () => platform, evaluate: async (fn: () => Promise<void>) => {
+  const frame = {url: () => platform, parentFrame: () => null, isDetached: () => detached, evaluate: async (fn: () => Promise<void>) => {
     if (evaluationFails) throw Error('Frame detached during observation');
     return fn();
   }};
@@ -128,4 +128,104 @@ test('delivery rejection, missing initialization and detachment during drain fai
   await transportHarness(async deliver => deliver(), async ({collector, detach}) => {
     detach(); await assert.rejects(collector.drain(), /without an observation checkpoint/);
   });
+});
+
+// Lifecycle models exercise the actual collector callbacks without a browser.
+async function lifecycleHarness() {
+  type ModelFrame = {url: () => string; parentFrame: () => ModelFrame | null; isDetached: () => boolean;
+    evaluate: () => Promise<boolean>; navigate: (url: string) => void; detach: () => void;
+    missing: boolean; fail: boolean; duringEvaluation?: () => void};
+  const frames: ModelFrame[] = [];
+  const handlers = new Map<string, (frame: ModelFrame) => void>();
+  let binding!: (source: {frame: ModelFrame}, event: ShortVideoCspEvent) => void;
+  const create = (initialURL: string, initialParent: ModelFrame | null): ModelFrame => {
+    let url = initialURL, parent = initialParent, detached = false;
+    const frame: ModelFrame = {url: () => url, parentFrame: () => parent, isDetached: () => detached,
+      missing: false, fail: false, evaluate: async () => {
+        frame.duringEvaluation?.();
+        if (frame.fail || detached) throw Error('evaluation failed');
+        return !frame.missing;
+      }, navigate: next => { url = next; handlers.get('framenavigated')?.(frame); },
+      detach: () => { detached = true; parent = null; frames.splice(frames.indexOf(frame), 1);
+        handlers.get('framedetached')?.(frame); }};
+    frames.push(frame); handlers.get('frameattached')?.(frame); return frame;
+  };
+  const main = create(platform, null);
+  const page = {mainFrame: () => main, frames: () => [...frames],
+    on: (name: string, callback: (frame: ModelFrame) => void) => handlers.set(name, callback),
+    exposeBinding: async (_name: string, callback: typeof binding) => { binding = callback; },
+    addInitScript: async () => {}} as unknown as Page;
+  const collector = await collectShortVideoCsp(page, platform);
+  return {collector, main, create, emit: (frame: ModelFrame, event: ShortVideoCspEvent) => binding({frame}, event)};
+}
+
+test('platform and unknown child lifecycles remain fail-closed, including inherited blanks', async () => {
+  for (const url of [platform + '/child?private=secret', 'about:blank', 'about:srcdoc', '', 'data:text/html,private', 'not-a-url']) {
+    for (const failure of ['missing', 'detach', 'during-drain'] as const) {
+      const {collector, main, create} = await lifecycleHarness();
+      const child = create(url, main);
+      if (failure === 'missing') child.missing = true;
+      else if (failure === 'detach') child.detach();
+      else child.duringEvaluation = () => child.detach();
+      await assert.rejects(collector.drain(), error => {
+        assert.doesNotMatch(String(error), /private|secret/);
+        return /not initialized|without an observation checkpoint|evaluation failed/.test(String(error));
+      });
+    }
+  }
+  const {collector, main} = await lifecycleHarness();
+  main.navigate(youtube); main.missing = true;
+  await assert.rejects(collector.drain(), /not initialized/); // Main always required, even external.
+});
+
+test('external transient children and inherited blanks do not invent platform lifecycle failures', async () => {
+  for (const failure of ['missing', 'detach', 'during-drain'] as const) {
+    const {collector, main, create, emit} = await lifecycleHarness();
+    const player = create(youtube + '?private=secret', main);
+    const child = create('about:blank', player);
+    const nested = create('about:srcdoc', child);
+    emit(player, {...report, disposition: 'enforce'});
+    emit(player, report);
+    emit(child, {...report, documentURI: 'about:blank'}); // Unknown observed event still fails.
+    if (failure === 'missing') { player.missing = child.missing = nested.missing = true; }
+    else if (failure === 'detach') { nested.detach(); child.detach(); player.detach(); }
+    else nested.duringEvaluation = () => nested.detach();
+    await collector.drain();
+    assert.equal(collector.violations.length, 2);
+    assert.equal(collector.thirdPartyReports.length, 1);
+    assert.ok(collector.lifecycleDiagnostics.length > 0);
+    assert.doesNotMatch(JSON.stringify(collector.lifecycleDiagnostics), /private|secret|embed/);
+    assert.ok(collector.lifecycleDiagnostics.every(item => item.scope === 'external'));
+  }
+});
+
+test('external permission is not a blanket evaluation error suppression or a stale platform certificate', async () => {
+  const {collector, main, create} = await lifecycleHarness();
+  const player = create(youtube, main);
+  player.fail = true;
+  await assert.rejects(collector.drain(), /evaluation failed/);
+  player.fail = false;
+  player.navigate(platform); player.detach();
+  await assert.rejects(collector.drain(), /without an observation checkpoint/);
+  for (const [before, after] of [[platform, youtube], [youtube, platform], [youtube, 'data:text/html,unknown']]) {
+    for (const missing of [false, true]) {
+      const moving = await lifecycleHarness();
+      const child = moving.create(before, moving.main);
+      child.missing = missing;
+      child.duringEvaluation = () => child.navigate(after);
+      await assert.rejects(moving.collector.drain(), /navigated during observation/);
+    }
+  }
+});
+
+test('new events and navigation invalidate required frame checkpoints', async () => {
+  for (const invalidate of ['event', 'navigation'] as const) {
+    const {collector, main, create, emit} = await lifecycleHarness();
+    const child = create(platform, main);
+    await collector.drain();
+    if (invalidate === 'event') emit(child, {...report, documentURI: platform});
+    else child.navigate(platform + '/next');
+    child.detach();
+    await assert.rejects(collector.drain(), /without an observation checkpoint/);
+  }
 });
