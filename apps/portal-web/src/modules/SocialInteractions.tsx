@@ -12,7 +12,7 @@ import {SocialIcon,SocialTextTools,SocialRichText,SocialMemberLink,type Mention}
 import {SocialPostShare} from './SocialPostShare';
 import {SocialPostLike} from './SocialPostLike';
 
-type Comment = {image_url?:string|null;sticker_id?:string|null;mentions?:Mention[];like_count?:number;liked?:boolean;comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: {user_id: string; display_name: string}; mine: boolean};
+type Comment = {image_url?:string|null;sticker_id?:string|null;mentions?:Mention[];like_count?:number;liked?:boolean;comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: {user_id: string; display_name: string; avatar_url?: string | null}; mine: boolean};
 type Comments = {items: Comment[]; next_cursor: string | null};
 function mergeComments(current: Comment[], incoming: Comment[]) {
   const all = new Map([...current, ...incoming].map(item => [item.comment_id, item]));
@@ -165,7 +165,7 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
       {loading && <p role="status">正在載入留言…</p>}
       {!loading && !loadError && comments.length === 0 && <p className="muted">還沒有留言，聊聊你的想法。</p>}
       {comments.map(comment => <article className="social-comment" key={comment.comment_id}>
-        <div className="social-comment-meta"><MemberAvatar nickname={comment.author.display_name}/><strong>{comment.author.display_name}</strong><time dateTime={comment.created_at}>{formatIsoLocal(comment.created_at)}</time>{comment.edited_at && <span className="social-edited" title={formatIsoLocal(comment.edited_at)}>已編輯</span>}</div>
+        <div className="social-comment-meta"><MemberAvatar nickname={comment.author.display_name} avatarUrl={comment.author.avatar_url}/><strong>{comment.author.display_name}</strong><time dateTime={comment.created_at}>{formatIsoLocal(comment.created_at)}</time>{comment.edited_at && <span className="social-edited" title={formatIsoLocal(comment.edited_at)}>已編輯</span>}</div>
         {editing?.id === comment.comment_id ? <form className="stack" onSubmit={event => void saveEdit(event, comment)} aria-busy={sending}>
           <label className="field">編輯留言<textarea aria-label="編輯留言" required rows={2} maxLength={1000} value={editing.text} disabled={sending} onChange={event => setEditing({id: comment.comment_id, text: event.target.value})}/></label>
           <div className="social-actions"><button className="btn btn-ghost" disabled={sending || !editing.text.trim() || editing.text.trim() === comment.body}>{sending ? '儲存中…' : '儲存留言'}</button><button type="button" className="btn btn-ghost" disabled={sending} onClick={() => setEditing(null)}>取消</button></div>
