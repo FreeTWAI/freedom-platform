@@ -39,7 +39,7 @@
 研究主張：完整但克制的節日氛圍，不犧牲社群閱讀與原操作。對照必須用同一候選、同一日期／視窗／基本主題的「關閉」與三套節日，不拿舊版圖冒充本次 baseline。
 
 - 純測試：台北午夜首尾 ±1ms、跨年／閏日、無效日期、手動／自動／關閉、storage 阻擋與輸入白名單。
-- 原生瀏覽器案例：明亮／夜航／敘生 × 390／1280px，保留整頁 before/after 圖；320px 圖片失敗、composer 開關與自動到期；品牌名稱、44px控制、無水平溢出、選單 Esc 返回焦點。
+- 原生瀏覽器案例：明亮／夜航／敘生 × 390／1280px，產生整頁 before/after 附件；320px 圖片失敗、composer 開關與自動到期；品牌名稱、44px控制、無水平溢出、選單 Esc 返回焦點。
 - 手機首頁 hero 實際上限120px；原始 Logo／萊姆綠主要操作／正文色不變；未選主題沒有下載。
-- 實際執行與未驗項以 PR 收據為準。此環境不啟動 native browser／PG，local build 或 source review **不代表**原生畫面、真人接受或正式環境通過。必須取得 CI 截圖後 inspect → fix → recapture 才能接受視覺主張。
+- 實際執行與未驗項以 PR 收據為準。此環境不啟動 native browser／PG，local build 或 source review **不代表**原生畫面、真人接受或正式環境通過。既有 pinned runner 成功時不留存附件；附加截圖不等於可讀回證據。本 PR 另經授權使用僅限 #1155、固定產品來源的一次性觀察流程，最多 24 張 PNG、256MiB、留存一天；不改 required gates。必須實際取得圖片後 inspect → fix → recapture 才能接受視覺主張，取得前為 NOT_CHECKED。
 - 使用公開 R&D／Code Cleanup 方法；私人 canonical Skills provider/revision gate **NOT_RUN**。不宣稱已安裝或完整通過該流程。
