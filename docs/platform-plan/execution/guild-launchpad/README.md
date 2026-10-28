@@ -6,11 +6,13 @@
 
 ## 目前狀態
 
+本分支另含活動幫手候選 migration195；只更新 repository 來源上限，不表示兩環境已套用、啟用幫手功能或完成部署。
+
 本分支另含預設關閉的 Google 身分候選 migration190；`repo_max_migration` 只反映來源上限，不代表正式套用、啟用登入或部署。下方具日期的 applied schema、release、旗標與驗收紀錄維持已合併 main 的原值。
 
 歷史發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=f2c9b2fd14173e8d552771618590fdb2dc915142 release.staging=f2c9b2fd14173e8d552771618590fdb2dc915142 flag.production=true flag.staging=true repo_max_migration=194 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=f2c9b2fd14173e8d552771618590fdb2dc915142 release.staging=f2c9b2fd14173e8d552771618590fdb2dc915142 flag.production=true flag.staging=true repo_max_migration=195 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 2026-10-27 18:17 UTC：兩環境已部署 `f2c9b2fd`。Staging 五階段成功；next 已部署／健康檢查通過，最後釋放 lease 報錯，workflow failure 保留。18:16Z 重新取得同一 lease，唯讀確認 journal pending=null、DB／Worker 同版本並正常釋放；18:17Z 公開 health 正常。原備份 pending 已結清，沒有新備份、floor reset 或重複部署。四人共用入口可用，後續 main 不再等待發布側；[收據 followup_control_read_fix](../unified-foundation/rollout-shared-actions-2026-10-27.json)保留失敗與後續確認。會員 UX、M1／完整計畫與第二操作者還原仍未驗收。
 

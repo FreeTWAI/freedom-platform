@@ -22,13 +22,17 @@ export type EventHelperStatus={state:EventHelperState|null;version:number;event_
 export type EventHelperListItem={user_id:string;nickname:string;avatar_url:string|null;state:EventHelperState;version:number;created_at:string;updated_at:string};
 export type EventHelperPage={items:EventHelperListItem[];total:number;next_offset:number|null;event_closed:boolean};
 
-async function eventLock(q:PoolClient,actor:Actor,id:string):Promise<EventRow>{
-  // Same guild advisory precedes the event lock as existing organizer edits.
-  await lockMemberGuilds(q,actor);
+async function scopedHelperEvent(q:PoolClient,actor:Actor,id:string,lock=false):Promise<EventRow>{
+  // GET projections do not serialize with event or guild writers. Commands keep
+  // the existing guild-before-event lock order and recheck before effects.
+  if(lock)await lockMemberGuilds(q,actor);
   const user=(await q.query('SELECT onboarding_required,onboarding_completed_at FROM users WHERE user_id=$1 AND community_id=$2',[actor.user_id,actor.community_id])).rows[0];
   requireCondition(user&&(!user.onboarding_required||user.onboarding_completed_at),403,'onboarding_required','請先完成會員入門。');
-  const row=(await q.query('SELECT event_id,community_id,organizer_ref,state,starts_at,visibility,guild_key,event_kind,help_need FROM community_events WHERE event_id=$1 AND community_id=$2 FOR UPDATE',[id,actor.community_id])).rows[0];
+  const row=(await q.query(`SELECT event_id,community_id,organizer_ref,state,starts_at,visibility,guild_key,event_kind,help_need FROM community_events WHERE event_id=$1 AND community_id=$2${lock?' FOR UPDATE':''}`,[id,actor.community_id])).rows[0];
   requireCondition(row,404,'not_found','找不到這場活動。');return row;
+}
+async function eventLock(q:PoolClient,actor:Actor,id:string):Promise<EventRow>{
+  return scopedHelperEvent(q,actor,id,true);
 }
 async function own(q:PoolClient,id:string,memberId:string):Promise<HelperRow|undefined>{
   return (await q.query('SELECT helper_id,member_ref,state,aggregate_version,created_at,updated_at FROM community_event_helpers WHERE event_id=$1 AND member_ref=$2',[id,memberId])).rows[0];
@@ -54,7 +58,7 @@ async function organizer(q:PoolClient,actor:Actor,event:EventRow){
 export async function readEventHelper(pool:Pool,rawActor:Actor,id:string):Promise<EventHelperStatus>{
   const actor={...rawActor};
   return readWithMemberSession(pool,actor,async q=>{
-    const event=await eventLock(q,actor,id),row=await own(q,id,actor.user_id);
+    const event=await scopedHelperEvent(q,actor,id),row=await own(q,id,actor.user_id);
     // A retained personal application remains readable/withdrawable after loss
     // of guild visibility; this projection reveals no event or peer details.
     if(!row)await visible(q,actor,event,false);
@@ -64,7 +68,7 @@ export async function readEventHelper(pool:Pool,rawActor:Actor,id:string):Promis
 export async function listEventHelpers(pool:Pool,rawActor:Actor,id:string,raw:unknown):Promise<EventHelperPage>{
   const actor={...rawActor},{limit,offset}=pageInput.parse(raw);
   return readWithMemberSession(pool,actor,async q=>{
-    const event=await eventLock(q,actor,id);await organizer(q,actor,event);
+    const event=await scopedHelperEvent(q,actor,id);await organizer(q,actor,event);
     const rows=(await q.query(`SELECT h.member_ref,h.state,h.aggregate_version,h.created_at,h.updated_at,u.display_name,
       a.present AS avatar_present,a.aggregate_version AS avatar_version
       FROM community_event_helpers h JOIN users u ON u.user_id=h.member_ref AND u.community_id=$2

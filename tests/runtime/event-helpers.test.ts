@@ -196,3 +196,30 @@ test('verification-only applicants remain hidden in both organizer pages and kno
  assert.equal((await request(path+'/'+member.id+'/decision',host,{decision:'accept'},2)).status,404);
  assert.equal((await request(path+'/'+member.id+'/decision',host,{decision:'decline'},2)).status,404);
 });
+test('helper GET projections do not wait for event or guild writer locks and retain private scoping',async()=>{
+ const {host,member,peer,id,path}=await fixture();await request(path+'/me',member,{action:'offer'},1);
+ const blocker=await pool.connect();let pending:Promise<any[]>|undefined;let timer:ReturnType<typeof setTimeout>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM community_events WHERE event_id=$1 FOR UPDATE',[id]);
+  for(const user of [host,member,peer])await blocker.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`guild-member/${DEMO_COMMUNITY}/${user.id}`]);
+  pending=Promise.all([request(path+'/me',member),request(path,host),request(path,peer)]);
+  const results=await Promise.race([pending,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('GET waited on domain writer locks')),2000);})]);
+  assert.deepEqual(results.map(r=>r.status),[200,200,403]);
+  assert.deepEqual(Object.keys(results[0].data).sort(),['event_closed','state','version']);
+  assert.equal(results[0].data.state,'applied');assert.equal(results[1].data.items[0].user_id,member.id);
+ }finally{if(timer)clearTimeout(timer);await blocker.query('ROLLBACK');blocker.release();if(pending)await pending;}
+});
+test('legacy omitted help_need preserves pending text; explicit null clears and create omission defaults null',async()=>{
+ const host=await login(0);
+ const body={title:'舊版編輯',description:'省略欄位相容測試',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'https://example.test/meeting',capacity:1,visibility:'open'};
+ const legacy=await request('/events',host,body);assert.equal(legacy.status,201);assert.equal(legacy.data.help_need,null);
+ const created=await request('/events',host,{...body,help_need:'協助報到'});assert.equal(created.status,201);
+ const id=created.data.event_id;
+ const version=async()=>Number((await pool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[id])).rows[0].aggregate_version);
+ const preserved=await request(`/events/${id}/update`,host,{...body,title:'舊版更新標題'},await version());
+ assert.equal(preserved.status,200);assert.equal(preserved.data.help_need,'協助報到');
+ const cleared=await request(`/events/${id}/update`,host,{...body,help_need:null},await version());
+ assert.equal(cleared.status,200);assert.equal(cleared.data.help_need,null);
+ const replaced=await request(`/events/${id}/update`,host,{...body,help_need:'整理場地'},await version());
+ assert.equal(replaced.status,200);assert.equal(replaced.data.help_need,'整理場地');
+});
