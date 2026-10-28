@@ -409,6 +409,37 @@ test('PUBLIC-POST-14 no-JS visitors can read three known resources from public t
   }finally{await anonymous.close();}
 });
 
+// Source-bound in shared-controls.test.ts; fail closed for unsupported paint.
+function measureSharedControl(node: Element) {
+  type Color={rgb:number[];alpha:number};
+  const parse=(value:string):Color=>{
+    const match=/^rgba?\(([^)]+)\)$/.exec(value);
+    if(!match)throw new Error(`Unsupported computed color: ${value}`);
+    const parts=match[1].split(',').map(Number);
+    if((parts.length!==3&&parts.length!==4)||parts.some(x=>!Number.isFinite(x))||parts.slice(0,3).some(x=>x<0||x>255)||(parts[3]!==undefined&&(parts[3]<0||parts[3]>1)))throw new Error(`Unsupported computed color: ${value}`);
+    return {rgb:parts.slice(0,3),alpha:parts[3]??1};
+  };
+  const over=(front:Color,back:Color):Color=>{
+    const alpha=front.alpha+back.alpha*(1-front.alpha);
+    return {alpha,rgb:front.rgb.map((v,i)=>alpha?(v*front.alpha+back.rgb[i]*back.alpha*(1-front.alpha))/alpha:0)};
+  };
+  const style=getComputedStyle(node);let background:Color={rgb:[0,0,0],alpha:0};
+  for(let layer:Element|null=node;layer;layer=layer.parentElement){
+    const paint=getComputedStyle(layer);
+    if(paint.opacity!=='1')throw new Error('Unsupported opacity');
+    if(background.alpha<1){
+      if(paint.backgroundImage!=='none')throw new Error('Unsupported background image');
+      background=over(background,parse(paint.backgroundColor));
+    }
+  }
+  if(background.alpha!==1)throw new Error('No known opaque background');
+  const foreground=over(parse(style.color),background);
+  const lum=(rgb:number[])=>{const v=rgb.map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
+  const a=lum(foreground.rgb),b=lum(background.rgb);
+  return {contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),foreground:foreground.rgb,background:background.rgb,rawForeground:style.color,rawBackground:style.backgroundColor,opacity:style.opacity,height:node.getBoundingClientRect().height,outline:style.outlineStyle,focusVisible:node.matches(':focus-visible'),hovered:node.matches(':hover'),border:style.borderStyle,transition:style.transitionProperty};
+}
+// End source-bound shared control measurement.
+
 test('PUBLIC-POST-16 shared controls and concise sharing retain readable states at 320/390/1280 in all three themes',async({author})=>{
   const post=await createPost(author,`收合的完整預覽 ${randomUUID()} ${'保留全文。'.repeat(100)}`);
   await author.page.addInitScript(()=>{
@@ -426,17 +457,16 @@ test('PUBLIC-POST-16 shared controls and concise sharing retain readable states 
     await expect(copy).toBeInViewport();await expect(dialog.getByRole('button',{name:'系統分享',exact:true})).toBeInViewport();
     expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
     for(const variant of ['', 'btn-secondary','btn-primary','btn-ghost','btn-module']){
+      await author.page.mouse.move(0,0);
       await dialog.evaluate((node,variant)=>{const probe=document.createElement('button');probe.type='button';probe.className=`btn ${variant}`;probe.dataset.controlProbe='true';probe.textContent='共用控制項驗證';node.append(probe);},variant);
       const probe=dialog.locator('[data-control-probe]');
       for(const state of ['enabled','hover','focus','disabled','reenabled']){
+        if(state!=='hover')await author.page.mouse.move(0,0);
+        if(state!=='focus')await probe.evaluate(node=>(node as HTMLElement).blur());
         if(state==='hover')await probe.hover();if(state==='focus'){await probe.focus();await author.page.keyboard.press('Tab');await author.page.keyboard.press('Shift+Tab');await expect(probe).toBeFocused();}if(state==='disabled')await probe.evaluate(node=>(node as HTMLButtonElement).disabled=true);if(state==='reenabled')await probe.evaluate(node=>(node as HTMLButtonElement).disabled=false);
-        const colors=await probe.evaluate(node=>{
-          const style=getComputedStyle(node);let bg=style.backgroundColor;let parent=node.parentElement;
-          while(bg==='rgba(0, 0, 0, 0)'&&parent){bg=getComputedStyle(parent).backgroundColor;parent=parent.parentElement;}
-          const lum=(rgb:string)=>{const v=rgb.match(/[\d.]+/g)!.slice(0,3).map(Number).map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
-          const a=lum(style.color),b=lum(bg);return {contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),opacity:style.opacity,height:node.getBoundingClientRect().height,outline:style.outlineStyle,focusVisible:node.matches(':focus-visible'),border:style.borderStyle,transition:style.transitionProperty};
-        });
-        expect(colors.contrast,`${theme}/${width}/${variant}/${state}`).toBeGreaterThanOrEqual(4.5);expect(colors.height).toBeGreaterThanOrEqual(44);
+        const colors=await probe.evaluate(measureSharedControl);
+        expect(colors.contrast,`${theme}/${width}/${variant}/${state} ${JSON.stringify(colors)}`).toBeGreaterThanOrEqual(4.5);expect(colors.height).toBeGreaterThanOrEqual(44);
+        expect(colors.hovered).toBe(state==='hover');expect(colors.focusVisible).toBe(state==='focus');
         expect(colors.transition.split(',').every(property=>['none','border-color'].includes(property.trim()))).toBe(true);if(state==='reenabled')await expect(probe).toBeEnabled();
         if(state==='focus'){expect(colors.focusVisible).toBe(true);expect(colors.outline).not.toBe('none');}if(state==='disabled'){expect(colors.opacity).toBe('1');expect(colors.border).toBe('dashed');await expect(probe).toBeDisabled();}
       }

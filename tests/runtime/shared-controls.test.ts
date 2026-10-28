@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import postcss from 'postcss';
+import {transformSync} from 'esbuild';
+import {runInNewContext} from 'node:vm';
 const read=(name:string)=>readFileSync(new URL('../../apps/portal-web/src/'+name,import.meta.url),'utf8');
 const sheets=['styles.css','rpg-theme.css','light-theme.css','versefolk-theme.css'].map(read);
 function declarations(source:string,selector:string){const values:Record<string,string>={};postcss.parse(source).walkRules(rule=>{if(rule.selector===selector)rule.walkDecls(d=>{values[d.prop]=d.value;});});return values;}
@@ -77,4 +79,33 @@ test('shared buttons switch foreground/background pairs immediately in both dire
   assert.ok(native.includes("'disabled','reenabled'"));
   assert.ok(native.includes("state==='reenabled'"));
   assert.ok(native.includes("['none','border-color'].includes(property.trim())"));
+});
+
+test('actual native control evaluator composites alpha layers and rejects unreadable or unsupported paint',()=>{
+  const source=readFileSync(new URL('../e2e/public-social-posts.spec.ts',import.meta.url),'utf8');
+  const start=source.indexOf('function measureSharedControl('),end=source.indexOf('// End source-bound shared control measurement.',start);
+  assert.ok(start>=0&&end>start);assert.ok(source.includes('probe.evaluate(measureSharedControl)'));
+  const compiled=transformSync(source.slice(start,end)+'\nmeasureSharedControl;',{loader:'ts',target:'es2022'}).code;
+  const evaluate=runInNewContext(compiled,{getComputedStyle:(node:any)=>node.style});
+  const element=(backgroundColor:string,color='rgb(244, 246, 239)',parentElement:any=null,extra:Record<string,string>={})=>({parentElement,style:{backgroundColor,color,backgroundImage:'none',opacity:'1',outlineStyle:'solid',borderStyle:'solid',transitionProperty:'border-color',...extra},getBoundingClientRect:()=>({height:44}),matches:()=>true});
+  const dialog=element('rgb(20, 22, 27)');
+  const opaque=evaluate(element('rgb(37, 45, 57)'));assert.ok(opaque.contrast>=4.5);
+  const transparent=evaluate(element('rgba(0, 0, 0, 0)',undefined,dialog));assert.deepEqual(Array.from(transparent.background),[20,22,27]);assert.ok(transparent.contrast>=4.5);
+  const hover=evaluate(element('rgba(255, 255, 255, 0.0431373)',undefined,dialog));assert.ok(hover.contrast>=4.5);assert.ok(Math.abs(hover.background[0]-30.1372655)<.001);
+  const nested=evaluate(element('rgba(255, 255, 255, 0.25)',undefined,element('rgba(0, 0, 0, 0.5)',undefined,element('rgb(100, 100, 100)'))));assert.deepEqual(Array.from(nested.background),[101.25,101.25,101.25]);
+  assert.ok(evaluate(element('rgb(255, 255, 255)')).contrast<4.5,'opaque white must still fail for pale text');
+  assert.ok(evaluate(element('rgb(37, 45, 57)','rgb(41, 61, 85)')).contrast<4.5,'original dark-on-dark screenshot remains a failure');
+  assert.ok(evaluate(element('rgb(20, 22, 27)','rgba(244, 246, 239, 0.1)')).contrast<4.5,'translucent foreground cannot pass as opaque');
+  assert.throws(()=>evaluate(element('rgba(0, 0, 0, 0)')),/No known opaque background/);
+  assert.throws(()=>evaluate(element('rgb(0, 0, 0)',undefined,null,{opacity:'0.5'})),/Unsupported opacity/);
+  assert.throws(()=>evaluate(element('rgb(0, 0, 0)',undefined,null,{backgroundImage:'linear-gradient(black, white)'})),/Unsupported background image/);
+  assert.throws(()=>evaluate(element('color(display-p3 0 0 0)')),/Unsupported computed color/);
+  assert.throws(()=>evaluate(element('rgb(20, 22, 27)',undefined,element('rgb(0, 0, 0)',undefined,null,{opacity:'0.5'}))),/Unsupported opacity/,'opaque control still inherits ancestor group opacity');
+  assert.ok(evaluate(element('rgb(20, 22, 27)',undefined,element('rgb(0, 0, 0)',undefined,null,{backgroundImage:'linear-gradient(black, white)'}))).contrast>=4.5,'opaque control hides ancestor background image');
+  // The original helper discarded alpha and treated the ghost's white tint as an opaque white surface.
+  const discardAlpha=compiled.replace('alpha: parts[3] ?? 1','alpha: 1');
+  assert.notEqual(discardAlpha,compiled);
+  const regressed=runInNewContext(discardAlpha,{getComputedStyle:(node:any)=>node.style});
+  assert.ok(regressed(element('rgba(255, 255, 255, 0.0431373)',undefined,dialog)).contrast<4.5);
+  assert.ok(contrast('#f4f6ef','#ffffff')<4.5);assert.ok(hover.contrast>contrast('#f4f6ef','#ffffff'));
 });
