@@ -242,3 +242,38 @@ test('manual skill committed save lost ACK then 429 reconciles one draft with th
   const drafts = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items.filter((item: any) => item.payload?.title === '未知後限流仍只一份');
   expect(drafts).toHaveLength(1); expect(drafts[0].status).toBe('ready_for_review'); expect(drafts[0].public_path).toBeNull();
 });
+
+test('manual skill unknown save remains retryable after My Content URL resume remount', async ({ page }) => {
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  let submissionId = '', individualReads = 0;
+  page.on('request', request => {
+    if (submissionId && request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/me/skill-submissions/' + submissionId) individualReads++;
+  });
+  await page.route('**/api/v1/me/skill-submissions/manual', async route => {
+    requests.push({ key: route.request().headers()['idempotency-key'], body: route.request().postData() });
+    if (requests.length === 1) {
+      const committed = await route.fetch();
+      expect(committed.status()).toBe(201);
+      submissionId = (await committed.json()).submission_id;
+      await route.abort('failed');
+    } else await route.fallback();
+  });
+  const title = '未知存稿從我的內容返回';
+  await login(page); await navigate(page, '開源投稿'); await fillTool(page, title);
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByRole('button', { name: '重試儲存私人草稿', exact: true })).toBeEnabled();
+  await navigate(page, '我的內容');
+  const own = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+  await own.getByRole('link', { name: '繼續', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp('#opensource\\?submission=' + submissionId));
+  await expect(page.getByRole('button', { name: '重試儲存私人草稿', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('作品名稱', { exact: true })).toHaveValue(title);
+  await expect(page.getByLabel('作品名稱', { exact: true })).toBeDisabled();
+  expect(individualReads).toBe(0); expect(requests).toHaveLength(1);
+  await page.getByRole('button', { name: '重試儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  expect(requests).toHaveLength(2); expect(requests[0].key).toBeTruthy(); expect(requests[1]).toEqual(requests[0]);
+  const drafts = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items.filter((item: any) => item.payload?.title === title);
+  expect(drafts).toHaveLength(1); expect(drafts[0].submission_id).toBe(submissionId); expect(drafts[0].public_path).toBeNull();
+  await expect(page.getByRole('button', { name: '確認並公開', exact: true })).toBeDisabled();
+});
