@@ -7,6 +7,7 @@
     ".github/workflows/native-game-previews.yml",
     "apps/portal-web/src/games/**",
     "tests/runtime/absurd-daily.test.ts",
+    "tests/runtime/kitchen-food-batch.test.ts",
     "tests/runtime/market-cooking.test.ts",
     "tests/e2e/absurd-daily.spec.ts",
     "docs/development/absurd-daily.md",
