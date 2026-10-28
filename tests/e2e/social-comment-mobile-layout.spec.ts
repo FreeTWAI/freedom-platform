@@ -1,15 +1,21 @@
 import {randomUUID} from 'node:crypto';
+import type {Pool} from 'pg';
 import {test,expect,type Page} from './fixtures.js';
-async function openPost(page:Page){
- await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
+async function openPost(page:Page,pool:Pool){
+ // Each case owns its posting allowance; never consume the shared demo member's daily quota.
+ const userId=randomUUID(),email=`mobile-comment-${userId}@example.test`;
+ const inserted=await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required)
+  SELECT $1,community_id,$2,'手機留言測試會員',password_hash,$3,false FROM users WHERE email='maker@local.test'`,[userId,email,randomUUID()]);
+ expect(inserted.rowCount).toBe(1);
+ await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
  const trigger=page.getByRole('button',{name:'建立貼文',exact:true});await trigger.click();
  const text=`手機留言版面 ${randomUUID()}`;await page.getByLabel('貼文內容',{exact:true}).fill(text);await page.getByRole('button',{name:'發布貼文',exact:true}).click();
  const post=page.locator('.social-card').filter({has:page.locator('.social-note').filter({hasText:text})});await expect(post).toBeVisible();
  await post.getByRole('button',{name:'留言 · 0',exact:true}).click();return {post,trigger};
 }
 
-test('mobile comment focus yields the launcher space, including toolbar controls, while desktop and open inbox remain intact',async({page})=>{
- await page.setViewportSize({width:390,height:844});const {post,trigger}=await openPost(page);
+test('mobile comment focus yields the launcher space, including toolbar controls, while desktop and open inbox remain intact',async({page,e2eAuthPool})=>{
+ await page.setViewportSize({width:390,height:844});const {post,trigger}=await openPost(page,e2eAuthPool);
  const composer=post.locator('.social-comment-composer'),area=composer.getByRole('textbox',{name:'寫留言',exact:true}),bubble=page.locator('.floating-messages'),start=page.locator('.social-composer-start');
  await area.fill('保留手機留言草稿');
  // A reduced viewport is a layout check, not a simulated native iOS keyboard.
@@ -32,8 +38,8 @@ test('mobile comment focus yields the launcher space, including toolbar controls
  await trigger.click();await page.getByLabel('貼文內容',{exact:true}).fill('保留發文草稿');await page.keyboard.press('Escape');await expect(trigger).toBeFocused();await trigger.click();await expect(page.getByLabel('貼文內容',{exact:true})).toHaveValue('保留發文草稿');await page.keyboard.press('Escape');
 });
 
-test('mobile comment collapse retains an unknown send and retries the original idempotency key exactly once',async({page})=>{
- await page.setViewportSize({width:390,height:420});const {post}=await openPost(page);const area=post.getByRole('textbox',{name:'寫留言',exact:true}),bubble=page.locator('.floating-messages');
+test('mobile comment collapse retains an unknown send and retries the original idempotency key exactly once',async({page,e2eAuthPool})=>{
+ await page.setViewportSize({width:390,height:420});const {post}=await openPost(page,e2eAuthPool);const area=post.getByRole('textbox',{name:'寫留言',exact:true}),bubble=page.locator('.floating-messages');
  await area.fill('未知送出不能清掉這份草稿');const keys:string[]=[],bodies:string[]=[];
  await page.route('**/api/v1/social-posts/*/comments',async route=>{
   if(route.request().method()!=='POST')return route.continue();keys.push(route.request().headers()['idempotency-key']);bodies.push(route.request().postData()??'');

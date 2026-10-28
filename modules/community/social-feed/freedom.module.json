@@ -36,6 +36,8 @@
     "apps/portal-web/src/social-share.ts",
     "tests/e2e/social-cross-platform-share.spec.ts",
     "tests/e2e/social-wall.spec.ts",
+    "tests/e2e/social-comment-mobile-layout.spec.ts",
+    "tests/runtime/social-comment-mobile-layout.test.ts",
     "tests/runtime/social-post-edit.test.ts",
     "tests/runtime/social-post-editor.test.ts",
     "tests/runtime/social-share.test.ts",
