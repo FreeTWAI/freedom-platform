@@ -1,4 +1,5 @@
-import { runPortableMigration } from '../../shared-release/portable/migration.mjs';
+import { runPortableMigration, preparePortableMigration } from '../../shared-release/portable/migration.mjs';
+import { deriveDisabledMaterialPolicyAdditions, appendDisabledMaterialPolicies } from '../../shared-release/portable/material-policy.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
 import { backupDiagnosticCode, isBackupDiagnosticCode } from '../../../packages/media-migration/backup-diagnostics.ts';
 import { test } from 'node:test';
@@ -3019,4 +3020,51 @@ test('backup diagnostic cause walk is bounded, preserves specific codes and vali
   assert.deepEqual(operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1).backupFailure,
     { stage: 'capture', code: 'daily_backup_cleanup_failed', cleanupVerified: false,
       phaseCode: 'backup_database_sqlstate_23505', cleanupCode: 'backup_network_econnreset' });
+});
+
+test('candidate policy additions permit only new disabled purposes and preserve installed policy rows', () => {
+  const disabled = purpose => ({ purpose, mode: 'legacy', policy_lock: 0, policy_revision: null,
+    persistence_allowed: false, retained_byte_limit: null });
+  const before = [disabled('member.service-cover')], added = disabled('member.profile-cover');
+  const after = [added, ...before];
+  assert.deepEqual(deriveDisabledMaterialPolicyAdditions(before, after), [added]);
+  const installed = [{ ...before[0], mode: 'r2_only', policy_revision: 'approved-v1', persistence_allowed: true, retained_byte_limit: '524288' }];
+  assert.deepEqual(appendDisabledMaterialPolicies(installed, [added]), [added, ...installed]);
+  for (const patch of [{ mode: 'bridge' }, { persistence_allowed: true }, { policy_lock: 1 },
+    { policy_revision: 'enabled-v1' }, { retained_byte_limit: '524288' }]) {
+    assert.throws(() => deriveDisabledMaterialPolicyAdditions(before, [{ ...added, ...patch }, ...before]),
+      { code: 'release_migration_policy_addition_invalid' });
+  }
+  assert.throws(() => deriveDisabledMaterialPolicyAdditions(before, [added]), { code: 'release_migration_policy_changed' });
+  assert.throws(() => deriveDisabledMaterialPolicyAdditions(before, [{ ...before[0], mode: 'bridge' }]), { code: 'release_migration_policy_changed' });
+  assert.throws(() => appendDisabledMaterialPolicies(installed, before), { code: 'release_migration_policy_addition_invalid' });
+});
+
+test('policy digest changes require matching commit intent and confirmed SQL; historical records keep the old digest', () => {
+  const f = floorFixture(), initial = f.chain[0].record.data.state.materialPolicySha256;
+  const begin = structuredClone(f.begin); begin.record.data.kind = 'release-begin-v2';
+  begin.record.data.request.releaseKind = 'independent'; f.add(begin);
+  const commit = { ...f.commit, beforeMaterialPolicySha256: initial, afterMaterialPolicySha256: 'e'.repeat(64) };
+  const invalid = [{ beforeMaterialPolicySha256: 'f'.repeat(64) }, { afterMaterialPolicySha256: undefined },
+    { beforeMaterialPolicySha256: undefined }, { afterMaterialPolicySha256: 'bad' }];
+  for (const patch of invalid) assert.throws(() => replayReleaseFloor([...f.chain,
+    f.event('intent', 'migration', { ...commit, ...patch }, { operation: 'commit' })], f.options), { code: 'release_floor_commit_intent_invalid' });
+  assert.equal(f.add(f.event('intent', 'migration', commit, { operation: 'commit' })).materialPolicySha256, initial);
+  for (const patch of [{ afterMaterialPolicySha256: 'f'.repeat(64) }, { beforeMaterialPolicySha256: undefined }]) {
+    assert.throws(() => replayReleaseFloor([...f.chain,
+      f.event('committed', 'migration', { ...commit, ledger: f.after, ...patch })], f.options), { code: 'release_floor_commit_unverified' });
+  }
+  assert.equal(f.add(f.event('committed', 'migration', { ...commit, ledger: f.after })).materialPolicySha256, commit.afterMaterialPolicySha256);
+  const old = floorFixture(); old.add(old.begin); old.runBackup('backup-before', main);
+  old.add(old.event('intent', 'migration', old.commit, { operation: 'commit' }));
+  assert.throws(() => replayReleaseFloor([...old.chain, old.event('committed', 'migration', { ...commit, ledger: old.after })], old.options),
+    { code: 'release_floor_commit_unverified' });
+  assert.equal(old.add(old.event('committed', 'migration', { ...old.commit, ledger: old.after })).materialPolicySha256, initial);
+});
+
+test('an outdated environment frontier has its own actionable failure before migration installation', () => {
+  assert.throws(() => preparePortableMigration({ sourceRoot: resolve('.'), sourceCommit: sha,
+    profile: { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] },
+    installationParent: '/unused', beforeLedger: [{ name: '001_initial.sql', sha256: '1'.repeat(64) }] }),
+  { code: 'release_migration_frontier_mismatch' });
 });

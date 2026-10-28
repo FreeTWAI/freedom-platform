@@ -13,6 +13,7 @@ import { observeBackupControl } from '../portable/backup.mjs';
 import { preparePortableMigration, runPortableMigration, observeMigrationOutcome, verifyUnchangedSchema } from '../portable/migration.mjs';
 import { runCanonicalSql } from '../portable/canonical-sql.mjs';
 import { acquireReleaseLease } from '../portable/lease.mjs';
+import { deriveCandidateContract } from '../portable/candidate-contract.mjs';
 
 export async function verifyMigration({ root, openCluster }) {
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
@@ -41,28 +42,29 @@ INSERT INTO shared_release_fixture VALUES(1);
   const connect = user => new Pool({ host: cluster.socket, port: 5432, user, database, max: 4,
     connectionTimeoutMillis: 5000, query_timeout: 135000 });
   const pool = connect(migrator), runtimePool = connect(runtime), backupPool = connect(backup);
-  let lease, floorCalls = 0, intentCalls = 0;
+  let lease, floorCalls = 0, intentCalls = 0, committedPolicy;
   try {
-    await runMigrationPlan(pool, { sources, profile, target: { database, role: migrator, schema: 'public' } });
+    // Regression: the installed environments were at 189. Starting at today's
+    // full schema would miss migration 192's new, disabled profile-cover policy.
+    await runMigrationPlan(pool, { sources: sources.filter(item => Number(item.name.slice(0, 3)) <= 189),
+      profile: { ...profile, last: 189 }, target: { database, role: migrator, schema: 'public' } });
+    await pool.query("UPDATE domain_media_storage_policy SET mode='bridge' WHERE purpose='member.service-cover'");
     await pool.query(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${backup};
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ${backup};`);
     const beforeLedger = (await pool.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows;
     const prepare = ledger => preparePortableMigration({ sourceRoot: source, sourceCommit,
       profile: { ...profile, last: last + 1 }, installationParent: host, beforeLedger: ledger });
     const plan = prepare(beforeLedger);
-    // The already-existing live contract is sampled only in this fixture. A
-    // production controller must obtain its contract from reviewed authority.
+    // Exercise the actual candidate derivation against the admitted source;
+    // preserve the independently installed live mode, not the empty DB defaults.
     await pool.query('BEGIN'); await runCanonicalSql(pool, plan.canonical, '20-runtime-grants.psql', { runtime, migrator }); await pool.query('COMMIT');
-    const rlsTables = (await pool.query(`SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname='public' AND c.relrowsecurity ORDER BY c.relname`)).rows.map(row => row.relname);
-    const runtimeUnreadable = (await pool.query(`SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname='public' AND c.relkind='r' AND NOT has_table_privilege($1,c.oid,'SELECT') ORDER BY c.relname`, [runtime])).rows.map(row => row.relname);
-    const expected = { materialPolicySha256: (await observeBackupControl(pool)).materialPolicySha256,
-      rlsTables: [...rlsTables, 'shared_release_fixture'].sort(), runtimeUnreadable,
-      tablePrivileges: [
-        { table: 'shared_release_fixture', roleSuffix: '_app', privileges: { s: true, i: true, u: true, d: true, extra: false, grantable: false } },
-        { table: 'shared_release_fixture', roleSuffix: '_backup', privileges: { s: true, i: false, u: false, d: false, extra: false, grantable: false } },
-      ] };
+    const expected = await deriveCandidateContract({ sourceRoot: source, sourceSha: sourceCommit,
+      sourceTree: git(source, ['rev-parse', 'HEAD^{tree}']), beforeLedger,
+      profile: { ...profile, last: last + 1 }, materialPolicySha256: (await observeBackupControl(pool)).materialPolicySha256,
+      workRoot: root, binDirectory: '/unused', signal: new AbortController().signal },
+    { openDatabase: () => openCluster('migration-candidate') });
+    assert.deepEqual(expected.materialPolicyAdditions, [{ purpose: 'member.profile-cover', mode: 'legacy',
+      policy_lock: 0, policy_revision: null, persistence_allowed: false, retained_byte_limit: null }]);
     lease = await acquireReleaseLease(pool, { database, role: migrator, heartbeatMs: 50 });
     const beforeBackup = { status: 'passed', database, sourceRelease: 'a'.repeat(40), createdAt: new Date().toISOString(),
       restore: 'database_and_objects_restored', remoteReadback: 'verified', cleanupVerified: true,
@@ -72,12 +74,20 @@ INSERT INTO shared_release_fixture VALUES(1);
       assertFloor: async () => { lease.assertHeld(); },
       async verifyRetainedConstraints(q) { assert.equal((await q.query("SELECT current_setting('server_version_num')::int/10000 major")).rows[0].major, 18); },
       retainCommitIntent: async value => { assert.match(value.transactionId, /^[1-9][0-9]*$/); intentCalls++; },
-      retainCommittedFloor: async value => { assert.equal(value.afterDigest, plan.afterDigest); floorCalls++; } };
+      retainCommittedFloor: async value => { assert.equal(value.afterDigest, plan.afterDigest);
+        assert.equal(value.beforeMaterialPolicySha256, expected.materialPolicySha256);
+        assert.equal(value.afterMaterialPolicySha256, (await observeBackupControl(pool)).materialPolicySha256);
+        committedPolicy = value.afterMaterialPolicySha256; floorCalls++; } };
 
     const wrong = await journalRoot('migration-wrong-policy');
     await assert.rejects(runPortableMigration({ ...args, journalRoot: wrong,
       expected: { ...expected, materialPolicySha256: 'f'.repeat(64) } }), { code: 'release_migration_policy_changed' });
     assert.equal((await pool.query("SELECT to_regclass('public.shared_release_fixture') relation")).rows[0].relation, null);
+    const missingAddition = await journalRoot('migration-missing-policy-addition');
+    await assert.rejects(runPortableMigration({ ...args, journalRoot: missingAddition,
+      expected: { ...expected, materialPolicyAdditions: [] } }), { code: 'release_migration_invariants_changed' });
+    assert.equal((await pool.query("SELECT count(*)::int count FROM domain_media_storage_policy WHERE purpose='member.profile-cover'")).rows[0].count, 0);
+    assert.deepEqual((await pool.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows, beforeLedger);
     const rejected = await journalRoot('migration-grants-rejected');
     // Canonical grants cannot remove PUBLIC authority; its guard must abort all
     // the DDL and ledger writes in this same transaction.
@@ -98,18 +108,20 @@ INSERT INTO shared_release_fixture VALUES(1);
     const goodRoot = await journalRoot('migration-confirmed');
     const result = await runPortableMigration({ ...args, independent: true, beginMutation: async () => lease.assertHeld(), beforeBackup: undefined, backupPool: undefined, journalRoot: goodRoot });
     assert.equal(result.outcome, 'committed'); assert.equal(result.commitStatus, 'confirmed');
-    assert.deepEqual(result.applied, [pending]); assert.equal(floorCalls, 1);
+    assert.deepEqual(result.applied, plan.pending); assert(result.applied.some(name => name.startsWith('192_'))); assert.equal(floorCalls, 1);
     assert.equal(intentCalls, 1);
     assert.deepEqual(result.probes.map(value => value.role), [runtime]);
     assert(result.probes.every(value => value.readOnly && value.tables > 300));
     assert.equal((await pool.query('SELECT count(*)::int count FROM shared_release_fixture')).rows[0].count, 1);
+    assert.equal((await pool.query("SELECT mode FROM domain_media_storage_policy WHERE purpose='member.service-cover'")).rows[0].mode, 'bridge');
+    const afterExpected = { ...expected, materialPolicySha256: committedPolicy, materialPolicyAdditions: [] };
     const nextPlan = prepare(plan.afterLedger); let commits = 0;
     const readOnlySql = [], codePool = { async connect() {
       const q = await pool.connect(); return { release: destroy => q.release(destroy), async query(sql, values) {
         readOnlySql.push(sql); return q.query(sql, values);
       } };
     } };
-    const codeArgs = { pool: codePool, runtimePool, database, plan: nextPlan, expected, lease,
+    const codeArgs = { pool: codePool, runtimePool, database, plan: nextPlan, expected: afterExpected, lease,
       floor: { assertCurrent: async () => lease.assertHeld(), verifyDatabase: async q => {
         assert.deepEqual((await q.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows, plan.afterLedger);
       } } };
@@ -130,7 +142,7 @@ INSERT INTO shared_release_fixture VALUES(1);
         } };
     } };
     const unknownRoot = await journalRoot('migration-unknown');
-    await assert.rejects(runPortableMigration({ ...args, pool: lostReply, plan: nextPlan, journalRoot: unknownRoot, independent: true,
+    await assert.rejects(runPortableMigration({ ...args, expected: afterExpected, pool: lostReply, plan: nextPlan, journalRoot: unknownRoot, independent: true,
       beginMutation: async () => lease.assertHeld(), beforeBackup: undefined, backupPool: undefined }), /synthetic lost COMMIT reply/);
     assert.equal(commits, 1); assert.equal(floorCalls, 1);
     assert.equal(intentCalls, 2);
@@ -139,12 +151,13 @@ INSERT INTO shared_release_fixture VALUES(1);
     assert.deepEqual(await observeMigrationOutcome(pool, attempt), {
       outcome: 'committed_ledger_verified', postCommitVerification: 'required', resumeAuthorized: false, automaticRetry: false,
     });
-    await assert.rejects(runPortableMigration({ ...args, plan: nextPlan, journalRoot: unknownRoot }), { code: 'EEXIST' });
+    await assert.rejects(runPortableMigration({ ...args, expected: afterExpected, plan: nextPlan, journalRoot: unknownRoot }), { code: 'EEXIST' });
     assert.equal(commits, 1); lease.assertHeld();
     return { status: 'passed', realMigratorRole: true, migrationAndGrantsAtomic: true, existingIntentRefusesReplay: true,
       actualRuntimeProbe: true, directBackupRoleProbe: 'not_run_independent_release', unknownCommitObservedWithoutReplay: true,
       failedSharedIntentRollsBack: true, codeReleaseChecksSchemaWithoutMutationOrBackup: true,
-      sourceInstallationVerified: true, retainedFloor: 'synthetic-callback', remote: 'not_run' };
+      sourceInstallationVerified: true, upgradeFromSchema189: true, disabledProfileCoverPolicyAdded: true,
+      installedPolicyPreserved: true, missingPolicyAdditionRollsBack: true, retainedFloor: 'synthetic-callback', remote: 'not_run' };
   } finally {
     if (lease) await lease.release();
     await Promise.all([pool.end(), runtimePool.end(), backupPool.end()]);
