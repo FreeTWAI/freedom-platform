@@ -36,7 +36,7 @@ test('one renderer honors block order/hiding and escapes user text; anonymous ha
  const profile=VisitorProfile.parse({display_name:'<b>literal</b>',bio:'intro',links:[],avatar_url:null,layout:custom,cover:null});
  const html=renderToStaticMarkup(createElement(ProfileDesign,{profile}));assert(html.includes('&lt;script&gt;'));assert(!html.includes('<script>'));assert(!html.includes('<img src=x>'));assert(html.indexOf('精選作品')<html.indexOf('關於我'));assert(!html.includes('稱號與社群認證'));
  custom.blocks.find(b=>b.id==='featured')!.visible=false;
- const hidden=renderToStaticMarkup(createElement(ProfileDesign,{profile:{...profile,layout:custom}}));assert(!hidden.includes('https://example.test/work'));assert(!hidden.includes('/private/'));
+ const hidden=renderToStaticMarkup(createElement(ProfileDesign,{profile:{...profile,layout:custom}}));assert.equal(hidden.split('https://example.test/work').length,1);assert(!hidden.includes('/private/'));
 });
 test('defaults are independent snapshots; resetting appearance never changes identity or privacy',()=>{
  const first=ProfilePublicationInput.parse({visibility:'members',display_name:'owner',bio:'intro',links:[]}),second=ProfilePublicationInput.parse({visibility:'private',display_name:'other',bio:'',links:[]});
