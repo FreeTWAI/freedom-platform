@@ -153,6 +153,7 @@ test('bookmark options retain readable contrast and touch targets in light and d
   for(const theme of ['light','dark','versefolk']){
     await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
     for(const target of [control.locator('summary'),control.getByRole('button',{name:'儲存私人書籤',exact:true})]){
+      await target.scrollIntoViewIfNeeded();
       const metrics=await target.evaluate(element=>{
         const style=getComputedStyle(element),rect=element.getBoundingClientRect();
         const luminance=(color:string)=>{
@@ -160,11 +161,46 @@ test('bookmark options retain readable contrast and touch targets in light and d
           return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
         };
         const a=luminance(style.color),b=luminance(style.backgroundColor);
-        return {contrast:(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05),height:rect.height,unclipped:element.contains(document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2))};
+        let insideScrollports=true;
+        for(let parent=element.parentElement;parent;parent=parent.parentElement){
+          const css=getComputedStyle(parent),bounds=parent.getBoundingClientRect();
+          if(/auto|scroll|hidden|clip/.test(css.overflowY)&& (rect.top<bounds.top||rect.bottom>bounds.bottom))insideScrollports=false;
+          if(/auto|scroll|hidden|clip/.test(css.overflowX)&& (rect.left<bounds.left||rect.right>bounds.right))insideScrollports=false;
+        }
+        return {contrast:(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05),height:rect.height,insideScrollports,unclipped:element.contains(document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2))};
       });
-      expect(metrics.contrast).toBeGreaterThanOrEqual(4.5);expect(metrics.height).toBeGreaterThanOrEqual(44);expect(metrics.unclipped).toBe(true);
+      expect(metrics.contrast,`${theme} contrast`).toBeGreaterThanOrEqual(4.5);expect(metrics.height,`${theme} touch height`).toBeGreaterThanOrEqual(44);expect(metrics.unclipped,`${theme} target stays inside visible viewport`).toBe(true);
+      expect(metrics.insideScrollports,`${theme} target is not clipped by a scrolling ancestor`).toBe(true);
     }
   }
+});
+
+test('post options fit the visible viewport after resize and scroll without trapping keyboard focus',async({page,bookmarkAccount})=>{
+  const {control}=await createPost(page,bookmarkAccount.email),menu=control.locator('..').locator('..');
+  await openBookmark(control);
+  const save=control.getByRole('button',{name:'儲存私人書籤',exact:true});
+  await expect(save).toBeVisible();
+  for(const size of [{width:1280,height:720},{width:390,height:420},{width:390,height:844}]){
+    await page.setViewportSize(size);
+    await menu.scrollIntoViewIfNeeded();
+    // Resizing may move the trigger entirely off-screen, which intentionally closes it.
+    if(!await menu.evaluate(element=>(element as HTMLDetailsElement).open))await openBookmark(control);
+    await expect(save).toBeVisible();
+    const panel=menu.locator(':scope > .social-post-menu-actions');
+    await expect.poll(async()=>panel.evaluate(element=>{
+      const rect=element.getBoundingClientRect(),header=document.querySelector('.community-header')!.getBoundingClientRect();
+      return rect.top>=Math.max(0,header.bottom)&&rect.bottom<=window.innerHeight;
+    })).toBe(true);
+    // Native keyboard scrolling must bring the actual action into the scrollport.
+    await control.locator('summary').focus();await page.keyboard.press('Tab');await expect(save).toBeFocused();
+    await expect.poll(async()=>save.evaluate(element=>{
+      const rect=element.getBoundingClientRect();return element.contains(document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2));
+    })).toBe(true);
+  }
+  await page.keyboard.press('Escape');await expect(control).not.toHaveAttribute('open','');
+  await expect(control.locator('summary')).toBeFocused();
+  await page.keyboard.press('Escape');await expect(menu).not.toHaveAttribute('open','');
+  await expect(menu.locator(':scope > summary')).toBeFocused();
 });
 
 

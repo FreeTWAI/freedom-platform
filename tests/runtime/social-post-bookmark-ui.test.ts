@@ -61,3 +61,43 @@ test('Escape closes only the expanded bookmark and returns its focus; next Escap
   h.view().props.onKeyDown(event);assert.equal(h.details.open,false);assert.equal(h.focused,1);assert.equal(stopped,1);
   h.view().props.onKeyDown(event);assert.equal(stopped,1);
 });
+
+function optionsHarness(){
+  const hooks:any[]=[],effects:(()=>void)[]=[],listeners=new Map<string,Set<()=>void>>();let index=0,observed=0,disconnected=0;
+  const rect={top:474,bottom:518},viewport={offsetTop:0,height:720},header={getBoundingClientRect:()=>({bottom:106})};
+  const eventTarget=(prefix:string)=>({addEventListener:(event:string,fn:()=>void)=>{const key=prefix+event;if(!listeners.has(key))listeners.set(key,new Set());listeners.get(key)!.add(fn);},removeEventListener:(event:string,fn:()=>void)=>listeners.get(prefix+event)?.delete(fn)});
+  const window={...eventTarget('window:'),innerHeight:720,visualViewport:{...viewport,...eventTarget('visual:')}};
+  const details={open:false,getBoundingClientRect:()=>rect,contains:()=>false,querySelector:()=>({focus(){}})};
+  const effect=(fn:()=>unknown,deps:unknown[])=>{const i=index++;if(!hooks[i]||deps.some((v,n)=>v!==hooks[i].deps[n])){hooks[i]?.cleanup?.();hooks[i]={deps};effects.push(()=>{hooks[i].cleanup=fn();});}};
+  const react={useRef:(value:unknown)=>{const i=index++;return hooks[i]??(hooks[i]={current:value});},useState:(value:unknown)=>{const i=index++;if(!(i in hooks))hooks[i]=value;return [hooks[i],(v:any)=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useEffect:effect,useLayoutEffect:effect};
+  const jsx=(type:string,props:unknown)=>({type,props}),module={exports:{} as any};
+  runInNewContext(compiled,{module,exports:module.exports,window,document:{...eventTarget('document:'),querySelector:()=>header},ResizeObserver:class{observe(){observed++;}disconnect(){disconnected++;}},Node:class{},require:(name:string)=>{
+    if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='../api')return {ApiError};if(name==='../language')return {useLanguage:()=>({language:'zh-Hant'})};throw Error(name);
+  }});
+  function render(){index=0;const tree=module.exports.SocialPostOptions({client:{},postId:'post-a',bookmarksEnabled:true,children:[]});tree.props.ref.current=details;while(effects.length)effects.shift()!();return tree;}
+  function view(){render();return render();}
+  function toggle(open:boolean){details.open=open;view().props.onToggle({target:details,currentTarget:details});return view();}
+  return {view,toggle,rect,window,details,listeners,placement:module.exports.postOptionsPlacement,emit:(key:string)=>listeners.get(key)?.forEach(fn=>fn()),get observed(){return observed;},get disconnected(){return disconnected;}};
+}
+test('post options choose the visible side and cap the scrollport, including the failing 720px viewport',()=>{
+  const h=optionsHarness();
+  for(const [top,bottom,viewTop,viewBottom,above,height] of [[474,518,106,720,true,356],[150,194,106,720,false,420],[150,222,106,720,false,420],[200,244,65,420,false,164],[740,784,65,844,true,420],[30,74,65,100,false,14]]){
+    const actual=h.placement(top,bottom,viewTop,viewBottom);assert.equal(actual.above,above);assert.equal(actual.maxHeight,height);
+    const panelTop=above?top-height:bottom,panelBottom=above?top:bottom+height;
+    assert.ok(panelTop>=viewTop);assert.ok(panelBottom<=viewBottom);
+  }
+});
+test('open options reposition on viewport resize and ancestor scroll; close cleans all geometry subscriptions',()=>{
+  const h=optionsHarness();h.view();assert.equal(h.observed,0);
+  let panel=find(h.toggle(true),n=>n.props?.className==='social-post-menu-actions');assert.equal(panel.props.style.bottom,'100%');assert.equal(panel.props.style.maxHeight,356);assert.equal(h.observed,2);
+  h.rect.top=150;h.rect.bottom=194;h.emit('window:scroll');panel=find(h.view(),n=>n.props?.className==='social-post-menu-actions');assert.equal(panel.props.style.top,'100%');assert.equal(panel.props.style.maxHeight,420);
+  h.window.visualViewport.height=420;h.emit('visual:resize');panel=find(h.view(),n=>n.props?.className==='social-post-menu-actions');assert.equal(panel.props.style.maxHeight,214);
+  h.rect.top=330;h.rect.bottom=374;h.emit('window:resize');panel=find(h.view(),n=>n.props?.className==='social-post-menu-actions');assert.equal(panel.props.style.bottom,'100%');assert.equal(panel.props.style.maxHeight,212);
+  h.toggle(false);assert.equal(h.disconnected,1);for(const set of h.listeners.values())assert.equal(set.size,0);
+});
+test('scrolling the trigger fully behind the header or below viewport closes its menu',()=>{
+  for(const rect of [{top:30,bottom:74},{top:730,bottom:774}]){
+    const h=optionsHarness();h.toggle(true);Object.assign(h.rect,rect);h.emit('window:scroll');h.view();
+    assert.equal(h.details.open,false);assert.equal(h.disconnected,1);for(const set of h.listeners.values())assert.equal(set.size,0);
+  }
+});

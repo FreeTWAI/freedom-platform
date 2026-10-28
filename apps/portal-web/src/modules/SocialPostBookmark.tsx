@@ -96,11 +96,38 @@ export function SocialPostBookmark({client,postId,menuOpen=true}:{client:PortalC
   </details>;
 }
 
+/** Prefer the larger visible side; a long menu scrolls without escaping the viewport. */
+export function postOptionsPlacement(top:number,bottom:number,viewportTop:number,viewportBottom:number) {
+  const above=Math.max(0,top-viewportTop-12),below=Math.max(0,viewportBottom-bottom-12);
+  return {above:above>below,maxHeight:Math.min(420,Math.max(above,below))};
+}
+
 /** Native disclosure, not an ARIA menu: its contents retain normal Tab navigation. */
 export function SocialPostOptions({client,postId,bookmarksEnabled,children}:{client:PortalClient;postId:string;bookmarksEnabled:boolean;children:ReactNode}) {
   const menu=useRef<HTMLDetailsElement>(null);
   const [open,setOpen]=useState(false);
+  const [placement,setPlacement]=useState({above:false,maxHeight:420});
   const close=()=>{if(menu.current)menu.current.open=false;setOpen(false);};
+  useLayoutEffect(()=>{
+    if(!open)return;
+    const position=()=>{
+      const rect=menu.current?.getBoundingClientRect();if(!rect)return;
+      const viewport=window.visualViewport;
+      const top=viewport?.offsetTop??0,bottom=top+(viewport?.height??window.innerHeight);
+      const header=document.querySelector('.community-header')?.getBoundingClientRect();
+      const visibleTop=Math.max(top,header?.bottom??top);
+      // Do not leave an orphaned menu over another post or pull focus back on scroll.
+      if(rect.bottom<=visibleTop||rect.top>=bottom){close();return;}
+      const next=postOptionsPlacement(rect.top,rect.bottom,visibleTop,bottom);
+      setPlacement(previous=>previous.above===next.above&&previous.maxHeight===next.maxHeight?previous:next);
+    };
+    position();
+    const observer=new ResizeObserver(position);if(menu.current)observer.observe(menu.current);
+    const header=document.querySelector('.community-header');if(header)observer.observe(header);
+    window.addEventListener('resize',position);window.addEventListener('scroll',position,true);
+    window.visualViewport?.addEventListener('resize',position);window.visualViewport?.addEventListener('scroll',position);
+    return()=>{observer.disconnect();window.removeEventListener('resize',position);window.removeEventListener('scroll',position,true);window.visualViewport?.removeEventListener('resize',position);window.visualViewport?.removeEventListener('scroll',position);};
+  },[open]);
   useEffect(()=>{
     if(!open)return;
     const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!menu.current?.contains(event.target))close();};
@@ -112,7 +139,7 @@ export function SocialPostOptions({client,postId,bookmarksEnabled,children}:{cli
     onBlur={event=>{if(event.relatedTarget instanceof Node&&!event.currentTarget.contains(event.relatedTarget))close();}}
     onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();close();menu.current?.querySelector('summary')?.focus();}}}>
     <summary aria-label="貼文選項">⋯</summary>
-    <div className="social-post-menu-actions">{children}
+    <div className="social-post-menu-actions" style={{top:placement.above?'auto':'100%',bottom:placement.above?'100%':'auto',maxHeight:placement.maxHeight,overflowY:'auto'}}>{children}
       {bookmarksEnabled&&<SocialPostBookmark client={client} postId={postId} menuOpen={open}/>}
     </div>
   </details>;
