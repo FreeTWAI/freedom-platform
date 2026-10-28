@@ -84,6 +84,9 @@ test('PUBLIC-POST-01 author explicitly opens one version; anonymous no-JS reader
   const card=author.page.locator(`#social-post-${post.post_id}`);await expect(card).toBeVisible();
   await card.getByRole('button',{name:'分享貼文連結',exact:true}).click();
   const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});
+  await expect(dialog.getByRole('button',{name:'複製貼文連結',exact:true})).toBeEnabled();
+  await expect(dialog.locator('.social-sharing-consent')).not.toHaveAttribute('open','');
+  await dialog.locator('.social-sharing-consent > summary').click();
   await expect(dialog.getByRole('button',{name:'開放免登入閱讀',exact:true})).toBeVisible();
   const publication=author.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1/social-posts/${post.post_id}/public-sharing`);
   await dialog.getByRole('button',{name:'開放免登入閱讀',exact:true}).click();expect((await publication).status()).toBe(200);
@@ -194,6 +197,7 @@ test('PUBLIC-POST-07 editing invalidates consent; reopening the reviewed version
   // The close control is already visible for invalidated consent (enabled=true).
   // Wait for this explicit publication's acknowledgment, not that stale control.
   const reopening=author.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1/social-posts/${post.post_id}/public-sharing`);
+  await dialog.locator('.social-sharing-consent > summary').click();
   await dialog.getByRole('button',{name:'重新開放目前版本',exact:true}).click();
   const reopened=await reopening;expect(reopened.status()).toBe(200);
   expect(await reopened.json()).toMatchObject({enabled:true,available:true,post_revision:post.revision+1,public_path:publicPath(post.post_id)});
@@ -308,6 +312,7 @@ test('PUBLIC-POST-12 a malformed successful sharing acknowledgment retains the e
   await author.page.goto(`/?social-post=${post.post_id}#social`);
   await author.page.locator(`#social-post-${post.post_id}`).getByRole('button',{name:'分享貼文連結',exact:true}).click();
   const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});
+  await dialog.locator('.social-sharing-consent > summary').click();
   await dialog.getByRole('button',{name:'開放免登入閱讀',exact:true}).click();
   await expect(dialog.getByRole('button',{name:'確認上次設定',exact:true})).toBeEnabled();
   await expect(dialog.getByRole('alert')).toContainText('尚未確認公開設定是否已保存');
@@ -402,4 +407,42 @@ test('PUBLIC-POST-14 no-JS visitors can read three known resources from public t
     expect(await reader.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     expect(writes).toEqual([]);
   }finally{await anonymous.close();}
+});
+
+test('PUBLIC-POST-16 shared controls and concise sharing retain readable states at 320/390/1280 in all three themes',async({author})=>{
+  const post=await createPost(author,`收合的完整預覽 ${randomUUID()} ${'保留全文。'.repeat(100)}`);
+  await author.page.addInitScript(()=>{
+    Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('cancelled','AbortError');}});
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new DOMException('denied','NotAllowedError');}}});
+  });
+  await author.page.goto(`/?social-post=${post.post_id}#social`);
+  const trigger=author.page.locator(`#social-post-${post.post_id}`).getByRole('button',{name:'分享貼文連結',exact:true});
+  const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});
+  for(const theme of ['light','dark','versefolk'])for(const width of [320,390,1280]){
+    await author.page.setViewportSize({width,height:800});await author.page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await trigger.click();const copy=dialog.getByRole('button',{name:'複製貼文連結',exact:true});await expect(copy).toBeEnabled();
+    await expect(dialog.locator('.social-share-preview')).not.toBeVisible();await expect(dialog.locator('.social-share-link input')).not.toBeVisible();
+    await expect(dialog.locator('.social-share-audience')).toHaveText('僅限登入且有閱覽權限的會員。');
+    await expect(copy).toBeInViewport();await expect(dialog.getByRole('button',{name:'系統分享',exact:true})).toBeInViewport();
+    expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+    for(const variant of ['', 'btn-secondary','btn-primary','btn-ghost','btn-module']){
+      await dialog.evaluate((node,variant)=>{const probe=document.createElement('button');probe.type='button';probe.className=`btn ${variant}`;probe.dataset.controlProbe='true';probe.textContent='共用控制項驗證';node.append(probe);},variant);
+      const probe=dialog.locator('[data-control-probe]');
+      for(const state of ['enabled','hover','focus','disabled']){
+        if(state==='hover')await probe.hover();if(state==='focus')await probe.focus();if(state==='disabled')await probe.evaluate(node=>(node as HTMLButtonElement).disabled=true);
+        const colors=await probe.evaluate(node=>{
+          const style=getComputedStyle(node);let bg=style.backgroundColor;let parent=node.parentElement;
+          while(bg==='rgba(0, 0, 0, 0)'&&parent){bg=getComputedStyle(parent).backgroundColor;parent=parent.parentElement;}
+          const lum=(rgb:string)=>{const v=rgb.match(/[\d.]+/g)!.slice(0,3).map(Number).map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
+          const a=lum(style.color),b=lum(bg);return {contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),opacity:style.opacity,height:node.getBoundingClientRect().height,outline:style.outlineStyle,border:style.borderStyle};
+        });
+        expect(colors.contrast,`${theme}/${width}/${variant}/${state}`).toBeGreaterThanOrEqual(4.5);expect(colors.height).toBeGreaterThanOrEqual(44);
+        if(state==='focus')expect(colors.outline).not.toBe('none');if(state==='disabled'){expect(colors.opacity).toBe('1');expect(colors.border).toBe('dashed');await expect(probe).toBeDisabled();}
+      }
+      await probe.evaluate(node=>node.remove());
+    }
+    await copy.click();await expect(dialog.getByLabel('貼文連結',{exact:true})).toBeFocused();await expect(dialog.locator('.social-share-link')).toHaveAttribute('open','');
+    await dialog.getByRole('button',{name:'系統分享',exact:true}).click();expect(await sharing(author,post.post_id)).toMatchObject({enabled:false,available:false,version:'1'});
+    await author.page.keyboard.press('Escape');await expect(trigger).toBeFocused();
+  }
 });

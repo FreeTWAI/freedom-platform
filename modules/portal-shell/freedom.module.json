@@ -62,7 +62,8 @@
     "apps/portal-web/src/PlatformHelperHost.tsx",
     "tests/runtime/platform-helper-host.test.ts",
     "tests/runtime/platform-helper-host-observation.test.ts",
-    "tests/e2e/platform-helper-host.spec.ts"
+    "tests/e2e/platform-helper-host.spec.ts",
+    "tests/runtime/shared-controls.test.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/api.ts",
