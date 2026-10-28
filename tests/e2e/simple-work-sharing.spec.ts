@@ -217,3 +217,28 @@ test('manual skill private save reloads and revises the same draft without publi
   await signOut(page); await login(page, 'client@local.test');
   expect((await page.request.get('/api/v1/me/skill-submissions/' + first.submission_id)).status()).toBe(404);
 });
+
+test('manual skill committed save lost ACK then 429 reconciles one draft with the original key', async ({ page }) => {
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  await page.route('**/api/v1/me/skill-submissions/manual', async route => {
+    requests.push({ key: route.request().headers()['idempotency-key'], body: route.request().postData() });
+    if (requests.length === 1) {
+      const committed = await route.fetch();
+      expect(committed.status()).toBe(201);
+      await route.abort('failed');
+    } else if (requests.length === 2) {
+      await route.fulfill({ status: 429, json: { title: '暫時限流', detail: '請稍後重試原請求。' } });
+    } else await route.fallback();
+  });
+  await login(page); await navigate(page, '開源投稿');
+  await fillTool(page, '未知後限流仍只一份');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await page.getByRole('button', { name: '重試儲存私人草稿', exact: true }).click();
+  await expect(page.getByText('暫時限流：請稍後重試原請求。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '重試儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  expect(requests).toHaveLength(3); expect(requests[0].key).toBeTruthy();
+  expect(requests[1]).toEqual(requests[0]); expect(requests[2]).toEqual(requests[0]);
+  const drafts = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items.filter((item: any) => item.payload?.title === '未知後限流仍只一份');
+  expect(drafts).toHaveLength(1); expect(drafts[0].status).toBe('ready_for_review'); expect(drafts[0].public_path).toBeNull();
+});

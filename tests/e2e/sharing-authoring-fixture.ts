@@ -51,7 +51,8 @@ export async function mountSharingFixture(page:Page, kind='probe') {
       pendingReads,resolveRead:(index,value)=>pendingReads[index].resolve(value),rejectRead:index=>pendingReads[index].reject(Error('Synthetic private read failure')),
       content:value=>{content=value},deferReads:value=>{deferReads=value},enabled:value=>{enabled=value;render()},resume:value=>{resumeId=value;render()},
       resolve:(index,value)=>pending[index].resolve(value),
-      reject:(index,network=true)=>pending[index].reject(new ApiError({message:'Synthetic response loss',network,status:network?0:409})),
+      reject:(index,network=true)=>pending[index].reject(new ApiError({message:'Synthetic response loss',network,definitiveResponse:!network,status:network?0:409})),
+      rejectRateLimit:index=>pending[index].reject(new ApiError({message:'Synthetic rate limit',status:429,definitiveResponse:true})),
       projects:value=>{projects=value},drafts:value=>{drafts=value},showcases:value=>{showcases=value},opportunities:value=>{opportunities=value},blocked:value=>{blocked=value},
       session:(next,replace=true)=>{user=next;if(replace)token+='x';client.csrfToken=next?token:null;setSharingDraftAccount(next,client.sessionGeneration);render();},
     };
@@ -126,6 +127,49 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
     await page.getByRole('button',{name:'確認並公開',exact:true}).click();
     expect(await fixture(page,f=>({path:f.calls[2].path,version:f.calls[2].options.ifMatch}))).toEqual({path:'/me/skill-submissions/private-skill/publish',version:2});
+  },
+  'manual skill rejected publication then unknown revision retries the manual tuple after remount':async page=>{
+    await mountSharingFixture(page,'skill');
+    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await page.getByLabel('作品名稱',{exact:true}).fill('Rejected publication');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
+    await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
+    await page.getByRole('button',{name:'確認並公開',exact:true}).click();
+    await fixture(page,f=>f.resolve(0,{submission_id:'recovery-skill',status:'ready_for_review',can_edit:true,aggregate_version:1,payload:{...f.calls[0].body},public_path:null}));
+    await expect.poll(()=>fixture(page,f=>f.calls.length)).toBe(2);
+    await fixture(page,f=>f.reject(1,false));
+    await page.getByRole('button',{name:'修改內容',exact:true}).click();
+    await page.getByLabel('作品名稱',{exact:true}).fill('Private revision');
+    await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
+    await fixture(page,f=>f.reject(2));
+    await remount(page);
+    await expect(page.getByLabel('作品名稱',{exact:true})).toBeDisabled();
+    await page.getByRole('button',{name:'重試儲存私人草稿',exact:true}).click();
+    expect(await fixture(page,f=>({path:f.calls[3].path,version:f.calls[3].options.ifMatch,same:JSON.stringify(f.calls[2])===JSON.stringify(f.calls[3])}))).toEqual({path:'/me/skill-submissions/recovery-skill/manual',version:1,same:true});
+    await fixture(page,f=>f.resolve(3,{submission_id:'recovery-skill',status:'ready_for_review',can_edit:true,aggregate_version:2,payload:{...f.calls[3].body},public_path:null}));
+    await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+    await expect(page.getByRole('button',{name:'儲存私人草稿',exact:true})).toBeEnabled();
+    expect(await fixture(page,f=>f.calls.length)).toBe(4);
+  },
+  'manual skill unknown save retains its exact tuple across a definitive rate limit':async page=>{
+    await mountSharingFixture(page,'skill');
+    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
+    await page.getByLabel('作品名稱',{exact:true}).fill('Ambiguous save');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
+    await fixture(page,f=>f.reject(0));
+    await page.getByRole('button',{name:'重試儲存私人草稿',exact:true}).click();
+    await fixture(page,f=>f.rejectRateLimit(1));
+    await remount(page);
+    await page.getByRole('button',{name:'重試儲存私人草稿',exact:true}).click();
+    expect(await fixture(page,f=>f.calls.length)).toBe(3);
+    expect(await fixture(page,f=>f.calls.every((c:any)=>JSON.stringify(c)===JSON.stringify(f.calls[0])))).toBe(true);
+    await fixture(page,f=>f.resolve(2,{submission_id:'committed-once',status:'ready_for_review',can_edit:true,aggregate_version:1,payload:{...f.calls[0].body},public_path:null}));
+    await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+    await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
+    await expect(page.getByRole('button',{name:'儲存私人草稿',exact:true})).toBeEnabled();
+    expect(await fixture(page,f=>f.calls.length)).toBe(3);
   },
   'manual skill saved draft reload reads server list and resumes without treating save as publish':async page=>{
     await mountSharingFixture(page,'skill');
@@ -344,7 +388,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     expect(await fixture(page,f=>({path:f.calls[2].path,version:f.calls[2].options.ifMatch,title:f.calls[2].body.title}))).toEqual({path:'/me/skill-submissions/10000000-0000-4000-8000-000000000099/manual',version:1,title:'Edited title'});
     await fixture(page,f=>f.resolve(2,{submission_id:'10000000-0000-4000-8000-000000000099',status:'ready_for_review',can_edit:true,aggregate_version:2,payload:{...f.calls[2].body},public_path:null}));
     await expect.poll(()=>fixture(page,f=>f.calls.length)).toBe(4);await remount(page);await expect(page.getByRole('button',{name:'正在確認公開來源與授權…'})).toBeDisabled();
-    await fixture(page,f=>f.reject(3));await expect(page.getByRole('button',{name:'儲存私人草稿',exact:true})).toBeDisabled();await expect(page.getByText('已保存草稿；公開結果尚未確認，請先確認原公開操作。')).toBeVisible();await page.getByRole('button',{name:'重試公開投稿',exact:true}).click();expect(await fixture(page,f=>JSON.stringify(f.calls[3])===JSON.stringify(f.calls[4]))).toBe(true);
+    await fixture(page,f=>f.reject(3));await expect(page.getByRole('button',{name:'儲存私人草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'修改內容',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'撤銷這份私人投稿',exact:true})).toBeDisabled();await expect(page.getByText('已保存草稿；公開結果尚未確認，請先確認原公開操作。')).toBeVisible();await page.getByRole('button',{name:'重試公開投稿',exact:true}).click();expect(await fixture(page,f=>JSON.stringify(f.calls[3])===JSON.stringify(f.calls[4]))).toBe(true);
     await fixture(page,f=>f.resolve(4,{submission_id:'10000000-0000-4000-8000-000000000099',status:'published',aggregate_version:3,public_path:'/development/submissions/10000000-0000-4000-8000-000000000099'}));
     await expect(page.getByRole('link',{name:'閱讀已公開技能書 ↗'})).toHaveAttribute('href','/development/submissions/10000000-0000-4000-8000-000000000099');await remount(page);await expect(page.getByRole('link',{name:'前往技能書架'})).toBeVisible();
   },
