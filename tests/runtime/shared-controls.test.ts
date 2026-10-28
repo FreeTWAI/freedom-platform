@@ -40,3 +40,28 @@ test('standalone styles retain a readable fallback pair without the RPG sheet',(
   assert.equal(declarations(sheets[0],'.btn').background,'var(--control-bg,#252d39)');
   assert.equal(declarations(sheets[0],'.btn').color,'var(--control-ink,#f4f6ef)');
 });
+
+test('Short overlay styling and white focus ring match only the direct share trigger, never dialog buttons',()=>{
+  const css=read('modules/ShortVideoFeed.css');
+  assert.doesNotMatch(css,/\.short-video-share\s+\.btn/);
+  const overlay=declarations(css,'.short-video-feed .short-video-share > .btn');
+  assert.equal(overlay.color,'#fff');assert.equal(overlay.background,'rgb(0 0 0 / 0.45)');assert.equal(overlay['min-height'],'44px');
+  assert.equal(declarations(css,'.short-video-action:focus-visible, .short-video-share > .btn:focus-visible').outline,'2px solid #fff');
+  assert.equal(declarations(css,'.short-video-feed .short-video-share > .btn svg').color,'inherit');
+  const feed=read('modules/ShortVideoFeed.tsx'),share=read('modules/SocialPostShare.tsx');
+  assert.ok(feed.includes('<span className="short-video-share">{renderShare(post)}</span>'));
+  assert.match(share,/return <>\s*<button[\s\S]*?<\/button>\s*<dialog/);
+  const regression=css.replaceAll('.short-video-share > .btn','.short-video-share .btn');
+  assert.match(regression,/\.short-video-share\s+\.btn/);
+  assert.ok(contrast('#ffffff','#8c8c8c')<4.5,'old white-on-translucent-black over white dialog fails');
+});
+
+test('Newbie enabled-only override cannot replace the shared disabled border; the old selector is a negative control',()=>{
+  const css=read('modules/NewbieVillage.css');
+  const original='.newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost)';
+  assert.equal(declarations(css,original).border,undefined);
+  assert.equal(declarations(css,original+':not(:disabled)').border,'1px solid var(--line)');
+  const regression=css.replace(original+':not(:disabled)',original);
+  assert.equal(declarations(regression,original).border,'1px solid var(--line)');
+  assert.ok((original.match(/\.[a-z-]+/g)||[]).length>3,'old five-class specificity outranks root/btn/disabled');
+});

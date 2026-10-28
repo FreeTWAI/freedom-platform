@@ -73,10 +73,30 @@ test.describe('sharing around Short, feature ON', () => {
       await expect(trigger).toBeFocused();
       await expect(feed.getByRole('button', {name: '留言 · 1', exact: true})).toBeVisible();
       // Share hands off the permalink; options keep the report entry.
-      await feed.getByRole('button', {name: '分享貼文連結', exact: true}).click();
-      const share = page.getByRole('dialog', {name: '分享貼文連結', exact: true});
-      await expect(share.getByLabel('貼文連結')).toHaveValue(new RegExp(`social-post=${ids[0]}`));
-      await share.getByRole('button', {name: '關閉分享', exact: true}).click();
+      for(const theme of ['light','dark','versefolk'])for(const width of [320,390,1280]){
+        await page.setViewportSize({width,height:800});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+        const shareTrigger=feed.getByRole('button',{name:'分享貼文連結',exact:true});
+        await expect(shareTrigger).toHaveCSS('color','rgb(255, 255, 255)');
+        await expect(shareTrigger).toHaveCSS('background-color','rgba(0, 0, 0, 0.45)');
+        await shareTrigger.click();
+        const share=page.getByRole('dialog',{name:'分享貼文連結',exact:true});
+        const copy=share.getByRole('button',{name:'複製貼文連結',exact:true});await expect(copy).toBeEnabled();
+        await expect(share.getByLabel('貼文連結')).toHaveValue(new RegExp(`social-post=${ids[0]}`));
+        await expect(share.locator('.social-share-link input')).not.toBeVisible();
+        await expect(copy).toBeInViewport();expect(await share.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+        for(const control of [copy,share.getByRole('button',{name:'關閉分享',exact:true})]){
+          await control.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');await expect(control).toBeFocused();
+          const colors=await control.evaluate(node=>{
+            const style=getComputedStyle(node),dialog=getComputedStyle(node.closest('dialog')!);
+            const lum=(rgb:string)=>{const v=rgb.match(/[\d.]+/g)!.slice(0,3).map(Number).map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
+            const bg=style.backgroundColor==='rgba(0, 0, 0, 0)'?dialog.backgroundColor:style.backgroundColor;
+            const a=lum(style.color),b=lum(bg);return {ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),background:bg,outline:style.outlineColor,focusVisible:node.matches(':focus-visible'),height:node.getBoundingClientRect().height};
+          });
+          expect(colors.ratio,`${theme}/${width}`).toBeGreaterThanOrEqual(4.5);expect(colors.background).not.toBe('rgba(0, 0, 0, 0.45)');
+          expect(colors.focusVisible).toBe(true);expect(colors.outline).not.toBe('rgb(255, 255, 255)');expect(colors.height).toBeGreaterThanOrEqual(44);
+        }
+        await share.getByRole('button',{name:'關閉分享',exact:true}).click();await expect(shareTrigger).toBeFocused();
+      }
       await feed.getByRole('button', {name: '貼文選項與檢舉', exact: true}).click();
       await expect(page.getByRole('dialog', {name: '貼文選項與檢舉', exact: true}).getByRole('button', {name: '檢舉貼文', exact: true})).toBeVisible();
     } finally {
