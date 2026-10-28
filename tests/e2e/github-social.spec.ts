@@ -1,4 +1,4 @@
-import { navigate, signOut } from './navigation.js';
+import { navigate, signOut, openAccountSettings } from './navigation.js';
 import {test,expect,type Page} from './fixtures.js';
 
 test.beforeEach(async({page})=>{
@@ -175,7 +175,7 @@ test('account disconnect clears shared Star state and distinguishes local remova
   await page.route('**/api/v1/me/github/books/*/star',route=>route.fulfill({json:{book_id:'social-post',starred:true,connected}}));
   await page.route('**/api/v1/me/github/disconnect',route=>{expect(route.request().method()).toBe('POST');expect(route.request().headers()['x-csrf-token']).toBeTruthy();connected=false;return route.fulfill({json:{connected:false,provider_revoked:false}});});
   await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'取消 Star',exact:true})).toBeEnabled();
-  await navigate(page, '我的名片');const panel=page.locator('.github-connection-panel');
+  await navigate(page, '我的名片');await openAccountSettings(page,'帳號與安全','連結 GitHub 與其他工具');const panel=page.locator('.github-connection-panel');
   await expect(panel).toContainText('@synthetic-owner');await panel.getByRole('button',{name:'解除 GitHub 連結',exact:true}).click();
   await expect(panel.getByRole('status')).toContainText('已解除工坊連結；可到 GitHub 設定撤銷授權。');
   await expect(panel.getByRole('link',{name:'GitHub 授權設定 ↗',exact:true})).toHaveAttribute('href','https://github.com/settings/apps/authorizations');

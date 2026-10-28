@@ -1,4 +1,4 @@
-import { navigate } from './navigation.js';
+import { navigate, openAccountSettings } from './navigation.js';
 import { test, expect, type Locator, type Page } from './fixtures.js';
 import { DEMO_PASSWORD, DEMO_USERS } from '../../packages/testing/seed.js';
 import { mountSharingFixture } from './sharing-authoring-fixture.js';
@@ -547,6 +547,7 @@ test('the upload dialog keeps the same type on the skill shelf and the open-sour
 test('member card headings keep their margin outside the upload dialog', async ({ page }) => {
   await login(page);
   await navigate(page, '我的名片');
+  await openAccountSettings(page, '查看目前的會員名片');
   const heading = page.locator('.account-panel .member-card-body h4').first();
   await expect(heading).toBeVisible();
   await expect(heading).toHaveCSS('margin-top', '0px');

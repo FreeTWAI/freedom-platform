@@ -73,7 +73,7 @@ test('compact rows keep three skills visible and fold permitted contact and guil
   await page.setViewportSize({width:768,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/member-directory-tablet.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-results/member-directory-phone.png',fullPage:true});
   await page.setViewportSize({width:320,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await navigate(page, '我的名片');await expect(page.locator('.account-panel .member-card')).toHaveCount(1);await expect(page.locator('.account-panel .directory-member')).toHaveCount(0);await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'保存個人資料與公開範圍',exact:true})).toBeVisible();
+  await navigate(page, '我的名片');await expect(page.locator('.account-panel .member-card')).toHaveCount(1);await expect(page.locator('.account-panel .directory-member')).toHaveCount(0);await expect(page.getByLabel('社群顯示名稱',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'儲存修改',exact:true})).toBeVisible();
 });
 
 test('empty search and retry states remain distinct and keep the selected filters',async({page})=>{

@@ -1,0 +1,68 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "community-certification",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/community-certification/**",
+    "apps/platform-api/src/routes/community-certification.ts",
+    "migrations/193_member_community_certifications.sql",
+    "tests/runtime/community-certification.test.ts",
+    "tests/runtime/community-certification-policy.test.ts",
+    "tests/e2e/community-certification.spec.ts",
+    "deploy/cloudflare/test/community-certification-schema.test.mjs",
+    "tests/runtime/community-certification-http.test.ts"
+  ],
+  "public_exports": [
+    "modules/community-certification/service.ts",
+    "apps/platform-api/src/routes/community-certification.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "member-card",
+    "platform-admin-portal",
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member",
+    "platform-admin"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "docs/development/platform-admin-api.md",
+    "packages/db/README.md",
+    "modules/community-certification/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts",
+    "single-transaction-effects"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "community-certification.member",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/community-certification.ts",
+      "operations": [
+        "certification.apply",
+        "certification.withdraw",
+        "certification.display"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "community-certification.review",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/community-certification.ts",
+      "operations": [
+        "certification.review",
+        "certification.queue"
+      ],
+      "auth_profile": "platform-admin-and-current-member"
+    }
+  ]
+}

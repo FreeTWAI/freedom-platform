@@ -40,6 +40,7 @@
     "social-feed",
     "tenant-workspaces",
     "work",
+    "community-certification",
     "google-identity"
   ],
   "format": "freedom.module/v1",

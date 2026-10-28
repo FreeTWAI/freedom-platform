@@ -1,3 +1,4 @@
+import {recordSocialWork} from '../../../../modules/social-achievements/service.js';
 import { singleQuery } from '../routes/tenant-http.js';
 import { createWork, claimWork, changeClaim, listWorks, listWorksPage, workListPageQuery, dashboard } from '../../../../modules/opportunity-project-work/work.js';
 import { createShowcase, listShowcases, createOpportunity, listOpportunities, proposeEngagement, listEngagements, readEngagementSummary, changeEngagement } from '../../../../modules/opportunity-project-work/business.js';
@@ -22,7 +23,7 @@ export function registerWorkRoutes(app: PlatformFeatureApp, context: PlatformFea
   // Action suffix is part of the constrained segment; validate its UUID separately.
   app.post('/api/v1/work-items/:id{[0-9a-f-]+:claim}',async c=>respond(c,await claimWork(pool,await cmd(c),routeId(c)),201));
   for(const action of ['start','submit','begin-review','decide'] as const) {
-    app.post(`/api/v1/work-claims/:id{[0-9a-f-]+:${action}}`,async c=>respond(c,await changeClaim(pool,await cmd(c),routeId(c),action)));
+    app.post(`/api/v1/work-claims/:id{[0-9a-f-]+:${action}}`,async c=>respond(c,await changeClaim(pool,await cmd(c),routeId(c),action,context.runtime.socialAchievementsEnabled===true?recordSocialWork:undefined)));
   }
   app.get('/api/v1/dashboard',async c=>c.json(await dashboard(pool,c.get('actor'))));
   app.get('/api/v1/task-board/preview',async c=>c.json({items:await previewTasks(pool,c.get('actor'))}));

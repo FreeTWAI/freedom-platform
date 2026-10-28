@@ -2455,6 +2455,7 @@ export const TENANT_DATA_CATALOG: TenantDataCatalog = deepFreeze({
             "target_distribution_product_id",
             "target_appearance_id",
             "target_gallery_photo_id",
+            "target_profile_cover_id",
           ],
           tenant_resolution: {
             kind: "direct" as const,
@@ -2658,6 +2659,23 @@ export const TENANT_DATA_CATALOG: TenantDataCatalog = deepFreeze({
             reason: "Maintenance, backup and deletion inventory must see every asset row. Tenant bytes stay on scoped queries, composite foreign keys, asset_scope_purpose, and the purpose allow-list that never GC-claims work.tenant-result or storefront.product-photo.",
           },
         },
+        // Personal profile rows join the asset/scope graph but do not acquire
+        // tenant ownership or export authority from this coverage registration.
+        { kind: "table" as const, table: "member_profile_cover_targets",
+          columns: ["user_id", "community_id", "scope_id", "scope_kind", "owner_principal_id", "aggregate_version"],
+          tenant_resolution: { kind: "fk_chain" as const, via: ["resource_scopes"] },
+          isolation: { rls: "exempt" as const, reason_code: "non_tenant_sidecar",
+            reason: "Personal-only cover target with generated personal scope and composite owner bindings. Its scope FK enters structural tenant coverage; it grants no tenant ownership, read or export authority. Owner commands retain domain authorization and maintenance must see every row." } },
+        { kind: "table" as const, table: "member_profile_cover_versions",
+          columns: ["user_id", "version", "scope_id", "owner_principal_id", "asset_id", "purpose", "created_at", "retired_at", "asset_state"],
+          tenant_resolution: { kind: "fk_chain" as const, via: ["assets"] },
+          isolation: { rls: "exempt" as const, reason_code: "non_tenant_sidecar",
+            reason: "Immutable personal cover versions enter coverage through their composite asset FK. The personal-only purpose and owner binding remain authoritative; only the current consented publication exposes a selected cover. Structural registration does not authorize asset reads or tenant export; maintenance retains complete inventory." } },
+        { kind: "table" as const, table: "member_profile_publications",
+          columns: ["user_id", "community_id", "visibility", "display_name", "bio", "links", "aggregate_version", "created_at", "updated_at", "layout", "include_cover", "cover_version"],
+          tenant_resolution: { kind: "fk_chain" as const, via: ["member_profile_cover_versions", "assets"] },
+          isolation: { rls: "exempt" as const, reason_code: "non_tenant_sidecar",
+            reason: "Opt-in personal publication enters coverage through its optional selected cover FK, not tenant membership. Owner-only edits and current private/member/public visibility, account status and block checks authorize projections. Hidden fields and unselected covers stay private; catalog coverage grants no read or export authority. Retention remains undecided." } },
         {
           kind: "table" as const,
           table: "member_avatar_asset_targets",

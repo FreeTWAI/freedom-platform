@@ -225,6 +225,11 @@ const FOUNDATION_NAMES = [
   '188_paid_order_cancellation.sql',
   '189_hosted_drop_ship.sql',
   '190_google_identity.sql',
+  // Explicitly consented profile records only; recognition grants no publication or release authority.
+  '191_member_profile_publications.sql',
+  '192_member_profile_customization.sql',
+  '193_member_community_certifications.sql',
+  '194_social_achievements.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

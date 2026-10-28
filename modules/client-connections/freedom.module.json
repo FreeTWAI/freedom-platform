@@ -25,7 +25,8 @@
     "tests/runtime/client-connections.test.ts",
     "packages/client-connections/**",
     "packages/sdk/member-workspace.mjs",
-    "apps/portal-web/src/modules/ClientConnections.tsx"
+    "apps/portal-web/src/modules/ClientConnections.tsx",
+    "tests/e2e/onboarding-members.spec.ts"
   ],
   "public_exports": [
     "modules/client-connections/service.ts"

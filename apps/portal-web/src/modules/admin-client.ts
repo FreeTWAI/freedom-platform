@@ -6,7 +6,7 @@ const INCOMPLETE_MESSAGE = '管理入口沒有回傳完整資料，請重新確�
 
 export class AdminRequestError extends Error {
   readonly accessExpired: boolean;
-  constructor(message: string, readonly status = 0, accessExpired = false) {
+  constructor(message: string, readonly status = 0, accessExpired = false, readonly definitiveResponse = false) {
     super(message);
     this.name = 'AdminRequestError';
     this.accessExpired = accessExpired;
@@ -59,7 +59,7 @@ export class AdminClient {
       if (this.csrf === requestCsrf && (response.status === 401 || response.status === 403)) this.csrf = null;
       const detail=typeof value?.detail === 'string' ? value.detail : '無法完成管理操作，請重新載入確認。';
       const admissionCode=path.startsWith('/commerce/store-admissions')&&typeof value?.code==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value.code)?`（${value.code}）`:'';
-      throw new AdminRequestError(detail+admissionCode, response.status);
+      throw new AdminRequestError(detail+admissionCode, response.status, false, value!==null&&!Array.isArray(value)&&typeof value==='object'&&value.status===response.status&&typeof value.type==='string'&&typeof value.title==='string');
     }
     if (ticket === this.latestRequest && this.csrf === requestCsrf) this.onAccessRecovered?.();
     return value as T;

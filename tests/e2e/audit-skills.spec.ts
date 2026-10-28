@@ -225,6 +225,16 @@ for (const width of [1280, 390]) {
       await expect(card.getByRole('link', { name: 'Fork 專案 ↗', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321/claude-skill-social-post/fork');
       expect(starWrites).toBe(0);
       await linked.getByRole('button', { name: '管理 GitHub 連結', exact: true }).click();
+      await expect(page).toHaveURL(/\/#account\?view=connections$/);
+      await expect(page.locator('[data-account-connections] > summary')).toBeFocused();
+      await expect(page.locator('.github-connection-panel').getByRole('button', { name: '解除 GitHub 連結', exact: true })).toBeVisible();
+      await page.reload();
+      await expect(page.locator('[data-account-connections] > summary')).toBeFocused();
+      await expect(page.locator('.github-connection-panel').getByRole('button', { name: '解除 GitHub 連結', exact: true })).toBeVisible();
+      await page.goBack();
+      await expect(page).toHaveURL(/\/#skills$/);
+      await page.goForward();
+      await expect(page.locator('[data-account-connections] > summary')).toBeFocused();
       await expect(page.locator('.github-connection-panel').getByRole('button', { name: '解除 GitHub 連結', exact: true })).toBeVisible();
       expect(starWrites).toBe(0);
     });
