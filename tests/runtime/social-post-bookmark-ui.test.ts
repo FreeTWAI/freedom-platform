@@ -81,7 +81,8 @@ function optionsHarness(){
 }
 test('post options choose the visible side and cap the scrollport, including the failing 720px viewport',()=>{
   const h=optionsHarness();
-  for(const [top,bottom,viewTop,viewBottom,above,height] of [[474,518,106,720,true,356],[150,194,106,720,false,420],[150,222,106,720,false,420],[200,244,65,420,false,164],[740,784,65,844,true,420],[30,74,65,100,false,14]]){
+  const cases:[number,number,number,number,boolean,number][]=[[474,518,106,720,true,356],[150,194,106,720,false,420],[150,222,106,720,false,420],[200,244,65,420,false,164],[740,784,65,844,true,420],[30,74,65,100,false,14]];
+  for(const [top,bottom,viewTop,viewBottom,above,height] of cases){
     const actual=h.placement(top,bottom,viewTop,viewBottom);assert.equal(actual.above,above);assert.equal(actual.maxHeight,height);
     const panelTop=above?top-height:bottom,panelBottom=above?top:bottom+height;
     assert.ok(panelTop>=viewTop);assert.ok(panelBottom<=viewBottom);
