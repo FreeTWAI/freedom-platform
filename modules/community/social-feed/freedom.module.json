@@ -63,7 +63,8 @@
     "apps/portal-web/src/modules/social-sharing.css",
     "apps/portal-web/src/modules/SocialPostBookmark.tsx",
     "tests/e2e/social-post-bookmark.spec.ts",
-    "tests/runtime/social-post-bookmark-ui.test.ts"
+    "tests/runtime/social-post-bookmark-ui.test.ts",
+    "tests/runtime/social-post-share-ui.test.ts"
   ],
   "public_exports": [],
   "dependencies": [

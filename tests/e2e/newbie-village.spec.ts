@@ -116,15 +116,18 @@ async function expectNewbieActionColors(action:import('@playwright/test').Locato
     }
     function ratio(a:string,b:string){const values=[luminance(a),luminance(b)].sort((x,y)=>x-y);return (values[1]+.05)/(values[0]+.05);}
     return {text:ratio(style.color,style.backgroundColor),focus:ratio(style.outlineColor,style.backgroundColor),
-      outline:style.outlineStyle,width:parseFloat(style.outlineWidth),opacity:Number(style.opacity),
+      outline:style.outlineStyle,width:parseFloat(style.outlineWidth),opacity:Number(style.opacity),border:style.borderStyle,cursor:style.cursor,
       focusVisible:element.matches(':focus-visible'),height:element.getBoundingClientRect().height};
   });
   // Disabled controls are exempt from WCAG text contrast. These checks concern
   // their uncomposited theme colors and retained disabled styling, not a WCAG claim.
   expect(observed.text).toBeGreaterThanOrEqual(4.5);
   expect(observed.height).toBeGreaterThanOrEqual(44);
-  if(await action.isDisabled())expect(observed.opacity).toBeLessThan(1);
-  else expect(observed.opacity).toBe(1);
+  expect(observed.opacity).toBe(1);
+  if(await action.isDisabled()){
+    await expect(action).toBeDisabled();expect(observed.border).toBe('dashed');expect(observed.cursor).toBe('not-allowed');
+    expect(await action.evaluate(element=>{let clicks=0;const count=()=>{clicks++;};element.addEventListener('click',count);(element as HTMLButtonElement).click();element.removeEventListener('click',count);return clicks;})).toBe(0);
+  }
   if(focused){expect(observed.focusVisible).toBe(true);expect(observed.outline).not.toBe('none');expect(observed.width).toBeGreaterThanOrEqual(2);expect(observed.focus).toBeGreaterThanOrEqual(3);}
 }
 async function expectNewbieActions(page:import('@playwright/test').Page){

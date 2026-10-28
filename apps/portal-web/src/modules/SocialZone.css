@@ -162,9 +162,9 @@
 .social-active-tag{display:flex;align-items:center;gap:12px;margin:0;color:var(--blue-ink)}
 .social-active-tag button{min-height:44px;font-size:.875rem}
 .social-share-dialog{width:min(600px,calc(100vw - 24px))}
-.social-sharing-consent{display:grid;gap:12px;border:1px solid var(--line);border-radius:12px;padding:16px}
+.social-sharing-consent{border:1px solid var(--line);border-radius:12px;padding:16px}
 .social-sharing-consent p{margin:0;font-size:14px}
-.social-share-preview{max-height:260px;overflow:auto;padding:12px;border-radius:8px;background:var(--bg);overflow-wrap:anywhere}
+.social-share-preview{padding:12px;border-radius:8px;background:var(--bg);overflow-wrap:anywhere}
 .social-share-preview p{white-space:pre-wrap;margin-top:8px;line-height:1.65}
 .social-share-preview img{display:block;max-width:100%;height:auto;margin-top:12px;border-radius:8px}
 .social-sharing-consent .btn,.social-share-dialog>.stack>.actions .btn{min-height:44px;width:auto}
@@ -191,3 +191,10 @@
 .social-post-bookmark .btn:focus-visible,.social-post-bookmark>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .social-post-bookmark .btn:disabled{opacity:1;color:var(--muted);cursor:wait}
 .social-post-bookmark .btn[aria-pressed="true"]{border-color:var(--focus)}
+
+.social-share-dialog summary{min-height:44px;padding:10px 0;cursor:pointer;font-weight:650}
+.social-share-dialog details[open]>summary{margin-bottom:8px}
+.social-share-dialog .social-share-audience{margin:0}
+.social-share-dialog .social-share-actions{flex-wrap:wrap}
+.social-share-dialog .social-share-actions .btn{min-width:0;max-width:100%;white-space:normal}
+.social-share-link input{width:100%;min-width:0}
