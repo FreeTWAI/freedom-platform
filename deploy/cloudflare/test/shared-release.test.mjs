@@ -3028,6 +3028,7 @@ test('candidate policy additions permit only new disabled purposes and preserve 
   const before = [disabled('member.service-cover')], added = disabled('member.profile-cover');
   const after = [added, ...before];
   assert.deepEqual(deriveDisabledMaterialPolicyAdditions(before, after), [added]);
+  assert.deepEqual(deriveDisabledMaterialPolicyAdditions(before, [...after].reverse()), [added]);
   const installed = [{ ...before[0], mode: 'r2_only', policy_revision: 'approved-v1', persistence_allowed: true, retained_byte_limit: '524288' }];
   assert.deepEqual(appendDisabledMaterialPolicies(installed, [added]), [added, ...installed]);
   for (const patch of [{ mode: 'bridge' }, { persistence_allowed: true }, { policy_lock: 1 },

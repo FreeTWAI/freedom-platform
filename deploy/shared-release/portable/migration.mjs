@@ -151,10 +151,7 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
     const baseline = await invariants(q);
     check(baseline.materialPolicySha256 === expected.materialPolicySha256, 'release_migration_policy_changed');
     const policies = appendDisabledMaterialPolicies(baseline.policies, expected.materialPolicyAdditions ?? []);
-    const afterInvariant = { ...baseline, policies, materialPolicySha256: hash(JSON.stringify(policies)) };
-    const policyTransition = afterInvariant.materialPolicySha256 === baseline.materialPolicySha256 ? {} : {
-      beforeMaterialPolicySha256: baseline.materialPolicySha256, afterMaterialPolicySha256: afterInvariant.materialPolicySha256,
-    };
+    let afterInvariant;
     await q.query('ROLLBACK');
     await journal(journalRoot, 'intent', { source: plan.sourceCommit, tree: plan.sourceTree, database,
       beforeDigest: plan.beforeDigest, afterDigest: plan.afterDigest, ...(independent ? { recoveryPolicy: 'routine-backup-independent/v1' } : { backupSetId: beforeBackup.setId }), automaticRetry: false });
@@ -167,7 +164,14 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
       }
       if (text === 'COMMIT') {
         same((await q.query(LEDGER)).rows, plan.afterLedger, 'release_migration_after_ledger_changed');
-        same(await invariants(q), afterInvariant, 'release_migration_invariants_changed');
+        afterInvariant = await invariants(q);
+        same(appendDisabledMaterialPolicies(afterInvariant.policies, []), policies, 'release_migration_invariants_changed');
+        same(afterInvariant.gc, baseline.gc, 'release_migration_invariants_changed');
+        // Preserve this database's ordering in the retained digest. Validate
+        // the exact allowed rows first; JS and PostgreSQL collations can differ.
+        const policyTransition = afterInvariant.materialPolicySha256 === baseline.materialPolicySha256 ? {} : {
+          beforeMaterialPolicySha256: baseline.materialPolicySha256, afterMaterialPolicySha256: afterInvariant.materialPolicySha256,
+        };
         await runCanonicalSql(q, plan.canonical, '20-runtime-grants.psql', { runtime: database + '_app', migrator: role });
         await verify(q, { database, plan, expected });
         await verifyRetainedConstraints(q);

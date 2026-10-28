@@ -63,8 +63,9 @@ INSERT INTO shared_release_fixture VALUES(1);
       profile: { ...profile, last: last + 1 }, materialPolicySha256: (await observeBackupControl(pool)).materialPolicySha256,
       workRoot: root, binDirectory: '/unused', signal: new AbortController().signal },
     { openDatabase: () => openCluster('migration-candidate') });
-    assert.deepEqual(expected.materialPolicyAdditions, [{ purpose: 'member.profile-cover', mode: 'legacy',
-      policy_lock: 0, policy_revision: null, persistence_allowed: false, retained_byte_limit: null }]);
+    assert.deepEqual(expected.materialPolicyAdditions.find(row => row.purpose === 'member.profile-cover'),
+      { purpose: 'member.profile-cover', mode: 'legacy', policy_lock: 0, policy_revision: null,
+        persistence_allowed: false, retained_byte_limit: null });
     lease = await acquireReleaseLease(pool, { database, role: migrator, heartbeatMs: 50 });
     const beforeBackup = { status: 'passed', database, sourceRelease: 'a'.repeat(40), createdAt: new Date().toISOString(),
       restore: 'database_and_objects_restored', remoteReadback: 'verified', cleanupVerified: true,

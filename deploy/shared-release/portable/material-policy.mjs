@@ -28,7 +28,7 @@ export function deriveDisabledMaterialPolicyAdditions(before, after) {
   const existing = new Map(before.map(row => [row.purpose, row]));
   const additions = after.filter(row => !existing.has(row.purpose));
   // Exact comparison also rejects removal or edits to previously declared rows.
-  check(JSON.stringify(appendDisabledMaterialPolicies(before, additions)) === JSON.stringify(after),
+  check(JSON.stringify(appendDisabledMaterialPolicies(before, additions)) === JSON.stringify(appendDisabledMaterialPolicies(after, [])),
     'release_migration_policy_changed');
   return structuredClone(additions);
 }
