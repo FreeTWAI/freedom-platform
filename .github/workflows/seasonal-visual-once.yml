@@ -42,14 +42,24 @@ jobs:
           SOURCE: 04d09d6b33990ca8d6531eaf4b7e2978c8605da3
         run: |
           git fetch --no-tags --depth=1 origin "$SOURCE"
-          test "$(git show -s --format=%P HEAD)" = "$SOURCE"
-          test "$(git show -s --format=%s HEAD)" = "test(portal): capture seasonal evidence once 1155-20261028-0503"
+          test "$(git show -s --format=%P HEAD)" = "730a96dc301afe66e680cf1c33fa1d40bb31fa2b"
+          test "$(git show -s --format=%s HEAD)" = "test(portal): repair seasonal evidence once 1155-20261028-0528"
           git diff --name-only "$SOURCE" HEAD > /tmp/seasonal-changed.txt
           python3 - <<'PY'
           from pathlib import Path
           allowed={'.github/workflows/seasonal-visual-once.yml','scripts/ci/collect-seasonal-visual.mjs','docs/design/seasonal-theme.md'}
           changed=set(Path('/tmp/seasonal-changed.txt').read_text().splitlines())
           assert changed and changed <= allowed, changed
+          PY
+      - name: Require the bounded failed capture and no prior artifact
+        run: |
+          curl --fail --silent --show-error --max-time 30 https://api.github.com/repos/FreeTWAI/freedom-platform/actions/runs/40637629050 > /tmp/seasonal-prior-run.json
+          curl --fail --silent --show-error --max-time 30 https://api.github.com/repos/FreeTWAI/freedom-platform/actions/runs/40637629050/artifacts > /tmp/seasonal-prior-artifacts.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('/tmp/seasonal-prior-run.json'));a=json.load(open('/tmp/seasonal-prior-artifacts.json'))
+          assert r['id']==40637629050 and r['status']=='completed' and r['conclusion']=='failure' and r['run_attempt']==1
+          assert r['head_sha']=='730a96dc301afe66e680cf1c33fa1d40bb31fa2b' and a['total_count']==0
           PY
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

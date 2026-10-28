@@ -11,10 +11,17 @@ for(const suite of report.suites??[])visit(suite);
 if(found.length!==24||new Set(found.map(a=>a.name)).size!==24)throw Error('capture_count_mismatch');
 await mkdir(out,{recursive:false});let total=0;const files=[];
 for(const a of found){
- if(a.contentType!=='image/png'||typeof a.path!=='string')throw Error('capture_not_png');
- const path=resolve(a.path);if(!path.startsWith(root+sep)||await realpath(path)!==path)throw Error('capture_path_invalid');
- const stat=await lstat(path);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16*1024*1024)throw Error('capture_file_invalid');
- const bytes=await readFile(path);if(bytes.length!==stat.size)throw Error('capture_changed');
+ if(a.contentType!=='image/png')throw Error('capture_not_png');
+ let bytes;
+ if(typeof a.body==='string'&&a.path===undefined){
+  if(a.body.length>22369624||a.body.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(a.body))throw Error('capture_body_invalid');
+  bytes=Buffer.from(a.body,'base64');
+  if(bytes.length>16*1024*1024||bytes.toString('base64')!==a.body)throw Error('capture_body_invalid');
+ }else if(typeof a.path==='string'&&a.body===undefined){
+  const path=resolve(a.path);if(!path.startsWith(root+sep)||await realpath(path)!==path)throw Error('capture_path_invalid');
+  const stat=await lstat(path);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>16*1024*1024)throw Error('capture_file_invalid');
+  bytes=await readFile(path);if(bytes.length!==stat.size)throw Error('capture_changed');
+ }else throw Error('capture_attachment_ambiguous');
  total+=bytes.length;if(total>256*1024*1024)throw Error('capture_budget_exceeded');
  if(bytes.length<33||bytes.subarray(0,8).toString('hex')!=='89504e470d0a1a0a'||bytes.subarray(12,16).toString()!=='IHDR')throw Error('capture_signature_invalid');
  const width=bytes.readUInt32BE(16),height=bytes.readUInt32BE(20);

@@ -43,3 +43,7 @@
 - 手機首頁 hero 實際上限120px；原始 Logo／萊姆綠主要操作／正文色不變；未選主題沒有下載。
 - 實際執行與未驗項以 PR 收據為準。此環境不啟動 native browser／PG，local build 或 source review **不代表**原生畫面、真人接受或正式環境通過。既有 pinned runner 成功時不留存附件；附加截圖不等於可讀回證據。本 PR 另經授權使用僅限 #1155、固定產品來源的一次性觀察流程，最多 24 張 PNG、256MiB、留存一天；不改 required gates。必須實際取得圖片後 inspect → fix → recapture 才能接受視覺主張，取得前為 NOT_CHECKED。
 - 使用公開 R&D／Code Cleanup 方法；私人 canonical Skills provider/revision gate **NOT_RUN**。不宣稱已安裝或完整通過該流程。
+
+### 有界截圖流程狀態
+
+首次 run `40637629050` 在固定產品 source `04d09d6b33990ca8d6531eaf4b7e2978c8605da3` 上執行六個比較案例，全部通過；但收集器誤以為 JSON 附件必有 path，未處理 inline base64 body，因而拒絕輸出，沒有可下載圖片。這不是已檢視畫面。補救限一次同樣 24 圖，先證明該 run 已失敗且零 artifact，再接受嚴格有界 base64；保留原產品來源、PNG 尺寸／雜湊／數量／大小與一天留存限制，不放寬產品斷言或 required checks。
