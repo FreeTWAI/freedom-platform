@@ -102,7 +102,7 @@ for(const width of [1280,390])for(const fails of [false,true])eventTest(`event s
   });
   try{
     await navigate(page,'社群活動');await requested;
-    const submit=page.getByRole('button',{name:'＋ 提交活動',exact:true});
+    const submit=page.getByRole('button',{name:'辦活動',exact:true});
     await expect(page.getByText('正在載入活動…',{exact:true})).toBeVisible();
     // Calendar insertion can scroll the target away between pointer positioning
     // and pointer-down. The control must not accept a click in that loading layout.
@@ -116,6 +116,7 @@ for(const width of [1280,390])for(const fails of [false,true])eventTest(`event s
     if(fails)await expect(page.getByRole('alert').filter({hasText:'服務暫時無法回應（503）。請稍後重試。'})).toBeVisible();
     await expect(submit).toBeEnabled();
     await submit.click();
+  await page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
     await page.getByLabel('活動類型').selectOption('guild_skill_exchange');
     await expect(page.getByLabel('活動類型')).toHaveValue('guild_skill_exchange');
     await expect(page.getByRole('button',{name:'送出審核',exact:true})).toBeVisible();
@@ -131,18 +132,20 @@ test('member previews an event, an authorized officer approves it, and participa
     VALUES($1,'guild_member_operations',$2) ON CONFLICT DO NOTHING`,[DEMO_COMMUNITY,DEMO_USERS[1].user_id]);
   await context.grantPermissions(['clipboard-read','clipboard-write']);
   await page.setViewportSize({width:390,height:844});await login(page);await navigate(page,'社群活動');
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const title='合成活動：共同整理開源工具',form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const title='合成活動：共同整理開源工具',form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   let writes=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events')writes++;});
   await form.getByLabel('活動名稱',{exact:true}).fill(title);
   await form.getByLabel('活動說明',{exact:true}).fill('這是合成內容；一起用範例資料整理工具，沒有付款或真實招募。');
   await form.getByLabel('線上場地',{exact:true}).fill('合成線上工作室');
   await form.getByLabel('線上參與連結',{exact:true}).fill('https://example.com/synthetic-event');
+  await form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
   await form.getByRole('combobox',{name:/^參與範圍/}).selectOption('open');
   await expect(form).toContainText('America/New_York');
   const start=await form.getByLabel('開始時間',{exact:true}).inputValue();
   const expectedIso=await page.evaluate(value=>new Date(value).toISOString(),start);
   const photo=await sharp({create:{width:700,height:1050,channels:3,background:'#366177'}}).png().toBuffer();
+  await form.getByText('加上海報或影片（選填）',{exact:true}).click();
   await form.getByLabel('活動海報（選填）').setInputFiles({name:'synthetic-event.png',mimeType:'image/png',buffer:photo});
   await expect(form.getByRole('button',{name:'送出審核',exact:true})).toBeEnabled();
   await form.getByText('送出前預覽活動',{exact:true}).click();
@@ -210,11 +213,11 @@ for(const width of [1440,390])test(`unsaved event input survives rejected naviga
   let discard=false;const prompts:string[]=[];let writes=0;
   page.on('dialog',async dialog=>{prompts.push(dialog.message());await(discard?dialog.accept():dialog.dismiss());});
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes++;});
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
   // An untouched form has no work to discard.
   await navigate(page,'我的內容');expect(prompts).toEqual([]);await navigate(page,'社群活動');
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   await form.getByLabel('活動名稱',{exact:true}).fill('尚未送出的活動草稿');
   await form.getByLabel('活動說明',{exact:true}).fill('切換頁面、返回與關閉編輯都不能默默丟掉這段文字。');
   await form.getByLabel('開始時間',{exact:true}).fill('2030-06-10T14:30');
@@ -230,13 +233,13 @@ for(const width of [1440,390])test(`unsaved event input survives rejected naviga
   expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
   await page.screenshot({path:info.outputPath(`event-draft-retained-${width}.png`),fullPage:true});
   discard=true;await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);
-  await navigate(page,'社群活動');await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
+  await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
   await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');expect(writes).toBe(0);
 });
 
 test('event submission blocks departure while pending and saved edits require explicit discard',async({page})=>{
-  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const title='離開保護 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const title='離開保護 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('隔離資料，驗證送出與返回編輯。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
   let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});let reached=false,writes=0;
   const createdResponse=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname==='/api/v1/events');
@@ -255,7 +258,7 @@ test('event submission blocks departure while pending and saved edits require ex
   // Opening a saved draft alone does not make it dirty.
   await card.getByRole('button',{name:'返回',exact:true}).click();expect(prompts).toBe(0);
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await card.getByLabel('活動名稱',{exact:true}).fill(title+' 修改中');
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();expect(prompts).toBe(1);await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title+' 修改中');
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();expect(prompts).toBe(1);await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title+' 修改中');
   await navigate(page,'我的內容');await expect(page).toHaveURL(/#events$/);expect(prompts).toBe(2);
   discard=true;await card.getByRole('button',{name:'返回',exact:true}).click();await expect(card.getByLabel('活動名稱',{exact:true})).toHaveCount(0);
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('活動名稱',{exact:true})).toHaveValue(title);expect(writes).toBe(1);
@@ -267,13 +270,13 @@ test('event submission blocks departure while pending and saved edits require ex
 });
 
 for(const width of [1440,390])test(`an unknown event submission keeps its original retry key and cannot be abandoned at ${width}px`,async({page,e2eAuthPool},info)=>{
-  await page.setViewportSize({width,height:844});await login(page,width===390?'client@local.test':'maker@local.test');await navigate(page,'社群活動');await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const title='不明結果 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  await page.setViewportSize({width,height:844});await login(page,width===390?'client@local.test':'maker@local.test');await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const title='不明結果 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   const otherTitle='其他活動 '+randomUUID().slice(0,8);
   await form.getByLabel('活動名稱',{exact:true}).fill(otherTitle);await form.getByLabel('活動說明',{exact:true}).fill('合成案例：原操作未決時不可插入取消其他活動。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
   await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();
   const other=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:otherTitle,exact:true})});
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
   await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('合成案例，原請求已完成但回應遺失。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
   const attempts:{body:string|null;key:string|undefined}[]=[];
   let releaseRefresh!:()=>void,reachedRefresh!:()=>void;
@@ -294,7 +297,7 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
   await expect(form.getByLabel('開始時間',{exact:true})).toBeDisabled();await expect(form.locator('input[type="file"]')).toHaveCount(2);
   for(const input of await form.locator('input[type="file"]').all())await expect(input).toBeDisabled();
   await expect(other.getByRole('button',{name:'取消活動',exact:true})).toBeDisabled();
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();await expect(titleInput).toHaveValue(title);expect(attempts).toHaveLength(1);
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();await expect(titleInput).toHaveValue(title);expect(attempts).toHaveLength(1);
   let prompts=0;page.on('dialog',async dialog=>{prompts++;await dialog.accept();});
   await navigate(page,'我的內容');await expect(page).toHaveURL(/#events$/);expect(prompts).toBe(0);
   await expect(page.getByRole('status').filter({hasText:'尚未確認原操作的結果'})).toBeVisible();
@@ -307,7 +310,7 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
     // A confirmed save can close a fresh untouched composer and leave while its
     // real list response is still held. Waiting for that read would hide the race.
     const closeMenu=page.getByRole('button',{name:'關閉選單',exact:true});if(await closeMenu.isVisible())await closeMenu.click();
-    await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');
+    await page.getByRole('button',{name:'辦活動',exact:true}).click();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('');
     await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toHaveCount(0);
     expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(false);
     await navigate(page,'我的內容');await expect(page).toHaveURL(/#my-content$/);expect(prompts).toBe(0);
@@ -317,8 +320,8 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
 });
 
 test('a known event rejection unlocks the draft for correction and a new submission',async({page,e2eAuthPool})=>{
-  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const title='修正時間 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const title='修正時間 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('結束時間早於開始時間，已知拒絕後可修正。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
   await form.getByLabel('開始時間',{exact:true}).fill('2030-06-10T14:30');await form.getByLabel('結束時間',{exact:true}).fill('2030-06-10T13:30');
   const rejected=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
@@ -331,7 +334,7 @@ test('a known event rejection unlocks the draft for correction and a new submiss
 for(const width of [1440,390])eventTest(`confirmed event versions and partial media survive held refreshes at ${width}px`,async({page,e2eAuthPool,eventFixture:{user,email}},info)=>{
   await page.setViewportSize({width,height:844});await login(page,email);await navigate(page,'社群活動');
   await expect(page.getByText('目前沒有即將舉辦的活動。你可以提交第一場。',{exact:true})).toBeVisible();
-  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   const titles=[`刷新甲 ${user}`,`刷新乙 ${user}`];
   const snapshots:{release:()=>void;done:Promise<void>;body:unknown}[]=[];
   const writes:{path:string;version:string|undefined;status:number;body:unknown}[]=[];
@@ -348,7 +351,7 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
   try{
     hold=true;
     for(const title of titles){
-      await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
+      await page.getByRole('button',{name:'辦活動',exact:true}).click();
       await form.getByLabel('活動名稱',{exact:true}).fill(title);
       await form.getByLabel('活動說明',{exact:true}).fill('合成內容：核對已確認版本與較新草稿。');
       await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
@@ -356,7 +359,7 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
       await expect(form).toHaveCount(0);
     }
     await expect.poll(()=>snapshots.length).toBe(2);
-    await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
+    await page.getByRole('button',{name:'辦活動',exact:true}).click();
     await form.getByLabel('活動名稱',{exact:true}).fill('較新的未送出草稿');
     snapshots[1].release();await snapshots[1].done;
     await expect(page.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
@@ -388,6 +391,7 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
     await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
     const photo=await sharp({create:{width:700,height:1050,channels:3,background:'#366177'}}).png().toBuffer();
     const video=await readFile('tests/media-fixtures/event-video-160x90.mp4');
+  await editor.getByText('加上海報或影片（選填）',{exact:true}).click();
     await editor.getByLabel('活動海報（選填）').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:photo});
     await editor.getByLabel('活動影片（選填）').setInputFiles({name:'synthetic.mp4',mimeType:'video/mp4',buffer:video});
     const media:{path:string;version:string|undefined;status:number;bytes:string}[]=[];
@@ -427,8 +431,8 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
   const title=`媒體對帳 ${user}`;
   await login(page,email);await navigate(page,'社群活動');
   await expect(page.getByText('目前沒有即將舉辦的活動。你可以提交第一場。',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const composer=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const composer=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   await composer.getByLabel('活動名稱',{exact:true}).fill(title);await composer.getByLabel('活動說明',{exact:true}).fill('已提交但 ACK 遺失或格式不符，不可再次產生媒體效果。');await composer.getByLabel('線上場地',{exact:true}).fill('合成場地');
   const created=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
   await composer.getByRole('button',{name:'送出審核',exact:true}).click();const id=(await(await created).json()).event_id as string;
@@ -436,6 +440,7 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
   const card=page.locator('.experience-card'),editor=card.locator('form');
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
   const photo=await sharp({create:{width:700,height:1050,channels:3,background:'#366177'}}).png().toBuffer();
+  await editor.getByText('加上海報或影片（選填）',{exact:true}).click();
   await editor.getByLabel('活動海報（選填）').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:photo});
   await editor.getByLabel('活動影片（選填）').setInputFiles({name:'synthetic.mp4',mimeType:'video/mp4',buffer:await readFile('tests/media-fixtures/event-video-160x90.mp4')});
   await expect(editor.getByRole('button',{name:'儲存修改',exact:true})).toBeEnabled();
@@ -512,8 +517,8 @@ eventTest('superseded event reads cannot replace the newest loading or error sta
     await route.fulfill(failure?{status:503,contentType:'application/problem+json',body:JSON.stringify({detail:`合成刷新失敗 ${index}`})}:{response});complete();
   });
   async function create(index:number){
-    await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-    const form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+    await page.getByRole('button',{name:'辦活動',exact:true}).click();
+    const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
     await form.getByLabel('活動名稱',{exact:true}).fill(`讀取狀態 ${index} ${user}`);await form.getByLabel('活動說明',{exact:true}).fill('合成列表競態');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
     await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(form).toHaveCount(0);
   }
