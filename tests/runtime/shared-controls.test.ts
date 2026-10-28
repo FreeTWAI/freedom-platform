@@ -65,3 +65,16 @@ test('Newbie enabled-only override cannot replace the shared disabled border; th
   assert.equal(declarations(regression,original).border,'1px solid var(--line)');
   assert.ok((original.match(/\.[a-z-]+/g)||[]).length>3,'old five-class specificity outranks root/btn/disabled');
 });
+
+// Text/background interpolation can lose contrast even when both endpoint pairs pass.
+test('shared buttons switch foreground/background pairs immediately in both directions',()=>{
+  const safe=(css:string)=>assert.equal(declarations(css,'.btn').transition,'border-color .16s');
+  safe(sheets[1]);
+  assert.equal(declarations(sheets[1],'button,a').transition,'background-color .16s,color .16s,border-color .16s');
+  const regression=sheets[1].replace('transition:border-color .16s;','');
+  assert.throws(()=>safe(regression),assert.AssertionError);
+  const native=readFileSync(new URL('../e2e/public-social-posts.spec.ts',import.meta.url),'utf8');
+  assert.ok(native.includes("'disabled','reenabled'"));
+  assert.ok(native.includes("state==='reenabled'"));
+  assert.ok(native.includes("['none','border-color'].includes(property.trim())"));
+});

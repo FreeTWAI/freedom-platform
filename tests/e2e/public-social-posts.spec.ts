@@ -428,15 +428,16 @@ test('PUBLIC-POST-16 shared controls and concise sharing retain readable states 
     for(const variant of ['', 'btn-secondary','btn-primary','btn-ghost','btn-module']){
       await dialog.evaluate((node,variant)=>{const probe=document.createElement('button');probe.type='button';probe.className=`btn ${variant}`;probe.dataset.controlProbe='true';probe.textContent='共用控制項驗證';node.append(probe);},variant);
       const probe=dialog.locator('[data-control-probe]');
-      for(const state of ['enabled','hover','focus','disabled']){
-        if(state==='hover')await probe.hover();if(state==='focus'){await probe.focus();await author.page.keyboard.press('Tab');await author.page.keyboard.press('Shift+Tab');await expect(probe).toBeFocused();}if(state==='disabled')await probe.evaluate(node=>(node as HTMLButtonElement).disabled=true);
+      for(const state of ['enabled','hover','focus','disabled','reenabled']){
+        if(state==='hover')await probe.hover();if(state==='focus'){await probe.focus();await author.page.keyboard.press('Tab');await author.page.keyboard.press('Shift+Tab');await expect(probe).toBeFocused();}if(state==='disabled')await probe.evaluate(node=>(node as HTMLButtonElement).disabled=true);if(state==='reenabled')await probe.evaluate(node=>(node as HTMLButtonElement).disabled=false);
         const colors=await probe.evaluate(node=>{
           const style=getComputedStyle(node);let bg=style.backgroundColor;let parent=node.parentElement;
           while(bg==='rgba(0, 0, 0, 0)'&&parent){bg=getComputedStyle(parent).backgroundColor;parent=parent.parentElement;}
           const lum=(rgb:string)=>{const v=rgb.match(/[\d.]+/g)!.slice(0,3).map(Number).map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
-          const a=lum(style.color),b=lum(bg);return {contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),opacity:style.opacity,height:node.getBoundingClientRect().height,outline:style.outlineStyle,focusVisible:node.matches(':focus-visible'),border:style.borderStyle};
+          const a=lum(style.color),b=lum(bg);return {contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),opacity:style.opacity,height:node.getBoundingClientRect().height,outline:style.outlineStyle,focusVisible:node.matches(':focus-visible'),border:style.borderStyle,transition:style.transitionProperty};
         });
         expect(colors.contrast,`${theme}/${width}/${variant}/${state}`).toBeGreaterThanOrEqual(4.5);expect(colors.height).toBeGreaterThanOrEqual(44);
+        expect(colors.transition.split(',').every(property=>['none','border-color'].includes(property.trim()))).toBe(true);if(state==='reenabled')await expect(probe).toBeEnabled();
         if(state==='focus'){expect(colors.focusVisible).toBe(true);expect(colors.outline).not.toBe('none');}if(state==='disabled'){expect(colors.opacity).toBe('1');expect(colors.border).toBe('dashed');await expect(probe).toBeDisabled();}
       }
       await probe.evaluate(node=>node.remove());
