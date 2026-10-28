@@ -1058,7 +1058,7 @@ test('reviewed store spec has one whole-file default pass and a distinct complet
   ]) {const passes=clean();mutate(passes);assert.equal(check(passes).status,'failed');}
 });
 
-test('CLI store spec pilot runs eight complete cases with independent listing despite forged candidate filters', async () => {
+test('CLI store spec pilot uses separately installed workflow parser in hosted nested checkout', async () => {
   await withFixture(async root => {
     await playwrightFixture(root, "export default {grep:/never/,testIgnore:['**/*'],retries:4,projects:[{name:'chromium'}]};");
     const source = await readFile(join(repoRoot,STORE_SPEC_FILES[0]),'utf8');
@@ -1074,7 +1074,7 @@ test('CLI store spec pilot runs eight complete cases with independent listing de
     await writeFile(join(dir,'freedom.module.json'),JSON.stringify({format:'freedom.module/v1',module_id:'example',owner_role:'foundation',
       owned_paths:['modules/example/**'],dependencies:[],tests:['runtime.full'],public_exports:[],contract_families:['preview'],
       client_profiles:['member'],instructions:['governance/README.md'],invariants:['local-only'],surfaces:[]}));
-    await writeFile(join(root,'.gitignore'),'node_modules\nresult.json\n');
+    await writeFile(join(root,'.gitignore'),'node_modules\nresult.json\n.freedom/\n');
     const git=(args,input)=>execFileSync('git',['-C',root,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{
       input,encoding:'utf8',env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',
         GIT_AUTHOR_NAME:'CI Test',GIT_AUTHOR_EMAIL:'ci@example.invalid',GIT_COMMITTER_NAME:'CI Test',GIT_COMMITTER_EMAIL:'ci@example.invalid'},
@@ -1082,9 +1082,33 @@ test('CLI store spec pilot runs eight complete cases with independent listing de
     git(['init','-q','-b','main']);git(['add','.']);git(['commit','-qm','base']);const base=git(['rev-parse','HEAD']);
     await writeFile(join(root,STORE_SPEC_FILES[0]),synthetic(8));git(['add','.']);git(['commit','-qm','case']);const head=git(['rev-parse','HEAD']);
     const candidate=git(['commit-tree',git(['rev-parse','HEAD^{tree}']),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);
+    const trusted=join(root,'.freedom/trusted');await mkdir(join(root,'.freedom'),{recursive:true});
+    execFileSync('git',['clone','--quiet','--shared',repoRoot,trusted],{stdio:'pipe'});
+    await assert.rejects(stat(join(trusted,'node_modules')),{code:'ENOENT'});
+    // Candidate installation must never supply this parser, even when present.
+    await rm(join(root,'node_modules'));await mkdir(join(root,'node_modules/@typescript/typescript6'),{recursive:true});
+    await mkdir(join(root,'node_modules/@playwright'),{recursive:true});
+    for (const name of ['@playwright/test','playwright','playwright-core'])
+      await symlink(join(repoRoot,'node_modules',name),join(root,'node_modules',name),'dir');
+    const marker=join(root,'.freedom/candidate-parser-loaded');
+    await writeFile(join(root,'node_modules/@typescript/typescript6/package.json'),'{"main":"index.cjs"}');
+    await writeFile(join(root,'node_modules/@typescript/typescript6/index.cjs'),
+      `require('node:fs').writeFileSync(${JSON.stringify(marker)},'loaded');throw Error('untrusted parser');`);
+    const input={repository:root,event:'pull_request',base,head,candidate};
+    const select=(extra={})=>JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',
+      `import {collectRepositoryE2eDecision} from ${JSON.stringify(join(trusted,'scripts/ci/select-affected-jobs.mjs'))};console.log(JSON.stringify(collectRepositoryE2eDecision(${JSON.stringify({...input,...extra})})));`],{encoding:'utf8'}));
+    assert.deepEqual(select(),{profile:'full',reason:'store_spec_dependencies_unproven'});
+    await assert.rejects(stat(marker),{code:'ENOENT'});
+    // Offline fixture for the workflow-owned npm-ci installation; no candidate
+    // dependency is copied and the test does not contact the package registry.
+    await symlink(join(repoRoot,'node_modules'),join(trusted,'node_modules'),'dir');
+    assert.equal(select().profile,STORE_SPEC_PROFILE);
+    for (const event of ['push','merge_group']) assert.equal(select({event}).profile,'full');
+    await assert.rejects(stat(marker),{code:'ENOENT'});
     const output=join(root,'result.json');
-    const child=invoke(['--root',root,'--output',output,'--event','pull_request','--base',base,'--head',head,'--candidate',candidate],
-      {FREEDOM_E2E_PROFILE:'full',FREEDOM_E2E_STORE_PHOTO_FIXTURE:'1'});
+    const child=spawnSync(process.execPath,[join(trusted,'scripts/ci/run-pinned-e2e.mjs'),
+      '--root',root,'--output',output,'--event','pull_request','--base',base,'--head',head,'--candidate',candidate],
+      {encoding:'utf8',env:{...cliEnv,FREEDOM_E2E_PROFILE:'full',FREEDOM_E2E_STORE_PHOTO_FIXTURE:'1'}});
     assert.equal(child.status,0,child.stdout+child.stderr);
     const result=JSON.parse(await readFile(output,'utf8'));
     assert.equal(result.selection.profile,STORE_SPEC_PROFILE);
@@ -1093,6 +1117,7 @@ test('CLI store spec pilot runs eight complete cases with independent listing de
     assert.equal(result.test_count,8);assert.equal(result.passes.length,1);
     assert.equal(result.passes[0].listed_case_count,8);assert.equal(result.passes[0].cases.length,8);
     assert.ok(result.passes[0].cases.every(item=>item.status==='passed'));
+    await assert.rejects(stat(marker),{code:'ENOENT'});
     for (const flag of ['--profile','--grep','--files']) assert.equal(invoke(['--root',root,flag,STORE_SPEC_PROFILE]).status,2);
   });
 });

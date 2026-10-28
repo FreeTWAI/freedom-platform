@@ -42,11 +42,23 @@ base/head/candidate parents, clean checkout (including ignored browser files),
 regular nonexecutable blobs and unchanged complete descriptor graph are required.
 Main push and merge-group browser plans remain full. Guide and guild selection
 are unchanged. No workflow, API permission, runner, credential or required gate
-is added; execution still comes from `job.workflow_sha`, not an independent
+is added; the existing ui-e2e job installs selector dependencies as described
+below. Execution still comes from `job.workflow_sha`, not an independent
 base-pinned controller.
 
 The selector parses both immutable spec versions with the workflow installation's
-existing TypeScript parser. The seven reviewed import declarations include exact
+existing TypeScript parser. The candidate root's `npm ci` does not install packages
+under `.freedom/trusted`. After confirming that checkout against `job.workflow_sha`,
+only the browser-spec-only lane runs `npm ci --ignore-scripts --no-audit --no-fund`
+with `.freedom/trusted` as its working directory. This uses the runner checkout's
+own package manifest and lockfile, as the existing selector job does. It adds an
+installation in this job; it does not reuse another job's filesystem or load a
+parser from candidate `node_modules`. Missing or unloadable installed parsers
+still return full. Exact one-file integration evidence also keeps candidate
+package/config/dependency sources unchanged; it is not an integrity claim for
+arbitrary candidate-installed parser bytes.
+
+The seven reviewed import declarations include exact
 bindings: default-mode `person`, `login`, `open`, `post`, `launchStore` and
 `captureOffer`, not the same helper's photo-ON server. New imports/bindings,
 dynamic loaders, exports, environment-dependent spec code, missing parser or
@@ -70,6 +82,9 @@ narrowing; missing unrelated baseline files cannot be hidden by this selection.
 Six existing source-consumer files, TypeScript, portal build, source integrity,
 CodeQL, aggregate, required checks and review remain unchanged. This candidate
 is separate from the current release and does not alter any running run.
+This PR-only path does not claim to cover every order-dependent interaction
+between specs sharing a fixture or database. Main pushes retain the full browser
+plan to exercise cross-spec behavior; fixture/helper changes also remain full.
 Synthetic runner tests are not browser/product acceptance or a hosted timing
 comparison. The reported local 9.3-second single-spec result is not a full-CI
 baseline; no formal runtime savings are claimed.

@@ -21,6 +21,7 @@ import { verificationEnvironment } from '../../packages/contribution-tools/proce
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const selector = fileURLToPath(new URL('./select-affected-jobs.mjs', import.meta.url));
 const workflowPath = join(root, '.github/workflows/verify.yml');
+const PINNED_BROWSER_PARSER_INSTALL = "      - name: Install pinned browser selector dependencies\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        working-directory: .freedom/trusted\n        run: npm ci --ignore-scripts --no-audit --no-fund\n";
 const oid = (suffix = 'a') => suffix.repeat(40).slice(0, 40);
 const narrow = () => [moduleDescriptor('example', ['modules/example/**'])];
 
@@ -722,7 +723,10 @@ test('verify workflow keeps the required gate, unconditional integrity, and hist
   }
 
   for (const id of ['source-integrity', 'runtime-full', 'runtime-aggregate', 'static-worker', 'governance-consumers', 'ui-e2e', 'deploy-preflight']) {
-    const trusted = jobBlock(text, id);
+    // Only this exact script-disabled install in the workflow checkout may
+    // follow checkout. All candidate npm/scripts commands remain prohibited.
+    const block = jobBlock(text, id);
+    const trusted = id === 'ui-e2e' ? block.replace(PINNED_BROWSER_PARSER_INSTALL, '') : block;
     assert.match(trusted, /repository: \$\{\{ job\.workflow_repository \}\}/u);
     assert.match(trusted, /ref: \$\{\{ job\.workflow_sha \}\}/u);
     assert.match(trusted, /path: \.freedom\/trusted/u);
@@ -1862,4 +1866,25 @@ test('store spec browser plan requires exact PR topology and falls back on depen
   git(['checkout','-q',head]);
   const reversed = git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',head,'-p',base],'reversed\n');git(['checkout','-q',reversed]);
   assert.equal(collectRepositoryE2eDecision({...input,candidate:reversed}).profile,'full');
+});
+
+
+test('browser-only parser installation belongs to the confirmed workflow checkout, never candidate dependencies', async () => {
+  const workflow=await readFile(workflowPath,'utf8'), ui=jobBlock(workflow,'ui-e2e');
+  const install = PINNED_BROWSER_PARSER_INSTALL;
+  assert.equal(ui.split(install).length,2);
+  assert.ok(ui.indexOf('Confirm the pinned runner checkout') < ui.indexOf(install));
+  assert.ok(ui.indexOf(install) < ui.indexOf('Check existing browser-spec consumers'));
+  assert.ok(ui.indexOf(install) < ui.indexOf('Run the pinned browser plan'));
+  assert.match(ui,/ref: \$\{\{ job\.workflow_sha \}\}/);
+  // This new workflow change needs the full existing review/CI path; do not
+  // silently extend the old typecheck/consumer wiring exception to admit it.
+  assert.equal(ciToolsWorkflowProven(workflow.replace(install,''),workflow),false);
+  for (const unsafe of [install.replace('--ignore-scripts ',''),
+    install.replace('working-directory: .freedom/trusted','working-directory: .'),
+    install.replace('npm ci --ignore-scripts --no-audit --no-fund','npm install')]) {
+    const changed=ui.replace(install,unsafe).replace(PINNED_BROWSER_PARSER_INSTALL,'');
+    const checkout=changed.indexOf('path: .freedom/trusted');
+    assert.ok(changed.lastIndexOf('npm ')>checkout,'unsafe installs cannot use the exact exception');
+  }
 });
