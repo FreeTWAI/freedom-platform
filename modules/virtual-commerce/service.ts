@@ -89,6 +89,7 @@ export class RehearsalWorkbench {
     this.#settings = clone(settings); this.#invalidate();
   }
   draft(productId: string, text: string, kind: Cue['kind'] = 'main') {
+    if (this.#mode === 'stopped') throw new Error('請先重新開始彩排，再加入講稿。');
     this.#prune();
     const product = this.#products.get(productId);
     if (!product || product.validUntil <= this.#clock()) throw new Error('請先更新有效商品資料。');
@@ -100,6 +101,7 @@ export class RehearsalWorkbench {
     this.#queue.push(cue); return cue.id;
   }
   approve(id: string) {
+    if (this.#mode === 'stopped') throw new Error('請先重新開始彩排，再確認講稿。');
     this.#prune(); const cue = this.#queue.find(c => c.id === id);
     if (!cue || !this.#valid(cue)) throw new Error('講稿已失效，請重新建立。');
     cue.approved = true; this.#note('操作員已確認這一版商品與講稿。');
@@ -112,6 +114,7 @@ export class RehearsalWorkbench {
   }
   /** Untrusted viewer text never enters an instruction parser, script or provider prompt. */
   receiveViewer(input: {eventId: string; productId: string; text: string}): ViewerResult {
+    if (this.#mode === 'stopped') return 'ignored';
     this.#prune();
     if (!bounded(input.eventId, 100) || !bounded(input.text, 300) || !bounded(input.productId, 80)) return 'ignored';
     if (this.#seen.has(input.eventId)) return 'duplicate';
@@ -128,8 +131,8 @@ export class RehearsalWorkbench {
     return 'queued-for-review';
   }
   start() { if (this.#mode === 'stopped') throw new Error('已停止；請明確重新開始彩排。'); this.#mode = 'running'; }
-  pause() { this.#mode = 'paused'; this.#cancel(); this.#note('已暫停，當前段落取消；繼續時從段首重新確認。'); }
-  takeover() { this.#mode = 'takeover'; this.#cancel(); this.#note('已人工接管；自動排程停止。'); }
+  pause() { if (this.#mode === 'stopped') return; this.#mode = 'paused'; this.#cancel(); this.#note('已暫停，當前段落取消；繼續時從段首重新確認。'); }
+  takeover() { if (this.#mode === 'stopped') return; this.#mode = 'takeover'; this.#cancel(); this.#note('已人工接管；自動排程停止。'); }
   stop() { this.#mode = 'stopped'; this.#cancel(); this.#queue = []; this.#cache.clear(); this.#note('已停止並清空講稿與快取。'); }
   restart() { this.stop(); this.#mode = 'paused'; this.#seen.clear(); this.#qaBurst = 0; }
   /** Boundary handoff only. Current cue cannot be interrupted by a new viewer question. */

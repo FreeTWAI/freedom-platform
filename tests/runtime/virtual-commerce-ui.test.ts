@@ -80,3 +80,14 @@ test('actual UI: changing product clears an unsent script; unsaved facts block d
  h.input('一段一重點的主講','依未保存資料寫的稿');assert.equal(h.button('加入待確認講稿').props.disabled,true);
  h.click('放棄未儲存修改');assert.equal(h.button('確認本版資料與講稿').props.disabled,false);h.cleanup();
 });
+
+test('actual UI: stopped intake is disabled and rejected submits retain text through restart',()=>{
+ const h=ready();h.click('停止並清空佇列');h.input('一段一重點的主講','停止後尚未送出的新稿');h.input('對目前商品提問','規格？');
+ assert.equal(h.button('加入待確認講稿').props.disabled,true);assert.equal(h.button('送入模擬留言').props.disabled,true);
+ // Programmatic stale submits must also preserve text, not merely disable buttons.
+ h.submit('加入待確認講稿');h.submit('送入模擬留言');assert.equal(h.engine().snapshot().queue.length,0);
+ assert.ok(text(h.render()).includes('請先重新開始彩排'));
+ h.click('重新開始彩排');assert.equal(h.button('加入待確認講稿').props.disabled,false);assert.equal(h.button('送入模擬留言').props.disabled,false);
+ h.submit('加入待確認講稿');assert.equal(h.engine().snapshot().queue[0].text,'停止後尚未送出的新稿');
+ h.click('確認本版資料與講稿');assert.equal(h.engine().snapshot().queue[0].approved,true);h.cleanup();
+});

@@ -86,6 +86,7 @@ export function VirtualCommerce() {
       <button className="btn btn-secondary btn-small" disabled={state.mode === 'takeover' || state.mode === 'stopped'} onClick={() => act(() => engine.takeover())}>人工接管</button>
       <button className="btn btn-secondary btn-small vc-stop" disabled={state.mode === 'stopped'} onClick={() => act(() => engine.stop())}>停止並清空佇列</button>
     </div>
+    {state.mode === 'stopped' && <p className="vc-boundary" role="status">已停止；請先重新開始彩排，再加入／確認講稿或送入模擬提問。未送出的文字會保留。</p>}
     {error && <p role="alert" className="banner banner-error">{error}</p>}
     <p role="status" className="vc-notice">{notice}</p>
     <div className="vc-grid">
@@ -112,13 +113,13 @@ export function VirtualCommerce() {
         <div className="vc-section-heading"><span aria-hidden="true">02</span><h2 id="vc-queue-heading">講稿與確認</h2></div>
         <form className="stack" onSubmit={event => {event.preventDefault(); act(() => {if (factsDirty) throw new Error('請先儲存或放棄商品資料修改。'); engine.draft(selected, script); setScript(''); setNotice('主講已加入待確認區，尚未核准。');});}}>
           <label className="field">一段一重點的主講<textarea required rows={4} maxLength={1200} value={script} onChange={event => setScript(event.target.value)} placeholder="依左側商品資料撰寫；不加入未確認功效或促銷承諾。"/></label>
-          <button className="btn btn-secondary btn-small" type="submit" disabled={factsDirty || !product || !script.trim() || state.queue.length >= 50}>加入待確認講稿</button>
+          <button className="btn btn-secondary btn-small" type="submit" disabled={state.mode === 'stopped' || factsDirty || !product || !script.trim() || state.queue.length >= 50}>加入待確認講稿</button>
         </form>
         <p className="vc-muted">{state.queue.length}/50 段 · 短答優先，最多連續2段後回到主講。每段都需人工確認；短答60秒後失效。</p>
         <ol className="vc-queue">{state.queue.map(cue => <li key={cue.id} className={state.active?.id === cue.id ? 'vc-cue vc-cue-active' : 'vc-cue'}>
           <div className="vc-cue-heading"><strong>{cue.kind === 'answer' ? '觀眾短答' : '主講'} · v{cue.productVersion}</strong><span>{state.active?.id === cue.id ? '預覽中' : cue.approved ? '已核准' : '待人工確認'}</span></div>
           <p className="vc-muted">{state.products.find(item => item.id === cue.productId)?.title}</p><p className="vc-script">{cue.text}</p><details><summary>核對此版資料來源</summary><p>{state.products.find(item => item.id === cue.productId)?.source}</p><p>{state.products.find(item => item.id === cue.productId)?.facts}</p></details>
-          <div className="actions">{!cue.approved && <button className="btn btn-secondary btn-small" disabled={factsDirty} onClick={() => act(() => {if (factsDirty) throw new Error('請先儲存或放棄商品資料修改。'); engine.approve(cue.id);})}>確認本版資料與講稿</button>}
+          <div className="actions">{!cue.approved && <button className="btn btn-secondary btn-small" disabled={state.mode === 'stopped' || factsDirty} onClick={() => act(() => {if (factsDirty) throw new Error('請先儲存或放棄商品資料修改。'); engine.approve(cue.id);})}>確認本版資料與講稿</button>}
             <button className="btn btn-ghost btn-small" onClick={() => act(() => engine.remove(cue.id))}>移除{state.active?.id === cue.id ? '並中止' : ''}</button></div>
         </li>)}</ol>
         {!state.queue.length && <p className="vc-empty">還沒有講稿。先選商品，寫一段主講，再確認內容。</p>}
@@ -131,10 +132,10 @@ export function VirtualCommerce() {
         </div>
         <button className="btn btn-secondary btn-small" disabled={state.mode !== 'running' || state.preparing || (!state.active && !eligible)} onClick={() => void next(false, state.active ?? undefined)}>{state.active ? '本段結束，預覽下一段' : '預覽下一段'}</button>
         <p className="vc-muted">主講與短答共用一條通道；新提問不打斷目前段落。文字快取 {state.cacheEntries} 筆，不代表已產生語音。</p>
-        <form className="stack vc-viewer" onSubmit={event => {event.preventDefault(); act(() => {const result = engine.receiveViewer({eventId: `manual-viewer-${++viewerSerial.current}`, productId: selected, text: viewerText}); setNotice(viewerLabels[result]); setViewerText('');});}}>
+        <form className="stack vc-viewer" onSubmit={event => {event.preventDefault(); act(() => {if (engine.snapshot().mode === 'stopped') throw new Error('請先重新開始彩排，再送入模擬提問。'); const result = engine.receiveViewer({eventId: `manual-viewer-${++viewerSerial.current}`, productId: selected, text: viewerText}); setNotice(viewerLabels[result]); setViewerText('');});}}>
           <h3>模擬觀眾提問</h3><p className="vc-muted">僅一個測試留言通道。留言不是控制指令，短答只取商品資料，不直接照讀留言。</p>
           <label className="field">對目前商品提問<textarea required rows={3} maxLength={300} value={viewerText} onChange={event => setViewerText(event.target.value)} placeholder="例如：這項商品的規格是什麼？"/></label>
-          <button className="btn btn-secondary btn-small" type="submit" disabled={!product || !viewerText.trim()}>送入模擬留言</button>
+          <button className="btn btn-secondary btn-small" type="submit" disabled={state.mode === 'stopped' || !product || !viewerText.trim()}>送入模擬留言</button>
         </form>
       </section>
     </div>

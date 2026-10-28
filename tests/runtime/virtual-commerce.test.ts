@@ -92,3 +92,15 @@ for(const command of ['pause','takeover'] as const)test(`${command}: completion 
 test('completed preview cache remains bounded across many distinct cues',async()=>{
  const {work}=fixture();work.start();for(let i=0;i<75;i++){const id=add(work,`bounded-${i}`);await work.next();finish(work,id);}assert.equal(work.snapshot().cacheEntries,50);
 });
+
+test('stopped rejects new drafts, approvals and viewer intake until explicit restart',()=>{
+ const {work}=fixture();const old=add(work);work.stop();
+ assert.throws(()=>work.draft('test-1','停止後的新稿'),/重新開始/);
+ assert.throws(()=>work.approve(old),/重新開始/);
+ assert.equal(work.receiveViewer({eventId:'after-stop',productId:'test-1',text:'規格'}),'ignored');
+ assert.equal(work.snapshot().queue.length,0);
+ for(const command of ['pause','takeover'] as const){work[command]();assert.equal(work.snapshot().mode,'stopped');assert.throws(()=>work.draft('test-1','不得繞過重新開始'),/重新開始/);assert.throws(()=>work.start());}
+ work.restart();
+ const fresh=add(work,'重新開始後的新稿');assert.notEqual(fresh,old);
+ assert.equal(work.snapshot().queue[0].text,'重新開始後的新稿');
+});
