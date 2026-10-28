@@ -1,5 +1,6 @@
 import {test, expect, type Page} from './member-feature-fixture.js';
 import {navigate, selectSocialFeed} from './navigation.js';
+import {collectShortVideoCsp} from './short-video-csp.js';
 
 async function login(page: Page) {
   await page.goto('/');
@@ -12,9 +13,8 @@ async function login(page: Page) {
 
 test.describe('Short feed ON',()=>{
 test.use({memberFeatures:{shortVideosEnabled:true}});
-test('members swipe through shared YouTube links in a scrollbar-free feed; players come only from the allowed origin and other sources never get one', async ({page, e2eAuthPool}) => {
-  const violations: string[] = [];
-  page.on('console', message => { if (/Content Security Policy|Refused to frame/i.test(message.text())) violations.push(message.text()); });
+test('members swipe through shared YouTube links in a scrollbar-free feed; players come only from the allowed origin and other sources never get one', async ({page, e2eAuthPool, baseURL}, testInfo) => {
+  const {violations, thirdPartyReports, drain} = await collectShortVideoCsp(page, baseURL!);
   await login(page);
   const base = (await e2eAuthPool.query('SELECT community_id, user_id AS author_user_id FROM users WHERE email=$1', ['maker@local.test'])).rows[0];
   expect(base).toBeTruthy();
@@ -28,6 +28,7 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
       ids.push((await e2eAuthPool.query(`INSERT INTO community_social_posts(community_id,author_user_id,kind,url,platform,title,state,created_at)
         VALUES($1,$2,'link',$3,$4,$5,'active',now() + ($6 || ' seconds')::interval) RETURNING post_id`, [base.community_id, base.author_user_id, urls[i], platforms[i], titles[i], String(-i)])).rows[0].post_id);
     }
+    await drain();
     await page.reload();
     await navigate(page, '社群分享');
     await selectSocialFeed(page, 'Short');
@@ -51,20 +52,25 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
     expect(await players.first().evaluate(frame => getComputedStyle(frame).pointerEvents)).toBe('none');
     const down = feed.getByRole('button', {name: '下一支短影音', exact: true}), up = feed.getByRole('button', {name: '上一支短影音', exact: true});
     await expect(up).toBeDisabled();
+    await drain();
     await down.click();
     await expect(slides.nth(1)).toBeInViewport({ratio: 0.6});
     await expect(down).toBeDisabled();
     await expect(up).toBeEnabled();
+    await drain();
     await feed.getByRole('button', {name: '暫停', exact: true}).click();
     await expect(feed.getByRole('button', {name: '繼續播放', exact: true})).toBeVisible();
+    await drain();
     await feed.getByRole('button', {name: '開啟聲音', exact: true}).click();
     await expect(feed.getByRole('button', {name: '關閉聲音', exact: true})).toBeVisible();
+    await drain();
     await up.click();
     await expect(slides.nth(0)).toBeInViewport({ratio: 0.6});
     // Full screen covers the whole viewport, keeps the same slide, locks the page behind it and Escape leaves it.
     for (const [width, height] of [[1280, 800], [390, 844]]) {
       await page.setViewportSize({width, height});
       await feed.scrollIntoViewIfNeeded();
+      await drain();
       await feed.getByRole('button', {name: '全螢幕', exact: true}).click();
       const full = page.getByRole('dialog', {name: '短影音', exact: true});
       await expect(full).toBeVisible();
@@ -76,13 +82,16 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
       expect(Math.round((await full.locator('.short-video-scroller').boundingBox())!.height)).toBe(height);
       expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
       await expect(openSlides.nth(0)).toBeInViewport({ratio: 0.9});
+      await drain();
       await full.getByRole('button', {name: '下一支短影音', exact: true}).click();
       await expect(openSlides.nth(1)).toBeInViewport({ratio: 0.9});
+      await drain();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog', {name: '短影音', exact: true})).toHaveCount(0);
       await expect(feed.getByRole('button', {name: '全螢幕', exact: true})).toBeFocused();
       expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
       await expect(slides.nth(1)).toBeInViewport({ratio: 0.9});
+      await drain();
       await up.click();
       await expect(slides.nth(0)).toBeInViewport({ratio: 0.6});
     }
@@ -90,6 +99,7 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
     await page.setViewportSize({width: 390, height: 844});
     await feed.scrollIntoViewIfNeeded();
     const here = page.url();
+    await drain();
     await feed.getByRole('button', {name: '全螢幕', exact: true}).click();
     const back = page.getByRole('dialog', {name: '短影音', exact: true});
     await expect(back).toBeVisible();
@@ -97,12 +107,14 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
       await page.keyboard.press('Tab');
       expect(await back.evaluate(element => element.contains(document.activeElement))).toBe(true);
     }
+    await drain();
     await page.goBack();
     await expect(page.getByRole('dialog', {name: '短影音', exact: true})).toHaveCount(0);
     expect(page.url()).toBe(here);
     await expect(feed).toBeVisible();
     // A post hidden elsewhere stops being offered when the viewer returns to the tab.
     await e2eAuthPool.query("UPDATE community_social_posts SET state='hidden' WHERE post_id=$1", [ids[1]]);
+    await drain();
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
     await expect(slides.filter({hasText: titles[1]})).toHaveCount(0);
     await expect(slides.filter({hasText: titles[0]})).toHaveCount(1);
@@ -127,12 +139,110 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
     const csp = (await page.request.get('/')).headers()['content-security-policy'];
     expect(csp.split(';').map(part=>part.trim()).filter(part=>part.split(/\s+/)[0]==='frame-src')).toEqual(['frame-src https://aisns.evitina.tw https://www.youtube-nocookie.com']);
     expect(csp).toContain("frame-ancestors 'none'");
+    await drain();
     expect(violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally {
-    if (ids.length) await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
+    try {
+      await testInfo.attach('third-party-csp-reports', {body: JSON.stringify(thirdPartyReports), contentType: 'application/json'});
+    } finally {
+      if (ids.length) await e2eAuthPool.query('DELETE FROM community_social_posts WHERE post_id = ANY($1::uuid[])', [ids]);
+    }
   }
 });
+});
+
+test.describe('Short CSP collector browser controls', () => {
+  test.use({memberFeatures: {shortVideosEnabled: true}});
+  test.describe('parent frame policy', () => {
+  test.use({memberFeatures: {}});
+  test('a real parent frame-src block remains a violation even when blockedURI names YouTube', async ({page, baseURL}) => {
+    const collected = await collectShortVideoCsp(page, baseURL!);
+    // This fixture document has the actual default-OFF homepage policy. No
+    // product header is changed to make the collector pass.
+    const csp = (await page.request.get('/')).headers()['content-security-policy'];
+    const fixtureURL = `${baseURL}/__short-csp-parent-control`;
+    await page.route(fixtureURL, route => route.fulfill({contentType: 'text/html',
+      headers: {'Content-Security-Policy': csp}, body: '<!doctype html><body></body>'}));
+    await page.goto(fixtureURL);
+    await page.evaluate(() => {
+      const frame = document.createElement('iframe');
+      frame.src = 'https://www.youtube-nocookie.com/embed/aaaaaaaaaaa'; document.body.append(frame);
+    });
+    await expect.poll(() => collected.violations.some(event => event.mainFrame && event.disposition === 'enforce'
+      && event.effectiveDirective === 'frame-src' && event.blockedURI.startsWith('https://www.youtube-nocookie.com'))).toBe(true);
+    expect(collected.thirdPartyReports).toEqual([]);
+  });
+  });
+
+  test('a held real CSP event cannot pass the empty-array assertion before transport acknowledgement', async ({page, baseURL}) => {
+    const collected = await collectShortVideoCsp(page, baseURL!);
+    const csp = (await page.request.get('/')).headers()['content-security-policy'];
+    const fixtureURL = `${baseURL}/__short-csp-transport-control`;
+    await page.route(fixtureURL, route => route.fulfill({contentType: 'text/html',
+      headers: {'Content-Security-Policy': csp}, body: '<!doctype html><body></body>'}));
+    await page.goto(fixtureURL);
+    await page.evaluate(() => {
+      const target = window as unknown as {
+        recordShortVideoCsp: (event: unknown) => Promise<void>; drainShortVideoCsp: () => Promise<void>;
+        shortCspTransport: {entered: Promise<void>; drainEntered: Promise<void>; release: () => void};
+      };
+      const record = target.recordShortVideoCsp, drain = target.drainShortVideoCsp;
+      let entered!: () => void, drainEntered!: () => void, release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      target.shortCspTransport = {entered: new Promise<void>(resolve => { entered = resolve; }),
+        drainEntered: new Promise<void>(resolve => { drainEntered = resolve; }), release};
+      target.recordShortVideoCsp = async event => { entered(); await gate; await record(event); };
+      target.drainShortVideoCsp = async () => { drainEntered(); await drain(); };
+      const script = document.createElement('script'); script.textContent = 'window.__shortCspControl = true'; document.body.append(script);
+    });
+    await page.evaluate(() => (window as unknown as {shortCspTransport: {entered: Promise<void>}}).shortCspTransport.entered);
+    let drained = false;
+    const observation = collected.drain().then(() => { drained = true; });
+    try {
+      await page.evaluate(() => (window as unknown as {shortCspTransport: {drainEntered: Promise<void>}}).shortCspTransport.drainEntered);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(drained).toBe(false);
+    } finally {
+      await page.evaluate(() => (window as unknown as {shortCspTransport: {release: () => void}}).shortCspTransport.release());
+    }
+    await observation;
+    expect(collected.violations.some(event => event.mainFrame && event.disposition === 'enforce'
+      && event.effectiveDirective.startsWith('script-src'))).toBe(true);
+    expect(collected.thirdPartyReports).toEqual([]);
+  });
+
+  for (const target of ['platform', 'youtube'] as const) for (const disposition of ['enforce', 'report'] as const) {
+    test(`real ${target} ${disposition} script violation is classified without console text`, async ({page, baseURL}) => {
+      const collected = await collectShortVideoCsp(page, baseURL!);
+      const fixtureURL = `${baseURL}/__short-csp-script-control`;
+      const playerURL = 'https://www.youtube-nocookie.com/embed/aaaaaaaaaaa';
+      const documentURL = target === 'platform' ? fixtureURL : playerURL;
+      const reportURL = `${new URL(documentURL).origin}/__short-csp-report`;
+      const policy = { [disposition === 'enforce' ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only']:
+        `script-src 'none'; report-uri ${reportURL}` };
+      await page.route(reportURL, route => route.fulfill({status: 204, body: ''}));
+      await page.route(documentURL, route => route.fulfill({contentType: 'text/html', headers: policy, body: '<!doctype html><body></body>'}));
+      if (target === 'youtube') {
+        const csp = (await page.request.get('/')).headers()['content-security-policy'];
+        await page.route(fixtureURL, route => route.fulfill({contentType: 'text/html',
+          headers: {'Content-Security-Policy': csp}, body: `<!doctype html><iframe src="${playerURL}"></iframe>`}));
+      }
+      await page.goto(fixtureURL);
+      const document = target === 'platform' ? page.mainFrame() : page.frames().find(frame => frame.url() === playerURL)!;
+      await document.evaluate(() => {
+        const script = window.document.createElement('script'); script.textContent = 'window.__shortCspControl = true';
+        window.document.body.append(script);
+      });
+      const diagnostic = target === 'youtube' && disposition === 'report';
+      const records = diagnostic ? collected.thirdPartyReports : collected.violations;
+      await expect.poll(() => records.some(event => event.disposition === disposition
+        && event.effectiveDirective.startsWith('script-src'))).toBe(true);
+      expect(await document.evaluate(() => Boolean((window as unknown as {__shortCspControl?: boolean}).__shortCspControl)))
+        .toBe(disposition === 'report');
+      expect(diagnostic ? collected.violations : collected.thirdPartyReports).toEqual([]);
+    });
+  }
 });
 
 test.describe('Short feed OFF (default)',()=>{
