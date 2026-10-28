@@ -117,7 +117,7 @@ test('a failed publish keeps one private draft and resumes after reload without 
   await page.getByRole('button', { name: '預覽投稿' }).click();
   fail = false;
   await page.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
-  await page.getByRole('button', { name: '重試公開投稿' }).click();
+  await page.getByRole('button', { name: '確認並公開' }).click();
   await expect(page.getByRole('region', { name: '投稿完成' })).toBeVisible();
   const ownDrafts = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items;
   expect(ownDrafts.filter((item: any) => item.payload?.title === '同一份草稿修正版')).toHaveLength(1);
@@ -191,4 +191,29 @@ test('member returns to manage a shared tool, withdraws it privately and publish
   const newPath=await card.getByRole('link',{name:'閱讀已公開技能書 ↗'}).getAttribute('href');
   expect(newPath).not.toBe(oldPath);expect((await page.request.get(newPath!)).status()).toBe(200);
   expect((await page.request.get(oldPath!)).status()).toBe(404);
+});
+
+test('manual skill private save reloads and revises the same draft without publishing', async ({ page }) => {
+  const writes: string[] = [];
+  page.on('request', request => { if (request.method() === 'POST' && request.url().includes('/skill-submissions')) writes.push(new URL(request.url()).pathname); });
+  await login(page); await navigate(page, '開源投稿');
+  await fillTool(page, '僅本人續寫的技能草稿');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  const first = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items.find((item: any) => item.payload?.title === '僅本人續寫的技能草稿');
+  expect(first.status).toBe('ready_for_review'); expect(first.public_path).toBeNull(); expect(first.grant_expires_at).toBeNull();
+  await page.reload();
+  await page.getByText(/繼續未公開的草稿/).click();
+  await page.getByRole('button', { name: '繼續投稿：僅本人續寫的技能草稿', exact: true }).click();
+  await expect(page.getByRole('button', { name: '確認並公開', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '修改內容', exact: true }).click();
+  await page.getByLabel('作品名稱', { exact: true }).fill('私人草稿修正版');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  const revised = await (await page.request.get('/api/v1/me/skill-submissions/' + first.submission_id)).json();
+  expect(revised.payload.title).toBe('私人草稿修正版'); expect(revised.public_path).toBeNull();
+  expect(Number(revised.aggregate_version)).toBe(Number(first.aggregate_version) + 1);
+  expect(writes).toEqual(['/api/v1/me/skill-submissions/manual', '/api/v1/me/skill-submissions/' + first.submission_id + '/manual']);
+  await signOut(page); await login(page, 'client@local.test');
+  expect((await page.request.get('/api/v1/me/skill-submissions/' + first.submission_id)).status()).toBe(404);
 });
