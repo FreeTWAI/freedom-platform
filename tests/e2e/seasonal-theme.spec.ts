@@ -4,6 +4,7 @@ import {openSettingsPanel} from './settings-menu-helpers.js';
 async function login(page:Page){
  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+ await expect(page.locator('.home-timeline .social-zone')).toHaveAttribute('aria-busy','false');
 }
 async function selectSeason(page:Page,label:string){
  await openSettingsPanel(page,'appearance');await page.locator('[data-settings-panel="seasonal"]').click();
@@ -41,8 +42,9 @@ test('seasonal sharing reuses composer; auto expires at Taipei midnight and fail
  await page.addInitScript(()=>localStorage.setItem('freedom-seasonal-theme','auto'));
  await page.route('**/art/seasonal/*',route=>route.abort());await login(page);
  await expect(page.locator('.seasonal-welcome')).toBeVisible();await expect(page.locator('.seasonal-share')).toBeEnabled();
- await page.locator('.seasonal-share').click();await expect(page.locator('.social-publish-dialog')).toBeVisible();
- await page.keyboard.press('Escape');await expect(page.locator('.social-publish-dialog')).toBeHidden();await expect(page.locator('.social-write-trigger')).toBeFocused();
+ const composer=page.getByRole('dialog',{name:'建立貼文',exact:true});
+ await page.locator('.seasonal-share').click();await expect(composer).toBeVisible();
+ await page.keyboard.press('Escape');await expect(composer).toBeHidden();await expect(page.locator('.home-timeline .social-write-trigger')).toBeFocused();
  await page.clock.fastForward(59*60*1000+1);await expect(page.locator('.seasonal-welcome')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

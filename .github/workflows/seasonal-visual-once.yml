@@ -9,6 +9,7 @@ jobs:
   capture:
     if: >-
       github.event.pull_request.number == 1155 &&
+      github.event.pull_request.head.sha == 'aef67d001cf42fc63babfd8b18a66114eddbaf4e' &&
       github.event.pull_request.user.login == 'Hao0321' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'hao/seasonal-interface-candidate-20261028' &&
