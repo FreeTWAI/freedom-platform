@@ -662,6 +662,12 @@ const STORE_SPEC_IMPORTS = Object.freeze([
   "import {InstallationPageSchema} from '../../contracts/guild-launchpad/v1/module-registry.js';",
   "import {SupplyCatalogViewSchema, SupplyProductPageSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog.js';",
 ]);
+// Exact #1160 declaration at 05429167416a5e3092c0967f10bd4cc48a5fdd91.
+// These are existing schema exports from the same unchanged module, not a
+// general contracts-path or arbitrary-binding exception.
+const STORE_SPEC_1160_IMPORTS = Object.freeze(STORE_SPEC_IMPORTS.map((declaration, index) => index === 5
+  ? "import {InstancePageSchema, LaunchPlanSchema, PlanInputSchema, InstallationPageSchema} from '../../contracts/guild-launchpad/v1/module-registry.js';"
+  : declaration));
 export function storeSpecDependenciesProven(before, after, ts = loadGuildPresentationParsers()?.ts) {
   if (!ts) return false;
   const inspect = source => {
@@ -691,7 +697,8 @@ export function storeSpecDependenciesProven(before, after, ts = loadGuildPresent
       ts.forEachChild(node, child => visit(child, depth + 1));
     };
     visit(file);
-    return valid && JSON.stringify(imports) === JSON.stringify(STORE_SPEC_IMPORTS) && cases.size >= 7 ? cases : null;
+    return valid && [STORE_SPEC_IMPORTS, STORE_SPEC_1160_IMPORTS].some(reviewed => JSON.stringify(imports) === JSON.stringify(reviewed))
+      && cases.size >= 7 ? cases : null;
   };
   const baseline = inspect(before), candidate = inspect(after);
   return !!baseline && !!candidate && candidate.size >= 8 && [...baseline].every(title => candidate.has(title));
@@ -1066,7 +1073,11 @@ function collectIntegrationProfile({ repository, event, ref = '', base = '', hea
       // The exact one-file tree diff also preserves all transitive dependencies.
       for (const path of ['tests/e2e/fixtures.ts', 'tests/e2e/hosted-store-fixture.ts',
         'packages/testing/seed.ts', 'contracts/guild-launchpad/v1/tenant.ts',
-        'contracts/guild-launchpad/v1/module-registry.ts', 'contracts/guild-launchpad/v1/hosted-supply-catalog.ts']) {
+        'contracts/guild-launchpad/v1/module-registry.ts', 'contracts/guild-launchpad/v1/hosted-supply-catalog.ts',
+        // Reviewed schema closure: tenant/registry/catalog -> primitives,
+        // storefront and common identity; their sole external package is zod.
+        'contracts/guild-launchpad/v1/primitives.ts', 'contracts/guild-launchpad/v1/storefront.ts',
+        'contracts/common/v1/identity.ts', 'package.json', 'package-lock.json']) {
         const before = diff.baseFiles.get(path), after = diff.candidateFiles.get(path);
         if (!regularBlob(before) || !regularBlob(after) || before.mode !== '100644'
           || after.mode !== '100644' || before.oid !== after.oid) return fallback('store_spec_dependencies_unproven');

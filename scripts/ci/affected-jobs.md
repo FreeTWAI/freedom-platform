@@ -58,8 +58,15 @@ still return full. Exact one-file integration evidence also keeps candidate
 package/config/dependency sources unchanged; it is not an integrity claim for
 arbitrary candidate-installed parser bytes.
 
-The seven reviewed import declarations include exact
-bindings: default-mode `person`, `login`, `open`, `post`, `launchStore` and
+The seven reviewed import declarations include exact bindings. Only the original
+`InstallationPageSchema` declaration or #1160's exact declaration adding
+`InstancePageSchema`, `LaunchPlanSchema` and `PlanInputSchema` is accepted for
+`module-registry.js`; no other schema binding or contracts path is admitted.
+The existing tenant and hosted-supply-catalog declarations remain exact.
+The unchanged regular-blob proof explicitly includes their reviewed schema
+closure (`primitives.ts`, `storefront.ts`, `contracts/common/v1/identity.ts`) and
+package manifest/lockfile for the external `zod` dependency. Every mixed schema
+or helper edit still selects full. Default-mode helper bindings remain: default-mode `person`, `login`, `open`, `post`, `launchStore` and
 `captureOffer`, not the same helper's photo-ON server. New imports/bindings,
 dynamic loaders, exports, environment-dependent spec code, missing parser or
 unprovable syntax fall back to full. Every other repository path is unchanged,
@@ -324,3 +331,26 @@ checks. This small check uses the existing product-source scope; harmless unowne
 sources and literal unrelated imports remain warnings. It is not general
 JavaScript or transitive dependency analysis. Source-integrity and aggregate
 failure semantics, CodeQL and non-author review remain required.
+
+### Exact #1160 regression source
+
+`packages/contribution-tools/test/fixtures/store-setup-entry-1160.spec.txt` is an
+unaltered test-source snapshot from PR #1160 commit
+`05429167416a5e3092c0967f10bd4cc48a5fdd91`, blob
+`6697625e15ec412e7d211180c7c3706a28fddea5`, SHA-256
+`7bacd10a028eb12cff69e8f0d699abbb48b39d5c5225513496608209771b4043`.
+It is regression data, not a second product test or an extra browser obligation.
+The regression copies these exact bytes into a disposable Git integration,
+proves selection, and uses real Playwright `--list` to enumerate all eight cases.
+Evaluator unit inputs use that inventory with explicitly synthetic execution
+outcomes, including omitted-case rejection; they are not browser/DB results.
+The original product spec and assertions are never edited by this proposal.
+
+The previously observed `8af0974ee` rejection of these imports remains a real
+failed reachability observation. This correction addresses it without treating
+full fallback as pilot completion. The coordinating review reports that #1160's
+original hosted full suite passed; that product evidence does not mean the new
+narrow lane has run on hosted CI. Actual narrow-lane DB execution and hosted
+runtime savings remain unverified; no new PostgreSQL platform is a prerequisite
+for this bounded selector correction. The prior baseline cancellation failure
+also remains unchanged.

@@ -1839,10 +1839,11 @@ test('store spec browser plan requires exact PR topology and falls back on depen
   for (const d of narrow()) await put(`modules/${d.module_id}/freedom.module.json`,JSON.stringify(d));
   const path = 'tests/e2e/store-setup-entry.spec.ts', source = await readFile(join(root,path),'utf8');
   for (const dependency of ['tests/e2e/fixtures.ts','tests/e2e/hosted-store-fixture.ts','packages/testing/seed.ts',
-    'contracts/guild-launchpad/v1/tenant.ts','contracts/guild-launchpad/v1/module-registry.ts','contracts/guild-launchpad/v1/hosted-supply-catalog.ts'])
+    'contracts/guild-launchpad/v1/tenant.ts','contracts/guild-launchpad/v1/module-registry.ts','contracts/guild-launchpad/v1/hosted-supply-catalog.ts',
+    'contracts/guild-launchpad/v1/primitives.ts','contracts/guild-launchpad/v1/storefront.ts','contracts/common/v1/identity.ts','package.json','package-lock.json'])
     await put(dependency, '// unchanged reviewed dependency\n');
   await put(path,source);await put('.gitignore','tests/e2e/generated.spec.ts\n');
-  const base = commit();await put(path,source + "\ntest('eighth candidate case', async () => {});\n");const head = commit(), input = integrate(base,head);
+  const base = commit();await put(path,await readFile(join(root,'packages/contribution-tools/test/fixtures/store-setup-entry-1160.spec.txt'),'utf8'));const head = commit(), input = integrate(base,head);
   assert.equal(collectRepositoryE2eDecision(input).profile,'store-setup-entry');
   assert.deepEqual(collectRepositoryDecision(input),minimalSelection('browser_specs_only'));
   for (const extra of [{event:'push',ref:'refs/heads/main'},{event:'merge_group'},{candidate:head},{base:head},{head:base},{candidate:''}])
@@ -1852,6 +1853,9 @@ test('store spec browser plan requires exact PR topology and falls back on depen
   const mutations = [
     () => put(path,source + "\nimport './unknown.js';"),
     () => put('tests/e2e/fixtures.ts','changed'), () => put('tests/e2e/hosted-store-fixture.ts','changed'),
+    ...['contracts/guild-launchpad/v1/tenant.ts','contracts/guild-launchpad/v1/module-registry.ts',
+      'contracts/guild-launchpad/v1/hosted-supply-catalog.ts','contracts/guild-launchpad/v1/primitives.ts',
+      'contracts/guild-launchpad/v1/storefront.ts','contracts/common/v1/identity.ts','package-lock.json'].map(path => () => put(path,'changed')),
     () => put('playwright.config.ts','changed'), () => put('.github/workflows/verify.yml','changed'),
     () => put('apps/portal-web/src/App.tsx','changed'), () => put('unknown.ts','changed'),
     () => put('tests/e2e/another.spec.ts','added'), () => rm(join(directory,path)),
@@ -1887,4 +1891,16 @@ test('browser-only parser installation belongs to the confirmed workflow checkou
     const checkout=changed.indexOf('path: .freedom/trusted');
     assert.ok(changed.lastIndexOf('npm ')>checkout,'unsafe installs cannot use the exact exception');
   }
+});
+
+
+test('exact PR 1160 spec admits only the reviewed schema bindings', async () => {
+  const before=await readFile(join(root,'tests/e2e/store-setup-entry.spec.ts'),'utf8');
+  const actual=await readFile(join(root,'packages/contribution-tools/test/fixtures/store-setup-entry-1160.spec.txt'),'utf8');
+  assert.equal(storeSpecDependenciesProven(before,actual),true);
+  for (const extra of ["import {z} from 'zod';", "import {OtherSchema} from '../../contracts/guild-launchpad/v1/other.js';",
+    "import {OpaqueId} from '../../contracts/common/v1/identity.js';"]) {
+    assert.equal(storeSpecDependenciesProven(before,actual+'\n'+extra),false);
+  }
+  assert.equal(storeSpecDependenciesProven(before,actual.replace('InstancePageSchema, LaunchPlanSchema,', 'InstancePageSchema, UnknownSchema, LaunchPlanSchema,')),false);
 });

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { GUILD_PRESENTATION_PROFILE } from '../guild-presentation-profile.mjs';
+import { collectRepositoryE2eDecision } from '../../../scripts/ci/select-affected-jobs.mjs';
 import { cleanupE2ePass } from '../../../scripts/ci/run-pinned-e2e.mjs';
 import { STORE_SPEC_PROFILE, STORE_SPEC_FILES, STORE_SPEC_PLAN, E2E_BASELINE, E2E_PLAN, E2E_DEFAULT_SHARDS, E2E_PASS_TIMEOUT_MS, evaluateE2ePasses, evaluateE2ePassProgress, GUIDE_DEFAULT_FILES, GUIDE_COMPOSITION_PROFILE, planE2eSelection } from '../pinned-e2e.mjs';
 
@@ -1065,7 +1066,8 @@ test('CLI store spec pilot uses separately installed workflow parser in hosted n
     const imports = source.split('\n\n')[0];
     await writeFile(join(root,'tests/e2e/fixtures.ts'), "export {test,expect} from '@playwright/test';\n");
     for (const path of ['tests/e2e/hosted-store-fixture.ts','packages/testing/seed.ts','contracts/guild-launchpad/v1/tenant.ts',
-      'contracts/guild-launchpad/v1/module-registry.ts','contracts/guild-launchpad/v1/hosted-supply-catalog.ts']) {
+      'contracts/guild-launchpad/v1/module-registry.ts','contracts/guild-launchpad/v1/hosted-supply-catalog.ts',
+      'contracts/guild-launchpad/v1/primitives.ts','contracts/guild-launchpad/v1/storefront.ts','contracts/common/v1/identity.ts','package-lock.json']) {
       await mkdir(join(root,path,'..'),{recursive:true});await writeFile(join(root,path),'// unchanged synthetic dependency\n');
     }
     const synthetic = count => imports + '\n' + Array.from({length:count},(_,i)=>`test('case ${i}',async()=>{});`).join('\n');
@@ -1119,5 +1121,56 @@ test('CLI store spec pilot uses separately installed workflow parser in hosted n
     assert.ok(result.passes[0].cases.every(item=>item.status==='passed'));
     await assert.rejects(stat(marker),{code:'ENOENT'});
     for (const flag of ['--profile','--grep','--files']) assert.equal(invoke(['--root',root,flag,STORE_SPEC_PROFILE]).status,2);
+  });
+});
+
+
+test('exact PR 1160 bytes select and list all eight cases with the fixed evaluator contract', async () => {
+  await withFixture(async root => {
+    const bytes=await readFile(join(repoRoot,'packages/contribution-tools/test/fixtures/store-setup-entry-1160.spec.txt'));
+    const digest='7bacd10a028eb12cff69e8f0d699abbb48b39d5c5225513496608209771b4043';
+    assert.equal(createHash('sha256').update(bytes).digest('hex'),digest,'exact 054291674 source, never rewritten assertions');
+    execFileSync('git',['clone','--quiet','--shared',repoRoot,root],{stdio:'pipe'});
+    await symlink(join(repoRoot,'node_modules'),join(root,'node_modules'),'dir');
+    await writeFile(join(root,'.git/info/exclude'),'node_modules\n');
+    const git=(args,input)=>execFileSync('git',['-C',root,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{
+      input,encoding:'utf8',env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',
+        GIT_AUTHOR_NAME:'CI Fixture',GIT_AUTHOR_EMAIL:'fixture@example.invalid',GIT_COMMITTER_NAME:'CI Fixture',GIT_COMMITTER_EMAIL:'fixture@example.invalid'},
+    }).trim();
+    // A comment-only synthetic baseline keeps the actual candidate bytes exact,
+    // even after the product branch has adopted the eighth case itself.
+    await writeFile(join(root,STORE_SPEC_FILES[0]),Buffer.concat([bytes,Buffer.from('\n// synthetic baseline only\n')]));
+    git(['add',STORE_SPEC_FILES[0]]);git(['commit','-qm','synthetic baseline']);const base=git(['rev-parse','HEAD']);
+    await writeFile(join(root,STORE_SPEC_FILES[0]),bytes);git(['add',STORE_SPEC_FILES[0]]);git(['commit','-qm','exact PR 1160 source']);const head=git(['rev-parse','HEAD']);
+    const candidate=git(['commit-tree',git(['rev-parse','HEAD^{tree}']),'-p',base,'-p',head],'local integration\n');git(['checkout','-q',candidate]);
+    assert.deepEqual(collectRepositoryE2eDecision({repository:root,event:'pull_request',base,head,candidate}),
+      {profile:STORE_SPEC_PROFILE,reason:'reviewed_store_spec'});
+    const output=join(root,'.freedom/reports/real-listing.json');await mkdir(join(root,'.freedom/reports'),{recursive:true});
+    const configFile=join(repoRoot,'scripts/ci/pinned-playwright.config.mjs');
+    const child=spawnSync(process.execPath,[join(repoRoot,'node_modules/@playwright/test/cli.js'),'test','--config',configFile,
+      '--list','--reporter=json','tests/e2e/store-setup-entry\\.spec\\.ts$'],
+      {cwd:root,encoding:'utf8',env:{...cliEnv,FREEDOM_PINNED_E2E_ROOT:root,PLAYWRIGHT_JSON_OUTPUT_FILE:output}});
+    assert.equal(child.status,0,child.stdout+child.stderr);
+    const raw=await readFile(output),listing=JSON.parse(raw),execution=structuredClone(listing);let count=0;
+    assert.deepEqual(listing.errors,[]);
+    // Only the listing above executes actual spec collection. These result
+    // envelopes are unit-test inputs, NOT product/browser execution evidence.
+    const visit=suite=>{
+      for(const spec of suite.specs??[]) for(const test of spec.tests??[]) {
+        assert.equal(spec.file,'store-setup-entry.spec.ts');assert.equal(test.projectName,'chromium');count++;
+        Object.assign(test,{status:'expected',expectedStatus:'passed',results:[{status:'passed',retry:0}]});
+      }
+      for(const nested of suite.suites??[])visit(nested);
+    };execution.suites.forEach(visit);assert.equal(count,8);
+    execution.stats={expected:8,skipped:0,unexpected:0,flaky:0};
+    const passes=[{id:'default',exit_code:0,report:execution,evidence_sha256:'a'.repeat(64),
+      listing,listing_exit_code:0,listing_evidence_sha256:createHash('sha256').update(raw).digest('hex')}];
+    const options={rootDir:join(root,'tests/e2e'),configFile,profile:STORE_SPEC_PROFILE};
+    const result=evaluateE2ePasses(STORE_SPEC_FILES,passes,options);
+    assert.equal(result.status,'passed');assert.equal(result.test_count,8);assert.equal(result.passes[0].listed_case_count,8);
+    const missing=structuredClone(passes);missing[0].report.suites[0].specs.pop();missing[0].report.stats.expected--;
+    assert.equal(evaluateE2ePasses(STORE_SPEC_FILES,missing,options).status,'failed');
+    assert.equal(evaluateE2ePasses(STORE_SPEC_FILES,passes,{...options,profile:'full'}).status,'failed');
+    assert.equal(createHash('sha256').update(await readFile(join(root,STORE_SPEC_FILES[0]))).digest('hex'),digest);
   });
 });
