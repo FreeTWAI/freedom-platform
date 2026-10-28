@@ -148,6 +148,10 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         check(value.source === pending.candidate.sourceSha && value.tree === pending.candidate.sourceTree
           && /^[1-9][0-9]*$/.test(value.transactionId) && value.beforeDigest === migrationLedgerDigest(state.schemaLedger)
           && value.afterDigest === migrationLedgerDigest(pending.candidate.schemaLedger), 'release_floor_commit_intent_invalid');
+        if (Object.hasOwn(value, 'beforeMaterialPolicySha256') || Object.hasOwn(value, 'afterMaterialPolicySha256')) {
+          check(value.beforeMaterialPolicySha256 === state.materialPolicySha256 && isDigest(value.afterMaterialPolicySha256)
+            && value.beforeDigest !== value.afterDigest, 'release_floor_commit_intent_invalid');
+        }
       } else if (event.operation === 'publish') {
         check(value.sourceSha === pending.candidate.sourceSha && value.previousSourceSha === pending.previousSourceSha
           && UUID.test(value.previousVersion) && isDigest(value.configSha256), 'release_floor_publish_intent_invalid');
@@ -161,10 +165,15 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && proof.tree === pending.candidate.sourceTree && proof.afterDigest === migrationLedgerDigest(pending.candidate.schemaLedger),
       'release_floor_commit_unverified');
       same(proof.ledger, pending.candidate.schemaLedger, 'release_floor_commit_ledger_changed');
+      for (const key of ['beforeMaterialPolicySha256', 'afterMaterialPolicySha256']) {
+        check(Object.hasOwn(proof, key) === Object.hasOwn(commit, key) && proof[key] === commit[key],
+          'release_floor_commit_unverified');
+      }
       // Raise the rollback floor as soon as COMMIT is confirmed, before later
       // probes can fail. This event does not mark the migration phase passed.
       state.schemaLedger = structuredClone(pending.candidate.schemaLedger); state.schemaVersion = ledger(state.schemaLedger);
       state.sourceSha = pending.candidate.sourceSha; state.sourceTree = pending.candidate.sourceTree;
+      if (Object.hasOwn(commit, 'afterMaterialPolicySha256')) state.materialPolicySha256 = commit.afterMaterialPolicySha256;
       pending.committed = structuredClone(proof); continue;
     }
     check(event.kind === 'passed', 'release_floor_event_invalid');
