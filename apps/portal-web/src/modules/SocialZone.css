@@ -180,3 +180,14 @@
 .social-post-like:focus-visible{outline:2px solid var(--blue-ink);outline-offset:2px}
 @keyframes social-like-pop{0%{transform:scale(.85) rotate(-8deg)}55%{transform:scale(1.15) rotate(3deg)}100%{transform:scale(1) rotate(0)}}
 @media(prefers-reduced-motion:reduce){.social-post-like{transition:none}.social-like-pulse{animation:none}}
+
+/* Private bookmarks are secondary options, not an extra feed action row. */
+.social-card:has(.social-post-menu[open]){overflow:visible;position:relative;z-index:5}
+.social-post-menu-actions:has(.social-post-bookmark){width:min(280px,calc(100vw - 64px));max-height:min(60vh,420px);overflow:auto}
+.social-post-bookmark>.btn,.social-post-bookmark .btn{background:var(--bg-elev);color:var(--ink);border:1px solid var(--line);max-width:100%;min-height:44px;white-space:normal}
+.social-post-bookmark>summary{display:flex;align-items:center;width:100%;list-style:none;cursor:pointer}
+.social-post-bookmark>summary::-webkit-details-marker{display:none}
+.social-post-bookmark>.btn:hover,.social-post-bookmark .btn:hover:not(:disabled){background:var(--bg-elev);color:var(--ink);border-color:var(--focus)}
+.social-post-bookmark .btn:focus-visible,.social-post-bookmark>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.social-post-bookmark .btn:disabled{opacity:1;color:var(--muted);cursor:wait}
+.social-post-bookmark .btn[aria-pressed="true"]{border-color:var(--focus)}

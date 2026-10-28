@@ -1,4 +1,4 @@
-import {useLayoutEffect, useMemo, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {ApiError, type PortalClient} from '../api';
 import {useLanguage, type InterfaceLanguage} from '../language';
 
@@ -19,7 +19,7 @@ function snapshot(value:unknown,id:string):Snapshot|null {
 }
 
 /** No provider traversal or row-mount request. Every read follows an explicit disclosure. */
-export function SocialPostBookmark({client,postId}:{client:PortalClient;postId:string}) {
+export function SocialPostBookmark({client,postId,menuOpen=true}:{client:PortalClient;postId:string;menuOpen?:boolean}) {
   const {language}=useLanguage(), text=copy[language];
   const generation=client.sessionGeneration;
   const life=useMemo(()=>({client,generation,id:postId,disposed:false,open:false,read:0,reading:false,controller:null as AbortController|null,attempt:null as Attempt|null,busy:false}),[client,generation,postId]);
@@ -70,6 +70,8 @@ export function SocialPostBookmark({client,postId}:{client:PortalClient;postId:s
     }
     finally {life.busy=false;if(live())render(value=>value+1);}
   }
+  // Closing the outer options does not discard a possibly committed write.
+  useLayoutEffect(()=>{if(!menuOpen)disclose(false);},[menuOpen,life]);
   const held=life.attempt;
   function disclose(open:boolean) {
     if(!live()||life.open===open)return;
@@ -80,8 +82,8 @@ export function SocialPostBookmark({client,postId}:{client:PortalClient;postId:s
   }
   return <details key={`${postId}:${generation}`} ref={details} className="social-post-bookmark" data-post-id={postId}
     onToggle={event=>disclose(event.currentTarget.open)}
-    onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();disclose(false);event.currentTarget.querySelector('summary')?.focus();}}}>
-    <summary className="btn btn-secondary btn-small" style={{minHeight:44}} onClick={event=>{event.preventDefault();disclose(!life.open);}}>{text[0]}</summary>
+    onKeyDown={event=>{if(event.key==='Escape'&&life.open){event.preventDefault();event.stopPropagation();disclose(false);event.currentTarget.querySelector('summary')?.focus();}}}>
+    <summary className="btn btn-ghost btn-small" style={{minHeight:44}} onClick={event=>{event.preventDefault();disclose(!life.open);}}>{text[0]}</summary>
     <div className="stack" style={{padding:'0.5rem 0',minWidth:0}}>
       <p className="field-hint">{text[1]}</p>
       <p role="status">{state?.loading?text[2]:life.busy?text[5]:state?.notice?text[state.notice==='saved'?6:7]:''}</p>
@@ -90,6 +92,28 @@ export function SocialPostBookmark({client,postId}:{client:PortalClient;postId:s
       {(state?.error==='read'||state?.error==='refused')&&!held&&<button type="button" className="btn btn-secondary btn-small" onClick={()=>void read()}>{text[9]}</button>}
       {(held||state?.data)&&<button type="button" className="btn btn-secondary btn-small" style={{minHeight:44}} disabled={life.busy||!!state?.loading}
         aria-pressed={held?undefined:state?.data?.selected} onClick={()=>void change()}>{life.busy?text[5]:held?text[held.body.selected?11:12]:text[state?.data?.selected?4:3]}</button>}
+    </div>
+  </details>;
+}
+
+/** Native disclosure, not an ARIA menu: its contents retain normal Tab navigation. */
+export function SocialPostOptions({client,postId,bookmarksEnabled,children}:{client:PortalClient;postId:string;bookmarksEnabled:boolean;children:ReactNode}) {
+  const menu=useRef<HTMLDetailsElement>(null);
+  const [open,setOpen]=useState(false);
+  const close=()=>{if(menu.current)menu.current.open=false;setOpen(false);};
+  useEffect(()=>{
+    if(!open)return;
+    const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!menu.current?.contains(event.target))close();};
+    document.addEventListener('pointerdown',outside);
+    return()=>document.removeEventListener('pointerdown',outside);
+  },[open]);
+  return <details ref={menu} className="social-post-menu"
+    onToggle={event=>{if(event.target===event.currentTarget)setOpen(event.currentTarget.open);}}
+    onBlur={event=>{if(event.relatedTarget instanceof Node&&!event.currentTarget.contains(event.relatedTarget))close();}}
+    onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();close();menu.current?.querySelector('summary')?.focus();}}}>
+    <summary aria-label="貼文選項">⋯</summary>
+    <div className="social-post-menu-actions">{children}
+      {bookmarksEnabled&&<SocialPostBookmark client={client} postId={postId} menuOpen={open}/>}
     </div>
   </details>;
 }
