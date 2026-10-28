@@ -180,3 +180,9 @@
 .social-post-like:focus-visible{outline:2px solid var(--blue-ink);outline-offset:2px}
 @keyframes social-like-pop{0%{transform:scale(.85) rotate(-8deg)}55%{transform:scale(1.15) rotate(3deg)}100%{transform:scale(1) rotate(0)}}
 @media(prefers-reduced-motion:reduce){.social-post-like{transition:none}.social-like-pulse{animation:none}}
+
+/* Keep the original post entry in document flow on phones so it does not
+   cover the post being read or the inline comment composer. */
+@media(max-width:760px){
+  .social-composer-start{position:static;top:auto;z-index:auto}
+}
