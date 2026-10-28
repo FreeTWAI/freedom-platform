@@ -1,9 +1,10 @@
 {
   "format": "freedom.native-capture-request/v1",
-  "request_id": "cooking66-party3-20261028-02-cooking-recovery",
-  "source_base_sha": "ec362111707a0b0122aa532fac725a924615f73e",
+  "request_id": "cooking66-party3-20261028-03-index-framing",
+  "source_base_sha": "ba3992ee23fc503e0e2b8f0e2f08dde8fa91d440",
   "families": [
-    "cooking"
+    "cooking",
+    "party"
   ],
   "source_inputs": [
     {
@@ -16,11 +17,11 @@
     },
     {
       "path": "apps/portal-web/src/games/cooking/dish-model.ts",
-      "sha256": "8f23fd84193069eac32e354d914dbe72f3fd0aa5dc684844af943f83cf7c24dd"
+      "sha256": "7248e36cff465c3e3743d26dc5e6b12c1b7f0bd8708b181bb7dc289c8eb6818f"
     },
     {
       "path": "apps/portal-web/src/games/cooking/dish-stage.ts",
-      "sha256": "383d04aef4aaca589a5eb9fde430e20a0c026619a5ba1498023476d7c8d93086"
+      "sha256": "db121d183c3a6f61fa448c0708f43c741e3cc797ea6b801781a942f5199b6a05"
     },
     {
       "path": "apps/portal-web/src/games/cooking/food-geometry.ts",
@@ -68,7 +69,7 @@
     },
     {
       "path": "apps/portal-web/src/games/stage-batch.ts",
-      "sha256": "d0213d99a03f5325af54b923ee730c0f824621f6d66b0971d28a868c83e0f2b4"
+      "sha256": "c87936287eebda9a55310b6a864623df23d3aba3f9d83342b8b5a36b80a20fd0"
     },
     {
       "path": "apps/portal-web/vite.config.ts",
