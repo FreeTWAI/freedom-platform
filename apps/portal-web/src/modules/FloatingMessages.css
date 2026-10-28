@@ -95,3 +95,9 @@
 /* An open panel owns its close control. Hide the external launcher at every
    width so visual/layout viewport differences cannot overlay panel controls. */
 .floating-messages[aria-expanded=true]{display:none}
+
+/* Yield the phone's reading space while any comment-composer control has
+   focus. The persistent inbox and its own close control are not affected. */
+@media(max-width:760px){
+  .app-frame:has(.social-comment-composer:focus-within) .floating-messages[aria-expanded=false]{display:none}
+}
