@@ -11,7 +11,7 @@ import {
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
   deliveryDailyRegistryAddition, deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
   MINIMAL_JOB_PROFILES, decideMinimalProfile, decideCiToolsProfile, ciToolsWorkflowProven, ciToolsSchemaProven,
-  decideBrowserSpecProfile, ciToolsBrowserRegistryProven,
+  decideBrowserSpecProfile, ciToolsBrowserRegistryProven, storeSpecDependenciesProven,
 } from './select-affected-jobs.mjs';
 
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
@@ -1804,4 +1804,62 @@ test('CI tools admit only the exact browser coverage wiring and fixed consumer r
   for(const changed of [registry.replace(addition,addition.replace('public-social-post-page.test.ts','unknown.test.ts')),
     registry.replace(addition,addition.replace('database: false','database: true')),registry.replace("'ci.worker-unit'","'ci.unknown'")])
     assert.equal(ciToolsBrowserRegistryProven(old,changed),false);
+});
+
+
+test('store spec pilot proves reviewed imports and preserves every baseline case', async () => {
+  const source = await readFile(join(root, 'tests/e2e/store-setup-entry.spec.ts'), 'utf8') + "\ntest('eighth candidate case', async () => {});\n";
+  assert.equal(storeSpecDependenciesProven(source, source + '\n// assertion edit\n'), true);
+  for (const extra of ["import './other.spec.js';", "const x = import('./fixtures.js');",
+    "const x = require('./fixtures.js');", "const x = process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE;",
+    "const x = globalThis.process;", "export * from './fixtures.js';", 'const x = import.meta.url;', 'test.use({});', 'const alias = test;', 'test();'])
+    assert.equal(storeSpecDependenciesProven(source, source + '\n' + extra), false, extra);
+  assert.equal(storeSpecDependenciesProven(source, source.replace('launchStore, captureOffer', 'launchStore, captureOffer, startGalleryBrowserServer')), false);
+  assert.equal(storeSpecDependenciesProven(source, source.replace("test('", "test('renamed ")), false);
+  assert.equal(storeSpecDependenciesProven(source, source, null), false);
+});
+
+test('store spec browser plan requires exact PR topology and falls back on dependency or content uncertainty', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'fp-store-select-'));
+  t.after(() => rm(directory, {recursive:true, force:true}));
+  const env = {...verificationEnvironment(), GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
+    GIT_AUTHOR_NAME:'CI Fixture', GIT_AUTHOR_EMAIL:'fixture@example.invalid', GIT_COMMITTER_NAME:'CI Fixture', GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
+  const git = (args,input) => execFileSync('git', ['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args], {input,encoding:'utf8',stdio:['pipe','pipe','pipe'],env}).trim();
+  const put = async (path,body) => {await mkdir(dirname(join(directory,path)),{recursive:true});await writeFile(join(directory,path),body);};
+  const commit = () => {git(['add','.']);git(['commit','-qm','fixture']);return git(['rev-parse','HEAD']);};
+  const integrate = (base,head) => {
+    const candidate = git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',base,'-p',head],'integration\n');
+    git(['checkout','-q',candidate]);return {repository:directory,event:'pull_request',base,head,candidate};
+  };
+  git(['init','-q','-b','main']);
+  for (const d of narrow()) await put(`modules/${d.module_id}/freedom.module.json`,JSON.stringify(d));
+  const path = 'tests/e2e/store-setup-entry.spec.ts', source = await readFile(join(root,path),'utf8');
+  for (const dependency of ['tests/e2e/fixtures.ts','tests/e2e/hosted-store-fixture.ts','packages/testing/seed.ts',
+    'contracts/guild-launchpad/v1/tenant.ts','contracts/guild-launchpad/v1/module-registry.ts','contracts/guild-launchpad/v1/hosted-supply-catalog.ts'])
+    await put(dependency, '// unchanged reviewed dependency\n');
+  await put(path,source);await put('.gitignore','tests/e2e/generated.spec.ts\n');
+  const base = commit();await put(path,source + "\ntest('eighth candidate case', async () => {});\n");const head = commit(), input = integrate(base,head);
+  assert.equal(collectRepositoryE2eDecision(input).profile,'store-setup-entry');
+  assert.deepEqual(collectRepositoryDecision(input),minimalSelection('browser_specs_only'));
+  for (const extra of [{event:'push',ref:'refs/heads/main'},{event:'merge_group'},{candidate:head},{base:head},{head:base},{candidate:''}])
+    assert.equal(collectRepositoryE2eDecision({...input,...extra}).profile,'full');
+  await put(path,source);assert.equal(collectRepositoryE2eDecision(input).profile,'full');git(['checkout','--',path]);
+  await put('tests/e2e/generated.spec.ts','ignored');assert.equal(collectRepositoryE2eDecision(input).profile,'full');await rm(join(directory,'tests/e2e/generated.spec.ts'));
+  const mutations = [
+    () => put(path,source + "\nimport './unknown.js';"),
+    () => put('tests/e2e/fixtures.ts','changed'), () => put('tests/e2e/hosted-store-fixture.ts','changed'),
+    () => put('playwright.config.ts','changed'), () => put('.github/workflows/verify.yml','changed'),
+    () => put('apps/portal-web/src/App.tsx','changed'), () => put('unknown.ts','changed'),
+    () => put('tests/e2e/another.spec.ts','added'), () => rm(join(directory,path)),
+    () => git(['mv',path,'tests/e2e/renamed.spec.ts']),
+    () => put('modules/example/freedom.module.json',JSON.stringify(moduleDescriptor('example',['modules/example/**'],{tests:['runtime.full']}))),
+  ];
+  for (const mutate of mutations) {
+    git(['checkout','-q',head]);await mutate();assert.equal(collectRepositoryE2eDecision(integrate(base,commit())).profile,'full');
+  }
+  git(['checkout','-q',head]);git(['update-index','--chmod=+x',path]);git(['commit','-qm','mode']);git(['checkout','--',path]);
+  assert.equal(collectRepositoryE2eDecision(integrate(base,git(['rev-parse','HEAD']))).profile,'full');
+  git(['checkout','-q',head]);
+  const reversed = git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',head,'-p',base],'reversed\n');git(['checkout','-q',reversed]);
+  assert.equal(collectRepositoryE2eDecision({...input,candidate:reversed}).profile,'full');
 });

@@ -21,7 +21,7 @@ import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCT
 import { isModuleSourcePath } from '../../packages/contribution-tools/modules.mjs';
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
-import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import { GUIDE_COMPOSITION_PROFILE, STORE_SPEC_PROFILE, STORE_SPEC_FILES } from '../../packages/contribution-tools/pinned-e2e.mjs';
 import { GUILD_PRESENTATION_PROFILE, guildPresentationPath, guildPresentationDependenciesProven, loadGuildPresentationParsers } from '../../packages/contribution-tools/guild-presentation-profile.mjs';
 import { runtimeTextSources } from '../generate-runtime-text.mjs';
 
@@ -651,8 +651,59 @@ export function decideGuildPresentationProfile(input) {
   } catch { return fallback('guild_impact_unproven'); }
 }
 
+// Reviewed static import bindings, including type imports. In particular the
+// photo-ON helper exports are not part of this default-only spec boundary.
+const STORE_SPEC_IMPORTS = Object.freeze([
+  "import type {Pool} from 'pg';",
+  "import {test, expect, type Page, type TestInfo} from './fixtures.js';",
+  "import {person, login, open, post, launchStore, captureOffer} from './hosted-store-fixture.js';",
+  "import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';",
+  "import {TenantPageSchema} from '../../contracts/guild-launchpad/v1/tenant.js';",
+  "import {InstallationPageSchema} from '../../contracts/guild-launchpad/v1/module-registry.js';",
+  "import {SupplyCatalogViewSchema, SupplyProductPageSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog.js';",
+]);
+export function storeSpecDependenciesProven(before, after, ts = loadGuildPresentationParsers()?.ts) {
+  if (!ts) return false;
+  const inspect = source => {
+    if (typeof source !== 'string' || Buffer.byteLength(source) > 262144) return null;
+    const file = ts.createSourceFile(STORE_SPEC_FILES[0], source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    if (file.parseDiagnostics.length || file.referencedFiles.length || file.typeReferenceDirectives.length
+      || file.libReferenceDirectives.length || file.pragmas.has('jsximportsource')) return null;
+    const imports = [], cases = new Set();
+    let valid = true, nodes = 0;
+    const visit = (node, depth = 0) => {
+      if (!valid || ++nodes > 30000 || depth > 128) { valid = false; return; }
+      if (ts.isImportDeclaration(node)) imports.push(node.getText(file));
+      if (ts.isExportDeclaration(node) || ts.isImportEqualsDeclaration(node) || ts.isImportTypeNode(node)
+        || ts.isMetaProperty(node) || node.kind === ts.SyntaxKind.ImportKeyword && !ts.isImportDeclaration(node.parent)
+        || ts.isIdentifier(node) && ['require', 'eval', 'Function', 'Worker', 'SharedWorker', 'process',
+          'globalThis', 'module', '__dirname', '__filename'].includes(node.text)) valid = false;
+      // This pilot admits direct, unconditional whole-file registrations only;
+      // custom test fixtures, aliases, skip/only and test.use need broader proof.
+      if (ts.isIdentifier(node) && node.text === 'test' && !ts.isImportSpecifier(node.parent)
+        && !(ts.isCallExpression(node.parent) && node.parent.expression === node
+          && ts.isExpressionStatement(node.parent.parent) && ts.isSourceFile(node.parent.parent.parent))) valid = false;
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'test') {
+        const title = node.arguments[0];
+        if (!title || !ts.isStringLiteral(title) || cases.has(title.text)) valid = false;
+        else cases.add(title.text);
+      }
+      ts.forEachChild(node, child => visit(child, depth + 1));
+    };
+    visit(file);
+    return valid && JSON.stringify(imports) === JSON.stringify(STORE_SPEC_IMPORTS) && cases.size >= 7 ? cases : null;
+  };
+  const baseline = inspect(before), candidate = inspect(after);
+  return !!baseline && !!candidate && candidate.size >= 8 && [...baseline].every(title => candidate.has(title));
+}
+
 // Browser narrowing is a separate, fixed pilot; it never narrows job selection.
 export function decideE2eProfile(input) {
+  if (input?.event === 'pull_request'
+    && decideBrowserSpecProfile(input).profile === 'browser_specs_only'
+    && input.changes.length === 1 && input.changes[0].path === STORE_SPEC_FILES[0]) {
+    return {profile: STORE_SPEC_PROFILE, reason: 'reviewed_store_spec'};
+  }
   const selected = decideAffectedJobs(input);
   // Reuse every admission/fallback above. Only the original leaf-impact guard
   // may defer to this explicit two-module browser profile; jobs still stay full.
@@ -1010,6 +1061,19 @@ function collectIntegrationProfile({ repository, event, ref = '', base = '', hea
         || decide === decideMinimalProfile && diff?.ok === true
         && diff.changes.every(change => [diff.baseFiles.get(change.path), diff.candidateFiles.get(change.path)]
           .every(entry => !entry || entry.type === 'blob' && entry.mode === '100644')) });
+    if (result.profile === STORE_SPEC_PROFILE) {
+      // Fixed local imports must resolve to unchanged regular source blobs.
+      // The exact one-file tree diff also preserves all transitive dependencies.
+      for (const path of ['tests/e2e/fixtures.ts', 'tests/e2e/hosted-store-fixture.ts',
+        'packages/testing/seed.ts', 'contracts/guild-launchpad/v1/tenant.ts',
+        'contracts/guild-launchpad/v1/module-registry.ts', 'contracts/guild-launchpad/v1/hosted-supply-catalog.ts']) {
+        const before = diff.baseFiles.get(path), after = diff.candidateFiles.get(path);
+        if (!regularBlob(before) || !regularBlob(after) || before.mode !== '100644'
+          || after.mode !== '100644' || before.oid !== after.oid) return fallback('store_spec_dependencies_unproven');
+      }
+      const sources = [base, candidate].map(sha => runGit(root, ['show', `${sha}:${STORE_SPEC_FILES[0]}`]).toString('utf8'));
+      if (!storeSpecDependenciesProven(sources[0], sources[1])) return fallback('store_spec_dependencies_unproven');
+    }
     if (['ci_tools','ci_tools_document_inputs'].includes(result.profile) && !ciToolsSourcesProven(root,base,candidate,diff))
       return {profile:'full',reason:'ci_tools_sources_unproven'};
     if (result.profile === GUILD_PRESENTATION_PROFILE.id) {

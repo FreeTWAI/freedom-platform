@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { GUILD_PRESENTATION_PROFILE } from '../guild-presentation-profile.mjs';
 import { cleanupE2ePass } from '../../../scripts/ci/run-pinned-e2e.mjs';
-import { E2E_BASELINE, E2E_PLAN, E2E_DEFAULT_SHARDS, E2E_PASS_TIMEOUT_MS, evaluateE2ePasses, evaluateE2ePassProgress, GUIDE_DEFAULT_FILES, GUIDE_COMPOSITION_PROFILE, planE2eSelection } from '../pinned-e2e.mjs';
+import { STORE_SPEC_PROFILE, STORE_SPEC_FILES, STORE_SPEC_PLAN, E2E_BASELINE, E2E_PLAN, E2E_DEFAULT_SHARDS, E2E_PASS_TIMEOUT_MS, evaluateE2ePasses, evaluateE2ePassProgress, GUIDE_DEFAULT_FILES, GUIDE_COMPOSITION_PROFILE, planE2eSelection } from '../pinned-e2e.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const rootDir = '/fixture/tests/e2e';
@@ -1024,4 +1024,75 @@ test('Guild preview requires every listed case from all three reviewed module fi
   const withoutEvents=clean();withoutEvents[0].report.suites=withoutEvents[0].report.suites.filter(suite=>suite.file!=='guild-events/EventsBlock.spec.ts');
   withoutEvents[0].report.stats.expected--;assert.equal(check(withoutEvents).status,'failed');
   assert.equal(evaluateE2ePasses([...files,'modules/other/WorksBlock.spec.ts'],clean(),{rootDir,configFile,profile:'guild-preview'}).status,'failed');
+});
+
+
+test('reviewed store spec has one whole-file default pass and a distinct complete evidence contract', () => {
+  const selected = planE2eSelection(STORE_SPEC_PROFILE, [...E2E_BASELINE,...STORE_SPEC_FILES]);
+  assert.deepEqual(selected, {profile:STORE_SPEC_PROFILE, expectedFiles:[...STORE_SPEC_FILES], plan:STORE_SPEC_PLAN});
+  assert.deepEqual(selected.plan.map(p => p.files), [[...STORE_SPEC_FILES]]);
+  assert.deepEqual(selected.plan[0].env, {});
+  assert.equal(planE2eSelection(STORE_SPEC_PROFILE, E2E_BASELINE).profile, 'full');
+  const options = {rootDir,configFile,profile:STORE_SPEC_PROFILE};
+  const clean = () => {
+    const result = report([suite('store-setup-entry.spec.ts',Array.from({length:8},(_,i)=>['case '+i,'expected']))]);
+    return [{id:'default',exit_code:0,report:result,evidence_sha256:'a'.repeat(64),
+      listing:structuredClone(result),listing_exit_code:0,listing_evidence_sha256:'b'.repeat(64)}];
+  };
+  const check = passes => evaluateE2ePasses(STORE_SPEC_FILES,passes,options);
+  assert.equal(check(clean()).status,'passed');assert.equal(check(clean()).test_count,8);
+  assert.equal(evaluateE2ePassProgress(STORE_SPEC_FILES,clean(),options).status,'passed');
+  assert.equal(evaluateE2ePasses(STORE_SPEC_FILES,clean(),{rootDir,configFile}).status,'failed','one pass cannot satisfy full');
+  assert.equal(evaluateE2ePasses(expectedFiles,cleanPasses(),options).status,'failed','full files cannot forge the pilot');
+  assert.equal(check([]).status,'failed');assert.equal(check([...clean(),...clean()]).status,'failed');
+  for (const mutate of [
+    p => {p[0].exit_code=1;}, p => {p[0].listing_exit_code=1;}, p => {delete p[0].listing_evidence_sha256;},
+    p => {delete p[0].evidence_sha256;}, p => {p[0].partitions=[];},
+    p => {p[0].report.stats.flaky=1;}, p => {p[0].report.errors.push({message:'failed'});},
+    p => {p[0].report.suites[0].file='other.spec.ts';},
+    p => {p[0].report.suites[0].suites[0].suites[0].specs.pop();p[0].report.stats.expected--;},
+    p => {p[0].report.suites[0].suites[0].suites[0].specs[0].tests[0]=state('skipped');p[0].report.stats.expected--;p[0].report.stats.skipped++;},
+    p => {p[0].report.suites[0].suites[0].suites[0].specs[0].tests[0].results=[{status:'passed',retry:1}];},
+    p => {p[0].report.suites[0].suites[0].suites[0].specs[0].tests[0].results.push({status:'passed'});},
+    p => {for (const r of [p[0].report,p[0].listing]) {r.suites[0].suites[0].suites[0].specs.pop();r.stats.expected--; }},
+  ]) {const passes=clean();mutate(passes);assert.equal(check(passes).status,'failed');}
+});
+
+test('CLI store spec pilot runs eight complete cases with independent listing despite forged candidate filters', async () => {
+  await withFixture(async root => {
+    await playwrightFixture(root, "export default {grep:/never/,testIgnore:['**/*'],retries:4,projects:[{name:'chromium'}]};");
+    const source = await readFile(join(repoRoot,STORE_SPEC_FILES[0]),'utf8');
+    const imports = source.split('\n\n')[0];
+    await writeFile(join(root,'tests/e2e/fixtures.ts'), "export {test,expect} from '@playwright/test';\n");
+    for (const path of ['tests/e2e/hosted-store-fixture.ts','packages/testing/seed.ts','contracts/guild-launchpad/v1/tenant.ts',
+      'contracts/guild-launchpad/v1/module-registry.ts','contracts/guild-launchpad/v1/hosted-supply-catalog.ts']) {
+      await mkdir(join(root,path,'..'),{recursive:true});await writeFile(join(root,path),'// unchanged synthetic dependency\n');
+    }
+    const synthetic = count => imports + '\n' + Array.from({length:count},(_,i)=>`test('case ${i}',async()=>{});`).join('\n');
+    await writeFile(join(root,STORE_SPEC_FILES[0]),synthetic(7));
+    const dir=join(root,'modules/example');await mkdir(dir,{recursive:true});
+    await writeFile(join(dir,'freedom.module.json'),JSON.stringify({format:'freedom.module/v1',module_id:'example',owner_role:'foundation',
+      owned_paths:['modules/example/**'],dependencies:[],tests:['runtime.full'],public_exports:[],contract_families:['preview'],
+      client_profiles:['member'],instructions:['governance/README.md'],invariants:['local-only'],surfaces:[]}));
+    await writeFile(join(root,'.gitignore'),'node_modules\nresult.json\n');
+    const git=(args,input)=>execFileSync('git',['-C',root,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args],{
+      input,encoding:'utf8',env:{...process.env,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',
+        GIT_AUTHOR_NAME:'CI Test',GIT_AUTHOR_EMAIL:'ci@example.invalid',GIT_COMMITTER_NAME:'CI Test',GIT_COMMITTER_EMAIL:'ci@example.invalid'},
+    }).trim();
+    git(['init','-q','-b','main']);git(['add','.']);git(['commit','-qm','base']);const base=git(['rev-parse','HEAD']);
+    await writeFile(join(root,STORE_SPEC_FILES[0]),synthetic(8));git(['add','.']);git(['commit','-qm','case']);const head=git(['rev-parse','HEAD']);
+    const candidate=git(['commit-tree',git(['rev-parse','HEAD^{tree}']),'-p',base,'-p',head],'integration\n');git(['checkout','-q',candidate]);
+    const output=join(root,'result.json');
+    const child=invoke(['--root',root,'--output',output,'--event','pull_request','--base',base,'--head',head,'--candidate',candidate],
+      {FREEDOM_E2E_PROFILE:'full',FREEDOM_E2E_STORE_PHOTO_FIXTURE:'1'});
+    assert.equal(child.status,0,child.stdout+child.stderr);
+    const result=JSON.parse(await readFile(output,'utf8'));
+    assert.equal(result.selection.profile,STORE_SPEC_PROFILE);
+    assert.deepEqual(result.binding,{base,head,candidate});
+    assert.deepEqual(result.selected_files,STORE_SPEC_FILES);
+    assert.equal(result.test_count,8);assert.equal(result.passes.length,1);
+    assert.equal(result.passes[0].listed_case_count,8);assert.equal(result.passes[0].cases.length,8);
+    assert.ok(result.passes[0].cases.every(item=>item.status==='passed'));
+    for (const flag of ['--profile','--grep','--files']) assert.equal(invoke(['--root',root,flag,STORE_SPEC_PROFILE]).status,2);
+  });
 });
