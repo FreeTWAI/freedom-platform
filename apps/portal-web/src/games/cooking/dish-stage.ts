@@ -1,8 +1,35 @@
-import {Box3,BoxGeometry,Color,DirectionalLight,HemisphereLight,Mesh,MeshStandardMaterial,ACESFilmicToneMapping,PerspectiveCamera,PCFSoftShadowMap,Scene,WebGLRenderer} from 'three';
+import {Box3,BoxGeometry,Color,DirectionalLight,HemisphereLight,Mesh,MeshStandardMaterial,Matrix4,Vector3,ACESFilmicToneMapping,PerspectiveCamera,PCFSoftShadowMap,Scene,WebGLRenderer} from 'three';
 import {foodStudio} from './food-studio';
 import type {MarketRun} from './market-domain';
 import {foodTexture} from './food-kit';
 import {createDishModel,type DishModel} from './dish-model';
+
+/** One CPU-only pass at the default pose. Keep fitting scenes bit-for-bit unchanged;
+ * clipped scenes retreat along the existing view axis, with a small edge margin.
+ * Never run this on turn/zoom/reset: those remain the user's original controls. */
+export function fitDishDefaultView(camera:PerspectiveCamera,root:DishModel['root']):void{
+ // Fail closed for unsupported/deformed input rather than moving to a blank view.
+ const projection=camera.projectionMatrix.elements;
+ if(camera.parent||!projection.every(Number.isFinite)||projection[0]<=0||projection[5]<=0||projection[8]!==0||projection[9]!==0||!Number.isFinite(camera.near)||!Number.isFinite(camera.far)||camera.near<=0||camera.far<=camera.near)return;
+ root.updateWorldMatrix(true,true);camera.updateMatrixWorld(true);
+ const point=new Vector3(),toCamera=new Matrix4();
+ let valid=true,clipped=false,retreat=0,farthest=0;
+ root.traverseVisible(object=>{
+  if(!(object instanceof Mesh))return;
+  if('isInstancedMesh' in object||'isSkinnedMesh' in object||object.geometry.morphAttributes.position?.length){valid=false;return;}
+  const positions=object.geometry.getAttribute('position');if(!positions||positions.itemSize!==3){valid=false;return;}
+  toCamera.multiplyMatrices(camera.matrixWorldInverse,object.matrixWorld);
+  for(let i=0;i<positions.count;i++){
+   point.fromBufferAttribute(positions,i).applyMatrix4(toCamera);
+   if(!Number.isFinite(point.x)||!Number.isFinite(point.y)||!Number.isFinite(point.z)){valid=false;continue;}
+   const horizontal=Math.abs(point.x)*projection[0],vertical=Math.abs(point.y)*projection[5],depth=-point.z;
+   farthest=Math.max(farthest,depth);
+   if(horizontal>depth||vertical>depth||depth<camera.near)clipped=true;
+   retreat=Math.max(retreat,horizontal/.94-depth,vertical/.94-depth,camera.near-depth);
+  }
+ });
+ if(valid&&clipped&&retreat>0&&Number.isFinite(retreat)&&farthest+retreat<camera.far){camera.position.addScaledVector(camera.getWorldDirection(new Vector3()),-retreat);camera.updateMatrixWorld(true);}
+}
 
 export type DishStage={turn:(delta:number)=>void;reset:()=>void;zoom:(delta:number)=>void;capture:()=>string;stats:()=>{calls:number;triangles:number;geometries:number;textures:number};dispose:()=>void};
 /** DOM adapter retained for the native preview operator. The renderer/model are shared with the worker. */
@@ -25,6 +52,7 @@ export function createDishCanvasStage(canvas:HTMLCanvasElement|OffscreenCanvas,p
   studio=foodStudio(renderer,scene);floorTexture.repeat.set(5,5);scene.background=new Color('#d6b991');scene.add(new HemisphereLight('#fff9ee','#523723',.35));light.position.set(-4,8,5);light.castShadow=true;light.shadow.mapSize.set(1024,1024);Object.assign(light.shadow.camera,{left:-5,right:5,top:5,bottom:-5,near:.5,far:25});light.shadow.normalBias=.04;light.shadow.radius=3;scene.add(light);
   const floor=new Mesh(floorGeometry,floorMaterial);floor.receiveShadow=true;scene.add(floor);model=createDishModel(recipeId,snapshot);scene.add(model.root);floor.position.y=new Box3().setFromObject(model.root).min.y-.1;
   const camera=new PerspectiveCamera(34,4/3,.1,40);camera.position.set(.25,7.5,7.9);camera.lookAt(0,.3,0);const fill=new DirectionalLight('#dbe7ff',.35);fill.position.set(4,3,-3);scene.add(fill);
+  model.root.rotation.y=-.12;camera.zoom=recipeId==='steak-dinner'?1.26:1.38;camera.updateProjectionMatrix();fitDishDefaultView(camera,model.root);
   const render=()=>{if(!disposed)renderer.render(scene,camera);};const reset=()=>{if(model){model.root.rotation.y=-.12;camera.zoom=recipeId==='steak-dinner'?1.26:1.38;camera.updateProjectionMatrix();render();}};reset();
   return {render,view:(angle,zoom)=>{if(!model||disposed||!Number.isFinite(angle)||!Number.isFinite(zoom))return;model.root.rotation.y=angle;camera.zoom=Math.max(.8,Math.min(1.7,zoom));camera.updateProjectionMatrix();render();},turn:delta=>{if(!model||!Number.isFinite(delta)||disposed)return;model.root.rotation.y=(model.root.rotation.y+delta)%(Math.PI*2);render();},reset,zoom:delta=>{if(!Number.isFinite(delta)||disposed)return;camera.zoom=Math.max(.8,Math.min(1.7,camera.zoom+delta));camera.updateProjectionMatrix();render();},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
  }catch(cause){dispose();throw cause;}

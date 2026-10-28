@@ -148,7 +148,7 @@ export function createDishModel(recipeId:string,snapshot?:MarketRun):DishModel{
   // Glass has one restrained transparent shell. Drinks and fruit are real interior meshes.
   const shell=new Mesh(cup,mat(family==='glass'?'#d8dfcc':'#9bbcb0',family==='glass'));root.add(shell);shell.castShadow=false;
   mesh(root,drinkFill,design.base,0,1.02,0,1,1.93,1);torus(root,'#b8c6b2',0,2.4,0,.9);
-  if(family==='mug'){const handle=mesh(root,ring,'#9bbcb0',1.02,1.28,0,.68);handle.rotation.y=Math.PI/2;disk(root,design.top,0,2.02,0,.8,.06);if(design.detail==='marshmallow')for(const [x,z]of [[-.35,-.2],[.3,-.12],[0,.37]])rb(root,design.top,x,2.17,z,.4,.28,.38);else{torus(root,'#c1d0a0',0,2.07,0,.43);leaf(root,0,2.1,0,.4,design.accent);}}
+  if(family==='mug'){const handle=mesh(root,ring,'#9bbcb0',1.02,1.28,0,.68);handle.rotation.y=Math.PI/2;disk(root,design.detail==='marshmallow'?design.base:design.top,0,2.02,0,.8,.06);if(design.detail==='marshmallow')for(const [x,z]of [[-.35,-.2],[.3,-.12],[0,.37]])rb(root,design.top,x,2.17,z,.4,.28,.38);else{torus(root,'#c1d0a0',0,2.07,0,.43);leaf(root,0,2.1,0,.4,design.accent);}}
   else{const straw=mesh(root,cylinder,'#cb7959',.35,2.1,-.2,.055,2.1,.055);straw.rotation.z=-.12;if(design.detail==='pearls')for(let i=0;i<7;i++){const a=-.65+i*.23;ball(root,design.top,Math.sin(a)*.75,.26+(i%2)*.2,Math.cos(a)*.75,.14);}else for(let i=0;i<4;i++){const a=-.3+i*.42,f=disk(root,design.top,Math.sin(a)*.78,.65+(i%3)*.42,Math.cos(a)*.78,.24,.1);f.rotation.x=Math.PI/2;f.rotation.z=i*.4;}if(design.detail==='citrus'){const f=disk(root,design.top,.68,2.37,0,.4,.11);f.rotation.z=Math.PI/2;sprig(root,-.2,2.1,0);}}
   disk(root,'#cba67c',0,-.05,0,1.22,.1);
  }
