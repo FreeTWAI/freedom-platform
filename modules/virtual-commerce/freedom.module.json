@@ -1,0 +1,47 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "virtual-commerce",
+  "owner_role": "commerce",
+  "owned_paths": [
+    "modules/virtual-commerce/**",
+    "apps/portal-web/src/modules/VirtualCommerce.tsx",
+    "apps/portal-web/src/modules/VirtualCommerce.css",
+    "tests/runtime/virtual-commerce.test.ts",
+    "tests/runtime/virtual-commerce-ui.test.ts",
+    "tests/e2e/virtual-commerce.spec.ts"
+  ],
+  "public_exports": [
+    "modules/virtual-commerce/index.ts"
+  ],
+  "dependencies": [
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "DESIGN.md",
+    "modules/virtual-commerce/README.md"
+  ],
+  "invariants": [
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "virtual-commerce.rehearsal-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/VirtualCommerce.tsx",
+      "operations": [
+        "virtual-commerce.rehearsal.local"
+      ],
+      "auth_profile": "member-session"
+    }
+  ]
+}

@@ -7,8 +7,14 @@ const TenantSettings = lazy(() => import('../modules/TenantSettings').then(m => 
 const SupplierPanel = lazy(() => import('../modules/CommercePanels').then(m => ({default: m.SupplierPanel})))
 const RetailPanel = lazy(() => import('../modules/CommercePanels').then(m => ({default: m.RetailPanel})))
 
+const VirtualCommerce = lazy(() => import('../modules/VirtualCommerce').then(m => ({default: m.VirtualCommerce})))
+
 // Page entries only compose existing features. Session, navigation and leave guards stay in the shell.
 export const commerceFeatures = {
+  "virtual-commerce": {
+    moduleId: "virtual-commerce", placement: 'page',
+    render: ({client, session}) => <VirtualCommerce key={`${session.user.user_id}:${client.sessionGeneration}`} />,
+  },
   "reservations": {
     moduleId: "hosted-checkout", placement: 'page',
     render: ({client, session, site, locationHash, registerPageLeave, replaceBuyerLocation, onSessionExpired}) => <HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={registerPageLeave} replaceLocation={replaceBuyerLocation} checkoutOrders={site?.commerce_checkout_enabled===true?{userId:session.user.user_id,csrfToken:session.csrf_token,onSessionExpired}:undefined} />,

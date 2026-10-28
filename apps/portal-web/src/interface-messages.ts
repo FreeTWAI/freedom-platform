@@ -2,6 +2,7 @@
 // All supported languages must have the same keys. Member-authored content is
 // not an interface message and must never be substituted by this catalog.
 export const interfaceMessages = {
+  "nav.virtual-commerce": ["虛擬導購工作台", "Virtual commerce rehearsal", "バーチャル商品案内リハーサル", "가상 상품 안내 리허설", "Ensayo de comercio virtual"],
   "nav.community-hub": ["社群入口總覽","Community hub","コミュニティ一覧","커뮤니티 허브","Comunidades"],
   "communityHub.intro": ["自由工坊共同經營的社群與參與方向，從這裡找到交流夥伴。","Find communities co-run by Freedom Workshop and ways to participate.","自由工坊が共同運営するコミュニティと参加方法を紹介します。","자유공방이 공동 운영하는 커뮤니티와 참여 방법을 찾아보세요.","Encuentra comunidades gestionadas junto a Freedom Workshop y formas de participar."],
   "communityHub.groups": ["社群列表","Community groups","コミュニティグループ","커뮤니티 목록","Grupos de la comunidad"],

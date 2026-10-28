@@ -227,6 +227,10 @@ export const QUEST_STAGES: readonly QuestStage[] = [
     name: ['第八關・商店（只用測試資料）', 'Stage 8 · Stores (test data only)', '第8関・ショップ（テストデータのみ）', '8단계 · 상점(테스트 데이터만)', 'Etapa 8 · Tiendas (solo datos de prueba)'],
     medal: ['商隊勳章', 'Caravan medal', '商隊の勲章', '상단 훈장', 'Medalla de caravana'],
     steps: [
+      { id: 'market.rehearsal', features: ['shop.virtual-commerce'], href: '#virtual-commerce',
+        title: ['文字彩排', 'Text rehearsal', 'テキストリハーサル', '텍스트 리허설', 'Ensayo de texto'],
+        task: ['載入測試商品，確認一段講稿後彩排，再暫停或接管。', 'Load test products, approve a cue, rehearse, then pause or take over.', 'テスト商品を読み込み、原稿を確認して一時停止します。', '테스트 상품과 승인한 문장으로 리허설 후 일시 중지합니다.', 'Carga productos de prueba, aprueba un texto y pausa el ensayo.'],
+        check: ['未核准或過期內容不顯示為目前段落；沒有語音、推流或訂單。', 'Unapproved or stale cues do not become active; no audio, streaming or orders.', '未承認・期限切れの内容は出力されず、音声・配信・注文はありません。', '미승인·만료 문장은 출력되지 않으며 음성·방송·주문은 없습니다.', 'No se activan textos sin aprobar o caducados; sin audio, emisión ni pedidos.'] },
       { id: 'market.offer', features: ['shop.supplier', 'shop.retail'], href: '#supplier',
         title: ['供貨與販售入口', 'Offer and sell entries', '提供と販売の入口', '제공과 판매 입구', 'Entradas de oferta y venta'],
         task: ['打開「我有東西要賣」與「我可以賣東西」，下載 MD 看看內容。', 'Open “Offer products” and “Sell products” and download the MD to read it.', '「商品を提供する」「商品を販売する」で MD をダウンロードして読みます。', '“상품 제공”과 “상품 판매”에서 MD를 내려받아 읽어 보세요.', 'Abre «Ofrecer» y «Vender productos» y descarga el MD.'],
