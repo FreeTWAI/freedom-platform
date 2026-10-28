@@ -1,3 +1,4 @@
+import {parseProfileRoute,canOpenGuestProfile} from './modules/profile-publication-route';
 import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
 import {activateHomeLink} from './brand-home-link';
 import {requestHomeJournalOpen} from './modules/member-home-loading';
@@ -56,6 +57,7 @@ import {AppInstallProvider,InstallAppButton} from './AppInstall'
 
 const PublicGuildLaunchpad = lazy(() => import('./guild-blocks/GuildLaunchpadPage').then(m => ({default: m.PublicGuildLaunchpad})))
 const PublicArPage=lazy(()=>import('./modules/community-ar/Panel').then(m=>({default:m.PublicArPage})))
+const VisitorProfile = lazy(() => import('./modules/VisitorProfile').then(m => ({default:m.VisitorProfile})))
 const PublicMemberPage = lazy(() => import('./modules/PublicMemberPage').then(m => ({default: m.PublicMemberPage})))
 const Onboarding = lazy(() => import('./modules/Onboarding').then(m => ({default: m.Onboarding})))
 const AdminPanel = lazy(() => import('./modules/AdminPanel').then(m => ({default: m.AdminPanel})))
@@ -141,6 +143,11 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   const [publicEventId,setPublicEventId]=useState(eventIdFromLocation)
   const [eventLoginRequested,setEventLoginRequested]=useState(eventLoginFromLocation)
   const [locationHash,setLocationHash]=useState(() => window.location.hash)
+  const [profileLoginRequested,setProfileLoginRequested]=useState(()=>window.history.state?.freedomProfileLogin===window.location.hash);
+  const profileRoute=parseProfileRoute(locationHash);
+  const beginProfileLogin=()=>{window.history.pushState({...window.history.state,freedomProfileLogin:window.location.hash},'');setProfileLoginRequested(true);};
+  const returnToProfile=()=>{if(window.history.state?.freedomProfileLogin===window.location.hash)window.history.back();else setProfileLoginRequested(false);};
+  useEffect(()=>{const update=()=>setProfileLoginRequested(window.history.state?.freedomProfileLogin===window.location.hash);window.addEventListener('popstate',update);window.addEventListener('hashchange',update);return()=>{window.removeEventListener('popstate',update);window.removeEventListener('hashchange',update);};},[]);
   const [entryIntent,setEntryIntent]=useState<EntryIntent|null>(entryIntentFromHash)
   const [siteLoaded,setSiteLoaded]=useState(false)
   const [launchpadLoginRequested,setLaunchpadLoginRequested]=useState(false)
@@ -179,6 +186,8 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
       const state={...window.history.state};delete state.freedomEventLogin
       window.history.replaceState(Object.keys(state).length?state:null,'')
     }
+    if(window.history.state?.freedomProfileLogin){const state={...window.history.state};delete state.freedomProfileLogin;window.history.replaceState(state,'');}
+    setProfileLoginRequested(false);
     sessionGeneration.current += 1
     client.csrfToken = next.csrf_token
     setSharingDraftAccount(next.user.user_id, client.sessionGeneration)
@@ -292,6 +301,8 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   if(emailChangeToken)return <EmailChangeConfirm key={emailChangeToken} client={client} token={emailChangeToken}/>;
   if(emailVerificationToken)return <EmailVerificationConfirm key={emailVerificationToken} client={client} token={emailVerificationToken}/>;
   if (resetToken || phase !== 'ready' || !session) {
+    // Authentication callbacks take precedence over every guest publication entry.
+    if(!googleCallback&&!resetToken&&!profileLoginRequested&&profileRoute?.kind==='visitor'&&canOpenGuestProfile(locationHash,window.location.search))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><h1>個人頁</h1><VisitorProfile client={client} id={profileRoute.id} onLogin={beginProfileLogin}/><a className="btn btn-secondary btn-small" href="#home">返回自由工坊</a></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-hub')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
@@ -305,6 +316,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
       <div className="app-frame">
         {site?.demo_accounts_enabled && <DemoBanner />}
         {sharedCardToken&&<button type="button" className="btn btn-ghost" onClick={()=>setMemberLoginRequested(false)}>返回邀請名片</button>}
+        {profileLoginRequested&&profileRoute?.kind==='visitor'&&<button type="button" className="btn btn-secondary btn-small" onClick={returnToProfile}>取消登入，返回個人頁</button>}
         <LoginView
           site={site}
           googleCallback={googleCallback}
@@ -333,7 +345,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
       ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
-      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(!entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(parseProfileRoute(window.location.hash)?.kind!=='visitor' && !entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
     : sharedCardToken ? <PublicMemberPage client={client} token={sharedCardToken} session={session} onLogin={()=>{}} onReturn={returnToWorkshop} onEdit={editOwnCard}/> : <>
     <AuthorClaimProvider client={client}><DevelopmentAccessProvider client={client} session={session}>
     <Workspace key={`${session.user.user_id}:${client.sessionGeneration}`}
@@ -1039,6 +1051,8 @@ function tabTitle(tab: TabId): string {
 
 function tabFromHash(launchpadEnabled: boolean): TabId {
   const value = window.location.hash.slice(1)
+  if(parseProfileRoute(window.location.hash))return 'profile'
+  if(value==='account?view=recognition'||value==='account?view=connections')return 'account'
   if(isMessagesHash(window.location.hash))return 'home'
   if(value === 'reservations' || value.startsWith('reservations/'))return 'reservations'
   if(value.split('?')[0]==='community-search')return 'community-search'

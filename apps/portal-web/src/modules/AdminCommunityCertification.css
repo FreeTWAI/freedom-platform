@@ -1,0 +1,8 @@
+.community-certification-panel{font-size:1rem;min-width:0;margin-block:1rem}
+.community-certification-panel fieldset{min-width:0;border:1px solid var(--line);padding:1rem;border-radius:var(--radius)}
+.community-certification-panel textarea{width:100%;font-size:1rem;resize:vertical}
+.community-certification-panel .actions{display:flex;flex-wrap:wrap;gap:.5rem}
+.community-certification-panel button{align-self:flex-start}
+.community-certification-queue{display:grid;gap:1rem;min-width:0}
+.community-certification-queue article{min-width:0;overflow-wrap:anywhere}
+.community-certification-queue blockquote{margin:0;white-space:pre-wrap;border-inline-start:3px solid var(--line);padding-inline-start:.75rem}

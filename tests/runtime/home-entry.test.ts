@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {parseProfileRoute} from '../../apps/portal-web/src/modules/profile-publication-route.js';
 import {activateHomeLink} from '../../apps/portal-web/src/brand-home-link.js';
 
 type HomeLinkEvent = Parameters<typeof activateHomeLink>[0];
@@ -93,7 +94,7 @@ function navigationHistoryHarness(initialHash='#stores/supply') {
   const state={mobileOpen:true,focus:'menu',focused:0,scrolled:0,logs:0,replaced:0,blocked:false};
   const location={get href(){return href},get hash(){return new URL(href).hash},pathname:'/',search:''};
   const context:any={window:{location,history:{state:null,replaceState(_state:unknown,_title:string,url:string){href=new URL(url,href).href;state.replaced++;},pushState(){throw Error('Unexpected history push')},go(){throw Error('Unexpected history traversal')}}},document:{activeElement:{closest:(selector:string)=>state.focus==='menu'&&selector==='#workspace-navigation'?{}:null}},
-    launchpadEnabled:true,TAB_TITLES,eventIdFromLocation:()=>null,isMessagesHash:(hash:string)=>hash.split('?')[0]==='#messages',isMessagesHistoryEntry:()=>false,
+    launchpadEnabled:true,TAB_TITLES,parseProfileRoute,eventIdFromLocation:()=>null,isMessagesHash:(hash:string)=>hash.split('?')[0]==='#messages',isMessagesHistoryEntry:()=>false,
     acceptedHash:{current:initialHash},messageLocation:{current:{href,state:null}},messageHistoryTransition:{current:null},pageLeaveGuard:{current:()=>!state.blocked},previousTab:{current:'stores'},tab:'stores',locationHash:initialHash,
     mainContent:{current:{focus(){state.focus='main';state.focused++;}}},workspaceTopbar:{current:{scrollIntoView(){state.scrolled++;}}},
     setMobileOpen:(value:boolean)=>{state.mobileOpen=value;},setLocationHash:(value:string)=>{context.locationHash=value;},setTab:(value:string)=>{context.tab=value;},setNotificationTarget:()=>{},setMessagesOpen:()=>{},openMessages:()=>{},consoleChannel:(x:string)=>x,tabTitle:(x:string)=>x,TAB_GUIDANCE:{},logConsoleEvent:()=>{state.logs++;},
@@ -192,4 +193,57 @@ test('outside controls keep native pointer focus and focusin never cancels a def
 });
 test('inside navigation and the menu toggle are not outside dismissals',()=>{
   for(const where of ['inside','toggle']){const h=outsideDismissHarness();assert.equal(h.event('pointerdown',where).defaultPrevented,false);assert.deepEqual(h.state.closed,[]);}
+});
+
+for(const target of ['#profile','#profile?view=settings','#profile?member=30000000-0000-4000-8000-000000000001','#profile?member=invalid'])test(`actual history parser delegates profile route ${target} without bypassing focus or leave guards`,()=>{
+ const h=navigationHistoryHarness();h.move(target);assert.equal(h.context.tab,'profile');assert.equal(h.state.mobileOpen,false);assert.equal(h.state.focus,'main');assert.equal(h.state.scrolled,1);assert.equal(h.state.logs,1);
+ const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(target);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);assert.equal(blocked.state.mobileOpen,true);
+});
+
+for(const view of ['recognition','connections'])test(`${view} account entry uses existing guarded history and rejects unknown account query destinations`,()=>{
+ const h=navigationHistoryHarness();h.move(`#account?view=${view}`);assert.equal(h.context.tab,'account');assert.equal(h.state.focus,'main');assert.equal(h.state.mobileOpen,false);
+ const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(`#account?view=${view}`);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);
+ const invalid=navigationHistoryHarness();invalid.move('#account?view=unknown');assert.equal(invalid.context.tab,'home');
+});
+
+// Execute the actual disclosure effect; this models focus scheduling, not native
+// browser acceptance. The shelf E2E exercises the visible action at both widths.
+function connectionsDisclosureHarness(requested=true){
+ const source=readFileSync(new URL('../../apps/portal-web/src/modules/Membership.tsx',import.meta.url),'utf8');
+ const effect=source.match(/  useEffect\(\(\)=>\{\n    const details=connectionsRef.current;[\s\S]*?\n  \},\[focusConnections\]\);/);assert.ok(effect);
+ let focused=0,cleanup:(()=>void)|undefined;
+ class Details {open=false;isConnected=true;parentElement:Details|null=null;querySelector(){return summary;}}
+ const summary={focus(){focused++;}};const outer=new Details(),details=new Details();details.parentElement=outer;
+ const body={},document={body,activeElement:body as {id?:string},querySelector:(_selector:string)=>null as object|null};
+ const window={location:{hash:'#account?view=connections'}};const frames=new Map<number,()=>void>();
+ const context={connectionsRef:{current:details},focusConnections:requested,HTMLDetailsElement:Details,document,window,
+  requestAnimationFrame:(callback:()=>void)=>{frames.set(1,callback);return 1;},cancelAnimationFrame:(id:number)=>frames.delete(id),useEffect:(callback:()=>void|(()=>void))=>{cleanup=callback()||undefined;}};
+ runInNewContext(transformSync(effect[0],{loader:'ts'}).code,context);
+ return {details,outer,document,window,get focused(){return focused;},cleanup:()=>cleanup?.(),flush:()=>{for(const callback of frames.values())callback();frames.clear();}};
+}
+test('explicit GitHub management reveals both disclosures then focuses after shell focus',()=>{
+ const h=connectionsDisclosureHarness();assert.equal(h.outer.open,true);assert.equal(h.details.open,true);assert.equal(h.focused,0);
+ h.document.activeElement={id:'main-content'};h.flush();assert.equal(h.focused,1);
+});
+test('ordinary account visits keep tools collapsed',()=>{
+ const h=connectionsDisclosureHarness(false);h.flush();assert.equal(h.outer.open,false);assert.equal(h.details.open,false);assert.equal(h.focused,0);
+});
+for(const reason of ['unmount','navigation','closed','detached','modal','other-control'])test(`GitHub destination does not steal stale focus after ${reason}`,()=>{
+ const h=connectionsDisclosureHarness();
+ if(reason==='unmount')h.cleanup();
+ if(reason==='navigation')h.window.location.hash='#skills';
+ if(reason==='closed')h.details.open=false;
+ if(reason==='detached')h.details.isConnected=false;
+ if(reason==='modal')h.document.querySelector=()=>({});
+ if(reason==='other-control')h.document.activeElement={id:'nickname'};
+ h.flush();assert.equal(h.focused,0);
+});
+
+test('actual guest-profile entry cannot preempt a Google callback or password reset',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
+ const expression=source.match(/if\(([^\n]+?)\)return <div[^\n]+?<VisitorProfile/);assert.ok(expression,'actual guest profile entry predicate');
+ const context={googleCallback:null as unknown,resetToken:null as unknown,profileLoginRequested:false,profileRoute:{kind:'visitor',id:'synthetic'},canOpenGuestProfile:()=>true,locationHash:'#profile/synthetic',window:{location:{search:''}}};
+ const allowed=()=>runInNewContext(expression[1],context);assert.equal(allowed(),true);
+ context.googleCallback={intent:'login'};assert.equal(allowed(),false);context.googleCallback={intent:'link'};assert.equal(allowed(),false);
+ context.googleCallback=null;context.resetToken='reset';assert.equal(allowed(),false);context.resetToken=null;context.profileLoginRequested=true;assert.equal(allowed(),false);
 });

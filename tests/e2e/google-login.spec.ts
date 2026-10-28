@@ -22,8 +22,13 @@ async function skillReturn(page:Page,registered=false){
   await mockActivation(page,registered);
   await page.route('**/development/skills/google-test',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Skill return</title><h1 id="skill-use-title">Synthetic skill</h1>'}));
 }
+async function openAccountSecurity(page:Page){
+  const summary=page.locator('summary').filter({has:page.getByText('帳號與安全',{exact:true})});
+  await expect(summary).toBeVisible();
+  if(!await summary.evaluate(element=>(element.parentElement as HTMLDetailsElement).open))await summary.click();
+}
 async function loginAccount(page:Page){
-  await page.goto('/#account');await page.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
+  await page.goto('/#account');await page.getByLabel('電子郵件',{exact:true}).fill('client@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await openAccountSecurity(page);await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
 }
 
 test('OFF hides Google controls and preserves ordinary password login',async({page})=>{
@@ -267,7 +272,7 @@ for(const outcome of ['stale-409','unknown'] as const)test(`unlink ${outcome} ne
   expect(calls).toBe(1);expect(statusReads).toBe(readsBefore);
   // Reopen the account and read B. The next write requires a new explicit
   // password submission and targets B, never a replay of the old A command.
-  await page.reload();await expect(panel.getByLabel('目前工坊密碼')).toBeVisible();expect(calls).toBe(1);expect(statusReads).toBeGreaterThan(readsBefore);
+  await page.reload();await openAccountSecurity(page);await expect(panel.getByLabel('目前工坊密碼')).toBeVisible();expect(calls).toBe(1);expect(statusReads).toBeGreaterThan(readsBefore);
   await panel.getByLabel('目前工坊密碼').fill('freedom-local-demo');await panel.getByRole('button',{name:'解除 Google 連結',exact:true}).click();
   await expect(panel.getByRole('alert')).toContainText('操作尚未確認');expect(calls).toBe(2);
 });
@@ -312,14 +317,14 @@ test('successful Google link reloads the scrubbed account entry and leaves callb
   });
   await page.route('**/api/v1/auth/google/complete',async route=>{logins++;await route.fulfill({status:409,json:{code:'unexpected_login'}})});
   await callback(page);
-  await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
+  await openAccountSecurity(page);await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'連結 Google',exact:true})).toHaveCount(0);
   await expect(page.locator('.google-account')).toContainText('已連結 Google。');
   await expect(page).toHaveURL(/\/#account$/);
   expect(await page.evaluate(()=>(performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type)).toBe('reload');
   expect(await page.evaluate(key=>sessionStorage.getItem(key),ENTRY_KEY)).toBeNull();
   expect(linked).toBe(1);expect(logins).toBe(0);
-  await page.reload();await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
+  await page.reload();await openAccountSecurity(page);await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
   expect(linked).toBe(1);expect(logins).toBe(0);
 });
 
@@ -340,7 +345,7 @@ for(const intent of ['login','link'] as const)for(const outcome of ['error','can
   if(outcome==='cancel')await expect(result.getByRole('status')).toContainText('已取消這次 Google 授權');
   else await expect(result.getByRole('alert')).toContainText('未完成或已失效');
   await back.focus();await back.press('Enter');
-  if(intent==='link')await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
+  if(intent==='link'){await openAccountSecurity(page);await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();}
   else await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:intent==='link'?'連結 Google':'完成 Google 登入',exact:true})).toHaveCount(0);
   expect(await page.evaluate(()=>(performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type)).toBe('reload');

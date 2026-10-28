@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: false
       - name: Admit only a new explicit capture request at the exact head
         id: request
@@ -42,6 +42,9 @@ jobs:
       - name: Install the repository locked capture dependencies
         if: steps.request.outputs.capture == 'true'
         run: npm ci
+      - name: Reproduce and verify the cooking export boundary without a browser
+        if: steps.request.outputs.capture == 'true'
+        run: node modules/absurd-daily/tools/bundle-regression.mjs "$PWD" "$RUNNER_TEMP/native-cooking-bundle-regression.json"
       - name: Install the repository Playwright Chromium runtime
         if: steps.request.outputs.capture == 'true'
         run: node node_modules/@playwright/test/cli.js install --with-deps chromium

@@ -9,6 +9,10 @@ export type ModulePanelProps = {
   onNavigate?: (tab: TabId) => void;
 };
 
+// Decoder-enabled commands additionally retain each tuple's ambiguous history.
+// Weak lifetime follows its account-scoped mutation store; legacy callers unchanged.
+const decoderUnknownRequests = new WeakMap<SharingMutationState, Set<string>>();
+
 // Preserve the exact request's key on unknown network outcomes. A changed draft
 // gets a new key; a retry with the same body and version reuses its original key.
 export function useModuleMutation(client: PortalClient, authorScope?: SharingMutationScope) {
@@ -22,7 +26,7 @@ export function useModuleMutation(client: PortalClient, authorScope?: SharingMut
   const setError = useCallback((next: SetStateAction<string | null>) => {
     updateMutationState(state, { error: typeof next === 'function' ? next(state.snapshot.error) : next });
   }, [state]);
-  const mutate = <T,>(path: string, body: unknown, ifMatch?: number | string) => performModuleMutation<T>(client, state, path, body, ifMatch);
+  const mutate = <T,>(path: string, body: unknown, ifMatch?: number | string, decode?: (value: unknown) => T) => performModuleMutation<T>(client, state, path, body, ifMatch, decode);
   return { mutate, busy, error, setError, lastFailureUnknown };
 }
 
@@ -32,7 +36,7 @@ function updateMutationState(state: SharingMutationState, patch: Partial<Sharing
   for (const notify of state.listeners) notify();
 }
 
-export async function performModuleMutation<T>(client: PortalClient, state: SharingMutationState, path: string, body: unknown, ifMatch?: number | string): Promise<T | undefined> {
+export async function performModuleMutation<T>(client: PortalClient, state: SharingMutationState, path: string, body: unknown, ifMatch?: number | string, decode?: (value: unknown) => T): Promise<T | undefined> {
   if (!state.live() || state.snapshot.busy) return undefined;
   const request = JSON.stringify([path, body, ifMatch]);
   const key = state.keys.get(request) ?? crypto.randomUUID();
@@ -41,12 +45,28 @@ export async function performModuleMutation<T>(client: PortalClient, state: Shar
   try {
     const result = await client.post<T>(path, body, { idempotencyKey: key, ifMatch });
     if (!state.live()) return undefined;
+    // A malformed successful response cannot settle an unknown command outcome.
+    // Opt-in decoders run before deleting the original idempotency tuple.
+    let decoded: T = result;
+    if (decode) {
+      try { decoded = decode(result); }
+      catch { throw new ApiError({ message: '伺服器回覆格式不符，結果尚未確認；請確認原操作結果。', network: true }); }
+    }
     state.keys.delete(request);
-    return result;
+    decoderUnknownRequests.get(state)?.delete(request);
+    return decoded;
   } catch (cause) {
     if (!state.live()) return undefined;
-    if (!(cause instanceof ApiError) || !cause.network) state.keys.delete(request);
-    updateMutationState(state, { error: cause instanceof Error ? cause.message : '操作未完成，請重新整理後重試。', lastFailureUnknown: cause instanceof ApiError && cause.network });
+    const networkUnknown = cause instanceof ApiError && cause.network;
+    let unknown = networkUnknown;
+    if (decode) {
+      const uncertain = decoderUnknownRequests.get(state) ?? new Set<string>();
+      decoderUnknownRequests.set(state, uncertain);
+      if (networkUnknown || !(cause instanceof ApiError) || !cause.definitiveResponse || cause.status>=500 || cause.status===401 || cause.status===403) uncertain.add(request);
+      unknown = uncertain.has(request);
+    }
+    if (!unknown) state.keys.delete(request);
+    updateMutationState(state, { error: cause instanceof Error ? cause.message : '操作未完成，請重新整理後重試。', lastFailureUnknown: unknown });
     return undefined;
   } finally {
     updateMutationState(state, { busy: false });

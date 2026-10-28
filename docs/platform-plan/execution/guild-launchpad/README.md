@@ -10,7 +10,7 @@
 
 歷史發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=f2c9b2fd14173e8d552771618590fdb2dc915142 release.staging=f2c9b2fd14173e8d552771618590fdb2dc915142 flag.production=true flag.staging=true repo_max_migration=190 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=f2c9b2fd14173e8d552771618590fdb2dc915142 release.staging=f2c9b2fd14173e8d552771618590fdb2dc915142 flag.production=true flag.staging=true repo_max_migration=194 applied_migration.production=189 applied_migration.staging=189 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 2026-10-27 18:17 UTC：兩環境已部署 `f2c9b2fd`。Staging 五階段成功；next 已部署／健康檢查通過，最後釋放 lease 報錯，workflow failure 保留。18:16Z 重新取得同一 lease，唯讀確認 journal pending=null、DB／Worker 同版本並正常釋放；18:17Z 公開 health 正常。原備份 pending 已結清，沒有新備份、floor reset 或重複部署。四人共用入口可用，後續 main 不再等待發布側；[收據 followup_control_read_fix](../unified-foundation/rollout-shared-actions-2026-10-27.json)保留失敗與後續確認。會員 UX、M1／完整計畫與第二操作者還原仍未驗收。
 

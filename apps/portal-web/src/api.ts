@@ -14,6 +14,8 @@ export class ApiError extends Error {
   readonly detail?: string
   readonly code?: string
   readonly network: boolean
+  /** A parsed problem response, not a transport or JSON decoding failure. */
+  readonly definitiveResponse: boolean
   readonly unauthorized: boolean
   readonly conflict: boolean
   readonly timedOut: boolean
@@ -32,6 +34,7 @@ export class ApiError extends Error {
     detail?: string
     code?: string
     network?: boolean
+    definitiveResponse?: boolean
     timedOut?: boolean
     accessExpired?: boolean
     cfRay?: string
@@ -47,6 +50,7 @@ export class ApiError extends Error {
     this.detail = init.detail
     this.code = init.code
     this.network = init.network ?? false
+    this.definitiveResponse = init.definitiveResponse ?? false
     this.timedOut = init.timedOut ?? false
     this.accessExpired = init.accessExpired ?? false
     this.cfRay = init.cfRay
@@ -69,6 +73,8 @@ export type RequestOptions = {
   body?: unknown
   /** Closed AR image-target upload; the shared session/error lifetime applies. */
   arPattern?: Blob
+  /** Closed private profile-cover staging upload; never a generic binary endpoint. */
+  profileCover?: Blob
   idempotencyKey?: string
   ifMatch?: number | string
   /** Current authorization for retrying the unchanged Commerce settings command. */
@@ -234,6 +240,13 @@ export class PortalClient {
     finally{this.reads.clear()}
   }
 
+  async postProfileCover<T>(file:Blob,options:Omit<RequestOptions,'body'|'arPattern'|'profileCover'>):Promise<T>{
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size===0||file.size>4*1024*1024)throw new ApiError({message:'請選擇4 MB以下的JPEG、PNG或WebP封面。',status:422})
+    this.reads.clear()
+    try{return await this.request<T>('POST','/me/profile-cover',{...options,profileCover:file})}
+    finally{this.reads.clear()}
+  }
+
   async getSession(): Promise<SessionPayload> {
     return this.get<SessionPayload>('/session', { skipAuthHandler: true })
   }
@@ -278,6 +291,10 @@ export class PortalClient {
     if(options.arPattern){
       if(method!=='PUT'||!/^\/ar\/targets\/[0-9a-f-]{36}\/pattern$/.test(path)||options.body!==undefined||options.arPattern.size>20*1024*1024)throw new ApiError({message:'圖案上傳格式不正確。',status:422})
       headers['Content-Type']='application/octet-stream'
+    }
+    if(options.profileCover){
+      if(method!=='POST'||path!=='/me/profile-cover'||options.body!==undefined||options.arPattern||!['image/png','image/jpeg','image/webp'].includes(options.profileCover.type)||options.profileCover.size===0||options.profileCover.size>4*1024*1024)throw new ApiError({message:'封面上傳格式不正確。',status:422})
+      headers['Content-Type']=options.profileCover.type
     }
     if (needsCsrf) {
       if (!this.csrfToken) {
@@ -333,7 +350,7 @@ export class PortalClient {
       response = await accessAwareFetch(`${API_BASE}${path}`, {
         method, headers, credentials: 'same-origin', signal: controller.signal,
         ...(options.keepalive === true ? {keepalive: true} : {}),
-        body: options.arPattern ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
+        body: options.profileCover ?? options.arPattern ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
       })
       if (await isExpiredAccessResponse(response)) {
         const status = expiredAccessStatus(response)
@@ -376,6 +393,7 @@ export class PortalClient {
         const safeDetail = typeof problem?.detail === 'string' && safePlatformDetail(problem.detail.trim()) ? problem.detail : undefined
         throw new ApiError({
           message: messageFromProblem(response.status, problem, method !== 'GET', path, response.headers.get('retry-after')), status: response.status, cfRay:cloudflareRay(response), requestId:requestId(response),
+          definitiveResponse: problem !== null && !Array.isArray(problem) && problem.status === response.status && typeof problem.type === 'string' && typeof problem.title === 'string',
           type: serverFailure && !knownGitHub ? undefined : problem?.type,
           title: serverFailure && !knownGitHub ? undefined : problem?.title,
           detail: serverFailure ? (knownGitHub ? safeDetail : undefined) : problem?.detail,

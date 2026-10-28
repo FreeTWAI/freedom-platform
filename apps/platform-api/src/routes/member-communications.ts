@@ -1,3 +1,4 @@
+import {recordSocialChat} from '../../../../modules/social-achievements/service.js';
 import { Hono,type Context } from 'hono';
 import type { Pool } from 'pg';
 import { moduleCommand,type PlatformEnv } from '../module-context.js';
@@ -48,7 +49,7 @@ function channelCommand(c:Context<PlatformEnv>,action:'messages'|'read'){
   const kind=c.req.param('kind')??'',key=c.req.param('key')??'';
   return canonicalCommand(c,`/me/channels/${kind}/${kind==='squad'?key.toLowerCase():key}/${action}`);
 }
-export function createMemberCommunicationRoutes(pool:Pool,runtime?:ImageRuntime,memberBlockingEnabled=false,orderNotificationsEnabled=false) {
+export function createMemberCommunicationRoutes(pool:Pool,runtime?:ImageRuntime,memberBlockingEnabled=false,orderNotificationsEnabled=false,socialAchievementsEnabled=false) {
   const app=new Hono<PlatformEnv>();
   const installed=()=>requireCondition(messagesImagesOn(),404,'not_found','找不到這個頁面。');
   const messagesImagesOn=()=>messageImagesInstalled(runtime);
@@ -107,7 +108,7 @@ export function createMemberCommunicationRoutes(pool:Pool,runtime?:ImageRuntime,
   app.get('/me/channels/:kind/:key/activity',async c=>c.json(await channelActivity(pool,c.get('actor'),c.req.param('kind'),c.req.param('key'),c.req.query())));
   app.get('/me/channels/:kind/:key/messages',async c=>c.json(await channelMessages(pool,c.get('actor'),c.req.param('kind'),c.req.param('key'),c.req.query())));
   app.get('/me/channels/:kind/:key/messages/search',async c=>c.json(await searchChannelMessages(pool,c.get('actor'),c.req.param('kind'),c.req.param('key'),c.req.query())));
-  app.post('/me/channels/:kind/:key/messages',async c=>c.json(await sendChannelMessage(pool,await channelCommand(c,'messages'),c.req.param('kind'),c.req.param('key')),201));
+  app.post('/me/channels/:kind/:key/messages',async c=>c.json(await sendChannelMessage(pool,await channelCommand(c,'messages'),c.req.param('kind'),c.req.param('key'),socialAchievementsEnabled?recordSocialChat:undefined),201));
   app.post('/me/channels/:kind/:key/messages/:messageId/retract',async c=>{
     const kind=c.req.param('kind')??'',key=c.req.param('key')??'';
     return c.json(await retractChannelMessage(pool,await canonicalCommand(c,`/me/channels/${kind}/${kind==='squad'?key.toLowerCase():key}/messages/${uuidParam(c,'messageId')}/retract`),kind,key,c.req.param('messageId')));

@@ -1,10 +1,9 @@
 {
   "format": "freedom.native-capture-request/v1",
-  "request_id": "cooking66-party3-20261028-01",
+  "request_id": "cooking66-party3-20261028-02-cooking-recovery",
   "source_base_sha": "ec362111707a0b0122aa532fac725a924615f73e",
   "families": [
-    "cooking",
-    "party"
+    "cooking"
   ],
   "source_inputs": [
     {

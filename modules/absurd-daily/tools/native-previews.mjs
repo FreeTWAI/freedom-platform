@@ -82,7 +82,7 @@ export async function capture(root,out,executable){
   // Only installed modules; no package manager, installer, API or database server.
   const {build}=await import(require.resolve('vite')),sharp=require('sharp'),{chromium}=require('playwright');
   const inputs=new Map(),transformed=new Map();
-  const built=await build({configFile:resolve(root,'apps/portal-web/vite.config.ts'),build:{write:false},plugins:[{
+  const built=await build({configFile:resolve(root,'apps/portal-web/vite.config.ts'),build:{write:false,rolldownOptions:{input:'native-cooking-fixture',preserveEntrySignatures:'strict'}},plugins:[{name:'native-cooking-fixture',resolveId(id){if(id==='native-cooking-fixture')return '\0native-cooking-fixture';},load(id){if(id==='\0native-cooking-fixture')return `export {createDishStage} from ${JSON.stringify(resolve(root,factoryPath))};`;}},{
    name:'native-preview-input-receipt',enforce:'pre',async transform(code,id){
     if(id.startsWith('\0'))return;
     const file=id.split('?')[0];if(!isAbsolute(file))return;
@@ -95,7 +95,7 @@ export async function capture(root,out,executable){
   if(factory.length!==1||!factory[0].exports.includes('createDishStage'))throw Error('factory_export_not_identified');
   await mkdir(resolve(out,'portal'));
   for(const c of chunks){safeRelative(c.fileName);await mkdir(dirname(resolve(out,'portal',c.fileName)),{recursive:true});await writeFile(resolve(out,'portal',c.fileName),c.code,{flag:'wx'});}
-  receipt.build={node:process.version,vite:require('vite/package.json').version,kind:'Vite production portal compilation; skill-client packaging not run',factory:factory[0].fileName,inputs:[...inputs.values()],transforms:[...transformed.values()],chunks:chunks.map(c=>({file:c.fileName,sha256:digest(c.code),imports:[...c.imports,...c.dynamicImports],modules:Object.keys(c.modules).map(id=>id.startsWith('\0')?id:relative(root,id).split(sep).join('/'))}))};
+  receipt.build={node:process.version,vite:require('vite/package.json').version,kind:'Vite production configuration with operator entry importing real createDishStage; not standard portal build',factory:factory[0].fileName,inputs:[...inputs.values()],transforms:[...transformed.values()],chunks:chunks.map(c=>({file:c.fileName,sha256:digest(c.code),imports:[...c.imports,...c.dynamicImports],modules:Object.keys(c.modules).map(id=>id.startsWith('\0')?id:relative(root,id).split(sep).join('/'))}))};
   // Keep exactly emitted module metadata, including synthetic IDs. Raw file
   // hashes cover observed file-backed transform inputs, not a claimed universal closure.
   await writeFile(resolve(out,'build-metadata.json'),JSON.stringify(receipt.build,null,2)+'\n',{flag:'wx'});

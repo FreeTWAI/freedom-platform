@@ -1,0 +1,41 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "social-achievements",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/social-achievements/**",
+    "apps/platform-api/src/routes/social-achievements.ts",
+    "apps/portal-web/src/modules/SocialAchievements.tsx",
+    "migrations/194_social_achievements.sql",
+    "tests/runtime/social-achievements-policy.test.ts",
+    "tests/runtime/social-achievements.test.ts",
+    "tests/e2e/social-achievements.spec.ts"
+  ],
+  "public_exports": [
+    "modules/social-achievements/service.ts",
+    "modules/social-achievements/policy.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "shared",
+    "community"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "DESIGN.md",
+    "modules/social-achievements/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

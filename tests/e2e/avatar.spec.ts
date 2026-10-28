@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import { navigate } from './navigation.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 import { test, expect, type Page } from './fixtures.js';
@@ -9,7 +10,7 @@ async function login(page: Page) {
   await page.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
   await page.getByRole('button', { name: '登入', exact: true }).click();
   await expect(page.getByRole('button', { name: '設定', exact: true })).toBeVisible();
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'更換頭像');
 }
 
 test('member previews, saves, reloads and removes a synthetic avatar without saving nickname drafts', async ({ page, request }) => {
@@ -25,6 +26,7 @@ test('member previews, saves, reloads and removes a synthetic avatar without sav
   await editor.getByRole('button', { name: '保存頭像', exact: true }).click();
   await expect(editor.getByRole('status')).toHaveText('頭像已保存，工坊夥伴現在可以看見。');
   await expect(nickname).toHaveValue('尚未保存的暱稱草稿');
+  await openAccountSettings(page,'查看目前的會員名片');
   const savedPhoto = page.locator('.member-card .member-avatar-photo img');
   await expect(savedPhoto).toBeVisible();
   const avatarUrl = await savedPhoto.getAttribute('src');
@@ -32,8 +34,9 @@ test('member previews, saves, reloads and removes a synthetic avatar without sav
   await expect.poll(() => savedPhoto.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(256);
   const anonymous = await request.get(avatarUrl!);
   expect(anonymous.status()).toBe(401);
+  page.once('dialog',dialog=>{expect(dialog.type()).toBe('beforeunload');void dialog.accept();});
   await page.reload();
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'更換頭像','查看目前的會員名片');
   await expect(nickname).toHaveValue(originalNickname);
   await expect(savedPhoto).toHaveAttribute('src', avatarUrl!);
   await expect.poll(() => savedPhoto.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(256);
@@ -44,7 +47,7 @@ test('member previews, saves, reloads and removes a synthetic avatar without sav
   await expect(savedPhoto).toHaveCount(0);
   expect((await page.request.get(avatarUrl!)).status()).toBe(404);
   await page.reload();
-  await navigate(page, '我的名片');
+  await navigate(page, '我的名片');await openAccountSettings(page,'更換頭像','查看目前的會員名片');
   await expect(editor.getByRole('heading', { name: '我的頭像', exact: true })).toBeVisible();
   await expect(savedPhoto).toHaveCount(0);
   await expect(editor.getByRole('button', { name: '移除頭像', exact: true })).toHaveCount(0);
@@ -106,6 +109,7 @@ test('avatar confirmation failure offers a read-only retry without claiming the 
   await expect(editor.getByLabel('選擇頭像', { exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: '重新確認頭像', exact: true }).click();
   await expect(editor.getByRole('status')).toHaveText('已重新確認目前頭像。');
+  await openAccountSettings(page,'查看目前的會員名片');
   await expect(page.locator('.member-card .member-avatar-photo img')).toBeVisible();
   expect(uploads).toBe(1);
   await editor.getByRole('button', { name: '移除頭像', exact: true }).click();

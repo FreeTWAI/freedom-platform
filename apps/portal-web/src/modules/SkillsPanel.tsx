@@ -5,7 +5,7 @@ import { SkillUpload, type SkillOpenRequest } from './SkillUpload';
 import { CommunitySkillBooks } from './CommunitySkillBooks';
 import { GitHubConnectionSummary } from './GitHubSocial';
 
-export function SkillsPanel({ client, onNavigate }: ModulePanelProps) {
+export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelProps & {onManageGitHub?:()=>void}) {
   const [scope, setScope] = useState<'unlocked' | 'locked'>('unlocked');
   const [ids, setIds] = useState<string[] | null>(null);
   const [error, setError] = useState('');
@@ -84,7 +84,7 @@ export function SkillsPanel({ client, onNavigate }: ModulePanelProps) {
           </>}
       </section>
     </div>
-    <GitHubConnectionSummary returnTo="#skills" onManage={() => onNavigate?.('account')}/>
+    <GitHubConnectionSummary returnTo="#skills" onManage={onManageGitHub ?? (() => onNavigate?.('account'))}/>
   </section>;
 }
 

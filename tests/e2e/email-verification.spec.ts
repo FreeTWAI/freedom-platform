@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import { test,expect } from './fixtures.js';
 import { tokenHash } from '../../modules/identity-membership/service.js';
 
@@ -8,7 +9,7 @@ test('account send error and one-use confirmation work on desktop and phone',asy
   await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
   const user=(await e2eAuthPool.query('SELECT user_id FROM users WHERE email=$1',['maker@local.test'])).rows[0];
   await e2eAuthPool.query('UPDATE users SET email_verified_at=NULL WHERE user_id=$1',[user.user_id]);
-  await page.goto('/#account');
+  await page.goto('/#account');await openAccountSettings(page,'帳號與安全');
   await expect(page.getByRole('heading',{name:'登入信箱驗證'})).toBeVisible();
   await page.getByRole('button',{name:'寄送驗證信',exact:true}).click();
   await expect(page.getByText('驗證信郵件服務尚未設定完成。',{exact:true})).toBeVisible();
@@ -29,7 +30,7 @@ test('account send error and one-use confirmation work on desktop and phone',asy
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await page.goto('/#account');
+  await page.goto('/#account');await openAccountSettings(page,'帳號與安全');
   await expect(page.getByText('maker@local.test · 已驗證',{exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'寄送驗證信',exact:true})).toHaveCount(0);
   await page.goto(`/#verify-email/${token}`);
