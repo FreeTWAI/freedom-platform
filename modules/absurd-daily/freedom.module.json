@@ -4,6 +4,7 @@
   "owner_role": "community",
   "owned_paths": [
     "modules/absurd-daily/**",
+    ".github/workflows/native-game-previews.yml",
     "apps/portal-web/src/games/**",
     "tests/runtime/absurd-daily.test.ts",
     "tests/runtime/market-cooking.test.ts",

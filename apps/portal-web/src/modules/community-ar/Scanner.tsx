@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState,type KeyboardEvent} from 'react';
 import {AR_EXPERIENCE_MAX_BYTES,AR_SCENE_MAX_TARGETS,inspectArExperience} from '../../../../../packages/asset-storage/ar-target';
 import {ArCamera,cameraIssue} from './camera';
-import {cardTexture,effectTexture,effectCaptionQuad,drawArCard,drawArEffect,projectTarget,captureArPhoto,type ArContent} from './render';
+import {cardTexture,effectTexture,effectCaptionQuad,drawArCard,drawArEffect,projectTarget,composeArSnapshot,encodeArSnapshot,type ArContent} from './render';
 import {readArPacket} from './packet';
 import {ArPhotoShare} from './share';
 import type {ArSpatialRenderer} from './spatial';
@@ -23,6 +23,7 @@ export function ArScanner({entries,local,client,onClose}:{entries:readonly ScanE
   const [phase,setPhase]=useState<'loading'|'idle'|'starting'|'scanning'|'paused'|'error'>('loading'),[message,setMessage]=useState(''),[found,setFound]=useState<ArContent|null>(null),[photo,setPhoto]=useState<File|null>(null),[photoText,setPhotoText]=useState(''),[torch,setTorch]=useState(false),[capturing,setCapturing]=useState(false);
   const [expanded,setExpanded]=useState(false),[facing,setFacing]=useState<'environment'|'user'>('environment'),[loaded,setLoaded]=useState(0),[renderMode,setRenderMode]=useState<'idle'|'webgl'|'fallback'>('idle');
   const preparedPackets=useRef<Uint8Array[]>([]),[reload,setReload]=useState(0),[sound,setSound]=useState(false);
+  const captureToken=useRef(0);
   const data=useRef<Cached[]>([]),pose=useRef<Pose|null>(null),lastIndex=useRef(-1),animation=useRef(0),drawFrame=useRef<(now:number,force?:boolean)=>void>(()=>{}),reduced=useRef(false);
   const live=(id:number)=>mounted.current&&run.current===id&&client.sessionGeneration===owner.current;
   function clearOverlay(){
@@ -146,14 +147,17 @@ export function ArScanner({entries,local,client,onClose}:{entries:readonly ScanE
     }catch(error){if(!live(id))return;stop();setPhase('error');setMessage(error instanceof Error&&error.message==='ar_scene_empty'?'還沒有可掃描的圖案，請先製作或選擇圖案。':cameraIssue(error));}
   }
   async function capture(){
-    if(capturing)return;const id=run.current;setCapturing(true);
+    if(capturing)return;let snapshot:HTMLCanvasElement,destination:string|undefined;
     try{
       // Composite immediately after drawing: the WebGL back buffer is transient.
-      drawFrame.current(performance.now(),true);const destination=found?.destination;
-      const file=await captureArPhoto(video.current!,overlay.current!,spatialCanvas.current!);
-      if(live(id)){stop();setExpanded(false);setPhoto(file);setPhotoText(local?'我在自由工坊製作了一個 AR 圖案！':`一起用自由工坊 AR 探索圖案與夥伴！ ${window.location.origin}${destination??window.location.pathname}`);}
-    }catch(error){if(live(id))setMessage(error instanceof Error?error.message:'照片未完成，請重試。');}
-    finally{if(mounted.current&&client.sessionGeneration===owner.current)setCapturing(false);}
+      drawFrame.current(performance.now(),true);snapshot=composeArSnapshot(video.current!,overlay.current!,spatialCanvas.current!);destination=found?.destination;
+    }catch(error){setMessage(error instanceof Error?error.message:'照片未完成，請重試。');return;}
+    const token=++captureToken.current;setCapturing(true);stop();const owned=run.current;
+    try{
+      const file=await encodeArSnapshot(snapshot);
+      if(live(owned)&&token===captureToken.current){setExpanded(false);setPhoto(file);setPhotoText(local?'我在自由工坊製作了一個 AR 圖案！':`一起用自由工坊 AR 探索圖案與夥伴！ ${window.location.origin}${destination??window.location.pathname}`);setMessage('相機已暫停。可以分享照片，或繼續掃描。');}
+    }catch{if(live(owned)&&token===captureToken.current){setPhase('error');setMessage('照片未產生，請重新開啟相機再拍一次。');}}
+    finally{snapshot.width=0;snapshot.height=0;if(mounted.current&&token===captureToken.current)setCapturing(false);}
   }
   function trapExpanded(event:KeyboardEvent<HTMLElement>){
     if(!expanded)return;if(event.key==='Escape'){event.preventDefault();setExpanded(false);return;}
@@ -167,12 +171,12 @@ export function ArScanner({entries,local,client,onClose}:{entries:readonly ScanE
     <header className="ar-row"><div><p className="eyebrow">FREEDOM AR</p><h2>{local?'先用相機試掃':'讓圖案，帶你認識夥伴'}</h2></div><div className="ar-view-actions">{!photo&&<button ref={expandButton} className="btn btn-ghost" type="button" aria-pressed={expanded} onClick={()=>setExpanded(value=>!value)}>{expanded?'縮小相機':'展開相機'}</button>}{onClose&&<button className="btn btn-ghost" type="button" onClick={()=>{stop('idle');onClose();}}>返回</button>}</div></header>
     <div className={`ar-stage${active?' is-active':''}`} hidden={!!photo}>
       <video ref={video} muted playsInline aria-label="相機即時畫面"/><canvas ref={overlay} className="ar-flat-layer" aria-hidden="true"/><canvas ref={spatialCanvas} className="ar-spatial-layer" aria-hidden="true"/>
-      {!active&&<div className="ar-stage-intro"><span className="ar-scan-glyph" aria-hidden="true">⌗</span><strong>{phase==='starting'||phase==='loading'?'準備中…':phase==='paused'?'相機已暫停':'掃衣服圖案、海報或活動名片'}</strong><p>開啟相機後才開始辨識。畫面只在這台裝置處理。</p>{phase==='loading'&&total>0&&<p>已準備 {loaded} / {total} 個圖案</p>}</div>}
+      {!active&&<div className="ar-stage-intro"><span className="ar-scan-glyph" aria-hidden="true">⌗</span><strong>{capturing?'正在產生照片…':phase==='starting'||phase==='loading'?'準備中…':phase==='paused'?'相機已暫停':'掃衣服圖案、海報或活動名片'}</strong><p>開啟相機後才開始辨識。畫面只在這台裝置處理。</p>{phase==='loading'&&total>0&&<p>已準備 {loaded} / {total} 個圖案</p>}</div>}
       {active&&<><div className={`ar-camera-badge${found?' is-found':''}`}><span aria-hidden="true"/>{found?'圖案已鎖定':'尋找圖案中'}</div>{!found&&<div className="ar-reticle" aria-hidden="true"/>}{found&&<div className="ar-found-label">{found.title}{renderMode==='webgl'&&found.binding?.kind==='effect'&&<span>3D</span>}</div>}</>}
     </div>
-    <p className={`ar-status${phase==='error'?' banner banner-error':''}`} role={phase==='error'?'alert':'status'} aria-live="polite">{message||'先選擇要掃的圖案，再開啟相機。'}</p>
+    <p className={`ar-status${phase==='error'?' banner banner-error':''}`} role={phase==='error'?'alert':'status'} aria-live="polite">{capturing?'正在產生照片…':message||'先選擇要掃的圖案，再開啟相機。'}</p>
     <div className="ar-actions ar-camera-actions">
-      {!active&&<button className="btn btn-primary" type="button" disabled={phase==='starting'||phase==='loading'||!preparedPackets.current.length} onClick={()=>{void start();}}>{phase==='starting'?'準備相機…':phase==='error'?'重新開啟':phase==='paused'?'繼續掃描':'開啟相機'}</button>}
+      {!active&&<button className="btn btn-primary" type="button" disabled={capturing||phase==='starting'||phase==='loading'||!preparedPackets.current.length} onClick={()=>{void start();}}>{phase==='starting'?'準備相機…':phase==='error'?'重新開啟':phase==='paused'?'繼續掃描':'開啟相機'}</button>}
       {(phase==='starting'||phase==='loading')&&<button className="btn btn-ghost" type="button" onClick={()=>stop()}>取消</button>}
       {active&&<><button className="btn btn-primary ar-shutter" type="button" disabled={capturing} onClick={()=>{void capture();}}>{capturing?'正在產生照片…':'拍照'}</button><button className="btn btn-ghost" type="button" onClick={()=>stop()}>暫停相機</button><button className="btn btn-ghost" type="button" disabled={capturing} onClick={()=>{stop('idle');void start(facing==='environment'?'user':'environment');}}>切換鏡頭</button><button className="btn btn-ghost" type="button" aria-pressed={torch} onClick={()=>{const id=run.current;void camera.current.torch(!torch).then(supported=>{if(live(id)){if(supported)setTorch(!torch);else setMessage('這台相機未提供補光燈，請移到光線充足的位置。');}}).catch(()=>{if(live(id))setMessage('補光燈未開啟，可以繼續掃描。');});}}>補光</button></>}
       {phase==='error'&&!preparedPackets.current.length&&<button className="btn btn-ghost" type="button" onClick={()=>setReload(value=>value+1)}>重新載入圖案</button>}

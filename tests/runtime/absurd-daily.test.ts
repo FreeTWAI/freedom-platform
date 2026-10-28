@@ -6,6 +6,33 @@ import {transformSync} from 'esbuild';
 import {parseDishInit,parseDishView,parseDishReply,nextDishView} from '../../apps/portal-web/src/games/cooking/dish-worker-protocol.js';
 import {newMarket} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 
+test('UX-15g restored completed guided run skips kitchen startup while restart and retry retain real capture (non-native)',async()=>{
+ const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingScene.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code.replace('import("./kitchen-stage")','Promise.resolve().then(()=>require("./kitchen-stage"))');
+ const slots:any[]=[],effects:Array<()=>void>=[],buttons:any[]=[];let index=0,dirty=false,imports=0,creates=0,disposed=0,updates=0;
+ const same=(a:any[],b:any[])=>a?.length===b?.length&&a.every((v,i)=>Object.is(v,b[i]));
+ const hooks={useRef:(value:any)=>{const i=index++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=index++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return [slots[i].value,(next:any)=>{const v=typeof next==='function'?next(slots[i].value):next;if(!Object.is(v,slots[i].value)){slots[i].value=v;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=index++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
+ const jsx=(type:any,props:any)=>{if(type==='div'&&props.ref)props.ref.current={dataset:{}};if(type==='button')buttons.push(props);return {type,props};};
+ const stage={update:()=>updates++,capture:()=> 'actual-stage-snapshot',stats:()=>({calls:1,triangles:2,geometries:3,textures:4}),dispose:()=>disposed++};
+ const module={exports:{} as any};let run:any={status:'done',active:{count:0}};const captureRef={current:null as any},onSettled=()=>{};
+ runInNewContext(code,{module,exports:module.exports,performance:{now:()=>1},matchMedia:()=>({matches:true,addEventListener(){},removeEventListener(){}}),requestAnimationFrame:()=>1,cancelAnimationFrame(){},setTimeout:()=>1,clearTimeout(){},require:(path:string)=>{
+  if(path==='react')return hooks;if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
+  if(path==='./kitchen-stage'){imports++;return {createKitchenStage:()=>{creates++;return stage;}};}
+  if(path==='./domain')return {currentStep:()=>({kind:'mix',directions:[]}),plateTarget:()=>({x:.5,y:.5}),cutGuide:()=>.5};
+  if(path==='./catalog')return {KITCHEN_VIEW:{loaderMs:15000}};if(path==='../diagnostics')return {syncDiagnostics(){}};return {CookingScene:()=>null};
+ }});
+ const capture=()=>{const fn:unknown=captureRef.current;assert.equal(typeof fn,'function');return (fn as (value:unknown)=>string)(run);};
+ const render=()=>{index=0;dirty=false;buttons.length=0;module.exports.CookingScene({run,point:null,readRun:()=>run,captureRef,onSettled});while(effects.length)effects.shift()!();};
+ const settle=async()=>{for(let n=0;n<12;n++){if(dirty)render();await Promise.resolve();}};
+ render();await settle();assert.equal(imports,0);assert.equal(creates,0);assert.equal(captureRef.current,null);
+ // Restored results expose no dead retry control while the parent exports.
+ assert.equal(buttons[0].disabled,true);assert.equal(buttons[0].children,'料理已完成');assert.equal(imports,0);
+ run={...run,status:'ready'};render();await settle();assert.equal(buttons[0].disabled,false);assert.equal(imports,1);assert.equal(creates,1);assert.equal(capture(),'actual-stage-snapshot');
+ run={...run,status:'playing'};render();await settle();run={...run,status:'done'};render();await settle();assert.equal(disposed,0);assert.equal(capture(),'actual-stage-snapshot');assert.ok(updates>0);
+ buttons[0].onClick();await settle();assert.equal(disposed,1);assert.equal(captureRef.current,null);
+ buttons[0].onClick();await settle();assert.equal(creates,2);assert.equal(capture(),'actual-stage-snapshot');
+ for(const slot of slots)slot?.cleanup?.();assert.equal(disposed,2);
+});
+
 test('UX-15f worker initialization validates bounded canvas, recipe and actual market snapshot',()=>{
  // Structural protocol unit test only; this class is not native rendering evidence.
  const previous=Object.getOwnPropertyDescriptor(globalThis,'OffscreenCanvas');class Canvas{}
@@ -37,18 +64,46 @@ test('UX-15f absolute dish view coalescing preserves clamp, turn and reset order
  assert.deepEqual(nextDishView(view,'reset',0,'rice-balls'),{angle:-.12,zoom:1.38});
 });
 
-test('UX-15f actual worker reports failure before throwing cleanup and always closes (non-native)',()=>{
+test('UX-15f actual worker reports failure before throwing cleanup and always closes (non-native)',async()=>{
  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/dish-worker.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code;
  for(const scenario of ['invalid-owner','render-throws','cleanup-throws','post-throws'] as const){
   const events:string[]=[],scope:any={onmessage:null,postMessage(m:any){events.push(m.kind);if(scenario==='post-throws'&&m.kind==='failed')throw Error('closed port');},close(){events.push('close');}};
   const stage={stats:()=>({calls:1,triangles:2,geometries:3,textures:4}),view(){events.push('render');if(scenario==='render-throws')throw Error('render');},dispose(){events.push('dispose');if(scenario==='cleanup-throws')throw Error('cleanup');}};
   const module={exports:{}};
-  runInNewContext(source,{self:scope,module,exports:module.exports,require:(path:string)=>path==='./dish-stage'?{createDishCanvasStage:()=>stage}:{parseDishInit:(m:any)=>m.kind==='init'?m:null,parseDishView}});
-  scope.onmessage({data:{kind:'init',owner:7}});assert.deepEqual(events,['ready']);
+  runInNewContext(source,{self:scope,module,exports:module.exports,AbortController,require:(path:string)=>path==='./dish-stage'?{createDishCanvasStage:()=>stage}:path==='./dish-worker-frame'?{waitForDishFrame:()=>Promise.resolve()}:{parseDishInit:(m:any)=>m.kind==='init'?{...m,canvas:{}}:null,parseDishView}});
+  await scope.onmessage({data:{kind:'init',owner:7}});assert.deepEqual(events,['ready']);
   const message={version:1,kind:'view',owner:scenario==='render-throws'?7:-1,sequence:1,angle:0,zoom:1};
-  scope.onmessage({data:message});assert.deepEqual(events,scenario==='render-throws'?['ready','render','failed','dispose','close']:['ready','failed','dispose','close']);
-  scope.onmessage({data:message});assert.equal(events.filter(x=>x==='failed').length,1);assert.equal(events.filter(x=>x==='dispose').length,1);assert.equal(events.filter(x=>x==='close').length,1);
+  await scope.onmessage({data:message});assert.deepEqual(events,scenario==='render-throws'?['ready','render','failed','dispose','close']:['ready','failed','dispose','close']);
+  await scope.onmessage({data:message});assert.equal(events.filter(x=>x==='failed').length,1);assert.equal(events.filter(x=>x==='dispose').length,1);assert.equal(events.filter(x=>x==='close').length,1);
  }
+});
+
+test('UX-15f worker frame barrier waits for GPU and rendering opportunities, cancels and bounds every path (non-native)',async()=>{
+ const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/dish-worker-frame.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code;
+ function setup(states:number[]=[1],raf=true){
+  let now=0,id=0,lost=false,deletes=0,flushed=0,throwWait=false,nullFence=false;const timers=new Map<number,{at:number;fn:()=>void}>(),frames=new Map<number,()=>void>(),waits:unknown[]=[];
+  const gl={ALREADY_SIGNALED:1,CONDITION_SATISFIED:2,TIMEOUT_EXPIRED:3,WAIT_FAILED:4,SYNC_GPU_COMMANDS_COMPLETE:5,isContextLost:()=>lost,fenceSync:()=>nullFence?null:{},flush:()=>flushed++,deleteSync:()=>deletes++,clientWaitSync:(...args:unknown[])=>{waits.push(args);if(throwWait)throw Error('GPU');return states.length>1?states.shift():states[0];}};
+  const module={exports:{} as any};runInNewContext(code,{module,exports:module.exports,DOMException,performance:{now:()=>now},setTimeout:(fn:()=>void,ms:number)=>{timers.set(++id,{at:now+ms,fn});return id;},clearTimeout:(key:number)=>timers.delete(key),requestAnimationFrame:raf?(fn:()=>void)=>{frames.set(++id,fn);return id;}:undefined,cancelAnimationFrame:(key:number)=>frames.delete(key)});
+  return {start:(signal:AbortSignal)=>module.exports.waitForDishFrame({getContext:()=>gl},signal) as Promise<void>,tick:(ms=0)=>{now+=ms;for(const [key,value]of [...timers])if(value.at<=now&&timers.delete(key))value.fn();},frame:()=>{now+=16;const batch=[...frames];frames.clear();batch.forEach(([,fn])=>fn());},setLost:()=>{lost=true;},setThrow:()=>{throwWait=true;},setNull:()=>{nullFence=true;},stats:()=>({timers:timers.size,frames:frames.size,deletes,flushed,waits})};
+ }
+ const f=setup([3,1]),a=new AbortController();let done=false;const p=f.start(a.signal).then(()=>{done=true;});assert.equal(f.stats().flushed,1);f.tick();assert.equal(done,false);assert.equal(f.stats().frames,0);f.tick(16);assert.equal(f.stats().deletes,1);f.frame();await Promise.resolve();assert.equal(done,false);f.frame();await p;assert.equal(done,true);assert.equal(f.stats().timers,0);assert.equal(f.stats().frames,0);assert.ok(f.stats().waits.every((x:any)=>x[1]===0&&x[2]===0));
+ const unsupported=setup([1],false);await assert.rejects(unsupported.start(new AbortController().signal),/unavailable/);assert.equal(unsupported.stats().flushed,0);
+ const cancelled=setup(),cancelledOwner=new AbortController();cancelledOwner.abort();await assert.rejects(cancelled.start(cancelledOwner.signal),{name:'AbortError'});assert.equal(cancelled.stats().timers,0);assert.equal(cancelled.stats().deletes,0);
+ for(const scenario of ['abort','lost','timeout','wait-failed','wait-throws','no-fence','no-frame'] as const){
+  const f=setup([scenario==='wait-failed'?4:scenario==='no-frame'?1:3]),owner=new AbortController();if(scenario==='wait-throws')f.setThrow();if(scenario==='no-fence')f.setNull();const pending=f.start(owner.signal);const rejected=assert.rejects(pending);
+  if(scenario==='abort')owner.abort();else if(scenario==='lost'){f.setLost();f.tick();}else if(scenario==='timeout')f.tick(15000);else{f.tick();if(scenario==='no-frame')f.tick(15000);}await rejected;assert.equal(f.stats().timers,0);assert.equal(f.stats().frames,0);assert.equal(f.stats().deletes,scenario==='no-fence'?0:1);
+ }
+});
+
+test('UX-15f actual worker acknowledges only completed owned frames and rejects overlapping input (non-native)',async()=>{
+ const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/dish-worker.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code;
+ const messages:any[]=[],pending:{resolve:()=>void;signal:AbortSignal}[]=[];let disposed=0,closed=0,views=0;
+ const scope:any={postMessage:(m:any)=>messages.push(m),close:()=>closed++,onmessage:null},module={exports:{}};
+ runInNewContext(code,{self:scope,module,exports:module.exports,AbortController,require:(path:string)=>path==='./dish-stage'?{createDishCanvasStage:()=>({stats:()=>({calls:1,triangles:2,geometries:3,textures:4}),view:()=>views++,dispose:()=>disposed++})}:path==='./dish-worker-frame'?{waitForDishFrame:(_canvas:unknown,signal:AbortSignal)=>new Promise<void>((resolve,reject)=>{pending.push({resolve,signal});signal.addEventListener('abort',()=>reject(Error('owner closed')),{once:true});})}:{parseDishInit:(m:any)=>m.kind==='init'?{...m,canvas:{}}:null,parseDishView}});
+ const init=scope.onmessage({data:{kind:'init',owner:7}});assert.equal(messages.length,0);pending.shift()!.resolve();await init;assert.equal(messages[0].kind,'ready');
+ const first=scope.onmessage({data:{version:1,kind:'view',owner:7,sequence:1,angle:0,zoom:1}});assert.equal(views,1);assert.equal(messages.length,1);pending.shift()!.resolve();await first;assert.equal(messages[1].kind,'rendered');assert.equal(messages[1].sequence,1);
+ const second=scope.onmessage({data:{version:1,kind:'view',owner:7,sequence:2,angle:0,zoom:1}});const held=pending.shift()!;
+ await scope.onmessage({data:{version:1,kind:'view',owner:7,sequence:3,angle:0,zoom:1}});await second;assert.equal(held.signal.aborted,true);held.resolve();await Promise.resolve();assert.equal(messages.at(-1).kind,'failed');assert.equal(messages.filter(m=>m.kind==='rendered').length,1);assert.equal(disposed,1);assert.equal(closed,1);
 });
 
 test('UX-15f actual dish worker client has one bounded in-flight view and terminates stale owners',()=>{

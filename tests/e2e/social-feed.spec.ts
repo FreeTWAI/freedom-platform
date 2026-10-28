@@ -559,6 +559,13 @@ test('a pre-edit feed response revalidates once without restoring the old text',
 });
 
 test('visible feed categories keep keyboard focus and drafts while failed reads retry the selected query',async({page})=>{
+  // Keep passive read confirmations from triggering feed revalidation during query assertions.
+  let releaseReads!:()=>void;
+  const heldReads=new Promise<void>(resolve=>{releaseReads=resolve;});
+  await page.route(/\/api\/v1\/social-posts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/read$/i,async route=>{
+    if(route.request().method()==='POST')await heldReads;
+    await route.continue();
+  });
   await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize({width:320,height:844});await login(page);
   const draft='保留原生草稿，不因閱讀分類或分享連結而發布';
   await page.getByLabel('貼文內容',{exact:true}).fill(draft);await page.keyboard.press('Escape');
@@ -593,7 +600,7 @@ test('visible feed categories keep keyboard focus and drafts while failed reads 
   await feed.getByRole('button',{name:'建立貼文',exact:true}).click();await expect(page.getByLabel('貼文內容',{exact:true})).toHaveValue(draft);await page.keyboard.press('Escape');
   await linkEntry.click();await expect(link.getByLabel('預覽連結',{exact:true})).toHaveValue('https://example.com/retained-link');await page.keyboard.press('Escape');
   expect(writes).toEqual([]);
-  await page.unrouteAll({behavior:'wait'});
+  releaseReads();await page.unrouteAll({behavior:'wait'});
 });
 
 test('a delayed all-posts response cannot replace a newer direct category selection',async({page,e2eAuthPool})=>{
