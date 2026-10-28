@@ -62,7 +62,13 @@
     "apps/portal-web/src/PlatformHelperHost.tsx",
     "tests/runtime/platform-helper-host.test.ts",
     "tests/runtime/platform-helper-host-observation.test.ts",
-    "tests/e2e/platform-helper-host.spec.ts"
+    "tests/e2e/platform-helper-host.spec.ts",
+    "apps/portal-web/src/seasonal/**",
+    "apps/portal-web/public/art/seasonal/**",
+    "tests/runtime/seasonal-theme.test.ts",
+    "tests/e2e/seasonal-theme.spec.ts",
+    "docs/design/seasonal-theme.md",
+    "docs/design/seasonal-theme-art-manifest.json"
   ],
   "public_exports": [
     "apps/portal-web/src/api.ts",
