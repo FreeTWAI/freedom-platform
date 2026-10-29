@@ -5,10 +5,10 @@ import {checkMigrations} from '../lib/migrations.mjs';
 import {compatibilityLedgerDigest,evaluateReleaseCompatibility} from '../lib/release-compatibility.mjs';
 const root=fileURLToPath(new URL('../../../migrations',import.meta.url));
 function fixture(){
- const scan=checkMigrations(root,{first:1,last:194,known_gaps:[22]});
+ const scan=checkMigrations(root,{first:1,last:195,known_gaps:[22]});
  const candidate={source_sha:'a'.repeat(40),artifact_sha256:'b'.repeat(64)},target={environment:'next',database_identity:'synthetic-certification',recovery_generation:'1'};
  const input={schema:'freedom.release-compatibility-request/v1',environment:'next',candidate,enable_shapes:[]};
- const floor=scan.ledger.filter(row=>Number(row.name.slice(0,3))<=193),now=1790899200000;
+ const floor=structuredClone(scan.ledger.filter(row=>Number(row.name.slice(0,3))<=194)),now=1790899200000;
  const host={schema:'freedom.release-compatibility-host/v2',target,now_ms:now,max_age_ms:30000,rollback_floor_shapes:[],
   rollback_floor:{evidence_id:'synthetic-floor',target:{...target},schema_ledger:floor,schema_ledger_digest:compatibilityLedgerDigest(floor),capabilities:[]},
   observation:{evidence_id:'synthetic-observation',observed_at_ms:now-1000,target:{...target},schema_ledger:structuredClone(scan.ledger),schema_ledger_digest:scan.ledger_digest,enabled_shapes:[],written_shapes:[],active_releases:[candidate],complete:true},
@@ -17,25 +17,33 @@ function fixture(){
 }
 const evaluate=f=>evaluateReleaseCompatibility(f.input,{scan:f.scan,host:f.host});
 const codes=result=>result.issues.map(issue=>issue.code);
-test('integrated schema194 certification records recognize exact identity without granting publication or release authority',()=>{
- const f=fixture();assert.equal(f.scan.ok,true);assert.equal(f.scan.ledger.at(-1).name,'194_social_achievements.sql');assert(f.scan.ledger.some(row=>row.name==='193_member_community_certifications.sql'));
+test('integrated schema195 certification records recognize exact identity without granting publication or release authority',()=>{
+ const f=fixture();assert.equal(f.scan.ok,true);assert.equal(f.scan.ledger.at(-1).name,'195_event_helpers.sql');assert(f.scan.ledger.some(row=>row.name==='193_member_community_certifications.sql'));
+ assert(f.scan.ledger.some(row=>row.name==='194_social_achievements.sql'));
  const result=evaluate(f);assert.equal(result.status,'compatible');assert.deepEqual(result.required_shapes,[]);
  for(const flag of ['deployment_authority','execution_authority','restore_proof'])assert.equal(result[flag],false);
  assert.equal(result.required_capabilities.some(value=>value.includes('certification')),false);
 });
-test('integrated schema194 does not reuse schema193 approvals and still requires independent host evidence',()=>{
- const f=fixture();f.host.release_records[0].schema_ledger_digests=[f.host.rollback_floor.schema_ledger_digest];assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+test('integrated schema195 does not reuse schema194 approvals and still requires independent host evidence',()=>{
+ for(const through of [193,194]){
+  const f=fixture(),old=f.scan.ledger.filter(row=>Number(row.name.slice(0,3))<=through);
+  f.host.release_records[0].schema_ledger_digests=[compatibilityLedgerDigest(old)];assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+ }
+ const f=fixture();
  assert.deepEqual(codes(evaluateReleaseCompatibility(f.input,{scan:f.scan})),['trusted_host_required']);
 });
-test('integrated schema194 rejects renamed, changed, future and gapped catalogs',()=>{
- for(const [name,expected] of [['194_unreviewed.sql','schema_unknown'],['195_member_community_certifications.sql','schema_ledger_invalid']]){
+test('integrated schema195 rejects renamed, changed, future and gapped catalogs',()=>{
+ for(const [name,expected] of [['195_unreviewed.sql','schema_unknown'],['196_member_community_certifications.sql','schema_ledger_invalid']]){
   const f=fixture();f.scan.ledger.at(-1).name=name;f.scan.ledger_digest=compatibilityLedgerDigest(f.scan.ledger);assert.deepEqual(codes(evaluate(f)),[expected]);
  }
- const changed=fixture();changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
- const future=fixture();future.scan.ledger.push({name:'195_unreviewed.sql',sha256:'e'.repeat(64)});future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+ for(const index of [-2,-1]){
+  const changed=fixture();changed.scan.ledger.at(index).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'),JSON.stringify(evaluate(changed)));
+ }
+ const historical=fixture();historical.scan.ledger.at(-2).name='194_unreviewed.sql';historical.scan.ledger_digest=compatibilityLedgerDigest(historical.scan.ledger);assert.deepEqual(codes(evaluate(historical)),['schema_unknown']);
+ const future=fixture();future.scan.ledger.push({name:'196_unreviewed.sql',sha256:'e'.repeat(64)});future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
 });
 
-test('integrated schema194 retains the main Google NULL-safe password capability requirement',()=>{
+test('integrated schema195 retains the main Google NULL-safe password capability requirement',()=>{
  const f=fixture();f.host.release_records[0].capabilities=f.host.release_records[0].capabilities.filter(value=>value!=='identity.passwordless-null-safe.v1');
  const result=evaluate(f);assert.equal(result.status,'incompatible');assert(result.issues.some(issue=>issue.code==='release_capability_missing'&&issue.capability==='identity.passwordless-null-safe.v1'));
 });
