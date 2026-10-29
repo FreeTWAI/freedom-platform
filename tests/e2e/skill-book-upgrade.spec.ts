@@ -557,7 +557,7 @@ test('member card headings keep their margin outside the upload dialog', async (
   if (await photo.count()) await expect(photo.first()).toHaveCSS('object-fit', 'contain');
 });
 
-test('a loading draft refresh stays dim inside the dialog', async ({ page }) => {
+test('a loading draft refresh stays readable and distinctly disabled inside the dialog', async ({ page }) => {
   let gate: Promise<void> | null = null;
   let release = () => {};
   await page.route('**/api/v1/me/skill-submissions**', async route => {
@@ -588,7 +588,16 @@ test('a loading draft refresh stays dim inside the dialog', async ({ page }) => 
     gate = new Promise(resolve => { release = resolve; });
     await refresh.click();
     await expect(refresh).toBeDisabled();
-    await expect(refresh).toHaveCSS('opacity', '0.55');
+    await expect(refresh).toHaveCSS('opacity', '1');
+    await expect(refresh).toHaveCSS('border-style', 'dashed');
+    await expect(refresh).toHaveCSS('cursor', 'not-allowed');
+    const disabled=await refresh.evaluate(element=>{
+      let clicks=0;const count=()=>{clicks++;};element.addEventListener('click',count);(element as HTMLButtonElement).click();element.removeEventListener('click',count);
+      const style=getComputedStyle(element);
+      const lum=(rgb:string)=>{const parts=rgb.match(/[\d.]+/g)!.map(Number);if(parts.length>3&&parts[3]!==1)throw Error('Expected opaque disabled colors');const v=parts.slice(0,3).map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);return v[0]*.2126+v[1]*.7152+v[2]*.0722;};
+      const a=lum(style.color),b=lum(style.backgroundColor);return {clicks,contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),height:element.getBoundingClientRect().height};
+    });
+    expect(disabled.clicks).toBe(0);expect(disabled.contrast).toBeGreaterThanOrEqual(4.5);expect(disabled.height).toBeGreaterThanOrEqual(44);
     release();
     gate = null;
     await expect(refresh).toBeEnabled();

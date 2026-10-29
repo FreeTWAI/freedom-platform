@@ -3,7 +3,7 @@ import {test, expect, type Page, type TestInfo} from './fixtures.js';
 import {person, login, open, post, launchStore, captureOffer} from './hosted-store-fixture.js';
 import {DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {TenantPageSchema} from '../../contracts/guild-launchpad/v1/tenant.js';
-import {InstallationPageSchema} from '../../contracts/guild-launchpad/v1/module-registry.js';
+import {InstancePageSchema, LaunchPlanSchema, PlanInputSchema, InstallationPageSchema} from '../../contracts/guild-launchpad/v1/module-registry.js';
 import {SupplyCatalogViewSchema, SupplyProductPageSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog.js';
 
 const commerce = 'guild_commerce_sales';
@@ -343,4 +343,130 @@ test('eligibility read failure is retryable and does not invent a join or a new 
   blocked = false;
   await setup(page).getByRole('button', {name: '重新確認資格', exact: true}).click();
   await expect(setup(page).getByRole('button', {name: /加入.*並繼續/})).toBeEnabled();
+});
+
+
+test('cross-account store setup hides foreign spaces and rejects foreign launch identifiers', async ({page, browser, baseURL, e2eAuthPool}) => {
+  // Two cookie jars remain alive throughout: checking the owner again must not log out the stranger.
+  await member(e2eAuthPool, page, 'active');
+  const supply = await launchStore(page, '甲的純供貨 A');
+  await post(page, supply.root + '/supply-profile', {name: '甲的私人商品庫', currency: 'TWD'}, 201);
+  await post(page, supply.root + '/supply-products', {title: '甲的私人商品', cost_minor: 12000, stock: 5}, 201);
+  const retail = await launchStore(page, '甲的獨立零售 B');
+  await post(page, retail.root + '/setup', {name: '甲的零售店', slug: 'iso-' + retail.hash.split('/')[1].replaceAll('-', ''), currency: 'TWD'}, 201);
+  const ownerInventory = await launchInventory(page);
+  expect(ownerInventory).toHaveLength(2);
+  const catalog = async (target: typeof supply) => {
+    const response = await page.request.get('/api/v1' + target.root + '/supply-profile');
+    expect(response.status()).toBe(200);
+    return SupplyCatalogViewSchema.parse(await response.json());
+  };
+  const products = async () => {
+    const response = await page.request.get('/api/v1' + supply.root + '/supply-products');
+    expect(response.status()).toBe(200);
+    return SupplyProductPageSchema.parse(await response.json());
+  };
+  const supplyBefore = await catalog(supply), retailBefore = await catalog(retail), productsBefore = await products();
+  expect(supplyBefore).toMatchObject({retail_enabled: false, product_count: 1});
+  expect(retailBefore.retail_enabled).toBe(true);
+  expect(productsBefore.items).toHaveLength(1);
+  expect(productsBefore.items[0]).toMatchObject({title: '甲的私人商品', stock: 5});
+  const foreign = await Promise.all(ownerInventory.map(async row => {
+    expect(row.installations).toHaveLength(1);
+    const installation = row.installations[0];
+    const response = await page.request.get(`/api/v1/tenants/${row.tenant_id}/module-instances?limit=100`);
+    expect(response.status()).toBe(200);
+    const instances = InstancePageSchema.parse(await response.json());
+    expect(instances.next_cursor).toBeNull();
+    const instance = instances.items.find(item => item.instance_id === installation.modules[0].instance_id)!;
+    expect(instance).toBeDefined();
+    const input = PlanInputSchema.parse({guild_key: commerce, workspace_id: installation.workspace_id,
+      application_key: 'hosted-store', release_ref: installation.release_ref,
+      installation_choice: 'reuse_existing', existing_installation_id: installation.installation_id,
+      dependencies: [{requirement_key: 'storefront', choice: 'reuse', instance_id: instance.instance_id, expected_version: instance.version}], configuration: {}});
+    // A real, unexecuted owner plan avoids mistaking an invalid payload for authorization denial.
+    const plan = LaunchPlanSchema.parse(await post(page, `/tenants/${row.tenant_id}/application-launch-plans`, input, 201));
+    return {installation, instance, input, plan};
+  }));
+  const strangerContext = await browser.newContext({baseURL});
+  try {
+    const stranger = await strangerContext.newPage();
+    await member(e2eAuthPool, stranger, 'active');
+    expect(await launchInventory(stranger)).toEqual([]);
+    await openSetup(stranger);
+    await expect(flow(stranger).getByLabel('業務空間名稱', {exact: true})).toBeVisible();
+    const expectForeignAbsent = async () => {
+      for (const text of ['甲的純供貨 A', '甲的獨立零售 B', '甲的私人商品庫', '甲的零售店']) await expect(flow(stranger)).not.toContainText(text);
+      for (const {installation, instance} of foreign) {
+        for (const id of [installation.tenant_id, installation.installation_id, instance.instance_id]) {
+          await expect(flow(stranger)).not.toContainText(id);
+          expect(await flow(stranger).locator('input, option, button, a').evaluateAll(nodes => nodes.map(node => node.outerHTML).join(''))).not.toContain(id);
+        }
+        await expect(flow(stranger)).not.toContainText(installation.installation_id.slice(-6));
+      }
+      await expect(flow(stranger).getByRole('radio', {name: /沿用這個安裝/})).toHaveCount(0);
+    };
+    await expectForeignAbsent();
+    await createSpace(stranger, '乙的獨立空間');
+    const ownInventory = await launchInventory(stranger);
+    expect(ownInventory).toHaveLength(1);
+    expect(ownInventory[0].installations).toEqual([]);
+    await expectForeignAbsent();
+    // Capture a valid own plan via the ordinary wizard; cancellation may retain this plan.
+    const planned = stranger.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/application-launch-plans'));
+    await flow(stranger).getByRole('button', {name: '確認開店空間', exact: true}).click();
+    const planResponse = await planned;
+    expect(planResponse.status()).toBe(201);
+    const ownInput = PlanInputSchema.parse(planResponse.request().postDataJSON());
+    const confirmation = flow(stranger).getByRole('region', {name: '確認啟動方案', exact: true});
+    await confirmation.getByRole('button', {name: '修改選擇', exact: true}).click();
+    await expect(confirmation).toHaveCount(0);
+    expect(await launchInventory(stranger)).toEqual(ownInventory);
+    const ownTenant = ownInventory[0].tenant_id;
+    for (const {installation, instance, input, plan} of foreign) {
+      const tenant = installation.tenant_id;
+      for (const path of [
+        `/tenants/${tenant}`, `/tenants/${tenant}/workspaces`,
+        `/tenants/${tenant}/application-installations`, `/tenants/${tenant}/module-instances`,
+        `/tenants/${tenant}/module-instances/${instance.instance_id}`,
+        `/tenants/${tenant}/workspaces/${installation.workspace_id}/launchpad-context?guild_key=${commerce}`,
+        `/tenants/${tenant}/storefronts/${instance.instance_id}/supply-profile`,
+        `/tenants/${tenant}/storefronts/${instance.instance_id}/supply-products`,
+        `/tenants/${ownTenant}/module-instances/${instance.instance_id}`,
+        `/tenants/${ownTenant}/storefronts/${instance.instance_id}/supply-profile`,
+      ]) {
+        const response = await stranger.request.get('/api/v1' + path);
+        expect(response.status(), path).toBe(404);
+        const body = await response.text();
+        for (const value of ['甲的私人商品', '甲的零售店', tenant, instance.instance_id, installation.installation_id]) expect(body, path).not.toContain(value);
+      }
+      expect(await post(stranger, `/tenants/${tenant}/application-launch-plans`, input, 404)).toMatchObject({code: 'tenant_not_found'});
+      expect(await post(stranger, `/tenants/${ownTenant}/application-launch-plans`, {...ownInput, workspace_id: installation.workspace_id}, 404)).toMatchObject({code: 'not_found'});
+      expect(await post(stranger, `/tenants/${ownTenant}/application-launch-plans`, {...ownInput,
+        installation_choice: 'reuse_existing', existing_installation_id: installation.installation_id}, 409)).toMatchObject({code: 'installation_selection_required'});
+      expect(await post(stranger, `/tenants/${ownTenant}/application-launch-plans`, {...ownInput, dependencies: input.dependencies}, 404)).toMatchObject({code: 'not_found'});
+      const launchInput = {plan_id: plan.plan_id, expected_plan_version: plan.version, configuration_digest: plan.configuration_digest};
+      expect(await post(stranger, `/tenants/${tenant}/application-installations`, launchInput, 404)).toMatchObject({code: 'tenant_not_found'});
+      expect(await post(stranger, `/tenants/${ownTenant}/application-installations`, launchInput, 404)).toMatchObject({code: 'not_found'});
+    }
+    expect(await launchInventory(stranger)).toEqual(ownInventory);
+    await launch(stranger);
+    const ownStore = stranger.getByRole('form', {name: '建立商店', exact: true});
+    await ownStore.getByLabel('商店名稱', {exact: true}).fill('乙的零售店');
+    await ownStore.getByLabel('商店網址', {exact: true}).fill('own-' + ownTenant.replaceAll('-', ''));
+    await ownStore.getByRole('button', {name: '建立商店', exact: true}).click();
+    await expect(stranger.locator('.hosted-store').getByRole('heading', {level: 2, name: '乙的零售店', exact: true})).toBeVisible();
+    const completed = await launchInventory(stranger);
+    expect(completed).toHaveLength(1);
+    expect(completed[0].tenant_id).toBe(ownTenant);
+    expect(completed[0].installations).toHaveLength(1);
+    expect(foreign.map(item => item.instance.instance_id)).not.toContain(completed[0].installations[0].modules[0].instance_id);
+    // Read back through the still-authenticated owner session, after every foreign attempt and own launch.
+    expect(await launchInventory(page)).toEqual(ownerInventory);
+    expect(await catalog(supply)).toEqual(supplyBefore);
+    expect(await catalog(retail)).toEqual(retailBefore);
+    expect(await products()).toEqual(productsBefore);
+  } finally {
+    await strangerContext.close();
+  }
 });
