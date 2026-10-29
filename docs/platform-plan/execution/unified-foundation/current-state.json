@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-29T01:26:55.398Z",
+  "recorded_at": "2026-10-29T10:23:10.876102Z",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -14,12 +14,12 @@
   },
   "merged_source": {
     "repository": "FreeTWAI/freedom-platform",
-    "sha": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
-    "tree": "7902c60308b37306305138ac223a71595fc58f22",
-    "observed_at": "2026-10-29T01:26:20.839Z",
+    "sha": "245d2a677757a3f30d29fd2f061d5ce63b6b1882",
+    "tree": "31d5a92590b4dea496597cc5e66361e4608b2566",
+    "observed_at": "2026-10-29T10:19:50.731885Z",
     "observation_kind": "GitHub main readback, separate from actual deployed source.",
     "runtime_release_source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-    "runtime_release_source_scope": "Both environments serve the release. Staging workflow passed; production workflow and Deployment remain failed because handoff lost its lease. A later local release-owner reconciliation verified live state and appended only the missing handoff. Member journeys, new feature activation, other accounts actual deploys and original 168 requirements are not established.",
+    "runtime_release_source_scope": "Production remains at 5c4bf56d. Staging reports 5d662e6e deployed and healthy, but handoff failed and journal settlement has not been read back. See per-environment observations.",
     "release_source_verify": {
       "conclusion": "success",
       "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
@@ -29,19 +29,17 @@
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json"
     },
     "main_verify_observation": {
-      "observed_at": "2026-10-29T01:26:20.839Z",
-      "main": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
-      "main_verify_run": 40665150685,
+      "observed_at": "2026-10-29T10:19:50.731885Z",
+      "main": "245d2a677757a3f30d29fd2f061d5ce63b6b1882",
+      "main_verify_run": 40845770013,
       "main_verify_attempt": 1,
       "main_verify_last_reported_status": "completed",
       "main_verify_conclusion": "success",
-      "main_codeql_run": 40665150671,
+      "main_codeql_run": 40845769999,
       "main_codeql_conclusion": "success",
       "main_ci_complete": true,
-      "application_source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "operator_image_source": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "limitation": "Controller/image and application SHA intentionally differ; production workflow failure is retained."
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+      "limitation": "Current main/controller and selected application SHA are separate; selected application own main CI passed."
     },
     "previous_main_verify_observation": {
       "observed_at": "2026-10-27T18:17:51.933Z",
@@ -58,7 +56,15 @@
       "deployed_by_receipt_and_followup_readback": true
     },
     "migrations_beyond_observed_runtime": [],
-    "limitation": "Currently observed main and deployed source are separate observations; original acceptance is unchanged."
+    "limitation": "Currently observed main and deployed source are separate observations; original acceptance is unchanged.",
+    "selected_release_observation": {
+      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "verify_run": 40843702385,
+      "codeql_run": 40843702369,
+      "ci_conclusion": "success",
+      "deployment_status": "staging_deployed_health_passed_handoff_failed_production_not_started",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
+    }
   },
   "deployment": {
     "production": {
@@ -69,14 +75,14 @@
         "http": 200,
         "status": "ok",
         "release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-        "observation_kind": "public_readback_during_local_handoff_reconciliation",
-        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json"
+        "observation_kind": "public_readback_after_failed_staging_handoff",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
       },
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
       "status": "deployed_workflow_handoff_failed_manually_reconciled",
       "last_operator_release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "limitation": "Both environments serve the release. Staging workflow passed; production workflow and Deployment remain failed because handoff lost its lease. A later local release-owner reconciliation verified live state and appended only the missing handoff. Member journeys, new feature activation, other accounts actual deploys and original 168 requirements are not established.",
-      "health_observed_at": "2026-10-29T01:26:40.201Z",
+      "limitation": "Production remains on the earlier 5c4bf56d release with its original failed workflow and separately recorded manual reconciliation. No 5d662e6e production deployment was started.",
+      "health_observed_at": "2026-10-29T10:19:48.740990Z",
       "workflow_conclusion": "failure",
       "github_deployment_state": "failure",
       "run_id": 40798978135,
@@ -131,33 +137,31 @@
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
-      "observed_release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "observed_at": "2026-10-29T01:11:45.864Z",
+      "observed_release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "observed_at": "2026-10-29T10:09:56.142Z",
       "health": {
-        "http": 200,
-        "status": "ok",
-        "release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-        "observation_kind": "operator_validated_health_phase",
-        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json"
+        "release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+        "status": "passed",
+        "observation_kind": "operator_reported_health_phase_before_handoff_failure",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
       },
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "status": "shared_actions_five_phases_passed",
-      "last_operator_release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "limitation": "Both environments serve the release. Staging workflow passed; production workflow and Deployment remain failed because handoff lost its lease. A later local release-owner reconciliation verified live state and appended only the missing handoff. Member journeys, new feature activation, other accounts actual deploys and original 168 requirements are not established.",
-      "health_observed_at": "2026-10-29T01:11:45.864Z",
-      "workflow_conclusion": "success",
-      "github_deployment_state": "success",
-      "run_id": 40798095826,
-      "deployment_id": 7401281748
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+      "status": "deployed_health_passed_handoff_failed_not_reconciled",
+      "last_operator_release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "limitation": "Operator receipt reports deploy and health passed, then handoff release_lease_lost. Journal pending and lease cleanup remain unconfirmed; no retry or production rollout was started.",
+      "workflow_conclusion": "failure",
+      "github_deployment_state": "failure",
+      "run_id": 40853952665,
+      "deployment_id": 7409321089
     },
     "last_operator_rollout": {
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "at": "2026-10-29T01:26:55.398Z",
-      "kind": "shared_actions_and_local_handoff_reconciliation",
-      "scope": "staging-next then next, same verified source/image",
-      "status": "both_deployed_production_handoff_manually_reconciled",
-      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "limitation": "Both environments serve the release. Staging workflow passed; production workflow and Deployment remain failed because handoff lost its lease. A later local release-owner reconciliation verified live state and appended only the missing handoff. Member journeys, new feature activation, other accounts actual deploys and original 168 requirements are not established."
+      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "at": "2026-10-29T10:09:56.142Z",
+      "kind": "shared_actions_staging_attempt",
+      "scope": "staging-next only; production not started",
+      "status": "staging_deployed_health_passed_handoff_failed_production_not_started",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+      "limitation": "Operator receipt reports deploy and health passed, then handoff release_lease_lost. Journal pending and lease cleanup remain unconfirmed; no retry or production rollout was started."
     },
     "last_production_rollout": {
       "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
@@ -169,13 +173,13 @@
       "kind": "authenticated_receipt_and_manual_reconciliation"
     },
     "last_staging_rollout": {
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "at": "2026-10-29T01:11:45.864Z",
-      "status": "shared_actions_five_phases_passed",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "run_id": 40798095826,
-      "deployment_id": 7401281748,
-      "kind": "authenticated_shared_actions_receipt"
+      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "at": "2026-10-29T10:09:56.142Z",
+      "status": "deployed_health_passed_handoff_failed_not_reconciled",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+      "run_id": 40853952665,
+      "deployment_id": 7409321089,
+      "kind": "authenticated_failed_shared_actions_receipt"
     },
     "previous_production_rollout": {
       "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
@@ -902,6 +906,15 @@
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
       "limitation": "Failure retained; no release success inferred. Live pending-state diagnosis is attributed to the original operator.",
       "observation_scope": "historical_failure_preserved_before_2026-10-29_release"
+    },
+    "prior_staging_rollout_20261029": {
+      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+      "at": "2026-10-29T01:11:45.864Z",
+      "status": "shared_actions_five_phases_passed",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
+      "run_id": 40798095826,
+      "deployment_id": 7401281748,
+      "kind": "authenticated_shared_actions_receipt"
     }
   },
   "schema": {
@@ -9656,9 +9669,9 @@
     }
   ],
   "shared_release_installation": {
-    "observed_at": "2026-10-29T01:26:55.398Z",
-    "status": "enabled_both_deployed_production_handoff_manually_reconciled",
-    "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
+    "observed_at": "2026-10-29T10:19:50.731885Z",
+    "status": "enabled_staging_handoff_reconciliation_required",
+    "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
     "workflow": "https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml",
     "operators": [
       {
@@ -9752,9 +9765,12 @@
       "limitation": "GitHub admission only; no operator, provider, database or deployment acceptance."
     },
     "current_release_blocker": {
-      "status": "cleared_after_manual_handoff_reconciliation",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "limitation": "Original production workflow/Deployment failure retained; manual incident repair is not four-operator autonomous failure recovery."
+      "status": "staging_handoff_lease_lost_reconciliation_required",
+      "run_id": 40853952665,
+      "recovery_pr": 1173,
+      "formal_approval": "pending",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+      "limitation": "Operator receipt reports deploy and health passed, then handoff release_lease_lost. Journal pending and lease cleanup remain unconfirmed; no retry or production rollout was started."
     },
     "recovery_followup": {
       "status": "original_backup_pending_reconciled_both_sources_deployed_production_cleanup_failure_readback_confirmed",
@@ -9784,6 +9800,16 @@
       "execution_origin": "local_release_owner_incident_reconciliation",
       "shared_recovery_entry": "not_implemented",
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json"
-    }
+    },
+    "staging_handoff_followup": {
+      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "failed_run": 40853952665,
+      "status": "not_reconciled",
+      "pending": "unknown_until_readback",
+      "lease_released": "not_confirmed",
+      "shared_recovery_entry": "PR1173_CI_passed_formal_approval_and_installation_pending",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
+    },
+    "access_readback_observed_at": "2026-10-29T10:23:10.876102Z"
   }
 }

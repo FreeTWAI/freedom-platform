@@ -1,5 +1,8 @@
 # 共用發布入口
 
+2026-10-29 10:19 UTC 接續：產品 `5d662e6e` 的 main CI 已成功；[staging 40853952665](https://github.com/FreeTWAI/freedom-platform/actions/runs/40853952665) 回報部署與 health 通過，最後 handoff 失去 lease，workflow／Deployment 仍為 failure。journal 尚未持鎖讀回，未重送部署；正式站仍是健康的 `5c4bf56d`／schema194。
+復原 [#1173](https://github.com/FreeTWAI/freedom-platform/pull/1173) 的 source 修正與 CI 已完成，仍待獨立正式核准、合併與新映像驗證／安裝。之後優先結清這筆 staging handoff，再取得同 source／image 的成功 staging 發布收據，才接續正式站。設定 hash、映像 pins 與旗標本輪未變；租約中斷根因未確認。見[完整收據與下一步](../../docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
+
 一般程式發布使用 `releaseKind: independent`：preflight → migration（無待執行 SQL 時唯讀確認；有則走已核准交易）→ deploy → health → handoff。
 不等待日常備份、不執行發布前後的 dump／遠端讀回／隔離還原，也不需要備份 DB 憑證。
 日常 `Shared backup` 保留每日 **05:43 UTC**、完整備份／讀回／還原／清理與獨立收據。
