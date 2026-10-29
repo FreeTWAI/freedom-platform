@@ -267,6 +267,8 @@ export const RELEASE_FAILURE_CODES = Object.freeze([
   'release_health_input_invalid',
   'release_health_source_not_propagated',
   'release_health_unconfirmed',
+  'release_image_arguments_invalid',
+  'release_image_implementation_missing',
   'release_image_workflow_invalid',
   'release_input_file_changed',
   'release_input_file_invalid',
