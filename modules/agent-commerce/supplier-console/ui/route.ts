@@ -1,4 +1,4 @@
-import {SupplierReportQuerySchema,type SupplierReportQuery} from '../../../../contracts/guild-launchpad/v1/supplier-console';
+import {SupplierReportQuerySchema,type SupplierReportQuery} from '../../../../contracts/guild-launchpad/v1/supplier-report-query';
 import {OpaqueId} from '../../../../contracts/guild-launchpad/v1/primitives';
 export type ConsoleScope={tenantId:string;instanceId:string};
 export type ReportPeriod=SupplierReportQuery;

@@ -13,6 +13,7 @@
     "migrations/172_distribution_photos.sql",
     "migrations/174_supply_offer_photos.sql",
     "contracts/guild-launchpad/v1/supplier-console.ts",
+    "contracts/guild-launchpad/v1/supplier-report-query.ts",
     "contracts/guild-launchpad/v1/supplier-console.schema.json",
     "tests/runtime/supplier-console.test.ts",
     "tests/runtime/supplier-console-writes.test.ts",
