@@ -35,6 +35,63 @@ async function fixture(extra:Record<string,unknown>={}){
  await pool.query("UPDATE community_events SET state='published' WHERE event_id=$1",[id]);
  return {host,member,peer,id,path:`/events/${id}/helpers`};
 }
+// Synthetic parents without bulletins/receipts: isolate the helper FKs themselves.
+async function helperParents(communityId=DEMO_COMMUNITY){
+ const member=randomUUID(),event=randomUUID();
+ await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref)
+  VALUES($1,$2,$3,'合成幫手','not-a-login-hash',$4)`,[member,communityId,`${member}@example.test`,randomUUID()]);
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,help_need)
+  VALUES($1,$2,$3,'合成活動','資料完整性測試',now()+interval '1 day',now()+interval '2 days','online','https://example.test','published','協助報到')`,[event,communityId,member]);
+ return {member,event,communityId};
+}
+async function helperScopes(){
+ const other=randomUUID();await pool.query("INSERT INTO communities(community_id,name) VALUES($1,'隔離合成社群')",[other]);
+ return {local:await helperParents(),foreign:await helperParents(other)};
+}
+const foreignKey=(constraint:string)=>(error:any)=>error.code==='23503'&&error.constraint===constraint;
+test('helper INSERT requires a non-null community shared by both existing parents',async()=>{
+ const {local,foreign}=await helperScopes();
+ const insert=(event:string,member:string,community:string|null)=>pool.query(`INSERT INTO community_event_helpers(helper_id,event_id,member_ref,community_id,state)
+  VALUES($1,$2,$3,$4,'applied')`,[randomUUID(),event,member,community]);
+ await assert.rejects(insert(local.event,foreign.member,local.communityId),foreignKey('helper_member_community'));
+ await assert.rejects(insert(foreign.event,local.member,local.communityId),foreignKey('helper_event_community'));
+ await assert.rejects(insert(local.event,local.member,null),(error:any)=>error.code==='23502'&&error.column==='community_id');
+ assert.equal((await pool.query('SELECT count(*) AS n FROM community_event_helpers')).rows[0].n,'0');
+ await insert(local.event,local.member,local.communityId);
+ await insert(foreign.event,foreign.member,foreign.communityId);
+ assert.equal((await pool.query('SELECT count(*) AS n FROM community_event_helpers')).rows[0].n,'2');
+});
+test('helper UPDATE rejects foreign parent or community reassignment without changing the row',async()=>{
+ const {local,foreign}=await helperScopes(),helper=randomUUID();
+ await pool.query("INSERT INTO community_event_helpers(helper_id,event_id,member_ref,community_id,state) VALUES($1,$2,$3,$4,'applied')",[helper,local.event,local.member,local.communityId]);
+ const read=async()=>(await pool.query('SELECT * FROM community_event_helpers WHERE helper_id=$1',[helper])).rows[0],before=await read();
+ for(const [column,value,constraint] of [
+  ['event_id',foreign.event,'helper_event_community'],['member_ref',foreign.member,'helper_member_community'],
+ ] as const){
+  await assert.rejects(pool.query(`UPDATE community_event_helpers SET ${column}=$2 WHERE helper_id=$1`,[helper,value]),foreignKey(constraint));
+  assert.deepEqual(await read(),before);
+ }
+ await assert.rejects(pool.query('UPDATE community_event_helpers SET community_id=$2 WHERE helper_id=$1',[helper,foreign.communityId]),(error:any)=>error.code==='23503'&&['helper_event_community','helper_member_community'].includes(error.constraint));
+ assert.deepEqual(await read(),before);
+ await assert.rejects(pool.query('UPDATE community_event_helpers SET community_id=NULL WHERE helper_id=$1',[helper]),(error:any)=>error.code==='23502');
+ assert.deepEqual(await read(),before);
+});
+test('helper parent rebinding is blocked; member deletion stays NO ACTION and event deletion cascades',async()=>{
+ const {local,foreign}=await helperScopes(),helper=randomUUID();
+ // Use a member who is not the event organizer so deletion tests only its helper FK.
+ await pool.query("INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref) VALUES($1,$2,$3,'合成申請者','not-a-login-hash',$4)",[helper,local.communityId,`${helper}@example.test`,randomUUID()]);
+ await pool.query("INSERT INTO community_event_helpers(helper_id,event_id,member_ref,community_id,state) VALUES($1,$2,$1,$3,'applied')",[helper,local.event,local.communityId]);
+ await assert.rejects(pool.query('UPDATE community_events SET community_id=$2 WHERE event_id=$1',[local.event,foreign.communityId]),foreignKey('helper_event_community'));
+ await assert.rejects(pool.query('UPDATE users SET community_id=$2 WHERE user_id=$1',[helper,foreign.communityId]),foreignKey('helper_member_community'));
+ await assert.rejects(pool.query('DELETE FROM users WHERE user_id=$1',[helper]),foreignKey('helper_member_community'));
+ assert.equal((await pool.query('SELECT community_id FROM community_events WHERE event_id=$1',[local.event])).rows[0].community_id,local.communityId);
+ assert.equal((await pool.query('SELECT community_id FROM users WHERE user_id=$1',[helper])).rows[0].community_id,local.communityId);
+ assert.equal((await pool.query('SELECT state FROM community_event_helpers WHERE helper_id=$1',[helper])).rows[0].state,'applied');
+ await pool.query("UPDATE community_event_helpers SET state='withdrawn' WHERE helper_id=$1",[helper]);
+ await pool.query('DELETE FROM community_events WHERE event_id=$1',[local.event]);
+ assert.equal((await pool.query('SELECT count(*) AS n FROM community_event_helpers WHERE helper_id=$1',[helper])).rows[0].n,'0');
+ assert.equal((await pool.query('SELECT count(*) AS n FROM users WHERE user_id=$1',[helper])).rows[0].n,'1');
+});
 test('independent offer, private organizer list, accept and withdraw never reserve a seat or publish contacts',async()=>{
  const {host,member,peer,id,path}=await fixture();
  const absent=await request(path+'/me',member);assert.deepEqual(absent.data,{state:null,version:1,event_closed:false});
@@ -80,7 +137,7 @@ test('cancel/start/pending restrict new effects but retained own withdrawal rema
 test('strict commands, missing version, organizer self-application, disabled need and paging reject unsafe defaults',async()=>{
  const {host,member,id,path}=await fixture();
  assert.equal((await request(path+'/me',member,{action:'offer'})).status,428);
- for(const body of [{action:'approve'},{action:'offer',member_ref:host.id},{action:'withdraw',referral_code:null}])assert.equal((await request(path+'/me',member,body,1)).status,422);
+ for(const body of [{action:'approve'},{action:'offer',member_ref:host.id},{action:'offer',community_id:DEMO_COMMUNITY},{action:'withdraw',referral_code:null}])assert.equal((await request(path+'/me',member,body,1)).status,422);
  assert.equal((await request(path+'/me',host,{action:'offer'},1)).status,409);
  assert.equal((await request(path+'?limit=51',host)).status,422);assert.equal((await request(path+'?offset=-1',host)).status,422);
  await pool.query('UPDATE community_events SET help_need=NULL WHERE event_id=$1',[id]);assert.equal((await request(path+'/me',member,{action:'offer'},1)).status,409);
@@ -117,11 +174,15 @@ test('same-community reviewer has no helper-list privilege; foreign event scope 
  await pool.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state) VALUES($1,$2,$3,'guild_member_operations','active') ON CONFLICT DO NOTHING",[randomUUID(),DEMO_COMMUNITY,peer.id]);
  await pool.query("INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,'guild_member_operations',$2) ON CONFLICT DO NOTHING",[DEMO_COMMUNITY,peer.id]);
  assert.equal((await request(path,peer)).status,403);
- await request(path+'/me',member,{action:'offer'},1);
- const other=randomUUID();await pool.query("INSERT INTO communities(community_id,name) VALUES($1,'隔離合成社群')",[other]);
- await pool.query('UPDATE community_events SET community_id=$2 WHERE event_id=$1',[id,other]);
- for(const session of [host,member,peer])assert.equal((await request(path+'/me',session)).status,404);
- assert.equal((await request(path+'/me',member,{action:'withdraw'},2)).status,404);
+ const key=randomUUID();assert.equal((await request(path+'/me',member,{action:'offer'},1,key)).status,200);
+ assert.equal((await pool.query('SELECT community_id FROM community_event_helpers WHERE event_id=$1',[id])).rows[0].community_id,DEMO_COMMUNITY);
+ const {foreign}=await helperScopes(),foreignPath=`/events/${foreign.event}/helpers`;
+ for(const session of [host,member,peer])assert.equal((await request(foreignPath+'/me',session)).status,404);
+ assert.equal((await request(foreignPath,host)).status,404);
+ assert.equal((await request(foreignPath+'/me',member,{action:'offer'},1,key)).status,404);
+ assert.equal((await request(foreignPath+'/me',member,{action:'withdraw'},2)).status,404);
+ assert.equal((await request(foreignPath+'/'+member.id+'/decision',host,{decision:'accept'},2)).status,404);
+ assert.equal((await request(path+'/me',member)).data.state,'applied');
 });
 test('intern organizer cannot decide or replay an earlier decision after demotion',async()=>{
  const {host,member,peer,id,path}=await fixture();
