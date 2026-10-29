@@ -106,9 +106,9 @@ export async function mutateEventHelper(pool:Pool,rawInput:Command,id:string):Pr
     }
     requireCondition(!mine||Number(mine.aggregate_version)<Number.MAX_SAFE_INTEGER,409,'helper_version_exhausted','這份幫手申請暫時無法變更，請聯絡主辦者。');
     const next=nextEventHelperState(mine?.state??null,body.action);
-    const row=(await q.query(`INSERT INTO community_event_helpers(helper_id,event_id,member_ref,state,aggregate_version)
-      VALUES($1,$2,$3,$4,2) ON CONFLICT(event_id,member_ref) DO UPDATE SET state=EXCLUDED.state,
-      aggregate_version=community_event_helpers.aggregate_version+1,updated_at=clock_timestamp() RETURNING *`,[mine?.helper_id??randomUUID(),id,input.actor.user_id,next])).rows[0] as HelperRow;
+    const row=(await q.query(`INSERT INTO community_event_helpers(helper_id,event_id,member_ref,community_id,state,aggregate_version)
+      VALUES($1,$2,$3,$4,$5,2) ON CONFLICT(event_id,member_ref) DO UPDATE SET state=EXCLUDED.state,
+      aggregate_version=community_event_helpers.aggregate_version+1,updated_at=clock_timestamp() RETURNING *`,[mine?.helper_id??randomUUID(),id,input.actor.user_id,input.actor.community_id,next])).rows[0] as HelperRow;
     await journal(q,input.actor,'community_event_helper',row.helper_id,row.aggregate_version,body.action,{event_id:id});
     return status(q,event,row);
   },async q=>{if(newEffect)await requireOpen(q,event);});
