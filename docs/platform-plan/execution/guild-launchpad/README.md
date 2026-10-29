@@ -10,9 +10,11 @@
 
 歷史發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
 
-<!-- glp-status: as_of=2026-10-12 release.production=5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d release.staging=5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d flag.production=true flag.staging=true repo_max_migration=194 applied_migration.production=194 applied_migration.staging=194 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d release.staging=5d662e6e2d1af343a08e6b16ddf66dfd732c2f85 flag.production=true flag.staging=true repo_max_migration=194 applied_migration.production=194 applied_migration.staging=194 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
-2026-10-29 01:26 UTC：兩環境實際已部署 `5c4bf56d`／schema194。Staging 五階段成功；正式站原 workflow 在 handoff 失去 lease，失敗保留。Release owner 重新持有同一 lease，核對 DB／政策／Worker／health，只追加缺少的 handoff，pending=null 後正常釋放；沒有重做 migration、部署或備份。這是人工事件對帳，不是完整 hosted 自動成功；共用 handoff-only 復原入口仍待補。旗標、M1／完整驗收及原政策列觀察不因本次發布改為通過。詳見[發布與對帳收據](../unified-foundation/rollout-shared-actions-2026-10-29.json)。
+2026-10-29 10:23 UTC 紀錄：staging 的 `5d662e6e`／schema194 發布回報 preflight、migration、deploy、health 通過，最後 handoff 因 `release_lease_lost` 失敗；journal pending 與 lease 釋放尚未持鎖讀回確認。正式站仍是 `5c4bf56d`，公開 health 回報正常。沒有重送部署或啟動新版正式站；旗標、M1／完整驗收及原政策列觀察不變。詳見[本次失敗收據與待辦](../unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
+
+2026-10-29 01:26 UTC 歷史紀錄：兩環境當時已部署 `5c4bf56d`／schema194。Staging 五階段成功；正式站原 workflow 在 handoff 失去 lease，失敗保留。Release owner 重新持有同一 lease，核對 DB／政策／Worker／health，只追加缺少的 handoff，pending=null 後正常釋放；沒有重做 migration、部署或備份。這是人工事件對帳，不是完整 hosted 自動成功；共用 handoff-only 復原入口仍待補。旗標、M1／完整驗收及原政策列觀察不因本次發布改為通過。詳見[發布與對帳收據](../unified-foundation/rollout-shared-actions-2026-10-29.json)。
 
 2026-10-27 18:17 UTC：兩環境已部署 `f2c9b2fd`。Staging 五階段成功；next 已部署／健康檢查通過，最後釋放 lease 報錯，workflow failure 保留。18:16Z 重新取得同一 lease，唯讀確認 journal pending=null、DB／Worker 同版本並正常釋放；18:17Z 公開 health 正常。原備份 pending 已結清，沒有新備份、floor reset 或重複部署。四人共用入口可用，後續 main 不再等待發布側；[收據 followup_control_read_fix](../unified-foundation/rollout-shared-actions-2026-10-27.json)保留失敗與後續確認。會員 UX、M1／完整計畫與第二操作者還原仍未驗收。
 
