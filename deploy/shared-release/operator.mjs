@@ -154,6 +154,14 @@ export function validateBackupOperatorResult(value, admission, installation, req
   return value.phases.map(({ name, startedAt, completedAt }) => ({ name, status: 'passed', startedAt, completedAt }));
 }
 
+// Closed public projection: never publish provider URLs, keys, headers, bodies or error text.
+export function publicControlReadFailure(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || !['list', 'chain_record', 'authority', 'append_existence', 'append_readback', 'append_list'].includes(value.operation)) return undefined;
+  if (value.httpStatus !== undefined && (!Number.isInteger(value.httpStatus) || value.httpStatus < 100 || value.httpStatus > 599)) return undefined;
+  return { operation: value.operation, ...(value.httpStatus !== undefined ? { httpStatus: value.httpStatus } : {}) };
+}
+
 export function operatorProgress(value, admission, installation, requestDigest) {
   validateBinding(value, admission, installation, requestDigest);
   const phases = admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission);
@@ -175,7 +183,9 @@ export function operatorProgress(value, admission, installation, requestDigest) 
         ...Object.fromEntries(['phaseCode', 'cleanupCode'].filter(key => isBackupDiagnosticCode(failure[key]))
           .map(key => [key, failure[key]])),
         ...(['not_started', 'running', 'failed', 'completed'].includes(failure.snapshotDump) ? { snapshotDump: failure.snapshotDump } : {}) } } : {};
+    const controlReadFailure = phase.status === 'failed' ? publicControlReadFailure(phase.controlReadFailure) : undefined;
     return { name: phase.name, reportedStatus: phase.status, ...diagnostic,
+      ...(controlReadFailure ? { controlReadFailure } : {}),
       ...(i === value.phases.length - 1 && phase.status === 'failed' && isReleaseFailureCode(phase.failureCode)
         ? { failureCode: phase.failureCode } : {}),
       ...(['preflight', 'deploy'].includes(phase.name) && phase.flagChanges !== undefined

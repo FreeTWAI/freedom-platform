@@ -4,7 +4,7 @@ import { open, mkdir, rename } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { Pool } from 'pg';
 import { releasePhases, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha, releaseFailureCode } from '../admission.mjs';
-import { validateOperatorResult, validateBackupOperatorResult } from '../operator.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, publicControlReadFailure } from '../operator.mjs';
 import { BACKUP_PHASES } from '../scheduled-admission.mjs';
 import { validatePortableConfig, portableConnections } from './config.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
@@ -76,6 +76,8 @@ export async function main(args = process.argv.slice(2)) {
     try { Object.assign(item, await operation(), { status: 'passed', completedAt: new Date().toISOString() }); }
     catch (error) {
       Object.assign(item, { status: 'failed', failureCode: releaseFailureCode(error), completedAt: new Date().toISOString() });
+      const controlReadFailure = publicControlReadFailure(error.controlReadFailure);
+      if (controlReadFailure) item.controlReadFailure = controlReadFailure;
       if (error.backupFailure) item.backupFailure = error.backupFailure;
       throw error;
     }

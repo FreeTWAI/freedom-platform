@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, requireLegacyPredecessor, githubClient, releaseFailureCode, isReleaseFailureCode } from '../../shared-release/admission.mjs';
-import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, publicControlReadFailure, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive, artifactReader } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
@@ -2901,6 +2901,7 @@ test('all failed operator phases record fixed codes and public progress filters 
   for (const [error, expected] of [
     [Object.assign(Error('private'), { code: 'release_floor_unsettled' }), 'release_floor_unsettled'],
     [Error('release_floor_unsettled'), 'release_floor_unsettled'],
+    [Object.assign(Error('release_control_read_unavailable'), { controlReadFailure: { operation: 'append_readback', httpStatus: 503, url: 'PRIVATE', transport: 'PRIVATE', cause: 'PRIVATE' } }), 'release_control_read_unavailable'],
     [Object.assign(Error('release_floor_unsettled'), { code: 'INVALID' }), 'release_floor_unsettled'],
     [Object.assign(Error('release_private_token_abc123'), { code: 'P0001' }), 'release_operation_failed'],
     [Object.assign(Error('private'), { code: 'release_private_token_abc123' }), 'release_operation_failed'],
@@ -2911,10 +2912,14 @@ test('all failed operator phases record fixed codes and public progress filters 
     [Object.assign(Error('private'), { code: 'release_bad\nsecret' }), 'release_operation_failed'],
   ]) {
     const value = resultFixture(); value.phases = [];
-    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'return ' + source)(
-      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode);
+    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'publicControlReadFailure', 'return ' + source)(
+      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode, publicControlReadFailure);
     await assert.rejects(phase('preflight', async () => { throw error; }), error);
     assert.equal(value.phases[0].failureCode, expected);
+    if (error.controlReadFailure) {
+      assert.deepEqual(value.phases[0].controlReadFailure, { operation: 'append_readback', httpStatus: 503 });
+      assert(!JSON.stringify(value).includes('PRIVATE'));
+    }
     const progress = operatorProgress(value, request(), installation, 'e'.repeat(64));
     assert.equal(progress[0].failureCode, expected);
     assert(!JSON.stringify(progress).includes('10.1.2.3')); assert(!JSON.stringify(progress).includes('private'));
@@ -3020,6 +3025,77 @@ test('backup diagnostic cause walk is bounded, preserves specific codes and vali
   assert.deepEqual(operatorProgress(value, request(), installation, 'e'.repeat(64)).at(-1).backupFailure,
     { stage: 'capture', code: 'daily_backup_cleanup_failed', cleanupVerified: false,
       phaseCode: 'backup_database_sqlstate_23505', cleanupCode: 'backup_network_econnreset' });
+});
+
+test('control read diagnostics preserve bounded locations and HTTP status without changing the three-attempt GET budget', async t => {
+  for (const operation of ['list', 'chain_record', 'authority', 'append_existence', 'append_readback', 'append_list']) {
+    const f = await controlFixture(t); let armed = false, putSeen = false, failures = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      const listing = new URL(url).searchParams.has('prefix');
+      const key = decodeURIComponent(new URL(url).pathname.split('/objects/')[1] ?? '');
+      if (options.method === 'PUT') putSeen = true;
+      const hit = armed && options.method === 'GET' && (
+        operation === 'list' && listing || operation === 'chain_record' && key === f.seedKey ||
+        operation === 'authority' && key.includes('/authority/') ||
+        operation === 'append_existence' && !listing && !f.map.has(key) ||
+        operation === 'append_readback' && putSeen && !listing || operation === 'append_list' && putSeen && listing);
+      if (hit) { failures++; return new Response('PRIVATE body', { status: 429, headers: { 'x-private': 'PRIVATE header' } }); }
+      return f.options.fetchImpl(url, options);
+    } });
+    const head = (await store.load()).at(-1); armed = true;
+    const action = operation === 'authority' ? () => store.readAuthority('d'.repeat(64))
+      : ['list', 'chain_record'].includes(operation) ? () => store.load()
+      : () => store.append({ previous: head, data: { state: 'synthetic' }, intentDirectory: f.directory });
+    await assert.rejects(action(), error => {
+      assert.deepEqual(error.controlReadFailure, { operation, httpStatus: 429 });
+      assert(!JSON.stringify(error).includes('PRIVATE')); return true;
+    });
+    assert.equal(failures, 3);
+    assert.equal(f.puts(), ['append_readback', 'append_list'].includes(operation) ? 1 : 0);
+  }
+});
+
+test('control transport failure never fabricates HTTP status or leaks original errors', async t => {
+  const f = await controlFixture(t);
+  const store = createControlStore({ ...f.options, fetchImpl: async () => { throw Object.assign(Error('PRIVATE https://secret.invalid/token'), { status: 429, headers: 'PRIVATE' }); } });
+  await assert.rejects(store.load(), error => {
+    assert.equal(error.message, 'release_control_read_network_failed');
+    assert.deepEqual(error.controlReadFailure, { operation: 'list' });
+    assert(!JSON.stringify(error).includes('PRIVATE')); return true;
+  });
+  assert.equal(f.puts(), 0);
+});
+
+test('public control diagnostics strip private fields and reject malformed values', () => {
+  for (const operation of ['list', 'chain_record', 'authority', 'append_existence', 'append_readback', 'append_list']) {
+    for (const httpStatus of [undefined, 100, 403, 429, 503, 599]) {
+      const value = resultFixture(); value.phases = [{ name: 'preflight', status: 'failed', failureCode: 'release_control_read_failed',
+        controlReadFailure: { operation, httpStatus, url: 'PRIVATE', headers: 'PRIVATE', body: 'PRIVATE', message: 'PRIVATE', token: 'PRIVATE' } }];
+      const expected = { operation, ...(httpStatus === undefined ? {} : { httpStatus }) };
+      assert.deepEqual(operatorProgress(value, request(), installation, 'e'.repeat(64))[0].controlReadFailure, expected);
+      assert(!JSON.stringify(operatorProgress(value, request(), installation, 'e'.repeat(64))).includes('PRIVATE'));
+      value.phases[0].status = 'running';
+      assert.equal(operatorProgress(value, request(), installation, 'e'.repeat(64))[0].controlReadFailure, undefined);
+    }
+  }
+  for (const value of [null, [], 'PRIVATE', { operation: 'https://secret.invalid' }, ...[0, 99, 600, 429.1, '429', NaN, null].map(httpStatus => ({ operation: 'authority', httpStatus }))]) {
+    assert.equal(publicControlReadFailure(value), undefined);
+  }
+});
+
+
+test('terminal GET diagnostics never retain an earlier HTTP status after network failure', async t => {
+  const f = await controlFixture(t); let calls = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async () => {
+    calls++;
+    if (calls === 1) return new Response('PRIVATE', { status: 429 });
+    throw Object.assign(Error('PRIVATE provider detail'), { status: 503 });
+  } });
+  await assert.rejects(store.load(), error => {
+    assert.equal(error.message, 'release_control_read_network_failed');
+    assert.deepEqual(error.controlReadFailure, { operation: 'list' }); return true;
+  });
+  assert.equal(calls, 3); assert.equal(f.puts(), 0);
 });
 
 test('candidate policy additions permit only new disabled purposes and preserve installed policy rows', () => {
