@@ -509,3 +509,130 @@ test('unknown entry warns and retains all baseline/candidate dependency rules wh
       && message.unknown_paths.includes('new-queue/handler.mjs');
   }));
 });
+
+test('compact v2 retains revision provenance and exact text while sharing only same-path unchanged content', async t => {
+  const f = await largeContextFixture(t);
+  const original = await buildContextDelivery(f.options);
+  const d = await buildContextDelivery({ ...f.options, deliveryFormat: 'compact-v2' });
+  assert.equal(d.manifest.format, 'freedom.coding-context-manifest/v2');
+  assert.notEqual(d.manifest.delivery_id, original.manifest.delivery_id);
+  assert.deepEqual(d.manifest.binding, original.manifest.binding);
+  assert.deepEqual(d.manifest.selection, original.manifest.selection);
+  assert.deepEqual(d.manifest.delta, original.manifest.delta);
+  assert.deepEqual(d.context.blockers, original.context.blockers);
+  assert.equal(d.manifest.sources.length, original.manifest.sources.length);
+  assert.equal(d.chunks.length * 2, original.chunks.length);
+  assert.equal(d.chunks.reduce((n, c) => n + c.value.bytes, 0) * 2,
+    original.chunks.reduce((n, c) => n + c.value.bytes, 0));
+  for (const [index, source] of d.manifest.sources.entries()) {
+    const { canonical_source_index, first_chunk, chunk_count, ...provenance } = source;
+    const { first_chunk: _first, chunk_count: _count, ...expected } = original.manifest.sources[index];
+    assert.deepEqual(provenance, expected);
+    const chunks = d.chunks.slice(first_chunk, first_chunk + chunk_count);
+    const bytes = Buffer.from(chunks.map(chunk => chunk.value.content).join(''));
+    assert.equal(sha256(bytes), source.content_sha256);
+    assert.equal(bytes.length, source.content_bytes);
+    for (const chunk of chunks) {
+      assert.equal(chunk.value.source_index, canonical_source_index);
+      const bound = chunk.value.source_bindings.find(item => item.source_index === index);
+      assert.equal(bound.path, source.path); assert.equal(bound.revision, source.revision);
+      assert.equal(bound.commit, source.revision === 'base' ? d.context.base_commit : d.context.head_commit);
+      assert.equal(bound.workspace_sha256, source.revision === 'base' ? null : d.context.workspace_sha256);
+    }
+    if (source.path === 'docs/rules.md') assert.equal(bytes.toString(), f.rule);
+  }
+  // These fixture instructions have identical text but distinct path authority.
+  const roots = d.manifest.sources.filter(s => ['AGENTS.md', 'README.md', 'CONTRIBUTING.md'].includes(s.path) && s.revision === 'base');
+  assert.equal(new Set(roots.map(s => s.first_chunk)).size, 3);
+  // A one-byte amendment must never alias, even when all other content agrees.
+  await put(f.root, 'docs/rules.md', f.rule + 'x');
+  const changed = await writeContextDelivery({ ...f.options, deliveryFormat: 'compact-v2' });
+  const rules = changed.manifest.sources.filter(s => s.path === 'docs/rules.md');
+  assert.notEqual(rules[0].first_chunk, rules[1].first_chunk);
+  assert.equal(changed.manifest.delta.find(s => s.path === 'docs/rules.md').status, 'changed');
+  assert.equal((await readContextDelivery(f.root, changed.manifestPath, { complete: true })).value.complete, true);
+  const defaultAgain = await buildContextDelivery(f.options);
+  assert.equal(defaultAgain.manifest.format, 'freedom.coding-context-manifest/v1');
+  assert(defaultAgain.manifest.sources.every(s => !('canonical_source_index' in s)));
+  assert(defaultAgain.chunks.every(c => !('source_bindings' in c.value)));
+});
+
+test('compact v2 rejects alias forgery and all-fragment corruption before returning text', async t => {
+  const f = await largeContextFixture(t), options = { ...f.options, deliveryFormat: 'compact-v2' };
+  const d = await writeContextDelivery(options), last = d.chunks.at(-1), saved = await readFile(join(f.root, last.path));
+  const read = () => readContextDelivery(f.root, d.manifestPath, { chunkIndex: 0 });
+  await unlink(join(f.root, last.path)); await assert.rejects(read(), { code: 'artifact_missing' });
+  await put(f.root, last.path, 'corrupt'); await assert.rejects(read(), { code: 'context_chunk_mismatch' });
+  await unlink(join(f.root, last.path)); await symlink(join(f.root, d.chunks[0].path), join(f.root, last.path));
+  await assert.rejects(read(), { code: 'artifact_symlink' });
+  await unlink(join(f.root, last.path)); await put(f.root, last.path, saved);
+  for (const mutate of [m => { m.sources[1].canonical_source_index = 2; }, m => { m.sources[1].first_chunk++; },
+    m => { m.sources[1].sha256 = '0'.repeat(64); }, m => { m.sources.pop(); }, m => { m.format = 'freedom.coding-context-manifest/v1'; }]) {
+    const forged = structuredClone(d.manifest); mutate(forged);
+    await put(f.root, d.manifestPath, pretty(forged));
+    await assert.rejects(read(), { code: 'stale_or_modified_context_manifest' });
+  }
+  await put(f.root, d.manifestPath, pretty(d.manifest));
+  const fragment = structuredClone(d.chunks[0].value); fragment.source_bindings.pop();
+  await put(f.root, d.chunks[0].path, pretty(fragment));
+  await assert.rejects(read(), { code: 'context_chunk_mismatch' });
+});
+
+test('compact v2 keeps unknown-scope fallback, missing rules and source freshness failures', async t => {
+  const f = await fixture(t), options = { ...f.options, requestedPaths: ['unknown/runtime.mjs'], deliveryFormat: 'compact-v2' };
+  t.mock.method(console, 'warn', () => {});
+  const d = await writeContextDelivery(options), v1 = await buildContextDelivery({ ...options, deliveryFormat: undefined });
+  assert.deepEqual(d.manifest.selection, v1.manifest.selection); assert.deepEqual(d.context.tests, v1.context.tests);
+  const read = () => readContextDelivery(f.root, d.manifestPath, { complete: true });
+  const old = await readFile(join(f.root, 'docs/rules.md'));
+  await put(f.root, 'docs/rules.md', 'changed'); await assert.rejects(read(), { code: 'stale_or_modified_context_manifest' });
+  await put(f.root, 'docs/rules.md', old);
+  f.git(['checkout', '-q', '-b', 'new-task']); await assert.rejects(read(), { code: 'stale_or_modified_context_manifest' });
+  const fresh = await writeContextDelivery(options);
+  await unlink(join(f.root, 'docs/rules.md'));
+  const missing = await writeContextDelivery(options);
+  assert(missing.context.blockers.includes('instruction_missing'));
+  assert.equal((await readContextDelivery(f.root, missing.manifestPath, { complete: true })).value.complete, false);
+  const next = f.commit(); f.git(['update-ref', 'refs/heads/baseline', next]);
+  await assert.rejects(readContextDelivery(f.root, fresh.manifestPath, { complete: true }), { code: 'stale_or_modified_context_manifest' });
+  await put(f.root, 'docs/rules.md', old);
+  const noBaseline = await writeContextDelivery(options);
+  assert(noBaseline.context.blockers.includes('baseline_instruction_missing'));
+  assert.equal((await readContextDelivery(f.root, noBaseline.manifestPath, { complete: true })).value.complete, false);
+});
+
+test('compact v2 CLI is explicit, bounded and cannot override a saved manifest request', async t => {
+  const f = await fixture(t);
+  const args = ['prepare', '--base-ref', 'baseline', '--scope', 'governance'];
+  const ordinary = contextCli(f.root, args);
+  assert.equal(ordinary.status, 0, ordinary.stdout); assert.equal(JSON.parse(ordinary.stdout).format, 'freedom.coding-context/v1');
+  const result = contextCli(f.root, [...args, '--delivery-format', 'compact-v2']);
+  assert.equal(result.status, 0, result.stdout);
+  const summary = JSON.parse(result.stdout); assert.equal(summary.format, 'freedom.coding-context-manifest/v2');
+  const manifest = JSON.parse(await readFile(join(f.root, summary.context_path)));
+  for (const chunk of manifest.chunks) {
+    const read = contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', String(chunk.index)]);
+    assert.equal(read.status, 0, read.stdout); assert(Buffer.byteLength(read.stdout) <= CONTEXT_LIMITS.artifact_bytes);
+    assert.equal(JSON.parse(read.stdout).format, 'freedom.coding-context-chunk/v2');
+  }
+  for (const extra of [['--delivery-format', 'compact-v3'], ['--delivery-format', 'compact-v2', '--delivery-format', 'compact-v2']]) {
+    assert.equal(contextCli(f.root, [...args, ...extra]).status, 1);
+  }
+  assert.equal(contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', '0', '--delivery-format', 'compact-v2']).status, 1);
+  await assert.rejects(buildContextDelivery({ ...f.options, deliveryFormat: 'unknown' }), { code: 'invalid_context_delivery_format' });
+});
+
+test('compact v2 does not use deduplication to relax input or publication limits', async t => {
+  const f = await fixture(t), options = { ...f.options, scopes: ['governance'], deliveryFormat: 'compact-v2' };
+  await put(f.root, 'docs/rules.md', Buffer.alloc(2_000_001, 65));
+  await assert.rejects(writeContextDelivery(options), { code: 'artifact_size_limit' });
+  await put(f.root, 'docs/rules.md', Buffer.from([0xc0, 0xaf]));
+  await assert.rejects(writeContextDelivery(options), { code: 'invalid_instruction_encoding' });
+  const d = descriptor(); d.instructions = [];
+  for (let i = 0; i < 9; i++) { const path = `docs/large-${i}.md`; d.instructions.push(path); await put(f.root, path, 'x'.repeat(1_800_000)); }
+  await put(f.root, 'docs/rules.md', '# valid\n');
+  await put(f.root, 'packages/contribution-tools/freedom.module.json', pretty(d));
+  f.commit(); f.git(['update-ref', 'refs/heads/baseline', 'HEAD']);
+  await assert.rejects(writeContextDelivery(options), { code: 'context_total_size_limit' });
+  await assert.rejects(readdir(join(f.root, '.freedom/context')), { code: 'ENOENT' });
+});

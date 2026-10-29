@@ -17,6 +17,7 @@ function parseArgs(args) {
     else if (flag === '--scope') options.scopes = value.split(',');
     else if (flag === '--paths') options.requestedPaths = value.split(',');
     else if (flag === '--report' && command === 'verify') report = value;
+    else if (flag === '--delivery-format' && ['prepare', 'context'].includes(command) && value === 'compact-v2') options.deliveryFormat = value;
     else if (flag === '--manifest' && command === 'context') manifestPath = value;
     else if (flag === '--chunk' && command === 'context' && /^(0|[1-9][0-9]{0,3})$/.test(value)) chunkIndex = Number(value);
     else if (flag === '--check' && command === 'context' && value === 'complete') complete = true;
@@ -24,7 +25,7 @@ function parseArgs(args) {
   }
   if (manifestPath || chunkIndex !== undefined || complete) {
     if (!manifestPath || complete === (chunkIndex !== undefined)
-      || ['--base-ref', '--scope', '--paths'].some(flag => seen.has(flag))) throw new VerificationError('invalid_arguments');
+      || ['--base-ref', '--scope', '--paths', '--delivery-format'].some(flag => seen.has(flag))) throw new VerificationError('invalid_arguments');
   }
   return { command, options, report, manifestPath, chunkIndex, complete };
 }
@@ -51,6 +52,7 @@ export async function runFreedomCli(args = process.argv.slice(2), repositoryRoot
     }
     let context;
     try {
+      if (options.deliveryFormat === 'compact-v2') throw new VerificationError('context_size_limit');
       ({ context } = await buildContext({ repositoryRoot, ...options }));
       if (Buffer.byteLength(JSON.stringify(context, null, 2) + '\n') > CONTEXT_LIMITS.bundle_bytes) throw new VerificationError('context_size_limit');
     } catch (error) {
