@@ -97,6 +97,7 @@ export const TESTER_COVERAGE: Record<string, CoverageEntry> = {
   'contrib.private-ai': { status: '未測' },
   // 供貨、商店與訂單
   'shop.supplier': { status: '未測' },
+  'shop.virtual-commerce': { status: '未測' },
   'shop.retail': { status: '未測' },
   'shop.supplier-console': { status: '未測' },
   'shop.stores': { status: '未測' },

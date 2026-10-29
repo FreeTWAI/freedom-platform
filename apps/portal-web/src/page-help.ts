@@ -1,6 +1,7 @@
 /** Human-facing help for the current screen. Development instructions live in the Agent section. */
 export type PageHelp={summary:string;steps:string[];note?:string};
 export const pageHelp:Record<string,PageHelp>={
+  'virtual-commerce':{summary:'用合成測試商品確認講稿與問答的文字彩排流程，不會實際開播。',steps:['載入測試商品，核對並儲存這一版資料，再建立與人工確認講稿。','開始文字彩排，逐段預覽已確認的主講與短答；可隨時暫停、接管或停止。','停止後先按重新開始彩排，再加入新稿或模擬提問；未送出的文字會保留。'],note:'內容只在本頁記憶體，離頁或重新整理即清除；人工確認不等於供應商核准，沒有語音、人物、推流、付款或訂單。'},
   'community-hub':{summary:'自由工坊共同經營的社群入口與參與方向。',steps:['依平台瀏覽社群，選擇想交流的主題。','社群邀請在新分頁開啟。','從我們正在做什麼前往站內原有頁面。'],note:'站內頁面仍依原登入與權限流程開放。'},
   'newbie-village':{summary:'AI 時代定位的新手村任務；所有作答與進度只存在本機。',steps:['閱讀做自己、過生活、用強項三維度。','完成 15 題並檢查分數與公會建議，公會由本人選擇。','寫方向卡，透過既有連結探索公會與小隊，再回顧第一週行動。'],note:'這不是診斷測驗，不向教練或伺服器傳送資料；本機勳章不是 XP 或官方紀錄。'},
 
