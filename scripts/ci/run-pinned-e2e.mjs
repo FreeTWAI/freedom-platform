@@ -244,6 +244,9 @@ async function main() {
       .filter(name => /^[a-z0-9][a-z0-9-]*\.spec\.ts$/.test(name)).map(name => 'tests/e2e/' + name);
     expectedFiles = [...new Set([...E2E_BASELINE, ...found])].sort();
     for (const file of expectedFiles) await readBounded(root, file);
+    // The reviewed spec-only profile also uses this fixed plan registry. It
+    // keeps the full catalog integrity check above and the independent listing
+    // and complete-plan evaluator below; no candidate file/grep flag is added.
     const selected = planE2eSelection(selection.profile, expectedFiles);
     expectedFiles = selected.expectedFiles; plan = selected.plan; profile = selected.profile;
     }
