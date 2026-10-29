@@ -4,7 +4,7 @@ import {z} from 'zod';
 import {OpaqueId} from '../../../../contracts/common/v1/identity';
 import {TenantCreateInputSchema, CreateResultSchema, TenantPageSchema, WorkspacePageSchema, type TenantView, type WorkspaceView} from '../../../../contracts/guild-launchpad/v1/tenant';
 import {ApplicationViewSchema, InstancePageSchema, InstallationPageSchema, InstallationViewSchema, LaunchPlanSchema, PlanInputSchema, LaunchInputSchema, RegistryOperationSchema, type InstanceView, type InstallationView, type LaunchPlan, type RegistryOperation} from '../../../../contracts/guild-launchpad/v1/module-registry';
-import {readActing, rememberActing} from './GuildLaunchpadMyWork';
+import {readActing, rememberActing} from './acting-tenant-storage';
 import {roleLabel} from './TenantSelector';
 import {moduleWord, INSTANCE_STATUS_WORDS} from './module-words';
 import {formatIsoLocal} from '../format';

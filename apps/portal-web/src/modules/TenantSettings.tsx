@@ -1,3 +1,4 @@
+import { readActingTenant as readStored, rememberActing as remember } from './acting-tenant-storage';
 import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import type { InvitationView, InviteRole, MemberView, RecoveryCaseView, TenantView, TransferView, WorkspaceView } from '../../../../contracts/guild-launchpad/v1/tenant';
 import { ApiError, type PortalClient } from '../api';
@@ -21,16 +22,6 @@ function sameRequest(attempt: Attempt, path: string, body: unknown, ifMatch?: st
   return attempt.path === path && JSON.stringify(attempt.body) === JSON.stringify(body) && attempt.ifMatch === ifMatch;
 }
 
-function storedKey(userId: string) { return `freedom-acting-tenant:${userId}`; }
-function readStored(userId: string): string | null {
-  try {
-    const parsed = JSON.parse(sessionStorage.getItem(storedKey(userId)) ?? '') as { tenant_id?: unknown };
-    return typeof parsed.tenant_id === 'string' ? parsed.tenant_id : null;
-  } catch { return null; }
-}
-function remember(userId: string, tenantId: string, workspaceId: string) {
-  try { sessionStorage.setItem(storedKey(userId), JSON.stringify({ tenant_id: tenantId, workspace_id: workspaceId })); } catch { /* The screen still shows the current choice. */ }
-}
 function absoluteWhen(value: string) {
   return new Date(value).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
