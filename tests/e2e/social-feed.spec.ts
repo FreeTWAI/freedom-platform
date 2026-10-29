@@ -145,12 +145,16 @@ test('a note publishes with its image, unusable files are refused before upload,
   await expect(post.getByLabel('貼文選項', {exact: true})).toBeFocused();
   await expect(card(page, text)).toHaveCount(1);
   await page.setViewportSize({width: 390, height: 844});
+  await expect(post.locator('.social-post-menu')).not.toHaveAttribute('open', '');
+  await post.getByLabel('貼文選項', {exact: true}).click();
   await post.getByRole('button', {name: '刪除', exact: true}).click();
   await expect(dialog).toBeVisible();
   expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(390);
   await page.screenshot({path: 'test-results/social-delete-dialog-390.png'});
   await dialog.getByRole('button', {name: '取消', exact: true}).click();
   await expect(dialog).toBeHidden();
+  await expect(post.getByLabel('貼文選項', {exact: true})).toBeFocused();
+  await post.getByLabel('貼文選項', {exact: true}).click();
   await post.getByRole('button', {name: '刪除', exact: true}).click();
   await dialog.getByRole('button', {name: '確定刪除', exact: true}).click();
   await expect(dialog).toBeHidden();

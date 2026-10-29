@@ -4,6 +4,7 @@ import type {PageGuideSupport} from './contracts';
 // Shared content IDs/anchors
 // retain the reviewed product facts, access boundaries and safe focus behavior.
 export const AI_SISTER_PAGE_SUPPORT={
+  'virtual-commerce':DRAGON_PAGE_SUPPORT['virtual-commerce'],
   'community-hub':DRAGON_PAGE_SUPPORT['community-hub'],
   'newbie-village':DRAGON_PAGE_SUPPORT['newbie-village'],
   profile:DRAGON_PAGE_SUPPORT.profile,

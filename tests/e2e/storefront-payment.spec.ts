@@ -391,6 +391,14 @@ test('7. B07 actions with page.route: every §2 outcome row for startPayment and
   const baseDto = await readOrderDtoWithPageCookies(page, p.store.slug, p.order.order_ref);
   const orderPath = `/shops/${p.store.slug}/orders/${p.order.order_ref}`;
   const orderApiPath = `/api/v1/public/stores/${p.store.slug}/orders/${p.order.order_ref}`;
+  const orderApiUrl = new URL(orderApiPath, baseURL).href;
+  // An alert may render before the GET starts; arm this before each action.
+  const waitForOrderReread = async () => {
+    const response = await page.waitForResponse(
+      res => res.url() === orderApiUrl && res.request().method() === 'GET',
+    );
+    expect(await response.finished()).toBeNull();
+  };
 
   let currentOrder = buildVerifiedOrder(baseDto, {
     payment_state: 'unpaid',
@@ -477,12 +485,14 @@ test('7. B07 actions with page.route: every §2 outcome row for startPayment and
     status: 409,
     body: buildVerifiedError(409, 'checkout_hold_expired', '保留時間已結束。'),
   };
+  const orderReread = waitForOrderReread();
   await repayBtn.click();
   await expect(actionSection.getByRole('alert')).toContainText('保留時間已結束，請回到購物車重新下單。');
   await expect(actionSection.getByRole('link', { name: '前往購物車', exact: true })).toHaveAttribute(
     'href',
     `/shops/${p.store.slug}/cart`,
   );
+  await orderReread;
   expect(getOrderCount).toBe(2);
 
   // 2–6. refused codes that re-read the order
@@ -498,8 +508,10 @@ test('7. B07 actions with page.route: every §2 outcome row for startPayment and
       status: 409,
       body: buildVerifiedError(409, code, expectedCopy),
     };
+    const orderReread = waitForOrderReread();
     await repayBtn.click();
     await expect(actionSection.getByRole('alert')).toHaveText(expectedCopy);
+    await orderReread;
     expect(getOrderCount).toBe(beforeGets + 1);
   }
 
@@ -511,10 +523,12 @@ test('7. B07 actions with page.route: every §2 outcome row for startPayment and
       headers: { 'Retry-After': '25' },
       body: buildVerifiedError(409, 'payment_result_pending', '確認中。'),
     };
+    const orderReread = waitForOrderReread();
     await repayBtn.click();
     await expect(actionSection.getByRole('alert')).toHaveText(
       '暫時無法確認這次付款的結果，請不要重複付款。',
     );
+    await orderReread;
     expect(getOrderCount).toBe(beforeGets + 1);
     await expect(repayBtn).toHaveCount(0);
 
@@ -607,10 +621,12 @@ test('7. B07 actions with page.route: every §2 outcome row for startPayment and
       headers: { 'Retry-After': '10' },
       body: buildVerifiedError(409, 'payment_result_pending', '確認中。'),
     };
+    const orderReread = waitForOrderReread();
     await queryBtn.click();
     await expect(paymentSection.getByRole('alert')).toHaveText(
       '暫時無法確認這次付款的結果，請不要重複付款。',
     );
+    await orderReread;
     expect(getOrderCount).toBe(beforeGets + 1);
     await expect(repayBtn).toHaveCount(0);
     await page.clock.runFor(10_000);
@@ -624,8 +640,10 @@ test('7. B07 actions with page.route: every §2 outcome row for startPayment and
       status: 409,
       body: buildVerifiedError(409, 'checkout_not_enabled', '未開放。'),
     };
+    const orderReread = waitForOrderReread();
     await queryBtn.click();
     await expect(paymentSection.getByRole('alert')).toHaveText('這間店目前沒有開放線上付款。');
+    await orderReread;
     expect(getOrderCount).toBe(beforeGets + 1);
   }
 

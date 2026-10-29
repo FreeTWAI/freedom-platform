@@ -1,5 +1,19 @@
 # Foundation Complete 收尾
 
+## 2026-10-29 兩環境已部署 schema194，正式站收尾已對帳
+
+兩環境現為 `5c4bf56d`／schema194。[staging 40798095826](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798095826) 五階段、workflow 與 Deployment 全成功；[正式站 40798978135](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798978135) 的 migration、部署、health 通過，handoff 失去 lease，原 workflow／Deployment 保留 failure。
+01:21Z 唯讀確認 DB／Worker 已更新、journal 只缺 handoff。01:26:20–01:26:55Z，release owner 以本機維運工具重新持有同一 lease，核對原失敗 artifact、193列 ledger、政策摘要、GC OFF、零其他維護 session、Worker／bindings 與公開 health，只透過既有 floor transition 追加缺少的 handoff：generation39→40、pending=null，正常釋放。
+沒有重做 migration、部署或備份，也沒有重設 seed。[具日期收據](rollout-shared-actions-2026-10-29.json)保留原失敗與後續對帳；這次需要人工處理末段，不是完整 hosted 自動成功。發布等待已解除，#1159 可續原整合／CI／審查。
+
+工具採已審 #1162／`f56b6c3a`，[image 40797805357](https://github.com/FreeTWAI/freedom-platform/actions/runs/40797805357) 建置與獨立私人下載驗證成功。兩環境使用同 digest；190–194 已實際套用，新媒體用途仍停用，既有政策保留，只有確認 COMMIT 才推進摘要。部署與日常備份不可降回不相容舊 image。
+四帳號 admin、兩環境 main-only 規則已讀回，沒有只等待 Ted 的 reviewer。從 [Shared release](https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml) 選已驗證完整 SHA，先 staging-next、再同版 next，mode=deploy，recovery 欄位通常留空；日常不必另跑 plan／check／備份。
+本輪操作者為 teddashh，其他三人實際 deploy 另由本人紀錄證明。真人會員旅程、原168項、新旗標啟用與完整自主故障復原仍未驗完；lease 失去的根因與共用 handoff-only 復原入口需接續改善。
+
+本輪 config secret／hash 不一致已修復：同一份 JSON 只移除檔尾1 byte LF，重存 secret 並用相同 bytes 計算摘要，各環境 hosted check 成功。更新設定時建議用無檔尾換行的精確 UTF-8 bytes，避免存入工具處理換行後與摘要不同；安裝後 check 一次，日常 deploy 已內建相同檢查。
+舊程序實際中斷於10/28 09:27Z、未發出 mutation，本輪不再以「程序正在跑」代替真實發布證據。
+10/28 自然備份40681260401在開始前因 config pin 不符被拒，原失敗保留；新 image 自然備份尚未觀察，舊 timer 相容與退役沿原維運線處理，不加入發布前置。旗標無變更。
+
 本輪固定研究來源為 `567ae8d3849cfaa319b79c42d9c6c0a48d76f4a9`（包含 #129）。
 目前仍未完成共同基礎 sprint。保留 React／Hono／Workers／PostgreSQL／R2，
 暫停非必要功能擴張，按原需求收尾。

@@ -1,0 +1,663 @@
+{
+  "format": "freedom.shared-actions-rollout-observation/v1",
+  "recorded_at": "2026-10-29T01:26:55.398Z",
+  "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+  "previous_live_source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
+  "controller_source": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
+  "scope": "Both environments serve the release. Staging workflow passed; production workflow and Deployment remain failed because handoff lost its lease. A later local release-owner reconciliation verified live state and appended only the missing handoff. Member journeys, new feature activation, other accounts actual deploys and original 168 requirements are not established.",
+  "release_source_ci": [
+    {
+      "workflow": ".github/workflows/verify.yml",
+      "runId": 40616306774,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40616306774/attempts/1"
+    },
+    {
+      "workflow": ".github/workflows/codeql.yml",
+      "runId": 40616306735,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40616306735/attempts/1"
+    }
+  ],
+  "operator_source_ci": [
+    {
+      "workflow": ".github/workflows/verify.yml",
+      "runId": 40665150685,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40665150685/attempts/1"
+    },
+    {
+      "workflow": ".github/workflows/codeql.yml",
+      "runId": 40665150671,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40665150671/attempts/1"
+    }
+  ],
+  "operator_review": {
+    "pr": 1162,
+    "head": "010f9af8a31e480809b6fd484a82c87a3aa781b2",
+    "reviewer": "detna-vibe-coding",
+    "reviewed_at": "2026-10-28T09:32:36Z",
+    "merge_sha": "f56b6c3a25ffd98fc974e0e44679b447841e2f50"
+  },
+  "operator_image_build": {
+    "run": 40797805357,
+    "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40797805357",
+    "image": "ghcr.io/freetwai/freedom-release-operator@sha256:7094c922275b7ec6490c0982fdb70119d8287d9b957519813233fb3fa809780c",
+    "image_and_independent_private_pull": "passed"
+  },
+  "config_repair": {
+    "startedAt": "2026-10-29T00:58:16.788Z",
+    "reason": "hosted_config_pin_mismatch_40681260401",
+    "semanticChanges": false,
+    "frontier": 194,
+    "operations": [
+      {
+        "target": "staging-next",
+        "previousHash": "b87f120954568128b1373e5d6d73c184cf48e2c05724dd4b61fcbd2e1377505b",
+        "configSha256": "59496b70106455dc1f593c0c0bef2eeaf24eac616bfe74a1842494d444664727",
+        "removedTrailingBytes": 1,
+        "status": "installed_awaiting_hosted_check",
+        "automaticRetry": false
+      },
+      {
+        "target": "next",
+        "previousHash": "d4c8c55a5b4c2df743f3d74471bc3cca66e87dbec34cc695147bc62dc8e6a6d0",
+        "configSha256": "d713fc8aa26f0728169782cc7dc4f51ad8a724ba5e25d10195b4e72b3e3d18bf",
+        "removedTrailingBytes": 1,
+        "status": "installed_awaiting_hosted_check",
+        "automaticRetry": false
+      }
+    ],
+    "status": "both_installed_awaiting_hosted_check",
+    "completedAt": "2026-10-29T00:58:20.385Z"
+  },
+  "environment_checks": [
+    {
+      "target": "staging-next",
+      "runId": 40797550549,
+      "artifactId": 12864965359,
+      "artifactDigest": "sha256:8f631338e9f08b9cffc6715e309492924d67c87ddcf8f2f6f61b6879a338fd3c",
+      "status": "passed",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40797550549",
+      "configSha256": "59496b70106455dc1f593c0c0bef2eeaf24eac616bfe74a1842494d444664727",
+      "checks": [
+        {
+          "name": "cloudflare_account_token",
+          "status": "passed"
+        },
+        {
+          "name": "worker_routes_and_hyperdrive",
+          "status": "passed"
+        },
+        {
+          "name": "media_object_listing",
+          "status": "passed"
+        },
+        {
+          "name": "backup_object_listing",
+          "status": "passed"
+        },
+        {
+          "name": "staging_access_health",
+          "status": "passed"
+        }
+      ],
+      "providerOutcome": "no_mutations"
+    },
+    {
+      "target": "next",
+      "runId": 40797674064,
+      "artifactId": 12864093828,
+      "artifactDigest": "sha256:50f9d1080a3712c5f2f52674c169a28e40d277ff6edc30d59c36944095be1c3f",
+      "status": "passed",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40797674064",
+      "configSha256": "d713fc8aa26f0728169782cc7dc4f51ad8a724ba5e25d10195b4e72b3e3d18bf",
+      "checks": [
+        {
+          "name": "cloudflare_account_token",
+          "status": "passed"
+        },
+        {
+          "name": "worker_routes_and_hyperdrive",
+          "status": "passed"
+        },
+        {
+          "name": "media_object_listing",
+          "status": "passed"
+        },
+        {
+          "name": "backup_object_listing",
+          "status": "passed"
+        },
+        {
+          "name": "public_health",
+          "status": "passed"
+        }
+      ],
+      "providerOutcome": "no_mutations"
+    }
+  ],
+  "deployments": {
+    "staging-next": {
+      "format": "freedom.shared-release/v1",
+      "status": "passed",
+      "startedAt": "2026-10-29T01:04:40.179Z",
+      "phases": [
+        {
+          "name": "preflight",
+          "status": "passed",
+          "startedAt": "2026-10-29T01:05:04.874Z",
+          "completedAt": "2026-10-29T01:05:43.441Z"
+        },
+        {
+          "name": "migration",
+          "status": "passed",
+          "startedAt": "2026-10-29T01:05:43.484Z",
+          "completedAt": "2026-10-29T01:10:40.793Z"
+        },
+        {
+          "name": "deploy",
+          "status": "passed",
+          "flagChanges": [],
+          "startedAt": "2026-10-29T01:10:40.795Z",
+          "completedAt": "2026-10-29T01:11:12.535Z"
+        },
+        {
+          "name": "health",
+          "status": "passed",
+          "startedAt": "2026-10-29T01:11:12.537Z",
+          "completedAt": "2026-10-29T01:11:33.750Z"
+        },
+        {
+          "name": "handoff",
+          "status": "passed",
+          "startedAt": "2026-10-29T01:11:33.751Z",
+          "completedAt": "2026-10-29T01:11:44.685Z"
+        }
+      ],
+      "providerOutcome": "release_confirmed",
+      "repository": "FreeTWAI/freedom-platform",
+      "repositoryId": 1378081342,
+      "sourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+      "target": "staging-next",
+      "mode": "deploy",
+      "releaseKind": "independent",
+      "controllerSha": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
+      "actor": "teddashh",
+      "actorId": 233386770,
+      "triggeringActor": "teddashh",
+      "runId": 40798095826,
+      "runAttempt": 1,
+      "sourceTree": "3b2b28ebea8cbd389b49d8984824949c3c58bf82",
+      "mainShaObserved": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
+      "original": {
+        "login": "teddashh",
+        "id": 233386770
+      },
+      "triggeredBy": {
+        "login": "teddashh",
+        "id": 233386770
+      },
+      "verification": [
+        {
+          "workflow": ".github/workflows/verify.yml",
+          "runId": 40616306774,
+          "attempt": 1,
+          "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40616306774/attempts/1"
+        },
+        {
+          "workflow": ".github/workflows/codeql.yml",
+          "runId": 40616306735,
+          "attempt": 1,
+          "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40616306735/attempts/1"
+        }
+      ],
+      "admittedAt": "2026-10-29T01:04:43.431Z",
+      "flagChanges": [],
+      "flagChangesObservation": "live",
+      "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:7094c922275b7ec6490c0982fdb70119d8287d9b957519813233fb3fa809780c",
+      "configSha256": "59496b70106455dc1f593c0c0bef2eeaf24eac616bfe74a1842494d444664727",
+      "deploymentId": 7401281748,
+      "operatorProgress": [
+        {
+          "name": "preflight",
+          "reportedStatus": "passed",
+          "flagChanges": []
+        },
+        {
+          "name": "migration",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "deploy",
+          "reportedStatus": "passed",
+          "flagChanges": []
+        },
+        {
+          "name": "health",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "handoff",
+          "reportedStatus": "running"
+        }
+      ],
+      "operatorEvidence": "validated-independent-release/v1",
+      "completedAt": "2026-10-29T01:11:45.864Z",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40798095826",
+      "artifactId": 12865162027,
+      "artifactDigest": "sha256:e4c94f96c460bca8e06f40a790b9232af01f19369b230dd99ae670f3a676b42d",
+      "githubDeploymentState": "success"
+    },
+    "next": {
+      "format": "freedom.shared-release/v1",
+      "status": "failed",
+      "startedAt": "2026-10-29T01:13:09.781Z",
+      "phases": [],
+      "providerOutcome": "unknown_until_confirmed",
+      "repository": "FreeTWAI/freedom-platform",
+      "repositoryId": 1378081342,
+      "sourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+      "target": "next",
+      "mode": "deploy",
+      "releaseKind": "independent",
+      "controllerSha": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
+      "actor": "teddashh",
+      "actorId": 233386770,
+      "triggeringActor": "teddashh",
+      "runId": 40798978135,
+      "runAttempt": 1,
+      "sourceTree": "3b2b28ebea8cbd389b49d8984824949c3c58bf82",
+      "mainShaObserved": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
+      "original": {
+        "login": "teddashh",
+        "id": 233386770
+      },
+      "triggeredBy": {
+        "login": "teddashh",
+        "id": 233386770
+      },
+      "verification": [
+        {
+          "workflow": ".github/workflows/verify.yml",
+          "runId": 40616306774,
+          "attempt": 1,
+          "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40616306774/attempts/1"
+        },
+        {
+          "workflow": ".github/workflows/codeql.yml",
+          "runId": 40616306735,
+          "attempt": 1,
+          "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40616306735/attempts/1"
+        }
+      ],
+      "admittedAt": "2026-10-29T01:13:12.970Z",
+      "flagChanges": [],
+      "flagChangesObservation": "live",
+      "operatorImage": "ghcr.io/freetwai/freedom-release-operator@sha256:7094c922275b7ec6490c0982fdb70119d8287d9b957519813233fb3fa809780c",
+      "configSha256": "d713fc8aa26f0728169782cc7dc4f51ad8a724ba5e25d10195b4e72b3e3d18bf",
+      "stagingEvidence": {
+        "deploymentId": 7401281748,
+        "runId": 40798095826,
+        "runAttempt": 1,
+        "controllerSha": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
+        "artifactId": 12865162027,
+        "artifactDigest": "sha256:e4c94f96c460bca8e06f40a790b9232af01f19369b230dd99ae670f3a676b42d"
+      },
+      "deploymentId": 7401410854,
+      "operatorProgress": [
+        {
+          "name": "preflight",
+          "reportedStatus": "passed",
+          "flagChanges": []
+        },
+        {
+          "name": "migration",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "deploy",
+          "reportedStatus": "passed",
+          "flagChanges": []
+        },
+        {
+          "name": "health",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "handoff",
+          "reportedStatus": "failed",
+          "failureCode": "release_lease_lost"
+        }
+      ],
+      "error": "release_operator_process_failed",
+      "completedAt": "2026-10-29T01:20:20.263Z",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40798978135",
+      "artifactId": 12865850257,
+      "artifactDigest": "sha256:84028133c55d4ef168c7642685ebcc3f1bb3dacd512330ee185bbfdb31458b4b",
+      "githubDeploymentState": "failure",
+      "followupReadback": {
+        "observedAt": "2026-10-29T01:21:09.038Z",
+        "target": "next",
+        "failedRun": 40798978135,
+        "failedAttempt": 1,
+        "readOnlyExceptAdvisoryLease": true,
+        "remoteWrites": 0,
+        "httpStatuses": {
+          "200": 44
+        },
+        "getCount": 44,
+        "journal": {
+          "generation": 39,
+          "sha256": "1d90e9819cc837209b86c294c6271079d8f69b6c1103d34e06f55ee11e2c38c6",
+          "sourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+          "deployedSourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+          "pending": {
+            "kind": "code",
+            "runId": 40798978135,
+            "stage": 3,
+            "intents": [
+              "migration:commit",
+              "deploy:publish"
+            ]
+          },
+          "recordsForFailedRelease": 7
+        },
+        "completedJournal": {
+          "kind": "passed",
+          "stage": "health",
+          "runId": 40798978135,
+          "proof": {
+            "sourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+            "statusCode": 200,
+            "smokePassed": true,
+            "attempts": 1,
+            "schemaVerified": true
+          }
+        },
+        "releaseRecords": [
+          {
+            "generation": 33,
+            "kind": "release-begin-v2"
+          },
+          {
+            "generation": 34,
+            "kind": "intent",
+            "stage": "migration",
+            "operation": "commit"
+          },
+          {
+            "generation": 35,
+            "kind": "committed",
+            "stage": "migration"
+          },
+          {
+            "generation": 36,
+            "kind": "passed",
+            "stage": "migration",
+            "proof": {
+              "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+              "database": "freedom_next",
+              "transactionId": "1111518",
+              "applied": [
+                "190_google_identity.sql",
+                "191_member_profile_publications.sql",
+                "192_member_profile_customization.sql",
+                "193_member_community_certifications.sql",
+                "194_social_achievements.sql"
+              ],
+              "outcome": "committed",
+              "commitStatus": "confirmed",
+              "ledgerVerified": true,
+              "runtimeGrantsVerified": true,
+              "probes": [
+                {
+                  "role": "freedom_next_app",
+                  "readOnly": true,
+                  "tables": 349
+                }
+              ],
+              "automaticRetry": false,
+              "ledgerSha256": "e109e0d5945013591c877f1447e293305d74acb7829563fc875317b7344bd5ee"
+            }
+          },
+          {
+            "generation": 37,
+            "kind": "intent",
+            "stage": "deploy",
+            "operation": "publish"
+          },
+          {
+            "generation": 38,
+            "kind": "passed",
+            "stage": "deploy",
+            "proof": {
+              "sourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+              "providerConfirmed": true,
+              "versionId": "45ed5796-1213-42f1-8680-e108034f743d",
+              "observations": 1,
+              "bindingsSha256": "376580f5735bb01dd6340dcd810fcf00049c992faafaf3441cc2af23ca7ff2b6",
+              "flagChanges": []
+            }
+          },
+          {
+            "generation": 39,
+            "kind": "passed",
+            "stage": "health",
+            "proof": {
+              "sourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+              "statusCode": 200,
+              "smokePassed": true,
+              "attempts": 1,
+              "schemaVerified": true
+            }
+          }
+        ],
+        "databaseVerified": true,
+        "worker": {
+          "sourceSha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+          "bindingsUnchanged": true
+        },
+        "leaseReleased": true,
+        "status": "deployed_source_confirmed_pending_handoff",
+        "retryScope": "Readback only; inspect whether handoff is complete. No migration or deployment repeated.",
+        "completedAt": "2026-10-29T01:21:22.223Z"
+      },
+      "handoffReconciliation": {
+        "format": "freedom.manual-release-handoff-reconciliation/v1",
+        "startedAt": "2026-10-29T01:26:20.839Z",
+        "failedRun": 40798978135,
+        "target": "next",
+        "actor": "teddashh",
+        "actorId": 233386770,
+        "executionOrigin": "local_release_owner_incident_reconciliation",
+        "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+        "automaticRetry": false,
+        "originalWorkflowFailureRetained": true,
+        "originalGitHubDeploymentFailureRetained": true,
+        "databasePersistentWrites": 0,
+        "providerDeploymentWrites": 0,
+        "journalAppendCount": 1,
+        "status": "deployed_release_handoff_reconciled_original_failure_retained",
+        "failedArtifact": {
+          "id": 12865850257,
+          "digest": "sha256:84028133c55d4ef168c7642685ebcc3f1bb3dacd512330ee185bbfdb31458b4b"
+        },
+        "before": {
+          "generation": 39,
+          "sha256": "1d90e9819cc837209b86c294c6271079d8f69b6c1103d34e06f55ee11e2c38c6",
+          "pendingStage": 3,
+          "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+          "throughSchema": 194,
+          "ledgerRows": 193
+        },
+        "databaseVerified": true,
+        "materialPolicyVerified": true,
+        "gcDisabled": true,
+        "otherMaintenanceSessions": 0,
+        "workerVerified": true,
+        "publicHealth": {
+          "observedAt": "2026-10-29T01:26:40.201Z",
+          "http": 200,
+          "status": "ok",
+          "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d"
+        },
+        "after": {
+          "generation": 40,
+          "sha256": "fd5ec2076e0586133455f68d5aab8a1d7687c3450b555fdae6fe130e3e8a4370",
+          "pending": null
+        },
+        "leaseReleased": true,
+        "completedAt": "2026-10-29T01:26:55.398Z"
+      },
+      "observedReleaseStatus": "deployed_handoff_reconciled_original_workflow_failed"
+    }
+  },
+  "production_health": {
+    "observedAt": "2026-10-29T01:26:40.201Z",
+    "http": 200,
+    "status": "ok",
+    "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d"
+  },
+  "access_readback": {
+    "observedAt": "2026-10-29T01:01:22.180Z",
+    "operators": [
+      {
+        "login": "teddashh",
+        "expectedId": 233386770,
+        "observedId": 233386770,
+        "permission": "admin"
+      },
+      {
+        "login": "arumwu",
+        "expectedId": 75135621,
+        "observedId": 75135621,
+        "permission": "admin"
+      },
+      {
+        "login": "Hao0321",
+        "expectedId": 126182090,
+        "observedId": 126182090,
+        "permission": "admin"
+      },
+      {
+        "login": "detna-vibe-coding",
+        "expectedId": 267743027,
+        "observedId": 267743027,
+        "permission": "admin"
+      }
+    ],
+    "environments": [
+      {
+        "target": "staging-next",
+        "protectionRules": [
+          "branch_policy"
+        ],
+        "branchPolicy": {
+          "protected_branches": false,
+          "custom_branch_policies": true
+        },
+        "branches": [
+          {
+            "name": "main",
+            "type": "branch"
+          }
+        ]
+      },
+      {
+        "target": "next",
+        "protectionRules": [
+          "branch_policy"
+        ],
+        "branchPolicy": {
+          "protected_branches": false,
+          "custom_branch_policies": true
+        },
+        "branches": [
+          {
+            "name": "main",
+            "type": "branch"
+          }
+        ]
+      }
+    ]
+  },
+  "schema": {
+    "previous": 189,
+    "through_number": 194,
+    "ledger_rows": 193,
+    "applied": [
+      "migrations/190_google_identity.sql",
+      "migrations/191_member_profile_publications.sql",
+      "migrations/192_member_profile_customization.sql",
+      "migrations/193_member_community_certifications.sql",
+      "migrations/194_social_achievements.sql"
+    ],
+    "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+    "known_number_gaps": [
+      22
+    ],
+    "evidence_kind": "hosted_confirmed_migration_and_later_production_readback",
+    "policy_addition": "member.profile-cover remains default-disabled; prior rows and GC preserved; confirmed COMMIT advances policy digest",
+    "operator_compatibility": "Keep compatible image for release and daily backup; never downgrade the policy-transition journal to the old operator."
+  },
+  "feature_flag_changes": [],
+  "backup": {
+    "ordinary_release_requires_backup": false,
+    "new_backup_started": false,
+    "daily_cron_utc": "43 5 * * *",
+    "latest_observed_natural_failure": {
+      "run": 40681260401,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/40681260401",
+      "receipts": [
+        {
+          "artifactId": 12813017277,
+          "artifactDigest": "sha256:38c93b8bae4bd1714ae0635ec610593992ea2addf96b3a2d2beadaf19a9581a6",
+          "name": "backup-result-staging-next-40681260401-1",
+          "receipt": {
+            "format": "freedom.shared-backup/v1",
+            "status": "failed",
+            "phases": [],
+            "startedAt": "2026-10-28T11:36:41.621Z",
+            "providerOutcome": "not_started",
+            "error": "release_config_pin_mismatch",
+            "completedAt": "2026-10-28T11:36:42.882Z"
+          }
+        },
+        {
+          "artifactId": 12812498513,
+          "artifactDigest": "sha256:2649a46b096068a190ae4d275817a70cf02266c25015d4f500f751868d519f46",
+          "name": "backup-result-next-40681260401-1",
+          "receipt": {
+            "format": "freedom.shared-backup/v1",
+            "status": "failed",
+            "phases": [],
+            "startedAt": "2026-10-28T11:37:00.196Z",
+            "providerOutcome": "not_started",
+            "error": "release_config_pin_mismatch",
+            "completedAt": "2026-10-28T11:37:00.920Z"
+          }
+        }
+      ]
+    },
+    "new_image_natural_success": "not_observed",
+    "legacy_timer_compatibility": "not_checked_this_run_original_operations_owner"
+  },
+  "continuation": {
+    "prior_process": "exited_before_any_mutation",
+    "last_prior_observation": "2026-10-28T09:27:46.073Z",
+    "resumed_at": "2026-10-29T00:58:49.199Z",
+    "automatic_mutation_retries": 0
+  },
+  "actual_deploy_operators_observed": [
+    "teddashh"
+  ],
+  "personal_keys_distributed": false,
+  "open_followups": [
+    "Exact cause of production lease loss is not established.",
+    "Shared Actions lacks a handoff-only reconciliation path; this incident needed a local release owner.",
+    "New image natural backup and legacy timer handoff remain separate."
+  ],
+  "limitation": "Both environments serve the release. Staging workflow passed; production workflow and Deployment remain failed because handoff lost its lease. A later local release-owner reconciliation verified live state and appended only the missing handoff. Member journeys, new feature activation, other accounts actual deploys and original 168 requirements are not established."
+}
