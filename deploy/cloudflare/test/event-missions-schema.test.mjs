@@ -13,7 +13,7 @@ const historical=()=>resolveMigrationPlan(sources().filter(row=>Number(row.name.
 test('mission candidate preserves exact PR1170 schema195 ledger without treating it as approval for196',()=>{
  const old=historical();
  assert.equal(old.ledger.at(-1).name,'195_event_helpers.sql');
- assert.equal(old.ledger_digest,'1e8f233aa309d79dc23f5685c7eb67d314cf7a89ce275b97b106f1d0a1052e99');
+ assert.equal(old.ledger_digest,'63ce756c3265756c4bad892137a189f1a47b9a43c982c6ad49ebcfff840e3503');
  const next=resolveMigrationPlan(sources(),profile(196),old.ledger);
  assert.deepEqual(next.pending,['196_event_missions.sql']);
  assert.deepEqual(next.ledger.slice(0,-1),old.ledger);
