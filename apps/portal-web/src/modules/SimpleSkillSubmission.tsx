@@ -26,18 +26,11 @@ function manualSubmission(value: unknown): Submission {
   return item;
 }
 
-// Immediate field feedback only; the API remains authoritative for source,
-// licensing, membership and all writes.
+// Required text feedback only; repository URL policy, source and licensing
+// are checked by the API so valid URL syntax can reach its authoritative errors.
 function validateField(field: HTMLInputElement | HTMLTextAreaElement) {
   const value = field.value.trim();
-  let message = field.required && !value ? '請填寫這個欄位，不能只有空白。' : '';
-  if (value && field.name === 'repository_url') {
-    try {
-      const url = new URL(value), name = url.pathname.replace(/^\//, '').replace(/\/$/, '').replace(/\.git$/, '');
-      if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.port || url.username || url.password || url.search || url.hash
-        || !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]{1,100}$/.test(name) || name.split('/').some(part => part === '.' || part === '..')) throw Error();
-    } catch { message = '請使用 https://github.com/擁有者/儲存庫，不接受檔案網址。'; }
-  }
+  const message = field.required && !value ? '請填寫這個欄位，不能只有空白。' : '';
   field.setCustomValidity(message);
 }
 
@@ -86,7 +79,8 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
           const payload = item.payload;
           setResumedAdvanced(false);
           setDraft({ ...payload, demo_url: payload.demo_url ?? '' });
-          setSaved(item); setPublished(null); setPublishAttempted(false); setConsent(false); setReview(true); setError(null);
+          // Resumed drafts retain the existing retry label; consent is always renewed.
+          setSaved(item); setPublished(null); setPublishAttempted(true); setConsent(false); setReview(true); setError(null);
         }
         setResumedId(resumeId);
       }).catch(cause => { if (live()) setLoadError(cause instanceof Error ? cause.message : '私人投稿暫時無法載入。'); });
@@ -107,7 +101,7 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
     if (!item.payload || pending || saveUnknown || publishUnknown || !current()) return;
     const payload = item.payload;
     setDraft({ repository_url: payload.repository_url, title: payload.title, description: payload.description, use_notes: payload.use_notes, demo_url: payload.demo_url ?? '', relationship: payload.relationship });
-    setSaved(item); setPublished(null); setPublishAttempted(false); setError(null); setConsent(false); setReview(true);
+    setSaved(item); setPublished(null); setPublishAttempted(true); setError(null); setConsent(false); setReview(true);
   }
   function draftBody() {
     return {
@@ -133,6 +127,7 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
         setSaveUnknown(saveUnknown || sharingMutationState({ userId, type: 'skill' }).snapshot.lastFailureUnknown);
         return;
       }
+      if (submission.payload) setDraft({ ...submission.payload, demo_url: submission.payload.demo_url ?? '' });
       setSaved(submission); setSaveUnknown(false); setPublished(null); setConsent(false); setReview(true);
       void loadDrafts();
     } finally { lock.current = false; if (current()) { setWorking(false); setSaving(false); } }
@@ -142,8 +137,15 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
     if (lock.current || pending || saveUnknown || !consent || !current()) return;
     lock.current = true; setWorking(true);
     try {
-      const submission = await persistDraft();
-      if (!submission || !current()) return;
+      // An unknown publish may already have advanced the server version. Replay
+      // that exact publish tuple before attempting any revision of the draft.
+      const submission = publishUnknown ? saved : await persistDraft();
+      if (!current()) return;
+      if (!submission) {
+        setSaveUnknown(sharingMutationState({ userId, type: 'skill' }).snapshot.lastFailureUnknown);
+        return;
+      }
+      if (submission.payload) setDraft({ ...submission.payload, demo_url: submission.payload.demo_url ?? '' });
       setSaved(submission);
       setPublishAttempted(true);
       setLastCommand('publish');
@@ -161,7 +163,7 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
   async function withdraw() {
     if (!saved || pending || saveUnknown || publishUnknown) return;
     const result = await upgrade.mutate<Submission>(`/me/skill-submissions/${encodeURIComponent(saved.submission_id)}/revoke`, {}, Number(saved.aggregate_version));
-    if (result) { setSaved(null); setReview(false); setConsent(false); await loadDrafts(); }
+    if (result) { setSaved(null); setPublishAttempted(false); setReview(false); setConsent(false); await loadDrafts(); }
   }
   async function copyLink() {
     const path = published ? skillPublicationPath(published) : null;
@@ -187,7 +189,7 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
       <p className="hint">確認後即公開為社群技能書。系統會讀取 GitHub 的公開版本與授權；來源關係仍為本人自行聲明。</p>
       <label className="choice"><input type="checkbox" required checked={consent} disabled={pending} onChange={event => setConsent(event.target.checked)}/>我同意公開這份作品介紹與來源關係</label>
       <div className="actions"><button className="btn btn-primary" disabled={pending || saveUnknown || !consent}>{pending ? saving ? '正在儲存私人草稿…' : '正在確認公開來源與授權…' : publishAttempted ? '重試公開投稿' : '確認並公開'}</button>{(!saved || saved.can_edit) && <button type="button" className="btn btn-ghost" disabled={pending || saveUnknown || publishUnknown} onClick={() => { setReview(false); setError(null); }}>修改內容</button>}</div>
-      {saved && <p role="status" className="hint">{publishUnknown || (publishAttempted && pending) ? '已保存草稿；公開結果尚未確認，請先確認原公開操作。' : '已保存私人草稿，待本人預覽；尚未送審或公開，來源與授權尚未核可。可稍後從下方草稿繼續。'}</p>}
+      {saved && <p role="status" className="hint">{publishUnknown || (lastCommand === 'publish' && pending) ? '已保存草稿；公開結果尚未確認，請先確認原公開操作。' : '已保存私人草稿，待本人預覽；尚未送審或公開，來源與授權尚未核可。可稍後從下方草稿繼續。'}</p>}
       {saved && <div className="actions"><button type="button" className="btn btn-ghost" disabled={pending || saveUnknown || publishUnknown || upgrade.busy} onClick={() => void withdraw()}>撤銷這份私人投稿</button></div>}
     </form> : <form className="stack" onSubmit={event => {
       event.currentTarget.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach(validateField);
