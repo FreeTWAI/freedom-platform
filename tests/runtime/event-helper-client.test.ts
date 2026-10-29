@@ -87,14 +87,39 @@ test('organizer list and decisions use the application version; members never re
 });
 
 const parent=readFileSync('apps/portal-web/src/modules/EventsPanel.tsx','utf8');
-test('actual parent departure and beforeunload guards preserve unknown helper operations and dirty drafts',()=>{
-  const start=parent.indexOf('  leaveGuard.current=()=>{'),end=parent.indexOf('  const acceptedLocation',start);assert.ok(start>=0&&end>start);
-  let confirms=0;const context:any={leaveGuard:{current:null},helperBlocked:{current:true},saving:false,busy:false,mediaUnknown:false,lastFailureUnknown:false,dirty:false,setNotice:()=>{},window:{confirm:()=>{confirms++;return false;}}};
-  runInNewContext(transformSync(parent.slice(start,end),{loader:'tsx'}).code,context);assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,0);
-  context.helperBlocked.current=false;context.dirty=true;assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,1);context.dirty=false;assert.equal(context.leaveGuard.current(),true);
-  const from=parent.indexOf('    const beforeUnload='),to=parent.indexOf('\n',from);assert.ok(from>=0&&to>from);
-  const guard=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.guard=beforeUnload',{loader:'tsx'}).code+';guard',{unloading:{current:false},helperBlocked:{current:true}});
-  let prevented=false;const event={preventDefault(){prevented=true;},returnValue:undefined};guard(event);assert.equal(prevented,true);assert.equal(event.returnValue,'');
+test('actual parent departure and beforeunload guards preserve unknown helper/mission operations and dirty drafts',()=>{
+  const start=parent.indexOf('  leaveGuard.current=()=>{');
+  const end=parent.indexOf('  const acceptedLocation',start);
+  assert.ok(start>=0&&end>start);
+  let confirms=0;
+  const context:any={
+    leaveGuard:{current:null},helperBlocked:{current:true},missionBlocked:{current:false},
+    saving:false,busy:false,mediaUnknown:false,lastFailureUnknown:false,dirty:false,
+    setNotice:()=>{},window:{confirm:()=>{confirms++;return false;}},
+  };
+  runInNewContext(transformSync(parent.slice(start,end),{loader:'tsx'}).code,context);
+  assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,0);
+  context.helperBlocked.current=false;
+  context.missionBlocked.current=true;
+  assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,0);
+  context.missionBlocked.current=false;
+  context.dirty=true;
+  assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,1);
+  context.dirty=false;assert.equal(context.leaveGuard.current(),true);
+  const from=parent.indexOf('    const beforeUnload=');
+  const to=parent.indexOf('\n',from);assert.ok(from>=0&&to>from);
+  const unloadContext={unloading:{current:false},helperBlocked:{current:true},missionBlocked:{current:false}};
+  const guard=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.guard=beforeUnload',{loader:'tsx'}).code+';guard',unloadContext);
+  const attempt=()=>{
+    let prevented=false;
+    const event={preventDefault(){prevented=true;},returnValue:undefined};
+    guard(event);return {prevented,returnValue:event.returnValue};
+  };
+  assert.deepEqual(attempt(),{prevented:true,returnValue:''});
+  unloadContext.helperBlocked.current=false;unloadContext.missionBlocked.current=true;
+  assert.deepEqual(attempt(),{prevented:true,returnValue:''});
+  unloadContext.missionBlocked.current=false;
+  assert.deepEqual(attempt(),{prevented:false,returnValue:undefined});
 });
 
 test('hidden private helper data is cleared and visibility/focus require a fresh authorized read',async()=>{
