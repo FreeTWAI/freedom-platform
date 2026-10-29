@@ -258,7 +258,7 @@ test('UX-15c: preview back and an initial renderer failure preserve another unfi
   test.setTimeout(90000);await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');
   await page.getByRole('button',{name:'← 大廳',exact:true}).click();
   const saved=await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY);expect(JSON.parse(saved!).run.recipe).toBe('corn-dog');
-  await page.getByRole('button',{name:'開始製作香煎牛排',exact:true}).click();await expect(page.getByRole('button',{name:'開火，開始做！',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'開始製作香煎牛排',exact:true}).click();await expectNativeMarketReady(page);
   await page.getByRole('button',{name:'← 大廳',exact:true}).click();expect(await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY)).toBe(saved);
   await page.route('**/assets/market-stage-*.js',r=>r.abort());await page.goto('/play?game=kitchen&recipe=steak-dinner&seed=42');
   await expect(page.locator('.mk-error')).toContainText('3D暫時無法開啟');expect(await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY)).toBe(saved);

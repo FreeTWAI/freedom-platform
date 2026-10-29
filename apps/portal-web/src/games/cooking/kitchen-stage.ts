@@ -52,7 +52,9 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    g.scale.setScalar(size);bakeRigidGroup(g,stepGeometry);return g;
   }
   function mitten(p:Group){const g=group(p);ball(g,C.mint,0,0,0,.55,.22,.57);for(let i=0;i<4;i++)ball(g,C.mint,(i-1.5)*.25,0,.49,.16,.18,.23);ball(g,C.red,0,.2,.12,.22,.03,.25);rb(g,C.cream,0,-.01,-.6,.64,.3,.4);bakeRigidGroup(g,stepGeometry);return g;}
-  function build(run:CookingRun){openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,.7,.1);objects=null;return;}camera.lookAt(0,0,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
+  let lastMix:{amount:number;x:number|undefined;y:number|undefined}|null=null;
+  let lastKnead:{held:number;motion:boolean}|null=null;
+  function build(run:CookingRun){lastKnead=null;lastMix=null;openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,.7,.1);objects=null;return;}camera.lookAt(0,0,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
    if(['slice','knead','fold'].includes(s.kind)){rb(body,C.edge,0,.04,.1,6.4,.28,4.5);rb(body,'#e7bd84',0,.2,.1,6.1,.08,4.2);rb(body,'#d1a56d',-2.68,.25,.1,.05,.012,3.5);}
    if(s.kind==='slice'){for(let i=0;i<Math.min(8,s.goal);i++){const p=food(body,s.shape,.95);p.position.set(-1.9+i*3.8/(s.goal-1),.28,.05);pieces.push(p);}rb(tool,C.dark,0,.25,-.7,.23,.2,.9);rb(tool,'#bec4bd',0,.22,.18,.19,.07,1.25);rb(tool,C.cream,0,.37,-.62,.07,.02,.43);}
    if(s.kind==='knead'){pieces.push(food(body,'dough',3.8));pieces[0].position.set(0,.26,.1);mitten(tool);}
@@ -71,8 +73,8 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
   const baked=new Color('#bd864b'),burnt=new Color('#805335');
   function syncMaterialSides(run:CookingRun){
    // Keep open bowls (and meshes sharing their material) two-sided. Only the
-   // closed pan/boil/bake surfaces are culled; the original shadow pass stays two-sided.
-   const cull=run.status!=='done'&&['pan','boil','bake'].includes(currentStep(run).kind);
+   // closed pan/boil/bake/mix/knead surfaces are culled; the original shadow pass stays two-sided.
+   const cull=run.status!=='done'&&['pan','boil','bake','mix','knead'].includes(currentStep(run).kind);
    for(const material of palette.values()){const side=cull&&!openMaterials.has(material)?FrontSide:DoubleSide;if(material.side!==side){material.side=side;material.shadowSide=DoubleSide;material.needsUpdate=true;}}
   }
   function update(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean){if(disposed)return;const key=`${run.recipeId}/${run.status==='done'?'dish':run.step}`;if(key!==identity){identity=key;for(const color of Object.values(foodColors))palette.get(color)?.color.set(color);build(run);syncMaterialSides(run);}if(run.status==='done'){renderer.render(scene,camera);return;}const o=objects!,s=currentStep(run),a=run.active,t=time/1000,held=a.holdAt===null?0:Math.min(1.5,(run.elapsed-a.holdAt)/s.holdMs),pulse=Math.max(0,1-(run.elapsed-a.lastAt)/320),pos=point?screen(point.x,point.y,s.kind==='mix'?1.4:.35):null;
@@ -87,7 +89,14 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    if(s.kind==='pour'){o.tool.position.set(-1.4,1.8,-.1);o.tool.rotation.z=a.holdAt===null?.12:-.7;o.liquid!.position.y=.3+a.amount*1.8;o.stream!.visible=a.holdAt!==null;}
    if(s.kind==='fold'){o.flaps.forEach((g,i)=>{g.rotation.z=i<a.count?-.85:0;g.visible=i<a.count;});o.tool.position.copy(pos??new Vector3(2.4,1.3,.5));}
    if(s.kind==='plate'){o.food.forEach((g,i)=>{g.visible=i<a.count;if(g.visible){const p=plateTarget({...run,active:{...a,count:i}});g.position.copy(screen(p.x,p.y,.45));}});o.tool.position.copy(pos??new Vector3(-3.5,.35,.6));o.tool.visible=a.count<s.goal;}
-   o.flames.forEach((f,i)=>{f.scale.y=.3+a.heat/100*.6+(motion?Math.sin(t*5+i)*.04:0);});foodBatch?.update();renderer.render(scene,camera);
+   o.flames.forEach((f,i)=>{f.scale.y=.3+a.heat/100*.6+(motion?Math.sin(t*5+i)*.04:0);});foodBatch?.update();
+   // Mixing has no time-driven animation: only the stir angle and pointer move
+   // its food/tool. Keep the presented frame until one of those inputs changes.
+   if(s.kind==='mix'&&lastMix&&lastMix.amount===a.amount&&lastMix.x===point?.x&&lastMix.y===point?.y)return;
+   if(s.kind==='knead'&&lastKnead&&lastKnead.held===held&&lastKnead.motion===motion)return;
+   renderer.render(scene,camera);
+   lastKnead=s.kind==='knead'?{held,motion}:null;
+   lastMix=s.kind==='mix'?{amount:a.amount,x:point?.x,y:point?.y}:null;
   }
   return {update,capture:()=>{if(disposed)throw Error('料理畫面已關閉');renderer.render(scene,camera);return renderer.domElement.toDataURL('image/png');},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
  }catch(error){dispose();throw error;}
