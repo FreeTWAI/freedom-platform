@@ -186,6 +186,45 @@ The destination must already exist and must not overlap the producer. Export che
 
 In a consumer, `node scripts/verify-contracts.mjs` returns structured JSON and exits 0 for the requested local verification, 1 for invalid input/integrity, or 2 for unavailable trust/source. `--remote` additionally compares v1 bytes with the exact pinned GitHub commit. v2 does not accept `--remote` as a replacement for publisher approval.
 
+### Shared contributor profile and reader capabilities
+
+The read-only `node scripts/freedom.mjs context-capabilities` command reports
+`freedom.context-capabilities/v1` for the **running CLI** without reading or writing
+a workspace. It lists default delivery, the compact profile's accepted reader
+formats, and the existing explicit format selector. It does not attest to any
+editor/Agent/MCP reader's support or install configuration/hooks.
+
+A compatible contributor can choose:
+
+```sh
+node scripts/freedom.mjs context-capabilities
+node scripts/freedom.mjs prepare --base-ref <exact-base-sha> --paths <actual-paths> --context-profile compact
+```
+
+`compact` explicitly opts the caller into both `freedom.coding-context/v1` small
+bundles and `freedom.coding-context-manifest/v2` / `freedom.coding-context-chunk/v2`
+large delivery. The existing small-bundle admission check runs first; only its
+size-limit result selects v2. Other errors are not hidden by a fallback. This
+avoids forcing a small, already deduplicated v1 bundle into chunk envelopes.
+The completeness response remains `freedom.coding-context-completeness/v1`.
+
+No profile means exactly the original small v1 / large v1 behavior. The explicit
+`--delivery-format compact-v2` still forces v2 for callers that require it.
+Combining profile and explicit format, unknown or duplicate profiles, using a
+profile with `verify` or a saved `--manifest`, and extra capability-command
+arguments are rejected. Reading a saved manifest follows its exact format and
+all existing freshness/completeness checks, never a caller override.
+
+The shared module-contribution guide and newly generated module README /
+`next_commands` recommend this profile to compatible readers. Existing generated
+README files are not rewritten. Old checkouts or pinned consumers may lack the
+capability command; a caller that does not positively support these formats must
+keep the original prepare/read flow, not infer compatibility or drop rules.
+Updating another repository's vendor pin is a separate authorized change.
+This is an available common workflow, not proof all contributors' tools have
+adopted it. Delivered byte/chunk measurements remain separate from actual model
+Token consumption, billing, prompt cache and task-quality claims.
+
 ### Opt-in compact context delivery (v2)
 
 `prepare` and `context` accept `--delivery-format compact-v2` to explicitly emit

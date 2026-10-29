@@ -636,3 +636,73 @@ test('compact v2 does not use deduplication to relax input or publication limits
   await assert.rejects(writeContextDelivery(options), { code: 'context_total_size_limit' });
   await assert.rejects(readdir(join(f.root, '.freedom/context')), { code: 'ENOENT' });
 });
+
+test('context capabilities describes the running CLI without reading or writing a workspace', async t => {
+  const root = await fixtureRoot(t), before = await readdir(root);
+  const result = contextCli(root, ['context-capabilities']);
+  assert.equal(result.status, 0, result.stdout);
+  const value = JSON.parse(result.stdout);
+  assert.equal(value.format, 'freedom.context-capabilities/v1');
+  assert.deepEqual(value.default_delivery, { small: 'freedom.coding-context/v1', large: 'freedom.coding-context-manifest/v1' });
+  assert.deepEqual(value.profiles[0].argument, ['--context-profile', 'compact']);
+  assert.deepEqual(value.profiles[0].reader_formats, ['freedom.coding-context/v1', 'freedom.coding-context-manifest/v2',
+    'freedom.coding-context-chunk/v2', 'freedom.coding-context-completeness/v1']);
+  assert.equal(value.automatic_reader_detection, false); assert.equal(value.host_configuration_changed, false);
+  assert.equal(value.execution_authorized, false); assert(value.not_checked.includes('model-token-usage'));
+  assert.deepEqual(await readdir(root), before);
+  for (const extra of [['--context-profile', 'compact'], ['--base-ref', 'HEAD'], ['extra']]) {
+    assert.equal(contextCli(root, ['context-capabilities', ...extra]).status, 1);
+    assert.deepEqual(await readdir(root), before);
+  }
+});
+
+test('compact profile preserves exact small v1 output and selects the existing v2 only for large context', async t => {
+  const f = await fixture(t), args = ['--base-ref', 'baseline', '--scope', 'governance'];
+  for (const command of ['context', 'prepare']) {
+    const legacy = contextCli(f.root, [command, ...args]);
+    const compact = contextCli(f.root, [command, ...args, '--context-profile', 'compact']);
+    assert.equal(legacy.status, 0, legacy.stdout); assert.equal(compact.status, 0, compact.stdout);
+    assert.equal(compact.stdout, legacy.stdout); // Includes framing, not just content length.
+    assert.equal(JSON.parse(compact.stdout).format, 'freedom.coding-context/v1');
+  }
+  await put(f.root, 'docs/rules.md', '\ufeff' + '界🙂\n'.repeat(70_000));
+  f.commit(); f.git(['update-ref', 'refs/heads/baseline', 'HEAD']);
+  const legacy = contextCli(f.root, ['context', ...args]);
+  const compact = contextCli(f.root, ['context', ...args, '--context-profile', 'compact']);
+  const explicit = contextCli(f.root, ['context', ...args, '--delivery-format', 'compact-v2']);
+  for (const result of [legacy, compact, explicit]) assert.equal(result.status, 0, result.stdout);
+  assert.equal(JSON.parse(legacy.stdout).format, 'freedom.coding-context-manifest/v1');
+  assert.equal(JSON.parse(compact.stdout).format, 'freedom.coding-context-manifest/v2');
+  assert.equal(compact.stdout, explicit.stdout);
+  const prepared = contextCli(f.root, ['prepare', ...args, '--context-profile', 'compact']);
+  assert.equal(prepared.status, 0, prepared.stdout);
+  const summary = JSON.parse(prepared.stdout), manifest = JSON.parse(compact.stdout), chunks = [];
+  for (const chunk of manifest.chunks) {
+    const read = contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', String(chunk.index)]);
+    assert.equal(read.status, 0, read.stdout); chunks.push(JSON.parse(read.stdout));
+  }
+  for (const source of manifest.sources) {
+    const bytes = Buffer.from(chunks.slice(source.first_chunk, source.first_chunk + source.chunk_count).map(c => c.content).join(''));
+    assert.equal(sha256(bytes), source.content_sha256);
+  }
+  const done = contextCli(f.root, ['context', '--manifest', summary.context_path, '--check', 'complete']);
+  assert.equal(done.status, 0, done.stdout); assert.equal(JSON.parse(done.stdout).complete, true);
+  await put(f.root, 'docs/rules.md', 'changed after prepare');
+  const stale = contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', '0']);
+  assert.equal(stale.status, 1); assert.equal(JSON.parse(stale.stdout).code, 'stale_or_modified_context_manifest');
+});
+
+test('compact profile rejects unknown, duplicate, conflicting and read/verify arguments without artifacts', async t => {
+  const f = await fixture(t), args = ['--base-ref', 'baseline', '--scope', 'governance'];
+  for (const input of [
+    ['prepare', ...args, '--context-profile', 'unknown'],
+    ['prepare', ...args, '--context-profile', 'compact', '--context-profile', 'compact'],
+    ['prepare', ...args, '--context-profile', 'compact', '--delivery-format', 'compact-v2'],
+    ['context', '--manifest', '.freedom/context/task-' + '0'.repeat(16) + '/' + '0'.repeat(64) + '/manifest.json', '--chunk', '0', '--context-profile', 'compact'],
+    ['verify', ...args, '--context-profile', 'compact'], ['prepare', '--context-profile'],
+  ]) {
+    const result = contextCli(f.root, input); assert.equal(result.status, 1, result.stdout);
+    assert.equal(JSON.parse(result.stdout).code, 'invalid_arguments');
+    await assert.rejects(readdir(join(f.root, '.freedom')), { code: 'ENOENT' });
+  }
+});
