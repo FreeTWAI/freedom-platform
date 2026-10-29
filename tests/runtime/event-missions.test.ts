@@ -83,13 +83,73 @@ test('clear and progress serialize against the same version; non-owner cannot cl
  assert.deepEqual(race.map(r=>r.status).sort(),[200,412]);const current=(await request(path,member)).data;assert.equal(current.version,3);
  if(!current.enabled)assert.deepEqual(current.slots,[]);else assert.equal(current.slots[0].state,'skipped');
 });
-test('foreign community event is hidden for original owner and other members, including stored ACK',async()=>{
- const {host,member,peer,id,path}=await fixture(),key=randomUUID();await request(path,member,{action:'start'},1,key);
- const foreign=randomUUID();await pool.query("INSERT INTO communities(community_id,name) VALUES($1,'隔離合成社群')",[foreign]);
- await pool.query('UPDATE community_events SET community_id=$2 WHERE event_id=$1',[id,foreign]);
- for(const session of [host,member,peer])assert.equal((await request(path,session)).status,404);
- assert.equal((await request(path,member,{action:'start'},1,key)).status,404);
- assert.equal((await request(path,member,{action:'clear'},2)).status,404);
+// Independent synthetic scope; never rebind an existing event to manufacture
+// an inconsistent database row. No foreign member login/receipt is needed.
+async function foreignFixture(){
+ const community=randomUUID(),host=randomUUID(),member=randomUUID(),event=randomUUID();
+ await pool.query("INSERT INTO communities(community_id,name) VALUES($1,'隔離合成社群')",[community]);
+ for(const user of [host,member])await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref)
+   SELECT $1,$2,$3,'隔離合成會員',password_hash,$4 FROM users WHERE user_id=$5`,
+   [user,community,`${user}@example.test`,randomUUID(),DEMO_USERS[0].user_id]);
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,event_kind,visibility)
+   VALUES($1,$2,$3,'隔離合成活動','隔離測試',now()+interval '1 day',now()+interval '2 days','online','合成場地','published','other','open')`,[event,community,host]);
+ return {community,host,member,event,path:`/events/${event}/my-missions`};
+}
+function rejectsScope(write:Promise<unknown>,constraint:string){
+ return assert.rejects(write,(error:any)=>error.code==='23503'&&error.constraint===constraint);
+}
+async function insertProgress(community:string,event:string,member:string,enabled=false){
+ return pool.query(`INSERT INTO event_mission_progress(progress_id,community_id,event_id,member_ref,enabled,policy_version,slots,aggregate_version)
+   VALUES($1,$2,$3,$4,$5,'personal_self_exercises_v1',$6::jsonb,2)`,
+   [randomUUID(),community,event,member,enabled,JSON.stringify(enabled?['read_intro','think_question','notice_interest'].map((template_id,slot)=>({template_id,slot,state:'active'})):[])]);
+}
+test('database rejects cross-community event and member INSERTs for active progress and cleared tombstones',async()=>{
+ const {member,id}=await fixture(),foreign=await foreignFixture();
+ for(const enabled of [true,false]){
+  await rejectsScope(insertProgress(DEMO_COMMUNITY,foreign.event,member.id,enabled),'event_mission_event_community_fk');
+  await rejectsScope(insertProgress(DEMO_COMMUNITY,id,foreign.member,enabled),'event_mission_member_community_fk');
+ }
+ assert.equal((await pool.query('SELECT count(*) n FROM event_mission_progress')).rows[0].n,'0');
+ await insertProgress(foreign.community,foreign.event,foreign.member);
+ assert.equal((await pool.query('SELECT count(*) n FROM event_mission_progress')).rows[0].n,'1');
+});
+test('database rejects cross-community UPDATEs before and after clear without changing retained identity',async()=>{
+ const {member,id,path}=await fixture(),foreign=await foreignFixture(),key=randomUUID();
+ const started=await request(path,member,{action:'start'},1,key);assert.equal(started.status,200);
+ for(const cleared of [false,true]){
+  if(cleared)assert.equal((await request(path,member,{action:'clear'},2)).status,200);
+  const before=(await pool.query('SELECT * FROM event_mission_progress WHERE event_id=$1',[id])).rows;
+  await rejectsScope(pool.query('UPDATE event_mission_progress SET event_id=$2 WHERE event_id=$1',[id,foreign.event]),'event_mission_event_community_fk');
+  await rejectsScope(pool.query('UPDATE event_mission_progress SET member_ref=$2 WHERE event_id=$1',[id,foreign.member]),'event_mission_member_community_fk');
+  await assert.rejects(pool.query('UPDATE event_mission_progress SET community_id=$2 WHERE event_id=$1',[id,foreign.community]),
+   (error:any)=>error.code==='23503'&&['event_mission_event_community_fk','event_mission_member_community_fk'].includes(error.constraint));
+  assert.deepEqual((await pool.query('SELECT * FROM event_mission_progress WHERE event_id=$1',[id])).rows,before);
+ }
+ // Referenced event scope also cannot change after a private row exists.
+ await rejectsScope(pool.query('UPDATE community_events SET community_id=$2 WHERE event_id=$1',[id,foreign.community]),'event_mission_event_community_fk');
+ assert.deepEqual((await request(path,member,{action:'start'},1,key)).data,started.data);
+ assert.deepEqual((await request(path,member)).data.slots,[]);
+});
+test('foreign community event is hidden before commands and receipt replay without inconsistent fixtures',async()=>{
+ const {host,member,peer,path}=await fixture(),foreign=await foreignFixture(),key=randomUUID();
+ assert.equal((await request(path,member,{action:'start'},1,key)).status,200);
+ const original=(await request(path,member)).data;
+ for(const session of [host,member,peer]){
+  const read=await request(foreign.path,session);assert.equal(read.status,404);assert.equal(read.data.slots,undefined);
+  for(const body of [{action:'start'},{action:'clear'}]){
+   const denied=await request(foreign.path,session,body,1,key);assert.equal(denied.status,404);assert.equal(denied.data.acknowledged,undefined);
+  }
+ }
+ assert.deepEqual((await request(path,member)).data,original);
+});
+test('same-community progress and tombstones retain event and member deletion cascades',async()=>{
+ await fixture();
+ for(const target of ['event','member'] as const)for(const enabled of [true,false]){
+  const foreign=await foreignFixture();await insertProgress(foreign.community,foreign.event,foreign.member,enabled);
+  if(target==='event')await pool.query('DELETE FROM community_events WHERE event_id=$1',[foreign.event]);
+  else await pool.query('DELETE FROM users WHERE user_id=$1',[foreign.member]);
+  assert.equal((await pool.query('SELECT count(*) n FROM event_mission_progress WHERE event_id=$1',[foreign.event])).rows[0].n,'0');
+ }
 });
 test('guild membership loss redacts own content and rejects old progress receipt but allows clear',async()=>{
  const {member,id,path}=await fixture(),key=randomUUID();

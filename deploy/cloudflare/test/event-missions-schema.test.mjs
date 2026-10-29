@@ -34,3 +34,11 @@ test('mission schema has no attendee, friend or Contribution write and clearing 
  assert.match(sql,/NOT enabled AND slots='\[\]'::jsonb/);
  assert.doesNotMatch(sql,/\b(?:INSERT INTO|UPDATE|ALTER TABLE)\s+(?:contributions|community_event_rsvps|community_event_helpers|friendships|social_achievement)/i);
 });
+
+test('mission identity binds both referenced rows to the same community, including retained tombstones',()=>{
+ const sql=sources().find(row=>row.name==='196_event_missions.sql').sql;
+ assert.match(sql,/CONSTRAINT event_mission_event_community_fk\s+FOREIGN KEY\(event_id,community_id\) REFERENCES community_events\(event_id,community_id\) ON DELETE CASCADE/);
+ assert.match(sql,/CONSTRAINT event_mission_member_community_fk\s+FOREIGN KEY\(member_ref,community_id\) REFERENCES users\(user_id,community_id\) ON DELETE CASCADE/);
+ assert.match(sql,/community_id uuid NOT NULL REFERENCES communities/);
+ assert.match(sql,/event_id uuid NOT NULL,/);assert.match(sql,/member_ref uuid NOT NULL,/);
+});
