@@ -9,6 +9,30 @@ A broader fallback means the dependency scope is not yet established, not that
 all changes inherently require every test. Extend bounded profiles as ownership
 and coverage become clear; retain failures and distinguish skipped from passed.
 
+The `browser_specs_only` profile handles ordinary modifications of existing
+`tests/e2e/<kebab-case>.spec.ts` files. The unchanged product and complete module
+graph do not need another runtime matrix, Worker restore drill or deployment
+preflight. The existing **ui-e2e** job retains the complete browser plan and adds
+the same TypeScript check normally supplied by static-worker. Six existing
+runtime files read browser-spec bodies: `public-social-post-page`,
+`newcomer-guides`, `social-share`, `social-feed-write-order`,
+`guild-workspace-writer` and `guild-member-tier-fixture`. Their controlled
+race/ACK, request forwarding and partial setup/cleanup failure cases remain in the small, fixed
+`ci.browser-spec-consumers` suite in the same job; no database or new runner is
+needed. It retains the pinned runner's missing/empty/skip/failure rejection.
+Source integrity,
+CodeQL and required review remain in place. This reduces unrelated jobs; it does
+not claim to shorten the browser plan or reuse another source's green result.
+
+Like CI-tool changes, browser specs qualify only on a clean exact PR integration
+tree or direct main successor. Additions, deletions, renames, executable/link
+changes, fixture/config/helper changes, mixed product changes, graph changes and
+unproven Git topology retain the existing broader selection. Ignored extra
+browser files also prevent this profile. No browser cases, assertions, retries
+or deadlines change. The selector's own workflow exception admits only the exact
+conditional TypeScript and consumer-suite steps in ui-e2e, at its existing
+contracts-build and pinned-runner boundaries, plus only that fixed suite addition.
+
 The `delivery_tooling` profile applies to exact release/backup workflow and
 operator paths, the daily backup orchestrator/diagnostics/test, and the selector
 and Verify workflow controls. It runs **deploy-preflight**: operator/preflight
@@ -53,7 +77,7 @@ selector-level negatives too. Mandatory source-integrity failure still rejects
 the aggregate; ownership warnings are not mislabeled as that failure.
 
 The older profiles below retain their own event and path limits. In particular,
-the statements about full push selection below exclude this delivery profile and bounded CI tools.
+the statements about full push selection below exclude delivery tooling, bounded CI tools and browser-spec-only changes.
 
 The selector and aggregate are loaded from the installed workflow source, not
 from candidate configuration. This candidate adds an `affected` mode for the
@@ -82,6 +106,7 @@ may accompany a leaf; they cannot introduce another module obligation.
 | `affected`: plan_receipt_docs / module_app_markdown | 無 heavy jobs |
 | `affected`: plan_document_inputs | Governance consumers |
 | `affected`: delivery tooling | Deploy preflight (PR and direct main successor) |
+| `affected`: browser_specs_only | Complete browser plan, TypeScript and six existing consumer test files in ui-e2e (PR and direct main successor) |
 
 The frontend profile omits `governance-consumers`, `deploy-preflight` and the
 separate guild-presentation job. It does

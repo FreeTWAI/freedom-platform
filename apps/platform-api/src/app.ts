@@ -24,10 +24,11 @@ import type { ModuleProviderMap } from '../../../modules/module-registry/provide
 import { createNodePreviewFetch } from './node-preview-fetch.js';
 
 type NodeAppOptions = {shortVideosEnabled?:boolean;supplyMaterialAssetStore?:PlatformRuntime['supplyMaterialAssetStore'];supplyMaterialAssets?:PlatformRuntime['supplyMaterialAssets'];supplyMaterialUploadsEnabled?:boolean;afterResponse?:PlatformRuntime['afterResponse'];commerceQueryTransport?:PlatformRuntime['commerceQueryTransport'];commercePayments?:PlatformRuntime['commercePayments'];commerceJournal?:PlatformRuntime['commerceJournal'];commerceEmailSender?:PlatformRuntime['commerceEmailSender'];commerceCredentialKeyring?:PlatformRuntime['commerceCredentialKeyring'];commerceSettings?:PlatformRuntime['commerceSettings'];commerceOrderNotificationsEnabled?:boolean;commerceSelfShipEnabled?:boolean;commerceDropShipEnabled?:boolean;commercePorts?:PlatformRuntime['commercePorts'];arEnabled?:boolean;arAssetStore?:PlatformRuntime['arAssetStore'];storePhotoAssetStore?:PlatformRuntime['storePhotoAssetStore'];storePhotoAssets?:PlatformRuntime['storePhotoAssets'];storeAppearanceAssets?:PlatformRuntime['storeAppearanceAssets'];storeGalleryAssets?:PlatformRuntime['storeGalleryAssets'];storePhotoUploadsEnabled?:boolean;shopKeyPolicy?:PlatformRuntime['shopKeyPolicy'];publicGuideAssets?:PlatformRuntime['publicGuideAssets'];adminVerifier?:AdminAccessVerifier;githubSocial?:GitHubSocialOptions;passwordEmailSender?:PasswordEmailSender;
+  googleLogin?:PlatformRuntime['googleLogin'];
   registrationCommunityId?:string;
   totpEncryptionKey?:string;
   eventEmailSender?:EventEmailSender;maintainerWebhookSecret?:string;now?:()=>Date;avatarAssetStore?:PlatformRuntime['avatarAssetStore'];serviceCoverAssets?:PlatformRuntime['serviceCoverAssets'];serviceCoverAssetStore?:PlatformRuntime['serviceCoverAssetStore'];messageImageAssets?:PlatformRuntime['messageImageAssets'];messageImageAssetStore?:PlatformRuntime['messageImageAssetStore'];eventBannerAssets?:PlatformRuntime['eventBannerAssets'];eventBannerAssetStore?:PlatformRuntime['eventBannerAssetStore'];eventVideoAssets?:PlatformRuntime['eventVideoAssets'];eventVideoAssetStore?:PlatformRuntime['eventVideoAssetStore'];skillImageAssets?:PlatformRuntime['skillImageAssets'];skillImageAssetStore?:PlatformRuntime['skillImageAssetStore'];socialThumbnailAssets?:PlatformRuntime['socialThumbnailAssets'];socialThumbnailAssetStore?:PlatformRuntime['socialThumbnailAssetStore'];eventHighlightAssets?:PlatformRuntime['eventHighlightAssets'];eventHighlightAssetStore?:PlatformRuntime['eventHighlightAssetStore'];
-  linkPreviewFetch?:PlatformRuntime['linkPreviewFetch'];privateAiProduct?:PrivateAiProductTransport;moduleProviders?:ModuleProviderMap;guildLaunchpadEnabled?:boolean;hostedReservationsEnabled?:boolean;supplierConsoleEnabled?:boolean;distributionPhotosEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;storeAppearanceEnabled?:boolean;storePoliciesEnabled?:boolean;storeVariantsEnabled?:boolean;storeCategoriesEnabled?:boolean;storeGalleryEnabled?:boolean;tenantCursorSigningKey?:string;communityDiscoveryEnabled?:boolean;memberBlockingEnabled?:boolean;memberReportingEnabled?:boolean;communitySearchEnabled?:boolean;unifiedSharingEnabled?:boolean;communityRelationsEnabled?:boolean;personalContentEnabled?:boolean;notificationPreferencesEnabled?:boolean;firstParticipationEnabled?:boolean;eventParticipationEnabled?:boolean;squadOutcomesEnabled?:boolean;eventOutcomesEnabled?:boolean;participationMetricsEnabled?:boolean;skillBookStarGateEnabled?:boolean;tenantWorkAssetStore?:PlatformRuntime['tenantWorkAssetStore']};
+  linkPreviewFetch?:PlatformRuntime['linkPreviewFetch'];privateAiProduct?:PrivateAiProductTransport;moduleProviders?:ModuleProviderMap;guildLaunchpadEnabled?:boolean;hostedReservationsEnabled?:boolean;supplierConsoleEnabled?:boolean;distributionPhotosEnabled?:boolean;supplyOfferPhotosEnabled?:boolean;storeAppearanceEnabled?:boolean;storePoliciesEnabled?:boolean;storeVariantsEnabled?:boolean;storeCategoriesEnabled?:boolean;storeGalleryEnabled?:boolean;tenantCursorSigningKey?:string;communityDiscoveryEnabled?:boolean;memberBlockingEnabled?:boolean;memberReportingEnabled?:boolean;communitySearchEnabled?:boolean;unifiedSharingEnabled?:boolean;communityRelationsEnabled?:boolean;personalContentEnabled?:boolean;notificationPreferencesEnabled?:boolean;firstParticipationEnabled?:boolean;eventParticipationEnabled?:boolean;squadOutcomesEnabled?:boolean;eventOutcomesEnabled?:boolean;participationMetricsEnabled?:boolean;communityCertificationEnabled?:boolean;socialAchievementsEnabled?:boolean;skillBookStarGateEnabled?:boolean;tenantWorkAssetStore?:PlatformRuntime['tenantWorkAssetStore']};
 
 // Node host adapter. The Worker bundle never imports this module, so the
 // socket-based address below is only ever read from a real Node server.
@@ -58,6 +59,7 @@ export function nodeRuntime(freedomEnv:FreedomEnv,origin:string,options:Omit<Nod
     storeGalleryAssets:options.storeGalleryAssets,
     storePhotoAssetStore:options.storePhotoAssetStore,storePhotoAssets:options.storePhotoAssets,storePhotoUploadsEnabled:options.storePhotoUploadsEnabled===true,
     shopKeyPolicy:options.shopKeyPolicy??process.env.FREEDOM_SHOP_KEY_POLICY as PlatformRuntime['shopKeyPolicy'],
+    googleLogin:options.googleLogin??(process.env.FREEDOM_GOOGLE_LOGIN_ENABLED==='true'&&process.env.GOOGLE_LOGIN_CLIENT_ID&&process.env.GOOGLE_LOGIN_CLIENT_SECRET?{enabled:true,clientId:process.env.GOOGLE_LOGIN_CLIENT_ID,clientSecret:process.env.GOOGLE_LOGIN_CLIENT_SECRET}:undefined),
     registrationCommunityId:()=>options.registrationCommunityId??process.env.FREEDOM_REGISTRATION_COMMUNITY_ID,
     githubTokenKey:()=>options.githubSocial?.tokenKey??process.env.GITHUB_SOCIAL_TOKEN_KEY,
     totpEncryptionKey:()=>options.totpEncryptionKey??process.env.TOTP_ENCRYPTION_KEY,
@@ -87,6 +89,7 @@ export function nodeRuntime(freedomEnv:FreedomEnv,origin:string,options:Omit<Nod
     communityDiscoveryEnabled:options.communityDiscoveryEnabled===true,
     memberBlockingEnabled:options.memberBlockingEnabled===true,
     memberReportingEnabled:options.memberReportingEnabled===true,
+    socialAchievementsEnabled:options.socialAchievementsEnabled===true,
     communitySearchEnabled:options.communitySearchEnabled===true,
     unifiedSharingEnabled:options.unifiedSharingEnabled===true,
     communityRelationsEnabled:options.communityRelationsEnabled===true,
@@ -97,6 +100,7 @@ export function nodeRuntime(freedomEnv:FreedomEnv,origin:string,options:Omit<Nod
     eventParticipationEnabled:options.eventParticipationEnabled===true,
     firstParticipationEnabled:options.firstParticipationEnabled===true,
     participationMetricsEnabled:options.participationMetricsEnabled===true,
+    communityCertificationEnabled:options.communityCertificationEnabled===true,
     skillBookStarGateEnabled:options.skillBookStarGateEnabled===true,
     tenantWorkAssetStore:options.tenantWorkAssetStore,
     tenantListCursors:createTenantListCursorCodec(

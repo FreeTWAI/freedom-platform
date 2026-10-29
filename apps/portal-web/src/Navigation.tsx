@@ -21,7 +21,7 @@ const groups: { label: string; pages: TabId[] }[] = [
   { label: '認識夥伴', pages: ['members', 'friends', 'positioning', 'newbie-village', 'squads', 'cocreation'] },
   { label: '分享推廣', pages: ['services', 'promotion'] },
   { label: '創作與合作', pages: ['workbench', 'showcase', 'private-ai'] },
-  { label: '供貨與銷售', pages: ['reservations', 'stores', 'supplier', 'retail', 'marketing'] },
+  { label: '供貨與銷售', pages: ['reservations', 'stores', 'supplier', 'retail', 'marketing', 'virtual-commerce'] },
   { label: '管理', pages: ['guild-workspace', 'business'] },
 ];
 
@@ -121,7 +121,7 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
           </div>
           <div className="nav-commerce-group" role="group" aria-labelledby={`${navigationId}-commerce-ai`}>
             <p id={`${navigationId}-commerce-ai`} className="nav-commerce-heading">{t('nav.commerceAi')}</p>
-            {(['supplier', 'retail'] as TabId[]).map(id => item(id))}
+            {(['supplier', 'retail', 'virtual-commerce'] as TabId[]).map(id => item(id))}
           </div>
         </div> : group.pages.filter(id => (id !== 'my-content' || personalContentEnabled) && (id !== 'guild-workspace' || canManageGuild) && (id !== 'business' || guildLaunchpadEnabled)).map(id => item(id, `nav.${id}`, `#${id}`, true))}
         {group.label === '管理' && <a className="nav-item" href="/admin">{t('nav.admin')} <span aria-hidden="true">↗</span></a>}

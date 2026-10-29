@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
@@ -10,7 +11,7 @@ const themes=[['自由工坊－明亮','light'],['自由工坊－夜航','dark']
 const widths=[390,820,1280] as const;
 
 for(const trigger of ['focus','pageshow','visibilitychange'])test(`a withdrawn public card is removed on ${trigger} without a manual reload`,async({page,browser})=>{
- const name=`重驗名片 ${trigger}`;await account(page,name);await joinGuild(page);await navigate(page,'我的名片');
+ const name=`重驗名片 ${trigger}`;await account(page,name);await joinGuild(page);await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
  const settings=page.getByRole('region',{name:'分享我的工坊名片'});await settings.getByRole('button',{name:'建立分享連結',exact:true}).click();
  const link=settings.getByRole('link',{name:'開啟名片',exact:true});await expect(link).toBeVisible();
  const guestContext=await browser.newContext(),guest=await guestContext.newPage();
@@ -277,7 +278,7 @@ test('welcome keeps one primary action and selected filters stay distinct in eve
   await page.setViewportSize({width:1280,height:900});
   await navigate(page,'職業公會');
   for(const [label,theme] of themes){await shellTheme(page,label,theme);await pressedDiffers(page,'.guilds-panel .guild-topic-filter');}
-  await navigate(page,'我的名片');
+  await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
   const settings=page.getByRole('region',{name:'分享我的工坊名片'});
   await expect(settings.getByRole('checkbox',{name:'在分享頁顯示我的頭像'})).not.toBeChecked();
   await page.screenshot({path:'test-results/mc51-share-settings-1280.png',fullPage:true});

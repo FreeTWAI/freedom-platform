@@ -38,15 +38,15 @@
 .short-video-slide.is-unconfirmed iframe { visibility: hidden; }
 .short-video-status { padding: 0.6rem 1rem; border-radius: 12px; color: #fff; background: rgb(0 0 0 / 0.65); font-size: 0.95rem; text-align: center; }
 .short-video-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; pointer-events: auto; }
-.short-video-action, .short-video-share .btn { min-height: 44px; min-width: 44px; padding: 0 0.8rem; border: 1px solid rgb(255 255 255 / 0.6); border-radius: 22px; color: #fff; background: rgb(0 0 0 / 0.45); font-size: 0.9rem; cursor: pointer; pointer-events: auto; }
+.short-video-action, .short-video-share > .btn { min-height: 44px; min-width: 44px; padding: 0 0.8rem; border: 1px solid rgb(255 255 255 / 0.6); border-radius: 22px; color: #fff; background: rgb(0 0 0 / 0.45); font-size: 0.9rem; cursor: pointer; pointer-events: auto; }
 .short-video-action[aria-pressed="true"] { background: rgb(190 30 60 / 0.75); }
 .short-video-action:disabled { opacity: 0.5; cursor: default; }
-.short-video-action:focus-visible, .short-video-share .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.short-video-action:focus-visible, .short-video-share > .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .short-video-share { display: inline-flex; }
 .short-video-post-dialog { width: min(92vw, 520px); max-height: 85dvh; padding: 0; border: 0; border-radius: 16px; overflow: auto; }
 .short-video-post-dialog::backdrop { background: rgb(0 0 0 / 0.6); }
 .short-video-post-dialog-close { display: block; margin: 0.6rem 0.6rem 0 auto; min-height: 44px; }
 
 /* The existing share button keeps its behaviour; only its look follows the other actions on a dark slide. */
-.short-video-feed .short-video-share .btn { min-height: 44px; padding: 0 0.8rem; border: 1px solid rgb(255 255 255 / 0.6); border-radius: 22px; color: #fff; background: rgb(0 0 0 / 0.45); font-size: 0.9rem; box-shadow: none; }
-.short-video-feed .short-video-share .btn svg { color: inherit; }
+.short-video-feed .short-video-share > .btn { min-height: 44px; padding: 0 0.8rem; border: 1px solid rgb(255 255 255 / 0.6); border-radius: 22px; color: #fff; background: rgb(0 0 0 / 0.45); font-size: 0.9rem; box-shadow: none; }
+.short-video-feed .short-video-share > .btn svg { color: inherit; }

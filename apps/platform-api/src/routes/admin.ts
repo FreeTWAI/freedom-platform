@@ -1,3 +1,4 @@
+import {createCommunityCertificationAdminRoutes} from './community-certification.js';
 import type {EffectJournalPort} from '../../../../modules/agent-commerce/operations/journal/journal.js';
 import {createCommerceAdmissionRoutes} from './commerce-admissions.js';
 import type {CommerceProviderEnvironment} from '../../../../modules/agent-commerce/operations/admissions.js';
@@ -25,7 +26,7 @@ import {participationMetrics} from '../../../../modules/community/participation-
 import {listCredentials,requestCloudflareRenewal} from '../../../../modules/platform-admin/credentials.js';
 import {approveRecoveryCase,closeRecoveryCase,executeRecoveryCase,getRecoveryCase,openRecoveryCase} from '../../../../modules/tenant-workspaces/recovery.js';
 type AdminEnv={Variables:{admin:AdminActor;adminCsrf:string}};
-export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=verifyAdminAccess,github:{origin:string;tokenKey?:string;fetcher?:typeof fetch;readToken?:()=>string|undefined;guildReviewer?:GuildReviewer}={origin:'http://127.0.0.1:4310'},guildLaunchpadEnabled=false,participationMetricsEnabled=false,commerceProviderEnvironment:CommerceProviderEnvironment='sandbox',commerceJournal?:EffectJournalPort,commerceReadiness?:StoreReadinessDependencies & {releaseSha:string|null}){
+export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=verifyAdminAccess,github:{origin:string;tokenKey?:string;fetcher?:typeof fetch;readToken?:()=>string|undefined;guildReviewer?:GuildReviewer}={origin:'http://127.0.0.1:4310'},guildLaunchpadEnabled=false,participationMetricsEnabled=false,commerceProviderEnvironment:CommerceProviderEnvironment='sandbox',commerceJournal?:EffectJournalPort,commerceReadiness?:StoreReadinessDependencies & {releaseSha:string|null},communityCertificationEnabled=false){
   const app=new Hono<AdminEnv>();
   app.use('/participation-metrics',async(_c,next)=>{
     requireCondition(participationMetricsEnabled===true,404,'not_found','找不到這個頁面。');
@@ -53,9 +54,10 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
     if(version)requireCondition(/^"[1-9][0-9]*"$/.test(version),400,'invalid_version','If-Match 須為加引號的整數版本。');
     return {admin:c.get('admin'),operation:`${c.req.method} ${c.req.path}`,key:c.req.header('Idempotency-Key')??'',body:await c.req.json(),expected:version?.slice(1,-1)};
   };
+  if(communityCertificationEnabled===true)app.route('/community-certifications',createCommunityCertificationAdminRoutes(pool,verifyAccess,github.origin,command));
   const paging=(c:Context<AdminEnv>)=>z.object({limit:z.coerce.number().int().min(1).max(100).default(25),offset:z.coerce.number().int().min(0).max(100000).default(0)}).parse(c.req.query());
   const result=(c:Context<AdminEnv>,value:any)=>{if(value.aggregate_version)c.header('ETag',`"${value.aggregate_version}"`);return c.json(value);};
-  app.get('/bootstrap',async c=>c.json({...await adminBootstrap(pool,c.get('admin')),csrf_token:c.get('adminCsrf'),pending_guild_appointments:await nominatedGuildAppointments(pool,c.get('admin'))}));
+  app.get('/bootstrap',async c=>c.json({...await adminBootstrap(pool,c.get('admin')),community_certification_enabled:communityCertificationEnabled===true,csrf_token:c.get('adminCsrf'),pending_guild_appointments:await nominatedGuildAppointments(pool,c.get('admin'))}));
   app.get('/github-app',async c=>c.json({...await githubAppSetupStatus(pool,c.get('admin')),setup_available:Boolean(github.tokenKey)}));
   app.post('/github-app/start',async c=>{
     z.object({}).strict().parse(await c.req.json());

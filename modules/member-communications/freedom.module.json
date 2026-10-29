@@ -11,7 +11,8 @@
     "shared",
     "media-migration",
     "community",
-    "positioning"
+    "positioning",
+    "social-achievements"
   ],
   "format": "freedom.module/v1",
   "instructions": [

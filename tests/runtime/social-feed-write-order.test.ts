@@ -345,3 +345,90 @@ test('Short rendered retry map excludes old client or generation even before the
 test('Short timed-out response remains uncertain even if a caller omits the network flag',async()=>{
   const h=counterHarness();h.c.client.post=async()=>{throw new ApiError({message:'timeout',status:408,timedOut:true});};await h.c.like('p');assert.ok(h.c.shortLikeCommands.current.get('p')?.uncertain);assert.equal(h.c.shortLikeRetries.p.liked,true);assert.equal(h.c.confirmedWrites.current,0);
 });
+
+const avatarSource=readFileSync(new URL('../../apps/portal-web/src/modules/MemberAvatar.tsx',import.meta.url),'utf8');
+function commentAvatarHarness(sourceText=interactionSource){
+  const hooks:any[]=[],effects:(()=>void)[]=[],requests:any[]=[],updates:any[]=[];let index=0;
+  const transport=(method:string)=>(path:string,body?:unknown,options?:unknown)=>new Promise((resolve,reject)=>requests.push({method,path,body,options,resolve,reject}));
+  const client={sessionGeneration:1,csrfToken:'synthetic',get:transport('GET'),post:transport('POST'),delete:transport('DELETE')};
+  const props={client,post:{post_id:'post',comment_count:0},canHide:false,initialOpen:true,onUpdate:(value:unknown)=>updates.push(value)};
+  const react={useRef:(value:unknown)=>{const i=index++;return hooks[i]??(hooks[i]={current:value});},useState:(value:unknown)=>{const i=index++;if(!(i in hooks))hooks[i]=value;return[hooks[i],(v:any)=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useEffect:(fn:()=>unknown,deps:unknown[])=>{const i=index++;if(!hooks[i]||deps.some((v,n)=>v!==hooks[i].deps[n])){hooks[i]?.cleanup?.();hooks[i]={deps};effects.push(()=>{hooks[i].cleanup=fn();});}}};
+  const jsx=(type:unknown,props:unknown)=>({type,props}),module={exports:{} as any};
+  runInNewContext(transformSync(sourceText,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,crypto:webcrypto,URL,require:(name:string)=>{
+    if(name==='react')return react;if(name==='react/jsx-runtime')return{jsx,jsxs:jsx};if(name==='../api')return{ApiError};
+    if(name==='../format')return{formatIsoLocal:(s:string)=>s};return new Proxy({},{get:(_target,key)=>String(key)});
+  }});
+  function render(){index=0;const tree=module.exports.SocialInteractions(props);while(effects.length)effects.shift()!();return tree;}
+  function nodes(tree:any,predicate:(node:any)=>boolean):any[]{if(!tree||typeof tree!=='object')return[];return[...(predicate(tree)?[tree]:[]),...[tree.props?.children].flat(Infinity).flatMap(child=>nodes(child,predicate))];}
+  const find=(predicate:(node:any)=>boolean)=>nodes(render(),predicate)[0];
+  const avatars=()=>nodes(render(),n=>n.type==='MemberAvatar').map(n=>n.props);
+  function send(){find(n=>n.type==='textarea'&&n.props['aria-label']==='寫留言').props.onChange({target:{value:'new comment'}});find(n=>n.type==='form'&&n.props.className==='social-comment-composer').props.onSubmit({preventDefault(){}});}
+  function toggle(){find(n=>n.type==='button'&&n.props['aria-controls']==='social-comments-post').props.onClick();}
+  function unmount(){for(const hook of hooks)hook?.cleanup?.();}
+  render();return{client,requests,updates,avatars,find,send,toggle,unmount,render};
+}
+const commentAvatar=(id:string,url:string|null|undefined,revision=1)=>({comment_id:id,body:'comment '+id,created_at:'2026-10-28T00:00:00.000000Z',edited_at:null,revision,author:{user_id:id,display_name:'Author '+id,...(url===undefined?{}:{avatar_url:url})},mine:id==='self'});
+const selfAvatar='/api/v1/members/10000000-0000-4000-8000-000000000001/avatar?v=2';
+const otherAvatar='/api/v1/members/10000000-0000-4000-8000-000000000002/avatar?v=3';
+for(const sourceVariant of ['actual','removed-binding'] as const)test(`comment avatar author binding ${sourceVariant}`,async()=>{
+ const h=commentAvatarHarness(sourceVariant==='actual'?interactionSource:interactionSource.replace(' avatarUrl={comment.author.avatar_url}',''));
+ h.requests[0].resolve({items:[commentAvatar('self',selfAvatar),commentAvatar('other',otherAvatar),commentAvatar('missing',null),commentAvatar('legacy',undefined)],next_cursor:null});await tick();
+ const check=()=>assert.deepEqual(Object.fromEntries(h.avatars().map(a=>[a.nickname,a.avatarUrl])),{'Author self':selfAvatar,'Author other':otherAvatar,'Author missing':null,'Author legacy':undefined});
+ if(sourceVariant==='actual')check();else assert.throws(check,assert.AssertionError);
+});
+test('comment creation is ACK-driven and first-page reconciliation retains each author avatar',async()=>{
+ const h=commentAvatarHarness();h.send();assert.equal(h.avatars().length,0);
+ h.requests[1].resolve(commentAvatar('self',selfAvatar));await tick();assert.equal(h.avatars()[0].avatarUrl,selfAvatar);
+ h.requests[0].resolve({items:[commentAvatar('other',otherAvatar)],next_cursor:'next'});await tick();assert.deepEqual(h.avatars().map(a=>a.avatarUrl).sort(),[selfAvatar,otherAvatar].sort());
+ h.toggle();h.toggle();h.requests[2].resolve({items:[commentAvatar('self',null),commentAvatar('other',otherAvatar)],next_cursor:null});await tick();
+ assert.deepEqual(Object.fromEntries(h.avatars().map(a=>[a.nickname,a.avatarUrl])),{'Author self':null,'Author other':otherAvatar});
+});
+test('comment edit response carries the acknowledged author avatar',async()=>{
+ const h=commentAvatarHarness();h.requests[0].resolve({items:[commentAvatar('self',selfAvatar)],next_cursor:null});await tick();
+ h.find(n=>n.type==='button'&&n.props.children==='編輯留言').props.onClick();
+ h.find(n=>n.type==='textarea'&&n.props['aria-label']==='編輯留言').props.onChange({target:{value:'edited'}});
+ h.find(n=>n.type==='form'&&n.props.className==='stack').props.onSubmit({preventDefault(){}});
+ h.requests[1].resolve({...commentAvatar('self',selfAvatar.replace('v=2','v=3'),2),body:'edited'});await tick();assert.equal(h.avatars()[0].avatarUrl,selfAvatar.replace('v=2','v=3'));
+});
+for(const operation of ['read','create'] as const)for(const change of ['generation','unmount'] as const)test(`late comment ${operation} cannot install avatar after ${change}`,async()=>{
+ const h=commentAvatarHarness();if(operation==='create')h.send();
+ if(change==='generation')h.client.sessionGeneration++;else h.unmount();
+ h.requests[operation==='read'?0:1].resolve(operation==='read'?{items:[commentAvatar('self',selfAvatar)],next_cursor:null}:commentAvatar('self',selfAvatar));await tick();
+ assert.equal(h.avatars().length,0);assert.equal(h.updates.length,0);assert.equal(commentAvatarHarness().avatars().length,0);
+});
+test('app identity/session boundary remounts the workspace that contains comment avatars',()=>{
+ const app=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
+ assert.match(app,/<Workspace key=\{`\$\{session\.user\.user_id\}:\$\{client\.sessionGeneration\}`\}/);
+});
+test('shared MemberAvatar keeps permitted URLs, handles failed/private images, and recovers on author/version change',()=>{
+ let failed:any=null;const module={exports:{} as any},jsx=(type:string,props:any)=>({type,props});
+ runInNewContext(transformSync(avatarSource,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,Intl,require:(name:string)=>name==='react'?{useState:()=>[failed,(value:any)=>failed=value]}:name==='react/jsx-runtime'?{jsx,jsxs:jsx}:{}});
+ const render=(avatarUrl?:string|null)=>module.exports.MemberAvatar({nickname:'Hao',avatarUrl}).props.children;
+ assert.equal(render(selfAvatar).type,'img');render(selfAvatar).props.onError();assert.equal(render(selfAvatar).type,'span');
+ for(const url of [undefined,null,'https://example.test/photo.png','/api/v1/members/not-an-id/avatar?v=1'])assert.equal(render(url).type,'span');
+ assert.equal(render(otherAvatar).type,'img');assert.equal(render(selfAvatar.replace('v=2','v=3')).type,'img');
+});
+const commentServerSource=readFileSync(new URL('../../modules/community/social-posts.ts',import.meta.url),'utf8');
+function commentProjectionHarness(){
+ const a=commentServerSource.indexOf('function commentView('),b=commentServerSource.indexOf('export async function createSocialComment(',a);
+ const avatar=readFileSync(new URL('../../modules/identity-membership/avatars.ts',import.meta.url),'utf8');
+ const aa=avatar.indexOf('export function avatarUrl('),ab=avatar.indexOf('export async function avatarMetadata(',aa);
+ assert.ok(a>=0&&b>a&&aa>=0&&ab>aa);
+ const c:any={Buffer,activePost:async()=>{},cursorOf:()=>null};
+ const context:any={...c,module:{exports:{}},exports:{}};
+ runInNewContext(transformSync(avatar.slice(aa,ab)+commentServerSource.slice(a,b)+';globalThis.project=commentView;globalThis.shown=shownComment;globalThis.list=listSocialComments;globalThis.sql=COMMENTS;',{loader:'ts',format:'cjs'}).code,context);
+ return context;
+}
+for(const self of [false,true])for(const synthetic of [false,true])for(const present of [false,true])test(`comment DTO author photo self=${self} synthetic=${synthetic} present=${present}`,()=>{
+ const h=commentProjectionHarness(),author='10000000-0000-4000-8000-000000000001';
+ const result=h.project({author_user_id:author,display_name:'Author',has_avatar:present,test_account:synthetic,aggregate_version:'7',created_cursor:'2026-10-28T00:00:00.000000Z',edit_revision:1},{user_id:self?author:'another'});
+ assert.equal(result.author.user_id,author);assert.equal(result.author.avatar_url,present&&(!synthetic||self)?`/api/v1/members/${author}/avatar?v=7`:null);
+});
+test('comment list/create/edit share one same-community author-presence projection (fake query, not SQL execution)',async()=>{
+ const h=commentProjectionHarness(),calls:any[]=[],row={author_user_id:'10000000-0000-4000-8000-000000000001',display_name:'Author',has_avatar:true,test_account:false,aggregate_version:'9',created_cursor:'2026-10-28T00:00:00.000000Z',edit_revision:1};
+ const q={query:async(sql:string,values:unknown[])=>{calls.push({sql,values});return{rows:[row]};}},actor={user_id:row.author_user_id,community_id:'community'};
+ const shown=await h.shown(q,actor,'post','comment'),listed=await h.list(q,actor,'post');
+ assert.equal(shown.author.avatar_url,listed.items[0].author.avatar_url);
+ for(const call of calls){assert.match(call.sql,/LEFT JOIN member_avatar_presence a ON a.user_id=u.user_id AND a.community_id=c.community_id/);assert.match(call.sql,/a.aggregate_version,a.present AS has_avatar,is_verification_test_account\(u.user_id\) AS test_account/);assert.equal(call.values[1],actor.community_id);}
+ for(const [start,end] of [['export async function createSocialComment(','export async function removeSocialComment('],['export async function editSocialComment(',null]] as const){const a=commentServerSource.indexOf(start),b=end?commentServerSource.indexOf(end,a):commentServerSource.length;assert.match(commentServerSource.slice(a,b),/return shownComment\(q,inputCommand.actor,/);}
+});

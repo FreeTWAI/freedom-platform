@@ -2,6 +2,7 @@
 // All supported languages must have the same keys. Member-authored content is
 // not an interface message and must never be substituted by this catalog.
 export const interfaceMessages = {
+  "nav.virtual-commerce": ["虛擬導購工作台", "Virtual commerce rehearsal", "バーチャル商品案内リハーサル", "가상 상품 안내 리허설", "Ensayo de comercio virtual"],
   "nav.community-hub": ["社群入口總覽","Community hub","コミュニティ一覧","커뮤니티 허브","Comunidades"],
   "communityHub.intro": ["自由工坊共同經營的社群與參與方向，從這裡找到交流夥伴。","Find communities co-run by Freedom Workshop and ways to participate.","自由工坊が共同運営するコミュニティと参加方法を紹介します。","자유공방이 공동 운영하는 커뮤니티와 참여 방법을 찾아보세요.","Encuentra comunidades gestionadas junto a Freedom Workshop y formas de participar."],
   "communityHub.groups": ["社群列表","Community groups","コミュニティグループ","커뮤니티 목록","Grupos de la comunidad"],
@@ -34,6 +35,7 @@ export const interfaceMessages = {
   "nv.previous": ["上一題", "Previous question", "前の質問", "이전 질문", "Pregunta anterior"],
   "nv.results": ["查看結果", "View results", "結果を見る", "결과 보기", "Ver resultados"],
   "nv.resultTitle": ["我的定位草稿", "My direction draft", "方向性の下書き", "내 방향 초안", "Mi borrador de rumbo"],
+  "nv.nextStep": ["下一步", "Next step", "次の一歩", "다음 단계", "Siguiente paso"],
   "nv.baseline": ["過生活底線", "Lifestyle baseline", "暮らしの譲れない条件", "생활의 기준선", "Límites de estilo de vida"],
   "nv.firstWeek": ["第一週行動", "First-week action", "最初の週の行動", "첫 주 행동", "Acción de la primera semana"],
   "nv.rhythm": ["30 天節奏（作者示例，由你調整）", "30-day rhythm (author example; adapt it)", "30日の流れ（著者の例・調整可）", "30일 리듬 (저자 예시, 직접 조정)", "Ritmo de 30 días (ejemplo adaptable)"],

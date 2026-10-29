@@ -24,7 +24,9 @@
     "tests/e2e/github-setup.spec.ts",
     "tests/runtime/admin-access-session.test.ts",
     "apps/platform-api/src/admin-sync-worker.ts",
-    "modules/platform-admin/**"
+    "modules/platform-admin/**",
+    "apps/portal-web/src/modules/AdminCommunityCertification.tsx",
+    "apps/portal-web/src/modules/AdminCommunityCertification.css"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/AdminPanel.tsx"

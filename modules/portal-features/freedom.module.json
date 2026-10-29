@@ -36,7 +36,10 @@
     "skill-submissions",
     "social-feed",
     "tenant-workspaces",
-    "work"
+    "work",
+    "social-achievements",
+    "community-certification",
+    "virtual-commerce"
   ],
   "contract_families": [],
   "client_profiles": [

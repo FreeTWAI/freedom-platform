@@ -1,7 +1,11 @@
+import {SeasonalWelcome} from './seasonal/SeasonalTheme';
+import {useSeasonalTheme} from './seasonal/useSeasonalTheme';
+import {parseProfileRoute,canOpenGuestProfile} from './modules/profile-publication-route';
 import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
 import {activateHomeLink} from './brand-home-link';
 import {requestHomeJournalOpen} from './modules/member-home-loading';
 import {PasswordField} from './modules/auth/PasswordField';
+import {GoogleSignIn,GoogleCallback,captureGoogleCallback,type GoogleCallbackEntry} from './modules/GoogleSignIn';
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
 import {parseSupplierConsoleRoute} from '../../../modules/agent-commerce/supplier-console/ui/route';
@@ -55,6 +59,7 @@ import {AppInstallProvider,InstallAppButton} from './AppInstall'
 
 const PublicGuildLaunchpad = lazy(() => import('./guild-blocks/GuildLaunchpadPage').then(m => ({default: m.PublicGuildLaunchpad})))
 const PublicArPage=lazy(()=>import('./modules/community-ar/Panel').then(m=>({default:m.PublicArPage})))
+const VisitorProfile = lazy(() => import('./modules/VisitorProfile').then(m => ({default:m.VisitorProfile})))
 const PublicMemberPage = lazy(() => import('./modules/PublicMemberPage').then(m => ({default: m.PublicMemberPage})))
 const Onboarding = lazy(() => import('./modules/Onboarding').then(m => ({default: m.Onboarding})))
 const AdminPanel = lazy(() => import('./modules/AdminPanel').then(m => ({default: m.AdminPanel})))
@@ -77,6 +82,9 @@ const onboardingStarted=(userId:string)=>{try{return sessionStorage.getItem(`fre
 const rememberOnboarding=(userId:string,started:boolean)=>{try{if(started)sessionStorage.setItem(`freedom-onboarding-started:${userId}`,'yes');else sessionStorage.removeItem(`freedom-onboarding-started:${userId}`)}catch{/* Keep the in-memory choice. */}}
 
 
+// Capture once before React StrictMode and before any return-path snapshot.
+const initialGoogleCallback=captureGoogleCallback();
+
 export function App() {
   // Old pop-out links now enter the same member message panel.
   const legacyConsole=new URL(window.location.href)
@@ -87,8 +95,8 @@ export function App() {
     window.history.replaceState(null,'',legacyConsole)
   }
   const arToken=/^\/ar\/([A-Za-z0-9_-]{43})\/?$/.exec(window.location.pathname)?.[1]
-  const page = arToken?<PublicArPage client={client} token={arToken}/> : popout&&adminRoute ? <GameConsolePopout client={client}/> : window.location.pathname==='/github/callback' ? <GitHubCallback/>
-    : adminRoute ? <AdminConsoleShell/> : <MemberApp/>
+  const page = initialGoogleCallback?.intent==='link'?<main className="centered"><div className="card stack"><BrandPoster compact/><GoogleCallback client={client} entry={initialGoogleCallback}/></div></main> : arToken?<PublicArPage client={client} token={arToken}/> : popout&&adminRoute ? <GameConsolePopout client={client}/> : window.location.pathname==='/github/callback' ? <GitHubCallback/>
+    : adminRoute ? <AdminConsoleShell/> : <MemberApp initialGoogleCallback={initialGoogleCallback}/>
   return <LanguageProvider><AppInstallProvider><RequestFeedback/><PageLoadBoundary label="自由工坊" resetKey={window.location.pathname}>{page}</PageLoadBoundary></AppInstallProvider></LanguageProvider>
 }
 
@@ -120,9 +128,10 @@ function AdminConsoleShell(){
   </GameConsoleProvider>
 }
 
-function MemberApp() {
+function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallbackEntry|null}) {
+  const [googleCallback,setGoogleCallback]=useState(initialGoogleCallback);
   const {t}=useLanguage()
-  const [phase, setPhase] = useState<'boot' | 'login' | 'ready'>('boot')
+  const [phase, setPhase] = useState<'boot' | 'login' | 'ready'>(initialGoogleCallback?'login':'boot')
   const [session, setSession] = useState<SessionPayload | null>(null)
   const [bootError, setBootError] = useState<ActionError | null>(null)
   const [loginNotice, setLoginNotice] = useState<string | null>(null)
@@ -136,6 +145,11 @@ function MemberApp() {
   const [publicEventId,setPublicEventId]=useState(eventIdFromLocation)
   const [eventLoginRequested,setEventLoginRequested]=useState(eventLoginFromLocation)
   const [locationHash,setLocationHash]=useState(() => window.location.hash)
+  const [profileLoginRequested,setProfileLoginRequested]=useState(()=>window.history.state?.freedomProfileLogin===window.location.hash);
+  const profileRoute=parseProfileRoute(locationHash);
+  const beginProfileLogin=()=>{window.history.pushState({...window.history.state,freedomProfileLogin:window.location.hash},'');setProfileLoginRequested(true);};
+  const returnToProfile=()=>{if(window.history.state?.freedomProfileLogin===window.location.hash)window.history.back();else setProfileLoginRequested(false);};
+  useEffect(()=>{const update=()=>setProfileLoginRequested(window.history.state?.freedomProfileLogin===window.location.hash);window.addEventListener('popstate',update);window.addEventListener('hashchange',update);return()=>{window.removeEventListener('popstate',update);window.removeEventListener('hashchange',update);};},[]);
   const [entryIntent,setEntryIntent]=useState<EntryIntent|null>(entryIntentFromHash)
   const [siteLoaded,setSiteLoaded]=useState(false)
   const [launchpadLoginRequested,setLaunchpadLoginRequested]=useState(false)
@@ -174,6 +188,8 @@ function MemberApp() {
       const state={...window.history.state};delete state.freedomEventLogin
       window.history.replaceState(Object.keys(state).length?state:null,'')
     }
+    if(window.history.state?.freedomProfileLogin){const state={...window.history.state};delete state.freedomProfileLogin;window.history.replaceState(state,'');}
+    setProfileLoginRequested(false);
     sessionGeneration.current += 1
     client.csrfToken = next.csrf_token
     setSharingDraftAccount(next.user.user_id, client.sessionGeneration)
@@ -245,7 +261,7 @@ function MemberApp() {
       }
       toLogin('登入已過期，請重新登入。')
     }
-    void bootstrap()
+    if(!initialGoogleCallback)void bootstrap()
     return () => {
       client.onUnauthorized = null
     }
@@ -269,7 +285,7 @@ function MemberApp() {
   };
   const returnToEvent=()=>{if(eventLoginFromLocation())window.history.back();else setEventLoginRequested(false)};
 
-  if (phase === 'boot') {
+  if (phase === 'boot'||googleCallback&&!siteLoaded) {
     return (
       <div className="app-frame">
         {site?.demo_accounts_enabled && <DemoBanner />}
@@ -281,31 +297,35 @@ function MemberApp() {
       </div>
     )
   }
-  if(!resetToken&&publicEventId&&readEventParticipationToken(locationHash)&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} participationEnabled={site?.event_participation_enabled===true} onLogin={eventLogin}/>;
+  if(!googleCallback&&!resetToken&&publicEventId&&readEventParticipationToken(locationHash)&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} participationEnabled={site?.event_participation_enabled===true} onLogin={eventLogin}/>;
 
   const emailChangeToken=/^#change-email\/([A-Za-z0-9_-]{43})$/.exec(locationHash)?.[1];
   if(emailChangeToken)return <EmailChangeConfirm key={emailChangeToken} client={client} token={emailChangeToken}/>;
   if(emailVerificationToken)return <EmailVerificationConfirm key={emailVerificationToken} client={client} token={emailVerificationToken}/>;
   if (resetToken || phase !== 'ready' || !session) {
-    if(!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
-    if(!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
-    if(!resetToken&&locationHash.split('?')[0]==='#community-hub')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
-    if(!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
-    if(!resetToken&&locationHash.split('?')[0]==='#tester-map')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#home">{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap/></PageLoadBoundary></main></div>;
-    if(!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>{if(site?.community_discovery_enabled&&site.registration_enabled)window.location.assign(`/?join=1&return_to=${encodeURIComponent(`/events/${publicEventId}`)}`);else eventLogin()}}/>;
+    // Authentication callbacks take precedence over every guest publication entry.
+    if(!googleCallback&&!resetToken&&!profileLoginRequested&&profileRoute?.kind==='visitor'&&canOpenGuestProfile(locationHash,window.location.search))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><h1>個人頁</h1><VisitorProfile client={client} id={profileRoute.id} onLogin={beginProfileLogin}/><a className="btn btn-secondary btn-small" href="#home">返回自由工坊</a></main></div>;
+    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
+    if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
+    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-hub')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
+    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
+    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#tester-map')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#home">{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap/></PageLoadBoundary></main></div>;
+    if(!googleCallback&&!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>{if(site?.community_discovery_enabled&&site.registration_enabled)window.location.assign(`/?join=1&return_to=${encodeURIComponent(`/events/${publicEventId}`)}`);else eventLogin()}}/>;
     const launchpadKey=guildKeyFromHash(locationHash);
-    if(!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
+    if(!googleCallback&&!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
     if(!resetToken&&launchpadKey&&!siteLoaded)return <div className="app-frame"><div className="centered"><p className="muted" role="status">正在確認公開頁面…</p></div></div>;
     return (
       <div className="app-frame">
         {site?.demo_accounts_enabled && <DemoBanner />}
         {sharedCardToken&&<button type="button" className="btn btn-ghost" onClick={()=>setMemberLoginRequested(false)}>返回邀請名片</button>}
+        {profileLoginRequested&&profileRoute?.kind==='visitor'&&<button type="button" className="btn btn-secondary btn-small" onClick={returnToProfile}>取消登入，返回個人頁</button>}
         <LoginView
           site={site}
+          googleCallback={googleCallback}
           notice={loginNotice}
           bootError={bootError}
           onRetrySession={() => void bootstrap()}
-          onLoggedIn={(next, returnNotice) => { applySession(next); setPublicReturnNotice(returnNotice ?? null) }}
+          onLoggedIn={(next, returnNotice) => { setGoogleCallback(null);applySession(next); setPublicReturnNotice(returnNotice ?? null) }}
           onReturnToGuild={!resetToken&&launchpadKey&&launchpadLoginRequested&&site?.guild_launchpad_enabled===true?()=>setLaunchpadLoginRequested(false):undefined}
           onReturnToEvent={!resetToken&&publicEventId&&eventLoginRequested?returnToEvent:undefined}
           entryIntent={entryIntent}
@@ -327,7 +347,7 @@ function MemberApp() {
     : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
       ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
-      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(!entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(parseProfileRoute(window.location.hash)?.kind!=='visitor' && !entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
     : sharedCardToken ? <PublicMemberPage client={client} token={sharedCardToken} session={session} onLogin={()=>{}} onReturn={returnToWorkshop} onEdit={editOwnCard}/> : <>
     <AuthorClaimProvider client={client}><DevelopmentAccessProvider client={client} session={session}>
     <Workspace key={`${session.user.user_id}:${client.sessionGeneration}`}
@@ -356,6 +376,7 @@ function DemoBanner() {
 
 function LoginView({
   site,
+  googleCallback,
   notice,
   bootError,
   onRetrySession,
@@ -369,6 +390,7 @@ function LoginView({
   onReturnToEvent,
 }: {
   site: SiteConfig | null
+  googleCallback?:GoogleCallbackEntry|null
   notice: string | null
   bootError: ActionError | null
   onRetrySession: () => void
@@ -408,6 +430,12 @@ function LoginView({
     window.addEventListener('hashchange',moved);window.addEventListener('popstate',moved)
     return()=>{window.removeEventListener('hashchange',moved);window.removeEventListener('popstate',moved)}
   },[postReturnPath,memberPostPath])
+  useEffect(()=>{
+    if(!googleCallback)return;
+    const moved=()=>{authEpoch.current++;skillReturnRequest.current?.abort()};
+    window.addEventListener('hashchange',moved);window.addEventListener('popstate',moved);
+    return()=>{window.removeEventListener('hashchange',moved);window.removeEventListener('popstate',moved)};
+  },[googleCallback]);
   const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -425,6 +453,41 @@ function LoginView({
   const [error, setError] = useState<unknown>(null)
   const {language,t}=useLanguage()
   const errorDetails=error?{...describeError(error),message:totpRequired&&error instanceof ApiError&&error.status===401&&!error.accessExpired?t('error.totpInvalid'):authErrorMessage(error,language)}:null
+
+  async function completeSession(session:SessionPayload,epoch:number,registered:boolean) {
+      if (!session?.user || !session.csrf_token) {
+        throw new Error('登入回應不完整')
+      }
+      if (epoch !== authEpoch.current) return
+      if(postReturnPath||memberPostPath){
+        if(window.location.href!==postEntryUrl)return
+        if(postReturnPath){window.location.assign(postReturnPath);return}
+        onLoggedIn(session);return
+      }
+      if (storefrontReturnEnabled && storefrontReturn) {
+        const allowed = await successfulStorefrontReturn(storefrontReturn, session)
+        if (epoch !== authEpoch.current) return
+        if (allowed) { window.location.assign(storefrontReturn); return }
+        onLoggedIn(session, registered
+          ? '帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。'
+          : '登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。')
+      } else if (skillReturn) {
+        // Same-document Back/Forward can retain this form while changing the entry.
+        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
+        const controller = new AbortController(); skillReturnRequest.current?.abort(); skillReturnRequest.current = controller
+        const allowed = await validateSkillReturn(skillReturn, {signal: controller.signal})
+        if (epoch !== authEpoch.current || controller.signal.aborted) return
+        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
+        if (allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
+        onLoggedIn(session, t('auth.skillReturnUnavailable'))
+      } else if (registered && discoveryEnabled && returnPath) {
+        let allowed = false
+        try { allowed = await validatePublicReturn(returnPath) } catch { /* Registration succeeded even when original content cannot be checked. */ }
+        if (googleCallback && epoch !== authEpoch.current) return
+        if (allowed) { window.location.assign(returnPath); return }
+        onLoggedIn(session, '帳號已建立。原本的公開內容目前無法確認或已停止公開，你仍可繼續逛工坊。')
+      } else onLoggedIn(session)
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -454,37 +517,7 @@ function LoginView({
       const session = activeMode === 'register'
         ? await client.register({email:email.trim(),password,nickname:nickname.trim()})
         : await client.login(email.trim(), password, totpRequired?loginCode.trim():undefined)
-      if (!session?.user || !session.csrf_token) {
-        throw new Error('登入回應不完整')
-      }
-      if (epoch !== authEpoch.current) return
-      if(postReturnPath||memberPostPath){
-        if(window.location.href!==postEntryUrl)return
-        if(postReturnPath){window.location.assign(postReturnPath);return}
-        onLoggedIn(session);return
-      }
-      if (storefrontReturnEnabled && storefrontReturn) {
-        const allowed = await successfulStorefrontReturn(storefrontReturn, session)
-        if (epoch !== authEpoch.current) return
-        if (allowed) { window.location.assign(storefrontReturn); return }
-        onLoggedIn(session, activeMode === 'register'
-          ? '帳號已建立。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。'
-          : '登入成功。原本的商店目前無法確認或已停止公開，你仍可繼續逛工坊。')
-      } else if (skillReturn) {
-        // Same-document Back/Forward can retain this form while changing the entry.
-        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
-        const controller = new AbortController(); skillReturnRequest.current?.abort(); skillReturnRequest.current = controller
-        const allowed = await validateSkillReturn(skillReturn, {signal: controller.signal})
-        if (epoch !== authEpoch.current || controller.signal.aborted) return
-        if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
-        if (allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
-        onLoggedIn(session, t('auth.skillReturnUnavailable'))
-      } else if (activeMode === 'register' && discoveryEnabled && returnPath) {
-        let allowed = false
-        try { allowed = await validatePublicReturn(returnPath) } catch { /* Registration succeeded even when original content cannot be checked. */ }
-        if (allowed) { window.location.assign(returnPath); return }
-        onLoggedIn(session, '帳號已建立。原本的公開內容目前無法確認或已停止公開，你仍可繼續逛工坊。')
-      } else onLoggedIn(session)
+      await completeSession(session,epoch,activeMode==='register')
     } catch (err) {
       if(activeMode==='login'&&err instanceof ApiError&&err.code==='totp_required'){
         setTotpRequired(true);setLoginCode('')
@@ -501,6 +534,7 @@ function LoginView({
   const visitorFirst = !discoveryEnabled && !resetToken && !returnPath && !skillReturn
     && !storefrontReturn && !postReturnPath && !memberPostPath && !entryIntent
     && !onReturnToGuild && !onReturnToEvent && !accessExpired
+  if(googleCallback)return <main className="login-layout"><section className="login-story"><BrandPoster/></section><div className="login-form-area"><div className="card login-card"><GoogleCallback client={client} entry={googleCallback} onLoggedIn={(next,registered)=>completeSession(next,authEpoch.current,registered)}/></div></div></main>
   return (
     <main className={`login-layout${discoveryEnabled ? ' discovery-login-layout' : ''}${visitorFirst ? ' visitor-first-layout' : ''}`}>
       <div className="login-entry-tools"><LanguagePicker className="login-language-row"/><InstallAppButton/></div>
@@ -566,6 +600,7 @@ function LoginView({
             {t(pending?'auth.pending':activeMode==='register'?'auth.createExplore':activeMode==='request-reset'?'auth.sendReset':activeMode==='confirm-reset'?'auth.savePassword':'auth.login')}
           </button>
         </form>}
+        {!accessExpired&&(activeMode==='login'||activeMode==='register')&&<GoogleSignIn client={client} disabled={pending}/>}
         {onReturnToGuild&&<button type="button" className="btn btn-ghost" disabled={pending} onClick={onReturnToGuild}>返回公會啟動台</button>}
         {onReturnToEvent&&<button type="button" className="btn btn-ghost btn-small" disabled={pending} onClick={onReturnToEvent}>返回活動</button>}
         {!accessExpired&&<div className="login-secondary-actions">
@@ -614,6 +649,7 @@ function Workspace({
   onLoggedOut: () => void
   onSessionExpired: () => void
 }) {
+  const seasonal=useSeasonalTheme();
   const {t}=useLanguage()
   const [headerMember,setHeaderMember]=useState<MemberCardData|null>(null)
   const [canManageGuild,setCanManageGuild]=useState(false)
@@ -941,7 +977,7 @@ function Workspace({
 
   return (
     <PortalContext.Provider value={value}>
-      <div className="app-frame social-layout">
+      <div className="app-frame social-layout seasonal-surface" data-season={seasonal.season??undefined} data-seasonal-home={tab==='home'&&!consoleRoute&&!sellerRoute}>
         {site?.demo_accounts_enabled && <DemoBanner />}
         <a className="skip" href="#main-content" onClick={event => { event.preventDefault(); mainContent.current?.focus(); }}>
           跳到主要內容
@@ -962,7 +998,7 @@ function Workspace({
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
             <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen} onCloseMobile={returnFocus => { setMobileOpen(false); if (returnFocus) menuToggle.current?.focus(); }}/>
           </aside>
-          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
+          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu seasonalPreference={seasonal.preference} onSeasonalPreference={seasonal.selectPreference} personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">
@@ -986,6 +1022,7 @@ function Workspace({
                 onReload={() => window.location.reload()}
               />
             )}
+            {tab==='home'&&!consoleRoute&&!sellerRoute&&seasonal.season&&<SeasonalWelcome season={seasonal.season} onShare={()=>chooseShare('post')} disabled={Boolean(pending)||Boolean(error?.accessExpired)}/>}
             <PageLoadBoundary label={t(`nav.${tab}`)} resetKey={tab}>
             {renderPortalFeature(tab, {
               client, session, site, locationHash, selectTab, friendScope, notificationTarget, headerMember,
@@ -1018,6 +1055,8 @@ function tabTitle(tab: TabId): string {
 
 function tabFromHash(launchpadEnabled: boolean): TabId {
   const value = window.location.hash.slice(1)
+  if(parseProfileRoute(window.location.hash))return 'profile'
+  if(value==='account?view=recognition'||value==='account?view=connections')return 'account'
   if(isMessagesHash(window.location.hash))return 'home'
   if(value === 'reservations' || value.startsWith('reservations/'))return 'reservations'
   if(value.split('?')[0]==='community-search')return 'community-search'

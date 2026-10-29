@@ -24,6 +24,7 @@
     "deploy/cloudflare/test/media-wrangler.test.mjs",
     "deploy/cloudflare/test/isolated-candidate.test.mjs",
     "deploy/cloudflare/test/release-compatibility.test.mjs",
+    "deploy/cloudflare/test/profile-publication-schema.test.mjs",
     "deploy/cloudflare/README.md",
     "apps/migration-maintenance/**",
     "tests/worker/migration-maintenance.test.ts"

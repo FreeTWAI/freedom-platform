@@ -74,7 +74,13 @@ test('settings menu replaces the card button with an accessible keyboard menu',a
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'加入主畫面',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitem',{name:'外觀主題',exact:true})).toBeFocused();
   await page.keyboard.press('Enter');await expect(menu.getByRole('menuitem',{name:'返回個人選單',exact:true})).toBeFocused();
-  await page.keyboard.press('End');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
+  const seasonal=menu.getByRole('menuitem',{name:'節日主題 · 自動配合節日',exact:true});
+  await page.keyboard.press('End');await expect(seasonal).toBeFocused();
+  await page.keyboard.press('Enter');await expect(menu.getByRole('menuitem',{name:'返回個人選單',exact:true})).toBeFocused();
+  await page.keyboard.press('End');await expect(menu.getByRole('menuitemradio',{name:'新年',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowDown');await expect(menu.getByRole('menuitem',{name:'返回個人選單',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');await expect(seasonal).toBeFocused();
+  await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－AI Sister',exact:true})).toBeFocused();
   await page.keyboard.press('ArrowUp');await expect(menu.getByRole('menuitemradio',{name:'新手導覽－龍娘',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');await expect(menu.getByRole('menuitem',{name:'外觀主題',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(toggle).toBeFocused();await expect(toggle).toHaveAttribute('aria-expanded','false');

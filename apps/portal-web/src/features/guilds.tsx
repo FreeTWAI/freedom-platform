@@ -25,7 +25,7 @@ export const guildsFeatures = {
   },
   "skills": {
     moduleId: "development", placement: 'page',
-    render: ({client, session, selectTab}) => <SkillsPanel client={client} session={session} onNavigate={selectTab} />,
+    render: ({client, session, selectTab}) => <SkillsPanel client={client} session={session} onNavigate={selectTab} onManageGitHub={()=>selectTab('account','#account?view=connections')} />,
   },
   "guild-workspace": {
     moduleId: "guild-workspace", placement: 'page',

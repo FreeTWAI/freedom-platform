@@ -9,6 +9,9 @@ export type CoverageEntry = { status: CoverageStatus; issues?: readonly number[]
 
 export const TESTER_COVERAGE_UPDATED_AT = '2026-10-25';
 export const TESTER_COVERAGE: Record<string, CoverageEntry> = {
+  // Disabled local candidate; not a public-site acceptance observation.
+  'profile.community-certification': { status: '未測' },
+  'profile.social-titles': { status: '未測' },
   // 入口、註冊與加入
   'entry.preview': { status: '未測' },
   'entry.register': { status: '未測' },
@@ -94,6 +97,7 @@ export const TESTER_COVERAGE: Record<string, CoverageEntry> = {
   'contrib.private-ai': { status: '未測' },
   // 供貨、商店與訂單
   'shop.supplier': { status: '未測' },
+  'shop.virtual-commerce': { status: '未測' },
   'shop.retail': { status: '未測' },
   'shop.supplier-console': { status: '未測' },
   'shop.stores': { status: '未測' },

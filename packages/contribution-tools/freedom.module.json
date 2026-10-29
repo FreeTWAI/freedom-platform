@@ -53,6 +53,7 @@
     "deploy/cloudflare/release-compatibility.md",
     "deploy/cloudflare/test/migration-plan.test.mjs",
     "deploy/cloudflare/test/release-compatibility.test.mjs",
+    "deploy/cloudflare/test/profile-publication-schema.test.mjs",
     "deploy/cloudflare/test/release-agent-connections.test.mjs",
     "deploy/cloudflare/test/release-bootstrap-session.test.mjs",
     "deploy/cloudflare/test/release-bootstrap-status.test.mjs",

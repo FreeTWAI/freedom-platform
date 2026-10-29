@@ -43,6 +43,9 @@ test('guild member lists load on demand, preserve guild filtering across pages a
   await card.getByRole('button', { name: '查看成員', exact: true }).click();
   const panel = card.getByRole('region', { name: '活動與空間公會成員', exact: true });
   await expect(panel.locator('.directory-member')).toHaveCount(10); await expect(panel).toContainText('顯示 10 / 11 位成員');
+  // Legacy synthetic identifiers remain readable without constructing invalid visitor routes.
+  const legacyRow=panel.locator('[data-member-id="member-0"]');
+  await expect(legacyRow.getByRole('heading',{name:'同名夥伴',exact:true})).toBeVisible();await expect(legacyRow.locator('.member-avatar')).toBeVisible();await expect(legacyRow.locator('a[href^="#profile?member="]')).toHaveCount(0);
   expect(queries[0].get('guild_key')).toBe('guild_event_space'); expect(queries[0].get('sort')).toBe('nickname');
   await expect(panel.locator('[data-member-id="member-0"] .guild-member-leader')).toHaveText('公會長');
   await expect(panel.locator('[data-member-id="member-1"] .guild-member-leader')).toHaveCount(0);

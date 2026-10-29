@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {test,expect} from './member-feature-fixture.js';
 import {DEMO_USERS,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {tokenHash} from '../../modules/identity-membership/service.js';
@@ -16,7 +17,7 @@ test('a signed-out member confirms a real email-change link after the requesting
     await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
     await page.getByRole('button',{name:'登入',exact:true}).click();
     await expect(page.locator('.shell')).toBeVisible();
-    await page.goto('/#account');
+    await page.goto('/#account');await openAccountSettings(page,'更換登入信箱');
     const panel=page.locator('form').filter({has:page.getByRole('heading',{name:'變更登入 Email',exact:true})});
     await panel.getByLabel('新登入 Email',{exact:true}).fill(next);
     await panel.getByLabel('目前密碼',{exact:true}).fill(DEMO_PASSWORD);

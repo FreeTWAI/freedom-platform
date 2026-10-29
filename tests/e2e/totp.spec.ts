@@ -1,3 +1,4 @@
+import {openAccountSettings} from './navigation.js';
 import {test,expect,type Page} from './member-feature-fixture.js';
 import {DEMO_USERS,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {totpCode} from '../../modules/identity-membership/totp.js';
@@ -31,6 +32,7 @@ async function logout(page:Page){
 
 test('enrollment, authenticator login, one-use backup and MFA password reset finish in the browser',async({page,e2eAuthPool},testInfo)=>{
   await passwordLogin(page);
+  await openAccountSettings(page,'兩步驟驗證');
   const panel=page.locator('.totp-settings');
   await panel.getByRole('button',{name:'設定驗證器',exact:true}).click();
   const secret=await panel.getByLabel('驗證器金鑰',{exact:true}).inputValue();
@@ -53,11 +55,13 @@ test('enrollment, authenticator login, one-use backup and MFA password reset fin
   expect((await page.request.get('/api/v1/session')).status()).toBe(401);
   await page.getByRole('textbox',{name:/^驗證器代碼或備用碼/}).fill(totpCode(secret,counter+1));
   await page.getByRole('button',{name:'登入',exact:true}).click();
+  await openAccountSettings(page,'兩步驟驗證');
   await expect(panel.getByRole('button',{name:'停用雙因素驗證',exact:true})).toBeVisible();
   await logout(page);
   await passwordLogin(page);
   await page.getByRole('textbox',{name:/^驗證器代碼或備用碼/}).fill(codes[0]);
   await page.getByRole('button',{name:'登入',exact:true}).click();
+  await openAccountSettings(page,'兩步驟驗證');
   await expect(panel).toContainText('剩餘 9 組備用碼');
   await logout(page);
   await passwordLogin(page);
@@ -79,6 +83,7 @@ test('enrollment, authenticator login, one-use backup and MFA password reset fin
   await passwordLogin(page,rotated);
   await page.getByRole('textbox',{name:/^驗證器代碼或備用碼/}).fill(codes[1]);
   await page.getByRole('button',{name:'登入',exact:true}).click();
+  await openAccountSettings(page,'兩步驟驗證');
   await expect(panel).toContainText('剩餘 8 組備用碼');
   await panel.getByLabel('目前密碼',{exact:true}).fill(rotated);
   await panel.getByLabel('驗證器代碼或備用碼',{exact:true}).fill(codes[2]);
@@ -88,6 +93,7 @@ test('enrollment, authenticator login, one-use backup and MFA password reset fin
 
 test('lost enable response reuses the receipt and recovers status without replaying backup codes',async({page,e2eAuthPool})=>{
   await passwordLogin(page);
+  await openAccountSettings(page,'兩步驟驗證');
   const panel=page.locator('.totp-settings');
   await panel.getByRole('button',{name:'設定驗證器',exact:true}).click();
   const secret=await panel.getByLabel('驗證器金鑰',{exact:true}).inputValue();

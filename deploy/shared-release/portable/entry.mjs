@@ -146,7 +146,7 @@ export async function main(args = process.argv.slice(2)) {
       plan = preparePortableMigration({ sourceRoot: SOURCE, sourceCommit: request.sourceSha, profile: config.migrationProfile,
         installationParent: await directory('migration-installations'), beforeLedger: state.schemaLedger });
       expected = await deriveCandidateContract({ sourceRoot: SOURCE, sourceSha: request.sourceSha, sourceTree: request.sourceTree,
-        profile: config.migrationProfile, materialPolicySha256: state.materialPolicySha256,
+        profile: config.migrationProfile, materialPolicySha256: state.materialPolicySha256, beforeLedger: state.schemaLedger,
         workRoot: await directory('candidate-database'), binDirectory: BIN, signal: lease.signal });
       built = await buildApplication({ sourceRoot: SOURCE, sourceSha: request.sourceSha, sourceTree: request.sourceTree,
         workRoot: await directory('build'), target: config.target, before, signal: lease.signal });

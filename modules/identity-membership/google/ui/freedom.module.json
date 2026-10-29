@@ -1,0 +1,30 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "google-identity-ui",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/identity-membership/google/ui/freedom.module.json",
+    "apps/portal-web/src/modules/GoogleAccount.tsx",
+    "apps/portal-web/src/modules/PasswordSetup.tsx"
+  ],
+  "public_exports": [],
+  "dependencies": [
+    "shared"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "modules/identity-membership/google/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

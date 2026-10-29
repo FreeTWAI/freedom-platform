@@ -12,7 +12,9 @@
     "apps/portal-web/src/modules/MemberSocialLinks.tsx",
     "apps/portal-web/src/modules/MemberSocialLinks.css",
     "apps/portal-web/src/modules/MemberSettings.css",
-    "tests/e2e/member-connections.spec.ts"
+    "tests/e2e/member-connections.spec.ts",
+    "apps/portal-web/src/modules/CommunityCertification.tsx",
+    "apps/portal-web/src/modules/CommunityCertification.css"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/CapabilityTree.tsx",

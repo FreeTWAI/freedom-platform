@@ -20,5 +20,10 @@ export function CapabilityTree({categories,values,onToggle,kind}:{categories:Cho
 export function CustomChoices({kind,values,onChange}:{kind:'能力'|'裝備';values:string[];onChange:(values:string[])=>void}){
   const [value,setValue]=useState(''),[error,setError]=useState('');
   function add(){const trimmed=value.trim();if(!trimmed)return;if(values.includes(trimmed)){setError('這一項已經在清單中。');return;}if(values.length>=10){setError('最多可以自行補充 10 項。');return;}onChange([...values,trimmed]);setValue('');setError('');}
-  return <section className="custom-choices stack"><h3>補上你自己的{kind}</h3><p className="field-hint">清單沒有的也可以填。每項最多 60 字，最多 10 項；請勿填入密碼或其他機密。</p><div className="custom-choice-input"><label className="field">自訂{kind}<input maxLength={60} value={value} onChange={event=>setValue(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();add();}}}/></label><button type="button" className="btn btn-ghost" disabled={!value.trim()||values.length>=10} onClick={add}>加入{kind}</button></div>{error&&<p role="alert" className="field-hint">{error}</p>}<div className="tag-list">{values.map(item=><span className="custom-choice pill" key={item}>{item}<button type="button" aria-label={`移除${kind}：${item}`} onClick={()=>onChange(values.filter(v=>v!==item))}>×</button></span>)}</div></section>;
+  return <section className="custom-choices stack"><h3>補上你自己的{kind}</h3><p className="field-hint">清單沒有的也可以填。每項最多 60 字，最多 10 項；請勿填入密碼或其他機密。</p><div className="custom-choice-input"><label className="field">自訂{kind}<input maxLength={60} value={value} onChange={event=>setValue(event.target.value)} onKeyDown={event=>{
+    if(event.key==='Enter'){
+      if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;
+      event.preventDefault();add();
+    }
+  }}/></label><button type="button" className="btn btn-ghost" disabled={!value.trim()||values.length>=10} onClick={add}>加入{kind}</button></div>{error&&<p role="alert" className="field-hint">{error}</p>}<div className="tag-list">{values.map(item=><span className="custom-choice pill" key={item}>{item}<button type="button" aria-label={`移除${kind}：${item}`} onClick={()=>onChange(values.filter(v=>v!==item))}>×</button></span>)}</div></section>;
 }

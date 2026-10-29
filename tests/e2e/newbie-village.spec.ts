@@ -1,5 +1,5 @@
 import {test,expect} from './fixtures.js';
-import {QUESTIONS_V2,STORAGE_KEY} from '../../modules/newbie-village/index.js';
+import {CLASSES_V2,CAREER_GUILDS,DIMENSIONS,calculateResult,QUESTIONS_V2,STORAGE_KEY} from '../../modules/newbie-village/index.js';
 
 test.beforeEach(async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('freedom-interface-language-v1','zh-Hant'));
@@ -80,6 +80,30 @@ test('NEWBIE-003 blocked storage stays usable and reports that progress cannot p
   await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[1].q);
 });
 
+test('NEWBIE-005 quiz result shows next-step actions and suggested guild links once',async({page})=>{
+  await page.goto('/#newbie-village');
+  await expect(page.getByTestId('nv-next-step')).toHaveCount(0);
+  const answers=QUESTIONS_V2.map(()=>[0]);
+  for(let i=0;i<QUESTIONS_V2.length;i++){
+    await expect(page.locator('#nv-quiz legend')).toHaveText(QUESTIONS_V2[i].q);
+    await page.locator('#nv-quiz input').first().check();
+    await page.locator('#nv-quiz').getByRole('button',{name:i===14?'查看結果':'下一題',exact:true}).click();
+  }
+  const result=calculateResult(answers),career=result.primary;
+  const suggestedCareers=[...new Set([career,...DIMENSIONS.map(d=>result.dimensionWinners[d])])];
+  const screen=page.locator('#nv-quiz');
+  const card=page.getByTestId('nv-next-step');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('heading',{name:'下一步',exact:true})).toBeVisible();
+  await expect(card.locator('ol > li')).toHaveCount(3);
+  await expect(card.locator('ol > li')).toHaveText(CLASSES_V2[career].actions);
+  for(const action of CLASSES_V2[career].actions)await expect(screen.getByText(action,{exact:true})).toHaveCount(1);
+  for(const c of suggestedCareers)for(const guild of CAREER_GUILDS[c]){
+    await expect(screen.getByRole('link',{name:guild.name,exact:true})).toHaveCount(1);
+    await expect(card.getByRole('link',{name:guild.name,exact:true})).toHaveAttribute('href',`#guilds/${guild.guildId}`);
+  }
+});
+
 // Use the real main.tsx theme imports and persisted profiles, not an isolated CSS fixture.
 async function expectNewbieActionColors(action:import('@playwright/test').Locator,focused=false){
   const observed=await action.evaluate(element=>{
@@ -92,15 +116,18 @@ async function expectNewbieActionColors(action:import('@playwright/test').Locato
     }
     function ratio(a:string,b:string){const values=[luminance(a),luminance(b)].sort((x,y)=>x-y);return (values[1]+.05)/(values[0]+.05);}
     return {text:ratio(style.color,style.backgroundColor),focus:ratio(style.outlineColor,style.backgroundColor),
-      outline:style.outlineStyle,width:parseFloat(style.outlineWidth),opacity:Number(style.opacity),
+      outline:style.outlineStyle,width:parseFloat(style.outlineWidth),opacity:Number(style.opacity),border:style.borderStyle,cursor:style.cursor,
       focusVisible:element.matches(':focus-visible'),height:element.getBoundingClientRect().height};
   });
   // Disabled controls are exempt from WCAG text contrast. These checks concern
   // their uncomposited theme colors and retained disabled styling, not a WCAG claim.
   expect(observed.text).toBeGreaterThanOrEqual(4.5);
   expect(observed.height).toBeGreaterThanOrEqual(44);
-  if(await action.isDisabled())expect(observed.opacity).toBeLessThan(1);
-  else expect(observed.opacity).toBe(1);
+  expect(observed.opacity).toBe(1);
+  if(await action.isDisabled()){
+    await expect(action).toBeDisabled();expect(observed.border).toBe('dashed');expect(observed.cursor).toBe('not-allowed');
+    expect(await action.evaluate(element=>{let clicks=0;const count=()=>{clicks++;};element.addEventListener('click',count);(element as HTMLButtonElement).click();element.removeEventListener('click',count);return clicks;})).toBe(0);
+  }
   if(focused){expect(observed.focusVisible).toBe(true);expect(observed.outline).not.toBe('none');expect(observed.width).toBeGreaterThanOrEqual(2);expect(observed.focus).toBeGreaterThanOrEqual(3);}
 }
 async function expectNewbieActions(page:import('@playwright/test').Page){

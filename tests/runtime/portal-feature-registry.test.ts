@@ -126,3 +126,13 @@ test('friend/member entries forward shell actions without making a notification 
   const focused = element(identityFeatures.members.render({ ...context, notificationTarget: { tab: 'members', resource_id: 'synthetic-peer', sequence: 8 } }));
   assert.deepEqual(focused.props.focusRequest, { id: 'synthetic-peer', sequence: 8 });
 });
+
+test('virtual commerce rehearsal has an independent renderer and account-generation key without commerce credentials', () => {
+  const context = fixture();
+  const first = element(commerceFeatures['virtual-commerce'].render(context));
+  assert.equal(commerceFeatures['virtual-commerce'].moduleId, 'virtual-commerce');
+  assert.equal(first.key, `${context.session.user.user_id}:${context.client.sessionGeneration}`);
+  assert.deepEqual(first.props, {});
+  const other = element(commerceFeatures['virtual-commerce'].render({...context, session:{...context.session,user:{...context.session.user,user_id:'synthetic-member-b'}}}));
+  assert.notEqual(other.key,first.key);
+});

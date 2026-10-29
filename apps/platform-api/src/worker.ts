@@ -122,6 +122,7 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_COMMUNITY_DISCOVERY_ENABLED?: string;
   FREEDOM_MEMBER_BLOCKING_ENABLED?: string;
   FREEDOM_MEMBER_REPORTING_ENABLED?: string;
+  FREEDOM_SOCIAL_ACHIEVEMENTS_ENABLED?: string;
   FREEDOM_COMMUNITY_SEARCH_ENABLED?: string;
   FREEDOM_UNIFIED_SHARING_ENABLED?: string;
   FREEDOM_AR_ENABLED?:string;
@@ -134,6 +135,7 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_NOTIFICATION_PREFERENCES_ENABLED?: string;
   FREEDOM_EVENT_PARTICIPATION_ENABLED?: string;
   FREEDOM_PARTICIPATION_METRICS_ENABLED?: string;
+  FREEDOM_COMMUNITY_CERTIFICATION_ENABLED?: string;
   FREEDOM_SKILL_BOOK_STAR_GATE_ENABLED?: string;
   FREEDOM_ENV?: string;
   APP_ORIGIN?: string;
@@ -148,6 +150,9 @@ export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
   FREEDOM_ADMIN_CSRF_SECRET?: string;
   GITHUB_SOCIAL_TOKEN_KEY?: string;
   TOTP_ENCRYPTION_KEY?: string;
+  FREEDOM_GOOGLE_LOGIN_ENABLED?: string;
+  GOOGLE_LOGIN_CLIENT_ID?: string;
+  GOOGLE_LOGIN_CLIENT_SECRET?: string;
   /** Optional read-only GitHub token: Workers share egress IPs, so anonymous GitHub quota is gone. */
   GITHUB_METRICS_TOKEN?: string;
   /** Optional. Without it only POST /api/v1/maintainer/github/webhook answers 503. */
@@ -207,6 +212,7 @@ export function readWorkerConfig(env: WorkerEnv): WorkerConfig {
   if(env.FREEDOM_SHORT_VIDEOS_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_SHORT_VIDEOS_ENABLED))throw new ReadinessError('Short video flag must be true or false.');
   if(env.FREEDOM_FIRST_PARTICIPATION_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_FIRST_PARTICIPATION_ENABLED))throw new ReadinessError('First participation flag must be true or false.');
   if(env.FREEDOM_FIRST_PARTICIPATION_ENABLED==='true'&&env.FREEDOM_PERSONAL_CONTENT_ENABLED!=='true')throw new ReadinessError('First participation requires personal content.');
+  if(env.FREEDOM_COMMUNITY_CERTIFICATION_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_COMMUNITY_CERTIFICATION_ENABLED))throw new ReadinessError('Community certification flag must be true or false.');
   if(env.FREEDOM_PARTICIPATION_METRICS_ENABLED!==undefined&&!['true','false'].includes(env.FREEDOM_PARTICIPATION_METRICS_ENABLED))throw new ReadinessError('Participation metrics flag must be true or false.');
   for(const flag of [env.FREEDOM_SERVICE_COVER_ENABLED,env.FREEDOM_EVENT_BANNER_ENABLED,env.FREEDOM_SKILL_IMAGE_ENABLED,env.FREEDOM_SOCIAL_THUMBNAIL_ENABLED,env.FREEDOM_EVENT_HIGHLIGHT_ENABLED,env.FREEDOM_MESSAGE_IMAGE_ENABLED]){
     if(flag!==undefined&&!['true','false'].includes(flag))throw new ReadinessError('Media installation flag must be true or false.');
@@ -320,6 +326,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     registrationCommunityId: () => community,
     githubTokenKey: () => tokenKey,
     totpEncryptionKey: () => env.TOTP_ENCRYPTION_KEY,
+    googleLogin:env.FREEDOM_GOOGLE_LOGIN_ENABLED==='true'&&env.GOOGLE_LOGIN_CLIENT_ID&&env.GOOGLE_LOGIN_CLIENT_SECRET?{enabled:true,clientId:env.GOOGLE_LOGIN_CLIENT_ID,clientSecret:env.GOOGLE_LOGIN_CLIENT_SECRET}:undefined,
     githubMetricsToken: () => metricsToken,
     maintainerWebhookSecret: () => maintainerWebhookSecret,
     adminVerifier: workerAdminVerifier(env),
@@ -354,6 +361,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     communityDiscoveryEnabled: env.FREEDOM_COMMUNITY_DISCOVERY_ENABLED === 'true',
     memberBlockingEnabled: env.FREEDOM_MEMBER_BLOCKING_ENABLED === 'true',
     memberReportingEnabled: env.FREEDOM_MEMBER_REPORTING_ENABLED === 'true',
+    socialAchievementsEnabled: env.FREEDOM_SOCIAL_ACHIEVEMENTS_ENABLED === 'true',
     communitySearchEnabled: env.FREEDOM_COMMUNITY_SEARCH_ENABLED === 'true',
     unifiedSharingEnabled: env.FREEDOM_UNIFIED_SHARING_ENABLED === 'true',
     communityRelationsEnabled: env.FREEDOM_COMMUNITY_RELATIONS_ENABLED === 'true',
@@ -364,6 +372,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     notificationPreferencesEnabled: env.FREEDOM_NOTIFICATION_PREFERENCES_ENABLED === 'true',
     eventParticipationEnabled: env.FREEDOM_EVENT_PARTICIPATION_ENABLED === 'true',
     participationMetricsEnabled: env.FREEDOM_PARTICIPATION_METRICS_ENABLED === 'true',
+    communityCertificationEnabled: env.FREEDOM_COMMUNITY_CERTIFICATION_ENABLED === 'true',
     skillBookStarGateEnabled: env.FREEDOM_SKILL_BOOK_STAR_GATE_ENABLED === 'true',
     tenantWorkAssetStore: env.FREEDOM_GUILD_LAUNCHPAD_ENABLED === 'true' && avatarAssetStore ? avatarAssetStore : undefined,
   };

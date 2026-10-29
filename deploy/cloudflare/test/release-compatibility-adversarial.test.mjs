@@ -9,7 +9,7 @@ import { evaluateReleaseCompatibility, compatibilityLedgerDigest } from '../lib/
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const last = Math.max(...readdirSync(join(root, 'migrations')).filter(n => /^\d{3}_.*\.sql$/.test(n)).map(n => Number(n.slice(0, 3))));
 const scan = checkMigrations(join(root, 'migrations'), { first: 1, last, known_gaps: [22] });
-const capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1'];
+const capabilities = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1'];
 const identity = (character) => ({ source_sha: character.repeat(40), artifact_sha256: character.repeat(64) });
 function fixture() {
   const now = Date.parse('2026-10-02T12:00:00.000Z'), current = identity('a'), candidate = identity('b');
@@ -119,7 +119,7 @@ for (const release of ['active', 'candidate']) for (const capability of ['avatar
   }, 'release_capability_missing'));
 test('RELEASE policy schema alone is not private feature activation', () => {
   const f = fixture(); f.host.observation.written_shapes = [];
-  for (const record of f.host.release_records) record.capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
+  for (const record of f.host.release_records) record.capabilities = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
   const result = run(f); assert.equal(result.status, 'compatible', JSON.stringify(result));
   assert(!result.required_capabilities.includes('work.server-policy.v1'));
 });
@@ -127,7 +127,7 @@ test('RELEASE disabled feature does not erase a non-rollback historical data flo
   reject(f => {
     f.host.observation.written_shapes = []; f.host.observation.enabled_shapes = [];
     f.host.rollback_floor_shapes = ['work.private-human-result.v1'];
-    f.host.release_records[1].capabilities = ['commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
+    f.host.release_records[1].capabilities = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1'];
   }, 'release_capability_missing');
 });
 for (const [name, mutate, issue] of [
@@ -144,4 +144,20 @@ test('RELEASE candidate getters are not run and candidate-selected error text is
   const f = fixture(); let calls = 0;
   Object.defineProperty(f.input.candidate, 'source_sha', { enumerable: true, get() { calls++; throw Error('PRIVATE_MARKER'); } });
   const result = run(f); assert.equal(result.status, 'unavailable'); assert.equal(calls, 0); assert(!JSON.stringify(result).includes('PRIVATE_MARKER'));
+});
+
+for (const missing of [0, 1]) test(`RELEASE schema190 rejects NULL-unsafe ${missing === 0 ? 'active' : 'candidate'} even when all shape arrays are empty`, () => {
+  const f = fixture(); f.host.observation.written_shapes = []; f.host.observation.enabled_shapes = [];
+  assert.equal(run(f).status, 'compatible');
+  const record = f.host.release_records[missing];
+  record.capabilities = record.capabilities.filter(c => c !== 'identity.passwordless-null-safe.v1');
+  const result = run(f); assert.equal(result.status, 'incompatible'); assert.equal(result.checked_releases, 2);
+  assert(result.issues.some(i => i.code === 'release_capability_missing' && i.capability === 'identity.passwordless-null-safe.v1' && i.source_sha === record.source_sha));
+});
+test('RELEASE a similar unrecognized password capability cannot substitute exact source approval', () => {
+  reject(f => { f.host.release_records[0].capabilities = f.host.release_records[0].capabilities.map(c => c === 'identity.passwordless-null-safe.v1' ? 'identity.passwordless-null-safe.v0' : c); }, 'host_evidence_invalid');
+});
+test('RELEASE NULL-safe binary capability is not a provider enablement shape', () => {
+  const f = fixture(); f.input.enable_shapes = ['identity.passwordless-null-safe.v1'];
+  assert.notEqual(run(f).status, 'compatible');
 });

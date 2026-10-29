@@ -25,7 +25,10 @@
     "tests/worker/social-preview-assets.test.ts",
     "tests/runtime/social-thumbnail-assets.test.ts",
     "tests/runtime/event-banner-assets.test.ts",
-    "tests/runtime/media-session-recovery.test.ts"
+    "tests/runtime/media-session-recovery.test.ts",
+    "apps/platform-api/src/routes/profile-covers.ts",
+    "tests/runtime/profile-cover-policy.test.ts",
+    "tests/runtime/profile-cover.test.ts"
   ],
   "public_exports": [
     "modules/assets/index.ts",
@@ -35,7 +38,9 @@
     "modules/assets/avatar-policy.ts",
     "modules/assets/maintenance.ts",
     "modules/assets/storefront-product-photo.ts",
-    "modules/assets/supply-material.ts"
+    "modules/assets/supply-material.ts",
+    "modules/assets/profile-cover.ts",
+    "modules/assets/profile-cover-read.ts"
   ],
   "dependencies": [
     "command-core",
@@ -43,7 +48,8 @@
     "scoped-commands",
     "asset-storage",
     "work",
-    "agent-commerce"
+    "agent-commerce",
+    "shared"
   ],
   "contract_families": [
     "common"
@@ -57,7 +63,8 @@
     "docs/platform-plan/execution/unified-foundation/03-assets-private-work.md",
     "docs/platform-plan/execution/unified-foundation/05-media-migration.md",
     "modules/assets/storefront-product-photo.md",
-    "modules/assets/supply-material.md"
+    "modules/assets/supply-material.md",
+    "modules/assets/profile-cover.md"
   ],
   "invariants": [
     "current-authority-before-replay",
