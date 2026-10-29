@@ -310,6 +310,30 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
   };
   return Object.freeze({
     state() { return structuredClone(current.state); },
+    handoffRecoveryState(evidence) {
+      const pending = current.state.pending;
+      let request;
+      if (pending) {
+        check(pending.kind === 'code' && pending.stage === 3, 'release_floor_stage_mismatch');
+        request = pending.request;
+      } else {
+        // An earlier handoff may have committed before its reply/lease cleanup
+        // failed. Accept only that final release, never a later run or new work.
+        const last = chain.at(-1).record.data;
+        check(last.kind === 'passed' && last.stage === 'handoff' && last.runId === evidence.runId
+          && last.runAttempt === evidence.runAttempt, 'release_floor_stage_mismatch');
+        request = chain.findLast(item => item.record.data.kind === 'release-begin-v2'
+          && item.record.data.request?.runId === evidence.runId
+          && item.record.data.request?.runAttempt === evidence.runAttempt)?.record.data.request;
+      }
+      check(request?.mode === 'deploy' && request.releaseKind === 'independent', 'release_floor_stage_mismatch');
+      for (const key of ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'target', 'controllerSha', 'operatorImage', 'configSha256']) {
+        check(request[key] === evidence[key], 'release_floor_request_invalid');
+      }
+      check(current.state.sourceSha === evidence.sourceSha && current.state.sourceTree === evidence.sourceTree
+        && current.state.deployedSourceSha === evidence.sourceSha, 'release_floor_request_invalid');
+      return { alreadySettled: pending === null };
+    },
     verifyLegacySource(evidence) {
       legacyEvidence(evidence);
       check(evidence.target === store.target, 'release_floor_legacy_target_changed');

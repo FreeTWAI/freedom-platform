@@ -6,6 +6,7 @@ import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitIn
   requireStaging, requireLegacyPredecessor, requireRelease, releaseFailureCode } from './admission.mjs';
 import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
+import { requireFailedReleaseHandoff } from './handoff-admission.mjs';
 import { checkEnvironment, checkFlagDecisions } from './environment-check.mjs';
 import { MAX_FLAG_CHANGES, readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
 
@@ -24,7 +25,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     api = suppliedApi ?? githubClient(env.GH_TOKEN);
     const admission = await admitRelease(request, api);
     Object.assign(receipt, { ...admission, format: 'freedom.shared-release/v1', status: 'admitted' });
-    const flagDecisions = readFlagDecisions({ sourceRoot: resolve(request.mode === 'deploy' && env.RELEASE_COMMAND === 'execute'
+    const flagDecisions = readFlagDecisions({ sourceRoot: resolve(['deploy', 'handoff'].includes(request.mode) && env.RELEASE_COMMAND === 'execute'
       ? env.RELEASE_SOURCE_DIRECTORY ?? 'source' : controllerRoot),
     sourceSha: admission.sourceSha });
     // Only plan lacks a live comparison. Accumulated decisions that already
@@ -51,18 +52,23 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       if (receipt.status === 'checks_failed') process.exitCode = 1;
       return;
     }
-    requireRelease(request.mode === 'deploy', 'release_execution_mode_invalid');
+    requireRelease(['deploy', 'handoff'].includes(request.mode), 'release_execution_mode_invalid');
     const installation = admitInstallation(env);
     receipt.operatorImage = installation.image;
     receipt.configSha256 = installation.configSha256;
-    if (Object.keys(flagDecisions.targets[request.target] ?? {}).length > MAX_FLAG_CHANGES) {
+    if (request.mode === 'deploy' && Object.keys(flagDecisions.targets[request.target] ?? {}).length > MAX_FLAG_CHANGES) {
       receipt.flagChanges = await checkFlagDecisions(env, request.target, flagDecisions);
       receipt.flagChangesObservation = 'live';
     }
     const recoveryEvidence = admission.recoverRunId ? await requireFailedBackup(api, admission, installation) : undefined;
     if (recoveryEvidence) receipt.backupReconciliation = recoveryEvidence;
-    receipt.stagingEvidence = await requireStaging(api, admission, installation);
-    admission.legacyPredecessor = await requireLegacyPredecessor(api, admission);
+    const handoffRecoveryEvidence = request.mode === 'handoff'
+      ? await requireFailedReleaseHandoff(api, admission, installation) : undefined;
+    if (handoffRecoveryEvidence) receipt.handoffReconciliation = handoffRecoveryEvidence;
+    if (request.mode === 'deploy') {
+      receipt.stagingEvidence = await requireStaging(api, admission, installation);
+      admission.legacyPredecessor = await requireLegacyPredecessor(api, admission);
+    }
     if (admission.legacyPredecessor) receipt.legacyPredecessor = admission.legacyPredecessor;
     const source = resolve(env.RELEASE_SOURCE_DIRECTORY ?? 'source');
     const git = args => execFileSync('git', ['-C', source, ...args], {
@@ -82,7 +88,9 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     // failed Deployment before adoption. After preflight, the journal owns the
     // adopted source and every later intent. Keep a single creation promise:
     // an uncertain GitHub POST is never repeated by progress/final callbacks.
-    const createDeployment = () => deploymentCreation ??= (async () => {
+    // Reconciliation never creates or rewrites a GitHub Deployment. Its own
+    // receipt links the failed run; the original failure stays visible.
+    const createDeployment = () => request.mode === 'handoff' ? Promise.resolve() : deploymentCreation ??= (async () => {
       deployment = await api(`/repos/${REPOSITORY}/deployments`, { method: 'POST', body: {
         ref: admission.sourceSha, task: 'deploy', auto_merge: false, required_contexts: [],
         environment: request.target, production_environment: request.target === 'next',
@@ -106,7 +114,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     // Persist an honest in-progress record before any remote mutation. Abrupt cancellation
     // cannot turn this into a success; GitHub deployment may remain in_progress for reconciliation.
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
-    receipt.phases = await executeOperator({ admission, installation, recoveryEvidence, sourceRoot: source, temporaryRoot,
+    receipt.phases = await executeOperator({ admission, installation, recoveryEvidence, handoffRecoveryEvidence, sourceRoot: source, temporaryRoot,
       registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
       onProgress: async phases => {
         receipt.operatorProgress = phases;
@@ -128,6 +136,12 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     if (flags) { receipt.flagChanges = publicFlagChanges(flags); receipt.flagChangesObservation = 'live'; }
     // Fast runs may finish before the periodic progress reader observes preflight.
     await createDeployment();
+    if (request.mode === 'handoff') {
+      receipt.providerOutcome = 'handoff_reconciled';
+      receipt.operatorEvidence = 'validated-handoff-reconciliation/v1';
+      receipt.status = 'reconciled';
+      return;
+    }
     receipt.providerOutcome = 'release_confirmed';
     receipt.operatorEvidence = 'validated-independent-release/v1';
     await status('success', 'Release, schema verification and health confirmed');
@@ -151,6 +165,8 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       + (receipt.sourceSha ? `- Version: \`${receipt.sourceSha}\`\n- Environment: \`${receipt.target}\`\n`
         + `- Requested by: ${receipt.original.login}; run by: ${receipt.triggeredBy.login}\n` : '')
       + `- Provider outcome: \`${receipt.providerOutcome}\`\n`
+      + (receipt.handoffReconciliation ? `- Original failed release: [${receipt.handoffReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.handoffReconciliation.runId}); its failure is retained.\n` : '')
+      + (receipt.status === 'reconciled' ? '- Handoff reconciled; no migration, publication or backup was repeated.\n' : '')
       + (receipt.operatorProgress?.at(-1)?.failureCode ? `- Failed phase: \`${receipt.operatorProgress.at(-1).failureCode}\`\n` : '')
       + (receipt.error ? `- Stopped: \`${receipt.error}\`\n` : '')
       + (receipt.flagChanges ? `- Flag comparison: ${receipt.flagChangesObservation} (plan null means unobserved)\n`

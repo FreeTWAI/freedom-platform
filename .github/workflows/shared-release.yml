@@ -13,13 +13,17 @@ on:
         type: choice
         options: [staging-next, next]
       mode:
-        description: 'plan: GitHub admission; check: read-only Cloudflare/Access checks; deploy: installed operator'
+        description: 'plan: admission; check: credentials; deploy: release; handoff: reconcile a completed release without redeploying'
         required: true
         type: choice
         default: plan
-        options: [plan, check, deploy]
+        options: [plan, check, deploy, handoff]
       recover_backup_run_id:
         description: 'Optional failed BEGIN-only backup to reconcile by readback; never starts a backup'
+        required: false
+        type: string
+      recover_release_run_id:
+        description: 'Required only for handoff: failed deploy run whose migration, deploy and health already passed'
         required: false
         type: string
 permissions:
@@ -61,6 +65,7 @@ jobs:
           RELEASE_TARGET: ${{ inputs.target }}
           RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_RECOVER_BACKUP_RUN_ID: ${{ inputs.recover_backup_run_id }}
+          RELEASE_RECOVER_RELEASE_RUN_ID: ${{ inputs.recover_release_run_id }}
           RELEASE_COMMAND: admit
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
         run: node controller/deploy/shared-release/cli.mjs
@@ -74,7 +79,7 @@ jobs:
           retention-days: 90
   deploy:
     needs: admission
-    if: needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'check'
+    if: needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'check' || needs.admission.outputs.mode == 'handoff'
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     environment:
@@ -96,7 +101,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        if: needs.admission.outputs.mode == 'deploy'
+        if: needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'handoff'
         with:
           ref: ${{ needs.admission.outputs.source_sha }}
           path: source
@@ -115,6 +120,7 @@ jobs:
           RELEASE_TARGET: ${{ needs.admission.outputs.target }}
           RELEASE_MODE: ${{ needs.admission.outputs.mode }}
           RELEASE_RECOVER_BACKUP_RUN_ID: ${{ inputs.recover_backup_run_id }}
+          RELEASE_RECOVER_RELEASE_RUN_ID: ${{ inputs.recover_release_run_id }}
           RELEASE_COMMAND: execute
           RELEASE_SOURCE_DIRECTORY: ${{ github.workspace }}/source
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
