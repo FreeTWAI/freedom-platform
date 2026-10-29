@@ -9,8 +9,7 @@ import {GoogleSignIn,GoogleCallback,captureGoogleCallback,type GoogleCallbackEnt
 import {parseSellerConsoleRoute} from '../../../modules/agent-commerce/seller-console/route';
 import {orderNotificationDestination} from '../../../modules/agent-commerce/checkout/notification-action';
 import {parseSupplierConsoleRoute} from '../../../modules/agent-commerce/supplier-console/ui/route';
-import {sellerOrdersRoute} from './modules/hosted-seller-order-state'
-import {buyerRoute} from './modules/hosted-order-state'
+import {buyerRoute,sellerOrdersRoute} from './modules/hosted-order-route'
 import { client, PortalContext, describeError, isOwnRef, type ActionError, type PortalContextValue } from './portal-session'
 import { ErrorPanel } from './portal-feedback'
 import { Navigation, TAB_TITLES } from './Navigation'

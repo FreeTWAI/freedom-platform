@@ -66,6 +66,7 @@
     "tests/runtime/hosted-seller-orders.test.ts",
     "apps/portal-web/src/modules/HostedOrder.tsx",
     "apps/portal-web/src/modules/hosted-order-state.ts",
+    "apps/portal-web/src/modules/hosted-order-route.ts",
     "tests/runtime/hosted-order-ui.test.ts",
     "tests/e2e/hosted-order.spec.ts",
     "tests/e2e/hosted-order-fixture.ts",
