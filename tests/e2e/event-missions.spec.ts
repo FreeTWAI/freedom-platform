@@ -54,7 +54,7 @@ for(const [status,code] of [[404,'not_found'],[409,'event_closed']] as const)tes
  let writes=0;
  await page.route(`**/api/v1/events/${id}/my-missions`,route=>{
   if(route.request().method()!=='GET')writes++;
-  return route.fulfill({status,contentType:'application/problem+json',json:{code,detail:'合成未開放狀態'}});
+  return route.fulfill({status,contentType:'application/problem+json',json:{type:`urn:freedom:problem:${code}`,title:code,status,code,detail:'合成未開放狀態'}});
  });
  await open(page);const panel=page.getByRole('region',{name:'我的活動小任務',exact:true});
  await expect(panel.getByRole('status')).toContainText('目前無法使用小任務');

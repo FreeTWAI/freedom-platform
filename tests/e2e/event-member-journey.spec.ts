@@ -378,7 +378,7 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
       json:{code:'unavailable',detail:'合成小任務讀取暫停'},
     }));
     await page.goto(`/events/${id}`);
-    await expect(page.getByRole('region',{name:'我的活動小任務',exact:true}).getByRole('alert')).toContainText('合成小任務讀取暫停');
+    await expect(page.getByRole('region',{name:'我的活動小任務',exact:true}).getByRole('alert')).toHaveText('服務暫時無法回應（503）。請稍後重試。');
     const card=page.locator('.experience-card'),editor=card.locator('form');
     await expect(card.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
     await page.route(`**/api/v1/events/${id}/update`,async route=>{
