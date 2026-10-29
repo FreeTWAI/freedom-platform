@@ -214,7 +214,7 @@ for (const width of [390, 1280]) test(`visitor resource preview reads only three
   await expect(email).toBeVisible();
   await email.fill('preview-reader@example.test');
   expect(previewReads).toBe(0); expect(fullCatalogReads).toBe(0);
-  const resources = page.locator('.entry-resources'), toggle = resources.locator('summary');
+  const resources = page.locator('.entry-resources'), toggle = resources.locator(':scope > details > summary');
   for (let attempt = 1; attempt <= 2; attempt++) {
     const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/community/preview');
     await toggle.click();
