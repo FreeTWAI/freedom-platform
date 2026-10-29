@@ -200,3 +200,34 @@ test('compact visitor entry leaves breathing room below the email field on a sho
   await expect(page.locator('.entry-resources > details > summary')).toHaveText('先看免費資源，不用註冊 · 搜尋社群內容');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+for (const width of [390, 1280]) test(`visitor resource preview reads only three public books on demand at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 });
+  let previewReads = 0, fullCatalogReads = 0;
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/v1/community/preview') previewReads++;
+    if (path === '/api/v1/community') fullCatalogReads++;
+  });
+  await page.goto('/');
+  const email = page.getByLabel('電子郵件', { exact: true });
+  await expect(email).toBeVisible();
+  await email.fill('preview-reader@example.test');
+  expect(previewReads).toBe(0); expect(fullCatalogReads).toBe(0);
+  const resources = page.locator('.entry-resources'), toggle = resources.locator('summary');
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/community/preview');
+    await toggle.click();
+    const response = await responsePromise;
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(Object.keys(body)).toEqual(['skill_books']);
+    expect(body.skill_books).toHaveLength(3);
+    await expect(resources.locator('.entry-resource-list article > strong')).toHaveText(body.skill_books.map((book: { title: string }) => book.title));
+    await expect.poll(() => previewReads).toBe(attempt);
+    expect(fullCatalogReads).toBe(0);
+    await toggle.click();
+    await expect(resources.locator('.entry-resource-list article')).toHaveCount(0);
+    await expect(email).toHaveValue('preview-reader@example.test');
+  }
+});
