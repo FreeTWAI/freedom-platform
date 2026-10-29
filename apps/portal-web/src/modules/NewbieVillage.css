@@ -2,6 +2,6 @@
 
 .nv-next-step ol{padding-inline-start:24px}.nv-next-step li+li{margin-block-start:8px}
 /* Pair plain quiz and secondary actions locally; preserve semantic variants elsewhere. */
-.newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost) { color: var(--ink); background: var(--bg-elev); border: 1px solid var(--line); }
+.newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost):not(:disabled) { color: var(--ink); background: var(--bg-elev); border: 1px solid var(--line); }
 .newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost):hover:not(:disabled),
 .newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost):focus-visible { color: var(--ink); background: var(--bg-elev); border-color: var(--focus); }

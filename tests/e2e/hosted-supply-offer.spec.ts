@@ -220,3 +220,81 @@ test('structured references are optional information throughout supplier editing
   await b.evaluate(hash=>{location.hash=hash;},sb.hash+'/supply-offers/'+newOffer.offer_id);await expect(detail).toContainText('建議最低訂量：每次 2 件');await expect(detail).not.toContainText('預估交期：收到訂單後約 3 天內出貨');await expect(detail).toContainText('供應商建議售價');
  }finally{await Promise.allSettled(contexts.map(c=>c.close()));}
 });
+
+for(const failedRead of ['offer','store'] as const){
+ test(`confirmed withdrawal keeps sale paths unconfirmed after the ${failedRead} read fails, without losing the price draft`,async({browser,baseURL,e2eAuthPool})=>{
+  const contexts=await Promise.all([browser.newContext({baseURL}),browser.newContext({baseURL})]);
+  let releaseRead=()=>{};
+  try{
+   const [a,b]=await Promise.all(contexts.map(context=>context.newPage()));
+   const title='狀態重讀陶杯 '+randomUUID().slice(0,6);
+   await login(a,(await person(e2eAuthPool)).email);const sa=await launchStore(a,'狀態重讀供應商');
+   await post(a,sa.root+'/setup',{name:'狀態重讀供應商',slug:'read-supplier-'+randomUUID().slice(0,12),currency:'TWD'},201);
+   const product=await post(a,sa.root+'/products',{title,description:'已公開且保留的商品介紹',price_minor:9800,stock:5},201);
+   await open(a,sa.hash);await a.getByRole('button',{name:'供貨條件',exact:true}).click();
+   const terms=a.getByRole('form',{name:title+'供貨條件',exact:true});
+   await terms.getByLabel('供貨單價（TWD）',{exact:true}).fill('60');
+   await terms.getByLabel('每件運費（TWD）',{exact:true}).fill('15');
+   await terms.getByRole('textbox',{name:'出貨條件',exact:true}).fill('紙盒包裝，三個工作天出貨。');
+   await terms.getByRole('textbox',{name:'退貨條件',exact:true}).fill('瑕疵品七日內聯絡換貨。');
+   await terms.getByRole('button',{name:'儲存供貨條件',exact:true}).click();
+   await expect(a.locator('.hosted-store > [role="status"]')).toContainText('已儲存供貨條件');
+   const published=a.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1${sa.root}/products/${product.product_id}/supply-offer`);
+   await terms.getByRole('button',{name:'公開供貨版本',exact:true}).click();
+   const publishedResponse=await published;expect(publishedResponse.status()).toBe(200);const offer=await publishedResponse.json();
+   await login(b,(await person(e2eAuthPool)).email);const sb=await launchStore(b,'狀態重讀選物店');
+   await post(b,sb.root+'/setup',{name:'狀態重讀選物店',slug:'read-seller-'+randomUUID().slice(0,12),currency:'TWD'},201);
+   const selection=await post(b,sb.root+'/distribution-selections',{offer_id:offer.offer_id,terms_sha256:offer.terms_sha256,retail_price_minor:12000},201);
+   await post(a,sa.root+`/supply-requests/${selection.selection_id}/decision`,{decision:'accepted',listing_sha256:selection.listing_sha256},200,selection.version);
+   await open(b,sb.hash+'/supply-offers/'+offer.offer_id);
+   const detail=b.locator('.hosted-supply-offer'),price=detail.getByLabel('我的零售價（TWD）',{exact:true});
+   await expect(detail.getByRole('heading',{name:'展示：可加入展示頁',exact:true})).toBeVisible();
+   const presentation=await detail.locator('.supply-offer-presentation').innerText();
+   await price.fill('137');const priceNode=await price.elementHandle();
+   const offerPath=`/api/v1${sb.root}/supply-catalog/${offer.offer_id}`,storePath=`/api/v1${sb.root}`;
+   const withdrawalPath=`/api/v1${sb.root}/distribution-selections/${selection.selection_id}/withdraw`;
+   let failing=true,holdRead=false,storeReads=0;
+   const writes:{method:string;path:string;body:string|null}[]=[];
+   b.on('request',request=>{
+    const path=new URL(request.url()).pathname;
+    if(request.method()==='GET'&&path===storePath)storeReads++;
+    if(['POST','PATCH'].includes(request.method())&&path.startsWith(`/api/v1${sb.root}/distribution-selections`))writes.push({method:request.method(),path,body:request.postData()});
+   });
+   const blockedRead=new Promise<void>(resolve=>{releaseRead=resolve;});
+   let readStarted=()=>{};const pendingRead=new Promise<void>(resolve=>{readStarted=resolve;});
+   await b.route(url=>url.pathname===offerPath||url.pathname===storePath,async route=>{
+    if(route.request().method()!=='GET')return route.continue();
+    const path=new URL(route.request().url()).pathname;
+    if(failing&&path===(failedRead==='offer'?offerPath:storePath))return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({type:'about:blank',title:'unavailable',status:503,code:'unavailable'})});
+    if(holdRead&&path===offerPath){readStarted();await blockedRead;}
+    await route.continue();
+   });
+   const receipt=b.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===withdrawalPath);
+   await detail.getByRole('button',{name:'停止採用',exact:true}).click();expect((await receipt).status()).toBe(200);
+   await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已停止採用這項選品');
+   if(failedRead==='offer')await expect(detail.getByRole('alert')).toHaveText('目前無法讀取供貨方案。');
+   else await expect(b.locator('.hosted-store > [role="alert"]')).toBeVisible();
+   const unconfirmed=async()=>{
+    for(const name of ['展示：尚未確認','預留：尚未確認','結帳購買：尚未確認'])await expect(detail.getByRole('heading',{name,exact:true})).toBeVisible();
+    await expect(detail.getByText('選品狀態尚未確認',{exact:true})).toBeVisible();
+    await expect(detail.getByText(SELLABLE_LABEL,{exact:true})).toHaveCount(0);
+    await expect(detail.locator('.supply-offer-presentation')).toHaveText(presentation,{useInnerText:true});
+    await expect(price).toHaveValue('137');expect(await price.evaluate((node,previous)=>node===previous,priceNode)).toBe(true);
+    await expect(price).toBeDisabled();await expect(detail.getByRole('button',{name:'停止採用',exact:true})).toBeDisabled();
+    await expect(detail.getByRole('button',{name:'送出供貨申請',exact:true})).toBeDisabled();
+   };
+   await unconfirmed();expect(writes).toEqual([{method:'POST',path:withdrawalPath,body:'{}'}]);
+   const parentReadsBeforeRetry=storeReads;
+   failing=false;holdRead=true;
+   await detail.getByRole('button',{name:'重試讀取供貨方案',exact:true}).click();await pendingRead;
+   await unconfirmed();expect(writes).toHaveLength(1);expect(storeReads).toBe(parentReadsBeforeRetry);
+   releaseRead();
+   await expect(detail.getByText('已撤回供貨',{exact:true})).toBeVisible();
+   await expect(detail.getByRole('heading',{name:'展示：目前無法加入展示頁',exact:true})).toBeVisible();
+   await expect(detail.getByRole('heading',{name:'預留：目前無法預留',exact:true})).toBeVisible();
+   await expect(detail.getByRole('heading',{name:'結帳購買：目前無法結帳購買',exact:true})).toBeVisible();
+   await expect(detail.getByRole('button',{name:'停止採用',exact:true})).toHaveCount(0);
+   await expect(price).toBeEnabled();expect(writes).toHaveLength(1);expect(storeReads).toBe(parentReadsBeforeRetry);
+  }finally{releaseRead();await Promise.allSettled(contexts.map(context=>context.close()));}
+ });
+}

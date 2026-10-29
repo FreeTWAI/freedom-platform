@@ -9,6 +9,7 @@ import {seedLocal, DEMO_USERS, DEMO_PASSWORD, DEMO_COMMUNITY} from '../../packag
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {serve} from '@hono/node-server';
 import {once} from 'node:events';
+import sharp from 'sharp';
 
 const origin = 'http://127.0.0.1:4311';
 const url = process.env.TEST_DATABASE_URL;
@@ -523,4 +524,35 @@ test('social titles keep complete scalar boundaries through link creation and no
   assert.equal(edited.status, 200); assert.equal(edited.data.title, 'c'.repeat(118) + '😀'); assert.equal(edited.data.note, text);
   const stored = (await pool.query('SELECT title,note FROM community_social_posts WHERE post_id=$1', [note.data.post_id])).rows;
   assert.deepEqual(stored, [{title: 'c'.repeat(118) + '😀', note: text}]);
+});
+
+
+test('comment authors retain their own authenticated avatar across create, replay, edit and reload',async()=>{
+ const owner=await login(),other=await login(2),note=await post(owner),path=`/social-posts/${note.post_id}/comments`;
+ const png=await sharp({create:{width:24,height:24,channels:3,background:'#42654a'}}).png().toBuffer();
+ const upload=async(session:Session,version=1)=>{
+  const response=await app.request(origin+'/api/v1/me/avatar',{method:'POST',headers:{Origin:origin,Cookie:session.cookie,'X-CSRF-Token':session.csrf,'Content-Type':'image/png','If-Match':`"${version}"`,'Idempotency-Key':randomUUID()},body:new Uint8Array(png)});
+  assert.equal(response.status,200);return(await response.json() as {avatar_url:string}).avatar_url;
+ };
+ const ownAvatar=await upload(owner),otherAvatar=await upload(other),key=randomUUID(),body={text:'Synthetic avatar comment'};
+ const own=await request(path,owner,{text:'Synthetic own comment'}),created=await request(path,other,body,'POST',key);
+ assert.equal(own.status,201);assert.equal(created.status,201);
+ assert.equal(own.data.author.avatar_url,ownAvatar);assert.equal(created.data.author.avatar_url,otherAvatar);
+ assert.equal(created.data.author.user_id,other.id);assert.notEqual(otherAvatar,ownAvatar);
+ assert.deepEqual((await request(path,other,body,'POST',key)).data,created.data);
+ const edit=await app.request(origin+'/api/v1'+path+'/'+created.data.comment_id+'/edit',{method:'POST',headers:{Origin:origin,Cookie:other.cookie,'X-CSRF-Token':other.csrf,'Content-Type':'application/json','If-Match':'"1"','Idempotency-Key':randomUUID()},body:JSON.stringify({text:'Edited avatar comment'})});
+ assert.equal(edit.status,200);assert.equal((await edit.json() as any).author.avatar_url,otherAvatar);
+ const nextAvatar=await upload(other,2);
+ const listed=(await request(path,owner)).data.items;
+ assert.equal(listed.find((item:any)=>item.comment_id===own.data.comment_id).author.avatar_url,ownAvatar);
+ assert.equal(listed.find((item:any)=>item.comment_id===created.data.comment_id).author.avatar_url,nextAvatar);
+ const photo=await app.request(origin+nextAvatar,{headers:{Cookie:owner.cookie}});assert.equal(photo.status,200);assert.equal(photo.headers.get('cache-control'),'private, no-store');
+ assert.notEqual((await app.request(origin+nextAvatar)).status,200);
+ await pool.query('UPDATE users SET email=$2 WHERE user_id=$1',[other.id,'comment-avatar@example.invalid']);
+ assert.equal((await request(path,owner)).data.items.find((item:any)=>item.comment_id===created.data.comment_id).author.avatar_url,null);
+ assert.equal((await request(path,other)).data.items.find((item:any)=>item.comment_id===created.data.comment_id).author.avatar_url,nextAvatar);
+ assert.equal((await app.request(origin+nextAvatar,{headers:{Cookie:owner.cookie}})).status,404);
+ const removed=await app.request(origin+'/api/v1/me/avatar/remove',{method:'POST',headers:{Origin:origin,Cookie:other.cookie,'X-CSRF-Token':other.csrf,'Content-Type':'application/json','If-Match':'"3"','Idempotency-Key':randomUUID()},body:'{}'});
+ assert.equal(removed.status,200);
+ assert.equal((await request(path,other)).data.items.find((item:any)=>item.comment_id===created.data.comment_id).author.avatar_url,null);
 });

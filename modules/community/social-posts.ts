@@ -223,18 +223,21 @@ export async function setSocialLike(pool: Pool, inputCommand: Command, id: strin
   });
 }
 
-export type SocialCommentView = { image_url:string|null; sticker_id:string|null; mentions:SocialMention[]; like_count:number; liked:boolean; comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: { user_id: string; display_name: string }; mine: boolean };
-type CommentRow = { image_id?:string; post_id:string; sticker_id:string|null; mentions:SocialMention[]; like_count:number; liked:boolean; comment_id: string; body: string; created_cursor: string; edited_at: Date | string | null; edit_revision: number; author_user_id: string; display_name: string };
+export type SocialCommentView = { image_url:string|null; sticker_id:string|null; mentions:SocialMention[]; like_count:number; liked:boolean; comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: { user_id: string; display_name: string; avatar_url: string | null }; mine: boolean };
+type CommentRow = { image_id?:string; post_id:string; sticker_id:string|null; mentions:SocialMention[]; like_count:number; liked:boolean; comment_id: string; body: string; created_cursor: string; edited_at: Date | string | null; edit_revision: number; author_user_id: string; display_name: string; aggregate_version: string | null; has_avatar: boolean; test_account: boolean };
 function commentView(row: CommentRow, actor: Actor): SocialCommentView {
+  const showAvatar = row.has_avatar && (!row.test_account || row.author_user_id === actor.user_id);
   return {image_url:row.image_id?`/api/v1/social-posts/${row.post_id}/comments/${row.comment_id}/image`:null, sticker_id:row.sticker_id, mentions:row.mentions??[], like_count:Number(row.like_count)||0, liked:row.liked===true, comment_id: row.comment_id, body: row.body, created_at: row.created_cursor, edited_at: row.edited_at ? new Date(row.edited_at).toISOString() : null,
-    revision: Number(row.edit_revision), author: {user_id: row.author_user_id, display_name: row.display_name}, mine: row.author_user_id === actor.user_id};
+    revision: Number(row.edit_revision), author: {user_id: row.author_user_id, display_name: row.display_name, avatar_url: showAvatar ? avatarUrl(row.author_user_id, row.aggregate_version ?? 1, row.has_avatar) : null}, mine: row.author_user_id === actor.user_id};
 }
 
 const COMMENTS=`SELECT to_char(c.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_cursor, c.comment_id,c.post_id,c.body,c.edited_at,c.edit_revision,c.author_user_id,c.sticker_id,c.mentions,u.display_name,
+ a.aggregate_version,a.present AS has_avatar,is_verification_test_account(u.user_id) AS test_account,
  t.image_id,(SELECT count(*)::int FROM community_social_comment_likes l WHERE l.comment_id=c.comment_id) AS like_count,
  EXISTS(SELECT 1 FROM community_social_comment_likes l WHERE l.comment_id=c.comment_id AND l.user_id=$5) AS liked
  FROM community_social_comments c JOIN users u ON u.user_id=c.author_user_id
  JOIN community_social_posts p ON p.post_id=c.post_id AND p.state='active'
+ LEFT JOIN member_avatar_presence a ON a.user_id=u.user_id AND a.community_id=c.community_id
  LEFT JOIN community_comment_image_asset_targets t ON t.comment_id=c.comment_id`;
 async function shownComment(q:Pick<Pool,'query'>,actor:Actor,postId:string,commentId:string){
  const row=(await q.query(`${COMMENTS} WHERE c.post_id=$1 AND c.community_id=$2 AND c.comment_id=$3 AND c.state='active' AND $4::text IS NULL`,[postId,actor.community_id,commentId,null,actor.user_id])).rows[0] as CommentRow;
