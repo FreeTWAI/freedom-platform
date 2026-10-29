@@ -101,7 +101,12 @@ test('new member completes required positioning, chooses primary guild and gets 
   expect(profileBody.contacts.email).toEqual({audiences:[]});
   expect(profileBody.contacts.discord).toEqual({value:'new.member',audiences:['friends','guild']});
   await expect(page.getByText('修改已儲存。')).toBeVisible();
-  await navigate(page, '職業公會');await expect(page.locator('.primary-guild')).toHaveCount(1);
+  // The save notice precedes the account refresh; navigation remains guarded until it settles.
+  await expect(page.getByRole('button',{name:'儲存修改',exact:true})).toBeEnabled();
+  await navigate(page, '職業公會');
+  await expect(page).toHaveURL(/#guilds$/);
+  await expect(page.getByRole('heading',{name:'職業公會',level:1,exact:true})).toBeVisible();
+  await expect(page.locator('.primary-guild')).toHaveCount(1);
   await expect(page.locator('.primary-guild .guild-master .guild-leadership-name')).toHaveText('待任命');
   await expect(page.locator('.guild-card').first()).toHaveClass(/primary-guild/);
   const secondary=page.locator('.guild-card').filter({has:page.getByRole('button',{name:/^加入/})}).first();

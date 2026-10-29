@@ -4,6 +4,7 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/portal-shell/**",
+    "apps/portal-web/public/brand/freedom-workshop-compact.jpeg",
     "apps/portal-web/src/AppInstall.tsx",
     "apps/portal-web/src/AppInstall.css",
     "apps/portal-web/src/CalmExperience.css",

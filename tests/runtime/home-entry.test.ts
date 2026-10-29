@@ -247,3 +247,18 @@ test('actual guest-profile entry cannot preempt a Google callback or password re
  context.googleCallback={intent:'login'};assert.equal(allowed(),false);context.googleCallback={intent:'link'};assert.equal(allowed(),false);
  context.googleCallback=null;context.resetToken='reset';assert.equal(allowed(),false);context.resetToken=null;context.profileLoginRequested=true;assert.equal(allowed(),false);
 });
+
+// The supplied compact logo is a distinct, byte-preserved header asset. This
+// checks source contracts only; decoded pixels and browser layout are E2E work.
+import {createHash} from 'node:crypto';
+test('member home link uses the supplied compact logo without replacing the poster',()=>{
+  const source=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
+  assert.match(source, /className="brand brand-home" href="\/#home" aria-label=/);
+  assert.match(source, /<img className="brand-home-logo" src="\/brand\/freedom-workshop-compact\.jpeg" alt="自由工坊" width="1536" height="512"\/>/);
+  const logo=readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact.jpeg',import.meta.url));
+  assert.equal(createHash('sha256').update(logo).digest('hex'),'70217e355af1d30ff9911c313bc095e7fc83a78ac01d3e51feb03810de72ed6c');
+  const poster=readFileSync(new URL('../../apps/portal-web/src/modules/Community.tsx',import.meta.url),'utf8');
+  assert.match(poster,/src="\/brand\/freedom-workshop\.webp"/);
+  const css=readFileSync(new URL('../../apps/portal-web/src/SocialLayout.css',import.meta.url),'utf8');
+  assert.match(css,/\.brand-home-logo \{ display:block; width:132px; height:44px; flex:none; object-fit:contain; \}/);
+});

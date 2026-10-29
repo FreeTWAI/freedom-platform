@@ -440,7 +440,10 @@ function measureSharedControl(node: Element) {
 }
 // End source-bound shared control measurement.
 
-test('PUBLIC-POST-16 shared controls and concise sharing retain readable states at 320/390/1280 in all three themes',async({author})=>{
+// Each combination owns its author/page and the unchanged per-case timeout.
+const sharedControlMatrix=['light','dark','versefolk'].flatMap(theme=>[320,390,1280].map(width=>({theme,width})));
+for(const [index,{theme,width}] of sharedControlMatrix.entries()){
+test(`PUBLIC-POST-16 shared controls and concise sharing retain readable states: ${theme} at ${width}px`,async({author})=>{
   const post=await createPost(author,`收合的完整預覽 ${randomUUID()} ${'保留全文。'.repeat(100)}`);
   await author.page.addInitScript(()=>{
     Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('cancelled','AbortError');}});
@@ -449,7 +452,6 @@ test('PUBLIC-POST-16 shared controls and concise sharing retain readable states 
   await author.page.goto(`/?social-post=${post.post_id}#social`);
   const trigger=author.page.locator(`#social-post-${post.post_id}`).getByRole('button',{name:'分享貼文連結',exact:true});
   const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});
-  for(const theme of ['light','dark','versefolk'])for(const width of [320,390,1280]){
     await author.page.setViewportSize({width,height:800});await author.page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     await trigger.click();const copy=dialog.getByRole('button',{name:'複製貼文連結',exact:true});await expect(copy).toBeEnabled();
     await expect(dialog.locator('.social-share-preview')).not.toBeVisible();await expect(dialog.locator('.social-share-link input')).not.toBeVisible();
@@ -475,5 +477,17 @@ test('PUBLIC-POST-16 shared controls and concise sharing retain readable states 
     await copy.click();await expect(dialog.getByLabel('貼文連結',{exact:true})).toBeFocused();await expect(dialog.locator('.social-share-link')).toHaveAttribute('open','');
     await dialog.getByRole('button',{name:'系統分享',exact:true}).click();expect(await sharing(author,post.post_id)).toMatchObject({enabled:false,available:false,version:'1'});
     await author.page.keyboard.press('Escape');await expect(trigger).toBeFocused();
-  }
+    // Preserve each original adjacent transition on this same mounted post/dialog.
+    const next=sharedControlMatrix[index+1];
+    if(next){
+      await author.page.setViewportSize({width:next.width,height:800});await author.page.evaluate(theme=>document.documentElement.dataset.theme=theme,next.theme);
+      await trigger.click();await expect(copy).toBeEnabled();
+      await expect(dialog.locator('.social-share-preview')).not.toBeVisible();await expect(dialog.locator('.social-share-link input')).not.toBeVisible();
+      await expect(dialog.locator('.social-share-audience')).toHaveText('僅限登入且有閱覽權限的會員。');
+      await expect(copy).toBeInViewport();await expect(dialog.getByRole('button',{name:'系統分享',exact:true})).toBeInViewport();
+      expect(await dialog.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+      expect(await sharing(author,post.post_id)).toMatchObject({enabled:false,available:false,version:'1'});
+      await author.page.keyboard.press('Escape');await expect(trigger).toBeFocused();
+    }
 });
+}

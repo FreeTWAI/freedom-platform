@@ -25,8 +25,16 @@ test('the wordmark is a guarded native home link and exploration never forces it
   expect((await home.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(exploration).toHaveJSProperty('open',false);
   await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeInViewport();
-  for(const width of [1280,320]){
+  const logo=home.locator('.brand-home-logo');
+  await expect(logo).toHaveJSProperty('naturalWidth',1536);
+  await expect(logo).toHaveJSProperty('naturalHeight',512);
+  for(const width of [1280,390,320]){
     await page.setViewportSize({width,height:844});
+    const box=(await logo.boundingBox())!;
+    expect(box.width).toBe(132);expect(box.height).toBe(44);
+    expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
+    await expect(home).toBeInViewport();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await expect(exploration).toHaveJSProperty('open',false);
     await expect(exploration.locator(':scope > summary')).toBeVisible();
   }
@@ -57,4 +65,32 @@ test('the wordmark is a guarded native home link and exploration never forces it
   await page.evaluate(()=>scrollTo(0,document.body.scrollHeight));
   await home.click();
   await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeInViewport();
+});
+
+test('compact header reserves its image space while loading and when the asset fails',async({page})=>{
+  await page.setViewportSize({width:320,height:844});
+  let release!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve});
+  await page.route('**/brand/freedom-workshop-compact.jpeg',async route=>{await held;await route.continue();});
+  try{
+    await login(page);
+    const home=page.locator('.brand-home'),logo=home.locator('img');
+    const before=(await logo.boundingBox())!;
+    expect(before.width).toBe(132);expect(before.height).toBe(44);
+    release();
+    await expect(logo).toHaveJSProperty('naturalWidth',1536);
+    expect(await logo.boundingBox()).toEqual(before);
+    await page.unroute('**/brand/freedom-workshop-compact.jpeg');
+    await page.route('**/brand/freedom-workshop-compact.jpeg',route=>route.abort());
+    await page.reload();
+    await expect(home).toHaveAccessibleName('自由工坊 · 會員首頁');
+    for(const theme of ['light','dark','versefolk']){
+      await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+      const box=(await logo.boundingBox())!;
+      expect(box.width).toBe(132);expect(box.height).toBe(44);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    }
+    await home.press('Enter');
+    await expect(page).toHaveURL(/\/#home$/);
+  }finally{release();}
 });

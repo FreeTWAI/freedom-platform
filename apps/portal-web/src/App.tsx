@@ -994,7 +994,7 @@ function Workspace({
                 window.dispatchEvent(new HashChangeEvent('hashchange'));
               }
               workspaceTopbar.current?.scrollIntoView({block: 'start', behavior: 'instant'});
-            })}><strong>自由工坊</strong></a>
+            })}><img className="brand-home-logo" src="/brand/freedom-workshop-compact.jpeg" alt="自由工坊" width="1536" height="512"/></a>
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
             <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen} onCloseMobile={returnFocus => { setMobileOpen(false); if (returnFocus) menuToggle.current?.focus(); }}/>
           </aside>
