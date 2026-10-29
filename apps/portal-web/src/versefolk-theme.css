@@ -1,5 +1,6 @@
 /* Original storybook artwork and colors, drawn for the Freedom Workshop theme. */
 html[data-theme="versefolk"] {
+  --control-bg:#eee5d8; --control-ink:#392f2c; --control-hover:#e2d6c5;
   --bg:#f8f2e8;
   --bg-elev:#fffaf1;
   --ink:#392f2c;

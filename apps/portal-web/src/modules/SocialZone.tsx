@@ -1,4 +1,4 @@
-import {SocialPostBookmark} from './SocialPostBookmark';
+import {SocialPostOptions} from './SocialPostBookmark';
 import {SocialIcon,SocialTextTools,SocialRichText,SOCIAL_TOPICS,type Mention} from './SocialTools';
 import {Component,lazy,Suspense,useCallback, useEffect, useId, useRef, useState,useSyncExternalStore, type FormEvent,type ReactNode} from 'react';
 import {accessAwareFetch} from '../access-fetch';
@@ -661,14 +661,12 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const renderCard = (post: Post, view: {inline?: boolean; commentsOpen?: boolean} = {inline: true}) => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">
           <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
-            {(post.mine||canHide)&&<details className="social-post-menu" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.currentTarget.open=false;event.currentTarget.querySelector('summary')?.focus();}}}>
-              <summary aria-label="貼文選項">⋯</summary><div className="social-post-menu-actions">
+            {(post.mine||canHide||bookmarksEnabled)&&<SocialPostOptions client={client} postId={post.post_id} bookmarksEnabled={bookmarksEnabled}>
                 {post.mine && post.kind !== 'note' && <label className="btn btn-ghost social-file">換縮圖<input aria-label="更換縮圖" type="file" accept="image/jpeg,image/png,image/webp" disabled={saving} onChange={event=>{const next=event.target.files?.[0];if(next)void uploadLinkThumb(post,next);event.target.value='';}}/></label>}
                 {post.mine && <button type="button" className="btn btn-ghost" disabled={saving} aria-haspopup="dialog" onClick={event=>openDelete(post, event.currentTarget.closest('details')?.querySelector('summary') ?? event.currentTarget)}>刪除</button>}
                 {post.mine && confirming!==post.post_id && <button type="button" className="btn btn-ghost" disabled={saving} onClick={event=>{editTrigger.current=event.currentTarget.closest('details')?.querySelector('summary')??null;event.currentTarget.closest('details')?.removeAttribute('open');setNotice('');setEditingPost(post);}}>編輯</button>}
                 {canHide && !post.mine && <button type="button" className="btn btn-ghost" disabled={saving} onClick={()=>void hide(post)}>隱藏</button>}
-              </div>
-            </details>}
+            </SocialPostOptions>}
           </div>
           <div className="social-post-context">{post.kind==='note'&&<span className="social-topic-badge" data-topic={post.topic??'mood'}>{SOCIAL_TOPICS[post.topic??'mood']}</span>}{post.location_name&&<span className="social-location"><SocialIcon name="pin"/>{post.location_name}</span>}</div>
           {post.kind !== 'note' && <span className="social-platform-badge" data-platform={tone(post.platform)}>{post.platform_label || PLATFORM_LABELS[post.platform]}</span>}
@@ -678,7 +676,6 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb post={post}/>}
           {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
           <SocialInteractions onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => {if(client!==currentClient.current||feedSession!==client.sessionGeneration)return;++confirmedWrites.current;setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item));}}/>
-          {bookmarksEnabled && <SocialPostBookmark client={client} postId={post.post_id}/>}
           <div className="social-actions">
             {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
             {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}

@@ -1,5 +1,6 @@
 /* Bright, quiet alternative. Original brand and RPG artwork stay unchanged. */
 html:is([data-theme="light"],[data-theme="versefolk"]) {
+  --control-bg:#eef2f7; --control-ink:#1c2636; --control-hover:#dfe7f0;
   --bg:#f6f8fb; --bg-elev:#ffffff; --ink:#1c2636; --muted:#566376;
   --line:#dce3eb; --green:#9ed400; --green-2:#89bd00; --green-soft:#f2f8dc;
   --navy:#eef2f7; --navy-2:#ffffff; --blue:#3044ff; --blue-ink:#344cbd;

@@ -26,7 +26,7 @@ function requireSharingState(value:unknown,postId:string):SharingState{
 /** Sharing is a browser handoff. Only a separate, explicit author action makes
  * the reviewed post public; cancelling the dialog or native share never does. */
 export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPost}){
-  const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),field=useRef<HTMLInputElement>(null),id=useId();
+  const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),field=useRef<HTMLInputElement>(null),linkDetails=useRef<HTMLDetailsElement>(null),consentDetails=useRef<HTMLDetailsElement>(null),id=useId();
   const [open,setOpen]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState('');
   const [sharing,setSharing]=useState<SharingState|null>(null),[publicAvailable,setPublicAvailable]=useState(false);
   const [loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[uncertain,setUncertain]=useState(false);
@@ -57,6 +57,7 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
     return()=>{abort.abort();epoch.current++;};
   },[client,generation,post.post_id,post.revision,post.mine,open,refresh]);
   useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();},[open]);
+  useEffect(()=>{if(uncertain&&consentDetails.current)consentDetails.current.open=true;},[uncertain,open,sharing]);
   function close(){dialog.current?.close();setOpen(false);setStatus('');trigger.current?.focus({preventScroll:true});}
   async function share(){
     const result=await action.run('share',()=>navigator.share({title:'自由工坊的貼文',url}));
@@ -65,7 +66,7 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
   async function copy(){
     const result=await action.run('copy',()=>navigator.clipboard.writeText(url));
     if(result.status==='done')setStatus('已複製貼文連結');
-    else if(result.status==='failed'){setStatus('請選取並複製下方貼文連結。');field.current?.focus();field.current?.select();}
+    else if(result.status==='failed'){setStatus('請選取並複製下方貼文連結。');if(linkDetails.current)linkDetails.current.open=true;field.current?.focus();field.current?.select();}
   }
   async function publish(enabled:boolean){
     if(!post.mine||!sharing||savingToken.current!==null)return;
@@ -106,8 +107,20 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
       {open&&<div className="stack">
         <header className="social-publish-head"><h2 id={id+'-title'}>分享貼文連結</h2><button type="button" className="btn btn-ghost" onClick={close}>關閉分享</button></header>
         {loading&&<p role="status">正在確認貼文的分享範圍…</p>}
-        {!loading&&<p>{publicAvailable?'任何取得連結的人都能閱讀這篇全文與附圖；看更多貼文、按讚與留言需要登入。':post.mine?'目前連結只供有閱覽權限的會員查看。開放免登入閱讀後，朋友點進來就能直接看這篇全文與附圖。':'這篇目前需要登入並具備閱覽權限，原作者可以開放免登入閱讀。'}</p>}
-        {post.mine&&sharing&&<section className="social-sharing-consent" aria-label="公開閱讀設定">
+        {!loading&&<p className="social-share-audience">{publicAvailable?'任何取得連結的人都能閱讀。':'僅限登入且有閱覽權限的會員。'}</p>}
+        <div className="actions social-share-actions">
+          {typeof navigator.share==='function'&&<button type="button" className="btn btn-secondary" disabled={browserBusy||loading||uncertain} aria-busy={action.pending==='share'} onClick={()=>void share()}>系統分享</button>}
+          <button type="button" className="btn btn-secondary" disabled={browserBusy||loading||uncertain} aria-busy={action.pending==='copy'} onClick={()=>void copy()}>{action.pending==='copy'?'複製中…':'複製貼文連結'}</button>
+        </div>
+        <details ref={linkDetails} className="social-share-link">
+          <summary>查看貼文連結</summary>
+          <label className="field">貼文連結<input ref={field} readOnly value={url} onFocus={event=>event.currentTarget.select()}/></label>
+        </details>
+        {sharing?.enabled&&!sharing.available&&<p role="status">貼文內容或圖片已變更，目前已停止公開。確認目前內容後，可以重新開放。</p>}
+        {sharing&&sharing.post_revision!==post.revision&&<p role="alert">貼文已更新，請重新整理貼文後再確認公開內容。</p>}
+        {post.mine&&sharing&&<details ref={consentDetails} className="social-sharing-consent" aria-label="公開閱讀設定">
+          <summary>{sharing.available?'管理免登入閱讀':'開放免登入閱讀…'}</summary>
+          <div className="stack">
           <p className="muted">對外會顯示你的名稱、貼文內容與附圖；會員留言、打卡位置與互動名單不會公開。</p>
           {!sharing.available&&<div className="social-share-preview">
             <strong>{post.author.display_name}</strong>
@@ -115,18 +128,12 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
             {post.kind==='link'&&post.note&&<p>{post.note}</p>}
             {thumbnail&&<img src={thumbnail.pathname+thumbnail.search} alt="即將公開的貼文附圖" onLoad={()=>setImageReady(mediaKey)} onError={()=>{setImageReady('');setError('目前附圖暫時無法讀取，請重新確認分享狀態後再開放。');}}/>}
           </div>}
-          {sharing.enabled&&!sharing.available&&<p role="status">貼文內容或圖片已變更，目前已停止公開。確認目前內容後，可以重新開放。</p>}
-          {sharing.post_revision!==post.revision&&<p role="alert">貼文已更新，請重新整理貼文後再確認公開內容。</p>}
           {uncertain?<button type="button" className="btn btn-primary" disabled={saving} onClick={()=>void publish(command.current!.body.enabled)}>確認上次設定</button>:<div className="actions">
             {!sharing.available&&<button type="button" className="btn btn-primary" disabled={browserBusy||loading||!reviewed} aria-busy={saving} onClick={()=>void publish(true)}>{sharing.enabled?'重新開放目前版本':'開放免登入閱讀'}</button>}
             {sharing.enabled&&<button type="button" className="btn btn-secondary" disabled={browserBusy||loading} onClick={()=>void publish(false)}>關閉免登入閱讀</button>}
           </div>}
-        </section>}
-        <label className="field">貼文連結<input ref={field} readOnly value={url} onFocus={event=>event.currentTarget.select()}/></label>
-        <div className="actions">
-          {typeof navigator.share==='function'&&<button type="button" className="btn btn-secondary" disabled={browserBusy||loading||uncertain} aria-busy={action.pending==='share'} onClick={()=>void share()}>系統分享</button>}
-          <button type="button" className="btn btn-secondary" disabled={browserBusy||loading||uncertain} aria-busy={action.pending==='copy'} onClick={()=>void copy()}>{action.pending==='copy'?'複製中…':'複製貼文連結'}</button>
-        </div>
+          </div>
+        </details>}
         {error&&<p role="alert">{error}</p>}
         {error&&!uncertain&&!saving&&<button type="button" className="btn btn-ghost" onClick={()=>setRefresh(value=>value+1)}>重新確認分享狀態</button>}
         {status&&<p role="status">{status}</p>}
