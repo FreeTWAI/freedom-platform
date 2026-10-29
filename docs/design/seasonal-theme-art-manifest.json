@@ -1,0 +1,93 @@
+{
+  "generated_at": "2026-10-28",
+  "generator": "built-in image_gen",
+  "provenance": [
+    {
+      "name": "halloween",
+      "generator": "built-in image_gen",
+      "prompt": "Create ONE original Halloween hero artwork, transparent wide landscape 3:2, for a light modern website. The two supplied images are MATERIAL AND BRAND-PALETTE references ONLY: liquid polished chrome, electric cobalt blue #3044ff reflections, acid lime #c4ff20 highlights, sleek Y2K future-workshop sculpture. DO NOT copy, redraw, include or hint at ANY logo, brand characters, letters or typography from either reference. Composition: all sculpture concentrated in right45% and lower-right, generous safe margins, LEFT55% completely clear transparent alpha for live website text. Subject: one elegant sculptural chrome pumpkin with sculpted ribbed metal body and subtle angular jack-o-lantern cutouts containing a restrained warm amber/orange glow, no cute face, no smiley character. A slender abstract polished chrome crescent behind it, one smooth cobalt-reflecting orbital metal ribbon curves around the grouping, a single small sharp lime star accent. Highly refined glossy liquid-metal 3D art direction, crisp real metallic specular reflections, silver/chrome dominant with cobalt reflections and modest lime accent. Strong intentional silhouette, stylish futuristic Halloween not horror. No thick drawn outlines, no cartoon/navy sticker outlines, no soft toy or clay material, no kawaii, no cute ghost, no matte pastel objects. Keep light-mode friendly, not a black collage: actual transparent alpha around isolated vignette, no black or colored background, no poster rectangle, no global atmospheric haze, no floor/pedestal or shadow rectangle. Absolutely no text, digits, logos, watermark, UI elements or complete interface.",
+      "original_filename": "freedom-halloween-chrome-hero-v1.png",
+      "original_sha256": "9cd24a0ad31396a453f763cb65d70bb7f0ba22428e2083627f8b7f8c815d91d5",
+      "original_dimensions": [
+        1536,
+        1024
+      ],
+      "original_alpha_extrema": [
+        0,
+        254
+      ]
+    },
+    {
+      "name": "christmas",
+      "generator": "built-in image_gen",
+      "prompt": "Create ONE refined Christmas transparent compact hero vignette for a light editorial website. References are palette/visual-identity reference ONLY: electric cobalt #3044ff and acid lime #c4ff20, futuristic creative workshop energy. DO NOT reproduce any letters, logos or text from reference. Deliberately NOT liquid chrome or all-metal. Medium: elegant layered matte paper-cut forms with subtle soft gradients and restrained dimensional overlap, crisp clean shapes, sophisticated editorial illustration. Composition: compact centered cluster, square canvas, 10% clear padding all sides, all artwork fully visible. One sculptural simple evergreen pine of alternating muted cobalt and pale icy-blue folded planes, small lime geometric star at top, one small off-white gift with cobalt ribbon and a restrained warm-gold detail at base, one delicate winter branch tucked alongside. No mascot face, cute character, thick outline, cartoon sticker, bubbly toy, photorealistic scenery. Offwhite/icyblue/cobalt with small lime and warmgold accents, gentle materials, no heavy black. Actual transparent alpha surrounding cluster, no background rectangle, no global glow/haze, no floor scene, no pedestal. No text, words, digits, dates, logos, watermark, UI or brand name.",
+      "original_filename": "freedom-christmas-editorial-hero-v1.png",
+      "original_sha256": "42f2c766af36511109e8d5b22d3156e82a8e2c64e90a9b9502df6d2b28a25bde",
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "original_alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "name": "newyear",
+      "generator": "built-in image_gen",
+      "prompt": "Create ONE refined New Year transparent compact hero vignette for a light editorial website. References are palette and creative-workshop identity only: electric cobalt #3044ff, acid lime #c4ff20, bold angular star language. NEVER copy letters/typography/logos from reference. Deliberately NOT liquid chrome, NOT all-metal and NOT thick-outline cartoon. Medium: crisp layered matte paper-cut illustration with subtle soft gradient shading and gentle folded-paper dimension, refined simple architectural forms. Composition square canvas: compact balanced centered cluster with 10% clear padding all sides, all objects fully visible. A large angular folded cobalt star paired with a smaller lime angular star, a graceful offwhite ribbon curling between and below them, a small restrained fan of cobalt/lime/silver-white firework rays behind them, just 3 tiny geometric sparks. Sophisticated celebratory art, energetic but sparse. Offwhite and soft matte silver highlights (NOT shiny liquid chrome), cobalt dominant and small lime accents. No faces/characters/mascots, no heavy outlines, no clay/toy/puffy sticker, no glossy chrome, no city/scenery. True transparent alpha around the cluster, no background box or rectangle, no global haze/glow, no floor/pedestal. No numbers/dates/year/text/words/brand/logos/watermarks/UI.",
+      "original_filename": "freedom-newyear-editorial-hero-v1.png",
+      "original_sha256": "d234cf3cb8405d215d5bca640f277ee35933f61d3082a4d480650212a1e67089",
+      "original_dimensions": [
+        1254,
+        1254
+      ],
+      "original_alpha_extrema": [
+        0,
+        255
+      ]
+    }
+  ],
+  "postprocessing": "Pillow LANCZOS resize; WebP quality82/method6; RGBA alpha preserved; complete composition retained without crop; originals retained privately",
+  "rights": "Original AI-generated decorative artwork requested by user; no third-party logo redraw. Brand/image rights not automatically repo MIT; maintainer review required.",
+  "assets": [
+    {
+      "path": "apps/portal-web/public/art/seasonal/halloween-hero.webp",
+      "bytes": 47962,
+      "width": 480,
+      "height": 320,
+      "sha256": "ad50f0012440f0fa31164eb4655c6a450fb6a04088ee08321da077a1b3cdba94",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "path": "apps/portal-web/public/art/seasonal/christmas-hero.webp",
+      "bytes": 27000,
+      "width": 384,
+      "height": 384,
+      "sha256": "fc5d270e7798d66ebd7e92b7c78e3890eaf299fb011b4a5ba4468dd0adc5c3b9",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    },
+    {
+      "path": "apps/portal-web/public/art/seasonal/newyear-hero.webp",
+      "bytes": 38764,
+      "width": 384,
+      "height": 384,
+      "sha256": "4cec9f311ff03c21d9f2ab2086c25fa2554ec44640bc6ba8f58cfe9c87f31d4c",
+      "alpha_extrema": [
+        0,
+        255
+      ]
+    }
+  ],
+  "budgets_bytes": {
+    "hero": 102400,
+    "selected_theme_total": 102400
+  },
+  "acceptance": "Candidate only; image review is not native UI or user acceptance."
+}

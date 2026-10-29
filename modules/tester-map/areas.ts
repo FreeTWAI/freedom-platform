@@ -259,6 +259,7 @@ export const TESTER_AREAS: readonly TesterArea[] = [
     summary: ['只用測試商品與預留；不付款、不出貨、不成交。', 'Test products and reservations only: no payment, shipping or sale.', 'テスト商品と予約のみ。支払い・発送・成約はしません。', '테스트 상품과 예약만 사용합니다. 결제 · 배송 · 거래 없음.', 'Solo productos y reservas de prueba: sin pago, envío ni venta.'],
     features: [
       { id: 'shop.supplier', pages: ['supplier'], href: '#supplier', name: ['我有東西要賣', 'Offer products', '商品を提供する', '상품 제공', 'Ofrecer productos'] },
+      { id: 'shop.virtual-commerce', pages: ['virtual-commerce'], href: '#virtual-commerce', name: ['虛擬導購文字彩排', 'Virtual commerce text rehearsal', '商品案内テキストリハーサル', '상품 안내 텍스트 리허설', 'Ensayo de texto de comercio virtual'] },
       { id: 'shop.retail', pages: ['retail'], href: '#retail', name: ['我可以賣東西', 'Sell products', '商品を販売する', '상품 판매', 'Vender productos'] },
       { id: 'shop.supplier-console', pages: ['supplier-console'], href: '#stores/supply', flag: 'supplier_console_enabled', name: ['供應商營運中心（供貨商品庫）', 'Supplier console (supply catalog)', '供給者コンソール（商品庫）', '공급자 콘솔(공급 상품)', 'Consola del proveedor (catálogo)'] },
       { id: 'shop.stores', pages: ['stores'], href: '#stores', flag: 'commerce_console_enabled', name: ['我的商店：設定、預覽、發布展示頁', 'My stores: set up, preview, publish', 'マイショップ：設定・プレビュー・公開', '내 상점: 설정 · 미리보기 · 게시', 'Mis tiendas: configurar, previsualizar, publicar'] },

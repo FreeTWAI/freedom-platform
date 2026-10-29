@@ -44,6 +44,11 @@ const test=base.extend<{bookmarkAccount:BookmarkAccount}>({
 });
 
 const endpoint='/api/v1/community-relations/bookmarks';
+async function openBookmark(control:ReturnType<Page['locator']>) {
+  const menu=control.locator('..').locator('..');
+  await menu.locator(':scope > summary').click();
+  await control.locator('summary').click();
+}
 async function login(page:Page,email:string) {
   await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill(email);
@@ -68,19 +73,21 @@ test('private post bookmark saves only explicitly, persists and is isolated from
   let posts=0;page.on('request',r=>{if(new URL(r.url()).pathname===endpoint&&r.method()==='POST')posts++;});
   const reads:string[]=[];page.on('request',r=>{if(r.method()==='GET'&&r.url().includes('/community-relations/'))reads.push(new URL(r.url()).pathname);});
   const {id,control}=await createPost(page,bookmarkAccount.email);expect(reads).toEqual([]);
-  await control.locator('summary').click();
+  await openBookmark(control);
   await expect(control.getByRole('button',{name:'儲存私人書籤',exact:true})).toBeVisible();expect(posts).toBe(0);
   expect(reads).toEqual([`${endpoint}/post/${id}`]);
   await control.getByRole('button',{name:'儲存私人書籤',exact:true}).click();
   await expect(control.getByRole('button',{name:'移除書籤',exact:true})).toHaveAttribute('aria-pressed','true');
-  await page.reload();await control.locator('summary').click();
+  await page.reload();await openBookmark(control);
   await expect(control.getByRole('button',{name:'移除書籤',exact:true})).toBeVisible();
-  await signOut(page);await login(page,'reviewer@local.test');await control.locator('summary').click();
+  await signOut(page);await login(page,'reviewer@local.test');await openBookmark(control);
+  const readerMenu=control.locator('..').locator('..');
+  for(const name of ['編輯','刪除','隱藏'])await expect(readerMenu.getByRole('button',{name,exact:true})).toHaveCount(0);
   await expect(control.getByRole('button',{name:'儲存私人書籤',exact:true})).toHaveAttribute('aria-pressed','false');
-  await signOut(page);await login(page,bookmarkAccount.email);await control.locator('summary').click();
+  await signOut(page);await login(page,bookmarkAccount.email);await openBookmark(control);
   await control.getByRole('button',{name:'移除書籤',exact:true}).click();
   await expect(control.getByRole('button',{name:'儲存私人書籤',exact:true})).toBeVisible();
-  await page.reload();await control.locator('summary').click();
+  await page.reload();await openBookmark(control);
   await expect(control.getByRole('button',{name:'儲存私人書籤',exact:true})).toBeVisible();expect(posts).toBe(2);
 });
 
@@ -93,4 +100,132 @@ test('each existing site gate independently hides private bookmark controls with
     await page.unroute('**/api/v1/site');
   }
   expect(requests).toBe(0);
+});
+
+
+test('bookmark stays in options, closes without mutation, and returns keyboard focus',async({page,bookmarkAccount})=>{
+  const {control}=await createPost(page,bookmarkAccount.email);
+  const card=control.locator('xpath=ancestor::article[contains(@class,"social-card")]');
+  const menu=card.locator('.social-post-menu');
+  let writes=0;page.on('request',r=>{if(new URL(r.url()).pathname===endpoint&&r.method()==='POST')writes++;});
+  await expect(control).toBeHidden();
+  await expect(card.locator('.social-card-body > .social-post-bookmark')).toHaveCount(0);
+  await openBookmark(control);
+  await expect(control.getByRole('button',{name:'儲存私人書籤',exact:true})).toBeVisible();
+  await control.getByRole('button',{name:'儲存私人書籤',exact:true}).focus();
+  await page.keyboard.press('Escape');
+  await expect(control).not.toHaveAttribute('open','');
+  await expect(control.locator('summary')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).not.toHaveAttribute('open','');
+  await expect(menu.locator(':scope > summary')).toBeFocused();
+  await openBookmark(control);
+  await page.locator('.social-feed-heading').first().click({position:{x:4,y:4}});
+  await expect(menu).not.toHaveAttribute('open','');
+  await expect(control).not.toHaveAttribute('open','');
+  expect(writes).toBe(0);
+});
+
+test('unknown bookmark write survives options dismissal and retries the same intent',async({page,bookmarkAccount})=>{
+  const {control}=await createPost(page,bookmarkAccount.email);
+  const menu=control.locator('..').locator('..');
+  const writes:{key:string|null;body:unknown}[]=[];
+  await page.route(`**${endpoint}`,async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    writes.push({key:route.request().headers()['idempotency-key']??null,body:route.request().postDataJSON()});
+    if(writes.length===1)await route.abort('failed');else await route.continue();
+  });
+  await openBookmark(control);
+  await control.getByRole('button',{name:'儲存私人書籤',exact:true}).click();
+  await expect(control.getByRole('alert')).toBeVisible();
+  await menu.locator(':scope > summary').click();
+  await openBookmark(control);
+  await control.getByRole('button',{name:'重試儲存私人書籤',exact:true}).click();
+  await expect(control.getByRole('button',{name:'移除書籤',exact:true})).toBeVisible();
+  expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);
+});
+
+
+test('bookmark options retain readable contrast and touch targets in light and dark themes',async({page,bookmarkAccount})=>{
+  const {control}=await createPost(page,bookmarkAccount.email);
+  await openBookmark(control);
+  await expect(control.getByRole('button',{name:'儲存私人書籤',exact:true})).toBeVisible();
+  for(const theme of ['light','dark','versefolk']){
+    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+    for(const target of [control.locator('summary'),control.getByRole('button',{name:'儲存私人書籤',exact:true})]){
+      await target.scrollIntoViewIfNeeded();
+      const metrics=await target.evaluate(element=>{
+        const style=getComputedStyle(element),rect=element.getBoundingClientRect();
+        const luminance=(color:string)=>{
+          const rgb=color.match(/[\d.]+/g)!.slice(0,3).map(Number).map(x=>{const s=x/255;return s<=0.04045?s/12.92:((s+0.055)/1.055)**2.4;});
+          return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
+        };
+        const a=luminance(style.color),b=luminance(style.backgroundColor);
+        let insideScrollports=true;
+        for(let parent=element.parentElement;parent;parent=parent.parentElement){
+          const css=getComputedStyle(parent),bounds=parent.getBoundingClientRect();
+          if(/auto|scroll|hidden|clip/.test(css.overflowY)&& (rect.top<bounds.top||rect.bottom>bounds.bottom))insideScrollports=false;
+          if(/auto|scroll|hidden|clip/.test(css.overflowX)&& (rect.left<bounds.left||rect.right>bounds.right))insideScrollports=false;
+        }
+        return {contrast:(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05),height:rect.height,insideScrollports,unclipped:element.contains(document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2))};
+      });
+      expect(metrics.contrast,`${theme} contrast`).toBeGreaterThanOrEqual(4.5);expect(metrics.height,`${theme} touch height`).toBeGreaterThanOrEqual(44);expect(metrics.unclipped,`${theme} target stays inside visible viewport`).toBe(true);
+      expect(metrics.insideScrollports,`${theme} target is not clipped by a scrolling ancestor`).toBe(true);
+    }
+  }
+});
+
+test('post options fit the visible viewport after resize and scroll without trapping keyboard focus',async({page,bookmarkAccount})=>{
+  const {control}=await createPost(page,bookmarkAccount.email),menu=control.locator('..').locator('..');
+  await openBookmark(control);
+  const save=control.getByRole('button',{name:'儲存私人書籤',exact:true});
+  await expect(save).toBeVisible();
+  for(const size of [{width:1280,height:720},{width:390,height:420},{width:390,height:844}]){
+    await page.setViewportSize(size);
+    await menu.scrollIntoViewIfNeeded();
+    // Resizing may move the trigger entirely off-screen, which intentionally closes it.
+    if(!await menu.evaluate(element=>(element as HTMLDetailsElement).open))await openBookmark(control);
+    await expect(save).toBeVisible();
+    const panel=menu.locator(':scope > .social-post-menu-actions');
+    await expect.poll(async()=>panel.evaluate(element=>{
+      const rect=element.getBoundingClientRect(),header=document.querySelector('.community-header')!.getBoundingClientRect();
+      return rect.top>=Math.max(0,header.bottom)&&rect.bottom<=window.innerHeight;
+    })).toBe(true);
+    // Native keyboard scrolling must bring the actual action into the scrollport.
+    await control.locator('summary').focus();await page.keyboard.press('Tab');await expect(save).toBeFocused();
+    await expect.poll(async()=>save.evaluate(element=>{
+      const rect=element.getBoundingClientRect();return element.contains(document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2));
+    })).toBe(true);
+  }
+  await page.keyboard.press('Escape');await expect(control).not.toHaveAttribute('open','');
+  await expect(control.locator('summary')).toBeFocused();
+  await page.keyboard.press('Escape');await expect(menu).not.toHaveAttribute('open','');
+  await expect(menu.locator(':scope > summary')).toBeFocused();
+});
+
+
+test('pending write remains disabled after options reopen; late ACK requires same-intent reconciliation',async({page,bookmarkAccount})=>{
+  const {control}=await createPost(page,bookmarkAccount.email),menu=control.locator('..').locator('..');
+  let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+  const writes:{key:string|null;body:unknown}[]=[];
+  await page.route(`**${endpoint}`,async route=>{
+    if(route.request().method()!=='POST'){await route.continue();return;}
+    writes.push({key:route.request().headers()['idempotency-key']??null,body:route.request().postDataJSON()});
+    if(writes.length!==1){await route.continue();return;}
+    const response=await route.fetch();await gate;await route.fulfill({response});
+  });
+  await openBookmark(control);
+  await control.getByRole('button',{name:'儲存私人書籤',exact:true}).click();
+  try{
+    await expect(control.getByRole('button',{name:'正在儲存…',exact:true})).toBeDisabled();
+    await menu.locator(':scope > summary').click();await openBookmark(control);
+    await expect(control.getByRole('button',{name:'正在儲存…',exact:true})).toBeDisabled();
+    expect(writes).toHaveLength(1);
+  }finally{release();}
+  await expect(control.getByRole('button',{name:'重試儲存私人書籤',exact:true})).toBeEnabled();
+  await control.getByRole('button',{name:'重試儲存私人書籤',exact:true}).click();
+  await expect(control.getByRole('button',{name:'移除書籤',exact:true})).toBeVisible();
+  expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);
+  await control.getByRole('button',{name:'移除書籤',exact:true}).focus();await page.keyboard.press('Tab');
+  await expect(menu).not.toHaveAttribute('open','');
 });

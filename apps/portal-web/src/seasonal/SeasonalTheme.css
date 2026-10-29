@@ -1,0 +1,20 @@
+/* Brand, typography, lime primary actions and all base-theme tokens stay unchanged. */
+.seasonal-surface[data-season] { --season-accent:var(--blue-ink,#344cbd); --season-wash:color-mix(in srgb,var(--blue,#3044ff) 5%,var(--bg-elev)); }
+.app-frame.social-layout.seasonal-surface[data-season] .community-header { box-shadow:inset 0 -1px color-mix(in srgb,var(--blue,#3044ff) 35%,var(--line)); }
+.seasonal-welcome { position:relative; display:grid; grid-template-columns:minmax(0,1fr) 144px; align-items:center; gap:12px; min-height:120px; max-width:1040px; margin:0 0 12px; padding:10px 16px; border:1px solid var(--line); border-radius:12px; background:linear-gradient(115deg,var(--bg-elev) 65%,var(--season-wash)); }
+/* Small geometric edge marks stay inside the banner, outside its text column. */
+.seasonal-welcome::after { content:''; position:absolute; pointer-events:none; right:8px; bottom:8px; width:24px; height:1px; background:var(--green); opacity:.6; }
+.seasonal-welcome-copy { min-width:0; }
+.app-frame.social-layout .seasonal-welcome h2 { font-size:1rem; margin:3px 0; line-height:1.4; color:var(--ink); }
+.seasonal-chip { display:inline-block; font-size:.75rem; line-height:1.3; font-weight:650; color:var(--muted); }
+.seasonal-art-column { width:100%; height:100px; min-width:0; pointer-events:none; }
+.seasonal-hero-art { display:block; width:100%; height:100%; object-fit:contain; pointer-events:none; }
+.seasonal-welcome .seasonal-share { min-height:44px; max-width:100%; padding:5px 12px; font-size:.8125rem; color:var(--ink); background:var(--bg-elev); border-color:var(--line); }
+.seasonal-welcome .seasonal-share:hover { background:var(--season-wash); }
+.seasonal-welcome .seasonal-share:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
+.app-frame.social-layout.seasonal-surface[data-season] .home-participation-disclosure > summary { border-inline-start:3px solid color-mix(in srgb,var(--green) 65%,var(--line)); }
+@media(max-width:600px) {
+ .seasonal-welcome { grid-template-columns:minmax(0,1fr) clamp(80px,26vw,104px); min-height:112px; padding:8px 10px; gap:8px; }
+ .seasonal-art-column { height:96px; }
+}
+/* Static for every motion preference. No wallpaper, extra image requests or click-blocking overlay. */

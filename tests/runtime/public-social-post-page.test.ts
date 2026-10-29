@@ -121,7 +121,9 @@ function deferred<T>(){let resolve!:(value:T)=>void;const promise=new Promise<T>
 function reopenHarness(source=reopenTransition){
   const response=deferred<unknown>(),body=deferred<unknown>(),events:string[]=[];
   const path='/api/v1/social-posts/'+id+'/public-sharing';
-  const locator={getByRole:()=>locator,getByLabel:()=>locator,click:async()=>{events.push('click');}};
+  const locator={getByRole:()=>locator,getByLabel:()=>locator,
+    locator:(selector:string)=>{assert.equal(selector,'.social-sharing-consent > summary');return {click:async()=>{events.push('consent-details');}};},
+    click:async()=>{assert.ok(events.includes('consent-details'),'publication stays behind the explicit disclosure');events.push('click');}};
   const author={page:{getByRole:()=>locator,waitForResponse:(match:(value:unknown)=>boolean)=>{
     const candidate=(method:string,pathname:string)=>({request:()=>({method:()=>method}),url:()=>`https://example.test${pathname}`});
     assert.equal(match(candidate('GET',path)),false);
@@ -145,17 +147,17 @@ const flushReopen=()=>new Promise<void>(resolve=>setImmediate(resolve));
 
 test('reopen journey waits for its exact POST and complete ACK before public navigation',async()=>{
   const h=reopenHarness();await flushReopen();
-  assert.deepEqual(h.events,['response-listener','click']);
+  assert.deepEqual(h.events,['response-listener','consent-details','click']);
   h.response.resolve({status:()=>200,json:()=>h.body.promise});await flushReopen();
-  assert.deepEqual(h.events,['response-listener','click']);
+  assert.deepEqual(h.events,['response-listener','consent-details','click']);
   h.body.resolve(h.ack);await h.complete;
-  assert.deepEqual(h.events,['response-listener','click','ack','public-link','visible','visitor-navigation']);
+  assert.deepEqual(h.events,['response-listener','consent-details','click','ack','public-link','visible','visitor-navigation']);
 });
 
 test('reopen journey rejects incomplete or unavailable ACKs before visiting public content',async()=>{
   for(const ack of [{},{enabled:true,available:false,post_revision:2,public_path:null},{enabled:true,available:true,post_revision:1,public_path:'/posts/'+id},{enabled:true,available:true,post_revision:2,public_path:'/posts/'+other}]){
     const h=reopenHarness(),rejected=assert.rejects(h.complete);
-    h.response.resolve({status:()=>200,json:async()=>ack});await rejected;
+    h.response.resolve({status:()=>200,json:async()=>ack});await rejected;assert.ok(h.events.includes('click'));
     assert.ok(!h.events.includes('public-link'));assert.ok(!h.events.includes('visitor-navigation'));
   }
 });
@@ -163,5 +165,12 @@ test('reopen journey rejects incomplete or unavailable ACKs before visiting publ
 test('reopen journey rejects a non-200 response before reading its body or navigating',async()=>{
   const h=reopenHarness(),rejected=assert.rejects(h.complete);
   h.response.resolve({status:()=>409,json:async()=>{assert.fail('rejected response must not confirm publication');}});
-  await rejected;assert.ok(!h.events.includes('ack'));assert.ok(!h.events.includes('visitor-navigation'));
+  await rejected;assert.ok(h.events.includes('click'));assert.ok(!h.events.includes('ack'));assert.ok(!h.events.includes('visitor-navigation'));
+});
+
+test('reopen journey negative control rejects publication when disclosure expansion is removed',async()=>{
+  const changed=reopenTransition.replace("  await dialog.locator('.social-sharing-consent > summary').click();",'');
+  assert.notEqual(changed,reopenTransition);
+  const h=reopenHarness(changed);await assert.rejects(h.complete,/publication stays behind the explicit disclosure/);
+  assert.ok(!h.events.includes('click'));assert.ok(!h.events.includes('visitor-navigation'));
 });
