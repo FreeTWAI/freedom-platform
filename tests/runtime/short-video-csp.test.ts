@@ -59,14 +59,18 @@ test('source binding observes every document before login and keeps policy asser
 
 async function transportHarness(transport: (deliver: () => void) => Promise<void>,
   run: (context: {collector: Awaited<ReturnType<typeof collectShortVideoCsp>>; emit: () => void;
-    target: Record<string, unknown>; detach: () => void; failEvaluation: () => void}) => Promise<void>) {
+    target: Record<string, unknown>; detach: () => void; navigate: (url: string) => void; failEvaluation: () => void}) => Promise<void>,
+  childDocument = false) {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   let listener: (event: ShortVideoCspEvent) => void = () => { throw Error('Listener missing'); };
   let bound: (source: {frame: typeof frame}, event: ShortVideoCspEvent) => void;
-  let detached = false, evaluationFails = false;
+  let detached = false, evaluationFails = false, currentURL = platform;
+  let onNavigated: (value: typeof frame) => void = () => {};
+  let installDocument!: () => void;
+  const main = {url: () => platform, parentFrame: () => null, evaluate: async () => true};
   let onDetached: (value: typeof frame) => void = () => {};
-  const frame = {url: () => platform, parentFrame: () => null, isDetached: () => detached, evaluate: async (fn: () => Promise<void>) => {
+  const frame = {url: () => currentURL, parentFrame: () => childDocument ? main : null, isDetached: () => detached, evaluate: async (fn: () => Promise<void>) => {
     if (evaluationFails) throw Error('Frame detached during observation');
     return fn();
   }};
@@ -77,12 +81,17 @@ async function transportHarness(transport: (deliver: () => void) => Promise<void
     addEventListener: (_name: string, callback: typeof listener) => { listener = callback; },
   }});
   const page = {exposeBinding: async (_name: string, callback: typeof bound) => { bound = callback; },
-    addInitScript: async (fn: () => void) => fn(), mainFrame: () => frame, frames: () => detached ? [] : [frame],
-    on: (name: string, callback: typeof onDetached) => { if (name === 'framedetached') onDetached = callback; }} as unknown as Page;
+    addInitScript: async (fn: () => void) => { installDocument = fn; fn(); }, mainFrame: () => childDocument ? main : frame,
+    frames: () => [...(childDocument ? [main] : []), ...(detached ? [] : [frame])],
+    on: (name: string, callback: typeof onDetached) => {
+      if (name === 'framedetached') onDetached = callback;
+      if (name === 'framenavigated') onNavigated = callback;
+    }} as unknown as Page;
   try {
     const collector = await collectShortVideoCsp(page, platform);
     await run({collector, target, emit: () => listener({...report, documentURI: platform,
       disposition: 'enforce', effectiveDirective: 'frame-src', blockedURI: youtube}),
+      navigate: url => { currentURL = url; installDocument(); onNavigated(frame); },
       detach: () => { detached = true; onDetached(frame); }, failEvaluation: () => { evaluationFails = true; }});
   } finally {
     if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else Reflect.deleteProperty(globalThis, 'window');
@@ -228,4 +237,61 @@ test('new events and navigation invalidate required frame checkpoints', async ()
     child.detach();
     await assert.rejects(collector.drain(), /without an observation checkpoint/);
   }
+});
+
+
+test('held old platform events cannot become an empty checkpoint after external navigation', async () => {
+  for (const checkpointBeforeEvent of [false, true]) for (const detached of [false, true]) {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await transportHarness(deliver => gate.then(deliver), async ({collector, emit, navigate, detach}) => {
+      if (checkpointBeforeEvent) await collector.drain();
+      emit(); // Actual installed listener holds the old platform document event.
+      navigate(youtube);
+      if (detached) detach();
+      assert.equal(collector.violations.length, 0);
+      await assert.rejects(collector.drain(), /required document navigated externally/);
+      release();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(collector.violations.length, 1);
+      assert.equal(collector.violations[0].documentURI, platform);
+      assert.equal(collector.violations[0].disposition, 'enforce');
+      // Event delivery or later document evaluation cannot restore the lost boundary.
+      await assert.rejects(collector.drain(), /required document navigated externally/);
+    }, true);
+  }
+});
+
+test('only initial empty attachment can cross to external without a required document boundary', async () => {
+  const initial = await lifecycleHarness();
+  const bootstrap = initial.create('', initial.main);
+  bootstrap.navigate(youtube);
+  bootstrap.detach();
+  await initial.collector.drain();
+  assert.equal(initial.collector.lifecycleDiagnostics[0].scope, 'external');
+  for (const url of ['about:blank', 'about:srcdoc', platform, 'data:text/html,unknown']) {
+    const {collector, main, create} = await lifecycleHarness();
+    const child = create('', main);
+    child.navigate(url); // First navigation consumes bootstrap, including inherited blank.
+    child.navigate(youtube);
+    child.detach();
+    await assert.rejects(collector.drain(), /required document navigated externally/);
+  }
+  const existing = await lifecycleHarness();
+  const blank = existing.create('about:blank', existing.main);
+  blank.navigate(youtube);
+  await assert.rejects(existing.collector.drain(), /required document navigated externally/);
+});
+
+test('same-origin and hash navigation do not manufacture an external boundary', async () => {
+  const {collector, main, create} = await lifecycleHarness();
+  const child = create(platform, main);
+  child.navigate(platform + '/next');
+  child.navigate(platform + '/next#section');
+  main.navigate(platform + '/#social');
+  await collector.drain();
+  child.detach();
+  await collector.drain();
+  assert.deepEqual(collector.violations, []);
+  assert.deepEqual(collector.lifecycleDiagnostics, []);
 });

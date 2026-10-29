@@ -33,6 +33,8 @@ export async function collectShortVideoCsp(page: Page, platformURL: string) {
   type Scope = 'main' | 'platform' | 'external' | 'unknown';
   type Observation = {scope: Scope; frameOrigin: string; parentOrigin: string};
   const observations = new WeakMap<Frame, Observation>();
+  const initialAttachments = new WeakSet<Frame>();
+  let requiredNavigation: Observation | undefined;
   const lifecycleDiagnostics: (Observation & {reason: 'detached' | 'missing-init'})[] = [];
   let undrainedDetachment: Observation | undefined;
   const platformOrigin = origin(platformURL);
@@ -53,7 +55,12 @@ export async function collectShortVideoCsp(page: Page, platformURL: string) {
     return observation;
   };
   for (const frame of page.frames()) remember(frame);
-  page.on('frameattached', remember);
+  page.on('frameattached', frame => {
+    // Only an empty URL at attachment identifies the pre-navigation bootstrap.
+    // An existing/committed about:blank or srcdoc is not this exemption.
+    if (frame.url() === '') initialAttachments.add(frame);
+    remember(frame);
+  });
   page.on('framedetached', frame => {
     const observation = observations.get(frame) ?? remember(frame);
     if (!drainedFrames.has(frame)) {
@@ -61,7 +68,19 @@ export async function collectShortVideoCsp(page: Page, platformURL: string) {
       else undrainedDetachment ??= observation;
     }
   });
-  page.on('framenavigated', frame => { drainedFrames.delete(frame); remember(frame); });
+  page.on('framenavigated', frame => {
+    const previous = observations.get(frame);
+    const initial = initialAttachments.delete(frame);
+    const current = remember(frame);
+    // A checkpoint observes one boundary, not the document's entire remaining
+    // lifetime: a later event may still be awaiting binding delivery. Once a
+    // required document leaves for an external one, evaluating that new document
+    // cannot acknowledge the old listener. Keep the lost boundary sticky even
+    // after detach (or a later navigation back), rather than certify it empty.
+    if (previous && previous.scope !== 'external' && current.scope === 'external' && !initial)
+      requiredNavigation ??= previous;
+    drainedFrames.delete(frame);
+  });
   await page.exposeBinding('recordShortVideoCsp', (source, event: ShortVideoCspEvent) => {
     drainedFrames.delete(source.frame);
     const record = {...event, frameURL: source.frame.url(), mainFrame: source.frame === page.mainFrame()};
@@ -94,6 +113,7 @@ export async function collectShortVideoCsp(page: Page, platformURL: string) {
     });
   });
   const assertLifecycle = () => {
+    if (requiredNavigation) throw new Error(`Short CSP required document navigated externally without a final observation boundary: ${JSON.stringify(requiredNavigation)}`);
     if (undrainedDetachment) throw new Error(`Short CSP frame detached without an observation checkpoint: ${JSON.stringify(undrainedDetachment)}`);
   };
   const drain = async () => {
