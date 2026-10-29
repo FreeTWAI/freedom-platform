@@ -28,6 +28,7 @@ function Content({client, eventId, onBlockedChange}: Props) {
   const [busy, setBusy] = useState(false);
   const [unknown, setUnknown] = useState(false);
   const [error, setError] = useState('');
+  const [unavailable, setUnavailable] = useState(false);
   const [notice, setNotice] = useState('');
   const live = useRef(false);
   const epoch = useRef(0);
@@ -51,6 +52,7 @@ function Content({client, eventId, onBlockedChange}: Props) {
     setLoading(true);
     setView(null);
     setError('');
+    setUnavailable(false);
     try {
       const value = await client.get<unknown>(path, {signal: controller.signal, suppressConsole: true});
       if (!current(run) || seq !== sequence.current) return;
@@ -58,7 +60,16 @@ function Content({client, eventId, onBlockedChange}: Props) {
       setView(value);
     } catch (cause) {
       if (current(run) && seq === sequence.current) {
-        setError(cause instanceof Error ? cause.message : '無法讀取小任務。');
+        const expectedUnavailable = cause instanceof ApiError && cause.definitiveResponse
+          && ((cause.status === 409 && cause.code === 'event_closed')
+            || (cause.status === 404 && cause.code === 'not_found'));
+        if (expectedUnavailable && !pending.current && !uncertain.current) {
+          // This is an unavailable optional feature, not a failed event edit.
+          // Never turn an uncertain command into an empty or successful state.
+          setUnavailable(true);
+        } else {
+          setError(cause instanceof Error ? cause.message : '無法讀取小任務。');
+        }
       }
     } finally {
       controllers.current.delete(controller);
@@ -172,13 +183,14 @@ function Content({client, eventId, onBlockedChange}: Props) {
     <p>自願的個人練習，不是主辦交辦。進度只有你看得到；可換題、略過，不影響報名。</p>
     <p className="field-hint">「我已完成」是自己記錄，不是到場、交換名片或貢獻證明，沒有積分或勳章。</p>
     {notice && <p role="status">{notice}</p>}
+    {unavailable && <p role="status">目前無法使用小任務。活動開放後可重新讀取；不影響其他活動操作。</p>}
     {error && <p role="alert">{error}</p>}
     {loading && <p role="status">正在讀取私人進度…</p>}
     {unknown && pending.current && <button
       className="btn btn-ghost" disabled={busy}
       onClick={() => pending.current && void send(pending.current)}
     >重試原操作</button>}
-    {(error || unknown) && <button
+    {(error || unknown || unavailable) && <button
       className="btn btn-ghost" disabled={busy || loading} onClick={() => void load()}
     >重新讀取</button>}
     {view && !view.enabled && view.editable && <button

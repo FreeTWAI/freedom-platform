@@ -371,7 +371,14 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
     page.once('dialog',dialog=>dialog.accept());await form.getByRole('button',{name:'返回',exact:true}).click();
     hold=false;
     const id=(await e2eAuthPool.query('SELECT event_id FROM community_events WHERE organizer_ref=$1 AND title=$2',[user,titles[1]])).rows[0].event_id as string;
+    // Keep a separate, legitimate read-error alert visible as a negative control:
+    // it must never count as the awaited event media rejection.
+    await page.route(`**/api/v1/events/${id}/my-missions`,route=>route.fulfill({
+      status:503,contentType:'application/problem+json',
+      json:{code:'unavailable',detail:'合成小任務讀取暫停'},
+    }));
     await page.goto(`/events/${id}`);
+    await expect(page.getByRole('region',{name:'我的活動小任務',exact:true}).getByRole('alert')).toContainText('合成小任務讀取暫停');
     const card=page.locator('.experience-card'),editor=card.locator('form');
     await expect(card.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
     await page.route(`**/api/v1/events/${id}/update`,async route=>{
@@ -408,8 +415,9 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
       await route.fulfill({response});
     });
     await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
-    await expect(page.getByRole('alert')).toBeVisible();
-    expect(media.map(entry=>[entry.path,entry.version,entry.status])).toEqual([['banner','"4"',200],['video','"5"',415]]);
+    // An optional missions panel alert must not settle a media-save expectation.
+    await expect.poll(()=>media.map(entry=>[entry.path,entry.version,entry.status])).toEqual([['banner','"4"',200],['video','"5"',415]]);
+    await expect(page.locator('.event-flow > [role="alert"].banner-error')).toBeVisible();
     await expect(editor.getByLabel('活動名稱',{exact:true})).toHaveValue(titles[1]+' 修改二');
     page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'我的內容');
     await expect(page).toHaveURL(new RegExp(`/events/${id}$`));

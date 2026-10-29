@@ -49,3 +49,17 @@ for(const width of [320,390])test(`task controls remain readable and touchable a
  await page.setViewportSize({width,height:844});await page.route(`**/api/v1/events/${id}/my-missions`,route=>route.fulfill({json:progress()}));await open(page);const panel=page.getByRole('region',{name:'我的活動小任務',exact:true});await expect(panel.getByRole('listitem')).toHaveCount(3);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);const box=await panel.getByRole('button',{name:'換一個',exact:true}).first().boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);
 });
+
+for(const [status,code] of [[404,'not_found'],[409,'event_closed']] as const)test(`unavailable initial missions ${status} is a neutral read-only state`,async({page})=>{
+ let writes=0;
+ await page.route(`**/api/v1/events/${id}/my-missions`,route=>{
+  if(route.request().method()!=='GET')writes++;
+  return route.fulfill({status,contentType:'application/problem+json',json:{code,detail:'合成未開放狀態'}});
+ });
+ await open(page);const panel=page.getByRole('region',{name:'我的活動小任務',exact:true});
+ await expect(panel.getByRole('status')).toContainText('目前無法使用小任務');
+ await expect(panel.getByRole('alert')).toHaveCount(0);
+ await expect(panel.getByRole('button',{name:'自願開始 3 個小任務'})).toHaveCount(0);
+ await expect(panel.getByRole('button',{name:'重新讀取'})).toBeVisible();
+ expect(writes).toBe(0);
+});

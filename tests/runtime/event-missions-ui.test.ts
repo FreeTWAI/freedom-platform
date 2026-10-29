@@ -74,3 +74,42 @@ test('old clear ACK is not rendered as current state after another start',async(
  const h=harness();await ready(h,own(true,2));h.click('關閉並清除小任務');const clear=h.writes[0];clear.reject(unknown());await settle();h.click('重新讀取');h.reads.at(-1).resolve(own(true,4));await settle();
  h.click('重試原操作');assert.equal(tuple(h.writes[1]),tuple(clear));h.writes[1].resolve(ack(clear));await settle();h.reads.at(-1).resolve(own(true,4));await settle();assert.ok(h.button('換一個'));assert.equal(h.button('自願開始 3 個小任務'),undefined);h.cleanup();
 });
+for (const [status,code] of [[404,'not_found'],[409,'event_closed']] as const) {
+  test(`initial unavailable ${status} is neutral, read-only and recoverable`,async()=>{
+    const h=harness();
+    h.reads[0].reject(new ApiError({message:'unavailable source',status,code,definitiveResponse:true}));
+    await settle();
+    assert.equal(find(h.view(),node=>node.props.role==='alert'),undefined);
+    assert.match(text(h.view()),/目前無法使用小任務/);
+    assert.equal(h.button('自願開始 3 個小任務'),undefined);
+    assert.equal(h.writes.length,0);
+    h.click('重新讀取');h.reads.at(-1).resolve(own());await settle();
+    assert.ok(h.button('自願開始 3 個小任務'));
+    assert.doesNotMatch(text(h.view()),/目前無法使用小任務/);
+    assert.equal(h.writes.length,0);h.cleanup();
+  });
+}
+for (const [status,code,definitiveResponse] of [[500,'internal',true],[409,'other_conflict',true],[404,'not_found',false]] as const) {
+  test(`unexpected read failure ${status}/${code}/${definitiveResponse} remains an alert`,async()=>{
+    const h=harness();
+    h.reads[0].reject(new ApiError({message:'read failed',status,code,definitiveResponse}));
+    await settle();
+    assert.ok(find(h.view(),node=>node.props.role==='alert'));
+    assert.doesNotMatch(text(h.view()),/目前無法使用小任務/);
+    assert.equal(h.writes.length,0);h.cleanup();
+  });
+}
+test('unavailable GET after unknown command cannot downgrade the alert or release its tuple',async()=>{
+  const h=harness();await ready(h);h.click('自願開始 3 個小任務');
+  const first=h.writes[0];first.reject(unknown());await settle();
+  h.click('重新讀取');
+  h.reads.at(-1).reject(new ApiError({message:'unavailable source',status:409,code:'event_closed',definitiveResponse:true}));
+  await settle();
+  assert.ok(find(h.view(),node=>node.props.role==='alert'));
+  assert.equal(h.blocked.at(-1),true);
+  assert.doesNotMatch(text(h.view()),/目前無法使用小任務/);
+  h.click('重試原操作');assert.equal(tuple(h.writes[1]),tuple(first));
+  h.writes[1].reject(denied(403));await settle();
+  assert.ok(find(h.view(),node=>node.props.role==='alert'));
+  assert.equal(h.blocked.at(-1),true);h.cleanup();
+});

@@ -93,7 +93,7 @@ test('foreign community event is hidden for original owner and other members, in
 });
 test('guild membership loss redacts own content and rejects old progress receipt but allows clear',async()=>{
  const {member,id,path}=await fixture(),key=randomUUID();
- await pool.query("UPDATE community_events SET visibility='guild',guild_key='guild_member_operations' WHERE event_id=$1",[id]);
+ await pool.query("UPDATE community_events SET visibility='guild',event_kind='guild_skill_exchange',guild_key='guild_member_operations' WHERE event_id=$1",[id]);
  await pool.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state) VALUES($1,$2,$3,'guild_member_operations','active') ON CONFLICT DO NOTHING",[randomUUID(),DEMO_COMMUNITY,member.id]);
  assert.equal((await request(path,member,{action:'start'},1,key)).status,200);
  await pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1 AND guild_key='guild_member_operations'",[member.id]);
