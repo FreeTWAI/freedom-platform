@@ -8,7 +8,7 @@ function parseArgs(args) {
   const [command, ...rest] = args;
   if (!['prepare', 'context', 'verify'].includes(command)) throw new VerificationError('unknown_command');
   const options = { baseRef: 'origin/main', requestedPaths: [], scopes: [] }, seen = new Set();
-  let report, manifestPath, chunkIndex, complete = false;
+  let report, manifestPath, chunkIndex, contextProfile, complete = false;
   for (let index = 0; index < rest.length; index += 2) {
     const flag = rest[index], value = rest[index + 1];
     if (!value || value.startsWith('--') || seen.has(flag)) throw new VerificationError('invalid_arguments');
@@ -17,26 +17,44 @@ function parseArgs(args) {
     else if (flag === '--scope') options.scopes = value.split(',');
     else if (flag === '--paths') options.requestedPaths = value.split(',');
     else if (flag === '--report' && command === 'verify') report = value;
+    else if (flag === '--context-profile' && ['prepare', 'context'].includes(command) && value === 'compact') contextProfile = value;
+    else if (flag === '--delivery-format' && ['prepare', 'context'].includes(command) && value === 'compact-v2') options.deliveryFormat = value;
     else if (flag === '--manifest' && command === 'context') manifestPath = value;
     else if (flag === '--chunk' && command === 'context' && /^(0|[1-9][0-9]{0,3})$/.test(value)) chunkIndex = Number(value);
     else if (flag === '--check' && command === 'context' && value === 'complete') complete = true;
     else throw new VerificationError('invalid_arguments');
   }
+  if (contextProfile && options.deliveryFormat) throw new VerificationError('invalid_arguments');
   if (manifestPath || chunkIndex !== undefined || complete) {
     if (!manifestPath || complete === (chunkIndex !== undefined)
-      || ['--base-ref', '--scope', '--paths'].some(flag => seen.has(flag))) throw new VerificationError('invalid_arguments');
+      || ['--base-ref', '--scope', '--paths', '--delivery-format', '--context-profile'].some(flag => seen.has(flag))) throw new VerificationError('invalid_arguments');
   }
-  return { command, options, report, manifestPath, chunkIndex, complete };
+  return { command, options, report, manifestPath, chunkIndex, contextProfile, complete };
 }
 
 export async function runFreedomCli(args = process.argv.slice(2), repositoryRoot = process.cwd()) {
   try {
+    if (args[0] === 'context-capabilities') {
+      if (args.length !== 1) throw new VerificationError('invalid_arguments');
+      // Describes this running CLI, not the editor's ability or installed hooks.
+      console.log(JSON.stringify({ format: 'freedom.context-capabilities/v1', assurance_level: 'local',
+        default_delivery: { small: 'freedom.coding-context/v1', large: 'freedom.coding-context-manifest/v1' },
+        preferred_profile_for_compatible_readers: 'compact',
+        profiles: [{ id: 'compact', argument: ['--context-profile', 'compact'],
+          small: 'freedom.coding-context/v1', large: 'freedom.coding-context-manifest/v2',
+          reader_formats: ['freedom.coding-context/v1', 'freedom.coding-context-manifest/v2',
+            'freedom.coding-context-chunk/v2', 'freedom.coding-context-completeness/v1'] }],
+        explicit_delivery_formats: ['compact-v2'], automatic_reader_detection: false,
+        host_configuration_changed: false, merge_authorized: false, execution_authorized: false,
+        not_checked: ['reader-compatibility', 'model-token-usage', 'billing', 'prompt-cache', 'task-quality'] }));
+      return 0;
+    }
     if (MODULE_COMMANDS.includes(args[0])) {
       const result = await runModuleCommand(args, repositoryRoot);
       console.log(JSON.stringify(result));
       return result.status === 'failed' ? 1 : 0;
     }
-    const { command, options, report: reportPath, manifestPath, chunkIndex, complete } = parseArgs(args);
+    const { command, options, report: reportPath, manifestPath, chunkIndex, contextProfile, complete } = parseArgs(args);
     if (manifestPath) {
       const result = await readContextDelivery(repositoryRoot, manifestPath, { chunkIndex, complete });
       console.log(JSON.stringify(result.value));
@@ -51,11 +69,13 @@ export async function runFreedomCli(args = process.argv.slice(2), repositoryRoot
     }
     let context;
     try {
+      if (options.deliveryFormat === 'compact-v2') throw new VerificationError('context_size_limit');
       ({ context } = await buildContext({ repositoryRoot, ...options }));
       if (Buffer.byteLength(JSON.stringify(context, null, 2) + '\n') > CONTEXT_LIMITS.bundle_bytes) throw new VerificationError('context_size_limit');
     } catch (error) {
       if (error.code !== 'context_size_limit') throw error;
-      const built = await writeContextDelivery({ repositoryRoot, ...options });
+      const built = await writeContextDelivery({ repositoryRoot, ...options,
+        ...(contextProfile === 'compact' ? { deliveryFormat: 'compact-v2' } : {}) });
       console.log(JSON.stringify(command === 'context' ? built.manifest : {
         format: built.manifest.format, assurance_level: 'local', context_path: built.manifestPath,
         delivery_id: built.manifest.delivery_id, binding: built.manifest.binding, chunk_count: built.chunks.length,
