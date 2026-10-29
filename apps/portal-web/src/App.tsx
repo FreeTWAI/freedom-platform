@@ -1,3 +1,5 @@
+import {SeasonalWelcome} from './seasonal/SeasonalTheme';
+import {useSeasonalTheme} from './seasonal/useSeasonalTheme';
 import {parseProfileRoute,canOpenGuestProfile} from './modules/profile-publication-route';
 import {skillAcquisitionFromSearch,skillReadingPath,validateSkillReturn} from '../../../packages/shared/skill-acquisition';
 import {activateHomeLink} from './brand-home-link';
@@ -647,6 +649,7 @@ function Workspace({
   onLoggedOut: () => void
   onSessionExpired: () => void
 }) {
+  const seasonal=useSeasonalTheme();
   const {t}=useLanguage()
   const [headerMember,setHeaderMember]=useState<MemberCardData|null>(null)
   const [canManageGuild,setCanManageGuild]=useState(false)
@@ -974,7 +977,7 @@ function Workspace({
 
   return (
     <PortalContext.Provider value={value}>
-      <div className="app-frame social-layout">
+      <div className="app-frame social-layout seasonal-surface" data-season={seasonal.season??undefined} data-seasonal-home={tab==='home'&&!consoleRoute&&!sellerRoute}>
         {site?.demo_accounts_enabled && <DemoBanner />}
         <a className="skip" href="#main-content" onClick={event => { event.preventDefault(); mainContent.current?.focus(); }}>
           跳到主要內容
@@ -995,7 +998,7 @@ function Workspace({
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>{t(mobileOpen?'nav.closeMenu':'nav.openMenu')}</button></div>
             <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen} onCloseMobile={returnFocus => { setMobileOpen(false); if (returnFocus) menuToggle.current?.focus(); }}/>
           </aside>
-          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
+          <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu seasonalPreference={seasonal.preference} onSeasonalPreference={seasonal.selectPreference} personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">
@@ -1019,6 +1022,7 @@ function Workspace({
                 onReload={() => window.location.reload()}
               />
             )}
+            {tab==='home'&&!consoleRoute&&!sellerRoute&&seasonal.season&&<SeasonalWelcome season={seasonal.season} onShare={()=>chooseShare('post')} disabled={Boolean(pending)||Boolean(error?.accessExpired)}/>}
             <PageLoadBoundary label={t(`nav.${tab}`)} resetKey={tab}>
             {renderPortalFeature(tab, {
               client, session, site, locationHash, selectTab, friendScope, notificationTarget, headerMember,

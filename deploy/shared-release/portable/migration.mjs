@@ -11,6 +11,7 @@ import { requireRelease as check, isSha, isDigest } from '../admission.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
 import { checkMigrations } from '../../cloudflare/lib/migrations.mjs';
 import { readCanonicalSql, runCanonicalSql } from './canonical-sql.mjs';
+import { readMaterialPolicies, appendDisabledMaterialPolicies } from './material-policy.mjs';
 
 const IDENTITY = 'SELECT current_database() database,current_user role,session_user session_role,current_schema() schema';
 const LEDGER = 'SELECT name,sha256 FROM schema_migrations ORDER BY name LIMIT 1001';
@@ -23,7 +24,9 @@ const quote = value => { check(/^[a-z][a-z0-9_]{0,62}$/.test(value), 'release_mi
 export function preparePortableMigration({ sourceRoot, sourceCommit, profile, installationParent, beforeLedger }) {
   check(profile?.format === LEGACY_MIGRATIONS && Array.isArray(beforeLedger) && beforeLedger.length > 0,
     'release_migration_profile_invalid');
-  check(checkMigrations(join(sourceRoot, 'migrations'), profile).ok, 'release_migration_sql_policy_invalid');
+  const catalog = checkMigrations(join(sourceRoot, 'migrations'), profile);
+  check(!catalog.problems.includes('migration_legacy_frontier_mismatch'), 'release_migration_frontier_mismatch');
+  check(catalog.ok, 'release_migration_sql_policy_invalid');
   const installation = prepareMigrationInstallation({ sourceRoot, sourceCommit, profile, installationParent });
   const sources = readMigrationSources(join(sourceRoot, 'migrations'));
   const plan = resolveMigrationPlan(sources, profile, beforeLedger);
@@ -42,8 +45,7 @@ async function journal(root, name, value) {
 }
 
 async function invariants(q) {
-  const policies = (await q.query(`SELECT purpose,mode,policy_lock,policy_revision,persistence_allowed,
-    retained_byte_limit::text AS retained_byte_limit FROM domain_media_storage_policy ORDER BY purpose`)).rows;
+  const policies = await readMaterialPolicies(q);
   check(policies.length > 0 && policies.length <= 100 && policies.every(row => row.policy_lock === 0), 'release_migration_policy_invalid');
   const gc = (await q.query(`SELECT (SELECT count(*)::int FROM asset_maintenance_policy) policies,
     (SELECT bool_or(enabled) FROM asset_maintenance_policy) enabled,
@@ -52,7 +54,7 @@ async function invariants(q) {
     (SELECT count(*)::int FROM asset_deletion_tombstones) tombstones`)).rows[0];
   check(gc?.policies === 1 && gc.enabled === false && gc.domain_enabled === false && gc.fences === 0,
     'release_migration_gc_not_disabled');
-  return { materialPolicySha256: hash(JSON.stringify(policies)), gc };
+  return { materialPolicySha256: hash(JSON.stringify(policies)), policies, gc };
 }
 
 async function verify(q, { database, plan, expected }) {
@@ -148,6 +150,8 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
     same((await q.query(LEDGER)).rows, plan.beforeLedger, 'release_migration_before_ledger_changed');
     const baseline = await invariants(q);
     check(baseline.materialPolicySha256 === expected.materialPolicySha256, 'release_migration_policy_changed');
+    const policies = appendDisabledMaterialPolicies(baseline.policies, expected.materialPolicyAdditions ?? []);
+    let afterInvariant;
     await q.query('ROLLBACK');
     await journal(journalRoot, 'intent', { source: plan.sourceCommit, tree: plan.sourceTree, database,
       beforeDigest: plan.beforeDigest, afterDigest: plan.afterDigest, ...(independent ? { recoveryPolicy: 'routine-backup-independent/v1' } : { backupSetId: beforeBackup.setId }), automaticRetry: false });
@@ -160,7 +164,14 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
       }
       if (text === 'COMMIT') {
         same((await q.query(LEDGER)).rows, plan.afterLedger, 'release_migration_after_ledger_changed');
-        same(await invariants(q), baseline, 'release_migration_invariants_changed');
+        afterInvariant = await invariants(q);
+        same(appendDisabledMaterialPolicies(afterInvariant.policies, []), policies, 'release_migration_invariants_changed');
+        same(afterInvariant.gc, baseline.gc, 'release_migration_invariants_changed');
+        // Preserve this database's ordering in the retained digest. Validate
+        // the exact allowed rows first; JS and PostgreSQL collations can differ.
+        const policyTransition = afterInvariant.materialPolicySha256 === baseline.materialPolicySha256 ? {} : {
+          beforeMaterialPolicySha256: baseline.materialPolicySha256, afterMaterialPolicySha256: afterInvariant.materialPolicySha256,
+        };
         await runCanonicalSql(q, plan.canonical, '20-runtime-grants.psql', { runtime: database + '_app', migrator: role });
         await verify(q, { database, plan, expected });
         await verifyRetainedConstraints(q);
@@ -168,7 +179,7 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
         transactionId = (await q.query('SELECT pg_current_xact_id()::text id')).rows[0].id;
         check(/^[1-9][0-9]*$/.test(transactionId), 'release_migration_xid_invalid');
         const binding = { source: plan.sourceCommit, tree: plan.sourceTree, database, transactionId,
-          beforeDigest: plan.beforeDigest, afterDigest: plan.afterDigest, automaticRetry: false };
+          beforeDigest: plan.beforeDigest, afterDigest: plan.afterDigest, ...policyTransition, automaticRetry: false };
         await journal(journalRoot, 'attempt', binding);
         // A fresh runner must be able to observe this transaction even when the
         // local disk and COMMIT reply are lost. Failure here rolls back the DDL.
@@ -191,7 +202,7 @@ export async function runPortableMigration({ pool, runtimePool, backupPool, data
     same(result.applied, plan.pending, 'release_migration_plan_changed');
     await q.query('BEGIN READ ONLY'); const tables = await verify(q, { database, plan, expected });
     await verifyRetainedConstraints(q);
-    same(await invariants(q), baseline, 'release_migration_post_commit_changed'); await q.query('ROLLBACK');
+    same(await invariants(q), afterInvariant, 'release_migration_post_commit_changed'); await q.query('ROLLBACK');
     const probes = [await probe(runtimePool, database, '_app', tables.filter(row => row.readable).map(row => row.relname))];
     if (!independent) probes.push(await probe(backupPool, database, '_backup', tables.map(row => row.relname)));
     assertHeld();

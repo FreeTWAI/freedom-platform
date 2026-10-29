@@ -31,6 +31,14 @@ COMMIT intent 與確認後 floor；不要求新備份。DDL 是資料變更，�
 舊 journal 仍依原七階段 replay；新 `release-begin-v2` 保留四個 journal stages；有 migration 時確認 COMMIT 即更新 schema floor，
 無 migration 時先完成唯讀檢查才建立 journal，健康查核後完成發布。
 
+新增媒體用途時，operator 在原本的隔離候選資料庫分別讀取既有 schema 與候選 schema，
+只接受已審 SQL 新增的預設停用政策列（legacy、無 persistence、無 quota／revision）。
+既有環境政策與 GC 狀態仍須不變；交易內逐列核對後，將前後政策 digest 綁定 COMMIT intent，
+確認提交才更新 floor，供後續發布與日常備份沿用。這不會啟用新用途，也不以 live 狀態自我核准。
+若出現 `release_migration_frontier_mismatch`，表示 Environment config 的 `migrationProfile.last`
+與選定來源的 SQL catalog 不符；設定負責人應核對已審 migration 後更新 config secret 與 hash。
+這與 SQL policy 拒絕不同，不需重跑來源 CI 或備份來排除。
+
 若前次備份留下可驗證的未完成 journal，可在 deploy 選填 `recover_backup_run_id`。
 可信、已結束的失敗收據須證明尚未進入 capture 且沒有 intent，或 capture 失敗但 dump 尚未開始；
 後者接受沒有 intent、唯一 capture-policy intent 的原始 policy digest 仍完全相符，
