@@ -101,7 +101,7 @@ async function openResources(page:Page){
 
 test('an empty resource preview stops loading and retry keeps the login draft',async({page})=>{
   await page.setViewportSize({width:320,height:844});let reads=0;
-  await page.route(url=>url.pathname==='/api/v1/community',route=>{
+  await page.route(url=>url.pathname==='/api/v1/community/preview',route=>{
     reads++;return route.fulfill({json:{skill_books:[]}});
   });
   const list=await openResources(page);
@@ -118,7 +118,7 @@ test('an empty resource preview stops loading and retry keeps the login draft',a
 test('bad resource cards stay local and rapid retry sends only one pending read',async({page})=>{
   const held=resourceBarrier(),started=resourceBarrier();let reads=0,hold=false;
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.route(url=>url.pathname==='/api/v1/community',async route=>{
+  await page.route(url=>url.pathname==='/api/v1/community/preview',async route=>{
     reads++;
     if(hold){started.release();await held.promise;return route.fulfill({json:{skill_books:[]}});}
     return route.fulfill({json:{skill_books:[null]}});
@@ -139,7 +139,7 @@ test('bad resource cards stay local and rapid retry sends only one pending read'
 
 test('collapsing a pending preview cancels it and reopening reads fresh data',async({page})=>{
   const held=resourceBarrier(),started=resourceBarrier();let holdNext=true,reads=0,oldUrl='';
-  await page.route(url=>url.pathname==='/api/v1/community',async route=>{
+  await page.route(url=>url.pathname==='/api/v1/community/preview',async route=>{
     reads++;
     if(!holdNext)return route.fulfill({json:{skill_books:[]}});
     holdNext=false;oldUrl=route.request().url();started.release();await held.promise;

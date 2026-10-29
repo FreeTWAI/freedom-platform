@@ -475,6 +475,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     return c.json(operation_id?{...page,operation_id}:page);
   });
   app.get('/api/v1/community',c=>c.json(communityCatalog));
+  // Same public book objects as the catalog; avoid downloading all guides for three entry cards.
+  app.get('/api/v1/community/preview',c=>c.json({skill_books:communityCatalog.skill_books.slice(0,3)}));
   if(runtime.arEnabled===true&&runtime.arAssetStore)app.route('/api/v1',createPublicArRoutes(pool,runtime.arAssetStore));
   registerPublicMemberCardRoutes(app, featureContext);
   registerPublicMemberProfiles(app, featureContext);
