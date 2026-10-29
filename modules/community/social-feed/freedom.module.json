@@ -53,6 +53,8 @@
     "apps/portal-web/src/modules/InlineVideo.css",
     "apps/portal-web/src/modules/short-video-embed.ts",
     "tests/e2e/short-videos.spec.ts",
+    "tests/e2e/short-video-csp.ts",
+    "tests/runtime/short-video-csp.test.ts",
     "tests/e2e/short-videos-lifecycle.spec.ts",
     "tests/e2e/short-videos-share.spec.ts",
     "tests/e2e/short-videos-focus.spec.ts",
