@@ -18,3 +18,30 @@ test('manual root and part matrices survive rejected eligibility and dynamic fal
 });
 
 test('manual world matrices are never replaced by reconstructed instance transforms',()=>{for(const target of ['root','part'] as const){const x=fixture(),o=target==='root'?x.copies[1]:x.copies[1].children[0];o.matrixWorldAutoUpdate=false;o.matrixWorld.makeTranslation(45,-20,11);const before=o.matrixWorld.clone();assert.equal(createKitchenFoodBatch(x.parent,x.copies),null);assert.deepEqual(o.matrixWorld,before);}const x=fixture(),batch=createKitchenFoodBatch(x.parent,x.copies)!;x.copies[0].matrixWorldAutoUpdate=false;x.copies[0].matrixWorld.makeTranslation(45,-20,11);const before=x.copies[0].matrixWorld.clone();batch.update();assert.equal(batch.meshes[0].visible,false);assert.deepEqual(x.copies[0].matrixWorld,before);batch.dispose();});
+
+// Exercise the real factory across identities: palette materials survive scene rebuilds.
+test('thermal culling keeps open vessels and shared materials two-sided, preserves shadows and resets on exit',()=>{
+ const f=factory(true),seen=new Set<T.MeshStandardMaterial>();
+ try{
+  for(const kind of ['mix','pan','boil','bake','pour','boil','mix'] as const){
+   const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!,step=recipe.steps.findIndex(s=>s.kind===kind);
+   const run={...domain.newCookingRun(recipe,42,'material_transition'),step,status:'playing' as const};
+   f.stage.update(run,null,1000,true);
+   const thermal=kind==='pan'||kind==='boil'||kind==='bake';let closed=0,open=0;
+   f.scene().traverse(o=>{
+    if(!(o instanceof T.Mesh))return;
+    for(const material of Array.isArray(o.material)?o.material:[o.material]){
+     const m=material as T.MeshStandardMaterial;seen.add(m);
+     // The boil vessel uses the red palette entry, also shared by closed tool parts.
+     const vessel=kind==='boil'&&m.color.getHexString()==='e87455';
+     assert.equal(m.side,thermal&&!vessel?T.FrontSide:T.DoubleSide,`${kind}/${m.color.getHexString()}`);
+     if(thermal&&!vessel){assert.equal(m.shadowSide,T.DoubleSide,'culled surfaces retain two-sided shadow casting');closed++;}
+     if(vessel)open++;
+    }
+   });
+   if(thermal)assert.ok(closed>0,'closed surfaces actually exercise culling');
+   if(kind==='boil')assert.ok(open>0,'open vessel/shared material is present after batching');
+   if(!thermal)for(const m of seen)assert.equal(m.side,T.DoubleSide,'leaving thermal stages resets even retained palette entries');
+  }
+ }finally{f.stage.dispose();}
+});
