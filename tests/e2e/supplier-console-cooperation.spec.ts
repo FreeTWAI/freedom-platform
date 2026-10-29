@@ -736,13 +736,23 @@ test('SC-E2E-14 a request outside the first 200 opens from every entry and after
       await expect(review.getByText('未在目前的部分清單中',{exact:false})).toHaveCount(0);
       expect(new URL(pageA.url()).hash).toBe(reviewHash);
     };
-    const openReview=async(action:()=>Promise<unknown>)=>{
-      const [response]=await Promise.all([
-        pageA.waitForResponse(r=>new URL(r.url()).pathname===requestPath&&r.request().method()==='GET'&&r.status()===200),action(),
-      ]);
-      const detail=await response.json();expect(detail.request.selection_id).toBe(target.selection_id);
-      expect(detail.request.version).toBe(target.version);expect(detail.request.listing_sha256).toBe(target.listing_sha256);
-      await assertReview();return detail;
+    const openReview=async(action:()=>Promise<unknown>,reload=false)=>{
+      const requests=new Set<import('@playwright/test').Request>();
+      let documentReady=!reload;
+      const onNavigation=(frame:ReturnType<Page['mainFrame']>)=>{if(frame===pageA.mainFrame())documentReady=true;};
+      const onRequest=(request:import('@playwright/test').Request)=>{if(documentReady&&request.frame()===pageA.mainFrame())requests.add(request);};
+      pageA.on('framenavigated',onNavigation);pageA.on('request',onRequest);
+      try {
+        const [detail]=await Promise.all([
+          pageA.waitForResponse(r=>requests.has(r.request())&&new URL(r.url()).pathname===requestPath&&r.request().method()==='GET'&&r.status()===200)
+            .then(response=>response.json()),action(),
+        ]);
+        expect(detail.request.selection_id).toBe(target.selection_id);
+        expect(detail.request.version).toBe(target.version);expect(detail.request.listing_sha256).toBe(target.listing_sha256);
+        await assertReview();return detail;
+      }finally{
+        pageA.off('framenavigated',onNavigation);pageA.off('request',onRequest);
+      }
     };
 
     // All list/detail entry paths are reached through visible navigation and links.
@@ -770,7 +780,8 @@ test('SC-E2E-14 a request outside the first 200 opens from every entry and after
     await expect(activePage(pageA).getByRole('link').filter({hasText:shopName})).toHaveCount(0);
     await openReview(()=>pageA.goBack());
 
-    await openReview(()=>pageA.reload());
+    // Reload must exclude old-document reads, including responses arriving after the main-frame commit.
+    await openReview(()=>pageA.reload(),true);
     await nav.getByRole('link',{name:'設定與資料',exact:true}).click();
     await expect(activePage(pageA).getByRole('heading',{name:'設定與資料',exact:true})).toBeVisible();
     await openReview(()=>pageA.goto('/'+reviewHash));
