@@ -15,7 +15,7 @@ export async function inspectReleaseHandoff({ floor, pool, deployer, lease, requ
     && ['sourceSha', 'sourceTree', 'target', 'configSha256'].every(key => evidence[key] === request[key]),
   'release_handoff_recovery_binding_invalid');
   lease.assertHeld();
-  const { alreadySettled } = floor.handoffRecoveryState(evidence), state = floor.state();
+  const { alreadySettled, sourceSha } = floor.handoffRecoveryState(evidence), state = floor.state();
   const q = await pool.connect();
   try {
     await q.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -40,7 +40,7 @@ export async function inspectReleaseHandoff({ floor, pool, deployer, lease, requ
     await q.query('ROLLBACK');
   } finally { await q.query('ROLLBACK').catch(() => {}); q.release(); }
   const worker = await deployer.inspect();
-  check(worker.sourceSha === state.sourceSha && worker.bindingsSha256 === state.bindingsSha256,
+  check(worker.sourceSha === sourceSha && worker.bindingsSha256 === state.bindingsSha256,
     'release_handoff_recovery_state_changed');
   await floor.assertCurrent(); lease.assertHeld();
   return { alreadySettled, reconciledRunId: evidence.runId, reconciledRunAttempt: evidence.runAttempt,

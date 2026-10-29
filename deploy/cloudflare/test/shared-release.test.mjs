@@ -3150,25 +3150,28 @@ test('handoff authenticates terminal failed release and exact artifact while all
   await assert.rejects(requireFailedReleaseHandoff(changed.api, changed.admission, installation));
 });
 
-async function pendingHandoffFixture(t, stop = 'health') {
-  const f = await adoptionFixture(t), hosted = failedReleaseHandoffFixture(f.current);
+async function pendingHandoffFixture(t, stop = 'health', descendant = false) {
+  const f = await adoptionFixture(t);
+  if (descendant) await writeFile(join(f.sourceRoot, 'app.txt'), 'next application, unchanged migrations');
+  const candidate = descendant ? f.commit() : f.current, hosted = failedReleaseHandoffFixture(candidate);
   const evidence = await requireFailedReleaseHandoff(hosted.api, hosted.admission, installation);
   const chain = [{ sha256: hash(JSON.stringify(f.seed)), record: { data: structuredClone(f.seed) } }];
   let appends = 0;
-  const floor = await openReleaseFloor({ sourceRoot: f.sourceRoot, intentDirectory: f.sourceRoot, store: {
+  const reopenFloor = () => openReleaseFloor({ sourceRoot: f.sourceRoot, intentDirectory: f.sourceRoot, store: {
     target: 'staging-next', load: async () => structuredClone(chain), readAuthority: async () => structuredClone(f.legacy),
     append: async ({ data }) => { appends++; const row = { sha256: hash(JSON.stringify(data)), record: { data } }; chain.push(row); return row; },
   } });
+  const floor = await reopenFloor();
   const originalRequest = { ...hosted.admission, mode: 'deploy', runId: 77, runAttempt: 1,
     operatorImage: installation.image, configSha256: installation.configSha256 };
-  await floor.beginIndependent(originalRequest, { ...f.current, schemaLedger: f.seed.state.schemaLedger });
+  await floor.beginIndependent(originalRequest, { ...candidate, schemaLedger: f.seed.state.schemaLedger });
   if (stop !== 'begin') {
     await floor.passed('migration', { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
       ledgerSha256: migrationLedgerDigest(f.seed.state.schemaLedger) });
-    await floor.intent('deploy', 'publish', { sourceSha: f.current.sourceSha, previousSourceSha: f.current.sourceSha,
+    await floor.intent('deploy', 'publish', { sourceSha: candidate.sourceSha, previousSourceSha: f.current.sourceSha,
       previousVersion: '11111111-1111-4111-8111-111111111111', configSha256: '8'.repeat(64), automaticRetry: false });
-    await floor.passed('deploy', { sourceSha: f.current.sourceSha, providerConfirmed: true, versionId: '11111111-1111-4111-8111-111111111111' });
-    if (stop === 'health') await floor.passed('health', { sourceSha: f.current.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true });
+    await floor.passed('deploy', { sourceSha: candidate.sourceSha, providerConfirmed: true, versionId: '11111111-1111-4111-8111-111111111111' });
+    if (stop === 'health') await floor.passed('health', { sourceSha: candidate.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true });
   }
   appends = 0;
   const rows = { identity: [{ database: 'fixture', role: 'fixture_migrator', session_role: 'fixture_migrator' }],
@@ -3185,12 +3188,12 @@ async function pendingHandoffFixture(t, stop = 'health') {
     if (sql.includes("current_setting('server_version_num')")) return { rows: [{ major: 18 }] };
     return { rows: [] };
   }, release() { released++; } };
-  const worker = { sourceSha: f.current.sourceSha, bindingsSha256: f.seed.state.bindingsSha256 };
+  const worker = { sourceSha: candidate.sourceSha, bindingsSha256: f.seed.state.bindingsSha256 };
   const args = { floor, pool: { connect: async () => q }, deployer: { inspect: async () => worker },
     lease: { pid: 999, assertHeld() { if (leaseLost) throw Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' }); } },
     request: { ...hosted.admission, operatorImage: installation.image, configSha256: installation.configSha256, handoffRecoveryEvidence: evidence },
     database: 'fixture', role: 'fixture_migrator' };
-  return { ...f, floor, args, evidence, chain, rows, queries, worker, appends: () => appends, released: () => released,
+  return { ...f, candidate, floor, reopenFloor, args, evidence, chain, rows, queries, worker, appends: () => appends, released: () => released,
     loseLease: () => { leaseLost = true; } };
 }
 
@@ -3209,6 +3212,82 @@ test('handoff reads retained ledger/policy/Worker and appends exactly once; repl
   assert.equal(repeated.alreadySettled, true);
   assert.equal((await completeReleaseHandoff({ ...f.args, observed: { ...repeated, healthVerified: true } })).alreadySettled, true);
   assert.equal(f.appends(), 1);
+});
+
+test('handoff settles a deployed Git descendant with unchanged ledger and replays without another append', async t => {
+  const f = await pendingHandoffFixture(t, 'health', true);
+  assert.notEqual(f.candidate.sourceSha, f.current.sourceSha);
+  assert.notEqual(f.candidate.sourceTree, f.current.sourceTree);
+  assert.equal(fixtureGit(f.sourceRoot, ['rev-parse', f.candidate.sourceSha + '^']), f.current.sourceSha);
+  assert.equal(fixtureGit(f.sourceRoot, ['rev-parse', f.candidate.sourceSha + ':migrations']),
+    fixtureGit(f.sourceRoot, ['rev-parse', f.current.sourceSha + ':migrations']));
+  f.args.floor = await f.reopenFloor();
+  const before = f.args.floor.state();
+  assert.equal(before.sourceSha, f.current.sourceSha); assert.equal(before.sourceTree, f.current.sourceTree);
+  assert.equal(before.deployedSourceSha, f.candidate.sourceSha); assert.equal(before.pending.stage, 3);
+  assert.deepEqual(before.schemaLedger, before.pending.candidate.schemaLedger);
+  assert.equal(before.pending.committed, undefined);
+  const observed = await inspectReleaseHandoff(f.args);
+  assert.equal(observed.alreadySettled, false); assert.equal(f.appends(), 0);
+  await completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true } });
+  assert.equal(f.appends(), 1);
+  assert.deepEqual(f.args.floor.state(), { ...before, ...f.candidate, pending: null });
+  f.args.floor = await f.reopenFloor();
+  const repeated = await inspectReleaseHandoff(f.args);
+  assert.equal(repeated.alreadySettled, true);
+  await completeReleaseHandoff({ ...f.args, observed: { ...repeated, healthVerified: true } });
+  assert.equal(f.appends(), 1);
+});
+
+test('descendant handoff rejects predecessor Worker and mismatched original identities before and after replay', async t => {
+  const f = await pendingHandoffFixture(t, 'health', true);
+  f.worker.sourceSha = f.current.sourceSha;
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_handoff_recovery_state_changed/);
+  assert.equal(f.appends(), 0); f.worker.sourceSha = f.candidate.sourceSha;
+  for (const settled of [false, true]) {
+    f.args.floor = await f.reopenFloor();
+    for (const patch of [{ runId: 78 }, { runAttempt: 2 }, { sourceSha: f.current.sourceSha },
+      { sourceTree: f.current.sourceTree }, { target: 'next' }, { controllerSha: sha },
+      { operatorImage: `ghcr.io/freetwai/freedom-release-operator@sha256:${'9'.repeat(64)}` },
+      { configSha256: '9'.repeat(64) }]) {
+      assert.throws(() => f.args.floor.handoffRecoveryState({ ...f.evidence, ...patch }),
+        /release_floor_(request_invalid|stage_mismatch)/);
+      assert.equal(f.appends(), settled ? 1 : 0);
+    }
+    // Even matching caller/evidence identities cannot authorize the predecessor.
+    const stale = { ...f.args.request, ...f.current, handoffRecoveryEvidence: { ...f.evidence, ...f.current } };
+    await assert.rejects(inspectReleaseHandoff({ ...f.args, request: stale }), /release_floor_request_invalid/);
+    if (!settled) {
+      const observed = await inspectReleaseHandoff(f.args);
+      await completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true } });
+    }
+  }
+  assert.equal(f.appends(), 1);
+});
+
+test('descendant handoff replay rejects altered candidate identity and an original receipt after newer release work', async t => {
+  for (const key of ['sourceSha', 'sourceTree']) {
+    const f = await pendingHandoffFixture(t, 'health', true);
+    f.chain.find(row => row.record.data.kind === 'release-begin-v2').record.data.candidate[key] = f.current[key];
+    await assert.rejects(f.reopenFloor(), /release_floor_candidate_invalid/); assert.equal(f.appends(), 0);
+  }
+  const f = await pendingHandoffFixture(t, 'health', true), pending = f.floor.state().pending;
+  await f.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  await f.floor.beginIndependent({ ...pending.request, runId: 78 }, pending.candidate);
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_floor_stage_mismatch/);
+  await f.floor.passed('migration', { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: migrationLedgerDigest(f.seed.state.schemaLedger) });
+  await f.floor.intent('deploy', 'publish', { sourceSha: f.candidate.sourceSha, previousSourceSha: f.candidate.sourceSha,
+    previousVersion: '11111111-1111-4111-8111-111111111111', configSha256: '8'.repeat(64), automaticRetry: false });
+  await f.floor.passed('deploy', { sourceSha: f.candidate.sourceSha, providerConfirmed: true,
+    versionId: '11111111-1111-4111-8111-111111111111' });
+  await f.floor.passed('health', { sourceSha: f.candidate.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true });
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_floor_request_invalid/);
+  await f.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  f.args.floor = await f.reopenFloor();
+  const appends = f.appends();
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_floor_stage_mismatch/);
+  assert.equal(f.appends(), appends);
 });
 
 test('handoff rejects earlier phases, changed original bindings, newer work, DB/Worker drift and lost lease before append', async t => {

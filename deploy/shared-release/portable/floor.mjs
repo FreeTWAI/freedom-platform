@@ -330,9 +330,13 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       for (const key of ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'target', 'controllerSha', 'operatorImage', 'configSha256']) {
         check(request[key] === evidence[key], 'release_floor_request_invalid');
       }
-      check(current.state.sourceSha === evidence.sourceSha && current.state.sourceTree === evidence.sourceTree
+      // An unchanged-ledger release retains its predecessor source until
+      // handoff. Replay already binds this candidate to the original request,
+      // ancestry and confirmed deploy/health; a settled release uses its floor.
+      const source = pending ? pending.candidate : current.state;
+      check(source.sourceSha === evidence.sourceSha && source.sourceTree === evidence.sourceTree
         && current.state.deployedSourceSha === evidence.sourceSha, 'release_floor_request_invalid');
-      return { alreadySettled: pending === null };
+      return { alreadySettled: pending === null, sourceSha: source.sourceSha, sourceTree: source.sourceTree };
     },
     verifyLegacySource(evidence) {
       legacyEvidence(evidence);
