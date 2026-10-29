@@ -181,7 +181,7 @@ test('cancelling unsaved event navigation keeps the deep-link document and loads
   await login(page, false);
   await page.goto('/device');
   await navigate(page, '社群活動');
-  await page.getByRole('button', {name: '＋ 提交活動', exact: true}).click();
+  await page.getByRole('button', {name: '辦活動', exact: true}).click();
   const draft = page.getByLabel('活動名稱', {exact: true});
   await draft.fill('取消離開保留的活動草稿');
   const previousUrl = page.url();

@@ -5,6 +5,7 @@
   "owned_paths": [
     "packages/sdk/machine-device-client.mjs",
     "tests/runtime/machine-device-client.test.ts",
+    "tests/runtime/machine-device-response-boundary.test.ts",
     "modules/agent-control/**",
     "contracts/execution/v1/**",
     "migrations/087_runtime_registrations.sql",

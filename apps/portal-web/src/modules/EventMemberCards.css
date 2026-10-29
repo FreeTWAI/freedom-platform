@@ -1,0 +1,17 @@
+.event-member-cards{border-top:1px solid var(--line);padding-top:1rem;min-width:0}
+.event-member-cards h3{margin-top:0}
+.event-member-cards>.btn{min-height:44px}
+.event-member-card-help{margin-top:.75rem}
+.event-member-cards summary{cursor:pointer;min-height:44px;display:list-item;padding-block:.5rem}
+.event-member-cards summary:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.event-member-card-dialog{box-sizing:border-box;width:min(40rem,calc(100vw - 1.5rem));max-height:calc(100dvh - 2rem);padding:0;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev);color:var(--ink);overflow:auto;overscroll-behavior:contain}
+.event-member-card-dialog::backdrop{background:#0009}
+.event-member-card-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:1rem;position:sticky;top:0;padding:1rem;background:var(--bg-elev);border-bottom:1px solid var(--line);z-index:1}
+.event-member-card-dialog h2{font-size:1.2rem;margin:0}
+.event-member-card-dialog .btn{min-height:44px;white-space:normal}
+.event-member-card-body{padding:1rem;display:grid;gap:1rem;min-width:0;overflow-wrap:anywhere}
+.event-member-card-body>p{margin:0}
+.event-member-card-body>.btn{justify-self:start}
+.event-member-card-qr{display:flex;justify-content:center}
+.event-member-card-qr .ecard-qr{box-sizing:border-box;width:224px;--ecard-ink:#08090b;background:#fff;color:#08090b;padding:.75rem;border-radius:12px}
+.event-member-card-qr .ecard-qr svg{width:200px;height:200px;max-width:100%}

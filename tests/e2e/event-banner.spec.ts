@@ -8,12 +8,13 @@ async function createDraft(page: Page) {
   await page.getByLabel('密碼', {exact: true}).fill('freedom-local-demo');
   await page.getByRole('button', {name: '登入', exact: true}).click();
   await navigate(page, '社群活動');
-  await page.getByRole('button', {name: '＋ 提交活動'}).click();
+  await page.getByRole('button', {name: '辦活動'}).click();
   const form = page.locator('form.experience-editor');
   const title = `自動處理海報 ${Date.now()}`;
   await form.getByLabel('活動名稱').fill(title);
   await form.getByLabel('活動說明').fill('保留活動說明與原始海報，不必自己壓縮。');
   await form.getByLabel('線上場地').fill('Discord 讀書會場地');
+  await form.getByText('加上海報或影片（選填）',{exact:true}).click();
   return {form, title};
 }
 
@@ -63,6 +64,7 @@ test('large event posters are prepared on create and edit, preserving orientatio
   expect(await sharp(uploads[0].bytes).metadata()).toMatchObject({width: 1600, height: 384});
 
   await card.getByRole('button', {name: '編輯草稿'}).click();
+  await card.getByText('加上海報或影片（選填）',{exact:true}).click();
   const picker = card.getByLabel('活動海報（選填）');
   const portrait = await sharp({create: {width: 1200, height: 800, channels: 3, background: '#366177'}}).withMetadata({orientation: 6}).jpeg().toBuffer();
   await picker.setInputFiles({name: '直式照片.jpg', mimeType: 'image/jpeg', buffer: portrait});
@@ -101,7 +103,7 @@ test('pending poster processing blocks submission and cannot overwrite a replace
   await expect(form.getByRole('status')).toHaveText('正在處理圖片…');
   page.once('dialog',async dialog=>{expect(dialog.message()).toContain('尚未儲存');await dialog.accept();});
   await form.getByRole('button', {name: '返回', exact: true}).click();
-  await page.getByRole('button', {name: '＋ 提交活動'}).click();
+  await page.getByRole('button', {name: '辦活動'}).click();
   await page.evaluate(() => (window as unknown as {releasePoster(): Promise<void>}).releasePoster());
   await expect(form.getByText('已選擇', {exact: false})).toHaveCount(0);
   await expect(form.getByRole('status')).toHaveCount(0);
