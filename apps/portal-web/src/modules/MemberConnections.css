@@ -53,3 +53,20 @@
 @media(max-width:900px){.quick-guild-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.quick-guild-options{grid-template-columns:1fr}.guild-question-option{flex-basis:100%}.quick-start{padding:1rem}.public-member-page{padding:.75rem}.member-share-settings .actions{gap:.5rem}.member-share-settings input[readonly]{font-size:16px}}
 @media(max-width:480px){.member-share-settings>.btn,.member-share-settings .actions :is(.btn,a.btn){width:100%;align-self:stretch}.member-share-settings .actions{flex-direction:column;align-items:stretch}.member-card-share-actions>.skill-share,.member-card-share-actions>.skill-share>.btn,.member-card-share-actions>.btn{width:100%}.member-card-share-actions .skill-share-dialog :is(.btn,a.btn){width:auto;align-self:center}}
+
+/* Friends-only hierarchy; shared member cards and guild controls stay unchanged. */
+.friends-panel .friends-intro{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem 1rem;margin-bottom:.75rem}
+.friends-panel .friends-intro p{margin:0}
+.friends-panel .friends-scope-hint{color:var(--muted);font-size:.875rem;margin:.6rem 0 1rem}
+.friends-panel .friends-search{display:flex;align-items:flex-end;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}
+.friends-panel .friends-search>.field{flex:1 1 14rem;min-width:0}
+.friends-panel .friends-search>.actions{margin:0}
+.friends-panel .friends-empty{padding:1rem;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev)}
+.friends-panel .friends-empty h2{font-size:1rem;margin:0}
+.friends-panel .friends-empty p{color:var(--muted);margin:.4rem 0 .75rem}
+.friends-panel .friends-manage{min-width:0;max-width:100%}
+.friends-panel .friends-manage summary{display:list-item;min-height:44px;padding:.55rem .65rem;cursor:pointer;font-size:.875rem;box-sizing:border-box}
+.friends-panel .friends-manage summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.friends-panel .friends-manage[open]{flex-basis:100%}
+.friends-panel .friends-manage [role=group]{padding:.5rem;border:1px solid var(--line);border-radius:var(--radius)}
+@media(max-width:520px){.friends-panel .friends-search input{font-size:16px}.friends-panel .friends-search>.field{flex-basis:100%}}
