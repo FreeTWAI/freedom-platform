@@ -85,6 +85,22 @@ export function validateOperatorResult(value, admission, installation, requestDi
     'release_operator_phase_invalid');
     previous = end;
   }
+  if (admission.mode === 'handoff') {
+    const [preflight, handoff] = value.phases;
+    requireRelease(preflight.leaseHeld === true && preflight.retainedFloorVerified === true
+      && preflight.ledgerVerified === true && preflight.policyVerified === true
+      && preflight.workerVerified === true && preflight.healthVerified === true
+      && preflight.cleanupVerified === true, 'release_handoff_recovery_state_changed');
+    requireRelease(handoff.reconciledRunId === admission.recoverReleaseRunId
+      && Number.isSafeInteger(handoff.reconciledRunAttempt) && handoff.reconciledRunAttempt > 0
+      && typeof handoff.alreadySettled === 'boolean' && handoff.cleanupVerified === true
+      && handoff.pendingCleared === true && handoff.leaseReleased === true
+      && handoff.originalFailureRetained === true, 'release_handoff_incomplete');
+    return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+      ...(phase.name === 'handoff' ? { reconciledRunId: handoff.reconciledRunId,
+        reconciledRunAttempt: handoff.reconciledRunAttempt, alreadySettled: handoff.alreadySettled } : {}),
+      startedAt: new Date(Date.parse(phase.startedAt)).toISOString(), completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
+  }
   if (admission.releaseKind === 'independent') {
     const [preflight, schema, deploy, health, handoff] = value.phases;
     requireRelease(preflight.leaseHeld === true && preflight.sourceCompatible === true
@@ -194,7 +210,7 @@ export function operatorProgress(value, admission, installation, requestDigest) 
 }
 
 export async function runOperator({ admission, installation, sourceRoot, temporaryRoot, registry,
-  config, credentials, scheduleEvidence, recoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
+  config, credentials, scheduleEvidence, recoveryEvidence, handoffRecoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
   const workDir = join(temporaryRoot, 'work');
   requireRelease(![source, privateDir, resultDir, workDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
@@ -216,7 +232,7 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
         && credentials[key].length <= 1024 && !/[\r\n\0]/.test(credentials[key]), 'release_staging_access_required');
     }
   }
-  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence, recoveryEvidence,
+  const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence, recoveryEvidence, handoffRecoveryEvidence,
     configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission) });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });

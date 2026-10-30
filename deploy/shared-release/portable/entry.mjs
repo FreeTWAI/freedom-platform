@@ -20,6 +20,7 @@ import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema }
 import { runPortableBackup } from './backup.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff } from './handoff-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -52,10 +53,10 @@ export async function main(args = process.argv.slice(2)) {
   check(process.getuid() === 1001 && process.getgid() === 1001, 'release_entry_identity_invalid');
   const [rawRequest, rawConfig, rawCredentials] = await Promise.all(inputPaths.map((path, i) => input(path, i === 2 ? 65536 : 262144)));
   const request = rawRequest.value, credentials = rawCredentials.value, path = args[7];
-  check(request.repository === REPOSITORY && request.repositoryId === REPOSITORY_ID && ['deploy', 'backup'].includes(request.mode)
+  check(request.repository === REPOSITORY && request.repositoryId === REPOSITORY_ID && ['deploy', 'backup', 'handoff'].includes(request.mode)
     && isSha(request.sourceSha) && isSha(request.sourceTree) && isSha(request.controllerSha)
     && request.configSha256 === hash(rawConfig.bytes), 'release_entry_request_invalid');
-  const isBackup = request.mode === 'backup', independentRelease = request.releaseKind === 'independent',
+  const isBackup = request.mode === 'backup', isHandoff = request.mode === 'handoff', independentRelease = request.releaseKind === 'independent',
     phases = isBackup ? BACKUP_PHASES : releasePhases(request);
   same(request.requiredPhases, phases, 'release_entry_phases_invalid');
   const config = validatePortableConfig(rawConfig.value, request.target), connections = portableConnections(config, credentials, { includeBackup: !independentRelease });
@@ -67,7 +68,7 @@ export async function main(args = process.argv.slice(2)) {
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
   const pools = Object.fromEntries(Object.entries(connections).map(([key, value]) => [key, new Pool(value.options)]));
   for (const pool of Object.values(pools)) pool.on('error', stop);
-  let lease, floor, deployer, transport, before, plan, expected, built, beforeBackup, unchangedProof;
+  let lease, floor, deployer, transport, before, plan, expected, built, beforeBackup, unchangedProof, handoffObserved;
   const access = request.target === 'staging-next' ? { clientId: credentials.stagingAccessClientId, clientSecret: credentials.stagingAccessClientSecret } : undefined;
   const directory = async name => { const path = join(WORK, name); await mkdir(path, { mode: 0o700 }); return path; };
   const phase = async (name, operation) => {
@@ -118,6 +119,14 @@ export async function main(args = process.argv.slice(2)) {
       floor = await openReleaseFloor({ store, sourceRoot: SOURCE, intentDirectory: await directory('control-intents') });
       deployer = createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
         token: credentials.cloudflareApiToken, signal: lease.signal });
+      if (isHandoff) {
+        handoffObserved = await inspectReleaseHandoff({ floor, pool: pools.migrator, deployer, lease, request,
+          database: config.database.name, role: connections.migrator.role });
+        await waitForPublicRelease({ target: config.target, sourceSha: request.sourceSha, access, signal: lease.signal,
+          record: value => save(join(WORK, `handoff-health-${value.attempt}.json`), value) });
+        handoffObserved.healthVerified = true;
+        return { ...handoffObserved, leaseHeld: true, retainedFloorVerified: true };
+      }
       // Refuse oversized changes before recovery/adoption can write the floor.
       // Build/render checks again against the verified predecessor before begin.
       if (!isBackup) applyFlagDecisions({ target: config.target, bindings: (await deployer.inspect()).bindings,
@@ -159,6 +168,15 @@ export async function main(args = process.argv.slice(2)) {
       return { leaseHeld: true, sourceCompatible: true, retainedFloorVerified: true, flagsPreserved: true,
         previousSourceSha: before.sourceSha, flagChanges: built.flagChanges };
     });
+    if (isHandoff) {
+      await phase('handoff', async () => {
+        const proof = await completeReleaseHandoff({ floor, lease, request, observed: handoffObserved });
+        await lease.release(); lease = null;
+        return { ...proof, leaseReleased: true };
+      });
+      validateOperatorResult(result, request, installation, result.requestSha256);
+      return;
+    }
     if (isBackup) {
       await phase('backup', async () => (await backup('backup', request.sourceSha)).proof);
       await phase('handoff', async () => {
