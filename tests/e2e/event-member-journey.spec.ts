@@ -142,6 +142,7 @@ test('member previews an event, an authorized officer approves it, and participa
   await form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
   await form.getByRole('combobox',{name:/^參與範圍/}).selectOption('open');
   await expect(form).toContainText('America/New_York');
+  await expect(form.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
   const start=await form.getByLabel('開始時間',{exact:true}).inputValue();
   const expectedIso=await page.evaluate(value=>new Date(value).toISOString(),start);
   const photo=await sharp({create:{width:700,height:1050,channels:3,background:'#366177'}}).png().toBuffer();
@@ -150,7 +151,7 @@ test('member previews an event, an authorized officer approves it, and participa
   await expect(form.getByRole('button',{name:'送出審核',exact:true})).toBeEnabled();
   await form.getByText('送出前預覽活動',{exact:true}).click();
   const preview=form.getByRole('region',{name:'活動送審預覽',exact:true});
-  await expect(preview).toContainText(title);await expect(preview).toContainText('活動頁公開，所有人可查看及報名');
+  await expect(preview).toContainText(title);await expect(preview).toContainText('活動頁公開，所有人可查看');await expect(preview).toContainText('社群帳號登入後報名');
   await expect(preview.getByRole('img',{name:'活動海報預覽',exact:true})).toBeVisible();
   expect(writes).toBe(0);
   for(const theme of ['light','dark','versefolk']){
@@ -161,7 +162,7 @@ test('member previews an event, an authorized officer approves it, and participa
   const creating=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
   await form.getByRole('button',{name:'送出審核',exact:true}).click();
   const created=await creating;expect(created.status()).toBe(201);const event=await created.json();
-  expect(event.starts_at).toBe(expectedIso);expect(event.state).toBe('pending');
+  expect(event.starts_at).toBe(expectedIso);expect(event.state).toBe('pending');expect(event.registration_policy).toBe('community_member');
   let card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await expect(card).toContainText('待審核');await expect(card.locator('.experience-banner-image')).toBeVisible();
   await logout(page);await login(page,'reviewer@local.test');await navigate(page,'社群活動');
@@ -546,4 +547,20 @@ eventTest('superseded event reads cannot replace the newest loading or error sta
     await expect(loading).toHaveCount(0);await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.getByRole('heading',{name:`讀取狀態 3 ${user}`,exact:true})).toBeVisible();
   }finally{closing=true;for(const snapshot of snapshots)snapshot.release(false);}
+});
+
+
+eventTest('legacy draft preserves guest policy until the organizer explicitly changes the pending policy',async({page,eventFixture,e2eAuthPool})=>{
+  const eventId=randomUUID(),title=`既有報名方式 ${eventId.slice(0,8)}`;
+  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+    SELECT $1,community_id,user_id,$2,'合成既有活動',now()+interval '2 days',now()+interval '2 days 1 hour','online','合成教室','pending','open','other' FROM users WHERE user_id=$3`,[eventId,title,eventFixture.user]);
+  await login(page,eventFixture.email);await page.goto(`/events/${eventId}`);
+  const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
+  await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('guest_allowed');
+  await card.getByLabel('活動說明',{exact:true}).fill('只更新說明，不改既有報名方式');
+  await card.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(card.getByRole('button',{name:'編輯草稿',exact:true})).toBeVisible();
+  expect((await e2eAuthPool.query('SELECT registration_policy FROM community_events WHERE event_id=$1',[eventId])).rows[0].registration_policy).toBe('guest_allowed');
+  await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await card.getByLabel('報名方式',{exact:true}).selectOption('community_member');
+  await card.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(card.getByRole('button',{name:'編輯草稿',exact:true})).toBeVisible();
+  await page.reload();await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
 });
