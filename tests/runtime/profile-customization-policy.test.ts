@@ -67,15 +67,33 @@ test('recognition respects the same ordered hidden block and anonymous DTO rejec
 test('layout editor labels identify only their controls, hint is a description and repeated editors have unique IDs',()=>{
  const html=renderToStaticMarkup(createElement(Fragment,{},...Array.from({length:2},()=>createElement(ProfileLayoutEditor,{value:layout(),onChange:()=>{},disabled:false}))));
  const ids:string[]=[];
- for(const [label,tag] of [['主題','select'],['重點顏色','select'],['封面圖樣','select'],['關於我','textarea']]){
+ for(const [label,tag] of [['重點顏色','select'],['封面圖樣','select'],['關於我','textarea']]){
   const matches=[...html.matchAll(new RegExp(`<label for="([^"]+)">${label}</label>`,'g'))];assert.equal(matches.length,2,label);
   for(const match of matches){const id=match[1];ids.push(id);assert(html.includes(`<${tag} id="${id}"`),label);}
  }
- assert.equal(new Set(ids).size,8);
+ assert.equal(new Set(ids).size,6);
+ assert.equal([...html.matchAll(/role="group" aria-label="主題"/g)].length,2);
+ assert.equal([...html.matchAll(/aria-pressed="true"/g)].length,2);
+ assert.equal([...html.matchAll(/aria-pressed="false"/g)].length,6);
  for(const match of html.matchAll(/<textarea id="([^"]+)" aria-describedby="([^"]+)"/g)){
   assert(html.includes(`<span id="${match[2]}" class="hint">可以換行，最多 1600 字；不支援網頁程式碼。</span>`));
  }
  assert.equal([...html.matchAll(/<textarea id="[^"]+" aria-describedby="[^"]+"/g)].length,2);
  assert(!/<label[^>]*>[^<]*<(?:select|textarea)/.test(html));
  const disabled=renderToStaticMarkup(createElement(ProfileLayoutEditor,{value:layout(),onChange:()=>{},disabled:true}));assert(disabled.includes('<fieldset class="fieldset stack" disabled="">'));
+});
+
+for(const theme of ['paper','night','sage','rose'] as const)for(const disabled of [false,true])test(`theme chooser renders ${theme}, locked=${disabled}, without mutating saved content`,()=>{
+ const value={...layout(),theme,about:'existing biography',featured:[{title:'retained work',description:'unchanged',url:'https://example.test/work'}]};
+ const before=JSON.stringify(value);let writes=0;
+ const html=renderToStaticMarkup(createElement(ProfileLayoutEditor,{value,disabled,onChange:()=>{writes++;}}));
+ assert.equal((html.match(/aria-pressed="true"/g)||[]).length,1);
+ assert.equal((html.match(/aria-pressed="false"/g)||[]).length,3);
+ assert.match(html,new RegExp(`aria-pressed="true"[^>]*><span[^>]*data-profile-theme="${theme}"`));
+ assert.equal((html.match(/type="button" class="btn btn-secondary profile-theme-choice"/g)||[]).length,4);
+ for(const label of ['明亮紙頁','深夜星空','森林手帳','暖粉相簿'])assert(html.includes(label));
+ assert.doesNotMatch(html,/<details open/);
+ assert.match(html,/existing biography/);assert.match(html,/retained work/);
+ assert.equal(html.startsWith('<fieldset class="fieldset stack" disabled=""'),disabled);
+ assert.equal(JSON.stringify(value),before);assert.equal(writes,0);
 });
