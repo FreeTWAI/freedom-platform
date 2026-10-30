@@ -188,10 +188,25 @@ test('GuildCard separates workspace navigation, introduction and optional member
    const labels=nodes(settings[0]).filter(n=>n.type==='button').map(n=>text(n.props.children));
    assert.ok(labels.includes('設為主要公會'));assert.ok(labels.includes('退出Synthetic guild'));
    assert.ok(buttons.some(n=>text(n.props.children)==='查看公會介紹'));
-  }else assert.ok(buttons.some(n=>text(n.props.children)==='加入Synthetic guild'));
+  }else {
+   const join=buttons.find(n=>text(n.props.children)==='加入Synthetic guild');
+   assert.match(join.props.className,/\bbtn-primary\b/);
+   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,1,'join is the only primary action before membership');
+  }
   const workspace=buttons.find(n=>text(n.props.children)===(active?'進入公會工作區':'預覽公會工作區'));
   assert.equal(Boolean(workspace),enabled);
   assert.deepEqual(calls,[],'rendering and discovery do not join or change preferences');
-  if(workspace){workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
+  if(workspace){assert.match(workspace.props.className,active?/\bbtn-primary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
  }
+});
+
+
+test('legacy primary exit explanation stays beside its disabled action inside settings while badge remains visible',()=>{
+ const tree=GuildCard({guild:{...guild,membership:{...guild.membership,state:'active'},skill_books:[],purpose:'Synthetic',first_step:'Read',is_primary:true},client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{},launchpadEnabled:true});
+ const elements=nodes(tree),settings=elements.find(n=>n.type==='details'&&n.props.className==='guild-membership-settings');
+ const inner=nodes(settings),hint=elements.filter(n=>n.type==='p'&&text(n.props.children)==='退出前，請先更換主要公會。');
+ assert.equal(hint.length,1);assert.ok(inner.includes(hint[0]));assert.equal(settings.props.open,undefined);
+ assert.equal(inner.find(n=>n.type==='button'&&text(n.props.children)==='退出Synthetic guild').props.disabled,true);
+ const badge=elements.find(n=>n.props.className==='badge'&&text(n.props.children)==='主要公會');
+ assert.ok(badge);assert.ok(!inner.includes(badge),'membership status remains outside collapsed settings');
 });
