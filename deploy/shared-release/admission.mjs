@@ -25,6 +25,8 @@ export const releaseFailureCode = error => [error?.code, error?.message].find(is
 export const isSha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export const isDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const positiveId = value => Number.isSafeInteger(value) && value > 0;
+export const sameActor = (actual, expected) => Object.hasOwn(OPERATORS, actual?.login ?? '')
+  && actual.id === OPERATORS[actual.login] && actual.login === expected?.login && actual.id === expected.id;
 const workflowPath = '.github/workflows/shared-release.yml';
 
 export function requestFromEnvironment(env) {
@@ -210,8 +212,6 @@ export async function requireStaging(api, admission, installation) {
   await successfulStatus();
   const workflow = await api(`${prefix}/actions/workflows/shared-release.yml`);
   requireRelease(positiveId(workflow.id) && workflow.path === workflowPath && workflow.state === 'active', 'release_staging_workflow_invalid');
-  const sameActor = (actual, expected) => Object.hasOwn(OPERATORS, actual?.login ?? '')
-    && actual.id === OPERATORS[actual.login] && actual.login === expected?.login && actual.id === expected.id;
   const checkRun = run => {
     requireRelease(run?.id === binding.runId && run.run_attempt === binding.runAttempt
       && run.workflow_id === workflow.id && run.path === workflowPath && run.event === (automatic ? 'workflow_run' : 'workflow_dispatch')
@@ -225,31 +225,9 @@ export async function requireStaging(api, admission, installation) {
   const comparison = await api(`${prefix}/compare/${binding.controllerSha}...${admission.mainShaObserved}`);
   requireRelease(['ahead', 'identical'].includes(comparison.status)
     && comparison.merge_base_commit?.sha === binding.controllerSha, 'release_staging_controller_untrusted');
-  const jobs = await api(`${prefix}/actions/runs/${binding.runId}/attempts/${binding.runAttempt}/jobs?per_page=100`);
-  requireRelease(Array.isArray(jobs.jobs) && jobs.total_count === jobs.jobs.length
-    && (jobs.jobs.length === 2 && !automatic || jobs.jobs.length === 3
-      && jobs.jobs.filter(job => job.name === 'production' && job.run_id === binding.runId
-        && job.run_attempt === binding.runAttempt && job.head_sha === binding.controllerSha
-        && (automatic ? job.status === 'in_progress' && job.conclusion === null
-          : job.status === 'completed' && job.conclusion === 'skipped')).length === 1)
-    && ['admission', 'deploy'].every(name => jobs.jobs.filter(job => job.name === name && job.run_id === binding.runId
-      && job.run_attempt === binding.runAttempt && job.head_sha === binding.controllerSha
-      && job.status === 'completed' && job.conclusion === 'success').length === 1), 'release_staging_jobs_invalid');
-  const deployJob = jobs.jobs.find(job => job.name === 'deploy');
-  requireRelease(Array.isArray(deployJob.steps) && ['Execute the installed environment operator', 'Save public release receipt']
-    .every(name => deployJob.steps.filter(step => step.name === name && step.status === 'completed'
-      && step.conclusion === 'success').length === 1), 'release_staging_jobs_invalid');
+  const deployJob = await requireSuccessfulReleaseJobs(api, run, automatic, 'release_staging_jobs_invalid');
   const name = `release-result-${binding.runId}-${binding.runAttempt}${automatic ? '-staging-next' : ''}`;
-  const artifacts = await api(`${prefix}/actions/runs/${binding.runId}/artifacts?name=${name}&per_page=100`);
-  requireRelease(artifacts.total_count === 1 && Array.isArray(artifacts.artifacts) && artifacts.artifacts.length === 1,
-    'release_staging_artifact_invalid');
-  const artifact = artifacts.artifacts[0], owner = artifact.workflow_run;
-  requireRelease(positiveId(artifact.id) && artifact.name === name && artifact.expired === false
-    && /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') && owner?.id === binding.runId
-    && owner.repository_id === REPOSITORY_ID && owner.head_repository_id === REPOSITORY_ID
-    && owner.head_sha === binding.controllerSha && owner.head_branch === 'main'
-    && typeof api.readArtifact === 'function', 'release_staging_artifact_invalid');
-  const receipt = await api.readArtifact(artifact);
+  const { artifact, receipt } = await readReleaseArtifact(api, run, name, 'release_staging_artifact_invalid');
   requireRelease(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'passed'
     && (receipt.releaseKind === undefined || receipt.releaseKind === 'independent')
     && (receipt.releaseKind === 'independent'
@@ -286,4 +264,36 @@ export async function requireStaging(api, admission, installation) {
   await successfulStatus();
   return Object.freeze({ deploymentId: deployment.id, runId: binding.runId, runAttempt: binding.runAttempt,
     controllerSha: binding.controllerSha, artifactId: artifact.id, artifactDigest: artifact.digest });
+}
+
+// Shared hosted evidence checks: handoff reconciliation cannot weaken the
+// artifact ownership or completed-job checks used by production admission.
+export async function readReleaseArtifact(api, run, name, code) {
+  const artifacts = await api(`/repos/${REPOSITORY}/actions/runs/${run.id}/artifacts?name=${name}&per_page=100`);
+  requireRelease(artifacts.total_count === 1 && Array.isArray(artifacts.artifacts) && artifacts.artifacts.length === 1, code);
+  const artifact = artifacts.artifacts[0], owner = artifact.workflow_run;
+  requireRelease(positiveId(artifact.id) && artifact.name === name && artifact.expired === false
+    && /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') && owner?.id === run.id
+    && owner.repository_id === REPOSITORY_ID && owner.head_repository_id === REPOSITORY_ID
+    && owner.head_sha === run.head_sha && owner.head_branch === 'main'
+    && typeof api.readArtifact === 'function', code);
+  return { artifact, receipt: await api.readArtifact(artifact) };
+}
+
+export async function requireSuccessfulReleaseJobs(api, run, automatic, code) {
+  const jobs = await api(`/repos/${REPOSITORY}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`);
+  requireRelease(Array.isArray(jobs.jobs) && jobs.total_count === jobs.jobs.length
+    && (jobs.jobs.length === 2 && !automatic || jobs.jobs.length === 3
+      && jobs.jobs.filter(job => job.name === 'production' && job.run_id === run.id
+        && job.run_attempt === run.run_attempt && job.head_sha === run.head_sha
+        && (automatic ? job.status === 'in_progress' && job.conclusion === null
+          : job.status === 'completed' && job.conclusion === 'skipped')).length === 1)
+    && ['admission', 'deploy'].every(name => jobs.jobs.filter(job => job.name === name && job.run_id === run.id
+      && job.run_attempt === run.run_attempt && job.head_sha === run.head_sha
+      && job.status === 'completed' && job.conclusion === 'success').length === 1), code);
+  const deployJob = jobs.jobs.find(job => job.name === 'deploy');
+  requireRelease(Array.isArray(deployJob.steps) && ['Execute the installed environment operator', 'Save public release receipt']
+    .every(name => deployJob.steps.filter(step => step.name === name && step.status === 'completed'
+      && step.conclusion === 'success').length === 1), code);
+  return deployJob;
 }

@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
-import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest, isReleaseFailureCode } from './admission.mjs';
+import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest, isReleaseFailureCode, sameActor, readReleaseArtifact } from './admission.mjs';
 
 const prefix = `/repos/${REPOSITORY}`, path = '.github/workflows/shared-release.yml';
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const actor = value => Object.hasOwn(OPERATORS, value?.login ?? '') && value.id === OPERATORS[value.login];
-const sameActor = (a, b) => actor(a) && a.login === b?.login && a.id === b.id;
 
 // Terminal hosted evidence only authorizes readback. The image must independently
 // verify the exact journal, DB and Worker before appending a missing handoff.
@@ -41,13 +40,7 @@ export async function requireFailedReleaseHandoff(api, admission, installation) 
         && step.conclusion === (i ? 'success' : 'failure')).length === 1), 'release_handoff_recovery_evidence_invalid');
   }
   const name = `release-result-${id}-${run.run_attempt}${automatic ? '-' + admission.target : ''}`;
-  const artifacts = await api(`${prefix}/actions/runs/${id}/artifacts?name=${name}&per_page=100`);
-  check(artifacts.total_count === 1 && artifacts.artifacts?.length === 1, 'release_handoff_recovery_evidence_invalid');
-  const artifact = artifacts.artifacts[0], owner = artifact.workflow_run;
-  check(positive(artifact.id) && artifact.name === name && artifact.expired === false && /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '')
-    && owner?.id === id && owner.repository_id === REPOSITORY_ID && owner.head_repository_id === REPOSITORY_ID
-    && owner.head_branch === 'main' && owner.head_sha === run.head_sha, 'release_handoff_recovery_evidence_invalid');
-  const receipt = await api.readArtifact(artifact);
+  const { artifact, receipt } = await readReleaseArtifact(api, run, name, 'release_handoff_recovery_evidence_invalid');
   check(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'failed' && receipt.mode === 'deploy'
     && receipt.releaseKind === 'independent' && receipt.providerOutcome === 'unknown_until_confirmed'
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID && receipt.controllerSha === run.head_sha

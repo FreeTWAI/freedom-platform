@@ -7,6 +7,10 @@ GitHub 版本歷史只保存程式，不能當作資料庫備份。
 
 ## main 通過 CI 後自動發布
 
+Repository variable `AUTO_RELEASE_ENABLED` 只有精確值 `true` 才開啟自動發布；
+未設定或任何其他值都關閉自動化。這是事故停止開關，只限制 `workflow_run` 准入，
+不影響手動 `workflow_dispatch`；各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行。
+
 `Shared release` 接收 main push 的 Verify／CodeQL 完成通知，重新查證同一個完整
 source SHA 最新的兩個 main CI run 全部成功，才自動執行 `staging-next`；staging
 完整五階段及公開收據上傳成功後，自動執行 `next`。兩環境使用同一 source SHA
@@ -19,8 +23,11 @@ source SHA 最新的兩個 main CI run 全部成功，才自動執行 `staging-n
 分開保存。手動入口及舊的完整 run 收據仍受支援。
 
 重複通知已發布的版本會略過，較舊版本晚完成 CI 不會把環境倒退。最新 Deployment
-若失敗或仍在執行，停止自動接續，由四位操作者先讀回／對帳，再用手動入口完成
-一輪 staging → next；不自動重試未知 migration 或 provider 結果。Actions 與備份
+若為 `failure`，只有經驗證的 hosted `mode=handoff` 成功收據，精確對應該 Deployment
+的 run／attempt、環境及 SHA，才視為已結清並恢復後續版本的自動發布；保留原 failure，
+不寫入 Deployment。僅查詢最新一頁（最多 100 筆）成功 dispatch run，以同環境／SHA 的 handoff 標題前綴及不早於 Deployment 的建立時間預篩後，最多驗證 run ID 最新的 5 筆候選，逐一核對操作者、main controller、成功 jobs、artifact owner／digest 及對帳收據；缺證據即停止。
+`error`、pending 或其他非成功狀態仍停止。相同 SHA 的 staging 對帳不能代替正式發布所需的
+完整通過 staging 收據，仍須手動完成一輪 staging → next；不自動重試未知 migration 或 provider 結果。Actions 與備份
 共用 concurrency，採 `queue: max` 保留最多 100 個待執行 run，不取消正在變更的工作。
 GitHub 排隊順序可能不同於通知時間，因此來源前後關係仍由准入重新驗證。
 佇列語義見 [GitHub concurrency 說明](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency)。

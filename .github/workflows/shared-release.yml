@@ -1,5 +1,5 @@
 name: Shared release
-run-name: '${{ github.event_name == ''workflow_run'' && ''automatic staging → production'' || inputs.mode }} ${{ inputs.target }} at ${{ inputs.release_sha || github.event.workflow_run.head_sha }}'
+run-name: ${{ github.event_name == 'workflow_run' && format('automatic staging → production at {0}', github.event.workflow_run.head_sha) || format('{0} {1} at {2} by @{3}', inputs.mode, inputs.target, inputs.release_sha, github.actor) }}
 on:
   workflow_run:
     workflows: [Verify local milestone, CodeQL advanced setup]
@@ -43,7 +43,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' && github.repository == 'FreeTWAI/freedom-platform' &&
       (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' &&
+       (vars.AUTO_RELEASE_ENABLED == 'true' && github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_repository.id == 1378081342))
     runs-on: ubuntu-24.04
     timeout-minutes: 10

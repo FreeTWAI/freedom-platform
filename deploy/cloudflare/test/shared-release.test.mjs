@@ -3,6 +3,7 @@ import { deriveDisabledMaterialPolicyAdditions, appendDisabledMaterialPolicies }
 import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
 import { backupDiagnosticCode, isBackupDiagnosticCode } from '../../../packages/media-migration/backup-diagnostics.ts';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm, mkdir, stat, symlink, realpath, statfs, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -149,6 +150,234 @@ test('automatic release deduplicates notifications, refuses backwards releases a
   latest.payload.runAttempt++;
   await assert.rejects(automaticDisposition(api, { ...f.request, target: 'next' }), { code: 'release_automatic_previous_attempt' });
 });
+
+
+function automaticHandoffFixture(target = 'staging-next') {
+  const f = stagingFixture(), state = f.state;
+  Object.assign(state.deployment, { sha: main, environment: target, created_at: new Date(1000).toISOString(),
+    payload: { runId: 77, runAttempt: 1 } });
+  state.statuses = [{ state: 'failure' }];
+  state.run.created_at = new Date(2000).toISOString();
+  state.run.display_title = `handoff ${target} at ${main} by @teddashh`;
+  Object.assign(state.receipt, { mode: 'handoff', status: 'reconciled', providerOutcome: 'handoff_reconciled',
+    target, sourceSha: main, handoffReconciliation: { runId: 77, runAttempt: 1 } });
+  state.candidates = [state.run];
+  const api = async (path, options) => {
+    assert.equal(options, undefined, 'automatic disposition must only read GitHub facts');
+    if (path.includes('/workflows/3/runs?')) {
+      state.calls.push(path);
+      return { total_count: state.candidates.length, workflow_runs: state.candidates };
+    }
+    return f.api(path);
+  };
+  api.readArtifact = f.api.readArtifact;
+  return { ...f, api, admission: { ...f.admission, target: 'staging-next' } };
+}
+
+for (const target of ['staging-next', 'next']) {
+  test(`automatic release accepts a verified hosted handoff of the latest failed ${target} deployment`, async () => {
+    const f = automaticHandoffFixture(target);
+    assert.equal(await automaticDisposition(f.api, f.admission), undefined);
+    assert.equal(f.state.reads, 1);
+    assert.equal(f.state.statuses[0].state, 'failure', 'the original failure is retained');
+    assert.equal(f.state.calls.filter(path => path.includes('/workflows/3/runs?')).length, 1);
+    assert.ok(f.state.calls.some(path => path.endsWith('event=workflow_dispatch&status=success&branch=main&per_page=100')));
+    // The reconciled SHA is already live in production. Staging still needs a
+    // fully passed deploy receipt, even if the current run binding were equal.
+    f.admission.sourceSha = main;
+    Object.assign(f.admission, { runId: 77, runAttempt: 1, target: 'next' });
+    if (target === 'next') assert.equal(await automaticDisposition(f.api, f.admission), 'already_released');
+    else await assert.rejects(automaticDisposition(f.api, f.admission), { code: 'release_automatic_previous_attempt' });
+  });
+}
+
+const reconciliationMismatches = {
+  'other failed run': s => { s.receipt.handoffReconciliation.runId++; },
+  'other failed attempt': s => { s.receipt.handoffReconciliation.runAttempt++; },
+  'other target': s => { s.receipt.target = 'next'; },
+  'other source': s => { s.receipt.sourceSha = sha; },
+  'deploy mode': s => { s.receipt.mode = 'deploy'; },
+  'failed receipt': s => { s.receipt.status = 'failed'; },
+  'other outcome': s => { s.receipt.providerOutcome = 'release_confirmed'; },
+  'other format': s => { s.receipt.format = 'other'; },
+  'other repository': s => { s.receipt.repository = 'someone/freedom-platform'; },
+  'other repository id': s => { s.receipt.repositoryId++; },
+  'other receipt run': s => { s.receipt.runId++; },
+  'other receipt attempt': s => { s.receipt.runAttempt++; },
+  'other receipt controller': s => { s.receipt.controllerSha = sha; },
+  'invalid config digest': s => { s.receipt.configSha256 = 'invalid'; },
+  'non-operator receipt actor': s => { s.receipt.original = { login: 'someone', id: 1 }; },
+  'non-operator receipt triggering actor': s => { s.receipt.triggeredBy = { login: 'someone', id: 1 }; },
+  'non-operator run actor': s => { s.run.actor = { login: 'someone', id: 1 }; },
+  'non-operator run triggering actor': s => { s.run.triggering_actor = { login: 'someone', id: 1 }; },
+  'wrong operator id': s => { s.run.actor = { login: 'teddashh', id: 1 }; s.receipt.original = s.run.actor; },
+  'expired artifact': s => { s.artifact.expired = true; },
+  'wrong artifact owner': s => { s.artifact.workflow_run.id++; },
+  'wrong artifact repository': s => { s.artifact.workflow_run.repository_id++; },
+  'wrong artifact head repository': s => { s.artifact.workflow_run.head_repository_id++; },
+  'wrong artifact sha': s => { s.artifact.workflow_run.head_sha = sha; },
+  'wrong artifact branch': s => { s.artifact.workflow_run.head_branch = 'other'; },
+  'wrong artifact name': s => { s.artifact.name = 'release-result-33-1'; },
+  'invalid artifact digest': s => { s.artifact.digest = '4'.repeat(64); },
+  'duplicate artifact': s => { s.artifacts.push(s.artifact); },
+  'absent artifact': s => { s.artifacts = []; },
+  'failed run': s => { s.run.conclusion = 'failure'; },
+  'incomplete run': s => { s.run.status = 'in_progress'; },
+  'non-dispatch run': s => { s.run.event = 'workflow_run'; },
+  'wrong run workflow': s => { s.run.workflow_id++; },
+  'wrong run path': s => { s.run.path = '.github/workflows/other.yml'; },
+  'wrong run branch': s => { s.run.head_branch = 'other'; },
+  'wrong run repository': s => { s.run.repository.id++; },
+  'wrong run head repository': s => { s.run.head_repository.id++; },
+  'invalid run attempt': s => { s.run.run_attempt = 0; },
+  'run predates deployment': s => { s.run.created_at = new Date(999).toISOString(); },
+  'missing run date': s => { delete s.run.created_at; },
+  'missing deployment date': s => { delete s.deployment.created_at; },
+  'missing failed run': s => { delete s.deployment.payload.runId; },
+  'missing failed attempt': s => { delete s.deployment.payload.runAttempt; },
+  'failed admission job': s => { s.jobs[0].conclusion = 'failure'; },
+  'failed deploy job': s => { s.jobs[1].conclusion = 'failure'; },
+  'wrong job attempt': s => { s.jobs[1].run_attempt++; },
+  'failed operator step': s => { s.jobs[1].steps[0].conclusion = 'failure'; },
+  'failed receipt upload': s => { s.jobs[1].steps[1].conclusion = 'failure'; },
+  'unreconciled failure': s => { s.candidates = []; },
+};
+for (const [label, mutate] of Object.entries(reconciliationMismatches)) {
+  test(`automatic release keeps a failed deployment unsettled: ${label}`, async () => {
+    const f = automaticHandoffFixture(); mutate(f.state);
+    await assert.rejects(automaticDisposition(f.api, f.admission), { code: 'release_automatic_previous_unsettled' });
+  });
+}
+
+test('automatic reconciliation rejects an untrusted controller and changed run after artifact read', async () => {
+  for (const changedRun of [false, true]) {
+    const f = automaticHandoffFixture();
+    const api = Object.assign(async path => {
+      if (!changedRun && path.includes('/compare/')) return { status: 'diverged', merge_base_commit: { sha: main } };
+      if (changedRun && f.state.reads && path.endsWith('/runs/33')) return { ...f.state.run, run_attempt: 3 };
+      return f.api(path);
+    }, { readArtifact: f.api.readArtifact });
+    await assert.rejects(automaticDisposition(api, f.admission), { code: 'release_automatic_previous_unsettled' });
+  }
+});
+
+test('missing, malformed or unavailable reconciliation evidence keeps the original failure unsettled', async () => {
+  for (const override of [
+    path => path.endsWith('/workflows/shared-release.yml') ? { id: 3, path: '.github/workflows/shared-release.yml', state: 'disabled' } : undefined,
+    path => path.includes('/workflows/3/runs?') ? { total_count: 1, workflow_runs: [] } : undefined,
+    path => path.includes('/workflows/3/runs?') ? { total_count: 0, workflow_runs: [{ id: 33 }] } : undefined,
+    path => path.includes('/workflows/3/runs?') ? { total_count: 101, workflow_runs: Array(101).fill({ id: 33 }) } : undefined,
+    path => path.includes('/artifacts?') ? { total_count: 2, artifacts: [] } : undefined,
+  ]) {
+    const f = automaticHandoffFixture();
+    const api = Object.assign(async path => override(path) ?? f.api(path), { readArtifact: f.api.readArtifact });
+    await assert.rejects(automaticDisposition(api, f.admission), { code: 'release_automatic_previous_unsettled' });
+  }
+  for (const failure of ['listing', 'artifact']) {
+    const f = automaticHandoffFixture();
+    const api = Object.assign(async path => {
+      if (failure === 'listing' && path.includes('/workflows/3/runs?')) throw Error('unavailable');
+      return f.api(path);
+    }, { readArtifact: async () => { throw Error('unavailable'); } });
+    await assert.rejects(automaticDisposition(api, f.admission), { code: 'release_automatic_previous_unsettled' });
+  }
+});
+
+test('only a failure can use reconciliation; uncertain or missing latest status never can', async () => {
+  for (const state of ['error', 'pending', 'queued', 'in_progress', 'inactive', undefined]) {
+    const f = automaticHandoffFixture(); f.state.statuses = [{ state }];
+    await assert.rejects(automaticDisposition(f.api, f.admission), { code: 'release_automatic_previous_unsettled' });
+    assert.equal(f.state.reads, 0);
+    assert.ok(!f.state.calls.some(path => path.includes('/workflows/3/runs?')));
+  }
+  const f = automaticHandoffFixture(); f.state.statuses = [];
+  await assert.rejects(automaticDisposition(f.api, f.admission), { code: 'release_automatic_previous_unsettled' });
+});
+
+test('reconciliation searches newest first within one page and accepts a run created exactly with the deployment', async () => {
+  const f = automaticHandoffFixture(); f.state.run.created_at = f.state.deployment.created_at;
+  f.state.candidates = [{ ...f.state.run }, { ...f.state.run, id: 44 }];
+  const calls = [];
+  const api = Object.assign(async path => {
+    calls.push(path);
+    if (path.endsWith('/runs/44')) return { ...f.state.run, id: 44, event: 'push' };
+    if (path.includes('/workflows/3/runs?')) return { total_count: 150, workflow_runs: f.state.candidates };
+    return f.api(path);
+  }, { readArtifact: f.api.readArtifact });
+  assert.equal(await automaticDisposition(api, f.admission), undefined);
+  assert.ok(calls.indexOf(`/repos/${REPOSITORY}/actions/runs/44`) < calls.indexOf(`/repos/${REPOSITORY}/actions/runs/33`));
+  assert.equal(calls.filter(path => path.includes('/workflows/3/runs?')).length, 1);
+  assert.ok(calls.every(path => !/[?&]page=/.test(path)));
+  // A proven reconciliation still cannot authorize a backwards/divergent source.
+  const backwards = Object.assign(async path => path.endsWith(`/compare/${main}...${sha}`)
+    ? { status: 'behind', merge_base_commit: { sha } } : api(path), { readArtifact: api.readArtifact });
+  assert.equal(await automaticDisposition(backwards, f.admission), 'newer_source_already_deployed');
+});
+
+test('100 successful dispatch runs without the handoff title prefix need no per-run API calls', async () => {
+  for (const target of ['next', 'staging-next']) {
+    const f = automaticHandoffFixture(target), prefix = `/repos/${REPOSITORY}`;
+    const titles = ['plan', 'check', 'deploy'].map(mode => `${mode} ${target} at ${main} by @teddashh`);
+    titles.push(`handoff other at ${main} by @teddashh`, `handoff ${target} at ${sha} by @teddashh`,
+      ` handoff ${target} at ${main} by @teddashh`, undefined);
+    f.state.candidates = Array.from({ length: 100 }, (_, i) => ({ ...f.state.run, id: 1000 + i,
+      display_title: titles[i % titles.length] }));
+    const calls = [];
+    const api = Object.assign(async path => { calls.push(path); return f.api(path); }, { readArtifact: f.api.readArtifact });
+    await assert.rejects(automaticDisposition(api, f.admission), { code: 'release_automatic_previous_unsettled' });
+    assert.deepEqual(calls, [
+      `${prefix}/deployments?environment=next&per_page=100`,
+      ...(target === 'staging-next' ? [`${prefix}/deployments?environment=staging-next&per_page=100`] : []),
+      `${prefix}/deployments/1/statuses?per_page=1`,
+      `${prefix}/actions/workflows/shared-release.yml`,
+      `${prefix}/actions/workflows/3/runs?event=workflow_dispatch&status=success&branch=main&per_page=100`,
+    ]);
+    assert.equal(f.state.reads, 0);
+  }
+});
+
+test('matching titles with stale dates or unsuccessful dispatch fields need no per-run API calls', async () => {
+  for (const patch of [{ created_at: new Date(999).toISOString() }, { created_at: 'invalid' },
+    { created_at: undefined }, { event: 'workflow_run' }, { status: 'in_progress' }, { conclusion: 'failure' }]) {
+    const f = automaticHandoffFixture();
+    f.state.candidates = [{ ...f.state.run, ...patch }];
+    const calls = [];
+    const api = Object.assign(async path => { calls.push(path); return f.api(path); }, { readArtifact: f.api.readArtifact });
+    await assert.rejects(automaticDisposition(api, f.admission), { code: 'release_automatic_previous_unsettled' });
+    assert.deepEqual(calls.filter(path => path.includes('/actions/') || path.includes('/compare/')), [
+      `/repos/${REPOSITORY}/actions/workflows/shared-release.yml`,
+      `/repos/${REPOSITORY}/actions/workflows/3/runs?event=workflow_dispatch&status=success&branch=main&per_page=100`,
+    ]);
+    assert.equal(f.state.reads, 0);
+  }
+});
+
+for (const validPosition of [6, 5]) {
+  test(`reconciliation caps verification at five candidates when valid proof is ${validPosition}th newest`, async () => {
+    const f = automaticHandoffFixture(), calls = [];
+    // Run 33 has the only valid jobs/artifact/receipt; list in ascending order
+    // so selection must sort by ID before applying the cap.
+    f.state.candidates = Array.from({ length: 7 }, (_, i) => ({ ...f.state.run, id: 26 + validPosition + i }));
+    const api = Object.assign(async path => {
+      calls.push(path);
+      const match = path.match(/\/actions\/runs\/(\d+)$/);
+      if (match) return { ...f.state.run, id: Number(match[1]) };
+      return f.api(path);
+    }, { readArtifact: f.api.readArtifact });
+    if (validPosition === 6) {
+      await assert.rejects(automaticDisposition(api, f.admission), { code: 'release_automatic_previous_unsettled' });
+      assert.equal(f.state.reads, 0);
+    } else {
+      assert.equal(await automaticDisposition(api, f.admission), undefined);
+      assert.equal(f.state.reads, 1);
+    }
+    const runs = calls.filter(path => /\/actions\/runs\/\d+$/.test(path));
+    const expected = Array.from({ length: 5 }, (_, i) => `/repos/${REPOSITORY}/actions/runs/${32 + validPosition - i}`);
+    assert.deepEqual(runs, validPosition === 5 ? [...expected, expected.at(-1)] : expected);
+    assert.equal(calls.filter(path => path.includes('/workflows/3/runs?')).length, 1);
+    assert.ok(calls.every(path => !/[?&](?:page|created)=/.test(path)));
+  });
+}
 
 function fixtureApi(override = () => undefined) {
   const calls = [];
@@ -881,6 +1110,35 @@ test('workflow keeps dispatch input out of shell, secrets out of admission, and 
   assert.match(production, /environment:\n      name: next/);
   assert.match(production, /RELEASE_SHA: \$\{\{ needs.admission.outputs.source_sha \}\}/);
   assert.match(production, /RELEASE_OPERATOR_IMAGE: \$\{\{ vars.RELEASE_OPERATOR_IMAGE \}\}/);
+});
+
+test('automatic incident switch leaves manual admission available and run titles preserve dispatch tooling', async () => {
+  const text = await readFile(new URL('../../../.github/workflows/shared-release.yml', import.meta.url), 'utf8');
+  const admission = text.split('  admission:')[1].split('    runs-on:')[0];
+  const condition = admission.split('    if: >-\n')[1].trim();
+  assert.match(condition, /github.event_name == 'workflow_dispatch' \|\|\s*\(vars.AUTO_RELEASE_ENABLED == 'true' &&/);
+  for (const enabled of [undefined, '', 'false', 'true']) {
+    for (const event of ['workflow_dispatch', 'workflow_run']) {
+      const github = { ref: 'refs/heads/main', repository: REPOSITORY, event_name: event,
+        event: { workflow_run: { event: 'push', conclusion: 'success', head_repository: { id: REPOSITORY_ID } } } };
+      assert.equal(runInNewContext(condition, { github, vars: { AUTO_RELEASE_ENABLED: enabled } }),
+        event === 'workflow_dispatch' || enabled === 'true');
+      github.repository = 'someone/freedom-platform';
+      assert.equal(runInNewContext(condition, { github, vars: { AUTO_RELEASE_ENABLED: enabled } }), false);
+    }
+  }
+  const title = text.match(/^run-name: (.*)$/m)[1];
+  assert.equal(title, "${{ github.event_name == 'workflow_run' && format('automatic staging → production at {0}', github.event.workflow_run.head_sha) || format('{0} {1} at {2} by @{3}', inputs.mode, inputs.target, inputs.release_sha, github.actor) }}");
+  const format = (template, ...values) => template.replace(/\{(\d+)\}/g, (_, index) => values[index]);
+  const github = { event_name: 'workflow_dispatch', actor: 'teddashh', event: { workflow_run: { head_sha: sha } } };
+  for (const mode of ['plan', 'check', 'deploy', 'handoff']) {
+    for (const target of ['staging-next', 'next']) {
+      assert.equal(runInNewContext(title.slice(3, -2), { github, inputs: { mode, target, release_sha: sha }, format }),
+        `${mode} ${target} at ${sha} by @teddashh`);
+    }
+  }
+  github.event_name = 'workflow_run';
+  assert.equal(runInNewContext(title.slice(3, -2), { github, inputs: {}, format }), `automatic staging → production at ${sha}`);
 });
 
 test('source migration frontier advances without changing private config and rejects gaps, privileged SQL and downgrades', async t => {
