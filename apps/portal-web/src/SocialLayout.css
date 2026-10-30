@@ -71,9 +71,9 @@
  .app-frame.social-layout .sidebar .brand{gap:8px}
  .app-frame.social-layout .sidebar-brand-art{width:44px;max-width:44px}
  .app-frame.social-layout .sidebar .brand strong{font-size:1rem}
- .app-frame.social-layout .mobile-menu-toggle{font-size:0;width:44px;height:44px;padding:0;border-color:var(--line)}
- .app-frame.social-layout .mobile-menu-toggle::after{content:'☰';font-size:20px;color:var(--ink)}
- .app-frame.social-layout .mobile-menu-toggle[aria-expanded=true]::after{content:'×';font-size:26px}
+ /* One vector flex item avoids the hidden text gap and platform font-glyph offsets. */
+ .app-frame.social-layout .mobile-menu-toggle{width:44px;min-width:44px;height:44px;padding:0;gap:0;align-items:center;justify-content:center;color:var(--ink);border-color:var(--line)}
+ .app-frame.social-layout .mobile-menu-toggle > svg{display:block;flex:none}
  .app-frame.social-layout .workspace-navigation{display:none}
  .app-frame.social-layout .workspace-navigation.is-open{position:absolute;left:12px;right:12px;top:100%;z-index:1;display:block;width:auto;max-height:var(--mobile-navigation-height,calc(100dvh - 94px));overflow:auto;overscroll-behavior:contain;background:var(--bg-elev);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
  .app-frame.social-layout .mobile-nav-backdrop{display:block;position:fixed;inset:var(--mobile-navigation-top,74px) 0 0;background:color-mix(in srgb,var(--ink) 18%,transparent)}
@@ -183,6 +183,7 @@
 .home-journal-dialog>header .btn{min-height:44px;flex-shrink:0}
 /* Member home stays content-first at every width. Exploration opens only by choice. */
 .app-frame.social-layout .sidebar .brand-home { min-height:44px; width:fit-content; color:var(--ink); text-decoration:none; }
+.app-frame.social-layout .brand-home-logo { display:block; width:132px; height:44px; flex:none; object-fit:contain; }
 .app-frame.social-layout .sidebar .brand-home:focus-visible { outline:2px solid var(--focus); outline-offset:4px; border-radius:4px; }
 .app-frame.social-layout .home-participation-disclosure > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:12px; list-style:none; }
 .app-frame.social-layout .home-participation-disclosure > summary::-webkit-details-marker { display:none; }

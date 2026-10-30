@@ -6,6 +6,8 @@ import { MyContent } from '../modules/MyContent';
 
 const CommunityArPanel=lazy(()=>import('../modules/community-ar/Panel').then(m=>({default:m.CommunityArPanel})))
 const EventsPanel = lazy(() => import('../modules/EventsPanel').then(m => ({default: m.EventsPanel})))
+const EventMissions = lazy(() => import('../modules/EventMissions').then(m => ({default: m.EventMissions})))
+const EventMemberCards = lazy(() => import('../modules/EventMemberCards').then(m => ({default: m.EventMemberCards})))
 const SocialZone = lazy(() => import('../modules/SocialZone').then(m => ({default: m.SocialZone})))
 const MemberServices = lazy(() => import('../modules/MemberServices').then(m => ({default: m.MemberServices})))
 const PromotionBoards = lazy(() => import('../modules/PromotionBoards').then(m => ({default: m.PromotionBoards})))
@@ -38,7 +40,7 @@ export const communityFeatures = {
   },
   "events": {
     moduleId: "community", placement: 'page',
-    render: ({client, session, site, locationHash, selectTab, registerPageLeave}) => <EventsPanel key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} locationHash={locationHash} registerLeave={registerPageLeave} onList={()=>selectTab('events')} participationEnabled={site?.event_participation_enabled===true}/>,
+    render: ({client, session, site, locationHash, selectTab, registerPageLeave}) => <EventsPanel key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} locationHash={locationHash} registerLeave={registerPageLeave} onList={()=>selectTab('events')} renderMissions={(eventId,onBlockedChange)=><React.Suspense fallback={<p role="status">正在準備小任務…</p>}><EventMissions client={client} eventId={eventId} userId={session.user.user_id} onBlockedChange={onBlockedChange}/></React.Suspense>} renderMemberCards={eventId=><React.Suspense fallback={<p role="status">正在準備名片…</p>}><EventMemberCards client={client} eventId={eventId} userId={session.user.user_id}/></React.Suspense>} participationEnabled={site?.event_participation_enabled===true}/>,
   },
   "highlights": {
     moduleId: "community", placement: 'page',

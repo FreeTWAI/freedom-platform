@@ -186,6 +186,88 @@ The destination must already exist and must not overlap the producer. Export che
 
 In a consumer, `node scripts/verify-contracts.mjs` returns structured JSON and exits 0 for the requested local verification, 1 for invalid input/integrity, or 2 for unavailable trust/source. `--remote` additionally compares v1 bytes with the exact pinned GitHub commit. v2 does not accept `--remote` as a replacement for publisher approval.
 
+### Shared contributor profile and reader capabilities
+
+The read-only `node scripts/freedom.mjs context-capabilities` command reports
+`freedom.context-capabilities/v1` for the **running CLI** without reading or writing
+a workspace. It lists default delivery, the compact profile's accepted reader
+formats, and the existing explicit format selector. It does not attest to any
+editor/Agent/MCP reader's support or install configuration/hooks.
+
+A compatible contributor can choose:
+
+```sh
+node scripts/freedom.mjs context-capabilities
+node scripts/freedom.mjs prepare --base-ref <exact-base-sha> --paths <actual-paths> --context-profile compact
+```
+
+`compact` explicitly opts the caller into both `freedom.coding-context/v1` small
+bundles and `freedom.coding-context-manifest/v2` / `freedom.coding-context-chunk/v2`
+large delivery. The existing small-bundle admission check runs first; only its
+size-limit result selects v2. Other errors are not hidden by a fallback. This
+avoids forcing a small, already deduplicated v1 bundle into chunk envelopes.
+The completeness response remains `freedom.coding-context-completeness/v1`.
+
+No profile means exactly the original small v1 / large v1 behavior. The explicit
+`--delivery-format compact-v2` still forces v2 for callers that require it.
+Combining profile and explicit format, unknown or duplicate profiles, using a
+profile with `verify` or a saved `--manifest`, and extra capability-command
+arguments are rejected. Reading a saved manifest follows its exact format and
+all existing freshness/completeness checks, never a caller override.
+
+The shared module-contribution guide and newly generated module README /
+`next_commands` recommend this profile to compatible readers. Existing generated
+README files are not rewritten. Old checkouts or pinned consumers may lack the
+capability command; a caller that does not positively support these formats must
+keep the original prepare/read flow, not infer compatibility or drop rules.
+Updating another repository's vendor pin is a separate authorized change.
+This is an available common workflow, not proof all contributors' tools have
+adopted it. Delivered byte/chunk measurements remain separate from actual model
+Token consumption, billing, prompt cache and task-quality claims.
+
+### Opt-in compact context delivery (v2)
+
+`prepare` and `context` accept `--delivery-format compact-v2` to explicitly emit
+`freedom.coding-context-manifest/v2` and `freedom.coding-context-chunk/v2`, even for
+a small input. Without this option the existing small bundle and large v1 delivery
+remain unchanged. Existing v1 readers must not treat a v2 manifest as v1.
+
+Both baseline and candidate source records remain in `sources`, including their
+path, kind, revision and digests. Each v2 source additionally identifies its
+`canonical_source_index`. Only records with the **same kind and path and exactly
+equal content bytes** share a contiguous `first_chunk` / `chunk_count` range;
+digests alone never establish equality. Different paths or changed content are
+not coalesced. A canonical source points to itself; an alias points to the earlier
+canonical source. Every chunk's `source_bindings` lists all source indices and
+revision/commit/workspace identities represented by its text. Its existing
+`source` and `source_index` identify the canonical source, not the only revision.
+Read every unique chunk once, interpreting all its source bindings; this is not
+permission to omit any selected rule. UTF-8, including BOM, is preserved.
+
+The delivery identity binds the v2 format as well as the full provenance, scope
+and contents. The reader regenerates the complete selected context and compares
+the exact manifest and **all** unique chunk artifacts before returning any text.
+Alias tampering, missing fragments, symlinks and stale workspace/base/branch data
+fail closed just as in v1. The completeness command remains an integrity report,
+not evidence that a model read or understood the instructions. No cross-session
+semantic read receipt, prompt cache or new trust level is introduced.
+
+Source-count and total-content admission budgets still count **both revisions
+before deduplication**. Per-file, UTF-8, fragment, output and manifest limits remain
+in force. Unknown-source full fallback, baseline/candidate ownership union,
+missing-rule blockers, selected tests and local/unverified assurance do not change.
+
+```sh
+node scripts/freedom.mjs prepare --base-ref <exact-base-sha> --paths packages/contribution-tools/context.mjs --delivery-format compact-v2
+node scripts/freedom.mjs context --manifest <returned-manifest-path> --chunk 0
+node scripts/freedom.mjs context --manifest <returned-manifest-path> --check complete
+```
+
+The manifest determines its format on read; mixing `--delivery-format`, scope or
+base overrides with `--manifest` is rejected. Reducing repeated delivered UTF-8
+bytes is not a measured reduction in model tokens, billed usage, cache misses or
+real-task error rates. Those claims require separate tokenizer and task evidence.
+
 ## ReleaseSet and proof profile
 
 `freedom.release-set/v1` binds source SHA, artifact bytes/digests, contract families, libraries, policy revision, generator, fixtures and runtime profiles. Every artifact must be classified and every reference must resolve. Paths, counts and total bytes are bounded; absolute/traversal/Windows-special paths, case collisions, symlinks, hardlinks, extra files and missing files are rejected.

@@ -139,6 +139,7 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
     while(parent&&parent!==event.currentTarget){if(parent instanceof HTMLDetailsElement)parent.open=true;parent=parent.parentElement;}
   }}>
     <div className="account-settings-intro"><p>改名字、選擇分享對象，或管理登入安全。</p>{onNavigate&&<button type="button" className="btn btn-small btn-ghost" disabled={locked} onClick={()=>onNavigate('profile')}>返回我的個人空間</button>}</div>
+    <details className="card account-settings-section"><summary><strong>分享名片設定（免登入）</strong><span>見面時出示 QR Code，先確認你願意公開的內容</span></summary><div className="stack account-settings-body"><MemberShare client={client}/></div></details>
     <Status error={loadError||error} notice={notice}/>
     {loadError&&<button type="button" className="btn btn-small btn-ghost" disabled={locked} onClick={()=>{if(!dirty||window.confirm('放棄尚未儲存的修改，重新載入？'))void load();}}>重新載入我的資料</button>}
     {!account&&!loadError&&<p role="status">載入會員資料…</p>}
@@ -178,7 +179,6 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
           </div>)}</div>
           <div className="actions"><button type="submit" form={formId} className="btn btn-primary" disabled={locked}>{busy?'儲存中…':'儲存分享對象'}</button></div>
         </>}
-        <details className="account-settings-more"><summary>分享名片設定（免登入）</summary><MemberShare client={client}/></details>
       </div>
     </details>
     <details className="card account-settings-section">

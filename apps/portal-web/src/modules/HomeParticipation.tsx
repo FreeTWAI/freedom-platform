@@ -14,20 +14,23 @@ type Progress =
   | { state: 'error' }
   | { state: 'ready'; hasEngagements: boolean; needsResponse: boolean };
 
-/** Navigation never waits for private progress. Each mounted session owns one small read. */
-export function HomeParticipation({ client, onNavigate, personalContentEnabled = false }: ModulePanelProps & { personalContentEnabled?: boolean }) {
-  const [progress, setProgress] = useState<Progress>({ state: 'loading' });
+/** Navigation never waits for private progress. Read only after this session opens the section. */
+export function HomeParticipation({ client, onNavigate, personalContentEnabled = false, active }: ModulePanelProps & { personalContentEnabled?: boolean; active: boolean }) {
+  const [progressValue, setProgress] = useState<{client: ModulePanelProps['client']; generation: number; value: Progress} | null>(null);
   const sequence = useRef(0);
   const inFlight = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const generation = client.sessionGeneration;
+  // Hide a replaced client's facts synchronously, before effect cleanup runs.
+  const progress: Progress = progressValue?.client === client && progressValue.generation === generation
+    ? progressValue.value : {state: 'loading'};
   const load = useCallback(() => {
     if (inFlight.current) return;
     const current = ++sequence.current;
     const abort = new AbortController();
     controller.current = abort;
     inFlight.current = true;
-    setProgress({ state: 'loading' });
+    setProgress({client, generation, value: { state: 'loading' }});
     const live = () => current === sequence.current && generation === client.sessionGeneration && !abort.signal.aborted;
     void client.get<unknown>('/engagements/summary', { signal: abort.signal }).then(payload => {
       if (!live()) return;
@@ -35,17 +38,18 @@ export function HomeParticipation({ client, onNavigate, personalContentEnabled =
         || !('has_engagements' in payload) || typeof payload.has_engagements !== 'boolean'
         || !('needs_response' in payload) || typeof payload.needs_response !== 'boolean'
         || (payload.needs_response && !payload.has_engagements)) throw new Error('Invalid cooperation summary');
-      setProgress({ state: 'ready', hasEngagements: payload.has_engagements, needsResponse: payload.needs_response });
+      setProgress({client, generation, value: { state: 'ready', hasEngagements: payload.has_engagements, needsResponse: payload.needs_response }});
     }).catch(() => {
-      if (live()) setProgress({ state: 'error' });
+      if (live()) setProgress({client, generation, value: { state: 'error' }});
     }).finally(() => {
       if (current === sequence.current) inFlight.current = false;
     });
   }, [client, generation]);
   useEffect(() => {
+    if (!active) return;
     load();
     return () => { sequence.current++; controller.current?.abort(); inFlight.current = false; };
-  }, [load]);
+  }, [load, active]);
 
   const message = progress.state === 'loading' ? '正在讀取合作進度…'
     : progress.state === 'error' ? '合作進度暫時無法載入，可以重試或直接查看合作紀錄。'

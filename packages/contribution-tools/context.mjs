@@ -231,15 +231,30 @@ export async function buildContextMetadata(options) {
 }
 
 export async function buildContextDelivery(options) {
+  const compact = options.deliveryFormat === 'compact-v2';
+  check(options.deliveryFormat === undefined || compact, 'invalid_context_delivery_format');
   const request = { baseRef: options.baseRef ?? 'origin/main',
     requestedPaths: Array.isArray(options.requestedPaths) ? [...options.requestedPaths] : options.requestedPaths ?? [],
     scopes: Array.isArray(options.scopes) ? [...options.scopes] : options.scopes ?? [],
     ...(options.repository === undefined ? {} : { repository: options.repository }) };
-  const sources = [], parts = [], admit = contentBudget();
+  const sources = [], parts = [], canonical = new Map(), admit = contentBudget();
   const built = await collectContext({ ...request, repositoryRoot: options.repositoryRoot }, (kind, input) => {
     admit(input);
     const { content, ...source } = input, bytes = Buffer.from(content);
     const first = parts.length, sourceIndex = sources.length;
+    // Only the same source path/kind with exact matching bytes may share text.
+    // Hashes remain provenance, not a substitute for byte equality. Both
+    // revision records and the original pre-deduplication budgets are retained.
+    const key = JSON.stringify([kind, source.path]);
+    const prior = compact ? canonical.get(key) : undefined;
+    if (prior && prior.bytes.equals(bytes)) {
+      const original = sources[prior.index];
+      sources.push({ kind, ...source, content_bytes: bytes.length, content_sha256: sha256(bytes),
+        first_chunk: original.first_chunk, chunk_count: original.chunk_count,
+        canonical_source_index: prior.index });
+      return;
+    }
+    if (compact) canonical.set(key, { index: sourceIndex, bytes });
     for (let start = 0; start < bytes.length || start === 0;) {
       let end = Math.min(start + CONTEXT_LIMITS.chunk_content_bytes, bytes.length);
       // A fragment is complete UTF-8, including any BOM; no replacement or trim.
@@ -252,21 +267,27 @@ export async function buildContextDelivery(options) {
       start = end;
     }
     sources.push({ kind, ...source, content_bytes: bytes.length, content_sha256: sha256(bytes),
-      first_chunk: first, chunk_count: parts.length - first });
+      first_chunk: first, chunk_count: parts.length - first,
+      ...(compact ? { canonical_source_index: sourceIndex } : {}) });
   });
   const { documents: _documents, format: _format, ...binding } = built.context;
   const selectedModules = descriptors => descriptors.filter(item => binding.module_ids.includes(item.module_id))
     .map(item => ({ module_id: item.module_id, dependencies: [...item.dependencies].sort() }));
   const selection = { unknown_paths: built.impact.unknown_paths,
     baseline_modules: selectedModules(built.baseline), candidate_modules: selectedModules(built.candidate) };
-  const deliveryId = sha256(JSON.stringify({ binding, request, selection, sources }));
+  const deliveryId = sha256(JSON.stringify({ binding, request, selection, sources,
+    ...(compact ? { delivery_format: 'compact-v2' } : {}) }));
   const directory = `.freedom/context/${binding.task_id}/${deliveryId}`;
   const chunks = parts.map((part, index) => {
     const source = sources[part.source_index];
-    const value = { format: 'freedom.coding-context-chunk/v1', assurance_level: 'local', delivery_id: deliveryId,
+    const value = { format: compact ? 'freedom.coding-context-chunk/v2' : 'freedom.coding-context-chunk/v1', assurance_level: 'local', delivery_id: deliveryId,
       index, source: { kind: source.kind, path: source.path, revision: source.revision, sha256: source.sha256, bytes: source.bytes,
         commit: source.revision === 'base' ? binding.base_commit : binding.head_commit,
-        workspace_sha256: source.revision === 'candidate' ? binding.workspace_sha256 : null }, ...part };
+        workspace_sha256: source.revision === 'candidate' ? binding.workspace_sha256 : null },
+      ...(compact ? { source_bindings: sources.flatMap((entry, source_index) => entry.canonical_source_index === part.source_index
+        ? [{ source_index, kind: entry.kind, path: entry.path, revision: entry.revision, sha256: entry.sha256, bytes: entry.bytes,
+          commit: entry.revision === 'base' ? binding.base_commit : binding.head_commit,
+          workspace_sha256: entry.revision === 'candidate' ? binding.workspace_sha256 : null }] : []) } : {}), ...part };
     const bytes = boundedArtifact(value);
     return { path: `${directory}/chunk-${index}.json`, value, sha256: sha256(bytes), bytes: bytes.length };
   });
@@ -277,7 +298,7 @@ export async function buildContextDelivery(options) {
     return { path, status: !base ? 'added' : !candidate ? 'missing_candidate' : base.sha256 === candidate.sha256 ? 'unchanged' : 'changed',
       base_sha256: base?.sha256 ?? null, candidate_sha256: candidate?.sha256 ?? null };
   });
-  const manifest = { format: 'freedom.coding-context-manifest/v1', assurance_level: 'local', delivery_id: deliveryId,
+  const manifest = { format: compact ? 'freedom.coding-context-manifest/v2' : 'freedom.coding-context-manifest/v1', assurance_level: 'local', delivery_id: deliveryId,
     request, binding, selection, limits: CONTEXT_LIMITS, sources, delta,
     chunks: chunks.map(({ path, sha256, bytes }, index) => ({ index, path, sha256, bytes })) };
   boundedArtifact(manifest);
@@ -305,12 +326,13 @@ export async function readContextDelivery(repositoryRoot, manifestPath, { chunkI
     'invalid_context_read');
   const storedBytes = await readLocalArtifact(repositoryRoot, manifestPath, CONTEXT_LIMITS.artifact_bytes);
   const stored = parseJson(storedBytes, { maxBytes: CONTEXT_LIMITS.artifact_bytes });
-  check(stored.format === 'freedom.coding-context-manifest/v1' && stored.request && typeof stored.request === 'object'
+  check(['freedom.coding-context-manifest/v1', 'freedom.coding-context-manifest/v2'].includes(stored.format) && stored.request && typeof stored.request === 'object'
     && !Array.isArray(stored.request) && Object.keys(stored.request).every(key => ['baseRef', 'requestedPaths', 'scopes', 'repository'].includes(key))
     && typeof stored.request.baseRef === 'string' && Array.isArray(stored.request.requestedPaths) && Array.isArray(stored.request.scopes), 'invalid_context_manifest');
   // A self-consistent local digest is not trusted evidence. Recompute complete
   // scope and bytes from this workspace; never follow candidate-supplied paths.
-  const built = await buildContextDelivery({ ...stored.request, repositoryRoot });
+  const built = await buildContextDelivery({ ...stored.request, repositoryRoot,
+    ...(stored.format === 'freedom.coding-context-manifest/v2' ? { deliveryFormat: 'compact-v2' } : {}) });
   check(manifestPath === built.manifestPath && storedBytes.equals(boundedArtifact(built.manifest)), 'stale_or_modified_context_manifest');
   if (!complete) check(chunkIndex < built.chunks.length, 'context_chunk_out_of_range');
   for (const chunk of built.chunks) {

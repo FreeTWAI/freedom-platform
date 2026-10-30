@@ -230,6 +230,11 @@ const FOUNDATION_NAMES = [
   '192_member_profile_customization.sql',
   '193_member_community_certifications.sql',
   '194_social_achievements.sql',
+  // Private opt-in helper records only; exact ledger approval remains required.
+  // Recognition grants no attendance, contact-sharing or release authority.
+  '195_event_helpers.sql',
+  // Private self-reported exercises; no attendance, contribution or release authority.
+  '196_event_missions.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

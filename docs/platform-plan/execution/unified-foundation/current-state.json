@@ -1,6 +1,6 @@
 {
   "format": "freedom.foundation-current-state/v1",
-  "recorded_at": "2026-10-29T10:23:10.876102Z",
+  "recorded_at": "2026-10-30T08:25:00Z",
   "scope": "Dated reconciliation; each observation has its own source/time. This file is not a live monitor or a release authorization.",
   "foundation_complete": false,
   "requirements": {
@@ -14,32 +14,31 @@
   },
   "merged_source": {
     "repository": "FreeTWAI/freedom-platform",
-    "sha": "245d2a677757a3f30d29fd2f061d5ce63b6b1882",
-    "tree": "31d5a92590b4dea496597cc5e66361e4608b2566",
-    "observed_at": "2026-10-29T10:19:50.731885Z",
+    "sha": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+    "tree": "f28e02e22bad0a0abe5bdd37d55b3cc428bc37e1",
+    "observed_at": "2026-10-30T08:25:00Z",
     "observation_kind": "GitHub main readback, separate from actual deployed source.",
-    "runtime_release_source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-    "runtime_release_source_scope": "Production remains at 5c4bf56d. Staging reports 5d662e6e deployed and healthy, but handoff failed and journal settlement has not been read back. See per-environment observations.",
+    "runtime_release_source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+    "runtime_release_source_scope": "兩環境均由成功的五階段 hosted 發布收據確認，schema196；旗標與功能驗收不變。",
     "release_source_verify": {
       "conclusion": "success",
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "head": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "run": 40616306774,
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "head": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "run": 41017154345,
       "attempt": 1,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json"
     },
     "main_verify_observation": {
-      "observed_at": "2026-10-29T10:19:50.731885Z",
-      "main": "245d2a677757a3f30d29fd2f061d5ce63b6b1882",
-      "main_verify_run": 40845770013,
+      "observed_at": "2026-10-30T08:25:00Z",
+      "main": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "main_verify_run": 41017154345,
       "main_verify_attempt": 1,
       "main_verify_last_reported_status": "completed",
       "main_verify_conclusion": "success",
-      "main_codeql_run": 40845769999,
+      "main_codeql_run": 41017154341,
       "main_codeql_conclusion": "success",
       "main_ci_complete": true,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
-      "limitation": "Current main/controller and selected application SHA are separate; selected application own main CI passed."
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json"
     },
     "previous_main_verify_observation": {
       "observed_at": "2026-10-27T18:17:51.933Z",
@@ -58,128 +57,80 @@
     "migrations_beyond_observed_runtime": [],
     "limitation": "Currently observed main and deployed source are separate observations; original acceptance is unchanged.",
     "selected_release_observation": {
-      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
-      "verify_run": 40843702385,
-      "codeql_run": 40843702369,
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "verify_run": 41017154345,
+      "codeql_run": 41017154341,
       "ci_conclusion": "success",
-      "deployment_status": "staging_deployed_health_passed_handoff_failed_production_not_started",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
+      "deployment_status": "staging_and_production_five_phases_passed",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json"
     }
   },
   "deployment": {
     "production": {
       "url": "https://freetwai.com/",
-      "observed_release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "observed_at": "2026-10-29T01:26:40.201Z",
+      "observed_release_sha": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "observed_at": "2026-10-30T08:20:44.465Z",
       "health": {
-        "http": 200,
+        "release_sha": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
         "status": "ok",
-        "release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-        "observation_kind": "public_readback_after_failed_staging_handoff",
-        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
+        "observation_kind": "public_health_readback",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json"
       },
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "status": "deployed_workflow_handoff_failed_manually_reconciled",
-      "last_operator_release_sha": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "limitation": "Production remains on the earlier 5c4bf56d release with its original failed workflow and separately recorded manual reconciliation. No 5d662e6e production deployment was started.",
-      "health_observed_at": "2026-10-29T10:19:48.740990Z",
-      "workflow_conclusion": "failure",
-      "github_deployment_state": "failure",
-      "run_id": 40798978135,
-      "deployment_id": 7401410854,
-      "cleanup_followup": {
-        "format": "freedom.manual-release-handoff-reconciliation/v1",
-        "startedAt": "2026-10-29T01:26:20.839Z",
-        "failedRun": 40798978135,
-        "target": "next",
-        "actor": "teddashh",
-        "actorId": 233386770,
-        "executionOrigin": "local_release_owner_incident_reconciliation",
-        "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-        "automaticRetry": false,
-        "originalWorkflowFailureRetained": true,
-        "originalGitHubDeploymentFailureRetained": true,
-        "databasePersistentWrites": 0,
-        "providerDeploymentWrites": 0,
-        "journalAppendCount": 1,
-        "status": "deployed_release_handoff_reconciled_original_failure_retained",
-        "failedArtifact": {
-          "id": 12865850257,
-          "digest": "sha256:84028133c55d4ef168c7642685ebcc3f1bb3dacd512330ee185bbfdb31458b4b"
-        },
-        "before": {
-          "generation": 39,
-          "sha256": "1d90e9819cc837209b86c294c6271079d8f69b6c1103d34e06f55ee11e2c38c6",
-          "pendingStage": 3,
-          "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-          "throughSchema": 194,
-          "ledgerRows": 193
-        },
-        "databaseVerified": true,
-        "materialPolicyVerified": true,
-        "gcDisabled": true,
-        "otherMaintenanceSessions": 0,
-        "workerVerified": true,
-        "publicHealth": {
-          "observedAt": "2026-10-29T01:26:40.201Z",
-          "http": 200,
-          "status": "ok",
-          "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d"
-        },
-        "after": {
-          "generation": 40,
-          "sha256": "fd5ec2076e0586133455f68d5aab8a1d7687c3450b555fdae6fe130e3e8a4370",
-          "pending": null
-        },
-        "leaseReleased": true,
-        "completedAt": "2026-10-29T01:26:55.398Z"
-      }
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "status": "shared_actions_five_phases_passed",
+      "last_operator_release_sha": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "limitation": "租約中斷根因仍未知，由 PR #1193 增加診斷；本次發布不代表新旗標啟用、真人會員驗收或原 168 項需求完成。",
+      "workflow_conclusion": "success",
+      "github_deployment_state": "success",
+      "run_id": 41025042462,
+      "deployment_id": 7433758011,
+      "health_observed_at": "2026-10-30T08:24Z"
     },
     "staging": {
       "url": "https://staging.freetwai.com/",
-      "observed_release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
-      "observed_at": "2026-10-29T10:09:56.142Z",
+      "observed_release_sha": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "observed_at": "2026-10-30T08:07:57.671Z",
       "health": {
-        "release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+        "release_sha": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
         "status": "passed",
-        "observation_kind": "operator_reported_health_phase_before_handoff_failure",
-        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
+        "observation_kind": "successful_hosted_health_phase",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json"
       },
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
-      "status": "deployed_health_passed_handoff_failed_not_reconciled",
-      "last_operator_release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
-      "limitation": "Operator receipt reports deploy and health passed, then handoff release_lease_lost. Journal pending and lease cleanup remain unconfirmed; no retry or production rollout was started.",
-      "workflow_conclusion": "failure",
-      "github_deployment_state": "failure",
-      "run_id": 40853952665,
-      "deployment_id": 7409321089
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "status": "shared_actions_five_phases_passed",
+      "last_operator_release_sha": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "limitation": "租約中斷根因仍未知，由 PR #1193 增加診斷；本次發布不代表新旗標啟用、真人會員驗收或原 168 項需求完成。",
+      "workflow_conclusion": "success",
+      "github_deployment_state": "success",
+      "run_id": 41023423825,
+      "deployment_id": 7433524819
     },
     "last_operator_rollout": {
-      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
-      "at": "2026-10-29T10:09:56.142Z",
-      "kind": "shared_actions_staging_attempt",
-      "scope": "staging-next only; production not started",
-      "status": "staging_deployed_health_passed_handoff_failed_production_not_started",
-      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
-      "limitation": "Operator receipt reports deploy and health passed, then handoff release_lease_lost. Journal pending and lease cleanup remain unconfirmed; no retry or production rollout was started."
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "at": "2026-10-30T08:20:44.465Z",
+      "kind": "authenticated_shared_actions_receipts",
+      "scope": "staging-next then next; same source and operator image",
+      "status": "staging_and_production_five_phases_passed",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "limitation": "租約中斷根因仍未知，由 PR #1193 增加診斷；本次發布不代表新旗標啟用、真人會員驗收或原 168 項需求完成。"
     },
     "last_production_rollout": {
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "at": "2026-10-29T01:26:40.201Z",
-      "status": "deployed_workflow_handoff_failed_manually_reconciled",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "run_id": 40798978135,
-      "deployment_id": 7401410854,
-      "kind": "authenticated_receipt_and_manual_reconciliation"
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "at": "2026-10-30T08:20:44.465Z",
+      "status": "shared_actions_five_phases_passed",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "run_id": 41025042462,
+      "deployment_id": 7433758011,
+      "kind": "authenticated_shared_actions_receipt"
     },
     "last_staging_rollout": {
-      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
-      "at": "2026-10-29T10:09:56.142Z",
-      "status": "deployed_health_passed_handoff_failed_not_reconciled",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
-      "run_id": 40853952665,
-      "deployment_id": 7409321089,
-      "kind": "authenticated_failed_shared_actions_receipt"
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "at": "2026-10-30T08:07:57.671Z",
+      "status": "shared_actions_five_phases_passed",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "run_id": 41023423825,
+      "deployment_id": 7433524819,
+      "kind": "authenticated_shared_actions_receipt"
     },
     "previous_production_rollout": {
       "source": "b14916ccd75cff70bcd4ba979088ddd8c3d88583",
@@ -915,63 +866,81 @@
       "run_id": 40798095826,
       "deployment_id": 7401281748,
       "kind": "authenticated_shared_actions_receipt"
+    },
+    "prior_staging_rollout_20261029_1023": {
+      "url": "https://staging.freetwai.com/",
+      "observed_release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "observed_at": "2026-10-29T10:09:56.142Z",
+      "health": {
+        "release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+        "status": "passed",
+        "observation_kind": "operator_reported_health_phase_before_handoff_failure",
+        "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
+      },
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+      "status": "deployed_health_passed_handoff_failed_not_reconciled",
+      "last_operator_release_sha": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "limitation": "Operator receipt reports deploy and health passed, then handoff release_lease_lost. Journal pending and lease cleanup remain unconfirmed; no retry or production rollout was started.",
+      "workflow_conclusion": "failure",
+      "github_deployment_state": "failure",
+      "run_id": 40853952665,
+      "deployment_id": 7409321089
     }
   },
   "schema": {
     "last_observed_live": {
-      "ledger_rows": 193,
-      "through_number": 194,
-      "source_digest_drift": 0,
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "kind": "successful_hosted_migration_and_production_readback",
-      "limitation": "Staging migration contract confirmed; production later independently read under lease."
+      "through_number": 196,
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "observed_at": "2026-10-30T08:25:00Z",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "kind": "successful_hosted_migration_phases",
+      "limitation": "兩環境已套用195／196；本輪文件工作未另讀 live ledger，不重認證歷史政策或還原驗收。"
     },
     "staging_observed": {
       "environment": "staging",
-      "ledger_rows": 193,
-      "through_number": 194,
+      "through_number": 196,
       "applied": [
         "migrations/190_google_identity.sql",
         "migrations/191_member_profile_publications.sql",
         "migrations/192_member_profile_customization.sql",
         "migrations/193_member_community_certifications.sql",
-        "migrations/194_social_achievements.sql"
+        "migrations/194_social_achievements.sql",
+        "migrations/195_event_helpers.sql",
+        "migrations/196_event_missions.sql"
       ],
       "pending": [],
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
       "observed_between": {
-        "start": "2026-10-29T01:05:43.484Z",
-        "end": "2026-10-29T01:10:40.793Z"
+        "start": "2026-10-30T08:00:55.876Z",
+        "end": "2026-10-30T08:06:48.118Z"
       },
       "kind": "successful_hosted_migration_gate",
-      "source_digest_drift": 0,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
       "timestamp_basis": "Operation interval, not an independent per-query timestamp."
     },
     "production_observed": {
       "environment": "production",
-      "ledger_rows": 193,
-      "through_number": 194,
+      "through_number": 196,
       "applied": [
         "migrations/190_google_identity.sql",
         "migrations/191_member_profile_publications.sql",
         "migrations/192_member_profile_customization.sql",
         "migrations/193_member_community_certifications.sql",
-        "migrations/194_social_achievements.sql"
+        "migrations/194_social_achievements.sql",
+        "migrations/195_event_helpers.sql",
+        "migrations/196_event_missions.sql"
       ],
       "pending": [],
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
       "observed_between": {
-        "start": "2026-10-29T01:26:20.839Z",
-        "end": "2026-10-29T01:26:55.398Z"
+        "start": "2026-10-30T08:15:36.445Z",
+        "end": "2026-10-30T08:19:43.356Z"
       },
-      "kind": "read_only_under_lease_post_commit_exact_catalog",
-      "source_digest_drift": 0,
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
+      "kind": "successful_hosted_migration_gate",
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
       "timestamp_basis": "Operation interval, not an independent per-query timestamp."
     },
-    "production_last_reported": "Migration190–194 confirmed; later lease-protected readback verified193-row ledger, policy digest, Worker and GC OFF. Only missing handoff appended; no SQL/deploy repeated.",
+    "production_last_reported": "Migration195／196已套用至schema196；五階段發布成功，handoff未失鎖；沒有備份或新旗標啟用。",
     "fresh_live_ledger_read": {
       "staging": {
         "at": null,
@@ -994,7 +963,8 @@
         "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
         "observed_no_later_than": "2026-10-29T01:26:55.398Z",
         "timestamp_basis": "Authenticated phase/readback interval; no independent per-query timestamp."
-      }
+      },
+      "observation_scope": "歷史10/29 ledger讀回；10/30 schema196以兩環境成功 hosted migration phase與發布觀察為準，沒有另讀 ledger。"
     },
     "limitation": "Approved migration executed in both environments. Original restore acceptance and historical policy counts are not re-certified.",
     "declared_historical_number_gaps": [
@@ -1020,24 +990,21 @@
       }
     },
     "main_migrations_beyond_observed_release": {
-      "source": "f56b6c3a25ffd98fc974e0e44679b447841e2f50",
-      "runtime_source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+      "runtime_source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
       "migrations": [],
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
-      "observed_at": "2026-10-29T01:26:55.398Z"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "observed_at": "2026-10-30T08:25:00Z"
     },
     "latest_release_migration_catalog_comparison": {
-      "observed_at": "2026-10-29T01:26:55.398Z",
-      "previous_source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
-      "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+      "observed_at": "2026-10-30T08:25:00Z",
+      "previous_source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
       "changed_migrations": [
-        "migrations/190_google_identity.sql",
-        "migrations/191_member_profile_publications.sql",
-        "migrations/192_member_profile_customization.sql",
-        "migrations/193_member_community_certifications.sql",
-        "migrations/194_social_achievements.sql"
+        "migrations/195_event_helpers.sql",
+        "migrations/196_event_missions.sql"
       ],
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json"
     }
   },
   "topology": {
@@ -9666,12 +9633,65 @@
       "source": "f2c9b2fd14173e8d552771618590fdb2dc915142",
       "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-27.json",
       "scope": "Previous shared Actions release and production cleanup-failure readback; original failures retained."
+    },
+    {
+      "recorded_at": "2026-10-29T10:23:10.876102Z",
+      "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
+      "receipt": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+      "scope": "10/29 staging handoff 失鎖與正式站較早人工對帳的歷史；10/30已由 hosted handoff 結清並部署新版。",
+      "production_cleanup_followup": {
+        "format": "freedom.manual-release-handoff-reconciliation/v1",
+        "startedAt": "2026-10-29T01:26:20.839Z",
+        "failedRun": 40798978135,
+        "target": "next",
+        "actor": "teddashh",
+        "actorId": 233386770,
+        "executionOrigin": "local_release_owner_incident_reconciliation",
+        "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+        "automaticRetry": false,
+        "originalWorkflowFailureRetained": true,
+        "originalGitHubDeploymentFailureRetained": true,
+        "databasePersistentWrites": 0,
+        "providerDeploymentWrites": 0,
+        "journalAppendCount": 1,
+        "status": "deployed_release_handoff_reconciled_original_failure_retained",
+        "failedArtifact": {
+          "id": 12865850257,
+          "digest": "sha256:84028133c55d4ef168c7642685ebcc3f1bb3dacd512330ee185bbfdb31458b4b"
+        },
+        "before": {
+          "generation": 39,
+          "sha256": "1d90e9819cc837209b86c294c6271079d8f69b6c1103d34e06f55ee11e2c38c6",
+          "pendingStage": 3,
+          "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d",
+          "throughSchema": 194,
+          "ledgerRows": 193
+        },
+        "databaseVerified": true,
+        "materialPolicyVerified": true,
+        "gcDisabled": true,
+        "otherMaintenanceSessions": 0,
+        "workerVerified": true,
+        "publicHealth": {
+          "observedAt": "2026-10-29T01:26:40.201Z",
+          "http": 200,
+          "status": "ok",
+          "source": "5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d"
+        },
+        "after": {
+          "generation": 40,
+          "sha256": "fd5ec2076e0586133455f68d5aab8a1d7687c3450b555fdae6fe130e3e8a4370",
+          "pending": null
+        },
+        "leaseReleased": true,
+        "completedAt": "2026-10-29T01:26:55.398Z"
+      }
     }
   ],
   "shared_release_installation": {
-    "observed_at": "2026-10-29T10:19:50.731885Z",
-    "status": "enabled_staging_handoff_reconciliation_required",
-    "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
+    "observed_at": "2026-10-30T08:25:00Z",
+    "status": "enabled_both_environments_five_phases_passed",
+    "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
     "workflow": "https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml",
     "operators": [
       {
@@ -9714,8 +9734,8 @@
         "variables": {
           "RELEASE_ENABLED": "true",
           "BACKUP_ENABLED": "true",
-          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:7094c922275b7ec6490c0982fdb70119d8287d9b957519813233fb3fa809780c",
-          "RELEASE_CONFIG_SHA256": "59496b70106455dc1f593c0c0bef2eeaf24eac616bfe74a1842494d444664727"
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:d075c12427c42d69ae52a5beb232841f8f3529dcce36ba34d2f4088d53bc292c",
+          "RELEASE_CONFIG_SHA256": "1de2e24870366cc259f1950a597ebd9f4b67b3e98f8f494521ce4cc199bdf789"
         }
       },
       {
@@ -9736,8 +9756,8 @@
         "variables": {
           "RELEASE_ENABLED": "true",
           "BACKUP_ENABLED": "true",
-          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:7094c922275b7ec6490c0982fdb70119d8287d9b957519813233fb3fa809780c",
-          "RELEASE_CONFIG_SHA256": "d713fc8aa26f0728169782cc7dc4f51ad8a724ba5e25d10195b4e72b3e3d18bf"
+          "RELEASE_OPERATOR_IMAGE": "ghcr.io/freetwai/freedom-release-operator@sha256:d075c12427c42d69ae52a5beb232841f8f3529dcce36ba34d2f4088d53bc292c",
+          "RELEASE_CONFIG_SHA256": "9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d"
         }
       }
     ],
@@ -9765,12 +9785,11 @@
       "limitation": "GitHub admission only; no operator, provider, database or deployment acceptance."
     },
     "current_release_blocker": {
-      "status": "staging_handoff_lease_lost_reconciliation_required",
-      "run_id": 40853952665,
-      "recovery_pr": 1173,
-      "formal_approval": "pending",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json",
-      "limitation": "Operator receipt reports deploy and health passed, then handoff release_lease_lost. Journal pending and lease cleanup remain unconfirmed; no retry or production rollout was started."
+      "status": "resolved",
+      "failed_run_id": 40853952665,
+      "reconciled_run_id": 41023132536,
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json",
+      "limitation": "原失敗狀態保留；租約根因仍未知，PR #1193 增加診斷。"
     },
     "recovery_followup": {
       "status": "original_backup_pending_reconciled_both_sources_deployed_production_cleanup_failure_readback_confirmed",
@@ -9799,16 +9818,21 @@
       "lease_released": true,
       "execution_origin": "local_release_owner_incident_reconciliation",
       "shared_recovery_entry": "not_implemented",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json"
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-shared-actions-2026-10-29.json",
+      "observation_scope": "historical_2026-10-29_0126_before_hosted_handoff_installation"
     },
     "staging_handoff_followup": {
       "source": "5d662e6e2d1af343a08e6b16ddf66dfd732c2f85",
       "failed_run": 40853952665,
-      "status": "not_reconciled",
-      "pending": "unknown_until_readback",
-      "lease_released": "not_confirmed",
-      "shared_recovery_entry": "PR1173_CI_passed_formal_approval_and_installation_pending",
-      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json"
+      "status": "reconciled",
+      "provider_outcome": "handoff_reconciled",
+      "recovery_attempts": [
+        41022455441,
+        41023132536
+      ],
+      "shared_recovery_entry": "installed_hosted_mode_handoff",
+      "original_failure_retained": true,
+      "evidence": "docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json"
     },
     "access_readback_observed_at": "2026-10-29T10:23:10.876102Z"
   }

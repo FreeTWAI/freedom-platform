@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, requireLegacyPredecessor, githubClient, releaseFailureCode, isReleaseFailureCode } from '../../shared-release/admission.mjs';
-import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, publicControlReadFailure, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive, artifactReader } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
@@ -35,6 +35,8 @@ import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireSchedu
 import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
+import { requireFailedReleaseHandoff } from '../../shared-release/handoff-admission.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff } from '../../shared-release/portable/handoff-recovery.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -2901,6 +2903,7 @@ test('all failed operator phases record fixed codes and public progress filters 
   for (const [error, expected] of [
     [Object.assign(Error('private'), { code: 'release_floor_unsettled' }), 'release_floor_unsettled'],
     [Error('release_floor_unsettled'), 'release_floor_unsettled'],
+    [Object.assign(Error('release_control_read_unavailable'), { controlReadFailure: { operation: 'append_readback', httpStatus: 503, url: 'PRIVATE', transport: 'PRIVATE', cause: 'PRIVATE' } }), 'release_control_read_unavailable'],
     [Object.assign(Error('release_floor_unsettled'), { code: 'INVALID' }), 'release_floor_unsettled'],
     [Object.assign(Error('release_private_token_abc123'), { code: 'P0001' }), 'release_operation_failed'],
     [Object.assign(Error('private'), { code: 'release_private_token_abc123' }), 'release_operation_failed'],
@@ -2911,10 +2914,14 @@ test('all failed operator phases record fixed codes and public progress filters 
     [Object.assign(Error('private'), { code: 'release_bad\nsecret' }), 'release_operation_failed'],
   ]) {
     const value = resultFixture(); value.phases = [];
-    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'return ' + source)(
-      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode);
+    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'publicControlReadFailure', 'return ' + source)(
+      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode, publicControlReadFailure);
     await assert.rejects(phase('preflight', async () => { throw error; }), error);
     assert.equal(value.phases[0].failureCode, expected);
+    if (error.controlReadFailure) {
+      assert.deepEqual(value.phases[0].controlReadFailure, { operation: 'append_readback', httpStatus: 503 });
+      assert(!JSON.stringify(value).includes('PRIVATE'));
+    }
     const progress = operatorProgress(value, request(), installation, 'e'.repeat(64));
     assert.equal(progress[0].failureCode, expected);
     assert(!JSON.stringify(progress).includes('10.1.2.3')); assert(!JSON.stringify(progress).includes('private'));
@@ -3022,6 +3029,77 @@ test('backup diagnostic cause walk is bounded, preserves specific codes and vali
       phaseCode: 'backup_database_sqlstate_23505', cleanupCode: 'backup_network_econnreset' });
 });
 
+test('control read diagnostics preserve bounded locations and HTTP status without changing the three-attempt GET budget', async t => {
+  for (const operation of ['list', 'chain_record', 'authority', 'append_existence', 'append_readback', 'append_list']) {
+    const f = await controlFixture(t); let armed = false, putSeen = false, failures = 0;
+    const store = createControlStore({ ...f.options, fetchImpl: async (url, options) => {
+      const listing = new URL(url).searchParams.has('prefix');
+      const key = decodeURIComponent(new URL(url).pathname.split('/objects/')[1] ?? '');
+      if (options.method === 'PUT') putSeen = true;
+      const hit = armed && options.method === 'GET' && (
+        operation === 'list' && listing || operation === 'chain_record' && key === f.seedKey ||
+        operation === 'authority' && key.includes('/authority/') ||
+        operation === 'append_existence' && !listing && !f.map.has(key) ||
+        operation === 'append_readback' && putSeen && !listing || operation === 'append_list' && putSeen && listing);
+      if (hit) { failures++; return new Response('PRIVATE body', { status: 429, headers: { 'x-private': 'PRIVATE header' } }); }
+      return f.options.fetchImpl(url, options);
+    } });
+    const head = (await store.load()).at(-1); armed = true;
+    const action = operation === 'authority' ? () => store.readAuthority('d'.repeat(64))
+      : ['list', 'chain_record'].includes(operation) ? () => store.load()
+      : () => store.append({ previous: head, data: { state: 'synthetic' }, intentDirectory: f.directory });
+    await assert.rejects(action(), error => {
+      assert.deepEqual(error.controlReadFailure, { operation, httpStatus: 429 });
+      assert(!JSON.stringify(error).includes('PRIVATE')); return true;
+    });
+    assert.equal(failures, 3);
+    assert.equal(f.puts(), ['append_readback', 'append_list'].includes(operation) ? 1 : 0);
+  }
+});
+
+test('control transport failure never fabricates HTTP status or leaks original errors', async t => {
+  const f = await controlFixture(t);
+  const store = createControlStore({ ...f.options, fetchImpl: async () => { throw Object.assign(Error('PRIVATE https://secret.invalid/token'), { status: 429, headers: 'PRIVATE' }); } });
+  await assert.rejects(store.load(), error => {
+    assert.equal(error.message, 'release_control_read_network_failed');
+    assert.deepEqual(error.controlReadFailure, { operation: 'list' });
+    assert(!JSON.stringify(error).includes('PRIVATE')); return true;
+  });
+  assert.equal(f.puts(), 0);
+});
+
+test('public control diagnostics strip private fields and reject malformed values', () => {
+  for (const operation of ['list', 'chain_record', 'authority', 'append_existence', 'append_readback', 'append_list']) {
+    for (const httpStatus of [undefined, 100, 403, 429, 503, 599]) {
+      const value = resultFixture(); value.phases = [{ name: 'preflight', status: 'failed', failureCode: 'release_control_read_failed',
+        controlReadFailure: { operation, httpStatus, url: 'PRIVATE', headers: 'PRIVATE', body: 'PRIVATE', message: 'PRIVATE', token: 'PRIVATE' } }];
+      const expected = { operation, ...(httpStatus === undefined ? {} : { httpStatus }) };
+      assert.deepEqual(operatorProgress(value, request(), installation, 'e'.repeat(64))[0].controlReadFailure, expected);
+      assert(!JSON.stringify(operatorProgress(value, request(), installation, 'e'.repeat(64))).includes('PRIVATE'));
+      value.phases[0].status = 'running';
+      assert.equal(operatorProgress(value, request(), installation, 'e'.repeat(64))[0].controlReadFailure, undefined);
+    }
+  }
+  for (const value of [null, [], 'PRIVATE', { operation: 'https://secret.invalid' }, ...[0, 99, 600, 429.1, '429', NaN, null].map(httpStatus => ({ operation: 'authority', httpStatus }))]) {
+    assert.equal(publicControlReadFailure(value), undefined);
+  }
+});
+
+
+test('terminal GET diagnostics never retain an earlier HTTP status after network failure', async t => {
+  const f = await controlFixture(t); let calls = 0;
+  const store = createControlStore({ ...f.options, fetchImpl: async () => {
+    calls++;
+    if (calls === 1) return new Response('PRIVATE', { status: 429 });
+    throw Object.assign(Error('PRIVATE provider detail'), { status: 503 });
+  } });
+  await assert.rejects(store.load(), error => {
+    assert.equal(error.message, 'release_control_read_network_failed');
+    assert.deepEqual(error.controlReadFailure, { operation: 'list' }); return true;
+  });
+  assert.equal(calls, 3); assert.equal(f.puts(), 0);
+});
+
 test('candidate policy additions permit only new disabled purposes and preserve installed policy rows', () => {
   const disabled = purpose => ({ purpose, mode: 'legacy', policy_lock: 0, policy_revision: null,
     persistence_allowed: false, retained_byte_limit: null });
@@ -3068,4 +3146,308 @@ test('an outdated environment frontier has its own actionable failure before mig
     profile: { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] },
     installationParent: '/unused', beforeLedger: [{ name: '001_initial.sql', sha256: '1'.repeat(64) }] }),
   { code: 'release_migration_frontier_mismatch' });
+});
+
+function failedReleaseHandoffFixture(source = { sourceSha: sha, sourceTree: tree }) {
+  const original = { login: 'teddashh', id: OPERATORS.teddashh }, triggeredBy = { login: 'arumwu', id: OPERATORS.arumwu };
+  const run = { id: 77, run_attempt: 1, workflow_id: 3, path: '.github/workflows/shared-release.yml',
+    event: 'workflow_dispatch', repository: { id: REPOSITORY_ID }, head_repository: { id: REPOSITORY_ID },
+    head_branch: 'main', head_sha: main, status: 'completed', conclusion: 'failure', actor: original,
+    triggering_actor: triggeredBy, run_started_at: '2026-10-25T00:00:00Z', updated_at: '2026-10-25T00:10:00Z' };
+  const jobs = ['admission', 'deploy'].map((name, i) => ({ name, run_id: 77, run_attempt: 1, head_sha: main,
+    status: 'completed', conclusion: i ? 'failure' : 'success', steps: i ? [
+      { name: 'Execute the installed environment operator', status: 'completed', conclusion: 'failure' },
+      { name: 'Save public release receipt', status: 'completed', conclusion: 'success' }] : [] }));
+  const artifact = { id: 78, name: 'release-result-77-1', expired: false, digest: 'sha256:' + '8'.repeat(64),
+    workflow_run: { id: 77, repository_id: REPOSITORY_ID, head_repository_id: REPOSITORY_ID, head_branch: 'main', head_sha: main } };
+  const receipt = { format: 'freedom.shared-release/v1', status: 'failed', mode: 'deploy', releaseKind: 'independent',
+    providerOutcome: 'unknown_until_confirmed', repository: REPOSITORY, repositoryId: REPOSITORY_ID, controllerSha: main,
+    target: 'staging-next', runId: 77, runAttempt: 1, ...source, original, triggeredBy,
+    operatorImage: installation.image, configSha256: installation.configSha256, completedAt: '2026-10-25T00:09:59Z',
+    operatorProgress: ['preflight', 'migration', 'deploy', 'health', 'handoff'].map((name, i) => ({ name,
+      reportedStatus: i === 4 ? 'failed' : 'passed', ...(i === 4 ? { failureCode: 'release_lease_lost' } : {}) })) };
+  const admission = { ...requestFromEnvironment({ ...environment(), RELEASE_MODE: 'handoff', RELEASE_RECOVER_RELEASE_RUN_ID: '77' }),
+    ...source, mainShaObserved: main, admittedAt: new Date(0).toISOString(), original, triggeredBy };
+  const state = { run, jobs, artifact, receipt }, calls = [];
+  const fallback = fixtureApi(path => path.includes('/commits/') ? { sha: source.sourceSha, commit: { tree: { sha: source.sourceTree } } }
+    : /\/actions\/runs\/(11|22)$/.test(path) ? { id: path.endsWith('/11') ? 11 : 22, workflow_id: path.endsWith('/11') ? 1 : 2,
+      path: `.github/workflows/${path.endsWith('/11') ? 'verify' : 'codeql'}.yml`, head_sha: source.sourceSha, head_branch: 'main',
+      event: 'push', repository: { id: REPOSITORY_ID }, head_repository: { id: REPOSITORY_ID }, run_attempt: 2,
+      status: 'completed', conclusion: 'success' } : undefined);
+  const api = async (path, options) => {
+    calls.push({ path, method: options?.method ?? 'GET' }); assert.equal(options?.method ?? 'GET', 'GET');
+    if (path.endsWith('/workflows/shared-release.yml')) return { id: 3, path: run.path, state: 'active' };
+    if (path.endsWith('/runs/77')) return structuredClone(state.run);
+    if (path.includes('/runs/77/attempts/')) return { total_count: state.jobs.length, jobs: structuredClone(state.jobs) };
+    if (path.includes('/runs/77/artifacts?')) return { total_count: 1, artifacts: [structuredClone(state.artifact)] };
+    return fallback(path);
+  };
+  api.readArtifact = async () => structuredClone(state.receipt);
+  return { admission, state, api, calls };
+}
+
+test('handoff input is explicit, four-operator admitted and separate from deploy/backup recovery', async () => {
+  for (const [login, id] of Object.entries(OPERATORS)) {
+    const input = requestFromEnvironment({ ...environment(), RELEASE_MODE: 'handoff', RELEASE_RECOVER_RELEASE_RUN_ID: '77',
+      GITHUB_ACTOR: login, GITHUB_ACTOR_ID: String(id) });
+    assert.equal((await admitRelease(input, fixtureApi())).original.login, login);
+    assert.equal(input.recoverReleaseRunId, 77);
+  }
+  for (const id of ['', '100', '0', '-1', '77\n', '1e2']) assert.throws(() => requestFromEnvironment({ ...environment(),
+    RELEASE_MODE: 'handoff', RELEASE_RECOVER_RELEASE_RUN_ID: id }));
+  for (const mode of ['plan', 'check', 'deploy']) assert.throws(() => requestFromEnvironment({ ...environment(),
+    RELEASE_MODE: mode, RELEASE_RECOVER_RELEASE_RUN_ID: '77' }));
+  assert.throws(() => requestFromEnvironment({ ...environment(), RELEASE_MODE: 'handoff',
+    RELEASE_RECOVER_RELEASE_RUN_ID: '77', RELEASE_RECOVER_BACKUP_RUN_ID: '76' }));
+});
+
+test('handoff authenticates terminal failed release and exact artifact while allowing a repaired operator image', async () => {
+  const f = failedReleaseHandoffFixture();
+  const proof = await requireFailedReleaseHandoff(f.api, f.admission, { ...installation,
+    image: `ghcr.io/freetwai/freedom-release-operator@sha256:${'9'.repeat(64)}` });
+  assert.equal(proof.operatorImage, installation.image); assert.equal(proof.runId, 77);
+  assert.equal(proof.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+  assert.equal(proof.cleanupVerified, undefined);
+  for (const mutate of [s => { s.run.status = 'in_progress'; }, s => { s.run.conclusion = 'success'; },
+    s => { s.run.head_repository.id = 2; }, s => { s.run.actor.id++; }, s => { s.run.triggering_actor.id++; },
+    s => { s.run.run_attempt++; }, s => { s.jobs[0].run_attempt++; }, s => { s.jobs[1].steps[0].conclusion = 'success'; },
+    s => { s.jobs[1].steps[1].conclusion = 'failure'; }, s => { s.artifact.workflow_run.id++; },
+    s => { s.artifact.expired = true; }, s => { s.artifact.digest = 'invalid'; }, s => { s.receipt.original.id++; },
+    s => { s.receipt.target = 'next'; }, s => { s.receipt.sourceSha = main; }, s => { s.receipt.sourceTree = main; },
+    s => { s.receipt.configSha256 = '9'.repeat(64); }, s => { s.receipt.completedAt = '2026-10-26T00:00:00Z'; },
+    s => { s.receipt.mode = 'handoff'; }, s => { s.receipt.operatorProgress[3].reportedStatus = 'failed'; },
+    s => { s.receipt.operatorProgress.pop(); }, s => { s.receipt.operatorProgress[4].failureCode = 'release_private_detail'; }]) {
+    const bad = failedReleaseHandoffFixture(); mutate(bad.state);
+    await assert.rejects(requireFailedReleaseHandoff(bad.api, bad.admission, installation));
+  }
+  const changed = failedReleaseHandoffFixture(); changed.api.readArtifact = async () => {
+    changed.state.run.run_attempt++; return structuredClone(changed.state.receipt);
+  };
+  await assert.rejects(requireFailedReleaseHandoff(changed.api, changed.admission, installation));
+});
+
+async function pendingHandoffFixture(t, stop = 'health', descendant = false) {
+  const f = await adoptionFixture(t);
+  if (descendant) await writeFile(join(f.sourceRoot, 'app.txt'), 'next application, unchanged migrations');
+  const candidate = descendant ? f.commit() : f.current, hosted = failedReleaseHandoffFixture(candidate);
+  const evidence = await requireFailedReleaseHandoff(hosted.api, hosted.admission, installation);
+  const chain = [{ sha256: hash(JSON.stringify(f.seed)), record: { data: structuredClone(f.seed) } }];
+  let appends = 0;
+  const reopenFloor = () => openReleaseFloor({ sourceRoot: f.sourceRoot, intentDirectory: f.sourceRoot, store: {
+    target: 'staging-next', load: async () => structuredClone(chain), readAuthority: async () => structuredClone(f.legacy),
+    append: async ({ data }) => { appends++; const row = { sha256: hash(JSON.stringify(data)), record: { data } }; chain.push(row); return row; },
+  } });
+  const floor = await reopenFloor();
+  const originalRequest = { ...hosted.admission, mode: 'deploy', runId: 77, runAttempt: 1,
+    operatorImage: installation.image, configSha256: installation.configSha256 };
+  await floor.beginIndependent(originalRequest, { ...candidate, schemaLedger: f.seed.state.schemaLedger });
+  if (stop !== 'begin') {
+    await floor.passed('migration', { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+      ledgerSha256: migrationLedgerDigest(f.seed.state.schemaLedger) });
+    await floor.intent('deploy', 'publish', { sourceSha: candidate.sourceSha, previousSourceSha: f.current.sourceSha,
+      previousVersion: '11111111-1111-4111-8111-111111111111', configSha256: '8'.repeat(64), automaticRetry: false });
+    await floor.passed('deploy', { sourceSha: candidate.sourceSha, providerConfirmed: true, versionId: '11111111-1111-4111-8111-111111111111' });
+    if (stop === 'health') await floor.passed('health', { sourceSha: candidate.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true });
+  }
+  appends = 0;
+  const rows = { identity: [{ database: 'fixture', role: 'fixture_migrator', session_role: 'fixture_migrator' }],
+    policies: structuredClone(f.legacy.retained172.materialPolicy.policies), gc: [{ policies: 1, enabled: false, domain_enabled: false, fences: 0 }],
+    sessions: [{ remaining: 0 }], ledger: structuredClone(f.seed.state.schemaLedger) }, queries = [];
+  let released = 0, leaseLost = false;
+  const q = { async query(sql) {
+    queries.push(sql); assert(/^(BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY|SELECT|ROLLBACK)/.test(sql));
+    if (sql.includes('current_database() database')) return { rows: rows.identity };
+    if (sql.includes('domain_media_storage_policy')) return { rows: rows.policies };
+    if (sql.includes('asset_maintenance_policy')) return { rows: rows.gc };
+    if (sql.includes('pg_stat_activity')) return { rows: rows.sessions };
+    if (sql.includes('schema_migrations')) return { rows: rows.ledger };
+    if (sql.includes("current_setting('server_version_num')")) return { rows: [{ major: 18 }] };
+    return { rows: [] };
+  }, release() { released++; } };
+  const worker = { sourceSha: candidate.sourceSha, bindingsSha256: f.seed.state.bindingsSha256 };
+  const args = { floor, pool: { connect: async () => q }, deployer: { inspect: async () => worker },
+    lease: { pid: 999, assertHeld() { if (leaseLost) throw Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' }); } },
+    request: { ...hosted.admission, operatorImage: installation.image, configSha256: installation.configSha256, handoffRecoveryEvidence: evidence },
+    database: 'fixture', role: 'fixture_migrator' };
+  return { ...f, candidate, floor, reopenFloor, args, evidence, chain, rows, queries, worker, appends: () => appends, released: () => released,
+    loseLease: () => { leaseLost = true; } };
+}
+
+test('handoff reads retained ledger/policy/Worker and appends exactly once; replay is read-only after settlement', async t => {
+  const f = await pendingHandoffFixture(t), before = f.floor.state();
+  const observed = await inspectReleaseHandoff(f.args); assert.equal(observed.alreadySettled, false); assert.equal(f.appends(), 0);
+  assert.equal(f.released(), 1); assert(f.queries.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
+  await assert.rejects(completeReleaseHandoff({ ...f.args, observed }), /release_handoff_recovery_binding_invalid/);
+  const result = await completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true } });
+  assert.equal(result.pendingCleared, true); assert.equal(f.appends(), 1);
+  assert.deepEqual(f.floor.state(), { ...before, pending: null });
+  const record = f.chain.at(-1).record.data;
+  assert.equal(record.runId, 77); assert.equal(record.proof.reconciliation.settledBy.runId, f.args.request.runId);
+  assert.equal(record.proof.reconciliation.originalWorkflowFailureRetained, true);
+  const repeated = await inspectReleaseHandoff(f.args);
+  assert.equal(repeated.alreadySettled, true);
+  assert.equal((await completeReleaseHandoff({ ...f.args, observed: { ...repeated, healthVerified: true } })).alreadySettled, true);
+  assert.equal(f.appends(), 1);
+});
+
+test('handoff settles a deployed Git descendant with unchanged ledger and replays without another append', async t => {
+  const f = await pendingHandoffFixture(t, 'health', true);
+  assert.notEqual(f.candidate.sourceSha, f.current.sourceSha);
+  assert.notEqual(f.candidate.sourceTree, f.current.sourceTree);
+  assert.equal(fixtureGit(f.sourceRoot, ['rev-parse', f.candidate.sourceSha + '^']), f.current.sourceSha);
+  assert.equal(fixtureGit(f.sourceRoot, ['rev-parse', f.candidate.sourceSha + ':migrations']),
+    fixtureGit(f.sourceRoot, ['rev-parse', f.current.sourceSha + ':migrations']));
+  f.args.floor = await f.reopenFloor();
+  const before = f.args.floor.state();
+  assert.equal(before.sourceSha, f.current.sourceSha); assert.equal(before.sourceTree, f.current.sourceTree);
+  assert.equal(before.deployedSourceSha, f.candidate.sourceSha); assert.equal(before.pending.stage, 3);
+  assert.deepEqual(before.schemaLedger, before.pending.candidate.schemaLedger);
+  assert.equal(before.pending.committed, undefined);
+  const observed = await inspectReleaseHandoff(f.args);
+  assert.equal(observed.alreadySettled, false); assert.equal(f.appends(), 0);
+  await completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true } });
+  assert.equal(f.appends(), 1);
+  assert.deepEqual(f.args.floor.state(), { ...before, ...f.candidate, pending: null });
+  f.args.floor = await f.reopenFloor();
+  const repeated = await inspectReleaseHandoff(f.args);
+  assert.equal(repeated.alreadySettled, true);
+  await completeReleaseHandoff({ ...f.args, observed: { ...repeated, healthVerified: true } });
+  assert.equal(f.appends(), 1);
+});
+
+test('descendant handoff rejects predecessor Worker and mismatched original identities before and after replay', async t => {
+  const f = await pendingHandoffFixture(t, 'health', true);
+  f.worker.sourceSha = f.current.sourceSha;
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_handoff_recovery_state_changed/);
+  assert.equal(f.appends(), 0); f.worker.sourceSha = f.candidate.sourceSha;
+  for (const settled of [false, true]) {
+    f.args.floor = await f.reopenFloor();
+    for (const patch of [{ runId: 78 }, { runAttempt: 2 }, { sourceSha: f.current.sourceSha },
+      { sourceTree: f.current.sourceTree }, { target: 'next' }, { controllerSha: sha },
+      { operatorImage: `ghcr.io/freetwai/freedom-release-operator@sha256:${'9'.repeat(64)}` },
+      { configSha256: '9'.repeat(64) }]) {
+      assert.throws(() => f.args.floor.handoffRecoveryState({ ...f.evidence, ...patch }),
+        /release_floor_(request_invalid|stage_mismatch)/);
+      assert.equal(f.appends(), settled ? 1 : 0);
+    }
+    // Even matching caller/evidence identities cannot authorize the predecessor.
+    const stale = { ...f.args.request, ...f.current, handoffRecoveryEvidence: { ...f.evidence, ...f.current } };
+    await assert.rejects(inspectReleaseHandoff({ ...f.args, request: stale }), /release_floor_request_invalid/);
+    if (!settled) {
+      const observed = await inspectReleaseHandoff(f.args);
+      await completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true } });
+    }
+  }
+  assert.equal(f.appends(), 1);
+});
+
+test('descendant handoff replay rejects altered candidate identity and an original receipt after newer release work', async t => {
+  for (const key of ['sourceSha', 'sourceTree']) {
+    const f = await pendingHandoffFixture(t, 'health', true);
+    f.chain.find(row => row.record.data.kind === 'release-begin-v2').record.data.candidate[key] = f.current[key];
+    await assert.rejects(f.reopenFloor(), /release_floor_candidate_invalid/); assert.equal(f.appends(), 0);
+  }
+  const f = await pendingHandoffFixture(t, 'health', true), pending = f.floor.state().pending;
+  await f.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  await f.floor.beginIndependent({ ...pending.request, runId: 78 }, pending.candidate);
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_floor_stage_mismatch/);
+  await f.floor.passed('migration', { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: migrationLedgerDigest(f.seed.state.schemaLedger) });
+  await f.floor.intent('deploy', 'publish', { sourceSha: f.candidate.sourceSha, previousSourceSha: f.candidate.sourceSha,
+    previousVersion: '11111111-1111-4111-8111-111111111111', configSha256: '8'.repeat(64), automaticRetry: false });
+  await f.floor.passed('deploy', { sourceSha: f.candidate.sourceSha, providerConfirmed: true,
+    versionId: '11111111-1111-4111-8111-111111111111' });
+  await f.floor.passed('health', { sourceSha: f.candidate.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true });
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_floor_request_invalid/);
+  await f.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  f.args.floor = await f.reopenFloor();
+  const appends = f.appends();
+  await assert.rejects(inspectReleaseHandoff(f.args), /release_floor_stage_mismatch/);
+  assert.equal(f.appends(), appends);
+});
+
+test('handoff rejects earlier phases, changed original bindings, newer work, DB/Worker drift and lost lease before append', async t => {
+  for (const stop of ['begin', 'deploy']) {
+    const f = await pendingHandoffFixture(t, stop);
+    await assert.rejects(inspectReleaseHandoff(f.args), /release_floor_stage_mismatch/); assert.equal(f.appends(), 0);
+  }
+  for (const mutate of [f => { f.rows.identity[0].role = 'wrong'; }, f => { f.rows.ledger[0].sha256 = '8'.repeat(64); },
+    f => { f.rows.policies[0].revision = 'changed'; }, f => { f.rows.gc[0].enabled = true; },
+    f => { f.rows.gc[0].fences = 1; }, f => { f.rows.sessions[0].remaining = 1; },
+    f => { f.worker.sourceSha = main; }, f => { f.worker.bindingsSha256 = '9'.repeat(64); }, f => f.loseLease(),
+    f => { f.args.request.handoffRecoveryEvidence.operatorImage = `ghcr.io/freetwai/freedom-release-operator@sha256:${'9'.repeat(64)}`; }]) {
+    const f = await pendingHandoffFixture(t);
+    f.args.request.handoffRecoveryEvidence = { ...f.evidence }; mutate(f);
+    await assert.rejects(inspectReleaseHandoff(f.args)); assert.equal(f.appends(), 0);
+  }
+  const changed = await pendingHandoffFixture(t), observed = await inspectReleaseHandoff(changed.args);
+  changed.loseLease(); await assert.rejects(completeReleaseHandoff({ ...changed.args, observed: { ...observed, healthVerified: true } }));
+  assert.equal(changed.appends(), 0);
+  const newer = await pendingHandoffFixture(t);
+  await newer.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  await newer.floor.beginBackup({ ...newer.args.request, mode: 'backup', runId: 101 });
+  await assert.rejects(inspectReleaseHandoff(newer.args), /release_floor_stage_mismatch/);
+  const drift = await pendingHandoffFixture(t), checked = await inspectReleaseHandoff(drift.args);
+  drift.chain.push({ sha256: '9'.repeat(64), record: {} });
+  await assert.rejects(completeReleaseHandoff({ ...drift.args, observed: { ...checked, healthVerified: true } }), /release_floor_external_state_changed/);
+  assert.equal(drift.appends(), 0);
+});
+
+function handoffResult() {
+  const f = failedReleaseHandoffFixture(), value = resultFixture(f.admission);
+  value.phases = [value.phases[0], { ...value.phases[6], name: 'handoff', reconciledRunId: 77,
+    reconciledRunAttempt: 1, alreadySettled: false, pendingCleared: true, originalFailureRetained: true }];
+  Object.assign(value.phases[0], { ledgerVerified: true, policyVerified: true, workerVerified: true,
+    healthVerified: true, cleanupVerified: true });
+  return { ...f, value };
+}
+
+test('handoff operator receipt needs all readback, cleanup and original-failure proofs and exposes no private details', () => {
+  const f = handoffResult(); f.value.phases[0].private = 'never publish';
+  const result = validateOperatorResult(f.value, f.admission, installation, 'e'.repeat(64));
+  assert.deepEqual(result.map(p => p.name), ['preflight', 'handoff']);
+  assert.equal(result[1].reconciledRunId, 77); assert(!JSON.stringify(result).includes('never publish'));
+  for (const [i, patch] of [[0, { ledgerVerified: false }], [0, { policyVerified: false }], [0, { workerVerified: false }],
+    [0, { healthVerified: false }], [1, { reconciledRunId: 78 }], [1, { alreadySettled: undefined }],
+    [1, { pendingCleared: false }], [1, { leaseReleased: false }], [1, { originalFailureRetained: false }]]) {
+    const bad = structuredClone(f.value); Object.assign(bad.phases[i], patch);
+    assert.throws(() => validateOperatorResult(bad, f.admission, installation, 'e'.repeat(64)));
+  }
+});
+
+test('hosted handoff binds original evidence without backup credentials and controller makes no Deployment writes', async t => {
+  const previousExitCode = process.exitCode;
+  try {
+    const source = await adoptionFixture(t), f = failedReleaseHandoffFixture(source.current);
+    const root = await diskFixture(t, 'fp-handoff-controller-'), runner = join(root, 'runner'); await mkdir(runner);
+    let executed = 0;
+    await releaseMain({ ...environment(), RELEASE_MODE: 'handoff', RELEASE_RECOVER_RELEASE_RUN_ID: '77',
+      RELEASE_COMMAND: 'execute', RELEASE_SHA: source.current.sourceSha, RELEASE_ENABLED: 'true',
+      RELEASE_CONFIG_JSON: config, RELEASE_CONFIG_SHA256: installation.configSha256, RELEASE_OPERATOR_IMAGE: installation.image,
+      RELEASE_SOURCE_DIRECTORY: source.sourceRoot, RUNNER_TEMP: runner, PUBLIC_RECEIPT_DIRECTORY: join(root, 'public'),
+      PATH: process.env.PATH }, { api: f.api, async executeOperator({ admission, handoffRecoveryEvidence, credentials, onProgress }) {
+      executed++; assert.equal(admission.legacyPredecessor, undefined); assert.equal(handoffRecoveryEvidence.runId, 77);
+      assert.equal(credentials.backupDatabaseUrl, undefined);
+      await onProgress([{ name: 'preflight', reportedStatus: 'passed' }]);
+      return validateOperatorResult(handoffResult().value, handoffResult().admission, installation, 'e'.repeat(64));
+    } });
+    assert.equal(process.exitCode, previousExitCode); assert.equal(executed, 1);
+    const receipt = JSON.parse(await readFile(join(root, 'public/receipt.json')));
+    assert.equal(receipt.status, 'reconciled'); assert.equal(receipt.providerOutcome, 'handoff_reconciled');
+    assert.equal(receipt.deploymentId, undefined); assert.equal(receipt.handoffReconciliation.runId, 77);
+    assert(f.calls.every(call => call.method === 'GET'));
+    assert(!f.calls.some(call => /deployments|shared-backup/.test(call.path)));
+    const image = await operatorFixture(t), result = handoffResult();
+    image.options.admission = result.admission; image.options.handoffRecoveryEvidence = await requireFailedReleaseHandoff(result.api, result.admission, installation);
+    delete image.options.credentials.backupDatabaseUrl;
+    const oldRun = image.options.run;
+    image.options.run = async (cmd, args, ...rest) => {
+      if (args[0] !== 'run') return oldRun(cmd, args, ...rest);
+      const input = await readFile(join(image.temporaryRoot, 'input/request.json'), 'utf8'), request = JSON.parse(input);
+      assert.deepEqual(request.requiredPhases, ['preflight', 'handoff']);
+      assert.equal(request.handoffRecoveryEvidence.runId, 77);
+      await writeFile(join(image.temporaryRoot, 'output/result.json'), JSON.stringify({ ...result.value, requestSha256: hash(input) }));
+    };
+    assert.equal((await runOperator(image.options)).length, 2);
+  } finally { process.exitCode = previousExitCode; }
 });

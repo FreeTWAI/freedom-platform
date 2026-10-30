@@ -574,3 +574,52 @@ for(const width of [1280,390])test(`both shelves combine content uses, business 
   // An unmapped catalog book remains readable in All.
   await expect(community.locator('article[data-book-id="hrflow"]')).toBeVisible();
 });
+
+for(const width of [1280,390])test(`skill introductions defer unvisited content and retain visited dialogs at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:844});
+  let reads=0,releaseFirst!:()=>void;
+  const firstRead=new Promise<void>(resolve=>{releaseFirst=resolve;});
+  await page.route('**/api/v1/skills/supplier-client/collaboration',async route=>{
+    const attempt=++reads;
+    if(attempt===1)await firstRead;
+    await route.fulfill({json:{purpose:attempt===1?'Late closed introduction':'Fresh reopened introduction',intent:{summary:'Synthetic cooperation guidance'}}}).catch(()=>{});
+  });
+  await page.route('**/api/v1/skills/supplier-client/share-content',route=>route.fulfill({json:{introductions:['Synthetic share introduction'],illustration_url:'',illustration_alt:''}}));
+  await page.route('**/api/v1/promotion/links',route=>route.fulfill({json:{path:'/share/synthetic-skill-link',points:{week:0,all:0}}}));
+  try {
+  const library=await openLibrary(page),card=library.locator('article[data-book-id="supplier-client"]');
+  const allShells=page.locator('.community-library .skill-intro-dialog, .community-skill-library .skill-intro-dialog');
+  await expect(allShells).toHaveCount(53);
+  await expect(allShells.locator(':scope > *')).toHaveCount(0);
+  expect(reads).toBe(0);
+  const trigger=card.getByRole('button',{name:'預覽技能書',exact:true});
+  await trigger.focus();await page.keyboard.press('Enter');
+  const modal=card.locator('.skill-intro-dialog');
+  await expect(modal).toBeVisible();await expect(modal).toHaveAccessibleName('供應端工作台');
+  await expect(modal.getByRole('button',{name:'關閉技能書介紹',exact:true})).toBeFocused();
+  await expect(modal.getByRole('link',{name:'完整指南 ↗',exact:true})).toHaveAttribute('href','/development/skills/supplier-client');
+  const practice=modal.locator('.skill-intro-start');
+  await expect(practice).toHaveAttribute('open','');
+  await practice.locator('summary').click();await expect(practice).not.toHaveAttribute('open','');
+  const content=await modal.locator(':scope > .stack').elementHandle();
+  const shareShell=await modal.locator('.skill-share-dialog').elementHandle();
+  await expect.poll(()=>reads).toBe(1);
+  await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();await expect(trigger).toBeFocused();
+  releaseFirst();
+  await expect.poll(()=>content!.evaluate(element=>element.isConnected)).toBe(true);
+  await expect.poll(()=>shareShell!.evaluate(element=>element.isConnected)).toBe(true);
+  await trigger.press('Enter');await expect(modal).toBeVisible();
+  await expect(modal.locator('.skill-intro-purpose')).toHaveText('Fresh reopened introduction');
+  await expect(modal).not.toContainText('Late closed introduction');
+  await expect(practice).not.toHaveAttribute('open','');
+  expect(await content!.evaluate(element=>element===element.closest('dialog')?.querySelector(':scope > .stack'))).toBe(true);
+  const shareTrigger=modal.getByRole('button',{name:'分享技能',exact:true});
+  await shareTrigger.click();
+  const nested=modal.locator('.skill-share-dialog');await expect(nested).toBeVisible();
+  await expect(nested).toContainText('Synthetic share introduction');
+  await page.keyboard.press('Escape');await expect(nested).not.toBeVisible();await expect(modal).toBeVisible();await expect(shareTrigger).toBeFocused();
+  await modal.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();await expect(trigger).toBeFocused();
+  await expect(allShells.locator(':scope > .stack')).toHaveCount(1);
+  await content!.dispose();await shareShell!.dispose();
+  } finally { releaseFirst(); }
+});

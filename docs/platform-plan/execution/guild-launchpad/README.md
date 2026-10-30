@@ -6,13 +6,17 @@
 
 ## 目前狀態
 
-2026-10-29：兩環境已套用 migration190–194；`repo_max_migration` 是來源上限，`applied_migration` 是具日期的實際套用觀察。資料表發布不代表啟用 Google 登入或其他新功能。
+<!-- glp-status: as_of=2026-10-12 release.production=d026ba76a4fb2c289cfb456dea68676f03f7bd30 release.staging=d026ba76a4fb2c289cfb456dea68676f03f7bd30 flag.production=true flag.staging=true repo_max_migration=196 applied_migration.production=196 applied_migration.staging=196 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+
+2026-10-30 08:25 UTC：兩環境已部署 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196，staging 41023423825 與正式站 41025042462 五階段、workflow／Deployment 均成功；08:24 UTC 正式站公開 health 為 `ok`、同 SHA。舊 staging 40853952665 的 handoff 已由 hosted 41023132536 結清為 `reconciled`／`handoff_reconciled`；首試41022455441在 R2 `chain_record` 讀取、任何寫入前失鎖，原 workflow／Deployment failure 保留。195／196 資料表已套用，未啟用新功能或旗標，M1／完整驗收與原政策列觀察不變；`as_of=2026-10-12` 仍是原功能觀察日期。本次無備份或備份前置，租約根因仍待 #1193 診斷。詳見[本次發布與復原收據](../unified-foundation/rollout-main-d026ba76-2026-10-30.json)。
+
+2026-10-30 發布前的來源觀察：main 已含活動幫手候選 migration195 與私人自記小任務候選 migration196，當時僅確認 repository 來源上限，尚未套用。此觀察已由10/30兩環境成功發布取代；195／196 已套用為資料表，不表示啟用幫手功能或其他新旗標。
+
+2026-10-29 10:23 UTC 歷史紀錄（已於10/30結清）：staging 的 `5d662e6e`／schema194 發布回報 preflight、migration、deploy、health 通過，最後 handoff 因 `release_lease_lost` 失敗；journal pending 與 lease 釋放尚未持鎖讀回確認。正式站仍是 `5c4bf56d`，公開 health 回報正常。沒有重送部署或啟動新版正式站；旗標、M1／完整驗收及原政策列觀察不變。詳見[本次失敗收據與待辦](../unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
+
+2026-10-29 歷史：兩環境當時已套用 migration190–194；`repo_max_migration` 是來源上限，`applied_migration` 是具日期的實際套用觀察。資料表發布不代表啟用 Google 登入或其他新功能。
 
 歷史發布已套用共創誌 migration186與聯絡資料保留 migration187；資料表／程式發布不代表指派編輯者、發行金鑰或真人投稿驗收。
-
-<!-- glp-status: as_of=2026-10-12 release.production=5c4bf56df197fa16f3ba303bcbb1c15cfbc5574d release.staging=5d662e6e2d1af343a08e6b16ddf66dfd732c2f85 flag.production=true flag.staging=true repo_max_migration=194 applied_migration.production=194 applied_migration.staging=194 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
-
-2026-10-29 10:23 UTC 紀錄：staging 的 `5d662e6e`／schema194 發布回報 preflight、migration、deploy、health 通過，最後 handoff 因 `release_lease_lost` 失敗；journal pending 與 lease 釋放尚未持鎖讀回確認。正式站仍是 `5c4bf56d`，公開 health 回報正常。沒有重送部署或啟動新版正式站；旗標、M1／完整驗收及原政策列觀察不變。詳見[本次失敗收據與待辦](../unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
 
 2026-10-29 01:26 UTC 歷史紀錄：兩環境當時已部署 `5c4bf56d`／schema194。Staging 五階段成功；正式站原 workflow 在 handoff 失去 lease，失敗保留。Release owner 重新持有同一 lease，核對 DB／政策／Worker／health，只追加缺少的 handoff，pending=null 後正常釋放；沒有重做 migration、部署或備份。這是人工事件對帳，不是完整 hosted 自動成功；共用 handoff-only 復原入口仍待補。旗標、M1／完整驗收及原政策列觀察不因本次發布改為通過。詳見[發布與對帳收據](../unified-foundation/rollout-shared-actions-2026-10-29.json)。
 

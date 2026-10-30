@@ -46,7 +46,8 @@
     "command-core",
     "resource-scopes",
     "scoped-commands",
-    "work"
+    "work",
+    "tenant-workspaces"
   ],
   "contract_families": [],
   "client_profiles": [
