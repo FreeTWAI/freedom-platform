@@ -72,9 +72,10 @@ test('layout editor labels identify only their controls, hint is a description a
   for(const match of matches){const id=match[1];ids.push(id);assert(html.includes(`<${tag} id="${id}"`),label);}
  }
  assert.equal(new Set(ids).size,6);
- assert.equal([...html.matchAll(/role="group" aria-label="主題"/g)].length,2);
- assert.equal([...html.matchAll(/aria-pressed="true"/g)].length,2);
- assert.equal([...html.matchAll(/aria-pressed="false"/g)].length,6);
+ assert.equal([...html.matchAll(/role="radiogroup" aria-label="主題"/g)].length,2);
+ const radios=[...html.matchAll(/<input[^>]*type="radio"[^>]*>/g)].map(match=>match[0]);
+ assert.equal(radios.length,8);assert.equal(radios.filter(input=>input.includes('checked=""')).length,2);
+ assert.equal(new Set(radios.map(input=>input.match(/name="([^"]+)"/)![1])).size,2);
  for(const match of html.matchAll(/<textarea id="([^"]+)" aria-describedby="([^"]+)"/g)){
   assert(html.includes(`<span id="${match[2]}" class="hint">可以換行，最多 1600 字；不支援網頁程式碼。</span>`));
  }
@@ -87,10 +88,11 @@ for(const theme of ['paper','night','sage','rose'] as const)for(const disabled o
  const value={...layout(),theme,about:'existing biography',featured:[{title:'retained work',description:'unchanged',url:'https://example.test/work'}]};
  const before=JSON.stringify(value);let writes=0;
  const html=renderToStaticMarkup(createElement(ProfileLayoutEditor,{value,disabled,onChange:()=>{writes++;}}));
- assert.equal((html.match(/aria-pressed="true"/g)||[]).length,1);
- assert.equal((html.match(/aria-pressed="false"/g)||[]).length,3);
- assert.match(html,new RegExp(`aria-pressed="true"[^>]*><span[^>]*data-profile-theme="${theme}"`));
- assert.equal((html.match(/type="button" class="btn btn-secondary profile-theme-choice"/g)||[]).length,4);
+ const radios=[...html.matchAll(/<input[^>]*type="radio"[^>]*>/g)].map(match=>match[0]);
+ assert.equal(radios.length,4);const checked=radios.filter(input=>input.includes('checked=""'));assert.equal(checked.length,1);assert(checked[0].includes(`value="${theme}"`));
+ assert.equal(new Set(radios.map(input=>input.match(/name="([^"]+)"/)![1])).size,1);
+ assert.equal((html.match(/class="btn btn-secondary profile-theme-choice"/g)||[]).length,4);
+ assert.match(html,/<span aria-hidden="true">✓ <\/span>/);
  for(const label of ['明亮紙頁','深夜星空','森林手帳','暖粉相簿'])assert(html.includes(label));
  assert.doesNotMatch(html,/<details open/);
  assert.match(html,/existing biography/);assert.match(html,/retained work/);

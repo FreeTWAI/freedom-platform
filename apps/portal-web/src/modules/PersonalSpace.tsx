@@ -55,7 +55,7 @@ export function PersonalSpace({client,session,contentEnabled,recognitionEnabled=
           {current.hero.positioning_title&&<p>{current.hero.positioning_title}</p>}
         </div>
       </> : <div className="personal-space-identity"><h2>{t('nav.profile')}</h2><p role="status">{current?.profileError?t('space.profileError'):t('space.profileLoading')}</p></div>}
-      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a><a className="btn btn-secondary btn-small" href="#profile?view=settings">編輯個人頁與主題</a>{recognitionEnabled&&<a className="btn btn-secondary btn-small" href="#account?view=recognition">我的稱號與認證</a>}</div>
+      <div className="personal-space-hero-actions"><a className="btn btn-secondary btn-small" href="#account">{t('space.edit')}</a><a className="btn btn-secondary btn-small" href="#profile?view=settings">佈置主頁</a>{recognitionEnabled&&<a className="btn btn-secondary btn-small" href="#account?view=recognition">我的稱號與認證</a>}</div>
       {!!current?.hero?.guilds.length&&<details className="personal-space-memberships">
         <summary>{t('space.guilds')} <span>({current.hero.guilds.length})</span></summary>
         <ul className="personal-space-guilds" aria-label={t('space.guilds')}>{current.hero.guilds.map(guild=><li key={guild.guild_key}>{guild.name}</li>)}</ul>
