@@ -17,8 +17,18 @@ import {GUILD_TOPIC_LABELS,type GuildTopic} from '../../../../packages/shared/gu
 
 function failure(error:unknown){return error instanceof Error?error.message:'暫時無法取得資料，請重試。';}
 
-export function PositioningPanel({client,session,onNavigate}:ModulePanelProps) {
+export function PositioningPanel({client,session,onNavigate,registerPendingLeave}:ModulePanelProps&{registerPendingLeave?:(guard:(()=>boolean)|null)=>void}) {
   const [summary,setSummary]=useState<{assessment:OnboardingView;member:MemberCardData;labels:Record<string,string>}|null>(null),[retaking,setRetaking]=useState(false);
+  const [assessmentDraft,setAssessmentDraft]=useState<OnboardingView|null>(null),[leaveNotice,setLeaveNotice]=useState('');
+  const risks=useRef({assessment:{dirty:false,locked:false},questions:{dirty:false,locked:false}});
+  const assessmentRisk=useCallback((dirty:boolean,locked:boolean)=>{risks.current.assessment={dirty,locked};},[]);
+  const questionRisk=useCallback((dirty:boolean,locked:boolean)=>{risks.current.questions={dirty,locked};},[]);
+  const retakeButton=useRef<HTMLButtonElement>(null);
+  function returnToResult(){setRetaking(false);requestAnimationFrame(()=>retakeButton.current?.focus());}
+  useEffect(()=>{registerPendingLeave?.(()=>{
+    if(Object.values(risks.current).some(r=>r.locked)){setLeaveNotice('操作結果尚未確認，請先回到原表單重試，再離開。');return false;}
+    return !Object.values(risks.current).some(r=>r.dirty)||window.confirm('定位或小問答有尚未儲存的輸入。要捨棄並離開嗎？');
+  });return()=>registerPendingLeave?.(null);},[registerPendingLeave]);
   const [summaryLoading,setSummaryLoading]=useState(true),[summaryError,setSummaryError]=useState<string|null>(null),summaryGeneration=useRef(0);
   const loadSummary=useCallback(async()=>{
     const generation=++summaryGeneration.current;
@@ -35,8 +45,12 @@ export function PositioningPanel({client,session,onNavigate}:ModulePanelProps) {
   const equipmentLabels=member?[...member.equipment.map(id=>summary?.labels[id]??id),...(member.custom_equipment??[])]:[];
   const featuredLabels=member?(member.featured_capabilities??member.capabilities.slice(0,3)).slice(0,3).map(id=>id.startsWith('custom:')?id.slice(7):summary?.labels[id]??id):[];
   const firstBook=assessment?.skill_books.find(book=>member?.primary_guild&&book.guild_keys.includes(member.primary_guild.guild_key))??assessment?.skill_books[0];
-  if(retaking&&assessment)return <Onboarding client={client} initial={assessment} optional onCompleted={()=>{setRetaking(false);window.dispatchEvent(new Event('freedom-profile-updated'));}}/>;
+
   return <section className="module-panel positioning-panel" aria-label="定位結果">
+    {leaveNotice&&<p role="alert" className="banner banner-info">{leaveNotice}</p>}
+    {assessmentDraft&&<div hidden={!retaking}><Onboarding client={client} initial={assessmentDraft} optional onRiskChange={assessmentRisk} onClose={returnToResult} onCompleted={()=>{returnToResult();setAssessmentDraft(null);assessmentRisk(false,false);window.dispatchEvent(new Event('freedom-profile-updated'));}}/></div>}
+    <div hidden={retaking}><div className="stack">
+    <p className="field-hint">查看已確認的公會方向，補充能力，或繼續上次的定位答案。推薦不是資格認證；加入公會仍由你最後確認。</p>
     {summaryLoading&&<p role="status">正在載入你的定位結果…</p>}
     {summaryError&&<div className="banner banner-error" role="alert"><p>定位結果暫時無法載入：{summaryError}</p><button type="button" className="btn btn-ghost" onClick={()=>void loadSummary()}>重新載入定位結果</button></div>}
     {!summaryLoading&&!summaryError&&assessment&&member&&<section className="card positioning-result" aria-labelledby="positioning-result-title">
@@ -45,10 +59,11 @@ export function PositioningPanel({client,session,onNavigate}:ModulePanelProps) {
       {member.category_primaries?<dl className="positioning-result-guilds">{member.category_primaries.map(item=><div key={item.category}><dt>{SECTION_LABELS[item.category]}</dt><dd>{item.guild?.name??'尚未選擇'}</dd></div>)}</dl>:<dl className="positioning-result-guilds"><div><dt>主要公會</dt><dd>{member.primary_guild?.name??'尚未選擇'}</dd></div><div><dt>次要公會</dt><dd>{member.secondary_guilds.map(g=>g.name).join('、')||'先專注在主要公會'}</dd></div></dl>}
       {featuredLabels.length>0&&<div className="positioning-featured"><h3>擅長的能力</h3><div className="tag-list">{featuredLabels.map((label,index)=><span className="pill" key={`${index}-${label}`}>{label}</span>)}</div></div>}
       <div className="positioning-result-next"><div className="actions"><button type="button" className="btn btn-primary" onClick={()=>onNavigate?.('guilds')}>前往我的公會</button>{firstBook&&<SkillBookIntro book={firstBook} guildName={firstBook.guild_keys.includes(member.primary_guild?.guild_key??'')?member.primary_guild?.name:undefined} label="閱讀我的技能書"/>}</div></div>
-      <div className="positioning-result-adjust"><button type="button" className="btn btn-ghost" onClick={()=>setRetaking(true)}>{assessment.entry_mode==='quick'?'補充／繼續探索定位':assessment.completed?'重新探索定位':'開始探索我的定位'}</button>{assessment.completed&&assessment.entry_mode!=='quick'&&assessment.state!=='completed'&&<p className="field-hint">調整中的草稿尚未取代這份已確認的定位。</p>}</div>
+      <div className="positioning-result-adjust"><button type="button" className="btn btn-ghost" ref={retakeButton} onClick={()=>{if(risks.current.questions.locked){setLeaveNotice('小問答操作尚未確認，請先重試原小問答。');return;}if(!assessmentDraft)setAssessmentDraft(assessment);setRetaking(true);setLeaveNotice('');}}>{assessmentDraft?'繼續本頁的定位草稿':assessment.entry_mode==='quick'?'補充／繼續探索定位':assessment.completed?'重新探索定位':'開始探索我的定位'}</button>{assessment.completed&&assessment.entry_mode!=='quick'&&assessment.state!=='completed'&&<p className="field-hint">調整中的草稿尚未取代這份已確認的定位。</p>}</div>
       <details className="positioning-result-skills"><summary>我的能力與裝備 · {abilityLabels.length} 項能力／{equipmentLabels.length} 項裝備</summary><div><section><h3>我的能力</h3><div className="tag-list">{abilityLabels.length?abilityLabels.map((label,index)=><span className="pill" key={`${index}-${label}`}>{label}</span>):<p className="muted">可以隨時補充，也可以先開始閱讀技能書。</p>}</div></section><section><h3>我的裝備</h3><div className="tag-list">{equipmentLabels.length?equipmentLabels.map((label,index)=><span className="pill" key={`${index}-${label}`}>{label}</span>):<p className="muted">尚未填寫裝備，不影響參與公會。</p>}</div></section></div></details>
     </section>}
-    <GuildAnswersSection client={client}/>
+    <GuildAnswersSection client={client} onRiskChange={questionRisk}/>
+    </div></div>
   </section>;
 }
 
