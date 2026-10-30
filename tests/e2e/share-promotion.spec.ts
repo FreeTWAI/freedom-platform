@@ -64,7 +64,10 @@ async function creditVisit(browser: Browser, url: string, expected: (url: URL) =
 
 async function openBoards(page: Page) {
   await navigate(page, '推廣排行榜');
-  await page.locator('.promotion-rankings > summary').click();
+  const rankings = page.locator('.promotion-rankings');
+  await expect(rankings).toBeVisible();
+  if (!await rankings.evaluate(element => (element as HTMLDetailsElement).open)) await rankings.locator(':scope > summary').click();
+  await expect(rankings).toHaveJSProperty('open', true);
 }
 
 function board(page: Page, name: string) {
@@ -188,7 +191,7 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await expect(dialog).toContainText('自由工坊：加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。');
-  await expect(dialog).toContainText('訪客每天點開算 1 分，自己點不算。');
+  await expect(dialog.locator('.promotion-share-rule')).toHaveText('只在你按下分享或複製後交給系統處理，不會自動發文或傳訊息。請先確認內容適合對方。有效點擊依既有規則計分；不代表閱讀、成交或獎勵。');
   const points = dialog.locator('.promotion-share-points');
   await expect(points).toHaveText(/這個連結：本週 \d+ 分・累計 \d+ 分/);
   const weekBefore = Number(/本週 (\d+) 分/.exec(await points.innerText())![1]);
@@ -206,6 +209,7 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await again.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.reload();
+  await openBoards(page);
   await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
 });
 
