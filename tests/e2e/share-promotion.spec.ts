@@ -62,6 +62,11 @@ async function creditVisit(browser: Browser, url: string, expected: (url: URL) =
   await context.close();
 }
 
+async function openBoards(page: Page) {
+  await navigate(page, '推廣排行榜');
+  await page.locator('.promotion-rankings > summary').click();
+}
+
 function board(page: Page, name: string) {
   return page.getByRole('article', { name, exact: true });
 }
@@ -104,7 +109,7 @@ test('a skill-book share link credits one guest click on the weekly board', asyn
 
   await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post', e2eAuthPool);
   await page.goto('/');
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   const skill = board(page, '技能推廣排行榜');
   await expect(skill).toContainText('示範創作者');
   await expect(skill).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
@@ -114,7 +119,7 @@ test('a skill-book share link credits one guest click on the weekly board', asyn
   await page.goto(go);
   await expect(page).toHaveURL(/\/development\/skills\/social-post/);
   await page.goto('/');
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   await expect(board(page, '技能推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
 });
 
@@ -193,7 +198,7 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.goto(platformGo);
   await expect(page).toHaveURL(url => url.pathname === '/' && url.search === '');
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
   await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
   const again = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
@@ -235,7 +240,7 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   });
   await login(page);
   await controlPromotionCapabilities(page);
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   await page.evaluate(() => {
     const address = new URL(location.href); address.searchParams.set('private-share', 'never-export');
     history.replaceState(history.state, '', address);
@@ -400,7 +405,7 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   const share = await card.getByRole('button', { name: '推廣原文', exact: true }).boundingBox();
   expect(Math.abs(open!.y - share!.y)).toBeLessThanOrEqual(1);
 
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」' });
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
@@ -408,7 +413,7 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, go, url => url.pathname === '/', e2eAuthPool);
   await page.reload();
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   const leader = page.locator('.promotion-person .promotion-avatar').first();
   await expect(leader).toBeVisible();
   expect((await leader.boundingBox())!.width).toBeLessThanOrEqual(36);
@@ -416,14 +421,14 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
 
 test('all six boards render, and a board with no clicks says so', async ({ page }) => {
   await login(page);
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   for (const name of ['名片點擊排行榜', '平台推廣排行榜', '技能推廣排行榜', '社群推廣排行榜', '業務推廣排行榜', '活動推廣排行榜']) {
     await expect(board(page, name)).toBeVisible();
   }
   const cards = board(page, '名片點擊排行榜');
   await expect(cards).toContainText('在我的名片分享名片連結，每次點擊 +1。');
   await expect(cards).toContainText('你在這個排行榜還沒有分數。');
-  await expect(board(page, '業務推廣排行榜')).toContainText('還沒有人得分，分享第一個連結吧。');
+  await expect(board(page, '業務推廣排行榜')).toContainText('這段期間還沒有計入的點擊。');
   await expect(page.getByText('計分規則', { exact: true })).toBeVisible();
   const note = page.locator('.promotion-period-note');
   const mine = page.getByRole('region', { name: '我的推廣連結', exact: true });
@@ -439,7 +444,7 @@ test('all six boards render, and a board with no clicks says so', async ({ page 
 
 test('計分規則 shows a disclosure marker and opens from a click or Enter', async ({ page }) => {
   await login(page);
-  await navigate(page, '推廣排行榜');
+  await openBoards(page);
   const rules = page.locator('details.promotion-rules');
   const summary = rules.locator('summary');
   const copy = '同一位訪客每天點同一個連結只算 1 分';
@@ -508,7 +513,7 @@ test('share pages stay inside the viewport and stay readable in every theme', as
     const cardColors = await placeholder.locator('xpath=ancestor::article[1]').evaluate(element => getComputedStyle(element).backgroundColor);
     expect(placeholderColors.backgroundColor, theme).not.toBe(cardColors);
     expect(contrast(placeholderColors.color, placeholderColors.backgroundColor), theme).toBeGreaterThanOrEqual(3);
-    await navigate(page, '推廣排行榜');
+    await openBoards(page);
     const pressed = page.getByRole('button', { name: '本週', exact: true });
     const resting = page.getByRole('button', { name: '累計', exact: true });
     const on = await pressed.evaluate(element => { const style = getComputedStyle(element); return { backgroundColor: style.backgroundColor, color: style.color }; });
@@ -535,7 +540,7 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
   test.setTimeout(120_000);
   await login(page);
   for (const theme of ['light', 'versefolk'] as const) {
-    await navigate(page, '推廣排行榜');
+    await openBoards(page);
     await themeOf(page, theme);
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
@@ -781,4 +786,42 @@ test('share destination rejects tampered executable and off-origin DOM targets a
     await visitor.goBack();
     await expect(visitor).toHaveURL(previous);
   } finally { await context.close(); }
+});
+
+
+test('sharing starts with real content choices and keeps ranking optional', async ({page}) => {
+  await login(page);
+  let creates = 0;
+  page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/v1/promotion/links')) creates++; });
+  await navigate(page, '推廣排行榜');
+  const choices = page.getByRole('region', {name:'選擇分享內容'});
+  await expect(choices).toBeVisible();
+  await expect(page.locator('.promotion-rankings')).not.toHaveAttribute('open');
+  for (const [label, href] of [['找一本技能書','#skills'],['查看社員服務','#services'],['找一場活動','#events'],['閱讀社群分享','#social']]) {
+    await expect(choices.getByRole('link',{name:label,exact:true})).toHaveAttribute('href',href);
+  }
+  await expect(page.getByRole('region',{name:'我的推廣連結',exact:true})).toBeVisible();
+  expect(creates).toBe(0);
+  const summary=page.locator('.promotion-rankings > summary');
+  await summary.focus(); await summary.press('Enter');
+  await expect(board(page,'平台推廣排行榜')).toBeVisible();
+  await summary.press('Enter');
+  await expect(board(page,'平台推廣排行榜')).not.toBeVisible();
+  await choices.getByRole('link',{name:'查看社員服務',exact:true}).click();
+  await expect(page).toHaveURL(/#services$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#promotion$/);
+  expect(creates).toBe(0);
+});
+
+test('failed personal-link reads are not presented as an empty sharing history', async ({page}) => {
+  await login(page);
+  await page.route('**/api/v1/promotion/links/mine?period=*', route => route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({status:503,detail:'合成讀取失敗'})}));
+  await navigate(page, '推廣排行榜');
+  const mine=page.getByRole('region',{name:'我的推廣連結',exact:true});
+  await expect(mine).toContainText('尚未取得連結紀錄，請重新載入。');
+  await expect(mine).not.toContainText('還沒有建立分享連結。');
+  await page.unroute('**/api/v1/promotion/links/mine?period=*');
+  await page.getByRole('button',{name:'重新載入分享紀錄',exact:true}).click();
+  await expect(mine).not.toContainText('尚未取得連結紀錄');
 });
