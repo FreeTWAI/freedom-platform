@@ -1,3 +1,7 @@
+import { EventEmitter } from 'node:events';
+import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+import { acquireReleaseLease } from '../../shared-release/portable/lease.mjs';
 import { runPortableMigration, preparePortableMigration, sourceMigrationProfile } from '../../shared-release/portable/migration.mjs';
 import { deriveDisabledMaterialPolicyAdditions, appendDisabledMaterialPolicies } from '../../shared-release/portable/material-policy.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
@@ -15,7 +19,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
   admitInstallation, requireStaging, requireLegacyPredecessor, githubClient, releaseFailureCode, isReleaseFailureCode } from '../../shared-release/admission.mjs';
-import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, publicControlReadFailure, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, publicControlReadFailure, publicLeaseLoss, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive, artifactReader } from '../../shared-release/artifacts.mjs';
 import { boundedResponseBytes, createCloudflareRecoveryTransport, waitForPublicRelease } from '../../shared-release/portable/cloudflare.mjs';
@@ -29,7 +33,7 @@ import { buildApplication, directoryDigest } from '../../shared-release/portable
 import { git as fixtureGit } from './migration-fixtures.mjs';
 import { createControlStore } from '../../shared-release/portable/control-store.mjs';
 import { validateCoordinateAuthority, verifyCoordinateFence } from '../../shared-release/portable/coordinate-fence.mjs';
-import { replayReleaseFloor, openReleaseFloor } from '../../shared-release/portable/floor.mjs';
+import { replayReleaseFloor, openReleaseFloor, gitAncestor } from '../../shared-release/portable/floor.mjs';
 import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
 import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
@@ -38,7 +42,7 @@ import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
 import { requireFailedReleaseHandoff } from '../../shared-release/handoff-admission.mjs';
-import { inspectReleaseHandoff, completeReleaseHandoff } from '../../shared-release/portable/handoff-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff } from '../../shared-release/portable/handoff-recovery.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -3308,8 +3312,8 @@ test('all failed operator phases record fixed codes and public progress filters 
     [Object.assign(Error('private'), { code: 'release_bad\nsecret' }), 'release_operation_failed'],
   ]) {
     const value = resultFixture(); value.phases = [];
-    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'publicControlReadFailure', 'return ' + source)(
-      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode, publicControlReadFailure);
+    const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'publicControlReadFailure', 'publicLeaseLoss', 'lease', 'return ' + source)(
+      value, PHASES, async () => {}, '/synthetic', assert.equal, releaseFailureCode, publicControlReadFailure, publicLeaseLoss, undefined);
     await assert.rejects(phase('preflight', async () => { throw error; }), error);
     assert.equal(value.phases[0].failureCode, expected);
     if (error.controlReadFailure) {
@@ -3865,4 +3869,271 @@ test('hosted handoff binds original evidence without backup credentials and cont
     };
     assert.equal((await runOperator(image.options)).length, 2);
   } finally { process.exitCode = previousExitCode; }
+});
+
+function leaseFixture() {
+  const client = new EventEmitter(), queries = [], releases = [];
+  const row = { database: 'fixture', role: 'fixture_migrator', session_role: 'fixture_migrator', pid: 123, locked: true };
+  let heartbeat = async () => ({ rows: [{ ...row }] });
+  client.query = async input => {
+    queries.push(input);
+    if (input.text.includes('pg_locks')) return heartbeat(input);
+    return { rows: [{ ...row, ...(input.text.includes('pg_advisory_unlock') ? { unlocked: true } : {}) }] };
+  };
+  client.release = destroy => releases.push(destroy);
+  return { client, queries, releases, row, setHeartbeat: fn => { heartbeat = fn; },
+    acquire: () => acquireReleaseLease({ connect: async () => client },
+      { database: row.database, role: row.role, heartbeatMs: 50 }) };
+}
+const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+
+test('lease records the first bounded public loss cause for connection errors and end', async t => {
+  for (const event of ['error', 'end']) {
+    const f = leaseFixture(), lease = await f.acquire();
+    const error = Object.assign(Error('PRIVATE host password SQL'), { code: 'ECONNRESET' });
+    f.client.emit(event, error); const loss = lease.loss();
+    f.client.emit('error', Object.assign(Error('PRIVATE'), { code: 'PRIVATE' }));
+    assert.equal(lease.loss(), loss); assert(Object.isFrozen(loss));
+    assert.equal(loss.cause, event === 'error' ? 'connection_error' : 'connection_ended');
+    assert.equal(loss.errorClass, event === 'error' ? 'ECONNRESET' : undefined);
+    assert.equal(loss.heartbeats, 0); assert(loss.heldMs >= loss.sinceHeartbeatMs);
+    assert(!JSON.stringify(loss).includes('PRIVATE')); assert.equal(lease.signal.aborted, true);
+    await assert.rejects(lease.release(), { code: 'release_lease_cleanup_failed' });
+    assert.deepEqual(f.releases, [true]);
+  }
+});
+
+test('ownership heartbeat checks exact granted bigint lock and distinguishes identity, lock, timeout and query loss', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  for (const [cause, mutate] of [
+    ['identity_changed', f => { f.row.pid++; }],
+    ['identity_changed', f => { f.row.role = 'other'; }],
+    ['identity_changed', f => { f.row.session_role = 'other'; }],
+    ['lock_not_held', f => { f.row.locked = false; }],
+    ['heartbeat_timeout', f => f.setHeartbeat(async () => { throw Error('Query read timeout'); })],
+    ['heartbeat_failed', f => f.setHeartbeat(async () => { throw Object.assign(Error('PRIVATE'), { code: '57P01' }); })],
+  ]) {
+    const f = leaseFixture(), lease = await f.acquire(); mutate(f);
+    t.mock.timers.tick(50); await flush();
+    assert.equal(lease.loss().cause, cause); assert.equal(lease.signal.aborted, true);
+    assert.equal(lease.loss().errorClass, cause === 'heartbeat_failed' ? '57P01' : undefined);
+    const query = f.queries.find(q => q.text.includes('pg_locks'));
+    for (const sql of ["locktype='advisory'", 'pid=pg_backend_pid()', 'AND granted', 'classid::bigint', 'objid::bigint',
+      'objsubid=1', '>> 32', '& 4294967295']) assert(query.text.includes(sql));
+    assert.equal(query.query_timeout, 30000);
+    await assert.rejects(lease.release(), { code: 'release_lease_cleanup_failed' }); assert.deepEqual(f.releases, [true]);
+  }
+});
+
+test('a slow heartbeat lasting beyond the old 5 s budget stays held and never overlaps another query', async t => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  const f = leaseFixture();
+  f.setHeartbeat(input => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(Error('Query read timeout')), input.query_timeout);
+    setTimeout(() => { clearTimeout(timeout); resolve({ rows: [{ ...f.row }] }); }, 6500);
+  }));
+  const lease = await f.acquire(); t.mock.timers.tick(50); await flush();
+  t.mock.timers.tick(6000); await flush(); lease.assertHeld(); assert.equal(lease.loss(), undefined);
+  assert.equal(f.queries.filter(q => q.text.includes('pg_locks')).length, 1);
+  t.mock.timers.tick(500); await flush(); lease.assertHeld();
+  await lease.release(); assert.deepEqual(f.releases, [false]);
+  assert.throws(lease.assertHeld, { code: 'release_lease_not_held' });
+});
+
+test('positive Git ancestry is cached by root and both SHAs, bounded, and failures are retried', t => {
+  let calls = 0, succeeds = false;
+  t.mock.method(childProcess, 'execFileSync', () => { calls++; if (!succeeds) throw Error('missing object'); return Buffer.alloc(0); });
+  syncBuiltinESMExports(); t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const root = '/synthetic-ancestry-cache';
+  assert.equal(gitAncestor(root, main, sha), false); assert.equal(gitAncestor(root, main, sha), false); assert.equal(calls, 2);
+  succeeds = true;
+  assert.equal(gitAncestor(root, main, sha), true); assert.equal(gitAncestor(root, main, sha), true); assert.equal(calls, 3);
+  gitAncestor(root + '-other', main, sha); gitAncestor(root, sha, main); assert.equal(calls, 5);
+  for (let i = 0; i < 4096; i++) gitAncestor(root, i.toString(16).padStart(40, '0'), sha);
+  const before = calls; gitAncestor(root, main, sha); assert.equal(calls, before + 1);
+  assert.throws(() => gitAncestor(root, 'invalid', sha), /release_floor_source_invalid/);
+});
+
+const lossFixture = () => ({ cause: 'connection_error', heldMs: 250000, sinceHeartbeatMs: 10000, heartbeats: 12, errorClass: 'ECONNRESET' });
+
+test('lease diagnostics project safe fields into passed results and public progress; malformed values are dropped or rejected', () => {
+  const f = codeResult(), loss = lossFixture();
+  Object.assign(f.admission, { mode: 'deploy' });
+  Object.assign(f.value.phases[4], { leaseLoss: { ...loss, message: 'PRIVATE' },
+    leaseRecovered: { cause: loss.cause, attempts: 2, host: 'PRIVATE' } });
+  for (const phases of [validateOperatorResult(f.value, f.admission, installation, 'e'.repeat(64)),
+    operatorProgress(f.value, f.admission, installation, 'e'.repeat(64))]) {
+    assert.deepEqual(phases[4].leaseLoss, loss);
+    assert.deepEqual(phases[4].leaseRecovered, { cause: loss.cause, attempts: 2 });
+    assert(!JSON.stringify(phases).includes('PRIVATE'));
+  }
+  const invalid = [null, [], {}, { ...loss, cause: 'PRIVATE' }, { ...loss, heldMs: -1 }, { ...loss, heartbeats: 0.5 },
+    { ...loss, heldMs: Infinity }, { ...loss, sinceHeartbeatMs: 99999999 }, { ...loss, errorClass: 'PRIVATE' }];
+  for (const value of invalid) {
+    assert.equal(publicLeaseLoss(value), undefined);
+    const failed = structuredClone(f.value); failed.phases = [{ ...failed.phases[0], status: 'failed', leaseLoss: value }];
+    assert.equal(operatorProgress(failed, f.admission, installation, 'e'.repeat(64))[0].leaseLoss, undefined);
+    f.value.phases[4].leaseLoss = value;
+    assert.throws(() => validateOperatorResult(f.value, f.admission, installation, 'e'.repeat(64)));
+  }
+  f.value.phases[4].leaseLoss = loss;
+  for (const recovery of [null, [], { cause: 'PRIVATE', attempts: 1 }, { cause: loss.cause, attempts: 0 },
+    { cause: loss.cause, attempts: 4 }, { cause: loss.cause, attempts: 1.5 }]) {
+    f.value.phases[4].leaseRecovered = recovery;
+    assert.throws(() => validateOperatorResult(f.value, f.admission, installation, 'e'.repeat(64)));
+    assert.throws(() => operatorProgress(f.value, f.admission, installation, 'e'.repeat(64)));
+  }
+  const failed = structuredClone(f.value); failed.phases = [{ ...failed.phases[0], status: 'failed', leaseLoss: loss }];
+  assert.deepEqual(operatorProgress(failed, f.admission, installation, 'e'.repeat(64))[0].leaseLoss, loss);
+});
+
+async function ownHandoffFixture(t) {
+  const f = await pendingHandoffFixture(t, 'health', true);
+  const request = f.floor.state().pending.request, controller = new AbortController(); controller.abort();
+  let acquired = 0, oldReleased = 0, freshReleased = 0, health = 0, opened = 0, renewed = 0;
+  const loss = lossFixture(), error = Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' });
+  const args = { request, error, expectedHead: f.floor.head(),
+    phases: ['preflight', 'migration', 'deploy', 'health'].map(name => ({ name, status: 'passed' })),
+    lease: { signal: controller.signal, loss: () => loss, release: async () => { oldReleased++; } },
+    renewConnections: async () => { assert.equal(oldReleased, 1); renewed++; },
+    acquire: async () => { assert.equal(renewed, 1); acquired++; return { ...f.args.lease, release: async () => { freshReleased++; } }; },
+    reopen: async fresh => { opened++; assert.notEqual(fresh, args.lease); return { ...f.args, floor: await f.reopenFloor() }; },
+    verifyHealth: async () => { health++; }, pause: async ms => assert.equal(ms, 2000) };
+  return { ...f, own: args, loss, counts: () => ({ acquired, oldReleased, freshReleased, health, opened, renewed }) };
+}
+
+test('same-run handoff re-acquires a fresh lease and appends only its missing handoff with normal passed evidence', async t => {
+  const f = await ownHandoffFixture(t), before = f.floor.head();
+  const proof = await settleOwnHandoff(f.own);
+  assert.deepEqual(f.counts(), { acquired: 1, oldReleased: 1, freshReleased: 1, health: 1, opened: 1, renewed: 1 });
+  assert.equal(f.appends(), 1); assert.notEqual(f.chain.at(-1).sha256, before);
+  assert.equal((await f.reopenFloor()).state().pending, null);
+  assert.deepEqual(proof.leaseLoss, f.loss); assert.deepEqual(proof.leaseRecovered, { cause: f.loss.cause, attempts: 1 });
+  assert.equal(f.chain.at(-1).record.data.stage, 'handoff');
+  const result = codeResult(); result.admission.mode = 'deploy'; Object.assign(result.value.phases[4], proof);
+  assert(validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64)).every(p => p.status === 'passed'));
+});
+
+test('same-run settlement refuses changed head, other sessions, Worker, ledger, policy, GC, health and lease drift', async t => {
+  for (const mutate of [
+    f => { f.chain.at(-1).sha256 = '9'.repeat(64); },
+    f => { f.rows.sessions[0].remaining = 1; },
+    f => { f.worker.sourceSha = main; },
+    f => { f.worker.bindingsSha256 = '9'.repeat(64); },
+    f => { f.rows.ledger[0].sha256 = '9'.repeat(64); },
+    f => { f.rows.policies[0].revision = 'changed'; },
+    f => { f.rows.gc[0].enabled = true; },
+    f => { f.rows.gc[0].fences = 1; },
+    f => { f.own.request = { ...f.own.request, runId: 999 }; },
+    f => { f.own.renewConnections = async () => { throw Error('cleanup failed'); }; },
+    f => { f.own.verifyHealth = async () => { throw Error('health differs'); }; },
+    f => { f.own.verifyHealth = async () => { f.chain.at(-1).sha256 = '8'.repeat(64); }; },
+    f => { f.own.verifyHealth = async () => f.loseLease(); },
+  ]) {
+    const f = await ownHandoffFixture(t); mutate(f);
+    await assert.rejects(settleOwnHandoff(f.own), { code: 'release_lease_lost' }); assert.equal(f.appends(), 0);
+  }
+});
+
+test('same-run handoff retries busy at most three times; earlier loss and unrelated failures never acquire', async t => {
+  const busy = await ownHandoffFixture(t); let attempts = 0, waits = 0;
+  busy.own.acquire = async () => { attempts++; throw Object.assign(Error('release_lease_busy'), { code: 'release_lease_busy' }); };
+  busy.own.pause = async ms => { assert.equal(ms, 2000); waits++; };
+  await assert.rejects(settleOwnHandoff(busy.own), { code: 'release_lease_lost' });
+  assert.equal(attempts, 3); assert.equal(waits, 2); assert.equal(busy.appends(), 0);
+  const succeeds = await ownHandoffFixture(t), acquire = succeeds.own.acquire; let retry = 0;
+  succeeds.own.acquire = async () => { if (++retry < 3) throw Object.assign(Error('busy'), { code: 'release_lease_busy' }); return acquire(); };
+  assert.equal((await settleOwnHandoff(succeeds.own)).leaseRecovered.attempts, 3);
+  for (let length = 0; length < 4; length++) {
+    const f = await ownHandoffFixture(t); f.own.phases.length = length;
+    await assert.rejects(settleOwnHandoff(f.own), { code: 'release_lease_lost' }); assert.equal(f.counts().acquired, 0);
+  }
+  for (const mutate of [f => { f.own.phases[3].status = 'failed'; }, f => { f.own.request = { ...f.own.request, mode: 'handoff' }; },
+    f => { f.own.error = Object.assign(Error('unrelated'), { code: 'release_control_history_gap_or_fork' }); },
+    f => { f.own.signal = AbortSignal.abort(); }, f => { f.own.lease.loss = () => undefined; }]) {
+    const f = await ownHandoffFixture(t); mutate(f); await assert.rejects(settleOwnHandoff(f.own)); assert.equal(f.counts().acquired, 0);
+  }
+});
+
+test('production admission accepts a normal successful staging receipt with recovered handoff diagnostics', async () => {
+  const f = stagingFixture(), result = codeResult(); result.admission.mode = 'deploy';
+  Object.assign(result.value.phases[4], { leaseLoss: lossFixture(), leaseRecovered: { cause: 'connection_error', attempts: 1 } });
+  Object.assign(f.state.receipt, { releaseKind: 'independent', providerOutcome: 'release_confirmed',
+    operatorEvidence: 'validated-independent-release/v1', phases: validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64)) });
+  await requireStaging(f.api, { ...request(), sourceTree: tree, target: 'next', mainShaObserved: main, releaseKind: 'independent' }, installation);
+});
+
+test('unknown lock acquisition outcomes and busy sessions are destroyed instead of returning an advisory lock to the pool', async () => {
+  for (const busy of [true, false]) {
+    const f = leaseFixture(), query = f.client.query;
+    f.client.query = async input => {
+      if (input.text.includes('pg_try_advisory_lock')) {
+        if (busy) return { rows: [{ locked: false }] };
+        throw Error('Query read timeout');
+      }
+      return query(input);
+    };
+    await assert.rejects(f.acquire(), busy ? { code: 'release_lease_busy' } : /Query read timeout/);
+    assert.deepEqual(f.releases, [true]);
+  }
+});
+
+test('entry phase persists a lost lease diagnostic before rethrowing and public progress strips its private fields', async () => {
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  const source = entry.slice(entry.indexOf('const phase = async ') + 'const phase = '.length, entry.indexOf('\n  const backup ='));
+  const value = codeResult().value; value.phases = [];
+  const loss = lossFixture(), lease = { loss: () => ({ ...loss, message: 'PRIVATE' }) };
+  const phase = new Function('result', 'phases', 'save', 'path', 'same', 'releaseFailureCode', 'publicControlReadFailure',
+    'publicLeaseLoss', 'lease', 'return ' + source)(value, ['preflight'], async () => {}, '/synthetic', assert.equal,
+    releaseFailureCode, publicControlReadFailure, publicLeaseLoss, lease);
+  await assert.rejects(phase('preflight', async () => { throw Error('release_lease_not_held'); }));
+  assert.equal(value.phases[0].failureCode, 'release_lease_lost'); assert.deepEqual(value.phases[0].leaseLoss, loss);
+  const progress = operatorProgress(value, codeResult().admission, installation, 'e'.repeat(64));
+  assert.deepEqual(progress[0].leaseLoss, loss); assert(!JSON.stringify(progress).includes('PRIVATE'));
+});
+
+test('operator and CLI preserve lease diagnostics in failed and recovered public receipts', async t => {
+  const previousExitCode = process.exitCode;
+  t.after(() => { process.exitCode = previousExitCode; });
+  for (const recovered of [true, false]) {
+    const source = await adoptionFixture(t), root = await diskFixture(t, 'fp-lease-receipt-');
+    const runner = join(root, 'runner'), output = join(root, 'public'); await mkdir(runner);
+    const read = fixtureApi(path => path.includes('/deployments?') ? []
+      : path.includes('/commits/') ? { sha: source.current.sourceSha, commit: { tree: { sha: source.current.sourceTree } } } : undefined);
+    const api = async (path, options) => {
+      if (options?.method === 'POST') return path.endsWith('/deployments') ? { ...options.body, id: 1, sha: options.body.ref } : {};
+      const value = await read(path); if (/\/actions\/runs\/\d+$/.test(path)) value.head_sha = source.current.sourceSha;
+      return value;
+    };
+    process.exitCode = previousExitCode;
+    await releaseMain({ ...environment(), RELEASE_MODE: 'deploy', RELEASE_COMMAND: 'execute', RELEASE_SHA: source.current.sourceSha,
+      RELEASE_ENABLED: 'true', RELEASE_CONFIG_JSON: config, RELEASE_CONFIG_SHA256: installation.configSha256,
+      RELEASE_OPERATOR_IMAGE: installation.image, RELEASE_SOURCE_DIRECTORY: source.sourceRoot, RUNNER_TEMP: runner,
+      PUBLIC_RECEIPT_DIRECTORY: output, PATH: process.env.PATH }, { api, executeOperator: options => runOperator({ ...options,
+      registry: { username: 'teddashh', token: 'synthetic-registry' },
+      credentials: { cloudflareApiToken: 'synthetic-provider', migrationDatabaseUrl: 'synthetic-migrator', runtimeDatabaseUrl: 'synthetic-runtime',
+        stagingAccessClientId: 'synthetic-id', stagingAccessClientSecret: 'synthetic-access' },
+      run: async (_command, args) => {
+        if (args[0] !== 'run') return;
+        const bytes = await readFile(join(options.temporaryRoot, 'input/request.json')), value = codeResult().value;
+        Object.assign(value, { sourceSha: source.current.sourceSha, runId: options.admission.runId,
+          runAttempt: options.admission.runAttempt, requestSha256: hash(bytes) });
+        value.phases[2].sourceSha = value.phases[3].sourceSha = source.current.sourceSha;
+        const now = new Date().toISOString(); for (const phase of value.phases) phase.startedAt = phase.completedAt = now;
+        Object.assign(value.phases[4], { leaseLoss: { ...lossFixture(), message: 'PRIVATE' },
+          ...(recovered ? { leaseRecovered: { cause: 'connection_error', attempts: 1 } }
+            : { status: 'failed', failureCode: 'release_lease_lost' }) });
+        await writeFile(join(options.temporaryRoot, 'output/result.json'), JSON.stringify(value));
+        if (!recovered) throw Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' });
+      } }) });
+    const receipt = JSON.parse(await readFile(join(output, 'receipt.json')));
+    assert.equal(receipt.status, recovered ? 'passed' : 'failed');
+    assert.deepEqual(receipt.operatorProgress.at(-1).leaseLoss, lossFixture());
+    if (recovered) {
+      assert(receipt.phases.every(p => p.status === 'passed'));
+      assert.deepEqual(receipt.phases[4].leaseRecovered, { cause: 'connection_error', attempts: 1 });
+      assert.equal(receipt.operatorEvidence, 'validated-independent-release/v1');
+    } else assert.equal(receipt.operatorProgress.at(-1).failureCode, 'release_lease_lost');
+    assert(!JSON.stringify(receipt).includes('PRIVATE'));
+  }
 });
