@@ -364,3 +364,22 @@ html[data-theme="dark"] .guilds-panel .guild-application-status.is-declined { ba
 .guild-directory-settings { display: grid; justify-items: start; gap: .75rem; padding-block: .5rem; }
 .guild-directory-settings .btn { min-height: 44px; max-width: 100%; white-space: normal; }
 .guilds-panel .guild-filter-result { margin: 0; color: var(--muted); font-size: .875rem; }
+
+/* A compact guild destination, using the active Freedom theme rather than new assets. */
+.guild-hub-hero{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(15rem,1fr);gap:1.25rem;padding:1.5rem;border:1px solid var(--line);border-radius:20px;background:linear-gradient(120deg,color-mix(in srgb,var(--blue-ink) 10%,var(--bg-elev)),var(--bg-elev) 65%);overflow:hidden;color:var(--ink)}
+.guild-hub-hero::before{content:"";position:absolute;z-index:-1;width:15rem;height:15rem;border:1px solid color-mix(in srgb,var(--focus) 30%,transparent);border-radius:50%;top:-9rem;left:35%;box-shadow:0 0 0 2.5rem color-mix(in srgb,var(--focus) 5%,transparent);pointer-events:none}
+.guild-hub-intro,.guild-hub-next{display:grid;align-content:center;gap:.65rem;min-width:0;overflow-wrap:anywhere}
+.guild-hub-intro h2{font-size:clamp(1.25rem,2.4vw,1.8rem);line-height:1.4;margin:0;max-width:22em}
+.guild-hub-intro p,.guild-hub-next p{margin:0;color:var(--muted);font-size:.9rem}
+.guild-hub-eyebrow{font-size:.8rem;font-weight:700;color:var(--muted)}
+.guild-hub-next{padding:1rem;border:1px solid var(--line);border-radius:14px;background:var(--bg-elev);box-shadow:inset 3px 0 var(--focus)}
+.guild-hub-next strong{font-size:1.05rem}.guild-hub-next .btn{justify-self:start;min-height:44px;white-space:normal}
+.guild-membership-settings{border-top:1px solid var(--line);padding-top:.25rem;min-width:0}
+.guild-membership-settings summary{min-height:44px;padding:.6rem .25rem;cursor:pointer;font-size:.875rem;color:var(--muted)}
+.guild-membership-settings summary:hover,.guild-membership-settings summary:focus-visible{color:var(--ink)}
+.guild-membership-settings summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+.guild-membership-settings[open]>.actions{padding-top:.5rem}
+.guild-community-start .actions{display:flex;flex-wrap:wrap;gap:.6rem}.guild-community-start .actions>.btn{width:auto}
+@media(max-width:720px){.guild-hub-hero{grid-template-columns:minmax(0,1fr);padding:1rem;gap:.9rem}.guild-hub-next .btn{width:100%;justify-self:stretch}}
+.guild-community-start .skill-intro-entry{min-width:0;max-width:100%}
+.guild-community-start .skill-intro-trigger{max-width:100%;white-space:normal;text-align:start;overflow-wrap:anywhere}

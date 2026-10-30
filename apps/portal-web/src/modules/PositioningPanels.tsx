@@ -117,6 +117,8 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     if(!focusAction||loading||categoryBusy)return;
     const button=document.querySelector<HTMLButtonElement>(`[data-category-action="${CSS.escape(focusAction)}"]`);
     if(!button)return;
+    const settings=button.closest<HTMLDetailsElement>('details');
+    if(settings)settings.open=true;
     button.focus();setFocusAction(null);
   },[focusAction,loading,categoryBusy,board,guilds]);
   function announce(message:string,guildName=''){setApplicationSuccess('');setNotice(message);setAnswerGuild(guildName);}
@@ -256,6 +258,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   const cardsRoot=useUniformGuildCards(layoutKey);
   const joinedCount=guilds.filter(g=>g.membership?.state==='active').length;
   const visibleApplications=showAllApplications?applications:applications.slice(0,3);
+  const entryGuild=classified.find(g=>g.is_primary)??classified.find(g=>chosenKeys.has(g.guild_key)&&g.membership?.state==='active')??classified.find(g=>g.membership?.state==='active');
   async function toggleSecondary(g:GuildSummary){
     if(categoryPending.current||categoryInFlight.current)return;
     const removing=secondaryKeys.includes(g.guild_key);
@@ -267,6 +270,15 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   }
   if(launchpadKey)return <GuildLaunchpad blockLoaders={blockLoaders} key={launchpadKey} client={client} guildKey={launchpadKey} mode="member" supplierConsoleEnabled={site?.supplier_console_enabled===true} userId={session.user.user_id} registerPendingLeave={registerPendingLeave} onBack={()=>{window.location.hash='guilds';}}/>;
   return <section className="module-panel guilds-panel" aria-label="公會目錄">
+    <section className="guild-hub-hero" aria-labelledby="guild-hub-title">
+      <div className="guild-hub-intro"><p className="guild-hub-eyebrow">自由工坊 · 專業協作</p><h2 id="guild-hub-title">找到同路人，一起把專長做成作品。</h2><p>選擇有興趣的公會，閱讀入門技能書，再到聊天室交流。加入不需要先完成定位測驗。</p></div>
+      {!loading&&!loadError&&<div className="guild-hub-next">
+        <span className="guild-hub-eyebrow">{entryGuild?'繼續參與':'從一個領域開始'}</span>
+        <strong>{entryGuild?.name??'挑選你的第一個公會'}</strong>
+        <p>{entryGuild?.first_step||'看看下方的公會介紹與入門技能，再決定加入。'}</p>
+        {entryGuild?<button type="button" className="btn btn-primary" onClick={()=>{if(launchpadEnabled)window.location.hash=`guilds/${entryGuild.guild_key}`;else viewGuild(entryGuild);}}>{launchpadEnabled?'進入我的公會工作區':'查看我的公會'}</button>:<button type="button" className="btn btn-primary" onClick={()=>document.querySelector<HTMLInputElement>('[data-guide-anchor="guilds:search"]')?.focus()}>搜尋感興趣的領域</button>}
+      </div>}
+    </section>
     <header className="guild-hub-heading">
       {!loading&&!loadError&&<p className="guild-overview" aria-label="我的公會概況"><span>已加入 <strong>{joinedCount}</strong> 個公會</span><span>共 {guilds.length} 個公會</span></p>}
       <div className="actions"><button type="button" className="btn btn-ghost" aria-expanded={showApply} aria-controls="guild-application" data-guide-anchor="guilds:create-application" onClick={openApply}>{showApply?'收起創建申請':'申請創建公會'}</button></div>
