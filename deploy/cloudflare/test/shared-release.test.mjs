@@ -2,7 +2,6 @@ import { EventEmitter } from 'node:events';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { acquireReleaseLease } from '../../shared-release/portable/lease.mjs';
-import { settleOwnHandoff } from '../../shared-release/portable/entry.mjs';
 import { runPortableMigration, preparePortableMigration } from '../../shared-release/portable/migration.mjs';
 import { deriveDisabledMaterialPolicyAdditions, appendDisabledMaterialPolicies } from '../../shared-release/portable/material-policy.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
@@ -41,7 +40,7 @@ import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
 import { requireFailedReleaseHandoff } from '../../shared-release/handoff-admission.mjs';
-import { inspectReleaseHandoff, completeReleaseHandoff } from '../../shared-release/portable/handoff-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff } from '../../shared-release/portable/handoff-recovery.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]

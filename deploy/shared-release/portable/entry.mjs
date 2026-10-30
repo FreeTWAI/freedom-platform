@@ -20,7 +20,7 @@ import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema }
 import { runPortableBackup } from './backup.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
-import { inspectReleaseHandoff, completeReleaseHandoff, inspectOwnReleaseHandoff } from './handoff-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff } from './handoff-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -42,45 +42,6 @@ async function save(path, value) {
   const temporary = join(dirname(path), 'result-' + randomUUID() + '.json'), file = await open(temporary, 'wx', 0o600);
   try { await file.writeFile(bytes); await file.sync(); } finally { await file.close(); }
   await rename(temporary, path);
-}
-
-/** Recover only this run's single missing handoff, with fresh signal-bound ports.
- * No migration, publish, backup or flag operation is reachable from this helper. */
-export async function settleOwnHandoff({ request, phases, lease, expectedHead, error, acquire, reopen, verifyHealth,
-  signal, renewConnections = async () => {}, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
-  const loss = publicLeaseLoss(lease?.loss());
-  const original = Object.assign(new Error('release_lease_lost'), { code: 'release_lease_lost', leaseLoss: loss });
-  if (!['release_lease_lost', 'release_lease_not_held'].includes(releaseFailureCode(error))
-    || !loss || !lease.signal.aborted || signal?.aborted || request.mode !== 'deploy' || request.releaseKind !== 'independent'
-    || phases.length !== 4 || !['preflight', 'migration', 'deploy', 'health'].every((name, i) =>
-      phases[i].name === name && phases[i].status === 'passed')) throw error;
-  // release destroys an ownership-lost connection even when unlock is impossible.
-  await lease.release().catch(() => {});
-  let fresh;
-  try {
-    // Retire this process's idle probe connections so the shared recovery
-    // check can require zero other release sessions without exemptions.
-    await renewConnections();
-    for (let attempts = 1; attempts <= 3; attempts++) {
-      signal?.throwIfAborted();
-      try { fresh = await acquire(); }
-      catch (failure) {
-        if (failure.code !== 'release_lease_busy' || attempts === 3) throw failure;
-        await pause(2000); continue;
-      }
-      const ports = await reopen(fresh);
-      await inspectOwnReleaseHandoff({ ...ports, lease: fresh, request, expectedHead });
-      await verifyHealth(fresh);
-      await ports.floor.assertCurrent(); fresh.assertHeld();
-      check(ports.floor.head() === expectedHead && !ports.floor.handoffRecoveryState(request).alreadySettled,
-        'release_handoff_recovery_state_changed');
-      await ports.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
-      await fresh.release(); fresh = undefined;
-      return { cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true,
-        leaseLoss: loss, leaseRecovered: { cause: loss.cause, attempts } };
-    }
-  } catch { throw original; }
-  finally { if (fresh) await fresh.release().catch(() => {}); }
 }
 
 /** Fixed image entry. Paths, programs and phase order cannot come from inputs.
