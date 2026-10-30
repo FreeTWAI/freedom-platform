@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { lstat, mkdir, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { checkModules, createModule, isModuleSourcePath, listModules, readModuleCatalog, runModuleCommand } from '../modules.mjs';
@@ -205,4 +205,33 @@ test('module CLI accepts only the documented flags and does not mutate on malfor
     ['module-new', '--id', 'new-feature', '--owner', 'community', '--force', 'true'],
   ]) await assert.rejects(runModuleCommand(args, f.root), { code: 'invalid_arguments' });
   await assert.rejects(lstat(join(f.root, 'modules/new-feature')), { code: 'ENOENT' });
+});
+
+test('generated compact-profile command executes the real CLI for small and large contributor contexts', async t => {
+  const f = await fixture(t), cli = new URL('../cli.mjs', import.meta.url).href;
+  // Thin fixture entrypoint invokes the real implementation, not a CLI mock.
+  await put(f.root, 'scripts/freedom.mjs', `import {runFreedomCli} from ${JSON.stringify(cli)}; process.exitCode = await runFreedomCli();\n`);
+  f.git(['add', '.']); f.git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Synthetic CLI entrypoint']);
+  f.git(['update-ref', 'refs/remotes/origin/main', 'HEAD']);
+  const result = await createModule(f.root, { id: 'community-calendar', owner: 'community', dependencies: ['shared'] });
+  const command = result.next_commands[0], argv = command.split(' ');
+  assert.deepEqual(argv, ['node', 'scripts/freedom.mjs', 'prepare', '--base-ref', 'origin/main', '--scope', 'community-calendar', '--context-profile', 'compact']);
+  assert((await readFile(join(f.root, 'modules/community-calendar/README.md'), 'utf8')).includes(command));
+  const run = args => spawnSync(process.execPath, args, { cwd: f.root, encoding: 'utf8', maxBuffer: 1_000_000 });
+  let prepared = run(argv.slice(1)); assert.equal(prepared.status, 0, prepared.stdout);
+  assert.equal(JSON.parse(prepared.stdout).format, 'freedom.coding-context/v1');
+  await put(f.root, 'modules/community-calendar/README.md', '\ufeff' + '完整必要規則🙂\n'.repeat(30_000));
+  prepared = run(argv.slice(1)); assert.equal(prepared.status, 0, prepared.stdout);
+  const summary = JSON.parse(prepared.stdout); assert.equal(summary.format, 'freedom.coding-context-manifest/v2');
+  const manifest = JSON.parse(await readFile(join(f.root, summary.context_path))), collected = [];
+  for (const chunk of manifest.chunks) {
+    const read = run(['scripts/freedom.mjs', 'context', '--manifest', summary.context_path, '--chunk', String(chunk.index)]);
+    assert.equal(read.status, 0, read.stdout); collected.push(JSON.parse(read.stdout));
+  }
+  for (const source of manifest.sources) {
+    const text = collected.slice(source.first_chunk, source.first_chunk + source.chunk_count).map(c => c.content).join('');
+    assert.equal(sha256(Buffer.from(text)), source.content_sha256);
+  }
+  const done = run(['scripts/freedom.mjs', 'context', '--manifest', summary.context_path, '--check', 'complete']);
+  assert.equal(done.status, 0, done.stdout); assert.equal(JSON.parse(done.stdout).complete, true);
 });

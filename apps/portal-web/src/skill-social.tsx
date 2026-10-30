@@ -1,3 +1,4 @@
+import './zod-csp';
 import {createRoot} from 'react-dom/client';
 import {ApiError,PortalClient} from './api';
 import {GitHubBookSocial,GitHubSocialProvider} from './modules/GitHubSocial';

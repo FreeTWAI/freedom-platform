@@ -509,3 +509,200 @@ test('unknown entry warns and retains all baseline/candidate dependency rules wh
       && message.unknown_paths.includes('new-queue/handler.mjs');
   }));
 });
+
+test('compact v2 retains revision provenance and exact text while sharing only same-path unchanged content', async t => {
+  const f = await largeContextFixture(t);
+  const original = await buildContextDelivery(f.options);
+  const d = await buildContextDelivery({ ...f.options, deliveryFormat: 'compact-v2' });
+  assert.equal(d.manifest.format, 'freedom.coding-context-manifest/v2');
+  assert.notEqual(d.manifest.delivery_id, original.manifest.delivery_id);
+  assert.deepEqual(d.manifest.binding, original.manifest.binding);
+  assert.deepEqual(d.manifest.selection, original.manifest.selection);
+  assert.deepEqual(d.manifest.delta, original.manifest.delta);
+  assert.deepEqual(d.context.blockers, original.context.blockers);
+  assert.equal(d.manifest.sources.length, original.manifest.sources.length);
+  assert.equal(d.chunks.length * 2, original.chunks.length);
+  assert.equal(d.chunks.reduce((n, c) => n + c.value.bytes, 0) * 2,
+    original.chunks.reduce((n, c) => n + c.value.bytes, 0));
+  for (const [index, source] of d.manifest.sources.entries()) {
+    const { canonical_source_index, first_chunk, chunk_count, ...provenance } = source;
+    const { first_chunk: _first, chunk_count: _count, ...expected } = original.manifest.sources[index];
+    assert.deepEqual(provenance, expected);
+    const chunks = d.chunks.slice(first_chunk, first_chunk + chunk_count);
+    const bytes = Buffer.from(chunks.map(chunk => chunk.value.content).join(''));
+    assert.equal(sha256(bytes), source.content_sha256);
+    assert.equal(bytes.length, source.content_bytes);
+    for (const chunk of chunks) {
+      assert.equal(chunk.value.source_index, canonical_source_index);
+      const bound = chunk.value.source_bindings.find(item => item.source_index === index);
+      assert.equal(bound.path, source.path); assert.equal(bound.revision, source.revision);
+      assert.equal(bound.commit, source.revision === 'base' ? d.context.base_commit : d.context.head_commit);
+      assert.equal(bound.workspace_sha256, source.revision === 'base' ? null : d.context.workspace_sha256);
+    }
+    if (source.path === 'docs/rules.md') assert.equal(bytes.toString(), f.rule);
+  }
+  // These fixture instructions have identical text but distinct path authority.
+  const roots = d.manifest.sources.filter(s => ['AGENTS.md', 'README.md', 'CONTRIBUTING.md'].includes(s.path) && s.revision === 'base');
+  assert.equal(new Set(roots.map(s => s.first_chunk)).size, 3);
+  // A one-byte amendment must never alias, even when all other content agrees.
+  await put(f.root, 'docs/rules.md', f.rule + 'x');
+  const changed = await writeContextDelivery({ ...f.options, deliveryFormat: 'compact-v2' });
+  const rules = changed.manifest.sources.filter(s => s.path === 'docs/rules.md');
+  assert.notEqual(rules[0].first_chunk, rules[1].first_chunk);
+  assert.equal(changed.manifest.delta.find(s => s.path === 'docs/rules.md').status, 'changed');
+  assert.equal((await readContextDelivery(f.root, changed.manifestPath, { complete: true })).value.complete, true);
+  const defaultAgain = await buildContextDelivery(f.options);
+  assert.equal(defaultAgain.manifest.format, 'freedom.coding-context-manifest/v1');
+  assert(defaultAgain.manifest.sources.every(s => !('canonical_source_index' in s)));
+  assert(defaultAgain.chunks.every(c => !('source_bindings' in c.value)));
+});
+
+test('compact v2 rejects alias forgery and all-fragment corruption before returning text', async t => {
+  const f = await largeContextFixture(t), options = { ...f.options, deliveryFormat: 'compact-v2' };
+  const d = await writeContextDelivery(options), last = d.chunks.at(-1), saved = await readFile(join(f.root, last.path));
+  const read = () => readContextDelivery(f.root, d.manifestPath, { chunkIndex: 0 });
+  await unlink(join(f.root, last.path)); await assert.rejects(read(), { code: 'artifact_missing' });
+  await put(f.root, last.path, 'corrupt'); await assert.rejects(read(), { code: 'context_chunk_mismatch' });
+  await unlink(join(f.root, last.path)); await symlink(join(f.root, d.chunks[0].path), join(f.root, last.path));
+  await assert.rejects(read(), { code: 'artifact_symlink' });
+  await unlink(join(f.root, last.path)); await put(f.root, last.path, saved);
+  for (const mutate of [m => { m.sources[1].canonical_source_index = 2; }, m => { m.sources[1].first_chunk++; },
+    m => { m.sources[1].sha256 = '0'.repeat(64); }, m => { m.sources.pop(); }, m => { m.format = 'freedom.coding-context-manifest/v1'; }]) {
+    const forged = structuredClone(d.manifest); mutate(forged);
+    await put(f.root, d.manifestPath, pretty(forged));
+    await assert.rejects(read(), { code: 'stale_or_modified_context_manifest' });
+  }
+  await put(f.root, d.manifestPath, pretty(d.manifest));
+  const fragment = structuredClone(d.chunks[0].value); fragment.source_bindings.pop();
+  await put(f.root, d.chunks[0].path, pretty(fragment));
+  await assert.rejects(read(), { code: 'context_chunk_mismatch' });
+});
+
+test('compact v2 keeps unknown-scope fallback, missing rules and source freshness failures', async t => {
+  const f = await fixture(t), options = { ...f.options, requestedPaths: ['unknown/runtime.mjs'], deliveryFormat: 'compact-v2' };
+  t.mock.method(console, 'warn', () => {});
+  const d = await writeContextDelivery(options), v1 = await buildContextDelivery({ ...options, deliveryFormat: undefined });
+  assert.deepEqual(d.manifest.selection, v1.manifest.selection); assert.deepEqual(d.context.tests, v1.context.tests);
+  const read = () => readContextDelivery(f.root, d.manifestPath, { complete: true });
+  const old = await readFile(join(f.root, 'docs/rules.md'));
+  await put(f.root, 'docs/rules.md', 'changed'); await assert.rejects(read(), { code: 'stale_or_modified_context_manifest' });
+  await put(f.root, 'docs/rules.md', old);
+  f.git(['checkout', '-q', '-b', 'new-task']); await assert.rejects(read(), { code: 'stale_or_modified_context_manifest' });
+  const fresh = await writeContextDelivery(options);
+  await unlink(join(f.root, 'docs/rules.md'));
+  const missing = await writeContextDelivery(options);
+  assert(missing.context.blockers.includes('instruction_missing'));
+  assert.equal((await readContextDelivery(f.root, missing.manifestPath, { complete: true })).value.complete, false);
+  const next = f.commit(); f.git(['update-ref', 'refs/heads/baseline', next]);
+  await assert.rejects(readContextDelivery(f.root, fresh.manifestPath, { complete: true }), { code: 'stale_or_modified_context_manifest' });
+  await put(f.root, 'docs/rules.md', old);
+  const noBaseline = await writeContextDelivery(options);
+  assert(noBaseline.context.blockers.includes('baseline_instruction_missing'));
+  assert.equal((await readContextDelivery(f.root, noBaseline.manifestPath, { complete: true })).value.complete, false);
+});
+
+test('compact v2 CLI is explicit, bounded and cannot override a saved manifest request', async t => {
+  const f = await fixture(t);
+  const args = ['prepare', '--base-ref', 'baseline', '--scope', 'governance'];
+  const ordinary = contextCli(f.root, args);
+  assert.equal(ordinary.status, 0, ordinary.stdout); assert.equal(JSON.parse(ordinary.stdout).format, 'freedom.coding-context/v1');
+  const result = contextCli(f.root, [...args, '--delivery-format', 'compact-v2']);
+  assert.equal(result.status, 0, result.stdout);
+  const summary = JSON.parse(result.stdout); assert.equal(summary.format, 'freedom.coding-context-manifest/v2');
+  const manifest = JSON.parse(await readFile(join(f.root, summary.context_path)));
+  for (const chunk of manifest.chunks) {
+    const read = contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', String(chunk.index)]);
+    assert.equal(read.status, 0, read.stdout); assert(Buffer.byteLength(read.stdout) <= CONTEXT_LIMITS.artifact_bytes);
+    assert.equal(JSON.parse(read.stdout).format, 'freedom.coding-context-chunk/v2');
+  }
+  for (const extra of [['--delivery-format', 'compact-v3'], ['--delivery-format', 'compact-v2', '--delivery-format', 'compact-v2']]) {
+    assert.equal(contextCli(f.root, [...args, ...extra]).status, 1);
+  }
+  assert.equal(contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', '0', '--delivery-format', 'compact-v2']).status, 1);
+  await assert.rejects(buildContextDelivery({ ...f.options, deliveryFormat: 'unknown' }), { code: 'invalid_context_delivery_format' });
+});
+
+test('compact v2 does not use deduplication to relax input or publication limits', async t => {
+  const f = await fixture(t), options = { ...f.options, scopes: ['governance'], deliveryFormat: 'compact-v2' };
+  await put(f.root, 'docs/rules.md', Buffer.alloc(2_000_001, 65));
+  await assert.rejects(writeContextDelivery(options), { code: 'artifact_size_limit' });
+  await put(f.root, 'docs/rules.md', Buffer.from([0xc0, 0xaf]));
+  await assert.rejects(writeContextDelivery(options), { code: 'invalid_instruction_encoding' });
+  const d = descriptor(); d.instructions = [];
+  for (let i = 0; i < 9; i++) { const path = `docs/large-${i}.md`; d.instructions.push(path); await put(f.root, path, 'x'.repeat(1_800_000)); }
+  await put(f.root, 'docs/rules.md', '# valid\n');
+  await put(f.root, 'packages/contribution-tools/freedom.module.json', pretty(d));
+  f.commit(); f.git(['update-ref', 'refs/heads/baseline', 'HEAD']);
+  await assert.rejects(writeContextDelivery(options), { code: 'context_total_size_limit' });
+  await assert.rejects(readdir(join(f.root, '.freedom/context')), { code: 'ENOENT' });
+});
+
+test('context capabilities describes the running CLI without reading or writing a workspace', async t => {
+  const root = await fixtureRoot(t), before = await readdir(root);
+  const result = contextCli(root, ['context-capabilities']);
+  assert.equal(result.status, 0, result.stdout);
+  const value = JSON.parse(result.stdout);
+  assert.equal(value.format, 'freedom.context-capabilities/v1');
+  assert.deepEqual(value.default_delivery, { small: 'freedom.coding-context/v1', large: 'freedom.coding-context-manifest/v1' });
+  assert.deepEqual(value.profiles[0].argument, ['--context-profile', 'compact']);
+  assert.deepEqual(value.profiles[0].reader_formats, ['freedom.coding-context/v1', 'freedom.coding-context-manifest/v2',
+    'freedom.coding-context-chunk/v2', 'freedom.coding-context-completeness/v1']);
+  assert.equal(value.automatic_reader_detection, false); assert.equal(value.host_configuration_changed, false);
+  assert.equal(value.execution_authorized, false); assert(value.not_checked.includes('model-token-usage'));
+  assert.deepEqual(await readdir(root), before);
+  for (const extra of [['--context-profile', 'compact'], ['--base-ref', 'HEAD'], ['extra']]) {
+    assert.equal(contextCli(root, ['context-capabilities', ...extra]).status, 1);
+    assert.deepEqual(await readdir(root), before);
+  }
+});
+
+test('compact profile preserves exact small v1 output and selects the existing v2 only for large context', async t => {
+  const f = await fixture(t), args = ['--base-ref', 'baseline', '--scope', 'governance'];
+  for (const command of ['context', 'prepare']) {
+    const legacy = contextCli(f.root, [command, ...args]);
+    const compact = contextCli(f.root, [command, ...args, '--context-profile', 'compact']);
+    assert.equal(legacy.status, 0, legacy.stdout); assert.equal(compact.status, 0, compact.stdout);
+    assert.equal(compact.stdout, legacy.stdout); // Includes framing, not just content length.
+    assert.equal(JSON.parse(compact.stdout).format, 'freedom.coding-context/v1');
+  }
+  await put(f.root, 'docs/rules.md', '\ufeff' + '界🙂\n'.repeat(70_000));
+  f.commit(); f.git(['update-ref', 'refs/heads/baseline', 'HEAD']);
+  const legacy = contextCli(f.root, ['context', ...args]);
+  const compact = contextCli(f.root, ['context', ...args, '--context-profile', 'compact']);
+  const explicit = contextCli(f.root, ['context', ...args, '--delivery-format', 'compact-v2']);
+  for (const result of [legacy, compact, explicit]) assert.equal(result.status, 0, result.stdout);
+  assert.equal(JSON.parse(legacy.stdout).format, 'freedom.coding-context-manifest/v1');
+  assert.equal(JSON.parse(compact.stdout).format, 'freedom.coding-context-manifest/v2');
+  assert.equal(compact.stdout, explicit.stdout);
+  const prepared = contextCli(f.root, ['prepare', ...args, '--context-profile', 'compact']);
+  assert.equal(prepared.status, 0, prepared.stdout);
+  const summary = JSON.parse(prepared.stdout), manifest = JSON.parse(compact.stdout), chunks = [];
+  for (const chunk of manifest.chunks) {
+    const read = contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', String(chunk.index)]);
+    assert.equal(read.status, 0, read.stdout); chunks.push(JSON.parse(read.stdout));
+  }
+  for (const source of manifest.sources) {
+    const bytes = Buffer.from(chunks.slice(source.first_chunk, source.first_chunk + source.chunk_count).map(c => c.content).join(''));
+    assert.equal(sha256(bytes), source.content_sha256);
+  }
+  const done = contextCli(f.root, ['context', '--manifest', summary.context_path, '--check', 'complete']);
+  assert.equal(done.status, 0, done.stdout); assert.equal(JSON.parse(done.stdout).complete, true);
+  await put(f.root, 'docs/rules.md', 'changed after prepare');
+  const stale = contextCli(f.root, ['context', '--manifest', summary.context_path, '--chunk', '0']);
+  assert.equal(stale.status, 1); assert.equal(JSON.parse(stale.stdout).code, 'stale_or_modified_context_manifest');
+});
+
+test('compact profile rejects unknown, duplicate, conflicting and read/verify arguments without artifacts', async t => {
+  const f = await fixture(t), args = ['--base-ref', 'baseline', '--scope', 'governance'];
+  for (const input of [
+    ['prepare', ...args, '--context-profile', 'unknown'],
+    ['prepare', ...args, '--context-profile', 'compact', '--context-profile', 'compact'],
+    ['prepare', ...args, '--context-profile', 'compact', '--delivery-format', 'compact-v2'],
+    ['context', '--manifest', '.freedom/context/task-' + '0'.repeat(16) + '/' + '0'.repeat(64) + '/manifest.json', '--chunk', '0', '--context-profile', 'compact'],
+    ['verify', ...args, '--context-profile', 'compact'], ['prepare', '--context-profile'],
+  ]) {
+    const result = contextCli(f.root, input); assert.equal(result.status, 1, result.stdout);
+    assert.equal(JSON.parse(result.stdout).code, 'invalid_arguments');
+    await assert.rejects(readdir(join(f.root, '.freedom')), { code: 'ENOENT' });
+  }
+});

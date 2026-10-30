@@ -132,7 +132,7 @@ export function GoogleCallback({client,entry,onLoggedIn}:{client:PortalClient;en
     if('linked' in result){leaveGoogleCallback(entry.entry);return;}
     if('totp_required' in result){
       if(typeof result.challenge!=='string'||!result.challenge)throw Error('Invalid challenge');
-      setChallenge(result.challenge);setBusy(false);requestAnimationFrame(()=>input.current?.focus());return;
+      setChallenge(result.challenge);setBusy(false);return;
     }
     if(!result.user||!result.csrf_token)throw Error('Invalid session');
     await completed.current?.(result,result.registered===true);
@@ -159,6 +159,9 @@ export function GoogleCallback({client,entry,onLoggedIn}:{client:PortalClient;en
     void operation.current.then(result=>{if(active)return finish(result)}).catch(cause=>{if(active&&current()){setError(googleError(cause));setBusy(false)}});
     return()=>{active=false;live.current=false;epoch.current++;window.removeEventListener('hashchange',moved);window.removeEventListener('popstate',moved);};
   },[client,entry]);
+  // A frame can run before React commits the challenge input. Focus only after
+  // that challenge is mounted, not on ordinary code-entry or busy-state renders.
+  useEffect(()=>{if(challenge&&current())input.current?.focus();},[challenge]);
   async function verify(event:FormEvent){
     event.preventDefault();if(!challenge||locked.current||!current())return;
     const generation=epoch.current;locked.current=true;setBusy(true);setError('');let factorAccepted=false;

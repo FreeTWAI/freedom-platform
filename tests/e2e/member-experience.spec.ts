@@ -104,7 +104,7 @@ test('completed member submits an event and sees accepted-work facts without pro
   await navigate(page,'社群活動');
   await expect(page.getByRole('heading',{name:'社群活動',level:1})).toBeVisible();
   await expect(page.getByRole('heading',{name:'活動行事曆'})).toBeVisible();
-  await page.getByRole('button',{name:'＋ 提交活動'}).click();
+  await page.getByRole('button',{name:'辦活動'}).click();
   const title=`共創活動 ${randomUUID().slice(0,8)}`;
   await page.getByLabel('活動名稱').fill(title);
   await page.getByLabel('活動說明').fill('一起分享一個可以完成的小作品。');
@@ -112,11 +112,13 @@ test('completed member submits an event and sees accepted-work facts without pro
   const local=(date:Date)=>new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);
   await page.getByLabel('開始時間').fill(local(start));
   await page.getByLabel('結束時間').fill(local(end));
+  await page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
   await page.getByLabel('活動類型').selectOption('reading_group');
   await page.getByLabel('讀書會主題').fill('共同創作入門');
   await page.getByLabel('線上場地').fill('Discord 讀書會場地');
   await page.getByLabel('線上參與連結').fill('https://example.org/meeting');
   const banner=await sharp({create:{width:120,height:63,channels:3,background:'#366177'}}).png().toBuffer();
+  await page.getByText('加上海報或影片（選填）',{exact:true}).click();
   await page.getByLabel('活動海報（選填）').setInputFiles({name:'event-banner.png',mimeType:'image/png',buffer:banner});
   await page.getByRole('button',{name:'送出審核'}).click();
   await expect(page.getByRole('heading',{name:title})).toBeVisible();

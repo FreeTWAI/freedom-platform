@@ -66,8 +66,12 @@ test.describe('sharing around Short, feature ON', () => {
       const sheet = page.getByRole('dialog', {name: '貼文留言', exact: true});
       await expect(sheet).toBeVisible();
       await sheet.getByLabel('寫留言').fill('從 Short 留言');
+      const commentAck = page.waitForResponse(response => response.url() === new URL(`/api/v1/social-posts/${ids[0]}/comments`, page.url()).href && response.request().method() === 'POST');
       await sheet.getByRole('button', {name: '送出留言', exact: true}).click();
-      await expect(sheet.getByText('從 Short 留言')).toBeVisible();
+      const response = await commentAck;
+      expect(response.status()).toBe(201);
+      expect(await response.finished()).toBeNull();
+      await expect(sheet.locator('article.social-comment').filter({hasText: '從 Short 留言'})).toHaveCount(1);
       await sheet.getByRole('button', {name: '關閉', exact: true}).click();
       await expect(sheet).toHaveCount(0);
       await expect(trigger).toBeFocused();
@@ -101,6 +105,77 @@ test.describe('sharing around Short, feature ON', () => {
       await expect(page.getByRole('dialog', {name: '貼文選項與檢舉', exact: true}).getByRole('button', {name: '檢舉貼文', exact: true})).toBeVisible();
     } finally {
       await e2eAuthPool.query('DELETE FROM community_social_comments WHERE post_id = ANY($1::uuid[])', [ids]).catch(() => undefined);
+      await cleanup(e2eAuthPool, ids);
+    }
+  });
+
+  for (const outcome of ['ack', 'unknown', 'committed-unknown'] as const) test(`closing a pending Short comment retains its owner and ${outcome} outcome`, async ({page, e2eAuthPool}) => {
+    await prepare(page);
+    const stamp = Date.now();
+    const ids = await seed(e2eAuthPool, [
+      {title: `待回覆短影音 ${stamp}`, url: `https://www.youtube.com/shorts/${SHORT}`},
+      {title: `另一則短影音 ${stamp}`, url: `https://www.youtube.com/shorts/${WATCH}`},
+    ]);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let received!: () => void;
+    const started = new Promise<void>(resolve => { received = resolve; });
+    const attempts: {key: string | undefined; body: string | null}[] = [];
+    const endpoint = new URL(`/api/v1/social-posts/${ids[0]}/comments`, page.url()).href;
+    await page.route(endpoint, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      attempts.push({key: route.request().headers()['idempotency-key'], body: route.request().postData()});
+      if (attempts.length === 1) {
+        received();
+        // Unknown transport before delivery also preserves the original command on reopening.
+        if (outcome === 'unknown') { await held; await route.abort('failed'); return; }
+        const response = await route.fetch();
+        expect(response.status()).toBe(201);
+        await held;
+        if (outcome === 'committed-unknown') await route.abort('failed');
+        else await route.fulfill({response});
+      } else await route.continue();
+    });
+    try {
+      await page.reload(); await navigate(page, '社群分享'); await selectSocialFeed(page, 'Short');
+      const feed = page.getByRole('region', {name: '短影音', exact: true});
+      const first = feed.locator('article.short-video-slide').filter({hasText: `待回覆短影音 ${stamp}`});
+      const second = feed.locator('article.short-video-slide').filter({hasText: `另一則短影音 ${stamp}`});
+      const trigger = first.getByRole('button', {name: '留言 · 0', exact: true});
+      await trigger.click();
+      const sheet = page.getByRole('dialog', {name: '貼文留言', exact: true});
+      await sheet.getByLabel('寫留言').fill(`保留原留言 ${stamp}`);
+      await sheet.getByRole('button', {name: '送出留言', exact: true}).click(); await started;
+      await sheet.getByRole('button', {name: '關閉', exact: true}).click();
+      await expect(sheet).toHaveCount(0); await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveAccessibleName('留言 · 0');
+      await second.getByRole('button', {name: '留言 · 0', exact: true}).click();
+      await sheet.getByLabel('寫留言').fill('另一則未送出草稿');
+      release();
+      await expect(sheet.getByLabel('寫留言')).toHaveValue('另一則未送出草稿');
+      await sheet.getByRole('button', {name: '關閉', exact: true}).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(second.getByRole('button', {name: '留言 · 0', exact: true})).toBeFocused();
+      // Query the feed only after the modal releases its inert background.
+      if (outcome === 'ack') await expect(first.getByRole('button', {name: '留言 · 1', exact: true})).toBeVisible();
+      await first.getByRole('button', {name: /^留言 · /}).click();
+      if (outcome !== 'ack') {
+        await expect(sheet.getByLabel('寫留言')).toHaveValue(`保留原留言 ${stamp}`);
+        await sheet.getByRole('button', {name: '重試留言', exact: true}).click();
+      }
+      await expect(sheet.locator('article.social-comment').filter({hasText: `保留原留言 ${stamp}`})).toHaveCount(1);
+      await expect(sheet.getByLabel('寫留言')).toHaveValue('');
+      await sheet.getByRole('button', {name: '關閉', exact: true}).click();
+      await expect(first.getByRole('button', {name: '留言 · 1', exact: true})).toBeVisible();
+      expect(attempts).toHaveLength(outcome === 'ack' ? 1 : 2);
+      expect(attempts[0].key).toBeTruthy();
+      if (outcome !== 'ack') expect(attempts[1]).toEqual(attempts[0]);
+      await second.getByRole('button', {name: '留言 · 0', exact: true}).click();
+      await expect(sheet.getByLabel('寫留言')).toHaveValue('另一則未送出草稿');
+    } finally {
+      release();
+      await page.unroute(endpoint);
+      await e2eAuthPool.query('DELETE FROM community_social_comments WHERE post_id = ANY($1::uuid[])', [ids]);
       await cleanup(e2eAuthPool, ids);
     }
   });

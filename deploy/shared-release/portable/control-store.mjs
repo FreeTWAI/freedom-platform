@@ -39,11 +39,15 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
   const root = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucket}/objects`;
   const objectUrl = key => root + '/' + key.split('/').map(encodeURIComponent).join('/');
   const assertHeld = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
-  const request = async (url, body, consume = response => response) => {
+  const requestRaw = async (url, body, consume, diagnostic) => {
     assertHeld();
-    const send = timeout => fetchImpl(url, { method: body ? 'PUT' : 'GET', redirect: 'error',
+    const send = async timeout => {
+      delete diagnostic.httpStatus;
+      const response = await fetchImpl(url, { method: body ? 'PUT' : 'GET', redirect: 'error',
         headers: { Authorization: 'Bearer ' + token, 'Cache-Control': 'no-store', ...(body ? { 'Content-Type': 'application/json' } : {}) },
         signal: AbortSignal.any([lease.signal, timeout]), ...(body ? { body } : {}) });
+      diagnostic.httpStatus = response.status; return response;
+    };
     // A PUT with an unknown outcome must never be repeated. Only GET transport
     // failures and transient HTTP responses receive a bounded retry.
     if (body) {
@@ -73,27 +77,40 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
         // Content/status guards fail immediately; interrupted response streams
         // share the fetch retry budget and deadline, not a second retry loop.
         if (isReleaseFailureCode(error?.code) || isReleaseFailureCode(error?.message)) throw error;
+        delete diagnostic.httpStatus;
         code = timeout.aborted ? 'release_control_read_timeout' : 'release_control_read_network_failed';
       }
       if (attempt === 2) throw Error(code);
+      delete diagnostic.httpStatus;
       try { await delay(wait, undefined, { signal: lease.signal }); }
       catch { assertHeld(); throw Error('release_control_read_failed'); }
     }
   };
-  const bytes = (url, limit, code) => request(url, undefined, async response => {
+  // Observe only the terminal GET attempt; prior transient statuses never survive a later transport failure.
+  const request = async (url, body, consume = response => response, operation) => {
+    const diagnostic = {};
+    try { return await requestRaw(url, body, consume, diagnostic); }
+    catch (error) {
+      if (!body && error && typeof error === 'object') error.controlReadFailure = { operation,
+        ...(Number.isInteger(diagnostic.httpStatus) && diagnostic.httpStatus >= 100 && diagnostic.httpStatus <= 599
+          ? { httpStatus: diagnostic.httpStatus } : {}) };
+      throw error;
+    }
+  };
+  const bytes = (url, limit, code, operation) => request(url, undefined, async response => {
     if (response.status !== 200) { await response.body?.cancel().catch(() => {}); throw Error(code); }
     return boundedResponseBytes(response, limit);
-  });
-  const read = async (key, expected, limit) => {
-    const value = await bytes(objectUrl(key), limit, 'release_control_read_failed');
+  }, operation);
+  const read = async (key, expected, limit, operation) => {
+    const value = await bytes(objectUrl(key), limit, 'release_control_read_failed', operation);
     check(digest(value) === expected, 'release_control_digest_mismatch'); return { bytes: value, value: parse(value) };
   };
-  const list = async () => {
+  const list = async (operation = 'list') => {
     const keys = new Map(), cursors = new Set(); let cursor;
     for (let page = 0; page < 16; page++) {
       const url = new URL(root); url.searchParams.set('prefix', records); url.searchParams.set('per_page', '1000');
       if (cursor) url.searchParams.set('cursor', cursor);
-      const body = parse(await bytes(url.href, 2_000_000, 'release_control_list_failed'));
+      const body = parse(await bytes(url.href, 2_000_000, 'release_control_list_failed', operation));
       check(body.success === true && Array.isArray(body.result) && body.result.length <= 1000, 'release_control_list_invalid');
       for (const item of body.result) {
         check(typeof item.key === 'string' && item.key.startsWith(records) && !keys.has(item.key)
@@ -120,13 +137,15 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
     // Bounded concurrent reads; inspect every result, never accept a partial chain.
     for (let offset = 0; offset < index.length; offset += 8) {
       const batch = await Promise.allSettled(index.slice(offset, offset + 8).map(async item => {
-        const record = await read(item.key, item.sha256, item.size);
+        const record = await read(item.key, item.sha256, item.size, 'chain_record');
         check(record.bytes.length === item.size, 'release_control_size_changed'); return { ...item, record: record.value };
       }));
       const failed = batch.find(item => item.status === 'rejected');
       if (failed) {
-        throw Error([failed.reason?.code, failed.reason?.message].find(isReleaseFailureCode)
+        const error = Error([failed.reason?.code, failed.reason?.message].find(isReleaseFailureCode)
           ?? 'release_control_chain_read_failed');
+        if (failed.reason?.controlReadFailure) error.controlReadFailure = failed.reason.controlReadFailure;
+        throw error;
       }
       values.push(...batch.map(item => item.value));
     }
@@ -143,7 +162,7 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
   return Object.freeze({ target, epoch, seedSha256, load,
     async readAuthority(sha256) {
       check(isDigest(sha256), 'release_control_authority_invalid');
-      return (await read(prefix + 'authority/' + sha256 + '.json', sha256, MAX_AUTHORITY)).value;
+      return (await read(prefix + 'authority/' + sha256 + '.json', sha256, MAX_AUTHORITY, 'authority')).value;
     },
     async append({ previous, data, intentDirectory }) {
       check(!writing && Number.isSafeInteger(previous?.generation) && isDigest(previous?.sha256)
@@ -158,14 +177,14 @@ export function createControlStore({ accountId, bucket, target, epoch, seedSha25
         const bytes = encode(record), sha256 = digest(bytes), key = records + fileName(generation, sha256);
         check(bytes.length <= MAX_RECORD && generation < 4096, 'release_control_record_limit');
         await intent(intentDirectory, generation, { target, epoch, generation, key, sha256, outcome: 'unknown', automaticRetry: false });
-        const existing = await request(objectUrl(key)); const absent = existing.status === 404; await existing.body?.cancel();
-        check(absent, 'release_control_key_exists');
+        const existing = await request(objectUrl(key), undefined, undefined, 'append_existence'); const absent = existing.status === 404; await existing.body?.cancel();
+        if (!absent) throw Object.assign(Error('release_control_key_exists'), { controlReadFailure: { operation: 'append_existence', httpStatus: existing.status } });
         // Check ownership after all preceding awaits, directly before the PUT.
         const response = await request(objectUrl(key), bytes);
         const ok = response.ok; await response.body?.cancel(); check(ok, 'release_control_write_unknown');
-        const saved = await read(key, sha256, bytes.length);
+        const saved = await read(key, sha256, bytes.length, 'append_readback');
         check(saved.bytes.equals(bytes), 'release_control_readback_mismatch');
-        const next = await list();
+        const next = await list('append_list');
         check(next.length === generation + 1 && next.at(-1).sha256 === sha256
           && next.every((row, i) => row.generation === i), 'release_control_concurrent_writer');
         assertHeld(); return { key, generation, sha256, size: bytes.length, record };

@@ -183,6 +183,7 @@
 .home-journal-dialog>header .btn{min-height:44px;flex-shrink:0}
 /* Member home stays content-first at every width. Exploration opens only by choice. */
 .app-frame.social-layout .sidebar .brand-home { min-height:44px; width:fit-content; color:var(--ink); text-decoration:none; }
+.app-frame.social-layout .brand-home-logo { display:block; width:132px; height:44px; flex:none; object-fit:contain; }
 .app-frame.social-layout .sidebar .brand-home:focus-visible { outline:2px solid var(--focus); outline-offset:4px; border-radius:4px; }
 .app-frame.social-layout .home-participation-disclosure > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:12px; list-style:none; }
 .app-frame.social-layout .home-participation-disclosure > summary::-webkit-details-marker { display:none; }

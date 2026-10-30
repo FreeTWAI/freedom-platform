@@ -83,8 +83,16 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
   const [wide,setWide]=useState(()=>window.matchMedia('(min-width:861px)').matches);
   useEffect(()=>{const media=window.matchMedia('(min-width:861px)'),update=()=>setWide(media.matches);media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
   const sessionGeneration = client.sessionGeneration;
+  const participationSession = `${session.user.user_id}:${sessionGeneration}`;
   const scope = useMemo(() => createHomeReadCycle(() => client.sessionGeneration),
     [client, session.user.user_id, sessionGeneration]);
+  const [openedParticipation, setOpenedParticipation] = useState<HomeScope | null>(null);
+  const participationDisclosure = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    // A replacement client must not inherit a closed section's activation.
+    // If the section remains visibly open, read the replacement client's facts.
+    if (participationDisclosure.current?.open) setOpenedParticipation(scope);
+  }, [scope]);
   const [memberValue, setMemberValue] = useState<HomeMember | null>(null);
   const [labelValue, setLabelValue] = useState<HomeValue<Record<string, string>> | null>(null);
   const [onboardingValue, setOnboardingValue] = useState<HomeValue<HomeOnboarding | null> | null>(null);
@@ -215,7 +223,11 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
     </div>}
     <div className="home-layout">
     <div className="home-main">
-    <details className="home-participation-disclosure" key={`${session.user.user_id}:${client.sessionGeneration}`}>
+    <details ref={participationDisclosure} className="home-participation-disclosure" key={participationSession} onToggle={event => {
+      // Keep the read active after first opening; collapsing does not reset a
+      // pending/error state or fetch again. A new login needs its own opening.
+      if (event.target === event.currentTarget && event.currentTarget.open) setOpenedParticipation(scope);
+    }}>
     <summary><span>{t('home.explore')}</span><span className="home-explore-indicator" aria-hidden="true"><span className="home-explore-open">{t('home.expand')} ＋</span><span className="home-explore-close">{t('home.collapse')} −</span></span></summary>
     <div className="home-exploration-content">
     {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
@@ -236,7 +248,7 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
       <img className="home-next-art" src="/art/rpg/skill-codex.webp" alt="" width="124" height="108"/>
     </section>}
 
-    <HomeParticipation client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled}/>
+    <HomeParticipation client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled} active={openedParticipation === scope}/>
     </div>
     </details>
     <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>

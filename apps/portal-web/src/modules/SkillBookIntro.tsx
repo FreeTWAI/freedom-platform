@@ -19,7 +19,7 @@ export function httpsLink(value?:string|null){
   try {const url=new URL(value??'');return url.protocol==='https:'&&!url.username&&!url.password?url.href:null;}catch{return null;}
 }
 export function SkillBookIntro({book,guildName,label='閱讀技能書',community=false,describedBy,disabled=false}:{book:IntroBook;guildName?:string;label?:string;community?:boolean;describedBy?:string;disabled?:boolean}){
-  const [open,setOpen]=useState(false),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),id=useId();
+  const [open,setOpen]=useState(false),[visited,setVisited]=useState(false),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),id=useId();
   const practice=useRef<HTMLDetailsElement>(null),quickstartCode=useRef<HTMLPreElement>(null);
   const [cooperation,setCooperation]=useState<{purpose:string;summary:string}|null>(null),[cooperationError,setCooperationError]=useState('');
   const [illustration,setIllustration]=useState<{bookId:string;url:string;alt:string}|null>(null);
@@ -42,9 +42,10 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
     return()=>controller.abort();
   },[open,bookId]);
   function close(){dialog.current?.close();setOpen(false);trigger.current?.focus();}
-  return <><span className="skill-intro-entry"><button ref={trigger} type="button" className="btn btn-ghost skill-intro-trigger" aria-haspopup="dialog" aria-describedby={describedBy} disabled={disabled} onClick={()=>setOpen(true)}>{label}</button>{guildName&&<SkillBookBadges bookId={bookId}/>}</span>
-    <dialog ref={dialog} className="skill-intro-dialog" aria-labelledby={id} aria-describedby={`${id}-purpose`} data-book-id={book.id??book.book_id} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();close();}} onClose={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
-      <div className="stack"><header className="skill-intro-header"><div><p className="eyebrow">{community?'自由工坊 · 社群技能書':'自由工坊 · 公會技能庫'}</p><h2 id={id}>{book.title}</h2></div><button className="btn btn-ghost" type="button" onClick={close} autoFocus aria-label="關閉技能書介紹">關閉</button></header>
+  return <><span className="skill-intro-entry"><button ref={trigger} type="button" className="btn btn-ghost skill-intro-trigger" aria-haspopup="dialog" aria-describedby={describedBy} disabled={disabled} onClick={()=>{setVisited(true);setOpen(true);}}>{label}</button>{guildName&&<SkillBookBadges bookId={bookId}/>}</span>
+    <dialog ref={dialog} className="skill-intro-dialog" aria-label={visited?undefined:book.title} aria-labelledby={visited?id:undefined} aria-describedby={visited?`${id}-purpose`:undefined} data-book-id={book.id??book.book_id} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();close();}} onClose={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
+      {/* Defer untouched books, then retain their subtree across close/reopen. */}
+      {visited&&<div className="stack"><header className="skill-intro-header"><div><p className="eyebrow">{community?'自由工坊 · 社群技能書':'自由工坊 · 公會技能庫'}</p><h2 id={id}>{book.title}</h2></div><button className="btn btn-ghost" type="button" onClick={close} autoFocus aria-label="關閉技能書介紹">關閉</button></header>
         <div className="skill-intro-cover"><div className="skill-intro-cover-copy"><div className="tag-list">{beginner&&<span className="badge">{beginner.category}</span>}{guide&&<span className="badge">{guide.format}</span>}{guildName&&<span className="badge">{guildName}</span>}</div>
         {open&&<SkillBookBadges bookId={bookId} community={community}/>}<p className="skill-intro-purpose multiline-text" id={`${id}-purpose`}>{cooperation?.purpose??summaryOverride??beginner?.purpose??guide?.summary??book.description}</p></div>{open&&<SkillBookCover book={book} className="skill-intro-art"/>}</div>
         {upstream&&<p className="field-hint">{guide?.author_name&&<>來源標示的{guide.credit_role??'作者'}：{guide.author_name} · </>}原作：{source?.hostname==='github.com'?source.pathname.slice(1):upstream}</p>}
@@ -67,7 +68,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
         {open&&bookId&&<AuthorClaimPanel key={bookId} bookId={bookId}/>}
         {bookId&&<section className="skill-intro-collaboration"><h3>一起開發</h3><DevelopmentEntry kind="skill" target={bookId} label="加入共同開發"/><p className="multiline-text">{cooperation?.summary??guide?.contribution??'在專案任務中認領一項修改，完成後提交 PR。'}</p>{cooperationError&&<p className="field-hint">{cooperationError}</p>}<div className="actions"><a className="btn btn-primary" href={skillSharePath(bookId)} target="_blank" rel="noopener noreferrer">查看里程碑與任務 ↗</a><a className="btn btn-ghost" href={`${skillSharePath(bookId)}/SKILL.md`} target="_blank" rel="noopener noreferrer">交給 Agent ↗</a>{upstream&&<a className="btn btn-ghost" href={`${upstream}/pulls`} target="_blank" rel="noopener noreferrer">查看原作 PR ↗</a>}{fork&&<a className="btn btn-ghost" href={fork} target="_blank" rel="noopener noreferrer">Fork 原作 ↗</a>}{contribute&&<a className="btn btn-ghost" href={contribute} target="_blank" rel="noopener noreferrer">查看協調任務 ↗</a>}{repository&&repository!==upstream&&<a className="btn btn-ghost" href={repository} target="_blank" rel="noopener noreferrer">查看工坊整合版本 ↗</a>}</div><p className="field-hint">修改預設以 PR 回饋原作，由原作維護者審查；保留來源授權與實際作者，Fork 不會自動回饋原作。</p></section>}
         <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack"><SkillBookSourceAccount book={book}/>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at} · 依以下收錄版本，不代表外部服務今天的運作狀態。</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
-      </div>
+      </div>}
     </dialog>
   </>;
 }

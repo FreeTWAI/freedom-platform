@@ -1,0 +1,6 @@
+.event-missions {display:grid;gap:.75rem;min-width:0;border:1px solid var(--line);border-radius:12px;padding:1rem;}
+.event-missions h3,.event-missions h4,.event-missions p {margin:0;}
+.event-missions-list {display:grid;gap:1rem;margin:0;padding-left:1.5rem;}
+.event-missions-list li {min-width:0;overflow-wrap:anywhere;}
+.event-missions .btn {min-height:44px;white-space:normal;overflow-wrap:anywhere;}
+.event-missions .btn:focus-visible {outline:3px solid var(--accent);outline-offset:3px;}

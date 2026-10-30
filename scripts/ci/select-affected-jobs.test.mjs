@@ -11,7 +11,7 @@ import {
   changesFromTrees, collectRepositoryDecision, collectRepositoryE2eDecision, decideE2eProfile, decideAffectedJobs, evaluateVerifyAggregate, githubOutput,
   deliveryDailyRegistryAddition, deliveryVerifyWiringOnly, deliveryCoverageProven, heavyJobCondition, isDocsAllowlisted, loadModuleDescriptors, parseLsTreeZ, parseNameStatusZ,
   MINIMAL_JOB_PROFILES, decideMinimalProfile, decideCiToolsProfile, ciToolsWorkflowProven, ciToolsSchemaProven,
-  decideBrowserSpecProfile, ciToolsBrowserRegistryProven,
+  decideBrowserSpecProfile, ciToolsBrowserRegistryProven, storeSpecDependenciesProven,
 } from './select-affected-jobs.mjs';
 
 import { GUIDE_COMPOSITION_PROFILE } from '../../packages/contribution-tools/pinned-e2e.mjs';
@@ -21,6 +21,7 @@ import { verificationEnvironment } from '../../packages/contribution-tools/proce
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const selector = fileURLToPath(new URL('./select-affected-jobs.mjs', import.meta.url));
 const workflowPath = join(root, '.github/workflows/verify.yml');
+const PINNED_BROWSER_PARSER_INSTALL = "      - name: Install pinned browser selector dependencies\n        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}\n        working-directory: .freedom/trusted\n        run: npm ci --ignore-scripts --no-audit --no-fund\n";
 const oid = (suffix = 'a') => suffix.repeat(40).slice(0, 40);
 const narrow = () => [moduleDescriptor('example', ['modules/example/**'])];
 
@@ -722,7 +723,10 @@ test('verify workflow keeps the required gate, unconditional integrity, and hist
   }
 
   for (const id of ['source-integrity', 'runtime-full', 'runtime-aggregate', 'static-worker', 'governance-consumers', 'ui-e2e', 'deploy-preflight']) {
-    const trusted = jobBlock(text, id);
+    // Only this exact script-disabled install in the workflow checkout may
+    // follow checkout. All candidate npm/scripts commands remain prohibited.
+    const block = jobBlock(text, id);
+    const trusted = id === 'ui-e2e' ? block.replace(PINNED_BROWSER_PARSER_INSTALL, '') : block;
     assert.match(trusted, /repository: \$\{\{ job\.workflow_repository \}\}/u);
     assert.match(trusted, /ref: \$\{\{ job\.workflow_sha \}\}/u);
     assert.match(trusted, /path: \.freedom\/trusted/u);
@@ -1804,4 +1808,108 @@ test('CI tools admit only the exact browser coverage wiring and fixed consumer r
   for(const changed of [registry.replace(addition,addition.replace('public-social-post-page.test.ts','unknown.test.ts')),
     registry.replace(addition,addition.replace('database: false','database: true')),registry.replace("'ci.worker-unit'","'ci.unknown'")])
     assert.equal(ciToolsBrowserRegistryProven(old,changed),false);
+});
+
+
+// Reconstruct the unchanged seven-case parent from the exact append-only #1160
+// snapshot, so adopting that PR on main cannot erase this fixture's Git diff.
+async function reviewedStoreSpecSources() {
+  const after=await readFile(join(root,'packages/contribution-tools/test/fixtures/store-setup-entry-1160.spec.txt'),'utf8');
+  const before=after.split("\n\ntest('cross-account store setup")[0].replace(
+    "import {InstancePageSchema, LaunchPlanSchema, PlanInputSchema, InstallationPageSchema}",
+    "import {InstallationPageSchema}");
+  return {before,after};
+}
+
+test('store spec pilot proves reviewed imports and preserves every baseline case', async () => {
+  const source = (await reviewedStoreSpecSources()).before + "\ntest('eighth candidate case', async () => {});\n";
+  assert.equal(storeSpecDependenciesProven(source, source + '\n// assertion edit\n'), true);
+  for (const extra of ["import './other.spec.js';", "const x = import('./fixtures.js');",
+    "const x = require('./fixtures.js');", "const x = process.env.FREEDOM_E2E_STORE_PHOTO_FIXTURE;",
+    "const x = globalThis.process;", "export * from './fixtures.js';", 'const x = import.meta.url;', 'test.use({});', 'const alias = test;', 'test();'])
+    assert.equal(storeSpecDependenciesProven(source, source + '\n' + extra), false, extra);
+  assert.equal(storeSpecDependenciesProven(source, source.replace('launchStore, captureOffer', 'launchStore, captureOffer, startGalleryBrowserServer')), false);
+  assert.equal(storeSpecDependenciesProven(source, source.replace("test('", "test('renamed ")), false);
+  assert.equal(storeSpecDependenciesProven(source, source, null), false);
+});
+
+test('store spec browser plan requires exact PR topology and falls back on dependency or content uncertainty', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'fp-store-select-'));
+  t.after(() => rm(directory, {recursive:true, force:true}));
+  const env = {...verificationEnvironment(), GIT_CONFIG_GLOBAL:'/dev/null', GIT_CONFIG_NOSYSTEM:'1',
+    GIT_AUTHOR_NAME:'CI Fixture', GIT_AUTHOR_EMAIL:'fixture@example.invalid', GIT_COMMITTER_NAME:'CI Fixture', GIT_COMMITTER_EMAIL:'fixture@example.invalid'};
+  const git = (args,input) => execFileSync('git', ['-C',directory,'-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',...args], {input,encoding:'utf8',stdio:['pipe','pipe','pipe'],env}).trim();
+  const put = async (path,body) => {await mkdir(dirname(join(directory,path)),{recursive:true});await writeFile(join(directory,path),body);};
+  const commit = () => {git(['add','.']);git(['commit','-qm','fixture']);return git(['rev-parse','HEAD']);};
+  const integrate = (base,head) => {
+    const candidate = git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',base,'-p',head],'integration\n');
+    git(['checkout','-q',candidate]);return {repository:directory,event:'pull_request',base,head,candidate};
+  };
+  git(['init','-q','-b','main']);
+  for (const d of narrow()) await put(`modules/${d.module_id}/freedom.module.json`,JSON.stringify(d));
+  const path = 'tests/e2e/store-setup-entry.spec.ts', {before:source,after:actual}=await reviewedStoreSpecSources();
+  for (const dependency of ['tests/e2e/fixtures.ts','tests/e2e/hosted-store-fixture.ts','packages/testing/seed.ts',
+    'contracts/guild-launchpad/v1/tenant.ts','contracts/guild-launchpad/v1/module-registry.ts','contracts/guild-launchpad/v1/hosted-supply-catalog.ts',
+    'contracts/guild-launchpad/v1/primitives.ts','contracts/guild-launchpad/v1/storefront.ts','contracts/common/v1/identity.ts','package.json','package-lock.json'])
+    await put(dependency, '// unchanged reviewed dependency\n');
+  await put(path,source);await put('.gitignore','tests/e2e/generated.spec.ts\n');
+  const base = commit();await put(path,actual);const head = commit(), input = integrate(base,head);
+  assert.equal(collectRepositoryE2eDecision(input).profile,'store-setup-entry');
+  assert.deepEqual(collectRepositoryDecision(input),minimalSelection('browser_specs_only'));
+  for (const extra of [{event:'push',ref:'refs/heads/main'},{event:'merge_group'},{candidate:head},{base:head},{head:base},{candidate:''}])
+    assert.equal(collectRepositoryE2eDecision({...input,...extra}).profile,'full');
+  await put(path,source);assert.equal(collectRepositoryE2eDecision(input).profile,'full');git(['checkout','--',path]);
+  await put('tests/e2e/generated.spec.ts','ignored');assert.equal(collectRepositoryE2eDecision(input).profile,'full');await rm(join(directory,'tests/e2e/generated.spec.ts'));
+  const mutations = [
+    () => put(path,source + "\nimport './unknown.js';"),
+    () => put('tests/e2e/fixtures.ts','changed'), () => put('tests/e2e/hosted-store-fixture.ts','changed'),
+    ...['contracts/guild-launchpad/v1/tenant.ts','contracts/guild-launchpad/v1/module-registry.ts',
+      'contracts/guild-launchpad/v1/hosted-supply-catalog.ts','contracts/guild-launchpad/v1/primitives.ts',
+      'contracts/guild-launchpad/v1/storefront.ts','contracts/common/v1/identity.ts','package-lock.json'].map(path => () => put(path,'changed')),
+    () => put('playwright.config.ts','changed'), () => put('.github/workflows/verify.yml','changed'),
+    () => put('apps/portal-web/src/App.tsx','changed'), () => put('unknown.ts','changed'),
+    () => put('tests/e2e/another.spec.ts','added'), () => rm(join(directory,path)),
+    () => git(['mv',path,'tests/e2e/renamed.spec.ts']),
+    () => put('modules/example/freedom.module.json',JSON.stringify(moduleDescriptor('example',['modules/example/**'],{tests:['runtime.full']}))),
+  ];
+  for (const mutate of mutations) {
+    git(['checkout','-q',head]);await mutate();assert.equal(collectRepositoryE2eDecision(integrate(base,commit())).profile,'full');
+  }
+  git(['checkout','-q',head]);git(['update-index','--chmod=+x',path]);git(['commit','-qm','mode']);git(['checkout','--',path]);
+  assert.equal(collectRepositoryE2eDecision(integrate(base,git(['rev-parse','HEAD']))).profile,'full');
+  git(['checkout','-q',head]);
+  const reversed = git(['commit-tree',git(['rev-parse',head+'^{tree}']),'-p',head,'-p',base],'reversed\n');git(['checkout','-q',reversed]);
+  assert.equal(collectRepositoryE2eDecision({...input,candidate:reversed}).profile,'full');
+});
+
+
+test('browser-only parser installation belongs to the confirmed workflow checkout, never candidate dependencies', async () => {
+  const workflow=await readFile(workflowPath,'utf8'), ui=jobBlock(workflow,'ui-e2e');
+  const install = PINNED_BROWSER_PARSER_INSTALL;
+  assert.equal(ui.split(install).length,2);
+  assert.ok(ui.indexOf('Confirm the pinned runner checkout') < ui.indexOf(install));
+  assert.ok(ui.indexOf(install) < ui.indexOf('Check existing browser-spec consumers'));
+  assert.ok(ui.indexOf(install) < ui.indexOf('Run the pinned browser plan'));
+  assert.match(ui,/ref: \$\{\{ job\.workflow_sha \}\}/);
+  // This new workflow change needs the full existing review/CI path; do not
+  // silently extend the old typecheck/consumer wiring exception to admit it.
+  assert.equal(ciToolsWorkflowProven(workflow.replace(install,''),workflow),false);
+  for (const unsafe of [install.replace('--ignore-scripts ',''),
+    install.replace('working-directory: .freedom/trusted','working-directory: .'),
+    install.replace('npm ci --ignore-scripts --no-audit --no-fund','npm install')]) {
+    const changed=ui.replace(install,unsafe).replace(PINNED_BROWSER_PARSER_INSTALL,'');
+    const checkout=changed.indexOf('path: .freedom/trusted');
+    assert.ok(changed.lastIndexOf('npm ')>checkout,'unsafe installs cannot use the exact exception');
+  }
+});
+
+
+test('exact PR 1160 spec admits only the reviewed schema bindings', async () => {
+  const {before,after:actual}=await reviewedStoreSpecSources();
+  assert.equal(storeSpecDependenciesProven(before,actual),true);
+  for (const extra of ["import {z} from 'zod';", "import {OtherSchema} from '../../contracts/guild-launchpad/v1/other.js';",
+    "import {OpaqueId} from '../../contracts/common/v1/identity.js';"]) {
+    assert.equal(storeSpecDependenciesProven(before,actual+'\n'+extra),false);
+  }
+  assert.equal(storeSpecDependenciesProven(before,actual.replace('InstancePageSchema, LaunchPlanSchema,', 'InstancePageSchema, UnknownSchema, LaunchPlanSchema,')),false);
 });

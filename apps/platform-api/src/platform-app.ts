@@ -1,3 +1,4 @@
+import {createEventMissionRoutes} from './routes/event-missions.js';
 import {createCommunityCertificationRoutes} from './routes/community-certification.js';
 import {createSocialAchievementRoutes} from './routes/social-achievements.js';
 import {createProfileCoverRoutes,createPublicProfileCoverRoutes,isProfileCoverUpload,checkProfileCoverHeaders} from './routes/profile-covers.js';
@@ -475,6 +476,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     return c.json(operation_id?{...page,operation_id}:page);
   });
   app.get('/api/v1/community',c=>c.json(communityCatalog));
+  // Same public book objects as the catalog; avoid downloading all guides for three entry cards.
+  app.get('/api/v1/community/preview',c=>c.json({skill_books:communityCatalog.skill_books.slice(0,3)}));
   if(runtime.arEnabled===true&&runtime.arAssetStore)app.route('/api/v1',createPublicArRoutes(pool,runtime.arAssetStore));
   registerPublicMemberCardRoutes(app, featureContext);
   registerPublicMemberProfiles(app, featureContext);
@@ -558,6 +561,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   if(runtime.socialAchievementsEnabled===true)app.route('/api/v1',createSocialAchievementRoutes(pool));
   app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true,commerceOrderNotificationsInstalled(runtime),runtime.socialAchievementsEnabled===true));
   app.route('/api/v1',createCommunityEventRoutes(pool,runtime.eventEmailSender,origin,runtime));
+  app.route('/api/v1',createEventMissionRoutes(pool));
   registerMemberPromotion(app,pool,runtime);
   registerMemberPublicSocialPosts(app,pool,runtime);
   registerMemberServices(app,pool,runtime);
