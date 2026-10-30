@@ -6,6 +6,12 @@ import './NewbieVillage.css';
 import {restoreVillage,resumeView,villageText,type VillageStep,type VillageView} from '../../../../modules/newbie-village/journey';
 const labels:Record<Quest,InterfaceMessage>={framework:'nv.framework',quiz:'nv.quiz',card:'nv.card',guild:'nv.guild',checkin:'nv.checkin'};
 const HISTORY_KEY='freedomNewbieView';
+function writeVillageView(view:VillageView,replace=false){
+  // Only navigation metadata belongs in history. Notify the shell so a declined
+  // departure restores this accepted entry, not the view from module entry.
+  window.history[replace?'replaceState':'pushState']({...window.history.state,[HISTORY_KEY]:view},'');
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
+}
 export function NewbieVillage({registerLeave}:{registerLeave?:(guard:((nextHash:string|null)=>boolean)|null)=>void}={}){
   const {t,language}=useLanguage();
   const text=(key:Parameters<typeof villageText>[1])=>villageText(language,key);
@@ -33,12 +39,12 @@ export function NewbieVillage({registerLeave}:{registerLeave?:(guard:((nextHash:
   useEffect(()=>{if(clearOpen)cancelRef.current?.focus()},[clearOpen]);
   useEffect(()=>{
     // Store navigation metadata only: never answers or private text in browser history.
-    window.history.replaceState({...window.history.state,[HISTORY_KEY]:initial.view},'');
+    writeVillageView(initial.view,true);
     const back=()=>{if(window.location.hash==='#newbie-village'){copyRequest.current++;setCopyStatus(null);focusStep.current=true;setView(resumeView(pRef.current,window.history.state?.[HISTORY_KEY]));setClearOpen(false)}};
     window.addEventListener('popstate',back);return()=>window.removeEventListener('popstate',back);
   },[initial]);
   const pRef=useRef(p);pRef.current=p;
-  const navigate=(next:VillageView)=>{copyRequest.current++;setCopyStatus(null);focusStep.current=true;setView(next);window.history.pushState({...window.history.state,[HISTORY_KEY]:next},'')};
+  const navigate=(next:VillageView)=>{copyRequest.current++;setCopyStatus(null);focusStep.current=true;setView(next);writeVillageView(next)};
   const go=(next:VillageStep)=>navigate({...view,step:next});
   const finish=(quest:Quest)=>setP(old=>({...old,done:[...new Set([...old.done,quest])]}));
   const result=calculateResult(p.answers),career=CLASSES_V2[result.primary],extra=EXTRA_DATA_V2[result.primary];
@@ -46,7 +52,7 @@ export function NewbieVillage({registerLeave}:{registerLeave?:(guard:((nextHash:
   const suggestedCareers=[...new Set([result.primary,...DIMENSIONS.map(d=>result.dimensionWinners[d])])];
   const baseline=p.baseline||lifestyleBaseline(p.answers);
   const draft=completeAnswers(p.answers)?directionDraft({...result,baseline:p.baseline,action:p.action,checkin:p.checkin}):[t('nv.card'),`${t('nv.baseline')}：${p.baseline}`,`${t('nv.firstWeek')}：${p.action}`,`${t('nv.checkin')}：${p.checkin}`].join('\n');
-  const changeQuestion=(i:number)=>{focusQuestion.current=true;const next={...view,index:i,result:false};setView(next);window.history.replaceState({...window.history.state,[HISTORY_KEY]:next},'')};
+  const changeQuestion=(i:number)=>{focusQuestion.current=true;const next={...view,index:i,result:false};setView(next);writeVillageView(next,true)};
   const toggle=(option:number)=>{setCopyStatus(null);setP(old=>{const a=old.answers[index];const next=q.multi?(a.includes(option)?a.filter(v=>v!==option):a.length<(q.maxSelect??1)?[...a,option]:a):[option];return {...old,answers:old.answers.map((v,i)=>i===index?next:v),done:old.done.filter(v=>v!=='quiz')}})};
   const point=(i:number,value:number)=>{const angle=(-90+i*60)*Math.PI/180;return `${200+Math.cos(angle)*value*25},${200+Math.sin(angle)*value*25}`};
   const closeClear=()=>{setClearOpen(false);clearRef.current?.focus()};
@@ -55,7 +61,7 @@ export function NewbieVillage({registerLeave}:{registerLeave?:(guard:((nextHash:
     try{localStorage.removeItem(STORAGE_KEY)}catch{setClearFailed(true);return}
     const progress=freshProgress(),next=resumeView(progress);skipSave.current=true;lastSavedProgress.current=progress;
     setP(progress);setView(next);setSaved(false);setStorageError(false);setReadError(false);setClearFailed(false);setCleared(true);setCopyStatus(null);closeClear();
-    window.history.replaceState({...window.history.state,[HISTORY_KEY]:next},'');
+    writeVillageView(next,true);
   };
   const edit=(field:'baseline'|'action'|'checkin',value:string)=>{copyRequest.current++;setCopyStatus(null);setP(old=>({...old,[field]:value,done:old.done.filter(q=>q!==(field==='checkin'?'checkin':'card'))}))};
   const backup=[...QUESTIONS_V2.flatMap((q,i)=>p.answers[i].length?[q.q,...p.answers[i].map(j=>q.options[j].text),'']:[]),draft].join('\n');

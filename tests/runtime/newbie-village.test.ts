@@ -2,6 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
+import {runInNewContext} from 'node:vm';
+import {transformSync} from 'esbuild';
 import {QUESTIONS_V2,DIMENSION_MAP_V2,DIMENSION_META_V2,RADAR_AXES_V2,CLASSES_V2,EXTRA_DATA_V2,CAREER_KEYS,CAREER_GUILDS,DIMENSIONS,directionDraft,DIRECTION_DRAFT_BASE_URL,calculateResult,lifestyleBaseline,validAnswer,completeAnswers,parseProgress,freshProgress,badges} from '../../modules/newbie-village/index.js';
 import {skillBooksForGuild} from '../../modules/community/catalog.js';
 const answers=QUESTIONS_V2.map(()=>[0]);
@@ -202,4 +204,67 @@ test('new village controls have all five language variants',()=>{
     assert.equal(new Set(values).size,5);
     assert.ok(values.every(value=>value.trim().length>0));
   }
+});
+
+// Source-level history integration: execute the real shell listener and module
+// writer, not a copied router. Browser event ordering/rendering stays an E2E tier.
+function villageHistoryHarness(){
+  const compile=(file:string)=>transformSync(readFileSync(new URL(`../../apps/portal-web/src/${file}`,import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm'}).code;
+  const app=compile('App.tsx'),marker=app.indexOf('const transition = messageHistoryTransition.current;');
+  const start=app.lastIndexOf('const changed =',marker),end=app.indexOf('\n    };',marker);
+  assert.ok(start>=0&&end>start,'actual shell history listener');
+  const village=compile('modules/NewbieVillage.tsx'),writerStart=village.indexOf('function writeVillageView('),writerEnd=village.indexOf('\n}',writerStart);
+  assert.ok(writerStart>=0&&writerEnd>writerStart,'actual village history writer');
+  const clone=<T,>(value:T):T=>JSON.parse(JSON.stringify(value));
+  const initial={freedomNewbieView:{step:'overview',index:0,result:false},preserved:'presentation'};
+  const location={href:'http://localhost/#newbie-village',hash:'#newbie-village',pathname:'/',search:''};
+  const calls={guard:0,route:0,open:0,close:0,push:0,replace:0,after:0};
+  const move=(hash:string)=>{location.hash=hash;location.href=`http://localhost/${hash}`};
+  const history={state:clone(initial) as any,
+    pushState(state:unknown){calls.push++;this.state=clone(state)},
+    replaceState(state:unknown,_title:string,url?:string){calls.replace++;this.state=clone(state);if(url)move(new URL(url,location.href).hash)},
+    go(){throw Error('unexpected legacy-chat traversal')},
+  };
+  let changed:(event:{type:string})=>void;
+  const state={window:{location,history,dispatchEvent:(event:{type:string})=>changed(event)},HashChangeEvent:class{constructor(public type:string){}},HISTORY_KEY:'freedomNewbieView',
+    messageLocation:{current:{href:location.href,state:history.state}},messageHistoryTransition:{current:null as null|{after:(()=>void)|null}},
+    acceptedHash:{current:location.hash},allow:false,pageLeaveGuard:{current:(_hash:string)=>{calls.guard++;return state.allow}},
+    isMessagesHistoryEntry:(value:any)=>value?.freedomMessagesOpen===true,isMessagesHash:(hash:string)=>hash.split('?')[0]==='#messages',
+    setTab:()=>{calls.route++},setLocationHash:()=>{},setMessagesOpen:(open:boolean)=>{if(!open)calls.close++},
+    launchpadEnabled:false,tabFromHash:()=>'',openMessages:()=>{calls.open++},
+  };
+  changed=runInNewContext(`${app.slice(start,end+7)};changed`,state);
+  const write=runInNewContext(`${village.slice(writerStart,writerEnd+2)};writeVillageView`,state) as (view:{step:string;index:number;result:boolean},replace?:boolean)=>void;
+  const event=(type='popstate')=>changed({type});
+  const depart=(hash='#guilds')=>{move(hash);history.state=null;event();event('hashchange')};
+  return {state,calls,history,write,event,depart,move,clone};
+}
+
+test('village metadata pushes/replaces update the shell cancellation snapshot without routing or private text',()=>{
+  const h=villageHistoryHarness(),guild={step:'guild',index:0,result:false};
+  h.write({step:'card',index:0,result:false});h.write(guild);
+  assert.equal(h.calls.push,2);assert.equal(h.calls.route,0);assert.equal(h.calls.guard,0);
+  assert.deepEqual(h.clone(h.state.messageLocation.current.state),{freedomNewbieView:guild,preserved:'presentation'});
+  h.depart();assert.equal(h.state.window.location.hash,'#newbie-village');
+  assert.deepEqual(h.history.state.freedomNewbieView,guild);assert.equal(h.calls.guard,1);assert.equal(h.calls.route,0);
+  const quiz={step:'quiz',index:7,result:false};h.write(quiz,true);assert.equal(h.calls.push,2);
+  h.depart();assert.deepEqual(h.history.state.freedomNewbieView,quiz);assert.equal(h.calls.guard,2);
+});
+
+test('genuine same-route Back updates the snapshot; accepted departure still routes once',()=>{
+  const h=villageHistoryHarness();h.write({step:'guild',index:0,result:false});
+  const older={freedomNewbieView:{step:'card',index:0,result:false},preserved:'older'};
+  h.history.state=older;h.event();
+  assert.equal(h.state.messageLocation.current.state,older);h.depart();assert.deepEqual(h.history.state,older);
+  h.state.allow=true;h.depart();assert.equal(h.state.acceptedHash.current,'#guilds');assert.equal(h.calls.route,1);assert.equal(h.history.state,null);
+});
+
+test('same-href chat changes and pending history transitions keep their original branches',()=>{
+  const h=villageHistoryHarness();h.history.state={...h.history.state,freedomMessagesOpen:true};h.event();
+  assert.equal(h.calls.open,1);assert.equal(h.calls.route,1);
+  h.state.messageHistoryTransition.current={after:()=>{h.calls.after++}};
+  h.history.state={freedomNewbieView:{step:'card',index:0,result:false}};
+  h.event('hashchange');assert.equal(h.calls.after,0);assert.equal(h.calls.route,1);
+  h.event();assert.equal(h.calls.after,1);assert.equal(h.calls.route,2);assert.equal(h.calls.close,1);
+  h.event('hashchange');assert.equal(h.calls.after,1);assert.equal(h.calls.route,2);assert.equal(h.calls.guard,0);
 });

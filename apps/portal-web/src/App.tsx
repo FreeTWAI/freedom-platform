@@ -873,7 +873,12 @@ function Workspace({
         transition.after?.()
         return
       }
-      if(current.href===previous.href&&isMessagesHistoryEntry(current.state)===isMessagesHistoryEntry(previous.state))return
+      if(current.href===previous.href&&isMessagesHistoryEntry(current.state)===isMessagesHistoryEntry(previous.state)){
+        // Modules may update navigation-only metadata without changing the URL.
+        // Keep the accepted entry current without routing or bypassing a guard.
+        messageLocation.current=current
+        return
+      }
       if (nextHash !== acceptedHash.current && pageLeaveGuard.current && !pageLeaveGuard.current(nextHash)) {
         window.history.replaceState(previous.state, '', `${window.location.pathname}${window.location.search}${acceptedHash.current}`)
         messageLocation.current={href:window.location.href,state:window.history.state}

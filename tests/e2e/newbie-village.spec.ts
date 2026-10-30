@@ -296,7 +296,13 @@ test('NEWBIE-010 result actions never replace an existing card and clipboard fai
   await expect(page.locator('#nv-card pre')).toContainText('我原本的行動');
 });
 
-test('NEWBIE-011 external guild visit then older history entry restores its own workspace, not latest cursor',async({page})=>{
+for(const member of [false,true])test(`NEWBIE-011 ${member?'member shell':'anonymous'} external guild visit then older history entry restores its own workspace, not latest cursor`,async({page})=>{
+  if(member){
+    await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
+    await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
+    await page.getByRole('button',{name:'登入',exact:true}).click();
+    await expect(page.locator('.shell')).toBeVisible();
+  }
   await page.goto('/#newbie-village');
   await page.locator('.nv-step-nav').getByRole('button',{name:/3\. 寫方向卡/}).click();
   await page.locator('#nv-card textarea').first().fill('跨頁保留');
@@ -333,6 +339,13 @@ for(const member of [false,true])test(`NEWBIE-012 ${member?'member shell':'anony
   await page.locator('#nv-guild a[href="#guilds"]').click();
   await expect(page.locator('#nv-guild')).toBeVisible();
   await expect(page).toHaveURL(/#newbie-village$/);
+  expect(await page.evaluate(()=>history.state.freedomNewbieView.step)).toBe('guild');
+  // Repeated cancellation must retain the accepted cursor and the same draft.
+  page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');void dialog.dismiss()});
+  await page.locator('#nv-guild a[href="#guilds"]').click();
+  await expect(page.locator('#nv-guild')).toBeVisible();
+  await expect(page.getByRole('textbox',{name:'複製備份：展開後選取文字自行保存'})).toHaveValue(/未保存的生活安排/);
+  expect(await page.evaluate(()=>history.state.freedomNewbieView.step)).toBe('guild');
   // Reload uses the browser's native beforeunload safeguard, not a fake saved result.
   const unload=page.waitForEvent('dialog');
   // A cancelled reload has no load event: do not await navigation completion.
