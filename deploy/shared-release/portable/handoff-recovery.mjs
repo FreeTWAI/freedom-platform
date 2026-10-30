@@ -14,6 +14,11 @@ export async function inspectReleaseHandoff({ floor, pool, deployer, lease, requ
     && /^sha256:[a-f0-9]{64}$/.test(evidence.artifactDigest ?? '')
     && ['sourceSha', 'sourceTree', 'target', 'configSha256'].every(key => evidence[key] === request[key]),
   'release_handoff_recovery_binding_invalid');
+  return inspectHandoffState({ floor, pool, deployer, lease, evidence, database, role });
+}
+
+// Both hosted recovery and same-run settlement use these exact live checks.
+async function inspectHandoffState({ floor, pool, deployer, lease, evidence, database, role }) {
   lease.assertHeld();
   const { alreadySettled, sourceSha } = floor.handoffRecoveryState(evidence), state = floor.state();
   const q = await pool.connect();
@@ -66,4 +71,13 @@ export async function completeReleaseHandoff({ floor, lease, request, observed }
   check(floor.state().pending === null, 'release_handoff_recovery_state_changed');
   return { reconciledRunId: observed.reconciledRunId, reconciledRunAttempt: observed.reconciledRunAttempt,
     alreadySettled: observed.alreadySettled, cleanupVerified: true, pendingCleared: true, originalFailureRetained: true };
+}
+
+/** Same-run evidence is the original request and retained head, never a failed
+ * hosted artifact. Require the missing event; an uncertain append stays hosted. */
+export async function inspectOwnReleaseHandoff({ floor, request, expectedHead, ...ports }) {
+  check(request.mode === 'deploy' && request.releaseKind === 'independent'
+    && isDigest(expectedHead) && floor.head() === expectedHead, 'release_handoff_recovery_state_changed');
+  check(floor.handoffRecoveryState(request).alreadySettled === false, 'release_handoff_recovery_state_changed');
+  return inspectHandoffState({ floor, request, evidence: request, ...ports });
 }

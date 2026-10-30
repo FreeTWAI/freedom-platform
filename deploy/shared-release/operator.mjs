@@ -1,3 +1,4 @@
+import { LEASE_LOSS_CAUSES, isLeaseErrorClass } from './portable/lease.mjs';
 import { isReleaseFailureCode, releasePhases } from './admission.mjs';
 import { isBackupDiagnosticCode } from '../../packages/media-migration/backup-diagnostics.ts';
 import { spawn } from 'node:child_process';
@@ -96,7 +97,7 @@ export function validateOperatorResult(value, admission, installation, requestDi
       && typeof handoff.alreadySettled === 'boolean' && handoff.cleanupVerified === true
       && handoff.pendingCleared === true && handoff.leaseReleased === true
       && handoff.originalFailureRetained === true, 'release_handoff_incomplete');
-    return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+    return value.phases.map(phase => ({ name: phase.name, status: 'passed', ...publicLeaseDiagnostics(phase, admission),
       ...(phase.name === 'handoff' ? { reconciledRunId: handoff.reconciledRunId,
         reconciledRunAttempt: handoff.reconciledRunAttempt, alreadySettled: handoff.alreadySettled } : {}),
       startedAt: new Date(Date.parse(phase.startedAt)).toISOString(), completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
@@ -114,7 +115,7 @@ export function validateOperatorResult(value, admission, installation, requestDi
       && health.schemaVerified === true && health.smokePassed === true, 'release_health_unconfirmed');
     requireRelease(handoff.cleanupVerified === true && handoff.leaseReleased === true
       && handoff.retainedFloorAdvanced === true, 'release_handoff_incomplete');
-    return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+    return value.phases.map(phase => ({ name: phase.name, status: 'passed', ...publicLeaseDiagnostics(phase, admission),
       ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),
       startedAt: new Date(Date.parse(phase.startedAt)).toISOString(), completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
   }
@@ -136,7 +137,7 @@ export function validateOperatorResult(value, admission, installation, requestDi
     && handoff.leaseReleased === true && handoff.retainedFloorAdvanced === true,
   'release_handoff_incomplete');
   // Fixed fields only; flag record URLs must pass the repository URL whitelist.
-  return value.phases.map(phase => ({ name: phase.name, status: 'passed',
+  return value.phases.map(phase => ({ name: phase.name, status: 'passed', ...publicLeaseDiagnostics(phase, admission),
     ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),
     startedAt: new Date(Date.parse(phase.startedAt)).toISOString(),
     completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
@@ -178,6 +179,25 @@ export function publicControlReadFailure(value) {
   return { operation: value.operation, ...(value.httpStatus !== undefined ? { httpStatus: value.httpStatus } : {}) };
 }
 
+export function publicLeaseLoss(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !LEASE_LOSS_CAUSES.includes(value.cause)
+    || !['heldMs', 'sinceHeartbeatMs', 'heartbeats'].every(key => Number.isSafeInteger(value[key]) && value[key] >= 0)
+    || value.sinceHeartbeatMs > value.heldMs
+    || (value.errorClass !== undefined && !isLeaseErrorClass(value.errorClass))) return undefined;
+  return { cause: value.cause, heldMs: value.heldMs, sinceHeartbeatMs: value.sinceHeartbeatMs, heartbeats: value.heartbeats,
+    ...(value.errorClass !== undefined ? { errorClass: value.errorClass } : {}) };
+}
+function publicLeaseDiagnostics(phase, admission) {
+  const leaseLoss = publicLeaseLoss(phase.leaseLoss), recovery = phase.leaseRecovered;
+  if (recovery !== undefined) requireRelease(phase.name === 'handoff' && phase.status === 'passed'
+    && admission.mode === 'deploy' && admission.releaseKind === 'independent' && leaseLoss
+    && recovery && typeof recovery === 'object' && !Array.isArray(recovery) && recovery.cause === leaseLoss.cause
+    && Number.isInteger(recovery.attempts) && recovery.attempts >= 1 && recovery.attempts <= 3,
+  'release_operator_phase_invalid');
+  return { ...(leaseLoss && (phase.status === 'failed' || recovery) ? { leaseLoss } : {}),
+    ...(recovery ? { leaseRecovered: { cause: recovery.cause, attempts: recovery.attempts } } : {}) };
+}
+
 export function operatorProgress(value, admission, installation, requestDigest) {
   validateBinding(value, admission, installation, requestDigest);
   const phases = admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission);
@@ -200,7 +220,7 @@ export function operatorProgress(value, admission, installation, requestDigest) 
           .map(key => [key, failure[key]])),
         ...(['not_started', 'running', 'failed', 'completed'].includes(failure.snapshotDump) ? { snapshotDump: failure.snapshotDump } : {}) } } : {};
     const controlReadFailure = phase.status === 'failed' ? publicControlReadFailure(phase.controlReadFailure) : undefined;
-    return { name: phase.name, reportedStatus: phase.status, ...diagnostic,
+    return { name: phase.name, reportedStatus: phase.status, ...diagnostic, ...publicLeaseDiagnostics(phase, admission),
       ...(controlReadFailure ? { controlReadFailure } : {}),
       ...(i === value.phases.length - 1 && phase.status === 'failed' && isReleaseFailureCode(phase.failureCode)
         ? { failureCode: phase.failureCode } : {}),
@@ -257,6 +277,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     await run('docker', operatorCommand(installation.image, source, privateDir, resultDir, name, workDir));
     const validate = admission.mode === 'backup' ? validateBackupOperatorResult : validateOperatorResult;
     const result = validate(await boundedJson(join(resultDir, 'result.json')), admission, installation, digest(requestBytes));
+    // Capture final recovery diagnostics even if handoff finished between polls.
+    await readProgress();
     return result;
   } catch (error) {
     await readProgress();

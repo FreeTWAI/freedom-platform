@@ -4,7 +4,7 @@ import { open, mkdir, rename } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { Pool } from 'pg';
 import { releasePhases, REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha, releaseFailureCode } from '../admission.mjs';
-import { validateOperatorResult, validateBackupOperatorResult, publicControlReadFailure } from '../operator.mjs';
+import { validateOperatorResult, validateBackupOperatorResult, publicControlReadFailure, publicLeaseLoss } from '../operator.mjs';
 import { BACKUP_PHASES } from '../scheduled-admission.mjs';
 import { validatePortableConfig, portableConnections } from './config.mjs';
 import { privateBackupRoot } from './backup-storage.mjs';
@@ -20,7 +20,7 @@ import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema }
 import { runPortableBackup } from './backup.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
-import { inspectReleaseHandoff, completeReleaseHandoff } from './handoff-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff, inspectOwnReleaseHandoff } from './handoff-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -42,6 +42,45 @@ async function save(path, value) {
   const temporary = join(dirname(path), 'result-' + randomUUID() + '.json'), file = await open(temporary, 'wx', 0o600);
   try { await file.writeFile(bytes); await file.sync(); } finally { await file.close(); }
   await rename(temporary, path);
+}
+
+/** Recover only this run's single missing handoff, with fresh signal-bound ports.
+ * No migration, publish, backup or flag operation is reachable from this helper. */
+export async function settleOwnHandoff({ request, phases, lease, expectedHead, error, acquire, reopen, verifyHealth,
+  signal, renewConnections = async () => {}, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  const loss = publicLeaseLoss(lease?.loss());
+  const original = Object.assign(new Error('release_lease_lost'), { code: 'release_lease_lost', leaseLoss: loss });
+  if (!['release_lease_lost', 'release_lease_not_held'].includes(releaseFailureCode(error))
+    || !loss || !lease.signal.aborted || signal?.aborted || request.mode !== 'deploy' || request.releaseKind !== 'independent'
+    || phases.length !== 4 || !['preflight', 'migration', 'deploy', 'health'].every((name, i) =>
+      phases[i].name === name && phases[i].status === 'passed')) throw error;
+  // release destroys an ownership-lost connection even when unlock is impossible.
+  await lease.release().catch(() => {});
+  let fresh;
+  try {
+    // Retire this process's idle probe connections so the shared recovery
+    // check can require zero other release sessions without exemptions.
+    await renewConnections();
+    for (let attempts = 1; attempts <= 3; attempts++) {
+      signal?.throwIfAborted();
+      try { fresh = await acquire(); }
+      catch (failure) {
+        if (failure.code !== 'release_lease_busy' || attempts === 3) throw failure;
+        await pause(2000); continue;
+      }
+      const ports = await reopen(fresh);
+      await inspectOwnReleaseHandoff({ ...ports, lease: fresh, request, expectedHead });
+      await verifyHealth(fresh);
+      await ports.floor.assertCurrent(); fresh.assertHeld();
+      check(ports.floor.head() === expectedHead && !ports.floor.handoffRecoveryState(request).alreadySettled,
+        'release_handoff_recovery_state_changed');
+      await ports.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+      await fresh.release(); fresh = undefined;
+      return { cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true,
+        leaseLoss: loss, leaseRecovered: { cause: loss.cause, attempts } };
+    }
+  } catch { throw original; }
+  finally { if (fresh) await fresh.release().catch(() => {}); }
 }
 
 /** Fixed image entry. Paths, programs and phase order cannot come from inputs.
@@ -71,6 +110,16 @@ export async function main(args = process.argv.slice(2)) {
   let lease, floor, deployer, transport, before, plan, expected, built, beforeBackup, unchangedProof, handoffObserved;
   const access = request.target === 'staging-next' ? { clientId: credentials.stagingAccessClientId, clientSecret: credentials.stagingAccessClientSecret } : undefined;
   const directory = async name => { const path = join(WORK, name); await mkdir(path, { mode: 0o700 }); return path; };
+  const acquire = () => acquireReleaseLease(pools.migrator, { database: config.database.name,
+    role: connections.migrator.role, signal: controller.signal });
+  const reopen = async (held, intentName) => {
+    const store = createControlStore({ accountId: config.accountId, bucket: config.backupBucket, target: config.target,
+      ...config.floor, token: credentials.cloudflareApiToken, lease: held });
+    return { floor: await openReleaseFloor({ store, sourceRoot: SOURCE, intentDirectory: await directory(intentName) }),
+      deployer: createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
+        token: credentials.cloudflareApiToken, signal: held.signal }), pool: pools.migrator,
+      database: config.database.name, role: connections.migrator.role };
+  };
   const phase = async (name, operation) => {
     same(name, phases[result.phases.length], 'release_entry_phase_order');
     const item = { name, status: 'running', startedAt: new Date().toISOString() }; result.phases.push(item); await save(path, result);
@@ -79,6 +128,11 @@ export async function main(args = process.argv.slice(2)) {
       Object.assign(item, { status: 'failed', failureCode: releaseFailureCode(error), completedAt: new Date().toISOString() });
       const controlReadFailure = publicControlReadFailure(error.controlReadFailure);
       if (controlReadFailure) item.controlReadFailure = controlReadFailure;
+      const leaseLoss = publicLeaseLoss(error.leaseLoss ?? lease?.loss());
+      if (leaseLoss) {
+        item.leaseLoss = leaseLoss;
+        if (item.failureCode === 'release_lease_not_held') item.failureCode = 'release_lease_lost';
+      }
       if (error.backupFailure) item.backupFailure = error.backupFailure;
       throw error;
     }
@@ -113,12 +167,8 @@ export async function main(args = process.argv.slice(2)) {
       if (!isBackup && !independentRelease) check(schedule?.format === 'freedom.verified-scheduled-backup/v1' && schedule.operatorImage === request.operatorImage
         && schedule.configSha256 === request.configSha256 && Date.now() - Date.parse(schedule.completedAt) <= 36 * 3600000,
       'release_entry_schedule_required');
-      lease = await acquireReleaseLease(pools.migrator, { database: config.database.name, role: connections.migrator.role, signal: controller.signal });
-      const store = createControlStore({ accountId: config.accountId, bucket: config.backupBucket, target: config.target,
-        ...config.floor, token: credentials.cloudflareApiToken, lease });
-      floor = await openReleaseFloor({ store, sourceRoot: SOURCE, intentDirectory: await directory('control-intents') });
-      deployer = createWorkerDeployer({ accountId: config.accountId, zoneId: config.zoneId, target: config.target,
-        token: credentials.cloudflareApiToken, signal: lease.signal });
+      lease = await acquire();
+      ({ floor, deployer } = await reopen(lease, 'control-intents'));
       if (isHandoff) {
         handoffObserved = await inspectReleaseHandoff({ floor, pool: pools.migrator, deployer, lease, request,
           database: config.database.name, role: connections.migrator.role });
@@ -228,10 +278,24 @@ export async function main(args = process.argv.slice(2)) {
     });
     if (!independentRelease) await phase('backup-after', async () => (await backup('backup-after', request.sourceSha)).proof);
     await phase('handoff', async () => {
-      await floor.assertCurrent(); lease.assertHeld();
-      await floor.passed('handoff', { cleanupVerified: true, ...(independentRelease ? { migrationVerified: true } : { schedule: request.scheduleEvidence }) });
-      await lease.release(); lease = null;
-      return { ...(independentRelease ? {} : { scheduledBackupsVerified: true }), cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true };
+      const expectedHead = floor.head();
+      try {
+        await floor.assertCurrent(); lease.assertHeld();
+        await floor.passed('handoff', { cleanupVerified: true, ...(independentRelease ? { migrationVerified: true } : { schedule: request.scheduleEvidence }) });
+        await lease.release(); lease = null;
+        return { ...(independentRelease ? {} : { scheduledBackupsVerified: true }), cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true };
+      } catch (error) {
+        return settleOwnHandoff({ request, phases: result.phases.slice(0, -1), lease, expectedHead, error,
+          signal: controller.signal, acquire, renewConnections: async () => {
+            const ended = await Promise.allSettled(Object.values(pools).map(pool => pool.end()));
+            check(ended.every(item => item.status === 'fulfilled'), 'release_entry_pool_cleanup_failed');
+            for (const [key, value] of Object.entries(connections)) {
+              pools[key] = new Pool(value.options); pools[key].on('error', stop);
+            }
+          }, reopen: held => reopen(held, 'handoff-control-intents'),
+          verifyHealth: held => waitForPublicRelease({ target: config.target, sourceSha: request.sourceSha, access, signal: held.signal,
+            record: value => save(join(WORK, `handoff-health-${value.attempt}.json`), value) }) });
+      }
     });
     validateOperatorResult(result, request, installation, result.requestSha256);
   } finally {
