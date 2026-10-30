@@ -71,9 +71,9 @@
  .app-frame.social-layout .sidebar .brand{gap:8px}
  .app-frame.social-layout .sidebar-brand-art{width:44px;max-width:44px}
  .app-frame.social-layout .sidebar .brand strong{font-size:1rem}
- .app-frame.social-layout .mobile-menu-toggle{font-size:0;width:44px;height:44px;padding:0;border-color:var(--line)}
- .app-frame.social-layout .mobile-menu-toggle::after{content:'☰';font-size:20px;color:var(--ink)}
- .app-frame.social-layout .mobile-menu-toggle[aria-expanded=true]::after{content:'×';font-size:26px}
+ /* One vector flex item avoids the hidden text gap and platform font-glyph offsets. */
+ .app-frame.social-layout .mobile-menu-toggle{width:44px;min-width:44px;height:44px;padding:0;gap:0;align-items:center;justify-content:center;color:var(--ink);border-color:var(--line)}
+ .app-frame.social-layout .mobile-menu-toggle > svg{display:block;flex:none}
  .app-frame.social-layout .workspace-navigation{display:none}
  .app-frame.social-layout .workspace-navigation.is-open{position:absolute;left:12px;right:12px;top:100%;z-index:1;display:block;width:auto;max-height:var(--mobile-navigation-height,calc(100dvh - 94px));overflow:auto;overscroll-behavior:contain;background:var(--bg-elev);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
  .app-frame.social-layout .mobile-nav-backdrop{display:block;position:fixed;inset:var(--mobile-navigation-top,74px) 0 0;background:color-mix(in srgb,var(--ink) 18%,transparent)}
