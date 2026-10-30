@@ -557,10 +557,13 @@ eventTest('legacy draft preserves guest policy until the organizer explicitly ch
   await login(page,eventFixture.email);await page.goto(`/events/${eventId}`);
   const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('guest_allowed');
-  await card.getByLabel('活動說明',{exact:true}).fill('只更新說明，不改既有報名方式');
-  await card.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(card.getByRole('button',{name:'編輯草稿',exact:true})).toBeVisible();
-  expect((await e2eAuthPool.query('SELECT registration_policy FROM community_events WHERE event_id=$1',[eventId])).rows[0].registration_policy).toBe('guest_allowed');
+  const editor=card.locator('form.experience-editor');
+  // A populated textarea contributes its initial text to the wrapping label's
+  // textContent. Match the label prefix, while keeping the editor scope exact.
+  await editor.getByLabel(/^活動說明/).fill('只更新說明，不改既有報名方式');
+  await editor.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(editor).toHaveCount(0);
+  expect((await e2eAuthPool.query('SELECT registration_policy,description FROM community_events WHERE event_id=$1',[eventId])).rows[0]).toEqual({registration_policy:'guest_allowed',description:'只更新說明，不改既有報名方式'});
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await card.getByLabel('報名方式',{exact:true}).selectOption('community_member');
-  await card.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(card.getByRole('button',{name:'編輯草稿',exact:true})).toBeVisible();
+  await editor.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(editor).toHaveCount(0);
   await page.reload();await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
 });

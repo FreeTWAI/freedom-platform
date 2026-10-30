@@ -265,7 +265,12 @@ test('member-only public event does not offer guest management intake when parti
   await expect(page.getByRole('button',{name:'寄送私人管理連結',exact:true})).toHaveCount(0);await expect(page.getByLabel('你的名字',{exact:true})).toHaveCount(0);
 });
 
+featureTest.describe('member-only event registration',()=>{
+  const memberMail:{to:string;subject:string;body:string}[]=[];
+  // Capture the existing referral-mail requirement locally; never contact a provider.
+  featureTest.use({memberFeatures:{eventEmailSender:async(to,subject,body)=>{memberMail.push({to,subject,body});}}});
 featureTest('new member keeps referral through required guild joining and explicitly confirms the original event',async({page,e2eAuthPool},info)=>{
+  memberMail.length=0;
   await page.unroute('**/api/v1/site');
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),community_discovery_enabled:true}})});
   const eventId=randomUUID(),shareCode=randomUUID().replaceAll('-','').slice(0,24),email=`event-newcomer-${randomUUID()}@example.test`;
@@ -284,11 +289,18 @@ featureTest('new member keeps referral through required guild joining and explic
     await quickJoin(page);await expect(page.getByRole('region',{name:'活動專頁',exact:true})).toContainText(title);
     await expect(page.getByRole('button',{name:'我要參加',exact:true})).toBeVisible();expect(writes).toBe(0);
     await expect(page).toHaveURL(new URL(destination,page.url()).href);
-    await page.getByRole('button',{name:'我要參加',exact:true}).click();await expect(page.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();expect(writes).toBe(1);
+    const confirmation=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1/events/${eventId}/rsvp`);
+    await page.getByRole('button',{name:'我要參加',exact:true}).click();expect((await confirmation).status()).toBe(200);
+    await expect(page.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();expect(writes).toBe(1);
+    expect(memberMail).toHaveLength(1);expect(memberMail[0]).toMatchObject({to:email,subject:'自由工坊：活動參與資料'});
+    expect(memberMail[0].body).toContain(title);expect(memberMail[0].body).toContain(`/events/${eventId}`);
     const rows=(await e2eAuthPool.query(`SELECT r.state,u.email,ref.email AS referrer FROM community_event_rsvps r JOIN users u ON u.user_id=r.user_id LEFT JOIN users ref ON ref.user_id=r.referred_by_user_id WHERE r.event_id=$1`,[eventId])).rows;
     expect(rows).toEqual([{state:'going',email,referrer:'maker@local.test'}]);
     expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_event_guest_rsvps WHERE event_id=$1',[eventId])).rows[0].count)).toBe(0);
     await page.reload();await expect(page.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();expect(writes).toBe(1);
+    expect(memberMail).toHaveLength(1);
     await info.attach('member-registration-evidence',{body:JSON.stringify({eventId,memberRegistrations:rows.length,guestRegistrations:0,explicitRsvpWrites:writes}),contentType:'application/json'});
   }finally{await page.unrouteAll({behavior:'wait'});await page.close();await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[eventId]);}
+});
+
 });
