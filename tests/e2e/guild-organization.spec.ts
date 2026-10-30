@@ -431,7 +431,7 @@ test('directory discovery precedes optional controls with readable wrapping and 
       if (fontSize === '16px') {
         const top = (await directory.boundingBox())!.y;
         const firstCard = (await directory.locator('.guild-card').first().boundingBox())!.y;
-        expect(firstCard - top).toBeLessThan(480);
+        expect(firstCard - top, `first card at ${width}px`).toBeLessThan(480);
       }
     }
   }
@@ -528,10 +528,10 @@ test('guild landing names the next step while membership settings stay optional 
   expect(fixture.writes).toEqual([]);
   for (const theme of ['light', 'dark', 'versefolk']) {
     await page.evaluate(value => {localStorage.setItem('freedom-theme', value); window.dispatchEvent(new StorageEvent('storage', {key: 'freedom-theme', newValue: value}));}, theme);
-    for (const width of [320, 1280]) {
+    for (const width of [320, 390, 1280]) {
       await page.setViewportSize({width, height: 900});
       await expect(hero).toBeVisible();
-      expect(await hero.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+      expect(await hero.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `${theme} hero at ${width}px`).toBe(true);
       expect(await summary.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }

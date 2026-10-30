@@ -271,9 +271,8 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   if(launchpadKey)return <GuildLaunchpad blockLoaders={blockLoaders} key={launchpadKey} client={client} guildKey={launchpadKey} mode="member" supplierConsoleEnabled={site?.supplier_console_enabled===true} userId={session.user.user_id} registerPendingLeave={registerPendingLeave} onBack={()=>{window.location.hash='guilds';}}/>;
   return <section className="module-panel guilds-panel" aria-label="公會目錄">
     <section className="guild-hub-hero" aria-labelledby="guild-hub-title">
-      <div className="guild-hub-intro"><p className="guild-hub-eyebrow">自由工坊 · 專業協作</p><h2 id="guild-hub-title">找到同路人，一起把專長做成作品。</h2><p>選擇有興趣的公會，閱讀入門技能書，再到聊天室交流。加入不需要先完成定位測驗。</p></div>
+      <div className="guild-hub-intro"><h2 id="guild-hub-title">找到同路人，一起把專長做成作品。</h2><p>選公會、讀技能書、到聊天室交流。定位測驗可稍後補做。</p></div>
       {!loading&&!loadError&&<div className="guild-hub-next">
-        <span className="guild-hub-eyebrow">{entryGuild?'繼續參與':'從一個領域開始'}</span>
         <strong>{entryGuild?.name??'挑選你的第一個公會'}</strong>
         <p>{entryGuild?.first_step||'看看下方的公會介紹與入門技能，再決定加入。'}</p>
         {entryGuild?<button type="button" className="btn btn-primary" onClick={()=>{if(launchpadEnabled)window.location.hash=`guilds/${entryGuild.guild_key}`;else viewGuild(entryGuild);}}>{launchpadEnabled?'進入我的公會工作區':'查看我的公會'}</button>:<button type="button" className="btn btn-primary" onClick={()=>document.querySelector<HTMLInputElement>('[data-guide-anchor="guilds:search"]')?.focus()}>搜尋感興趣的領域</button>}
