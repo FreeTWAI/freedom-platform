@@ -541,6 +541,12 @@ test('positioning returns to the confirmed result without discarding unsaved ans
   const resume=page.getByRole('button',{name:'繼續本頁的定位草稿',exact:true});
   await expect(resume).toBeFocused();
   await resume.click();await expect(radio).toBeChecked();
+  await page.route('**/api/v1/me/onboarding',route=>route.abort('failed'));
+  await page.getByRole('button',{name:'返回我的定位',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('定位結果暫時無法載入');
+  await expect(page.getByRole('button',{name:'重新載入定位結果',exact:true})).toBeVisible();
+  await expect(resume).toBeFocused();await resume.click();await expect(radio).toBeChecked();
+  await page.unroute('**/api/v1/me/onboarding');
   page.once('dialog',dialog=>dialog.dismiss());
   await navigate(page,'工坊夥伴');
   await expect(page).toHaveURL(/#positioning$/);await expect(radio).toBeChecked();
