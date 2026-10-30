@@ -140,7 +140,7 @@ async function expectNewbieActionColors(action:import('@playwright/test').Locato
 }
 async function expectNewbieActions(page:import('@playwright/test').Page){
   const actions=page.locator('.newbie-village .btn:visible');
-  expect(await actions.count()).toBeGreaterThanOrEqual(9);
+  await expect.poll(()=>actions.count()).toBeGreaterThanOrEqual(9);
   for(const action of await actions.all()){
     await action.scrollIntoViewIfNeeded();await expect(action).toBeVisible();await expectNewbieActionColors(action);
     if(await action.isEnabled()){
@@ -198,19 +198,19 @@ test('NEWBIE-006 optional card path, browser back/forward and reload preserve dr
   await expect(page.getByRole('link',{name:'先逛公會，不做測驗'})).toHaveAttribute('href','#guilds');
   await page.locator('.nv-step-nav').getByRole('button',{name:/3\. 寫方向卡/}).click();
   const card=page.locator('#nv-card');
-  await card.getByLabel('過生活底線',{exact:true}).fill('只投入週末');
-  await card.getByLabel('第一週行動',{exact:true}).fill('完成一份筆記');
+  await card.getByRole('textbox',{name:'過生活底線',exact:true}).fill('只投入週末');
+  await card.getByRole('textbox',{name:'第一週行動',exact:true}).fill('完成一份筆記');
   await card.getByRole('button',{name:'完成方向卡，繼續探索'}).click();
   await expect(page.locator('#nv-guild')).toBeVisible();
   await expect(page.locator('#nv-guild a[href^="#guilds/"]')).toHaveCount(0);
   await page.goBack();
-  await expect(card.getByLabel('第一週行動',{exact:true})).toHaveValue('完成一份筆記');
+  await expect(card.getByRole('textbox',{name:'第一週行動',exact:true})).toHaveValue('完成一份筆記');
   await page.goForward();
   await expect(page.locator('#nv-guild')).toBeVisible();
   await page.reload();
   await expect(page.locator('#nv-guild')).toBeVisible();
   await page.locator('.nv-step-nav').getByRole('button',{name:/3\. 寫方向卡/}).click();
-  await expect(card.getByLabel('過生活底線',{exact:true})).toHaveValue('只投入週末');
+  await expect(card.getByRole('textbox',{name:'過生活底線',exact:true})).toHaveValue('只投入週末');
   const history=await page.evaluate(()=>JSON.stringify(window.history.state));
   expect(history).not.toContain('只投入週末');expect(history).not.toContain('完成一份筆記');
   expect(await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!).answers.every((a:number[])=>a.length===0),STORAGE_KEY)).toBe(true);
@@ -313,16 +313,16 @@ test('NEWBIE-011 external guild visit then older history entry restores its own 
 });
 
 for(const member of [false,true])test(`NEWBIE-012 ${member?'member shell':'anonymous owned links'} confirms unsaved departure and offers a copyable backup`,async({page})=>{
+  await page.addInitScript(()=>{
+    const set=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){if(key==='freedom-newbie-village-v1')throw new DOMException('Blocked','QuotaExceededError');return set.call(this,key,value)};
+  });
   if(member){
     await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
     await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
     await page.getByRole('button',{name:'登入',exact:true}).click();
     await expect(page.locator('.shell')).toBeVisible();
   }
-  await page.addInitScript(()=>{
-    const set=Storage.prototype.setItem;
-    Storage.prototype.setItem=function(key,value){if(key==='freedom-newbie-village-v1')throw new DOMException('Blocked','QuotaExceededError');return set.call(this,key,value)};
-  });
   await page.goto('/#newbie-village');
   await page.locator('.nv-step-nav').getByRole('button',{name:/3\./}).click();
   await page.locator('#nv-card textarea').first().fill('未保存的生活安排');
@@ -335,9 +335,12 @@ for(const member of [false,true])test(`NEWBIE-012 ${member?'member shell':'anony
   await expect(page).toHaveURL(/#newbie-village$/);
   // Reload uses the browser's native beforeunload safeguard, not a fake saved result.
   const unload=page.waitForEvent('dialog');
-  const reload=page.reload().catch(()=>null);
-  const dialog=await unload;expect(dialog.type()).toBe('beforeunload');await dialog.dismiss();await reload;
+  // A cancelled reload has no load event: do not await navigation completion.
+  await page.evaluate(()=>{setTimeout(()=>window.location.reload(),0)});
+  const dialog=await unload;expect(dialog.type()).toBe('beforeunload');await dialog.dismiss();
   await expect(page.locator('#nv-guild')).toBeVisible();
+  await expect(page.getByRole('textbox',{name:'複製備份：展開後選取文字自行保存'})).toHaveValue(/未保存的生活安排/);
+  await expect(page).toHaveURL(/#newbie-village$/);
   page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');void dialog.accept()});
   await page.locator('#nv-guild a[href="#guilds"]').click();
   await expect(page).toHaveURL(/#guilds$/);
