@@ -1,5 +1,18 @@
 # 共用發布入口
 
+2026-10-30 08:25 UTC：兩環境已部署 d026ba76／schema196，staging 舊 handoff 已結清
+
+兩環境現為 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196；[staging 41023423825](https://github.com/FreeTWAI/freedom-platform/actions/runs/41023423825) 與[正式站 41025042462](https://github.com/FreeTWAI/freedom-platform/actions/runs/41025042462) 的 preflight、migration、deploy、health、handoff 五階段均通過，皆為 `release_confirmed`，Deployment 7433524819／7433758011 均為 success。正式站 handoff 沒有失鎖；08:24 UTC 公開 health 為 `ok`、同 SHA。
+
+10/29 staging `5d662e6e` 的失鎖已透過 hosted `mode=handoff` 結清：[41022455441](https://github.com/FreeTWAI/freedom-platform/actions/runs/41022455441) 在 R2 `chain_record` 讀取、任何寫入前報 `release_lease_lost`；相同輸入重試 [41023132536](https://github.com/FreeTWAI/freedom-platform/actions/runs/41023132536) 回傳 `reconciled`／`handoff_reconciled`。原 run 40853952665 與 Deployment 7409321089 保留 failure，不改寫為成功。
+
+工具映像 `ghcr.io/freetwai/freedom-release-operator@sha256:d075c12427c42d69ae52a5beb232841f8f3529dcce36ba34d2f4088d53bc292c` 由同一 main 建置（[41022144027](https://github.com/FreeTWAI/freedom-platform/actions/runs/41022144027)），已安裝於兩環境；main Verify 41017154345／CodeQL 41017154341 均成功。設定僅將 `migrationProfile.last` 由194調至196：staging-next 07:58 UTC config hash 為 `1de2e24870366cc259f1950a597ebd9f4b67b3e98f8f494521ce4cc199bdf789`，next 08:13 UTC 為 `9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d`。
+
+Migration195 活動幫手與196私人自記小任務已在兩環境套用為資料表；不啟用新旗標或功能，其他 pins 與旗標未變。本次沒有備份，也不要求發布備份。租約中斷根因仍未知，由 [#1193](https://github.com/FreeTWAI/freedom-platform/pull/1193) 增加診斷；真人會員旅程與原168項未驗狀態維持。完整來源、artifact digest、復原及發布收據見[本次觀察](../../docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json)。
+
+2026-10-29 10:19 UTC 歷史（當時待結清；已由上方10/30收據接續）：產品 `5d662e6e` 的 main CI 已成功；[staging 40853952665](https://github.com/FreeTWAI/freedom-platform/actions/runs/40853952665) 回報部署與 health 通過，最後 handoff 失去 lease，workflow／Deployment 仍為 failure。journal 尚未持鎖讀回，未重送部署；正式站仍是健康的 `5c4bf56d`／schema194。
+復原 [#1173](https://github.com/FreeTWAI/freedom-platform/pull/1173) 的 source 修正與 CI 已完成，仍待獨立正式核准、合併與新映像驗證／安裝。之後優先結清這筆 staging handoff，再取得同 source／image 的成功 staging 發布收據，才接續正式站。設定 hash、映像 pins 與旗標本輪未變；租約中斷根因未確認。見[完整收據與下一步](../../docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
+
 一般程式發布使用 `releaseKind: independent`：preflight → migration（無待執行 SQL 時唯讀確認；有則走已核准交易）→ deploy → health → handoff。
 不等待日常備份、不執行發布前後的 dump／遠端讀回／隔離還原，也不需要備份 DB 憑證。
 日常 `Shared backup` 保留每日 **05:43 UTC**、完整備份／讀回／還原／清理與獨立收據。
