@@ -214,6 +214,7 @@ for (const sample of [
     await page.getByRole('button', {name: '確認發布', exact: true}).click();
     await expect(page.getByText(/已發布版本 \d+/)).toBeVisible();
     await guest.reload(); await expect(guest.getByText(changedMission, {exact: true})).toBeVisible();
+    await page.getByRole('button', {name: '版本紀錄', exact: true}).click();
     await page.getByRole('listitem').filter({hasText: new RegExp(`^版本 ${firstRevision} ·`)}).getByRole('button', {name: '回復到此版本', exact: true}).click();
     await page.getByRole('dialog').getByLabel('回復原因', {exact: true}).fill('回到第一份可組裝版面');
     await page.getByRole('button', {name: '確認回復', exact: true}).click();
