@@ -300,7 +300,13 @@ featureTest('new member keeps referral through required guild joining and explic
     await page.reload();await expect(page.getByRole('button',{name:'取消報名',exact:true})).toBeVisible();expect(writes).toBe(1);
     expect(memberMail).toHaveLength(1);
     await info.attach('member-registration-evidence',{body:JSON.stringify({eventId,memberRegistrations:rows.length,guestRegistrations:0,explicitRsvpWrites:writes}),contentType:'application/json'});
-  }finally{await page.unrouteAll({behavior:'wait'});await page.close();await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[eventId]);}
+  }finally{
+    await page.unrouteAll({behavior:'wait'});await page.close();
+    // The successful member RSVP has a restrictive event FK. Remove only this
+    // synthetic event's RSVP rows before its parent; keep production FKs intact.
+    await e2eAuthPool.query('DELETE FROM community_event_rsvps WHERE event_id=$1',[eventId]);
+    await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[eventId]);
+  }
 });
 
 });
