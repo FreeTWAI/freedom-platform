@@ -110,14 +110,15 @@ test('invitation cancel preserves drafts; unknown publication remains recoverabl
   await expect(page.getByLabel('共創邀請名稱',{exact:true})).toHaveValue('');
 });
 
-for(const theme of ['light','dark','versefolk'])test(`co-creation list and task detail keep keyboard return and narrow layout in ${theme}`,async({page})=>{
+for(const theme of ['light','dark','versefolk','guide-dragon','guide-ai-sister'])test(`co-creation list and task detail keep keyboard return and narrow layout in ${theme}`,async({page})=>{
   await page.addInitScript(value=>localStorage.setItem('freedom-theme',value),theme);
   await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await navigate(page,'一起開發');
-  await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+  await expect(page.locator('html')).toHaveAttribute('data-experience-profile',theme);
+  await expect(page.locator('html')).toHaveAttribute('data-theme',theme==='guide-dragon'?'dark':theme==='guide-ai-sister'?'light':theme);
   const panel=page.locator('.cocreation-panel');
   const entry=panel.getByRole('button',{name:'查看任務：自動剪輯共創：一起把可用的底層疊起來',exact:true});
   for(const width of [320,390,1440]){
@@ -127,6 +128,18 @@ for(const theme of ['light','dark','versefolk'])test(`co-creation list and task 
     await entry.focus();await page.keyboard.press('Enter');
     await expect(panel.locator('#cocreation-project-title')).toBeFocused();
     await expect(panel.getByRole('link',{name:'到 GitHub 查看任務 ↗',exact:true})).toBeVisible();
+    await expect(panel.locator('.expedition-issue summary').first()).toBeVisible();
+    const summaries=panel.locator('.cocreation-detail details:visible > summary');
+    expect(await summaries.count()).toBeGreaterThanOrEqual(4);
+    for(const summary of await summaries.all()){
+      expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect(await summary.evaluate(node=>getComputedStyle(node).listStyleType)).not.toBe('none');
+      await summary.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');
+      await expect(summary).toBeFocused();
+      expect(await summary.evaluate(node=>getComputedStyle(node).outlineStyle)).not.toBe('none');
+      await summary.press('Enter');await expect(summary.locator('..')).toHaveAttribute('open','');
+      await summary.press('Space');await expect(summary.locator('..')).not.toHaveAttribute('open','');
+    }
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await panel.getByRole('button',{name:'返回共創專案',exact:true}).click();await expect(entry).toBeFocused();
   }
