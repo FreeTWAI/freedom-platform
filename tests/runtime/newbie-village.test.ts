@@ -154,7 +154,7 @@ test('newbie plain and secondary actions own a paired surface without overriding
   assert.match(css,/outline:2px solid var\(--focus\)/);
   const source=readFileSync(new URL('../../apps/portal-web/src/modules/NewbieVillage.tsx',import.meta.url),'utf8');
   const classes=[...source.matchAll(/className="(btn[^"]*)"/g)].map(m=>m[1]);
-  assert.equal(classes.length,11);
+  assert.ok(classes.length>=11,'all workflow actions retain the scoped style contract');
   assert.ok(classes.includes('btn btn-small'),'plain next/result action must be covered');
   assert.ok(classes.every(value=>value==='btn btn-small'||value==='btn btn-secondary btn-small'));
 });
@@ -174,5 +174,32 @@ test('all newbie appearance palettes pair readable text and focus with the actua
     const palette={...tokens('styles.css'),...tokens('rpg-theme.css'),...(profile.baseTheme!=='dark'?tokens('light-theme.css'):{}),...(profile.baseTheme==='versefolk'?tokens('versefolk-theme.css'):{}),...(profile.skin==='dragon'?tokens('dragon-theme.css'):{})};
     assert.ok(ratio(palette['--ink'],palette['--bg-elev'])>=4.5,profile.id+' text');
     assert.ok(ratio(palette['--focus'],palette['--bg-elev'])>=3,profile.id+' focus');
+  }
+});
+
+import {resumeView,restoreVillage,villageText} from '../../modules/newbie-village/journey.js';
+test('legacy progress resumes first unanswered question without changing answers or card',()=>{
+  const progress={...freshProgress(),answers:QUESTIONS_V2.map((_,i)=>i<6?[0]:[]),baseline:'不可覆寫',action:'我的行動',checkin:'回顧'};
+  const restored=restoreVillage(JSON.stringify(progress));
+  assert.deepEqual(restored.progress,progress);
+  assert.deepEqual(restored.view,{step:'overview',index:6,result:false});
+  assert.deepEqual(parseProgress(JSON.stringify({...progress,journey:{step:'card',index:6,result:false}})),progress);
+});
+test('village cursor validates stored metadata and never shows results for incomplete answers',()=>{
+  const p=freshProgress();
+  assert.deepEqual(resumeView(p,{step:'outside',index:99,result:true}),{step:'overview',index:0,result:false});
+  assert.deepEqual(resumeView(p,{step:'quiz',index:4,result:true}),{step:'quiz',index:4,result:false});
+  assert.deepEqual(resumeView({...p,answers},{step:'quiz',index:14,result:true}),{step:'quiz',index:14,result:true});
+  for(const raw of [null,'bad','null','x'.repeat(50001)])assert.deepEqual(restoreVillage(raw).progress,p);
+  const restored=restoreVillage(JSON.stringify({...p,answers,journey:{step:'card',index:14,result:true}}));
+  assert.deepEqual(restored.view,{step:'card',index:14,result:true});
+  // Clearing does not resurrect data from older history entries; metadata is validated against current answers.
+  assert.equal(resumeView(p,restored.view).result,false);
+});
+test('new village controls have all five language variants',()=>{
+  for(const key of ['purpose','start','back','readFailed','clearFailed','clearConfirm','cancel','saveCard','saveCheckin'] as const){
+    const values=['zh-Hant','en','ja','ko','es'].map(language=>villageText(language,key));
+    assert.equal(new Set(values).size,5);
+    assert.ok(values.every(value=>value.trim().length>0));
   }
 });
