@@ -1,6 +1,10 @@
 name: Shared release
-run-name: '${{ inputs.mode }} ${{ inputs.target }} at ${{ inputs.release_sha }} by @${{ github.actor }}'
+run-name: '${{ github.event_name == ''workflow_run'' && ''automatic staging → production'' || inputs.mode }} ${{ inputs.target }} at ${{ inputs.release_sha || github.event.workflow_run.head_sha }}'
 on:
+  workflow_run:
+    workflows: [Verify local milestone, CodeQL advanced setup]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       release_sha:
@@ -33,9 +37,14 @@ permissions:
 concurrency:
   group: shared-release
   cancel-in-progress: false
+  queue: max
 jobs:
   admission:
-    if: github.ref == 'refs/heads/main' && github.repository == 'FreeTWAI/freedom-platform'
+    if: >-
+      github.ref == 'refs/heads/main' && github.repository == 'FreeTWAI/freedom-platform' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.id == 1378081342))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -61,9 +70,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CONTROLLER_SHA: ${{ job.workflow_sha }}
-          RELEASE_SHA: ${{ inputs.release_sha }}
-          RELEASE_TARGET: ${{ inputs.target }}
-          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+          RELEASE_TRIGGER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RELEASE_SHA: ${{ inputs.release_sha || github.event.workflow_run.head_sha }}
+          RELEASE_TARGET: ${{ inputs.target || 'staging-next' }}
+          RELEASE_MODE: ${{ inputs.mode || 'deploy' }}
           RELEASE_RECOVER_BACKUP_RUN_ID: ${{ inputs.recover_backup_run_id }}
           RELEASE_RECOVER_RELEASE_RUN_ID: ${{ inputs.recover_release_run_id }}
           RELEASE_COMMAND: admit
@@ -116,6 +127,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CONTROLLER_SHA: ${{ job.workflow_sha }}
+          RELEASE_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+          RELEASE_TRIGGER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           RELEASE_SHA: ${{ needs.admission.outputs.source_sha }}
           RELEASE_TARGET: ${{ needs.admission.outputs.target }}
           RELEASE_MODE: ${{ needs.admission.outputs.mode }}
@@ -146,7 +159,79 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-result-${{ github.run_id }}-${{ github.run_attempt }}
+          name: release-result-${{ github.run_id }}-${{ github.run_attempt }}${{ github.event_name == 'workflow_run' && '-staging-next' || '' }}
+          path: ${{ runner.temp }}/release-public/receipt.json
+          if-no-files-found: warn
+          retention-days: 90
+  production:
+    needs: [admission, deploy]
+    if: github.event_name == 'workflow_run' && needs.admission.outputs.mode == 'deploy' && needs.deploy.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    environment:
+      name: next
+      # The workflow SHA is the controller, not the selected release. Create the
+      # deployment explicitly with the selected SHA after rechecking admission.
+      deployment: false
+    permissions:
+      contents: read
+      actions: read
+      deployments: write
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: controller
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.admission.outputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Execute the installed environment operator
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_SHA: ${{ job.workflow_sha }}
+          RELEASE_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+          RELEASE_TRIGGER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RELEASE_SHA: ${{ needs.admission.outputs.source_sha }}
+          RELEASE_TARGET: next
+          RELEASE_MODE: ${{ needs.admission.outputs.mode }}
+          RELEASE_COMMAND: execute
+          RELEASE_SOURCE_DIRECTORY: ${{ github.workspace }}/source
+          PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
+          RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
+          RELEASE_OPERATOR_IMAGE: ${{ vars.RELEASE_OPERATOR_IMAGE }}
+          RELEASE_CONFIG_SHA256: ${{ vars.RELEASE_CONFIG_SHA256 }}
+          RELEASE_CONFIG_JSON: ${{ secrets.RELEASE_CONFIG_JSON }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+          RUNTIME_DATABASE_URL: ${{ secrets.RUNTIME_DATABASE_URL }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node controller/deploy/shared-release/cli.mjs
+      - name: Stop this run's container after interruption
+        if: always()
+        env:
+          RELEASE_CONTAINER: freedom-release-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker rm --force "$RELEASE_CONTAINER" >/dev/null 2>&1 || true
+          # An interrupted release remains unknown/in_progress, never successful.
+          # Hosted runner teardown removes private temporary files and Docker state.
+      - name: Save public release receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-result-${{ github.run_id }}-${{ github.run_attempt }}-next
           path: ${{ runner.temp }}/release-public/receipt.json
           if-no-files-found: warn
           retention-days: 90

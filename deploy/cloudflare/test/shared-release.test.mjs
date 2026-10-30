@@ -1,4 +1,4 @@
-import { runPortableMigration, preparePortableMigration } from '../../shared-release/portable/migration.mjs';
+import { runPortableMigration, preparePortableMigration, sourceMigrationProfile } from '../../shared-release/portable/migration.mjs';
 import { deriveDisabledMaterialPolicyAdditions, appendDisabledMaterialPolicies } from '../../shared-release/portable/material-policy.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
 import { backupDiagnosticCode, isBackupDiagnosticCode } from '../../../packages/media-migration/backup-diagnostics.ts';
@@ -32,6 +32,7 @@ import { replayReleaseFloor, openReleaseFloor } from '../../shared-release/porta
 import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
 import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
+import { admitAutomaticRelease, automaticDisposition } from '../../shared-release/automatic-admission.mjs';
 import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
@@ -78,6 +79,76 @@ const environment = () => ({ GITHUB_REPOSITORY: REPOSITORY, GITHUB_REPOSITORY_ID
   GITHUB_TRIGGERING_ACTOR: 'arumwu', GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '2' });
 // Retain legacy receipt/journal fixtures; independent coverage below is explicit.
 const request = () => ({ ...requestFromEnvironment(environment()), releaseKind: undefined, admittedAt: new Date(0).toISOString() });
+
+function automaticFixture() {
+  const env = { ...environment(), GITHUB_EVENT_NAME: 'workflow_run', RELEASE_MODE: 'deploy',
+    RELEASE_TRIGGER_RUN_ID: '11', RELEASE_TRIGGER_RUN_ATTEMPT: '2' };
+  const request = requestFromEnvironment(env);
+  const current = { id: 100, run_attempt: 2, workflow_id: 3, path: '.github/workflows/shared-release.yml',
+    event: 'workflow_run', repository: { id: REPOSITORY_ID }, head_repository: { id: REPOSITORY_ID },
+    head_branch: 'main', head_sha: main, status: 'in_progress', conclusion: null,
+    actor: { login: env.GITHUB_ACTOR, id: Number(env.GITHUB_ACTOR_ID) }, triggering_actor: { login: env.GITHUB_TRIGGERING_ACTOR } };
+  const overrides = {};
+  const api = fixtureApi(path => {
+    if (Object.hasOwn(overrides, path)) return overrides[path];
+    if (path.endsWith('/actions/runs/100')) return current;
+    if (path.endsWith('/workflows/shared-release.yml')) return { id: 3, path: current.path, state: 'active' };
+    if (path.includes('/deployments?')) return [];
+  });
+  return { env, request, current, overrides, api };
+}
+
+test('automatic admission authenticates both exact main checks and the actual upstream notification', async () => {
+  const f = automaticFixture();
+  assert.equal((await admitAutomaticRelease(f.request, f.api)).sourceSha, sha);
+  for (const patch of [{ RELEASE_MODE: 'plan' }, { RELEASE_TRIGGER_RUN_ID: '' },
+    { RELEASE_TRIGGER_RUN_ATTEMPT: '0' }, { RELEASE_RECOVER_BACKUP_RUN_ID: '77' }]) {
+    assert.throws(() => requestFromEnvironment({ ...f.env, ...patch }));
+  }
+  for (const patch of [{ event: 'pull_request' }, { head_repository: { id: 2 } }, { head_sha: main },
+    { head_branch: 'feature' }, { conclusion: 'failure' }, { run_attempt: 3 }, { path: '.github/workflows/other.yml' }]) {
+    const f = automaticFixture(), path = `/repos/${REPOSITORY}/actions/runs/11`;
+    f.overrides[path] = { ...await f.api(path), ...patch };
+    await assert.rejects(admitAutomaticRelease(f.request, f.api), { code: 'release_automatic_trigger_invalid' });
+  }
+  for (const patch of [{ event: 'workflow_dispatch' }, { head_sha: sha }, { run_attempt: 3 },
+    { actor: { login: 'teddashh', id: 1 } }, { triggering_actor: { login: 'someone' } }, { status: 'completed' }]) {
+    const f = automaticFixture(); Object.assign(f.current, patch);
+    await assert.rejects(admitAutomaticRelease(f.request, f.api), { code: 'release_automatic_run_invalid' });
+  }
+});
+
+test('only read-only admission can wait for the second check; execution never falls through', async () => {
+  const f = automaticFixture(), path = `/repos/${REPOSITORY}/actions/runs/22`;
+  f.overrides[path] = { ...await f.api(path), status: 'in_progress', conclusion: null };
+  assert.deepEqual(await admitAutomaticRelease(f.request, f.api, { allowSkip: true }), { skipReason: 'waiting_for_both_main_checks' });
+  await assert.rejects(admitAutomaticRelease(f.request, f.api), { code: 'release_verification_not_successful' });
+  f.overrides[path].repository = { id: 2 };
+  await assert.rejects(admitAutomaticRelease(f.request, f.api, { allowSkip: true }), { code: 'release_verification_identity_invalid' });
+});
+
+test('automatic release deduplicates notifications, refuses backwards releases and never retries uncertainty', async () => {
+  const f = automaticFixture();
+  const latest = { id: 5, sha, environment: 'next', payload: { runId: 100, runAttempt: 2 } };
+  let state = 'success', comparison = { status: 'ahead', merge_base_commit: { sha: main } };
+  const api = async path => path.includes('/deployments?') ? [latest]
+    : path.includes('/statuses?') ? [{ state }] : comparison;
+  assert.equal(await automaticDisposition(api, f.request), 'already_released');
+  latest.sha = main;
+  assert.equal(await automaticDisposition(api, f.request), undefined);
+  comparison = { status: 'behind', merge_base_commit: { sha } };
+  assert.equal(await automaticDisposition(api, f.request), 'newer_source_already_deployed');
+  comparison.status = 'diverged';
+  await assert.rejects(automaticDisposition(api, f.request), { code: 'release_automatic_source_not_forward' });
+  for (state of ['failure', 'in_progress', 'pending', 'error', 'inactive']) {
+    await assert.rejects(automaticDisposition(api, f.request), { code: 'release_automatic_previous_unsettled' });
+  }
+  state = 'success'; latest.sha = sha; latest.environment = 'staging-next';
+  await assert.rejects(automaticDisposition(api, f.request), { code: 'release_automatic_previous_attempt' });
+  assert.equal(await automaticDisposition(api, { ...f.request, target: 'next' }), undefined);
+  latest.payload.runAttempt++;
+  await assert.rejects(automaticDisposition(api, { ...f.request, target: 'next' }), { code: 'release_automatic_previous_attempt' });
+});
 
 function fixtureApi(override = () => undefined) {
   const calls = [];
@@ -231,6 +302,41 @@ test('production authenticates latest staging workflow, exact attempt, controlle
   assert.equal(state.reads, 1);
   assert.equal(state.calls.filter(path => path.endsWith('/actions/runs/33')).length, 2);
   assert.equal(state.calls.filter(path => path.includes('/deployments?')).length, 2);
+});
+
+function automaticStagingFixture() {
+  const f = stagingFixture(), marker = { triggerRunId: 11, triggerRunAttempt: 2 };
+  Object.assign(f.admission, { runId: 33, runAttempt: 2, automatic: marker });
+  f.state.deployment.payload.automatic = marker;
+  Object.assign(f.state.run, { event: 'workflow_run', status: 'in_progress', conclusion: null });
+  f.state.jobs[1].completed_at = new Date(120000).toISOString();
+  f.state.jobs.push({ ...f.state.jobs[0], name: 'production', status: 'in_progress', conclusion: null });
+  f.state.artifact.name += '-staging-next';
+  Object.assign(f.state.receipt, { automatic: marker, releaseKind: 'independent',
+    providerOutcome: 'release_confirmed', operatorEvidence: 'validated-independent-release/v1',
+    phases: f.state.receipt.phases.filter(phase => !phase.name.startsWith('backup-')) });
+  return f;
+}
+
+test('automatic production requires the completed staging job and its receipt in the same active run/attempt', async () => {
+  const f = automaticStagingFixture();
+  assert.equal((await requireStaging(f.api, f.admission, installation)).artifactId, 81);
+  for (const mutate of [
+    f => { f.admission.runId++; }, f => { f.admission.runAttempt++; },
+    f => { f.state.jobs[1].status = 'in_progress'; }, f => { f.state.jobs[1].conclusion = 'failure'; },
+    f => { f.state.jobs[2].conclusion = 'skipped'; }, f => { f.state.jobs[1].completed_at = new Date(0).toISOString(); },
+    f => { f.state.receipt.releaseKind = undefined; }, f => { f.state.receipt.phases.pop(); },
+    f => { f.state.receipt.automatic = { triggerRunId: 22, triggerRunAttempt: 1 }; },
+    f => { f.state.run.status = 'completed'; f.state.run.conclusion = 'failure'; },
+    f => { f.state.artifact.name = 'release-result-33-2-next'; },
+    f => { f.state.deployment.payload.operatorImage = installation.image.replace(/d/g, 'e'); },
+  ]) {
+    const f = automaticStagingFixture(); mutate(f);
+    await assert.rejects(requireStaging(f.api, f.admission, installation));
+  }
+  const manual = stagingFixture();
+  manual.state.jobs.push({ ...manual.state.jobs[0], name: 'production', conclusion: 'skipped' });
+  assert.equal((await requireStaging(manual.api, manual.admission, installation)).artifactId, 81);
 });
 
 test('matching caller-written Deployment and success without a trusted workflow/artifact never authorize production', async () => {
@@ -758,15 +864,45 @@ test('GitHub transport neither follows redirects nor prints response bodies or t
 
 test('workflow keeps dispatch input out of shell, secrets out of admission, and pins controller/actions', async () => {
   const text = await readFile(new URL('../../../.github/workflows/shared-release.yml', import.meta.url), 'utf8');
-  assert.match(text, /on:\n  workflow_dispatch:/);
+  assert.match(text, /\n  workflow_dispatch:/);
   assert.match(text, /cancel-in-progress: false/);
   assert.match(text, /deployment: false/);
   const admission = text.split('  admission:')[1].split('\n  deploy:')[0];
   assert.ok(!admission.includes('secrets.')); assert.ok(!admission.includes('\n    environment:'));
   for (const match of text.matchAll(/uses: ([^\n#]+)/g)) assert.match(match[1].trim(), /^[a-z0-9/-]+@[a-f0-9]{40}$/);
   for (const match of text.matchAll(/run: ([^\n]+)/g)) assert.ok(!match[1].includes('${{'));
-  assert.equal([...text.matchAll(/ref: \$\{\{ job.workflow_sha \}\}/g)].length, 2);
-  assert.equal([...text.matchAll(/persist-credentials: false/g)].length, 3);
+  assert.equal([...text.matchAll(/ref: \$\{\{ job.workflow_sha \}\}/g)].length, 3);
+  assert.equal([...text.matchAll(/persist-credentials: false/g)].length, 5);
+  assert.match(text, /workflows: \[Verify local milestone, CodeQL advanced setup\]/);
+  assert.match(text, /queue: max/);
+  const production = text.split('\n  production:')[1];
+  assert.match(production, /needs: \[admission, deploy\]/);
+  assert.match(production, /needs\.deploy\.result == 'success'/);
+  assert.match(production, /environment:\n      name: next/);
+  assert.match(production, /RELEASE_SHA: \$\{\{ needs.admission.outputs.source_sha \}\}/);
+  assert.match(production, /RELEASE_OPERATOR_IMAGE: \$\{\{ vars.RELEASE_OPERATOR_IMAGE \}\}/);
+});
+
+test('source migration frontier advances without changing private config and rejects gaps, privileged SQL and downgrades', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'automatic-frontier-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'migrations'));
+  const installed = { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] };
+  for (let n = 1; n <= 190; n++) if (n !== 22) {
+    await writeFile(join(root, 'migrations', `${String(n).padStart(3, '0')}_fixture.sql`), 'SELECT 1;\n');
+  }
+  const profile = sourceMigrationProfile(root, installed);
+  assert.equal(profile.last, 190); assert.equal(installed.last, 189);
+  assert.throws(() => sourceMigrationProfile(root, { ...installed, last: 191 }), { code: 'release_migration_frontier_mismatch' });
+  const newest = join(root, 'migrations/190_fixture.sql');
+  await writeFile(newest, 'CREATE EXTENSION unreviewed;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await writeFile(newest, 'SELECT 1;');
+  await rm(join(root, 'migrations/188_fixture.sql'));
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await writeFile(join(root, 'migrations/188_fixture.sql'), 'SELECT 1;');
+  await writeFile(join(root, 'migrations/v2_unapproved.sql'), 'SELECT 1;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_profile_invalid' });
 });
 
 test('backup TAR round trip preserves private bytes and refuses links at the source', async t => {
@@ -3224,6 +3360,27 @@ test('handoff authenticates terminal failed release and exact artifact while all
     changed.state.run.run_attempt++; return structuredClone(changed.state.receipt);
   };
   await assert.rejects(requireFailedReleaseHandoff(changed.api, changed.admission, installation));
+});
+
+test('handoff can authenticate either failed automatic environment without redoing deployment', async () => {
+  for (const target of ['staging-next', 'next']) {
+    const f = failedReleaseHandoffFixture();
+    f.state.run.event = 'workflow_run';
+    f.admission.target = target; f.state.receipt.target = target;
+    f.state.receipt.automatic = { triggerRunId: 11, triggerRunAttempt: 2 };
+    f.state.artifact.name += '-' + target;
+    f.state.jobs.push({ ...structuredClone(f.state.jobs[1]), name: 'production',
+      conclusion: target === 'next' ? 'failure' : 'skipped' });
+    if (target === 'next') {
+      f.state.jobs[1].conclusion = 'success'; f.state.jobs[1].steps[0].conclusion = 'success';
+    }
+    assert.equal((await requireFailedReleaseHandoff(f.api, f.admission, installation)).target, target);
+    f.state.jobs[2].run_attempt++;
+    await assert.rejects(requireFailedReleaseHandoff(f.api, f.admission, installation));
+  }
+  const manual = failedReleaseHandoffFixture();
+  manual.state.jobs.push({ ...manual.state.jobs[0], name: 'production', conclusion: 'skipped' });
+  assert.equal((await requireFailedReleaseHandoff(manual.api, manual.admission, installation)).runId, 77);
 });
 
 async function pendingHandoffFixture(t, stop = 'health', descendant = false) {

@@ -15,8 +15,9 @@ export async function requireFailedReleaseHandoff(api, admission, installation) 
   const workflow = await api(`${prefix}/actions/workflows/shared-release.yml`);
   check(positive(workflow.id) && workflow.path === path && workflow.state === 'active', 'release_handoff_recovery_evidence_invalid');
   const run = await api(`${prefix}/actions/runs/${id}`);
+  const automatic = run.event === 'workflow_run';
   const checkRun = value => check(value.id === id && positive(value.run_attempt) && value.run_attempt === run.run_attempt
-    && value.workflow_id === workflow.id && value.path === path && value.event === 'workflow_dispatch'
+    && value.workflow_id === workflow.id && value.path === path && value.event === (automatic ? 'workflow_run' : 'workflow_dispatch')
     && value.repository?.id === REPOSITORY_ID && value.head_repository?.id === REPOSITORY_ID
     && value.head_branch === 'main' && isSha(value.head_sha) && value.head_sha === run.head_sha
     && value.status === 'completed' && value.conclusion === 'failure' && actor(value.actor) && actor(value.triggering_actor),
@@ -26,16 +27,20 @@ export async function requireFailedReleaseHandoff(api, admission, installation) 
   check(['ahead', 'identical'].includes(compare.status) && compare.merge_base_commit?.sha === run.head_sha,
     'release_handoff_recovery_evidence_invalid');
   const jobs = await api(`${prefix}/actions/runs/${id}/attempts/${run.run_attempt}/jobs?per_page=100`);
-  check(jobs.total_count === 2 && jobs.jobs?.length === 2, 'release_handoff_recovery_evidence_invalid');
-  for (const [name, conclusion] of [['admission', 'success'], ['deploy', 'failure']]) {
+  check(jobs.total_count === jobs.jobs?.length && (automatic ? jobs.total_count === 3
+    : [2, 3].includes(jobs.total_count)), 'release_handoff_recovery_evidence_invalid');
+  const failedJob = automatic && admission.target === 'next' ? 'production' : 'deploy';
+  const expectedJobs = [['admission', 'success'], ['deploy', failedJob === 'deploy' ? 'failure' : 'success'],
+    ...(jobs.total_count === 3 ? [['production', failedJob === 'production' ? 'failure' : 'skipped']] : [])];
+  for (const [name, conclusion] of expectedJobs) {
     const matching = jobs.jobs.filter(job => job.name === name && job.run_id === id && job.run_attempt === run.run_attempt
       && job.head_sha === run.head_sha && job.status === 'completed' && job.conclusion === conclusion);
     check(matching.length === 1, 'release_handoff_recovery_evidence_invalid');
-    if (name === 'deploy') check(['Execute the installed environment operator', 'Save public release receipt'].every((stepName, i) =>
+    if (name === failedJob) check(['Execute the installed environment operator', 'Save public release receipt'].every((stepName, i) =>
       matching[0].steps?.filter(step => step.name === stepName && step.status === 'completed'
         && step.conclusion === (i ? 'success' : 'failure')).length === 1), 'release_handoff_recovery_evidence_invalid');
   }
-  const name = `release-result-${id}-${run.run_attempt}`;
+  const name = `release-result-${id}-${run.run_attempt}${automatic ? '-' + admission.target : ''}`;
   const artifacts = await api(`${prefix}/actions/runs/${id}/artifacts?name=${name}&per_page=100`);
   check(artifacts.total_count === 1 && artifacts.artifacts?.length === 1, 'release_handoff_recovery_evidence_invalid');
   const artifact = artifacts.artifacts[0], owner = artifact.workflow_run;
@@ -47,6 +52,7 @@ export async function requireFailedReleaseHandoff(api, admission, installation) 
     && receipt.releaseKind === 'independent' && receipt.providerOutcome === 'unknown_until_confirmed'
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID && receipt.controllerSha === run.head_sha
     && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
+    && (!automatic || positive(receipt.automatic?.triggerRunId) && positive(receipt.automatic?.triggerRunAttempt))
     && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree
     && /^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(receipt.operatorImage ?? '')
     && receipt.configSha256 === installation.configSha256 && isDigest(receipt.configSha256)

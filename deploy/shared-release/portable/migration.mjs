@@ -19,6 +19,24 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const same = (a, b, code) => check(JSON.stringify(a) === JSON.stringify(b), code);
 const quote = value => { check(/^[a-z][a-z0-9_]{0,62}$/.test(value), 'release_migration_identifier_invalid'); return `"${value}"`; };
 
+/** The installed legacy frontier is a minimum, not a per-release secret edit.
+ * Only the admitted, clean source may extend it. The normal catalog, SQL policy
+ * and retained applied-ledger checks still reject gaps, rewrites and downgrades. */
+export function sourceMigrationProfile(sourceRoot, installed) {
+  check(installed?.format === LEGACY_MIGRATIONS && installed.first === 1
+    && Number.isSafeInteger(installed.last) && installed.last >= 189 && installed.last <= 999
+    && JSON.stringify(installed.known_gaps) === '[22]', 'release_migration_profile_invalid');
+  const sources = readMigrationSources(join(sourceRoot, 'migrations'));
+  check(sources.length > 0 && sources.every(row => /^[0-9]{3}_[a-z0-9_]+\.sql$/.test(row.name)),
+    'release_migration_profile_invalid');
+  const last = Math.max(...sources.map(row => Number(row.name.slice(0, 3))));
+  check(last >= installed.last && last <= 999, 'release_migration_frontier_mismatch');
+  const profile = { ...installed, known_gaps: [...installed.known_gaps], last };
+  // Validate before deriving a candidate database or creating an installation.
+  check(checkMigrations(join(sourceRoot, 'migrations'), profile).ok, 'release_migration_sql_policy_invalid');
+  return Object.freeze(profile);
+}
+
 /** Preparation is not approval. The enclosing controller must bind this result
  * to its admitted source/tree, retained floor and reviewed verification contract. */
 export function preparePortableMigration({ sourceRoot, sourceCommit, profile, installationParent, beforeLedger }) {

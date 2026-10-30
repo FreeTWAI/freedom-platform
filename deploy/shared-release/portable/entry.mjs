@@ -16,7 +16,7 @@ import { createCloudflareRecoveryTransport, waitForPublicRelease } from './cloud
 import { buildApplication, verifyApplicationSource } from './build.mjs';
 import { applyFlagDecisions, readFlagDecisions } from './flag-decisions.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
-import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema } from './migration.mjs';
+import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema, sourceMigrationProfile } from './migration.mjs';
 import { runPortableBackup } from './backup.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
@@ -152,10 +152,11 @@ export async function main(args = process.argv.slice(2)) {
         return { leaseHeld: true, retainedFloorVerified: true, flagsPreserved: true, previousSourceSha: before.sourceSha,
           ...(recovery ? { recovery } : {}) };
       }
-      plan = preparePortableMigration({ sourceRoot: SOURCE, sourceCommit: request.sourceSha, profile: config.migrationProfile,
+      const profile = sourceMigrationProfile(SOURCE, config.migrationProfile);
+      plan = preparePortableMigration({ sourceRoot: SOURCE, sourceCommit: request.sourceSha, profile,
         installationParent: await directory('migration-installations'), beforeLedger: state.schemaLedger });
       expected = await deriveCandidateContract({ sourceRoot: SOURCE, sourceSha: request.sourceSha, sourceTree: request.sourceTree,
-        profile: config.migrationProfile, materialPolicySha256: state.materialPolicySha256, beforeLedger: state.schemaLedger,
+        profile, materialPolicySha256: state.materialPolicySha256, beforeLedger: state.schemaLedger,
         workRoot: await directory('candidate-database'), binDirectory: BIN, signal: lease.signal });
       built = await buildApplication({ sourceRoot: SOURCE, sourceSha: request.sourceSha, sourceTree: request.sourceTree,
         workRoot: await directory('build'), target: config.target, before, signal: lease.signal });
