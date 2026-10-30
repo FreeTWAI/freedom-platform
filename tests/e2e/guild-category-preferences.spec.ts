@@ -8,6 +8,7 @@ import {hashPassword} from '../../modules/identity-membership/service.js';
 async function openGuildSetting(button: Locator) {
   const settings = button.locator('xpath=ancestor::details[contains(@class,"guild-membership-settings")]');
   await expect(settings).toBeAttached();
+  await expect(button).toBeEnabled();
   if (!await settings.evaluate(node => (node as HTMLDetailsElement).open)) await settings.locator(':scope > summary').click();
   await expect(button).toBeVisible();
 }
@@ -125,7 +126,10 @@ test('a switched community can set and clear two category primaries, including k
       await expect(session.page.getByLabel('我的公會概況', {exact: true})).toContainText('已加入 3 個公會');
       await chooseGuildSetting(session.page.getByRole('article', {name: guildNames.talent, exact: true}).getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true}));
       const leave = session.page.getByRole('group', {name: '社群架構開發主力', exact: true}).getByRole('button', {name: `退出${guildNames.talent}`, exact: true, includeHidden: true});
-      await chooseGuildSetting(leave);
+      // The category command opens settings and returns focus after its refresh.
+      await expect(internal.getByRole('button', {name: '取消本類主力', exact: true})).toBeFocused();
+      await expect(leave.locator('xpath=ancestor::details')).toHaveJSProperty('open', true);
+      await leave.click();
       const confirm = session.page.getByRole('status').filter({hasText: '不會刪除'});
       await expect(confirm).toContainText('不會移動');
       await expect(confirm).toContainText('私人業務資料不會移動，也不會刪除。');

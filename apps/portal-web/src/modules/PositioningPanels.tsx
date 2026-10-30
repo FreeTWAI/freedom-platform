@@ -1,4 +1,4 @@
-import { useCallback,useEffect,useRef,useState,type FormEvent } from 'react';
+import { useCallback,useEffect,useLayoutEffect,useRef,useState,type FormEvent } from 'react';
 import { ApiError } from '../api';
 import { SECTION_LABELS } from '../../../../contracts/guild-launchpad/v1/guild-preferences';
 import { useModuleMutation,type ModulePanelProps } from './shared';
@@ -78,7 +78,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   const categoryOwner=useRef({client,sessionGeneration:client.sessionGeneration,active:true}),categoryClient=useRef(client);
   categoryClient.current=client;
   const writesBlocked=Boolean(unknownDraft||unknownLeave);
-  const secondaryTriggerRef=useRef<HTMLButtonElement>(null),toolsSummaryRef=useRef<HTMLElement>(null);
+  const secondaryTriggerRef=useRef<HTMLButtonElement>(null),toolsSummaryRef=useRef<HTMLElement>(null),searchRef=useRef<HTMLInputElement>(null);
   const generation=useRef(0),successRef=useRef<HTMLParagraphElement>(null),nameRef=useRef<HTMLInputElement>(null),preferenceKeys=useRef(new Map<string,{key:string;uncertain:boolean}>());
   const launchpadKey=launchpadEnabled?guildKeyFromHash(locationHash):null;
   const {mutate,busy,error,setError}=useModuleMutation(client);
@@ -113,7 +113,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     if(!card)return;
     card.focus();card.scrollIntoView({block:'nearest'});setFocusGuild(null);
   },[focusGuild,loading,guilds,query,scope,topic]);
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     if(!focusAction||loading||categoryBusy)return;
     const button=document.querySelector<HTMLButtonElement>(`[data-category-action="${CSS.escape(focusAction)}"]`);
     if(!button)return;
@@ -271,11 +271,11 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
   if(launchpadKey)return <GuildLaunchpad blockLoaders={blockLoaders} key={launchpadKey} client={client} guildKey={launchpadKey} mode="member" supplierConsoleEnabled={site?.supplier_console_enabled===true} userId={session.user.user_id} registerPendingLeave={registerPendingLeave} onBack={()=>{window.location.hash='guilds';}}/>;
   return <section className="module-panel guilds-panel" aria-label="公會目錄">
     <section className="guild-hub-hero" aria-labelledby="guild-hub-title">
-      <div className="guild-hub-intro"><h2 id="guild-hub-title">找到同路人，一起把專長做成作品。</h2><p>選公會、讀技能書、到聊天室交流。定位測驗可稍後補做。</p></div>
+      <div className="guild-hub-intro"><h2 id="guild-hub-title">一起把專長做成作品</h2></div>
       {!loading&&!loadError&&<div className="guild-hub-next">
         <strong>{entryGuild?.name??'挑選你的第一個公會'}</strong>
         <p>{entryGuild?.first_step||'看看下方的公會介紹與入門技能，再決定加入。'}</p>
-        {entryGuild?<button type="button" className="btn btn-primary" onClick={()=>{if(launchpadEnabled)window.location.hash=`guilds/${entryGuild.guild_key}`;else viewGuild(entryGuild);}}>{launchpadEnabled?'進入我的公會工作區':'查看我的公會'}</button>:<button type="button" className="btn btn-primary" onClick={()=>document.querySelector<HTMLInputElement>('[data-guide-anchor="guilds:search"]')?.focus()}>搜尋感興趣的領域</button>}
+        {entryGuild?<button type="button" className="btn btn-primary" aria-label={launchpadEnabled?'進入我的公會工作區':'查看我的公會'} onClick={()=>{if(launchpadEnabled)window.location.hash=`guilds/${entryGuild.guild_key}`;else viewGuild(entryGuild);}}>{launchpadEnabled?'進入工作區':'查看公會'}</button>:<button type="button" className="btn btn-primary" onClick={()=>searchRef.current?.focus()}>搜尋感興趣的領域</button>}
       </div>}
     </section>
     <header className="guild-hub-heading">
@@ -302,7 +302,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
       </article>;
     })}</div>{applications.length>3&&<button type="button" className="btn btn-ghost" aria-expanded={showAllApplications} onClick={()=>setShowAllApplications(value=>!value)}>{showAllApplications?'收合':`顯示全部 ${applications.length} 件申請`}</button>}</section>}
     <div className="guild-directory-tools">
-      <label className="field">搜尋公會<input data-guide-anchor="guilds:search" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="名稱、專業、會長或技能書" maxLength={100}/></label>
+      <label className="field">搜尋公會<input ref={searchRef} data-guide-anchor="guilds:search" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="名稱、專業、會長或技能書" maxLength={100}/></label>
       <div className="guild-scope" data-guide-anchor="guilds:scope" role="group" aria-label="公會範圍"><button type="button" className="btn btn-ghost" aria-pressed={scope==='all'} onClick={()=>setScope('all')}>全部公會</button><button type="button" className="btn btn-ghost" aria-pressed={scope==='joined'} onClick={()=>setScope('joined')}>已加入</button></div>
     </div>
     <div className="guild-directory-options">

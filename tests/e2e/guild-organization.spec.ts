@@ -510,7 +510,7 @@ test('guild landing names the next step while membership settings stay optional 
     await route.fulfill({response, json: {...await response.json(), guild_launchpad_enabled: false}});
   });
   await login(page);
-  const hero = page.getByRole('region', {name: '找到同路人，一起把專長做成作品。', exact: true});
+  const hero = page.getByRole('region', {name: '一起把專長做成作品', exact: true});
   await expect(hero).toContainText(names[0]);
   await expect(hero).toContainText('閱讀入門技能');
   const card = page.getByRole('article', {name: names[1], exact: true});
