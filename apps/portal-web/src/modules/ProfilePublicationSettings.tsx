@@ -25,13 +25,19 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
  const reader=useMemo(()=>createProfileReader(async signal=>ProfilePublicationSettingsSchema.parse(await client.get('/me/profile-publication',{signal})),current),[client,generation]);
  const load=useSyncExternalStore(reader.subscribe,reader.getSnapshot,reader.getSnapshot);
  const [loadedFor,setLoadedFor]=useState<typeof reader|null>(null);
- const [draft,setDraft]=useState<Draft>(empty),[saved,setSaved]=useState<Settings|null>(null),[confirmed,setConfirmed]=useState(false),[preview,setPreview]=useState(false),[notice,setNotice]=useState(''),[validation,setValidation]=useState('');
+ const [draft,setDraft]=useState<Draft>(empty),[saved,setSaved]=useState<Settings|null>(null),[confirmed,setConfirmed]=useState(false),[notice,setNotice]=useState(''),[validation,setValidation]=useState('');
  const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client,{userId:owner,type:'profile-publication-settings'});
  const mutationState=sharingMutationState({userId:owner,type:'profile-publication-settings'});
  const pending=useRef<{body:Draft&{confirm_public:boolean};version?:string}|null>(null);
  const coverState=useRef<CoverEditorState>({busy:false,unknown:false,dirty:false});
  const [coverStatus,setCoverStatus]=useState(coverState.current);
- const reportCover=(value:CoverEditorState)=>{coverState.current=value;setCoverStatus(value);};
+ const form=useRef<HTMLFormElement>(null),coverDetails=useRef<HTMLDetailsElement>(null);
+ const reportCover=(value:CoverEditorState)=>{coverState.current=value;setCoverStatus(value);if(value.unknown&&coverDetails.current)coverDetails.current.open=true;};
+ function revealInvalidField(path:PropertyKey[]){
+  const field=form.current?.elements.namedItem(path.join('.'));if(!(field instanceof HTMLElement))return;
+  for(let element=field.parentElement;element;element=element.parentElement)if(element instanceof HTMLDetailsElement)element.open=true;
+  field.focus();
+ }
  const dirty=saved!==null&&JSON.stringify(draft)!==JSON.stringify(draftOf(saved));
  useEffect(()=>{reader.start();return()=>reader.stop();},[reader]);
  useEffect(()=>{if(load.value&&current()){const data=load.value;setLoadedFor(reader);setSaved(data);setDraft(draftOf(data));setConfirmed(false);}},[load.value]);
@@ -45,7 +51,7 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
   let operation=pending.current;
   if(!retry){
    const body={...draft,confirm_public:confirmed},parsed=ProfilePublicationInput.safeParse(body);
-   if(!parsed.success){setValidation(parsed.error.issues[0]?.message??'請檢查欄位。');return;}
+   if(!parsed.success){setValidation(parsed.error.issues[0]?.message??'請檢查欄位。');revealInvalidField(parsed.error.issues[0]?.path??[]);return;}
    operation={body:parsed.data,version:saved.aggregate_version??undefined};pending.current=operation;
   }
   if(!operation)return;
@@ -56,23 +62,31 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
  function update(next:Draft){setDraft(next);setConfirmed(false);setNotice('');}
  const previewData=profilePublicationPreview(draft);
  const locked=busy||lastFailureUnknown||coverStatus.busy||coverStatus.unknown;
- return <section className="profile-publication stack" aria-label="對外個人頁設定">
+ return <section className="profile-publication profile-publication-editor stack" aria-label="對外個人頁設定">
   <div className="section-head"><h2>對外個人頁</h2><button type="button" className="btn btn-secondary btn-small" disabled={locked} onClick={onReturn}>返回本人空間</button></div>
   <p className="hint">這裡只設定新的對外個人頁，不會隱藏舊會員目錄、分享名片或其他已發布內容。私人草稿、聯絡資料與訂單不會自動加入。</p><p className="hint">不影響你已公開的名片；名片另行管理。<a href="#account">前往資料與帳號設定，管理分享名片</a></p>
   {load.status==='error'&&<div role="alert"><p>設定暫時無法讀取。</p><button className="btn btn-secondary btn-small" onClick={()=>void reader.refresh()}>重讀設定</button></div>}
   {(!saved||loadedFor!==reader)&&load.status!=='error'&&<p role="status">正在讀取設定…</p>}
-  {saved&&loadedFor===reader&&current()&&<form className="card stack" onSubmit={event=>{event.preventDefault();void submit();}}>
+  {saved&&loadedFor===reader&&current()&&<form ref={form} className="card stack profile-editor-form" onInvalidCapture={event=>{if(!(event.target instanceof HTMLElement))return;for(let element=event.target.parentElement;element;element=element.parentElement)if(element instanceof HTMLDetailsElement)element.open=true;}} onSubmit={event=>{event.preventDefault();void submit();}}>
    <p>目前已儲存範圍：<strong>{labels[saved.visibility]}</strong></p>
    <fieldset className="fieldset profile-visibility" disabled={locked}><legend>誰可以看這個個人頁？</legend>{(Object.keys(labels) as ProfileVisibilityValue[]).map(value=><label key={value}><input type="radio" name="profile-visibility" checked={draft.visibility===value} onChange={()=>update({...draft,visibility:value})}/>{labels[value]}</label>)}</fieldset>
-   <label className="field">顯示名稱<input required maxLength={60} disabled={locked} value={draft.display_name} onChange={event=>update({...draft,display_name:event.target.value})}/></label>
-   <label className="field">一句話介紹<input maxLength={280} disabled={locked} value={draft.bio} onChange={event=>update({...draft,bio:event.target.value})}/></label>
-   <fieldset className="fieldset stack" disabled={locked}><legend>連結（最多五個）</legend>{draft.links.map((link,index)=><div className="profile-link-editor" key={index}><label className="field">連結名稱 {index+1}<input required maxLength={40} value={link.label} onChange={event=>update({...draft,links:draft.links.map((value,i)=>i===index?{...value,label:event.target.value}:value)})}/></label><label className="field">HTTPS 網址 {index+1}<input required type="url" maxLength={500} value={link.url} onChange={event=>update({...draft,links:draft.links.map((value,i)=>i===index?{...value,url:event.target.value}:value)})}/></label><button type="button" className="btn btn-secondary btn-small" onClick={()=>update({...draft,links:draft.links.filter((_,i)=>i!==index)})}>移除連結 {index+1}</button></div>)}{draft.links.length<5&&<button type="button" className="btn btn-secondary btn-small" onClick={()=>update({...draft,links:[...draft.links,{label:'',url:''}]})}>新增連結</button>}</fieldset>
+   <div className="profile-editor-workbench">
+   <div className="profile-editor-controls stack">
+   <label className="field">顯示名稱<input name="display_name" required maxLength={60} disabled={locked} value={draft.display_name} onChange={event=>update({...draft,display_name:event.target.value})}/></label>
+   <label className="field">一句話介紹<input name="bio" maxLength={280} disabled={locked} value={draft.bio} onChange={event=>update({...draft,bio:event.target.value})}/></label>
    <ProfileLayoutEditor value={draft.layout} disabled={locked} onChange={layout=>update({...draft,layout})}/>
+   <details><summary className="profile-editor-summary">編輯我的連結（{draft.links.length}/5）</summary><fieldset className="fieldset stack" disabled={locked}><legend>連結（最多五個）</legend>{draft.links.map((link,index)=><div className="profile-link-editor" key={index}><label className="field">連結名稱 {index+1}<input name={`links.${index}.label`} required maxLength={40} value={link.label} onChange={event=>update({...draft,links:draft.links.map((value,i)=>i===index?{...value,label:event.target.value}:value)})}/></label><label className="field">HTTPS 網址 {index+1}<input name={`links.${index}.url`} required type="url" maxLength={500} value={link.url} onChange={event=>update({...draft,links:draft.links.map((value,i)=>i===index?{...value,url:event.target.value}:value)})}/></label><button type="button" className="btn btn-secondary btn-small" onClick={()=>update({...draft,links:draft.links.filter((_,i)=>i!==index)})}>移除連結 {index+1}</button></div>)}{draft.links.length<5&&<button type="button" className="btn btn-secondary btn-small" onClick={()=>update({...draft,links:[...draft.links,{label:'',url:''}]})}>新增連結</button>}</fieldset></details>
+   <details ref={coverDetails}><summary className="profile-editor-summary">上傳自己的封面圖片</summary>
    <ProfileCoverEditor client={client} value={draft} saved={saved} disabled={busy||lastFailureUnknown} onChange={selection=>update({...draft,...selection})} onState={reportCover}/>
-   <label className="field">封面圖片說明<input maxLength={120} disabled={locked} value={draft.layout.cover_alt} onChange={event=>update({...draft,layout:{...draft.layout,cover_alt:event.target.value}})}/></label>
+   <label className="field">封面圖片說明<input name="layout.cover_alt" maxLength={120} disabled={locked} value={draft.layout.cover_alt} onChange={event=>update({...draft,layout:{...draft.layout,cover_alt:event.target.value}})}/></label>
+   </details>
+   {(coverStatus.busy||coverStatus.unknown||coverStatus.dirty)&&<div className="banner banner-info profile-cover-operation-status" role="status"><p>{coverStatus.unknown?'封面結果尚未確認；請確認原封面操作後再離開。':coverStatus.busy?'封面處理中，請稍候。':'封面已選擇但尚未上傳；請上傳或取消選檔後再儲存個人頁。'}</p><button type="button" className="btn btn-secondary btn-small" onClick={()=>{if(coverDetails.current){coverDetails.current.open=true;coverDetails.current.querySelector('summary')?.focus();}}}>查看封面操作</button></div>}
    {draft.visibility==='public'&&<div className="banner banner-info"><p id="profile-public-warning">公開後任何人都能免登入閱讀，包括登出後的被封鎖者。封鎖不能讓公開資料保密。</p><label className="checkbox-row"><input type="checkbox" checked={confirmed} disabled={locked} aria-describedby="profile-public-warning" onChange={event=>setConfirmed(event.target.checked)}/>我確認公開以上文字、連結與已勾選的封面</label></div>}
-   <div className="actions profile-editor-savebar"><button type="submit" className="btn btn-primary" disabled={locked||coverStatus.dirty||draft.visibility==='public'&&!confirmed}>{busy?'儲存中…':draft.visibility==='public'?'確認公開':'儲存'}</button><button type="button" className="btn btn-secondary btn-small" disabled={locked||coverStatus.dirty||!dirty} onClick={()=>{setDraft(draftOf(saved));setConfirmed(false);setNotice('已取消未儲存的修改。私人封面草稿仍可另行捨棄。');}}>取消修改</button><button type="button" className="btn btn-secondary btn-small" disabled={locked||coverStatus.dirty} onClick={()=>{if(window.confirm('將外觀恢復預設？文字名片與可見範圍保持不變，按儲存才生效。'))update({...draft,layout:structuredClone(defaultProfileLayout),include_cover:false,cover_version:null});}}>恢復預設外觀</button><button type="button" className="btn btn-secondary btn-small" onClick={()=>setPreview(value=>!value)} aria-expanded={preview}>草稿外觀預覽</button>{saved.aggregate_version&&<button type="button" className="btn btn-secondary btn-small" disabled={locked} onClick={onView}>查看已儲存個人頁</button>}</div>
-   {preview&&<section className="profile-preview stack"><h3>尚未儲存的草稿預覽</h3><p className="hint">只是外觀預覽，不會改變伺服器上的內容或公開範圍。此處不載入帳號稱號與認證；請用「查看已儲存個人頁」確認實際會員畫面。</p>{previewData.success?<ProfileText profile={previewData.data} coverUrl={draft.include_cover&&draft.cover_version?`/api/v1/me/profile-cover/image?v=${encodeURIComponent(draft.cover_version)}`:null}/>:<p>請填寫有效名稱與連結後預覽。</p>}</section>}
+   <div className="actions profile-editor-savebar"><button type="submit" className="btn btn-primary" disabled={locked||coverStatus.dirty||draft.visibility==='public'&&!confirmed}>{busy?'儲存中…':draft.visibility==='public'?'確認公開':'儲存'}</button><button type="button" className="btn btn-secondary btn-small" disabled={locked||coverStatus.dirty||!dirty} onClick={()=>{setDraft(draftOf(saved));setConfirmed(false);setNotice('已取消未儲存的修改。私人封面草稿仍可另行捨棄。');}}>取消修改</button><button type="button" className="btn btn-secondary btn-small" disabled={locked||coverStatus.dirty} onClick={()=>{if(window.confirm('將外觀恢復預設？文字名片與可見範圍保持不變，按儲存才生效。'))update({...draft,layout:structuredClone(defaultProfileLayout),include_cover:false,cover_version:null});}}>恢復預設外觀</button>{saved.aggregate_version&&<button type="button" className="btn btn-secondary btn-small" disabled={locked} onClick={onView}>查看已儲存個人頁</button>}</div>
+   </div>
+   <section className="profile-preview stack"><h3>草稿即時預覽</h3><p className="hint">只是外觀預覽，不會改變伺服器上的內容或公開範圍。此處不載入帳號稱號與認證；請用「查看已儲存個人頁」確認實際會員畫面。</p>{previewData.success?<ProfileText profile={previewData.data} coverUrl={draft.include_cover&&draft.cover_version?`/api/v1/me/profile-cover/image?v=${encodeURIComponent(draft.cover_version)}`:null}/>:<><p>名稱或連結尚未填妥，先顯示主題外觀示意；你填寫的內容仍保留。</p><ProfileText profile={{display_name:'主題外觀示意',bio:'',links:[],avatar_url:null,cover:null,layout:{...defaultProfileLayout,theme:draft.layout.theme,accent:draft.layout.accent,cover_style:draft.layout.cover_style}}}/></>}</section>
+   </div>
+
    {saved.visibility!=='private'&&saved.aggregate_version&&<p className="hint">個人頁連結：<a href={visitorProfileHash(owner)}>{visitorProfileHash(owner)}</a>（{labels[saved.visibility]}）</p>}
   </form>}
   {validation&&<p role="alert">{validation}</p>}{error&&<div role="alert"><p>{error}</p>{!lastFailureUnknown&&<p>若資料版本已更新，重讀會丟棄這份本機修改。<button className="btn btn-secondary btn-small" disabled={busy} onClick={()=>{if(window.confirm('丟棄本機修改並重讀最新設定？'))void reader.refresh();}}>重讀最新設定</button></p>}</div>}
