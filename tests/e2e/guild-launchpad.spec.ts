@@ -365,19 +365,34 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     expect(backBox!.width).toBeLessThan(400);
     await expect(session.page.getByRole('link', {name: '前往業務空間', exact: true})).toBeVisible();
     await expect(session.page.locator('.guild-launchpad-editor')).toBeHidden();
+    const managementWrites: string[] = [];
+    session.page.on('request', request => {if (/\/launchpad-(config|delegations)(?:\/|$)/.test(new URL(request.url()).pathname) && request.method() === 'POST') managementWrites.push(request.url());});
     await openGuildSection(session.page, '管理啟動台');
+    await session.page.getByRole('button', {name: '成員授權', exact: true}).click();
     await expect(session.page.getByText('目前沒有授權。', {exact: true})).toBeVisible();
+    await session.page.getByRole('button', {name: '工具與提示', exact: true}).click();
     await expect(session.page.getByRole('button', {name: '儲存草稿', exact: true})).toHaveClass(/btn-ghost/);
     await expect(session.page.getByRole('button', {name: '發布', exact: true})).toHaveClass(/btn-primary/);
     await session.page.locator('#launchpad-support-url').fill('http://example.com/help');
+    await session.page.getByRole('button', {name: '版面與使命', exact: true}).click();
+    await expect(session.page.locator('#launchpad-support-url')).toBeHidden();
+    expect(managementWrites).toEqual([]);
     await session.page.getByRole('button', {name: '儲存草稿', exact: true}).click();
     const urlError = session.page.locator('#launchpad-support-url-error');
+    await expect(session.page.getByRole('heading', {name: '工具與提示', exact: true})).toBeFocused();
+    await expect(session.page.locator('#launchpad-support-url')).toBeVisible();
+    await expect(session.page.locator('#launchpad-support-url')).toHaveValue('http://example.com/help');
     await expect(urlError).toHaveText('只接受 https:// 開頭、不含帳號密碼的網址');
     await expect(session.page.locator('#launchpad-support-url')).toHaveAttribute('aria-describedby', /launchpad-support-url-error/);
     await expect(session.page.getByText('unsupported_url')).toHaveCount(0);
     await expect(session.page.getByText('blocks.')).toHaveCount(0);
     await session.page.locator('#launchpad-support-url').fill('');
+    await session.page.getByRole('button', {name: '版面與使命', exact: true}).click();
     await session.page.locator('#launchpad-mission').fill(first);
+    await session.page.getByRole('button', {name: '工具與提示', exact: true}).click();
+    await expect(session.page.getByRole('button', {name: '發布', exact: true})).toBeDisabled();
+    await session.page.getByRole('button', {name: '版面與使命', exact: true}).click();
+    await expect(session.page.locator('#launchpad-mission')).toHaveValue(first);
     // Sharing works while signed in and leaves the active editor/draft intact.
     await session.page.getByRole('button', {name: '複製公會連結', exact: true}).click();
     await finishGuildCopy(session.page, 0, true);
@@ -418,6 +433,7 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await openGuildSection(session.page, '公會資訊');
     await expect(session.page.getByText(second).first()).toBeVisible();
     await openGuildSection(session.page, '管理啟動台');
+    await session.page.getByRole('button', {name: '版本紀錄', exact: true}).click();
     await session.page.getByRole('listitem').filter({hasText: `版本 ${revision}`}).getByRole('button', {name: '回復到此版本', exact: true}).click();
     await session.page.getByRole('dialog').getByLabel('回復原因').fill('回復這次測試的第一個發布');
     await session.page.getByRole('button', {name: '確認回復', exact: true}).click();
@@ -426,9 +442,23 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await openGuildSection(session.page, '公會資訊');
     await expect(session.page.getByText(first).first()).toBeVisible();
     await openGuildSection(session.page, '管理啟動台');
-    await session.page.setViewportSize({width: 360, height: 800});
-    await noOverflow(session.page);
-    await tallEnough(session.page);
+    const writesBeforePanelTour = managementWrites.length;
+    for (const width of [320, 390, 1280]) {
+      await session.page.setViewportSize({width, height: 800});
+      for (const name of ['版面與使命', '工具與提示', '版本紀錄', '成員授權']) {
+        await session.page.getByRole('button', {name, exact: true}).click();
+        await expect(session.page.getByRole('heading', {name, exact: true})).toBeVisible();
+        await expect(session.page.locator('.guild-editor-panel:visible')).toHaveCount(1);
+        await expect(session.page.locator('.guild-editor-panel[hidden]')).toHaveCount(3);
+        for (const hidden of await session.page.locator('.guild-editor-panel[hidden]').all()) {
+          await expect(hidden).toBeHidden();
+          expect(await hidden.evaluate(element => getComputedStyle(element).display)).toBe('none');
+        }
+        await noOverflow(session.page);
+        await tallEnough(session.page);
+      }
+    }
+    expect(managementWrites).toHaveLength(writesBeforePanelTour);
   } finally { await session.context.close(); await cleanup(e2eAuthPool, fixture.userId, fixture.previousOfficer); }
 });
 
@@ -453,6 +483,7 @@ test('a chair delegates editing and preview only, then revokes access from a sta
     await leader.page.goto(`/#guilds/${edited}`);
     await expect(leader.page.getByRole('heading', {level: 1, name: chair.editedName})).toBeVisible();
     await openGuildSection(leader.page, '管理啟動台');
+    await leader.page.getByRole('button', {name: '成員授權', exact: true}).click();
     await leader.page.getByRole('combobox', {name: '成員', exact: true}).selectOption({label: member.displayName});
     await leader.page.getByLabel('編輯內容', {exact: true}).check();
     await leader.page.getByLabel('預覽配置', {exact: true}).check();
@@ -470,6 +501,8 @@ test('a chair delegates editing and preview only, then revokes access from a sta
     await delegate.page.goto(`/#guilds/${edited}`);
     await openGuildSection(delegate.page, '管理啟動台');
     await expect(delegate.page.locator('#launchpad-mission')).toBeVisible();
+    await expect(delegate.page.getByRole('button', {name: '版本紀錄', exact: true})).toHaveCount(0);
+    await expect(delegate.page.getByRole('button', {name: '成員授權', exact: true})).toHaveCount(0);
     await expect(delegate.page.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
     await expect(delegate.page.getByRole('button', {name: '授權', exact: true})).toHaveCount(0);
     await expect(delegate.page.getByRole('button', {name: '撤銷', exact: true})).toHaveCount(0);
