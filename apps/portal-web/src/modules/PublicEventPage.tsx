@@ -5,23 +5,25 @@ import {formatIsoLocal} from '../format';
 import {GuestEventParticipation,readEventParticipationToken} from './EventParticipation';
 import './PublicEventPage.css';
 
-const publicEventSchema=z.object({event_id:z.string(),title:z.string(),description:z.string(),starts_at:z.string(),ends_at:z.string(),mode:z.enum(['online','in_person','hybrid']),location:z.string(),online_url:z.string().nullable(),event_kind:z.string(),topic:z.string().nullable(),visibility:z.enum(['referral','open']),capacity:z.number().nullable(),attending_count:z.number(),organizer_name:z.string(),banner_url:z.string().nullable(),video_url:z.string().nullable(),video_mime:z.enum(['video/mp4','video/webm']).nullable()});
+const publicEventSchema=z.object({event_id:z.string(),title:z.string(),description:z.string(),starts_at:z.string(),ends_at:z.string(),mode:z.enum(['online','in_person','hybrid']),location:z.string(),online_url:z.string().nullable(),event_kind:z.string(),topic:z.string().nullable(),visibility:z.enum(['referral','open']),registration_policy:z.enum(['guest_allowed','community_member']).default('guest_allowed'),capacity:z.number().nullable(),attending_count:z.number(),organizer_name:z.string(),banner_url:z.string().nullable(),video_url:z.string().nullable(),video_mime:z.enum(['video/mp4','video/webm']).nullable()});
 type PublicEvent=z.infer<typeof publicEventSchema>;
 const safeUrl=(value:string|null)=>{try{const url=new URL(value??'');return url.protocol==='https:'&&!url.username&&!url.password?url.href:null}catch{return null}};
 const savedCode=(id:string)=>{
   const match=/^#events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(window.location.hash);
   const pathId=/^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1];
-  const linkCode=match?.[1]===id?new URLSearchParams(match[2]??'').get('ref'):pathId===id?new URLSearchParams(window.location.search).get('ref'):null;
-  if(linkCode&&/^[A-Za-z0-9_-]{16,32}$/.test(linkCode))try{localStorage.setItem(`freedom-event-referral:${id}`,linkCode)}catch{/* Link stays usable. */}
-  try{return linkCode??localStorage.getItem(`freedom-event-referral:${id}`)}catch{return linkCode}
+  const refs=new URLSearchParams(match?.[1]===id?match[2]??'':pathId===id?window.location.search:'').getAll('ref');
+  const linkCode=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?refs[0]:null;
+  if(refs.length&&!linkCode)return null;
+  if(linkCode)try{localStorage.setItem(`freedom-event-referral:${id}`,linkCode)}catch{/* Link stays usable. */}
+  try{const cached=localStorage.getItem(`freedom-event-referral:${id}`);return linkCode??(cached&&/^[A-Za-z0-9_-]{16,32}$/.test(cached)?cached:null)}catch{return linkCode}
 };
 
-type PublicEventPageProps={client:PortalClient;id:string;onLogin:()=>void;revalidatePublic?:boolean;participationEnabled?:boolean};
+type PublicEventPageProps={client:PortalClient;id:string;onLogin:()=>void;onJoin?:()=>void;revalidatePublic?:boolean;participationEnabled?:boolean};
 export function PublicEventPage(props:PublicEventPageProps){
   // Drafts and pending registration responses belong to one event, not the reused route.
   return <PublicEventContent key={props.id} {...props}/>;
 }
-function PublicEventContent({client,id,onLogin,revalidatePublic=false,participationEnabled=false}:PublicEventPageProps){
+function PublicEventContent({client,id,onLogin,onJoin,revalidatePublic=false,participationEnabled=false}:PublicEventPageProps){
   const [event,setEvent]=useState<PublicEvent|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('');
   const [name,setName]=useState(''),[email,setEmail]=useState(''),[saving,setSaving]=useState(false),[notice,setNotice]=useState('');
   const [code,setCode]=useState(()=>savedCode(id));
@@ -42,7 +44,8 @@ function PublicEventContent({client,id,onLogin,revalidatePublic=false,participat
       void read.then(value=>{
         if(revalidatePublic){
           const hash=/^#events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(window.location.hash);
-          const referral=new URLSearchParams(hash?.[1]===id?hash[2]??'':window.location.search).get('ref');
+          const refs=new URLSearchParams(hash?.[1]===id?hash[2]??'':window.location.search).getAll('ref');
+          const referral=refs.length===1?refs[0]:null;
           if(value.visibility!=='open'&&!(value.visibility==='referral'&&referral&&/^[A-Za-z0-9_-]{16,32}$/.test(referral)))throw new Error('活動目前無法公開查看。');
         }
         if(active&&current===generation)setEvent(value);
@@ -55,7 +58,7 @@ function PublicEventContent({client,id,onLogin,revalidatePublic=false,participat
     if(revalidatePublic){window.addEventListener('focus',refresh);window.addEventListener('pageshow',refresh);document.addEventListener('visibilitychange',visible)}
     return()=>{active=false;generation++;controller?.abort();window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',refresh);document.removeEventListener('visibilitychange',visible)};
   },[client,id,revalidatePublic,privateManagement]);
-  async function register(e:FormEvent){e.preventDefault();if(!event||saving)return;setSaving(true);setError('');try{await client.post(`/public/events/${id}/register`,{name,email,referral_code:code},{skipAuthHandler:true});setNotice('報名已確認；Email 服務已接受參與資訊郵件，不代表郵件已送達。請檢查收件匣。');}
+  async function register(e:FormEvent){e.preventDefault();if(!event||event.registration_policy==='community_member'||saving)return;setSaving(true);setError('');try{await client.post(`/public/events/${id}/register`,{name,email,referral_code:code},{skipAuthHandler:true});setNotice('報名已確認；Email 服務已接受參與資訊郵件，不代表郵件已送達。請檢查收件匣。');}
     catch(cause){setError(cause instanceof Error?cause.message:'報名未完成，請稍後再試。')}finally{setSaving(false)}}
   const started=Boolean(event&&Date.parse(event.starts_at)<=Date.now()),ended=Boolean(event&&Date.parse(event.ends_at)<=Date.now()),full=Boolean(event&&event.capacity!==null&&event.attending_count>=event.capacity);
   const locationLink=safeUrl(event?.location??null),onlineLink=safeUrl(event?.online_url??null);
@@ -66,9 +69,11 @@ function PublicEventContent({client,id,onLogin,revalidatePublic=false,participat
       {event.topic&&<p><strong>主題：</strong>{event.topic}</p>}<p className="public-event-description">{event.description}</p>
       <dl className="public-event-meta"><div><dt>時間</dt><dd>{formatIsoLocal(event.starts_at)} ～ {formatIsoLocal(event.ends_at)}（依裝置時區）</dd></div><div><dt>地點</dt><dd>{locationLink?<a href={locationLink} target="_blank" rel="noopener noreferrer">開啟地點連結</a>:event.location}</dd></div>{onlineLink&&<div><dt>線上參與</dt><dd><a href={onlineLink} target="_blank" rel="noopener noreferrer">開啟線上連結</a></dd></div>}</dl>
       <p className="muted">{event.attending_count}{event.capacity===null?' 人已報名':` / ${event.capacity} 人已報名`}</p>
-      {!started&&!full&&<form className="public-event-register" onSubmit={e=>void register(e)}><h2>報名活動</h2>{event.visibility==='referral'&&!code&&<p className="banner banner-info">這場活動須從會員分享的連結報名，請向分享者取得連結。</p>}<label className="field">你的名字<input required maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label><label className="field">接收參與資料的 Email<input required type="email" maxLength={200} value={email} onChange={e=>setEmail(e.target.value)}/></label><p className="field-hint">活動參與資訊會寄到這個信箱。分享碼已包含在連結中，無須手動輸入。</p><button className="btn btn-primary" disabled={saving||Boolean(notice)||event.visibility==='referral'&&!code}>{saving?'寄送中…':'報名並寄送參與資料'}</button></form>}
+      {!started&&event.visibility==='referral'&&!code&&<p className="banner banner-info">這場活動須從會員分享的連結報名，請向分享者取得連結。</p>}
+      {!started&&event.registration_policy==='community_member'&&<section className="stack" aria-label="會員報名"><h2>使用社群帳號參加</h2><p>這場活動只接受本社群帳號報名。登入後請再確認報名，不會自動加入活動。</p><div className="actions"><button type="button" className="btn btn-primary btn-small" style={{minHeight:44}} onClick={onLogin}>登入後報名</button>{onJoin&&<button type="button" className="btn btn-secondary btn-small" style={{minHeight:44}} onClick={onJoin}>建立帳號後報名</button>}</div></section>}
+      {!started&&!full&&event.registration_policy!=='community_member'&&<form className="public-event-register" onSubmit={e=>void register(e)}><h2>報名活動</h2><label className="field">你的名字<input required maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label><label className="field">接收參與資料的 Email<input required type="email" maxLength={200} value={email} onChange={e=>setEmail(e.target.value)}/></label><p className="field-hint">活動參與資訊會寄到這個信箱。分享碼已包含在連結中，無須手動輸入。</p><button className="btn btn-primary" disabled={saving||Boolean(notice)||event.visibility==='referral'&&!code}>{saving?'寄送中…':'報名並寄送參與資料'}</button></form>}
       {full&&!started&&<p className="banner banner-info">活動名額已滿。</p>}{started&&!ended&&<p className="banner banner-info">活動已開始，報名已結束。</p>}{notice&&<p role="status" className="banner banner-info">{notice}</p>}{error&&<p role="alert" className="banner banner-error">{error}</p>}
     </article>}
-    {participationEnabled&&(privateManagement||event)&&<div className="card stack">{privateManagement&&<h1>活動參與管理</h1>}<GuestEventParticipation client={client} id={id} referralCode={code}/></div>}
+    {participationEnabled&&(privateManagement||event&&event.registration_policy!=='community_member')&&<div className="card stack">{privateManagement&&<h1>活動參與管理</h1>}<GuestEventParticipation client={client} id={id} referralCode={code}/></div>}
   </main></div>;
 }

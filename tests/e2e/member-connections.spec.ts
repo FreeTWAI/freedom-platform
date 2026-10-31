@@ -145,3 +145,44 @@ test('initial recommendation retry and acknowledged invitation refresh both star
   await panel.getByRole('button',{name:'換一位',exact:true}).click();await expect(panel.getByRole('heading',{name:'受邀測試夥伴',exact:true})).toBeVisible();
   await panel.getByRole('button',{name:'邀請成為好友',exact:true}).click();await expect(panel.getByRole('heading',{name:'初始測試夥伴',exact:true})).toBeVisible();expect(offsets).toEqual([0,0,1,0]);expect(invites).toBe(1);
 });
+
+// Open the same opt-in capability URL carried by the onsite card QR. No camera
+// permission, scan tracking, automatic friendship or attendance is involved.
+test('reciprocal card visit accepts only by consent and an unknown ACK keeps the original command',async({page,browser})=>{
+  await signup(page,'現場受邀會員');await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
+  const sharing=page.getByRole('region',{name:'分享我的工坊名片'});await sharing.getByRole('button',{name:'建立分享連結'}).click();
+  const ownLink=sharing.getByRole('link',{name:'開啟名片',exact:true});await expect(ownLink).toHaveAttribute('href',/\/member-cards\/[A-Za-z0-9_-]{43}$/);
+  const ownUrl=await ownLink.getAttribute('href');
+  const context=await browser.newContext({baseURL:test.info().project.use.baseURL as string}),peer=await context.newPage();
+  const attempts:{url:string;body:string|null;key:string|undefined;version:string|undefined}[]=[];
+  let acceptedBody:unknown;
+  try{
+    await peer.goto(ownUrl!);await peer.getByRole('button',{name:'加入自由工坊／登入'}).click();await signup(peer,'現場邀請會員',false);
+    await expect(peer.getByRole('button',{name:'接受好友邀請',exact:true})).toHaveCount(0);
+    await peer.getByRole('button',{name:'邀請成為好友',exact:true}).click();await expect(peer.getByText('好友邀請待回覆',{exact:true})).toBeVisible();
+    await expect(peer.getByRole('button',{name:'接受好友邀請',exact:true})).toHaveCount(0);
+    await peer.getByRole('button',{name:'返回會員首頁'}).click();await navigate(peer,'我的名片');await openAccountSettings(peer,'分享名片設定（免登入）');
+    const peerSharing=peer.getByRole('region',{name:'分享我的工坊名片'});await peerSharing.getByRole('button',{name:'建立分享連結'}).click();
+    const peerLink=peerSharing.getByRole('link',{name:'開啟名片',exact:true});await expect(peerLink).toHaveAttribute('href',/\/member-cards\/[A-Za-z0-9_-]{43}$/);
+    const peerUrl=await peerLink.getAttribute('href');
+    await page.route('**/api/v1/friends/*/accept',async route=>{
+      const request=route.request(),headers=request.headers();attempts.push({url:request.url(),body:request.postData(),key:headers['idempotency-key'],version:headers['if-match']});
+      if(attempts.length===1){const response=await route.fetch();expect(response.status()).toBe(200);acceptedBody=await response.json();return route.abort('failed');}
+      if(attempts.length===2)return route.fulfill({status:403,json:{type:'about:blank',title:'Forbidden',status:403,code:'capability_denied',detail:'目前無法確認原操作'}});
+      return route.fulfill({json:acceptedBody});
+    });
+    await page.setViewportSize({width:320,height:720});await page.goto(peerUrl!);
+    const accept=page.getByRole('button',{name:'接受好友邀請',exact:true});await expect(accept).toBeVisible();
+    await expect(page.getByText('對方已邀請你成為好友。接受後，雙方可看見彼此設定為「好友」可見的內容。',{exact:true})).toBeVisible();
+    expect(attempts).toHaveLength(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await accept.evaluate(button=>{(button as HTMLButtonElement).click();(button as HTMLButtonElement).click();});
+    const retry=page.getByRole('button',{name:'重試原好友操作',exact:true});await expect(retry).toBeVisible();expect(attempts).toHaveLength(1);
+    await page.getByRole('button',{name:'重新讀取好友狀態',exact:true}).click();await expect(page.getByText('你們已是好友',{exact:true})).toBeVisible();
+    await expect(retry).toBeVisible();await expect(page.getByRole('button',{name:'返回會員首頁'})).toBeDisabled();
+    await retry.click();await expect(retry).toBeEnabled();expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
+    await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.getByText('你們已是好友',{exact:true})).toBeVisible();await expect(retry).toBeVisible();
+    await retry.click();await expect(retry).toHaveCount(0);await expect(page.getByText('你們已是好友',{exact:true})).toBeVisible();
+    expect(attempts).toHaveLength(3);expect(attempts[2]).toEqual(attempts[0]);expect(attempts[0].key).toBeTruthy();expect(attempts[0].version).toBeTruthy();
+    await expect(page.getByRole('button',{name:'返回會員首頁'})).toBeEnabled();
+  }finally{await context.close();}
+});
