@@ -41,6 +41,6 @@ export const identityFeatures = {
   },
   "members": {
     moduleId: "friends-directory", placement: 'page',
-    render: ({client, session, site, notificationTarget, openMemberMessage, showIncomingFriends}) => <MembersPanel client={client} session={session} memberBlockingEnabled={site?.member_blocking_enabled===true} onIncomingFriends={showIncomingFriends} onMessage={openMemberMessage} focusRequest={notificationTarget?.tab==='members'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined} />,
+    render: ({client, session, site, notificationTarget, openMemberMessage, showIncomingFriends, registerPageLeave}) => <MembersPanel key={`${session.user.user_id}:${client.sessionGeneration}`} registerPendingLeave={registerPageLeave} client={client} session={session} memberBlockingEnabled={site?.member_blocking_enabled===true} onIncomingFriends={showIncomingFriends} onMessage={openMemberMessage} focusRequest={notificationTarget?.tab==='members'&&notificationTarget.resource_id?{id:notificationTarget.resource_id,sequence:notificationTarget.sequence}:undefined} />,
   },
 } satisfies PortalFeatureEntries;
