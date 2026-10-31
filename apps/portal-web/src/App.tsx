@@ -101,10 +101,18 @@ export function App() {
 
 const resetTokenFromHash=()=>/^#reset-password\/([A-Za-z0-9_-]{43})$/.exec(window.location.hash)?.[1]??null
 const eventIdFromLocation=()=>{
-  const inHash=/^#events\/([0-9a-f-]{36})(?:\?.*)?$/.exec(window.location.hash)?.[1];
+  const inHash=/^#events\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\?.*)?$/.exec(window.location.hash)?.[1];
   if(inHash)return inHash;
   if(window.location.hash&&!readEventParticipationToken())return null;
-  return /^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1]??null;
+  return /^\/events\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/.exec(window.location.pathname)?.[1]??null;
+}
+const eventReturnPath=()=>{
+  const id=eventIdFromLocation();if(!id)return null;
+  const hash=/^#events\/[^?]+(?:\?(.*))?$/.exec(window.location.hash);
+  const refs=new URLSearchParams(hash?hash[1]??'':window.location.search).getAll('ref');
+  const query=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?`?ref=${refs[0]}`:'';
+  // Only public event identity/referral survives authentication, never a private capability.
+  return hash?`/#events/${id}${query}`:`/events/${id}${query}`;
 }
 const eventLoginFromLocation=()=>Boolean(eventIdFromLocation()&&window.history.state?.freedomEventLogin===window.location.href)
 const isMessagesHash=(hash:string)=>hash.split('?')[0]==='#messages'
@@ -184,7 +192,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     const memberReturn=window.location.pathname==='/'?memberPostReturn(window.location.search,window.location.hash):null
     if(memberReturn){window.history.replaceState(null,'',memberReturn);window.dispatchEvent(new HashChangeEvent('hashchange'))}
     if(eventLoginFromLocation()){
-      const state={...window.history.state};delete state.freedomEventLogin
+      const state={...window.history.state};delete state.freedomEventLogin;delete state.freedomEventAuthMode
       window.history.replaceState(Object.keys(state).length?state:null,'')
     }
     if(window.history.state?.freedomProfileLogin){const state={...window.history.state};delete state.freedomProfileLogin;window.history.replaceState(state,'');}
@@ -271,15 +279,12 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   const leaveCurrentSession = (notice?: string) => {
     if (sessionGeneration.current === renderedSessionGeneration) toLogin(notice)
   }
-  const eventLogin=()=>{
-    if(readEventParticipationToken()){
-      window.history.replaceState(null,'',window.location.pathname+window.location.search);
-      setLocationHash('');
-      setPublicEventId(eventIdFromLocation());
-    }
-    // Keep the public event and its referral/query intact behind the login view.
-    // A scoped history entry makes Back/Forward dismiss/reopen the same view.
-    if(!eventLoginFromLocation())window.history.pushState({...window.history.state,freedomEventLogin:window.location.href},'');
+  const eventLogin=(mode:'login'|'register'='login')=>{
+    const destination=eventReturnPath();if(!destination)return;
+    // Scrub unallowlisted query/fragment data before creating any auth history entry.
+    window.history.replaceState(null,'',destination);
+    setLocationHash(window.location.hash);setPublicEventId(eventIdFromLocation());
+    window.history.pushState({freedomEventLogin:window.location.href,freedomEventAuthMode:mode},'');
     setEventLoginRequested(true);
   };
   const returnToEvent=()=>{if(eventLoginFromLocation())window.history.back();else setEventLoginRequested(false)};
@@ -296,7 +301,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
       </div>
     )
   }
-  if(!googleCallback&&!resetToken&&publicEventId&&readEventParticipationToken(locationHash)&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} participationEnabled={site?.event_participation_enabled===true} onLogin={eventLogin}/>;
+  if(!googleCallback&&!resetToken&&publicEventId&&readEventParticipationToken(locationHash)&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>eventLogin()}/>;
 
   const emailChangeToken=/^#change-email\/([A-Za-z0-9_-]{43})$/.exec(locationHash)?.[1];
   if(emailChangeToken)return <EmailChangeConfirm key={emailChangeToken} client={client} token={emailChangeToken}/>;
@@ -309,7 +314,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-hub')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#tester-map')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#home">{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap/></PageLoadBoundary></main></div>;
-    if(!googleCallback&&!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>{if(site?.community_discovery_enabled&&site.registration_enabled)window.location.assign(`/?join=1&return_to=${encodeURIComponent(`/events/${publicEventId}`)}`);else eventLogin()}}/>;
+    if(!googleCallback&&!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>eventLogin()} onJoin={site?.registration_enabled?()=>eventLogin('register'):undefined}/>;
     const launchpadKey=guildKeyFromHash(locationHash);
     if(!googleCallback&&!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
     if(!resetToken&&launchpadKey&&!siteLoaded)return <div className="app-frame"><div className="centered"><p className="muted" role="status">正在確認公開頁面…</p></div></div>;
@@ -320,6 +325,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
         {profileLoginRequested&&profileRoute?.kind==='visitor'&&<button type="button" className="btn btn-secondary btn-small" onClick={returnToProfile}>取消登入，返回個人頁</button>}
         <LoginView
           site={site}
+          initialMode={eventLoginRequested&&site?.registration_enabled&&window.history.state?.freedomEventAuthMode==='register'?'register':'login'}
           googleCallback={googleCallback}
           notice={loginNotice}
           bootError={bootError}
@@ -342,11 +348,12 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     <GameConsoleProvider key={session.user.user_id+':'+client.sessionGeneration} client={client} userId={session.user.user_id} session={session} site={site} feedEnabled={false} headless>
     <GitHubSocialProvider client={client} session={session} starGateEnabled={site?.skill_book_star_gate_enabled===true}>
     {publicReturnNotice && <p className="banner banner-info" role="status">{publicReturnNotice}</p>}
-    {publicEventId && site?.community_discovery_enabled ? <PublicEventPage client={client} id={publicEventId} revalidatePublic onLogin={()=>window.location.assign('/#home')}/> : !onboarding ? <div className="centered"><div className="card stack"><h1>自由工坊</h1>{gateError ? <><p role="alert">{gateError}</p><button className="btn btn-primary" onClick={() => void loadOnboarding()}>重新載入定位進度</button></> : <p role="status">正在確認你的定位旅程…</p>}</div></div>
+    {publicEventId&&onboarding?.required&&!onboarding.completed&&<p className="banner banner-info" role="status">完成加入公會後會返回這場活動，完整定位可稍後補做。返回後仍需自行確認報名，不會自動參加。</p>}
+    {!onboarding ? <div className="centered"><div className="card stack"><h1>自由工坊</h1>{gateError ? <><p role="alert">{gateError}</p><button className="btn btn-primary" onClick={() => void loadOnboarding()}>重新載入定位進度</button></> : <p role="status">正在確認你的定位旅程…</p>}</div></div>
     : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
-      ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
-      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(parseProfileRoute(window.location.hash)?.kind!=='visitor' && !entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={publicEventId?'原本的活動報名':entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(!eventIdFromLocation() && parseProfileRoute(window.location.hash)?.kind!=='visitor' && !entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
     : sharedCardToken ? <PublicMemberPage client={client} token={sharedCardToken} session={session} onLogin={()=>{}} onReturn={returnToWorkshop} onEdit={editOwnCard}/> : <>
     <AuthorClaimProvider client={client}><DevelopmentAccessProvider client={client} session={session}>
     <Workspace key={`${session.user.user_id}:${client.sessionGeneration}`}
@@ -375,6 +382,7 @@ function DemoBanner() {
 
 function LoginView({
   site,
+  initialMode='login',
   googleCallback,
   notice,
   bootError,
@@ -389,6 +397,7 @@ function LoginView({
   onReturnToEvent,
 }: {
   site: SiteConfig | null
+  initialMode?:'login'|'register'
   googleCallback?:GoogleCallbackEntry|null
   notice: string | null
   bootError: ActionError | null
@@ -402,7 +411,7 @@ function LoginView({
   onReturnToGuild?:()=>void
   onReturnToEvent?:()=>void
 }) {
-  const [mode, setMode] = useState<'login' | 'register' | 'request-reset'>('login')
+  const [mode, setMode] = useState<'login' | 'register' | 'request-reset'>(initialMode)
   const [returnPath] = useState(() => publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))
   const [skillReturn] = useState(() => skillAcquisitionFromSearch(window.location.search))
   const [skillEntryUrl] = useState(() => window.location.href)
@@ -414,7 +423,7 @@ function LoginView({
   const authEpoch = useRef(0)
   const emailInput = useRef<HTMLInputElement>(null)
   const authForm = useRef<HTMLFormElement>(null)
-  const discoveryEnabled = site?.community_discovery_enabled === true && !resetToken
+  const discoveryEnabled = site?.community_discovery_enabled === true && !resetToken && !onReturnToEvent
   const join = useCallback(() => {
     setMode('register'); setError(null); setResetNotice('')
     requestAnimationFrame(() => { authForm.current?.scrollIntoView({ block: 'start' }); emailInput.current?.focus({ preventScroll: true }) })
@@ -550,6 +559,7 @@ function LoginView({
       <section className="card login-card" aria-labelledby="login-heading">
         {!accessExpired && activeMode!=='confirm-reset'&&<div className="auth-switch" role="group" aria-label={t('auth.switch')}><button type="button" className={activeMode==='login'?'selected':''} aria-pressed={activeMode==='login'} onClick={()=>{setMode('login');setError(null);setResetNotice('')}}>{t('auth.memberLogin')}</button>{site?.registration_enabled&&<button type="button" className={activeMode==='register'?'selected':''} aria-pressed={activeMode==='register'} onClick={()=>{setMode('register');setError(null);setResetNotice('')}}>{t('auth.create')}</button>}</div>}
         <header className="login-card-heading"><h2 id="login-heading">{t(accessExpired?'auth.accessExpired':activeMode==='register'?'auth.join':activeMode==='request-reset'?'auth.forgot':activeMode==='confirm-reset'?'auth.newPasswordTitle':'auth.login')}</h2><PageTools pageId="registration" compact/></header>
+        {onReturnToEvent&&<p className="purpose-next-destination">登入後返回這場活動，再由你確認報名。新帳號先完成加入公會，完整定位可稍後補做。</p>}
         {postReturnPath&&<p className="purpose-next-destination"><a href={postReturnPath}>返回貼文繼續閱讀</a><br/>{activeMode==='register'?'建立帳號後會回到這篇貼文，加入公會可稍後完成。':'登入後會回到這篇貼文。'}</p>}
         {memberPostPath&&<p className="purpose-next-destination">登入後會回到指定貼文，並確認你的閱覽權限。</p>}
         {entryIntent&&!accessExpired&&activeMode!=='confirm-reset'&&activeMode!=='request-reset'&&<p className="purpose-next-destination" role="status">{language==='zh-Hant'?`${activeMode==='register'?'加入':'登入'}後前往：${entryIntentLabel(entryIntent)}。`:t('auth.destination',{destination:t(`intent.${entryIntent}`)})}</p>}
