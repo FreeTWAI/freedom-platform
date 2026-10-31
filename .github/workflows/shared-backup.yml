@@ -18,6 +18,7 @@ permissions:
 concurrency:
   group: shared-release
   cancel-in-progress: false
+  queue: max
 jobs:
   backup:
     if: >-
