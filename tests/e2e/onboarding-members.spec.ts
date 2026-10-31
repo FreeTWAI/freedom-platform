@@ -530,3 +530,89 @@ test('a pending guild join keeps the primary card from opening a dialog',async({
     await expect(intro).not.toBeVisible();
   }finally{releaseJoin();}
 });
+
+test('positioning returns to the confirmed result without discarding unsaved answers',async({page})=>{
+  await register(page,'定位返回草稿');await completeOrientation(page);
+  await navigate(page,'我的定位');
+  await page.getByRole('button',{name:'重新探索定位',exact:true}).click();
+  const radio=page.locator('.quiz-question').first().getByRole('radio').last();
+  await radio.check();
+  await page.getByRole('button',{name:'返回我的定位',exact:true}).click();
+  const resume=page.getByRole('button',{name:'繼續本頁的定位草稿',exact:true});
+  await expect(resume).toBeFocused();
+  await resume.click();await expect(radio).toBeChecked();
+  await page.route('**/api/v1/me/onboarding',route=>route.abort('failed'));
+  await page.getByRole('button',{name:'返回我的定位',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('定位結果暫時無法載入');
+  await expect(page.getByRole('button',{name:'重新載入定位結果',exact:true})).toBeVisible();
+  await expect(resume).toBeFocused();await resume.click();await expect(radio).toBeChecked();
+  await page.unroute('**/api/v1/me/onboarding');
+  page.once('dialog',dialog=>dialog.dismiss());
+  await navigate(page,'工坊夥伴');
+  await expect(page).toHaveURL(/#positioning$/);await expect(radio).toBeChecked();
+  page.once('dialog',dialog=>dialog.accept());
+  await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#members$/);
+});
+
+test('positioning preserves the original command after a lost ACK and later refusal',async({page})=>{
+  await register(page,'定位重試');await completeOrientation(page);await navigate(page,'我的定位');
+  await page.getByRole('button',{name:'重新探索定位',exact:true}).click();
+  for(const field of await page.locator('.quiz-question').all())await field.getByRole('radio').first().check();
+  const attempts:{body:string|null;key:string;version:string}[]=[];let ack:unknown;
+  await page.route('**/api/v1/me/onboarding/answers',async route=>{
+    const request=route.request();attempts.push({body:request.postData(),key:request.headers()['idempotency-key'],version:request.headers()['if-match']});
+    if(attempts.length===1){ack=await (await route.fetch()).json();await route.abort('failed');}
+    else if(attempts.length===2)await route.fulfill({status:412,contentType:'application/problem+json',json:{type:'about:blank',title:'Conflict',status:412,code:'version_conflict',detail:'版本不符'}});
+    else await route.fulfill({json:ack});
+  });
+  await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();
+  const retry=page.getByRole('button',{name:'重試保存',exact:true});await expect(retry).toBeEnabled();
+  await retry.click();await expect(retry).toBeEnabled();
+  await expect(page.getByRole('button',{name:'返回我的定位',exact:true})).toBeDisabled();
+  await expect(page.locator('.quiz-question').first().getByRole('radio').first()).toBeDisabled();
+  await retry.click();await expect(page.getByRole('heading',{name:'遇到這些情境，你會怎麼做？',exact:true})).toBeVisible();
+  expect(attempts).toHaveLength(3);expect(attempts[1]).toEqual(attempts[0]);expect(attempts[2]).toEqual(attempts[0]);
+});
+
+test('private guild answers distinguish return from discard and retain an unknown save',async({page})=>{
+  await register(page,'公會答案草稿');await completeOrientation(page);
+  const item={guild_key:'test_guild',name:'測試公會',question_set_version:'v1',outdated:false,answers:null,aggregate_version:null,updated_at:null};
+  await page.route('**/api/v1/me/guild-answers',route=>route.fulfill({json:{items:[item]}}));
+  await page.route('**/api/v1/guilds/directory',route=>route.fulfill({json:{items:[{guild_key:'test_guild',name:'測試公會',entry_questions:{questions:[{id:'q1',prompt:'想練習什麼？',options:[{id:'a',label:'練習寫作'},{id:'b',label:'練習設計'}]}]}}]}}));
+  await navigate(page,'我的定位');const card=page.getByRole('article',{name:'測試公會',exact:true});
+  await card.getByRole('button',{name:'回答',exact:true}).click();await card.getByRole('radio',{name:'練習寫作',exact:true}).check();
+  await card.getByRole('button',{name:'返回清單，保留輸入',exact:true}).click();
+  await card.getByRole('button',{name:'繼續草稿',exact:true}).click();await expect(card.getByRole('radio',{name:'練習寫作',exact:true})).toBeChecked();
+  page.once('dialog',dialog=>dialog.dismiss());await card.getByRole('button',{name:'捨棄未儲存答案',exact:true}).click();await expect(card.getByRole('radio',{name:'練習寫作',exact:true})).toBeChecked();
+  page.once('dialog',dialog=>dialog.accept());await card.getByRole('button',{name:'捨棄未儲存答案',exact:true}).click();
+  await card.getByRole('button',{name:'回答',exact:true}).click();await expect(card.getByRole('radio',{name:'練習寫作',exact:true})).not.toBeChecked();
+  await card.getByRole('radio',{name:'練習設計',exact:true}).check();
+  const attempts:string[]=[];
+  await page.route('**/api/v1/me/guild-answers/test_guild',async route=>{const request=route.request();attempts.push(JSON.stringify([request.postDataJSON(),request.headers()['idempotency-key'],request.headers()['if-match']]));if(attempts.length<3)return route.abort('failed');return route.fulfill({json:{...item,aggregate_version:1,answers:[{question_id:'q1',option_id:'b',label:'練習設計',prompt:'想練習什麼？'}]}});});
+  await card.getByRole('button',{name:'儲存小問答',exact:true}).click();
+  const retry=page.getByRole('button',{name:'重試原小問答',exact:true});await expect(retry).toBeEnabled();
+  await expect(card.getByRole('button',{name:'捨棄未儲存答案',exact:true})).toBeDisabled();
+  await page.route('**/api/v1/guilds/directory',route=>route.fulfill({json:{items:[]}}));
+  await page.getByRole('button',{name:'更新題目與已儲存答案',exact:true}).click();
+  await expect(page.getByRole('button',{name:'更新題目與已儲存答案',exact:true})).toBeEnabled();
+  await retry.click();await expect(retry).toBeEnabled();await retry.click();
+  await expect(page.getByText('已儲存測試公會的小問答。',{exact:true})).toBeVisible();
+  expect(attempts).toHaveLength(3);expect(new Set(attempts).size).toBe(1);
+});
+
+
+test('removing saved custom choices alone protects unsaved positioning changes',async({page})=>{
+  await register(page,'移除選項防護');await answerQuestions(page);
+  await page.getByLabel('自訂能力',{exact:true}).fill('已保存的能力');await page.getByRole('button',{name:'加入能力',exact:true}).click();
+  await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();
+  await page.getByLabel('自訂裝備',{exact:true}).fill('已保存的裝備');await page.getByRole('button',{name:'加入裝備',exact:true}).click();
+  await page.getByRole('button',{name:'看看適合我的公會',exact:true}).click();await finishGuild(page);
+  await navigate(page,'我的定位');await page.getByRole('button',{name:'重新探索定位',exact:true}).click();await answerQuestions(page);
+  await page.getByRole('button',{name:'移除能力：已保存的能力',exact:true}).click();
+  page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#positioning$/);
+  await expect(page.getByRole('button',{name:'移除能力：已保存的能力',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();
+  await page.getByRole('button',{name:'移除裝備：已保存的裝備',exact:true}).click();
+  page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#positioning$/);
+  await expect(page.getByRole('button',{name:'移除裝備：已保存的裝備',exact:true})).toHaveCount(0);
+});
