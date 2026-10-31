@@ -115,6 +115,22 @@ attempt；只重跑 deploy／failed jobs，可能因 admission 屬於舊 attempt
 
 ### 部署與健康檢查已完成，只有 handoff 失敗
 
+一般五階段發布若只有 handoff 的租約連線失去，會在同一 run 內先銷毀舊連線，
+最多嘗試三次取得新 session 的同一把鎖（busy 間隔兩秒）。重新建立控制紀錄、floor 與 Worker reader，
+核對原 journal head 未變、pending 正是本 run 的 handoff、完整 ledger／素材政策、GC OFF／零 fences、
+沒有其他發布或備份 session、Worker／bindings 及指定版本公開 health，才追加唯一缺少的 handoff。
+成功仍是正常五階段 `passed`，handoff 另保留 `leaseLoss` 與 `leaseRecovered: { cause, attempts }`，
+可沿既有 staging 收據准入正式發布。任一差異、鎖持續 busy 或較早階段失去租約都不自動收尾；
+不重做 migration、部署、備份或旗標變更，保留 `release_lease_lost` 並沿下列 hosted 入口對帳。
+若 handoff 已寫入才失去回覆／清理失敗，也留給 hosted 入口確認，不在同 run 重送。
+
+租約每 20 秒以單一查詢核對 DB／pid／登入角色及實際持有的 advisory lock，heartbeat 的
+client timeout 為 30 秒，容忍多秒同步工作；連線 error／end、身分改變或缺少鎖仍立即中止。
+公開 `leaseLoss` 只保留第一次原因、持有與距上次成功 heartbeat 的毫秒數、成功 heartbeat 數量，
+以及可選的白名單 SQLSTATE／Node error code；不包含錯誤訊息、主機、SQL 或憑證。
+診斷原因為 `heartbeat_timeout`、`heartbeat_failed`、`identity_changed`、`lock_not_held`、
+`connection_error`、`connection_ended`；目前不能由歷史 `release_lease_lost` 推定根因。
+
 四人可在同一個 Shared release 入口選 `handoff`，填原失敗 run 的完整 source SHA、
 相同環境，並在 `recover_release_run_id` 填原 run ID；`recover_backup_run_id` 留空。
 此入口須先合併並安裝包含它的 operator 映像；沒有安裝的舊映像不能執行新模式。
@@ -296,8 +312,8 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 - `postgres.mjs`：原生 PG18 快照 dump，以及磁碟上的全新隔離還原，僅開私人 Unix socket。
   完整讀完及驗證備份串流後才執行單一交易還原；正式資料庫 URL 不能作為還原目的地。
   遠端連線要求完整 TLS 驗證，SQL role 與 PlanetScale 分支登入名稱分開核對。
-- `lease.mjs`：沿用舊每日備份的 advisory lock，整個發布持續使用同一連線；
-  連線中斷會撤銷工作訊號，不能回報成功交接。
+- `lease.mjs`：沿用舊每日備份的 advisory lock，正常發布持續使用同一連線；
+  連線中斷撤銷工作訊號並保留原因。只有上述 handoff 查核全通過，才以新租約完成同 run 收尾。
 - `backup.mjs`：沿用既有 daily backup coordinator，實際執行同一快照的 DB dump 與
   媒體擷取、封裝、遠端完整讀回、PG18 與本機原生 R2 還原、隔離證據比對及清理。
   前後核對 Worker source／bindings、完整 migration ledger 和 material policy digest；
