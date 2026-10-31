@@ -6,7 +6,9 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=d026ba76a4fb2c289cfb456dea68676f03f7bd30 release.staging=d026ba76a4fb2c289cfb456dea68676f03f7bd30 flag.production=true flag.staging=true repo_max_migration=196 applied_migration.production=196 applied_migration.staging=196 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+2026-10-31 來源更新：main 已合併社群會員報名政策 migration197；目前僅確認來源上限為197。以下兩環境成功發布觀察仍為 schema196，不表示197已套用或新功能已啟用。
+
+<!-- glp-status: as_of=2026-10-12 release.production=d026ba76a4fb2c289cfb456dea68676f03f7bd30 release.staging=d026ba76a4fb2c289cfb456dea68676f03f7bd30 flag.production=true flag.staging=true repo_max_migration=197 applied_migration.production=196 applied_migration.staging=196 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 2026-10-30 08:25 UTC：兩環境已部署 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196，staging 41023423825 與正式站 41025042462 五階段、workflow／Deployment 均成功；08:24 UTC 正式站公開 health 為 `ok`、同 SHA。舊 staging 40853952665 的 handoff 已由 hosted 41023132536 結清為 `reconciled`／`handoff_reconciled`；首試41022455441在 R2 `chain_record` 讀取、任何寫入前失鎖，原 workflow／Deployment failure 保留。195／196 資料表已套用，未啟用新功能或旗標，M1／完整驗收與原政策列觀察不變；`as_of=2026-10-12` 仍是原功能觀察日期。本次無備份或備份前置，租約根因仍待 #1193 診斷。詳見[本次發布與復原收據](../unified-foundation/rollout-main-d026ba76-2026-10-30.json)。
 
