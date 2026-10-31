@@ -1,0 +1,479 @@
+{
+  "version": 1,
+  "tool": "built-in image_gen",
+  "direction": "Warm matte cookbook illustration; refined tableware and leaves, smooth rice shapes, no dense grains or reflection dots.",
+  "dimensions": [
+    1600,
+    800
+  ],
+  "assets": [
+    {
+      "category": "taiwan",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/taiwan.webp",
+      "bytes": 206092,
+      "sha256": "a2c164ef038d9c451f449535987270ed5f37755f32029d96a1f65ce385e66481",
+      "source_sha256": "b5bad9118101fdcd25c675c8d20a1b90881e9a85b98d27c45a841f2b5fea8542",
+      "prompt": "Use case: style-transfer. Refine this exact eight-dish food illustration atlas to be a little more sophisticated and beautifully finished, keeping its friendly matte flat illustration style. Preserve ALL eight subjects, their exact order, regular four-column two-row arrangement, transparent background and individual positions and sizes. Add only a SMALL AMOUNT of carefully chosen detail: elegant slightly varied warm-brown outline weight, a fine hand-painted rim on cream bowls and plates, two or three delicate veins on basil and bok choy leaves, restrained warm two-tone color layering on broad ingredient shapes, clear attractive edges on pancake wedges and meat pieces, a few well-placed scallion rings. The rice must remain ONE smooth unified mound with sparse colored toppings, absolutely NO individual rice grains or dense repeating marks. Keep smooth matte food surfaces, NO white light glints or wet oily highlights, NO realism, NO 3D, NO dense textures, NO grainy surface, NO tiny speckles. Sophisticated illustrated cookbook art, appetizing and calm, not a generic clip-art icon and not a photoreal food painting. Improve craftsmanship rather than adding visual clutter. Full plates and glass must remain fully contained, no dish crossing into another cell. No extra objects, letters, labels, numbers, background, logos or grid lines. Preserve real transparency.",
+      "frames": [
+        [
+          26,
+          120,
+          387,
+          265
+        ],
+        [
+          441,
+          113,
+          392,
+          274
+        ],
+        [
+          898,
+          45,
+          212,
+          349
+        ],
+        [
+          1165,
+          131,
+          419,
+          247
+        ],
+        [
+          17,
+          448,
+          410,
+          265
+        ],
+        [
+          439,
+          441,
+          368,
+          295
+        ],
+        [
+          810,
+          472,
+          389,
+          247
+        ],
+        [
+          1201,
+          419,
+          391,
+          317
+        ]
+      ]
+    },
+    {
+      "category": "japan",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/japan.webp",
+      "bytes": 210880,
+      "sha256": "77fb8731b0b07bdce0f80823fa6febdd798aac1703078d243aa71609a266e85e",
+      "source_sha256": "7d3212fd29eb679f65b83e6325dcbbfa6cccb703db62d8446edc5d04b6b7d591",
+      "prompt": "Use case: style-transfer. Use the attached image ONLY as a style reference. Make ONE completely new food illustration sprite atlas with exactly eight NEW dishes in a regular FOUR columns by TWO rows, in the precise order below. Real transparent background. Every dish on its own fully visible cream plate or bowl, or its own cup, centered in its own cell with generous clear separation and at least 15 percent padding. Match the refined warm hand-drawn illustrated cookbook style: elegant warm brown outlines, matte pastel colors, restrained broad two-tone layering, a fine line on tableware rims, a few deliberate leaf veins and ingredient edges. Sophisticated carefully finished illustration with a small amount of detail. Smooth rice mounds, NO individual rice grains. Only a few broad noodle strokes. NO wet oily shine, NO white reflection dots, NO photorealism, NO 3D, NO dense texture or tiny repeated marks. No people, faces, hands, letters, text, logos, grid lines or scenery. Keep all eight illustrations distinct and delicious, consistent view and scale. Wide 2:1 transparent canvas. Row 1 left to right: salmon nigiri sushi with a few pieces on a cream plate; two triangular seaweed rice balls; shrimp tempura with a simple dipping cup on a cream plate; tofu miso soup in a cream bowl. Row 2 left to right: Japanese chicken and egg rice bowl; Japanese curry rice with simple potato and carrot shapes; sliced golden rolled omelette on a cream plate; tonkotsu ramen with pork slices and one egg half in a cream bowl.",
+      "frames": [
+        [
+          21,
+          106,
+          402,
+          256
+        ],
+        [
+          435,
+          97,
+          377,
+          266
+        ],
+        [
+          823,
+          69,
+          390,
+          303
+        ],
+        [
+          1233,
+          112,
+          351,
+          284
+        ],
+        [
+          15,
+          412,
+          398,
+          309
+        ],
+        [
+          418,
+          422,
+          408,
+          280
+        ],
+        [
+          825,
+          439,
+          387,
+          261
+        ],
+        [
+          1207,
+          402,
+          383,
+          328
+        ]
+      ]
+    },
+    {
+      "category": "italy",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/italy.webp",
+      "bytes": 229130,
+      "sha256": "d415e0316c1f2f97fd864153374728bebef53a765d95fec95fe2daa7e4aee726",
+      "source_sha256": "6de7c7b709f5da0203cf4f587ac3f5b1d7205138a760d6c44d55d5401aea76a0",
+      "prompt": "Use case: precise-object-edit. Change ONLY the creamy risotto in the TOP ROW THIRD bowl of this atlas. Replace the densely textured rice surface with ONE smooth cream-colored mound, matte flat color and only two broad curved hand-drawn contour strokes. Keep the basil sprig and two broad cheese shavings on top. Absolutely no individual rice grains, no repeating ovals, no glints, no tiny dots or clustered texture. Keep the shape and size of that bowl. Preserve the other seven dishes, all framing, all positions, the exact four-column two-row grid, original illustration style and transparent background. This is a surgical texture simplification of the single rice mound, no other changes.",
+      "frames": [
+        [
+          10,
+          104,
+          394,
+          264
+        ],
+        [
+          403,
+          102,
+          392,
+          275
+        ],
+        [
+          797,
+          101,
+          395,
+          277
+        ],
+        [
+          1195,
+          101,
+          396,
+          260
+        ],
+        [
+          11,
+          413,
+          391,
+          290
+        ],
+        [
+          401,
+          426,
+          410,
+          257
+        ],
+        [
+          809,
+          416,
+          391,
+          264
+        ],
+        [
+          1199,
+          412,
+          390,
+          292
+        ]
+      ]
+    },
+    {
+      "category": "korea",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/korea.webp",
+      "bytes": 231952,
+      "sha256": "3d4d30f5724c4d736ca97cbb3f02b9822ae0498bbaefbc2ba4361b4bce59b491",
+      "source_sha256": "584ee79afef17e80c77f5325f85b2d1aeedc2563cf5f836f3f9d5124af9a738f",
+      "prompt": "Use case: style-transfer. Use the attached image ONLY as a style reference. Make ONE completely new food illustration sprite atlas with exactly eight NEW dishes in a regular FOUR columns by TWO rows, in the precise order below. Real transparent background. Every dish on its own fully visible cream plate or bowl, or its own cup, centered in its own cell with generous clear separation and at least 15 percent padding. Match the refined warm hand-drawn illustrated cookbook style: elegant warm brown outlines, matte pastel colors, restrained broad two-tone layering, a fine line on tableware rims, a few deliberate leaf veins and ingredient edges. Sophisticated carefully finished illustration with a small amount of detail. Smooth rice mounds, NO individual rice grains. Only a few broad noodle strokes. NO wet oily shine, NO white reflection dots, NO photorealism, NO 3D, NO dense texture or tiny repeated marks. No people, faces, hands, letters, text, logos, grid lines or scenery. Keep all eight illustrations distinct and delicious, consistent view and scale. Wide 2:1 transparent canvas. CRITICAL RICE RULE: every rice dish must use one completely SMOOTH, FLAT, UNTEXTURED mound with just two broad contour curves, like the smooth fried rice in the reference. Never show clustered rice grains, dimpled surfaces, repetitive white ovals or sparkly food. Row 1 left to right: Korean bibimbap with separate broad colorful vegetables and one fried egg on a SMOOTH rice base; seafood scallion pancake on a cream plate; tteokbokki rice cakes in red sauce in a cream bowl; kimchi fried rice as ONE smooth coral mound topped with one fried egg. Row 2 left to right: sliced seaweed gimbap rolls on a cream plate with simple solid rice cross-sections; Korean soybean paste soup with tofu; Korean red-sauce fried chicken with only a few large smooth pieces; Korean bulgogi beef slices with lettuce on a cream plate.",
+      "frames": [
+        [
+          18,
+          89,
+          395,
+          305
+        ],
+        [
+          418,
+          108,
+          396,
+          267
+        ],
+        [
+          816,
+          100,
+          385,
+          292
+        ],
+        [
+          1204,
+          112,
+          384,
+          264
+        ],
+        [
+          17,
+          451,
+          408,
+          258
+        ],
+        [
+          424,
+          414,
+          381,
+          310
+        ],
+        [
+          803,
+          428,
+          399,
+          282
+        ],
+        [
+          1200,
+          416,
+          391,
+          297
+        ]
+      ]
+    },
+    {
+      "category": "world",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/world.webp",
+      "bytes": 224964,
+      "sha256": "c35b4a22d0399931aeb766d6e51ce766e6d4af5389e7a7e004e0894cac94e37a",
+      "source_sha256": "9c1a37fbe3a3818410e943510d193bb1b64fa9e5bcfa8ee3e41ec897437b5ad3",
+      "prompt": "Use case: style-transfer. Use the attached image ONLY as a style reference. Make ONE completely new food illustration sprite atlas with exactly eight NEW dishes in a regular FOUR columns by TWO rows, in the precise order below. Real transparent background. Every dish on its own fully visible cream plate or bowl, or its own cup, centered in its own cell with generous clear separation and at least 15 percent padding. Match the refined warm hand-drawn illustrated cookbook style: elegant warm brown outlines, matte pastel colors, restrained broad two-tone layering, a fine line on tableware rims, a few deliberate leaf veins and ingredient edges. Sophisticated carefully finished illustration with a small amount of detail. Smooth rice mounds, NO individual rice grains. Only a few broad noodle strokes. NO wet oily shine, NO white reflection dots, NO photorealism, NO 3D, NO dense texture or tiny repeated marks. No people, faces, hands, letters, text, logos, grid lines or scenery. Keep all eight illustrations distinct and delicious, consistent view and scale. Wide 2:1 transparent canvas. CRITICAL RICE RULE: every rice dish must use one completely SMOOTH, FLAT, UNTEXTURED mound with just two broad contour curves, like the smooth fried rice in the reference. Never show clustered rice grains, dimpled surfaces, repetitive white ovals or sparkly food. Row 1 left to right: two beef tacos with lettuce and tomato on a cream plate; one cheeseburger on a cream plate; fish and chips with a lemon wedge; a steak dinner with a few potato wedges on a cream plate. Row 2 left to right: two Vietnamese fresh spring rolls with one dipping cup; Spanish seafood paella with three shrimp and two mussels arranged on a perfectly smooth ochre rice surface, no individual grains; butter chicken curry in a cream bowl; a triangular club sandwich on a cream plate.",
+      "frames": [
+        [
+          13,
+          104,
+          401,
+          266
+        ],
+        [
+          421,
+          77,
+          386,
+          291
+        ],
+        [
+          808,
+          111,
+          392,
+          258
+        ],
+        [
+          1201,
+          120,
+          391,
+          249
+        ],
+        [
+          13,
+          404,
+          401,
+          293
+        ],
+        [
+          399,
+          403,
+          423,
+          301
+        ],
+        [
+          816,
+          399,
+          376,
+          304
+        ],
+        [
+          1189,
+          404,
+          407,
+          297
+        ]
+      ]
+    },
+    {
+      "category": "bakery",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/bakery.webp",
+      "bytes": 208074,
+      "sha256": "ac499ab79704617cba9689e974e25b7cc6eab648b1b5d4d434e41036cae8fdfd",
+      "source_sha256": "96bfcc7c4ecace2d7ccc1aa7bf8251a4c2e03f31088d461eafc3a65ebd506d58",
+      "prompt": "Use case: style-transfer. Use the attached image ONLY as a style reference. Make ONE completely new food illustration sprite atlas with exactly eight NEW dishes in a regular FOUR columns by TWO rows, in the precise order below. Real transparent background. Every dish on its own fully visible cream plate or bowl, or its own cup, centered in its own cell with generous clear separation and at least 15 percent padding. Match the refined warm hand-drawn illustrated cookbook style: elegant warm brown outlines, matte pastel colors, restrained broad two-tone layering, a fine line on tableware rims, a few deliberate leaf veins and ingredient edges. Sophisticated carefully finished illustration with a small amount of detail. Smooth rice mounds, NO individual rice grains. Only a few broad noodle strokes. NO wet oily shine, NO white reflection dots, NO photorealism, NO 3D, NO dense texture or tiny repeated marks. No people, faces, hands, letters, text, logos, grid lines or scenery. Keep all eight illustrations distinct and delicious, consistent view and scale. Wide 2:1 transparent canvas. Row 1 left to right: one small strawberry whipped-cream cake with three strawberries; a chocolate brownie square; two glazed doughnuts with only a few broad sugar decorations; three pastel French macarons. Row 2 left to right: three chocolate chip cookies with only four large chocolate chips each; two colorful cupcakes with elegant simple cream swirls; two golden egg tarts; one round waffle with three berries and a small cream swirl. All on separate cream plates. Decoration must be restrained and carefully composed, no dense sprinkles, no tiny dots, no shiny reflections.",
+      "frames": [
+        [
+          18,
+          92,
+          399,
+          291
+        ],
+        [
+          426,
+          118,
+          384,
+          260
+        ],
+        [
+          815,
+          122,
+          380,
+          260
+        ],
+        [
+          1199,
+          113,
+          385,
+          268
+        ],
+        [
+          12,
+          446,
+          403,
+          264
+        ],
+        [
+          417,
+          416,
+          392,
+          293
+        ],
+        [
+          813,
+          444,
+          389,
+          265
+        ],
+        [
+          1202,
+          439,
+          388,
+          270
+        ]
+      ]
+    },
+    {
+      "category": "drinks",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/drinks.webp",
+      "bytes": 192402,
+      "sha256": "6385fad9f20ea316d0acdc1ba9d8989ead2fffb8f574e7873b47e61957b38fe9",
+      "source_sha256": "4a1bd8b9cec08475eadd60b0fab9d93e28b8ede9ddf32571010e7dc9af9cff2c",
+      "prompt": "Use case: style-transfer. Use the attached image ONLY as a style reference. Make ONE completely new food illustration sprite atlas with exactly eight NEW dishes in a regular FOUR columns by TWO rows, in the precise order below. Real transparent background. Every dish on its own fully visible cream plate or bowl, or its own cup, centered in its own cell with generous clear separation and at least 15 percent padding. Match the refined warm hand-drawn illustrated cookbook style: elegant warm brown outlines, matte pastel colors, restrained broad two-tone layering, a fine line on tableware rims, a few deliberate leaf veins and ingredient edges. Sophisticated carefully finished illustration with a small amount of detail. Smooth rice mounds, NO individual rice grains. Only a few broad noodle strokes. NO wet oily shine, NO white reflection dots, NO photorealism, NO 3D, NO dense texture or tiny repeated marks. No people, faces, hands, letters, text, logos, grid lines or scenery. Keep all eight illustrations distinct and delicious, consistent view and scale. Wide 2:1 transparent canvas. Row 1 left to right: fruit tea in a glass with a few large fruit slices; matcha latte in a cream mug; yuzu soda in a glass with one citrus slice and one mint leaf; banana smoothie in a simple tall glass. Row 2 left to right: hot chocolate in a cream mug topped with three large marshmallows; one caramel custard pudding on a cream plate; ice cream sundae with three large scoops and one strawberry in a short dessert cup; mango shaved ice as a smooth white mound with five large mango cubes and condensed milk on a cream plate. Glasses are matte outlined illustrations, absolutely NO white reflection streaks or gleaming dots. No dense ice texture, no tiny repeating particles.",
+      "frames": [
+        [
+          76,
+          61,
+          263,
+          335
+        ],
+        [
+          443,
+          109,
+          365,
+          287
+        ],
+        [
+          874,
+          61,
+          252,
+          343
+        ],
+        [
+          1286,
+          18,
+          235,
+          386
+        ],
+        [
+          43,
+          457,
+          354,
+          288
+        ],
+        [
+          407,
+          472,
+          407,
+          251
+        ],
+        [
+          825,
+          407,
+          338,
+          361
+        ],
+        [
+          1191,
+          416,
+          395,
+          356
+        ]
+      ]
+    },
+    {
+      "category": "vegetables",
+      "file": "apps/portal-web/public/games/absurd-daily/cooking/vegetables.webp",
+      "bytes": 215500,
+      "sha256": "952cfb59b36df5d6f1baf46f1516b3d7953c1576905015d31cc81ec3ca3b891b",
+      "source_sha256": "809779653da50487b24338675d03612e61017caacc0efc03e26782d1a42b0da5",
+      "prompt": "Use case: style-transfer. Use the attached image ONLY as a style reference. Make ONE completely new food illustration sprite atlas with exactly eight NEW dishes in a regular FOUR columns by TWO rows, in the precise order below. Real transparent background. Every dish on its own fully visible cream plate or bowl, or its own cup, centered in its own cell with generous clear separation and at least 15 percent padding. Match the refined warm hand-drawn illustrated cookbook style: elegant warm brown outlines, matte pastel colors, restrained broad two-tone layering, a fine line on tableware rims, a few deliberate leaf veins and ingredient edges. Sophisticated carefully finished illustration with a small amount of detail. Smooth rice mounds, NO individual rice grains. Only a few broad noodle strokes. NO wet oily shine, NO white reflection dots, NO photorealism, NO 3D, NO dense texture or tiny repeated marks. No people, faces, hands, letters, text, logos, grid lines or scenery. Keep all eight illustrations distinct and delicious, consistent view and scale. Wide 2:1 transparent canvas. CRITICAL: rice is always a smooth solid mound with only two curved contour lines. No individual rice grains or clustered rice dots. Row 1 left to right: rainbow garden salad with a few broad lettuce leaves, tomato and carrot in a cream bowl; pumpkin soup with one cream swirl in a cream bowl; two butter-roasted sweet potato halves on a cream plate; avocado toast with five clean avocado slices and two tomato slices on a cream plate. Row 2 left to right: mushroom risotto as a smooth ivory mound with three broad mushroom slices and one sprig, NO textured rice; roasted vegetable skewers with only three wooden skewers, large bell pepper and zucchini pieces on a cream plate; two triangular wholegrain vegetable rice balls with a completely smooth tan-colored rice surface, no grains, seaweed strip and one green garnish; a mushroom vegetable burger on a cream plate. Sophisticated restrained illustrated details in leaves and tableware rims only. No shine, sparkles or dense dots.",
+      "frames": [
+        [
+          16,
+          80,
+          392,
+          301
+        ],
+        [
+          422,
+          110,
+          385,
+          270
+        ],
+        [
+          809,
+          122,
+          386,
+          248
+        ],
+        [
+          1198,
+          119,
+          397,
+          252
+        ],
+        [
+          12,
+          439,
+          390,
+          296
+        ],
+        [
+          400,
+          424,
+          411,
+          287
+        ],
+        [
+          805,
+          434,
+          404,
+          283
+        ],
+        [
+          1208,
+          419,
+          392,
+          299
+        ]
+      ]
+    }
+  ],
+  "review": "Automated source/hash/frame checks are separate from human art acceptance.",
+  "runtime_status": "superseded_by_cooking_3d_art",
+  "historical_source_commit": "bc211f72c74e31242d86f509b71959cb9bf5dd22",
+  "historical_source_url": "https://github.com/FreeTWAI/freedom-platform/tree/bc211f72c74e31242d86f509b71959cb9bf5dd22/apps/portal-web/public/games/absurd-daily/cooking"
+}

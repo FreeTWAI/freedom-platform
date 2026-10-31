@@ -1,0 +1,1204 @@
+{
+  "format": "freedom.illustrated-game-covers/v1",
+  "created": "2026-10-26",
+  "spec": "PLAYABILITY UX-15e",
+  "direction": "Loose ink, flat paper color, original goofy food and everyday characters, noren and wooden counters. The first food-advertising batch was rejected and is not used.",
+  "acceptance": "provisional; user art acceptance remains external",
+  "generation": "built-in image_gen with two user style references",
+  "rights": "Original generated illustrations; reference screenshots and their characters, logos and text are not distributed. Not a claim of exclusive copyright.",
+  "references": [
+    {
+      "role": "user-supplied style reference only; not distributed",
+      "sha256": "c5eae9bda7ae56681f9f98051bd1f17d2a0a3c3604a2ee463142c6ee5dc31eb1"
+    },
+    {
+      "role": "user-supplied style reference only; not distributed",
+      "sha256": "28deb872784450da1531f3213b7501199eb67b4904e9cfdd48139b34939625ec"
+    }
+  ],
+  "atlases": [
+    {
+      "id": "taiwan",
+      "original_sha256": "465a0b2caff31fc17777bf78c1df99eb0b7a0d1c213b68603977cc8d8059538b",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/taiwan.txt",
+      "prompt_sha256": "6ad3f078a78543678be5168efa0ee242e0b2841f07094babc7cfc0134863c848",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "japan",
+      "original_sha256": "5037a9d02232ce92872fcd3ce84170b96aa5d7909a15cfc5e24c766b7456ba15",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/japan.txt",
+      "prompt_sha256": "37394bde15bacb04d5aefb5241dbc1ebd7ac44625675daae6579806d72680859",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "italy",
+      "original_sha256": "163a2a7edb616a86fd91b72f36f50b4617e6669bd529d488fac113ffee92d6e1",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/italy.txt",
+      "prompt_sha256": "cf372e94639d4aac5c68a60a72810276e933c90dcdd5b22220b1bf41695add5f",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "korea",
+      "original_sha256": "6e17afca7b520a102d7596838c539ab0a3f6ed78bc2eec2a50607699f055bc59",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/korea.txt",
+      "prompt_sha256": "10e4239900dd4ae253f56f2133ceea25a015fc7a290d524327c3fed49c4069f3",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "world",
+      "original_sha256": "e9f6d3292399496f1b1524c002386ee386964f173f2e0153bcc2cfbf534f2384",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/world.txt",
+      "prompt_sha256": "9a1ea889ec8b1f0a85a08452127f523520d3228a69b7a5eb406d9b9dc0bbaa25",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "bakery",
+      "original_sha256": "e93653caee34ee811b081d26e995468c9f2cf28b82f8ca557a4e5100b5d4c3bf",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/bakery.txt",
+      "prompt_sha256": "7e7605f35aae686d69670bb976c81b1e804a406728f075b6070093dae619a1d1",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "drinks",
+      "original_sha256": "8fe19fdd7b2bb98544b3abedd8beabe241dcaabfa7d2caae8ef2ffd6216df401",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/drinks.txt",
+      "prompt_sha256": "7d2f58f9967aa5acfce2f3f1b9b4bdbc15d3f0d7266398532cf0c6029d9b5857",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "vegetables",
+      "original_sha256": "0f5635e89374264f781f77551eef1dca48c80d45db2ba313302cb256ac3ddce1",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/vegetables.txt",
+      "prompt_sha256": "e2a434d0d073e1abc08462b47c5332a7ba1ec1629c9d135f4b0b5efa6cb720db",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "party",
+      "original_sha256": "d209ea6b5e340cc14d1a8d87901d3e92b7b54d75c9a8cc9dfa2c92741d219dbf",
+      "width": 1536,
+      "height": 1024,
+      "prompt": "modules/absurd-daily/art-prompts/party.txt",
+      "prompt_sha256": "9ca147b566048269d17525b6f95fed57cc92e0de4a6181054f0ca3ad9fab568a",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    },
+    {
+      "id": "corn-dog-direction",
+      "original_sha256": "2c9df2c98b5e155068ee83ba08edc26cb50da652bc21a92c2157f91797e46f3b",
+      "width": 941,
+      "height": 1672,
+      "prompt": "modules/absurd-daily/art-prompts/corn-dog-direction.txt",
+      "prompt_sha256": "666438dd987419dfc72bb698c8e1517bfd637d395f7c6fbf7a47e885ec526392",
+      "tool": "built-in image_gen",
+      "original_archived": true
+    }
+  ],
+  "previews": [
+    {
+      "id": "egg-fried-rice",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/egg-fried-rice.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 38708,
+      "sha256": "b5edc7c783c179a54b655c720c82667a2a852386f22e3037d683d8255fe6bd97"
+    },
+    {
+      "id": "braised-pork-rice",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/braised-pork-rice.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 34508,
+      "sha256": "c6ca15e35941a682dc2e5a66224a21ad93c9c57bd63f208deedd8fce91293361"
+    },
+    {
+      "id": "pearl-milk-tea",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/pearl-milk-tea.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 28120,
+      "sha256": "c2b8611eb8e513029134bdbbfc05a39021c342011ad7458e5072ce87ed0b4e40"
+    },
+    {
+      "id": "oyster-omelette",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/oyster-omelette.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 45168,
+      "sha256": "5773034198c6bd9a056c6e71654c326553a16bba2f2f1e11c93b7ccd657f82d1"
+    },
+    {
+      "id": "scallion-pancake",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/scallion-pancake.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 39832,
+      "sha256": "fce6aa43b0a4bda75d2ea6c64982a58a22d05183c042e026ed760fb0b15465be"
+    },
+    {
+      "id": "popcorn-chicken",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/popcorn-chicken.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 40688,
+      "sha256": "170338c04066bd5cb29a3058275c49372822e815fbaf46b9d68619f3025cece0"
+    },
+    {
+      "id": "taiwan-fish-cake",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/taiwan-fish-cake.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 41224,
+      "sha256": "86d8381fbb2ff657d6f9fb802ff7a7fee3233de891b7868395cdba1ef4ea0349"
+    },
+    {
+      "id": "beef-noodle-soup",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/beef-noodle-soup.webp",
+      "atlas": "taiwan",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 40930,
+      "sha256": "8ca9705d69d6dd3aa71d87306a60fd345b0ea67dddc7fb4091943e8df9cee7a4"
+    },
+    {
+      "id": "corn-dog",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/corn-dog.webp",
+      "atlas": "corn-dog-direction",
+      "rect": {
+        "left": 0,
+        "top": 326,
+        "width": 941,
+        "height": 625
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 45838,
+      "sha256": "8b98db12a45c0eaa6c69a06e2f0f96c0a5a616b3a824017bfe43e5d22f04d332"
+    },
+    {
+      "id": "salmon-sushi",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/salmon-sushi.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 31222,
+      "sha256": "643faa3d2fbe08253a36e5614bb57072b9f7a9c6d13318ef7a83b0fd17fb9113"
+    },
+    {
+      "id": "rice-balls",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/rice-balls.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 27272,
+      "sha256": "f4045a235b81e6a178ff8035b3531d1ea702652595357eecc01f1cfa4c21e1fa"
+    },
+    {
+      "id": "tempura",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tempura.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 35050,
+      "sha256": "fca2184e50c80891fb9ef5c9df2fbaa828965f5549125d063b20e4f0f9bf7279"
+    },
+    {
+      "id": "miso-soup",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/miso-soup.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 31306,
+      "sha256": "d513335cc2538f335a08b6b857747d49a54f6b4ca3ab11ab580c221624404e20"
+    },
+    {
+      "id": "chicken-egg-bowl",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chicken-egg-bowl.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 36460,
+      "sha256": "611b6cc196a208b9af3c0cf2003e7e9f0e6421440d62465a4fecdf7b15027515"
+    },
+    {
+      "id": "japanese-curry",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/japanese-curry.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 34472,
+      "sha256": "5d70a0d689005eba9cd5c0780cea3c1f582e8ff2d55f3ad4e904c9545e592584"
+    },
+    {
+      "id": "rolled-omelette",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/rolled-omelette.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 36860,
+      "sha256": "7e9d2856ef8fe18da34f334fd2e48cec4afed34540bf59bdbbbee2d02970c60d"
+    },
+    {
+      "id": "tonkotsu-ramen",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tonkotsu-ramen.webp",
+      "atlas": "japan",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 36102,
+      "sha256": "cf6164dbd9f4d5e12cc47d5fb047bb1947ecd79c59914fd692cfdb8e7d07f009"
+    },
+    {
+      "id": "margherita-pizza",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/margherita-pizza.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 37010,
+      "sha256": "02ad1f7f9bc7598fbdded838d54dcca364c61c1afc45094fb135245d28a62043"
+    },
+    {
+      "id": "tomato-spaghetti",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tomato-spaghetti.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 41902,
+      "sha256": "7140683e07fb0c8016b0df394ce1a271c5f9808a387b97798e60c0e10b4fabc5"
+    },
+    {
+      "id": "cream-risotto",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cream-risotto.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 37598,
+      "sha256": "3325090596e2714b3550f1063e3e989506b04a272f49e6f8869297fac39f614e"
+    },
+    {
+      "id": "lasagna",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/lasagna.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 38924,
+      "sha256": "feafd4798a03f17e5e6c03cd55cd8832193d6a486347df006188dc7c3cc4dd9e"
+    },
+    {
+      "id": "italian-meatballs",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/italian-meatballs.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 34634,
+      "sha256": "a5dfaf38b8f8b65cf86bb4888d01bdd1e2e1282f0677ca9b62e100ca0f80a8c9"
+    },
+    {
+      "id": "roasted-vegetables",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/roasted-vegetables.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 43196,
+      "sha256": "86cfdeb9192a1d3f8b4f9b4c500888bcd50de1c990c28b2d4551bb83d32a7b63"
+    },
+    {
+      "id": "tiramisu",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tiramisu.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 43664,
+      "sha256": "fa2175940ba1ca417360903774c7215ee6572397d3d763602ed9c1e9ca017ac1"
+    },
+    {
+      "id": "pesto-pasta",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/pesto-pasta.webp",
+      "atlas": "italy",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 34756,
+      "sha256": "de49d5771312402ed9384d7d4ce701064a43aa1581364743464ce4d7db88ff32"
+    },
+    {
+      "id": "bibimbap",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/bibimbap.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 40758,
+      "sha256": "6907ca457781ed9341b0a21bf1bf785848967271e832a3f78608c9eca72f6538"
+    },
+    {
+      "id": "korean-pancake",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/korean-pancake.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 41168,
+      "sha256": "11823521f8540ef3df0c526353afa6fb1327a8f8f216be55c56ba1bbf6cc9201"
+    },
+    {
+      "id": "tteokbokki",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tteokbokki.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 36364,
+      "sha256": "214efd83cc2be22a598a64d4500b225763568527a12c1db0a354bd01f86de236"
+    },
+    {
+      "id": "kimchi-fried-rice",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/kimchi-fried-rice.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 38914,
+      "sha256": "2fd42b9f8d97903ebf5ab2f5f715a9c2e57e908f75c8ae4337b8945389acd2ed"
+    },
+    {
+      "id": "gimbap",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/gimbap.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 38340,
+      "sha256": "df09023ed70fd6d1f2942b7b50d601b48d4d8c40ee600a655cb841c2c7b69c79"
+    },
+    {
+      "id": "doenjang-soup",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/doenjang-soup.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33056,
+      "sha256": "80d07d8804b63409ea8fece3d5c1870ea452aab9b91675cc1bcee8fe4985f2ce"
+    },
+    {
+      "id": "korean-fried-chicken",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/korean-fried-chicken.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 42568,
+      "sha256": "d40a4ab71bbc83f72bc612c291d2a2c87af22790cc4bc8a39ccbc5edbc151836"
+    },
+    {
+      "id": "bulgogi",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/bulgogi.webp",
+      "atlas": "korea",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 45454,
+      "sha256": "79b868ae816b153e921e679094dad2d1b07eba750a169fe608ca959ae6dbd784"
+    },
+    {
+      "id": "beef-tacos",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/beef-tacos.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 40376,
+      "sha256": "719ab9248f77edf3438a91a202d3476e71efeb0713e4fa8629c4f9871ea38660"
+    },
+    {
+      "id": "cheeseburger",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cheeseburger.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 29360,
+      "sha256": "8d97c298bf45cd88c888a6216394fb384203ea6cf654cae584092e27a7a1568c"
+    },
+    {
+      "id": "fish-and-chips",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/fish-and-chips.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 40324,
+      "sha256": "7579dc0a01f689576dae44b136b893942a26bc84e2180d676660e6ef2eea7420"
+    },
+    {
+      "id": "steak-dinner",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/steak-dinner.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33710,
+      "sha256": "55835220a70c9fcff4621c3fb5888e70870e1f90e775f784f13b5c89fd9867c8"
+    },
+    {
+      "id": "fresh-spring-rolls",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/fresh-spring-rolls.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 35348,
+      "sha256": "76df67a8a96de4c288b5a79db08d1dfec809cccc04a33cc9d0bcf4f5e8c337af"
+    },
+    {
+      "id": "seafood-paella",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/seafood-paella.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 39860,
+      "sha256": "501fcd16b0583c5664559e84d9e645f6bf48c5a3ca65103702f284009b97a9ba"
+    },
+    {
+      "id": "butter-chicken",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/butter-chicken.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 35286,
+      "sha256": "c198e1cb2abc9371f9185535cd66da1571c88efff76d6b4612a9f6d75264e337"
+    },
+    {
+      "id": "club-sandwich",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/club-sandwich.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 28834,
+      "sha256": "cbc9c2fa2b09685e298dae0e2b08a4d004be65527189d63848b291a71bffe8cf"
+    },
+    {
+      "id": "shawarma",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/shawarma.webp",
+      "atlas": "world",
+      "rect": {
+        "left": 1030,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 38674,
+      "sha256": "73470f6f4309474be087903185386cd31ef50c3fd6ee27752ab7e61f0faf5223"
+    },
+    {
+      "id": "strawberry-cake",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/strawberry-cake.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 28206,
+      "sha256": "90bc4b8ff0df10397927596a3564d34a2fbf5642e656b646d3d236684f8c6dec"
+    },
+    {
+      "id": "chocolate-brownie",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chocolate-brownie.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 27872,
+      "sha256": "0c58121a040d01616ce92034b9e669e563380895d3747db2e094dc60d8461774"
+    },
+    {
+      "id": "glazed-doughnuts",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/glazed-doughnuts.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 24810,
+      "sha256": "e6d2c47c0e6e281b615b95e7c60eff77e4c51243bd7b46fa44d8548138d53a80"
+    },
+    {
+      "id": "macarons",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/macarons.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 26832,
+      "sha256": "436b325ee3366ea94e5c979295420100595058a91a501c1c7deb7b2249303148"
+    },
+    {
+      "id": "chocolate-cookies",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chocolate-cookies.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33636,
+      "sha256": "c8d63e9425f24d901e5252edf1ba9c364e8c4fa2e393f15cf650d1cf6122a2be"
+    },
+    {
+      "id": "cupcakes",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cupcakes.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 27162,
+      "sha256": "e6399a23dbf582d8bfb79fd2f1afd2d59b28e95ef5e8526348777d46b307f997"
+    },
+    {
+      "id": "egg-tarts",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/egg-tarts.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 35380,
+      "sha256": "2ee03f41f89d7fe010363aa368530a3222265e627a9447ebef62e87bd59d9006"
+    },
+    {
+      "id": "breakfast-waffles",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/breakfast-waffles.webp",
+      "atlas": "bakery",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 20508,
+      "sha256": "d2f75ab11c17c6a5ae298cda1d941ed528334881d204aaaf2a75953498e25e8b"
+    },
+    {
+      "id": "fruit-tea",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/fruit-tea.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 35918,
+      "sha256": "6865ef2a847cde82ea27a0aad5d4bedfc60022958a7947e10a9cdb7d5c7d83a8"
+    },
+    {
+      "id": "matcha-latte",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/matcha-latte.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33274,
+      "sha256": "1045bd27e051b6f7feea4b5db1c380c628270436d2cc1641b2b1d953f80d7986"
+    },
+    {
+      "id": "yuzu-soda",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/yuzu-soda.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33096,
+      "sha256": "721965ace90554f7ca00686cb405b11d3e867bf60f905e900a6c4ffbd6bfd0c2"
+    },
+    {
+      "id": "banana-smoothie",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/banana-smoothie.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33106,
+      "sha256": "ef9629879071cd4af30fea9a549c70497130e88f20cd91663af64605b3cc0481"
+    },
+    {
+      "id": "hot-chocolate",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/hot-chocolate.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 41900,
+      "sha256": "c1558e40f8c3cbcfd33a2c1308ccc0a81e56f48e30093cc21fd43f57a36fba61"
+    },
+    {
+      "id": "caramel-pudding",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/caramel-pudding.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 29962,
+      "sha256": "a67525ecf26d633daac5bf2410660fbb5ddc03bcfde8d048aeb41043571148d1"
+    },
+    {
+      "id": "ice-cream-sundae",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/ice-cream-sundae.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 32042,
+      "sha256": "0c6a5882951762516c4f6c86fb89f3f4c101bb807d603c1892b48c31a801fe02"
+    },
+    {
+      "id": "mango-shaved-ice",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/mango-shaved-ice.webp",
+      "atlas": "drinks",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33348,
+      "sha256": "b0998059c482f9453c4fd19fef089887356c3a18557a9527c04999827b4860ec"
+    },
+    {
+      "id": "garden-salad",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/garden-salad.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 38948,
+      "sha256": "9bfb3be65a2cb523cc9fd674b824b8660e0cb319e90da338d9844c0767d84860"
+    },
+    {
+      "id": "pumpkin-soup",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/pumpkin-soup.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 35738,
+      "sha256": "c796c1770e2f4a841dcede4e80d7e385e8714af18642bd127bcd349092c581a8"
+    },
+    {
+      "id": "baked-sweet-potato",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/baked-sweet-potato.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 33796,
+      "sha256": "a2e863751e4e083466db6040115ad68819b064c7bb651ac477d00ed90a3a9d26"
+    },
+    {
+      "id": "avocado-toast",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/avocado-toast.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 34718,
+      "sha256": "d13dd98508119063f8477169b70a45ffb2c1de2be5fdee38f8a2cc0156b6ae5c"
+    },
+    {
+      "id": "mushroom-risotto",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/mushroom-risotto.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 37764,
+      "sha256": "c748b27b59e8126d29dbc9ad824d5d40d42ce4bd925cce08e7d73e0409bb581a"
+    },
+    {
+      "id": "vegetable-skewers",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/vegetable-skewers.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 38134,
+      "sha256": "861f9710d4615bd00f429a8095b0f5267a8e6ae6b284c40d2aa38c75476f9c5f"
+    },
+    {
+      "id": "wholegrain-rice-ball",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/wholegrain-rice-ball.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 6,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 34706,
+      "sha256": "65171d4b72246361f24de30e6560086e357d7daa2b2b45d9ecf1bbb7ff547dc1"
+    },
+    {
+      "id": "plant-burger",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/plant-burger.webp",
+      "atlas": "vegetables",
+      "rect": {
+        "left": 518,
+        "top": 689,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 37148,
+      "sha256": "7367bc2dfc06623dfb77c27e35f2e89082cbfd01e2cfb8385b1eab3822bbc075"
+    },
+    {
+      "id": "chair",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/chair.webp",
+      "atlas": "party",
+      "rect": {
+        "left": 6,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 31926,
+      "sha256": "8b47bd9697e5aab57f2b442b0f13871708e25455ff3cdac9517eb655bca51f7a"
+    },
+    {
+      "id": "tofu",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/tofu.webp",
+      "atlas": "party",
+      "rect": {
+        "left": 518,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 22448,
+      "sha256": "54cbd6a56d53981610b35f1cd51bb97b8514c30cb375bc0245c26559e1df997a"
+    },
+    {
+      "id": "holiday",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/holiday.webp",
+      "atlas": "party",
+      "rect": {
+        "left": 1030,
+        "top": 6,
+        "width": 500,
+        "height": 329
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 36138,
+      "sha256": "fb52632eeaa6597c9bc19689c9cd59782fb2efd3114c0009a99159ce0402bc95"
+    },
+    {
+      "id": "photo",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/photo.webp",
+      "atlas": "party",
+      "rect": {
+        "left": 6,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 28562,
+      "sha256": "7719d71c674594e0612f6d4d6d5cbd2a8832f31b899401bd80dffb5a11c9d531"
+    },
+    {
+      "id": "stamp",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/stamp.webp",
+      "atlas": "party",
+      "rect": {
+        "left": 518,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 26242,
+      "sha256": "15a5c2f45d289c7575b0cf5100a8fd7e6ce62617aefd700f453bfc4509b1bb53"
+    },
+    {
+      "id": "cash",
+      "path": "apps/portal-web/public/games/absurd-daily/illustrated/cash.webp",
+      "atlas": "party",
+      "rect": {
+        "left": 1030,
+        "top": 347,
+        "width": 500,
+        "height": 330
+      },
+      "width": 512,
+      "height": 340,
+      "bytes": 31790,
+      "sha256": "7b1f85732c18560afef1ad341fbc23ff268f61ea4eff9f09e4375e3e9e389982"
+    }
+  ],
+  "total_bytes": 2538948
+}

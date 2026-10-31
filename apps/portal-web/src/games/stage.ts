@@ -1,7 +1,7 @@
-import { ACESFilmicToneMapping, HemisphereLight, PCFShadowMap, PMREMGenerator, BoxGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type WebGLRenderTarget } from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {bakeRigidGroup} from './stage-batch';
 import { cashDeck, CLIENTS, documentTitle, photoPose, RULES, stampTarget, type CashState, type GameId, type Point, type StampState } from './domain';
 export type StageView = {
     game: GameId;
@@ -38,12 +38,12 @@ type Anchor = {
     object: Group;
     points: Vector3[];
 };
-const INK = '#302744', LIME = '#ffc857', BLUE = '#5062cb', PAPER = '#fff1d5';
+const INK = '#49362f', LIME = '#e8bd68', BLUE = '#608b85', PAPER = '#fff1d5';
 /** AD-6: all geometry/material/texture ownership is per mounted stage. */
 export function createStage(host: HTMLElement, onLost: () => void): Stage {
     const renderer = new WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
-    const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<CanvasTexture>(), shadows = new Set<DirectionalLight['shadow']>();
-    let disposed = false, environment: WebGLRenderTarget | undefined, pmrem: PMREMGenerator | undefined, room: RoomEnvironment | undefined, observer: ResizeObserver | undefined;
+    const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<Texture>(), shadows = new Set<DirectionalLight['shadow']>();
+    let disposed = false, observer: ResizeObserver | undefined;
     const lost = (event: Event) => { event.preventDefault(); if (!disposed) onLost(); };
     // AD-6: initialization can fail before the caller receives a Stage to dispose.
     function dispose() {
@@ -55,37 +55,24 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         materials.forEach(m => m.dispose());
         textures.forEach(t => t.dispose());
         shadows.forEach(s => s.dispose());
-        room?.dispose();
-        pmrem?.dispose();
-        environment?.dispose();
         renderer.dispose();
         renderer.forceContextLoss();
         renderer.domElement.remove();
     }
     try {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, RULES.maxDpr));
-    renderer.toneMapping = ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMapping = NoToneMapping;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = PCFShadowMap;
     renderer.domElement.setAttribute('aria-hidden', 'true');
     host.append(renderer.domElement);
     const scene = new Scene();
-    scene.background = new Color('#ba9bdf');
+    scene.background = new Color('#f0dfc5');
     const camera = new PerspectiveCamera(44, 4 / 3, .1, 60), ray = new Raycaster(), ground = new Plane(new Vector3(0, 1, 0), 0), intersection = new Vector3();
-    scene.add(new HemisphereLight('#fff2da', '#785f9b', 2.15));
-    pmrem = new PMREMGenerator(renderer);
-    room = new RoomEnvironment();
-    // Clay materials need broad light, not the default 256px GGX prefilter.
-    // 64px keeps the same room/reflections with 1/16 of its base texel work.
-    environment = pmrem.fromScene(room, .06, .1, 100, { size: 64 });
-    scene.environment = environment.texture;
-    scene.environmentIntensity = .42;
-    room.dispose();
-    room = undefined;
-    pmrem.dispose();
-    pmrem = undefined;
-    const key = new DirectionalLight('#fff1d7', 4.2);
+    scene.add(new HemisphereLight('#fff6df', '#9c8266', .9));
+    // CK-2: three matte ink-wash bands; no reflective environment or specular highlights.
+    const gradient=new DataTexture(new Uint8Array([95,180,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
+    const key = new DirectionalLight('#fff1d7', 1.3);
     shadows.add(key.shadow);
     key.position.set(-3.5, 7, 5);
     key.castShadow = true;
@@ -95,15 +82,15 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     key.shadow.normalBias = .025;
     key.shadow.radius = 3;
     scene.add(key);
-    const rim = new DirectionalLight('#bdc7ff', 2.4);
+    const rim = new DirectionalLight('#f5dfbe', .35);
     rim.position.set(5, 3, -3);
     scene.add(rim);
     const geo = <T extends BufferGeometry>(value: T): T => { geometries.add(value); return value; };
     const round = geo(new RoundedBoxGeometry(1, 1, 1, 3, .12)), sphere = geo(new SphereGeometry(1, 24, 16)), cylinder = geo(new CylinderGeometry(1, 1, 1, 24)), cone = geo(new CylinderGeometry(0, 1, 1, 24)), plane = geo(new PlaneGeometry(1, 1)), box = geo(new BoxGeometry(1, 1, 1));
     const torus = geo(new TorusGeometry(1, .09, 10, 40)), arch = geo(new TorusGeometry(1, .09, 10, 36, Math.PI)), coat = geo(new CylinderGeometry(.72, 1, 1, 32));
-    const palette = new Map<string, MeshStandardMaterial>();
-    function mat(color: string, metalness = 0, roughness = .42) { const id = `${color}/${metalness}/${roughness}`; let m = palette.get(id); if (!m) {
-        m = new MeshStandardMaterial({ color, metalness, roughness });
+    const palette = new Map<string, MeshToonMaterial>();
+    function mat(color: string, _metalness = 0) { const id = color; let m = palette.get(id); if (!m) {
+        m = new MeshToonMaterial({ color, gradientMap:gradient });
         materials.add(m);
         palette.set(id, m);
     } return m; }
@@ -243,6 +230,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             mesh(p, cone, LIME, 0, 2.06, .48, .12, .40, .05).rotation.z = Math.PI;
             rb(p, PAPER, .37, 2.13, .48, .25, .15, .025);
         }
+        bakeRigidGroup(p,geometries);
         return p;
     }
     function pigeon(parent: Group, x: number, y: number, index = 0) {
@@ -259,6 +247,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         rb(b, '#b87e46', 0, -.04, .59, .16, .014, .06);
         for (let i = 0; i < 3; i++)
             ball(b, f, (i - 1) * .08, .43 + (i === 1 ? .025 : 0), -.01, .055, .14, .05).rotation.z = (i - 1) * -.3;
+        bakeRigidGroup(b,geometries);
         return b;
     }
     function buildPhoto(view: StageView) {
@@ -282,6 +271,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             ball(board, '#fa789a', 0, 1.54, .285, .16, .06, .02);
             label(board, '我也要拍', 'BACKGROUND MAIN CHARACTER', 0, .93, .20, 1.35, .34);
             anchors.push({ id: 'board', object: board, points: [new Vector3(-.91, 3.12, .2), new Vector3(.91, .04, .3)] });
+            bakeRigidGroup(board,geometries);
         }
         if (client === 'umbrella') {
             const u = group(clientRoot);
@@ -296,6 +286,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             ball(u, LIME, .8, 4.73, .06, .09, .19, .09);
             mesh(u, torus, LIME, .68, 1.47, .06, .16, .20, .13).rotation.x = Math.PI / 2;
             anchors.push({ id: 'umbrella', object: clientRoot, points: [new Vector3(-.66, 4.94, 0), new Vector3(2.28, 4.1, .6)] });
+            bakeRigidGroup(u,geometries);
         }
         if (client === 'pigeons') {
             birds = [pigeon(clientRoot, 0, 2.96, 0), pigeon(clientRoot, -.20, 2.08, 1), pigeon(clientRoot, .21, 1.08, 2)];
@@ -333,6 +324,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             mesh(pen, cone, '#a77952', 0, .80, 0, .026, .10, .026);
         }
         rb(world, LIME, -2.25, .055, 1.6, .08, .08, 1.0).rotation.y = -.4;
+        bakeRigidGroup(world,geometries,new Set([lamp.children[lamp.children.length-1]]));
     }
     function buildStamp() { desk(); paperMat = new MeshBasicMaterial({ color: PAPER, toneMapped: false }); materials.add(paperMat); paperMesh = new Mesh(plane, paperMat); paperMesh.scale.set(3, 3.7, 1); paperMesh.rotation.x = -Math.PI / 2; paperMesh.position.y = .086; world.add(paperMesh); stampRoot = group(world, 0, .4, 0); rb(stampRoot, '#ec6549', 0, .09, 0, .46, .18, .43); rb(stampRoot, INK, 0, .005, 0, .49, .025, .47); mesh(stampRoot, cylinder, BLUE, 0, .44, 0, .11, .6, .11); ball(stampRoot, BLUE, 0, .8, 0, .23, .18, .20); rb(stampRoot, LIME, 0, .81, .18, .22, .06, .05); tower = group(world, 2.5, .03, -.6); for (let i = 0; i < 12; i++) {
         const page = rb(tower, PAPER, Math.sin(i) * .04, i * .065, 0, 1.35, .055, 1.7);

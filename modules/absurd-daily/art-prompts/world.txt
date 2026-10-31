@@ -1,0 +1,12 @@
+Use case: illustration-story. Asset: ONE 3 by 3 illustrated tile sheet for a Japanese quirky casual-game menu, 1536 by 1024 landscape. EXACTLY 3 equal columns and 3 equal rows with no gutters or dividers; 9 independent complete small scenes, one per tile. NOTHING may cross tile boundaries. Keep all subjects inside each cell with 8% safe margin.
+STYLE: match the TWO supplied reference screenshots, their simple silly flat cartoon ink drawing, economical wobbly charcoal outlines, broad flat cream, dusty red, mustard, indigo, pale aqua and muted green shapes. Original goofy food characters with only a few short ink marks for faces and little stick arms, hand-drawn wooden counters, small plain noren accents, quiet paper. Sparse handmade print texture, NOT detailed food rendering. Amusing little situations, clear silhouettes and open background, not food advertisement beauty shots. No cinematic light, 3D rendering, glossy realism, highly detailed ingredients, dense rice granules, polished anime-food paintings, gold glow, fake UI, buttons, text, labels, letters, numbers, logos, watermarks. Do not copy the reference egg mascot or its face; create original diverse food characters. ALL NINE cells consistent in style and fully independently framed.
+Cell order left to right, then top to bottom:
+1. Two taco characters catching a few large colorful toppings, little wooden serving board.
+2. A cheeseburger character trying to hold its oversized flat cheese blanket, two lettuce shapes.
+3. A fish-and-chips paper boat with a fish-fillet character and three chunky fries cheering.
+4. A steak character reclining on an OVAL BLACK CAST-IRON SIZZLING PLATTER with ear handles on a separate brown wooden trivet. NO ceramic plate. One potato companion.
+5. Two translucent spring-roll characters rolling themselves up in flat pale rice paper, broad vegetable silhouettes.
+6. A wide paella skillet character with two shrimp friends and a few big red and yellow ingredient shapes.
+7. A butter-chicken pot character holding a wooden ladle, broad terracotta curry shape, tiny cream swirl.
+8. A club-sandwich character with three simple triangular layers struggling to balance itself.
+9. A shawarma wrap character beside a small vertical roasting spit, lettuce hair and three broad meat strips, one garlic sauce squeeze bottle.
