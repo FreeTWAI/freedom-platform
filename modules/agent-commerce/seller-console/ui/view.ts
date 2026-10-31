@@ -20,6 +20,9 @@ export const NOT_ALLOWED='你沒有這個操作的權限';
 export const permissionHelp='請聯絡商店擁有者或管理員授予權限。';
 export function amountToMinor(value:string,currency:string){if(!['TWD','USD'].includes(currency)||!/^\d+$(?![\s\S])/.test(value))throw Error('請輸入大於 0 的整數金額。');return parseMajorToMinor(value);}
 export const setupNext:Record<string,string>={
+ policy_unconfigured:'平台尚未完成身分驗證設定，請聯絡平台管理員處理。',
+ csrf_rejected:'登入狀態已變更，請先保留尚未儲存的內容，再重新整理頁面驗證。',
+ fresh_auth_rate_limited:'密碼驗證次數過多，請稍後再試。',
  offline_settings_invalid:'請修正收款設定中標示的欄位，再儲存。',
  logistics_credentials_required:'請先設定綠界物流金鑰，再新增物流服務。',
  logistics_service_exists:'已有相同的物流服務，請更新服務清單。',
