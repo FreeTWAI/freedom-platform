@@ -84,6 +84,7 @@ for (const width of [1280, 390]) {
       await card.getByRole('button', { name: '預覽技能書', exact: true }).click();
       const dialog = page.getByRole('dialog', { name: 'Hao 社群貼文技能書', exact: true });
       const upstream = 'https://github.com/Hao0321/claude-skill-social-post';
+      await dialog.getByText('作者與共同開發（進階）', {exact: true}).click();
       await expect(dialog.getByRole('link', { name: '開啟原作 ↗', exact: true })).toHaveAttribute('href', upstream);
       await expect(dialog.getByRole('link', { name: 'Fork 原作 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
       await expect(dialog.getByRole('link', { name: 'Fork 專案 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
@@ -265,6 +266,7 @@ for (const width of [1280, 390]) {
       await card.getByRole('button', { name: '預覽技能書', exact: true }).click();
       const intro = page.locator('dialog.skill-intro-dialog[data-book-id="project-template"]');
       await expect(intro).toBeVisible();
+      await intro.getByText('作者與共同開發（進階）', {exact: true}).click();
       await intro.getByRole('button', { name: '加入共同開發', exact: true }).click();
       const access = page.getByRole('dialog', { name: '開發啟用任務', exact: true });
       await access.getByRole('button', { name: '加入AI 開發公會', exact: true }).click();
