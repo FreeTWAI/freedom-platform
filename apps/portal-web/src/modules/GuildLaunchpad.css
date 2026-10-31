@@ -67,3 +67,27 @@
 .guild-launchpad-heading>.btn{flex:none}
 @media(max-width:420px){.guild-launchpad-heading{flex-wrap:wrap;gap:.5rem}}
 .guild-launchpad-public-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;max-width:100%;margin-left:auto}
+
+.guild-launchpad-welcome{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.25rem;padding:1.25rem;border:1px solid var(--line);border-radius:var(--radius);background:linear-gradient(120deg,color-mix(in srgb,var(--blue-ink) 8%,var(--bg-elev)),var(--bg-elev))}
+.guild-launchpad-purpose{display:grid;align-content:start;gap:.5rem;min-width:0}.guild-launchpad-purpose p{margin:0}.guild-launchpad-purpose>.muted{font-size:.875rem}
+.guild-launchpad-kicker{font-size:.8rem;font-weight:700;color:var(--muted)}
+.guild-launchpad-resource-preview{display:grid;gap:.65rem;min-width:0}
+.guild-launchpad-resource-preview button{display:grid;gap:.25rem;min-width:0;min-height:44px;padding:.85rem 1rem;text-align:left;font:inherit;color:var(--ink);background:var(--bg-elev);border:1px solid var(--line);border-radius:12px;cursor:pointer;overflow-wrap:anywhere}
+.guild-launchpad-resource-preview button>span{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted)}
+.guild-launchpad-resource-preview strong{font-size:.95rem}.guild-launchpad-resource-preview small{font-size:.8rem;color:var(--muted)}
+.guild-launchpad-resource-preview button:hover,.guild-launchpad-resource-preview button:focus-visible{border-color:var(--focus);outline:2px solid var(--focus);outline-offset:2px}
+@media(max-width:720px){.guild-launchpad-welcome{grid-template-columns:minmax(0,1fr);gap:.85rem;padding:1rem}}
+.guild-launchpad-resource-preview button:disabled{cursor:default;opacity:1;color:var(--muted)}
+.guild-launchpad-resource-preview button:disabled:hover{border-color:var(--line);outline:none}
+.guild-launchpad-content h2:focus{outline:2px solid var(--focus);outline-offset:4px}
+.guild-launchpad-content h2{scroll-margin-top:6rem}
+
+/* Management keeps one task in view while every draft remains mounted. */
+.guild-editor-nav{display:flex;flex-wrap:wrap;gap:.5rem;padding-bottom:.75rem;border-bottom:1px solid var(--line)}
+.guild-editor-nav .btn{min-height:44px;width:auto;max-width:100%;white-space:normal}
+.guild-editor-nav .btn[aria-pressed="true"]{background:var(--green-soft);color:var(--ink);box-shadow:inset 0 0 0 2px var(--focus)}
+.guild-editor-panel{display:grid;gap:.8rem;min-width:0}
+.guild-editor-panel>h3{margin:0}
+.guild-editor-panel>h3:focus{outline:2px solid var(--focus);outline-offset:4px}
+.guild-editor-savebar{display:grid;gap:.65rem;border-top:1px solid var(--line);padding-top:1rem}
+.guild-editor-savebar p{margin:0}

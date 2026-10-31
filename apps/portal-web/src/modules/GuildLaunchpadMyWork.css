@@ -28,3 +28,13 @@
   .my-work input,.my-work textarea,.my-work select{font-size:16px}
   .my-work>.my-work-primary,.my-work .stack>.my-work-primary{width:100%;justify-self:stretch;align-self:stretch}
 }
+
+/* Retain the current work above the separate creation form when creation is permitted. */
+.my-work-list,.my-work-create{display:grid;gap:.75rem;min-width:0}
+.my-work-list li{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.5rem;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev)}
+.my-work-list li.is-selected{border-color:var(--focus)}
+.my-work-list .btn{max-width:60%;min-height:44px;white-space:normal;overflow-wrap:anywhere;text-align:start;justify-content:flex-start}
+.my-work-list .btn[aria-current="true"]{font-weight:700;text-decoration:underline;text-underline-offset:.2em}
+.my-work-progress{padding:.2rem .5rem;border:1px solid var(--line);border-radius:999px;font-size:.875rem;color:var(--muted)}
+.my-work-create{border-top:1px solid var(--line);padding-top:1rem;margin-top:.4rem}
+.my-work-list>.btn{justify-self:start;width:auto}

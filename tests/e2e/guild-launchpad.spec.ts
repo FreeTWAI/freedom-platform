@@ -344,13 +344,20 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await session.page.setViewportSize({width: 360, height: 800});
     const card = session.page.getByRole('article', {name: fixture.editedName, exact: true});
     await card.scrollIntoViewIfNeeded();
-    const open = card.getByRole('button', {name: '啟動台', exact: true});
+    const open = card.getByRole('button', {name: '進入公會工作區', exact: true});
     await expect(open).toBeVisible();
     expect(await open.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     await noOverflow(session.page);
     await session.page.setViewportSize({width: 1280, height: 900});
     await open.click();
     await expect(session.page.getByRole('heading', {level: 1, name: fixture.editedName})).toBeVisible();
+    const guide = session.page.getByRole('region', {name: '公會工作區導覽', exact: true});
+    await expect(guide).toBeVisible();
+    const launchpadResponse = await session.page.request.get(`/api/v1/guilds/${edited}/launchpad`);
+    expect(launchpadResponse.status()).toBe(200);
+    const launchpadData = await launchpadResponse.json();
+    await expect(guide).toContainText(launchpadData.config.body.mission_override ?? launchpadData.guild.purpose);
+    if (launchpadData.config.body.blocks.some((block: {kind: string; enabled: boolean}) => block.kind === 'skill_books' && block.enabled) && launchpadData.skill_books.length) await expect(guide).toContainText(launchpadData.skill_books[0].title);
     const back = session.page.getByRole('button', {name: '返回公會列表', exact: true});
     await expect(back).toBeVisible();
     const backBox = await back.boundingBox();
@@ -358,19 +365,34 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     expect(backBox!.width).toBeLessThan(400);
     await expect(session.page.getByRole('link', {name: '前往業務空間', exact: true})).toBeVisible();
     await expect(session.page.locator('.guild-launchpad-editor')).toBeHidden();
+    const managementWrites: string[] = [];
+    session.page.on('request', request => {if (/\/launchpad-(config|delegations)(?:\/|$)/.test(new URL(request.url()).pathname) && request.method() === 'POST') managementWrites.push(request.url());});
     await openGuildSection(session.page, '管理啟動台');
+    await session.page.getByRole('button', {name: '成員授權', exact: true}).click();
     await expect(session.page.getByText('目前沒有授權。', {exact: true})).toBeVisible();
+    await session.page.getByRole('button', {name: '工具與提示', exact: true}).click();
     await expect(session.page.getByRole('button', {name: '儲存草稿', exact: true})).toHaveClass(/btn-ghost/);
     await expect(session.page.getByRole('button', {name: '發布', exact: true})).toHaveClass(/btn-primary/);
     await session.page.locator('#launchpad-support-url').fill('http://example.com/help');
+    await session.page.getByRole('button', {name: '版面與使命', exact: true}).click();
+    await expect(session.page.locator('#launchpad-support-url')).toBeHidden();
+    expect(managementWrites).toEqual([]);
     await session.page.getByRole('button', {name: '儲存草稿', exact: true}).click();
     const urlError = session.page.locator('#launchpad-support-url-error');
+    await expect(session.page.getByRole('heading', {name: '工具與提示', exact: true})).toBeFocused();
+    await expect(session.page.locator('#launchpad-support-url')).toBeVisible();
+    await expect(session.page.locator('#launchpad-support-url')).toHaveValue('http://example.com/help');
     await expect(urlError).toHaveText('只接受 https:// 開頭、不含帳號密碼的網址');
     await expect(session.page.locator('#launchpad-support-url')).toHaveAttribute('aria-describedby', /launchpad-support-url-error/);
     await expect(session.page.getByText('unsupported_url')).toHaveCount(0);
     await expect(session.page.getByText('blocks.')).toHaveCount(0);
     await session.page.locator('#launchpad-support-url').fill('');
+    await session.page.getByRole('button', {name: '版面與使命', exact: true}).click();
     await session.page.locator('#launchpad-mission').fill(first);
+    await session.page.getByRole('button', {name: '工具與提示', exact: true}).click();
+    await expect(session.page.getByRole('button', {name: '發布', exact: true})).toBeDisabled();
+    await session.page.getByRole('button', {name: '版面與使命', exact: true}).click();
+    await expect(session.page.locator('#launchpad-mission')).toHaveValue(first);
     // Sharing works while signed in and leaves the active editor/draft intact.
     await session.page.getByRole('button', {name: '複製公會連結', exact: true}).click();
     await finishGuildCopy(session.page, 0, true);
@@ -411,6 +433,7 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await openGuildSection(session.page, '公會資訊');
     await expect(session.page.getByText(second).first()).toBeVisible();
     await openGuildSection(session.page, '管理啟動台');
+    await session.page.getByRole('button', {name: '版本紀錄', exact: true}).click();
     await session.page.getByRole('listitem').filter({hasText: `版本 ${revision}`}).getByRole('button', {name: '回復到此版本', exact: true}).click();
     await session.page.getByRole('dialog').getByLabel('回復原因').fill('回復這次測試的第一個發布');
     await session.page.getByRole('button', {name: '確認回復', exact: true}).click();
@@ -419,9 +442,23 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await openGuildSection(session.page, '公會資訊');
     await expect(session.page.getByText(first).first()).toBeVisible();
     await openGuildSection(session.page, '管理啟動台');
-    await session.page.setViewportSize({width: 360, height: 800});
-    await noOverflow(session.page);
-    await tallEnough(session.page);
+    const writesBeforePanelTour = managementWrites.length;
+    for (const width of [320, 390, 1280]) {
+      await session.page.setViewportSize({width, height: 800});
+      for (const name of ['版面與使命', '工具與提示', '版本紀錄', '成員授權']) {
+        await session.page.getByRole('button', {name, exact: true}).click();
+        await expect(session.page.getByRole('heading', {name, exact: true})).toBeVisible();
+        await expect(session.page.locator('.guild-editor-panel:visible')).toHaveCount(1);
+        await expect(session.page.locator('.guild-editor-panel[hidden]')).toHaveCount(3);
+        for (const hidden of await session.page.locator('.guild-editor-panel[hidden]').all()) {
+          await expect(hidden).toBeHidden();
+          expect(await hidden.evaluate(element => getComputedStyle(element).display)).toBe('none');
+        }
+        await noOverflow(session.page);
+        await tallEnough(session.page);
+      }
+    }
+    expect(managementWrites).toHaveLength(writesBeforePanelTour);
   } finally { await session.context.close(); await cleanup(e2eAuthPool, fixture.userId, fixture.previousOfficer); }
 });
 
@@ -446,6 +483,7 @@ test('a chair delegates editing and preview only, then revokes access from a sta
     await leader.page.goto(`/#guilds/${edited}`);
     await expect(leader.page.getByRole('heading', {level: 1, name: chair.editedName})).toBeVisible();
     await openGuildSection(leader.page, '管理啟動台');
+    await leader.page.getByRole('button', {name: '成員授權', exact: true}).click();
     await leader.page.getByRole('combobox', {name: '成員', exact: true}).selectOption({label: member.displayName});
     await leader.page.getByLabel('編輯內容', {exact: true}).check();
     await leader.page.getByLabel('預覽配置', {exact: true}).check();
@@ -463,6 +501,8 @@ test('a chair delegates editing and preview only, then revokes access from a sta
     await delegate.page.goto(`/#guilds/${edited}`);
     await openGuildSection(delegate.page, '管理啟動台');
     await expect(delegate.page.locator('#launchpad-mission')).toBeVisible();
+    await expect(delegate.page.getByRole('button', {name: '版本紀錄', exact: true})).toHaveCount(0);
+    await expect(delegate.page.getByRole('button', {name: '成員授權', exact: true})).toHaveCount(0);
     await expect(delegate.page.getByRole('button', {name: '發布', exact: true})).toHaveCount(0);
     await expect(delegate.page.getByRole('button', {name: '授權', exact: true})).toHaveCount(0);
     await expect(delegate.page.getByRole('button', {name: '撤銷', exact: true})).toHaveCount(0);
@@ -591,4 +631,70 @@ test('a failed public launchpad chunk can return home and recover after reload',
     await expect(page.locator('.guild-launchpad')).toBeVisible();
     await expect(page.getByRole('button', {name: '會員登入', exact: true})).toBeVisible();
   } finally { await context.close(); }
+});
+
+test('resource previews focus the actual destination on mobile, including same-section and empty custom layouts', async ({browser, baseURL, e2eAuthPool}) => {
+  test.setTimeout(120_000);
+  const fixture = await seed(e2eAuthPool, false);
+  const session = await login(browser, baseURL!, fixture.email);
+  type Scenario = {books: boolean; information: boolean; announcements: boolean; booksEnabled: boolean};
+  let scenario: Scenario = {books: true, information: true, announcements: true, booksEnabled: true};
+  const marker = `合成資源 ${randomUUID().slice(0, 8)}`;
+  await session.page.route(`**/api/v1/guilds/${music}/launchpad`, async route => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    const member = await response.json();
+    const original = member.config.body;
+    const body = original.schema_version === 'guild-launchpad.config/v1' ? convertV1(original) : structuredClone(original);
+    body.blocks = [
+      {id: 'mission', kind: 'mission', order: 0, enabled: scenario.information, title: null},
+      {id: 'announcements', kind: 'announcements', order: 1, enabled: scenario.announcements, title: null},
+      {id: 'skill_books', kind: 'skill_books', order: 2, enabled: scenario.booksEnabled, title: null},
+    ];
+    body.application_refs = [];
+    await route.fulfill({response, json: {...member, config: {...member.config, body}, applications: [],
+      viewer_can_edit_config: false, viewer_can_preview_config: false, viewer_can_publish_config: false, viewer_can_manage_delegations: false,
+      skill_books: scenario.books ? [{book_id: 'synthetic-book', title: marker, introduction_url: 'https://example.invalid/intro', upstream_url: 'https://example.invalid/source'}] : [],
+      announcements: scenario.announcements ? [{announcement_id: 'synthetic-announcement', title: `${marker}公告`, body: '這是隔離的導覽測試內容。', published_at: '2026-10-30T00:00:00Z'}] : [],
+    }});
+  });
+  const guide = session.page.getByRole('region', {name: '公會工作區導覽', exact: true});
+  const books = guide.getByRole('button', {name: /^入門技能書/});
+  const announcements = guide.getByRole('button', {name: /^公會公告/});
+  const destination = (kind: string) => session.page.locator(`[data-launchpad-kind="${kind}"] > h2`);
+  const inView = async (kind: string) => {
+    const heading = destination(kind);
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeVisible();
+    await expect.poll(async () => heading.evaluate(node => {const rect = node.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight;})).toBe(true);
+  };
+  try {
+    await session.page.goto(`/#guilds/${music}`);
+    for (const width of [360, 1280]) {
+      await session.page.setViewportSize({width, height: 800});
+      await expect(guide).toContainText(marker);
+      await announcements.click(); await inView('announcements'); // Information may already be selected.
+      await announcements.click(); await inView('announcements'); // Repeating is not a no-op.
+      await books.click(); await inView('skill_books');
+      await books.click(); await inView('skill_books');
+      await announcements.click(); await inView('announcements');
+      await noOverflow(session.page);
+    }
+    await session.page.setViewportSize({width: 360, height: 800});
+    scenario = {books: false, information: true, announcements: false, booksEnabled: true};
+    await session.page.reload(); await expect(books).toContainText('先閱讀公會資訊');
+    await books.click(); await inView('mission');
+    scenario = {...scenario, information: false};
+    await session.page.reload(); await expect(books).toBeDisabled();
+    await expect(books).toContainText('目前沒有可顯示的入門資源');
+    await expect(guide).not.toContainText('先閱讀公會資訊');
+    scenario = {books: true, information: true, announcements: false, booksEnabled: false};
+    await session.page.reload(); await expect(guide).toBeVisible();
+    await expect(books).toHaveCount(0);
+    await expect(guide).not.toContainText(marker);
+    await noOverflow(session.page);
+  } finally {
+    await session.context.close();
+    await cleanup(e2eAuthPool, fixture.userId, fixture.previousOfficer);
+  }
 });
