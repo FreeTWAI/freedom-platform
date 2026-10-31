@@ -1003,7 +1003,7 @@ function Workspace({
                 window.dispatchEvent(new HashChangeEvent('hashchange'));
               }
               workspaceTopbar.current?.scrollIntoView({block: 'start', behavior: 'instant'});
-            })}><img className="brand-home-logo" src="/brand/freedom-workshop-compact.jpeg" alt="自由工坊" width="1536" height="512"/></a>
+            })}><img className="brand-home-logo" src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="396" height="132"/></a>
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true" focusable="false"><path d={mobileOpen?'M6 6L18 18M18 6L6 18':'M4 6H20M4 12H20M4 18H20'}/></svg>
             </button></div>
