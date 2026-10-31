@@ -14,17 +14,18 @@ test('mission candidate preserves exact PR1170 schema195 ledger without treating
  const old=historical();
  assert.equal(old.ledger.at(-1).name,'195_event_helpers.sql');
  assert.equal(old.ledger_digest,'63ce756c3265756c4bad892137a189f1a47b9a43c982c6ad49ebcfff840e3503');
- const next=resolveMigrationPlan(sources(),profile(196),old.ledger);
+ const next=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=196),profile(196),old.ledger);
  assert.deepEqual(next.pending,['196_event_missions.sql']);
  assert.deepEqual(next.ledger.slice(0,-1),old.ledger);
  assert.notEqual(next.ledger_digest,old.ledger_digest);
 });
 
-test('explicit196 scan accepts only complete catalog; stale195 profile is not silently advanced',()=>{
- assert.equal(checkMigrations(root,profile(196)).ok,true);
+test('explicit197 scan accepts only complete catalog; historical196/195 profiles are not silently advanced',()=>{
+ assert.equal(checkMigrations(root,profile(197)).ok,true);
+ assert.equal(checkMigrations(root,profile(196)).ok,false);
  assert.equal(checkMigrations(root,profile(195)).ok,false);
  assert.equal(checkMigrations(root,profile(194)).ok,false);
- assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(196)));
+ assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(197)));
 });
 
 test('mission schema has no attendee, friend or Contribution write and clearing is not a hard-erasure claim',()=>{
@@ -41,4 +42,15 @@ test('mission identity binds both referenced rows to the same community, includi
  assert.match(sql,/CONSTRAINT event_mission_member_community_fk\s+FOREIGN KEY\(member_ref,community_id\) REFERENCES users\(user_id,community_id\) ON DELETE CASCADE/);
  assert.match(sql,/community_id uuid NOT NULL REFERENCES communities/);
  assert.match(sql,/event_id uuid NOT NULL,/);assert.match(sql,/member_ref uuid NOT NULL,/);
+});
+
+test('registration policy197 appends to exact mission196 history and preserves the guest-compatible default',()=>{
+ const mission=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=196),profile(196));
+ const next=resolveMigrationPlan(sources(),profile(197),mission.ledger);
+ assert.deepEqual(next.pending,['197_event_registration_policy.sql']);
+ assert.deepEqual(next.ledger.slice(0,-1),mission.ledger);
+ assert.notEqual(next.ledger_digest,mission.ledger_digest);
+ const sql=sources().find(row=>row.name==='197_event_registration_policy.sql').sql;
+ assert.match(sql,/ADD COLUMN registration_policy text NOT NULL DEFAULT 'guest_allowed'/);
+ assert.match(sql,/CHECK \(registration_policy IN \('guest_allowed','community_member'\)\)/);
 });
