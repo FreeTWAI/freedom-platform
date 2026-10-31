@@ -1,9 +1,18 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
-import {test, expect, type Browser, type Page} from './fixtures.js';
+import {test, expect, type Browser, type Locator, type Page} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {DEMO_COMMUNITY, DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
+
+async function openGuildSetting(button: Locator) {
+  const settings = button.locator('xpath=ancestor::details[contains(@class,"guild-membership-settings")]');
+  await expect(settings).toBeAttached();
+  await expect(button).toBeEnabled();
+  if (!await settings.evaluate(node => (node as HTMLDetailsElement).open)) await settings.locator(':scope > summary').click();
+  await expect(button).toBeVisible();
+}
+async function chooseGuildSetting(button: Locator) { await openGuildSetting(button); await button.click(); }
 
 const keys = {
   talent: 'guild_talent_direction',
@@ -70,7 +79,7 @@ test('a switched community can set and clear two category primaries, including k
         await expect(session.page.getByRole('group', {name: label, exact: true})).toContainText('尚未選擇');
       }
       const talent = session.page.getByRole('article', {name: guildNames.talent, exact: true});
-      await talent.getByRole('button', {name: '設為本類主力', exact: true}).click();
+      await chooseGuildSetting(talent.getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true}));
       const internal = session.page.getByRole('group', {name: '社群架構開發主力', exact: true});
       await expect(internal.getByRole('article', {name: guildNames.talent, exact: true})).toBeVisible();
       await expect(internal.getByText('本類主力', {exact: true})).toBeVisible();
@@ -82,7 +91,7 @@ test('a switched community can set and clear two category primaries, including k
       expect(emptyBox!.height).toBeLessThan(200);
       expect(heldBox!.height).toBeGreaterThan(400);
       const partnership = session.page.getByRole('article', {name: guildNames.partnership, exact: true});
-      await partnership.getByRole('button', {name: '設為本類主力', exact: true}).click();
+      await chooseGuildSetting(partnership.getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true}));
       const external = session.page.getByRole('group', {name: '社群業務推廣主力', exact: true});
       await expect(external.getByRole('article', {name: guildNames.partnership, exact: true})).toBeVisible();
       for (const theme of ['light', 'dark']) {
@@ -94,28 +103,32 @@ test('a switched community can set and clear two category primaries, including k
           await session.page.screenshot({path: testInfo.outputPath(`category-${theme}-${width}.png`), fullPage: false});
         }
       }
-      await internal.getByRole('button', {name: '取消本類主力', exact: true}).click();
+      await chooseGuildSetting(internal.getByRole('button', {name: '取消本類主力', exact: true, includeHidden: true}));
       await expect(internal).toContainText('尚未選擇');
       const pending = session.page.getByRole('article', {name: guildNames.vibe, exact: true});
       await expect(pending.getByText('分類整理中', {exact: true})).toBeVisible();
       await expect(pending.getByText('分類整理中，仍可使用公會工作區。')).toBeVisible();
-      await expect(pending.getByRole('button', {name: '設為本類主力', exact: true})).toHaveCount(0);
+      await expect(pending.getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true})).toHaveCount(0);
       await session.page.setViewportSize({width: 360, height: 800});
       await noOverflow(session.page);
-      const again = session.page.getByRole('article', {name: guildNames.talent, exact: true}).getByRole('button', {name: '設為本類主力', exact: true});
+      const again = session.page.getByRole('article', {name: guildNames.talent, exact: true}).getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true});
       // The cleared slot renders before its refresh finishes; focus() does not wait for enabled.
       await expect(again).toBeEnabled();
+      await openGuildSetting(again);
       await again.focus();
       await session.page.keyboard.press('Enter');
-      const chosen = session.page.getByRole('group', {name: '社群架構開發主力', exact: true}).getByRole('button', {name: '取消本類主力', exact: true});
+      const chosen = session.page.getByRole('group', {name: '社群架構開發主力', exact: true}).getByRole('button', {name: '取消本類主力', exact: true, includeHidden: true});
       await expect(chosen).toBeFocused();
       await expect(external.getByRole('article', {name: guildNames.partnership, exact: true})).toBeVisible();
       await chosen.click();
       await expect(session.page.getByRole('group', {name: '社群架構開發主力', exact: true})).toContainText('尚未選擇');
       await expect(external.getByRole('article', {name: guildNames.partnership, exact: true})).toBeVisible();
       await expect(session.page.getByLabel('我的公會概況', {exact: true})).toContainText('已加入 3 個公會');
-      await session.page.getByRole('article', {name: guildNames.talent, exact: true}).getByRole('button', {name: '設為本類主力', exact: true}).click();
-      const leave = session.page.getByRole('group', {name: '社群架構開發主力', exact: true}).getByRole('button', {name: `退出${guildNames.talent}`, exact: true});
+      await chooseGuildSetting(session.page.getByRole('article', {name: guildNames.talent, exact: true}).getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true}));
+      const leave = session.page.getByRole('group', {name: '社群架構開發主力', exact: true}).getByRole('button', {name: `退出${guildNames.talent}`, exact: true, includeHidden: true});
+      // The category command opens settings and returns focus after its refresh.
+      await expect(internal.getByRole('button', {name: '取消本類主力', exact: true})).toBeFocused();
+      await expect(leave.locator('xpath=ancestor::details')).toHaveJSProperty('open', true);
       await leave.click();
       const confirm = session.page.getByRole('status').filter({hasText: '不會刪除'});
       await expect(confirm).toContainText('不會移動');
@@ -191,7 +204,7 @@ test('confirmed category-primary leave survives reload and rejoin without changi
     await navigate(page, '職業公會');
     const expected = new Map(guilds.map(g => [g.category, g.guild_key as string | null]));
     for (const guild of guilds) {
-      await page.getByRole('article', {name: guild.name, exact: true}).getByRole('button', {name: '設為本類主力', exact: true}).click();
+      await chooseGuildSetting(page.getByRole('article', {name: guild.name, exact: true}).getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true}));
       await expect(page.getByRole('group', {name: labels[guild.category], exact: true}).getByRole('article', {name: guild.name, exact: true})).toBeVisible();
     }
     const assertSlots = async () => {
@@ -217,7 +230,7 @@ test('confirmed category-primary leave survives reload and rejoin without changi
 
     for (const guild of guilds) {
       await assertSlots();
-      await page.getByRole('group', {name: labels[guild.category], exact: true}).getByRole('button', {name: `退出${guild.name}`, exact: true}).click();
+      await chooseGuildSetting(page.getByRole('group', {name: labels[guild.category], exact: true}).getByRole('button', {name: `退出${guild.name}`, exact: true, includeHidden: true}));
       const confirmation = page.getByRole('status').filter({hasText: `退出${guild.name}會清空${labels[guild.category]}`});
       await expect(confirmation).toContainText('私人業務資料不會移動，也不會刪除。');
       await confirmation.getByRole('button', {name: '確認退出', exact: true}).click();
@@ -283,10 +296,10 @@ test('用新版本送出草稿 reloads the version and sends that If-Match', asy
       await navigate(second.page, '職業公會');
       await expect(first.page.getByRole('group', {name: '社群架構開發主力', exact: true})).toContainText('尚未選擇');
       await expect(second.page.getByRole('group', {name: '社群業務推廣主力', exact: true})).toContainText('尚未選擇');
-      await first.page.getByRole('article', {name: guildNames.talent, exact: true}).getByRole('button', {name: '設為本類主力', exact: true}).click();
+      await chooseGuildSetting(first.page.getByRole('article', {name: guildNames.talent, exact: true}).getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true}));
       await expect(first.page.getByRole('group', {name: '社群架構開發主力', exact: true}).getByRole('article', {name: guildNames.talent, exact: true})).toBeVisible();
       const version = (await e2eAuthPool.query(`SELECT aggregate_version::text AS aggregate_version FROM guild_preference_sets WHERE user_id = $1`, [userId])).rows[0].aggregate_version as string;
-      await second.page.getByRole('article', {name: guildNames.partnership, exact: true}).getByRole('button', {name: '設為本類主力', exact: true}).click();
+      await chooseGuildSetting(second.page.getByRole('article', {name: guildNames.partnership, exact: true}).getByRole('button', {name: '設為本類主力', exact: true, includeHidden: true}));
       await expect(second.page.getByRole('status').filter({hasText: '草稿已保留'})).toBeVisible();
       await second.page.getByRole('button', {name: '用新版本送出草稿', exact: true}).click();
       await expect(second.page.getByRole('group', {name: '社群業務推廣主力', exact: true}).getByRole('article', {name: guildNames.partnership, exact: true})).toBeVisible();
@@ -303,7 +316,7 @@ test('用新版本送出草稿 reloads the version and sends that If-Match', asy
       second.page.on('request', request => {
         if (request.method() === 'POST' && new URL(request.url()).pathname === leavePath) leaveMatches.push(request.headers()['if-match'] ?? '');
       });
-      await internal.getByRole('button', {name: `退出${guildNames.talent}`, exact: true}).click();
+      await chooseGuildSetting(internal.getByRole('button', {name: `退出${guildNames.talent}`, exact: true, includeHidden: true}));
       const confirmation = second.page.getByRole('status').filter({hasText: `退出${guildNames.talent}會清空社群架構開發主力`});
       await expect(confirmation).toBeVisible();
       const changed = (await e2eAuthPool.query<{aggregate_version: string}>(`UPDATE positioning_profession_memberships
@@ -328,7 +341,7 @@ test('用新版本送出草稿 reloads the version and sends that If-Match', asy
       await expect(internal.locator('.guild-intern-notice')).toHaveCount(0);
       await expect(confirmation).toHaveCount(0);
       expect(leaveMatches).toHaveLength(1);
-      await internal.getByRole('button', {name: `退出${guildNames.talent}`, exact: true}).click();
+      await chooseGuildSetting(internal.getByRole('button', {name: `退出${guildNames.talent}`, exact: true, includeHidden: true}));
       await expect(confirmation).toContainText('私人業務資料不會移動，也不會刪除。');
       const completed = second.page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === leavePath);
       await confirmation.getByRole('button', {name: '確認退出', exact: true}).click();
