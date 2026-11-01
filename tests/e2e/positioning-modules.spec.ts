@@ -3,7 +3,7 @@ import { test,expect,type Page } from './fixtures.js';
 async function login(page:Page){await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();}
 async function expectSinglePositioningFlow(page:Page){
   await expect(page.getByRole('heading',{name:'我的定位結果',exact:true})).toBeVisible();
-  await expect(page.locator('.positioning-panel form')).toHaveCount(0);
+  await expect(page.locator('.positioning-panel form:visible')).toHaveCount(0);
   await expect(page.getByText(/合作偏好|想探索的職業方向/)).toHaveCount(0);
   await expect(page.getByLabel('搜尋職業方向')).toHaveCount(0);
   await expect(page.getByLabel('我現在想完成的事')).toHaveCount(0);
@@ -13,11 +13,20 @@ async function expectSinglePositioningFlow(page:Page){
 test('positioning has one assessment entry and guild membership remains independently editable',async({page})=>{
   await login(page);await navigate(page, '我的定位');
   await expectSinglePositioningFlow(page);
+  await expect(page.locator('.positioning-panel form')).toHaveCount(0);
   const assessment=await (await page.request.get('/api/v1/me/onboarding')).json();
   const start=page.getByRole('button',{name:assessment.completed?'重新探索定位':'開始探索我的定位',exact:true});
   await expect(start).toHaveCount(1);await start.click();
   await expect(page.getByRole('heading',{name:'你喜歡怎麼做事？',exact:true})).toBeVisible();
   await expect(page.getByRole('list',{name:'定位進度',exact:true}).getByRole('listitem')).toHaveCount(5);
+  await page.getByRole('button',{name:'返回我的定位',exact:true}).click();
+  await expectSinglePositioningFlow(page);
+  await expect(page.locator('.positioning-panel form')).toHaveCount(1);
+  await expect(page.locator('.positioning-panel form')).toBeHidden();
+  const resume=page.getByRole('button',{name:'繼續本頁的定位草稿',exact:true});
+  await expect(resume).toBeFocused();await resume.click();
+  await expect(page.getByRole('heading',{name:'你喜歡怎麼做事？',exact:true})).toBeVisible();
+  await expect(page.locator('.positioning-panel form:visible')).toHaveCount(1);
   await page.getByRole('button',{name:'返回我的定位',exact:true}).click();
   await expectSinglePositioningFlow(page);
   await navigate(page, '職業公會');
