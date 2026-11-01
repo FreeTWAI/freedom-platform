@@ -5,3 +5,12 @@
 .newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost):not(:disabled) { color: var(--ink); background: var(--bg-elev); border: 1px solid var(--line); }
 .newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost):hover:not(:disabled),
 .newbie-village .btn:not(.btn-primary):not(.btn-danger):not(.btn-ghost):focus-visible { color: var(--ink); background: var(--bg-elev); border-color: var(--focus); }
+
+.nv-step-nav{display:flex;flex-wrap:wrap;gap:8px;padding-block:8px;border-block:1px solid var(--line)}
+.nv-step-nav .btn[aria-current="step"]{border-color:var(--focus)!important;box-shadow:inset 0 -3px var(--focus);font-weight:700}
+.nv-quests{display:grid;gap:12px;margin:0}.nv-quests li{margin:0}.nv-quests .badge{margin-inline-start:8px}
+.nv-privacy summary,.nv-result-details summary{cursor:pointer;min-height:44px;align-content:center}
+.nv-result-details>summary{font-weight:700}.nv-result-details[open]>summary{margin-bottom:16px}
+.nv-result-details .nv-radar{display:block;margin-inline:auto}.nv-footer{border-top:1px solid var(--line);padding-top:16px;font-size:.9rem}
+.newbie-village progress{width:100%;accent-color:var(--focus)}
+@media(max-width:600px){.nv-step-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.nv-step-nav .btn{width:100%;height:100%;white-space:normal;text-align:start}.nv-actions .btn{max-width:100%;white-space:normal}}
