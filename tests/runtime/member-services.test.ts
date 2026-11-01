@@ -615,9 +615,9 @@ test('a member_service link scores the sharer, including the owner, and a non-uu
   assert.equal(interstitial.status, 200);
   assert.match(body, /property="og:title" content="可分享的課"/);
   assert.match(body, /property="og:description" content="一對一語言課"/);
-  assert.match(body, /property="og:image" content="https:\/\/freetwai\.com\/brand\/freedom-workshop\.webp"/);
-  assert.match(body, /property="og:image:width" content="1280"/);
-  assert.match(body, /property="og:image:height" content="720"/);
+  assert.match(body, /property="og:image" content="https:\/\/freetwai\.com\/brand\/og-freedom-workshop-20261030\.jpg"/);
+  assert.match(body, /property="og:image:width" content="1200"/);
+  assert.match(body, /property="og:image:height" content="628"/);
   assert.match(body, new RegExp(`data-target="/services/${id}"`));
   assert.match(body, /noindex,nofollow/);
   await click(shared.data.code);
