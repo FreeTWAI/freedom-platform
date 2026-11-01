@@ -295,7 +295,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     </div>
   }
   return <section className="service-zone stack" aria-label="社員服務分享區">
-    <p className="service-intro">社員的本業服務都在這裡。看到適合朋友的服務，就用你的連結分享出去；每次點擊都算你的業務推廣分數。</p>
+    <p className="service-intro">在這裡找社員提供的服務，先看內容、價格與服務方式；有需要再透過服務頁聯絡。若剛好適合朋友，也可以自願分享，不必為了排名推廣。</p>
     <section className="card service-mine" data-guide-anchor="services:mine" aria-label="我的服務">
       <div className="service-mine-head">
         <h2>我的服務 <span className="service-count">{mine.length}／{limit}</span></h2>
