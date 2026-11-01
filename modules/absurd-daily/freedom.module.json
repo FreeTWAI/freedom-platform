@@ -4,8 +4,13 @@
   "owner_role": "community",
   "owned_paths": [
     "modules/absurd-daily/**",
+    ".github/workflows/native-game-previews.yml",
     "apps/portal-web/src/games/**",
     "tests/runtime/absurd-daily.test.ts",
+    "tests/runtime/kitchen-food-batch.test.ts",
+    "tests/runtime/bounded-cpu-profile.test.ts",
+    "tests/e2e/helpers/bounded-cpu-profile.ts",
+    "tests/runtime/market-cooking.test.ts",
     "tests/e2e/absurd-daily.spec.ts",
     "docs/development/absurd-daily.md",
     "apps/portal-web/public/games/absurd-daily/**"
@@ -15,7 +20,7 @@
     "apps/portal-web/src/games/result-bridge.ts",
     "apps/portal-web/src/games/GameDraftInbox.tsx"
   ],
-  "dependencies": [],
+  "dependencies": ["shared"],
   "contract_families": [],
   "client_profiles": [
     "member"
