@@ -344,13 +344,20 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await session.page.setViewportSize({width: 360, height: 800});
     const card = session.page.getByRole('article', {name: fixture.editedName, exact: true});
     await card.scrollIntoViewIfNeeded();
-    const open = card.getByRole('button', {name: '啟動台', exact: true});
+    const open = card.getByRole('button', {name: '進入公會工作區', exact: true});
     await expect(open).toBeVisible();
     expect(await open.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
     await noOverflow(session.page);
     await session.page.setViewportSize({width: 1280, height: 900});
     await open.click();
     await expect(session.page.getByRole('heading', {level: 1, name: fixture.editedName})).toBeVisible();
+    const guide = session.page.getByRole('region', {name: '公會工作區導覽', exact: true});
+    await expect(guide).toBeVisible();
+    const launchpadResponse = await session.page.request.get(`/api/v1/guilds/${edited}/launchpad`);
+    expect(launchpadResponse.status()).toBe(200);
+    const launchpadData = await launchpadResponse.json();
+    await expect(guide).toContainText(launchpadData.config.body.mission_override ?? launchpadData.guild.purpose);
+    if (launchpadData.config.body.blocks.some((block: {kind: string; enabled: boolean}) => block.kind === 'skill_books' && block.enabled) && launchpadData.skill_books.length) await expect(guide).toContainText(launchpadData.skill_books[0].title);
     const back = session.page.getByRole('button', {name: '返回公會列表', exact: true});
     await expect(back).toBeVisible();
     const backBox = await back.boundingBox();
@@ -591,4 +598,70 @@ test('a failed public launchpad chunk can return home and recover after reload',
     await expect(page.locator('.guild-launchpad')).toBeVisible();
     await expect(page.getByRole('button', {name: '會員登入', exact: true})).toBeVisible();
   } finally { await context.close(); }
+});
+
+test('resource previews focus the actual destination on mobile, including same-section and empty custom layouts', async ({browser, baseURL, e2eAuthPool}) => {
+  test.setTimeout(120_000);
+  const fixture = await seed(e2eAuthPool, false);
+  const session = await login(browser, baseURL!, fixture.email);
+  type Scenario = {books: boolean; information: boolean; announcements: boolean; booksEnabled: boolean};
+  let scenario: Scenario = {books: true, information: true, announcements: true, booksEnabled: true};
+  const marker = `合成資源 ${randomUUID().slice(0, 8)}`;
+  await session.page.route(`**/api/v1/guilds/${music}/launchpad`, async route => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    const member = await response.json();
+    const original = member.config.body;
+    const body = original.schema_version === 'guild-launchpad.config/v1' ? convertV1(original) : structuredClone(original);
+    body.blocks = [
+      {id: 'mission', kind: 'mission', order: 0, enabled: scenario.information, title: null},
+      {id: 'announcements', kind: 'announcements', order: 1, enabled: scenario.announcements, title: null},
+      {id: 'skill_books', kind: 'skill_books', order: 2, enabled: scenario.booksEnabled, title: null},
+    ];
+    body.application_refs = [];
+    await route.fulfill({response, json: {...member, config: {...member.config, body}, applications: [],
+      viewer_can_edit_config: false, viewer_can_preview_config: false, viewer_can_publish_config: false, viewer_can_manage_delegations: false,
+      skill_books: scenario.books ? [{book_id: 'synthetic-book', title: marker, introduction_url: 'https://example.invalid/intro', upstream_url: 'https://example.invalid/source'}] : [],
+      announcements: scenario.announcements ? [{announcement_id: 'synthetic-announcement', title: `${marker}公告`, body: '這是隔離的導覽測試內容。', published_at: '2026-10-30T00:00:00Z'}] : [],
+    }});
+  });
+  const guide = session.page.getByRole('region', {name: '公會工作區導覽', exact: true});
+  const books = guide.getByRole('button', {name: /^入門技能書/});
+  const announcements = guide.getByRole('button', {name: /^公會公告/});
+  const destination = (kind: string) => session.page.locator(`[data-launchpad-kind="${kind}"] > h2`);
+  const inView = async (kind: string) => {
+    const heading = destination(kind);
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeVisible();
+    await expect.poll(async () => heading.evaluate(node => {const rect = node.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight;})).toBe(true);
+  };
+  try {
+    await session.page.goto(`/#guilds/${music}`);
+    for (const width of [360, 1280]) {
+      await session.page.setViewportSize({width, height: 800});
+      await expect(guide).toContainText(marker);
+      await announcements.click(); await inView('announcements'); // Information may already be selected.
+      await announcements.click(); await inView('announcements'); // Repeating is not a no-op.
+      await books.click(); await inView('skill_books');
+      await books.click(); await inView('skill_books');
+      await announcements.click(); await inView('announcements');
+      await noOverflow(session.page);
+    }
+    await session.page.setViewportSize({width: 360, height: 800});
+    scenario = {books: false, information: true, announcements: false, booksEnabled: true};
+    await session.page.reload(); await expect(books).toContainText('先閱讀公會資訊');
+    await books.click(); await inView('mission');
+    scenario = {...scenario, information: false};
+    await session.page.reload(); await expect(books).toBeDisabled();
+    await expect(books).toContainText('目前沒有可顯示的入門資源');
+    await expect(guide).not.toContainText('先閱讀公會資訊');
+    scenario = {books: true, information: true, announcements: false, booksEnabled: false};
+    await session.page.reload(); await expect(guide).toBeVisible();
+    await expect(books).toHaveCount(0);
+    await expect(guide).not.toContainText(marker);
+    await noOverflow(session.page);
+  } finally {
+    await session.context.close();
+    await cleanup(e2eAuthPool, fixture.userId, fixture.previousOfficer);
+  }
 });
