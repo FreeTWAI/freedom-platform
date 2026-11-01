@@ -60,8 +60,9 @@ async function direct(page:Page,account:Account){
   await openChat(page);
   await returnToList(page);
   await page.getByRole('tab',{name:/^私人訊息/}).click();const panel=page.locator('#messages-panel-direct');
-  if(!await panel.getByLabel('搜尋會員',{exact:true}).isVisible())await panel.getByRole('button',{name:'← 返回對話列表',exact:true}).click();
-  await panel.getByLabel('搜尋會員',{exact:true}).fill(account.name);await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+  await panel.locator('.messages-search').waitFor({state:'attached'});
+  if(!await panel.locator('.messages-search').isVisible())await panel.getByRole('button',{name:'← 返回對話列表',exact:true}).click();
+  await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員',{exact:true}).fill(account.name);await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   await panel.getByRole('button',{name:`傳訊給 ${account.name}`,exact:true}).click();await expect(panel.locator('.messages-compose')).toBeVisible();return panel;
 }
 async function choose(panel:Locator,label:string){
@@ -137,6 +138,27 @@ test('supplied pack previews before sending, preserves text and reply drafts, an
   await receiver.reload();const restored=await group(receiver);await expect(restored.locator('.messages-bubbles [data-sticker-id="freetwai-v2-thanks"] img')).toHaveJSProperty('naturalWidth',512);
   const directA=await direct(sender,accounts[1]),directB=await direct(receiver,accounts[0]);await directA.getByRole('button',{name:'選擇貼圖',exact:true}).click();await directA.getByLabel('搜尋貼圖',{exact:true}).fill('相信');await directA.getByRole('button',{name:'預覽貼圖：我信',exact:true}).click();await directA.getByRole('button',{name:'送出這張貼圖',exact:true}).click();await expect(directB.locator('.messages-bubbles [data-sticker-id="freetwai-v2-trust"]')).toHaveCount(1);
   await receiver.reload();await direct(receiver,accounts[0]);await expect(receiver.locator('.messages-bubbles [data-sticker-id="freetwai-v2-trust"]')).toHaveCount(1);
+});
+
+test('chat preview reports cold image loading and retry without sending or shifting its frame',async({browser,baseURL})=>{
+  const page=await member(browser,baseURL!,0,320),panel=await group(page);
+  let release!:()=>void,allow=false,sends=0;
+  const held=new Promise<void>(resolve=>{release=resolve;});
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/messages'))sends++;});
+  await page.route('**/art/chat/freetwai-v2/*-image-*.webp',async route=>{
+    if(allow)return route.continue();await held;return route.abort();
+  });
+  try{
+    await panel.getByRole('button',{name:'選擇貼圖',exact:true}).click();await panel.getByLabel('搜尋貼圖',{exact:true}).fill('感謝');await panel.getByRole('button',{name:'預覽貼圖：謝謝',exact:true}).click();
+    const feedback=panel.locator('.chat-preview-feedback'),frame=feedback.locator('.chat-preview-frame');
+    await expect(feedback.getByRole('status')).toHaveText('正在載入清晰預覽…');
+    await expect(feedback.locator('.chat-preview-thumb')).toHaveJSProperty('naturalWidth',144);
+    const before=(await frame.boundingBox())!;expect(before.width).toBeGreaterThan(0);expect(Math.abs(before.width-before.height)).toBeLessThan(1);
+    release();await expect(feedback.getByRole('status')).toContainText('載入失敗');await expect(feedback.locator('.chat-preview-thumb')).toBeVisible();expect(sends).toBe(0);
+    allow=true;await feedback.getByRole('button',{name:'重試載入圖片',exact:true}).click();await expect(panel.locator('.chat-sticker-confirm')).toBeFocused();await expect(feedback.getByRole('status')).toHaveText('清晰預覽已載入。');
+    const after=(await frame.boundingBox())!;expect(after.width).toBe(before.width);expect(after.height).toBe(before.height);
+    await expect(feedback.locator('.chat-preview-full')).toHaveAttribute('data-ready','true');expect(sends).toBe(0);
+  }finally{release();}
 });
 
 test('supplied sticker picker scrolls at 320px in every base theme and falls back to its text label when an image fails',async({browser,baseURL})=>{
@@ -571,7 +593,7 @@ for(const surface of ['page','dock'] as const)test(`${surface} direct retains it
   if(surface==='page')panel=await direct(page,accounts[1]);
   else{
     await openChat(page);const dock=page.locator('.floating-message-panel');
-    await dock.getByRole('tab',{name:/^私人訊息/}).click();await dock.getByLabel('搜尋會員').fill(accounts[1].name);
+    await dock.getByRole('tab',{name:/^私人訊息/}).click();await dock.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await dock.getByLabel('搜尋會員').fill(accounts[1].name);
     await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();await dock.getByRole('button',{name:`傳訊給 ${accounts[1].name}`,exact:true}).click();panel=dock.locator('.messages-thread');
   }
   const path=`/api/v1/me/conversations/${accounts[1].id}/messages`,sends:{key:string;body:unknown}[]=[];

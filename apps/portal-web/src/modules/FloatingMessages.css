@@ -13,8 +13,8 @@
 .floating-message-content{padding:12px;overflow:auto;min-height:0;flex:1;overscroll-behavior:contain}
 .floating-message-panel .messages-hub{grid-template-columns:minmax(0,1fr);height:100%;grid-template-rows:auto minmax(0,1fr);align-items:stretch}
 .floating-message-panel .messages-categories{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 0 8px;border:0;border-bottom:1px solid var(--line);border-radius:0}
-.floating-message-panel .messages-tabs{display:flex;flex-wrap:nowrap;flex:1;gap:4px}
-.floating-message-panel .messages-tabs [role=tab]{display:flex;gap:6px;min-height:44px;padding:8px 12px}
+.floating-message-panel .messages-tabs{display:flex;flex-wrap:nowrap;flex:1;min-width:0;gap:4px;overflow-x:auto}
+.floating-message-panel .messages-tabs [role=tab]{display:flex;align-items:center;justify-content:center;flex-shrink:0;white-space:nowrap;gap:6px;min-height:44px;padding:8px 12px}
 .floating-message-panel .messages-new-group{display:flex;align-items:center;gap:6px;min-height:44px;padding:8px;border:0}
 .floating-message-panel .messages-hub>[role=tabpanel]{min-height:0;overflow:auto}
 .floating-message-panel .chat-workspace{height:100%;min-height:0}
@@ -30,8 +30,8 @@
   .floating-message-header h2{font-size:16px}
   .floating-message-content{padding:0;overflow:hidden}
   .floating-message-panel .messages-categories{flex-wrap:wrap;gap:4px;padding:8px max(8px,var(--app-safe-right,0px)) 8px max(8px,var(--app-safe-left,0px))}
-  .floating-message-panel .messages-tabs{justify-content:space-between}
-  .floating-message-panel .messages-tabs [role=tab]{padding:8px;flex:1}
+  .floating-message-panel .messages-tabs{flex:1 0 100%;justify-content:space-between}
+  .floating-message-panel .messages-tabs [role=tab]{padding:8px;flex:1 0 auto}
   .floating-message-panel .messages-new-group{margin-inline-start:auto}
   .floating-message-panel .messages-tabs svg{width:18px;height:18px}
   .floating-message-panel .messages-hub>[role=tabpanel],.floating-message-panel .messages-thread{overflow:hidden}
