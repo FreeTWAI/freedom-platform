@@ -82,7 +82,7 @@ test('GuildCard unknown-write blocking affects mutation controls only, with the 
   const tree=GuildCard({guild:{...guild,membership:{...guild.membership,state:'active'},skill_books:[],purpose:'Synthetic',first_step:'Read',is_primary:false},client:{sessionGeneration:1},busy:false,...(blocked?{writesBlocked:true}:{}),onPrimary:()=>{},onMembership:()=>{},onSecondary:()=>{},categorySlot:category?{pending:false,selected:false,section:'Synthetic',onToggle:()=>{}}:undefined});
   const buttons=nodes(tree).filter(n=>n.type==='button');
   for(const label of category?['設為本類主力','退出Synthetic guild']:['設為主要公會','設為次要公會','退出Synthetic guild'])assert.equal(Boolean(buttons.find(n=>text(n.props.children)===label)?.props.disabled),blocked,label);
-  for(const label of ['進入公會','查看成員','公會公告']){const button=buttons.find(n=>text(n.props.children)===label);assert.ok(button,label);assert.equal(Boolean(button.props.disabled),false,label);}
+  for(const label of ['查看公會介紹','查看成員','公會公告']){const button=buttons.find(n=>text(n.props.children)===label);assert.ok(button,label);assert.equal(Boolean(button.props.disabled),false,label);}
  }
 });
 
@@ -173,4 +173,40 @@ test('StrictMode setup cleanup setup permits a new intent but cannot revive the 
  h.updates.length=0;h.gets[0].resolve({migration_state:'switched',aggregate_version:7});await old;assert.equal(h.calls.length,0);assert.deepEqual(h.updates,[]);
  h.gets[1].resolve({migration_state:'switched',aggregate_version:9});await new Promise(resolve=>setImmediate(resolve));assert.equal(h.calls.length,1);assert.equal(h.calls[0].body.guild_key,'new-intent');assert.equal(h.calls[0].options.ifMatch,9);
  h.posts[0].resolve({aggregate_version:10});await current;assert.equal(h.context.categoryInFlight.current,false);assert.equal(h.context.categoryPending.current,null);
+});
+
+
+test('GuildCard separates workspace navigation, introduction and optional membership settings without issuing writes',()=>{
+ for(const active of [false,true])for(const enabled of [false,true]){
+  const calls:string[]=[];
+  const tree=GuildCard({guild:{...guild,membership:active?{...guild.membership,state:'active'}:null,skill_books:[],purpose:'Synthetic',first_step:'Read',is_primary:false},client:{sessionGeneration:1},busy:false,onPrimary:()=>calls.push('primary'),onMembership:()=>calls.push('membership'),onSecondary:()=>calls.push('secondary'),launchpadEnabled:enabled,onLaunchpad:()=>calls.push('workspace')});
+  const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
+  const settings=elements.filter(n=>n.type==='details'&&n.props.className==='guild-membership-settings');
+  assert.equal(settings.length,active?1:0);
+  if(active){
+   assert.equal(settings[0].props.open,undefined,'settings begin collapsed');
+   const labels=nodes(settings[0]).filter(n=>n.type==='button').map(n=>text(n.props.children));
+   assert.ok(labels.includes('設為主要公會'));assert.ok(labels.includes('退出Synthetic guild'));
+   assert.ok(buttons.some(n=>text(n.props.children)==='查看公會介紹'));
+  }else {
+   const join=buttons.find(n=>text(n.props.children)==='加入Synthetic guild');
+   assert.match(join.props.className,/\bbtn-primary\b/);
+   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,1,'join is the only primary action before membership');
+  }
+  const workspace=buttons.find(n=>text(n.props.children)===(active?'進入公會工作區':'預覽公會工作區'));
+  assert.equal(Boolean(workspace),enabled);
+  assert.deepEqual(calls,[],'rendering and discovery do not join or change preferences');
+  if(workspace){assert.match(workspace.props.className,active?/\bbtn-primary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
+ }
+});
+
+
+test('legacy primary exit explanation stays beside its disabled action inside settings while badge remains visible',()=>{
+ const tree=GuildCard({guild:{...guild,membership:{...guild.membership,state:'active'},skill_books:[],purpose:'Synthetic',first_step:'Read',is_primary:true},client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{},launchpadEnabled:true});
+ const elements=nodes(tree),settings=elements.find(n=>n.type==='details'&&n.props.className==='guild-membership-settings');
+ const inner=nodes(settings),hint=elements.filter(n=>n.type==='p'&&text(n.props.children)==='退出前，請先更換主要公會。');
+ assert.equal(hint.length,1);assert.ok(inner.includes(hint[0]));assert.equal(settings.props.open,undefined);
+ assert.equal(inner.find(n=>n.type==='button'&&text(n.props.children)==='退出Synthetic guild').props.disabled,true);
+ const badge=elements.find(n=>n.props.className==='badge'&&text(n.props.children)==='主要公會');
+ assert.ok(badge);assert.ok(!inner.includes(badge),'membership status remains outside collapsed settings');
 });
