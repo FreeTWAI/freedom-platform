@@ -13,7 +13,7 @@ async function openDirect(page:Page,controls=true,email='maker@local.test'){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
   await page.goto('/#messages');const panel=page.getByRole('tabpanel',{name:/^私人訊息/});
-  if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員').fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+  await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員').fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
   const thread=panel.locator('.messages-thread');await expect(thread.getByRole('textbox')).toBeVisible();
   if(controls)await expect(thread.getByRole('button',{name:'附加圖片',exact:true})).toBeVisible();return thread;
@@ -145,7 +145,7 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
       const thread=await openDirect(page);
       if(mode==='page')return thread;
       await openChat(page);const dock=page.locator('.floating-message-panel');
-      await dock.getByRole('tab',{name:/^私人訊息/}).click();if(await dock.locator('.messages-search:not([open])').isVisible())await dock.locator('.messages-search > summary').click();await dock.getByLabel('搜尋會員').fill('示範需求者');
+      await dock.getByRole('tab',{name:/^私人訊息/}).click();await dock.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await dock.getByLabel('搜尋會員').fill('示範需求者');
       await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();await dock.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
       return dock.locator('#messages-panel-direct .messages-thread');
     }
@@ -253,10 +253,10 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
     for(const width of [1440,390]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath(`dm-unknown-${width}.png`)});}
     await page.setViewportSize({width:1440,height:900});
     const panel=page.getByRole('tabpanel',{name:/^私人訊息/});
-    if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員').fill('示範合作方');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+    await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員').fill('示範合作方');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
     await panel.getByRole('button',{name:'傳訊給 示範合作方',exact:true}).click();
     await expect(thread.getByRole('textbox')).toHaveValue('');
-    if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員').fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+    await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員').fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
     await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
     await expect(thread.getByRole('textbox')).toHaveValue(caption);await expect(thread.getByLabel('待送出的圖片')).toContainText('screenshot.png');
     let notices=0;page.on('dialog',async dialog=>{notices++;await dialog.accept();});
@@ -311,7 +311,7 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
   test('dock unknown send blocks intentional logout and survives collapse until original retry confirms',async({page})=>{
     await openDirect(page);await openChat(page);
     const dock=page.locator('.floating-message-panel');await dock.getByRole('tab',{name:/^私人訊息/}).click();
-    if(await dock.locator('.messages-search:not([open])').isVisible())await dock.locator('.messages-search > summary').click();await dock.getByLabel('搜尋會員').fill('示範需求者');await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();
+    await dock.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await dock.getByLabel('搜尋會員').fill('示範需求者');await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();
     await dock.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
     const thread=dock.locator('#messages-panel-direct .messages-thread'),caption=`Console original ${crypto.randomUUID()}`,keys:string[]=[],payloads:string[]=[];
     await page.route(/\/api\/v1\/me\/conversations\/[^/]+\/messages$/,async route=>{
@@ -425,7 +425,7 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
     expect((await (await page.request.get('/api/v1/session')).json()).user.user_id).toBe(sender.id);
     if(mode==='dock-logout'){
       await openChat(page);const dock=page.locator('.floating-message-panel');
-      await dock.getByRole('tab',{name:/^私人訊息/}).click();if(await dock.locator('.messages-search:not([open])').isVisible())await dock.locator('.messages-search > summary').click();await dock.getByLabel('搜尋會員').fill('示範需求者');
+      await dock.getByRole('tab',{name:/^私人訊息/}).click();await dock.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await dock.getByLabel('搜尋會員').fill('示範需求者');
       await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();await dock.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();thread=dock.locator('#messages-panel-direct .messages-thread');
     }
     await thread.locator('input[type=file]').setInputFiles(image);const caption=`Synchronous guard ${crypto.randomUUID()}`;await thread.getByRole('textbox').fill(caption);

@@ -81,7 +81,7 @@ test('two synthetic members exchange a private message and a friend notification
     await openMessages(s);
     await s.getByRole('tab',{name:/私人訊息/}).click();
     const sPanel=s.getByRole('tabpanel',{name:/私人訊息/}),sThread=sPanel.locator('.messages-thread');
-    if(await sPanel.locator('.messages-search:not([open])').isVisible())await sPanel.locator('.messages-search > summary').click();await sPanel.getByLabel('搜尋會員').fill(receiver.display_name);await sPanel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+    await sPanel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await sPanel.getByLabel('搜尋會員').fill(receiver.display_name);await sPanel.getByRole('button',{name:'搜尋會員',exact:true}).click();
     await expect(sPanel.getByRole('list',{name:'會員搜尋結果'}).getByRole('button')).toHaveCount(1);
     await sPanel.getByRole('list',{name:'會員搜尋結果'}).getByRole('button',{name:`傳訊給 ${receiver.display_name}`}).click();
     await expect(sThread.getByRole('heading',{name:`與 ${receiver.display_name} 的對話`})).toBeFocused();

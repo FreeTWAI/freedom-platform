@@ -529,7 +529,7 @@ test('switching conversations ignores late responses and keeps a draft per recip
   await panel.getByRole('button',{name:/合成夥伴甲/}).click();
   await expect(threadRegion.getByRole('status')).toHaveText('正在讀取訊息…');
   // Start a new conversation from the real member directory while A is still loading.
-  if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員').fill('示範');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+  await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員').fill('示範');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   const results=panel.getByRole('list',{name:'會員搜尋結果'});
   await expect(results.getByRole('button',{name:/示範合作方/})).toBeVisible();
   await expect(results.getByRole('button',{name:/示範創作者/})).toHaveCount(0);

@@ -8,7 +8,7 @@ async function login(page:Page){
 test('legacy console is retired; the unified inbox keeps site-controlled features and reloads private history only after selection',async({page})=>{
   let siteReads=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/site')siteReads++;});
   await login(page);await openChat(page);const panel=page.locator('.floating-message-panel');
-  if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員').fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
+  await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員').fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
   await expect(panel.getByRole('button',{name:'附加圖片',exact:true})).toHaveCount(process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE==='1'?1:0);
   const message=`保留歷史 ${randomUUID()}`;await panel.getByRole('textbox',{name:'寫給 示範需求者 的訊息'}).fill(message);await panel.getByRole('button',{name:'送出',exact:true}).click();await expect(panel.getByRole('log')).toContainText(message);
   expect(siteReads).toBe(1);await expect(page.locator('.game-console')).toHaveCount(0);await closeChat(page);await signOut(page);
