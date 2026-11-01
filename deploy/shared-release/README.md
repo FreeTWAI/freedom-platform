@@ -1,9 +1,74 @@
 # 共用發布入口
 
+2026-10-30 08:25 UTC：兩環境已部署 d026ba76／schema196，staging 舊 handoff 已結清
+
+兩環境現為 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196；[staging 41023423825](https://github.com/FreeTWAI/freedom-platform/actions/runs/41023423825) 與[正式站 41025042462](https://github.com/FreeTWAI/freedom-platform/actions/runs/41025042462) 的 preflight、migration、deploy、health、handoff 五階段均通過，皆為 `release_confirmed`，Deployment 7433524819／7433758011 均為 success。正式站 handoff 沒有失鎖；08:24 UTC 公開 health 為 `ok`、同 SHA。
+
+10/29 staging `5d662e6e` 的失鎖已透過 hosted `mode=handoff` 結清：[41022455441](https://github.com/FreeTWAI/freedom-platform/actions/runs/41022455441) 在 R2 `chain_record` 讀取、任何寫入前報 `release_lease_lost`；相同輸入重試 [41023132536](https://github.com/FreeTWAI/freedom-platform/actions/runs/41023132536) 回傳 `reconciled`／`handoff_reconciled`。原 run 40853952665 與 Deployment 7409321089 保留 failure，不改寫為成功。
+
+工具映像 `ghcr.io/freetwai/freedom-release-operator@sha256:d075c12427c42d69ae52a5beb232841f8f3529dcce36ba34d2f4088d53bc292c` 由同一 main 建置（[41022144027](https://github.com/FreeTWAI/freedom-platform/actions/runs/41022144027)），已安裝於兩環境；main Verify 41017154345／CodeQL 41017154341 均成功。設定僅將 `migrationProfile.last` 由194調至196：staging-next 07:58 UTC config hash 為 `1de2e24870366cc259f1950a597ebd9f4b67b3e98f8f494521ce4cc199bdf789`，next 08:13 UTC 為 `9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d`。
+
+Migration195 活動幫手與196私人自記小任務已在兩環境套用為資料表；不啟用新旗標或功能，其他 pins 與旗標未變。本次沒有備份，也不要求發布備份。租約中斷根因仍未知，由 [#1193](https://github.com/FreeTWAI/freedom-platform/pull/1193) 增加診斷；真人會員旅程與原168項未驗狀態維持。完整來源、artifact digest、復原及發布收據見[本次觀察](../../docs/platform-plan/execution/unified-foundation/rollout-main-d026ba76-2026-10-30.json)。
+
+2026-10-29 10:19 UTC 歷史（當時待結清；已由上方10/30收據接續）：產品 `5d662e6e` 的 main CI 已成功；[staging 40853952665](https://github.com/FreeTWAI/freedom-platform/actions/runs/40853952665) 回報部署與 health 通過，最後 handoff 失去 lease，workflow／Deployment 仍為 failure。journal 尚未持鎖讀回，未重送部署；正式站仍是健康的 `5c4bf56d`／schema194。
+復原 [#1173](https://github.com/FreeTWAI/freedom-platform/pull/1173) 的 source 修正與 CI 已完成，仍待獨立正式核准、合併與新映像驗證／安裝。之後優先結清這筆 staging handoff，再取得同 source／image 的成功 staging 發布收據，才接續正式站。設定 hash、映像 pins 與旗標本輪未變；租約中斷根因未確認。見[完整收據與下一步](../../docs/platform-plan/execution/unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
+
 一般程式發布使用 `releaseKind: independent`：preflight → migration（無待執行 SQL 時唯讀確認；有則走已核准交易）→ deploy → health → handoff。
 不等待日常備份、不執行發布前後的 dump／遠端讀回／隔離還原，也不需要備份 DB 憑證。
 日常 `Shared backup` 保留每日 **05:43 UTC**、完整備份／讀回／還原／清理與獨立收據。
 GitHub 版本歷史只保存程式，不能當作資料庫備份。
+
+## main 通過 CI 後自動發布
+
+### 已核准 PR 的自動合併佇列
+
+只有 auto-merge 時，strict required checks 仍會在 main 前進後把其他 PR 擋在
+`BEHIND`；GitHub 原生 merge queue 會針對最新 main 與佇列前方 PR 建立合併候選、
+驗證後再合併，不需作者逐次更新分支。Verify 與 CodeQL 都須接收
+`merge_group: checks_requested`；缺任一必要檢查就不能啟用佇列。
+
+首次安裝順序：先讓兩份 workflow 經 CODEOWNER 審查、合併並通過 main CI，再於
+main ruleset 啟用 merge queue，保留原本的獨立審查、CODEOWNERS、最新推送核准、
+討論解決、App-bound verify／CodeQL 與零 bypass。初始設定使用 `MERGE`、
+`ALLGREEN`、同時建置1個候選、每批合併1支、最低1支、等待0分鐘，必要檢查
+逾時設為240分鐘（包含既有完整 CI 的排隊時間）。失敗或衝突退出佇列後須處理原因，
+不自動核准、不刪除檢查，也不反覆重送未知失敗。
+
+驗收需有真實 merge-group 的 verify／CodeQL 成功及 resulting main merge 紀錄。
+本段是待安裝設定，並非已啟用聲明；自動發布仍由下方獨立開關與兩站收據控制。
+參考 [GitHub merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)。
+
+### main 的兩站發布
+
+Repository variable `AUTO_RELEASE_ENABLED` 只有精確值 `true` 才開啟自動發布；
+未設定或任何其他值都關閉自動化。這是事故停止開關，只限制 `workflow_run` 准入，
+不影響手動 `workflow_dispatch`；各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行。
+
+`Shared release` 接收 main push 的 Verify／CodeQL 完成通知，重新查證同一個完整
+source SHA 最新的兩個 main CI run 全部成功，才自動執行 `staging-next`；staging
+完整五階段及公開收據上傳成功後，自動執行 `next`。兩環境使用同一 source SHA
+及已安裝的相同 operator digest，不需人手點兩次 Run workflow。PR／fork 的 CI
+不會觸發發布；CI 尚未齊備時只留下 skip 收據，不取得環境憑證。
+
+正式准入核對同一 run／attempt 已完成的 staging job、GitHub Deployment 最新狀態、
+經 artifact digest 驗證的收據、版本／tree／工具／設定與五階段。此時整個 run 仍在
+執行正式發布，不能偽稱整個 run 已成功。兩環境收據以 `-staging-next`／`-next`
+分開保存。手動入口及舊的完整 run 收據仍受支援。
+
+重複通知已發布的版本會略過，較舊版本晚完成 CI 不會把環境倒退。最新 Deployment
+若為 `failure`，只有經驗證的 hosted `mode=handoff` 成功收據，精確對應該 Deployment
+的 run／attempt、環境及 SHA，才視為已結清並恢復後續版本的自動發布；保留原 failure，
+不寫入 Deployment。僅查詢最新一頁（最多 100 筆）成功 dispatch run，以同環境／SHA 的 handoff 標題前綴及不早於 Deployment 的建立時間預篩後，最多驗證 run ID 最新的 5 筆候選，逐一核對操作者、main controller、成功 jobs、artifact owner／digest 及對帳收據；缺證據即停止。
+`error`、pending 或其他非成功狀態仍停止。相同 SHA 的 staging 對帳不能代替正式發布所需的
+完整通過 staging 收據，仍須手動完成一輪 staging → next；不自動重試未知 migration 或 provider 結果。Actions 與備份
+共用 concurrency，採 `queue: max` 保留最多 100 個待執行 run，不取消正在變更的工作。
+GitHub 排隊順序可能不同於通知時間，因此來源前後關係仍由准入重新驗證。
+佇列語義見 [GitHub concurrency 說明](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency)。
+
+首次啟用須將包含 `sourceMigrationProfile` 的已審 operator image 建置、完成獨立下載
+驗證並安裝到兩個 Environment；仍使用既有服務憑證、原始 floor 與 config bytes/hash。
+先處理既有未結 journal，不能把本機測試或本段流程說明當成已完成正式發布。
+日常應用發布不必重建 operator；operator 本身變更仍經獨立審查、映像驗證與安裝。
 
 ## 目前安裝狀態
 
@@ -35,9 +100,12 @@ COMMIT intent 與確認後 floor；不要求新備份。DDL 是資料變更，�
 只接受已審 SQL 新增的預設停用政策列（legacy、無 persistence、無 quota／revision）。
 既有環境政策與 GC 狀態仍須不變；交易內逐列核對後，將前後政策 digest 綁定 COMMIT intent，
 確認提交才更新 floor，供後續發布與日常備份沿用。這不會啟用新用途，也不以 live 狀態自我核准。
-若出現 `release_migration_frontier_mismatch`，表示 Environment config 的 `migrationProfile.last`
-與選定來源的 SQL catalog 不符；設定負責人應核對已審 migration 後更新 config secret 與 hash。
-這與 SQL policy 拒絕不同，不需重跑來源 CI 或備份來排除。
+Environment config 的 `migrationProfile.last` 是已安裝的最低 frontier。新 operator 在
+精確 source/tree 驗證後，從該來源的完整 SQL catalog 推導本次上限，維持 first=1、
+唯一缺號 22、SQL policy、既有 ledger 的檔名／雜湊及交易驗證；每次新增已審 migration
+不必修改 config secret/hash。`release_migration_frontier_mismatch` 表示候選來源低於
+已安裝最低值（或舊 operator 仍要求上限相等），應核對來源及工具版本；不得改 seed
+或用 live ledger 自行核准。未知 COMMIT 的對帳要求不變。
 
 若前次備份留下可驗證的未完成 journal，可在 deploy 選填 `recover_backup_run_id`。
 可信、已結束的失敗收據須證明尚未進入 capture 且沒有 intent，或 capture 失敗但 dump 尚未開始；
@@ -81,9 +149,9 @@ image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、
 以及 Verify／CodeQL。部署塞車不能直接歸因於「其他人沒有 GitHub 寫入權」。
 本變更保留這些規則；部署操作人不需要拿到別人的個人 token。
 
-## 四人的操作方式
+## 四人的手動處理方式
 
-環境已安裝並完成實際發布驗收，四人使用自己的 GitHub 登入：
+日常使用上述自動流程。安裝、明確核准的重新發布及失敗對帳時，四人使用自己的 GitHub 登入：
 
 1. 開啟 [Actions → Shared release](https://github.com/FreeTWAI/freedom-platform/actions/workflows/shared-release.yml)，
    按 Run workflow，workflow branch 保持 `main`。
@@ -114,6 +182,22 @@ attempt；只重跑 deploy／failed jobs，可能因 admission 屬於舊 attempt
 這不授予未知結果的 migration／部署重做權；先確認前次 provider 與 DB 的實際結果。
 
 ### 部署與健康檢查已完成，只有 handoff 失敗
+
+一般五階段發布若只有 handoff 的租約連線失去，會在同一 run 內先銷毀舊連線，
+最多嘗試三次取得新 session 的同一把鎖（busy 間隔兩秒）。重新建立控制紀錄、floor 與 Worker reader，
+核對原 journal head 未變、pending 正是本 run 的 handoff、完整 ledger／素材政策、GC OFF／零 fences、
+沒有其他發布或備份 session、Worker／bindings 及指定版本公開 health，才追加唯一缺少的 handoff。
+成功仍是正常五階段 `passed`，handoff 另保留 `leaseLoss` 與 `leaseRecovered: { cause, attempts }`，
+可沿既有 staging 收據准入正式發布。任一差異、鎖持續 busy 或較早階段失去租約都不自動收尾；
+不重做 migration、部署、備份或旗標變更，保留 `release_lease_lost` 並沿下列 hosted 入口對帳。
+若 handoff 已寫入才失去回覆／清理失敗，也留給 hosted 入口確認，不在同 run 重送。
+
+租約每 20 秒以單一查詢核對 DB／pid／登入角色及實際持有的 advisory lock，heartbeat 的
+client timeout 為 30 秒，容忍多秒同步工作；連線 error／end、身分改變或缺少鎖仍立即中止。
+公開 `leaseLoss` 只保留第一次原因、持有與距上次成功 heartbeat 的毫秒數、成功 heartbeat 數量，
+以及可選的白名單 SQLSTATE／Node error code；不包含錯誤訊息、主機、SQL 或憑證。
+診斷原因為 `heartbeat_timeout`、`heartbeat_failed`、`identity_changed`、`lock_not_held`、
+`connection_error`、`connection_ended`；目前不能由歷史 `release_lease_lost` 推定根因。
 
 四人可在同一個 Shared release 入口選 `handoff`，填原失敗 run 的完整 source SHA、
 相同環境，並在 `recover_release_run_id` 填原 run ID；`recover_backup_run_id` 留空。
@@ -296,8 +380,8 @@ socket 或家目錄。整次發布只有一個 operator process，以維持資�
 - `postgres.mjs`：原生 PG18 快照 dump，以及磁碟上的全新隔離還原，僅開私人 Unix socket。
   完整讀完及驗證備份串流後才執行單一交易還原；正式資料庫 URL 不能作為還原目的地。
   遠端連線要求完整 TLS 驗證，SQL role 與 PlanetScale 分支登入名稱分開核對。
-- `lease.mjs`：沿用舊每日備份的 advisory lock，整個發布持續使用同一連線；
-  連線中斷會撤銷工作訊號，不能回報成功交接。
+- `lease.mjs`：沿用舊每日備份的 advisory lock，正常發布持續使用同一連線；
+  連線中斷撤銷工作訊號並保留原因。只有上述 handoff 查核全通過，才以新租約完成同 run 收尾。
 - `backup.mjs`：沿用既有 daily backup coordinator，實際執行同一快照的 DB dump 與
   媒體擷取、封裝、遠端完整讀回、PG18 與本機原生 R2 還原、隔離證據比對及清理。
   前後核對 Worker source／bindings、完整 migration ledger 和 material policy digest；

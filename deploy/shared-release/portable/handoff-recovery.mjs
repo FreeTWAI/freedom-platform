@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { requireRelease as check, isDigest, isSha } from '../admission.mjs';
+import { requireRelease as check, isDigest, isSha, releaseFailureCode } from '../admission.mjs';
+import { publicLeaseLoss } from '../operator.mjs';
 import { readMaterialPolicies } from './material-policy.mjs';
 
 // No SQL mutation, build, publish, backup or new release begin is reachable here.
@@ -14,6 +15,11 @@ export async function inspectReleaseHandoff({ floor, pool, deployer, lease, requ
     && /^sha256:[a-f0-9]{64}$/.test(evidence.artifactDigest ?? '')
     && ['sourceSha', 'sourceTree', 'target', 'configSha256'].every(key => evidence[key] === request[key]),
   'release_handoff_recovery_binding_invalid');
+  return inspectHandoffState({ floor, pool, deployer, lease, evidence, database, role });
+}
+
+// Both hosted recovery and same-run settlement use these exact live checks.
+async function inspectHandoffState({ floor, pool, deployer, lease, evidence, database, role }) {
   lease.assertHeld();
   const { alreadySettled, sourceSha } = floor.handoffRecoveryState(evidence), state = floor.state();
   const q = await pool.connect();
@@ -66,4 +72,52 @@ export async function completeReleaseHandoff({ floor, lease, request, observed }
   check(floor.state().pending === null, 'release_handoff_recovery_state_changed');
   return { reconciledRunId: observed.reconciledRunId, reconciledRunAttempt: observed.reconciledRunAttempt,
     alreadySettled: observed.alreadySettled, cleanupVerified: true, pendingCleared: true, originalFailureRetained: true };
+}
+
+/** Same-run evidence is the original request and retained head, never a failed
+ * hosted artifact. Require the missing event; an uncertain append stays hosted. */
+export async function inspectOwnReleaseHandoff({ floor, request, expectedHead, ...ports }) {
+  check(request.mode === 'deploy' && request.releaseKind === 'independent'
+    && isDigest(expectedHead) && floor.head() === expectedHead, 'release_handoff_recovery_state_changed');
+  check(floor.handoffRecoveryState(request).alreadySettled === false, 'release_handoff_recovery_state_changed');
+  return inspectHandoffState({ floor, request, evidence: request, ...ports });
+}
+
+/** Recover only this run's single missing handoff, with fresh signal-bound ports.
+ * No migration, publish, backup or flag operation is reachable from this helper. */
+export async function settleOwnHandoff({ request, phases, lease, expectedHead, error, acquire, reopen, verifyHealth,
+  signal, renewConnections = async () => {}, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  const loss = publicLeaseLoss(lease?.loss());
+  const original = Object.assign(new Error('release_lease_lost'), { code: 'release_lease_lost', leaseLoss: loss });
+  if (!['release_lease_lost', 'release_lease_not_held'].includes(releaseFailureCode(error))
+    || !loss || !lease.signal.aborted || signal?.aborted || request.mode !== 'deploy' || request.releaseKind !== 'independent'
+    || phases.length !== 4 || !['preflight', 'migration', 'deploy', 'health'].every((name, i) =>
+      phases[i].name === name && phases[i].status === 'passed')) throw error;
+  // release destroys an ownership-lost connection even when unlock is impossible.
+  await lease.release().catch(() => {});
+  let fresh;
+  try {
+    // Retire this process's idle probe connections so the shared recovery
+    // check can require zero other release sessions without exemptions.
+    await renewConnections();
+    for (let attempts = 1; attempts <= 3; attempts++) {
+      signal?.throwIfAborted();
+      try { fresh = await acquire(); }
+      catch (failure) {
+        if (failure.code !== 'release_lease_busy' || attempts === 3) throw failure;
+        await pause(2000); continue;
+      }
+      const ports = await reopen(fresh);
+      await inspectOwnReleaseHandoff({ ...ports, lease: fresh, request, expectedHead });
+      await verifyHealth(fresh);
+      await ports.floor.assertCurrent(); fresh.assertHeld();
+      check(ports.floor.head() === expectedHead && !ports.floor.handoffRecoveryState(request).alreadySettled,
+        'release_handoff_recovery_state_changed');
+      await ports.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+      await fresh.release(); fresh = undefined;
+      return { cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true,
+        leaseLoss: loss, leaseRecovered: { cause: loss.cause, attempts } };
+    }
+  } catch { throw original; }
+  finally { if (fresh) await fresh.release().catch(() => {}); }
 }
