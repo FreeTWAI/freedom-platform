@@ -107,7 +107,11 @@ test('bookmark stays in options, closes without mutation, and returns keyboard f
   const {control}=await createPost(page,bookmarkAccount.email);
   const card=control.locator('xpath=ancestor::article[contains(@class,"social-card")]');
   const menu=card.locator('.social-post-menu');
-  let writes=0;page.on('request',r=>{if(new URL(r.url()).pathname===endpoint&&r.method()==='POST')writes++;});
+  let writes=0,feedReads=0;page.on('request',r=>{
+    const path=new URL(r.url()).pathname;
+    if(path===endpoint&&r.method()==='POST')writes++;
+    if(path==='/api/v1/social-posts'&&r.method()==='GET')feedReads++;
+  });
   await expect(control).toBeHidden();
   await expect(card.locator('.social-card-body > .social-post-bookmark')).toHaveCount(0);
   await openBookmark(control);
@@ -120,7 +124,15 @@ test('bookmark stays in options, closes without mutation, and returns keyboard f
   await expect(menu).not.toHaveAttribute('open','');
   await expect(menu.locator(':scope > summary')).toBeFocused();
   await openBookmark(control);
-  await page.locator('.social-feed-heading').first().click({position:{x:4,y:4}});
+  const feed=page.locator('.social-zone'),selected=await feed.getAttribute('data-feed');
+  const readsBeforeDismiss=feedReads;
+  // Category controls now occupy the former heading row. Its padding is not
+  // a neutral outside target; use the visible composer's non-interactive edge.
+  const outside=feed.locator('.social-composer-start');
+  await expect(outside).toBeVisible();await outside.click({position:{x:4,y:4}});
+  await expect(feed).toHaveAttribute('data-feed',selected!);
+  await expect(feed.locator('.social-publish-dialog[open]')).toHaveCount(0);
+  expect(feedReads).toBe(readsBeforeDismiss);
   await expect(menu).not.toHaveAttribute('open','');
   await expect(control).not.toHaveAttribute('open','');
   expect(writes).toBe(0);
