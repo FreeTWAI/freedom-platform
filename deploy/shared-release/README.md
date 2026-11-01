@@ -20,6 +20,26 @@ GitHub 版本歷史只保存程式，不能當作資料庫備份。
 
 ## main 通過 CI 後自動發布
 
+### 已核准 PR 的自動合併佇列
+
+只有 auto-merge 時，strict required checks 仍會在 main 前進後把其他 PR 擋在
+`BEHIND`；GitHub 原生 merge queue 會針對最新 main 與佇列前方 PR 建立合併候選、
+驗證後再合併，不需作者逐次更新分支。Verify 與 CodeQL 都須接收
+`merge_group: checks_requested`；缺任一必要檢查就不能啟用佇列。
+
+首次安裝順序：先讓兩份 workflow 經 CODEOWNER 審查、合併並通過 main CI，再於
+main ruleset 啟用 merge queue，保留原本的獨立審查、CODEOWNERS、最新推送核准、
+討論解決、App-bound verify／CodeQL 與零 bypass。初始設定使用 `MERGE`、
+`ALLGREEN`、同時建置1個候選、每批合併1支、最低1支、等待0分鐘，必要檢查
+逾時設為240分鐘（包含既有完整 CI 的排隊時間）。失敗或衝突退出佇列後須處理原因，
+不自動核准、不刪除檢查，也不反覆重送未知失敗。
+
+驗收需有真實 merge-group 的 verify／CodeQL 成功及 resulting main merge 紀錄。
+本段是待安裝設定，並非已啟用聲明；自動發布仍由下方獨立開關與兩站收據控制。
+參考 [GitHub merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)。
+
+### main 的兩站發布
+
 Repository variable `AUTO_RELEASE_ENABLED` 只有精確值 `true` 才開啟自動發布；
 未設定或任何其他值都關閉自動化。這是事故停止開關，只限制 `workflow_run` 准入，
 不影響手動 `workflow_dispatch`；各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行。
