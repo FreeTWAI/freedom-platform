@@ -78,8 +78,16 @@
 .chat-workspace .chat-sticker-preview{min-height:44px}
 .chat-workspace .messages-search form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px}
 .chat-workspace .messages-search form>.btn{min-height:44px;padding:6px 12px}
-.chat-workspace .messages-side>.messages-search{border-top:1px solid var(--line);padding-top:12px;order:2}
-.chat-workspace .messages-side>.stack{order:1}
+/* DOM and visual order agree: existing conversations before optional discovery. */
+.chat-workspace .messages-side>.messages-search{border-top:1px solid var(--line);padding-top:4px}
+.chat-workspace .messages-search>summary{min-height:44px;box-sizing:border-box;padding:10px 4px;cursor:pointer;font-size:14px;font-weight:600}
+.chat-workspace .messages-search>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.chat-workspace .messages-search>.stack{padding-top:4px}
+.chat-workspace .messages-search .field{min-width:0;margin:0}
+.chat-workspace .messages-search input{min-width:0;width:100%;font-size:16px;min-height:44px}
+.chat-workspace .chat-list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.chat-workspace .chat-list-toolbar h2{margin:0;flex:1}
+.chat-workspace .chat-list-toolbar>.btn{flex:none;min-width:44px;min-height:44px;width:auto;padding:6px;font-size:22px}
 .chat-workspace .messages-side>.messages-switch{order:0}
 .chat-workspace .messages-switch{min-height:44px;font-size:14px;justify-self:start;grid-column:1/-1}
 /* A generic ghost-button hover must not erase the selected inbox tab. */

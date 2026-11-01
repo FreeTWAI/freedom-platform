@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
@@ -68,4 +68,47 @@ test('target and disabled guards take effect during render before cleanup effect
     if(change==='target')h.props.target='new-target';else h.props.disabled=true;
     h.renderWithoutEffects();stale();assert.deepEqual(h.sends,[]);h.flush();
   }
+});
+
+// The adjacent member picker is another disclosure in the same chat surface.
+// Exercise the real component, not a copied search implementation. Native
+// details focus/layout requires the separate browser regression, not this tier.
+describe('member discovery disclosure (separate from sticker protocol)',()=>{
+test('toolbar discovery action opens before focusing the preserved input and tolerates unmount',()=>{
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/modules/MemberMessages.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm',jsx:'transform'}).code;
+  const start=source.indexOf('function focusMemberDiscovery('),end=source.indexOf('\n}',start)+2;assert.ok(start>=0&&end>start);
+  let focused=0;const input={value:'保留的搜尋',focus(){assert.equal(details.open,true);focused++;}};
+  const details={open:false,querySelector:(selector:string)=>{assert.equal(selector,'input');return input;}};
+  const action=runInNewContext(`${source.slice(start,end)};focusMemberDiscovery`,{document:{getElementById:(id:string)=>id==='discovery'?details:null}});
+  action('discovery');assert.equal(focused,1);assert.equal(input.value,'保留的搜尋');
+  details.open=false;action('discovery');assert.equal(focused,2);action('unmounted');assert.equal(focused,2);
+});
+
+test('member discovery starts collapsed and retains search/results across re-renders',async()=>{
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/modules/MemberMessages.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm',jsx:'transform'}).code;
+  const start=source.indexOf('function MemberPicker('),end=source.indexOf('\n}',start)+2;assert.ok(start>=0&&end>start);
+  const slots:any[]=[];let cursor=0,tree:Element;const calls:string[]=[];
+  let resolve!:(value:unknown)=>void;
+  const render=runInNewContext(`${source.slice(start,end)};MemberPicker`,{
+    PAGE:20,URLSearchParams,MemberAvatar:()=>null,fail:(error:Error)=>error.message,
+    merge:(left:any[],right:any[])=>[...left,...right],useId:()=> 'member-picker',
+    useState:(initial:unknown)=>{const i=cursor++;if(!(i in slots))slots[i]=initial;return[slots[i],(value:any)=>{slots[i]=typeof value==='function'?value(slots[i]):value;}];},
+    useRef:(initial:unknown)=>{const i=cursor++;return slots[i]??={current:initial};},
+    React:{createElement:(type:unknown,props:Record<string,any>|null,...children:any[]):Element=>({type,props:props??{},children:children.flat(Infinity)})},
+  });
+  const props={id:'discovery',me:'self',onSelect:()=>{},client:{get:(path:string)=>{calls.push(path);return new Promise(r=>{resolve=r;});}}};
+  const all=(node:any):Element[]=>node&&typeof node==='object'?[node,...(node.children??[]).flatMap(all)]:[];
+  const flush=()=>{cursor=0;tree=render(props);return all(tree);};
+  let nodes=flush();assert.equal(tree!.type,'details');assert.equal(tree!.props.open,undefined);
+  assert.equal(nodes.find(node=>node.type==='summary')?.children[0],'開始新對話');
+  nodes.find(node=>node.type==='input')!.props.onChange({target:{value:'合成夥伴'}});nodes=flush();
+  nodes.find(node=>node.type==='form')!.props.onSubmit({preventDefault(){}});
+  nodes=flush();assert.equal(calls.length,1);assert.equal(nodes.find(node=>node.type==='input')!.props.value,'合成夥伴');
+  assert.equal(nodes.find(node=>node.type==='button'&&node.props.type==='submit')!.props.disabled,true);
+  resolve({items:[{user_id:'other',nickname:'合成夥伴',is_self:false}],next_offset:null});
+  await new Promise<void>(done=>setImmediate(done));nodes=flush();
+  assert.ok(nodes.some(node=>node.type==='ul'&&node.props['aria-label']==='會員搜尋結果'));
+  // Opening/closing native details does not unmount the child form or reset its hooks.
+  nodes=flush();assert.equal(nodes.find(node=>node.type==='input')!.props.value,'合成夥伴');assert.equal(calls.length,1);
+});
 });

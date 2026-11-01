@@ -60,8 +60,8 @@ async function direct(page:Page,account:Account){
   await openChat(page);
   await returnToList(page);
   await page.getByRole('tab',{name:/^私人訊息/}).click();const panel=page.locator('#messages-panel-direct');
-  if(!await panel.getByLabel('搜尋會員',{exact:true}).isVisible())await panel.getByRole('button',{name:'← 返回對話列表',exact:true}).click();
-  await panel.getByLabel('搜尋會員',{exact:true}).fill(account.name);await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+  if(!await panel.locator('.messages-search').isVisible())await panel.getByRole('button',{name:'← 返回對話列表',exact:true}).click();
+  if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員',{exact:true}).fill(account.name);await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   await panel.getByRole('button',{name:`傳訊給 ${account.name}`,exact:true}).click();await expect(panel.locator('.messages-compose')).toBeVisible();return panel;
 }
 async function choose(panel:Locator,label:string){
@@ -571,7 +571,7 @@ for(const surface of ['page','dock'] as const)test(`${surface} direct retains it
   if(surface==='page')panel=await direct(page,accounts[1]);
   else{
     await openChat(page);const dock=page.locator('.floating-message-panel');
-    await dock.getByRole('tab',{name:/^私人訊息/}).click();await dock.getByLabel('搜尋會員').fill(accounts[1].name);
+    await dock.getByRole('tab',{name:/^私人訊息/}).click();if(await dock.locator('.messages-search:not([open])').isVisible())await dock.locator('.messages-search > summary').click();await dock.getByLabel('搜尋會員').fill(accounts[1].name);
     await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();await dock.getByRole('button',{name:`傳訊給 ${accounts[1].name}`,exact:true}).click();panel=dock.locator('.messages-thread');
   }
   const path=`/api/v1/me/conversations/${accounts[1].id}/messages`,sends:{key:string;body:unknown}[]=[];

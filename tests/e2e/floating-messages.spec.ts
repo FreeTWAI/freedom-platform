@@ -20,7 +20,7 @@ test('chat size controls preserve drafts and fit resized desktop and mobile view
   await page.setViewportSize({width:1440,height:900});await login(page);
   const panel=page.locator('.floating-message-panel'),bubble=page.locator('.floating-messages');
   await bubble.click();expect((await panel.boundingBox())!.width).toBe(560);
-  await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');
+  if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');
   await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
   const draft=panel.getByRole('textbox',{name:'寫給 示範需求者 的訊息'});await draft.fill('調整聊天室大小仍保留的草稿');
@@ -88,7 +88,7 @@ test('launcher and panel close preserve the persistent inbox across pages and th
     }
   }
   await page.setViewportSize({width:1440,height:900});await bubble.click();
-  await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
+  if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
   const draft=panel.getByRole('textbox',{name:'寫給 示範需求者 的訊息'});await draft.fill('跨頁與收合後保留的草稿');await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();
   await page.getByRole('button',{name:'技能書架',exact:true}).click();await bubble.click();await expect(draft).toHaveValue('跨頁與收合後保留的草稿');
   await page.setViewportSize({width:390,height:844});await expect(bubble).toBeHidden();await expect(draft).toBeVisible();await page.screenshot({path:'test-results/unified-messages-draft-phone.png'});
@@ -336,6 +336,7 @@ test('desktop dragged launcher stays hidden while the panel is open and restores
   expect(saved.y).toBeLessThan(originalPanel.y+originalPanel.height);expect(saved.y+saved.height).toBeGreaterThan(originalPanel.y);
   await bubble.click();await expect(panel).toBeVisible();
   await expect(bubble).toBeHidden();
+  if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();
   const close=panel.getByRole('button',{name:'收合聊天室',exact:true}),search=panel.getByLabel('搜尋會員',{exact:true});
   for(const control of [close,search])expect(await control.evaluate(node=>{
     const box=node.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===node||node.contains(hit);

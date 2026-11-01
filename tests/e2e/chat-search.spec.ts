@@ -45,7 +45,7 @@ async function member(browser:Browser,baseURL:string,width=390){
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.messages-categories')).toBeVisible();return page;
 }
 async function direct(page:Page){
-  const panel=page.locator('#messages-panel-direct');await panel.getByLabel('搜尋會員',{exact:true}).fill(accounts[1].name);
+  const panel=page.locator('#messages-panel-direct');if(await panel.locator('.messages-search:not([open])').isVisible())await panel.locator('.messages-search > summary').click();await panel.getByLabel('搜尋會員',{exact:true}).fill(accounts[1].name);
   await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:`傳訊給 ${accounts[1].name}`,exact:true}).click();
   await expect(panel.locator('.messages-compose')).toBeVisible();return panel;
 }
