@@ -167,3 +167,38 @@ for(const theme of ['light','dark','versefolk'])test(`compact member search fits
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:`test-results/member-search-${theme}-phone.png`,fullPage:true});
 });
+
+test('directory keeps search after viewing another page and waits for Chinese composition',async({page})=>{
+  const queries:string[]=[];
+  await page.route('**/api/v1/members?*',route=>{queries.push(new URL(route.request().url()).searchParams.get('search')??'');return route.fulfill({json:{items:[member(1)],next_offset:null,total:1}});});
+  const panel=await openDirectory(page),search=panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true});
+  await expect(panel.locator('.directory-member')).toHaveCount(1);
+  await search.dispatchEvent('compositionstart');await search.fill('設計');
+  await expect(search).toHaveValue('設計');
+  await panel.getByRole('button',{name:'搜尋',exact:true}).click();expect(queries).not.toContain('設計');
+  await search.dispatchEvent('compositionend');await expect.poll(()=>queries.at(-1)).toBe('設計');
+  await navigate(page,'我的定位');await navigate(page,'工坊夥伴');
+  await expect(search).toHaveValue('設計');await expect.poll(()=>queries.at(-1)).toBe('設計');
+  await panel.getByRole('button',{name:'重設篩選',exact:true}).click();await expect(search).toHaveValue('');await expect(search).toBeFocused();
+});
+
+test('directory unknown friend operation remains recoverable when its row is filtered out',async({page})=>{
+  await page.route('**/api/v1/members?*',route=>route.fulfill({json:{items:new URL(route.request().url()).searchParams.has('search')?[]:[member(1)],next_offset:null,total:1}}));
+  const panel=await openDirectory(page);const session=await (await page.request.get('/api/v1/session')).json();
+  const pair=[session.user.user_id,member(1).user_id].sort(),attempts:string[]=[];
+  await page.route(`**/api/v1/friends/${member(1).user_id}/request`,route=>{
+    const request=route.request();attempts.push(JSON.stringify([request.postData(),request.headers()['idempotency-key'],request.headers()['if-match']]));
+    if(attempts.length===1)return route.abort('failed');
+    if(attempts.length===2)return route.fulfill({status:403,contentType:'application/problem+json',json:{type:'about:blank',title:'Forbidden',status:403,detail:'暫時無法操作'}});
+    return route.fulfill({json:{low_ref:pair[0],high_ref:pair[1],state:'pending',aggregate_version:1}});
+  });
+  await panel.getByRole('button',{name:'邀請成為好友',exact:true}).click();
+  const retry=panel.getByRole('button',{name:'重試原好友操作',exact:true});await expect(retry).toBeEnabled();
+  await panel.getByRole('button',{name:'查看好友與邀請',exact:true}).click();await expect(page).toHaveURL(/#members$/);
+  await expect(retry).toBeVisible();
+  const protectedReload=await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;});expect(protectedReload).toBe(true);
+  await panel.getByRole('searchbox',{name:'搜尋夥伴',exact:true}).fill('其他人');await expect(panel.locator('.directory-member')).toHaveCount(0);
+  await retry.click();await expect(retry).toBeEnabled();await retry.click();
+  await expect(panel.getByText('好友邀請已送出，等待對方接受。',{exact:true})).toBeVisible();
+  expect(attempts).toHaveLength(3);expect(new Set(attempts).size).toBe(1);
+});
