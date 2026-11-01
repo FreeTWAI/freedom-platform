@@ -49,9 +49,10 @@ export function SquadOwnerTools({squad,selfId,mutate,busy,onChanged,onDisbanded,
     </div>)}
     <details className="squad-manage">
       <summary>管理小隊</summary>
+      <p className="field-hint">修改名稱與目標，或設定公開頻道名稱。轉移與解散需另外確認，不會在儲存資料時執行。</p>
       <form className="stack" onSubmit={event=>void saveProfile(event)}>
-        <label className="field">小隊名稱<input key={`name-${squad.aggregate_version}`} name="name" required maxLength={80} defaultValue={squad.name}/></label>
-        <label className="field">我們想一起完成什麼<textarea key={`purpose-${squad.aggregate_version}`} name="purpose" required maxLength={800} defaultValue={squad.purpose}/></label>
+        <label className="field">小隊名稱<input key={`name-${squad.aggregate_version}`} name="name" required maxLength={80} disabled={busy} defaultValue={squad.name}/></label>
+        <label className="field">我們想一起完成什麼<textarea key={`purpose-${squad.aggregate_version}`} name="purpose" required maxLength={800} disabled={busy} defaultValue={squad.purpose}/></label>
         <div className="actions"><button className="btn btn-ghost" disabled={busy}>儲存名稱與目標</button></div>
       </form>
       {children}
