@@ -1,6 +1,6 @@
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {test,expect,type Page,type Route} from './fixtures.js';
-import {navigate,signOut} from './navigation.js';
+import {navigate} from './navigation.js';
 
 async function startStepThree(page:Page){
   await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
@@ -20,7 +20,7 @@ function record(route:Route){return {body:route.request().postDataJSON(),key:rou
 function expectExactRetry(writes:ReturnType<typeof record>[]){expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);}
 
 async function expectPreservedUnknown(page:Page){
-  await expect(page.getByRole('alert')).toContainText('目前頁面的答案仍保留，請重試保存。');
+  await expect(page.getByRole('alert')).toContainText('結果尚未確認，答案已鎖定。請用原內容重試保存；重讀資料不會取消這次操作。');
   await expect(page.getByRole('heading',{name:'你從哪裡來，帶著哪些能力？',exact:true})).toBeVisible();
   await expect(page.getByLabel('你的職業／目前身分',{exact:true})).toHaveValue('保留的私人職業答案');
   await expect(page.getByLabel('你的職業／目前身分',{exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'上一步',exact:true})).toBeDisabled();
@@ -76,7 +76,7 @@ test('known version conflicts reload only the saved version, preserve the local 
   await page.getByRole('button',{name:'保存，繼續下一步 →',exact:true}).click();await expect(page.getByRole('heading',{name:'你的裝備庫',exact:true})).toBeVisible();expect(writes).toHaveLength(2);expect(writes[1].version).toBe(`"${concurrentVersion}"`);expect(writes[1].key).not.toBe(writes[0].key);expect((await (await page.request.get('/api/v1/me/onboarding')).json()).draft.occupation).toBe('保留的私人職業答案');
 });
 
-test('held committed step-four answer save released after same-document logout/login never evaluates or mutates the new session',async({page,e2eAuthPool})=>{
+test('pending save blocks logout; a late committed answer after actual session expiry never evaluates or mutates the new session',async({page,e2eAuthPool})=>{
   const password='freedom-recovery-test-2026',firstEmail=`recovery-a-${randomUUID()}@example.test`,secondEmail=`recovery-b-${randomUUID()}@example.test`;
   const answerWrites:ReturnType<typeof record>[]=[],evaluationWrites:ReturnType<typeof record>[]=[];
   let onboardingReads=0,release!:()=>void,started!:()=>void,done!:()=>void;
@@ -137,7 +137,22 @@ test('held committed step-four answer save released after same-document logout/l
     await page.getByRole('button',{name:'看看適合我的公會',exact:true}).click();await requested;
     await expect(page.getByLabel('搜尋裝備',{exact:true})).toBeDisabled();
 
-    await signOut(page);
+    let logoutRequests=0;
+    page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/auth/logout')logoutRequests++;});
+    await page.getByRole('button',{name:'設定',exact:true}).click();
+    await page.getByRole('menu',{name:'個人檔案'}).getByRole('menuitem',{name:'登出',exact:true}).click();
+    await expect(page.getByRole('alert')).toContainText('操作結果尚未確認，請先回到原表單重試，再離開。');
+    await expect(page.getByLabel('搜尋裝備',{exact:true})).toBeDisabled();
+    expect(logoutRequests).toBe(0);
+    // Involuntary expiry is not a user-approved discard. Keep the document alive
+    // so the held old-session response exercises the real client generation fence.
+    const cookie=(await page.context().cookies(page.url())).find(value=>value.name==='freedom_local_session');
+    expect(cookie).toBeDefined();
+    const hash=createHash('sha256').update(cookie!.value).digest('hex');
+    expect((await e2eAuthPool.query("UPDATE sessions SET expires_at=now()-interval '1 second' WHERE token_hash=$1",[hash])).rowCount).toBe(1);
+    const expired=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/session'&&response.status()===401);
+    await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+    await expired;
     await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();
     await page.getByLabel('電子郵件',{exact:true}).fill(secondEmail);
     await page.getByLabel('密碼',{exact:true}).fill(password);
