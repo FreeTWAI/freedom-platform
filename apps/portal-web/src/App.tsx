@@ -140,6 +140,14 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   const {t}=useLanguage()
   const [phase, setPhase] = useState<'boot' | 'login' | 'ready'>(initialGoogleCallback?'login':'boot')
   const [session, setSession] = useState<SessionPayload | null>(null)
+  useEffect(() => {
+    if (!session) return;
+    let active = true; const generation = client.sessionGeneration;
+    void import('./modules/tester-map/import-progress').then(({importGuestTesterProgress}) => {
+      if (active && client.sessionGeneration === generation) return importGuestTesterProgress(client);
+    }).catch(() => { /* Keep guest progress; the tester map offers the same import retry. */ });
+    return () => { active = false };
+  }, [session?.user.user_id, session?.csrf_token])
   const [bootError, setBootError] = useState<ActionError | null>(null)
   const [loginNotice, setLoginNotice] = useState<string | null>(null)
   const [publicReturnNotice, setPublicReturnNotice] = useState<string | null>(null)

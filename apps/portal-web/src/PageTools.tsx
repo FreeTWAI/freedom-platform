@@ -14,7 +14,7 @@ const icons:Record<PageTool,ReactNode>={
 };
 
 /** Keep the toolbar stable; load and retain its stateful dialog only after an explicit choice. */
-export function PageTools({pageId,client,compact=false}:{pageId:string;client?:PortalClient;compact?:boolean}){
+export function PageTools({pageId,client,compact=false,ideaDraft}:{pageId:string;client?:PortalClient;compact?:boolean;ideaDraft?:{title:string;body:string;label:string}}){
   const page=developmentPages.find(value=>value.id===pageId);
   const [tool,setTool]=useState<PageTool|null>(null),[Dialog,setDialog]=useState<DialogComponent|null>(null);
   const [loadState,setLoadState]=useState<'idle'|'loading'|'failed'>('idle');
@@ -68,7 +68,7 @@ export function PageTools({pageId,client,compact=false}:{pageId:string;client?:P
   if(!page)return null;
   return <>
     <div className={`page-tools${compact?' page-tools--compact':''}`} role="group" aria-label={`${page.title}頁面工具`}>
-      {compact?<details ref={toolsMenu} className="page-tools-menu" onToggle={event=>{if(!event.currentTarget.open&&!Dialog&&tool)cancelPending()}} onKeyDown={event=>{if(event.key==='Escape'&&toolsMenu.current){toolsMenu.current.open=false;toolsTrigger.current?.focus()}}}>
+      {ideaDraft?<button type="button" className="btn btn-secondary btn-small" onClick={event=>openTool('idea',event.currentTarget)}>{ideaDraft.label}</button>:compact?<details ref={toolsMenu} className="page-tools-menu" onToggle={event=>{if(!event.currentTarget.open&&!Dialog&&tool)cancelPending()}} onKeyDown={event=>{if(event.key==='Escape'&&toolsMenu.current){toolsMenu.current.open=false;toolsTrigger.current?.focus()}}}>
         <summary ref={toolsTrigger} aria-label="頁面工具" onClick={()=>{if(toolsMenu.current?.open&&!Dialog&&tool)cancelPending()}}><span aria-hidden="true">⋯</span></summary>
         <div className="page-tools-menu-items">{(['idea','help','edit'] as const).map(item=><button key={item} type="button" className={`page-tool-button page-tool-button--${item}`} onClick={event=>openTool(item,event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[item]}</svg><span className="page-tool-label">{names[item]}</span></button>)}</div>
       </details>:<>{(['idea','help','edit'] as const).map(item=><button key={item} type="button" className={`page-tool-button page-tool-button--${item}`} aria-label={names[item]} onClick={event=>openTool(item,event.currentTarget)}><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[item]}</svg><span className="page-tool-label">{names[item]}</span></button>)}</>}
@@ -77,6 +77,6 @@ export function PageTools({pageId,client,compact=false}:{pageId:string;client?:P
       {loadState==='loading'?<p role="status" aria-live="polite">正在開啟{names[tool]}…</p>:loadState==='failed'?<p role="alert">頁面工具暫時無法載入。請重新載入頁面後再試。</p>:null}
       <div className="actions">{loadState==='failed'&&<button type="button" className="btn btn-secondary btn-small" onClick={()=>window.location.reload()}>重新載入頁面</button>}<button type="button" className="btn btn-ghost btn-small" onClick={closeTool}>關閉頁面工具</button></div>
     </section>}
-    {Dialog&&<Dialog pageId={pageId} client={client} page={page} tool={tool} dialog={dialog} closeTool={closeTool}/>}
+    {Dialog&&<Dialog pageId={pageId} client={client} page={page} tool={tool} dialog={dialog} closeTool={closeTool} initialDraft={ideaDraft}/>}
   </>;
 }

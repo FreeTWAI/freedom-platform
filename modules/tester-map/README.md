@@ -10,9 +10,11 @@
 - `coverage.ts`：每項功能的狀態（未測／測試中／已測／有問題）。「有問題」必須附公開 GitHub Issue 編號。
 - `service.ts`：純函式，負責驗證、統計與依小組篩選。
 - `quest.ts`：8 個關卡、各步驟的五語說明與 A–E 建議路線。每一步都對應 `areas.ts` 的功能；預設關閉的功能只留在清單裡。
-- `progress.ts`：本機進度。鍵名 `freedom-tester-map-progress-v1`，做法同 newcomer-guides 的 `engine/preferences.ts`：防禦性解析、寫入失敗不影響操作，可一鍵清除。勳章完全由本機進度推導。進度與勳章不是官方紀錄、XP 或獎勵，也不送伺服器。
-- 排行榜尚未實作，頁面只標示「規劃中，需團隊協調」。伺服器端進度、勳章與自願排行榜的提案見 [COORDINATION.md](COORDINATION.md)；在協調前不得新增 schema、migration、API 或旗標。
-- 沒有 API、資料庫、migration 或權限。頁面不發任何請求，也不讀取 session；旗標欄位只是有日期的觀察紀錄，不能開關功能。
+- `progress.ts`：未登入的本機進度，鍵名 `freedom-tester-map-progress-v1`；防禦性解析，寫入失敗不影響操作。勳章一律由私人進度推導，不是正式驗收、XP、獎勵或職務證明。
+- `account.ts`：帳號進度聯集、嚴格回饋驗證與純彙總規則；`account-service.ts`／`repository.ts`：會員交易、版本比對及 PostgreSQL 讀寫。
+- 登入時合併本機進度到帳號；未登入只用本機。帳號紀錄只給本人；每步可選回饋與建造者報告見 [COORDINATION.md](COORDINATION.md)。
+- `apps/portal-web/src/modules/tester-map/`：帳號同步與五語回饋／報告 UI。`TesterMap.tsx` 只接入 hook、狀態與步驟元件，保留其他 PR 的分享接線空間。
+- 不做排行榜、計分、致謝牆或公開稱號，不使用 migration 194 的公開成就資料。
 
 ## 更新方式
 

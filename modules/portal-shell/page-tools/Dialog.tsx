@@ -22,7 +22,7 @@ function promptFor(tool:Tool,page:DevelopmentPage,draft:{title:string;body:strin
   return `${preface}\n\n我想提出這頁的想法。先查這頁仍開啟的 Issue（包含 ${pageTag(page.id)} 或 ${marker(page.id)}），避免重複。請將我的想法整理成清楚的問題、預期體驗與完成條件，不要杜撰需求。標題：${draft.title||'請根據我的想法擬定'}。內容：${draft.body||'請先詢問我具體想法'}。用我的 GitHub 帳號向 ${PLATFORM_REPOSITORY}/issues 提出 Issue；若 repo 已有 ${pageTag(page.id)} 標籤就加上，並在正文保留 ${marker(page.id)}，讓網站能正確歸屬此頁。沒有 GitHub 權限時請提供已填好標題與正文的連結，讓我親自檢查送出。送出後回報真實 Issue 網址，不能把草稿當成已發布。`;
 }
 
-export function PageToolsDialog({pageId,client,page,tool,dialog,closeTool}:{pageId:string;client?:PortalClient;page:DevelopmentPage|undefined;tool:Tool|null;dialog:RefObject<HTMLDialogElement|null>;closeTool:()=>void}){
+export function PageToolsDialog({pageId,client,page,tool,dialog,closeTool,initialDraft}:{pageId:string;client?:PortalClient;page:DevelopmentPage|undefined;tool:Tool|null;dialog:RefObject<HTMLDialogElement|null>;closeTool:()=>void;initialDraft?:{title:string;body:string}}){
   const [activity,setActivity]=useState<PageGitHubActivity|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false),[claimCopied,setClaimCopied]=useState<number|null>(null),[title,setTitle]=useState(''),[body,setBody]=useState(''),[refreshTick,setRefreshTick]=useState(0);
   const [githubConnected,setGithubConnected]=useState(false),[githubConfigured,setGithubConfigured]=useState(false),[githubLoaded,setGithubLoaded]=useState(false),[githubCheckError,setGithubCheckError]=useState(false),[connectCopied,setConnectCopied]=useState(false),[posting,setPosting]=useState(false),[postError,setPostError]=useState(''),[postedUrl,setPostedUrl]=useState(''),[ownIssues,setOwnIssues]=useState<OwnIssue[]>([]);
   const [screenshot,setScreenshot]=useState<File|null>(null),[screenshotError,setScreenshotError]=useState(''),[screenshotHelp,setScreenshotHelp]=useState('');
@@ -38,6 +38,7 @@ export function PageToolsDialog({pageId,client,page,tool,dialog,closeTool}:{page
   const claimKey=useRef<{draft:string;key:string}|null>(null);
   useEffect(()=>{if(tool)dialog.current?.showModal();else dialog.current?.close()},[tool]);
   useEffect(()=>{setTitle('');setBody('');setPostError('');setPostedUrl('');setScreenshot(null);setScreenshotError('');setScreenshotHelp('');setActivity(null);setOwnIssues([]);setOwnClaims([]);setClaimIssue(null);setClaimMessage(designClaim);setClaimError('');issueKey.current=null;claimKey.current=null},[pageId]);
+  useEffect(()=>{if(tool==='idea'&&initialDraft){setTitle(initialDraft.title.slice(0,120));setBody(initialDraft.body.slice(0,700));}},[pageId,tool,initialDraft?.title,initialDraft?.body]);
   useEffect(()=>{if(!screenshot)return;let live=true;
     void createImageBitmap(screenshot).then(bitmap=>{if(!live){bitmap.close();return;}
       const canvas=screenshotCanvas.current;if(canvas){const scale=Math.min(320/bitmap.width,240/bitmap.height,1);canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d')?.drawImage(bitmap,0,0,canvas.width,canvas.height);}bitmap.close();
