@@ -30,6 +30,12 @@ const TAIPEI = 8 * 60 * 60 * 1000;
 const PLATFORM_DESCRIPTION = '加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。';
 const platformOg = { title: '自由工坊', description: PLATFORM_DESCRIPTION, image: '/brand/freedom-workshop.webp', width: 1280, height: 720 };
 
+function platformTarget(target: string) {
+  if (target === 'workshop') return { ...platformOg, href: '/' };
+  if (target === 'tester-map') return { ...platformOg, href: '/#tester-map', title: '測試員地圖', description: '選擇測試路線、查看功能狀態，和夥伴一起測試自由工坊、回報問題。' };
+  return null;
+}
+
 export function taipeiParts(now: Date) {
   const shifted = new Date(now.getTime() + TAIPEI);
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth(), day: shifted.getUTCDate(), weekday: shifted.getUTCDay() };
@@ -126,8 +132,9 @@ async function memberCardTarget(pool: Pool | PoolClient, actor: Actor, target: s
 
 async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: PromotionKind, target: string) {
   if (kind === 'platform') {
-    requireCondition(target === 'workshop', 422, 'validation_failed', '平台分享目標不正確。');
-    return { title: '自由工坊', key: target };
+    const page = platformTarget(target);
+    requireCondition(page, 422, 'validation_failed', '平台分享目標不正確。');
+    return { title: page.title, key: target };
   }
   if (kind === 'skill_book') return { title: (await skillTarget(pool, target)).title, key: target };
   if (kind === 'event') {
@@ -223,7 +230,10 @@ async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) 
   const eventById = new Map(eventRows.map(row => [row.id, row]));
   const postById = new Map(postRows.map(row => [row.id, row]));
   return (row: MineRow) => {
-    if (row.kind === 'platform') return { title: '自由工坊', available: row.target_key === 'workshop' };
+    if (row.kind === 'platform') {
+      const page = platformTarget(row.target_key);
+      return { title: page?.title ?? '自由工坊', available: Boolean(page) };
+    }
     if (row.kind === 'skill_book' && row.target_key.startsWith('book:')) return catalogBook(row.target_key);
     if (row.kind === 'skill_book' && /^submission:/i.test(row.target_key)) {
       const title = submissionById.get(row.target_key.slice(11).toLowerCase());
@@ -321,7 +331,7 @@ function absoluteUrl(origin: string, url: string) {
 
 async function shareable(pool: Pool, link: LinkRow) {
   if (link.revoked_at || !link.owner_active) return false;
-  if (link.kind === 'platform') return link.target_key === 'workshop';
+  if (link.kind === 'platform') return Boolean(platformTarget(link.target_key));
   if (link.kind === 'skill_book') {
     if (link.target_key.startsWith('book:')) return communityCatalog.skill_books.some(item => item.id === link.target_key.slice(5));
     if (/^submission:[0-9a-f-]{36}$/i.test(link.target_key)) return Boolean(await readPublishedSkillSubmission(pool, link.target_key.slice(11)));
@@ -359,7 +369,10 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
     };
   }
   if (!await shareable(pool, link)) return null;
-  if (link.kind === 'platform') return { navigation: 'internal', href: '/', title: platformOg.title, description: platformOg.description, image: { url: origin + platformOg.image, width: platformOg.width, height: platformOg.height } };
+  if (link.kind === 'platform') {
+    const page = platformTarget(link.target_key)!;
+    return { navigation: 'internal', href: page.href, title: page.title, description: page.description, image: { url: origin + page.image, width: page.width, height: page.height } };
+  }
   if (link.kind === 'skill_book') {
     const intro = introNumber(introRaw);
     const query = intro ? `?intro=${intro}` : '';

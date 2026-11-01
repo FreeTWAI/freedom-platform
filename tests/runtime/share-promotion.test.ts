@@ -122,6 +122,60 @@ async function facts() {
     (SELECT count(*)::int FROM transition_journal) AS journal`)).rows[0];
 }
 
+test('platform targets accept workshop and tester-map only, with distinct reusable personal links', async () => {
+  const maker = await signIn();
+  const workshop = await platformLink(maker);
+  const map = await request('/promotion/links', maker, { kind: 'platform', target: 'tester-map' });
+  assert.equal(map.status, 200);
+  assert.equal(map.data.kind, 'platform');
+  assert.equal(map.data.target, 'tester-map');
+  assert.equal(map.data.title, '測試員地圖');
+  assert.notEqual(map.data.code, workshop.code);
+  const replay = await request('/promotion/links', maker, { kind: 'platform', target: 'tester-map' });
+  assert.equal(replay.data.code, map.data.code);
+  for (const target of ['tester_map', 'Tester-map', 'tester-map/other', '/#tester-map', 'https://evil.example/', '__proto__']) {
+    const invalid = await request('/promotion/links', maker, { kind: 'platform', target });
+    assert.equal(invalid.status, 422, target);
+    assert.equal(invalid.data.code, 'validation_failed', target);
+  }
+  const mine = await request('/promotion/links/mine?period=all', maker);
+  const saved = mine.data.items.find((item: { code: string }) => item.code === map.data.code);
+  assert.equal(saved.title, map.data.title);
+  assert.equal(saved.available, true);
+});
+
+test('tester-map lands on the public map with its own preview and reuses platform click rules', async () => {
+  const maker = await signIn();
+  const map = await request('/promotion/links', maker, { kind: 'platform', target: 'tester-map' });
+  const landing = await app.request(origin + map.data.path + '?url=https://evil.example/');
+  assert.equal(landing.status, 200);
+  const html = await landing.text();
+  assert.match(html, /data-navigation="internal"/);
+  assert.match(html, /data-target="\/#tester-map"/);
+  assert.match(html, /data-go-destination href="\/#tester-map"/);
+  assert.match(html, /property="og:title" content="測試員地圖"/);
+  assert.match(html, /property="og:description" content="選擇測試路線、查看功能狀態，和夥伴一起測試自由工坊、回報問題。"/);
+  assert.ok(html.includes(`property="og:url" content="https://freetwai.com${map.data.path}"`));
+  assert.doesNotMatch(html, /evil.example/);
+  assert.equal(await pointsOf(map.data.code), 0);
+  await click(map.data.code, REAL, maker.cookie);
+  await click(map.data.code, 'facebookexternalhit/1.1');
+  assert.equal(await pointsOf(map.data.code), 0);
+  await click(map.data.code);
+  await click(map.data.code);
+  assert.equal(await pointsOf(map.data.code), 1);
+  assert.equal((await pool.query('SELECT c.kind FROM promotion_clicks c JOIN promotion_links l USING(link_id) WHERE l.code=$1', [map.data.code])).rows[0].kind, 'platform');
+  const workshop = await platformLink(maker);
+  await click(workshop.code);
+  const boards = await request('/promotion/leaderboards?period=all', maker);
+  assert.equal(boards.data.boards.length, 6);
+  assert.equal(boards.data.boards.find((board: { kind: string }) => board.kind === 'platform').me.points, 2);
+  const unknown = await ownLink(maker.user.user_id, 'platform', 'tester-map/other');
+  assert.equal(await promotionGo(pool, unknown.code, undefined, origin, clock), null);
+  await click(unknown.code);
+  assert.equal(await pointsOf(unknown.code), 0);
+});
+
 test('preview bots are not credited and in-app browsers are', async () => {
   assert.equal(isPreviewBot(''), true);
   assert.equal(isPreviewBot('   '), true);
