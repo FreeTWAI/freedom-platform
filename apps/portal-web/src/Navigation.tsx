@@ -100,7 +100,7 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
     </button>;
   };
   return <>{mobileOpen && <div className="mobile-nav-backdrop" aria-hidden="true"/>}<nav ref={nav} id="workspace-navigation" className={`nav workspace-navigation${mobileOpen ? ' is-open' : ''}`} aria-label={t('nav.main')} onKeyDown={event=>{if(event.key!=='Escape'||!moreOpen)return;event.stopPropagation();if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;event.preventDefault();setMoreOpen(false);moreTrigger.current?.focus()}}>
-    <div className="nav-mobile-heading"><strong>{t('nav.main')}</strong><button type="button" className="btn btn-ghost btn-small" onClick={() => closeMobile.current?.(true)}>{t('nav.collapse')}</button></div>
+    <div className="nav-mobile-heading"><strong>{t('nav.main')}</strong><button type="button" className="btn btn-ghost btn-small nav-close" aria-label={t('nav.collapse')} title={t('nav.collapse')} onClick={() => closeMobile.current?.(true)}><span aria-hidden="true">×</span></button></div>
     <div className="nav-primary">{primary.map(id => item(id))}{communitySearchEnabled && item('community-search')}</div>
     <details className="nav-section nav-more" open={moreOpen}>
       <summary ref={moreTrigger} aria-expanded={moreOpen} onClick={event => { event.preventDefault(); setMoreOpen(value => !value); }}>{t('nav.more')}<span aria-hidden="true">⌄</span></summary>
