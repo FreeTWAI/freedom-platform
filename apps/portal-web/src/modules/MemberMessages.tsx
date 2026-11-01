@@ -667,7 +667,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
             if(!files.length)for(const item of Array.from(event.clipboardData.items)){if(item.kind==='file'){const file=item.getAsFile();if(file)files.push(file);}}
             if(files.length){event.preventDefault();attachImage(files);}
           }}>
-            <ChatExtras key={selection?.key??peer} target={peer} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(held.current[peer])return;richDrafts.change(peer,value);}} onSendSticker={id=>void send(peer,id)}/>
+            <ChatExtras previewFeedback key={selection?.key??peer} target={peer} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(held.current[peer])return;richDrafts.change(peer,value);}} onSendSticker={id=>void send(peer,id)}/>
             {messageImagesEnabled===true&&<div className="message-image-controls">
               <input ref={fileInput} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>{const files=Array.from(event.target.files??[]);event.target.value='';if(files.length)attachImage(files);}}/>
               <button className="btn btn-ghost" type="button" disabled={Boolean(attempt)} onClick={()=>fileInput.current?.click()}>附加圖片</button>
