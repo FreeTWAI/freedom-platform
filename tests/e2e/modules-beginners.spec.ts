@@ -34,6 +34,7 @@ test('task discovery combines real labels and assignment, remembers filters, and
   });
   await login(page);
   await navigate(page, '一起開發');
+  await page.getByRole('button', { name: '查看任務：自動剪輯共創：一起把可用的底層疊起來', exact: true }).click();
   const issues = page.locator('.expedition-issue');
   await expect(issues).toHaveCount(2);
   await page.getByRole('combobox', { name: '任務類型', exact: true }).selectOption('bug');
@@ -47,6 +48,7 @@ test('task discovery combines real labels and assignment, remembers filters, and
   await expect(issues).toContainText('整理新手操作文件');
   await expect(issues.getByRole('link', { name: '到任務頁參與 ↗', exact: true })).toHaveAttribute('href', /issues\/92$/);
   await page.reload();
+  await page.getByRole('button', { name: '查看任務：自動剪輯共創：一起把可用的底層疊起來', exact: true }).click();
   await expect(page.getByLabel('搜尋任務', { exact: true })).toHaveValue('安裝步驟');
   await expect(page.getByRole('combobox', { name: '任務標籤', exact: true })).toHaveValue('documentation');
   await expect(page.getByRole('combobox', { name: '任務負責人', exact: true })).toHaveValue('assigned');
@@ -54,6 +56,7 @@ test('task discovery combines real labels and assignment, remembers filters, and
   await expect(issues).toHaveCount(1);
   await page.getByRole('combobox', { name: '任務負責人', exact: true }).selectOption('unassigned');
   await expect(page.getByRole('heading', { name: '沒有符合條件的任務', exact: true })).toBeVisible();
+  await page.getByText(/^查看已合併的貢獻（/).click();
   await expect(page.getByRole('heading', { name: '已合併的貢獻', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '查看未指派任務', exact: true }).click();
   await expect(page.getByLabel('搜尋任務', { exact: true })).toBeFocused();
