@@ -9,8 +9,12 @@ const empty:ReadSlot<never>={data:null,state:'idle',time:null,error:''};
 type Descriptor={path:string;schema:z.ZodType;match?:(value:unknown)=>boolean};
 export type Command={label:string;method?:'post'|'put';path:string;body:Record<string,unknown>;ifMatch?:string;schema:z.ZodType;match?:(value:unknown)=>boolean;sensitive?:boolean;settled?:(success:boolean)=>void;success?:(value:unknown)=>void;failed?:(cause:unknown)=>void;freshAgain?:()=>void;freshRecovery?:(resume:(verificationId:string)=>void)=>void};
 export function errorText(cause:unknown,sensitive=false){
- if(cause instanceof ApiError){if(cause.status===403&&cause.code!=='fresh_auth_required')return NOT_ALLOWED+'。'+permissionHelp;
-  const next=setupNext[cause.code??'']??'請更新資料後再試。';
+ if(cause instanceof ApiError){
+  const code=cause.code??'',known=Object.hasOwn(setupNext,code);
+  const next=known?setupNext[code]:'請更新資料後再試。';
+  // A 403 can also mean missing platform policy or an expired CSRF token.
+  // Keep these messages local: refusal details may contain sensitive input.
+  if(cause.status===403)return known&&!['capability_denied','tenant_capability_denied'].includes(code)?next:NOT_ALLOWED+'。'+permissionHelp;
   // Provider-account errors must never reflect a submitted password or credential fragment.
   return (sensitive?'':cause.detail?cause.detail+' ':'操作未完成。')+next;
  }
