@@ -353,3 +353,20 @@ for(const intent of ['login','link'] as const)for(const outcome of ['error','can
   expect(new URL(page.url()).search).toBe('');expect(calls).toBe(1);
   await page.reload();expect(calls).toBe(1);
 });
+
+
+const EVENT_ID='10000000-0000-4000-8000-000000000001',EVENT_REF='abcdefghijklmnopqrstuvwx';
+for(const entry of [`/events/${EVENT_ID}?ref=${EVENT_REF}`,`/#events/${EVENT_ID}?ref=${EVENT_REF}`])test(`Google callback preserves allowlisted event referral: ${entry}`,async({page})=>{
+  let cancelled=0,registrations=0;
+  page.on('request',request=>{if(request.method()==='POST'&&/\/(?:register|rsvp)$/.test(new URL(request.url()).pathname))registrations++;});
+  await page.route('**/api/v1/auth/google/cancel',async route=>{cancelled++;await route.fulfill({json:{cancelled:true}})});
+  await remember(page,entry);await callback(page,`state=${STATE}&error=access_denied`);
+  await expect(page.getByRole('region',{name:'完成 Google 登入',exact:true})).toContainText('已取消這次 Google 授權');
+  await expect(page).toHaveURL(new URL(entry,page.url()).href);expect(cancelled).toBe(1);expect(registrations).toBe(0);
+  expect(await page.evaluate(key=>sessionStorage.getItem(key),ENTRY_KEY)).toBeNull();
+});
+for(const entry of [`/events/${EVENT_ID}#participation=${STATE}`,`/events/${EVENT_ID}?ref=${STATE}`,`/events/${EVENT_ID}?ref=${EVENT_REF}&ref=${EVENT_REF}`,`/events/${EVENT_ID}?ref=${EVENT_REF}&return_to=https%3A%2F%2Fattacker.example`, `/#events/${EVENT_ID}?ref=${EVENT_REF}&participation=${STATE}`,`/?ref=${EVENT_REF}`,`/events/${'-'.repeat(36)}?ref=${EVENT_REF}`])test(`Google rejects unsafe event continuity: ${entry}`,async({page})=>{
+  let completed=0;await page.route('**/api/v1/auth/google/complete',async route=>{completed++;await route.fulfill({json:PROOF})});
+  await remember(page,entry);await callback(page);await expect(page.getByRole('alert')).toContainText('未完成或已失效');
+  const url=new URL(page.url());expect(url.pathname).toBe('/');expect(url.search).toBe('');expect(url.hash).toBe('');expect(completed).toBe(0);
+});
