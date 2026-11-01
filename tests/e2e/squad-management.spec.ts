@@ -106,13 +106,22 @@ test('a lost disband response closes stale owner controls after the detail confi
   const squad=await command(page,'/squads',{name,kind:'social',purpose:'合成失去回應流程'});
   const detail=await openSquad(page,name);
   await detail.locator('.squad-manage > summary').click();
+  const attempts:{key:string|undefined;version:string|undefined;body:unknown}[]=[];
   await page.route(`**/api/v1/squads/${squad.squad_id}/disband`,async route=>{
-    const response=await route.fetch();expect(response.status()).toBe(200);await route.abort('failed');
+    attempts.push({key:route.request().headers()['idempotency-key'],version:route.request().headers()['if-match'],body:route.request().postDataJSON()});
+    const response=await route.fetch();expect(response.status()).toBe(attempts.length===1?200:404);
+    if(attempts.length===1)await route.abort('failed');else await route.fulfill({response});
   });
   await detail.getByRole('button',{name:'解散小隊',exact:true}).click();
   await page.getByRole('dialog',{name:'解散這支小隊？'}).getByRole('button',{name:'確定解散',exact:true}).click();
   await expect(detail).toHaveCount(0);
   await expect(page.getByRole('status').filter({hasText:'已返回列表'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'確認原操作結果',exact:true})).toBeVisible();
+  // A 404 read removes stale owner controls, but is not an ACK of the lost command.
+  await expect(page.getByRole('button',{name:'確認原操作結果',exact:true})).toBeEnabled();
   await expect(page.getByRole('button',{name:`查看小隊：${name}`,exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'確認原操作結果',exact:true}).click();
+  await expect(page.getByRole('button',{name:'確認原操作結果',exact:true})).toBeEnabled();
+  expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
   expect((await e2eAuthPool.query('SELECT disbanded_at IS NOT NULL AS done FROM member_squads WHERE squad_id=$1',[squad.squad_id])).rows[0].done).toBe(true);
 });
