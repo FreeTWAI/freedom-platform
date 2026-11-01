@@ -7,23 +7,24 @@
 .social-link-fields{padding-block:.5rem}
 .social-link-fields .field-hint{margin:0}
 .social-retained-url{margin:.25rem 0;font-size:.875rem;overflow-wrap:anywhere}
-.social-feed-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.social-feed-heading{display:grid;gap:8px;min-width:0}
 .social-feed-heading h2{margin:0;font-size:1rem}
-.social-feed-heading>div{display:flex;gap:4px;flex:none}
+.social-feed-toolbar{display:flex;align-items:center;gap:4px;min-width:0;border-bottom:1px solid var(--line)}
+.social-feed-tools{display:flex;gap:0;flex:none}
 .social-feed-control{border:0;border-radius:8px;background:var(--bg-elev);color:var(--muted);width:44px;min-height:44px;padding:0;font-size:1.5rem;cursor:pointer}
 .social-feed-control:disabled{cursor:wait;opacity:.55}
 .social-feed-control:focus-visible,.social-post-menu>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .social-view-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .social-view-options .btn{width:100%;min-height:44px;white-space:normal}
-.social-feed-navigation{display:flex;gap:4px;min-width:0;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--bg-elev)}
-.social-feed-category{flex:1;min-width:0;min-height:44px;padding:8px;border:0;border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:.875rem;cursor:pointer;overflow-wrap:anywhere}
+.social-feed-navigation{display:flex;flex:1;gap:0;min-width:0;overflow-x:auto;scrollbar-width:thin}
+.social-feed-category{flex:1 0 auto;min-width:44px;white-space:nowrap;min-height:44px;padding:8px 4px;border:0;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);font:inherit;font-size:.875rem;cursor:pointer;overflow-wrap:anywhere}
 .social-feed-category[aria-pressed="true"]{background:var(--green-soft);color:var(--ink);font-weight:700;box-shadow:inset 0 -3px var(--green)}
 .social-feed-category:hover{background:var(--green-soft);color:var(--ink)}
-.social-feed-category:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.social-feed-more{display:inline-flex;align-items:center;justify-content:center;gap:6px;width:auto;padding:6px 8px;font-size:.875rem}
+.social-feed-category:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.social-feed-more{display:inline-flex;align-items:center;justify-content:center}
 .social-feed-more>span:first-child{font-size:1.5rem;line-height:1}
-.social-feed-heading{flex-wrap:wrap}
-.social-feed-heading>div{flex-wrap:wrap;max-width:100%}
+.social-feed-heading>h2:not(.sr-only){overflow-wrap:anywhere}
+.social-feed-heading>.btn{justify-self:start}
 .social-feedback{margin:0;color:var(--blue-ink);font-size:.875rem;padding-inline:4px}
 .social-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.8rem}
 .social-card{min-width:0;overflow:hidden;padding:0}
@@ -182,7 +183,7 @@
 @media(prefers-reduced-motion:reduce){.social-post-like{transition:none}.social-like-pulse{animation:none}}
 
 /* Private bookmarks are secondary options, not an extra feed action row. */
-.social-card:has(.social-post-menu[open]){overflow:visible;position:relative;z-index:5}
+.social-card:has(.social-post-menu[open]){overflow:visible;position:relative;z-index:21}
 .social-post-menu-actions:has(.social-post-bookmark){width:min(280px,calc(100vw - 64px));max-height:min(60vh,420px);overflow:auto}
 .social-post-bookmark>.btn,.social-post-bookmark .btn{background:var(--bg-elev);color:var(--ink);border:1px solid var(--line);max-width:100%;min-height:44px;white-space:normal}
 .social-post-bookmark>summary{display:flex;align-items:center;width:100%;list-style:none;cursor:pointer}

@@ -183,11 +183,15 @@ for (const [index, language] of languages.entries()) {
       await trigger.press('Enter');await expect(search).toBeFocused();await expect(search).toHaveValue('');
       await search.fill('zz-no-feature-93275');
       const panel=(await menu.locator('.nav-more-content').boundingBox())!;expect(panel).not.toBeNull();
-      const heading=page.getByRole('heading',{name:language.home,level:1,exact:true});
-      const title=(await heading.boundingBox())!;expect(title).not.toBeNull();
-      // Click the heading's uncovered left portion, outside the panel's horizontal bounds.
-      expect(title.x).toBeLessThan(panel.x);
-      await heading.click({position:{x:Math.min(title.width,panel.x-title.x)/2,y:title.height/2}});
+      await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toHaveCount(1);
+      // The home heading is screen-reader-only. Use the visible composer's
+      // non-interactive left padding, outside the panel, without opening a form.
+      const outside=page.locator('.home-timeline .social-composer-start');
+      await expect(outside).toBeVisible();
+      const box=(await outside.boundingBox())!;
+      expect(box.x+4).toBeLessThan(panel.x);
+      await outside.click({position:{x:4,y:4}});
+      await expect(page.locator('.social-publish-dialog[open]')).toHaveCount(0);
       await expect(trigger).toHaveAttribute('aria-expanded','false');
       await trigger.click();await expect(search).toHaveValue('');
       await expect(contentSearch).toHaveCount(0);

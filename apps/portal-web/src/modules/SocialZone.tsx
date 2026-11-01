@@ -803,11 +803,17 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={loading || more} onClick={retryFeed}>重試</button></div>}
     {actionError && <div className="banner banner-error" role="alert"><p>{actionError}</p><p>重新載入只更新貼文狀態，不會重送操作或確認圖片已更新。若要更換縮圖，請重新選取圖片。</p><button type="button" className="btn btn-ghost" disabled={loading || more || saving} onClick={refreshAfterAction}>重新載入貼文狀態</button><button type="button" className="btn btn-ghost" onClick={() => setActionError('')}>關閉提示</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
-      <h2>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
-      <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span><span>{feedText.options}</span></button></div>
-    </div>
-    <div className="social-feed-navigation" role="group" aria-label={feedText.filters}>
-      {FILTERS.filter(item=>item.id==='note'||item.id===''||(item.id==='shorts'&&shortVideos)).map(item=><button key={item.id||'all'} type="button" className="social-feed-category" aria-pressed={!directPost&&platform===item.id} onClick={()=>selectPlatform(item.id)}>{filterLabel(item.id,item.label)}</button>)}
+      <h2 className={!directPost && ['', 'note', 'shorts'].includes(platform) ? 'sr-only' : undefined}>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
+      <div className="social-feed-toolbar">
+        <div className="social-feed-navigation" role="group" aria-label={feedText.filters}>
+          {FILTERS.filter(item=>item.id==='note'||item.id===''||(item.id==='shorts'&&shortVideos)).map(item=><button key={item.id||'all'} type="button" className="social-feed-category" aria-pressed={!directPost&&platform===item.id} onClick={()=>selectPlatform(item.id)}>{filterLabel(item.id,item.label)}</button>)}
+        </div>
+        <div className="social-feed-tools">
+          <button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button>
+          <button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} title={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span></button>
+        </div>
+      </div>
+      {directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}
     </div>
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
