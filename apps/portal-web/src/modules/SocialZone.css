@@ -183,7 +183,7 @@
 @media(prefers-reduced-motion:reduce){.social-post-like{transition:none}.social-like-pulse{animation:none}}
 
 /* Private bookmarks are secondary options, not an extra feed action row. */
-.social-card:has(.social-post-menu[open]){overflow:visible;position:relative;z-index:5}
+.social-card:has(.social-post-menu[open]){overflow:visible;position:relative;z-index:21}
 .social-post-menu-actions:has(.social-post-bookmark){width:min(280px,calc(100vw - 64px));max-height:min(60vh,420px);overflow:auto}
 .social-post-bookmark>.btn,.social-post-bookmark .btn{background:var(--bg-elev);color:var(--ink);border:1px solid var(--line);max-width:100%;min-height:44px;white-space:normal}
 .social-post-bookmark>summary{display:flex;align-items:center;width:100%;list-style:none;cursor:pointer}
