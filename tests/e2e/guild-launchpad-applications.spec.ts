@@ -85,6 +85,7 @@ async function capture(page: Page, testInfo: TestInfo, state: string) {
 test('visitor sees application cards and public release details without launch controls', async ({page}) => {
   await page.route(url => !['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
   await page.goto(`/#guilds/${GUILD}`); await openGuildSection(page, '工具目錄'); await expect(cards(page)).toContainText('可用');
+  await expect(manualCard(page).locator('.application-capabilities')).toContainText('人工工作');
   await manualCard(page).getByRole('button',{name:'版本資料',exact:true}).click();
   await expect(cards(page)).toContainText('來源提交：'); await expect(cards(page)).toContainText('成品摘要：');
   await expect(cards(page)).toContainText('人工工作：必要，允許共用既有實例');

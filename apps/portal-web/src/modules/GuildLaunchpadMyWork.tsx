@@ -864,33 +864,14 @@ export function MyWorkPanel({ client, guildKey, userId, starter, registerLeave, 
         : workspaceBinding?.instance_status === 'archived' ? '這個工作區的模組已封存，舊的工作仍可查看；請改用其他工作區建立新工作。'
         : '這個工作區的模組目前無法寫入，舊的工作仍可查看。'}</p> : <button type="button" className="btn btn-primary my-work-primary" disabled={busy || writeLocked} onClick={event => void enable(undefined, event.currentTarget)}>啟用手動工作</button>}
       {bound && <>
-        <section aria-label="工作">
-          {works.length === 0 ? <p>這個工作區還沒有工作。</p> : <ul>{works.map(item => <li key={item.work_id}>
+        <section className="my-work-list" aria-label="工作">
+          <h4>工作清單</h4>
+          {works.length === 0 ? <p>這個工作區還沒有工作。</p> : <ul>{works.map(item => <li key={item.work_id} className={work?.work_id === item.work_id ? 'is-selected' : undefined}>
             <button type="button" className="btn btn-ghost" aria-current={work?.work_id === item.work_id ? 'true' : undefined} onClick={() => void openWork(item.work_id)}>{item.title}</button>
-            <span>{PROGRESS_LABEL[item.progress]}</span>
+            <span className="my-work-progress">{PROGRESS_LABEL[item.progress]}</span>
           </li>)}</ul>}
           {worksCursor && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void loadMoreWorks()}>載入更多</button>}
         </section>
-        {writable && canCreateWork && <>
-        <h4 id={createHeadingId}>{isPositioning ? '建立我的方向卡' : isProduction ? '建立製作專案' : '新增工作'}</h4>
-        <form className="stack" aria-labelledby={createHeadingId} onSubmit={event => void createWork(event)}>
-          <label className="field" htmlFor="my-work-title">{titleLabel}
-            <input id="my-work-title" aria-describedby={createError ? 'my-work-create-error' : undefined} value={draftTitle} maxLength={120} disabled={busy || writeLocked || (isDocument && createAttempt.current !== null)} onChange={event => setDraftTitle(event.target.value)}/>
-          </label>
-          <label className="field" htmlFor="my-work-objective">{objectiveLabel}
-            <textarea id="my-work-objective" aria-describedby={createError ? 'my-work-create-error' : undefined} value={draftObjective} disabled={busy || writeLocked || (isDocument && createAttempt.current !== null)} onChange={event => setDraftObjective(event.target.value)}/>
-          </label>
-          <label className="field" htmlFor="my-work-progress">進度
-            <select id="my-work-progress" value={draftProgress} disabled={busy || writeLocked || (isDocument && createAttempt.current !== null)} onChange={event => setDraftProgress(event.target.value as Progress)}>
-              <option value="todo">待辦</option>
-              <option value="in_progress">進行中</option>
-              <option value="done">完成</option>
-            </select>
-          </label>
-          {createError && <p id="my-work-create-error" className="banner banner-error" role="alert">{createError}</p>}
-          <button type="submit" className="btn btn-primary my-work-primary" disabled={busy || writeLocked}>建立</button>
-        </form>
-        </>}
       </>}
       {work && <section className="stack my-work-open" aria-labelledby={openHeadingId}>
         <h4 id={openHeadingId}>{work.title}</h4>
@@ -983,6 +964,26 @@ export function MyWorkPanel({ client, guildKey, userId, starter, registerLeave, 
           {resultError && <p className="banner banner-error" role="alert">{resultError}</p>}
           {resultsCursor && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void loadMoreResults()}>載入更多</button>}
         </section>
+      </section>}
+      {bound && writable && canCreateWork && <section className="my-work-create" aria-labelledby={createHeadingId}>
+        <h4 id={createHeadingId}>{isPositioning ? '建立我的方向卡' : isProduction ? '建立製作專案' : '新增工作'}</h4>
+        <form className="stack" aria-labelledby={createHeadingId} onSubmit={event => void createWork(event)}>
+          <label className="field" htmlFor="my-work-title">{titleLabel}
+            <input id="my-work-title" aria-describedby={createError ? 'my-work-create-error' : undefined} value={draftTitle} maxLength={120} disabled={busy || writeLocked || (isDocument && createAttempt.current !== null)} onChange={event => setDraftTitle(event.target.value)}/>
+          </label>
+          <label className="field" htmlFor="my-work-objective">{objectiveLabel}
+            <textarea id="my-work-objective" aria-describedby={createError ? 'my-work-create-error' : undefined} value={draftObjective} disabled={busy || writeLocked || (isDocument && createAttempt.current !== null)} onChange={event => setDraftObjective(event.target.value)}/>
+          </label>
+          <label className="field" htmlFor="my-work-progress">進度
+            <select id="my-work-progress" value={draftProgress} disabled={busy || writeLocked || (isDocument && createAttempt.current !== null)} onChange={event => setDraftProgress(event.target.value as Progress)}>
+              <option value="todo">待辦</option>
+              <option value="in_progress">進行中</option>
+              <option value="done">完成</option>
+            </select>
+          </label>
+          {createError && <p id="my-work-create-error" className="banner banner-error" role="alert">{createError}</p>}
+          <button type="submit" className="btn btn-primary my-work-primary" disabled={busy || writeLocked}>建立</button>
+        </form>
       </section>}
     </>}
     <dialog ref={choiceDialog} aria-labelledby="my-work-choice-title" onClose={() => { setCandidates(null); opener.current?.focus(); }}>

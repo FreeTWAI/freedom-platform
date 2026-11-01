@@ -52,6 +52,15 @@ const CAPABILITY_LABEL: Record<string, string> = {
   'guild.content.edit': '編輯內容', 'guild.config.preview': '預覽配置', 'guild.config.publish': '發布配置',
 };
 
+type EditorPanel = 'layout' | 'tools' | 'versions' | 'delegations';
+const EDITOR_LABEL: Record<EditorPanel, string> = {layout: '版面與使命', tools: '工具與提示', versions: '版本紀錄', delegations: '成員授權'};
+function editorErrorPanel(errors: FieldError[]): EditorPanel | null {
+  if (['mission_override', 'blocks'].some(path => fieldHits(errors, path).length)) return 'layout';
+  if (['application_refs', 'starter', 'support'].some(path => fieldHits(errors, path).length)) return 'tools';
+  if (['principal_id', 'capabilities', 'expires_at'].some(path => fieldHits(errors, path).length)) return 'delegations';
+  return null;
+}
+
 type BookRef = {book_id: string; title: string; introduction_url: string | null; upstream_url: string};
 type AnnouncementRef = {announcement_id: string; title: string; body: string; published_at: string | null};
 type ConfigProblem = {code: 'config_schema_unsupported'; revision: string} | null;
@@ -350,6 +359,9 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   blockLoaders?: GuildBlockLoaders;
   supplierConsoleEnabled?: boolean;
 }) {
+  const [editorPanel, setEditorPanel] = useState<EditorPanel>('layout');
+  const editorRoot = useRef<HTMLFormElement>(null);
+  const pendingEditorFocus = useRef<EditorPanel | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const skillBooksHeading = useRef<HTMLHeadingElement>(null);
   const focusSkillBooks = useRef(false);
@@ -530,7 +542,15 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   }
   function fail(error: unknown) {
     if (error instanceof ApiError && error.status === 412) setConflict(true);
-    if (error instanceof ApiError && error.errors?.length) setErrors(error.errors);
+    if (error instanceof ApiError && error.errors?.length) {
+      setErrors(error.errors);
+      const panel = editorErrorPanel(error.errors);
+      // Dialog validation stays in its modal; a late response must not steal focus from another page.
+      if (panel && !publishDialog.current?.open && !revertDialog.current?.open && !revokeDialog.current?.open && !previewDialog.current?.open) {
+        setEditorPanel(panel);
+        pendingEditorFocus.current = activeSection === 'management' ? panel : null;
+      }
+    }
     setBanner(error instanceof Error ? error.message : '操作未完成。');
   }
   async function saveDraft() {
@@ -670,6 +690,14 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
     }
   }, [activeSection]);
 
+  const activeEditorPanel = (editorPanel === 'versions' && !access.publish) || (editorPanel === 'delegations' && !access.delegate) ? 'layout' : editorPanel;
+  useLayoutEffect(() => {
+    const panel = pendingEditorFocus.current;
+    pendingEditorFocus.current = null;
+    if (!panel || activeSection !== 'management' || panel !== activeEditorPanel) return;
+    editorRoot.current?.querySelector<HTMLElement>(`[data-editor-panel="${panel}"] > h3`)?.focus();
+  }, [errors, activeEditorPanel, activeSection]);
+
   const looseErrors = errors.filter(error => !['mission_override', 'starter.title_label', 'starter.objective_hint', 'starter.note_hint', 'support.public_url', 'reason'].some(path => error.path === path || error.path.endsWith(`.${path}`)) && !/blocks\.\d+\.(title|enabled|order)/.test(error.path));
 
   return <section className="guild-launchpad" aria-labelledby={titleId}>
@@ -711,9 +739,16 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
     </>}
     <div className="guild-launchpad-content" ref={readingRoot}>
     {readingConfig && guild && <Reading guild={guild} config={readingConfig} announcements={visitor ? [] : announcements} skillBooks={skillBooks} applications={applications} visitor={visitor} memberTier={visitor ? undefined : memberTier} mode={mode} client={client} guildKey={guildKey} userId={userId} registerLeave={registerLeave} registerPendingLeave={registerLaunchLeave} canLeave={canLeave} canNavigate={canNavigate} onLogin={onLogin} blockLoaders={blockLoaders} supplierConsoleEnabled={supplierConsoleEnabled} activeSection={activeSection} selectSection={selectSection} skillBooksHeading={skillBooksHeading}/>}
-    {showEditor && draft && <form hidden={activeSection !== 'management'} className="card guild-launchpad-editor" onSubmit={event => event.preventDefault()}>
+    {showEditor && draft && <form ref={editorRoot} hidden={activeSection !== 'management'} className="card guild-launchpad-editor" onSubmit={event => event.preventDefault()}>
       <h2>調整版面</h2>
+      <p className="field-hint">先調整、儲存與預覽，再發布給會員。切換設定不會清除未儲存內容。</p>
+      <nav className="guild-editor-nav" aria-label="公會管理設定">
+        {(['layout', 'tools', ...(access.publish ? ['versions'] : []), ...(access.delegate && leader?.delegations ? ['delegations'] : [])] as EditorPanel[]).map(panel => <button key={panel} type="button" className="btn btn-ghost btn-small" aria-pressed={activeEditorPanel === panel} onClick={() => setEditorPanel(panel)}>{EDITOR_LABEL[panel]}</button>)}
+      </nav>
       {looseErrors.length > 0 && <ul>{looseErrors.map(error => <li key={`${error.path}:${error.code}`}>{looseText(error, draft)}</li>)}</ul>}
+      {errors.some(error => editorErrorPanel([error])) && <div className="guild-editor-errors" role="status"><p>有設定需要修正；可切換到對應區域查看。</p><div className="guild-launchpad-actions">{([...new Set(errors.map(error => editorErrorPanel([error])).filter((panel): panel is EditorPanel => panel !== null))]).filter(panel => panel !== 'delegations' || access.delegate).map(panel => <button key={panel} type="button" className="btn btn-ghost btn-small" onClick={() => setEditorPanel(panel)}>檢查{EDITOR_LABEL[panel]}</button>)}</div></div>}
+      <section className="guild-editor-panel" data-editor-panel="layout" hidden={activeEditorPanel !== 'layout'} aria-labelledby="guild-editor-layout-title">
+      <h3 id="guild-editor-layout-title" tabIndex={-1}>版面與使命</h3>
       <label className="field" htmlFor="launchpad-mission">公會使命補充
         <input id="launchpad-mission" aria-describedby={describedBy(errors, 'mission_override', 'launchpad-mission-error', 'launchpad-mission-hint')} value={draft.mission_override ?? ''} maxLength={1200} onChange={event => setDraft({...draft, mission_override: event.target.value === '' ? null : event.target.value})}/>
       </label>
@@ -755,6 +790,9 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
           </div>;
         })}</div>
       </fieldset>
+      </section>
+      <section className="guild-editor-panel" data-editor-panel="tools" hidden={activeEditorPanel !== 'tools'} aria-labelledby="guild-editor-tools-title">
+      <h3 id="guild-editor-tools-title" tabIndex={-1}>工具與提示</h3>
       <fieldset className="fieldset">
         <legend>推薦應用</legend>
         <p className="field-hint" id="launchpad-recommendations-hint">排在第一個的應用會成為會員看到的主要動作。</p>
@@ -797,6 +835,9 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         <label className="field" htmlFor="launchpad-support-url">公開網址<input id="launchpad-support-url" aria-describedby={describedBy(errors, 'support.public_url', 'launchpad-support-url-error')} value={draft.support.public_url ?? ''} maxLength={2048} placeholder="https://" onChange={event => setDraft({...draft, support: {...draft.support, public_url: event.target.value === '' ? null : event.target.value}})}/></label>
         <FieldNote id="launchpad-support-url-error" errors={errors} path="support.public_url"/>
       </fieldset>
+      </section>
+      <div className="guild-editor-savebar">
+      <p className="field-hint">{dirty ? '有尚未儲存的修改。' : saved?.status === 'draft' ? '目前為已儲存草稿，尚未發布。' : saved?.status === 'published' ? '目前顯示已發布版本。' : '請先儲存草稿。'}</p>
       {!canPublish && access.publish && <p className="field-hint">{saved?.status === 'draft' && dirty ? '尚未儲存的修改不會進入這個版本。' : '請先儲存草稿'}</p>}
       <div className="guild-launchpad-actions">
         {access.preview && <>
@@ -807,13 +848,20 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         {access.edit && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void saveDraft()}>儲存草稿</button>}
         {access.publish && <button type="button" className="btn btn-primary" disabled={busy || !canPublish} onClick={event => { setConfirmPublish(true); openDialog(publishDialog.current, event.currentTarget); }}>發布</button>}
       </div>
-      {access.publish && leader && <fieldset className="fieldset">
+      </div>
+      {access.publish && leader && <section className="guild-editor-panel" data-editor-panel="versions" hidden={activeEditorPanel !== 'versions'} aria-labelledby="guild-editor-versions-title">
+        <h3 id="guild-editor-versions-title" tabIndex={-1}>版本紀錄</h3>
+        <p className="field-hint">回復版本會重新發布；先確認內容，再填寫回復原因。</p>
+        <fieldset className="fieldset">
         <legend>版本</legend>
         {leader.revisions.length === 0 ? <p>還沒有任何版本。</p> : <ul>{leader.revisions.map(revision => <li key={revision.revision}>版本 {revision.revision} · {revision.status === 'draft' ? '草稿' : revision.status === 'published' ? '已發布' : '已取代'}{revision.revert_reason ? ` · 回復自版本 ${revision.reverted_from_revision}：${revision.revert_reason}` : ''}
           <button type="button" className="btn btn-ghost" disabled={busy} onClick={event => { setRevertTarget(revision.revision); setRevertReason(''); openDialog(revertDialog.current, event.currentTarget); }}>回復到此版本</button>
         </li>)}</ul>}
-      </fieldset>}
-      {access.delegate && leader?.delegations && <fieldset className="fieldset">
+      </fieldset></section>}
+      {access.delegate && leader?.delegations && <section className="guild-editor-panel" data-editor-panel="delegations" hidden={activeEditorPanel !== 'delegations'} aria-labelledby="guild-editor-delegations-title">
+        <h3 id="guild-editor-delegations-title" tabIndex={-1}>成員授權</h3>
+        <p className="field-hint">選擇成員、可操作項目與到期時間。這裡的授權不會增加其他業務空間權限。</p>
+        <fieldset className="fieldset">
         <legend>授權</legend>
         <label className="field">成員<select value={grantPrincipal} onChange={event => setGrantPrincipal(event.target.value)}><option value="">選擇成員</option>{(leader.delegation_candidates ?? []).map((candidate, index) => <option key={candidate.principal_id ?? `missing-principal-${index}`} value={candidate.principal_id ?? ''} disabled={!candidate.principal_id}>{candidate.display_name}{candidate.principal_id ? '' : '（尚未建立身份，無法授權）'}</option>)}</select></label>
         <div>{Object.entries(CAPABILITY_LABEL).map(([capability, label]) => <label key={capability} className="checkbox-row"><input type="checkbox" checked={grantCaps.includes(capability)} onChange={event => setGrantCaps(current => event.target.checked ? [...current, capability] : current.filter(item => item !== capability))}/>{label}</label>)}</div>
@@ -822,7 +870,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         {leader.delegations.length === 0 ? <p>目前沒有授權。</p> : <ul>{leader.delegations.map(row => <li key={row.delegation_id}>{row.display_name} · {row.capabilities.map(capability => CAPABILITY_LABEL[capability] ?? capability).join('、')} · <time dateTime={row.expires_at}>{formatIsoLocal(row.expires_at)}</time>{row.expired ? ' · 已過期' : ''}
           <button type="button" className="btn btn-ghost" disabled={busy} onClick={event => { setRevokeId(row.delegation_id); setRevokeReason(''); openDialog(revokeDialog.current, event.currentTarget); }}>撤銷</button>
         </li>)}</ul>}
-      </fieldset>}
+      </fieldset></section>}
     </form>}
     </div>
     </div>

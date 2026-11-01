@@ -367,6 +367,10 @@ test('T-055 keyboard, themes, narrow layout, unsaved leave, and a late workspace
     await expect(session.page.getByRole('button', { name: title, exact: true })).toBeVisible();
     await expect(session.page.getByRole('heading', { level: 4, name: '新增工作', exact: true })).toBeVisible();
     await expect(session.page.getByRole('heading', { level: 4, name: title, exact: true })).toBeVisible();
+    expect(await session.page.locator('.my-work-open').evaluate(element => {
+      const create = document.querySelector('#my-work-title')?.closest('form');
+      return Boolean(create && (element.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING));
+    })).toBe(true);
     await session.page.locator('#my-work-note').focus();
     await session.page.keyboard.type(`鍵盤筆記${run}`);
     await session.page.keyboard.press('Tab');
