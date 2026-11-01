@@ -17,7 +17,7 @@ export const guildsFeatures = {
   },
   "positioning": {
     moduleId: "positioning", placement: 'page',
-    render: ({client, session, selectTab}) => <PositioningPanel client={client} session={session} onNavigate={selectTab} />,
+    render: ({client, session, selectTab, registerPageLeave}) => <PositioningPanel key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} onNavigate={selectTab} registerPendingLeave={registerPageLeave} />,
   },
   "guilds": {
     moduleId: "guild-presentation", placement: 'page',

@@ -26,6 +26,7 @@ import {snapshotBoundedBytes,type ObjectStore,AssetStorageError} from '../../pac
 const details = z.object({
   title:text(120), description:text(3000), starts_at:isoTime, ends_at:isoTime,
   help_need:text(500).nullable().optional(),
+  registration_policy:z.enum(['guest_allowed','community_member']).optional(),
   mode:z.enum(['online','in_person','hybrid']), location:text(300),
   event_kind:z.enum(['reading_group','meetup','guild_skill_exchange','other']).default('other'),
   topic:text(160).nullable().default(null),
@@ -64,6 +65,8 @@ export async function canAccessGuildEvent(q:Pick<PoolClient,'query'>,actor:Actor
   return member.rowCount===1;
 }
 
+function privateEventLocationHint(row:{registration_policy?:string}){return row.registration_policy==='community_member'?'登入並完成報名後可查看參與資料':'線上參與資料將寄至報名信箱';}
+
 async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
   const count=(await q.query(`SELECT
     (SELECT count(*) FROM community_event_rsvps WHERE event_id=$1 AND state='going' AND NOT is_verification_test_account(user_id))+
@@ -76,7 +79,7 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     (SELECT mime_type FROM community_event_videos WHERE event_id=$1) AS video_mime`,[row.event_id])).rows[0];
   const hideOnline=row.visibility==='referral'&&mine!=='going'&&row.organizer_ref!==actor.user_id&&!canReview;
   const cancelledForParticipant=row.state==='cancelled'&&row.organizer_ref!==actor.user_id;
-  return {...row,location:cancelledForParticipant?null:hideOnline&&(row.mode==='online'||/https?:\/\//i.test(row.location))?'線上參與資料將寄至報名信箱':row.location,
+  return {...row,location:cancelledForParticipant?null:hideOnline&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
     online_url:cancelledForParticipant||hideOnline?null:row.online_url,
     banner_url:media.banner_orientation?`/api/v1/events/${row.event_id}/banner?v=${row.aggregate_version}`:null,banner_orientation:media.banner_orientation,
     video_url:media.video_mime?`/api/v1/events/${row.event_id}/video?v=${row.aggregate_version}`:null,video_mime:media.video_mime,
@@ -153,7 +156,7 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
   return rows.map(row=>{
     const {list_rank:_rank,list_time:_time,...rest}=row;
     return rest.visibility==='referral'&&rest.my_rsvp!=='going'&&rest.organizer_ref!==actor.user_id&&!rest.can_review
-      ?{...rest,location:rest.mode==='online'||/https?:\/\//i.test(rest.location)?'線上參與資料將寄至報名信箱':rest.location,online_url:null}:rest;
+      ?{...rest,location:rest.mode==='online'||/https?:\/\//i.test(rest.location)?privateEventLocationHint(rest):rest.location,online_url:null}:rest;
   });
 }
 
@@ -241,7 +244,7 @@ export async function eventAttendees(pool:Pool,actor:Actor,id:string,raw:unknown
 
 export async function publicEvent(pool:Pool|PoolClient,id:string){
   const row=(await pool.query(`SELECT e.event_id,e.title,e.description,e.starts_at,e.ends_at,e.mode,e.location,e.online_url,e.event_kind,e.topic,
-    e.visibility,e.capacity,e.aggregate_version,u.display_name AS organizer_name,
+    e.visibility,e.registration_policy,e.capacity,e.aggregate_version,u.display_name AS organizer_name,
     (SELECT orientation FROM community_event_banners b WHERE b.event_id=e.event_id) AS banner_orientation,
     (SELECT mime_type FROM community_event_videos v WHERE v.event_id=e.event_id) AS video_mime,
     ((SELECT count(*)::int FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.state='going' AND NOT is_verification_test_account(r.user_id))+
@@ -250,8 +253,8 @@ export async function publicEvent(pool:Pool|PoolClient,id:string){
   requireCondition(row,404,'not_found','找不到這場公開活動。');
   const referral=row.visibility==='referral';
   return {event_id:row.event_id,title:row.title,description:row.description,starts_at:row.starts_at,ends_at:row.ends_at,
-    mode:row.mode,location:referral&&(row.mode==='online'||/https?:\/\//i.test(row.location))?'線上參與資料將寄至報名信箱':row.location,
-    online_url:referral?null:row.online_url,event_kind:row.event_kind,topic:row.topic,visibility:row.visibility,
+    mode:row.mode,location:referral&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
+    online_url:referral?null:row.online_url,event_kind:row.event_kind,topic:row.topic,visibility:row.visibility,registration_policy:row.registration_policy,
     capacity:row.capacity,aggregate_version:Number(row.aggregate_version),organizer_name:row.organizer_name,
     attending_count:row.attending_count,banner_orientation:row.banner_orientation,
     banner_url:row.banner_orientation?`/api/v1/public/events/${id}/banner`:null,
@@ -269,6 +272,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
   const registration=await transaction(pool,async q=>{
     const row=(await q.query('SELECT * FROM community_events WHERE event_id=$1 FOR UPDATE',[id])).rows[0];
     requireCondition(row&&row.state==='published'&&['referral','open'].includes(row.visibility)&&!(await q.query('SELECT is_verification_test_account($1) AS hidden',[row.organizer_ref])).rows[0].hidden,404,'not_found','找不到這場公開活動。');
+    requireCondition(row.registration_policy!=='community_member',403,'event_member_required','請登入本社群帳號後報名。');
     requireCondition(Date.parse(row.starts_at)>Date.now(),409,'event_closed','活動已開始或取消，無法報名。');
     requireCondition(row.visibility!=='referral'||body.referral_code,422,'share_code_required','請從會員分享的活動連結報名。');
     const referrer=await referralOwner(q,id,body.referral_code);
@@ -294,6 +298,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
     const event=(await q.query('SELECT * FROM community_events WHERE event_id=$1 FOR UPDATE',[id])).rows[0];
     const reservation=(await q.query('SELECT state,registration_attempt_id FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[id,email])).rows[0];
     requireCondition(event?.state==='published'&&Date.parse(event.starts_at)>Date.now()&&reservation&&reservation.state!=='cancelled'&&reservation.registration_attempt_id===registration.attempt_id,409,'event_closed','這筆報名已取消或失效，郵件未交給提供者。');
+    requireCondition(event.registration_policy!=='community_member',403,'event_member_required','請登入本社群帳號後報名。');
     const local=(value:string)=>new Date(value).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',dateStyle:'medium',timeStyle:'short'});
     const parts=[`你已申請參加「${event.title}」。`,`時間：${local(event.starts_at)} 至 ${local(event.ends_at)}（台灣時間）`,
       `地點：${event.location}`,event.online_url?`線上參與連結：${event.online_url}`:'',`活動頁：${origin}/events/${event.event_id}`,
@@ -477,8 +482,8 @@ export async function createEvent(pool:Pool,input:Command) {
     // The command has already checked receipts; replay never consumes this budget.
     await authRateLimitInTransaction(q,'event-create-member',input.actor.user_id,eventCreateLimit,eventCreateWindowSeconds);
     const id=randomUUID();
-    const row=(await q.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,[id,input.actor.community_id,input.actor.user_id,body.guild_key,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,reviewGuildFor(body),body.visibility,body.help_need??null])).rows[0];
+    const row=(await q.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need,registration_policy)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,[id,input.actor.community_id,input.actor.user_id,body.guild_key,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,reviewGuildFor(body),body.visibility,body.help_need??null,body.registration_policy??'guest_allowed'])).rows[0];
     const organizer=(await q.query('SELECT display_name FROM users WHERE user_id=$1',[input.actor.user_id])).rows[0].display_name as string;
     await bulletin(q,row,'submitted',organizer,organizer);
     await notifyMember(q,{community_id:row.community_id,recipient_ref:row.organizer_ref,kind:'event_submitted',source_key:`event/${id}/submitted`,title:'活動已送出審核',body:`「${body.title}」已送出；核准後才會開放報名。`,action:{tab:'events',resource_id:null}});
@@ -506,7 +511,7 @@ export async function updateEvent(pool:Pool,input:Command,id:string) {
     requireCondition(Date.parse(body.starts_at)>Date.now(),422,'event_in_past','活動開始時間須在未來。');
     requireCondition(body.guild_key===row.guild_key&&body.mode===row.mode&&body.event_kind===row.event_kind&&body.visibility===row.visibility,422,'event_review_route_immutable','送出後不能更換主辦公會、形式、類型或參與範圍；請取消並重新提交。');
     const updated=(await q.query(`UPDATE community_events SET title=$2,description=$3,starts_at=$4,ends_at=$5,mode=$6,location=$7,capacity=$8,
-      event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need])).rows[0];
+      event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,registration_policy=$14,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need,body.registration_policy??row.registration_policy])).rows[0];
     await journal(q,input.actor,'community_event',id,updated.aggregate_version,'update',{title:body.title});
     return eventView(q,input.actor,updated);
   });
