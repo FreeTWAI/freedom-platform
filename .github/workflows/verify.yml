@@ -543,7 +543,9 @@ jobs:
           # Disposable runner-only synthetic DB: low-privilege fixture LOGIN roles
           # have no passwords. Never use this authentication mode outside CI.
           POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_INITDB_ARGS: '-c dynamic_shared_memory_type=mmap'
+          # media-backup-archive drops a fully migrated fixture schema in one transaction;
+          # from schema198 the default 64 lock slots overflow (53200). Match runtime-full.
+          POSTGRES_INITDB_ARGS: '-c max_locks_per_transaction=256 -c dynamic_shared_memory_type=mmap'
         ports: ['127.0.0.1:5432:5432']
         options: >-
           --health-cmd "pg_isready -U freedom_local -d fp_foundation_ci"
