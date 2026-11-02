@@ -4,13 +4,15 @@ import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import ts from '@typescript/typescript6';
 
-// Structural snapshots captured from 51dfe03c1 before extraction. The complete JSX
-// includes every branch, attribute, text node and callback, even when hidden.
+// Extraction snapshots started at 51dfe03c1. PR #1219 intentionally updates
+// Products copy, Publish copy/read lock, and Settings read lock; all other
+// panels and forms retain their original fingerprint. Complete JSX includes
+// every branch, attribute, text node and callback, even when hidden.
 const baseline: Readonly<Record<string, string>> = {
-  "store-products-panel": "a2608a7b7c2b1e66efd8d72a543e59ddd743857842e1a0cec123bda47e72b4b7",
+  "store-products-panel": "93a51428ebd300723ed80dd01b6cfbdd85adc29295ee2881719e076d10343c66",
   "store-cooperation-panel": "5b33264a138207bbe8f732d2c710798ca1bcb922881f01e2d2a1c685e86cf3a9",
-  "store-publish-panel": "8ae3e80b6f7f187ccc4372a3efe4b6b3ce27c4513bcf1c0e53df3a517842be47",
-  "store-settings-panel": "3cddf7ab800006413f4ff6c1dccc6f5256c46aff98bf861f459b8f69f797668d",
+  "store-publish-panel": "a59682ad46f87ff45c77bbb30b26ff1f35d7a31022fde82f320d02c768cec328",
+  "store-settings-panel": "5d76fbdf114c3fc69c1ce66fdfa3c1d91d2d58b4d4a970aa6baace0a89ad4978",
   "PublicationReview": "a8dcbae6aeed7bc722a2a25a5d841c24a7d4389d158a674085c83aa75d31b988",
   "ManualCopy": "76cdc0866f74582d365de26024391e0d4a6738328c1b85237c8cc8eb1453888a",
   "SettingsForm": "c5f3aa3014667d6fbdec7a1871a9d615c9b3fe99317b98123fba1ff4954c5b1f",
@@ -32,7 +34,7 @@ function returned(file: ts.SourceFile, name: string) {
   return result.expression;
 }
 for (const area of ['Products', 'Cooperation', 'Publish', 'Settings'] as const) {
-  test(`HostedStore${area}Area preserves the complete baseline panel markup and conditions`, async () => {
+  test(`HostedStore${area}Area matches the reviewed complete panel markup and conditions`, async () => {
     const file = await source(`HostedStore${area}Area.tsx`);
     const panel = returned(file, `HostedStore${area}Area`);
     assert.equal(fingerprint(panel, file), baseline[`store-${area.toLowerCase()}-panel`]);
@@ -44,8 +46,22 @@ for (const [name, module] of [['PublicationReview', 'hosted-store-area-shared.ts
     assert.equal(fingerprint(returned(file, name), file), baseline[name]);
   });
 }
-test('StorePage passes every area input through unchanged and areas have no import cycle', async () => {
+test('StorePage preserves area inputs with explicit read-failure locks and no import cycle', async () => {
   const page = await source('HostedStore.tsx');
+  const declarations: ts.VariableDeclaration[] = [];
+  function collect(node: ts.Node) {
+    if (ts.isVariableDeclaration(node)) declarations.push(node);
+    ts.forEachChild(node, collect);
+  }
+  collect(page);
+  for (const [name, expression] of [
+    ['readBlocked', 'loading || readFailed'],
+    ['locked', 'busy || retry !== null || photoBlocking || loading || readFailed'],
+  ]) {
+    const matches = declarations.filter(node => node.name.getText(page) === name);
+    assert.equal(matches.length, 1, name);
+    assert.equal(matches[0].initializer?.getText(page), expression);
+  }
   for (const area of ['Products', 'Cooperation', 'Publish', 'Settings']) {
     const name = `HostedStore${area}Area`;
     const file = await source(`${name}.tsx`);
@@ -65,7 +81,9 @@ test('StorePage passes every area input through unchanged and areas have no impo
     assert.deepEqual(attributes.map(attribute => {
       assert.ok(ts.isJsxAttribute(attribute));
       assert.ok(attribute.initializer && ts.isJsxExpression(attribute.initializer));
-      assert.equal(attribute.initializer.expression?.getText(page), attribute.name.getText(page));
+      const prop = attribute.name.getText(page);
+      const expected = prop === 'loading' && ['Products', 'Publish', 'Settings'].includes(area) ? 'readBlocked' : prop;
+      assert.equal(attribute.initializer.expression?.getText(page), expected);
       return attribute.name.getText(page);
     }).sort(), inputs);
     for (const statement of file.statements) {
