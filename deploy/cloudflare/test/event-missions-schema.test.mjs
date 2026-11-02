@@ -20,12 +20,13 @@ test('mission candidate preserves exact PR1170 schema195 ledger without treating
  assert.notEqual(next.ledger_digest,old.ledger_digest);
 });
 
-test('explicit197 scan accepts only complete catalog; historical196/195 profiles are not silently advanced',()=>{
- assert.equal(checkMigrations(root,profile(197)).ok,true);
+test('explicit198 scan accepts only complete catalog; historical197/196/195 profiles are not silently advanced',()=>{
+ assert.equal(checkMigrations(root,profile(198)).ok,true);
+ assert.equal(checkMigrations(root,profile(197)).ok,false);
  assert.equal(checkMigrations(root,profile(196)).ok,false);
  assert.equal(checkMigrations(root,profile(195)).ok,false);
  assert.equal(checkMigrations(root,profile(194)).ok,false);
- assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(197)));
+ assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(198)));
 });
 
 test('mission schema has no attendee, friend or Contribution write and clearing is not a hard-erasure claim',()=>{
@@ -46,11 +47,26 @@ test('mission identity binds both referenced rows to the same community, includi
 
 test('registration policy197 appends to exact mission196 history and preserves the guest-compatible default',()=>{
  const mission=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=196),profile(196));
- const next=resolveMigrationPlan(sources(),profile(197),mission.ledger);
+ const next=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=197),profile(197),mission.ledger);
  assert.deepEqual(next.pending,['197_event_registration_policy.sql']);
  assert.deepEqual(next.ledger.slice(0,-1),mission.ledger);
  assert.notEqual(next.ledger_digest,mission.ledger_digest);
  const sql=sources().find(row=>row.name==='197_event_registration_policy.sql').sql;
  assert.match(sql,/ADD COLUMN registration_policy text NOT NULL DEFAULT 'guest_allowed'/);
  assert.match(sql,/CHECK \(registration_policy IN \('guest_allowed','community_member'\)\)/);
+});
+
+
+test('tester accounts198 appends to exact registration197 history with private self-reported progress and feedback',()=>{
+ const registration=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=197),profile(197));
+ const next=resolveMigrationPlan(sources(),profile(198),registration.ledger);
+ assert.deepEqual(next.pending,['198_tester_map_accounts.sql']);
+ assert.deepEqual(next.ledger.slice(0,-1),registration.ledger);
+ assert.notEqual(next.ledger_digest,registration.ledger_digest);
+ const sql=sources().find(row=>row.name==='198_tester_map_accounts.sql').sql;
+ assert.match(sql,/CREATE TABLE tester_map_accounts/);
+ assert.match(sql,/CREATE TABLE tester_map_feedback/);
+ assert.match(sql,/user_id uuid PRIMARY KEY REFERENCES users\(user_id\) ON DELETE CASCADE/);
+ assert.match(sql,/PRIMARY KEY\(user_id,step_id\)/);
+ assert.doesNotMatch(sql,/\b(?:INSERT INTO|UPDATE|ALTER TABLE)\s+(?:contributions|community_event_rsvps|community_event_helpers|friendships|social_achievement)/i);
 });

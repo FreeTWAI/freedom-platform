@@ -236,6 +236,8 @@ const FOUNDATION_NAMES = [
   // Private self-reported exercises; no attendance, contribution or release authority.
   '196_event_missions.sql',
   '197_event_registration_policy.sql',
+  // Private self-reported tester progress/feedback; no ranking, release or contribution authority.
+  '198_tester_map_accounts.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

@@ -14,3 +14,6 @@ export {
   resetTesterProgress, stageProgress, testerMedals, toggleStep, writeTesterProgress,
 } from './progress.js';
 export type { MedalId, TesterProgress } from './progress.js';
+
+export {mergeTesterProgress,aggregateTesterFeedback,TESTER_NOTE_LIMIT} from './account.js';
+export type {TesterAccountView,TesterFeedback,TesterFeatureReport} from './account.js';

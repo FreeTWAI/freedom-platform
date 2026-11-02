@@ -64,7 +64,7 @@ export const communityFeatures = {
   },
   "tester-map": {
     moduleId: "tester-map", placement: 'page',
-    render: () => <TesterMap />,
+    render: ({client,session}) => <TesterMap key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} />,
   },
   messages: {
     moduleId: 'member-communications', placement: 'overlay',

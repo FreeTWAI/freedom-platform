@@ -7,13 +7,24 @@
     "apps/portal-web/src/modules/TesterMap.tsx",
     "apps/portal-web/src/modules/TesterMap.css",
     "tests/runtime/tester-map.test.ts",
-    "tests/e2e/tester-map.spec.ts"
+    "tests/e2e/tester-map.spec.ts",
+    "apps/portal-web/src/modules/tester-map/**",
+    "apps/platform-api/src/routes/tester-map.ts",
+    "migrations/198_tester_map_accounts.sql",
+    "tests/runtime/tester-map-account.test.ts",
+    "tests/runtime/tester-map-api.test.ts",
+    "tests/runtime/tester-map-import.test.ts",
+    "tests/e2e/tester-map-account.spec.ts"
   ],
   "public_exports": [
     "modules/tester-map/index.ts"
   ],
   "dependencies": [
-    "shared"
+    "shared",
+    "command-core",
+    "development-access",
+    "positioning",
+    "portal-shell"
   ],
   "contract_families": [],
   "client_profiles": [
@@ -23,13 +34,18 @@
     "AGENTS.md",
     "CONTRIBUTING.md",
     "DESIGN.md",
-    "modules/tester-map/README.md"
+    "modules/tester-map/README.md",
+    "modules/tester-map/COORDINATION.md",
+    "packages/db/README.md",
+    "packages/db/migrations.md"
   ],
   "invariants": [
-    "no-secrets-in-artifacts"
+    "no-secrets-in-artifacts",
+    "current-authority-before-replay"
   ],
   "tests": [
-    "runtime.full"
+    "runtime.full",
+    "ui.default"
   ],
   "surfaces": [
     {
@@ -47,6 +63,18 @@
       "entry": "apps/portal-web/src/modules/TesterMap.tsx",
       "operations": [
         "tester-map.static.read"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "tester-map.member-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/tester-map.ts",
+      "operations": [
+        "tester-map.account.read",
+        "tester-map.account.mutate",
+        "tester-map.report.read",
+        "tester-map.report.triage"
       ],
       "auth_profile": "member-session"
     }

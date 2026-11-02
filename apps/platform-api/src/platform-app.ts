@@ -1,3 +1,4 @@
+import {createTesterMapRoutes} from './routes/tester-map.js';
 import {createEventMissionRoutes} from './routes/event-missions.js';
 import {createCommunityCertificationRoutes} from './routes/community-certification.js';
 import {createSocialAchievementRoutes} from './routes/social-achievements.js';
@@ -562,6 +563,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true,commerceOrderNotificationsInstalled(runtime),runtime.socialAchievementsEnabled===true));
   app.route('/api/v1',createCommunityEventRoutes(pool,runtime.eventEmailSender,origin,runtime));
   app.route('/api/v1',createEventMissionRoutes(pool));
+  app.route('/api/v1',createTesterMapRoutes(pool));
   registerMemberPromotion(app,pool,runtime);
   registerMemberPublicSocialPosts(app,pool,runtime);
   registerMemberServices(app,pool,runtime);

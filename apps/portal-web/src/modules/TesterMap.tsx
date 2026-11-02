@@ -1,9 +1,13 @@
-import {useEffect, useRef, useState} from 'react';
+import {accountText} from './tester-map/text';
+import type {PortalClient} from '../api';
+import {useTesterAccount} from './tester-map/useTesterAccount';
+import {TesterAccountContext,TesterAccountPanel,TesterStepFeedback} from './tester-map/TesterAccount';
+import {useContext, useEffect, useRef, useState} from 'react';
 import {
   ISSUES_URL, REDESIGN_BATCH_PR, TEST_WEEK, TESTER_AREAS, TESTER_COVERAGE_UPDATED_AT, TESTER_FLAGS_OBSERVED_AT,
-  TESTER_GROUP_IDS, TESTER_GROUPS, TESTER_GUILD, COVERAGE_STATUSES, QUEST_PATHS, QUEST_STAGES, TESTER_PROGRESS_KEY,
-  areasForGroup, coverageOf, coverageSummary, isDefaultOff, overallProgress, readTesterProgress, resetTesterProgress,
-  stageProgress, testerMedals, toggleStep, writeTesterProgress,
+  TESTER_GROUP_IDS, TESTER_GROUPS, TESTER_GUILD, COVERAGE_STATUSES, QUEST_PATHS, QUEST_STAGES,
+  areasForGroup, coverageOf, coverageSummary, isDefaultOff, overallProgress,
+  stageProgress, testerMedals, toggleStep,
   type CoverageStatus, type Localized, type QuestStage, type QuestStep, type TesterFeature, type TesterGroupId, type TesterProgress,
 } from '../../../../modules/tester-map/index';
 import {useLanguage, type InterfaceLanguage} from '../language';
@@ -58,8 +62,9 @@ function QuestStepItem({step, done, pick, onToggle}: {step: QuestStep; done: boo
     <p className="field-hint">{t('testerMap.stepReport')}</p>
     <div className="actions">
       {href && <a className="btn btn-ghost btn-small" href={href}>{t('testerMap.stepOpen')}</a>}
-      <button type="button" className={`btn btn-small ${done ? 'btn-ghost' : 'btn-primary'}`} aria-pressed={done} aria-describedby={titleId} onClick={onToggle}>{done ? t('testerMap.markUndone') : t('testerMap.markDone')}</button>
+      <button type="button" className={`btn btn-small ${done ? 'btn-ghost' : 'btn-primary'}`} disabled={useContext(TesterAccountContext)?.account.busy} aria-pressed={done} aria-describedby={titleId} onClick={onToggle}>{done ? t('testerMap.markUndone') : t('testerMap.markDone')}</button>
     </div>
+    <TesterStepFeedback step={step}/>
   </li>;
 }
 
@@ -81,43 +86,35 @@ const firstOpenStage = (progress: TesterProgress) => {
   return order.find(id => !stageProgress(QUEST_STAGES.find(stage => stage.id === id)!, progress).complete) ?? null;
 };
 
-/** Static and public: no request, session or permission is read. Progress stays in this browser. */
-export function TesterMap() {
+/** Guests remain local; the member shell supplies its current authenticated client. */
+export function TesterMap({client}: {client?:PortalClient}) {
   const {language, t} = useLanguage();
   const pick = (value: Localized) => value[indexes[language]];
-  const [progress, setProgress] = useState<TesterProgress>(() => readTesterProgress());
+  const account = useTesterAccount(client), {progress} = account;
   const [openStages, setOpenStages] = useState<ReadonlySet<string>>(() => new Set([firstOpenStage(progress)].filter((id): id is string => Boolean(id))));
   const [announcement, setAnnouncement] = useState(''), [confirmReset, setConfirmReset] = useState(false);
   const [inventoryGroup, setInventoryGroup] = useState<TesterGroupId | 'all'>('all'), [priorityOnly, setPriorityOnly] = useState(false);
   const resetButton = useRef<HTMLButtonElement>(null), cancelReset = useRef<HTMLButtonElement>(null);
   // The reset button unmounts while confirming; keep keyboard users on the choice they must make.
   useEffect(() => { if (confirmReset) cancelReset.current?.focus(); }, [confirmReset]);
-  // Another tab on this device may change the same key.
-  useEffect(() => {
-    const sync = (event: StorageEvent) => { if (event.key === TESTER_PROGRESS_KEY || event.key === null) setProgress(readTesterProgress()); };
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-  const save = (next: TesterProgress) => { setProgress(next); writeTesterProgress(next); };
-  const toggle = (step: QuestStep) => {
+  const save = account.save;
+  const toggle = async (step: QuestStep) => {
     const before = new Set(testerMedals(progress).filter(medal => medal.earned).map(medal => medal.id));
     const next = toggleStep(progress, step.id), total = overallProgress(next);
-    save(next);
+    if (!await save(next)) return;
     const gained = testerMedals(next).filter(medal => medal.earned && !before.has(medal.id)).map(medal => t('testerMap.announceMedal', {medal: pick(medal.name)}));
     const key = next.done.includes(step.id) ? 'testerMap.announceDone' : 'testerMap.announceUndone';
     setAnnouncement([t(key, {step: pick(step.title), done: total.done, total: total.total}), ...gained].join(' '));
   };
-  const chooseGroup = (group: TesterGroupId | null) => {
+  const chooseGroup = async (group: TesterGroupId | null) => {
     const next = {...progress, group};
-    save(next);
+    if (!await save(next)) return;
     const first = firstOpenStage(next);
     if (first) setOpenStages(value => new Set([...value, first]));
   };
-  const reset = () => {
-    resetTesterProgress();
-    const next = {group: null, done: []};
-    setProgress(next); setConfirmReset(false); setOpenStages(new Set([QUEST_STAGES[0].id]));
-    setAnnouncement(t('testerMap.resetDone'));
+  const reset = async () => {
+    if (!await account.reset()) return; setConfirmReset(false); setOpenStages(new Set([QUEST_STAGES[0].id]));
+    setAnnouncement(client ? '' : t('testerMap.resetDone'));
     requestAnimationFrame(() => resetButton.current?.focus());
   };
   const overall = overallProgress(progress), medals = testerMedals(progress), earned = medals.filter(medal => medal.earned).length;
@@ -128,7 +125,17 @@ export function TesterMap() {
     onOpen={open => setOpenStages(value => { const next = new Set(value); if (open) next.add(stage.id); else next.delete(stage.id); return next; })} onToggle={toggle}/>;
   const summary = coverageSummary();
   const areas = areasForGroup(inventoryGroup).map(area => ({...area, features: priorityOnly ? area.features.filter(feature => feature.redesign) : area.features})).filter(area => area.features.length > 0);
-  return <section className="module-panel tester-map stack">
+  return <TesterAccountContext.Provider value={{account,client}}><section className="module-panel tester-map stack">
+    {!account.working&&progress.done.length===0&&!(account.view?.feedback.length)&&<section className="card stack" aria-labelledby="tester-start-title">
+      <h2 id="tester-start-title">{pick(accountText.start)}</h2>
+      <ol><li>{pick(accountText.startRoute)}</li><li>{pick(accountText.startTry)}</li><li>{pick(accountText.startSend)}</li></ol>
+      <p>{pick(accountText.optional)}</p>
+      <button className="btn btn-primary" type="button" onClick={()=>{
+        const id=firstOpenStage(progress);if(!id)return;
+        setOpenStages(value=>new Set([...value,id]));
+        requestAnimationFrame(()=>{const step=document.querySelector<HTMLElement>(`[data-stage-id="${id}"] [data-step-id]`);step?.scrollIntoView({block:'start'});step?.querySelector<HTMLElement>('a,button')?.focus({preventScroll:true});});
+      }}>{pick(accountText.firstStep)}</button>
+    </section>}
     <section className="card stack" aria-labelledby="tester-map-intro">
       <p className="eyebrow" id="tester-map-intro">{t('testerMap.eyebrow')}</p>
       <p>{t('testerMap.intro', {start: TEST_WEEK.start, end: TEST_WEEK.end, leader: TESTER_GUILD.leaderNickname})}</p>
@@ -138,11 +145,11 @@ export function TesterMap() {
     <section className="stack tester-quest" aria-labelledby="tester-quest-title">
       <h2 id="tester-quest-title">{t('testerMap.quest')}</h2>
       <p>{t('testerMap.questIntro')}</p>
-      <p className="banner banner-info">{t('testerMap.localOnly')}</p>
+      <TesterAccountPanel account={account} client={client}/>
       <fieldset className="card tester-quest-groups">
         <legend>{t('testerMap.chooseGroup')}</legend>
-        <label className="tester-quest-group"><input type="radio" name="tester-group" checked={progress.group === null} onChange={() => chooseGroup(null)}/><span><strong>{t('testerMap.noGroup')}</strong></span></label>
-        {TESTER_GROUP_IDS.map(id => <label key={id} className="tester-quest-group"><input type="radio" name="tester-group" checked={progress.group === id} onChange={() => chooseGroup(id)}/>
+        <label className="tester-quest-group"><input type="radio" name="tester-group" disabled={account.busy} checked={progress.group === null} onChange={() => chooseGroup(null)}/><span><strong>{t('testerMap.noGroup')}</strong></span></label>
+        {TESTER_GROUP_IDS.map(id => <label key={id} className="tester-quest-group"><input type="radio" name="tester-group" disabled={account.busy} checked={progress.group === id} onChange={() => chooseGroup(id)}/>
           <span><strong>{id} · {pick(TESTER_GROUPS[id].name)}</strong><span className="field-hint">{pick(TESTER_GROUPS[id].detail)}</span></span></label>)}
       </fieldset>
       <div className="card stack tester-quest-overall">
@@ -167,12 +174,12 @@ export function TesterMap() {
         <span><strong>{pick(medal.name)}</strong><span className="tester-medal-rule">{medal.stage ? t('testerMap.medalStage', {stage: pick(medal.stage.name)}) : medal.rule ? pick(medal.rule) : ''}</span></span>
         <span className="tester-medal-state">{medal.earned ? t('testerMap.medalEarned') : t('testerMap.medalLocked')}</span>
       </li>)}</ul>
-      <p className="field-hint">{t('testerMap.leaderboard')}</p>
+
       <div className="actions">{confirmReset ? <>
-        <span role="alert">{t('testerMap.resetAsk')}</span>
-        <button type="button" className="btn btn-ghost btn-small" onClick={reset}>{t('testerMap.resetConfirm')}</button>
+        <span role="alert">{client ? pick(accountText.clearAsk) : t('testerMap.resetAsk')}</span>
+        <button type="button" className="btn btn-ghost btn-small" disabled={account.busy} onClick={reset}>{t('testerMap.resetConfirm')}</button>
         <button ref={cancelReset} type="button" className="btn btn-ghost btn-small" onClick={() => { setConfirmReset(false); requestAnimationFrame(() => resetButton.current?.focus()); }}>{t('testerMap.resetCancel')}</button>
-      </> : <button ref={resetButton} type="button" className="btn btn-ghost btn-small" onClick={() => setConfirmReset(true)}>{t('testerMap.reset')}</button>}</div>
+      </> : <button ref={resetButton} type="button" className="btn btn-ghost btn-small" disabled={account.busy} onClick={() => setConfirmReset(true)}>{client ? pick(accountText.clear) : t('testerMap.reset')}</button>}</div>
     </section>
 
     <div className="tester-map-howto">
@@ -215,5 +222,5 @@ export function TesterMap() {
         <ul className="tester-map-features">{area.features.map(feature => <FeatureRow key={feature.id} feature={feature} pick={pick}/>)}</ul>
       </section>)}
     </section>
-  </section>;
+  </section></TesterAccountContext.Provider>;
 }

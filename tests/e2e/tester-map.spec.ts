@@ -71,8 +71,8 @@ test('TESTER-003 members open the tester map from the community page and the fea
 test('TESTER-004 a tester follows the guided path, completes a step, keeps progress after reload and can reset it',async({page})=>{
   await page.goto('/#tester-map');
   const quest=page.getByRole('region',{name:'測試任務路線',exact:true});
-  await expect(quest).toContainText('進度與勳章只存在這台裝置的瀏覽器');
-  await expect(page.getByText('排行榜：規劃中，需團隊協調',{exact:false})).toBeVisible();
+  await expect(quest).toContainText('未登入時，進度與勳章只存在這台裝置');
+  await expect(page.getByText('排行榜：規劃中，需團隊協調',{exact:false})).toHaveCount(0);
   const total=await page.locator('[data-step-id]').count();
   await expect(quest.getByText(`整體進度：0／${total} 步`,{exact:true})).toBeVisible();
   await quest.getByRole('radio',{name:/^A · 新朋友・手機/}).check();
