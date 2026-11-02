@@ -13,18 +13,38 @@ const rootPath = (route: SellerRoute) => `/tenants/${route.tenantId}/storefronts
 
 /** This successful owner-only read, not a role template or guild title, enables the link. */
 export function SellerOrdersLink({client, tenantId, instanceId,readinessHref}: SellerRoute & {client: PortalClient;readinessHref?:string}) {
-  const [allowed, setAllowed] = useState(false);
+  const generation = client.sessionGeneration;
+  const scope = useRef({client, tenantId, instanceId, generation});
+  scope.current = {client, tenantId, instanceId, generation};
+  type Read = typeof scope.current & {controller: AbortController; pending: boolean};
+  const active = useRef<Read | null>(null);
+  const [result, setResult] = useState<{read: Read; status: 'allowed' | 'failed'} | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const sameScope = (read: Read) => read.client === scope.current.client && read.tenantId === scope.current.tenantId &&
+    read.instanceId === scope.current.instanceId && read.generation === scope.current.generation && read.generation === read.client.sessionGeneration;
+  const live = (read: Read) => active.current === read && !read.controller.signal.aborted && sameScope(read);
   useEffect(() => {
-    const controller = new AbortController(), generation = client.sessionGeneration; setAllowed(false);
-    void client.get(rootPath({tenantId, instanceId}) + '?limit=1', {signal: controller.signal}).then(raw => {
-      if (!controller.signal.aborted && generation === client.sessionGeneration && readSellerPage(raw)) setAllowed(true);
-    }).catch(() => {});
-    return () => controller.abort();
-  }, [client, tenantId, instanceId]);
-  // Keep the navigation below this row still while the owner-only read settles.
-  // Pending, denied and failed reads keep the order links hidden; readiness
-  // uses the store read already authorized by the parent.
-  return <div className="actions hosted-seller-order-links">{readinessHref&&<a className="btn btn-ghost" href={readinessHref}>開店準備</a>}{allowed && <><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/orders`}>預留訂單</a><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/supply-orders`}>供貨訂單</a></>}</div>;
+    const read: Read = {...scope.current, controller: new AbortController(), pending: true};
+    active.current = read; setResult(null);
+    void client.get(rootPath({tenantId, instanceId}) + '?limit=1', {signal: read.controller.signal}).then(raw => {
+      if (!live(read)) return;
+      if (!readSellerPage(raw)) throw new Error('Invalid owner reservation page');
+      read.pending = false; setResult({read, status: 'allowed'});
+    }).catch(error => {
+      if (!live(read)) return;
+      read.pending = false;
+      if (!(error instanceof ApiError && (error.status === 403 || error.status === 404))) setResult({read, status: 'failed'});
+    });
+    return () => read.controller.abort();
+  }, [client, tenantId, instanceId, generation, attempt]);
+  const current = result && live(result.read) ? result : null;
+  const retry = () => {
+    if (!current || current.status !== 'failed' || !live(current.read) || current.read.pending) return;
+    current.read.pending = true; setResult(null); setAttempt(value => value + 1);
+  };
+  // Only a validated owner read enables order links. Readiness was authorized by
+  // the parent; retry never repeats a cancellation or any other write.
+  return <div className="actions hosted-seller-order-links">{readinessHref&&<a className="btn btn-ghost" href={readinessHref}>開店準備</a>}{current?.status === 'allowed' && <><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/orders`}>預留訂單</a><a className="btn btn-ghost" href={`#stores/${tenantId}/${instanceId}/supply-orders`}>供貨訂單</a></>}{current?.status === 'failed' && <><span role="status">暫時無法讀取訂單入口。</span><button type="button" className="btn btn-ghost btn-small" onClick={retry}>重試讀取訂單入口</button></>}</div>;
 }
 
 /** Mounted by exact account/session/store key. No private order data is persisted. */

@@ -157,3 +157,59 @@ registrationTest('HO-SUI04 fresh UI and API registrations keep the configured co
     expect((await e2eAuthPool.query('SELECT 1 FROM tenant_memberships m JOIN principals p ON p.principal_id=m.principal_id WHERE m.tenant_id=$1 AND p.user_ref=ANY($2::uuid[])', [store.tenant, [store.buyer.id, store.stranger.id]])).rowCount).toBe(0);
   } finally {await independent.close();}
 });
+
+for (const fault of ['network', '503', 'schema'] as const) test(`owner entry recovers from initial ${fault} through a read-only retry`, async ({page, browser, baseURL, e2eAuthPool}, testInfo) => {
+  const s = await fixtureStore(e2eAuthPool, browser, baseURL!);
+  const path = `**/api/v1${s.root}/reservations?limit=1`;
+  const pending = gate(), started = gate(); let reads = 0, writes = 0;
+  await page.route(path, async route => {
+    reads++; expect(route.request().method()).toBe('GET');
+    if (reads === 1) {
+      if (fault === 'network') await route.abort('failed');
+      else await route.fulfill({status: fault === '503' ? 503 : 200, contentType: 'application/json', body: '{}'});
+    } else {started.resolve(); await pending.promise; await route.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({items: [], next_cursor: null})});}
+  });
+  try {
+    await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`);
+    const entry = page.locator('.hosted-seller-order-links');
+    await expect(entry.getByRole('status')).toHaveText('暫時無法讀取訂單入口。');
+    await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(0);
+    page.on('request', request => {if (request.url().includes(`${s.root}/reservations`) && request.method() !== 'GET') writes++;});
+    if (fault === 'network') await capture(page, testInfo, 'entry-read-failed');
+    await entry.getByRole('button', {name: '重試讀取訂單入口', exact: true}).click(); await started.promise;
+    await expect(entry.getByRole('button')).toHaveCount(0); await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(0);
+    expect(reads).toBe(2); pending.resolve();
+    await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(1);
+    await expect(entry.getByRole('link', {name: '供貨訂單', exact: true})).toHaveCount(1);
+    await expect(entry.getByRole('status')).toHaveCount(0); expect(writes).toBe(0); expect(reads).toBe(2);
+  } finally {pending.resolve(); await page.unroute(path);}
+});
+for (const status of [403, 404]) test(`owner entry ${status} remains hidden without a retry action`, async ({page, browser, baseURL, e2eAuthPool}) => {
+  const s = await fixtureStore(e2eAuthPool, browser, baseURL!); const path = `**/api/v1${s.root}/reservations?limit=1`;
+  let reads = 0;
+  await page.route(path, async route => {reads++; await route.fulfill({status, contentType: 'application/problem+json', body: JSON.stringify({type: 'about:blank', title: 'Unavailable', status})});});
+  try {
+    const response = page.waitForResponse(r => r.url().endsWith(`${s.root}/reservations?limit=1`));
+    await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`); await (await response).finished();
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    const entry = page.locator('.hosted-seller-order-links'); await expect(entry).toHaveCount(1);
+    await expect(entry.getByRole('link', {name: '預留訂單', exact: true})).toHaveCount(0);
+    await expect(entry.getByRole('link', {name: '供貨訂單', exact: true})).toHaveCount(0);
+    await expect(entry.getByRole('button')).toHaveCount(0); await expect(entry.getByRole('status')).toHaveCount(0); expect(reads).toBe(1);
+  } finally {await page.unroute(path);}
+});
+test('late owner entry failure cannot reappear after leaving its store', async ({page, browser, baseURL, e2eAuthPool}) => {
+  const s = await fixtureStore(e2eAuthPool, browser, baseURL!); const path = `**/api/v1${s.root}/reservations?limit=1`;
+  const started = gate(), release = gate(), settled = gate();
+  await page.route(path, async route => {started.resolve(); await release.promise;
+    // The request can already be aborted by unmount; settle either way before assertions.
+    try {await route.fulfill({status: 503, contentType: 'application/json', body: '{}'});} catch (error) {if (!String(error).match(/closed|cancel|abort|handled/i)) throw error;} finally {settled.resolve();}
+  });
+  try {
+    await buyerLogin(page, s.seller.email, `#stores/${s.tenant}/${s.instance}`); await started.promise;
+    await navigate(page, '會員首頁'); await expect(page).toHaveURL(/#home$/); release.resolve(); await settled.promise;
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(page.locator('.hosted-seller-order-links')).toHaveCount(0);
+    await expect(page.getByRole('button', {name: '重試讀取訂單入口', exact: true})).toHaveCount(0);
+  } finally {release.resolve(); await page.unroute(path);}
+});
