@@ -48,7 +48,7 @@ export function HostedStoreSettingsArea({
           {policiesEnabled&&<>
             {policiesError&&<div><p role="alert">賣方資訊與商店政策暫時無法讀取。請重試。</p><div className="actions"><button type="button" className="btn btn-ghost btn-sm" disabled={loading||locked} onClick={()=>void load()}>重新讀取賣方資訊與商店政策</button></div></div>}
             {policiesDraft?<HostedStorePolicies client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} draft={policiesDraft} writable={can('store:manage')}
-              locked={busy||retry!==null||!!otherDraft||policiesError||dirtyForms.settings===true||Object.entries(photoBlocks).some(([id,blocking])=>id!=='policies'&&blocking)}
+              locked={loading||busy||retry!==null||!!otherDraft||policiesError||dirtyForms.settings===true||Object.entries(photoBlocks).some(([id,blocking])=>id!=='policies'&&blocking)}
               onState={(dirty,blocking)=>photoState('policies',dirty,blocking)} onSaved={load}/>:!policiesError&&<p role="status">正在讀取賣方資訊與商店政策…</p>}
           </>}
         </section>;

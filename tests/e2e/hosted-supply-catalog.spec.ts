@@ -548,7 +548,8 @@ test('supply product card shows offer state and requests waiting for the supplie
       await action();
       expect((await command).ok()).toBeTruthy();
       expect((await failed).status()).toBe(503);
-      await expect(status()).toContainText(receipt);
+      await expect(status()).toContainText('操作已完成，但最新供貨資料尚未讀回');
+      await expect(status()).not.toContainText('已重新載入');
       await expect(page.getByRole('alert').filter({hasText: '服務暫時無法回應（503）。請稍後重試。'})).toBeVisible();
       await expect(page.getByRole('button', {name: '重新載入', exact: true})).toBeEnabled();
       await expect(page.getByRole('button', {name: '重試', exact: true})).toHaveCount(0);
@@ -607,7 +608,7 @@ test('supply product card shows offer state and requests waiting for the supplie
           await expect(card().getByText('供貨版本：狀態未完整載入', {exact: true})).toBeVisible();
           await expect(staleNotice()).toBeVisible();
           await expect(page.getByText('有至少 1 件供貨申請等待你確認。', {exact: true})).toHaveCount(0);
-          await expect(status()).toContainText('已同意這一版選品');
+          await expect(status()).toContainText('操作已完成，但最新供貨資料尚未讀回');
           await expect(page.getByRole('button', {name: '供貨條件', exact: true})).toBeDisabled();
           parentReleased.resolve(); await childStarted.promise;
           await expect(card().getByText('供貨版本：狀態未完整載入', {exact: true})).toBeVisible();
@@ -828,3 +829,49 @@ test('supply product card shows offer state and requests waiting for the supplie
     await page.unroute(parentReadPath);
   }
 });
+
+for (const outcome of ['acknowledged', 'conflict'] as const) {
+  test(`supply ${outcome} command with failed readback retries only GET and keeps editing locked`, async ({page, e2eAuthPool}) => {
+    const store = await readyCatalog(page, e2eAuthPool);
+    await open(page, store.hash + '/supply');
+    await workspace(page, '預留與訂單').click();
+    const toggle = page.getByRole('button', {name: '開放 30 分鐘預留', exact: true});
+    await expect(toggle).toBeEnabled();
+    const initial = await readSetting(page, store.root);
+    if (outcome === 'conflict') await patchSetting(page, store.root, true, initial.version);
+    let failReadback = false;
+    let reads = 0;
+    const tuples: ReturnType<typeof settingTuple>[] = [];
+    await page.route('**/api/v1' + store.root + '/supply-profile', route => {
+      reads++;
+      return failReadback ? route.fulfill({status: 503, contentType: 'application/problem+json', json: {status: 503, code: 'unavailable', title: '暫時無法讀取'}}) : route.continue();
+    });
+    await page.route('**/api/v1' + store.root + '/reservation-setting', async route => {
+      if (route.request().method() !== 'PATCH') return route.continue();
+      tuples.push(settingTuple(route));
+      const response = await route.fetch();
+      expect(response.status()).toBe(outcome === 'acknowledged' ? 200 : 412);
+      failReadback = true;
+      await route.fulfill({response});
+    });
+    await toggle.click();
+    const status = supplySurface(page).locator(':scope > [role="status"]');
+    await expect(status).toContainText('最新供貨資料尚未讀回');
+    await expect(status).not.toContainText('已重新載入');
+    await expect(status).toContainText(outcome === 'acknowledged' ? '不會重送剛才的操作' : '資料剛剛被更新');
+    await expect(toggle).toBeDisabled();
+    await expect(supplySurface(page).getByRole('button', {name: '重試', exact: true})).toHaveCount(0);
+    await expect(supplySurface(page)).not.toContainText('尚未確認原操作的結果');
+    expect(tuples).toHaveLength(1);
+    const beforeRetry = reads;
+    failReadback = false;
+    await supplySurface(page).getByRole('button', {name: '重新載入', exact: true}).click();
+    await expect(page.getByRole('button', {name: '停止接受新預留', exact: true})).toBeEnabled();
+    await expect(status).not.toContainText('尚未讀回');
+    expect(reads).toBeGreaterThan(beforeRetry);
+    expect(tuples).toHaveLength(1);
+    const current = await readSetting(page, store.root);
+    expect(current.reservation_enabled).toBe(true);
+    expect(BigInt(current.version)).toBe(BigInt(initial.version) + 1n);
+  });
+}

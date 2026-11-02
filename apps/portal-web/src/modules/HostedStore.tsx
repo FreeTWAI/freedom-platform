@@ -71,13 +71,14 @@ function MissingStore() { return <div className="hosted-store stack"><BackLink/>
 function StoreList({client}: {client: PortalClient}) {
   const {data, error, retry, loadMore, loadingMore, pageError} = useMyStores(client);
   return <div className="hosted-store stack" data-share-entry="stores" tabIndex={-1}>
+    <p className="field-hint">商店是你賣給訪客的頁面；商品在這裡編輯，儲存後由你決定何時公開。</p>
     <div className="actions"><a className="btn btn-primary" href="#stores/setup">建立我的商店</a><a className="btn btn-ghost" href="#stores/supply/setup">開始供貨設定</a></div>
     {error ? <><p role="alert">暫時無法讀取你的商店。</p><div className="actions"><button type="button" className="btn btn-ghost" onClick={retry}>重試</button></div></> : !data ? <p role="status">正在確認你的商店…</p> : <>
       {data.items.length === 0 && !data.next_cursor && <p>你還沒有商店。從這裡開始，就能接續完成開店設定。</p>}
       {data.items.map(item => <article className="card stack" key={item.instance_id}>
         <h2>{item.name ?? '尚未完成設定的商店'}</h2><p>業務空間：{item.tenant_display_name}</p><p>{stateWord(item)}</p>
         <div className="actions"><a className="btn btn-primary" href={`#stores/${item.tenant_id}/${item.instance_id}`}>進入我的商店</a>
-          {item.publication_state === 'published' && item.public_path && <a href={item.public_path} target="_blank" rel="noopener">查看公開頁</a>}</div>
+          {item.publication_state === 'published' && item.public_path && <a href={item.public_path} target="_blank" rel="noopener">查看公開商店</a>}</div>
       </article>)}
       {pageError && <p role="alert">暫時無法載入其餘商店，請重試。</p>}
       {data.next_cursor && <div className="actions"><button type="button" className="btn btn-ghost" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? '正在載入…' : pageError ? '重試載入其餘商店' : '載入更多商店'}</button></div>}
@@ -89,7 +90,7 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   const root = `/tenants/${tenantId}/storefronts/${instanceId}`;
   const {distributionRefresh, view, reservationSetting, products, galleries, media, photoBlocks, photoBlockRef, photoBlocking, setPhotoBlocking,
     preview, publicationReview, appearance, policiesDraft, policiesError, appearanceDraft, appearanceError, templateChoice, setTemplateChoice,
-    missing, setMissing, error, status, loading, busy, retry, busyRef, held, statusLine, load, announce, send, command} = useStorePageData({
+    missing, setMissing, error, status, loading, readFailed, busy, retry, busyRef, held, statusLine, load, announce, send, command} = useStorePageData({
     client, root, photosEnabled, appearanceEnabled, policiesEnabled, galleryEnabled,
     onConflict: () => {setEditing(null); setSupplyEditing(null); markDirty('edit', false); markDirty('supply', false);},
   });
@@ -129,7 +130,12 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
     else if (result.status === 'failed') {setCopyFeedback({url, message: '無法自動複製，請選取並複製下方內容'}); setManualUrl(url);}
   }
   const can = (key: string) => view?.writable === true && view.capabilities.includes(key);
-  const locked = busy || retry !== null || photoBlocking || loading;
+  const locked = busy || retry !== null || photoBlocking || loading || readFailed;
+  const readBlocked = loading || readFailed;
+  function retryRead() {
+    if (hasDraft && !window.confirm('重新載入可能取代未儲存的內容。取消可留在目前頁面保留草稿；確定重新載入嗎？')) return;
+    void load();
+  }
   const publishDisabled = locked || hasDraft || !publicationReview?.preview.projection.products.length || !can('store:publish');
   function publishSaved() {
     // Use the review already shown on screen; never fetch a new digest and publish it silently.
@@ -148,31 +154,29 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
   if (offerId) return <div className="hosted-store stack">
     <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{status}</p>
     {error&&<p className="banner banner-error" role="alert">{error}</p>}
-    {(retry||error)&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>void (retry?send(retry):load())}>{retry?'重試':'重新載入'}</button></div>}
+    {(retry||error)&&<div className="actions"><button type="button" className="btn btn-ghost" disabled={busy} onClick={()=>retry?void send(retry):retryRead()}>{retry?'重試':'重新載入'}</button></div>}
     {view?<HostedSupplyOffer client={client} root={root} offerId={offerId} refresh={distributionRefresh} busy={locked} writable={can('store:write')} onDirty={value=>markDirty('distribution/offer',value)} onCommand={command}/>:!error&&<p>正在確認商店權限…</p>}
   </div>;
   return <div className={appearanceEnabled?"hosted-store hosted-store-appearance-enabled stack":"hosted-store stack"}>
     <BackLink/>
     <p ref={statusLine} tabIndex={-1} role="status" aria-live="polite">{loading && !view ? '正在載入商店…' : [status, store ? publicationText : ''].filter(Boolean).join(' ')}</p>
-    {error && <p className="banner banner-error" role="alert">{error}</p>}
+    {error && <p className="banner banner-error" role="alert">{readFailed ? '目前顯示上次讀取的資料，重新載入成功前暫停修改。' : ''}{error}</p>}
     <div className="actions">{retry ? <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void send(retry)}>重試</button>
-      : error && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void load()}>重新載入</button>}</div>
+      : error && <button type="button" className="btn btn-ghost" disabled={busy || loading} onClick={retryRead}>重新載入</button>}</div>
     {view && <>
-      <h2>{store?.name ?? '設定我的商店'}</h2>
+      <header className="hosted-store-heading"><h2>{store?.name ?? '設定我的商店'}</h2>
+        {store && <p className="field-hint">這裡管理商品與商店；先儲存，確認後再發布給訪客看。</p>}</header>
       {store && <SellerOrdersLink client={client} tenantId={tenantId} instanceId={instanceId} readinessHref={commerceConsoleEnabled?sellerConsoleHref({tenantId,instanceId},'overview'):undefined}/>}
       {!view.writable && <p>{view.capabilities.some(key => key !== 'store:read') ? '這間商店目前暫停，無法修改。' : '你可以檢視這間商店，但不能修改。'}</p>}
       {!store ? can('store:manage') ? <SettingsForm key="setup" client={client} root={root} busy={locked} onMissing={() => setMissing(true)} onDirty={value => markDirty('settings', value)} onSave={(body, success, fieldError) => command({method: 'post', path: root + '/setup', body, schema: StoreViewSchema, notice: '已建立商店。', success, fieldError})}/>
         : <p>這間商店還沒完成設定，請業務空間擁有者或管理員設定。</p> : <>
         {checkoutEnabled?<StoreOrderBanner client={client} tenantId={tenantId} instanceId={instanceId} consoleEnabled={commerceConsoleEnabled} refresh={distributionRefresh}/>:<p className="banner" role="note">{reservationSetting?.reservation_enabled && reservationSetting.admission_enabled ? '已開放 30 分鐘庫存預留；付款與出貨尚未啟用。' : NOTICE}</p>}
-        <nav className="hosted-supply-nav hosted-retail-nav" aria-label="商店工作區">{([['products','商品'],['cooperation','供貨合作'],['publish','店面與發布'],['settings','商店資料']] as const).map(([key,label])=><button key={key} type="button" className="btn btn-ghost" aria-pressed={area===key} aria-controls={`store-${key}-panel`} onClick={()=>setArea(key)}>{label}</button>)}</nav>
+        <nav className="hosted-supply-nav hosted-retail-nav" aria-label="商店工作區">{([['products','商品'],['publish','店面與發布'],['settings','商店資料'],['cooperation','供貨合作']] as const).map(([key,label])=><button key={key} type="button" className="btn btn-ghost" aria-pressed={area===key} aria-controls={`store-${key}-panel`} onClick={()=>setArea(key)}>{label}</button>)}</nav>
         {otherDraft&&<div className="hosted-store-draft-note"><p>另一個工作區有未儲存內容，先儲存或取消後就能繼續修改。</p><button type="button" className="btn btn-ghost" onClick={()=>setArea(draftArea(otherDraft[0]))}>回到未儲存的工作區</button></div>}
-        {reservationSetting && <HostedReservationSetting setting={reservationSetting} writable={view.writable} locked={locked || hasDraft || loading}
-          onToggle={() => void command({method:'patch',path:root+'/reservation-setting',body:{reservation_enabled:!reservationSetting.reservation_enabled},
-            version:reservationSetting.version,schema:ReservationSettingSchema,notice:reservationSetting.reservation_enabled?'已停止接受新預留。既有預留仍可查看與取消。':'已開放 30 分鐘預留。',success:()=>{}})}/>}
         <HostedStoreProductsArea
           area={area} can={can} photosEnabled={photosEnabled} photoUploadsEnabled={photoUploadsEnabled} galleryEnabled={galleryEnabled} publicationReview={publicationReview} publishDisabled={publishDisabled}
           publication={publication} busy={busy} held={held} publishSaved={publishSaved} publicPath={publicPath} hasDraft={hasDraft} photoBlocking={photoBlocking}
-          loading={loading} view={view} products={products} query={query} setQuery={setQuery} locked={locked} preview={preview}
+          loading={readBlocked} view={view} products={products} query={query} setQuery={setQuery} locked={locked} preview={preview}
           categoriesEnabled={categoriesEnabled} client={client} userId={userId} root={root} distributionRefresh={distributionRefresh} retry={retry} otherDraft={otherDraft}
           photoBlocks={photoBlocks} photoState={photoState} load={load} variantsEnabled={variantsEnabled} supplyEditing={supplyEditing} editing={editing} store={store}
           areaLocked={areaLocked} command={command} setSupplyEditing={setSupplyEditing} markDirty={markDirty} leaveOk={leaveOk} setEditing={setEditing} productCopyUrl={productCopyUrl}
@@ -184,15 +188,18 @@ function StorePage({supplyOfferPhotosEnabled=false,offerId,cooperation=false,app
           tenantId={tenantId} instanceId={instanceId} materialMediaEnabled={materialMediaEnabled} distributionPhotosEnabled={distributionPhotosEnabled}/>
         <HostedStorePublishArea
           area={area} publication={publication} preview={preview} appearanceEnabled={appearanceEnabled} appearance={appearance} areaLocked={areaLocked} can={can}
-          templateChoice={templateChoice} setTemplateChoice={setTemplateChoice} markDirty={markDirty} command={command} root={root} appearanceError={appearanceError} loading={loading}
+          templateChoice={templateChoice} setTemplateChoice={setTemplateChoice} markDirty={markDirty} command={command} root={root} appearanceError={appearanceError} loading={readBlocked}
           locked={locked} appearanceDraft={appearanceDraft} client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} busy={busy}
           retry={retry} otherDraft={otherDraft} photoBlocks={photoBlocks} photoState={photoState} load={load} dirtyForms={dirtyForms} publicationReview={publicationReview}
           publishDisabled={publishDisabled} publishSaved={publishSaved} hasDraft={hasDraft} store={store} view={view} publicPath={publicPath} storeCopyUrl={storeCopyUrl}
           copyAction={copyAction} copyLink={copyLink} copyFeedback={copyFeedback} manualUrl={manualUrl} manualField={manualField}/>
+        {reservationSetting && <div hidden={area!=='settings'} className="hosted-reservation-settings"><HostedReservationSetting setting={reservationSetting} writable={view.writable} locked={locked || hasDraft || loading}
+          onToggle={() => void command({method:'patch',path:root+'/reservation-setting',body:{reservation_enabled:!reservationSetting.reservation_enabled},
+            version:reservationSetting.version,schema:ReservationSettingSchema,notice:reservationSetting.reservation_enabled?'已停止接受新預留。既有預留仍可查看與取消。':'已開放 30 分鐘預留。',success:()=>{}})}/></div>}
         <HostedStoreSettingsArea
           area={area} can={can} view={view} client={client} root={root} store={store} areaLocked={areaLocked}
           dirtyForms={dirtyForms} setMissing={setMissing} markDirty={markDirty} command={command} publication={publication} policiesEnabled={policiesEnabled} policiesError={policiesError}
-          loading={loading} locked={locked} load={load} policiesDraft={policiesDraft} userId={userId} tenantId={tenantId} instanceId={instanceId}
+          loading={readBlocked} locked={locked} load={load} policiesDraft={policiesDraft} userId={userId} tenantId={tenantId} instanceId={instanceId}
           busy={busy} retry={retry} otherDraft={otherDraft} photoBlocks={photoBlocks} photoState={photoState}/>
       </>}
     </>}

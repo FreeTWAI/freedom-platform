@@ -62,6 +62,8 @@ export function useStorePageData({client, root, photosEnabled, appearanceEnabled
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
+  const [readFailed, setReadFailed] = useState(false);
+  const refreshNotice = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState<StorePageAttempt | null>(null);
   const controller = useRef(new AbortController());
@@ -74,9 +76,10 @@ export function useStorePageData({client, root, photosEnabled, appearanceEnabled
     void load();
     return () => {controller.current.abort(); readGeneration.current++;};
   }, [client, root]);
-  async function load(options?: {throwOnError?: boolean}) {
-    const signal = controller.current.signal; const ticket = ++readGeneration.current;
-    const current = () => !signal.aborted && readGeneration.current === ticket;
+  async function load(options?: {throwOnError?: boolean}) {await refresh(options);}
+  async function refresh(options?: {throwOnError?: boolean}): Promise<'fresh' | 'failed' | 'superseded'> {
+    const signal = controller.current.signal; const ticket = ++readGeneration.current; const session = client.sessionGeneration;
+    const current = () => !signal.aborted && readGeneration.current === ticket && client.sessionGeneration === session;
     setLoading(true); setPublicationReview(null);
     try {
       const next = StoreViewSchema.parse(await client.get(root, {signal}));
@@ -98,15 +101,19 @@ export function useStorePageData({client, root, photosEnabled, appearanceEnabled
         try {setting=ReservationSettingSchema.parse(await client.get(root+'/reservation-setting',{signal}));}
         catch(cause) {if(!(cause instanceof ApiError && [403,404].includes(cause.status))) throw cause;}
       }
-      if (!current()) return;
+      if (!current()) return 'superseded';
       if(legal||next.setup_state!=='ready')setPoliciesDraft(legal);setPoliciesError(legalError);
       if(branding||next.setup_state!=='ready')setAppearanceDraft(branding);setAppearanceError(brandingError);
-      setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos);setGalleries(galleryDrafts); setPreview(draft); setAppearance(presentation); setPublicationReview(review); setError('');
+      setReservationSetting(setting); setView(next); setDistributionRefresh(n=>n+1); setProducts(items); setMedia(photos);setGalleries(galleryDrafts); setPreview(draft); setAppearance(presentation); setPublicationReview(review); setError(''); setReadFailed(false);
+      if (refreshNotice.current) {announce(refreshNotice.current); refreshNotice.current = null;}
+      return 'fresh';
     } catch (cause) {
-      if (!current()) return;
+      if (!current()) return 'superseded';
+      setReadFailed(true);
       if (cause instanceof ApiError && cause.status === 404 && !Object.values(photoBlockRef.current).some(Boolean)) setMissing(true);
       else setError(errorText(cause));
       if(options?.throwOnError) throw cause;
+      return 'failed';
     } finally {if (current()) setLoading(false);}
   }
   function setPhotoBlocking(id: string, blocking: boolean) {
@@ -115,36 +122,44 @@ export function useStorePageData({client, root, photosEnabled, appearanceEnabled
   }
   function announce(text: string) {setStatus(text); requestAnimationFrame(() => statusLine.current?.focus());}
   async function send(attempt: StorePageAttempt) {
-    if (busyRef.current) return;
+    if (busyRef.current || held.current && held.current !== attempt || readFailed && held.current !== attempt) return;
     held.current = attempt; busyRef.current = true; setBusy(true); setRetry(null); setError('');
-    const signal = controller.current.signal;
+    const signal = controller.current.signal, session = client.sessionGeneration;
+    const current = () => !signal.aborted && client.sessionGeneration === session;
     try {
       const raw = await client[attempt.method](attempt.path, attempt.body, {idempotencyKey: attempt.key, ifMatch: attempt.version, signal});
       // An unreadable success may already have committed; retain the same attempt key.
       const parsed = attempt.schema.safeParse(raw);
       if (!parsed.success) throw new ApiError({message: '回應未完整收到，請重試確認原操作。', network: true});
-      if (signal.aborted) return;
+      if (!current()) return;
       held.current = null; attempt.success(parsed.data);
-      await load(); if (!signal.aborted) announce(attempt.notice);
+      refreshNotice.current = attempt.notice;
+      const result = await refresh();
+      if (current() && result === 'failed') announce('操作已完成，但最新資料尚未讀回。請重新載入；不會重送剛才的操作。');
     } catch (cause) {
-      if (signal.aborted) return;
+      if (!current()) return;
       if (cause instanceof ApiError && cause.network) {setRetry(attempt); setError('尚未確認原操作的結果，請按「重試」確認。'); return;}
       held.current = null;
       if (cause instanceof ApiError && cause.status === 404 && attempt.targetMissingIsStore!==false) {setMissing(true); return;}
       if (cause instanceof ApiError && attempt.path.endsWith('/publish-reviewed') && (cause.status === 412 || cause.code === 'storefront_publication_changed')) {
-        await load(); announce('商品或店面內容已更新，已重新載入。請確認後再按一次上架。');
+        await reloadConflict('商品或店面內容已更新，已重新載入。請確認後再按一次上架。');
       } else if (cause instanceof ApiError && cause.status === 412) {
-        onConflict(); await load();
-        announce(attempt.path.endsWith('/appearance') ? '商店資料剛剛被更新，已重新載入。你的版型選擇仍保留，請確認後再儲存。' : attempt.product ? '這件商品剛剛被更新，已重新載入。' : '商店資料剛剛被更新，已重新載入。');
+        onConflict();
+        await reloadConflict(attempt.path.endsWith('/appearance') ? '商店資料剛剛被更新，已重新載入。你的版型選擇仍保留，請確認後再儲存。' : attempt.product ? '這件商品剛剛被更新，已重新載入。' : '商店資料剛剛被更新，已重新載入。');
       } else if (cause instanceof ApiError && cause.code === 'storefront_already_set_up') {
-        await load(); announce('這間商店已經設定過，已重新載入。');
+        await reloadConflict('這間商店已經設定過，已重新載入。');
       } else if (cause instanceof ApiError && ['storefront_slug_taken', 'storefront_slug_reserved', 'validation_failed'].includes(cause.code ?? '') && attempt.fieldError) {
         attempt.fieldError(cause);
       } else setError(errorText(cause));
-    } finally {if (!signal.aborted) {busyRef.current = false; setBusy(false);}}
+    } finally {if (current()) {busyRef.current = false; setBusy(false);}}
+  }
+  async function reloadConflict(notice: string) {
+    refreshNotice.current = notice;
+    const result = await refresh();
+    if (result === 'failed') announce('資料已被更新，但最新資料尚未讀回。請重新載入後再確認；本次操作未重送。');
   }
   function command(attempt: Omit<StorePageAttempt, 'key'>) {return send({...attempt, key: crypto.randomUUID()});}
   return {distributionRefresh, view, reservationSetting, products, galleries, media, photoBlocks, photoBlockRef, photoBlocking, setPhotoBlocking,
     preview, publicationReview, appearance, policiesDraft, policiesError, appearanceDraft, appearanceError, templateChoice, setTemplateChoice,
-    missing, setMissing, error, status, loading, busy, retry, busyRef, held, statusLine, load, announce, send, command};
+    missing, setMissing, error, status, loading, readFailed, busy, retry, busyRef, held, statusLine, load, announce, send, command};
 }
