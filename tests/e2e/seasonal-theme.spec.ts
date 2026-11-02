@@ -38,9 +38,11 @@ for(const base of ['light','dark','versefolk'])for(const width of [390,1280]){
  });
 }
 test('seasonal sharing reuses composer; auto expires at Taipei midnight and failed art stays optional',async({page})=>{
- await page.setViewportSize({width:320,height:844});await page.clock.install({time:new Date('2026-10-31T15:00:00Z')});await page.clock.pauseAt(new Date('2026-10-31T15:01:00Z'));
+ await page.setViewportSize({width:320,height:844});await page.clock.install({time:new Date('2026-10-31T15:00:00Z')});
  await page.addInitScript(()=>localStorage.setItem('freedom-seasonal-theme','auto'));
  await page.route('**/art/seasonal/*',route=>route.abort());await login(page);
+ // Keep timers running until lazy home rendering and its initial feed have settled.
+ await page.clock.pauseAt(new Date('2026-10-31T15:01:00Z'));
  await expect(page.locator('.seasonal-welcome')).toBeVisible();await expect(page.locator('.seasonal-share')).toBeEnabled();
  const composer=page.getByRole('dialog',{name:'建立貼文',exact:true});
  await page.locator('.seasonal-share').click();await expect(composer).toBeVisible();

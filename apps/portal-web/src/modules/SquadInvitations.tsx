@@ -33,6 +33,7 @@ export function ReceivedInvitations({client,mutate,busy,refreshToken,onChanged}:
   }
   return <section className="squad-invitations" aria-labelledby="received-squad-invitations">
     <details open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}><summary><h3 id="received-squad-invitations" data-guide-anchor="squads:invitations" ref={heading} tabIndex={-1}>收到的小隊邀請</h3><span className="muted">{page.loading?'載入中…':page.items.some(item=>item.state==='pending')?'有待回覆邀請':'查看紀錄'}</span></summary>
+      <p className="field-hint">接受後會加入對方的小隊，並可查看成員選擇分享給小隊的聯絡資料；婉拒不會加入。</p>
       <label className="squad-invitations-toggle"><input type="checkbox" checked={showAll} onChange={event=>setShowAll(event.target.checked)}/>顯示已回覆</label>
     {page.items.length>0&&<ul className="squad-invitation-list">{page.items.map(invitation=><li key={invitation.invitation_id} className="squad-invitation">
       <div><strong>{invitation.squad_name}</strong><span className="muted">隊主：{invitation.owner_name} · {invitationLabels[invitation.state]}</span></div>
@@ -66,7 +67,7 @@ export function OwnerInvitations({client,squad,selfId,mutate,busy,refreshToken,o
   async function withdraw(invitation:Invitation){const result=await mutate<Invitation>(`/squad-invitations/${invitation.invitation_id}/withdraw`,{},invitation.aggregate_version);if(result){await onChanged(`已撤回給 ${result.recipient_name} 的邀請。`);heading.current?.focus();}else await onChanged('');}
   return <section className="squad-invite-manager stack" aria-label="邀請夥伴">
     <form className="squad-invite-search" onSubmit={find}><label className="field">搜尋要邀請的夥伴<input type="search" value={search} maxLength={100} onChange={event=>setSearch(event.target.value)} placeholder="暱稱、定位或技能"/></label><button className="btn btn-ghost" disabled={searching}>搜尋夥伴</button></form>
-    <p className="field-hint">對方接受後才會加入小隊；接受前看不到只分享給小隊夥伴的聯絡方式。</p>
+    <p className="field-hint">對方接受後才會加入小隊；接受前看不到只分享給小隊夥伴的聯絡方式。每支小隊最多保留 50 份待回覆邀請。</p>
     {searching&&<p role="status">正在搜尋夥伴…</p>}
     {searchError&&<><p role="alert" className="banner banner-error">{searchError}</p><button className="btn btn-ghost" onClick={()=>void find()}>重新搜尋</button></>}
     {candidates&&!searching&&!searchError&&(candidates.length?<ul className="squad-invitation-list" aria-label="搜尋結果">{candidates.map(candidate=>{const state=status(candidate);return <li key={candidate.user_id} className="squad-invitation">

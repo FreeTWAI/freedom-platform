@@ -1,5 +1,7 @@
+import {readFileSync} from 'node:fs';
 import { navigate } from './navigation.js';
 import { test, expect } from './fixtures.js';
+import {mountSharingFixture} from './sharing-authoring-fixture.js';
 
 test('member reads GitHub-backed co-creation tasks, copies a bounded brief, and sees merged PR authors',async({page,context})=>{
   const browserErrors:string[]=[];page.on('pageerror',error=>browserErrors.push(error.message));
@@ -10,8 +12,14 @@ test('member reads GitHub-backed co-creation tasks, copies a bounded brief, and 
   await page.getByRole('button',{name:'登入',exact:true}).click();
   await navigate(page, '一起開發');
   await expect(page.getByRole('heading',{name:'一起開發',exact:true}).first()).toBeVisible();
-  await expect(page.getByRole('heading',{name:'自動剪輯共創：一起把可用的底層疊起來',exact:true})).toHaveCount(1);
+  const entry=page.getByRole('button',{name:'查看任務：自動剪輯共創：一起把可用的底層疊起來',exact:true});
+  await entry.focus();await page.keyboard.press('Enter');
+  await expect(page.locator('.cocreation-detail h3').first()).toBeFocused();
+  await page.getByRole('button',{name:'返回共創專案',exact:true}).click();
+  await expect(entry).toBeFocused();
+  await entry.press('Enter');
   await expect(page.locator('.expedition-project')).toHaveCount(0);
+  await page.getByText('用 AI 協助開發（選用）',{exact:true}).click();
   await page.getByRole('button',{name:'複製專案開發指令',exact:true}).click();
   const projectBrief=page.getByLabel('給 Agent 的專案開發指令',{exact:true});
   await expect(projectBrief).toHaveValue(/原作 Repo：https:\/\/github.com\/Hao0321\/video-autopilot-kit/);
@@ -28,6 +36,7 @@ test('member reads GitHub-backed co-creation tasks, copies a bounded brief, and 
   const text=await brief.inputValue();
   expect((await page.evaluate(()=>navigator.clipboard.readText())).replace(/\r\n/g,'\n')).toBe(text.replace(/\r\n/g,'\n'));
   await page.getByRole('button',{name:'收起指令',exact:true}).click();
+  await page.getByText(/^查看已合併的貢獻（/).click();
   const contribution=page.getByRole('article').filter({has:page.getByRole('heading',{name:'補上剪輯測試說明',exact:true})});
   await expect(contribution).toContainText('GitHub 作者：contributor-demo');
   await expect(contribution.getByRole('link',{name:'查看修改與審查 ↗',exact:true})).toHaveAttribute('href','https://github.com/FreeTWAI/video-autopilot-kit/pull/8');
@@ -55,14 +64,102 @@ test('guild discovery has recoverable empty states and project prompts survive a
   await expect(page.getByRole('heading',{name:'這個公會還沒有共創邀請',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'複製專案開發指令',exact:true})).toHaveCount(0);
   await page.getByRole('combobox',{name:'公會分類',exact:true}).selectOption('guild_ai_vibe');
-  await expect(page.getByRole('combobox',{name:'選擇專案',exact:true})).toHaveValue('workshop-video-autopilot');
+  await page.getByRole('button',{name:'查看任務：自動剪輯共創：一起把可用的底層疊起來',exact:true}).click();
   await expect(page.getByRole('button',{name:'重新載入任務',exact:true})).toBeVisible();
+  await page.getByText('用 AI 協助開發（選用）',{exact:true}).click();
   await page.getByRole('button',{name:'複製專案開發指令',exact:true}).click();
   await expect(page.getByLabel('給 Agent 的專案開發指令',{exact:true})).toHaveValue(/最多三項/);
   await expect(page.getByText('指令已準備好。瀏覽器未允許複製，請從下方自行選取複製。',{exact:true})).toBeVisible();
   await expect(page.getByText('目前沒有開放中的任務。',{exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'返回共創專案',exact:true}).click();
   await page.getByRole('combobox',{name:'公會分類',exact:true}).selectOption('guild_media_automation');
-  await expect(page.getByRole('combobox',{name:'選擇專案',exact:true})).toHaveValue('workshop-video-autopilot');
+  await expect(page.getByRole('button',{name:'查看任務：自動剪輯共創：一起把可用的底層疊起來',exact:true})).toBeVisible();
   await page.setViewportSize({width:320,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+// Synthetic transport exercises the real component/store without publishing.
+test('invitation cancel preserves drafts; unknown publication remains recoverable after cancel and remount',async({page})=>{
+  await mountSharingFixture(page,'cooperation');
+  await page.addStyleTag({content:readFileSync(new URL('../../apps/portal-web/src/modules/CoCreation.css',import.meta.url),'utf8')});
+  const trigger=page.getByRole('button',{name:'發起共創邀請',exact:true});
+  await trigger.click();
+  await expect(page.getByRole('heading',{name:'發起共創邀請',exact:true})).toBeFocused();
+  await page.getByLabel('共創邀請名稱',{exact:true}).fill('Retained invitation');
+  await page.getByLabel('這一輪想完成什麼',{exact:true}).fill('A bounded synthetic goal');
+  await page.getByLabel('參與方式與注意事項',{exact:true}).fill('Coordinate in GitHub first');
+  await page.getByLabel('程式開發',{exact:true}).check();
+  await page.getByRole('button',{name:'取消並返回',exact:true}).click();
+  await expect(trigger).toBeFocused();
+  expect(await page.evaluate(()=>(window as any).sharingFixture.calls.length)).toBe(0);
+  await trigger.press('Enter');
+  await expect(page.getByLabel('共創邀請名稱',{exact:true})).toHaveValue('Retained invitation');
+  await page.getByRole('button',{name:'發布共創邀請',exact:true}).click();
+  await expect(page.locator('.cocreation-panel')).toHaveAttribute('inert','');
+  await page.evaluate(()=>(window as any).sharingFixture.reject(0));
+  await expect(page.getByRole('button',{name:'確認發布結果',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'取消並返回',exact:true}).click();
+  await expect(page.getByRole('button',{name:'確認發布結果',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Toggle form',exact:true}).click();
+  await page.getByRole('button',{name:'Toggle form',exact:true}).click();
+  await page.getByRole('button',{name:'確認發布結果',exact:true}).click();
+  expect(await page.evaluate(()=>{const f=(window as any).sharingFixture;return JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]);})).toBe(true);
+  await page.evaluate(()=>{const f=(window as any).sharingFixture;f.session(f.other);f.resolve(1,{...f.calls[1].body,project_id:'late-old-owner',aggregate_version:1});});
+  await expect(page.getByRole('button',{name:'確認發布結果',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'發起共創邀請',exact:true}).click();
+  await expect(page.getByLabel('共創邀請名稱',{exact:true})).toHaveValue('');
+});
+
+for(const theme of ['light','dark','versefolk','guide-dragon','guide-ai-sister'])test(`co-creation list and task detail keep keyboard return and narrow layout in ${theme}`,async({page})=>{
+  await page.addInitScript(value=>localStorage.setItem('freedom-theme',value),theme);
+  await page.goto('/');
+  await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
+  await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
+  await page.getByRole('button',{name:'登入',exact:true}).click();
+  await navigate(page,'一起開發');
+  await expect(page.locator('html')).toHaveAttribute('data-experience-profile',theme);
+  await expect(page.locator('html')).toHaveAttribute('data-theme',theme==='guide-dragon'?'dark':theme==='guide-ai-sister'?'light':theme);
+  const panel=page.locator('.cocreation-panel');
+  const entry=panel.getByRole('button',{name:'查看任務：自動剪輯共創：一起把可用的底層疊起來',exact:true});
+  for(const width of [320,390,1440]){
+    await page.setViewportSize({width,height:900});
+    await expect(entry).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await entry.focus();await page.keyboard.press('Enter');
+    await expect(panel.locator('#cocreation-project-title')).toBeFocused();
+    await expect(panel.getByRole('link',{name:'到 GitHub 查看任務 ↗',exact:true})).toBeVisible();
+    await expect(panel.locator('.expedition-issue summary').first()).toBeVisible();
+    const summaries=panel.locator('.cocreation-detail details:visible > summary');
+    expect(await summaries.count()).toBeGreaterThanOrEqual(4);
+    for(const summary of await summaries.all()){
+      expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect(await summary.evaluate(node=>getComputedStyle(node).listStyleType)).not.toBe('none');
+      await summary.focus();await page.keyboard.press('Tab');await page.keyboard.press('Shift+Tab');
+      await expect(summary).toBeFocused();
+      expect(await summary.evaluate(node=>getComputedStyle(node).outlineStyle)).not.toBe('none');
+      await summary.press('Enter');await expect(summary.locator('..')).toHaveAttribute('open','');
+      await summary.press('Space');await expect(summary.locator('..')).not.toHaveAttribute('open','');
+    }
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await panel.getByRole('button',{name:'返回共創專案',exact:true}).click();await expect(entry).toBeFocused();
+  }
+  await page.screenshot({path:`test-results/co-creation-${theme}.png`,fullPage:true});
+});
+
+test('retained unavailable project shows a generic recovery instead of switching to another project',async({page})=>{
+  await mountSharingFixture(page,'cooperation');
+  await page.addStyleTag({content:readFileSync(new URL('../../apps/portal-web/src/modules/CoCreation.css',import.meta.url),'utf8')});
+  await page.evaluate(()=>{const f=(window as any).sharingFixture;f.projects([{project_id:'project-A',title:'Private A',goal:'A goal',guild_keys:[],help_wanted:[],repository_url:'https://github.com/synthetic/repo',repository_full_name:'synthetic/repo',coordinator_name:'Owner'}]);});
+  const remount=async()=>{await page.getByRole('button',{name:'Toggle form',exact:true}).click();await page.getByRole('button',{name:'Toggle form',exact:true}).click();};
+  await remount();await page.getByRole('button',{name:'查看任務：Private A',exact:true}).click();
+  await expect(page.locator('#cocreation-project-title')).toHaveText('Private A');
+  await page.evaluate(()=>{const f=(window as any).sharingFixture;f.projects([{project_id:'project-B',title:'Available B',goal:'B goal',guild_keys:[],help_wanted:[],repository_url:'https://github.com/synthetic/repo',repository_full_name:'synthetic/repo',coordinator_name:'Owner'}]);});
+  await remount();
+  await expect(page.getByText('這個專案目前不在可見清單中。請返回專案列表，選擇其他可以參與的作品。',{exact:true})).toBeVisible();
+  await expect(page.getByText('Private A',{exact:true})).toHaveCount(0);
+  await expect(page.locator('#cocreation-project-title')).toHaveCount(0);
+  expect(await page.evaluate(()=>(window as any).sharingFixture.reads.filter((path:string)=>path==='/co-creation/projects/project-B/activity').length)).toBe(0);
+  await page.getByRole('button',{name:'返回共創專案',exact:true}).click();
+  await page.getByRole('button',{name:'查看任務：Available B',exact:true}).click();
+  await expect(page.locator('#cocreation-project-title')).toHaveText('Available B');
 });
