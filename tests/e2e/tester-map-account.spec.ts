@@ -25,9 +25,12 @@ test('TESTER-ACCOUNT-001 login imports guest progress before opening map; feedba
     await device.goto('/#tester-map');
     await expect(device.locator('[data-step-id="arrival.preview"]').getByRole('button',{name:'取消完成',exact:true})).toBeEnabled();
     const step=device.locator('[data-step-id="arrival.preview"]');
-    await step.locator('details > summary').click();await step.getByRole('radio',{name:'有問題',exact:true}).check();
+    await step.getByRole('button',{name:'通過',exact:true}).click();
+    await expect(step.getByText('謝謝你幫忙測試！',{exact:true})).toBeVisible();
+    await expect(step.getByRole('status').first()).toContainText('已送出');
+    await step.getByRole('button',{name:'有問題',exact:true}).click();
     await step.getByRole('textbox').fill('Synthetic button did not open');await step.getByRole('button',{name:'儲存回饋',exact:true}).click();
-    await expect(step.getByRole('status')).toContainText('回饋已保存');
+    await expect(step.getByRole('status').first()).toContainText('回饋已保存');
     await step.getByRole('button',{name:'轉成公開 Issue（先確認）',exact:true}).click();
     const dialog=device.getByRole('dialog');await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel('標題',{exact:true})).toHaveValue('不登入先看看');
@@ -77,9 +80,14 @@ test('TESTER-ACCOUNT-003 current builders read anonymous feature reports; revoca
     const feedback=await page.request.post('/api/v1/me/tester-map',{headers:{Origin:new URL(page.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':crypto.randomUUID(),'If-Match':`"${view.version}"`},data:{action:'feedback',step_id:'arrival.preview',result:'problem',note:'Synthetic report issue'}});
     expect(feedback.status()).toBe(200);await page.goto('/#tester-map');
     const report=page.locator('section').filter({has:page.getByRole('heading',{name:'測試報告',exact:true})}).last();
+    await expect(report.getByRole('link',{name:'測試報告',exact:true})).toBeVisible();
     await report.getByRole('button',{name:'重新讀取',exact:true}).click();
     await expect(report.getByText('Synthetic report issue',{exact:true}).first()).toBeVisible();
     await expect(report).toContainText('測試人數／通過率: 1 / 0%');
+    const module=report.locator('[data-report-module="portal-shell"]');
+    const item=module.locator('li').filter({has:page.getByText('Synthetic report issue',{exact:true})}).first();
+    await item.getByRole('button',{name:'儲存回饋',exact:true}).click();
+    await expect(item.locator('.chip')).toHaveText('建造者已看到');
     await expect(report).not.toContainText(user.user_id);await expect(report).not.toContainText(user.email);
     await page.screenshot({path:'test-results/tester-map-report-desktop.png',fullPage:true});
     await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -89,4 +97,16 @@ test('TESTER-ACCOUNT-003 current builders read anonymous feature reports; revoca
     await expect(report.getByText('Synthetic report issue',{exact:true})).toHaveCount(0);
     await clear(page);
   } finally {await e2eAuthPool.query('DELETE FROM positioning_profession_memberships WHERE membership_id=$1',[membership]);}
+});
+
+test('TESTER-ACCOUNT-004 empty map shows the optional start card and opens the first step',async({page})=>{
+ await page.goto('/#tester-map');
+ const card=page.locator('section[aria-labelledby="tester-start-title"]');
+ await expect(card.getByRole('heading',{name:'從這裡開始',exact:true})).toBeVisible();
+ await expect(card.locator('ol > li')).toHaveCount(3);
+ await expect(card).toContainText('參與完全自願，不計分、不排名。');
+ await page.locator('[data-stage-id="arrival"] > summary').click();
+ await card.getByRole('button',{name:'試第一步',exact:true}).click();
+ await expect(page.locator('[data-stage-id="arrival"]')).toHaveAttribute('open','');
+ await expect(page.locator('[data-step-id="arrival.preview"] a').first()).toBeFocused();
 });

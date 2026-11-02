@@ -4,8 +4,8 @@
 
 - 登入後，自動將本機進度聯集合併到帳號；步驟白名單、去重與固定順序由伺服器決定。同一登入世代重試使用原 Idempotency-Key。成功後才消耗已匯入的訪客紀錄，不將帳號紀錄寫回訪客 localStorage。
 - 未登入仍維持原本本機流程。帳號進度與勳章只給本人；勳章由進度與小組推導，不另存成就、分數或稱號。
-- 可選的每步回饋只保存 account id、step id、pass/problem、最多 200 字單行純文字與伺服器時間。步驟對應功能由 `quest.ts` 推導，不接受任意 feature id、身分、網址、附件或額外欄位。提醒不要填個資；純文字驗證不能保證使用者沒有輸入個資。
-- 測試報告沿用 `activeDevelopmentGuilds(..., 'platform')` 的目前正式會員資格、社群隔離與鎖定規則。一般會員與訪客不能讀報告。每個功能每人只算一次，相關任一步有問題就不算通過；分母只含有提交回饋的人，未回饋的進度不算通過。最多顯示最近五個問題，不回傳測試者身分。
+- 可選的每步回饋保存本人／步驟、隨機回饋 id、pass/problem、最多 200 字單行純文字、處理狀態及伺服器時間。步驟對應功能由 `quest.ts` 推導，不接受任意 feature id、身分、網址、附件或額外欄位。提醒不要填個資；純文字驗證不能保證使用者沒有輸入個資。
+- 測試報告沿用 `activeDevelopmentGuilds(..., 'platform')` 的目前正式會員資格、社群隔離與鎖定規則。一般會員與訪客不能讀報告。每個功能每人只算一次，相關任一步有問題就不算通過；分母只含有提交回饋的人，未回饋的進度不算通過。按模組、功能與步驟分組，每步最多顯示最近五筆回饋及處理狀態，不回傳測試者身分。
 - 公開 Issue 僅預填既有頁面工具「想法」對話框。使用者先搜尋既有 Issue、檢查個資並明確送出；不自動發布，不因回饋建立任何 GitHub 寫入資格。
 - 這輪不做排行榜、計分、致謝牆或公開稱號。未來若提公開稱號，另案遵循 migration 194 `social_achievement_*` 同意規則。
 
@@ -19,7 +19,7 @@
 | `POST /api/v1/me/tester-map` | `merge`、`progress`、`feedback`、`clear`；會員 session、Origin／CSRF、Idempotency-Key；merge 以外需 If-Match |
 | `GET /api/v1/tester-map/report` | 同社群、目前平台開發正式會員可讀的彙總 |
 
-所有回應 private/no-store；寫入每帳號每分鐘最多 120 次。Node 與 Worker 共用 `createPlatformApp`、PostgreSQL／Hyperdrive，沒有 D1 schema 或第二套路由。先套 migration 再切換來源；沒有新旗標或正式設定變更。回退需停用這些路由；DROP 兩表會遺失紀錄，依既有備份政策處理，不修改歷史 migration。
+所有回應 private/no-store；寫入每帳號每分鐘最多 120 次。Node 與 Worker 共用 `createPlatformApp`、PostgreSQL／Hyperdrive，沒有 D1 schema 或第二套路由。先套 migration 再切換來源；沒有新旗標或正式設定變更。回退需停用這些路由；DROP 兩表會遺失紀錄，依既有備份政策處理，本輪直接編輯尚未發布的 migration 198；已發布的歷史 migration 不變。
 
 ## 驗證入口
 
@@ -32,3 +32,13 @@ TEST_DATABASE_URL=<isolated-local-fp-database> npm run test:e2e -- tests/e2e/tes
 ```
 
 測試使用合成資料，命令列不代表已執行；實際結果見交付記錄。此 source candidate 不代表已部署、真人試用或正式功能驗收。
+
+## #1213 回饋處理與新手入口
+
+`ownership.ts` 明列功能與 owning module id；`quest.ts` 明列步驟與功能，不依名稱猜測。報告提供 `modules → features → steps`、通過／問題數及每步最近五筆匿名項目，保留既有功能彙總。`GET /tester-map/report?module=<id>` 只接受 allowlist 內模組。
+
+未發布的 migration 198 加入隨機 `feedback_id`、`status`、`issue_number`、`triaged_at`。`POST /tester-map/report/triage` 接受 `{feedback_id,status,issue_number}`（seen／issue／fixed；issue 必須有正整數編號），沿用 report 的目前平台開發正式會員資格及社群隔離；command 重播仍重查權限，receipt 只存 ACK，journal 只記匿名 row id 與處理狀態。修改結果或說明會重設 sent 並清除 Issue 與處理時間；相同內容重送保留狀態。
+
+本人讀取包含處理狀態，其他測試者不能看；建造者報告不投影測試者身分。頁面提供一鍵通過、有問題的選填單行說明、狀態 chip 與簡短致謝。無進度時顯示三步開始卡及開啟第一步的按鈕；參與自願、不計分、不排名。未動 promotion.ts 或分享入口（#1214）。此為 source candidate，未部署。
+
+本輪本機驗證：`npm run typecheck`、`npm run build`、`npm run module:check`、`git diff --check` 通過；在另建的本機隔離 PostgreSQL／明確 `TEST_DATABASE_URL` 上，`node --import tsx --test --test-concurrency=1 tests/runtime/tester-map*.test.ts` 27/27 通過，build 後 `npm run test:e2e -- tests/e2e/tester-map.spec.ts tests/e2e/tester-map-account.spec.ts` 9/9 通過。`node --test deploy/cloudflare/test/*.test.mjs` 871/871、`python3 -m pytest -q docs/platform-plan/execution/tools/tests/` 303/303 通過。首次 API／瀏覽器嘗試因未提供 DB 而未執行案例，補建隔離 DB 後通過；瀏覽器首輪 8/9，修正說明文字呈現及精確定位後全數重跑通過。未提交、合併或部署。

@@ -1,3 +1,6 @@
+import {readFileSync,readdirSync} from 'node:fs';
+import {TESTER_FEATURE_MODULES} from '../../modules/tester-map/ownership.js';
+import {QUEST_STAGES,TESTER_AREAS} from '../../modules/tester-map/index.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mergeTesterProgress,testerCommandSchema,aggregateTesterFeedback,testerFeatureSteps} from '../../modules/tester-map/account.js';
@@ -42,4 +45,15 @@ test('aggregation counts each tester once per feature, uses latest step feedback
 });
 test('all account and feedback UI strings include the five interface languages',()=>{
   for(const [key,values] of Object.entries(accountText)){assert.equal(values.length,5,key);for(const value of values)assert.ok(value.trim(),key);}
+});
+
+test('each quest step explicitly maps every inventory feature to an existing module id',()=>{
+ const walk=(root:string):string[]=>readdirSync(root,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?walk(`${root}/${entry.name}`):entry.name==='freedom.module.json'?[`${root}/${entry.name}`]:[]);
+ const modules=new Set(['modules','packages','apps'].flatMap(walk).map(file=>JSON.parse(readFileSync(file,'utf8')).module_id));
+ const features=new Set(TESTER_AREAS.flatMap(area=>area.features.map(feature=>feature.id)));
+ for(const stage of QUEST_STAGES)for(const step of stage.steps){
+   assert.ok(step.features.length,step.id);
+   for(const feature of step.features){assert.ok(features.has(feature),feature);assert.ok(Object.hasOwn(TESTER_FEATURE_MODULES,feature),feature);assert.ok(modules.has(TESTER_FEATURE_MODULES[feature]),feature);}
+ }
+ assert.deepEqual(new Set(Object.keys(TESTER_FEATURE_MODULES)),new Set(testerFeatureSteps.map(item=>item.feature_id)));
 });

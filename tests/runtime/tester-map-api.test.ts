@@ -72,7 +72,7 @@ test('feedback upserts once; reports require current builder permission, dedupli
  const feature=report.data.features.find((f:any)=>f.feature_id===step.feature_id);assert.equal(feature.testers,2);assert.equal(feature.pass_rate,0.5);assert.equal(feature.issues[0].note,'Latest problem');
  assert.doesNotMatch(JSON.stringify(report.data),new RegExp(`${member.id}|${peer.id}|"user_id":|"email":|"display_name":`));
  const raw=(await pool.query('SELECT user_id,step_id,result,note,updated_at FROM tester_map_feedback')).rows.map(row=>({...row,updated_at:row.updated_at.toISOString()}));
- assert.deepEqual(report.data.features.map(({issues,...row}:any)=>row),aggregateTesterFeedback(raw).map(({issues,...row})=>row).sort((a,b)=>a.feature_id.localeCompare(b.feature_id)));
+ assert.deepEqual(report.data.features.map(({issues,module_id,steps,...row}:any)=>row),aggregateTesterFeedback(raw).map(({issues,...row})=>row).sort((a,b)=>a.feature_id.localeCompare(b.feature_id)));
  assert.equal((await request(path,peer)).data.can_report,true);
  await pool.query("UPDATE positioning_profession_memberships SET member_tier='intern' WHERE user_id=$1 AND guild_key='guild_platform_engineering'",[peer.id]);
  assert.equal((await request('/tester-map/report',peer)).status,403);
@@ -82,7 +82,10 @@ test('feedback upserts once; reports require current builder permission, dedupli
  await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref)
  SELECT $1,$2,'foreign@example.test','Synthetic',password_hash,$3 FROM users WHERE user_id=$4`,[user,foreign,randomUUID(),member.id]);
  await pool.query("INSERT INTO tester_map_feedback(user_id,step_id,result,note) VALUES($1,$2,'problem','Foreign private note')",[user,step.step_id]);
- await builder(peer);const isolated=await request('/tester-map/report',peer);assert.equal(isolated.status,200);assert.doesNotMatch(JSON.stringify(isolated.data),/Foreign private note/);
+ await builder(peer);
+ const foreignItem=(await pool.query('SELECT feedback_id FROM tester_map_feedback WHERE user_id=$1',[user])).rows[0].feedback_id;
+ assert.equal((await request('/tester-map/report/triage',peer,{feedback_id:foreignItem,status:'seen'})).status,404);
+ const isolated=await request('/tester-map/report',peer);assert.equal(isolated.status,200);assert.doesNotMatch(JSON.stringify(isolated.data),/Foreign private note/);
 });
 test('clear deletes feedback and progress; old ACK replay cannot restore them; account deletion cascades',async()=>{
  const member=await login(0),key=randomUUID();await request(path,member,merge([QUEST_STEP_IDS[0]]),undefined,key);await feedback(member,QUEST_STEP_IDS[0]);
@@ -104,4 +107,49 @@ test('revoked sessions cannot read or replay a recorded command',async()=>{
  const member=await login(0),key=randomUUID();await request(path,member,merge([]),undefined,key);
  await pool.query('UPDATE sessions SET revoked_at=now() WHERE user_id=$1',[member.id]);
  assert.equal((await request(path,member)).status,401);assert.equal((await request(path,member,merge([]),undefined,key)).status,401);
+});
+
+test('opaque triage requires current builder authority; status reaches only the owner and edits reset it',async()=>{
+ const member=await login(0),peer=await login(1),step=testerFeatureSteps[0];
+ await feedback(member,step.step_id);
+ await builder(peer);
+ const report=await request('/tester-map/report',peer),feature=report.data.features.find((f:any)=>f.feature_id===step.feature_id);
+ const item=feature.steps.find((s:any)=>s.step_id===step.step_id).items[0];
+ assert.match(item.feedback_id,/^[0-9a-f-]{36}$/);
+ const triage='/tester-map/report/triage',body={feedback_id:item.feedback_id,status:'seen',issue_number:null};
+ assert.equal((await request(triage,member,body)).status,403);
+ assert.equal((await request(triage,peer,{...body,user_id:member.id})).status,422);
+ assert.equal((await request(triage,peer,{...body,status:'issue'})).status,422);
+ assert.equal((await request(triage,peer,{...body,status:'issue',issue_number:0})).status,422);
+ assert.equal((await request(triage,peer,{...body,feedback_id:randomUUID()})).status,404);
+ const key=randomUUID();
+ for(const status of ['seen','issue','fixed']){
+   const next={...body,status,issue_number:status==='seen'?null:1213};
+   assert.equal((await request(triage,peer,next,undefined,status==='fixed'?key:randomUUID())).status,200);
+   const own=(await request(path,member)).data.feedback[0];assert.equal(own.status,status);assert.equal(own.issue_number,next.issue_number);
+   assert.deepEqual((await request(path,peer)).data.feedback,[]);
+ }
+ const fixed={...body,status:'fixed',issue_number:1213};
+ assert.equal((await request(triage,peer,fixed,undefined,key)).status,200);
+ assert.equal((await pool.query("SELECT count(*) n FROM transition_journal WHERE aggregate_type='tester_map_feedback'")).rows[0].n,'3');
+ await feedback(member,step.step_id,'problem','Button did not open');
+ assert.equal((await request(path,member)).data.feedback[0].status,'fixed');
+ await feedback(member,step.step_id,'problem','Changed note');
+ let own=(await request(path,member)).data.feedback[0];assert.equal(own.status,'sent');assert.equal(own.issue_number,null);
+ assert.equal((await pool.query('SELECT triaged_at FROM tester_map_feedback WHERE feedback_id=$1',[item.feedback_id])).rows[0].triaged_at,null);
+ await request(triage,peer,{...body,status:'issue',issue_number:1213});
+ await feedback(member,step.step_id,'pass','Changed note');
+ own=(await request(path,member)).data.feedback[0];assert.equal(own.status,'sent');assert.equal(own.issue_number,null);
+ // An old successful receipt cannot reapply a triage after a tester edit.
+ assert.equal((await request(triage,peer,fixed,undefined,key)).status,200);
+ assert.equal((await request(path,member)).data.feedback[0].status,'sent');
+ const filtered=await request('/tester-map/report?module='+feature.module_id,peer);assert.equal(filtered.status,200);
+ assert.deepEqual(filtered.data.modules.map((m:any)=>m.module_id),[feature.module_id]);
+ assert.ok(filtered.data.features.every((f:any)=>f.module_id===feature.module_id));
+ assert.equal((await request('/tester-map/report?module=unknown',peer)).status,422);
+ assert.equal((await request('/tester-map/report?module=',peer)).status,422);
+ const publicReport=JSON.stringify((await request('/tester-map/report',peer)).data);
+ assert.doesNotMatch(publicReport,new RegExp(`${member.id}|${peer.id}|"user_id"|"email"|"name"|"display_name"`));
+ await pool.query("UPDATE positioning_profession_memberships SET state='left' WHERE user_id=$1 AND guild_key='guild_platform_engineering'",[peer.id]);
+ assert.equal((await request(triage,peer,fixed,undefined,key)).status,403);
 });

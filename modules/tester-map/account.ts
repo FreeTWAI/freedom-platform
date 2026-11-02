@@ -1,5 +1,6 @@
 // Shared, browser-safe policy. Self reports never award XP or public titles.
 import {z} from 'zod';
+import {TESTER_FEATURE_MODULES} from './ownership.js';
 import {QUEST_STAGES, QUEST_STEP_IDS} from './quest.js';
 import {normalizeProgress, type TesterProgress} from './progress.js';
 
@@ -15,13 +16,18 @@ export const testerCommandSchema = z.discriminatedUnion('action', [
   z.object({action: z.literal('clear')}).strict(),
 ]);
 export type TesterCommand = z.infer<typeof testerCommandSchema>;
-export type TesterFeedback = {step_id: string; result: 'pass'|'problem'; note: string; updated_at: string};
+export const testerTriageSchema = z.object({feedback_id:z.uuid(),status:z.enum(['seen','issue','fixed']),issue_number:z.number().int().positive().max(2147483647).nullable().default(null)}).strict().refine(value => value.status !== 'issue' || value.issue_number !== null, 'Issue number required');
+export type TesterTriageStatus = 'sent'|'seen'|'issue'|'fixed';
+export type TesterReportItem = {feedback_id:string;result:'pass'|'problem';note:string;status:TesterTriageStatus;issue_number:number|null;updated_at:string};
+export type TesterStepReport = {step_id:string;passed:number;problems:number;items:TesterReportItem[]};
+export type TesterModuleReport = {module_id:string;features:TesterFeatureReport[]};
+export type TesterFeedback = {step_id: string; result: 'pass'|'problem'; note: string; updated_at: string; status?: TesterTriageStatus; issue_number?:number|null};
 export type TesterAccountView = {version: string; progress: TesterProgress; feedback: TesterFeedback[]; can_report: boolean};
-export type TesterFeatureReport = {feature_id: string; testers: number; passed: number; pass_rate: number|null; issues: {step_id: string; note: string; updated_at: string}[]};
+export type TesterFeatureReport = {module_id?:string;steps?:TesterStepReport[];feature_id: string; testers: number; passed: number; pass_rate: number|null; issues: {step_id: string; note: string; updated_at: string}[]};
 export function mergeTesterProgress(account: TesterProgress, local: TesterProgress): TesterProgress {
   return normalizeProgress({v: 1, group: account.group ?? local.group, done: [...account.done, ...local.done]});
 }
-export const testerFeatureSteps = QUEST_STAGES.flatMap(stage => stage.steps.flatMap(step => step.features.map(feature_id => ({feature_id, step_id: step.id}))));
+export const testerFeatureSteps = QUEST_STAGES.flatMap(stage => stage.steps.flatMap(step => step.features.map(feature_id => ({feature_id, module_id:TESTER_FEATURE_MODULES[feature_id], step_id: step.id}))));
 
 /** A tester is counted once per feature; any current problem makes their feature result a problem. */
 export function aggregateTesterFeedback(rows: (TesterFeedback & {user_id: string})[]): TesterFeatureReport[] {

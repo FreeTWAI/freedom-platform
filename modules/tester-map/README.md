@@ -33,3 +33,11 @@ npx playwright test tests/e2e/tester-map.spec.ts
 ```
 
 模組 metadata 與測試通過，不代表功能已上線、已驗收或已部署。
+
+## #1213 回饋處理與新手入口
+
+`ownership.ts` 明列功能與 owning module id；`quest.ts` 明列步驟與功能，不依名稱猜測。報告提供 `modules → features → steps`、通過／問題數及每步最近五筆匿名項目，保留既有功能彙總。`GET /tester-map/report?module=<id>` 只接受 allowlist 內模組。
+
+未發布的 migration 198 加入隨機 `feedback_id`、`status`、`issue_number`、`triaged_at`。`POST /tester-map/report/triage` 接受 `{feedback_id,status,issue_number}`（seen／issue／fixed；issue 必須有正整數編號），沿用 report 的目前平台開發正式會員資格及社群隔離；command 重播仍重查權限，receipt 只存 ACK，journal 只記匿名 row id 與處理狀態。修改結果或說明會重設 sent 並清除 Issue 與處理時間；相同內容重送保留狀態。
+
+本人讀取包含處理狀態，其他測試者不能看；建造者報告不投影測試者身分。頁面提供一鍵通過、有問題的選填單行說明、狀態 chip 與簡短致謝。無進度時顯示三步開始卡及開啟第一步的按鈕；參與自願、不計分、不排名。未動 promotion.ts 或分享入口（#1214）。此為 source candidate，未部署。

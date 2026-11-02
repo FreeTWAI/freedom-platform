@@ -9,10 +9,14 @@ CREATE TABLE tester_map_accounts (
   done text[] NOT NULL DEFAULT '{}',
   aggregate_version bigint NOT NULL DEFAULT 1 CHECK(aggregate_version BETWEEN 1 AND 9007199254740991)
 );
--- Exactly the account, step, result, one optional plain-text line and server timestamp.
+-- Private current feedback, opaque builder reference and triage state; no public identity.
 -- A step's features are derived from the server allowlist, never caller-supplied.
 CREATE TABLE tester_map_feedback (
   user_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  feedback_id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+  status text NOT NULL DEFAULT 'sent' CHECK(status IN ('sent','seen','issue','fixed')),
+  issue_number integer NULL CHECK(issue_number>0),
+  triaged_at timestamptz NULL,
   step_id text NOT NULL,
   result text NOT NULL CHECK(result IN ('pass','problem')),
   note text NOT NULL DEFAULT '' CHECK(char_length(note)<=200 AND note !~ '[[:cntrl:]<>]'),

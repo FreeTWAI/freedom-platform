@@ -126,6 +126,16 @@ export function TesterMap({client}: {client?:PortalClient}) {
   const summary = coverageSummary();
   const areas = areasForGroup(inventoryGroup).map(area => ({...area, features: priorityOnly ? area.features.filter(feature => feature.redesign) : area.features})).filter(area => area.features.length > 0);
   return <TesterAccountContext.Provider value={{account,client}}><section className="module-panel tester-map stack">
+    {!account.working&&progress.done.length===0&&!(account.view?.feedback.length)&&<section className="card stack" aria-labelledby="tester-start-title">
+      <h2 id="tester-start-title">{pick(accountText.start)}</h2>
+      <ol><li>{pick(accountText.startRoute)}</li><li>{pick(accountText.startTry)}</li><li>{pick(accountText.startSend)}</li></ol>
+      <p>{pick(accountText.optional)}</p>
+      <button className="btn btn-primary" type="button" onClick={()=>{
+        const id=firstOpenStage(progress);if(!id)return;
+        setOpenStages(value=>new Set([...value,id]));
+        requestAnimationFrame(()=>{const step=document.querySelector<HTMLElement>(`[data-stage-id="${id}"] [data-step-id]`);step?.scrollIntoView({block:'start'});step?.querySelector<HTMLElement>('a,button')?.focus({preventScroll:true});});
+      }}>{pick(accountText.firstStep)}</button>
+    </section>}
     <section className="card stack" aria-labelledby="tester-map-intro">
       <p className="eyebrow" id="tester-map-intro">{t('testerMap.eyebrow')}</p>
       <p>{t('testerMap.intro', {start: TEST_WEEK.start, end: TEST_WEEK.end, leader: TESTER_GUILD.leaderNickname})}</p>
