@@ -108,6 +108,7 @@ for (const width of [1280, 390]) {
 
     test('co-creation states the claim rule once and keeps task filters compact', async ({ page }) => {
       await login(page); await navigate(page, '一起開發');
+      await page.getByRole('button', { name: '查看任務：自動剪輯共創：一起把可用的底層疊起來', exact: true }).click();
       await expect(page.getByText('到 GitHub 任務留言認領；完成程式、測試、設計或文件後提交 PR，交由維護者審查。', { exact: true })).toHaveCount(1);
       await expect(page.getByText('篩選本次載入的任務', { exact: false })).toHaveCount(0);
       const filters = page.getByRole('region', { name: '任務篩選' });

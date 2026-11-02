@@ -257,8 +257,8 @@ function Reading({guild, config, announcements, skillBooks, applications, visito
   return <>
     {showPrimary && <div hidden={activeSection !== 'primary'}><LegacyLaunchpadPrimary primary={primary} config={config} guildKey={guildKey} memberTier={memberTier} internHint={INTERN_HINT} client={client}
       focusWork={focusWork} canLeave={canLeave} canNavigate={canNavigate} launchRequest={launchRequest} setLaunchRequest={setLaunchRequest}/></div>}
-    {blocks.map(block => <section key={block.id} hidden={activeSection !== blockSection(block)} className="guild-launchpad-block" ref={block.kind === 'my_work' ? workSection : block.kind === 'applications' ? applicationsSection : undefined} tabIndex={block.kind === 'my_work' ? -1 : undefined}>
-      {block.kind !== 'extension' && !(block.kind === 'applications' && launching) && <><h2 ref={block.kind === 'skill_books' ? skillBooksHeading : undefined} tabIndex={block.kind === 'skill_books' ? -1 : undefined}>{block.kind === 'applications' ? '工具目錄' : BLOCK_LABEL[block.kind]}</h2>{block.title && <p>{block.title}</p>}</>}
+    {blocks.map(block => <section key={block.id} hidden={activeSection !== blockSection(block)} className="guild-launchpad-block" data-launchpad-kind={block.kind} ref={block.kind === 'my_work' ? workSection : block.kind === 'applications' ? applicationsSection : undefined} tabIndex={block.kind === 'my_work' ? -1 : undefined}>
+      {block.kind !== 'extension' && !(block.kind === 'applications' && launching) && <><h2 ref={block.kind === 'skill_books' ? skillBooksHeading : undefined} tabIndex={-1}>{block.kind === 'applications' ? '工具目錄' : BLOCK_LABEL[block.kind]}</h2>{block.title && <p>{block.title}</p>}</>}
       {block.kind === 'extension' && <GuildBlock id={block.extension_id} heading={block.title} loaders={blockLoaders} client={client} guildKey={guildKey}
         viewer={visitor || mode === 'public' ? 'visitor' : memberTier === 'full' ? 'member' : 'read_only'}
         navigate={path => {if (canNavigate()) window.location.hash = path;}}
@@ -353,6 +353,8 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const skillBooksHeading = useRef<HTMLHeadingElement>(null);
   const focusSkillBooks = useRef(false);
+  const readingRoot = useRef<HTMLDivElement>(null);
+  const pendingResourceFocus = useRef<string | null>(null);
   const selectSection = useCallback((id: string) => setSelectedSection(id), []);
   useEffect(() => {setSelectedSection(null);}, [client, guildKey, mode]);
   const [guild, setGuild] = useState<{name: string; purpose: string} | null>(null);
@@ -644,11 +646,28 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   const groups = (['工作', '公會資源', '管理'] as const).map(group => ({label: group, items: sections.filter(section => section.group === group)})).filter(group => group.items.length);
   const defaultSection = visitor ? sections.find(section => section.id === 'information') : sections.find(section => section.group === '工作');
   const activeSection = sections.find(section => section.id === selectedSection)?.id ?? defaultSection?.id ?? sections[0]?.id ?? '';
+  const entryBookBlock = readingConfig?.blocks.find(block => block.kind === 'skill_books' && block.enabled);
+  const entryAnnouncementBlock = readingConfig?.blocks.find(block => block.kind === 'announcements' && block.enabled);
+  const entryInformationBlock = readingConfig?.blocks.filter(block => INFO_KINDS.has(block.kind) && block.enabled).sort((a,b)=>a.order-b.order)[0];
   const publicBookBlock = mode === 'public' && skillBooks.length > 0 ? readingConfig?.blocks.find(block => block.kind === 'skill_books' && block.enabled) : undefined;
   const publicContact = mode === 'public' && readingConfig?.support.kind === 'guild_public_contact' && readingConfig.blocks.some(block => block.kind === 'support' && block.enabled)
     ? httpsUrl(readingConfig.support.public_url) : null;
+  function focusResourceHeading(kind: string) {
+    const heading = readingRoot.current?.querySelector<HTMLHeadingElement>(`[data-launchpad-kind="${kind}"] > h2`);
+    heading?.focus();
+    heading?.scrollIntoView({block: 'start'});
+  }
+  function openResource(section: string, kind: string) {
+    if (!sections.some(item => item.id === section)) return;
+    if (activeSection === section) focusResourceHeading(kind);
+    else {pendingResourceFocus.current = kind; selectSection(section);}
+  }
   useLayoutEffect(() => {
     if (focusSkillBooks.current) {focusSkillBooks.current = false; skillBooksHeading.current?.focus();}
+    if (pendingResourceFocus.current) {
+      const kind = pendingResourceFocus.current; pendingResourceFocus.current = null;
+      focusResourceHeading(kind);
+    }
   }, [activeSection]);
 
   const looseErrors = errors.filter(error => !['mission_override', 'starter.title_label', 'starter.objective_hint', 'starter.note_hint', 'support.public_url', 'reason'].some(path => error.path === path || error.path.endsWith(`.${path}`)) && !/blocks\.\d+\.(title|enabled|order)/.test(error.path));
@@ -672,6 +691,13 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         if (activeSection === section) skillBooksHeading.current?.focus();
         else {focusSkillBooks.current = true; selectSection(section);}
       } : undefined}/>}
+    {!loading && guild && readingConfig && mode === 'member' && <section className="guild-launchpad-welcome" aria-label="公會工作區導覽">
+      <div className="guild-launchpad-purpose"><p className="guild-launchpad-kicker">公會工作區</p><p>{readingConfig.mission_override ?? guild.purpose}</p><p className="muted">{visitor?'先閱讀公會資源；加入後可到公會聊天室交流。':memberTier==='intern'?'先閱讀技能書、到聊天室交流。發布或編輯需由會長調整為正式成員。':'閱讀資源，或從下方工作區接續你的工作。私人工作仍依原業務空間權限存取。'}</p></div>
+      <div className="guild-launchpad-resource-preview">
+        {entryBookBlock && <button type="button" disabled={!skillBooks.length&&!entryInformationBlock} onClick={() => {const destination=skillBooks.length?entryBookBlock:entryInformationBlock;if(destination)openResource(blockSection(destination),destination.kind);}}><span>入門技能書 <span aria-hidden="true">→</span></span><strong>{skillBooks[0]?.title ?? '尚無可顯示的技能書'}</strong><small>{skillBooks.length?'閱讀介紹與原始專案':entryInformationBlock?'先閱讀公會資訊，了解這個公會。':'這個工作區目前沒有可顯示的入門資源。'}</small></button>}
+        {!visitor && entryAnnouncementBlock && <button type="button" onClick={() => openResource(blockSection(entryAnnouncementBlock), 'announcements')}><span>公會公告 <span aria-hidden="true">→</span></span><strong>{announcements[0]?.title ?? '目前沒有公告'}</strong><small>{announcements.length?'查看已發布的公會消息':'查看公告區；目前尚未發布公告。'}</small></button>}
+      </div>
+    </section>}
     <div className="guild-launchpad-layout">
     {sections.length > 0 && <>
       <nav className="guild-launchpad-nav" aria-label="公會功能">
@@ -683,7 +709,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         {groups.map(group => <optgroup key={group.label} label={group.label}>{group.items.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}
       </select></label>
     </>}
-    <div className="guild-launchpad-content">
+    <div className="guild-launchpad-content" ref={readingRoot}>
     {readingConfig && guild && <Reading guild={guild} config={readingConfig} announcements={visitor ? [] : announcements} skillBooks={skillBooks} applications={applications} visitor={visitor} memberTier={visitor ? undefined : memberTier} mode={mode} client={client} guildKey={guildKey} userId={userId} registerLeave={registerLeave} registerPendingLeave={registerLaunchLeave} canLeave={canLeave} canNavigate={canNavigate} onLogin={onLogin} blockLoaders={blockLoaders} supplierConsoleEnabled={supplierConsoleEnabled} activeSection={activeSection} selectSection={selectSection} skillBooksHeading={skillBooksHeading}/>}
     {showEditor && draft && <form hidden={activeSection !== 'management'} className="card guild-launchpad-editor" onSubmit={event => event.preventDefault()}>
       <h2>調整版面</h2>

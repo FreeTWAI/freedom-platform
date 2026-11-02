@@ -21,7 +21,7 @@ const CommunityHub = lazy(() => import('../modules/CommunityHub').then(m=>({defa
 // Page entries only compose existing features. Session, navigation and leave guards stay in the shell.
 export const communityFeatures = {
   "community-hub": {moduleId:"community-hub",placement:"page",render:()=> <CommunityHub/>},
-  "newbie-village": {moduleId:"newbie-village",placement:"page",render:()=> <NewbieVillage/>},
+  "newbie-village": {moduleId:"newbie-village",placement:"page",render:({registerPageLeave})=> <NewbieVillage registerLeave={registerPageLeave}/>},
   "community": {
     moduleId: "community", placement: 'page',
     render: ({client, selectTab}) => <CommunityPanel client={client} onNavigate={selectTab} />,
