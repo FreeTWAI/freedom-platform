@@ -84,3 +84,18 @@ for(const failure of ['update','capture'] as const)test(`AD-5 terminal ${failure
   assert.equal(h.live.current.cash,completed);assert.equal(h.pendingResult.current,summary);
   assert.equal(h.results.length,1);assert.equal(h.live.current.done,true);
 });
+
+
+test('AD-6 arcade DOM, stylesheet and skip-link namespaces avoid generic advertising selectors',()=>{
+  const sources=['AbsurdDaily.tsx','arcade.css','toy-theme.css'].map(name=>readFileSync(new URL(`../../apps/portal-web/src/games/${name}`,import.meta.url),'utf8'));
+  for(const source of sources){
+    assert.doesNotMatch(source,/(?<![\w-])ad-[a-z]/,'game presentation must not reuse the generic ad- namespace');
+    assert.match(source,/fw-arcade-root/);
+  }
+  assert.match(sources[0],/href="#fw-arcade-main"/);
+  assert.match(sources[0],/id="fw-arcade-main"/);
+  for(const name of ['header','footer','button','notice','result']){
+    assert.match(sources[0],new RegExp(`fw-arcade-${name}`));
+    assert.match(sources[1]+sources[2],new RegExp(`\\.fw-arcade-${name}`));
+  }
+});
