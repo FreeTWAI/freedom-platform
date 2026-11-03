@@ -43,6 +43,11 @@ test('removing a friend and declining a request ask first, and cancelling writes
   const row = (person: Member) => page.locator('.friends-panel .directory-member').filter({ has: page.getByRole('heading', { name: person.nickname, exact: true }) });
 
   // Remove: the first press only opens the confirmation; cancelling returns focus and sends nothing.
+  const settings = row(friend).locator('.friends-manage summary');
+  await settings.focus();
+  await page.keyboard.press('Enter');
+  await expect(row(friend).locator('.friends-manage')).toHaveJSProperty('open', true);
+  expect(writes).toEqual([]);
   const remove = row(friend).getByRole('button', { name: '移除好友', exact: true });
   await remove.focus();
   await page.keyboard.press('Enter');
@@ -93,6 +98,8 @@ test('removing a friend and declining a request ask first, and cancelling writes
   for (const theme of ['light', 'dark', 'versefolk'] as const) {
     await page.evaluate(value => { localStorage.setItem('freedom-theme', value); document.documentElement.dataset.theme = value; }, theme);
     await page.getByRole('button', { name: '我的好友', exact: true }).click();
+    const settings = row(third).locator('.friends-manage');
+    if (!await settings.evaluate(element => (element as HTMLDetailsElement).open)) await settings.locator('summary').click();
     const thirdRemove = row(third).getByRole('button', { name: '移除好友', exact: true });
     await thirdRemove.click();
     for (const width of [390, 1280]) {
@@ -121,6 +128,8 @@ test('an open confirmation closes when the visible result set changes by search 
   const rows = page.locator('.friends-panel .directory-member');
   await expect(rows.first()).toBeVisible();
   const openConfirmation = async () => {
+    const settings = rows.first().locator('.friends-manage');
+    if (!await settings.evaluate(element => (element as HTMLDetailsElement).open)) await settings.locator('summary').click();
     const remove = rows.first().getByRole('button', { name: '移除好友', exact: true });
     await remove.click();
     await expect(remove).toHaveAttribute('aria-expanded', 'true');

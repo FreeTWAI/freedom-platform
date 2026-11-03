@@ -64,3 +64,22 @@
 .profile-cover-private-preview img{display:block;width:100%;height:auto;aspect-ratio:8/3;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
 
 .profile-design .social-achievement-title summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:700}
+
+/* Editing is separate from the authorized visitor page: preview never publishes. */
+.profile-publication-editor{max-width:72rem}
+.profile-editor-workbench{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.25rem;align-items:start}
+.profile-editor-controls,.profile-editor-controls .fieldset{min-width:0}
+.profile-publication-editor .profile-editor-summary::after{content:"＋";margin-inline-start:auto;padding-inline-start:.5rem}
+.profile-publication-editor details[open]>.profile-editor-summary::after{content:"−"}
+.profile-publication-editor .profile-editor-summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.profile-editor-workbench>.profile-preview{position:sticky;top:1rem;min-width:0}
+.profile-theme-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem}
+.profile-publication .profile-theme-choice{display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .6rem 2rem;border-radius:12px;min-width:0;min-height:44px;position:relative;cursor:pointer}
+.profile-publication .profile-theme-choice[data-selected="true"]{border-color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
+.profile-theme-choice input[type="radio"]{position:absolute;inset-inline-start:.55rem;top:.75rem;width:auto;margin:0;min-height:0}
+.profile-publication .profile-theme-choice:has(input:focus-visible){outline:2px solid var(--focus);outline-offset:3px}
+.profile-theme-choice:has(input:disabled){cursor:not-allowed;opacity:.6}
+.profile-theme-swatch{display:block;pointer-events:none;border-radius:8px}
+.profile-theme-swatch .profile-design-cover{display:block;height:2rem}
+.profile-theme-swatch-lines{display:block;height:1.5rem;margin:.5rem;background:linear-gradient(var(--pd-ink),var(--pd-ink)) left top/60% 3px no-repeat,linear-gradient(var(--pd-muted),var(--pd-muted)) left bottom/85% 3px no-repeat}
+@media(max-width:760px){.profile-editor-workbench{grid-template-columns:1fr}.profile-editor-workbench>.profile-preview{position:static}}
