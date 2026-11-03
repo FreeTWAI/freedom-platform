@@ -113,7 +113,11 @@
     "apps/portal-web/src/modules/ProfileCoverEditor.tsx",
     "tests/runtime/profile-customization-policy.test.ts",
     "migrations/192_member_profile_customization.sql",
-    "tests/e2e/onboarding-members.spec.ts"
+    "tests/e2e/onboarding-members.spec.ts",
+    "apps/portal-web/src/modules/EventMemberCards.tsx",
+    "apps/portal-web/src/modules/EventMemberCards.css",
+    "tests/runtime/event-member-cards.test.ts",
+    "tests/e2e/event-member-cards.spec.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [

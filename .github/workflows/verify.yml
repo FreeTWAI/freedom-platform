@@ -412,6 +412,10 @@ jobs:
         run: |
           test "$(git -C .freedom/trusted rev-parse HEAD)" = "$PINNED_SHA"
           test -z "$(git -C .freedom/trusted status --porcelain)"
+      - name: Install pinned browser selector dependencies
+        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}
+        working-directory: .freedom/trusted
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Check existing browser-spec consumers
         if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}
         run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.browser-spec-consumers

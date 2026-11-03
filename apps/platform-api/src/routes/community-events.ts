@@ -1,3 +1,4 @@
+import {readEventHelper,listEventHelpers,mutateEventHelper,decideEventHelper} from '../../../../modules/community/event-helpers.js';
 import type {PlatformRuntime} from '../runtime.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
@@ -75,6 +76,11 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
   app.get('/events/bulletins',async c=>c.json({items:await readWithMemberSession(pool,c.get('actor'),q=>listEventBulletins(q,c.get('actor')))}));
   app.get('/events/:id',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>readEvent(q,c.get('actor'),id(c.req.param('id')),runtime?.eventParticipationEnabled===true))));
   app.get('/events/:id/referrals',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>eventReferralReport(q,c.get('actor'),id(c.req.param('id')),c.req.query()))));
+  app.use('/events/:id/helpers/*',async(c,next)=>{c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');await next();});
+  app.get('/events/:id/helpers/me',async c=>c.json(await readEventHelper(pool,c.get('actor'),id(c.req.param('id')))));
+  app.post('/events/:id/helpers/me',async c=>c.json(await mutateEventHelper(pool,await moduleCommand(c),id(c.req.param('id')))));
+  app.get('/events/:id/helpers',async c=>{c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');return c.json(await listEventHelpers(pool,c.get('actor'),id(c.req.param('id')),c.req.query()));});
+  app.post('/events/:id/helpers/:memberId/decision',async c=>c.json(await decideEventHelper(pool,await moduleCommand(c),id(c.req.param('id')),id(c.req.param('memberId')))));
   app.get('/events/:id/attendees',async c=>{c.header('Cache-Control','private, no-store');return c.json(await eventAttendees(pool,c.get('actor'),id(c.req.param('id')),c.req.query()));});
   app.post('/events/:id/share-code',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>getEventShareCode(q,c.get('actor'),id(c.req.param('id'))))));
   app.get('/events/:id/banner',async c=>{

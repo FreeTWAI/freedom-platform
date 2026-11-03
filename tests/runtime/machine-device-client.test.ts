@@ -258,7 +258,16 @@ test('abort while waiting to poll leaves enrollment unconsumed and sends no retr
 
 for (const kind of ['unknown', 'extra', 'duplicate', 'redirect', 'bytes', 'chunks', 'length', 'utf8', 'hang', 'encoding', 'content_coding'] as const)
 test('response boundary rejects '+kind+' without retaining secret output', async () => {
+  let headerBodyReads = 0;
   const f = await machine(async (_request, send) => {
+    // Header rejection must not depend on an unrelated SQL round trip within
+    // the unchanged 250ms deadline. Prove rejection precedes body decoding.
+    if (kind === 'content_coding') {
+      const response = new Response('{}', { status: 201, headers: { 'Content-Type':'application/json', 'Content-Encoding':'unsupported' } });
+      const body = response.body;
+      Object.defineProperty(response, 'body', { get() { headerBodyReads++; return body; } });
+      return response;
+    }
     const response = await send(), value = await response.json();
     if (kind === 'unknown') return json({ status: 'invented', operational_authority: false }, 201);
     if (kind === 'extra') return json({ ...value, unexpected: 'secret diagnostic' }, 201);
@@ -268,12 +277,12 @@ test('response boundary rejects '+kind+' without retaining secret output', async
     if (kind === 'length') return new Response(JSON.stringify(value), { status: 201, headers: { 'Content-Type':'application/json', 'Content-Length':'1' } });
     if (kind === 'utf8') return new Response(new Uint8Array([0xff]), { status: 201, headers: { 'Content-Type':'application/json' } });
     if (kind === 'encoding') return new Response(JSON.stringify(value), { status: 201, headers: { 'Content-Type':'text/html' } });
-    if (kind === 'content_coding') return new Response(JSON.stringify(value), { status: 201, headers: { 'Content-Type':'application/json', 'Content-Encoding':'unsupported' } });
     if (kind === 'hang') return new Response(new ReadableStream({ start() {} }), { status: 201, headers: { 'Content-Type':'application/json' } });
     return new Response(new ReadableStream({ start(controller) { for (let i=0;i<129;i++) controller.enqueue(new Uint8Array([32])); controller.close(); } }),
       { status: 201, headers: { 'Content-Type':'application/json' } });
   }, { requestTimeoutMs: 250 });
   await rejects(f.client.begin(), kind === 'hang' ? 'aborted' : 'response_invalid');
+  if (kind === 'content_coding') assert.equal(headerBodyReads, 0, 'Unsupported content coding must fail before reading the body');
   const calls = f.calls(); await rejects(f.client.begin(), 'client_unavailable'); assert.equal(f.calls(), calls);
 });
 

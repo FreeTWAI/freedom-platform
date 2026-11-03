@@ -1,0 +1,17 @@
+.event-flow .experience-actions .btn, .event-flow .btn, .event-flow summary { min-height: 44px; }
+.event-flow input, .event-flow select, .event-flow textarea { font-size: 1rem; min-height: 44px; max-width: 100%; }
+.event-flow :is(button,a,input,select,textarea,summary):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.event-jobs { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.event-jobs p { flex-basis: 100%; margin: 0; }
+.event-form-options { border: 1px solid var(--line); border-radius: 12px; padding: .6rem .85rem; min-width: 0; }
+.event-form-options summary { display: list-item; align-content: center; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.event-form-options[open] > .experience-fields { margin-top: .75rem; }
+.event-review-summary, .event-help-need { padding: .85rem; border-inline-start: 3px solid var(--accent); background: var(--bg-elev); overflow-wrap: anywhere; }
+.event-help-need h4 { margin-top: 0; }
+.event-flow .experience-row > *, .event-flow .experience-fields, .event-flow .field { min-width: 0; }
+@media (max-width: 600px) {
+  .event-flow .experience-row { grid-template-columns: minmax(0, 1fr); }
+  .event-flow .experience-intro { align-items: stretch; }
+  .event-flow .experience-intro > .btn { width: 100%; }
+  .event-flow .experience-card-head { flex-wrap: wrap; }
+}

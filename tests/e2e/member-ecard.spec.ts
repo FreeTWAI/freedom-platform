@@ -220,6 +220,7 @@ test('sharing a member card from 我的名片 scores one guest click',async({pag
     await expect(guest.getByRole('button',{name:'加入自由工坊／登入'})).toBeVisible();
   }finally{await context.close();}
   await navigate(page,'推廣排行榜');
+  await page.locator('.promotion-rankings > summary').click();
   await expect(page.getByRole('button',{name:'本週',exact:true})).toHaveAttribute('aria-pressed','true');
   const board=page.getByRole('article',{name:'名片點擊排行榜',exact:true});
   await expect(board).toContainText('在我的名片分享名片連結，每次點擊 +1。');
@@ -432,6 +433,8 @@ test('platform-public profile links render with brand icons and match the public
   await expect(profile).toContainText('你還沒有設為「平台公開」的聯絡方式或社群連結。在這頁上方的聯絡方式或社群連結設定公開對象後，就會出現在這裡。');
   await expect(profile).toContainText('拿到名片連結的任何人（不必登入）都看得到這些項目。');
   await openAccountSettings(page,'個人網站與社群連結');
+  // Sharing is now a top-level disclosure; opening it does not open private contact settings.
+  await openAccountSettings(page,'誰能看到我');
   const account=page.locator('.account-panel');
   await account.getByLabel('LINE ID',{exact:true}).fill('lineuser');
   await account.getByRole('group',{name:'LINE ID可見範圍',exact:true}).getByRole('checkbox',{name:'平台公開',exact:true}).check();

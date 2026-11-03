@@ -34,6 +34,44 @@ async function expectTouchTargets(page: Page, selector: string, label: string) {
   }
 }
 
+// Compare both the SVG box and its actual path, not just the button's hit target.
+async function expectMenuIconCentered(page: Page, expanded: boolean) {
+  const menu = page.locator('.mobile-menu-toggle');
+  await expect(menu).toHaveAccessibleName(expanded ? '關閉選單' : '開啟選單');
+  await expect(menu).toHaveAttribute('aria-expanded', String(expanded));
+  await expect(menu.locator('svg')).toHaveCount(1);
+  await expect(menu.locator('svg')).toHaveAttribute('aria-hidden', 'true');
+  const originalTheme = await page.locator('html').getAttribute('data-theme');
+  try {
+    for (const theme of ['light', 'dark', 'versefolk']) {
+      await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+      const metrics = await menu.evaluate(button => {
+        const rect = button.getBoundingClientRect();
+        const svg = button.querySelector('svg')!;
+        const delta = (node: Element) => {
+          const icon = node.getBoundingClientRect();
+          return { x: icon.x + icon.width / 2 - rect.x - rect.width / 2,
+            y: icon.y + icon.height / 2 - rect.y - rect.height / 2 };
+        };
+        return { width: rect.width, height: rect.height, svg: delta(svg),
+          path: delta(svg.querySelector('path')!), gap: getComputedStyle(button).gap };
+      });
+      expect(metrics.width).toBeGreaterThanOrEqual(44);
+      expect(metrics.height).toBeGreaterThanOrEqual(44);
+      expect(metrics.gap).toBe('0px');
+      for (const [name, delta] of [['svg', metrics.svg], ['path', metrics.path]] as const) {
+        expect(Math.abs(delta.x), `${theme} ${name} horizontal center`).toBeLessThanOrEqual(.5);
+        expect(Math.abs(delta.y), `${theme} ${name} vertical center`).toBeLessThanOrEqual(.5);
+      }
+    }
+  } finally {
+    await page.evaluate(value => {
+      if (value === null) delete document.documentElement.dataset.theme;
+      else document.documentElement.dataset.theme = value;
+    }, originalTheme);
+  }
+}
+
 async function signIn(page: Page) {
   await page.getByLabel('電子郵件', { exact: true }).fill('maker@local.test');
   await page.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
@@ -216,6 +254,7 @@ for (const viewport of VIEWPORTS) {
     const nav = page.getByRole('navigation', { name: '主要工作區', includeHidden: true });
     if (viewport.width <= 860) {
       const menu = page.getByRole('button', { name: /^(開啟|關閉)選單$/ });
+      await expectMenuIconCentered(page, false);
       // After scrolling the page the phone header (logo + menu button) remains reachable.
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await expect(menu).toBeInViewport();
@@ -223,6 +262,15 @@ for (const viewport of VIEWPORTS) {
       await page.keyboard.press('Enter');
       await expect(menu).toHaveAttribute('aria-expanded', 'true');
       await expect(nav).toBeVisible();
+      await expectMenuIconCentered(page, true);
+      // Closing and reopening must retain centered icons and keyboard focus.
+      await page.keyboard.press('Escape');
+      await expect(nav).toBeHidden();
+      await expect(menu).toBeFocused();
+      expect(await focusedIsVisiblyOutlined(page)).toBe(true);
+      await expectMenuIconCentered(page, false);
+      await page.keyboard.press('Enter');
+      await expectMenuIconCentered(page, true);
       // Opening the mobile menu focuses its current primary destination.
       await expect(nav.getByRole('button', { name: '會員首頁', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
@@ -244,6 +292,7 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator('#main-content')).toBeFocused();
       await expect(page.getByRole('heading', { level: 1 })).toBeInViewport();
     } else {
+      await expect(page.locator('.mobile-menu-toggle')).toBeHidden();
       await expect(nav).toBeVisible();
       // Keyboard from a fresh load: skip link, brand home link, then primary destinations.
       await page.reload();

@@ -284,3 +284,33 @@ test('public cards show platform-public profile links, hide the rest, and conten
   const catalog=await pool.query("SELECT column_default FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='member_card_shares' AND column_name='show_profile_links'");
   assert.match(String(catalog.rows[0].column_default),/true/);
 });
+
+test('scanned card preserves invitation direction and private contacts until explicit recipient acceptance',async()=>{
+  const sender=await member('現場邀請方'),recipient=await member('現場受邀方');
+  const account=await request('/me/account',sender);
+  assert.equal((await request('/me/account',sender,{nickname:account.data.nickname,contacts:{line:{value:'friend-only-contact',audiences:['friends']},github:{value:'',audiences:[]},discord:{value:'',audiences:[]},email:{audiences:[]}}},account.data.aggregate_version)).status,200);
+  const opened=await request('/me/member-card-share',sender,{enabled:true,include_avatar:false});
+  const token=opened.data.share_path.split('/').at(-1),path=`/member-cards/${token}/member`;
+  const before=await stamp();
+  const publicCard=await request(`/public/member-cards/${token}`),initial=await request(path,recipient);
+  assert.equal(publicCard.status,200);assert.equal(initial.status,200);
+  assert.equal(JSON.stringify(publicCard.data).includes(sender.id),false);
+  assert.equal(JSON.stringify(publicCard.data).includes('friend-only-contact'),false);
+  assert.equal(initial.data.friendship.state,'none');assert.deepEqual(initial.data.contacts,{});
+  assert.deepEqual(await stamp(),before,'scanning and reading a card create no commands or shares');
+  const sent=await request(`/friends/${recipient.id}/request`,sender,{});
+  assert.equal(sent.status,200);
+  const incoming=await request(path,recipient);
+  assert.equal(incoming.data.friendship.state,'pending');assert.equal(incoming.data.friendship.requester_ref,sender.id);
+  assert.deepEqual(incoming.data.contacts,{});
+  const version=incoming.data.friendship.aggregate_version;
+  assert.equal((await request(`/friends/${recipient.id}/accept`,sender,{},version)).status,403,'requester cannot accept their own invitation');
+  assert.equal((await request(`/friends/${sender.id}/request`,recipient,{},version)).status,200);
+  assert.equal((await request(path,recipient)).data.friendship.state,'pending','reciprocal request is not acceptance');
+  assert.equal((await request(`/friends/${sender.id}/accept`,recipient,{},version+1)).status,412);
+  assert.equal((await request(`/friends/${sender.id}/accept`,recipient,{},version)).status,200);
+  const accepted=await request(path,recipient);
+  assert.equal(accepted.data.friendship.state,'accepted');assert.equal(accepted.data.contacts.line,'friend-only-contact');
+  assert.equal(JSON.stringify((await request(`/public/member-cards/${token}`)).data).includes('friend-only-contact'),false);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM community_event_rsvps WHERE user_id=ANY($1::uuid[])',[[sender.id,recipient.id]])).rows[0].n,0);
+});

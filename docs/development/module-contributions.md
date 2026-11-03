@@ -53,6 +53,16 @@ npm run module:new -- --id community-calendar --owner community --depends shared
 
 ## 3. 取得本次修改的 context
 
+所有平台貢獻者可共用下列明確選擇的 compact profile；它不改編輯器或 Agent 的全域設定。先確認目前 checkout 的工具與你的讀端支援哪些格式：
+
+```sh
+node scripts/freedom.mjs context-capabilities
+```
+
+若輸出 `freedom.context-capabilities/v1` 且列出 `compact` profile，**讀端也必須能讀完整 v1 bundle、v2 manifest/chunks 與 completeness 報告**，才使用下面的 `--context-profile compact`。工具不會自動偵測你的 Agent 能力。這個 profile 保留小範圍的 v1 bundle，只把超過 bundle 上限的大範圍改為 v2，避免將本來已去重的小內容強制擴為 manifest。
+
+舊工具若回 `unknown_command`，或讀端只支援 v1，省略下面的 profile 選項，仍用原本 `prepare` 和完整 v1 讀取流程；未知／畸形的 capability 回應不能假裝支援。不要省略規則或自行升級其他 repo 的 vendor pins。使用更新後工具是採用條件，不表示所有編輯器／MCP／外倉自動套用，也不表示實際 Token 帳單已下降。
+
 先 fetch 本次 PR 的上游，再固定 baseline。以下假設 `origin` 指向中央 repo；fork 使用者可把 `origin` 換成已設定的 `upstream`。
 
 ```sh
@@ -60,18 +70,18 @@ git fetch origin main
 FREEDOM_BASE=$(git rev-parse origin/main)
 
 # 修改現有模組
-node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --scope community-search
+node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --scope community-search --context-profile compact
 ```
 
 新模組的 descriptor 尚未存在時，`--scope` 不認得新 ID。先用 dry-run 的所有預計路徑取得 context，例如：
 
 ```sh
-node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --paths modules/community-calendar/freedom.module.json,modules/community-calendar/README.md,modules/community-calendar/index.ts,modules/community-calendar/service.ts,tests/runtime/community-calendar.test.ts
+node scripts/freedom.mjs prepare --base-ref "$FREEDOM_BASE" --paths modules/community-calendar/freedom.module.json,modules/community-calendar/README.md,modules/community-calendar/index.ts,modules/community-calendar/service.ts,tests/runtime/community-calendar.test.ts --context-profile compact
 ```
 
-新路徑尚無歸屬時，工具會保守涵蓋全庫並回報 `surface_unmapped`。讀取完整規則並記錄這個原因；這是警告而非 blocker，仍保留全庫規則與 fallback suites，不能縮成無關模組來掩蓋它。建立骨架後重新執行 `prepare --base-ref "$FREEDOM_BASE" --scope community-calendar`。有跨模組修改時，加入所有實際範圍；工具也會納入已偵測的 worktree 差異。
+新路徑尚無歸屬時，工具會保守涵蓋全庫並回報 `surface_unmapped`。讀取完整規則並記錄這個原因；這是警告而非 blocker，仍保留全庫規則與 fallback suites，不能縮成無關模組來掩蓋它。建立骨架後重新執行 `prepare --base-ref "$FREEDOM_BASE" --scope community-calendar --context-profile compact`。有跨模組修改時，加入所有實際範圍；工具也會納入已偵測的 worktree 差異。
 
-核對輸出的 repository、head、base 與 affected modules。小範圍輸出 `freedom.coding-context/v1`，讀完 `context_path` 指向的 bundle；大範圍輸出 manifest，依 `chunk_count` 讀完所有 chunk，再檢查完整性：
+核對輸出的 repository、head、base 與 affected modules。小範圍輸出 `freedom.coding-context/v1`，讀完 `context_path` 指向的 bundle；compact profile 的大範圍輸出 v2 manifest（未選 profile 則仍是 v1），依 `chunk_count` 讀完所有 chunk，再檢查完整性：
 
 ```sh
 # 僅適用於 manifest；把路徑換成 prepare 的 context_path
@@ -79,6 +89,8 @@ node scripts/freedom.mjs context --manifest .freedom/context/REPLACE/REPLACE/man
 # 繼續讀取 1 到 chunk_count - 1
 node scripts/freedom.mjs context --manifest .freedom/context/REPLACE/REPLACE/manifest.json --check complete
 ```
+
+v2 的每個 chunk 會列出它同時代表的 baseline/candidate `source_bindings`；完整相同的同路徑文字只讀一次，但兩個版本的來源仍要核對。每個 chunk 仍須讀完，不可只看摘要或 capability 清單。
 
 完整性檢查確認規則與目前工作目錄相符，不代表已理解規則或通過功能驗收。詳細說明見 [governance/README](../../governance/README.md)。
 

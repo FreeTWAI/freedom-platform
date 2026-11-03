@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Pool } from 'pg';
+import { communityCatalog } from '../../modules/community/catalog.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 
 const origin = 'http://127.0.0.1:4310';
@@ -101,5 +102,27 @@ test('unknown machine endpoints keep JSON errors and security headers after feat
     assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
     assert.match(response.headers.get('Content-Security-Policy') ?? '', /default-src 'self'/);
   }
+  assert.equal(databaseCalls(), 0);
+});
+
+test('anonymous resource preview preserves the first three complete public books and legacy catalog', async () => {
+  const { app, databaseCalls } = isolatedApp();
+  const full = await app.request(origin + '/api/v1/community');
+  const fullText = await full.text();
+  assert.equal(full.status, 200);
+  assert.equal(fullText, JSON.stringify(communityCatalog));
+  const preview = await app.request(origin + '/api/v1/community/preview');
+  const previewText = await preview.text();
+  assert.equal(preview.status, 200);
+  assert.equal(previewText, JSON.stringify({ skill_books: communityCatalog.skill_books.slice(0, 3) }));
+  assert.equal(JSON.parse(previewText).skill_books.length, 3);
+  assert.ok(Buffer.byteLength(previewText) < Buffer.byteLength(fullText) / 10);
+  for (const header of ['content-type', 'cache-control', 'content-security-policy', 'referrer-policy', 'x-content-type-options']) {
+    assert.equal(preview.headers.get(header), full.headers.get(header), header);
+  }
+  assert.equal(preview.headers.get('cache-control'), 'no-store');
+  const site = await app.request(origin + '/api/v1/site');
+  assert.equal(site.status, 200);
+  assert.equal(JSON.stringify((await site.json()).community), JSON.stringify(communityCatalog));
   assert.equal(databaseCalls(), 0);
 });

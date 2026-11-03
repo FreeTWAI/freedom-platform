@@ -95,7 +95,16 @@ export const GUIDE_DEFAULT_FILES = Object.freeze([...new Set([
 ])].sort());
 export const GUILD_PREVIEW_PLAN = Object.freeze([{id: 'default', env: {}, files: GUILD_PRESENTATION_PROFILE.previewFiles}]);
 export const GUILD_E2E_PLAN = Object.freeze([{id: 'default', env: {}, files: GUILD_PRESENTATION_PROFILE.integrationFiles}]);
+// First spec-only pilot: reviewed default-mode imports and whole-file execution.
+export const STORE_SPEC_PROFILE = 'store-setup-entry';
+export const STORE_SPEC_FILES = Object.freeze(['tests/e2e/store-setup-entry.spec.ts']);
+export const STORE_SPEC_PLAN = Object.freeze([
+  Object.freeze({id: 'default', env: Object.freeze({}), files: STORE_SPEC_FILES}),
+]);
 export function planE2eSelection(profile, catalog) {
+  if (profile === STORE_SPEC_PROFILE && STORE_SPEC_FILES.every(file => catalog.includes(file))) {
+    return {profile, expectedFiles: [...STORE_SPEC_FILES], plan: STORE_SPEC_PLAN};
+  }
   if (profile === 'guild-presentation' && GUILD_PRESENTATION_PROFILE.integrationFiles.every(file => catalog.includes(file))) {
     return {profile, expectedFiles: [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort(), plan: GUILD_E2E_PLAN};
   }
@@ -170,9 +179,10 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
     if (!selected_files.length) throw Error('empty_test_set');
     const preview = options?.profile === 'guild-preview';
     const guild = options?.profile === 'guild-presentation' || preview;
-    const pilot = options?.profile === 'newcomer-guides' || guild;
-    const requiredPlan = preview ? GUILD_PREVIEW_PLAN : guild ? GUILD_E2E_PLAN : E2E_PLAN;
-    if (pilot && JSON.stringify(selected_files) !== JSON.stringify(preview ? [...GUILD_PRESENTATION_PROFILE.previewFiles].sort() : guild ? [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort() : GUIDE_DEFAULT_FILES)) throw Error('invalid_expected_files');
+    const store = options?.profile === STORE_SPEC_PROFILE;
+    const pilot = options?.profile === 'newcomer-guides' || guild || store;
+    const requiredPlan = store ? STORE_SPEC_PLAN : preview ? GUILD_PREVIEW_PLAN : guild ? GUILD_E2E_PLAN : E2E_PLAN;
+    if (pilot && JSON.stringify(selected_files) !== JSON.stringify(store ? STORE_SPEC_FILES : preview ? [...GUILD_PRESENTATION_PROFILE.previewFiles].sort() : guild ? [...GUILD_PRESENTATION_PROFILE.integrationFiles].sort() : GUIDE_DEFAULT_FILES)) throw Error('invalid_expected_files');
     if (!object(options) || !text(options.rootDir) || !options.rootDir.startsWith('/')
       || options.rootDir.includes('\\')) throw Error('invalid_root_dir');
     if (!text(options.configFile) || !isAbsolute(options.configFile)) throw Error('invalid_test_results');
@@ -199,6 +209,7 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
     const expected = new Set(selected_files);
     for (const [index, pass] of passReports.entries()) {
       if (pass.exit_code !== 0) throw Error('test_process_failed');
+      if (store && (!/^[a-f0-9]{64}$/.test(pass.evidence_sha256 ?? '') || pass.partitions !== undefined)) throw Error('invalid_test_results');
       const partitioned = !pilot && index === 0;
       if (partitioned && (!Array.isArray(pass.partitions) || pass.partitions.length !== E2E_DEFAULT_SHARDS.length
         || pass.report !== undefined)) throw Error('invalid_pass_plan');
@@ -239,6 +250,7 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
               const identity = createHash('sha256').update(`${path}\0${titles.join('\0')}\0${spec.title}\0${test.projectName}`).digest('hex');
               if (seen.has(identity)) throw Error('duplicate_test_identity');
               seen.add(identity);
+              if (store && (test.results.length !== 1 || (test.results[0]?.retry ?? 0) !== 0)) throw Error('test_not_passed');
               const passed = test.status === 'expected' && test.expectedStatus === 'passed' && test.results.length > 0
                 && test.results.every(result => object(result) && result.status === 'passed');
               const skipped = test.status === 'skipped' && test.results.every(result => object(result) && result.status === 'skipped');
@@ -260,6 +272,7 @@ function evaluatePassReports(expectedFiles, passReports, options, complete) {
       if (pilot || partitioned) {
         if (pass.listing_exit_code !== 0 || !/^[a-f0-9]{64}$/.test(pass.listing_evidence_sha256 ?? '')) throw Error('invalid_case_listing');
         const listed = listedCaseIdentities(pass.listing, index === 0 ? selected_files : requiredPlan[index].files, options);
+        if (store && listed.size < 8) throw Error('case_listing_mismatch');
         if (listed.size !== seen.size || [...listed].some(identity => !seen.has(identity))) throw Error('case_listing_mismatch');
         passes[index].listed_case_count = listed.size;
         passes[index].listed_cases_sha256 = createHash('sha256').update(JSON.stringify([...listed].sort())).digest('hex');

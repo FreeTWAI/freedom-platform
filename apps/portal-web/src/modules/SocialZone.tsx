@@ -163,6 +163,22 @@ function sharedPostFromLocation():string|null {
   const id=new URLSearchParams(window.location.search).get('social-post');
   return id&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)?id:null;
 }
+// Closing a sheet hides it; its keyed interaction owner retains in-flight commands and drafts.
+function ShortPostDialog({active, label, onClose, children}: {active: boolean; label: string; onClose: () => void; children: ReactNode}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (active && !dialog.current?.open) dialog.current?.showModal();
+    else if (!active && dialog.current?.open) dialog.current.close();
+  }, [active]);
+  return <dialog ref={dialog} className="short-video-post-dialog" aria-label={label} onCancel={onClose} onClose={() => {
+    // A queued close from the previous opening cannot dismiss a newly opened sheet.
+    if (active && !dialog.current?.open) onClose();
+  }}>
+    <button type="button" className="btn btn-ghost short-video-post-dialog-close" onClick={() => { dialog.current?.close(); onClose(); }}>關閉</button>
+    {children}
+  </dialog>;
+}
+
 export function SocialZone({client, canReview = false, viewer, focusPost, shortVideos = false, bookmarksEnabled = false}: {client: PortalClient; canReview?: boolean; shortVideos?: boolean; bookmarksEnabled?: boolean; viewer?: {name: string; avatarUrl?: string | null}; focusPost?: {id: string; sequence: number}}) {
   const composerId = useId();
   const currentClient=useRef(client);currentClient.current=client;
@@ -273,10 +289,8 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const shortLikeCommands=useRef(new Map<string,{client:PortalClient;generation:number;liked:boolean;key:string;inFlight:boolean;uncertain:boolean}>());
   const [shortLikeRetries,setShortLikeRetries]=useState<Record<string,{client:PortalClient;generation:number;liked:boolean}>>({});
   const shortPost = platform === 'shorts' ? items.find(item => item.post_id === shortPostId) : undefined;
-  const shortDialog = useRef<HTMLDialogElement>(null);
   const shortTrigger = useRef<HTMLElement | null>(null);
   // The card lives in a dialog opened from a slide; withdrawing or hiding the post removes it from `items`, which closes the dialog.
-  useEffect(() => { if (shortPost && !shortDialog.current?.open) shortDialog.current?.showModal(); }, [shortPost]);
   useEffect(() => { if (!shortPost && shortTrigger.current) { const back = shortTrigger.current; shortTrigger.current = null; if (back.isConnected) back.focus(); else document.querySelector<HTMLElement>('.short-video-scroller')?.focus(); } }, [shortPost]);
   const loadSequence = useRef(0);
   const confirmedWrites = useRef(0);
@@ -285,6 +299,17 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const composerVersion = useRef(0);
   const newPosts = useRef<Post[]>([]);
   const feedSession = client.sessionGeneration;
+  const [shortOwners, setShortOwners] = useState<{client: PortalClient; session: number; tag: string; ids: string[]} | null>(null);
+  const retainedShortIds = shortOwners?.client === client && shortOwners.session === feedSession && shortOwners.tag === tag ? shortOwners.ids : [];
+  useEffect(() => { setShortOwners(current => current ? {...current, ids: current.ids.filter(id => items.some(post => post.post_id === id))} : null); }, [items]);
+  useEffect(() => { setShortOwners(null); setShortPostId(null); }, [client, feedSession, platform, tag, directPost]);
+  function openShort(postId: string, trigger: HTMLElement, comments: boolean) {
+    shortTrigger.current = trigger;
+    setShortComments(comments);
+    setShortOwners({client, session: feedSession, tag, ids: [...new Set([...retainedShortIds, postId])]});
+    setShortPostId(postId);
+  }
+
   useEffect(()=>{shortLikeCommands.current.clear();setShortLikeRetries({});setShortLiking(null);},[client,feedSession]);
   const feedScope = useRef({client, session: feedSession, platform, tag, directPost});
   feedScope.current = {client, session: feedSession, platform, tag, directPost};
@@ -658,6 +683,36 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   }
   const feedText=FEED_MESSAGES[language];
   const filterLabel=(id:string,label:string)=>id==='note'?feedText.note:id===''?feedText.all:label;
+  const shortCommentReads = useRef(new Map<string, symbol>());
+  async function reconcileShortComments(post: Post) {
+    const scope = feedScope.current, token = Symbol(post.post_id), ownerSequence = loadSequence.current, refreshGeneration = refreshSequence.current;
+    const valid = () => client === currentClient.current && feedSession === client.sessionGeneration &&
+      scope.client === client && scope.session === feedSession && scope.platform === 'shorts' && scope.directPost === null &&
+      feedScope.current.client === scope.client && feedScope.current.session === scope.session &&
+      feedScope.current.platform === scope.platform && feedScope.current.tag === scope.tag && feedScope.current.directPost === scope.directPost &&
+      shortCommentReads.current.get(post.post_id) === token && ownerSequence === loadSequence.current && refreshGeneration === refreshSequence.current;
+    shortCommentReads.current.set(post.post_id, token);
+    // Even an idempotent replay already present in the comment GET invalidates older feed snapshots.
+    ++confirmedWrites.current;
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (!valid()) return;
+        const epoch = confirmedWrites.current;
+        const page = await client.get<Page>(`/social-posts?post_id=${encodeURIComponent(post.post_id)}`);
+        if (!valid()) return;
+        if (epoch !== confirmedWrites.current) {
+          if (attempt === 0) continue;
+          throw new Error('留言數尚未確認，請重新載入貼文狀態。');
+        }
+        const fresh = page.items.length === 1 ? page.items[0] : undefined;
+        if (!fresh || fresh.post_id !== post.post_id || !Number.isSafeInteger(fresh.revision) || fresh.revision < post.revision || !Number.isSafeInteger(fresh.comment_count) || fresh.comment_count! < 0)
+          throw new Error('留言數尚未確認，請重新載入貼文狀態。');
+        setItems(current => current.map(item => item.post_id === post.post_id && item.revision <= fresh.revision ? {...item, comment_count: fresh.comment_count} : item));
+        return;
+      }
+    } catch { if (valid()) setActionError('留言操作已確認，但留言數尚未重新確認。請重新載入貼文狀態。'); }
+    finally { if (shortCommentReads.current.get(post.post_id) === token) shortCommentReads.current.delete(post.post_id); }
+  }
   const renderCard = (post: Post, view: {inline?: boolean; commentsOpen?: boolean} = {inline: true}) => <article className="card social-card" key={post.post_id} id={`social-post-${post.post_id}`} tabIndex={-1}>
         <div className="social-card-body">
           <div className="social-post-header"><p className="social-byline"><MemberAvatar nickname={post.author.display_name} avatarUrl={post.author.avatar_url} className="social-avatar"/> <span>{post.author.display_name}</span> {post.edited_at ? <small className="social-byline-meta"><time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time><small className="social-edited" title={formatIsoLocal(post.edited_at)}>已編輯</small></small> : <time dateTime={post.created_at}>{formatIsoLocal(post.created_at)}</time>}</p>
@@ -675,7 +730,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           {post.note && <SocialBody text={post.note} client={client} mentions={post.mentions} onTag={selectTag}/>}
           {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb post={post}/>}
           {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
-          <SocialInteractions onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => {if(client!==currentClient.current||feedSession!==client.sessionGeneration)return;++confirmedWrites.current;setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item));}}/>
+          <SocialInteractions onCommentsChanged={view.inline === false ? () => { void reconcileShortComments(post); } : undefined} onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => {if(client!==currentClient.current||feedSession!==client.sessionGeneration)return;++confirmedWrites.current;setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item));}}/>
           <div className="social-actions">
             {post.url && <a className="btn btn-ghost" href={post.url} target="_blank" rel="noopener noreferrer">開啟原文 ↗</a>}
             {post.kind !== 'note' && <PromotionShare client={client} kind="social_post" target={post.post_id} title={post.title} label="推廣原文"/>}
@@ -757,11 +812,10 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}
     {!loading && !error && items.length === 0 && !(platform === 'shorts' && !directPost) && <p className="empty">{directPost?'這則貼文已刪除、隱藏，或你目前沒有閱覽權限。':platform ? '這個分類還沒有貼文。' : '還沒有動態。分享第一則近況，和夥伴開始聊聊。'}</p>}
-    {platform === 'shorts' && !directPost && !loading && (!error || Boolean(failedFeedLoad.current?.cursor)) && <ShortVideoFeed posts={items} hasMore={Boolean(cursor) && !error} loadingMore={more} onLoadMore={() => { if (cursor && !error && !failedFeedLoad.current) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => { shortTrigger.current = trigger; setShortComments(false); setShortPostId(post.post_id); }} onComment={(post, trigger) => { shortTrigger.current = trigger; setShortComments(true); setShortPostId(post.post_id); }} onLike={post => void likeShort(post.post_id)} likeBusy={shortLiking} likeRetry={Object.fromEntries(Object.entries(shortLikeRetries).filter(([,state])=>state.client===client&&state.generation===feedSession).map(([id,state])=>[id,state.liked]))} renderShare={post => { const full = items.find(item => item.post_id === post.post_id); return full ? <SocialPostShare client={client} post={full}/> : null; }}/>}
-    {shortPost && <dialog ref={shortDialog} className="short-video-post-dialog" aria-label={shortComments ? '貼文留言' : '貼文選項與檢舉'} onClose={() => setShortPostId(null)} onCancel={() => setShortPostId(null)}>
-      <button type="button" className="btn btn-ghost short-video-post-dialog-close" onClick={() => shortDialog.current?.close()}>關閉</button>
-      {renderCard(shortPost, {inline: false, commentsOpen: shortComments})}
-    </dialog>}
+    {platform === 'shorts' && !directPost && !loading && (!error || Boolean(failedFeedLoad.current?.cursor)) && <ShortVideoFeed posts={items} hasMore={Boolean(cursor) && !error} loadingMore={more} onLoadMore={() => { if (cursor && !error && !failedFeedLoad.current) void load(platform, cursor); }} onRefresh={() => refreshShorts(items.length)} onManage={(post, trigger) => openShort(post.post_id, trigger, false)} onComment={(post, trigger) => openShort(post.post_id, trigger, true)} onLike={post => void likeShort(post.post_id)} likeBusy={shortLiking} likeRetry={Object.fromEntries(Object.entries(shortLikeRetries).filter(([,state])=>state.client===client&&state.generation===feedSession).map(([id,state])=>[id,state.liked]))} renderShare={post => { const full = items.find(item => item.post_id === post.post_id); return full ? <SocialPostShare client={client} post={full}/> : null; }}/>}
+    {platform === 'shorts' && !directPost && items.filter(post => retainedShortIds.includes(post.post_id)).map(post => <ShortPostDialog key={post.post_id} active={shortPostId === post.post_id} label={shortComments ? '貼文留言' : '貼文選項與檢舉'} onClose={() => setShortPostId(null)}>
+      {renderCard(post, {inline: false, commentsOpen: shortPostId === post.post_id && shortComments})}
+    </ShortPostDialog>)}
     <div className="social-grid">
       {(platform === 'shorts' && !directPost ? [] : items).map(post => renderCard(post))}
     </div>

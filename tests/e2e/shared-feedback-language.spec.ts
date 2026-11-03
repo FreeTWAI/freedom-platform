@@ -283,8 +283,8 @@ for(const capability of ['disabled','missing'] as const)test(`feature search has
 
 test('content search handoff respects unsaved page departure protection',async({page})=>{
   await login(page);await navigate(page,'社群活動');
-  await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   await form.getByLabel('活動名稱',{exact:true}).fill('必須保留的搜尋測試草稿');
   let discard=false,prompts=0,writes=0;
   page.on('dialog',async dialog=>{prompts++;await(discard?dialog.accept():dialog.dismiss());});

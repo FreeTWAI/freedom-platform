@@ -30,6 +30,7 @@
     "tests/runtime/hosted-logistics-services.test.ts",
     "apps/platform-api/src/routes/hosted-offline-payments.ts",
     "contracts/guild-launchpad/v1/hosted-offline-payment.ts",
+    "contracts/guild-launchpad/v1/offline-settings-field-error.ts",
     "contracts/guild-launchpad/v1/hosted-offline-payment.schema.json",
     "tests/runtime/hosted-offline-schema.test.ts",
     "tests/runtime/hosted-offline-settings.test.ts",

@@ -22,7 +22,9 @@
     "tests/e2e/tenant-member-grants-role-change.spec.ts",
     "apps/portal-web/src/modules/TenantMembersSection.tsx",
     "apps/portal-web/src/modules/tenant-member-grants.ts",
-    "tests/runtime/tenant-members-section.test.ts"
+    "tests/runtime/tenant-members-section.test.ts",
+    "apps/portal-web/src/modules/acting-tenant-storage.ts",
+    "tests/runtime/acting-tenant-storage.test.ts"
   ],
   "public_exports": [
     "modules/tenant-workspaces/service.ts",

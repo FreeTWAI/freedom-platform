@@ -27,8 +27,8 @@ export function EntryResources({client,communitySearchEnabled=false,compact=fals
   const [opened,setOpened]=useState(false);
   const lane=useMemo(()=>createTaskRead<IntroBook[]>(()=>client.sessionGeneration),[client,generation]);
   const state=useSyncExternalStore(lane.subscribe,lane.getSnapshot,lane.getSnapshot);
-  const reload=useCallback(()=>lane.run('/community',async signal=>previewBooks(
-    await client.get<unknown>('/community',{background:true,signal}))),[client,lane]);
+  const reload=useCallback(()=>lane.run('/community/preview',async signal=>previewBooks(
+    await client.get<unknown>('/community/preview',{background:true,signal}))),[client,lane]);
   // Read only while expanded. Closing removes the old view; reopening revalidates.
   useEffect(()=>{if(opened)void reload();return()=>lane.reset();},[opened,reload,lane]);
   const loading=opened&&(state.status==='idle'||state.status==='loading');

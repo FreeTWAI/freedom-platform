@@ -181,7 +181,7 @@ test('cancelling unsaved event navigation keeps the deep-link document and loads
   await login(page, false);
   await page.goto('/device');
   await navigate(page, '社群活動');
-  await page.getByRole('button', {name: '＋ 提交活動', exact: true}).click();
+  await page.getByRole('button', {name: '辦活動', exact: true}).click();
   const draft = page.getByLabel('活動名稱', {exact: true});
   await draft.fill('取消離開保留的活動草稿');
   const previousUrl = page.url();
@@ -521,11 +521,23 @@ test('cooperation summary distinguishes a failed read from empty data and retrie
     return route.fulfill({ json: { has_engagements: true, needs_response: false } });
   });
   await login(page, false);
+  const disclosure = page.locator('.home-participation-disclosure');
+  await expect(disclosure).toHaveJSProperty('open', false);
+  // The normal visible home feed settles without starting this hidden read.
+  await expect(page.locator('.home-timeline .social-zone')).toHaveAttribute('aria-busy', 'false');
+  expect(calls).toBe(0);
   await openParticipation(page);
   const progress = page.getByRole('region', { name: '我的合作與內容', exact: true });
   await expect(progress).toContainText('合作進度暫時無法載入');
   await expect(progress).not.toContainText('還沒有合作紀錄');
   await expect(progress.getByRole('button', { name: '查看合作紀錄', exact: true })).toBeEnabled();
+  expect(calls).toBe(1);
+  const toggle = disclosure.locator(':scope > summary');
+  await toggle.click();
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await openParticipation(page);
+  await expect(progress).toContainText('合作進度暫時無法載入');
+  expect(calls).toBe(1); // Reopening retains the failed attempt and explicit retry.
   mode = 'malformed';
   await progress.getByRole('button', { name: '重試合作進度', exact: true }).click();
   await expect.poll(() => calls).toBe(2);
@@ -535,6 +547,11 @@ test('cooperation summary distinguishes a failed read from empty data and retrie
   const updating = progress.getByRole('button', { name: '正在更新…', exact: true });
   await expect(updating).toHaveAttribute('aria-disabled', 'true');
   await expect.poll(() => calls).toBe(3);
+  await toggle.click();
+  await expect(disclosure).toHaveJSProperty('open', false);
+  await openParticipation(page);
+  await expect(updating).toHaveAttribute('aria-disabled', 'true');
+  expect(calls).toBe(3); // A pending read is neither restarted nor duplicated.
   await updating.focus();
   await page.keyboard.press('Enter');
   expect(calls).toBe(3);
@@ -592,6 +609,8 @@ test('switching accounts cannot apply the prior account cooperation response', a
     await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible();
     await login(page, false, 'client@local.test');
     await expect(page.locator('.home-participation-disclosure')).toHaveJSProperty('open', false);
+    await expect(page.locator('.home-timeline .social-zone')).toHaveAttribute('aria-busy', 'false');
+    expect(calls).toBe(1); // The old account opening does not activate the new one.
     await openParticipation(page);
     await expect(progress).toContainText('還沒有合作紀錄');
     release();

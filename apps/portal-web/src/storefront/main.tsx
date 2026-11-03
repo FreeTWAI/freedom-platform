@@ -1,3 +1,4 @@
+import '../zod-csp.js';
 import {SelfShipCard} from './self-ship-card.js';
 import {formatOrderLifecycle} from './format.js';
 import { useEffect, useRef, useState } from 'react';

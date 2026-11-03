@@ -41,7 +41,8 @@
     "tenant-workspaces",
     "work",
     "community-certification",
-    "google-identity"
+    "google-identity",
+    "event-missions"
   ],
   "format": "freedom.module/v1",
   "instructions": [

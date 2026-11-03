@@ -51,3 +51,13 @@
   .squad-panel .card-grid { grid-template-columns: minmax(0, 1fr); }
   .squad-panel :is(input, select, textarea) { font-size: 1rem; }
 }
+
+/* Participation scopes and recovery use the existing theme and touch tokens. */
+.squad-panel .squad-scope .btn[aria-pressed="true"] { background: var(--green-soft); border-color: var(--focus); color: var(--ink); }
+.squad-panel .squad-recovery { border: 1px solid var(--line); border-radius: var(--radius); padding: .8rem; background: var(--bg-elev); }
+.squad-panel .squad-recovery p { margin: 0 0 .5rem; }
+.outcome-section { min-width: 0; overflow-wrap: anywhere; }
+.squad-outcome-editor { border-top: 1px solid var(--line); padding-top: .6rem; }
+.squad-outcome-editor > summary { min-height: 44px; cursor: pointer; font-weight: 600; }
+.squad-outcome-editor > form { margin-top: .6rem; }
+.outcome-section h2:focus, .outcome-section h4:focus { outline: 2px solid var(--focus); outline-offset: 4px; }

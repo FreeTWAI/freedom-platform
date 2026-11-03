@@ -1,3 +1,5 @@
+import { readActing, rememberActing } from './acting-tenant-storage';
+export { readActing, rememberActing } from './acting-tenant-storage';
 import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { hasLoneSurrogate, type Config } from '../../../../contracts/guild-launchpad/v1/config';
 import type { TenantView, WorkspaceView } from '../../../../contracts/guild-launchpad/v1/tenant';
@@ -38,20 +40,6 @@ type Page<T> = { items: T[]; next_cursor: string | null; source_version: string 
 type Choice = { kind: 'create_new' } | { kind: 'reuse'; instance_id: string; expected_version: string };
 type Call = { signal?: AbortSignal; live: () => boolean };
 
-// Same sessionStorage key TenantSettings writes. This screen also reads workspace_id.
-function actingKey(userId: string) { return `freedom-acting-tenant:${userId}`; }
-export function readActing(userId: string): { tenant_id: string | null; workspace_id: string | null } {
-  try {
-    const parsed = JSON.parse(sessionStorage.getItem(actingKey(userId)) ?? '') as { tenant_id?: unknown; workspace_id?: unknown };
-    return {
-      tenant_id: typeof parsed.tenant_id === 'string' ? parsed.tenant_id : null,
-      workspace_id: typeof parsed.workspace_id === 'string' ? parsed.workspace_id : null,
-    };
-  } catch { return { tenant_id: null, workspace_id: null }; }
-}
-export function rememberActing(userId: string, tenantId: string, workspaceId: string) {
-  try { sessionStorage.setItem(actingKey(userId), JSON.stringify({ tenant_id: tenantId, workspace_id: workspaceId })); } catch { /* The screen still shows the current choice. */ }
-}
 function byteLength(value: string) { return new TextEncoder().encode(value).length; }
 function textProblem(value: string, kind: 'title' | 'objective'): string | null {
   if (value.trim().length === 0) return '不能是空白';

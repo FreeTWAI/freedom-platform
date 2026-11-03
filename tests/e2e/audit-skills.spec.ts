@@ -84,6 +84,7 @@ for (const width of [1280, 390]) {
       await card.getByRole('button', { name: '預覽技能書', exact: true }).click();
       const dialog = page.getByRole('dialog', { name: 'Hao 社群貼文技能書', exact: true });
       const upstream = 'https://github.com/Hao0321/claude-skill-social-post';
+      await dialog.getByText('作者與共同開發（進階）', {exact: true}).click();
       await expect(dialog.getByRole('link', { name: '開啟原作 ↗', exact: true })).toHaveAttribute('href', upstream);
       await expect(dialog.getByRole('link', { name: 'Fork 原作 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
       await expect(dialog.getByRole('link', { name: 'Fork 專案 ↗', exact: true })).toHaveAttribute('href', `${upstream}/fork`);
@@ -108,6 +109,7 @@ for (const width of [1280, 390]) {
 
     test('co-creation states the claim rule once and keeps task filters compact', async ({ page }) => {
       await login(page); await navigate(page, '一起開發');
+      await page.getByRole('button', { name: '查看任務：自動剪輯共創：一起把可用的底層疊起來', exact: true }).click();
       await expect(page.getByText('到 GitHub 任務留言認領；完成程式、測試、設計或文件後提交 PR，交由維護者審查。', { exact: true })).toHaveCount(1);
       await expect(page.getByText('篩選本次載入的任務', { exact: false })).toHaveCount(0);
       const filters = page.getByRole('region', { name: '任務篩選' });
@@ -265,6 +267,7 @@ for (const width of [1280, 390]) {
       await card.getByRole('button', { name: '預覽技能書', exact: true }).click();
       const intro = page.locator('dialog.skill-intro-dialog[data-book-id="project-template"]');
       await expect(intro).toBeVisible();
+      await intro.getByText('作者與共同開發（進階）', {exact: true}).click();
       await intro.getByRole('button', { name: '加入共同開發', exact: true }).click();
       const access = page.getByRole('dialog', { name: '開發啟用任務', exact: true });
       await access.getByRole('button', { name: '加入AI 開發公會', exact: true }).click();

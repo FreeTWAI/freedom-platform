@@ -183,3 +183,58 @@ test('leadership avatars fall back safely and the phone layout keeps names reada
   }
   expect(externalReads).toBe(0);
 });
+
+
+test('guild partner cards keep consent-filtered data, keyboard disclosure and three-theme phone layouts',async({page},testInfo)=>{
+  await fixtureGuilds(page);
+  const id='aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+  const shown={...member(0,'帶著設計與光影專長的公會夥伴'),user_id:id,custom_capabilities:['一起設計展場動線'],is_online:true,last_seen_at:'2026-10-30T10:00:00Z',contacts:{discord:'viewer-permitted-contact'}};
+  let release!:()=>void,requested!:()=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{requested=resolve;});let first=true;
+  await page.route('**/api/v1/members?*',async route=>{
+    if(first){first=false;requested();await held;}
+    const search=new URL(route.request().url()).searchParams.get('search');
+    return route.fulfill({json:{items:search?[]:[shown,{...member(1,'我在公會的介紹'),is_self:true,capabilities:[],contacts:{}}],total:search?0:2,next_offset:null}});
+  });
+  let extraReads=0,socialReads=0;await page.route('**/api/v1/members/*/contribution-outcomes*',route=>{extraReads++;return route.fulfill({json:{accepted_count:0,entries:[],next_offset:null}});});await page.route('**/api/v1/members/*/social-links*',route=>{socialReads++;return route.fulfill({json:{items:[],total:0,next_offset:null}});});
+  try{
+    await login(page);const card=page.getByRole('article',{name:'活動與空間公會',exact:true});await card.getByRole('button',{name:'查看成員',exact:true}).click();await started;
+    const panel=card.getByRole('region',{name:'活動與空間公會成員',exact:true});await expect(panel.getByRole('status')).toHaveText('正在載入成員…');release();
+    await expect(panel.locator('.guild-member-card')).toHaveCount(2);await expect(panel).toContainText('這裡也有你的位置');await expect(panel).toContainText('尚未填寫專長');
+    const row=panel.locator(`[data-member-id="${id}"]`),summary=row.locator('.directory-member-details > summary');
+    await expect(row.getByRole('link',{name:'查看個人頁',exact:true})).toHaveAttribute('href',`#profile?member=${id}`);
+    await expect(row).not.toContainText('在線');await expect(row).not.toContainText('上線');await expect(row).not.toContainText('2026/10/30');
+    await expect(row.getByText('viewer-permitted-contact',{exact:true})).not.toBeVisible();await summary.focus();await page.keyboard.press('Enter');await expect(row.getByText('viewer-permitted-contact',{exact:true})).toBeVisible();await page.keyboard.press('Enter');await expect(row.getByText('viewer-permitted-contact',{exact:true})).not.toBeVisible();
+    for(const theme of ['light','dark','versefolk']){
+      await page.evaluate(value=>{document.documentElement.dataset.theme=value;document.documentElement.dataset.experienceProfile=value;window.dispatchEvent(new Event('freedom-theme-changed'));},theme);
+      for(const width of [320,390,1280]){
+        await page.setViewportSize({width,height:900});await row.scrollIntoViewIfNeeded();
+        expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+        expect(await panel.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+        const geometry=await row.evaluate(node=>{const box=node.getBoundingClientRect();return {width:box.width,children:[...node.querySelectorAll('h3,.pill,a,summary')].filter(child=>child.getClientRects().length>0).map(child=>{const r=child.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width};}),left:box.left,right:box.right};});
+        for(const child of geometry.children){expect(child.left).toBeGreaterThanOrEqual(geometry.left);expect(child.right).toBeLessThanOrEqual(geometry.right+1);}
+        await page.screenshot({path:testInfo.outputPath(`guild-partners-${theme}-${width}.png`),animations:'disabled'});
+      }
+    }
+    expect(extraReads).toBe(0);expect(socialReads).toBe(0);
+    const outcomes=row.locator('.guild-member-outcomes > summary');await outcomes.focus();await page.keyboard.press('Enter');await expect(row).toContainText('平台合作成果（非本公會貢獻統計）');await expect(row).toContainText('尚無已驗收合作紀錄');expect(extraReads).toBeGreaterThan(0);expect(socialReads).toBeGreaterThan(0);await page.keyboard.press('Enter');
+    await panel.getByRole('searchbox',{name:'搜尋公會成員',exact:true}).fill('無結果');await expect(panel).toContainText('沒有符合的公會成員。');await panel.getByRole('button',{name:'清除搜尋',exact:true}).click();await expect(panel.locator('.guild-member-card')).toHaveCount(2);await expect(panel.getByRole('searchbox')).toHaveValue('');
+    await page.keyboard.press('Escape');await expect(card.getByRole('button',{name:'查看成員',exact:true})).toBeFocused();
+  }finally{release();}
+});
+
+test('guild card admin retry after a lost response reuses the original operation tuple',async({page})=>{
+  await fixtureGuilds(page);let viewer='',tier='intern';const id='bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
+  await page.route('**/api/v1/guilds/directory',route=>route.fulfill({json:{items:[{...guilds[0],guild_master:{user_id:viewer,display_name:'合成會長'},guild_experts:[]}]}}));
+  await page.route('**/api/v1/members?*',route=>route.fulfill({json:{items:[{...member(1,'待設定的合成成員'),user_id:id,guild_roster:{member_tier:tier,aggregate_version:3,expert_aggregate_version:null,expert_active:false}}],total:1,next_offset:null}}));
+  const writes:{body:string|null;key:string|undefined;version:string|undefined}[]=[];
+  await page.route(`**/api/v1/guilds/guild_event_space/members/${id}/tier`,route=>{
+    const request=route.request(),headers=request.headers();writes.push({body:request.postData(),key:headers['idempotency-key'],version:headers['if-match']});
+    if(writes.length===1)return route.abort('failed');tier='full';return route.fulfill({json:{changed:true,user_id:id,guild_key:'guild_event_space',member_tier:'full',aggregate_version:4}});
+  });
+  await login(page);viewer=(await(await page.request.get('/api/v1/session')).json()).user.user_id;await page.reload();
+  const card=page.getByRole('article',{name:'活動與空間公會',exact:true});await card.getByRole('button',{name:'查看成員',exact:true}).click();
+  const panel=card.getByRole('region',{name:'活動與空間公會成員',exact:true}),promote=panel.getByRole('button',{name:'設為正式成員',exact:true});
+  await expect(panel.getByRole('group',{name:'管理待設定的合成成員',exact:true})).toBeVisible();await promote.click();await expect(panel.getByRole('alert')).toBeVisible();await expect(promote).toBeEnabled();await promote.click();await expect(panel.locator('.guild-member-tier-full')).toHaveText('正式成員');
+  expect(writes).toHaveLength(2);expect(writes[0].key).toBeTruthy();expect(writes[1]).toEqual(writes[0]);
+});

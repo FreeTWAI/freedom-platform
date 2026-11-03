@@ -1,4 +1,6 @@
 import {z} from 'zod';
+import {SupplierReportDaySchema as reportDay} from './supplier-report-query.js';
+export {SUPPLIER_REPORT_MAX_DAYS, SupplierReportQuerySchema, type SupplierReportQuery} from './supplier-report-query.js';
 import {OpaqueId, Version, NonNegativeDecimal, NON_NEGATIVE_DECIMAL_PATTERN} from './primitives.js';
 import {CurrencySchema, ProductViewSchema, MerchantInventorySchema, merchantInventoryMatches} from './storefront.js';
 import {SupplyCatalogSetupInputSchema} from './hosted-supply-catalog.js';
@@ -239,21 +241,9 @@ export const SupplierSummarySchema = z.object({
 // days (both included) that hold lines of this supplier, each in its state at as_of as the reservations read decides
 // it. Supply amounts are what the supplier would be owed for the units; they are not revenue, an invoice, a payment or
 // a commission. A report whose CSV would have more than SUPPLIER_REPORT_MAX_ROWS data rows is refused, never cut short.
-export const SUPPLIER_REPORT_MAX_DAYS = 366;
 export const SUPPLIER_REPORT_MAX_ROWS = 10000;
-const reportDay = z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/).refine(value => {
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return year >= 2000 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}, 'Invalid calendar date.');
-const dayNumber = (value: string) => Date.parse(`${value}T00:00:00Z`) / 86400000;
 /** Taiwan has kept UTC+8 without daylight saving since 1979, so a Taipei calendar day starts at 00:00+08:00. */
 const taipeiMidnight = (value: string) => Date.parse(`${value}T00:00:00+08:00`);
-/** Both days are Asia/Taipei calendar days and both are included: at most SUPPLIER_REPORT_MAX_DAYS days. */
-export const SupplierReportQuerySchema = z.object({from: reportDay, to: reportDay}).strict()
-  .refine(value => dayNumber(value.from) <= dayNumber(value.to), {message: 'from must not be after to.', path: ['to']})
-  .refine(value => dayNumber(value.to) - dayNumber(value.from) < SUPPLIER_REPORT_MAX_DAYS,
-    {message: 'The period is at most 366 days.', path: ['to']});
 const amount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 /** This supplier's lines in the period's reservations that are in one state at as_of. */
 export const SupplierReportReservationsSchema = z.object({
@@ -493,7 +483,6 @@ export type SupplierReservationDetail = z.infer<typeof SupplierReservationDetail
 export type SupplierChange = z.infer<typeof SupplierChangeSchema>;
 export type SupplierChanges = z.infer<typeof SupplierChangesSchema>;
 export type SupplierSummary = z.infer<typeof SupplierSummarySchema>;
-export type SupplierReportQuery = z.infer<typeof SupplierReportQuerySchema>;
 export type SupplierReport = z.infer<typeof SupplierReportSchema>;
 export type SupplyMaterialContent = z.infer<typeof SupplyMaterialContentSchema>;
 export type SupplyMaterialVersion = z.infer<typeof SupplyMaterialVersionSchema>;

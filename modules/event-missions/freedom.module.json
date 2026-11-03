@@ -1,0 +1,45 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "event-missions",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/event-missions/**",
+    "migrations/196_event_missions.sql",
+    "apps/platform-api/src/routes/event-missions.ts",
+    "apps/portal-web/src/modules/EventMissions.tsx",
+    "apps/portal-web/src/modules/EventMissions.css",
+    "apps/portal-web/src/modules/event-missions-client.ts",
+    "tests/runtime/event-missions-policy.test.ts",
+    "tests/runtime/event-missions-client.test.ts",
+    "tests/runtime/event-missions.test.ts",
+    "tests/e2e/event-missions.spec.ts",
+    "tests/runtime/event-missions-ui.test.ts",
+    "deploy/cloudflare/test/event-missions-schema.test.mjs"
+  ],
+  "public_exports": [],
+  "dependencies": [
+    "community",
+    "positioning",
+    "command-core"
+  ],
+  "client_profiles": [
+    "member"
+  ],
+  "contract_families": [],
+  "instructions": [
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "modules/event-missions/README.md",
+    "docs/development/member-api.md",
+    "packages/db/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full",
+    "ui.default"
+  ],
+  "surfaces": []
+}

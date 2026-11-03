@@ -65,7 +65,17 @@
     "tests/runtime/skill-share-content.test.ts",
     "tests/e2e/event-highlights.spec.ts",
     "tests/e2e/member-services.spec.ts",
-    "tests/e2e/event-member-journey.spec.ts"
+    "tests/e2e/event-member-journey.spec.ts",
+    "modules/community/event-helper-state.ts",
+    "modules/community/event-helpers.ts",
+    "migrations/195_event_helpers.sql",
+    "tests/runtime/event-helper-state.test.ts",
+    "tests/runtime/event-helpers.test.ts",
+    "apps/portal-web/src/modules/EventsPanel.css",
+    "apps/portal-web/src/modules/EventHelpers.tsx",
+    "apps/portal-web/src/modules/EventHelpers.css",
+    "tests/runtime/event-helper-client.test.ts",
+    "tests/e2e/event-helpers.spec.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",

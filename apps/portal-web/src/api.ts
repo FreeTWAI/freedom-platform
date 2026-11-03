@@ -3,7 +3,7 @@ import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
 import type { ProblemDetails, SessionPayload } from './types'
 import { beginRequest } from './request-activity'
-import { OfflineSettingsFieldErrorSchema } from '../../../contracts/guild-launchpad/v1/hosted-offline-payment'
+import { OfflineSettingsFieldErrorSchema } from '../../../contracts/guild-launchpad/v1/offline-settings-field-error'
 
 const API_BASE = '/api/v1'
 

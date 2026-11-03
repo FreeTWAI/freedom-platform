@@ -23,7 +23,7 @@ function mergeComments(current: Comment[], incoming: Comment[]) {
   });
 }
 
-export function SocialInteractions({client, post, canHide, onUpdate,onTag,initialOpen=false}: {initialOpen?:boolean;onTag?:(tag:string)=>void;client: PortalClient; post: SocialPost; canHide: boolean; onUpdate: (value: Partial<SocialPost>) => void}) {
+export function SocialInteractions({client, post, canHide, onUpdate,onTag,onCommentsChanged,initialOpen=false}: {onCommentsChanged?:()=>void;initialOpen?:boolean;onTag?:(tag:string)=>void;client: PortalClient; post: SocialPost; canHide: boolean; onUpdate: (value: Partial<SocialPost>) => void}) {
   const [open, setOpen] = useState(initialOpen);
   const [comments, setComments] = useState<Comment[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
   const pendingReadChanges = useRef<Map<string, Comment | null> | null>(null);
   useEffect(() => () => { ++sequence.current; pendingReadChanges.current = null; }, []);
   // Opened from a Short's comment button: the panel starts expanded and loads once.
-  useEffect(() => { if (initialOpen) void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (initialOpen) { setOpen(true); void load(); } }, [initialOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   async function load(next?: string) {
     const token = ++sequence.current, generation = client.sessionGeneration;
     // Only ACKs that arrive during this read supersede its older snapshot.
@@ -113,6 +113,7 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
       if(!comments.some(item=>item.comment_id===created.comment_id))onUpdate({comment_count:(post.comment_count??0)+1});
       pendingComment.current=null;
       if(!command.body.sticker_id){setText('');setMentions([]);setFile(null);}
+      onCommentsChanged?.();
     }catch(cause){
       if(!current(generation))return;
       // Uploaded files remain bound to this draft when comment delivery is unknown.
@@ -131,6 +132,7 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,initia
       confirmedComments.current = confirmedComments.current.filter(item => item.comment_id !== comment.comment_id);
       setComments(current => current.filter(item => item.comment_id !== comment.comment_id));
       onUpdate({comment_count: Math.max(0, (post.comment_count ?? 0) - 1)}); setConfirmDelete(null);
+      onCommentsChanged?.();
     } catch (cause) { if (current(generation)) setError(cause instanceof Error ? cause.message : '留言未能刪除。'); }
     finally { if (current(generation)) setSending(false); }
   }

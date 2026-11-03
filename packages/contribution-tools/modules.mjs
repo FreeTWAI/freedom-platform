@@ -150,10 +150,10 @@ function moduleTemplate(id, owner, dependencies) {
 2. 新頁面或 API 需在對應組合入口明確註冊，並同步 descriptor 的 owned_paths、surfaces 與 dependencies。JSON 描述檔不會自動啟用功能。
 3. 會員、權限、交易與資料庫寫入沿用現有服務及契約；不要從前端 import 伺服器或資料庫實作。
 4. 若需 migration，依合併時主線選下一個編號；不要自行啟用正式旗標。
-5. 依根 CONTRIBUTING.md 準備 context，記錄下列命令的實際結果與未驗項，再開 PR。
+5. 依根 CONTRIBUTING.md 準備 context；下列 compact profile 需讀端支援 v1 bundle 與 v2 manifest/chunks，舊讀端省略該選項。記錄下列命令的實際結果與未驗項，再開 PR。
 
 \`\`\`sh
-node scripts/freedom.mjs prepare --base-ref origin/main --scope ${id}
+node scripts/freedom.mjs prepare --base-ref origin/main --scope ${id} --context-profile compact
 node scripts/freedom.mjs module-check
 node --import tsx --test ${test}
 npm run typecheck
@@ -236,7 +236,7 @@ export async function createModule(repositoryRoot, { id, owner, dependencies = [
     status: dryRun ? 'planned' : 'created', module_id: id, head_commit: catalog.head_commit,
     files: files.map(file => ({ path: file.path, bytes: Buffer.byteLength(file.content), sha256: sha256(file.content),
       ...(dryRun ? { content: file.content } : {}) })),
-    next_commands: [`node scripts/freedom.mjs prepare --base-ref origin/main --scope ${id}`,
+    next_commands: [`node scripts/freedom.mjs prepare --base-ref origin/main --scope ${id} --context-profile compact`,
       'node scripts/freedom.mjs module-check', `node --import tsx --test tests/runtime/${id}.test.ts`, 'npm run typecheck'],
     runtime_registered: false, merge_authorized: false, execution_authorized: false };
   if (dryRun) return result;

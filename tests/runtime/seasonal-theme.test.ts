@@ -78,6 +78,6 @@ test('seasonal art uses independent contain columns without changing brand or pr
  assert.match(css,/object-fit:contain/);assert.doesNotMatch(css,/--(?:green|ink|blue|bg|focus)\s*:/);
  assert.doesNotMatch(css,/url\(|animation|background-image/);
  assert.match(ui,/seasonal-art-column/);assert.doesNotMatch(ui,/SeasonalBadge|edge\.webp/);
- assert.match(app,/<strong>自由工坊<\/strong><\/a>/);
+ assert.match(app,/<img className="brand-home-logo" src="\/brand\/freedom-workshop-compact\.jpeg" alt="自由工坊" width="1536" height="512"\/><\/a>/);
  assert.match(app,/onShare=\{\(\)=>chooseShare\('post'\)\}/);
 });

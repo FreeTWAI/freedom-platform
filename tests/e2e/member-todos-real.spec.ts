@@ -126,7 +126,9 @@ test('a legacy member completes profile and positioning todos through the real U
     const card=page.locator(`article.guild-card[data-guild-key="${GUILD}"]`);
     await card.getByRole('button',{name:`加入${GUILD_NAME}`,exact:true}).click();
     await expect(page.getByRole('status').filter({hasText:`已加入${GUILD_NAME}，技能書已解鎖。`})).toBeVisible();
-    await expect(card.getByRole('button',{name:'設為主要公會',exact:true})).toBeVisible();
+    await expect(card.getByRole('button',{name:'設為主要公會',exact:true, includeHidden: true})).toBeHidden();
+    await card.locator('.guild-membership-settings > summary').click();
+    await expect(card.getByRole('button',{name:'設為主要公會',exact:true, includeHidden: true})).toBeVisible();
     const joined=await getJson(page,'/me/onboarding');
     expect(joined.primary_guild_key).toBeNull();expect(joined.skill_books.length).toBeGreaterThan(0);
     expect(joined.skill_books.every((book:{guild_keys:string[]})=>book.guild_keys.includes(GUILD))).toBe(true);
@@ -138,7 +140,8 @@ test('a legacy member completes profile and positioning todos through the real U
     // The member's own 設為主要公會 is what completes the primary guild task.
     await follow(page,'primary-guild','前往職業公會','guilds','職業公會');
     const primaryResponse=page.waitForResponse(response=>response.url().endsWith(`/api/v1/guilds/${GUILD}/primary`)&&response.request().method()==='POST');
-    await card.getByRole('button',{name:'設為主要公會',exact:true}).click();
+    await card.locator('.guild-membership-settings > summary').click();
+    await card.getByRole('button',{name:'設為主要公會',exact:true, includeHidden: true}).click();
     const initialPrimary=await primaryResponse;
     expect(initialPrimary.request().headers()['if-match']).toBeUndefined();
     expect(initialPrimary.status()).toBe(200);

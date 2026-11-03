@@ -31,8 +31,8 @@ test('member helper host yields to page tools, share dialog and messages without
   await openChat(page);await expect(launcher(page)).toHaveCount(0);await closeChat(page);await expect(launcher(page)).toBeVisible();
 });
 test('member helper host respects real page-leave refusal and retains an unsaved event draft',async({page})=>{
-  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'＋ 提交活動',exact:true}).click();
-  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'提交活動',exact:true})});await form.getByLabel('活動名稱',{exact:true}).fill('助手導航不可丟掉的合成草稿');
+  await login(page);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});await form.getByLabel('活動名稱',{exact:true}).fill('助手導航不可丟掉的合成草稿');
   let accept=false,prompts=0;page.on('dialog',async dialog=>{prompts++;await(accept?dialog.accept():dialog.dismiss());});
   await launcher(page).click();await helper(page).getByRole('button',{name:'學 AI',exact:true}).click();
   await helper(page).getByRole('button',{name:'前往技能書架',exact:true}).click();

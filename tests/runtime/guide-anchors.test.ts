@@ -80,7 +80,7 @@ test('permission and data dependent targets remain attached to the existing cond
   assert.match(positioning, /!summaryLoading&&!summaryError&&assessment&&member&&<section/);
   assert.match(positioning, /<h2 id="positioning-result-title" data-guide-anchor="positioning:result"/);
   const events = readFileSync(path.join(moduleRoot, 'EventsPanel.tsx'), 'utf8');
-  assert.match(events, /<button[^>]*data-guide-anchor="events:submit-event"[^\n]*>＋ 提交活動<\/button>/);
+  assert.match(events, /<button[^>]*data-guide-anchor="events:submit-event"[^\n]*>辦活動<\/button>/);
 });
 
 

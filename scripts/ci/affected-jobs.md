@@ -12,7 +12,7 @@ and coverage become clear; retain failures and distinguish skipped from passed.
 The `browser_specs_only` profile handles ordinary modifications of existing
 `tests/e2e/<kebab-case>.spec.ts` files. The unchanged product and complete module
 graph do not need another runtime matrix, Worker restore drill or deployment
-preflight. The existing **ui-e2e** job retains the complete browser plan and adds
+preflight. The existing **ui-e2e** job adds
 the same TypeScript check normally supplied by static-worker. Six existing
 runtime files read browser-spec bodies: `public-social-post-page`,
 `newcomer-guides`, `social-share`, `social-feed-write-order`,
@@ -22,7 +22,8 @@ race/ACK, request forwarding and partial setup/cleanup failure cases remain in t
 needed. It retains the pinned runner's missing/empty/skip/failure rejection.
 Source integrity,
 CodeQL and required review remain in place. This reduces unrelated jobs; it does
-not claim to shorten the browser plan or reuse another source's green result.
+not reuse another source's green result. The reviewed PR-only exception below
+narrows the browser plan; all other browser-spec changes keep the complete plan.
 
 Like CI-tool changes, browser specs qualify only on a clean exact PR integration
 tree or direct main successor. Additions, deletions, renames, executable/link
@@ -32,6 +33,68 @@ browser files also prevent this profile. No browser cases, assertions, retries
 or deadlines change. The selector's own workflow exception admits only the exact
 conditional TypeScript and consumer-suite steps in ui-e2e, at its existing
 contracts-build and pinned-runner boundaries, plus only that fixed suite addition.
+
+### Reviewed store setup spec pilot
+
+Only a PR integration diff consisting of an ordinary modification to the existing
+`tests/e2e/store-setup-entry.spec.ts` can select `store-setup-entry`. The exact
+base/head/candidate parents, clean checkout (including ignored browser files),
+regular nonexecutable blobs and unchanged complete descriptor graph are required.
+Main push and merge-group browser plans remain full. Guide and guild selection
+are unchanged. No workflow, API permission, runner, credential or required gate
+is added; the existing ui-e2e job installs selector dependencies as described
+below. Execution still comes from `job.workflow_sha`, not an independent
+base-pinned controller.
+
+The selector parses both immutable spec versions with the workflow installation's
+existing TypeScript parser. The candidate root's `npm ci` does not install packages
+under `.freedom/trusted`. After confirming that checkout against `job.workflow_sha`,
+only the browser-spec-only lane runs `npm ci --ignore-scripts --no-audit --no-fund`
+with `.freedom/trusted` as its working directory. This uses the runner checkout's
+own package manifest and lockfile, as the existing selector job does. It adds an
+installation in this job; it does not reuse another job's filesystem or load a
+parser from candidate `node_modules`. Missing or unloadable installed parsers
+still return full. Exact one-file integration evidence also keeps candidate
+package/config/dependency sources unchanged; it is not an integrity claim for
+arbitrary candidate-installed parser bytes.
+
+The seven reviewed import declarations include exact bindings. Only the original
+`InstallationPageSchema` declaration or #1160's exact declaration adding
+`InstancePageSchema`, `LaunchPlanSchema` and `PlanInputSchema` is accepted for
+`module-registry.js`; no other schema binding or contracts path is admitted.
+The existing tenant and hosted-supply-catalog declarations remain exact.
+The unchanged regular-blob proof explicitly includes their reviewed schema
+closure (`primitives.ts`, `storefront.ts`, `contracts/common/v1/identity.ts`) and
+package manifest/lockfile for the external `zod` dependency. Every mixed schema
+or helper edit still selects full. Default-mode helper bindings remain: default-mode `person`, `login`, `open`, `post`, `launchStore` and
+`captureOffer`, not the same helper's photo-ON server. New imports/bindings,
+dynamic loaders, exports, environment-dependent spec code, missing parser or
+unprovable syntax fall back to full. Every other repository path is unchanged,
+so dependencies, fixture configuration and product source cannot change in this
+lane. This is a bounded static dependency policy, not hostile-code isolation.
+Product/helper/fixture/config/workflow or unknown mixed paths, descriptor edits,
+additions/deletions/renames and mode changes all restore the full browser plan.
+
+At baseline `f56b6c3a2` this spec has seven cases; the motivating #1160 adds an
+eighth. Both sources must keep the reviewed static imports, all baseline literal
+case names must remain, and the candidate must contain at least eight cases.
+The pinned plan executes the **whole file**, unsharded, in default mode: no grep
+and no five unrelated fixture-ON passes. Independent `--list` and execution use
+the same fixed files/config/environment. The evaluator has an explicit one-pass
+contract for this profile, requires at least eight matching listed/executed cases,
+rejects skipped/failed/flaky/retried cases and still rejects incomplete six-pass
+full plans. The baseline-plus-discovered catalog integrity check still precedes
+narrowing; missing unrelated baseline files cannot be hidden by this selection.
+
+Six existing source-consumer files, TypeScript, portal build, source integrity,
+CodeQL, aggregate, required checks and review remain unchanged. This candidate
+is separate from the current release and does not alter any running run.
+This PR-only path does not claim to cover every order-dependent interaction
+between specs sharing a fixture or database. Main pushes retain the full browser
+plan to exercise cross-spec behavior; fixture/helper changes also remain full.
+Synthetic runner tests are not browser/product acceptance or a hosted timing
+comparison. The reported local 9.3-second single-spec result is not a full-CI
+baseline; no formal runtime savings are claimed.
 
 The `delivery_tooling` profile applies to exact release/backup workflow and
 operator paths, the daily backup orchestrator/diagnostics/test, and the selector
@@ -268,3 +331,26 @@ checks. This small check uses the existing product-source scope; harmless unowne
 sources and literal unrelated imports remain warnings. It is not general
 JavaScript or transitive dependency analysis. Source-integrity and aggregate
 failure semantics, CodeQL and non-author review remain required.
+
+### Exact #1160 regression source
+
+`packages/contribution-tools/test/fixtures/store-setup-entry-1160.spec.txt` is an
+unaltered test-source snapshot from PR #1160 commit
+`05429167416a5e3092c0967f10bd4cc48a5fdd91`, blob
+`6697625e15ec412e7d211180c7c3706a28fddea5`, SHA-256
+`7bacd10a028eb12cff69e8f0d699abbb48b39d5c5225513496608209771b4043`.
+It is regression data, not a second product test or an extra browser obligation.
+The regression copies these exact bytes into a disposable Git integration,
+proves selection, and uses real Playwright `--list` to enumerate all eight cases.
+Evaluator unit inputs use that inventory with explicitly synthetic execution
+outcomes, including omitted-case rejection; they are not browser/DB results.
+The original product spec and assertions are never edited by this proposal.
+
+The previously observed `8af0974ee` rejection of these imports remains a real
+failed reachability observation. This correction addresses it without treating
+full fallback as pilot completion. The coordinating review reports that #1160's
+original hosted full suite passed; that product evidence does not mean the new
+narrow lane has run on hosted CI. Actual narrow-lane DB execution and hosted
+runtime savings remain unverified; no new PostgreSQL platform is a prerequisite
+for this bounded selector correction. The prior baseline cancellation failure
+also remains unchanged.

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { test, expect, type Page } from './fixtures.js';
 import { navigate, signOut } from './navigation.js';
 
@@ -12,6 +14,16 @@ async function fillTool(page: Page, title: string) {
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/freetwai-test/simple-work');
   await page.getByLabel('作品名稱', { exact: true }).fill(title);
   await page.getByLabel('一句話介紹', { exact: true }).fill('幫創作者把零散想法整理成合作提案。');
+}
+
+// Save-only cases keep private drafts intentionally; each owns a member so
+// they cannot change the seeded maker's later upgrade/callout expectations.
+async function privateSkillMember(pool: Pool) {
+  const id = randomUUID(), email = `private-skill-${id}@local.test`;
+  await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,onboarding_required,onboarding_completed_at)
+    SELECT $1,community_id,$2,'Private skill member',password_hash,$3,onboarding_required,onboarding_completed_at
+    FROM users WHERE email='maker@local.test'`, [id, email, randomUUID()]);
+  return email;
 }
 
 test('My Content saves a real private draft, isolates another member and resumes after re-login', async ({ page }) => {
@@ -101,7 +113,7 @@ test('simple tool submission previews without writes, edits freely, then publish
 test('a failed publish keeps one private draft and resumes after reload without duplicate posting', async ({ page }) => {
   let fail = true, manualWrites = 0;
   page.on('request', request => { if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/skill-submissions/manual')) manualWrites++; });
-  await page.route('**/api/v1/me/skill-submissions/*/publish', route => fail ? route.fulfill({ status: 503, json: { title: '暫時無法公開', detail: '請稍後重試。' } }) : route.fallback());
+  await page.route('**/api/v1/me/skill-submissions/*/publish', route => fail ? route.fulfill({ status: 422, json: { type: 'about:blank', status: 422, code: 'validation_failed', title: 'Validation failed', detail: '請稍後重試。' } }) : route.fallback());
   await login(page); await navigate(page, '開源投稿');
   await fillTool(page, '保留草稿範例');
   await page.getByRole('button', { name: '預覽投稿' }).click();
@@ -191,4 +203,139 @@ test('member returns to manage a shared tool, withdraws it privately and publish
   const newPath=await card.getByRole('link',{name:'閱讀已公開技能書 ↗'}).getAttribute('href');
   expect(newPath).not.toBe(oldPath);expect((await page.request.get(newPath!)).status()).toBe(200);
   expect((await page.request.get(oldPath!)).status()).toBe(404);
+});
+
+test('manual skill private save reloads and revises the same draft without publishing', async ({ page, e2eAuthPool }) => {
+  const writes: string[] = [];
+  page.on('request', request => { if (request.method() === 'POST' && request.url().includes('/skill-submissions')) writes.push(new URL(request.url()).pathname); });
+  await login(page, await privateSkillMember(e2eAuthPool)); await navigate(page, '開源投稿');
+  await fillTool(page, '僅本人續寫的技能草稿');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  const first = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items.find((item: any) => item.payload?.title === '僅本人續寫的技能草稿');
+  expect(first.status).toBe('ready_for_review'); expect(first.public_path).toBeNull(); expect(first.grant_expires_at).toBeNull();
+  await page.reload();
+  await page.getByText(/繼續未公開的草稿/).click();
+  await page.getByRole('button', { name: '繼續投稿：僅本人續寫的技能草稿', exact: true }).click();
+  await expect(page.getByRole('button', { name: '重試公開投稿', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '修改內容', exact: true }).click();
+  await page.getByLabel('作品名稱', { exact: true }).fill('私人草稿修正版');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  const revised = await (await page.request.get('/api/v1/me/skill-submissions/' + first.submission_id)).json();
+  expect(revised.payload.title).toBe('私人草稿修正版'); expect(revised.public_path).toBeNull();
+  expect(Number(revised.aggregate_version)).toBe(Number(first.aggregate_version) + 1);
+  expect(writes).toEqual(['/api/v1/me/skill-submissions/manual', '/api/v1/me/skill-submissions/' + first.submission_id + '/manual']);
+  await signOut(page); await login(page, 'client@local.test');
+  expect((await page.request.get('/api/v1/me/skill-submissions/' + first.submission_id)).status()).toBe(404);
+});
+
+test('manual skill committed save lost ACK then 429 reconciles one draft with the original key', async ({ page, e2eAuthPool }) => {
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  await page.route('**/api/v1/me/skill-submissions/manual', async route => {
+    requests.push({ key: route.request().headers()['idempotency-key'], body: route.request().postData() });
+    if (requests.length === 1) {
+      const committed = await route.fetch();
+      expect(committed.status()).toBe(201);
+      await route.abort('failed');
+    } else if (requests.length === 2) {
+      await route.fulfill({ status: 429, json: { type: 'about:blank', status: 429, code: 'auth_rate_limited', title: 'auth_rate_limited', detail: '操作次數過多，請稍後再試。' } });
+    } else await route.fallback();
+  });
+  await login(page, await privateSkillMember(e2eAuthPool)); await navigate(page, '開源投稿');
+  await fillTool(page, '未知後限流仍只一份');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await page.getByRole('button', { name: '重試儲存私人草稿', exact: true }).click();
+  await expect(page.getByText('操作次數過多，請稍後再試。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '重試儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  expect(requests).toHaveLength(3); expect(requests[0].key).toBeTruthy();
+  expect(requests[1]).toEqual(requests[0]); expect(requests[2]).toEqual(requests[0]);
+  const drafts = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items.filter((item: any) => item.payload?.title === '未知後限流仍只一份');
+  expect(drafts).toHaveLength(1); expect(drafts[0].status).toBe('ready_for_review'); expect(drafts[0].public_path).toBeNull();
+});
+
+test('manual skill unknown save remains retryable after My Content URL resume remount', async ({ page, e2eAuthPool }) => {
+  const requests: { key: string | undefined; body: string | null }[] = [];
+  let submissionId = '', individualReads = 0;
+  page.on('request', request => {
+    if (submissionId && request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/me/skill-submissions/' + submissionId) individualReads++;
+  });
+  await page.route('**/api/v1/me/skill-submissions/manual', async route => {
+    requests.push({ key: route.request().headers()['idempotency-key'], body: route.request().postData() });
+    if (requests.length === 1) {
+      const committed = await route.fetch();
+      expect(committed.status()).toBe(201);
+      submissionId = (await committed.json()).submission_id;
+      await route.abort('failed');
+    } else await route.fallback();
+  });
+  const title = '未知存稿從我的內容返回';
+  await login(page, await privateSkillMember(e2eAuthPool)); await navigate(page, '開源投稿'); await fillTool(page, title);
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByRole('button', { name: '重試儲存私人草稿', exact: true })).toBeEnabled();
+  await navigate(page, '我的內容');
+  const own = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+  await own.getByRole('link', { name: '繼續', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp('#opensource\\?submission=' + submissionId));
+  await expect(page.getByRole('button', { name: '重試儲存私人草稿', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('作品名稱', { exact: true })).toHaveValue(title);
+  await expect(page.getByLabel('作品名稱', { exact: true })).toBeDisabled();
+  expect(individualReads).toBe(0); expect(requests).toHaveLength(1);
+  await page.getByRole('button', { name: '重試儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  expect(requests).toHaveLength(2); expect(requests[0].key).toBeTruthy(); expect(requests[1]).toEqual(requests[0]);
+  const drafts = (await (await page.request.get('/api/v1/me/skill-submissions')).json()).items.filter((item: any) => item.payload?.title === title);
+  expect(drafts).toHaveLength(1); expect(drafts[0].submission_id).toBe(submissionId); expect(drafts[0].public_path).toBeNull();
+  await expect(page.getByRole('button', { name: '重試公開投稿', exact: true })).toBeDisabled();
+});
+
+test('normalized private saves stay clean and a committed unknown publish retries without a revision', async ({ page, e2eAuthPool }) => {
+  const writes: { path: string; key: string | undefined; body: string | null; version: string | undefined }[] = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().includes('/skill-submissions')) writes.push({
+      path: new URL(request.url()).pathname, key: request.headers()['idempotency-key'], body: request.postData(), version: request.headers()['if-match'],
+    });
+  });
+  let publishes = 0;
+  await page.route('**/api/v1/me/skill-submissions/*/publish', async route => {
+    if (++publishes === 1) {
+      const committed = await route.fetch(); expect(committed.status()).toBe(200);
+      expect((await committed.json()).status).toBe('published');
+      await route.abort('failed');
+    } else await route.fallback();
+  });
+  await login(page, await privateSkillMember(e2eAuthPool)); await navigate(page, '開源投稿'); await fillTool(page, '正規化草稿與未知公開');
+  await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/freetwai-test/simple-work.git/');
+  await page.getByText('補充使用說明與展示網址（選填）', { exact: true }).click();
+  await page.getByLabel('展示網址（選填）', { exact: true }).fill('https://example.org');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  await expect(page.getByText('目前修改尚未儲存。', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByRole('button', { name: '儲存私人草稿', exact: true })).toBeEnabled();
+  expect(writes).toHaveLength(1);
+  await page.getByRole('button', { name: '修改內容', exact: true }).click();
+  await expect(page.getByLabel('GitHub 專案網址', { exact: true })).toHaveValue('https://github.com/freetwai-test/simple-work');
+  await page.getByText('補充使用說明與展示網址（選填）', { exact: true }).click();
+  await expect(page.getByLabel('展示網址（選填）', { exact: true })).toHaveValue('https://example.org/');
+  await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/freetwai-test/simple-work/');
+  await page.getByLabel('展示網址（選填）', { exact: true }).fill('https://example.com');
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
+  await expect(page.getByText('目前修改尚未儲存。', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
+  await expect(page.getByRole('button', { name: '儲存私人草稿', exact: true })).toBeEnabled();
+  expect(writes).toHaveLength(2); expect(writes[1].path).toMatch(/\/[^/]+\/manual$/);
+  await page.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
+  await page.getByRole('button', { name: '確認並公開', exact: true }).click();
+  await expect(page.getByText('已保存草稿；公開結果尚未確認，請先確認原公開操作。', { exact: true })).toBeVisible();
+  await expect(page.getByText(/尚未送審或公開/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '修改內容', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '儲存私人草稿', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '重試公開投稿', exact: true }).click();
+  await expect(page.getByRole('region', { name: '投稿完成' })).toBeVisible();
+  expect(writes).toHaveLength(4); expect(writes[2].path).toMatch(/\/publish$/); expect(writes[3]).toEqual(writes[2]);
+  const result = await (await page.request.get('/api/v1/me/skill-submissions/' + writes[2].path.split('/').at(-2))).json();
+  expect(result.status).toBe('published'); expect(Number(result.aggregate_version)).toBe(3);
 });

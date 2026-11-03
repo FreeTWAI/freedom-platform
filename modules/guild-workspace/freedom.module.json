@@ -80,7 +80,8 @@
     "command-core",
     "module-registry",
     "guild-presentation",
-    "agent-commerce"
+    "agent-commerce",
+    "tenant-workspaces"
   ],
   "contract_families": [],
   "client_profiles": [],

@@ -1,22 +1,27 @@
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {useAuthoringDraft} from './authoring-drafts';
+import type {useModuleMutation} from './shared';
+import './SquadInvitations.css';
 import {ApiError,type PortalClient} from '../api';
 import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';
 
-type Outcome={outcome_id:string;squad_id:string;squad_name:string;title:string;summary:string;artifact_url:string|null;author:{user_id:string;display_name:string};audience:'squad'|'community'|'public';state:'draft'|'published'|'withdrawn';aggregate_version:number};
+export type Outcome={outcome_id:string;squad_id:string;squad_name:string;title:string;summary:string;artifact_url:string|null;author:{user_id:string;display_name:string};audience:'squad'|'community'|'public';state:'draft'|'published'|'withdrawn';aggregate_version:number};
 const audienceName={squad:'目前小隊成員',community:'社群會員',public:'任何人（公開）'};
 const errorMessage=(error:unknown)=>error instanceof Error?error.message:'這次未能完成，請重新載入後再試。';
 
 export function SquadOutcomeDetail({client,id,eventLinksEnabled=false}:{client:PortalClient;id:string;eventLinksEnabled?:boolean}){
+ const heading=useRef<HTMLHeadingElement>(null);
  const [outcome,setOutcome]=useState<Outcome|null>(null),[error,setError]=useState(''),[revision,setRevision]=useState(0);
  useEffect(()=>{
   let active=true;setOutcome(null);setError('');
   void client.get<Outcome>(`/squad-outcomes/${id}`).then(value=>{if(active)setOutcome(value);}).catch(reason=>{if(active)setError(errorMessage(reason));});
   return()=>{active=false;};
  },[client,id,revision]);
+ useEffect(()=>{if(outcome)heading.current?.focus();},[outcome]);
  if(error)return <section className="card stack outcome-section"><p role="alert">{error}</p><button className="btn btn-secondary btn-small" onClick={()=>setRevision(value=>value+1)}>重新載入成果</button><a href="#squads">返回小隊</a></section>;
  if(!outcome)return <p role="status">正在載入小隊成果…</p>;
  return <article className="card stack outcome-section">
-  <a href="#squads">返回小隊</a><h2>{outcome.title}</h2>
+  <a href="#squads">返回小隊</a><h2 ref={heading} tabIndex={-1}>{outcome.title}</h2>
   <p>小隊：{outcome.squad_name} · 作者：{outcome.author.display_name}</p>
   <p>{audienceName[outcome.audience]} · {outcome.state==='published'?'已發布':outcome.state==='draft'?'私人草稿':'已撤下'}</p>
   <p className="multiline-text">{outcome.summary}</p>
@@ -26,67 +31,81 @@ export function SquadOutcomeDetail({client,id,eventLinksEnabled=false}:{client:P
  </article>;
 }
 
-export function SquadOutcomePublisher({client,squadId,owner,actorId,eventLinksEnabled=false}:{client:PortalClient;squadId:string;owner:boolean;actorId:string;eventLinksEnabled?:boolean}){
+export function SquadOutcomePublisher({client,squadId,owner,actorId,eventLinksEnabled=false,mutate,busy:commandBusy,confirmed,onDirtyChange,onConfirmationApplied,onOpenOutcome}:{client:PortalClient;squadId:string;owner:boolean;actorId:string;eventLinksEnabled?:boolean;mutate:ReturnType<typeof useModuleMutation>['mutate'];busy:boolean;confirmed:Outcome|null;onDirtyChange:(dirty:boolean)=>void;onConfirmationApplied:()=>void;onOpenOutcome:()=>void}){
  const [items,setItems]=useState<Outcome[]>([]),[nextOffset,setNextOffset]=useState<number|null>(null);
- const [editing,setEditing]=useState<Outcome|null>(null),[title,setTitle]=useState(''),[summary,setSummary]=useState(''),[url,setUrl]=useState('');
+ const [editing,setEditing,draftLive]=useAuthoringDraft<Outcome|null>(actorId,`squad:${squadId}:editing`,null);
+ const [title,setTitle]=useAuthoringDraft(actorId,`squad:${squadId}:title`,''),[summary,setSummary]=useAuthoringDraft(actorId,`squad:${squadId}:summary`,''),[url,setUrl]=useAuthoringDraft(actorId,`squad:${squadId}:url`,'');
  const [audience,setAudience]=useState<Outcome['audience']>('squad'),[consent,setConsent]=useState(false);
- const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [reading,setReading]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [loading,setLoading]=useState(true),[editorOpen,setEditorOpen]=useState(true);
+ const request=useRef(0),recordRequest=useRef(0),editorHeading=useRef<HTMLHeadingElement>(null);
+ const busy=commandBusy||reading;
  const dirty=Boolean(editing&&(title!==editing.title||summary!==editing.summary||url!==(editing.artifact_url??'')));
+ useEffect(()=>{onDirtyChange(editing?dirty:Boolean(title||summary||url));},[onDirtyChange,editing,dirty,title,summary,url]);
  const load=useCallback(async(offset=0)=>{
-  const value=await client.get<{items:Outcome[];next_offset:number|null}>(`/squads/${squadId}/outcomes?offset=${offset}`);
-  setItems(previous=>offset?[...previous.filter(item=>!value.items.some(next=>next.outcome_id===item.outcome_id)),...value.items]:value.items);
-  setNextOffset(value.next_offset);
- },[client,squadId]);
+  const token=++request.current;setLoading(true);setError('');
+  try{
+   const value=await client.get<{items:Outcome[];next_offset:number|null}>(`/squads/${squadId}/outcomes?offset=${offset}`);
+   if(token!==request.current||!draftLive())return;
+   setItems(previous=>offset?[...previous.filter(item=>!value.items.some(next=>next.outcome_id===item.outcome_id)),...value.items]:value.items);
+   setNextOffset(value.next_offset);
+  }catch(reason){if(token===request.current&&draftLive())setError(errorMessage(reason));}
+  finally{if(token===request.current&&draftLive())setLoading(false);}
+ },[client,squadId,draftLive]);
+ useEffect(()=>{setItems([]);setNextOffset(null);setReading(false);void load();return()=>{request.current++;recordRequest.current++;};},[load,owner]);
  useEffect(()=>{
-  setEditing(null);setTitle('');setSummary('');setUrl('');setError('');setNotice('');
-  void load().catch(reason=>setError(errorMessage(reason)));
- },[load]);
+  if(!confirmed||confirmed.squad_id!==squadId||confirmed.author.user_id!==actorId||!owner)return;
+  edit(confirmed);setNotice(confirmed.state==='published'?'成果已依所選範圍發布。':confirmed.state==='withdrawn'?'成果已撤下。':'私人草稿已儲存；尚未發布。');onConfirmationApplied();void load();
+ },[confirmed,squadId,actorId,owner]);
  function edit(item:Outcome){
   setEditing(item);setTitle(item.title);setSummary(item.summary);setUrl(item.artifact_url??'');
-  setAudience(item.audience);setConsent(false);setError('');setNotice('');
+  setAudience(item.audience);setConsent(false);setError('');setNotice('');setEditorOpen(true);
  }
  async function reloadEditing(){
-  if(!editing)return;
-  setBusy(true);setError('');
-  try{edit(await client.get<Outcome>(`/squad-outcomes/${editing.outcome_id}`));}catch(reason){setError(errorMessage(reason));}finally{setBusy(false);}
+  if(busy||!editing||!owner)return;
+  const token=++recordRequest.current;setReading(true);setError('');
+  try{const result=await client.get<Outcome>(`/squad-outcomes/${editing.outcome_id}`);if(token===recordRequest.current&&draftLive())edit(result);}catch(reason){if(token===recordRequest.current&&draftLive())setError(errorMessage(reason));}finally{if(token===recordRequest.current&&draftLive())setReading(false);}
  }
  async function save(event:React.FormEvent){
-  event.preventDefault();setBusy(true);setError('');setNotice('');
+  event.preventDefault();if(busy||!owner)return;setReading(true);setError('');setNotice('');
   try{
-   const result=await client.post<Outcome>(editing?`/squad-outcomes/${editing.outcome_id}/edit`:`/squads/${squadId}/outcomes`,{title,summary,artifact_url:url.trim()||null},{idempotencyKey:crypto.randomUUID(),...(editing?{ifMatch:editing.aggregate_version}:{})});
-   edit(result);setNotice('私人草稿已儲存；尚未發布。');await load();
-  }catch(reason){setError(errorMessage(reason));}finally{setBusy(false);}
+   const result=await mutate<Outcome>(editing?`/squad-outcomes/${editing.outcome_id}/edit`:`/squads/${squadId}/outcomes`,{title,summary,artifact_url:url.trim()||null},editing?.aggregate_version);
+   if(!result||!draftLive())return;edit(result);setNotice('私人草稿已儲存；尚未發布。');await load();
+  }catch(reason){setError(errorMessage(reason));}finally{setReading(false);}
  }
  async function action(item:Outcome,operation:'publish'|'withdraw'){
-  setBusy(true);setError('');setNotice('');
+  if(busy||!owner)return;setReading(true);setError('');setNotice('');
   try{
    if(operation==='publish'&&(!consent||dirty))throw new Error('請先儲存最新內容並明確確認發布權利與範圍。');
-   const result=await client.post<Outcome>(`/squad-outcomes/${item.outcome_id}/${operation}`,operation==='publish'?{audience,consent_to_share:true}:{},{idempotencyKey:crypto.randomUUID(),ifMatch:item.aggregate_version});
+   const result=await mutate<Outcome>(`/squad-outcomes/${item.outcome_id}/${operation}`,operation==='publish'?{audience,consent_to_share:true}:{},item.aggregate_version);
+   if(!result||!draftLive())return;
    if(editing?.outcome_id===item.outcome_id)edit(result);
    setConsent(false);setNotice(operation==='publish'?'成果已依所選範圍發布。':'成果已撤下；活動連結與公開頁會依目前權限停止顯示。');await load();
   }catch(reason){
    setError(errorMessage(reason));
    if(reason instanceof ApiError&&reason.status===412)setNotice('版本已變更。目前輸入保留；重新載入原紀錄會明確取代這些未儲存內容。');
-  }finally{setBusy(false);}
+  }finally{setReading(false);}
  }
  return <section className="stack outcome-section" aria-label="小隊成果">
-  <h3>小隊成果</h3><p className="field-hint">這裡是作者明確發布的成果，不是小隊名冊、出席或私人 Result；不代表官方驗收或 XP。</p>
+  <h3>小隊成果</h3><p className="field-hint">{owner?'先儲存自己的草稿，確認內容與分享範圍後再發布。':'閱讀目前分享給你的成果；建立與發布由隊長本人操作。'}</p><p className="field-hint">這裡是作者明確發布的成果，不是小隊名冊、出席或私人 Result；不代表官方驗收或 XP。</p>
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   <button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void load().catch(reason=>setError(errorMessage(reason)))}>重新載入成果列表</button>
   {items.map(item=><article className="card stack" key={item.outcome_id}>
-   <h4><a href={`#squad-outcomes/${item.outcome_id}`}>{item.title}</a></h4>
+   <h4><a href={`#squad-outcomes/${item.outcome_id}`} onClick={event=>{if(!event.metaKey&&!event.ctrlKey&&!event.shiftKey&&!event.altKey)onOpenOutcome();}}>{item.title}</a></h4>
    <p>{audienceName[item.audience]} · {item.state==='published'?'已發布':item.state==='draft'?'草稿':'已撤下'}</p>
    <p className="multiline-text">{item.summary}</p><p>作者：{item.author.display_name}</p>
    {eventLinksEnabled&&item.state==='published'&&<EventOutcomeBacklinks client={client} kind="squad_outcome" sourceId={item.outcome_id}/>}
    {owner&&item.author.user_id===actorId&&<div className="actions">
-    {item.state!=='published'&&<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>edit(item)}>編輯這份成果</button>}
+    {item.state!=='published'&&<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>{edit(item);requestAnimationFrame(()=>editorHeading.current?.focus());}}>編輯這份成果</button>}
     {item.state==='published'&&<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void action(item,'withdraw')}>撤下這份成果</button>}
    </div>}
   </article>)}
   {nextOffset!==null&&<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void load(nextOffset).catch(reason=>setError(errorMessage(reason)))}>載入更多成果</button>}
-  {!items.length&&<p>目前沒有你可閱讀的小隊成果。</p>}
-  {owner&&<form className="stack" onSubmit={save}>
-   <h4>{editing?'編輯自己的成果':'建立自己的成果草稿'}</h4>
+  {loading&&!notice&&<p role="status">正在載入可閱讀的成果…</p>}
+  {!loading&&!error&&!items.length&&<p>目前沒有你可閱讀的小隊成果。</p>}
+  {owner&&<details className="squad-outcome-editor" open={editorOpen} onToggle={event=>setEditorOpen(event.currentTarget.open)}><summary>整理自己的成果</summary><form className="stack" onSubmit={save}>
+   <p className="field-hint">返回小隊列表會保留這次登入的輸入，重新整理或登出後不保留；只有「儲存私人草稿」才會存到伺服器，不會自動發布。</p>
+   <h4 ref={editorHeading} tabIndex={-1}>{editing?'編輯自己的成果':'建立自己的成果草稿'}</h4>
    <label className="field">成果標題<input required maxLength={120} value={title} disabled={busy||editing?.state==='published'} onChange={event=>{setTitle(event.target.value);setConsent(false);}}/></label>
    <label className="field">成果摘要<textarea required maxLength={4000} rows={4} value={summary} disabled={busy||editing?.state==='published'} onChange={event=>{setSummary(event.target.value);setConsent(false);}}/></label>
    <label className="field">成果來源連結（選填）<input type="url" maxLength={2000} value={url} disabled={busy||editing?.state==='published'} onChange={event=>{setUrl(event.target.value);setConsent(false);}}/></label>
@@ -102,6 +121,6 @@ export function SquadOutcomePublisher({client,squadId,owner,actorId,eventLinksEn
     <p className="field-hint">修改後請先儲存。已發布成果須先撤下才能編輯。</p>
    </>}
    {editing?.state==='published'&&<button type="button" className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void action(editing,'withdraw')}>撤下後再編輯</button>}
-  </form>}
+  </form></details>}
  </section>;
 }

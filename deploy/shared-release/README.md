@@ -89,7 +89,7 @@ image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、
    按 Run workflow，workflow branch 保持 `main`。
 2. 填完整 40 字元的 main commit SHA，選 `staging-next` 與 `deploy`。
    `plan` 是選用的 GitHub 准入預覽；日常部署已內建相同檢查，不必每次先跑。
-   日常操作的 `recover_backup_run_id` 留空，沿用已安裝的工具映像，不必每次重建。
+   日常操作的 `recover_backup_run_id`、`recover_release_run_id` 留空，沿用已安裝的工具映像，不必每次重建。
    暫不提供會漂移的 `main`／tag／短 SHA 作為版本輸入。
 3. 在 Summary 看版本、原始發起人、此次執行者、兩個 CI run 及結果收據。
    同一版本最新的 main push Verify、CodeQL 必須全部成功；PR 的綠燈不替代主線驗證。
@@ -112,6 +112,23 @@ image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、
 重跑既有 run，須選 **Re-run all jobs**。正式准入要求 admission 與 deploy 來自同一個
 attempt；只重跑 deploy／failed jobs，可能因 admission 屬於舊 attempt 而被拒絕。
 這不授予未知結果的 migration／部署重做權；先確認前次 provider 與 DB 的實際結果。
+
+### 部署與健康檢查已完成，只有 handoff 失敗
+
+四人可在同一個 Shared release 入口選 `handoff`，填原失敗 run 的完整 source SHA、
+相同環境，並在 `recover_release_run_id` 填原 run ID；`recover_backup_run_id` 留空。
+此入口須先合併並安裝包含它的 operator 映像；沒有安裝的舊映像不能執行新模式。
+
+控制程式核對原 run 的身分、attempt、失敗 job 與有 digest 的公開收據，要求
+preflight、migration、deploy、health 全部已通過，只有最後 handoff 失敗。
+取得同一把資料庫鎖後，讀回既有 journal、完整 ledger、素材政策、GC／殘留工作、
+Worker 版本及設定，並重新檢查指定版本的 health。全部相符才補上唯一缺少的 handoff。
+若 handoff 其實已寫入、只是回覆或鎖清理失敗，則只讀回確認，不重複寫紀錄。
+
+這個模式不執行 migration、重新部署、備份或旗標變更，也不建立新的 GitHub Deployment。
+原 run／Deployment 保留 failure；新的 Actions 收據以 `reconciled` 連結原失敗及此次操作者。
+若失敗早於 handoff、原收據已過期、config 已變動或 journal 已有後續工作，會拒絕復原；
+不能用此入口跳過未知寫入的對帳，也不能將一次收尾成功當成新版本發布成功。
 
 使用自己的 GitHub 登入即可。原始發起人及重跑者都會再查當下權限，帳號同名但 ID
 不同、權限已撤銷或不在四人名單內，都不通過。Actions 使用短效 `GITHUB_TOKEN`

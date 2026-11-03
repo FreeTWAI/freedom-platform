@@ -9,8 +9,13 @@ export const OPERATORS = Object.freeze({ teddashh: 233386770, arumwu: 75135621,
 export const PHASES = Object.freeze(['preflight', 'backup-before', 'migration', 'deploy',
   'health', 'backup-after', 'handoff']);
 export const INDEPENDENT_PHASES = Object.freeze(['preflight', 'migration', 'deploy', 'health', 'handoff']);
+export const HANDOFF_PHASES = Object.freeze(['preflight', 'handoff']);
 export const releasePhases = request => {
   requireRelease(request.releaseKind === undefined || request.releaseKind === 'independent', 'release_contract_invalid');
+  if (request.mode === 'handoff') {
+    requireRelease(request.releaseKind === 'independent', 'release_contract_invalid');
+    return HANDOFF_PHASES;
+  }
   return request.releaseKind === 'independent' ? INDEPENDENT_PHASES : PHASES;
 };
 export const requireRelease = (condition, code) => {
@@ -31,7 +36,7 @@ export function requestFromEnvironment(env) {
     && isSha(env.CONTROLLER_SHA), 'release_workflow_identity_invalid');
   requireRelease(isSha(env.RELEASE_SHA), 'release_exact_sha_required');
   requireRelease(['staging-next', 'next'].includes(env.RELEASE_TARGET), 'release_target_invalid');
-  requireRelease(['plan', 'check', 'deploy'].includes(env.RELEASE_MODE), 'release_mode_invalid');
+  requireRelease(['plan', 'check', 'deploy', 'handoff'].includes(env.RELEASE_MODE), 'release_mode_invalid');
   for (const key of ['GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_ACTOR_ID']) {
     requireRelease(/^[1-9][0-9]{0,15}$/.test(env[key] ?? '')
       && positiveId(Number(env[key])), 'release_run_identity_invalid');
@@ -40,7 +45,13 @@ export function requestFromEnvironment(env) {
   requireRelease(!recovery || (env.RELEASE_MODE === 'deploy' && /^[1-9][0-9]{0,15}$/.test(recovery)
     && positiveId(Number(recovery)) && String(Number(recovery)) === recovery && recovery !== env.GITHUB_RUN_ID),
   'release_backup_recovery_request_invalid');
-  return { ...(recovery ? { recoverRunId: Number(recovery) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
+  const handoff = env.RELEASE_RECOVER_RELEASE_RUN_ID;
+  requireRelease(env.RELEASE_MODE === 'handoff'
+    ? !recovery && /^[1-9][0-9]{0,15}$/.test(handoff ?? '') && positiveId(Number(handoff))
+      && String(Number(handoff)) === handoff && handoff !== env.GITHUB_RUN_ID
+    : !handoff, 'release_handoff_recovery_request_invalid');
+  return { ...(recovery ? { recoverRunId: Number(recovery) } : {}),
+    ...(handoff ? { recoverReleaseRunId: Number(handoff) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
     repositoryId: REPOSITORY_ID, sourceSha: env.RELEASE_SHA, target: env.RELEASE_TARGET,
     mode: env.RELEASE_MODE, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,
     actor: env.GITHUB_ACTOR, actorId: Number(env.GITHUB_ACTOR_ID),

@@ -96,12 +96,12 @@ test('accepting an invitation preserves the command version and refreshes confir
   await login(page);let accepted=false;const commands:Record<string,string>[]=[];
   await page.route(url=>url.pathname===directoryPath,route=>route.fulfill({json:result(accepted?[]:[person('邀請夥伴','pending')])}));
   await page.route(url=>url.pathname===`/api/v1/friends/${memberId}/accept`,route=>{
-    commands.push(route.request().headers());accepted=true;return route.fulfill({json:{ok:true}});
+    commands.push(route.request().headers());accepted=true;return route.fulfill({json:{state:'accepted',aggregate_version:8}});
   });
   await navigate(page,'我的好友');await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
   await list(page).getByRole('button',{name:'接受邀請',exact:true}).click();
   await expect(page.getByText('已和邀請夥伴成為好友。',{exact:true})).toBeVisible();
-  await expect(list(page).getByText('目前沒有待回覆的邀請。',{exact:true})).toBeVisible();
+  await expect(list(page).getByRole('heading',{name:'沒有等你回覆的邀請',exact:true})).toBeVisible();
   expect(commands).toHaveLength(1);expect(commands[0]['if-match']).toBe('"7"');expect(commands[0]['idempotency-key']).toBeTruthy();
 });
 
@@ -113,7 +113,7 @@ test('removing the last invitation on a later page recovers to a valid page with
     return route.fulfill({json:later?result(removed?[]:[person('待回覆朋友','pending')],removed?20:21)
       :result([person('第一頁朋友','pending')],removed?20:21,removed?null:20)});
   });
-  await page.route(url=>url.pathname===`/api/v1/friends/${memberId}/remove`,route=>{removed=true;return route.fulfill({json:{ok:true}});});
+  await page.route(url=>url.pathname===`/api/v1/friends/${memberId}/remove`,route=>{removed=true;return route.fulfill({json:{state:'removed',aggregate_version:8}});});
   await navigate(page,'我的好友');await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
   const input=page.getByLabel('搜尋好友名稱',{exact:true});await input.fill('朋友');await input.press('Enter');
   await expect(list(page)).toHaveAttribute('aria-busy','false');await list(page).getByRole('button',{name:'下一頁好友',exact:true}).click();
@@ -131,4 +131,65 @@ test('permission errors after a refresh remove previously loaded private results
   forbidden=true;await page.getByRole('button',{name:'搜尋好友',exact:true}).click();
   await expect(list(page).getByRole('alert')).toBeVisible();await expect(list(page)).not.toContainText('私人朋友姓名');
   await expect(list(page)).not.toContainText('共 0');
+});
+
+
+test('friend list states explain who is waiting and recover empty searches without sending invitations',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await login(page);
+  const writes:string[]=[];
+  page.on('request',request=>{if(request.method()==='POST'&&/\/api\/v1\/friends\//.test(request.url()))writes.push(request.url());});
+  await page.route(url=>url.pathname===directoryPath,route=>route.fulfill({json:result()}));
+  await navigate(page,'我的好友');
+  await expect(list(page).getByRole('heading',{name:'還沒有好友',exact:true})).toBeVisible();
+  await expect(list(page).getByRole('button',{name:'認識工坊夥伴',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'收到的邀請',exact:true}).click();
+  await expect(page.locator('.friends-scope-hint')).toContainText('等你回覆');
+  await expect(list(page).getByRole('heading',{name:'沒有等你回覆的邀請',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'送出的邀請',exact:true}).click();
+  await expect(page.locator('.friends-scope-hint')).toContainText('等對方回覆');
+  await expect(list(page)).toContainText('共 0 則邀請等對方回覆');
+  const input=page.getByLabel('搜尋好友名稱',{exact:true});
+  await input.fill('找不到的名字');await input.press('Enter');
+  await expect(list(page).getByRole('heading',{name:'沒有符合的名字',exact:true})).toBeVisible();
+  await list(page).getByRole('button',{name:'查看這份完整名單',exact:true}).click();
+  await expect(input).toHaveValue('');await expect(input).toBeFocused();
+  await expect(page.getByRole('button',{name:'送出的邀請',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(list(page).getByRole('heading',{name:'沒有等待回覆的邀請',exact:true})).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test('collapse during removal keeps unknown-result recovery visible and retries the original command',async({page})=>{
+  await login(page);const commands:Record<string,string>[]=[];const held=barrier(),started=barrier();let removed=false;
+  await page.route(url=>url.pathname===directoryPath,route=>route.fulfill({json:result(removed?[]:[person()])}));
+  await page.route(url=>url.pathname===`/api/v1/friends/${memberId}/remove`,async route=>{
+    commands.push(route.request().headers());
+    if(commands.length===1){started.release();await held.promise;return route.abort('failed');}
+    if(commands.length===2)return route.fulfill({status:412,json:{code:'version_conflict',detail:'版本已變更。'}});
+    removed=true;return route.fulfill({json:{state:'removed',aggregate_version:8}});
+  });
+  try{
+    await navigate(page,'我的好友');
+    const row=list(page).locator('.directory-member'),settings=row.locator('.friends-manage');
+    await expect(row.getByRole('button',{name:'移除好友',exact:true})).toBeHidden();
+    await settings.locator('summary').click();
+    await row.getByRole('button',{name:'移除好友',exact:true}).click();
+    await row.getByRole('button',{name:'確定移除',exact:true}).click();await started.promise;
+    await settings.locator('summary').click();await expect(settings).toHaveJSProperty('open',false);
+    await expect(page.getByText('正在更新好友關係，請稍候…',{exact:true})).toBeVisible();
+    held.release();
+    const retry=page.getByRole('button',{name:'確認原操作結果',exact:true});
+    await expect(retry).toBeVisible();expect(commands).toHaveLength(1);
+    await settings.locator('summary').click();
+    await expect(row.getByRole('button',{name:'移除好友',exact:true})).toBeDisabled();
+    await retry.focus();await page.keyboard.press('Enter');
+    await expect(retry).toBeVisible();expect(commands).toHaveLength(2);
+    await expect(row.getByRole('button',{name:'移除好友',exact:true})).toBeDisabled();
+    await retry.click();
+    await expect(page.getByText('好友關係或邀請已移除。',{exact:true})).toBeVisible();
+    expect(commands).toHaveLength(3);
+    expect(commands[2]['idempotency-key']).toBe(commands[0]['idempotency-key']);expect(commands[0]['idempotency-key']).toBeTruthy();
+    expect(commands[1]['idempotency-key']).toBe(commands[0]['idempotency-key']);
+    expect(commands[1]['if-match']).toBe(commands[0]['if-match']);
+    await expect(retry).toHaveCount(0);
+  }finally{held.release();}
 });
