@@ -1,0 +1,14 @@
+{
+  "headline": "交辦的任務在背景跑，成果檔存在本機。",
+  "outcomes": ["一筆可在 WebUI 追蹤的模擬任務", "data/artifacts 裡的本機成果檔", "核對過的成功與失敗結果"],
+  "flow": {
+    "title": "WebUI 交辦，背景 worker 執行",
+    "lead": "本機 Agent 任務執行系統，任務、進度與成果都存成本機檔案；預設 mock 模擬模式不需 API key。",
+    "steps": [
+      {"icon": "terminal", "title": "啟動 mock 模式", "note": "依繁中安裝文件啟動預設 mock 模式，先不接 Claude 或外部模型；需 Node.js 18 以上。"},
+      {"icon": "window", "title": "在 WebUI 建任務", "note": "點開終端機印出的一次性登入連結，進入 WebUI，建立示範任務並追蹤背景 worker。"},
+      {"icon": "folder", "title": "找到本機成果檔", "note": "在 data/artifacts 找到成果檔，核對成功與失敗結果，再決定是否接真實 Claude。"}
+    ],
+    "caption": "先讀 AGENTS.md 限定可操作範圍、用自己的測試資料夾；接外部模型或 Telegram 時，資料會傳往相應服務。"
+  }
+}

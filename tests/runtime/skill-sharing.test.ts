@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {runInNewContext} from 'node:vm';
 import {communityCatalog} from '../../modules/community/catalog.js';
 import {getSkillShareContent} from '../../modules/community/skill-share-content.js';
-import {developmentShareJs,pageHtml,publicSkillShareMarkup,publicSkillDestinations,shareIntroNumber,skillMarkdown} from '../../modules/development/service.js';
+import {developmentShareJs,pageHtml,publicSkillShareMarkup,publicSkillDestinations,shareIntroNumber,sharePlatformUrl,skillMarkdown} from '../../modules/development/service.js';
 
 const id='video-autopilot',base='https://freetwai.com/development/skills/'+id;
 const book=communityCatalog.skill_books.find(value=>value.id===id)!;
@@ -58,6 +58,8 @@ test('OG and Twitter images use the absolute 1200×630 illustration shown below 
 });
 
 type Fake=Record<string,any>;
+const platforms=['line','facebook','x','threads'] as const;
+const platformLinks=(html:string)=>[...html.matchAll(/<a href="([^"]*)" target="_blank" rel="noopener noreferrer" data-share-platform="([a-z]+)"/g)].map(match=>[match[2],unescape(match[1]!)]);
 function element(extra:Fake={}):Fake{
  return {hidden:false,disabled:false,textContent:'',value:'',focused:false,selected:false,listeners:{} as Record<string,()=>void>,
   addEventListener(name:string,fn:()=>void){this.listeners[name]=fn;},focus(){this.focused=true;},select(){this.selected=true;},click(){this.listeners.click();},...extra};
@@ -69,11 +71,13 @@ function harness(html:string,navigator:Fake,random?:number[]){
  const nodes:Record<string,Fake>={'[data-share-dialog]':dialog};
  for(const name of ['open','text','count','url','error','status','manual','manual-label','reroll','send','copy','close'])nodes[`[data-share-${name}]`]??=element();
  nodes['[data-share-manual-label]'].hidden=true;
- const root={dataset:{shareBase:attribute(html,'data-share-base'),shareTitle:attribute(html,'data-share-title'),shareSelected:attribute(html,'data-share-selected'),shareContent:attribute(html,'data-share-content')},querySelector:(selector:string)=>nodes[selector]};
+ const links=platforms.map(platform=>element({dataset:{sharePlatform:platform},href:''}));
+ const root={dataset:{shareBase:attribute(html,'data-share-base'),shareTitle:attribute(html,'data-share-title'),shareSelected:attribute(html,'data-share-selected'),shareContent:attribute(html,'data-share-content')},querySelector:(selector:string)=>nodes[selector],
+  querySelectorAll:(selector:string)=>selector==='[data-share-dialog] [data-share-platform]'?links:[]};
  const crypto={getRandomValues(buffer:Uint32Array){const value=random?.length?random.shift()!:Math.floor(Math.random()*0x100000000);draws.push(value);buffer[0]=value;return buffer;}};
  runInNewContext(developmentShareJs,{document:{querySelectorAll:(selector:string)=>selector==='[data-share-root]'?[root]:[]},navigator,window:{crypto},Uint32Array,Promise,JSON,Number,Array,Math});
  const get=(name:string)=>nodes[`[data-share-${name}]`];
- return {get,dialog,draws,intro:()=>get('text').textContent as string,url:()=>get('url').textContent as string};
+ return {get,dialog,draws,links:()=>links.map(link=>link.href as string),intro:()=>get('text').textContent as string,url:()=>get('url').textContent as string};
 }
 
 test('opening the public preview never sends, uses rejection-sampled crypto randomness and rerolls without repeating',async()=>{
@@ -96,6 +100,24 @@ test('a selected intro query is the initial preview; copy and native share send 
  assert.equal(copied,content.introductions[41]+'\n'+base+'?intro=42');assert.equal(page.get('status').textContent,'已複製介紹與連結');
  page.get('send').click();await flush();
  assert.deepEqual({...shared},{title:book.title+' · 自由工坊',url:base+'?intro=42',text:content.introductions[41]});assert.equal(page.get('status').textContent,'分享已送出');
+});
+
+test('LINE, Facebook, X and Threads links share the visible introduction and URL, and the preview links follow each reroll',async()=>{
+ const url=base+'?intro=42',text=content.introductions[41]!,enc=encodeURIComponent;
+ assert.equal(sharePlatformUrl('line',url,text),'https://social-plugins.line.me/lineit/share?url='+enc(url)+'&text='+enc(text));
+ assert.equal(sharePlatformUrl('facebook',url,text),'https://www.facebook.com/sharer/sharer.php?u='+enc(url));
+ assert.equal(sharePlatformUrl('x',url,text),'https://twitter.com/intent/tweet?text='+enc(text+'\n'+url));
+ assert.equal(sharePlatformUrl('threads',url,text),'https://www.threads.com/intent/post?text='+enc(text+'\n'+url));
+ const expected=(link:string,words:string)=>platforms.map(platform=>[platform,sharePlatformUrl(platform,link,words)]);
+ // The page row and the preview row start from the same selected payload.
+ assert.deepEqual(platformLinks(render('42')),[...expected(url,text),...expected(url,text)]);
+ assert.deepEqual(platformLinks(render()),[...expected(base,book.title+' · 自由工坊'),...expected(base,book.title+' · 自由工坊')]);
+ const page=harness(render('42'),{});
+ page.get('open').click();assert.deepEqual(page.links(),expected(url,text).map(([,href])=>href));
+ page.get('reroll').click();const rolled=page.url(),intro=page.intro();assert.notEqual(rolled,url);
+ assert.deepEqual(page.links(),expected(rolled,intro).map(([,href])=>href));
+ const empty=harness(render().replace(/data-share-content="[^"]*"/,'data-share-content="[]"'),{});
+ empty.get('open').click();assert.deepEqual(empty.links(),expected(base,book.title+' · 自由工坊').map(([,href])=>href));
 });
 
 test('native cancel stays quiet without copying; other failures and denied clipboard expose the selected manual payload',async()=>{
@@ -154,7 +176,7 @@ test('all catalog introductions show authored usage and source before collaborat
   assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2 id="collaboration-title">'),item.id);
   assert.ok(html.includes('到 GitHub 看原始碼 ↗'),item.id);
   assert.ok(html.includes('<bdi>'+escape(new URL(item.upstream_url).host+new URL(item.upstream_url).pathname)+'</bdi>'),item.id);
-  assert.ok(html.includes('功能示意圖，非實際操作截圖。'),item.id);
+  assert.ok(html.includes('<figcaption>分享到社群時的預覽圖。</figcaption>'),item.id);
   assert.ok(html.includes('<dt>指南核對版本</dt><dd><code>'+escape(guide.source_commit)),item.id);
  }
 });

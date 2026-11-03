@@ -14,6 +14,7 @@ import {getSkillShareContent} from '../../modules/community/skill-share-content.
 import {skillMarkdown,pageHtml,skillAgentMarkdown} from '../../modules/development/service.js';
 import {catalogBookForRepository,catalogRepositoryKeys,repositoryKey} from '../../modules/skill-submissions/repository-match.js';
 import {SkillBookSourceAccount} from '../../apps/portal-web/src/modules/SkillBookCover.js';
+import {skillShareCardSource} from '../../modules/development/skill-share-card.js';
 
 const expected=[
   ['project-hub','kieiken/project-hub','cfe3ab221f03f84d334ae7b97608dd31f3e643be','ken-kk','README.zh-TW.md'],
@@ -83,7 +84,7 @@ test('catalog matching hides both member submissions from the published list by 
   }
 });
 
-test('both books have exact-size WebP art recorded in the manifests with prompts and SHA-256',async()=>{
+test('both books have exact-size WebP art recorded in the manifests: cover prompts, share-card sources and SHA-256',async()=>{
   const hashes=new Set<string>();
   for(const [manifestPath,width,height] of [
     ['docs/design/skill-book-art-manifest.json',768,512],
@@ -97,7 +98,9 @@ test('both books have exact-size WebP art recorded in the manifests with prompts
       assert.equal(metadata.format,'webp');assert.equal(metadata.width,width);assert.equal(metadata.height,height);
       assert.equal(entry.width,width);assert.equal(entry.height,height);assert.equal(entry.bytes,bytes.length);
       assert.equal(entry.sha256,createHash('sha256').update(bytes).digest('hex'));assert.ok(!hashes.has(entry.sha256));hashes.add(entry.sha256);
-      assert.equal(entry.mode,'builtin-imagegen');assert.equal(entry.generated_at,'2026-11-03');assert.ok(entry.prompt.length>100);
+      // Covers are generated art; share images are rendered from the page content, so their source hash is the provenance.
+      if(width===768){assert.equal(entry.mode,'builtin-imagegen');assert.equal(entry.generated_at,'2026-11-03');assert.ok(entry.prompt.length>100);}
+      else{assert.equal(entry.mode,'rendered-share-card');assert.equal(entry.source_sha256,createHash('sha256').update(skillShareCardSource(id)!.html).digest('hex'));}
     }
   }
   assert.equal(hashes.size,4);

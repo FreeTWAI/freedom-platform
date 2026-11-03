@@ -1,0 +1,14 @@
+{
+  "headline": "網頁聊天接進 MCP，資料流向先看清楚。",
+  "outcomes": ["單一 provider 的橋接核對表", "連線方式與資料出口紀錄", "登入／暫存狀態、回答與未驗證部分"],
+  "flow": {
+    "title": "本機 Chromium 橋接網頁聊天",
+    "lead": "本機橋接，不是官方 API；提示、歷史與工具結果會送到你選的第三方服務，受其條款、額度與費用限制。",
+    "steps": [
+      {"icon": "hub", "title": "MCP client 提問", "note": "以 stdio 或預設只綁 loopback 的 HTTP 連本機 server，送出合成提示。"},
+      {"icon": "globe", "title": "內建 Chromium 代問", "note": "webchat_ask 向所選服務提問；持久 profile 保存登入，Claude／Grok 需本人登入。"},
+      {"icon": "chat", "title": "回答交回 client", "note": "取回聊天文字；webchat_status 的登入／暫存狀態若是 unknown，就記為未知。"}
+    ],
+    "caption": "Codex 等安裝腳本會關閉應用、改設定，外掛也不是沙箱：先只用 server 與預設 loopback。"
+  }
+}

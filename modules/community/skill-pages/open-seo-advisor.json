@@ -1,0 +1,14 @@
+{
+  "headline": "先讀健檢報告，確認修復計畫再套用。",
+  "outcomes": ["網站技術項目的健檢報告", "確認後才套用的修復計畫", "保留備份的一項技術修復"],
+  "flow": {
+    "title": "離線健檢，計畫確認後才修",
+    "lead": "SEO 健檢 CLI 在你的電腦離線檢查網站原始碼，預設不呼叫付費 API、不改動網站；它不產圖、不部署。",
+    "steps": [
+      {"icon": "folder", "title": "準備網站原始碼", "note": "依 QUICKSTART.md 安裝；用自己的網站原始碼，沒有網站時先跑 seo-advisor auto-demo。"},
+      {"icon": "search", "title": "離線技術健檢", "note": "對原始碼執行 seo-advisor audit consultant，檢查網站技術項目，產出健檢報告。"},
+      {"icon": "shield", "title": "照計畫修復並備份", "note": "依計畫修 sitemap、robots、canonical 或 hreflang，套用前先確認，並保留備份。"}
+    ],
+    "caption": "不保證排名、收錄、流量或銷售；付費或寫入前會先列明細，看清楚再確認。"
+  }
+}

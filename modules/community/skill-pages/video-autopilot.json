@@ -1,0 +1,14 @@
+{
+  "headline": "先看懂剪輯規則，再套到自己的影片。",
+  "outcomes": ["可重跑的 Shorts 判定結果", "門檻修改與判定變化的說明", "長片、Shorts 與 Reels 的規劃和品質檢查"],
+  "flow": {
+    "title": "用規則門檻判定 Shorts",
+    "lead": "影片自動化工具包 v0.23.0 是剪輯工具與方法框架，在自己的專案副本執行；示範 04 不需真素材，完整剪輯走 Editkin v4。",
+    "steps": [
+      {"icon": "terminal", "title": "跑無素材範例", "note": "執行 python examples/04_shorts_gate.py，只需 Python 3.9+，不用影片素材。"},
+      {"icon": "sliders", "title": "改一個門檻看判定", "note": "看不合格與修正後的差別；只改一個門檻，記錄判定為何改變。"},
+      {"icon": "scissors", "title": "換成自己的素材", "note": "依 SETUP.md 填自己的頻道資料，挑一段素材進入後續剪輯練習。"}
+    ],
+    "caption": "真正渲染前要自行備妥 ffmpeg／ffprobe 及媒體相依；頻道設定與素材也要自己準備。"
+  }
+}
