@@ -17,11 +17,12 @@ async function installCosmeticFilters(page:Page){
   });
 }
 
-for(const width of [320,1440])for(const [game,action] of [['photo','開照相館'],['stamp','拿起印章'],['cash','開始盤點']])test(`AD-6 cosmetic filters keep the anonymous lobby and ${game} entry visible at ${width}px`,async({page})=>{
-  await page.setViewportSize({width,height:900});
+for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,action] of [['photo','開照相館'],['stamp','拿起印章'],['cash','開始盤點']])test(`AD-6 cosmetic filters keep the anonymous lobby and ${game} entry visible at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height});
   await installCosmeticFilters(page);
   const writes:string[]=[];page.on('request',r=>{if(!['GET','HEAD'].includes(r.method()))writes.push(r.url());});
   await page.goto('/play');
+  await expect(page).toHaveTitle('離譜日常 · 自由工坊');
   await expect(page.locator('.fw-arcade-root')).toBeVisible();
   await expect(page.locator('.fw-arcade-header')).toBeVisible();
   await expect(page.locator('.fw-arcade-footer')).toBeVisible();
