@@ -5,4 +5,4 @@
 .fullscreen-game:fullscreen,.fullscreen-game--viewport{box-sizing:border-box;width:100%;height:100%;overflow:auto;overscroll-behavior:contain;background:var(--ad-bg);color:var(--ad-ink);padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
 .fullscreen-game--viewport{position:fixed;inset:0;height:100vh;height:100dvh;z-index:1000}
 .fullscreen-game:fullscreen .fullscreen-game__bar,.fullscreen-game--viewport .fullscreen-game__bar{position:sticky;top:0;z-index:5;background:var(--ad-bg);padding-bottom:4px}
-.fullscreen-game:fullscreen .ad-board,.fullscreen-game--viewport .ad-board{max-width:1200px;margin:auto}
+.fullscreen-game:fullscreen > section,.fullscreen-game--viewport > section{max-width:1200px;margin:auto}

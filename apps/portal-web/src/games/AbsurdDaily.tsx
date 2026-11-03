@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { beginStamps, cashDeck, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, resume, RULES, seconds, seedOf, sortCash, stamp, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
 import { saveGameDraft } from './result-bridge';
 import { resultExports, type RunResult } from './result-card';
 import type { Stage, StageView } from './stage';
-import { FullscreenGame } from './FullscreenGame';
+import { FullscreenGame, type FullscreenGameHandle } from './FullscreenGame';
 import './arcade.css';
 import './toy-theme.css';
 type Photo = NonNullable<RunResult['photos']>[number];
@@ -37,11 +38,12 @@ type Live = {
 const hints = { photo: '拖曳取景，抓到怪事再按快門。方向鍵也能移鏡。', stamp: '按住拖到藍圈，放手蓋章。也可以直接點藍圈。', cash: '道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。' };
 function freshSeed() { const value = new Uint32Array(1); crypto.getRandomValues(value); return seedOf(value[0]); }
 function initialGame() { return gameOf(new URLSearchParams(location.search).get('game')); }
-function GameBoard({ game, seed, onBack, onResult }: {
+function GameBoard({ game, seed, onBack, onResult, onStart }: {
     game: GameId;
     seed: number;
     onBack: () => void;
     onResult: (result: RunResult) => void;
+    onStart: (focusTarget: HTMLElement | null) => void;
 }) {
     const host = useRef<HTMLDivElement>(null), section = useRef<HTMLElement>(null), stage = useRef<Stage | null>(null), frame = useRef(0), generation = useRef(0), loop = useRef<(time: number) => void>(() => { }), audio = useRef<AudioContext | null>(null), soundRef = useRef(false), motionRef = useRef(!matchMedia('(prefers-reduced-motion: reduce)').matches);
     const live = useRef<Live>({ game, seed, clock: { elapsed: 0, last: null, running: false }, client: 0, roundAt: 0, film: 0, photos: [], pan: { x: 0, y: 0 }, targetPan: { x: 0, y: 0 }, fov: 44, stamps: newStamps(seed), cash: newCash(seed), stampPoint: stampTarget(seed, 0), raised: false, pointer: null, done: false, started: false, paused: false });
@@ -157,7 +159,7 @@ function GameBoard({ game, seed, onBack, onResult }: {
     } if (!l.done && l.clock.running)
         frame.current = requestAnimationFrame(loop.current); };
     function start() { if (!ready)
-        return; const l = live.current; l.started = true; l.paused = false; l.clock = { ...resume(l.clock), last: performance.now() }; cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(loop.current); section.current?.focus({ preventScroll: true }); setNotice(game === 'photo' ? '底片只有兩張。漂亮的、離譜的，都能留下。' : hints[game]); updateUi(); }
+        return; const l = live.current; if (!l.started) onStart(section.current); l.started = true; l.paused = false; l.clock = { ...resume(l.clock), last: performance.now() }; cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(loop.current); section.current?.focus({ preventScroll: true }); setNotice(game === 'photo' ? '底片只有兩張。漂亮的、離譜的，都能留下。' : hints[game]); updateUi(); }
     function setPaused() { const l = live.current; if (!l.started || l.done)
         return; stop(); l.paused = true; void audio.current?.suspend().catch(() => { }); updateUi(); }
     useEffect(() => { const change = () => { motionRef.current = !matchMedia('(prefers-reduced-motion: reduce)').matches; render(); }; const media = matchMedia('(prefers-reduced-motion: reduce)'); media.addEventListener('change', change); const hidden = () => { if (document.hidden)
@@ -337,7 +339,17 @@ function Result({ result, onBack, onReplay }: {
 }
 export function AbsurdDaily() {
     const [game, setGame] = useState<GameId | null>(initialGame), [seed, setSeed] = useState(() => seedOf(new URLSearchParams(location.search).get('seed'))), [result, setResult] = useState<RunResult | null>(null), [run, setRun] = useState(0);
-    const choose = useCallback((next: GameId | null, keepSeed = false) => { const nextSeed = keepSeed ? seed : freshSeed(); setGame(next); setSeed(nextSeed); setResult(null); setRun(n => n + 1); const url = new URL(location.href); url.pathname = '/play'; url.search = next ? new URLSearchParams({ game: next, seed: String(nextSeed) }).toString() : ''; url.hash = ''; history.pushState(null, '', url); window.scrollTo({ top: 0, behavior: 'instant' }); }, [seed]);
+    const fullscreen = useRef<FullscreenGameHandle>(null), lobbyHeading = useRef<HTMLHeadingElement>(null), previousGame = useRef(game);
+    useLayoutEffect(() => {
+        const returning = previousGame.current !== null && game === null;
+        previousGame.current = game;
+        if (!returning) return;
+        const focusLobby = () => { if (!document.fullscreenElement) lobbyHeading.current?.focus({ preventScroll: true }); };
+        if (!document.fullscreenElement) { focusLobby(); return; }
+        document.addEventListener('fullscreenchange', focusLobby);
+        return () => document.removeEventListener('fullscreenchange', focusLobby);
+    }, [game]);
+    const choose = useCallback((next: GameId | null, keepSeed = false) => { const nextSeed = keepSeed ? seed : freshSeed(); const url = new URL(location.href); url.pathname = '/play'; url.search = next ? new URLSearchParams({ game: next, seed: String(nextSeed) }).toString() : ''; url.hash = ''; history.pushState(null, '', url); window.scrollTo({ top: 0, behavior: 'instant' }); const update = () => { setGame(next); setSeed(nextSeed); setResult(null); setRun(n => n + 1); }; if (next) { flushSync(update); fullscreen.current?.enter(); } else update(); }, [seed]);
     useEffect(() => { document.title = '離譜日常 · 自由工坊'; const back = () => { setGame(initialGame()); setSeed(seedOf(new URLSearchParams(location.search).get('seed'))); setResult(null); setRun(n => n + 1); }; window.addEventListener('popstate', back); return () => window.removeEventListener('popstate', back); }, []);
-    return <div className="ad-root"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>離譜日常</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main">{result ? <Result result={result} onBack={() => choose(null)} onReplay={() => choose(game, true)}/> : game ? <FullscreenGame><GameBoard key={`${game}/${run}`} game={game} seed={seed} onBack={() => choose(null)} onResult={setResult}/></FullscreenGame> : <><section className="ad-welcome"><p className="ad-eyebrow">自由工坊・造物遊樂場</p><h1>認真上班，<br /><em>離譜下班。</em></h1><p>每個人都很認真，只有事情越來越不對勁。</p><span className="ad-pill">免登入試玩 · 手機電腦都能玩 · 成果直接分享</span><div className="ad-hero-art" aria-hidden="true"><img src="/games/absurd-daily/photo.jpg" alt="" width="960" height="720"/><span>一位客人，三張鳥臉。</span><b>CASE 003</b></div></section><div className="ad-game-cards">{GAMES.map((g, i) => <article key={g.id} className={`ad-game-card ad-card-${g.id}`}><div className="ad-card-art" aria-hidden="true"><span className="ad-art-index">0{i + 1}</span><img src={`/games/absurd-daily/${g.id}.jpg`} alt="" width="960" height="720" loading="lazy"/><span className="ad-art-copy">{i === 0 ? '三位，一件風衣。' : i === 1 ? '最後一張（修正版）' : '老闆的大餅也是餅。'}</span></div><div><h2>{g.title}</h2><p>{g.subtitle}</p><button onClick={() => choose(g.id)}>{g.action} →</button></div></article>)}</div><section className="ad-how"><h2>失手也有作品。</h2><p>按快門、落印、翻鈔，留下這一局真正發生的事。拍得漂亮可以分享，拍得離譜也可以。</p><p>拍下作品、分享同題，也可以把成果發到自由工坊。</p></section></>}</main><footer className="ad-footer">自由工坊原創遊戲 · 遊戲成果由你確認後分享</footer></div>;
+    return <div className="ad-root"><a className="ad-skip" href="#ad-main">跳到遊戲內容</a><header className="ad-header"><a className="ad-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>離譜日常</span></a><a className="ad-home-link" href="/">回自由工坊 ↗</a></header><main id="ad-main">{game ? <FullscreenGame ref={fullscreen}>{result ? <Result result={result} onBack={() => choose(null)} onReplay={() => choose(game, true)}/> : <GameBoard key={`${game}/${run}`} game={game} seed={seed} onBack={() => choose(null)} onResult={setResult} onStart={target => fullscreen.current?.enter(target)}/>}</FullscreenGame> : <><section className="ad-welcome"><p className="ad-eyebrow">自由工坊・造物遊樂場</p><h1 ref={lobbyHeading} tabIndex={-1}>認真上班，<br /><em>離譜下班。</em></h1><p>每個人都很認真，只有事情越來越不對勁。</p><span className="ad-pill">免登入試玩 · 手機電腦都能玩 · 成果直接分享</span><div className="ad-hero-art" aria-hidden="true"><img src="/games/absurd-daily/photo.jpg" alt="" width="960" height="720"/><span>一位客人，三張鳥臉。</span><b>CASE 003</b></div></section><div className="ad-game-cards">{GAMES.map((g, i) => <article key={g.id} className={`ad-game-card ad-card-${g.id}`}><div className="ad-card-art" aria-hidden="true"><span className="ad-art-index">0{i + 1}</span><img src={`/games/absurd-daily/${g.id}.jpg`} alt="" width="960" height="720" loading="lazy"/><span className="ad-art-copy">{i === 0 ? '三位，一件風衣。' : i === 1 ? '最後一張（修正版）' : '老闆的大餅也是餅。'}</span></div><div><h2>{g.title}</h2><p>{g.subtitle}</p><button onClick={() => choose(g.id)}>{g.action} →</button></div></article>)}</div><section className="ad-how"><h2>失手也有作品。</h2><p>按快門、落印、翻鈔，留下這一局真正發生的事。拍得漂亮可以分享，拍得離譜也可以。</p><p>拍下作品、分享同題，也可以把成果發到自由工坊。</p></section></>}</main><footer className="ad-footer">自由工坊原創遊戲 · 遊戲成果由你確認後分享</footer></div>;
 }

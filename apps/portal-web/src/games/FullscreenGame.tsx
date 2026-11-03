@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import './fullscreen-game.css';
 
 type Mode = 'normal' | 'native' | 'viewport';
 
 /** Keep the game mounted while presentation changes, so a run is never reset. */
-export function FullscreenGame({ children }: { children: ReactNode }) {
+export type FullscreenGameHandle = { enter: (focusTarget?: HTMLElement | null) => void };
+
+export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: ReactNode }>(function FullscreenGame({ children }, ref) {
   const container = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
   const button = useRef<HTMLButtonElement>(null);
+  const entryFocus = useRef<HTMLElement | null>(null);
   const [mode, setMode] = useState<Mode>('normal');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
@@ -28,7 +31,10 @@ export function FullscreenGame({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (mode !== 'normal') button.current?.focus({ preventScroll: true });
+    if (mode !== 'normal') {
+      const target = entryFocus.current; entryFocus.current = null;
+      (target?.isConnected ? target : button.current)?.focus({ preventScroll: true });
+    }
   }, [mode]);
 
   useEffect(() => {
@@ -64,11 +70,20 @@ export function FullscreenGame({ children }: { children: ReactNode }) {
     } finally { if (mounted.current) setPending(false); }
   }
 
+  useImperativeHandle(ref, () => ({ enter: (focusTarget) => {
+    // A cold deep link has no gesture; the visible button remains available.
+    if (mode === 'normal' && !pending && (!navigator.userActivation || navigator.userActivation.isActive)) { entryFocus.current = focusTarget ?? null; void toggle(); }
+  } }), [mode, pending]);
+
+  function captureEscape(event: KeyboardEvent<HTMLDivElement>) {
+    if (mode === 'normal' || event.key !== 'Escape') return;
+    // Do not let the game's Escape-to-pause handler cancel the browser exit.
+    event.stopPropagation();
+    if (mode === 'viewport') { event.preventDefault(); setMode('normal'); setMessage(''); }
+  }
+
   function keys(event: KeyboardEvent<HTMLDivElement>) {
     if (mode === 'normal') return;
-    if (event.key === 'Escape' && mode === 'viewport') {
-      event.preventDefault(); event.stopPropagation(); setMode('normal'); setMessage(''); return;
-    }
     if (event.key !== 'Tab') return;
     const controls = Array.from(container.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])
       .filter(element => element.getClientRects().length > 0 && !element.closest('[inert]'));
@@ -78,8 +93,8 @@ export function FullscreenGame({ children }: { children: ReactNode }) {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 
-  return <div ref={container} className={`fullscreen-game${mode === 'viewport' ? ' fullscreen-game--viewport' : ''}`} role={mode === 'normal' ? undefined : 'dialog'} aria-modal={mode === 'normal' ? undefined : true} aria-label={mode === 'normal' ? undefined : '遊戲全螢幕'} onKeyDown={keys}>
+  return <div ref={container} className={`fullscreen-game${mode === 'viewport' ? ' fullscreen-game--viewport' : ''}`} role={mode === 'normal' ? undefined : 'dialog'} aria-modal={mode === 'normal' ? undefined : true} aria-label={mode === 'normal' ? undefined : '遊戲全螢幕'} onKeyDownCapture={captureEscape} onKeyDown={keys}>
     <div className="fullscreen-game__bar"><button ref={button} type="button" className="fullscreen-game__button" onClick={() => void toggle()} aria-disabled={pending} aria-pressed={mode !== 'normal'}>{mode === 'normal' ? '⛶ 全螢幕' : '退出全螢幕'}</button><span role="status">{message}</span></div>
     {children}
   </div>;
-}
+});
