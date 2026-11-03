@@ -235,6 +235,7 @@ const FOUNDATION_NAMES = [
   '195_event_helpers.sql',
   // Private self-reported exercises; no attendance, contribution or release authority.
   '196_event_missions.sql',
+  '197_event_registration_policy.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

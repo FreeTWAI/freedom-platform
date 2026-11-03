@@ -11,3 +11,22 @@
   .cocreation-panel .cocreation-task-filters .discovery-search { grid-column: 1 / -1; }
   .cocreation-panel .cocreation-task-filters .field { min-width: 0; }
 }
+/* One task at a time: browse, read tasks, or write an invitation. */
+.cocreation-panel [hidden] { display: none !important; }
+.cocreation-panel .cocreation-heading { display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:.75rem 1rem; }
+.cocreation-panel .cocreation-heading h2 { font-size:1.2rem;margin:0; }
+.cocreation-panel .cocreation-heading p { color:var(--muted);font-size:.875rem;max-width:65ch;margin:.35rem 0 0; }
+.cocreation-panel .cocreation-browser,.cocreation-panel .cocreation-project-list { display:grid;gap:.75rem; }
+.cocreation-panel .cocreation-browser>h3 { font-size:1rem;margin:0; }
+.cocreation-panel .cocreation-project-picker { background:var(--bg-elev); }
+.cocreation-panel .cocreation-project-row { display:flex;align-items:center;justify-content:space-between;gap:1rem;min-width:0; }
+.cocreation-panel .cocreation-project-row>div { min-width:0; }
+.cocreation-panel .cocreation-project-row h3 { font-size:1rem;margin:0;overflow-wrap:anywhere; }
+.cocreation-panel .cocreation-project-row p { margin:.4rem 0;overflow-wrap:anywhere; }
+.cocreation-panel .cocreation-project-row>div>p:not(.field-hint) { display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden; }
+.cocreation-panel .cocreation-project-row>.btn { flex-shrink:0; }
+.cocreation-panel .cocreation-create { max-width:48rem; }
+.cocreation-panel .cocreation-form-fields { border:0;padding:0;margin:0;min-width:0; }
+.cocreation-panel .cocreation-form-fields>.btn { justify-self:start; }
+.cocreation-panel :is(#cocreation-list-heading,#cocreation-project-title,.cocreation-create h3):focus-visible { outline:2px solid var(--focus);outline-offset:4px; }
+@media(max-width:600px){.cocreation-panel .cocreation-project-row{align-items:flex-start;flex-direction:column;gap:.65rem}.cocreation-panel .cocreation-project-row>.btn{align-self:flex-start}.cocreation-panel .cocreation-create :is(input,textarea,select){font-size:16px}}

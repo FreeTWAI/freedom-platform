@@ -6,11 +6,13 @@
 
 ## 目前狀態
 
-<!-- glp-status: as_of=2026-10-12 release.production=d026ba76a4fb2c289cfb456dea68676f03f7bd30 release.staging=d026ba76a4fb2c289cfb456dea68676f03f7bd30 flag.production=true flag.staging=true repo_max_migration=196 applied_migration.production=196 applied_migration.staging=196 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
+<!-- glp-status: as_of=2026-10-12 release.production=d026ba76a4fb2c289cfb456dea68676f03f7bd30 release.staging=d026ba76a4fb2c289cfb456dea68676f03f7bd30 flag.production=true flag.staging=true repo_max_migration=197 applied_migration.production=196 applied_migration.staging=196 capacity_policy_rows=1 authority_policy_rows=0 accepted_m1=false accepted_full=false -->
 
 2026-10-30 08:25 UTC：兩環境已部署 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196，staging 41023423825 與正式站 41025042462 五階段、workflow／Deployment 均成功；08:24 UTC 正式站公開 health 為 `ok`、同 SHA。舊 staging 40853952665 的 handoff 已由 hosted 41023132536 結清為 `reconciled`／`handoff_reconciled`；首試41022455441在 R2 `chain_record` 讀取、任何寫入前失鎖，原 workflow／Deployment failure 保留。195／196 資料表已套用，未啟用新功能或旗標，M1／完整驗收與原政策列觀察不變；`as_of=2026-10-12` 仍是原功能觀察日期。本次無備份或備份前置，租約根因仍待 #1193 診斷。詳見[本次發布與復原收據](../unified-foundation/rollout-main-d026ba76-2026-10-30.json)。
 
 2026-10-30 發布前的來源觀察：main 已含活動幫手候選 migration195 與私人自記小任務候選 migration196，當時僅確認 repository 來源上限，尚未套用。此觀察已由10/30兩環境成功發布取代；195／196 已套用為資料表，不表示啟用幫手功能或其他新旗標。
+
+10/30 發布後 main 另含社群會員報名政策候選 migration197；只更新 repository 來源上限，截至本紀錄兩環境仍是 schema196，不表示已套用 197 或啟用報名政策。
 
 2026-10-29 10:23 UTC 歷史紀錄（已於10/30結清）：staging 的 `5d662e6e`／schema194 發布回報 preflight、migration、deploy、health 通過，最後 handoff 因 `release_lease_lost` 失敗；journal pending 與 lease 釋放尚未持鎖讀回確認。正式站仍是 `5c4bf56d`，公開 health 回報正常。沒有重送部署或啟動新版正式站；旗標、M1／完整驗收及原政策列觀察不變。詳見[本次失敗收據與待辦](../unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
 

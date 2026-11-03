@@ -8,6 +8,7 @@ import {createLocalGuideCatalog} from '../../packages/public-guide-assets/node.j
 import {DEMO_COMMUNITY,DEMO_USERS} from '../../packages/testing/seed.js';
 import {TENANT_CURSOR_TEST_KEY} from '../runtime/tenant-cursor-fixture.js';
 import {setupCartFixtureStore} from './storefront-cart-fixture.js';
+import {quickJoin} from './quick-join.js';
 
 // Per-test real discovery host: runs in the ordinary pinned default pass too.
 const test=base.extend<{discoveryOn:boolean}>({
@@ -216,14 +217,27 @@ test('checkout return_to still returns an authenticated buyer to the checkout',a
 
 test.describe('discovery ON event return',()=>{
   test.use({discoveryOn:true});
-  test('event return_to still returns registration to the open event',async({page,e2eAuthPool})=>{
+  test('event return_to preserves the original event through required guild joining without automatic RSVP',async({page,e2eAuthPool})=>{
     const id=randomUUID(),destination=`/events/${id}`,title='回流驗證公開活動';
     await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
       VALUES($1,$2,$3,$4,'合成公開活動',now()+interval '2 days',now()+interval '2 days 1 hour','online','線上','published','open','other')`,[id,DEMO_COMMUNITY,DEMO_USERS[0].user_id,title]);
+    let registrationWrites=0;
+    page.on('request',request=>{
+      const pathname=new URL(request.url()).pathname;
+      if(request.method()==='POST'&&(pathname===`/api/v1/events/${id}/rsvp`||pathname===`/api/v1/public/events/${id}/register`))registrationWrites++;
+    });
     try{
       await page.goto('/?join=1&return_to='+encodeURIComponent(destination));await signUp(page);
       await expect(page).toHaveURL(new URL(destination,page.url()).href);
+      await expect(page.getByText('完成加入公會後會返回這場活動，完整定位可稍後補做。返回後仍需自行確認報名，不會自動參加。',{exact:true})).toBeVisible();
+      await expect(page.getByRole('region',{name:'快速加入公會'})).toBeVisible();expect(registrationWrites).toBe(0);
+      await page.reload();await expect(page).toHaveURL(new URL(destination,page.url()).href);
+      await quickJoin(page);
       await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
+      await expect(page.getByRole('button',{name:'我要參加',exact:true})).toBeEnabled();
+      await expect(page).toHaveURL(new URL(destination,page.url()).href);expect(registrationWrites).toBe(0);
+      expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_event_rsvps WHERE event_id=$1',[id])).rows[0].count)).toBe(0);
+      expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_event_guest_rsvps WHERE event_id=$1',[id])).rows[0].count)).toBe(0);
     }finally{await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[id]);}
   });
 });

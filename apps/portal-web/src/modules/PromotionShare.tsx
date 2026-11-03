@@ -80,7 +80,7 @@ export function PromotionShare({client, kind, target, title, text, label = '分�
           <button type="button" className="btn btn-ghost" aria-busy={action.pending==='copy'} disabled={busy || !link || action.pending!==null} onClick={() => void copy()}>{action.pending==='copy'?t('action.copying'):'複製連結'}</button>
           {kind === 'platform' && (['LINE', 'Telegram'] as const).map(platform => <button key={platform} type="button" className="btn btn-ghost" aria-busy={action.pending === platform} disabled={busy || !link || action.pending !== null} title={`另開 ${platform} 分享視窗`} onClick={() => void shareTo(platform)}>{platform} 分享 ↗</button>)}
         </div>
-        <p className="promotion-share-rule">訪客每天點開算 1 分，自己點不算。</p>
+        <p className="promotion-share-rule">只在你按下分享或複製後交給系統處理，不會自動發文或傳訊息。請先確認內容適合對方。有效點擊依既有規則計分；不代表閱讀、成交或獎勵。</p>
         {status && <p className="skill-share-status" role="status">{status}</p>}
         {manual && <div className="field"><label htmlFor={`${id}-manual`}>手動複製分享內容</label><textarea ref={manualField} id={`${id}-manual`} value={copyText} readOnly rows={3} onFocus={event => event.currentTarget.select()}/></div>}
       </div>}
