@@ -17,6 +17,7 @@ export const skillBookUseMap: Readonly<Record<string, readonly SkillBookUse[]>> 
   'gemini-voice-lab': ['語音'],
   'ai-avatar-bot': ['語音'],
   'story-bible': ['文字'],
+  'taiwanese-english-checker': ['文字'],
   'coding-audit-harness': ['系統架構'],
 };
 export function matchesSkillBookUse(bookId: string | undefined, use: string) {

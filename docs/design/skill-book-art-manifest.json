@@ -2,7 +2,7 @@
   "generated_at": "2026-09-23",
   "mode": "builtin-imagegen",
   "style_anchor": "apps/portal-web/public/brand/freedom-workshop.webp",
-  "description": "53 separately generated original skill-book covers. No original logo edits; only mechanical WebP encoding for delivery.",
+  "description": "55 separately generated original skill-book covers. No original logo edits; only mechanical WebP encoding for delivery.",
   "assets": [
     {
       "id": "career-guide",
@@ -609,7 +609,35 @@
       "source_path": "/home/thuang/.codex/generated_images/01a15b1b-eb97-7c73-bc6f-95a2cc323cbe/exec-d757a8a0-bc68-4c3a-aac8-1a01790aec8a.png",
       "attempts": 2,
       "source_note": "工坊依固定 README 重新繪製的功能隱喻；非原作素材或實際畫面。逐張全尺寸與縮圖目視核對；sharp 僅縮放與編碼。"
+    },
+    {
+      "id": "project-hub",
+      "prompt": "Use case: stylized-concept. Asset: landscape 3:2 skill book cover. One closed cobalt #3044ff hardcover, acid lime #c4ff20 page edges, chrome spine and small chrome corners. Floating three-quarter view with charcoal black margins and soft floor shadow, subtle thin orbit accent. Premium clean 3D catalog product render. Large simple sculpted chrome and lime emblem clearly readable at 240px wide. Emblem: a round chrome hub disk with a glowing lime core; four short chrome spokes each hold a small cobalt project folder, and two small rounded chrome helper drones are docked at the rim, each working on one folder. Recognizable one hub coordinating projects and AI helpers. No real people or recognizable faces. No logos, trademarks, letters, words, numbers, glyphs, pseudo-text, watermark, or screenshots. Only one book. Emblem is pictorial sculpture, not software UI.",
+      "path": "apps/portal-web/public/art/skills/project-hub.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 33132,
+      "sha256": "d25159b014885b79d65c2ac46b8c8d9a2a57424873d51378cd66b971a6275cf6",
+      "generated_at": "2026-11-03",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a1a344-7b2d-7451-887b-608490331757/exec-0d1391c6-eedd-45b6-b179-8a52693ca52d.png",
+      "attempts": 1,
+      "source_note": "工坊依固定 README 重新繪製的功能隱喻；非原作素材或實際畫面。逐張全尺寸與縮圖目視核對；sharp 僅縮放與編碼。"
+    },
+    {
+      "id": "taiwanese-english-checker",
+      "prompt": "Use case: stylized-concept. Asset: landscape 3:2 skill book cover. One closed cobalt #3044ff hardcover, acid lime #c4ff20 page edges, chrome spine and small chrome corners. Floating three-quarter view with charcoal black margins and soft floor shadow, subtle thin orbit accent. Premium clean 3D catalog product render. Large simple sculpted chrome and lime emblem clearly readable at 240px wide. Emblem: a cobalt envelope with a folded letter card showing only blank lime text bars; a chrome magnifying glass hovers over one bar where a small sculpted lime beetle sits, and a tiny chrome butterfly net is poised beside the lens to catch it. Recognizable catching hidden mistakes in a written message. No real people or recognizable faces. No logos, trademarks, letters, words, numbers, glyphs, pseudo-text, watermark, or screenshots. Only one book. Emblem is pictorial sculpture, not software UI.",
+      "path": "apps/portal-web/public/art/skills/taiwanese-english-checker.webp",
+      "width": 768,
+      "height": 512,
+      "bytes": 34488,
+      "sha256": "03d2539d696ab93db0fb2aef2eb0e2c4648483f6a672d3d5a2a84ced47373d49",
+      "generated_at": "2026-11-03",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a1a343-7f14-75b0-89a7-2aac3975ed5e/exec-eff36039-6ab1-48ce-9d33-1df2b46410d0.png",
+      "attempts": 1,
+      "source_note": "工坊依固定 README 重新繪製的功能隱喻；非原作素材或實際畫面。逐張全尺寸與縮圖目視核對；sharp 僅縮放與編碼。"
     }
   ],
-  "updated_at": "2026-10-20"
+  "updated_at": "2026-11-03"
 }

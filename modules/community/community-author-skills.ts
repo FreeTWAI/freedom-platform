@@ -4,6 +4,7 @@ import type {SkillBookGuide} from './skill-book-guides.js';
 // Community names were supplied by the platform owner, except for the three 手動登錄作品 works; no member identity is inferred.
 // video-to-podcast-toolkit, autovtuber and coding-audit-harness are works members registered through 手動登錄作品, credited with the member's own community display name and self-declared author relationship (not verified against the GitHub account), converted at the platform owner's request.
 // Member-shared books reviewed 2026-10-20 use community display names and self-declared relationships, not verified GitHub identities.
+// Books reviewed 2026-11-03 follow the same rule. A custom guild (guild_custom_*) designates a book through guild_skill_book_bindings, not `guilds`; see migration 198.
 // Empty `guilds` keeps a work as a 社群技能書 instead of a guild designation.
 // Pinned upstream documentation reviewed on each source's `reviewed` date; upstream apps were not run.
 type AuthorSource={author:string;relationship?:'author'|'maintainer'|'curator';repo:string;sha:string;title:string;reading:string;evidence:string[];guilds:string[];license:string;reviewed:string};
@@ -32,6 +33,8 @@ const communityAuthorSourceList = {
   'gemini-voice-lab':{author:'Nico',relationship:'author',repo:'Rumi-3653/gemini-voice-lab',sha:'c8f6933127ca1d6ba65d0ce47075cfab4b5a0285',title:'gemini-voice-lab：回合制台灣口語配音',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
   'story-bible':{author:'Nico',relationship:'author',repo:'Rumi-3653/story-bible',sha:'d0fa28c9a2bf7f26eaf8f01a8b03c2f4508a9ef5',title:'story-bible：角色 × 場景 × 世界觀設定聖經',reading:'README.md',evidence:['README.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
   'human-mode':{author:'啪哩啪啦',relationship:'curator',repo:'madeofroc-arch/AI-Detox-Center',sha:'b2f5bc19f2f22b18285dfe360a5d77acbda63ca1',title:'Human Mode：五階提示與自主思考',reading:'README.md',evidence:['README.md','LICENSE','skill/README.md'],guilds:[],license:'MIT',reviewed:'2026-10-20'},
+  'project-hub':{author:'ken-kk',relationship:'author',repo:'kieiken/project-hub',sha:'cfe3ab221f03f84d334ae7b97608dd31f3e643be',title:'Project Hub：在一個畫面管理專案與 Claude Code／Codex',reading:'README.zh-TW.md',evidence:['README.zh-TW.md','hub/README.zh-TW.md','CONTRIBUTING.zh-TW.md','LICENSE','THIRD_PARTY_NOTICES.zh-TW.md'],guilds:[],license:'MIT',reviewed:'2026-11-03'},
+  'taiwanese-english-checker':{author:'Wilson',relationship:'author',repo:'WilsonAImaster/taiwanese-english-checker',sha:'52532373959436a875fd94209bf32df48bfe8dc9',title:'台式英文抓蟲器：抓出你以為是對的台式英文',reading:'README.md',evidence:['README.md','SKILL.md','references/rules.md','LICENSE'],guilds:[],license:'MIT',reviewed:'2026-11-03'},
 } satisfies Record<string,AuthorSource>;
 type Id=keyof typeof communityAuthorSourceList;
 export const communityAuthorSources:Record<Id,AuthorSource>=communityAuthorSourceList;
@@ -183,6 +186,31 @@ const details:Record<Id,Details>={
     first_result:'一份「暫定答案 → 讀論證後的選擇 → 揭曉回看」練習紀錄，附選用提示層與單次樣本的限制。',
     contribution:'沿啪哩啪啦策展的原作 Issues 回饋可查證題目、誤導線索或螢幕閱讀器問題，附遊戲 seed 與重現步驟；保留原作作者與 MIT 資訊，不把遊玩比例寫成人格評分。',
     beginner:{category:'定位與社群',purpose:'先選自己的答案，再看主持人的論證；用遊玩紀錄挑適合自己的五階提示。',for_whom:'想練習辨識流暢卻錯誤論證的人、希望 AI 先提示、仍能隨時要完整答案的學習者。',make:'一份「暫定答案 → 讀論證後的選擇 → 揭曉回看」練習紀錄，附選用提示層與單次樣本的限制。',workshop_use:'和夥伴比較同一題中哪段論證影響選擇，討論提示層是否有幫助；回饋題目與可及性，不替彼此貼能力標籤。',next_step:'先讀 skill/README.md 的五階說明，挑一題寫下自己的暫定答案；不想裝遊戲可先閱讀繁中 dist 指引。'},
+  },
+  'project-hub':{
+    format:'本機專案與 AI CLI 管理工具（Mac App／瀏覽器畫面）',
+    summary:'把專案、作業與 Claude Code／Codex 對話放進同一個本機畫面；每項作業用工作副本，完成後再整合回主作業。',
+    audience:['同時用 Claude Code／Codex 推進多個專案的個人開發者','願意先讀權限、自動 Git 儲存與本機紀錄說明的 Mac 使用者'],
+    status:'收錄版本為 v4.117.0，當時標示為公開 Beta，功能、畫面與儲存格式仍可能改變；2026-11-03 的原作 README 已改稱 Mac 與 Windows 11 x64 版為正式版，較新版本未經工坊核對。MIT；xterm.js、node-pty 等第三方軟體見 THIRD_PARTY_NOTICES。供單人在自己的 Mac 使用：只監聽 127.0.0.1:4545，會檢查 Host 與 Origin，但沒有使用者登入，不可當公開網站或多人共用伺服器。預設以略過權限確認的方式啟動 Claude Code，Codex 另略過沙箱，AI 能以你的帳號權限改檔與執行指令；可在 _hub/roles.yaml 的 permissions 改成需確認。建立工作副本時會複製主資料夾未納入 Git 的 .env、.dev.vars、.npmrc 與 .claude/settings.local.json；自動儲存先 git add -A，再以 --no-verify 提交；對話、交接與操作紀錄以未加密形式留在本機。收錄版本的 Windows 為實驗性支援；Mac App 自行簽署、尚未公證。repo 另附付費功能切換的隔離確認文件，不代表已開放販售。AI 費用依各 CLI 的方案。工坊未安裝或執行。',
+    features:['左側樹狀清單列出專案、作業、分支作業與子專案；概要畫面顯示階段、負責人、問題與相關專案。','對話畫面每次傳送都可選回覆的 AI、模型與思考程度，切換 AI 時交接對方尚未看過的對話；執行中可取消、補充說明或排隊下一個指示。','每項作業在 Work/ 使用工作副本，子作業成果以［整合］［選擇性整合］［批次整合］收回主作業；可自行啟用 Tailscale 與通關密語，從自己的 iPhone 遠端操作。'],
+    prerequisites:['macOS、Node.js 22 以上與 Git，以及編譯 node-pty 與 Project Hub.app 所需的 Apple 開發工具。','已安裝並登入的 Claude Code 或 Codex CLI；先確認各自方案的費用與額度。','先讀 README.zh-TW.md 與 hub/README.zh-TW.md 的「使用前須知」，準備一個不含機密、可隨意修改的練習專案。'],
+    first_steps:['依 README 在最上層執行 HUB_LANG=zh-TW bash hub/setup.sh；可用 HUB_ROOT 指定資料位置（預設 ~/Documents/AI-Workspace/）。它會建立 _hub/、Product/、Work/ 與虛構的範例台帳。','啟動 AI 前，在 _hub/roles.yaml 的 permissions 改成需要確認的啟動方式，並確認練習專案沒有未納入 Git 的 .env 等機密。','開啟桌面的 Project Hub.app，在練習專案建一項小作業請 AI 修改；檢查工作副本的差異與自動儲存的提交，再整合回主作業。'],
+    first_result:'一份練習專案的試用紀錄：權限設定、工作副本差異、自動儲存的提交與整合結果，另列尚未確認的風險。',
+    contribution:'可在原作 Issues 選「使用心得與需求」或「問題回報」，附版本（畫面或 hub/package.json）、macOS 與 Node.js 版本及重現步驟；大幅變更先開 Issue 討論。保留 ken-kk 與 MIT 來源，分享前移除姓名、路徑、通關密語與 token。',
+    beginner:{category:'作品與開源',purpose:'把專案、作業與 Claude Code／Codex 對話放進同一個本機畫面；每項作業用工作副本，完成後再整合回主作業。',for_whom:'同時用 Claude Code／Codex 推進多個專案的個人開發者，以及願意先讀權限與本機紀錄說明的 Mac 使用者。',make:'一份練習專案的試用紀錄：權限設定、工作副本差異、自動儲存的提交與整合結果，另列尚未確認的風險。',workshop_use:'和開發夥伴一起審查 AI 權限、會被複製的設定檔與本機紀錄位置，再用練習專案比較工作副本與整合流程；整理好的回饋送回原作 Issue。',next_step:'先讀 hub/README.zh-TW.md 的「使用前須知」，準備一個不含機密的練習專案，再執行 setup.sh。'},
+  },
+  'taiwanese-english-checker':{
+    format:'AI 英文寫作檢查 Skill（SKILL.md＋規則檔）',
+    summary:'貼上英文 Email 或貼文，讓 AI 抓出台式英文、分級說明原因，再給自然的改法。',
+    audience:['常寫英文 Email、求職信、LinkedIn 貼文或簡報講稿的人','想知道錯在哪裡、一次改掉一個寫作習慣的英文學習者'],
+    status:'MIT。內容是給 AI 讀的 SKILL.md、30 條通用規則與 7 個情境包，沒有程式或檢查引擎；結果由你選用的 AI 判讀，也可能誤判或漏抓，重要的信改完仍要自己再讀一遍。貼進 ChatGPT、Claude、Gemini 等服務的英文依該服務的條款與額度處理，不要貼客戶個資、合約或機密。依收錄版本的 index.html，介紹頁試用只在瀏覽器把規則與你的英文組成提示詞並複製，不代為送出。規則是作者整理的寫作建議，不是考試評分或語言能力認證。工坊未安裝或代為執行。',
+    features:['30 條通用規則分四類：語氣與禮貌、中文直翻、文法常錯、商務 Email 習慣，例如 Please be noted that、Look forward to hear from you。','7 個情境包：求職 J、外商職場 W、簡報與會議發言 P、跨境電商與客服 E、學術與升學 A、社群與個人品牌 S、旅遊與生活 T；說明文件類型，或讓 AI 自行判斷。','輸出一句總結、依原文順序的問題表（錯誤／誤會／不自然三級，附原因與規則編號）、改寫後全文與「最值得記住的一點」；說明收件人國家時，另加最多 3 點文化提醒。'],
+    prerequisites:['一段自己寫、不含機密的英文，例如 Email、求職信、LinkedIn 貼文或簡報講稿。','Claude Code 或其他支援 SKILL.md 的 AI 工具；或在 ChatGPT、Claude、Gemini 網頁版，把 SKILL.md 與 references/rules.md 貼進專案或自訂指令。','先讀 README 的「30條地雷，分四類」「7個情境包」，以及 examples/client-email.md 的完整輸出範例。'],
+    first_steps:['Claude Code 依 README 執行 git clone https://github.com/WilsonAImaster/taiwanese-english-checker ~/.claude/skills/taiwanese-english-checker；網頁版則把 SKILL.md 與 references/rules.md 貼進專案或自訂指令。','貼上自己的英文時多說一句文件類型與收件人，例如「這是要寄給德國客戶的報價信」，再請 AI 檢查台式英文。','逐條對照問題表的等級、原因與規則編號，回 references/rules.md 確認；只採用你認同的改法，把「最值得記住的一點」記進自己的錯誤筆記。'],
+    first_result:'一封自己英文信的檢查紀錄：分級問題表、改寫後全文，以及一條要改掉的寫作習慣。',
+    contribution:'遇到新的台式英文或覺得規則有誤，可用原作 Issues 的「分享一個台式英文」「回報規則有誤」範本，附去識別的原句與情境；保留 Wilson 的來源署名與 MIT，不貼客戶信件、姓名或公司資料。',
+    beginner:{category:'內容與行銷',purpose:'貼上英文 Email 或貼文，讓 AI 抓出台式英文、分級說明原因，再給自然的改法。',for_whom:'常寫英文 Email、求職信或簡報講稿的人，以及想知道錯在哪裡、一次改掉一個寫作習慣的英文學習者。',make:'一封自己英文信的檢查紀錄：分級問題表、改寫後全文，以及一條要改掉的寫作習慣。',workshop_use:'在語言學習與AI協作公會交換去識別的例句與檢查紀錄，一起判斷 AI 的改法是否合理；整理好的新例句再回原作 Issue 分享。',next_step:'先挑一封自己寫、不含機密的英文信，依 README 安裝或貼上規則，請 AI 檢查一次。'},
+    website_url:'https://wilsonaimaster.github.io/taiwanese-english-checker/',
   },
   'bidding-radar-concept':{
     format:'概念與設計文件（不含程式碼）',summary:'從公開資料設計標案搜尋、追蹤、決標分析與公司補助資格比對。',
