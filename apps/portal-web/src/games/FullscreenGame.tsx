@@ -1,0 +1,85 @@
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import './fullscreen-game.css';
+
+type Mode = 'normal' | 'native' | 'viewport';
+
+/** Keep the game mounted while presentation changes, so a run is never reset. */
+export function FullscreenGame({ children }: { children: ReactNode }) {
+  const container = useRef<HTMLDivElement>(null);
+  const mounted = useRef(true);
+  const button = useRef<HTMLButtonElement>(null);
+  const [mode, setMode] = useState<Mode>('normal');
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    mounted.current = true;
+    const node = container.current;
+    const sync = () => {
+      if (document.fullscreenElement === container.current) setMode('native');
+      else setMode(current => current === 'native' ? 'normal' : current);
+    };
+    document.addEventListener('fullscreenchange', sync);
+    return () => {
+      mounted.current = false;
+      document.removeEventListener('fullscreenchange', sync);
+      if (node && document.fullscreenElement === node) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'normal') button.current?.focus({ preventScroll: true });
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== 'viewport') return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [mode]);
+
+  async function toggle() {
+    const node = container.current;
+    if (!node || pending) return;
+    if (mode === 'viewport') { setMode('normal'); setMessage(''); return; }
+    if (mode === 'native') {
+      setPending(true);
+      try { await document.exitFullscreen(); }
+      catch { if (mounted.current) setMessage('無法離開全螢幕，請使用瀏覽器的退出方式。'); }
+      finally { if (mounted.current) setPending(false); }
+      return;
+    }
+    setPending(true);
+    try {
+      if (!node.requestFullscreen || document.fullscreenEnabled === false) throw new Error('unsupported');
+      // The request happens directly in the click handler, before any await.
+      await node.requestFullscreen();
+      if (mounted.current) setMessage('');
+      else if (document.fullscreenElement === node) void document.exitFullscreen().catch(() => {});
+    } catch {
+      if (mounted.current) {
+        setMode('viewport');
+        setMessage('此瀏覽器使用全視窗模式，瀏覽器工具列可能仍會顯示。');
+      }
+    } finally { if (mounted.current) setPending(false); }
+  }
+
+  function keys(event: KeyboardEvent<HTMLDivElement>) {
+    if (mode === 'normal') return;
+    if (event.key === 'Escape' && mode === 'viewport') {
+      event.preventDefault(); event.stopPropagation(); setMode('normal'); setMessage(''); return;
+    }
+    if (event.key !== 'Tab') return;
+    const controls = Array.from(container.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])
+      .filter(element => element.getClientRects().length > 0 && !element.closest('[inert]'));
+    if (!controls.length) return;
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+
+  return <div ref={container} className={`fullscreen-game${mode === 'viewport' ? ' fullscreen-game--viewport' : ''}`} role={mode === 'normal' ? undefined : 'dialog'} aria-modal={mode === 'normal' ? undefined : true} aria-label={mode === 'normal' ? undefined : '遊戲全螢幕'} onKeyDown={keys}>
+    <div className="fullscreen-game__bar"><button ref={button} type="button" className="fullscreen-game__button" onClick={() => void toggle()} aria-disabled={pending} aria-pressed={mode !== 'normal'}>{mode === 'normal' ? '⛶ 全螢幕' : '退出全螢幕'}</button><span role="status">{message}</span></div>
+    {children}
+  </div>;
+}

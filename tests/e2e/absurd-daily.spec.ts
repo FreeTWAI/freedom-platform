@@ -287,3 +287,71 @@ test('AD-6 WebGL loss has a recoverable boundary and public layouts fit narrow, 
   await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();await expect(page.locator('.ad-stage canvas')).toHaveCount(0);
   await expect(page.locator('.ad-game-card')).toHaveCount(3);
 });
+
+for (const {game,width,height} of [
+  {game:'photo',width:320,height:568},
+  {game:'stamp',width:667,height:375},
+  {game:'cash',width:1440,height:900},
+] as const) {
+  test(`fullscreen fallback keeps ${game} progress at ${width}x${height}`, async ({page}) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({width,height});
+    await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', {configurable:true, value:false}));
+    await openGame(page, game);
+    const counter = page.locator('.ad-counter');
+    if (game === 'photo') await page.getByRole('button',{name:'拍照快門'}).click();
+    if (game === 'stamp') await page.getByRole('button',{name:'啪！蓋章'}).click();
+    if (game === 'cash') await page.getByRole('button',{name:cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券'}).click();
+    const before = await counter.textContent();
+    const progress = game === 'photo' ? page.getByRole('button',{name:'拍照快門'}) : game === 'stamp' ? counter : page.locator('.ad-controls .ad-meta');
+    const progressBefore = await progress.textContent();
+    const canvas = page.locator('[data-game-stage] canvas');
+    await expect(canvas).toHaveCount(1);
+    await canvas.evaluate(el => { (el as HTMLCanvasElement & {testIdentity?:boolean}).testIdentity = true; });
+    await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
+    const dialog = page.getByRole('dialog',{name:'遊戲全螢幕'});
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('全視窗模式');
+    await expect(page.getByRole('button',{name:'退出全螢幕'})).toBeVisible();
+    expect(await dialog.evaluate(el => { const r=el.getBoundingClientRect(); return [Math.round(r.width),Math.round(r.height)]; })).toEqual([width,height]);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(counter).toHaveText(before!);
+    await expect(canvas).toHaveCount(1);
+    await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
+    await page.getByRole('button',{name:'退出全螢幕'}).click();
+    await expect(counter).toHaveText(before!);
+    await expect(canvas).toHaveCount(1);
+    expect(await canvas.evaluate(el => (el as HTMLCanvasElement & {testIdentity?:boolean}).testIdentity)).toBe(true);
+    await expect(progress).toHaveText(progressBefore!);
+    expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
+  });
+}
+
+test('native fullscreen enters on click and escape keeps the game mounted', async ({page}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({width:1440,height:900});
+  await openGame(page,'cash');
+  const counter=page.locator('.ad-counter'), before=await counter.textContent();
+  await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  await expect(page.getByRole('button',{name:'退出全螢幕'})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+  await expect(counter).toHaveText(before!);
+  await expect(page.locator('[data-game-stage] canvas')).toHaveCount(1);
+});
+
+test('rejected fullscreen request falls back and restores keyboard access', async ({page}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});
+    Element.prototype.requestFullscreen = async () => { throw new DOMException('denied','NotAllowedError'); };
+  });
+  await page.goto('/play?game=photo&seed=42');
+  const button=page.getByRole('button',{name:'⛶ 全螢幕'});
+  await button.click();
+  await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toContainText('瀏覽器工具列可能仍會顯示');
+  await page.getByRole('button',{name:'退出全螢幕'}).focus();
+  await page.keyboard.press('Escape');
+  await expect(button).toBeFocused();
+});
