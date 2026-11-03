@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {ProfilePublicationInput,ProfilePublicationSettingsSchema,defaultProfileLayout,type ProfileLayoutData,type ProfilePublicationSettingsData,type ProfileVisibilityValue} from '../../../../packages/shared/member-profile';
 import type {PortalClient} from '../api';
 import type {SessionPayload} from '../types';
-import {createProfileReader,profilePublicationPreview,profileMutationBlocksLeave} from './profile-publication-controller';
+import {createProfileReader,readProfileSettings,profileSettingsReadMessage,profilePublicationPreview,profileMutationBlocksLeave} from './profile-publication-controller';
 import {sharingMutationState} from './authoring-drafts';
 import {useModuleMutation} from './shared';
 import {ProfileText} from './VisitorProfile';
@@ -22,7 +22,7 @@ export function ProfilePublicationSettings(props:{client:PortalClient;session:Se
 function SettingsContent({client,session,registerLeave,onReturn,onView}:Parameters<typeof ProfilePublicationSettings>[0]){
  const generation=client.sessionGeneration,owner=session.user.user_id,scope=useRef({client,generation});scope.current={client,generation};
  const current=()=>scope.current.client===client&&scope.current.generation===generation&&client.sessionGeneration===generation;
- const reader=useMemo(()=>createProfileReader(async signal=>ProfilePublicationSettingsSchema.parse(await client.get('/me/profile-publication',{signal})),current),[client,generation]);
+ const reader=useMemo(()=>createProfileReader(signal=>readProfileSettings(client,signal),current),[client,generation]);
  const load=useSyncExternalStore(reader.subscribe,reader.getSnapshot,reader.getSnapshot);
  const [loadedFor,setLoadedFor]=useState<typeof reader|null>(null);
  const [draft,setDraft]=useState<Draft>(empty),[saved,setSaved]=useState<Settings|null>(null),[confirmed,setConfirmed]=useState(false),[notice,setNotice]=useState(''),[validation,setValidation]=useState('');
@@ -65,7 +65,7 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
  return <section className="profile-publication profile-publication-editor stack" aria-label="對外個人頁設定">
   <div className="section-head"><h2>對外個人頁</h2><button type="button" className="btn btn-secondary btn-small" disabled={locked} onClick={onReturn}>返回本人空間</button></div>
   <p className="hint">這裡只設定新的對外個人頁，不會隱藏舊會員目錄、分享名片或其他已發布內容。私人草稿、聯絡資料與訂單不會自動加入。</p><p className="hint">不影響你已公開的名片；名片另行管理。<a href="#account">前往資料與帳號設定，管理分享名片</a></p>
-  {load.status==='error'&&<div role="alert"><p>設定暫時無法讀取。</p><button className="btn btn-secondary btn-small" onClick={()=>void reader.refresh()}>重讀設定</button></div>}
+  {load.status==='error'&&<div role="alert"><p>{profileSettingsReadMessage(load.error)}</p><button className="btn btn-secondary btn-small" onClick={()=>void reader.refresh()}>重讀設定</button></div>}
   {(!saved||loadedFor!==reader)&&load.status!=='error'&&<p role="status">正在讀取設定…</p>}
   {saved&&loadedFor===reader&&current()&&<form ref={form} className="card stack profile-editor-form" onInvalidCapture={event=>{if(!(event.target instanceof HTMLElement))return;for(let element=event.target.parentElement;element;element=element.parentElement)if(element instanceof HTMLDetailsElement)element.open=true;}} onSubmit={event=>{event.preventDefault();void submit();}}>
    <p>目前已儲存範圍：<strong>{labels[saved.visibility]}</strong></p>

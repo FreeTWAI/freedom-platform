@@ -5,6 +5,24 @@ const settings={visibility:'private',display_name:'',bio:'',links:[],avatar_url:
 async function login(page:Page){
  await page.goto('/#profile');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.settings-menu-button')).toBeVisible();
 }
+for(const failure of [
+ {status:403,body:{type:'about:blank',title:'Denied',status:403,code:'onboarding_required',detail:'SECRET'},message:'請先選擇主要公會並完成加入，再設定個人頁。'},
+ {status:503,body:{type:'about:blank',title:'Failure',status:503,detail:'SECRET'},message:'服務暫時無法讀取設定，請稍後重試。'},
+ {status:200,body:{display_name:'PRIVATE',unexpected:'SECRET'},message:'收到的設定資料格式不符，請稍後重試。'},
+])test(`owner settings safely classifies ${failure.status} failure and retries`,async({page})=>{
+ let reads=0,writes=0;
+ await page.route('**/api/v1/me/profile-publication',route=>{
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  return ++reads===1?route.fulfill({status:failure.status,json:failure.body}):route.fulfill({json:settings});
+ });
+ await login(page);await page.goto('/#profile?view=settings');
+ await expect(page.getByRole('alert').filter({hasText:failure.message})).toBeVisible();
+ await expect(page.getByText('SECRET',{exact:false})).toHaveCount(0);
+ await expect(page.getByLabel('顯示名稱',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'重讀設定',exact:true}).click();
+ await expect(page.getByLabel('顯示名稱',{exact:true})).toBeVisible();
+ expect(reads).toBe(2);expect(writes).toBe(0);
+});
 test('guest profile is one public read, no authenticated profile/inventory or mutation; login cancel returns target',async({page})=>{
  const calls:string[]=[];page.on('request',request=>{if(request.url().includes('/api/v1/'))calls.push(request.method()+' '+new URL(request.url()).pathname);});
  await page.route(`**/api/v1/public/member-profiles/${target}`,route=>route.fulfill({json:profile}));

@@ -1,10 +1,41 @@
 import {defaultProfileLayout} from '../../packages/shared/member-profile.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createProfileReader,profilePublicationPreview,profileMutationBlocksLeave} from '../../apps/portal-web/src/modules/profile-publication-controller.js';
+import {createProfileReader,decodeProfileSettings,readProfileSettings,ProfileSettingsFormatError,profileSettingsReadMessage,profilePublicationPreview,profileMutationBlocksLeave} from '../../apps/portal-web/src/modules/profile-publication-controller.js';
+import {ApiError,PortalClient} from '../../apps/portal-web/src/api.js';
+import {subscribeGameConsole} from '../../apps/portal-web/src/game-console-core.js';
 import {parseProfileRoute,visitorProfileHash,canOpenGuestProfile,directoryVisitorProfileHref} from '../../apps/portal-web/src/modules/profile-publication-route.js';
 const id='10000000-0000-4000-8000-000000000001';
 const tick=()=>new Promise<void>(resolve=>queueMicrotask(resolve));
+test('settings read failures use closed categories without exposing payload or server details',()=>{
+ const classify=(status:number,extra:ConstructorParameters<typeof ApiError>[0]={message:'SECRET'})=>profileSettingsReadMessage(new ApiError({...extra,status}));
+ assert.match(classify(401),/登入/);
+ assert.match(classify(403,{message:'SECRET',code:'onboarding_required',definitiveResponse:true}),/主要公會/);
+ assert.doesNotMatch(classify(403,{message:'SECRET',code:'onboarding_required'}),/主要公會/);
+ assert.doesNotMatch(classify(403,{message:'SECRET',code:'other'}),/主要公會|SECRET/);
+ assert.match(classify(429),/頻繁/);assert.match(classify(500),/服務/);
+ assert.match(classify(0,{message:'SECRET',network:true}),/網路/);
+ assert.match(classify(200,{message:'SECRET',network:true}),/未完整/);
+ assert.equal(profileSettingsReadMessage(new Error('SECRET')),'設定暫時無法讀取。');
+ let failure:unknown;try{decodeProfileSettings({display_name:'PRIVATE',unexpected:'SECRET'});}catch(error){failure=error;}
+ assert(failure instanceof ProfileSettingsFormatError);assert.match(profileSettingsReadMessage(failure),/格式/);
+ assert.doesNotMatch(String(failure),/PRIVATE|SECRET/);
+ assert.equal(decodeProfileSettings({visibility:'private',display_name:'',bio:'',links:[],avatar_url:null,aggregate_version:null}).visibility,'private');
+});
+test('private settings read does not broadcast server error details or send telemetry',async()=>{
+ const events:unknown[]=[],calls:string[]=[];const unsubscribe=subscribeGameConsole(event=>events.push(event));const original=globalThis.fetch;
+ const windowDescriptor=Object.getOwnPropertyDescriptor(globalThis,'window');Object.defineProperty(globalThis,'window',{value:{},configurable:true});
+ try{
+  globalThis.fetch=async(url)=>{calls.push(String(url));return Response.json({type:'about:blank',title:'PRIVATE TITLE',status:403,code:'onboarding_required',detail:'PRIVATE DETAIL'},{status:403});};
+  const client=new PortalClient();client.csrfToken='synthetic-token';
+  // Positive control: this environment must detect the normal console and telemetry paths.
+  await assert.rejects(client.get('/me/profile-publication'));
+  assert.equal(events.length,1);assert.deepEqual(calls,['/api/v1/me/profile-publication','/api/v1/me/client-errors']);
+  events.length=0;calls.length=0;
+  await assert.rejects(readProfileSettings(client,new AbortController().signal),error=>error instanceof ApiError&&profileSettingsReadMessage(error).includes('主要公會'));
+  assert.deepEqual(events,[]);assert.deepEqual(calls,['/api/v1/me/profile-publication']);
+ }finally{globalThis.fetch=original;unsubscribe();if(windowDescriptor)Object.defineProperty(globalThis,'window',windowDescriptor);else Reflect.deleteProperty(globalThis,'window');}
+});
 test('profile routes reject malformed/duplicate/unknown parameters; OAuth is not a guest profile',()=>{
  assert.deepEqual(parseProfileRoute('#profile'),{kind:'workspace'});assert.deepEqual(parseProfileRoute('#profile?view=settings'),{kind:'settings'});
  assert.deepEqual(parseProfileRoute(visitorProfileHash(id)),{kind:'visitor',id});
