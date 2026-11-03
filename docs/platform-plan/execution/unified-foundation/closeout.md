@@ -1,5 +1,16 @@
 # Foundation Complete 收尾
 
+## 2026-11-03 兩環境已部署 schema197，正式站備份紀錄已對帳
+
+兩環境現為 `1cbd4066`／schema197。[staging 41646567554](https://github.com/FreeTWAI/freedom-platform/actions/runs/41646567554) 與[正式站 41661769908](https://github.com/FreeTWAI/freedom-platform/actions/runs/41661769908) 的 workflow 都成功，migration、部署、health 通過；正式站 journal 唯讀讀回 generation85 為該 run 的 handoff，pending=null。
+正式站部署前，floor 停在一筆 backup pending。11/01 自然備份 [41304390104](https://github.com/FreeTWAI/freedom-platform/actions/runs/41304390104) 在 capture 階段失敗，清理時失去 lease。接續的 [41645497475](https://github.com/FreeTWAI/freedom-platform/actions/runs/41645497475) 讀回後放棄舊項，自己的新備份又以同樣方式失敗。再接續的 [41647097780](https://github.com/FreeTWAI/freedom-platform/actions/runs/41647097780) 新備份已回報 passed，但在寫入 passed 紀錄前讀 chain 時失去 lease，沒有發出 PUT。
+該項同時持有 capture-policy 與 archive intent，hosted 復原都會拒絕；[探測部署 41649890891](https://github.com/FreeTWAI/freedom-platform/actions/runs/41649890891) 也在 preflight 以 `release_floor_unsettled` 停止，沒有寫入。
+14:58Z 先唯讀檢查一次。15:12:17–15:13:10Z，release owner 以本機維運工具重新持有 lease，核對原失敗 artifact、generation76 的 pending 與兩個 intent、R2 archive（9,154,560 bytes，sha256 與 intent 相同，control.json 相符）、ledger、政策摘要、capture revision、GC OFF、零 fence、capture 連線已結束、零其他維護 session、Worker／bindings 與公開 health。之後只透過既有 floor transition 追加缺少的 backup passed：generation76→77、pending=null，正常釋放。
+isolated restore 沒有重做，依據是原 run 寫入前已通過的結果。原 workflow 保留 failure；[具日期收據](rollout-shared-actions-2026-11-03.json)保留各次失敗與這次對帳。
+
+兩環境 config 只把 `migrationProfile.last` 從196改為197。正式站 14:02Z 先裝197，探測後改回196，以保留復原證據對 config 的綁定；對帳後 15:14Z 再裝197。Operator image 仍是 d026ba76 建置的 `d075c124`，到 controller `0d470404` 為止操作程式沒有變更。
+正式站備份失去 lease 的問題仍未修正（#1193 待審，且需新 image）；已有 archive intent 的 backup 也還沒有 hosted 對帳入口。current-state.json 停在 schema194，本次沒有更新。
+
 ## 2026-10-29 兩環境已部署 schema194，正式站收尾已對帳
 
 兩環境現為 `5c4bf56d`／schema194。[staging 40798095826](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798095826) 五階段、workflow 與 Deployment 全成功；[正式站 40798978135](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798978135) 的 migration、部署、health 通過，handoff 失去 lease，原 workflow／Deployment 保留 failure。
