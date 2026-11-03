@@ -7,7 +7,7 @@
     "staging-next": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0",
     "next": "0d470404841a7c630db7a023921675694b7d77eb"
   },
-  "scope": "Both environments serve 1cbd4066 with schema197. Staging passed on the hosted path. Production first needed a local release-owner reconciliation: backup run 41647097780 finished, but its passed journal record was lost with the lease, so the floor stayed pending. The owner verified live state and appended only that missing record; the following hosted deploy passed every phase. Member journeys and feature activation for this source are not established here.",
+  "scope": "Both environments served 1cbd4066 with schema197, then 0d470404 (same schema) after the follow-on rollout. Staging passed on the hosted path. Production first needed a local release-owner reconciliation: backup run 41647097780 finished, but its passed journal record was lost with the lease, so the floor stayed pending. The owner verified live state and appended only that missing record; the following hosted deploy passed every phase. Member journeys and feature activation for this source are not established here.",
   "schema": {
     "from": 196,
     "to": 197,
@@ -395,5 +395,123 @@
     "No hosted path settles a backup whose passed append was lost after an archive intent.",
     "The next natural production backup is the first one after this reconciliation.",
     "current-state.json has not been updated since schema194 (10-28); this record does not change it."
-  ]
+  ],
+  "follow_on_rollout": {
+    "source": "0d470404841a7c630db7a023921675694b7d77eb",
+    "previous_live_source": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0",
+    "change": "#1199 only; no migration, configs unchanged",
+    "release_source_ci": [
+      {
+        "workflow": ".github/workflows/verify.yml",
+        "runId": 41654889920,
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41654889920/attempts/1"
+      },
+      {
+        "workflow": ".github/workflows/codeql.yml",
+        "runId": 41654889809,
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41654889809/attempts/1"
+      }
+    ],
+    "deployments": [
+      {
+        "run": 41665777019,
+        "event": "workflow_dispatch",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41665777019",
+        "artifactId": 13245522641,
+        "artifactDigest": "sha256:9b0e9c7837e87076e37b371fc3ccbe3eba4fa942221124c7159727eadc4daa99",
+        "name": "release-result-41665777019-1",
+        "target": "staging-next",
+        "status": "passed",
+        "error": null,
+        "configSha256": "4816eacdea3fd4e89288036553e84361625f7d82025ee7c7163bc56082d99639",
+        "controllerSha": "0d470404841a7c630db7a023921675694b7d77eb",
+        "startedAt": "2026-11-03T15:38:19.560Z",
+        "completedAt": "2026-11-03T15:44:16.060Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "migration",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "deploy",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "health",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "handoff",
+            "reportedStatus": "running"
+          }
+        ]
+      },
+      {
+        "run": 41667146142,
+        "event": "workflow_dispatch",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41667146142",
+        "artifactId": 13246438559,
+        "artifactDigest": "sha256:8212b24aa96b36b8d2694969360c6b7926d197de5e2ffdae3a0c7a778b163be7",
+        "name": "release-result-41667146142-1",
+        "target": "next",
+        "status": "passed",
+        "error": null,
+        "configSha256": "6b7a8c78b032ef71c70f29fdf3307ab6e36afc25daa764bcdeffdebf8596f3e8",
+        "controllerSha": "0d470404841a7c630db7a023921675694b7d77eb",
+        "startedAt": "2026-11-03T15:46:34.100Z",
+        "completedAt": "2026-11-03T15:51:49.254Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "migration",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "deploy",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "health",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "handoff",
+            "reportedStatus": "running"
+          }
+        ],
+        "floorReadback": {
+          "observedBetween": [
+            "2026-11-03T15:53:11Z",
+            "2026-11-03T15:53:53Z"
+          ],
+          "generation": 91,
+          "pending": null,
+          "sourceSha": "0d470404841a7c630db7a023921675694b7d77eb",
+          "deployedSourceSha": "0d470404841a7c630db7a023921675694b7d77eb",
+          "schemaVersion": 197,
+          "lastEvent": {
+            "kind": "passed",
+            "stage": "handoff",
+            "runId": 41667146142
+          },
+          "readOnly": true
+        }
+      }
+    ],
+    "production_health": {
+      "observedAt": "2026-11-03T15:53:11Z",
+      "http": 200,
+      "status": "ok",
+      "release_sha": "0d470404841a7c630db7a023921675694b7d77eb"
+    }
+  }
 }

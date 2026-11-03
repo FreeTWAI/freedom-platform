@@ -2,7 +2,8 @@
 
 ## 2026-11-03 兩環境已部署 schema197，正式站備份紀錄已對帳
 
-兩環境現為 `1cbd4066`／schema197。[staging 41646567554](https://github.com/FreeTWAI/freedom-platform/actions/runs/41646567554) 與[正式站 41661769908](https://github.com/FreeTWAI/freedom-platform/actions/runs/41661769908) 的 workflow 都成功，migration、部署、health 通過；正式站 journal 唯讀讀回 generation85 為該 run 的 handoff，pending=null。
+兩環境現為 `0d470404`／schema197。schema197 先以 `1cbd4066` 發布：[staging 41646567554](https://github.com/FreeTWAI/freedom-platform/actions/runs/41646567554) 與[正式站 41661769908](https://github.com/FreeTWAI/freedom-platform/actions/runs/41661769908) 的 workflow 都成功，migration、部署、health 通過；正式站 journal 唯讀讀回 generation85 為該 run 的 handoff，pending=null。
+接著同流程部署只含 #1199、沒有 migration 的 `0d470404`：[staging 41665777019](https://github.com/FreeTWAI/freedom-platform/actions/runs/41665777019)、[正式站 41667146142](https://github.com/FreeTWAI/freedom-platform/actions/runs/41667146142) 都成功，正式站讀回 generation91 為 handoff、pending=null，config 不變。
 正式站部署前，floor 停在一筆 backup pending。11/01 自然備份 [41304390104](https://github.com/FreeTWAI/freedom-platform/actions/runs/41304390104) 在 capture 階段失敗，清理時失去 lease。接續的 [41645497475](https://github.com/FreeTWAI/freedom-platform/actions/runs/41645497475) 讀回後放棄舊項，自己的新備份又以同樣方式失敗。再接續的 [41647097780](https://github.com/FreeTWAI/freedom-platform/actions/runs/41647097780) 新備份已回報 passed，但在寫入 passed 紀錄前讀 chain 時失去 lease，沒有發出 PUT。
 該項同時持有 capture-policy 與 archive intent，hosted 復原都會拒絕；[探測部署 41649890891](https://github.com/FreeTWAI/freedom-platform/actions/runs/41649890891) 也在 preflight 以 `release_floor_unsettled` 停止，沒有寫入。
 14:58Z 先唯讀檢查一次。15:12:17–15:13:10Z，release owner 以本機維運工具重新持有 lease，核對原失敗 artifact、generation76 的 pending 與兩個 intent、R2 archive（9,154,560 bytes，sha256 與 intent 相同，control.json 相符）、ledger、政策摘要、capture revision、GC OFF、零 fence、capture 連線已結束、零其他維護 session、Worker／bindings 與公開 health。之後只透過既有 floor transition 追加缺少的 backup passed：generation76→77、pending=null，正常釋放。
