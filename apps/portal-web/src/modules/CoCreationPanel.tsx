@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useModuleMutation, type ModulePanelProps } from './shared';
 import { Status } from './Membership';
-import { ModuleBanner } from './ModuleBanner';
 import { categoriesForLabels, taskCategories, type TaskCategory } from '../../../../packages/shared/task-categories';
 import { logConsoleEvent } from '../game-console-core';
 import { consoleChannel } from '../game-console-routing';
@@ -47,7 +46,20 @@ function GitHubLink({ href, children, primary = false }: { href: string; childre
   } catch { return null; }
   return <a className={primary ? 'btn btn-primary' : 'btn btn-ghost'} href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{children} ↗</a>;
 }
-export function CoCreationPanel({ client, session, onNavigate }: ModulePanelProps) {
+type InvitationCommand=Readonly<{source_project_id:string;title:string;goal:string;help_wanted:readonly string[];guild_keys:readonly string[];contribution_notes:string}>;
+function invitationCommand(data:FormData,helpWanted:string[],guildKeys:string[]):InvitationCommand{
+  return Object.freeze({source_project_id:String(data.get('source_project_id')??''),title:String(data.get('title')??''),goal:String(data.get('goal')??''),help_wanted:Object.freeze([...helpWanted]),guild_keys:Object.freeze([...guildKeys]),contribution_notes:String(data.get('contribution_notes')??'')});
+}
+function confirmedInvitation(value:unknown,command:InvitationCommand):Project{
+  const project=value as Partial<Project>|null;
+  const version=project?.aggregate_version;
+  if((typeof version!=='number'&&(typeof version!=='string'||!/^\d+$/.test(version)))||!project||typeof project.project_id!=='string'||!project.project_id||typeof project.title!=='string'||project.source_project_id!==command.source_project_id||!Number.isSafeInteger(Number(project.aggregate_version))||Number(project.aggregate_version)<1)throw new Error('發布結果尚未確認。');
+  return project as Project;
+}
+export function CoCreationPanel(props:ModulePanelProps){
+  return <CoCreationContent key={`${props.session.user.user_id}:${props.client.sessionGeneration}`} {...props}/>;
+}
+function CoCreationContent({ client, session, onNavigate }: ModulePanelProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [guildFilter, setGuildFilter] = useState('');
@@ -61,6 +73,8 @@ export function CoCreationPanel({ client, session, onNavigate }: ModulePanelProp
   const [activityError, setActivityError] = useState('');
   const [notice, setNotice] = useAuthoringDraft(session.user.user_id, 'cooperation:notice', '');
   const [showCreate, setShowCreate] = useAuthoringDraft(session.user.user_id, 'cooperation:open', false);
+  const [detailOpen,setDetailOpen]=useAuthoringDraft(session.user.user_id,'cooperation:detail-open',false);
+  const [pendingCommand,setPendingCommand]=useAuthoringDraft<InvitationCommand|null>(session.user.user_id,'cooperation:pending',null);
   const [selectedRoles, setSelectedRoles] = useAuthoringDraft<string[]>(session.user.user_id, 'cooperation:roles', []);
   const [invitation, setInvitation, current] = useAuthoringDraft(session.user.user_id, 'cooperation:input', { source_project_id: '', title: '', goal: '', contribution_notes: '' });
   const [publishedInvitation, setPublishedInvitation] = useAuthoringDraft<Project|null>(session.user.user_id, 'cooperation:published', null);
@@ -71,16 +85,51 @@ export function CoCreationPanel({ client, session, onNavigate }: ModulePanelProp
   const catalogRequest = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({ ...emptyTaskFilters });
-  const { mutate, busy, error } = useModuleMutation(client, { userId: session.user.user_id, type: 'cooperation' });
+  const createTrigger=useRef<HTMLButtonElement>(null),listHeading=useRef<HTMLHeadingElement>(null),detailHeading=useRef<HTMLHeadingElement>(null),createHeading=useRef<HTMLHeadingElement>(null);
+  const projectTrigger=useRef<HTMLButtonElement|null>(null),publishing=useRef(false);
+  const focusRequest=useRef<{view:'detail'|'create'|'list'|'return';from:Element|null}|null>(null);
+  const { mutate, busy, error, lastFailureUnknown } = useModuleMutation(client, { userId: session.user.user_id, type: 'cooperation' });
+  const writesLocked=busy||lastFailureUnknown;
   const selected = projects.find(project => project.project_id === selectedId) ?? null;
   const matchesGuild = (project: Project, filter: string) => !filter || (filter === 'unclassified' ? project.guild_keys.length === 0 : project.guild_keys.includes(filter));
   const visibleProjects = projects.filter(project => matchesGuild(project, guildFilter));
   const guildName = (key: string) => guilds.find(guild => guild.guild_key === key)?.name ?? key;
+  function requestFocus(view:'detail'|'create'|'list'|'return'){
+    focusRequest.current={view,from:document.activeElement};
+  }
+  function openProject(id:string,trigger:HTMLButtonElement){
+    if(busy||publishing.current||!current())return;
+    projectTrigger.current=trigger;requestFocus('detail');chooseProject(id);setDetailOpen(true);
+  }
+  function backToProjects(){
+    if(busy||publishing.current||!current())return;
+    requestSequence.current+=1;requestFocus('list');setDetailOpen(false);
+  }
+  function openInvitation(){
+    if(busy||publishing.current||!current())return;
+    requestSequence.current+=1;requestFocus('create');setShowCreate(true);
+  }
+  function closeInvitation(){
+    if(busy||publishing.current||!current())return;
+    requestFocus('return');setShowCreate(false);
+  }
+  useEffect(()=>{
+    const request=focusRequest.current;if(!request)return;
+    const target=request.view==='create'?createHeading.current:request.view==='return'?createTrigger.current:request.view==='detail'?detailHeading.current:projectTrigger.current?.isConnected?projectTrigger.current:listHeading.current;
+    if(!target||target.closest('[hidden]'))return;
+    focusRequest.current=null;
+    const frame=requestAnimationFrame(()=>{
+      const active=document.activeElement;
+      if(current()&&target.isConnected&&!target.closest('[hidden],[inert]')&&(active===request.from||active===document.body||active?.id==='main-content'))target.focus();
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[detailOpen,showCreate,selectedId,loading]);
   function chooseProject(id: string | null) {
     requestSequence.current += 1;
     setSelectedId(id); setActivity(null); setBrief(null); setBriefLoading(null); setBriefError(''); setNotice(''); setActivityError('');
   }
   function chooseGuild(filter: string) {
+    if(!current())return;
     setGuildFilter(filter);
     const matching = projects.filter(project => matchesGuild(project, filter));
     if (!matching.some(project => project.project_id === selectedId)) chooseProject(matching[0]?.project_id ?? null);
@@ -88,6 +137,7 @@ export function CoCreationPanel({ client, session, onNavigate }: ModulePanelProp
   const filterKey = `freedom-task-filters:${session.user.user_id}:${selectedId ?? ''}`;
   useEffect(() => { setTaskFilters(readTaskFilters(filterKey)); }, [filterKey]);
   function updateTaskFilters(value: TaskFilters) {
+    if(!current())return;
     setTaskFilters(value);
     try { sessionStorage.setItem(filterKey, JSON.stringify(value)); } catch { /* Storage is optional. */ }
   }
@@ -113,7 +163,7 @@ export function CoCreationPanel({ client, session, onNavigate }: ModulePanelProp
       setProjects(catalog.items); setGuilds(catalog.guilds);
       setSources(ownSources.items.filter(source => source.owner_ref === session.user.user_id));
       const matching = catalog.items.filter(project => matchesGuild(project, guildFilter));
-      setSelectedId(selected => matching.some(project => project.project_id === selected) ? selected : matching[0]?.project_id ?? null);
+      setSelectedId(selected => detailOpen ? selected : matching.some(project => project.project_id === selected) ? selected : matching[0]?.project_id ?? null);
     } catch (cause) { if(sequence===catalogRequest.current&&current())setLoadError(message(cause)); }
     finally { if(sequence===catalogRequest.current&&current())setLoading(false); }
   }
@@ -122,65 +172,73 @@ export function CoCreationPanel({ client, session, onNavigate }: ModulePanelProp
     setActivityLoading(true); setActivityError(''); setActivity(null); setBrief(null); setBriefLoading(null); setBriefError('');
     try {
       const value = await client.get<Activity>(`/co-creation/projects/${encodeURIComponent(projectId)}/activity`);
-      if (sequence === requestSequence.current) setActivity(value);
-    } catch (cause) { if (sequence === requestSequence.current) setActivityError(message(cause)); }
-    finally { if (sequence === requestSequence.current) setActivityLoading(false); }
+      if (sequence === requestSequence.current && current()) setActivity(value);
+    } catch (cause) { if (sequence === requestSequence.current && current()) setActivityError(message(cause)); }
+    finally { if (sequence === requestSequence.current && current()) setActivityLoading(false); }
   }
   useEffect(() => { void loadProjects(); return()=>{catalogRequest.current++;}; }, [client, session.user.user_id, publishedInvitation?.project_id]);
   useEffect(() => {
-    if (selectedId) void loadActivity(selectedId);
+    if (selected && detailOpen && !showCreate && !loading && !loadError) void loadActivity(selected.project_id);
+    else if (!selected && !loading) { setActivity(null); setBrief(null); setBriefError(''); }
     return () => { requestSequence.current += 1; };
-  }, [selectedId]);
+  }, [selectedId,selected?.project_id,detailOpen,showCreate,loading,loadError]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setNotice('');
-    if (busy || !current()) return;
-    const form = event.currentTarget, data = new FormData(form);
-    const result = await mutate<Project>('/co-creation/projects', {
-      source_project_id: data.get('source_project_id'), title: data.get('title'), goal: data.get('goal'),
-      help_wanted: selectedRoles, guild_keys: selectedGuilds, contribution_notes: data.get('contribution_notes'),
-    });
-    if (result && current()) {
-      logConsoleEvent({id:`project:${result.project_id}`,createdAt:result.created_at,channel:consoleChannel('project_published'),level:'success',kind:'broadcast',source:'共創任務',message:`共創任務「${result.title}」已發布。`});
-      form.reset(); setInvitation({ source_project_id: '', title: '', goal: '', contribution_notes: '' }); setSelectedRoles([]); setSelectedGuilds([]); setShowCreate(false); setGuildFilter('');
-      setNotice(`共創邀請「${result.title}」已發布。到專案的 GitHub 建立具體任務，就能邀請夥伴一起參與。`);
-      setPublishedInvitation(result);
-      setSelectedId(result.project_id);
-    }
+    event.preventDefault();
+    if(writesLocked||publishing.current||!current())return;
+    await publishInvitation(invitationCommand(new FormData(event.currentTarget),selectedRoles,selectedGuilds));
+  }
+  async function publishInvitation(command:InvitationCommand,retry=false){
+    if(busy||publishing.current||!current()||(lastFailureUnknown&&!retry))return;
+    if(retry&&pendingCommand!==command)return;
+    publishing.current=true;setPendingCommand(command);setNotice('');
+    try{
+      const result=await mutate<Project>('/co-creation/projects',command,undefined,value=>confirmedInvitation(value,command));
+      if(result&&current()){
+        logConsoleEvent({id:`project:${result.project_id}`,createdAt:result.created_at,channel:consoleChannel('project_published'),level:'success',kind:'broadcast',source:'共創任務',message:`共創任務「${result.title}」已發布。`});
+        setPendingCommand(null);setInvitation({source_project_id:'',title:'',goal:'',contribution_notes:''});setSelectedRoles([]);setSelectedGuilds([]);setShowCreate(false);setGuildFilter('');
+        setNotice(`共創邀請「${result.title}」已發布。到專案的 GitHub 建立具體任務，就能邀請夥伴一起參與。`);
+        requestFocus('detail');setDetailOpen(true);setPublishedInvitation(result);setSelectedId(result.project_id);
+      }
+    }finally{publishing.current=false;}
   }
   async function copyBrief(issue?: Issue) {
-    if (!selected || briefLoading !== null) return;
+    if (!current() || !selected || briefLoading !== null) return;
     setBriefLoading(issue ? String(issue.number) : 'project'); setNotice(''); setBriefError('');
     const projectId = selected.project_id, sequence = requestSequence.current;
     try {
       const path = `/co-creation/projects/${encodeURIComponent(projectId)}` + (issue ? `/issues/${issue.number}/brief` : '/brief');
       const value = await client.get<{ text: string }>(path);
-      if (sequence !== requestSequence.current) return;
+      if (sequence !== requestSequence.current || !current()) return;
       logConsoleEvent({channel:consoleChannel('ai_prompt'),level:'success',kind:'prompt',source:'AI 指令',message:issue?`已準備議題 #${issue.number} 的 AI 工作說明。`:`已準備「${selected.title}」的專案開發提示詞。`,detail:value.text});
       setBrief({ project_id: projectId, number: issue?.number ?? null, title: issue?.title ?? selected.title, text: value.text });
-      try { await navigator.clipboard.writeText(value.text); if (sequence === requestSequence.current) setNotice(issue ? '工作說明已複製，可以交給你的協作夥伴或 AI 助手。' : '專案開發指令已複製，貼給你的 Agent 就能開始了解任務。'); }
-      catch { if (sequence === requestSequence.current) setNotice('指令已準備好。瀏覽器未允許複製，請從下方自行選取複製。'); }
-    } catch (cause) { if (sequence === requestSequence.current) setBriefError(message(cause)); }
-    finally { if (sequence === requestSequence.current) setBriefLoading(null); }
+      try { await navigator.clipboard.writeText(value.text); if (sequence === requestSequence.current && current()) setNotice(issue ? '工作說明已複製，可以交給你的協作夥伴或 AI 助手。' : '專案開發指令已複製，貼給你的 Agent 就能開始了解任務。'); }
+      catch { if (sequence === requestSequence.current && current()) setNotice('指令已準備好。瀏覽器未允許複製，請從下方自行選取複製。'); }
+    } catch (cause) { if (sequence === requestSequence.current && current()) setBriefError(message(cause)); }
+    finally { if (sequence === requestSequence.current && current()) setBriefLoading(null); }
   }
 
   return <section className="module-panel cocreation-panel" aria-labelledby="cocreation-heading" inert={busy} aria-busy={busy}>
-    <ModuleBanner eyebrow="BUILD TOGETHER" title="共創任務" headingId="cocreation-heading" description="到 GitHub 任務留言認領；完成程式、測試、設計或文件後提交 PR，交由維護者審查。" art="/art/rpg/cooperation-forge.webp"><div className="actions"><button className="btn btn-primary" data-share-entry="cocreation" onClick={() => setShowCreate(!showCreate)}>{showCreate ? '收起邀請表' : '發起共創邀請'}</button><button className="btn btn-ghost" onClick={() => onNavigate?.('opensource')}>登錄作品</button></div></ModuleBanner>
+    <header className="cocreation-heading"><div><h2 id="cocreation-heading">一起開發</h2><p className="cocreation-purpose">{showCreate?'邀請夥伴一起改進作品':detailOpen?'查看任務，找到能幫上忙的地方':'挑一個想參與的專案'}</p><p>到 GitHub 任務留言認領；完成程式、測試、設計或文件後提交 PR，交由維護者審查。</p></div><button ref={createTrigger} hidden={showCreate} type="button" className="btn btn-secondary btn-small" data-share-entry="cocreation" onClick={openInvitation}>發起共創邀請</button></header>
     <Status error={loadError || error} notice={notice}/>
-    {showCreate && <form className="card stack" onSubmit={create}><h3>發起共創邀請</h3>{sources.length ? <><label className="field">選擇你已登錄的作品<select name="source_project_id" required value={invitation.source_project_id || sources[0]?.project_id || ''} onChange={event => setInvitation({ ...invitation, source_project_id: event.target.value })}>{sources.map(source => <option key={source.project_id} value={source.project_id}>{source.title} · {source.repository_full_name}</option>)}</select></label><label className="field">共創邀請名稱<input name="title" required maxLength={120} placeholder="例如：一起完善影片自動剪輯工具" value={invitation.title} onChange={event => setInvitation({ ...invitation, title: event.target.value })}/></label><label className="field">這一輪想完成什麼<textarea name="goal" required maxLength={2000} placeholder="說明具體成果，以及誰會因此受益。" value={invitation.goal} onChange={event => setInvitation({ ...invitation, goal: event.target.value })}/></label><fieldset className="fieldset"><legend>專案公會分類（可跨公會，最多 5 個）</legend><div className="selection-chips">{guilds.map(guild => <label className="selection-chip" key={guild.guild_key}><input type="checkbox" checked={selectedGuilds.includes(guild.guild_key)} disabled={selectedGuilds.length >= 5 && !selectedGuilds.includes(guild.guild_key)} onChange={() => setSelectedGuilds(current => current.includes(guild.guild_key) ? current.filter(key => key !== guild.guild_key) : [...current, guild.guild_key])}/>{guild.name}</label>)}</div></fieldset><fieldset className="fieldset"><legend>希望哪些夥伴加入？（可複選）</legend><div className="selection-chips">{roles.map(([key, label]) => <label className="selection-chip" key={key}><input type="checkbox" checked={selectedRoles.includes(key)} onChange={() => setSelectedRoles(current => current.includes(key) ? current.filter(value => value !== key) : [...current, key])}/>{label}</label>)}</div></fieldset><label className="field">參與方式與注意事項<textarea name="contribution_notes" required maxLength={3000} placeholder="先讀哪些說明？任務如何協調？修改由誰審查？" value={invitation.contribution_notes} onChange={event => setInvitation({ ...invitation, contribution_notes: event.target.value })}/></label><p className="field-hint">發起邀請代表你願意協調參與，不會取得別人的 GitHub 管理權。若有費用或報酬，請由當事人另外確認。</p><button className="btn btn-primary" disabled={busy || selectedRoles.length === 0}>{busy ? '發布中…' : '發布共創邀請'}</button></> : <><p>先登錄一件作品，再邀請其他夥伴一起發展。</p><button className="btn btn-primary" type="button" onClick={() => onNavigate?.('opensource')}>登錄我的作品</button></>}</form>}
-    {loading && <p role="status">正在尋找可以一起做的作品…</p>}
+    {lastFailureUnknown&&pendingCommand&&<div className="banner" role="alert"><p>「{pendingCommand.title}」的發布結果還沒確認。你的原始內容已保留；先確認這次操作，不會重複建立邀請。</p><button type="button" className="btn btn-secondary btn-small" onClick={()=>void publishInvitation(pendingCommand,true)}>確認發布結果</button></div>}
+    <div hidden={!showCreate} className="cocreation-create"><form className="card stack" onSubmit={create}><div className="card-head"><h3 ref={createHeading} tabIndex={-1}>發起共創邀請</h3><button type="button" className="btn btn-ghost btn-small" onClick={closeInvitation}>取消並返回</button></div><p className="field-hint">送出前不是公開邀請。收起表單會保留目前登入期間的輸入；重新整理或登出會清除。</p>{loading?<p role="status">正在讀取你可用的作品…</p>:!loadError&&sources.length ? <fieldset className="cocreation-form-fields stack" disabled={writesLocked}><label className="field">選擇你已登錄的作品<select name="source_project_id" required value={invitation.source_project_id || sources[0]?.project_id || ''} onChange={event => setInvitation({ ...invitation, source_project_id: event.target.value })}>{sources.map(source => <option key={source.project_id} value={source.project_id}>{source.title} · {source.repository_full_name}</option>)}</select></label><label className="field">共創邀請名稱<input name="title" required maxLength={120} placeholder="例如：一起完善影片自動剪輯工具" value={invitation.title} onChange={event => setInvitation({ ...invitation, title: event.target.value })}/></label><label className="field">這一輪想完成什麼<textarea name="goal" required maxLength={2000} placeholder="說明具體成果，以及誰會因此受益。" value={invitation.goal} onChange={event => setInvitation({ ...invitation, goal: event.target.value })}/></label><fieldset className="fieldset"><legend>專案公會分類（可跨公會，最多 5 個）</legend><div className="selection-chips">{guilds.map(guild => <label className="selection-chip" key={guild.guild_key}><input type="checkbox" checked={selectedGuilds.includes(guild.guild_key)} disabled={selectedGuilds.length >= 5 && !selectedGuilds.includes(guild.guild_key)} onChange={() => setSelectedGuilds(current => current.includes(guild.guild_key) ? current.filter(key => key !== guild.guild_key) : [...current, guild.guild_key])}/>{guild.name}</label>)}</div></fieldset><fieldset className="fieldset"><legend>希望哪些夥伴加入？（可複選）</legend><div className="selection-chips">{roles.map(([key, label]) => <label className="selection-chip" key={key}><input type="checkbox" checked={selectedRoles.includes(key)} onChange={() => setSelectedRoles(current => current.includes(key) ? current.filter(value => value !== key) : [...current, key])}/>{label}</label>)}</div></fieldset><label className="field">參與方式與注意事項<textarea name="contribution_notes" required maxLength={3000} placeholder="先讀哪些說明？任務如何協調？修改由誰審查？" value={invitation.contribution_notes} onChange={event => setInvitation({ ...invitation, contribution_notes: event.target.value })}/></label><p className="field-hint">發起邀請代表你願意協調參與，不會取得別人的 GitHub 管理權。若有費用或報酬，請由當事人另外確認。</p><button className="btn btn-primary" disabled={busy || selectedRoles.length === 0}>{busy ? '發布中…' : '發布共創邀請'}</button></fieldset> : !loadError?<><p>先登錄一件作品，再邀請其他夥伴一起發展。</p><button className="btn btn-primary" type="button" onClick={() => onNavigate?.('opensource')}>登錄我的作品</button></>:null}</form></div>
+    {loading && !showCreate && <p role="status">正在尋找可以一起做的作品…</p>}
     {loadError && <button className="btn btn-ghost" onClick={() => void loadProjects()}>重新載入共創邀請</button>}
-    {!loading && !loadError && projects.length === 0 && <div className="card expedition-empty"><h3>目前沒有共創邀請</h3></div>}
-    {!loading && !loadError && projects.length > 0 && <section className="discovery-toolbar cocreation-project-picker" aria-label="選擇共創專案">
-      <label className="field">公會分類<select value={guildFilter} onChange={event => chooseGuild(event.target.value)}><option value="">全部公會 · {projects.length} 個專案</option>{guilds.map(guild => <option key={guild.guild_key} value={guild.guild_key}>{guild.name} · {projects.filter(project => project.guild_keys.includes(guild.guild_key)).length}</option>)}<option value="unclassified">尚未分類 · {projects.filter(project => !project.guild_keys.length).length}</option></select></label>
-      <label className="field discovery-search">選擇專案<select data-guide-anchor="cocreation:project" value={selectedId ?? ''} disabled={!visibleProjects.length} onChange={event => chooseProject(event.target.value)}>{!visibleProjects.length && <option value="">此分類尚無共創專案</option>}{visibleProjects.map(project => <option key={project.project_id} value={project.project_id}>{project.repository_full_name} · {project.coordinator_name}</option>)}</select></label>
-    </section>}
-    {!loading && !loadError && projects.length > 0 && !visibleProjects.length && <div className="discovery-empty"><h3>這個公會還沒有共創邀請</h3><button className="btn btn-ghost" onClick={() => chooseGuild('')}>查看全部公會專案</button></div>}
-    {selected && <section className="stack" aria-labelledby="cocreation-project-title"><div className="card stack expedition-project-detail">
+    <section hidden={detailOpen||showCreate} className="cocreation-browser" aria-labelledby="cocreation-list-heading">
+      <h3 id="cocreation-list-heading" ref={listHeading} tabIndex={-1}>可以一起參與的專案</h3>
+      {!loading&&!loadError&&projects.length===0&&<div className="discovery-empty"><h3>目前沒有共創邀請</h3><p>你可以先登錄自己的作品，再從「發起共創邀請」找夥伴。</p></div>}
+      {!loading&&!loadError&&projects.length>0&&<><div className="discovery-toolbar cocreation-project-picker"><label className="field">公會分類<select value={guildFilter} onChange={event=>chooseGuild(event.target.value)}><option value="">全部公會 · {projects.length} 個專案</option>{guilds.map(guild=><option key={guild.guild_key} value={guild.guild_key}>{guild.name} · {projects.filter(project=>project.guild_keys.includes(guild.guild_key)).length}</option>)}<option value="unclassified">尚未分類 · {projects.filter(project=>!project.guild_keys.length).length}</option></select></label><p className="field-hint">先看專案目標，再查看目前可參與的 GitHub 任務。</p></div>
+      {!visibleProjects.length?<div className="discovery-empty"><h3>這個公會還沒有共創邀請</h3><button className="btn btn-ghost" onClick={()=>chooseGuild('')}>查看全部公會專案</button></div>:<div className="cocreation-project-list">{visibleProjects.map(project=><article className="card cocreation-project-row" key={project.project_id}><div><h3>{project.title}</h3><p>{project.goal}</p><p className="field-hint">{project.repository_full_name} · 邀請發起：{project.coordinator_name}</p><div className="tag-list" aria-label="需要的協助">{project.help_wanted.map(role=><span className="pill" key={role}>{roleLabel(role)}</span>)}</div></div><button type="button" className="btn btn-primary btn-small" data-guide-anchor="cocreation:project" aria-label={`查看任務：${project.title}`} onClick={event=>openProject(project.project_id,event.currentTarget)}>查看任務</button></article>)}</div>}</>}
+    </section>
+    <div hidden={!detailOpen||showCreate} className="actions"><button type="button" className="btn btn-ghost btn-small" onClick={backToProjects}>返回共創專案</button></div>
+    {detailOpen&&!showCreate&&!loading&&!loadError&&!selected&&<p role="status">這個專案目前不在可見清單中。請返回專案列表，選擇其他可以參與的作品。</p>}
+    {selected && <section hidden={!detailOpen||showCreate||loading||Boolean(loadError)} className="stack cocreation-detail" aria-labelledby="cocreation-project-title"><div className="card stack expedition-project-detail">
       <div className="tag-list">{selected.guild_keys.length ? selected.guild_keys.map(key => <span className="pill" key={key}>{guildName(key)}</span>) : <span className="pill">尚未分類</span>}</div>
-      <h3 id="cocreation-project-title">{selected.title}</h3><p className="multiline-text">{selected.goal}</p>
-      <p className="field-hint">把開發指令貼給你的 Agent，先讀專案、挑任務，再依完成條件修改與測試。</p>
-      <div className="actions"><button className="btn btn-primary" disabled={briefLoading !== null} onClick={() => void copyBrief()}>{briefLoading === 'project' ? '準備開發指令…' : '複製專案開發指令'}</button><GitHubLink href={selected.upstream_url || selected.repository_url}>{selected.upstream_url ? '開啟原作' : '查看專案'}</GitHubLink><button className="btn btn-ghost" disabled={activityLoading} onClick={() => void loadActivity(selected.project_id)}>更新任務與成果</button></div>
+      <h3 id="cocreation-project-title" ref={detailHeading} tabIndex={-1}>{selected.title}</h3><p className="multiline-text">{selected.goal}</p>
+      <div className="actions"><GitHubLink href={`${selected.repository_url}/issues`} primary>到 GitHub 查看任務</GitHubLink><button className="btn btn-ghost btn-small" disabled={activityLoading} onClick={()=>void loadActivity(selected.project_id)}>更新任務與成果</button></div>
+      <p className="field-hint">查看或複製說明不會替你認領。要參與時，請到 GitHub 任務頁留言協調範圍。</p>
+      <details className="module-optional"><summary>用 AI 協助開發（選用）</summary><div className="actions"><button className="btn btn-secondary btn-small" disabled={briefLoading!==null} onClick={()=>void copyBrief()}>{briefLoading==='project'?'準備開發指令…':'複製專案開發指令'}</button><GitHubLink href={selected.upstream_url||selected.repository_url}>{selected.upstream_url?'開啟原作':'查看專案'}</GitHubLink></div><p className="field-hint">把指令交給自己的 AI，先了解專案與任務；不會自動取得 repo 權限或提交修改。</p></details>
       <p className="field-hint">{selected.upstream_url ? `原作：${selected.upstream_url.replace('https://github.com/', '')} · ` : ''}邀請發起：{selected.coordinator_name}</p>
       <details className="module-optional"><summary>參與方式與協作分工</summary><div className="stack"><div className="tag-list">{selected.help_wanted.map(role => <span className="pill" key={role}>{roleLabel(role)}</span>)}</div><p className="cocreation-copy">{selected.contribution_notes}</p><p className="field-hint">通用改善優先回饋原作；工坊專用整合依任務範圍提交。修改由 repo 維護者審查，邀請發起人不一定有合併權限。</p><div className="actions">{selected.upstream_url && <GitHubLink href={selected.repository_url}>查看工坊整合版本</GitHubLink>}<GitHubLink href={`${selected.repository_url}/issues/new`}>提出新任務</GitHubLink></div></div></details>
     </div>
@@ -193,8 +251,8 @@ export function CoCreationPanel({ client, session, onNavigate }: ModulePanelProp
       <p className="field-hint cocreation-task-source">GitHub 開放中的 Issues · {selected.repository_full_name}。類型依標籤分類；未指派不代表沒有人正在協調。</p>
       <section className="discovery-toolbar cocreation-task-filters" aria-label="任務篩選"><label className="field discovery-search">搜尋任務<input data-guide-anchor="cocreation:task-search" ref={searchInput} type="search" maxLength={150} value={taskFilters.query} onChange={event => updateTaskFilters({ ...taskFilters, query: event.target.value })} placeholder="任務名稱、內容或編號"/></label><label className="field">任務類型<select value={taskFilters.category} onChange={event => updateTaskFilters({ ...taskFilters, category: event.target.value as TaskFilters['category'] })}><option value="">全部類型</option>{taskCategories.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label className="field">任務負責人<select value={taskFilters.assignment} onChange={event => updateTaskFilters({ ...taskFilters, assignment: event.target.value as TaskFilters['assignment'] })}><option value="all">全部任務</option><option value="unassigned">未指派負責人</option><option value="assigned">已指派負責人</option></select></label><label className="field">任務標籤<select value={taskFilters.label} onChange={event => updateTaskFilters({ ...taskFilters, label: event.target.value })}><option value="">全部標籤</option>{taskFilters.label && !taskLabels.includes(taskFilters.label) && <option value={taskFilters.label}>{taskFilters.label}（目前無此標籤）</option>}{taskLabels.map(label => <option key={label} value={label}>{label}</option>)}</select></label></section>
       <div className="discovery-feedback"><p role="status">顯示 {visibleIssues.length} / {activity.issues.length} 項任務</p><button className="btn btn-ghost" onClick={() => { updateTaskFilters({ ...emptyTaskFilters, assignment: 'unassigned' }); searchInput.current?.focus(); }}>查看未指派任務</button>{hasTaskFilters && <button className="btn btn-ghost" onClick={() => updateTaskFilters({ ...emptyTaskFilters })}>清除任務篩選</button>}</div>
-      <div className="card-grid">{visibleIssues.map(issue => <article className="card stack expedition-issue" key={issue.number}><p className="eyebrow">任務 #{issue.number} · {categoriesForLabels(issue.labels).map(key => taskCategories.find(([value]) => value === key)?.[1]).join(' / ')}</p><h4>{issue.title}</h4><p className="muted">{issue.assignees.length ? `目前負責：${issue.assignees.join('、')}` : '尚未指派負責人；請先到任務頁留言協調。'}</p><div className="tag-list">{issue.labels.map(label => <span className="pill" key={label}>{label}</span>)}</div>{issue.body && <details><summary>閱讀任務內容</summary><p className="cocreation-copy">{issue.body}</p></details>}<div className="actions"><GitHubLink href={issue.url} primary>到任務頁參與</GitHubLink><button className="btn btn-ghost" disabled={briefLoading !== null} onClick={() => void copyBrief(issue)}>{briefLoading === String(issue.number) ? '準備工作說明…' : '複製工作說明'}</button></div></article>)}</div>{activity.issues.length === 0 ? <div className="discovery-empty"><p>目前沒有開放中的任務。</p><GitHubLink href={`${selected.repository_url}/issues/new`}>到 GitHub 提出任務</GitHubLink></div> : visibleIssues.length === 0 && <div className="discovery-empty"><h4>沒有符合條件的任務</h4><button className="btn btn-ghost" onClick={() => updateTaskFilters({ ...emptyTaskFilters })}>查看全部任務</button></div>}
-      <section className="stack"><h3>已合併的貢獻</h3><p className="muted">以下依 GitHub 已合併的 PR 顯示，作者是 GitHub 帳號；尚未連結成平台會員的成果認證。</p><div className="card-grid">{activity.contributions.map(contribution => <article className="card stack expedition-contribution" key={contribution.number}><p className="eyebrow">已合併 · PR #{contribution.number}</p><h4>{contribution.title}</h4><p>GitHub 作者：{contribution.author}</p><p className="muted">{new Date(contribution.merged_at).toLocaleDateString('zh-TW')}</p><GitHubLink href={contribution.url}>查看修改與審查</GitHubLink></article>)}</div>{activity.contributions.length === 0 && <p className="muted">還沒有已合併的貢獻紀錄。第一步可以從一份說明、一個測試或一項修正開始。</p>}</section></>}
+      <div className="card-grid">{visibleIssues.map(issue => <article className="card stack expedition-issue" key={issue.number}><p className="eyebrow">任務 #{issue.number} · {categoriesForLabels(issue.labels).map(key => taskCategories.find(([value]) => value === key)?.[1]).join(' / ')}</p><h4>{issue.title}</h4><p className="muted">{issue.assignees.length ? `目前負責：${issue.assignees.join('、')}` : '尚未指派負責人；請先到任務頁留言協調。'}</p><div className="tag-list">{issue.labels.map(label => <span className="pill" key={label}>{label}</span>)}</div>{issue.body && <details className="module-optional"><summary>閱讀任務內容</summary><p className="cocreation-copy">{issue.body}</p></details>}<div className="actions"><GitHubLink href={issue.url} primary>到任務頁參與</GitHubLink><button className="btn btn-ghost" disabled={briefLoading !== null} onClick={() => void copyBrief(issue)}>{briefLoading === String(issue.number) ? '準備工作說明…' : '複製工作說明'}</button></div></article>)}</div>{activity.issues.length === 0 ? <div className="discovery-empty"><p>目前沒有開放中的任務。</p><GitHubLink href={`${selected.repository_url}/issues/new`}>到 GitHub 提出任務</GitHubLink></div> : visibleIssues.length === 0 && <div className="discovery-empty"><h4>沒有符合條件的任務</h4><button className="btn btn-ghost" onClick={() => updateTaskFilters({ ...emptyTaskFilters })}>查看全部任務</button></div>}
+      <details className="module-optional"><summary>查看已合併的貢獻（{activity.contributions.length}）</summary><section className="stack"><h3>已合併的貢獻</h3><p className="muted">以下依 GitHub 已合併的 PR 顯示，作者是 GitHub 帳號；尚未連結成平台會員的成果認證。</p><div className="card-grid">{activity.contributions.map(contribution => <article className="card stack expedition-contribution" key={contribution.number}><p className="eyebrow">已合併 · PR #{contribution.number}</p><h4>{contribution.title}</h4><p>GitHub 作者：{contribution.author}</p><p className="muted">{new Date(contribution.merged_at).toLocaleDateString('zh-TW')}</p><GitHubLink href={contribution.url}>查看修改與審查</GitHubLink></article>)}</div>{activity.contributions.length === 0 && <p className="muted">還沒有已合併的貢獻紀錄。第一步可以從一份說明、一個測試或一項修正開始。</p>}</section></details></>}
     </section>}
   </section>;
 }

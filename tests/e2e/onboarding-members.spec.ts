@@ -521,6 +521,8 @@ test('a pending guild join keeps the primary card from opening a dialog',async({
     await expect(primary.locator('.guild-book-list').getByRole('button').first()).toBeDisabled();
     await expect(primary.getByRole('button',{name:'查看成員',exact:true})).toBeDisabled();
     releaseJoin();
+    const joinedCard=page.getByRole('article',{name:guildName,exact:true});
+    await joinedCard.locator('.guild-membership-settings > summary').click();
     await expect(page.getByRole('button',{name:`退出${guildName}`,exact:true})).toBeVisible();
     const book=page.locator('.guild-card').first().locator('.guild-book-list').getByRole('button').first();
     await book.click();
