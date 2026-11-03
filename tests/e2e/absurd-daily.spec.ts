@@ -66,6 +66,7 @@ test('AD-3 public photo studio captures real frames, enforces film, and exports 
   await shutter.click();await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();
   await page.clock.fastForward(3500);await shutter.click();
   await page.getByRole('button',{name:'挑選照片',exact:true}).click();
+  await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await expectResultInNativeFullscreen(page);
   await expect(page.locator('.ad-photo-choices button')).toHaveCount(4);
   await page.locator('.ad-photo-choices button').first().click();
@@ -102,8 +103,19 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
     if(i<11)await expect(page.locator('.ad-counter')).toHaveText(`${i+1}/12`);
   }
   await expect(page.locator('.ad-result-heading')).toContainText('完成 12 份文件');
+  await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await expectResultInNativeFullscreen(page);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => !!document.fullscreenElement?.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+  await expect(page.getByRole('button',{name:'系統分享圖片／連結'})).toBeVisible();
+  await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  await page.getByRole('button',{name:'同一題再來一次'}).click();
+  await expect(page.locator('.ad-board')).toBeFocused();
+  expect(await page.evaluate(() => !!document.fullscreenElement?.contains(document.activeElement))).toBe(true);
 });
 
 // Hosted #1044 exhausted 120s after ~108s in the first 29 input/clock pairs.
@@ -116,6 +128,7 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
   for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
   await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await expectResultInNativeFullscreen(page);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
   await page.evaluate(()=>{
@@ -397,16 +410,84 @@ test('rejected fullscreen request falls back and restores keyboard access', asyn
 });
 
 
-test('choosing a lobby game enters the available full-viewport fallback and leaving restores the lobby', async ({page}) => {
+test('leaving fullscreen before starting is respected through a zero-photo retry', async ({page}) => {
   await page.addInitScript(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
   await page.goto('/play');
   await page.locator('.ad-game-card').first().getByRole('button').click();
   const dialog=page.getByRole('dialog',{name:'遊戲全螢幕'});
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('全視窗模式');
-  await dialog.getByRole('button',{name:'← 遊樂場'}).click();
+  await dialog.getByRole('button',{name:'退出全螢幕'}).click();
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
+  await page.getByRole('button',{name:'開始這一局'}).click();
   await expect(dialog).toHaveCount(0);
+  await page.getByRole('button',{name:'下一位客人 →'}).click();
+  await page.getByRole('button',{name:'下一位客人 →'}).click();
+  await page.getByRole('button',{name:'挑選照片'}).click();
+  await expect(page.getByText('這局還沒拍到照片。再開一次照相館，按快門留下怪事。')).toBeVisible();
+  await page.getByRole('button',{name:'開始這一局'}).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button',{name:'← 遊樂場'}).click();
   await expect(page.locator('.ad-game-card')).toHaveCount(3);
   await expect(page.locator('.ad-welcome h1')).toBeFocused();
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
 });
+
+test('fallback keeps keyboard focus inside game, result and replay', async ({page}) => {
+  test.setTimeout(120_000);
+  await page.addInitScript(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+  await openGame(page,'photo');
+  await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
+  const dialog=page.getByRole('dialog',{name:'遊戲全螢幕'});
+  await page.getByRole('button',{name:'拍照快門'}).click();
+  await page.getByRole('button',{name:'下一位客人 →'}).click();
+  await page.getByRole('button',{name:'下一位客人 →'}).click();
+  await page.getByRole('button',{name:'挑選照片'}).click();
+  const result=page.getByRole('region',{name:'遊戲成果'});
+  await expect(result).toBeFocused();
+  await page.keyboard.press('Tab');
+  expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  const last=dialog.getByRole('button',{name:'回遊樂場'});
+  await last.focus(); await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button',{name:'退出全螢幕'})).toBeFocused();
+  await page.keyboard.press('Shift+Tab'); await expect(last).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(result).toBeVisible();
+  await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
+  await page.getByRole('button',{name:'同一題再來一次'}).click();
+  await expect(page.locator('.ad-board')).toBeFocused();
+  expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+});
+
+
+for (const outcome of ['resolve','reject'] as const) {
+  test(`delayed fullscreen ${outcome} preserves a started game's keyboard focus`, async ({page}) => {
+    test.setTimeout(120_000);
+    await page.addInitScript((outcome) => {
+      let current:Element|null=null;
+      Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});
+      Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>current});
+      Element.prototype.requestFullscreen=function(){
+        const target=this;
+        return new Promise<void>((resolve,reject)=>{
+          (window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen=()=>{
+            if(outcome==='reject'){reject(new DOMException('denied','NotAllowedError'));return;}
+            current=target;document.dispatchEvent(new Event('fullscreenchange'));resolve();
+          };
+        });
+      };
+    },outcome);
+    await page.goto('/play');
+    await page.locator('.ad-game-card').nth(2).getByRole('button').click();
+    await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
+    await page.getByRole('button',{name:'開始這一局'}).click();
+    await expect(page.locator('.ad-board')).toBeFocused();
+    await page.evaluate(() => (window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen());
+    await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toBeVisible();
+    await expect(page.locator('.ad-board')).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    // Either a correct or wrong classification changes the notice.
+    await expect(page.locator('.ad-notice')).not.toHaveText('道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。');
+  });
+}

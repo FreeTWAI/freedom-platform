@@ -11,6 +11,7 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
   const mounted = useRef(true);
   const button = useRef<HTMLButtonElement>(null);
   const entryFocus = useRef<HTMLElement | null>(null);
+  const autoAttempted = useRef(false);
   const [mode, setMode] = useState<Mode>('normal');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
@@ -33,6 +34,10 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
   useLayoutEffect(() => {
     if (mode !== 'normal') {
       const target = entryFocus.current; entryFocus.current = null;
+      const active = document.activeElement;
+      // A player may have started the game or reached its result while the
+      // browser was still resolving fullscreen. Do not steal their focus.
+      if (active instanceof HTMLElement && active !== button.current && container.current?.contains(active)) return;
       (target?.isConnected ? target : button.current)?.focus({ preventScroll: true });
     }
   }, [mode]);
@@ -47,6 +52,7 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
   async function toggle() {
     const node = container.current;
     if (!node || pending) return;
+    autoAttempted.current = true;
     if (mode === 'viewport') { setMode('normal'); setMessage(''); return; }
     if (mode === 'native') {
       setPending(true);
@@ -72,7 +78,7 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
 
   useImperativeHandle(ref, () => ({ enter: (focusTarget) => {
     // A cold deep link has no gesture; the visible button remains available.
-    if (mode === 'normal' && !pending && (!navigator.userActivation || navigator.userActivation.isActive)) { entryFocus.current = focusTarget ?? null; void toggle(); }
+    if (!autoAttempted.current && mode === 'normal' && !pending && (!navigator.userActivation || navigator.userActivation.isActive)) { entryFocus.current = focusTarget ?? null; void toggle(); }
   } }), [mode, pending]);
 
   function captureEscape(event: KeyboardEvent<HTMLDivElement>) {
