@@ -33,6 +33,6 @@ export const guildsFeatures = {
   },
   "squads": {
     moduleId: "member-squads", placement: 'page',
-    render: ({client, session, site, locationHash, selectTab}) => (/^#squad-outcomes\/[0-9a-f-]{36}$/i.test(locationHash)&&site?.squad_outcomes_enabled===true ? <SquadOutcomeDetail client={client} id={locationHash.slice('#squad-outcomes/'.length)} eventLinksEnabled={site?.event_outcomes_enabled===true}/> : <SquadsPanel client={client} session={session} onNavigate={selectTab} outcomesEnabled={site?.squad_outcomes_enabled===true} eventLinksEnabled={site?.event_outcomes_enabled===true}/>),
+    render: ({client, session, site, locationHash, selectTab, registerPageLeave}) => (/^#squad-outcomes\/[0-9a-f-]{36}$/i.test(locationHash)&&site?.squad_outcomes_enabled===true ? <SquadOutcomeDetail client={client} id={locationHash.slice('#squad-outcomes/'.length)} eventLinksEnabled={site?.event_outcomes_enabled===true}/> : <SquadsPanel key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} session={session} registerLeave={registerPageLeave} onNavigate={selectTab} outcomesEnabled={site?.squad_outcomes_enabled===true} eventLinksEnabled={site?.event_outcomes_enabled===true}/>),
   },
 } satisfies PortalFeatureEntries;

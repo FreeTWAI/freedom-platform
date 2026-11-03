@@ -637,6 +637,7 @@ test('the click shows on the business board for the sharer', async ({ page }) =>
   test.setTimeout(90_000);
   await login(page, 'reviewer@local.test');
   await navigate(page, '推廣排行榜');
+  await page.locator('.promotion-rankings > summary').click();
   const business = page.getByRole('article', { name: '業務推廣排行榜', exact: true });
   await expect(business).toContainText('在社員服務分享區分享社員的服務，每次點擊 +1。');
   await expect(page.getByRole('button', { name: '本週', exact: true })).toHaveAttribute('aria-pressed', 'true');
