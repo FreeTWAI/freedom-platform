@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import './fullscreen-game.css';
 
 type Mode = 'normal' | 'native' | 'viewport';
@@ -30,7 +30,7 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== 'normal') {
       const target = entryFocus.current; entryFocus.current = null;
       (target?.isConnected ? target : button.current)?.focus({ preventScroll: true });
@@ -77,9 +77,12 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
 
   function captureEscape(event: KeyboardEvent<HTMLDivElement>) {
     if (mode === 'normal' || event.key !== 'Escape') return;
-    // Do not let the game's Escape-to-pause handler cancel the browser exit.
-    event.stopPropagation();
-    if (mode === 'viewport') { event.preventDefault(); setMode('normal'); setMessage(''); }
+    // Exit explicitly before the game's Escape-to-pause handler sees the key.
+    event.preventDefault(); event.stopPropagation();
+    if (mode === 'viewport') { setMode('normal'); setMessage(''); }
+    else if (document.fullscreenElement === container.current) {
+      void document.exitFullscreen().catch(() => { if (mounted.current) setMessage('無法離開全螢幕，請使用瀏覽器的退出方式。'); });
+    }
   }
 
   function keys(event: KeyboardEvent<HTMLDivElement>) {

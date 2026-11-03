@@ -27,7 +27,11 @@ async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
 async function enterNativeFullscreen(page:Page){
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  const exit=page.getByRole('button',{name:'退出全螢幕'});
+  await expect(exit).toHaveAttribute('aria-pressed','true');
+  await expect(exit).toHaveAttribute('aria-disabled','false');
   await page.locator('.ad-board').focus();
+  await expect(page.locator('.ad-board')).toBeFocused();
 }
 async function expectResultInNativeFullscreen(page:Page){
   for (const name of ['系統分享圖片／連結','複製同題挑戰連結']) {
