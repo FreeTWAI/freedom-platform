@@ -50,7 +50,7 @@ async function login(page: Page, expand = true, email = 'maker@local.test') {
   }
 }
 
-for (const [width,height] of [[1440,1000],[360,780],[375,667],[390,844],[430,932],[390,420]]) {
+for (const [width,height] of [[1440,1000],[320,844],[360,780],[375,667],[390,844],[430,932],[390,420]]) {
   test(`journal iframe keeps reading inside the homepage at ${width}x${height}`, async ({ page, context }) => {
     await page.setViewportSize({width, height});
     const outbound: {authorization: string | undefined; cookie: string | undefined; referer: string | undefined}[] = [];
@@ -68,9 +68,30 @@ for (const [width,height] of [[1440,1000],[360,780],[375,667],[390,844],[430,932
     const sessionRequest = page.waitForRequest(request => new URL(request.url()).pathname === '/api/v1/session');
     expect(await page.evaluate(async () => (await fetch('/api/v1/session')).status)).toBe(200);
     expect((await (await sessionRequest).allHeaders()).cookie).toMatch(/(?:^|;\s*)freedom_local_session=/);
-    await openHomeGuide(page);
+    // Both destinations must be reachable before opening the optional workshop.
+    if (width <= 860) await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
+    const discovery = page.getByRole('navigation', {name: '共創誌與遊戲', exact: true});
+    await expect(discovery).toBeVisible();
+    const arcade = discovery.getByRole('link', {name: '遊戲大廳（另開分頁）', exact: true});
+    await expect(arcade).toBeVisible();
+    await expect(arcade).toHaveAttribute('href', '/play');
+    await expect(arcade).toHaveAttribute('rel', 'noopener noreferrer');
+    expect((await arcade.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(page.getByRole('link', {name: '遊戲大廳（另開分頁）', exact: true})).toHaveCount(1);
     const entry = page.getByRole('region', {name: '共創日誌', exact: true});
     await expect(entry).toBeVisible();
+    await expect(discovery).toBeInViewport();
+    // The link opens the existing three-game lobby, not a selected game.
+    const popupPromise = context.waitForEvent('page');
+    await arcade.focus();
+    await page.keyboard.press('Enter');
+    const lobby = await popupPromise;
+    await expect(lobby).toHaveURL(new URL('/play', page.url()).href);
+    for (const title of ['這張能交嗎？', '蓋完就下班', '這疊有一百萬？']) {
+      await expect(lobby.getByRole('heading', {name: title, exact: true})).toBeVisible();
+    }
+    await lobby.close();
+    await page.bringToFront();
     expect(outbound).toHaveLength(0);
     await expect(entry.locator('iframe')).toHaveCount(0);
     const url = resolveHomeJournalUrl(process.env.VITE_COMMUNITY_JOURNAL_URL);
