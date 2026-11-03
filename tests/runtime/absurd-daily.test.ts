@@ -6,6 +6,30 @@ import {transformSync} from 'esbuild';
 import {GAMES,seconds} from '../../apps/portal-web/src/games/domain.js';
 import {beginStamps,cashDeck,challengeUrl,gradePhoto,newCash,newStamps,pause,photoPose,resume,RULES,seedOf,sortCash,stamp,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_KEY,HANDOFF_TTL,parseGameDraft,readGameDraft,saveGameDraft,clearGameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
+import {gamePreviewHtml} from '../../apps/portal-web/src/games/preview.js';
+import sharp from 'sharp';
+import type {Pool} from 'pg';
+import {createApp} from '../../apps/platform-api/src/app.js';
+import {mountAssets} from '../../apps/platform-api/src/worker.js';
+
+test('public game previews use distinct original game assets and preserve the playable shell',async()=>{
+  const shell=readFileSync(new URL('../../apps/portal-web/index.html',import.meta.url),'utf8');
+  for(const [game,title] of [['photo','這張能交嗎？'],['stamp','蓋完就下班'],['cash','這疊有一百萬？']] as const){
+    const html=gamePreviewHtml(shell,`https://example.org/play?game=${game}&seed=123`,'https://example.org');
+    assert.match(html,new RegExp(`<meta property="og:title" content="${title}`));
+    assert.ok(html.includes(`<meta property="og:image" content="https://example.org/games/absurd-daily/${game}.jpg">`));
+    assert.ok(html.includes(`<link rel="canonical" href="https://example.org/play?game=${game}&amp;seed=123">`));
+    assert.equal((html.match(/property="og:image"/g)??[]).length,1);
+    assert.ok(html.includes('<div id="root"></div>'));
+    assert.ok(html.includes('src="/src/main.tsx"'));
+    const info=await sharp(readFileSync(new URL(`../../apps/portal-web/public/games/absurd-daily/${game}.jpg`,import.meta.url))).metadata();
+    assert.equal(info.format,'jpeg');assert.equal(info.width,960);assert.equal(info.height,720);
+  }
+  assert.equal(gamePreviewHtml(shell,'https://example.org/play?game=unknown&seed=123','https://example.org'),shell);
+  assert.equal(gamePreviewHtml(shell,'https://example.org/other?game=photo&seed=123','https://example.org'),shell);
+  assert.equal(gamePreviewHtml('no head','https://example.org/play?game=photo&seed=123','https://example.org'),'no head');
+  assert.match(gamePreviewHtml(shell,'https://example.org/play/?game=cash&seed=invalid','https://example.org'),/game=cash&amp;seed=20261023/);
+});
 test('AD-2 validates seed and emits a public challenge without result or identity',()=>{for(const bad of [0,-1,Infinity,NaN,'1x','0x12','4294967296',null,{},1.5])assert.equal(seedOf(bad),20261023);assert.equal(seedOf('4294967295'),4294967295);const u=new URL(challengeUrl('https://example.org','photo',12));assert.equal(u.pathname,'/play');assert.deepEqual([...u.searchParams],[['game','photo'],['seed','12']]);});
 test('AD-5 every seeded deck contains exactly one million and six unique decoys; last note is fixed',()=>{for(let seed=1;seed<=400;seed++){const d=cashDeck(seed);assert.equal(d.length,30);assert.equal(new Set(d.map(c=>c.id)).size,30);assert.equal(d.reduce((sum,c)=>sum+c.amount,0),RULES.targetCash);assert.equal(d.filter(c=>c.valid).length,24);assert.equal(new Set(d.filter(c=>!c.valid).map(c=>c.label)).size,6);assert.equal(d.at(-1)?.amount,100000);assert.deepEqual(d,cashDeck(seed));}assert.notDeepEqual(cashDeck(1),cashDeck(2));});
 test('AD-5 wrong sort changes neither progress nor money; stale and rapid actions do not consume a card',()=>{let s=newCash(9);const valid=cashDeck(9)[0].valid;let out=sortCash(s,0,!valid,0);assert.equal(out.kind,'wrong');assert.equal(out.state.index,0);assert.equal(out.state.amount,0);assert.equal(out.state.mistakes,1);s=out.state;assert.equal(sortCash(s,0,valid,20).state,s);s=sortCash(s,0,valid,200).state;assert.equal(s.index,1);assert.equal(sortCash(s,0,valid,400).state,s);for(const now of [NaN,Infinity,-1])assert.equal(sortCash(s,1,true,now).state,s);});
@@ -83,4 +107,38 @@ for(const failure of ['update','capture'] as const)test(`AD-5 terminal ${failure
   assert.deepEqual(h.events.map(e=>e.kind),['stop','update','capture','stop']);
   assert.equal(h.live.current.cash,completed);assert.equal(h.pendingResult.current,summary);
   assert.equal(h.results.length,1);assert.equal(h.live.current.done,true);
+});
+
+test('anonymous crawlers get game metadata from the real Worker SPA fallback',async()=>{
+  const shell=readFileSync(new URL('../../apps/portal-web/index.html',import.meta.url),'utf8');
+  const seen:string[]=[];
+  const assets={seen,async fetch(request:Request){
+    const path=new URL(request.url).pathname;seen.push(path);
+    if(path==='/')return new Response(shell,{headers:{'Content-Type':'text/html; charset=utf-8','ETag':'"generic-shell"','Content-Length':String(Buffer.byteLength(shell))}});
+    if(/^\/games\/absurd-daily\/(photo|stamp|cash)\.jpg$/.test(path))return new Response(readFileSync(new URL('../../apps/portal-web/public'+path,import.meta.url)),{headers:{'Content-Type':'image/jpeg'}});
+    return new Response('not found',{status:404});
+  }};
+  const app=createApp({} as Pool,'http://127.0.0.1:8787');
+  mountAssets(app,assets);
+  for(const [game,title,ua] of [['photo','這張能交嗎？','facebookexternalhit/1.1'],['stamp','蓋完就下班','Slackbot-LinkExpanding 1.0'],['cash','這疊有一百萬？','Twitterbot']] as const){
+    const response=await app.request(`http://127.0.0.1:8787/play?game=${game}&seed=123`,{headers:{'User-Agent':ua}});
+    assert.equal(response.status,200);assert.match(response.headers.get('content-type')??'',/^text\/html/);
+    assert.equal(response.headers.get('etag'),null);assert.equal(response.headers.get('content-length'),null);
+    const html=await response.text();
+    assert.ok(html.includes(`<meta property="og:title" content="${title}｜離譜日常・自由工坊">`));
+    assert.ok(html.includes(`<meta property="og:url" content="http://127.0.0.1:8787/play?game=${game}&amp;seed=123">`));
+    assert.ok(html.includes(`<meta property="og:image" content="http://127.0.0.1:8787/games/absurd-daily/${game}.jpg">`));
+    assert.equal((html.match(/property="og:image"/g)??[]).length,1);assert.ok(html.includes('<div id="root"></div>'));
+    const image=await app.request(`http://127.0.0.1:8787/games/absurd-daily/${game}.jpg`,{headers:{'User-Agent':ua}});
+    assert.equal(image.status,200);assert.equal(image.headers.get('content-type'),'image/jpeg');assert.ok((await image.arrayBuffer()).byteLength>1000);
+  }
+  assert.ok(seen.includes('/play')&&seen.includes('/'),'SPA fallback must actually request the shell');
+  const fallback=await app.request('http://127.0.0.1:8787/play?game=unknown');
+  assert.equal(await fallback.text(),shell);
+  const forbidden=await app.request('http://untrusted.example/play?game=photo&seed=123');
+  assert.equal(forbidden.status,403);
+  const missingApp=createApp({} as Pool,'http://127.0.0.1:8787');
+  mountAssets(missingApp,{fetch:async()=>new Response('not found',{status:404})});
+  const missing=await missingApp.request('http://127.0.0.1:8787/play?game=photo&seed=123');
+  assert.equal(missing.status,404);assert.ok(!(await missing.text()).includes('og:image'));
 });

@@ -1,3 +1,4 @@
+import {gamePreviewMiddleware} from '../../portal-web/src/games/preview.js';
 import {createEventMissionRoutes} from './routes/event-missions.js';
 import {createCommunityCertificationRoutes} from './routes/community-certification.js';
 import {createSocialAchievementRoutes} from './routes/social-achievements.js';
@@ -374,6 +375,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         &&/^text\/html(?:;|$)/i.test(c.res.headers.get('Content-Type')??''))c.header('Referrer-Policy','strict-origin');
     });
   });
+  app.use('*',gamePreviewMiddleware(origin));
   registerGuideReleaseRoute(app,runtime.publicGuideAssets);
   app.route('/admin/api',createAdminRoutes(pool,runtime.adminVerifier,{origin,tokenKey:runtime.githubTokenKey(),fetcher:options.githubSocial?.fetcher,readToken:runtime.githubMetricsToken,guildReviewer:runtime.guildReviewer},runtime.guildLaunchpadEnabled===true,runtime.participationMetricsEnabled===true,providerEnvironment(freedomEnv),runtime.commercePayments?.journal,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv),releaseSha:runtime.health?.release_sha??null},runtime.communityCertificationEnabled===true));
   const skillEventBacklinks=runtime.eventOutcomesEnabled===true?async(id:string,c:Context)=>{
