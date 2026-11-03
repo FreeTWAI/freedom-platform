@@ -72,12 +72,12 @@ for (const [width,height] of [[1440,1000],[320,844],[360,780],[375,667],[390,844
     if (width <= 860) await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
     const discovery = page.getByRole('navigation', {name: '共創誌與遊戲', exact: true});
     await expect(discovery).toBeVisible();
-    const arcade = discovery.getByRole('link', {name: '遊戲大廳（另開分頁）', exact: true});
+    const arcade = discovery.getByRole('link', {name: /^遊戲大廳\s*（另開分頁）$/});
     await expect(arcade).toBeVisible();
     await expect(arcade).toHaveAttribute('href', '/play');
     await expect(arcade).toHaveAttribute('rel', 'noopener noreferrer');
     expect((await arcade.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await expect(page.getByRole('link', {name: '遊戲大廳（另開分頁）', exact: true})).toHaveCount(1);
+    await expect(page.getByRole('link', {name: /^遊戲大廳\s*（另開分頁）$/})).toHaveCount(1);
     const entry = page.getByRole('region', {name: '共創日誌', exact: true});
     await expect(entry).toBeVisible();
     await expect(discovery).toBeInViewport();
