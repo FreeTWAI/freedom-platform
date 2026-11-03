@@ -19,6 +19,7 @@ async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
   // viewport fallback). Existing gameplay checks continue in normal mode.
   const exit=page.getByRole('button',{name:'退出全螢幕'});
   await expect(exit).toBeVisible();
+  await expect(exit).toHaveAttribute('aria-disabled','false');
   await exit.click();
   await expect(page.getByRole('button',{name:'⛶ 全螢幕'})).toBeVisible();
   await page.locator('.ad-board').focus();
