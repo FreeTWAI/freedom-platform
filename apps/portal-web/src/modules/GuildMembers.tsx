@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { PortalClient } from '../api';
 import { useModuleMutation } from './shared';
-import { DirectoryMemberRow, loadLabels, type MemberCardData } from './Membership';
+import { loadLabels, type MemberCardData } from './Membership';
+import { GuildMemberCard } from './GuildMemberCard';
 import './GuildMembers.css';
 
 const TIER_LOCKED = '會長與公會專家必須是正式成員；請先解除專家任命。';
@@ -79,7 +80,8 @@ export function GuildMembers({ client, guildKey, guildName, masterId, expertIds 
     else setFilters(current => ({ ...current, search: search.trim() }));
   }
   return <section className="guild-members members-panel" id={`members-${guildKey}`} aria-label={`${guildName}成員`}>
-    <header className="guild-members-heading"><h4>公會成員</h4><p aria-live="polite">{total === null ? loading ? '正在載入成員…' : '' : `顯示 ${members.length} / ${total} 位成員`}</p>{isMaster && <p className="guild-expert-count">專家 {expertCount}/3</p>}</header>
+    <header className="guild-members-heading"><h4>一起做事的夥伴</h4><p aria-live="polite">{total === null ? '' : `顯示 ${members.length} / ${total} 位成員`}</p>{isMaster && <p className="guild-expert-count">專家 {expertCount}/3</p>}</header>
+    <p className="guild-members-intro">從專長認識彼此，前往個人頁看看夥伴的介紹。成員身分不是能力評等。</p>
     {isMaster && expertCount >= 3 && <p className="field-hint guild-expert-cap">{EXPERT_CAP}</p>}
     <form className="guild-members-filters" onSubmit={submit}>
       <label className="field">搜尋公會成員<input type="search" value={search} onChange={event => editSearch(event.target.value)} maxLength={100} placeholder="暱稱、定位或專長"/></label>
@@ -88,17 +90,18 @@ export function GuildMembers({ client, guildKey, guildName, masterId, expertIds 
     </form>
     {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={loading} onClick={() => void load(offsetRef.current)}>重新載入成員</button></div>}
     {actionError && <div className="banner banner-error" role="alert"><p>{actionError}</p></div>}
-    <div className="directory-rows" aria-busy={loading}>{members.map(member => {
+    {loading && !members.length && <p className="guild-members-loading" role="status">正在載入成員…</p>}
+    <div className="directory-rows guild-member-grid" aria-busy={loading}>{members.map(member => {
       const roster = member.guild_roster, expert = expertIds.includes(member.user_id) || roster?.expert_active === true;
       const mine = member.user_id === viewerId, confirming = confirm?.userId === member.user_id ? confirm.kind : null;
       const capReached = expertCount >= 3 && !expert;
-      return <DirectoryMemberRow key={member.user_id} member={member} labels={labels} client={client}>
+      return <GuildMemberCard key={member.user_id} member={member} guildKey={guildKey} guildName={guildName} labels={labels} client={client}>
         <span className="guild-member-roster">
           {member.user_id === masterId && <span className="badge guild-member-leader">公會長</span>}
           {expert && <span className="badge guild-member-expert">公會專家</span>}
           {roster?.member_tier === 'full' && <span className="badge guild-member-tier-full">正式成員</span>}
           {roster?.member_tier === 'intern' && <span className="badge guild-member-tier-intern">實習成員</span>}
-          {isMaster && !mine && roster && <span className="guild-member-actions">
+          {isMaster && !mine && roster && <span className="guild-member-actions" role="group" aria-label={`管理${member.nickname}`}><strong className="guild-member-admin-label">成員管理</strong>
             {roster.member_tier === 'intern' && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void apply(member, `/guilds/${encodeURIComponent(guildKey)}/members/${member.user_id}/tier`, { member_tier: 'full' }, roster.aggregate_version)}>設為正式成員</button>}
             {roster.member_tier === 'full' && confirming !== 'demote' && <button type="button" className="btn btn-ghost" disabled={busy || expert} onClick={() => setConfirm({ userId: member.user_id, kind: 'demote' })}>改回實習成員</button>}
             {expert && <span className="guild-member-reason">{TIER_LOCKED}</span>}
@@ -109,10 +112,10 @@ export function GuildMembers({ client, guildKey, guildName, masterId, expertIds 
             {confirming === 'revoke' && <span className="guild-member-confirm"><span>解除後，這位成員不再顯示公會專家。</span><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void apply(member, `/guilds/${encodeURIComponent(guildKey)}/experts`, { user_id: member.user_id, active: false }, roster.expert_aggregate_version)}>確認</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setConfirm(null)}>取消</button></span>}
           </span>}
         </span>
-      </DirectoryMemberRow>;
+      </GuildMemberCard>;
     })}</div>
     {loading && members.length > 0 && <p role="status">正在載入更多成員…</p>}
-    {!loading && !error && !members.length && <p className="guild-members-empty">{filters.search ? '沒有符合的公會成員。' : '目前沒有可顯示的公會成員。'}</p>}
+    {!loading && !error && !members.length && <div className="guild-members-empty"><p>{filters.search ? '沒有符合的公會成員。' : '目前沒有可顯示的公會成員。'}</p>{filters.search ? <button type="button" className="btn btn-ghost" onClick={()=>editSearch('')}>清除搜尋</button> : <p>這不代表公會沒有夥伴；此處只列出目前可以顯示的資料。</p>}</div>}
     {next !== null && !error && <button className="btn btn-ghost" type="button" disabled={loading} onClick={() => void load(next)}>查看更多成員</button>}
   </section>;
 }
