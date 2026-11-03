@@ -411,6 +411,7 @@ test('rejected fullscreen request falls back and restores keyboard access', asyn
 
 
 test('leaving fullscreen before starting is respected through a zero-photo retry', async ({page}) => {
+  await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});
   await page.addInitScript(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
   await page.goto('/play');
   await page.locator('.ad-game-card').first().getByRole('button').click();
@@ -419,6 +420,7 @@ test('leaving fullscreen before starting is respected through a zero-photo retry
   await expect(dialog).toContainText('全視窗模式');
   await dialog.getByRole('button',{name:'退出全螢幕'}).click();
   await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
+  await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
   await page.getByRole('button',{name:'開始這一局'}).click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button',{name:'下一位客人 →'}).click();
