@@ -7,6 +7,24 @@ export type SkillShareContent={introductions:string[];illustration_url:string;il
 type Payload={title:string;text?:string;url:string;copy:string};
 type Loaded={key:string;content:SkillShareContent|null;error:string};
 
+/** One deadline includes response-body reads. Abort alone is not enough when a
+ * transport ignores its signal; late results must not replace the fallback. */
+async function boundedShareRequest<T>(signal:AbortSignal|undefined,read:(signal:AbortSignal)=>Promise<T>):Promise<T>{
+  const controller=new AbortController();
+  let rejectRequest!:(reason:Error)=>void;
+  const stopped=new Promise<never>((_,reject)=>{rejectRequest=reject;});
+  const cancel=()=>{rejectRequest(new Error('share_request_cancelled'));controller.abort();};
+  const timer=setTimeout(()=>{rejectRequest(new Error('share_request_timeout'));controller.abort();},8000);
+  signal?.addEventListener('abort',cancel,{once:true});
+  if(signal?.aborted)cancel();
+  try{
+    return await Promise.race([stopped,Promise.resolve().then(()=>{
+      if(controller.signal.aborted)throw new Error('share_request_cancelled');
+      return read(controller.signal);
+    })]);
+  }finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
+}
+
 export function skillSharePath(bookId:string){return `/development/skills/${encodeURIComponent(bookId)}`;}
 /** Public share URL; `intro` is the 1-based introduction number used by the public page. */
 export function skillShareUrl(bookId:string,intro?:number,origin=window.location.origin){return shareUrl(skillSharePath(bookId),intro,origin);}
@@ -22,13 +40,15 @@ export function isSkillIllustrationUrl(value:unknown):value is string{return typ
 export function fetchSkillShareContent(bookId:string,signal?:AbortSignal){return fetchShareContent(`/api/v1/skills/${encodeURIComponent(bookId)}/share-content`,signal);}
 export function fetchSubmissionShareContent(submissionId:string,signal?:AbortSignal){return fetchShareContent(`/api/v1/skill-submissions/${encodeURIComponent(submissionId)}/share-content`,signal);}
 async function fetchShareContent(path:string,signal?:AbortSignal):Promise<SkillShareContent>{
-  const response=await fetch(path,{credentials:'omit',signal,headers:{Accept:'application/json'}});
+  return boundedShareRequest(signal,async requestSignal=>{
+  const response=await fetch(path,{credentials:'omit',signal:requestSignal,headers:{Accept:'application/json'}});
   if(!response.ok)throw new Error(response.status===404?'share_content_missing':'share_content_unavailable');
   const data=await response.json() as Partial<SkillShareContent>|null;
   const introductions=Array.isArray(data?.introductions)?data.introductions:[];
   if(!introductions.length||!introductions.every(value=>typeof value==='string'&&value.trim().length>0))throw new Error('share_content_empty');
   const illustration=isSkillIllustrationUrl(data?.illustration_url)?data.illustration_url:'';
   return {introductions,illustration_url:illustration,illustration_alt:illustration&&typeof data?.illustration_alt==='string'?data.illustration_alt:''};
+  });
 }
 /** Uniform index from crypto randomness (rejection sampling); never repeats `avoid` when another choice exists. */
 export function randomIntroductionIndex(length:number,avoid?:number){
@@ -66,12 +86,16 @@ export function SkillShare({bookId,submissionId,title}:{bookId?:string;submissio
     const controller=new AbortController();trackRequest.current?.abort();trackRequest.current=controller;setTracked(null);
     const target=submissionId?`submission:${submissionId}`:`book:${bookId}`;
     try{
-      const session=await fetch('/api/v1/session',{credentials:'same-origin',signal:controller.signal,headers:{Accept:'application/json'}});
+      const tracked=await boundedShareRequest<Tracked|'plain'>(controller.signal,async signal=>{
+      const session=await fetch('/api/v1/session',{credentials:'same-origin',signal,headers:{Accept:'application/json'}});
       const csrf=session.ok?(await session.json() as {csrf_token?:string}).csrf_token:'';
-      if(!csrf){if(!controller.signal.aborted)setTracked('plain');return;}
-      const response=await fetch('/api/v1/promotion/links',{method:'POST',credentials:'same-origin',signal:controller.signal,headers:{'Content-Type':'application/json',Accept:'application/json','X-CSRF-Token':csrf},body:JSON.stringify({kind:'skill_book',target})});
+      if(!csrf)return 'plain';
+      if(signal.aborted)throw new Error('share_request_cancelled');
+      const response=await fetch('/api/v1/promotion/links',{method:'POST',credentials:'same-origin',signal,headers:{'Content-Type':'application/json',Accept:'application/json','X-CSRF-Token':csrf},body:JSON.stringify({kind:'skill_book',target})});
       const link=response.ok?await response.json() as {path?:string;points?:{week?:number;all?:number}}:null;
-      if(!controller.signal.aborted)setTracked(link?.path?{path:link.path,week:link.points?.week??0,all:link.points?.all??0}:'plain');
+      return link?.path?{path:link.path,week:link.points?.week??0,all:link.points?.all??0}:'plain';
+      });
+      if(!controller.signal.aborted)setTracked(tracked);
     }catch{if(!controller.signal.aborted)setTracked('plain');}
   }
   function resetStatus(){generation.current++;setStatus('');setManual(false);}
@@ -116,7 +140,7 @@ export function SkillShare({bookId,submissionId,title}:{bookId?:string;submissio
           <blockquote className="skill-share-text" id={`${id}-text`} aria-live="polite">{introduction}</blockquote>
         </>:<div className="skill-share-error" id={`${id}-text`} role="alert"><p>{current.error}</p><button type="button" className="btn btn-ghost" disabled={loading} onClick={()=>void load(false)}>{loading?'重新載入中…':'重試'}</button></div>}
         <p className="skill-share-url">{url}</p>
-        {tracked==='plain'&&<p className="promotion-share-points">登入後分享可累積推廣分數</p>}
+        {tracked==='plain'&&<p className="promotion-share-points">使用公開介紹連結分享</p>}
         {tracked&&tracked!=='plain'&&<p className="promotion-share-points">這個連結：本週 {tracked.week} 分・累計 {tracked.all} 分</p>}
         <div className="skill-share-actions">
           {introductions.length>1&&<button type="button" className="btn btn-ghost" disabled={busy} onClick={reroll}><span aria-hidden="true">🎲 </span>換一句</button>}
