@@ -85,6 +85,8 @@
     "docs/development/member-settings-messages.md",
     "tests/e2e/chat-search.spec.ts",
     "apps/portal-web/src/modules/ChatWorkspace.tsx",
+    "tests/runtime/chat-visible-read.test.ts",
+    "tests/e2e/chat-visible-read.spec.ts",
     "apps/portal-web/src/modules/ChatSearch.tsx",
     "tests/runtime/chat-content.test.ts",
     "migrations/182_commerce_order_notifications.sql",
