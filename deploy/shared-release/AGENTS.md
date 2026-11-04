@@ -54,6 +54,12 @@ mutation. Historical seven-stage journal records must still replay unchanged.
 BEGIN-only backup reconciliation requires authenticated terminal failure evidence,
 an empty-intent journal and independent live readback under the lease before an
 append-only abandonment. Unknown capture/archive/migration/deploy effects stop.
+A confirmed migration COMMIT whose run then lost its lease before any deploy intent
+may be closed only by a manual deploy of the same source with authenticated terminal
+failure evidence and lease-held read-only readback (xact committed, candidate ledger,
+policy, GC, sessions, unchanged Worker). The append-only `release-abandoned` keeps
+the raised floor; the same run releases through its own entry and never repeats SQL.
+Until that source is deployed, other sources, legacy adoption and backups stay blocked.
 
 Environment credentials remain outside the source checkout and public Actions
 artifacts. Only allowlisted summaries are published. Never upload database dumps,

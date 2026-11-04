@@ -20,6 +20,7 @@ import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema, 
 import { runPortableBackup } from './backup.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
+import { reconcileCommittedRelease } from './migration-recovery.mjs';
 import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff } from './handoff-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
@@ -142,7 +143,7 @@ export async function main(args = process.argv.slice(2)) {
       // Build/render checks again against the verified predecessor before begin.
       if (!isBackup) applyFlagDecisions({ target: config.target, bindings: (await deployer.inspect()).bindings,
         decisions: readFlagDecisions({ sourceRoot: SOURCE, sourceSha: request.sourceSha }) });
-      let recovery;
+      let recovery, migrationRecovery;
       if (request.recoverRunId) {
         if (independentRelease) check(['before_capture', 'before_dump'].includes(request.recoveryEvidence?.failureBoundary), 'release_backup_recovery_boundary_invalid');
         const previous = floor.state();
@@ -150,10 +151,14 @@ export async function main(args = process.argv.slice(2)) {
           request: independentRelease ? { ...request, mode: 'backup', event: 'workflow_dispatch',
             sourceSha: previous.sourceSha, sourceTree: previous.sourceTree } : request });
       }
+      // Close only the original run's stages; this run then verifies the
+      // committed schema read-only and deploys through its own new journal entry.
+      if (request.recoverMigrationRunId) migrationRecovery = await reconcileCommittedRelease({ floor, pool: pools.migrator,
+        database: config.database.name, role: connections.migrator.role, deployer, lease, request });
       if (independentRelease) await adoptLegacyPredecessor({ floor, pool: pools.migrator, deployer, lease, request });
       const state = floor.state(); check(state.pending === null, 'release_floor_unsettled');
       before = await deployer.inspect();
-      assertReleasePredecessor(before, state);
+      assertReleasePredecessor(before, state, request.sourceSha);
       await floor.verifyDatabase(pools.migrator);
       transport = createCloudflareRecoveryTransport({ accountId: config.accountId, target: config.target,
         mediaBucket: config.mediaBucket, backupBucket: config.backupBucket, token: credentials.cloudflareApiToken, signal: lease.signal });
@@ -178,7 +183,7 @@ export async function main(args = process.argv.slice(2)) {
       if (!independentRelease) await floor.begin(request, { sourceSha: request.sourceSha, sourceTree: request.sourceTree,
         schemaLedger: plan.afterLedger, bindingsSha256: built.bindingsSha256 });
       return { leaseHeld: true, sourceCompatible: true, retainedFloorVerified: true, flagsPreserved: true,
-        previousSourceSha: before.sourceSha, flagChanges: built.flagChanges };
+        previousSourceSha: before.sourceSha, flagChanges: built.flagChanges, ...(migrationRecovery ? { migrationRecovery } : {}) };
     });
     if (isHandoff) {
       await phase('handoff', async () => {

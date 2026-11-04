@@ -30,6 +30,10 @@ on:
         description: 'Required only for handoff: failed deploy run whose migration, deploy and health already passed'
         required: false
         type: string
+      recover_migration_run_id:
+        description: 'Optional for deploy of the same source: failed run that lost its lease after a confirmed migration COMMIT; never repeats SQL'
+        required: false
+        type: string
 permissions:
   contents: read
 # One release across BOTH environments: the current databases/operator schedules
@@ -77,6 +81,7 @@ jobs:
           RELEASE_MODE: ${{ inputs.mode || 'deploy' }}
           RELEASE_RECOVER_BACKUP_RUN_ID: ${{ inputs.recover_backup_run_id }}
           RELEASE_RECOVER_RELEASE_RUN_ID: ${{ inputs.recover_release_run_id }}
+          RELEASE_RECOVER_MIGRATION_RUN_ID: ${{ inputs.recover_migration_run_id }}
           RELEASE_COMMAND: admit
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public
         run: node controller/deploy/shared-release/cli.mjs
@@ -134,6 +139,7 @@ jobs:
           RELEASE_MODE: ${{ needs.admission.outputs.mode }}
           RELEASE_RECOVER_BACKUP_RUN_ID: ${{ inputs.recover_backup_run_id }}
           RELEASE_RECOVER_RELEASE_RUN_ID: ${{ inputs.recover_release_run_id }}
+          RELEASE_RECOVER_MIGRATION_RUN_ID: ${{ inputs.recover_migration_run_id }}
           RELEASE_COMMAND: execute
           RELEASE_SOURCE_DIRECTORY: ${{ github.workspace }}/source
           PUBLIC_RECEIPT_DIRECTORY: ${{ runner.temp }}/release-public

@@ -77,6 +77,22 @@ rejected. Such a staging receipt remains eligible under normal production
 admission. Hosted `mode=handoff` retains its independent failed-artifact binding
 and remains the fallback; it is not authorized by same-run evidence.
 
+A deploy with `recoverMigrationRunId` closes an earlier independent release that lost
+its lease after a confirmed COMMIT. The controller authenticates the terminal run,
+artifact and receipt (preflight passed, migration failed with `release_lease_lost` and
+valid public `leaseLoss`). Under the lease, before adoption or begin, the image requires
+that run's pending entry at stage 0 with exactly one commit intent plus `committed`,
+`pg_xact_status` committed with the candidate ledger, then read-only floor/ledger,
+material policy, GC OFF/zero fences, no other release/backup sessions and an unchanged
+Worker version/bindings before appending `release-abandoned`
+(`freedom.abandoned-committed-release/v1`). The raised schema/source floor remains;
+pending clears without touching `deployedSourceSha`. The same run then begins its own
+`release-begin-v2` for that exact source, verifies the unchanged schema read-only and
+deploys normally; `preflight.migrationRecovery` is required and published. Replay
+admits only an independent release of the committed source until its deploy passes;
+backups, legacy adoption, legacy begin and other sources refuse. Unknown COMMIT,
+aborted transactions, deploy intents and other failure codes still stop.
+
 The rest of this document describes retained legacy and backup contracts where
 seven phases, scheduler handoff or `backupDatabaseUrl` are mentioned.
 

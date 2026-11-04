@@ -157,7 +157,7 @@ image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、
    按 Run workflow，workflow branch 保持 `main`。
 2. 填完整 40 字元的 main commit SHA，選 `staging-next` 與 `deploy`。
    `plan` 是選用的 GitHub 准入預覽；日常部署已內建相同檢查，不必每次先跑。
-   日常操作的 `recover_backup_run_id`、`recover_release_run_id` 留空，沿用已安裝的工具映像，不必每次重建。
+   日常操作的 `recover_backup_run_id`、`recover_release_run_id`、`recover_migration_run_id` 留空，沿用已安裝的工具映像，不必每次重建。
    暫不提供會漂移的 `main`／tag／短 SHA 作為版本輸入。
 3. 在 Summary 看版本、原始發起人、此次執行者、兩個 CI run 及結果收據。
    同一版本最新的 main push Verify、CodeQL 必須全部成功；PR 的綠燈不替代主線驗證。
@@ -217,6 +217,30 @@ Worker 版本及設定，並重新檢查指定版本的 health。全部相符才
 使用自己的 GitHub 登入即可。原始發起人及重跑者都會再查當下權限，帳號同名但 ID
 不同、權限已撤銷或不在四人名單內，都不通過。Actions 使用短效 `GITHUB_TOKEN`
 查驗和登記發布；不需要 repo 管理員的 PAT。
+
+### migration 已確認 COMMIT，但部署前失去租約
+
+若 journal 已記下 migration 的 `committed`，之後才在提交後驗證或部署前失去租約，
+DB 已是新 schema，Worker 仍是前一版（與一般發布在 migration 和 deploy 之間的狀態相同）。
+floor 停在這筆未結清的發布，後續發布與備份都會被擋住，不能直接重跑原 run。
+
+四人可在 Shared release 選 `deploy`，填原失敗 run 的同一個完整 source SHA 與相同環境，
+並在 `recover_migration_run_id` 填原 run ID；`recover_backup_run_id`、`recover_release_run_id` 留空。
+此入口須先合併並安裝包含它的 operator 映像。正式站仍要求同一版本、同一映像最新的 staging
+發布成功，所以安裝新映像後，先以新映像在 staging 發布一次同一版本。
+
+控制程式核對原 run 的身分、attempt、失敗 job 與有 digest 的公開收據，要求只有 preflight
+通過、migration 以 `release_lease_lost`（含公開 `leaseLoss`）失敗。operator 取得同一把
+資料庫鎖後，以唯讀交易確認原 commit intent 的交易為 committed、ledger 等於候選版本，
+再讀回 floor、素材政策、GC OFF／零 fences、沒有其他發布或備份 session，且 Worker 版本與
+bindings 前後未變，才追加 `release-abandoned`：結清原 run，保留已提升的 schema／source floor。
+同一 run 接著照一般流程：migration 以唯讀方式重做提交後驗證（ledger、grants／RLS、runtime
+探測），不送任何 SQL；deploy、health、handoff 記在本 run 自己的 journal 項目。
+
+原 run／Deployment 保留 failure，本 run 另建自己的 Deployment，收據以 `migrationReconciliation`
+連結原失敗。COMMIT 結果不明（只有 intent、沒有 `committed`）、交易已 abort、已有 deploy intent、
+其他失敗原因、原收據過期、config 或 Worker 已變動，都會拒絕。若本 run 結清後又失敗，floor 只接受
+同一版本的一般 deploy（不必再填 run ID）；其他版本、版本銜接與備份要等這個版本部署完成。
 
 ## GitHub Environment 安裝
 

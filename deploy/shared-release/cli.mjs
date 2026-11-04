@@ -6,7 +6,7 @@ import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitIn
   requireStaging, requireLegacyPredecessor, requireRelease, releaseFailureCode } from './admission.mjs';
 import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
-import { requireFailedReleaseHandoff } from './handoff-admission.mjs';
+import { requireFailedReleaseHandoff, requireFailedReleaseMigration } from './handoff-admission.mjs';
 import { admitAutomaticRelease } from './automatic-admission.mjs';
 import { checkEnvironment, checkFlagDecisions } from './environment-check.mjs';
 import { MAX_FLAG_CHANGES, readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
@@ -73,6 +73,9 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     const handoffRecoveryEvidence = request.mode === 'handoff'
       ? await requireFailedReleaseHandoff(api, admission, installation) : undefined;
     if (handoffRecoveryEvidence) receipt.handoffReconciliation = handoffRecoveryEvidence;
+    const migrationRecoveryEvidence = admission.recoverMigrationRunId
+      ? await requireFailedReleaseMigration(api, admission, installation) : undefined;
+    if (migrationRecoveryEvidence) receipt.migrationReconciliation = migrationRecoveryEvidence;
     if (request.mode === 'deploy') {
       receipt.stagingEvidence = await requireStaging(api, admission, installation);
       admission.legacyPredecessor = await requireLegacyPredecessor(api, admission);
@@ -123,7 +126,8 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     // Persist an honest in-progress record before any remote mutation. Abrupt cancellation
     // cannot turn this into a success; GitHub deployment may remain in_progress for reconciliation.
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
-    receipt.phases = await executeOperator({ admission, installation, recoveryEvidence, handoffRecoveryEvidence, sourceRoot: source, temporaryRoot,
+    receipt.phases = await executeOperator({ admission, installation, recoveryEvidence, handoffRecoveryEvidence, migrationRecoveryEvidence,
+      sourceRoot: source, temporaryRoot,
       registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
       onProgress: async phases => {
         receipt.operatorProgress = phases;
@@ -177,6 +181,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       + (receipt.skipReason ? `- Skipped: \`${receipt.skipReason}\`\n` : '')
       + (receipt.handoffReconciliation ? `- Original failed release: [${receipt.handoffReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.handoffReconciliation.runId}); its failure is retained.\n` : '')
       + (receipt.status === 'reconciled' ? '- Handoff reconciled; no migration, publication or backup was repeated.\n' : '')
+      + (receipt.migrationReconciliation ? `- Original release with a committed migration: [${receipt.migrationReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.migrationReconciliation.runId}); its failure is retained and no SQL is repeated.\n` : '')
       + (receipt.operatorProgress?.at(-1)?.failureCode ? `- Failed phase: \`${receipt.operatorProgress.at(-1).failureCode}\`\n` : '')
       + (receipt.error ? `- Stopped: \`${receipt.error}\`\n` : '')
       + (receipt.flagChanges ? `- Flag comparison: ${receipt.flagChangesObservation} (plan null means unobserved)\n`
