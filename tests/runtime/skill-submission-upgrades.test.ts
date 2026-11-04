@@ -424,3 +424,14 @@ test('all twelve newly cataloged repositories hide member submissions, including
   for(const limit of [1,100])assert.deepEqual((await listPublishedSkillSubmissions(pool,limit)).map(row=>row.submission_id),[visible.submission_id]);
   for(const id of hidden)assert.equal((await readPublishedSkillSubmission(pool,id))?.submission_id,id);
 });
+
+test('both repositories cataloged on 2026-11-03 hide their member submissions while direct reads remain available',async t=>{
+  const repos=['kieiken/project-hub','WilsonAImaster/taiwanese-english-checker'];
+  mockGitHub(t,Object.fromEntries([...repos,'example/member-visible'].map((repo,i)=>[repo,{id:9900+i}])));
+  const owner=await login();
+  const visible=await publishManual(owner,'https://github.com/example/member-visible','仍可見的作品');
+  const hidden:string[]=[];
+  for(const repo of repos)hidden.push((await publishManual(owner,'https://github.com/'+repo,'新目錄作品')).submission_id);
+  for(const limit of [1,100])assert.deepEqual((await listPublishedSkillSubmissions(pool,limit)).map(row=>row.submission_id),[visible.submission_id]);
+  for(const id of hidden)assert.equal((await readPublishedSkillSubmission(pool,id))?.submission_id,id);
+});
