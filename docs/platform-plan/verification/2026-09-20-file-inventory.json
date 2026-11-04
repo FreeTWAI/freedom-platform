@@ -15394,8 +15394,8 @@
     },
     {
       "path": "docs/development/member-shared-skill-books-2026-11-03.md",
-      "bytes": 11600,
-      "sha256": "8f2f1a668f7328ef2024e19176920ca802cb4653b8f7c4ebbcdc40a2d63b6cda"
+      "bytes": 12154,
+      "sha256": "52066902ea663080fcd0879b6a18953dbfe00133846735c892100e43bff40582"
     },
     {
       "path": "docs/development/member-skill-registration.md",
@@ -15514,8 +15514,8 @@
     },
     {
       "path": "docs/development/repository-guidance-index.json",
-      "bytes": 79560,
-      "sha256": "16af2f38bbee651df60ea33be0482c72f47fd2b4cd8dcb32aa42ed9653c896ba"
+      "bytes": 79869,
+      "sha256": "4945c9a925dbf7993b6079009254ae6de1ca70ebe9ef07ba07f3c0965fffe8da"
     },
     {
       "path": "docs/development/repository-integration.md",
@@ -20864,8 +20864,8 @@
     },
     {
       "path": "modules/community/community-author-skills.ts",
-      "bytes": 79613,
-      "sha256": "4e7275e3ad245f5433c56cb0b7bccb40335aef0496d3f865668633210af84893"
+      "bytes": 80057,
+      "sha256": "bcdb624bd5ae77dc090881d358440a24f8e25688d1350bac67c9b4bcea10a64d"
     },
     {
       "path": "modules/community/content-relations.ts",
@@ -21269,8 +21269,8 @@
     },
     {
       "path": "modules/community/share-introductions/project-hub.json",
-      "bytes": 9118,
-      "sha256": "5c3ad3cdc7b68894d536fae3aadb46d600859e46ba07d3a14f1343449e83239f"
+      "bytes": 9174,
+      "sha256": "d9a07d27802635c3afa17decaf22d06d9ea5e818b088ddabf8918b36c7937a36"
     },
     {
       "path": "modules/community/share-introductions/project-template.json",
@@ -26819,8 +26819,8 @@
     },
     {
       "path": "tests/runtime/member-shared-skill-books-2026-11-03.test.ts",
-      "bytes": 9817,
-      "sha256": "3d7a7668899e146e875c002d290d433e9f8177b4998b45a1c38f3bcd630d4fa6"
+      "bytes": 10606,
+      "sha256": "8a8c04e00609baba415f5c1779a36d2f83b74bae91f82fd9300cb9eb4bda350b"
     },
     {
       "path": "tests/runtime/member-shared-skill-books.test.ts",
