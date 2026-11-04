@@ -58,6 +58,8 @@
     "tests/e2e/message-retraction.spec.ts",
     "tests/e2e/message-load-older.spec.ts",
     "tests/runtime/direct-message-receipts.test.ts",
+    "tests/runtime/direct-list-poll-isolation.test.ts",
+    "tests/e2e/direct-list-poll-isolation.spec.ts",
     "tests/runtime/member-channels-core.test.ts",
     "tests/runtime/member-communications.test.ts",
     "tests/runtime/message-retraction-client.test.ts",
