@@ -4,6 +4,50 @@ import {navigate} from './navigation.js';
 import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 
+// Fixed minimal cosmetic-filter excerpt, not a live network dependency.
+// EasyList https://easylist.to/easylist/easylist.txt, version 202611021446.
+// Download SHA256 e7d918a3a427f4d6ce3141c298f5c41e5d014b5c3dd2192845b0d448f68c729a.
+// These names describe game UI, not advertising; do not override user filters.
+const cosmeticSelectors='.ad-root,.ad-header,.ad-footer,.ad-button,.ad-notice,.ad-result,.ad-main';
+async function installCosmeticFilters(page:Page){
+  // Append to an actual same-origin stylesheet so the test respects style-src 'self'.
+  await page.route(/\/assets\/[^/]+\.css(?:\?.*)?$/,async route=>{
+    const response=await route.fetch();
+    await route.fulfill({response,body:`${await response.text()}\n${cosmeticSelectors}{display:none!important}`});
+  });
+}
+
+for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,action] of [['photo','開照相館'],['stamp','拿起印章'],['cash','開始盤點']])test(`AD-6 cosmetic filters keep the anonymous lobby and ${game} entry visible at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height});
+  await installCosmeticFilters(page);
+  const writes:string[]=[];page.on('request',r=>{if(!['GET','HEAD'].includes(r.method()))writes.push(r.url());});
+  await page.goto('/play');
+  await expect(page).toHaveTitle('離譜日常 · 自由工坊');
+  await expect(page.locator('.fw-arcade-root')).toBeVisible();
+  await expect(page.locator('.fw-arcade-header')).toBeVisible();
+  await expect(page.locator('.fw-arcade-footer')).toBeVisible();
+  await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
+  // Negative control proves the filter is effective, not silently absent.
+  await page.evaluate(()=>{const el=document.createElement('div');el.className='ad-root';el.id='cosmetic-control';el.textContent='synthetic filter control';document.body.append(el);});
+  await expect(page.locator('#cosmetic-control')).toBeHidden();
+  await page.locator('#cosmetic-control').evaluate(el=>el.remove());
+  {
+    await page.getByRole('button',{name:action+' →',exact:true}).click();
+    await expect(page).toHaveURL(new RegExp(`[?]game=${game}&seed=`));
+    await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
+    await expect(page.locator('.fw-arcade-controls')).toBeVisible();
+    await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toBeVisible();
+    await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();
+    await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
+    await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
+    await expect(page.locator('.fw-arcade-welcome h1')).toBeFocused();
+    expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
+  }
+  expect(writes).toEqual([]);
+});
+
 async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
   // Keep lazy Three startup on a running clock, then freeze gameplay time.
   // Continuous RAF + trace readback on software WebGL can consume a whole
@@ -22,7 +66,7 @@ async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
   await expect(exit).toHaveAttribute('aria-disabled','false');
   await exit.click();
   await expect(page.getByRole('button',{name:'⛶ 全螢幕'})).toBeVisible();
-  await page.locator('.ad-board').focus();
+  await page.locator('.fw-arcade-board').focus();
 }
 async function enterNativeFullscreen(page:Page){
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
@@ -30,8 +74,8 @@ async function enterNativeFullscreen(page:Page){
   const exit=page.getByRole('button',{name:'退出全螢幕'});
   await expect(exit).toHaveAttribute('aria-pressed','true');
   await expect(exit).toHaveAttribute('aria-disabled','false');
-  await page.locator('.ad-board').focus();
-  await expect(page.locator('.ad-board')).toBeFocused();
+  await page.locator('.fw-arcade-board').focus();
+  await expect(page.locator('.fw-arcade-board')).toBeFocused();
 }
 async function expectResultInNativeFullscreen(page:Page){
   for (const name of ['系統分享圖片／連結','複製同題挑戰連結']) {
@@ -68,9 +112,9 @@ test('AD-3 public photo studio captures real frames, enforces film, and exports 
   await page.getByRole('button',{name:'挑選照片',exact:true}).click();
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await expectResultInNativeFullscreen(page);
-  await expect(page.locator('.ad-photo-choices button')).toHaveCount(4);
-  await page.locator('.ad-photo-choices button').first().click();
-  await expect(page.locator('.ad-photo-choices [aria-pressed="true"]')).toHaveCount(1);
+  await expect(page.locator('.fw-arcade-photo-choices button')).toHaveCount(4);
+  await page.locator('.fw-arcade-photo-choices button').first().click();
+  await expect(page.locator('.fw-arcade-photo-choices [aria-pressed="true"]')).toHaveCount(1);
   await page.getByRole('button',{name:'退出全螢幕'}).click();
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
   await page.evaluate(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
@@ -79,7 +123,7 @@ test('AD-3 public photo studio captures real frames, enforces film, and exports 
   await expect(viewportResult.getByRole('button',{name:'系統分享圖片／連結'})).toBeVisible();
   await expect(viewportResult.getByRole('button',{name:'複製同題挑戰連結'})).toBeVisible();
   await viewportResult.getByRole('button',{name:'退出全螢幕'}).click();
-  await expect(page.locator('.ad-photo-choices [aria-pressed="true"]')).toHaveCount(1);
+  await expect(page.locator('.fw-arcade-photo-choices [aria-pressed="true"]')).toHaveCount(1);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
   const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG'}).click();
   const file=await download,path=await file.path();expect(path).toBeTruthy();
@@ -91,7 +135,7 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
   test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});await openGame(page,'stamp');await enterNativeFullscreen(page);
   await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
   await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();
-  await page.keyboard.press('Space');await expect(page.locator('.ad-counter')).toHaveText('練習中');
+  await page.keyboard.press('Space');await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');
   await page.getByRole('button',{name:'繼續這一局',exact:true}).click();
   await page.keyboard.press('Space');await expect(page.getByText('練習完成。十二張正式公文，開始！',{exact:true})).toBeVisible();
   let point=stampTarget(42,0);
@@ -100,9 +144,9 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
     for(let k=0;k<Math.abs(x);k++)await page.keyboard.press(x>0?'ArrowRight':'ArrowLeft');
     for(let k=0;k<Math.abs(y);k++)await page.keyboard.press(y>0?'ArrowDown':'ArrowUp');
     point={x:point.x+x*.06,y:point.y+y*.06};await page.clock.fastForward(230);await page.keyboard.press('Space');
-    if(i<11)await expect(page.locator('.ad-counter')).toHaveText(`${i+1}/12`);
+    if(i<11)await expect(page.locator('.fw-arcade-counter')).toHaveText(`${i+1}/12`);
   }
-  await expect(page.locator('.ad-result-heading')).toContainText('完成 12 份文件');
+  await expect(page.locator('.fw-arcade-result-heading')).toContainText('完成 12 份文件');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await expectResultInNativeFullscreen(page);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
@@ -114,7 +158,7 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
   await page.getByRole('button',{name:'同一題再來一次'}).click();
-  await expect(page.locator('.ad-board')).toBeFocused();
+  await expect(page.locator('.fw-arcade-board')).toBeFocused();
   expect(await page.evaluate(() => !!document.fullscreenElement?.contains(document.activeElement))).toBe(true);
 });
 
@@ -122,12 +166,14 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
 // Budget both full cash rounds for recovery/share assertions before teardown;
 // retain desktop rendering, real inputs, and all individual assertion deadlines.
 test('AD-5 sort exact million, recover denied storage, cancel system share, and hand off without a post',async({page})=>{
-  test.setTimeout(180_000);await openGame(page,'cash');await enterNativeFullscreen(page);const posts:string[]=[];
+  test.setTimeout(180_000);await installCosmeticFilters(page);await openGame(page,'cash');await enterNativeFullscreen(page);const posts:string[]=[];
   page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
   await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
   for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
-  await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  await expect(page.locator('.fw-arcade-result')).toBeVisible();
+  await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();
+  await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await expectResultInNativeFullscreen(page);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
@@ -176,12 +222,12 @@ test('AD-5 final cash capture failure retries the completed scene without replay
     };
   });
   await page.keyboard.press(deck[29].valid?'ArrowRight':'ArrowLeft');
-  await expect(page.locator('.ad-notice')).toContainText('完成次數不會重算');
-  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 30 / 30');
-  await expect(page.locator('.ad-result-heading')).toHaveCount(0);
+  await expect(page.locator('.fw-arcade-notice')).toContainText('完成次數不會重算');
+  await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');
+  await expect(page.locator('.fw-arcade-result-heading')).toHaveCount(0);
   await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
-  await expect(page.locator('.ad-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
-  const image=page.locator('.ad-result-photo > img');
+  await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  const image=page.locator('.fw-arcade-result-photo > img');
   await expect(image).toHaveJSProperty('naturalWidth',960);
   await expect(image).toHaveJSProperty('naturalHeight',720);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
@@ -214,6 +260,7 @@ test('AD-7 guest result survives login, shows current author, and publishes only
 });
 
 test('AD-6 stage import times out, ignores late completion, and recovers only after explicit Retry',async({page})=>{
+  await installCosmeticFilters(page);
   const now=new Date('2026-10-23T00:00:00Z');
   await page.clock.install({time:now});
   await page.clock.pauseAt(new Date(now.getTime()+60_000));
@@ -227,12 +274,13 @@ test('AD-6 stage import times out, ignores late completion, and recovers only af
   const route=await requested,response=await route.fetch(),stageUrl=route.request().url();
   const start=page.getByRole('button',{name:'開始這一局',exact:true});
   const retry=page.getByRole('button',{name:'重試場景',exact:true});
-  const alert=page.getByRole('alert'),canvas=page.locator('.ad-stage canvas');
-  await expect(page.locator('.ad-stage-cover').getByRole('status')).toHaveText('正在佈置現場…');
+  const alert=page.getByRole('alert'),canvas=page.locator('.fw-arcade-stage canvas');
+  await expect(page.locator('.fw-arcade-stage-cover').getByRole('status')).toHaveText('正在佈置現場…');
   await page.clock.fastForward(14_999);
   await expect(alert).toHaveCount(0);await expect(retry).toHaveCount(0);
   await expect(start).toHaveCount(0);await expect(canvas).toHaveCount(0);
   await page.clock.fastForward(1);
+  await expect(alert).toBeVisible();
   await expect(alert).toHaveText('遊戲場景載入較久。請重試，或回遊樂場。');
   await expect(retry).toBeVisible();await expect(start).toHaveCount(0);
   await route.fulfill({response});
@@ -249,12 +297,12 @@ test('AD-6 stage import times out, ignores late completion, and recovers only af
   await expect(canvas).toHaveCount(1);await expect(start).toBeVisible();
   await start.click();
   await page.keyboard.press(cashDeck(42)[0].valid?'ArrowRight':'ArrowLeft');
-  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 1 / 30');
+  await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 1 / 30');
 });
 
 test('AD-6 render exception recovers paused, keeps progress and resumes action cooldowns only on Continue',async({page})=>{
   test.setTimeout(120_000);await openGame(page,'cash');
-  const deck=cashDeck(42),progress=page.locator('.ad-controls .ad-meta');
+  const deck=cashDeck(42),progress=page.locator('.fw-arcade-controls .fw-arcade-meta');
   await page.keyboard.press(deck[0].valid?'ArrowRight':'ArrowLeft');
   await expect(progress).toContainText('已分類 1 / 30');
   // Expire the first action's cooldown so it cannot mask a broken pause guard.
@@ -271,7 +319,7 @@ test('AD-6 render exception recovers paused, keeps progress and resumes action c
   // Reconstruction has the same bounded readiness phase as initial load and import retry.
   await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   const resume=page.getByRole('button',{name:'繼續這一局',exact:true});
-  await expect(resume).toBeVisible();await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
+  await expect(resume).toBeVisible();await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(1);
   await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
   await expect(progress).toContainText('已分類 1 / 30');
   await resume.click();
@@ -287,7 +335,7 @@ test('AD-6 factory failure releases an unreturned stage and retry creates exactl
   await page.addInitScript(()=>{
     const prototype=WebGL2RenderingContext.prototype,original=prototype.compileShader;
     prototype.compileShader=function(...args){
-      if(document.querySelector('.ad-stage canvas')){
+      if(document.querySelector('.fw-arcade-stage canvas')){
         prototype.compileShader=original;
         (window as unknown as {failedStageContext:WebGL2RenderingContext}).failedStageContext=this;
         throw Error('Synthetic pre-return environment failure');
@@ -297,14 +345,14 @@ test('AD-6 factory failure releases an unreturned stage and retry creates exactl
   });
   await page.goto('/play?game=cash&seed=42');
   await expect(page.getByRole('alert')).toContainText('此瀏覽器暫時無法開啟 3D 場景');
-  await expect(page.locator('.ad-stage canvas')).toHaveCount(0);
+  await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>(window as unknown as {failedStageContext:WebGL2RenderingContext}).failedStageContext.isContextLost())).toBe(true);
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
   await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
-  await expect(page.locator('.ad-stage canvas')).toHaveCount(1);
+  await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(1);
   await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await page.keyboard.press(cashDeck(42)[0].valid?'ArrowRight':'ArrowLeft');
-  await expect(page.locator('.ad-controls .ad-meta')).toContainText('已分類 1 / 30');
+  await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 1 / 30');
 });
 
 test('AD-7 importing preserves an existing draft and refuses to overwrite its image',async({page})=>{
@@ -330,13 +378,13 @@ test('AD-6 WebGL loss has a recoverable boundary and public layouts fit narrow, 
   for(const [width,height] of [[320,568],[667,375],[768,1024],[1440,900]]){
     await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
-  await page.locator('.ad-stage canvas').evaluate(c=>c.dispatchEvent(new Event('webglcontextlost',{cancelable:true})));
+  await page.locator('.fw-arcade-stage canvas').evaluate(c=>c.dispatchEvent(new Event('webglcontextlost',{cancelable:true})));
   await expect(page.getByRole('button',{name:'重試場景',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
   await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'繼續這一局',exact:true}).click();
-  await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();await expect(page.locator('.ad-stage canvas')).toHaveCount(0);
-  await expect(page.locator('.ad-game-card')).toHaveCount(3);
+  await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(0);
+  await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
 });
 
 for (const {game,width,height} of [
@@ -346,15 +394,16 @@ for (const {game,width,height} of [
 ] as const) {
   test(`fullscreen fallback keeps ${game} progress at ${width}x${height}`, async ({page}) => {
     test.setTimeout(120_000);
+    await installCosmeticFilters(page);
     await page.setViewportSize({width,height});
     await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', {configurable:true, value:false}));
     await openGame(page, game);
-    const counter = page.locator('.ad-counter');
+    const counter = page.locator('.fw-arcade-counter');
     if (game === 'photo') await page.getByRole('button',{name:'拍照快門'}).click();
     if (game === 'stamp') await page.getByRole('button',{name:'啪！蓋章'}).click();
     if (game === 'cash') await page.getByRole('button',{name:cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券'}).click();
     const before = await counter.textContent();
-    const progress = game === 'photo' ? page.getByRole('button',{name:'拍照快門'}) : game === 'stamp' ? counter : page.locator('.ad-controls .ad-meta');
+    const progress = game === 'photo' ? page.getByRole('button',{name:'拍照快門'}) : game === 'stamp' ? counter : page.locator('.fw-arcade-controls .fw-arcade-meta');
     const progressBefore = await progress.textContent();
     const canvas = page.locator('[data-game-stage] canvas');
     await expect(canvas).toHaveCount(1);
@@ -365,7 +414,8 @@ for (const {game,width,height} of [
     await expect(dialog).toContainText('全視窗模式');
     await expect(page.getByRole('button',{name:'退出全螢幕'})).toBeVisible();
     expect(await dialog.evaluate(el => { const r=el.getBoundingClientRect(); return [Math.round(r.width),Math.round(r.height)]; })).toEqual([width,height]);
-    await page.locator('.ad-board').focus();
+    expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await page.locator('.fw-arcade-board').focus();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(counter).toHaveText(before!);
@@ -384,11 +434,11 @@ test('native fullscreen enters on click and escape keeps the game mounted', asyn
   test.setTimeout(120_000);
   await page.setViewportSize({width:1440,height:900});
   await openGame(page,'cash');
-  const counter=page.locator('.ad-counter'), before=await counter.textContent();
+  const counter=page.locator('.fw-arcade-counter'), before=await counter.textContent();
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
   await expect(page.getByRole('button',{name:'退出全螢幕'})).toBeVisible();
-  await page.locator('.ad-board').focus();
+  await page.locator('.fw-arcade-board').focus();
   await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
   await expect(counter).toHaveText(before!);
@@ -396,6 +446,7 @@ test('native fullscreen enters on click and escape keeps the game mounted', asyn
 });
 
 test('rejected fullscreen request falls back and restores keyboard access', async ({page}) => {
+  await installCosmeticFilters(page);
   await page.addInitScript(() => {
     Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});
     Element.prototype.requestFullscreen = async () => { throw new DOMException('denied','NotAllowedError'); };
@@ -414,7 +465,7 @@ test('leaving fullscreen before starting is respected through a zero-photo retry
   await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});
   await page.addInitScript(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
   await page.goto('/play');
-  await page.locator('.ad-game-card').first().getByRole('button').click();
+  await page.locator('.fw-arcade-game-card').first().getByRole('button').click();
   const dialog=page.getByRole('dialog',{name:'遊戲全螢幕'});
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('全視窗模式');
@@ -430,8 +481,8 @@ test('leaving fullscreen before starting is respected through a zero-photo retry
   await page.getByRole('button',{name:'開始這一局'}).click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button',{name:'← 遊樂場'}).click();
-  await expect(page.locator('.ad-game-card')).toHaveCount(3);
-  await expect(page.locator('.ad-welcome h1')).toBeFocused();
+  await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
+  await expect(page.locator('.fw-arcade-welcome h1')).toBeFocused();
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
 });
 
@@ -458,7 +509,7 @@ test('fallback keeps keyboard focus inside game, result and replay', async ({pag
   await expect(result).toBeVisible();
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
   await page.getByRole('button',{name:'同一題再來一次'}).click();
-  await expect(page.locator('.ad-board')).toBeFocused();
+  await expect(page.locator('.fw-arcade-board')).toBeFocused();
   expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
 });
 
@@ -481,15 +532,48 @@ for (const outcome of ['resolve','reject'] as const) {
       };
     },outcome);
     await page.goto('/play');
-    await page.locator('.ad-game-card').nth(2).getByRole('button').click();
+    await page.locator('.fw-arcade-game-card').nth(2).getByRole('button').click();
     await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
     await page.getByRole('button',{name:'開始這一局'}).click();
-    await expect(page.locator('.ad-board')).toBeFocused();
+    await expect(page.locator('.fw-arcade-board')).toBeFocused();
     await page.evaluate(() => (window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen());
     await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toBeVisible();
-    await expect(page.locator('.ad-board')).toBeFocused();
+    await expect(page.locator('.fw-arcade-board')).toBeFocused();
     await page.keyboard.press('ArrowRight');
     // Either a correct or wrong classification changes the notice.
-    await expect(page.locator('.ad-notice')).not.toHaveText('道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。');
+    await expect(page.locator('.fw-arcade-notice')).not.toHaveText('道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。');
+  });
+}
+
+
+for (const outcome of ['resolve','reject'] as const) {
+  test(`fullscreen ${outcome} after leaving the game cannot cover the lobby`, async ({page}) => {
+    await installCosmeticFilters(page);
+    await page.addInitScript((outcome) => {
+      let current:Element|null=null;
+      Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});
+      Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>current});
+      document.exitFullscreen=async()=>{current=null;document.dispatchEvent(new Event('fullscreenchange'));};
+      Element.prototype.requestFullscreen=function(){
+        const target=this;
+        return new Promise<void>((resolve,reject)=>{
+          (window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen=()=>{
+            if(outcome==='reject'){reject(new DOMException('denied','NotAllowedError'));return;}
+            current=target;document.dispatchEvent(new Event('fullscreenchange'));resolve();
+          };
+        });
+      };
+    },outcome);
+    await page.goto('/play');
+    await page.locator('.fw-arcade-game-card').nth(2).getByRole('button').click();
+    await expect(page.getByRole('button',{name:'⛶ 全螢幕'})).toHaveAttribute('aria-disabled','true');
+    await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();
+    await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
+    await page.evaluate(()=>(window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen());
+    await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
+    await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toHaveCount(0);
+    await expect(page.locator('.fw-arcade-welcome h1')).toBeFocused();
+    expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
+    await expect(page.locator('.fw-arcade-game-card').first()).toBeVisible();
   });
 }

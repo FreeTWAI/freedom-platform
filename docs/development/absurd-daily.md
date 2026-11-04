@@ -47,7 +47,7 @@
 
 使用者於 2026-10-23 明確指出原模型與畫面缺乏吸引力，並允許遊戲不沿用社群配色。本輪重做為原創怪奇黏土玩具攝影棚：大鼻子西裝客人、會搶鏡的表情背景板、粉紅雨傘與三隻風衣鴿子，搭配拱門、方格地面、柔光燈、植物、角色陰影及環境反射。桌面使用青綠、奶油紙與珊瑚色印章；道具鈔有原創鴿子肖像及六種假票券。主頁卡圖由同一 Three renderer 的真實場景產生，沒有將概念圖當可玩畫面。
 
-原創幾何與 Canvas 紋理由本 PR 的 stage.ts 產生；不需要外部圖片、字型、模型服務或 API key。Three.js 與內建 addon 為 MIT，版本固定在 package-lock；原平台 Logo 保留原圖與比例。所有遊戲樣式限縮在 ad-root 內，站內發文器沿用既有平台樣式與權限。
+原創幾何與 Canvas 紋理由本 PR 的 stage.ts 產生；不需要外部圖片、字型、模型服務或 API key。Three.js 與內建 addon 為 MIT，版本固定在 package-lock；原平台 Logo 保留原圖與比例。所有遊戲樣式限縮在 fw-arcade-root 內，站內發文器沿用既有平台樣式與權限。
 
 素材入口：[攝影棚](../../apps/portal-web/public/games/absurd-daily/photo.jpg)、[蓋章桌面](../../apps/portal-web/public/games/absurd-daily/stamp.jpg)、[道具鈔](../../apps/portal-web/public/games/absurd-daily/cash.jpg)。這三張為卡圖，遊戲本身仍即時渲染；成果則保存該局真正的畫面。
 
