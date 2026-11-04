@@ -1,5 +1,5 @@
 import {ReportButton} from './MemberReporting';
-import {useEffect, useRef, useState, type FormEvent} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState, type FormEvent} from 'react';
 import {ApiError, type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
 import type {SocialPost} from './SocialZone';
@@ -38,6 +38,16 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
   const input=useRef<HTMLInputElement>(null),imageSeq=useRef(0),root=useRef<HTMLDivElement>(null),mounted=useRef(true);
   const [likePeople,setLikePeople]=useState<Mention[]>([]),[peopleCursor,setPeopleCursor]=useState<string|null>(null),[peopleBusy,setPeopleBusy]=useState(false),[peopleError,setPeopleError]=useState('');
   const peopleDialog=useRef<HTMLDialogElement>(null),peopleTrigger=useRef<HTMLButtonElement>(null),peopleSeq=useRef(0);
+  const peopleOwnerRef=useRef({client,postId:post.post_id,generation:client.sessionGeneration});
+  if(peopleOwnerRef.current.client!==client||peopleOwnerRef.current.postId!==post.post_id||peopleOwnerRef.current.generation!==client.sessionGeneration){
+    peopleOwnerRef.current={client,postId:post.post_id,generation:client.sessionGeneration};
+  }
+  const peopleOwner=peopleOwnerRef.current;
+  const ownsPeople=()=>mounted.current&&peopleOwnerRef.current===peopleOwner&&client.sessionGeneration===peopleOwner.generation;
+  useLayoutEffect(()=>{
+    setLikePeople([]);setPeopleCursor(null);setPeopleBusy(false);setPeopleError('');
+    return()=>{++peopleSeq.current;peopleDialog.current?.close();};
+  },[peopleOwner]);
   const [commentLiking,setCommentLiking]=useState<string|null>(null),commentLikeCommands=useRef(new Map<string,{liked:boolean;key:string}>());
   type CommentCommand={body:{text?:string;image_id?:string;sticker_id?:string;mention_ids?:string[]};file:File|null;uploadKey:string;key:string};
   const pendingComment = useRef<CommentCommand|null>(null);
@@ -56,7 +66,31 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
     return()=>{clearTimeout(timer);observer.disconnect();document.removeEventListener('visibilitychange',schedule);};
   },[client,post.post_id]);
   async function selectImage(next:File|null){const token=++imageSeq.current,generation=client.sessionGeneration;setError('');if(!next){setFile(null);setPreparing(false);return;}setPreparing(true);try{const prepared=await prepareSocialImage(next);if(token===imageSeq.current&&current(generation))setFile(prepared);}catch(e){if(token===imageSeq.current&&current(generation))setError(e instanceof Error?e.message:'圖片無法處理，草稿仍保留。');}finally{if(token===imageSeq.current&&current(generation))setPreparing(false);}}
-  async function loadPeople(next?:string){const token=++peopleSeq.current,generation=client.sessionGeneration;setPeopleBusy(true);setPeopleError('');if(!next){setLikePeople([]);setPeopleCursor(null);}try{const page=await client.get<{items:Mention[];next_cursor:string|null}>(`/social-posts/${post.post_id}/likes${next?`?cursor=${encodeURIComponent(next)}`:''}`);if(token===peopleSeq.current&&current(generation)){setLikePeople(old=>next?[...new Map([...old,...page.items].map(m=>[m.user_id,m])).values()]:page.items);setPeopleCursor(page.next_cursor);}}catch(e){if(token===peopleSeq.current&&current(generation))setPeopleError(e instanceof Error?e.message:'按讚名單暫時無法載入。');}finally{if(token===peopleSeq.current&&current(generation))setPeopleBusy(false);}}
+  async function loadPeople(next?:string,preserve=false){
+    if(!ownsPeople())return;
+    const token=++peopleSeq.current;
+    const currentPeople=()=>token===peopleSeq.current&&ownsPeople();
+    setPeopleBusy(true);setPeopleError('');
+    if(!next){if(!preserve)setLikePeople([]);setPeopleCursor(null);}
+    try{
+      const page=await client.get<{items:Mention[];next_cursor:string|null}>(`/social-posts/${post.post_id}/likes${next?`?cursor=${encodeURIComponent(next)}`:''}`);
+      if(currentPeople()){
+        setLikePeople(old=>next?[...new Map([...old,...page.items].map(m=>[m.user_id,m])).values()]:page.items);
+        setPeopleCursor(page.next_cursor);
+      }
+    }catch(e){if(currentPeople()){
+      if(e instanceof ApiError&&(e.unauthorized||e.accessExpired||e.status===403||e.status===404)){setLikePeople([]);setPeopleCursor(null);}
+      setPeopleError(e instanceof Error?e.message:'按讚名單暫時無法載入。');
+    }}
+    finally{if(currentPeople())setPeopleBusy(false);}
+  }
+  function updatePostLike(value:{liked:boolean;like_count:number}){
+    if(!ownsPeople())return;
+    onUpdate(value);
+    // Only the child's validated canonical ACK reaches this callback. Starting
+    // a new first-page read also fences a pre-ACK page that is still in flight.
+    if(ownsPeople()&&peopleDialog.current?.open)void loadPeople(undefined,true);
+  }
   function closePeople(){++peopleSeq.current;peopleDialog.current?.close();peopleTrigger.current?.focus();}
   async function likeComment(comment:Comment){if(commentLiking)return;const generation=client.sessionGeneration;const command=commentLikeCommands.current.get(comment.comment_id)??{liked:!comment.liked,key:crypto.randomUUID()};commentLikeCommands.current.set(comment.comment_id,command);setCommentLiking(comment.comment_id);setError('');try{const value=await client.post<{liked:boolean;like_count:number}>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/like`,{liked:command.liked},{idempotencyKey:command.key});if(!current(generation))return;setComments(rows=>rows.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row));confirmedComments.current=confirmedComments.current.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row);commentLikeCommands.current.delete(comment.comment_id);}catch(e){if(current(generation)){if(e instanceof ApiError&&!e.network)commentLikeCommands.current.delete(comment.comment_id);setError(e instanceof Error?e.message:'尚未確認按讚結果，請重試。');}}finally{if(current(generation))setCommentLiking(null);}}
 
@@ -154,9 +188,9 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
   }
   return <div ref={root} className="social-interactions stack">
     <div className="social-interaction-summary"><button ref={peopleTrigger} type="button" className="social-text-link" aria-label="查看按讚名單" onClick={()=>{peopleDialog.current?.showModal();void loadPeople();}}><SocialIcon name="like"/>{post.like_count??0} 人按讚</button><span title="在前景停留觀看的會員，每人只計一次"><SocialIcon name="eye"/>已讀 {post.read_count??0} 人</span></div>
-    <dialog ref={peopleDialog} className="social-publish-dialog social-people-dialog" aria-label="按讚名單" onCancel={e=>{e.preventDefault();closePeople();}}><header className="social-publish-head"><h2>按讚名單</h2><button type="button" className="btn btn-ghost" onClick={closePeople}>關閉名單</button></header>{likePeople.map(member=><p className="social-person" key={member.user_id}><MemberAvatar nickname={member.display_name}/><SocialMemberLink client={client} member={member}/></p>)}{peopleBusy&&<p role="status">載入中…</p>}{!peopleBusy&&!likePeople.length&&!peopleError&&<p>目前沒有可顯示的按讚會員。</p>}{peopleError&&<p role="alert">{peopleError}</p>}{(peopleCursor||peopleError)&&<button type="button" className="btn btn-ghost" disabled={peopleBusy} onClick={()=>void loadPeople(peopleCursor??undefined)}>{peopleError?'重試':'更多按讚會員'}</button>}</dialog>
+    <dialog ref={peopleDialog} className="social-publish-dialog social-people-dialog" aria-label="按讚名單" onCancel={e=>{e.preventDefault();closePeople();}}><header className="social-publish-head"><h2>按讚名單</h2><button type="button" className="btn btn-ghost" onClick={closePeople}>關閉名單</button></header>{likePeople.map(member=><p className="social-person" key={member.user_id}><MemberAvatar nickname={member.display_name}/><SocialMemberLink client={client} member={member}/></p>)}{peopleBusy&&<p role="status">載入中…</p>}{!peopleBusy&&!likePeople.length&&!peopleError&&<p>目前沒有可顯示的按讚會員。</p>}{peopleError&&<p role="alert">{peopleError}</p>}{(peopleCursor||peopleError)&&<button type="button" className="btn btn-ghost" disabled={peopleBusy} onClick={()=>void loadPeople(peopleCursor??undefined,true)}>{peopleError?'重試':'更多按讚會員'}</button>}</dialog>
     <div className="social-actions">
-      <SocialPostLike client={client} postId={post.post_id} liked={post.liked} count={post.like_count} onUpdate={onUpdate}/>
+      <SocialPostLike client={client} postId={post.post_id} liked={post.liked} count={post.like_count} onUpdate={updatePostLike}/>
       <button type="button" className="btn btn-ghost" aria-expanded={open} aria-controls={`social-comments-${post.post_id}`} onClick={() => { setOpen(!open); if (!open) void load(); else { ++sequence.current; pendingReadChanges.current = null; setLoading(false); } }}><SocialIcon name="comment"/>留言 · {post.comment_count ?? 0}</button>
       <SocialPostShare client={client} post={post}/>
       <ReportButton kind="post" id={post.post_id} label="貼文"/>
