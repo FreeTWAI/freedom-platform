@@ -48,6 +48,8 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
   const richDrafts=useRichChatDraft();
   const path=(key:string,rest:string)=>`/me/channels/${kind}/${encodeURIComponent(key)}/${rest}`;
   const [channels,setChannels]=useState<ChannelSummary[]>([]),[listNext,setListNext]=useState<number|null>(null);
+  // Empty states and offsets belong to the query that produced this first page.
+  const [listQuery,setListQuery]=useState<string|null>(null);
   const [listStatus,setListStatus]=useState<'loading'|'ready'|'error'>('loading'),[listError,setListError]=useState('');
   const [listMore,setListMore]=useState({loading:false,error:''}),[listRefresh,setListRefresh]=useState({loading:false,error:''});
   const [selected,setSelected]=useState<{key:string;name:string}|null>(null),[history,setHistory]=useState<History|null>(null);
@@ -134,12 +136,12 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
   }
   async function loadList(quiet=false){
     if(kind==='world'){setListStatus('ready');return;}
-    const generation=++listGeneration.current;listInFlight.current=quiet;setListMore({loading:false,error:''});
+    const generation=++listGeneration.current,query=roomQuery.trim();listInFlight.current=quiet;setListMore({loading:false,error:''});
     if(quiet)setListRefresh({loading:true,error:''});else{setListStatus('loading');setListError('');setListRefresh({loading:false,error:''});}
     try{
-      const page=await client.get<ChannelPage>(`/me/channels?kind=${kind}&limit=${PAGE}&offset=0${roomQuery.trim()?`&search=${encodeURIComponent(roomQuery.trim())}`:''}`);
+      const page=await client.get<ChannelPage>(`/me/channels?kind=${kind}&limit=${PAGE}&offset=0${query?`&search=${encodeURIComponent(query)}`:''}`);
       if(generation!==listGeneration.current)return;
-      listInFlight.current=null;setChannels(page.items);setListNext(page.next_offset);onUnread(page.unread_count);setListStatus('ready');setListRefresh({loading:false,error:''});
+      listInFlight.current=null;setChannels(page.items);setListNext(page.next_offset);setListQuery(query);onUnread(page.unread_count);setListStatus('ready');setListRefresh({loading:false,error:''});
       const key=current.current;
       if(key&&!gone.current.has(key)&&!page.items.some(item=>item.channel_key===key)){
         if(page.next_offset===null&&!roomQuery.trim())revoke(key,epoch.current,false);else void probe(key);
@@ -231,7 +233,7 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
     }finally{polling.current=false;}
   }
   async function moreChannels(){
-    if(listNext===null||listMore.loading)return;
+    if(!listSettled||listNext===null||listMore.loading)return;
     const generation=listGeneration.current;setListMore({loading:true,error:''});
     try{
       const page=await client.get<ChannelPage>(`/me/channels?kind=${kind}&limit=${PAGE}&offset=${listNext}${roomQuery.trim()?`&search=${encodeURIComponent(roomQuery.trim())}`:''}`);
@@ -403,6 +405,8 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
           </ol>):null,
     [history,key,me,Boolean(attempt),retracting,changeRichDraft,uid,calendarKey]);
   const ids={list:`${uid}-list`,title:`${uid}-title`,error:`${uid}-send-error`};
+  const listSettled=listStatus==='ready'&&listQuery===roomQuery.trim()&&!listRefresh.loading&&!listRefresh.error;
+  const emptyList=listSettled&&channels.length===0&&listNext===null;
   function switchPane(){setPicking(value=>!value);requestAnimationFrame(()=>{if(picking)heading.current?.focus();else document.getElementById(ids.list)?.focus();});}
   function returnFromWorld(){setPicking(true);onReturnToChats?.();}
   const backLabel=kind==='world'?'← 返回對話列表':compact?`切換${text.unit}`:`← 返回${text.unit}列表`;
@@ -417,7 +421,7 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
       {listStatus==='error'&&<div className="banner banner-error" role="alert">{text.unit}頻道讀取失敗：{listError}<div className="messages-actions"><button className="btn btn-ghost" type="button" onClick={()=>void loadList()}>重新讀取{text.unit}頻道</button></div></div>}
       {listStatus==='ready'&&<div className="messages-actions"><button className="btn btn-ghost" type="button" aria-disabled={listRefresh.loading} onClick={()=>{if(!listRefresh.loading)void loadList(true);}}>{listRefresh.loading?`正在整理${text.unit}頻道…`:`重新整理${text.unit}頻道`}</button></div>}
       {listRefresh.error&&<p className="banner banner-error" role="alert">{text.unit}頻道重新整理失敗：{listRefresh.error}</p>}
-      {listStatus==='ready'&&(channels.length===0&&listNext===null?<div className="stack"><p className="empty">{text.empty}</p><div className="messages-actions"><button className="btn btn-primary" type="button" onClick={()=>onNavigate(text.home)}>{text.homeLabel}</button></div></div>
+      {listStatus==='ready'&&(emptyList&&!roomQuery.trim()?<div className="stack"><p className="empty">{text.empty}</p><div className="messages-actions"><button className="btn btn-primary" type="button" onClick={()=>onNavigate(text.home)}>{text.homeLabel}</button></div></div>
         :<ul className="messages-list member-channel-list" aria-label={`${text.unit}頻道列表`}>
           {channels.filter(item=>item.name.toLocaleLowerCase().includes(roomQuery.trim().toLocaleLowerCase())).map(item=>{const meta=`${uid}-meta-${item.channel_key}`;return <li key={item.channel_key} className={item.unread_count?'is-unread':undefined}>
             <button type="button" className="messages-peer channel-button" data-channel-key={item.channel_key} aria-label={item.name} aria-describedby={meta}
@@ -430,8 +434,8 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
           </li>;})}
         </ul>)}
       {listMore.error&&<p className="banner banner-error" role="alert">更多{text.unit}頻道讀取失敗：{listMore.error}</p>}
-      {roomQuery.trim()&&listStatus==='ready'&&!listRefresh.loading&&!channels.some(item=>item.name.toLocaleLowerCase().includes(roomQuery.trim().toLocaleLowerCase()))&&<p className="empty">沒有符合的頻道，請換個關鍵字。</p>}
-      {listStatus==='ready'&&listNext!==null&&<button className="btn btn-ghost" type="button" disabled={listMore.loading} onClick={()=>void moreChannels()}>{listMore.loading?'正在讀取…':listMore.error?`重試載入更多${text.unit}頻道`:`載入更多${text.unit}頻道`}</button>}
+      {roomQuery.trim()&&emptyList&&<p className="empty">沒有符合的頻道，請換個關鍵字。</p>}
+      {listStatus==='ready'&&listNext!==null&&<button className="btn btn-ghost" type="button" disabled={listMore.loading||!listSettled} onClick={()=>void moreChannels()}>{listMore.loading?'正在讀取…':listMore.error?`重試載入更多${text.unit}頻道`:`載入更多${text.unit}頻道`}</button>}
     </section>}
     <section hidden={singlePane&&(!selected||picking)} className="messages-thread" data-chat-open={Boolean(selected)&&status!=='gone'&&!picking&&!compact} aria-labelledby={ids.title} aria-busy={status==='loading'}>
       {!selected&&<><h2 id={ids.title}>{text.title}</h2><p className="muted">{text.pick}</p></>}
