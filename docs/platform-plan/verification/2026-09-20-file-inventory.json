@@ -21554,8 +21554,8 @@
     },
     {
       "path": "modules/community/skill-pages/project-hub.json",
-      "bytes": 1097,
-      "sha256": "cfb23b844a8dc590156a035d358e6806f42e48b42a2b6b3f53b6b3328c8a86fa"
+      "bytes": 1160,
+      "sha256": "b70fa8fc7dd246f82bf7d2c84e2d4d72826bfc5711935cbe03e60aae11468cb9"
     },
     {
       "path": "modules/community/skill-pages/project-template.json",
