@@ -68,6 +68,8 @@
 .social-publish-identity small{display:block;color:var(--muted);font-size:.875rem}
 .social-native-composer textarea{font-size:16px;min-height:160px;resize:vertical}
 .social-card-body>.social-thumb,.social-card-body>.social-placeholder{width:calc(100% + 1.7rem);max-width:none;margin-inline:-.85rem}
+.social-composer-optional-tools{margin:0;padding:0;border:0;min-width:0}
+.social-composer-optional-tools[hidden]{display:none}
 .social-composer-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem}
 .social-composer-footer .btn{width:auto;min-height:44px}
 .social-post-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-width:0}

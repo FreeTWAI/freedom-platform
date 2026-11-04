@@ -15,6 +15,27 @@ async function composer(page:Page,email='maker@local.test'){
   return page.getByRole('dialog',{name:'建立貼文',exact:true});
 }
 
+test('optional writing and sharing stay collapsed without loading tools, while history appears only when useful',async({page})=>{
+  const optionalLoads:string[]=[],writes:string[]=[];
+  page.on('request',request=>{
+    if(/\/assets\/(?:SocialPostOptimizer|SocialCrossPlatformShare)-[^/]+\.js/.test(request.url()))optionalLoads.push(request.url());
+    if(request.method()==='POST'&&/\/api\/v1\/(?:social-posts|me\/(?:model-|private-work))/.test(request.url()))writes.push(request.url());
+  });
+  const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true}),tools=dialog.getByRole('button',{name:'文案與分享',exact:true});
+  const undo=dialog.getByRole('button',{name:'復原上一步',exact:true}),redo=dialog.getByRole('button',{name:'重做',exact:true});
+  await expect(tools).toHaveAttribute('aria-expanded','false');await expect(undo).toHaveCount(0);await expect(redo).toHaveCount(0);
+  await expect(dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true})).toBeHidden();
+  await expect(dialog.getByRole('button',{name:'↗ Social Post 分享',exact:true})).toBeHidden();
+  await tools.focus();await page.keyboard.press('Enter');await expect(tools).toHaveAttribute('aria-expanded','true');
+  await expect(dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true})).toBeVisible();
+  await expect(dialog.getByRole('button',{name:'↗ Social Post 分享',exact:true})).toBeVisible();
+  await page.keyboard.press('Space');await expect(tools).toHaveAttribute('aria-expanded','false');await expect(tools).toBeFocused();
+  await area.fill('只寫貼文，不開其他工具。');await undo.click();await expect(area).toHaveValue('');await expect(area).toBeFocused();
+  await expect(undo).toBeDisabled();await expect(redo).toBeEnabled();await redo.click();await expect(area).toHaveValue('只寫貼文，不開其他工具。');
+  await expect(dialog.getByRole('button',{name:'發布貼文',exact:true})).toBeEnabled();
+  expect(optionalLoads).toHaveLength(0);expect(writes).toHaveLength(0);
+});
+
 test('mention search does not offer old-query members after failure or a late superseded response',async({page})=>{
   const dialog=await composer(page),draft=dialog.getByLabel('貼文內容',{exact:true});
   await draft.fill('保留我的貼文草稿');
@@ -238,8 +259,8 @@ test('English to Chinese unknown publication keeps the exact key and payload unt
     await page.getByRole('button',{name:'建立貼文',exact:true}).click();
     await expect(dialog.getByLabel('貼文內容',{exact:true})).toHaveValue('');
     await expect(dialog.locator('.social-compose-preview')).toHaveCount(0);
-    await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toBeDisabled();
-    await expect(dialog.getByRole('button',{name:'重做',exact:true})).toBeDisabled();
+    await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toHaveCount(0);
+    await expect(dialog.getByRole('button',{name:'重做',exact:true})).toHaveCount(0);
     expect(commands).toHaveLength(2);
   }finally{releaseFailure();releaseAcknowledgement();}
 });
@@ -247,7 +268,7 @@ test('English to Chinese unknown publication keeps the exact key and payload unt
 test('buttons and keyboard traverse multiple drafts, close retains history, and editing clears redo',async({page})=>{
   const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true});
   const undo=dialog.getByRole('button',{name:'復原上一步',exact:true}),redo=dialog.getByRole('button',{name:'重做',exact:true});
-  await expect(undo).toBeDisabled();await expect(redo).toBeDisabled();
+  await expect(undo).toHaveCount(0);await expect(redo).toHaveCount(0);
   await area.fill('第一稿：原始資訊與 https://example.test/?a=1&b=2');await area.press('Tab');
   await area.fill('第二稿：保留原本的連結與數字 42');await area.press('Tab');
   await area.fill('第三稿：繁中、emoji 🎨 與換行\n都要保留');
@@ -267,6 +288,7 @@ test('optimizer loads on demand, failed download retains editable history and ex
   const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true});
   await area.fill('工具失敗前的原稿');await area.press('Tab');await area.fill('工具失敗也要保留的修改');
   expect(loads).toBe(0);
+  await dialog.getByRole('button',{name:'文案與分享',exact:true}).click();
   await dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true}).click();
   await expect(dialog.getByRole('alert')).toContainText('文案優化未能開啟，草稿仍保留');
   await dialog.getByRole('button',{name:'復原上一步',exact:true}).click();await expect(area).toHaveValue('工具失敗前的原稿');
@@ -289,7 +311,7 @@ test('unknown publication locks history, retry confirms the original command and
   await expect(area).toBeDisabled();await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toBeDisabled();await expect(dialog.getByRole('button',{name:'重做',exact:true})).toBeDisabled();
   await dialog.getByRole('button',{name:'重試發布',exact:true}).click();await expect(dialog).not.toBeVisible();
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();await expect(area).toHaveValue('');
-  await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toBeDisabled();await area.press('Control+z');await expect(area).toHaveValue('');
+  await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toHaveCount(0);await area.press('Control+z');await expect(area).toHaveValue('');
 });
 
 test('ordinary note publication makes external URLs clickable without a preview or automatic navigation, including comment rendering',async({page,e2eAuthPool})=>{
@@ -350,7 +372,7 @@ test('signing out and signing in again cannot recover the previous session draft
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();
   await expect(dialog.getByLabel('貼文內容',{exact:true})).toHaveValue('');
-  await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toBeDisabled();
+  await expect(dialog.getByRole('button',{name:'復原上一步',exact:true})).toHaveCount(0);
 });
 
 test('history controls fit a 320px composer and remain keyboard accessible',async({page})=>{

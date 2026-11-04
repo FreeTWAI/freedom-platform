@@ -3,17 +3,17 @@ import {test,expect,type Page} from './fixtures.js';
 
 const image={name:'原始作品.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64')};
 async function login(page:Page){await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();}
-async function composer(page:Page){await login(page);await page.getByRole('button',{name:'建立貼文',exact:true}).click();return page.getByRole('dialog',{name:'建立貼文',exact:true});}
+async function composer(page:Page){await login(page);await page.getByRole('button',{name:'建立貼文',exact:true}).click();const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true});await dialog.getByRole('button',{name:'文案與分享',exact:true}).click();return dialog;}
 async function sharing(page:Page){const dialog=await composer(page);await dialog.getByRole('button',{name:'↗ Social Post 分享',exact:true}).click();const panel=dialog.getByRole('region',{name:'多平台分享',exact:true});await panel.getByRole('button',{name:'了解並開啟',exact:true}).click();for(const name of ['X','Instagram','Facebook','Threads']){const button=panel.getByRole('button',{name,exact:true});await expect(button).toHaveAttribute('aria-pressed','true');await button.click();}return {dialog,panel};}
 function writes(page:Page){const result:string[]=[];page.on('request',request=>{if(request.method()!=='GET'&&request.url().includes('/api/v1/')&&!request.url().includes('/auth/')&&!request.url().endsWith('/read'))result.push(request.url());});return result;}
 
 // Browser auto-detection and explicit settings use the same localized composer.
 const sharingLanguages=[
-  {id:'zh-Hant',locale:'zh-TW',name:'繁體中文',login:'登入',title:'建立貼文',close:'關閉發文',content:'貼文內容',publish:'發布貼文',workshop:'發布到工坊',share:'↗ Social Post 分享',panel:'多平台分享',enable:'了解並開啟',decline:'先不要',collapse:'收合',selected:'已選 1 個平台'},
-  {id:'en',locale:'en-US',name:'English',login:'Sign in',title:'Create post',close:'Close composer',content:'Post content',publish:'Publish post',workshop:'Publish to Workshop',share:'↗ Social Post share',panel:'Share to platforms',enable:'Understand and enable',decline:'Not now',collapse:'Collapse',selected:'1 platforms selected'},
-  {id:'ja',locale:'ja-JP',name:'日本語',login:'ログイン',title:'投稿を作成',close:'投稿画面を閉じる',content:'投稿内容',publish:'投稿する',workshop:'工坊に投稿',share:'↗ Social Post 共有',panel:'複数のサービスに共有',enable:'確認して有効にする',decline:'今はしない',collapse:'閉じる',selected:'1件選択中'},
-  {id:'ko',locale:'ko-KR',name:'한국어',login:'로그인',title:'게시물 작성',close:'게시 작성기 닫기',content:'게시물 내용',publish:'게시',workshop:'공방에 게시',share:'↗ Social Post 공유',panel:'여러 플랫폼에 공유',enable:'이해하고 사용하기',decline:'나중에',collapse:'접기',selected:'플랫폼 1개 선택'},
-  {id:'es',locale:'es-ES',name:'Español',login:'Iniciar sesión',title:'Crear publicación',close:'Cerrar editor',content:'Contenido de la publicación',publish:'Publicar',workshop:'Publicar en Workshop',share:'↗ Social Post compartir',panel:'Compartir en plataformas',enable:'Entendido, activar',decline:'Ahora no',collapse:'Contraer',selected:'1 plataformas seleccionadas'},
+  {id:'zh-Hant',tools:'文案與分享',locale:'zh-TW',name:'繁體中文',login:'登入',title:'建立貼文',close:'關閉發文',content:'貼文內容',publish:'發布貼文',workshop:'發布到工坊',share:'↗ Social Post 分享',panel:'多平台分享',enable:'了解並開啟',decline:'先不要',collapse:'收合',selected:'已選 1 個平台'},
+  {id:'en',tools:'Writing and sharing',locale:'en-US',name:'English',login:'Sign in',title:'Create post',close:'Close composer',content:'Post content',publish:'Publish post',workshop:'Publish to Workshop',share:'↗ Social Post share',panel:'Share to platforms',enable:'Understand and enable',decline:'Not now',collapse:'Collapse',selected:'1 platforms selected'},
+  {id:'ja',tools:'文章と共有',locale:'ja-JP',name:'日本語',login:'ログイン',title:'投稿を作成',close:'投稿画面を閉じる',content:'投稿内容',publish:'投稿する',workshop:'工坊に投稿',share:'↗ Social Post 共有',panel:'複数のサービスに共有',enable:'確認して有効にする',decline:'今はしない',collapse:'閉じる',selected:'1件選択中'},
+  {id:'ko',tools:'글쓰기 및 공유',locale:'ko-KR',name:'한국어',login:'로그인',title:'게시물 작성',close:'게시 작성기 닫기',content:'게시물 내용',publish:'게시',workshop:'공방에 게시',share:'↗ Social Post 공유',panel:'여러 플랫폼에 공유',enable:'이해하고 사용하기',decline:'나중에',collapse:'접기',selected:'플랫폼 1개 선택'},
+  {id:'es',tools:'Redacción y compartir',locale:'es-ES',name:'Español',login:'Iniciar sesión',title:'Crear publicación',close:'Cerrar editor',content:'Contenido de la publicación',publish:'Publicar',workshop:'Publicar en Workshop',share:'↗ Social Post compartir',panel:'Compartir en plataformas',enable:'Entendido, activar',decline:'Ahora no',collapse:'Contraer',selected:'1 plataformas seleccionadas'},
 ] as const;
 const textToolLabels={
   'zh-Hant':{emoji:'插入 emoji',mention:'標註會員',search:'搜尋標註會員'},
@@ -44,7 +44,7 @@ for(const language of sharingLanguages)test(`${language.id}: browser-selected co
         expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${language.id} ${width}: document has no horizontal overflow`).toBe(true);
         const dialogBox=(await dialog.boundingBox())!;expect(dialogBox).not.toBeNull();
         expect(dialogBox.x).toBeGreaterThanOrEqual(0);expect(dialogBox.x+dialogBox.width).toBeLessThanOrEqual(width);
-        for(const label of [language.close,publishLabel]){
+        for(const label of [language.close,language.tools,publishLabel]){
           const control=dialog.getByRole('button',{name:label,exact:true});await control.scrollIntoViewIfNeeded();
           const box=(await control.boundingBox())!;expect(box).not.toBeNull();
           expect(box.height,`${language.id} ${width}: ${label} touch target`).toBeGreaterThanOrEqual(44);
@@ -71,6 +71,10 @@ for(const language of sharingLanguages)test(`${language.id}: browser-selected co
     // Dismissing the mention picker returns to its shared emoji toolbar anchor.
     await expect(emoji).toBeFocused();await expect(source).toHaveValue(draft);
     await expect(dialog.getByRole('button',{name:language.publish,exact:true})).toBeEnabled();
+    const tools=dialog.getByRole('button',{name:language.tools,exact:true});
+    await expect(tools).toHaveAttribute('aria-expanded','false');await expect(trigger).toBeHidden();
+    await checkLayout(language.publish);
+    await tools.focus();await page.keyboard.press('Enter');await expect(tools).toHaveAttribute('aria-expanded','true');
     await expect(trigger).toHaveAttribute('aria-expanded','false');
     await checkLayout(language.publish);
     await trigger.click();
@@ -128,6 +132,9 @@ test('four clickable logos light up; official intent copy and explicit per-platf
 test('editing a prepared draft and closing the composer preserve the exact original handoff until explicit re-preparation',async({page,context})=>{
   await context.grantPermissions(['clipboard-read','clipboard-write']);const {dialog,panel}=await sharing(page),source=dialog.getByLabel('貼文內容',{exact:true});await source.fill('週一，台北的原始作品。');await panel.getByRole('button',{name:'X',exact:true}).click();await panel.getByRole('button',{name:'Threads',exact:true}).click();
   await panel.getByLabel('分享素材',{exact:true}).setInputFiles(image);await panel.getByRole('button',{name:'準備分享',exact:true}).click();await panel.getByRole('button',{name:'我已完成發布',exact:true}).click();await source.fill('週二，台中的新作品。');await expect(panel.getByRole('status').filter({hasText:'文案、平台或素材已變更'})).toBeVisible();
+  const tools=dialog.getByRole('button',{name:'文案與分享',exact:true});await tools.click();await expect(panel).toBeHidden();
+  await expect(source).toHaveValue('週二，台中的新作品。');await tools.click();
+  await expect(panel.locator('.social-share-progress')).toHaveText('本人確認完成 1/2');await expect(panel.locator('.social-share-files')).toContainText('原始作品.png');
   await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeFocused();await page.getByRole('button',{name:'建立貼文',exact:true}).click();await expect(source).toHaveValue('週二，台中的新作品。');
   await expect(panel.locator('.social-share-progress')).toHaveText('本人確認完成 1/2');await expect(panel.locator('.social-share-files')).toContainText('原始作品.png');await panel.getByRole('button',{name:'複製文案',exact:true}).click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe('週一，台北的原始作品。');
   await panel.getByRole('button',{name:'使用目前內容重新準備',exact:true}).click();await expect(panel.locator('.social-share-progress')).toHaveText('本人確認完成 0/2');await panel.getByRole('button',{name:'複製文案',exact:true}).click();expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe('週二，台中的新作品。');
@@ -210,6 +217,8 @@ test('real logout and another login clear opt-in, prepared private caption, orig
   const {dialog,panel}=await sharing(page);await dialog.getByLabel('貼文內容',{exact:true}).fill('PRIVATE-MEMBER-DRAFT-ONLY');await panel.getByRole('button',{name:'Instagram',exact:true}).click();await panel.getByLabel('分享素材',{exact:true}).setInputFiles(image);await panel.getByRole('button',{name:'準備分享',exact:true}).click();
   await dialog.getByRole('button',{name:'關閉發文',exact:true}).click();await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'登出',exact:true}).click();await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await page.getByRole('button',{name:'建立貼文',exact:true}).click();await expect(dialog.getByLabel('貼文內容',{exact:true})).toHaveValue('');
+  await expect(dialog.getByRole('button',{name:'文案與分享',exact:true})).toHaveAttribute('aria-expanded','false');
+  await dialog.getByRole('button',{name:'文案與分享',exact:true}).click();
   await dialog.getByRole('button',{name:'↗ Social Post 分享',exact:true}).click();await expect(panel.getByRole('button',{name:'了解並開啟',exact:true})).toBeVisible();await expect(panel).not.toContainText('PRIVATE-MEMBER-DRAFT-ONLY');await expect(panel).not.toContainText('原始作品.png');
 });
 
