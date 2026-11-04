@@ -41,7 +41,7 @@ function harness(){
   const url=()=>node(n=>n.props.className==='skill-share-url')?.props.children;
   const close=()=>click('關閉分享預覽');
   const unmount=()=>{for(const hook of hooks)hook?.cleanup?.();};
-  return {props,requests,copies,shares,timers,module,view,node,button,click,request,response,expire,start,text,url,close,unmount};
+  return {props,requests,copies,shares,timers,module,navigator,view,node,button,click,request,response,expire,start,text,url,close,unmount};
 }
 const introPath='/api/v1/skills/social-post/share-content';
 async function anonymous(h:ReturnType<typeof harness>){h.response('/api/v1/session',{});await flush();}
@@ -92,9 +92,9 @@ test('successful tracking retains the same intro, link and real returned point c
   assert.equal(h.request(introPath).options.credentials,'omit');assert.equal(h.request('/api/v1/promotion/links').options.method,'POST');
 });
 
-for(const action of ['close','book','unmount'])test(`${action} cancels outstanding requests and ignores their late results`,async()=>{
+for(const action of ['close','book','parent','unmount'])test(`${action} cancels outstanding requests and ignores their late results`,async()=>{
   const h=harness();await h.start();await loaded(h);const session=h.request('/api/v1/session');
-  if(action==='close')h.close();else if(action==='book'){h.props.bookId='editkin';h.view();}else h.unmount();await flush();
+  if(action==='close')h.close();else if(action==='book'){h.props.bookId='editkin';h.view();}else if(action==='parent'){h.props.active=false;h.view();}else h.unmount();await flush();
   assert.equal(session.options.signal.aborted,true);assert.equal(h.timers.size,0);session.resolve({ok:true,json:async()=>({csrf_token:'synthetic-csrf'})});await flush();
   assert.equal(h.requests.filter(r=>r.path==='/api/v1/promotion/links').length,0);assert.equal(h.copies.length,0);assert.equal(h.shares.length,0);
 });
@@ -117,19 +117,19 @@ test('session, tracking request and tracking body share one unchanged deadline',
   await h.expire();const fallback=h.url();finishTracking({path:'/go/abcdefghij',points:{week:3,all:7}});await flush();assert.equal(h.url(),fallback);assert.equal(h.timers.size,0);
 });
 
-for(const action of ['book','unmount'])test(`${action} before introduction resolves clears both deadlines and never opens the old preview`,async()=>{
+for(const action of ['book','parent','unmount'])test(`${action} before introduction resolves clears both deadlines and never opens the old preview`,async()=>{
   const h=harness();await h.start();const intro=h.request(introPath),session=h.request('/api/v1/session');
-  if(action==='book'){h.props.bookId='editkin';h.view();}else h.unmount();await flush();
+  if(action==='book'){h.props.bookId='editkin';h.view();}else if(action==='parent'){h.props.active=false;h.view();}else h.unmount();await flush();
   assert.equal(intro.options.signal.aborted,true);assert.equal(session.options.signal.aborted,true);assert.equal(h.timers.size,0);
   intro.resolve({ok:true,json:async()=>content});session.resolve({ok:true,json:async()=>({csrf_token:'synthetic-csrf'})});await flush();
-  if(action==='book')assert.equal(h.node(n=>n.type==='dialog')?.props.ref.current.open,false);
+  if(action!=='unmount')assert.equal(h.node(n=>n.type==='dialog')?.props.ref.current.open,false);
   assert.equal(h.requests.length,2);assert.equal(h.copies.length,0);assert.equal(h.shares.length,0);
 });
 
 for(const [file,signature,component,props] of [
   ['SkillBookIntro.tsx','export function SkillBookIntro','SkillBookIntro',{book:{id:'social-post',title:'合成技能書',description:'合成用途',repository_url:'https://example.test/source'}}],
   ['CommunitySkillBooks.tsx','function SubmissionIntro','SubmissionIntro',{item:{submission_id:'17c80987-1d06-4eb3-9cc4-5cc03a4987ec',title:'合成投稿',description:'合成用途',relationship:'recommender',source:{repository_url:'https://example.test/source',repository_full_name:'example/source',license_spdx:'MIT',commit_sha:''}}}],
-] as const)test(`${component} keeps its share child mounted only while the parent reading dialog is open`,()=>{
+] as const)test(`${component} retains its visited share child and propagates the parent reading state`,()=>{
   const text=readFileSync(new URL('../../apps/portal-web/src/modules/'+file,import.meta.url),'utf8');
   const start=text.indexOf(signature);assert.ok(start>=0);
   const end=file==='SkillBookIntro.tsx'?text.indexOf('\n\n\n// Copy is',start):text.length;
@@ -144,11 +144,31 @@ for(const [file,signature,component,props] of [
   });
   const render=()=>{index=0;return exports.component(props);};
   const nodes=()=>all(render());
-  assert.equal(nodes().filter(n=>n.type==='SkillShare').length,0);
+  const shares=()=>nodes().filter(n=>n.type==='SkillShare');
+  assert.equal(shares().length,component==='SkillBookIntro'?0:1);
+  if(shares().length)assert.equal(shares()[0].props.active,false);
   nodes().find(n=>n.type==='button'&&n.props['aria-haspopup']==='dialog')!.props.onClick();
-  assert.equal(nodes().filter(n=>n.type==='SkillShare').length,1);
+  assert.equal(shares().length,1);assert.equal(shares()[0].props.active,true);
   nodes().find(n=>n.type==='button'&&n.props['aria-label']==='關閉技能書介紹')!.props.onClick();
-  assert.equal(nodes().filter(n=>n.type==='SkillShare').length,0);
+  assert.equal(shares().length,1);assert.equal(shares()[0].props.active,false);
   nodes().find(n=>n.type==='button'&&n.props['aria-haspopup']==='dialog')!.props.onClick();
-  assert.equal(nodes().filter(n=>n.type==='SkillShare').length,1);
+  assert.equal(shares().length,1);assert.equal(shares()[0].props.active,true);
+});
+
+
+test('inactive parent keeps the same dialog shell, blocks hidden loads and reopens with fresh work',async()=>{
+  const h=harness();await h.start();await anonymous(h);const old=h.request(introPath),shell=h.node(n=>n.type==='dialog')!.props.ref.current;
+  h.props.active=false;h.view();await flush();assert.equal(shell.open,false);assert.equal(old.options.signal.aborted,true);
+  assert.equal(h.button('分享技能')?.props.disabled,true);const count=h.requests.length;h.button('分享技能')!.props.onClick();await flush();assert.equal(h.requests.length,count);
+  old.resolve({ok:true,json:async()=>({...content,introductions:['關閉後舊內容']})});await flush();await h.expire();assert.equal(shell.open,false);
+  h.props.active=true;h.view();assert.equal(h.node(n=>n.type==='dialog')!.props.ref.current,shell);assert.equal(shell.open,false);
+  await h.start();await anonymous(h);await loaded(h);assert.equal(shell.open,true);assert.ok(!h.text().includes('關閉後舊內容'));
+});
+
+test('closing a parent suppresses late clipboard feedback while retaining the unresolved capability lock',async()=>{
+  const h=harness();await h.start();await anonymous(h);await loaded(h);
+  let finish!:()=>void;h.navigator.clipboard.writeText=()=>new Promise<void>(resolve=>{finish=resolve;});
+  const pending=h.click('複製介紹與連結');await flush();h.props.active=false;h.view();h.props.active=true;h.view();
+  await h.start();await anonymous(h);await loaded(h);assert.equal(h.button('分享')?.props.disabled,true);
+  finish();await pending;await flush();h.view();assert.ok(!h.text().includes('已複製'));assert.equal(h.button('複製介紹與連結')?.props.disabled,false);
 });

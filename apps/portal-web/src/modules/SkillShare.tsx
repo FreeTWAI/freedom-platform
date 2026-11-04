@@ -60,22 +60,23 @@ export function randomIntroductionIndex(length:number,avoid?:number){
 }
 
 type Tracked={path:string;week:number;all:number};
-export function SkillShare({bookId,submissionId,title}:{bookId?:string;submissionId?:string;title:string}){
+export function SkillShare({bookId,submissionId,title,active=true}:{bookId?:string;submissionId?:string;title:string;active?:boolean}){
   const key=submissionId?`submission:${submissionId}`:bookId;
   const [loading,setLoading]=useState(false),[loaded,setLoaded]=useState<Loaded|null>(null),[index,setIndex]=useState(0);
   const [open,setOpen]=useState(false),[status,setStatus]=useState(''),[manual,setManual]=useState(false);
   const [tracked,setTracked]=useState<Tracked|'plain'|null>(null);
-  const {t}=useLanguage(),action=useLocalAction([key,title,open,index,tracked,loading]),busy=action.pending!==null;
+  const {t}=useLanguage(),action=useLocalAction([key,title,active,open,index,tracked,loading]),busy=action.pending!==null;
   const id=useId(),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),manualField=useRef<HTMLTextAreaElement>(null);
-  // Every reroll, close, book change or unmount bumps the generation so late async results are ignored.
+  // Retain the dialog shell, but invalidate all pending work when its reading parent closes.
+  // Every reroll, close, book change or unmount also bumps the generation.
   const generation=useRef(0),request=useRef<AbortController|null>(null),trackRequest=useRef<AbortController|null>(null);
   useEffect(()=>{
     generation.current++;request.current?.abort();request.current=null;trackRequest.current?.abort();trackRequest.current=null;
     setLoaded(null);setLoading(false);setOpen(false);setStatus('');setManual(false);setTracked(null);
     return()=>{generation.current++;request.current?.abort();request.current=null;trackRequest.current?.abort();trackRequest.current=null;};
-  },[key]);
-  useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();else if(!open&&dialog.current?.open)dialog.current.close();},[open]);
-  useEffect(()=>{if(manual&&open){manualField.current?.focus();manualField.current?.select();}},[manual,open]);
+  },[key,active]);
+  useEffect(()=>{if(open&&active&&!dialog.current?.open)dialog.current?.showModal();else if((!open||!active)&&dialog.current?.open)dialog.current.close();},[open,active]);
+  useEffect(()=>{if(manual&&open&&active){manualField.current?.focus();manualField.current?.select();}},[manual,open,active]);
   if(!key)return null;
   const current=loaded?.key===key?loaded:null,introductions=current?.content?.introductions??[];
   const introduction=introductions[index]??'',plain=shareUrl(submissionId?submissionSharePath(submissionId):skillSharePath(bookId!),introduction?index+1:undefined);
@@ -100,6 +101,7 @@ export function SkillShare({bookId,submissionId,title}:{bookId?:string;submissio
   }
   function resetStatus(){generation.current++;setStatus('');setManual(false);}
   async function load(show:boolean){
+    if(!active)return;
     const target=key!,controller=new AbortController(),run=++generation.current;
     request.current?.abort();request.current=controller;setLoading(true);setStatus('');setManual(false);void track();
     let next:Loaded;
@@ -131,7 +133,7 @@ export function SkillShare({bookId,submissionId,title}:{bookId?:string;submissio
   }
   async function copyOnly(){await copy(payload,generation.current);}
   return <div className="skill-share">
-    <button ref={trigger} type="button" className="btn btn-ghost" disabled={loading&&!open} aria-haspopup="dialog" onClick={()=>void load(true)}>{loading&&!open?'正在準備分享…':'分享技能'}</button>
+    <button ref={trigger} type="button" className="btn btn-ghost" disabled={!active||loading&&!open} aria-haspopup="dialog" onClick={()=>void load(true)}>{loading&&!open?'正在準備分享…':'分享技能'}</button>
     <dialog ref={dialog} className="skill-share-dialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-text`} data-book-id={submissionId?undefined:bookId} data-submission-id={submissionId} onCancel={event=>{event.stopPropagation();event.preventDefault();close();}} onClose={event=>{event.stopPropagation();setOpen(false);}}>
       {open&&current&&<div className="skill-share-preview">
         <header className="skill-share-head"><h2 id={`${id}-title`}>分享「{title}」</h2><button type="button" className="btn btn-ghost" onClick={close} aria-label="關閉分享預覽">關閉</button></header>

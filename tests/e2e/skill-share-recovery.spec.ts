@@ -38,13 +38,19 @@ test('closing the reading dialog cancels its pending nested share and does not r
   const card=await prepare(page),held:Route[]=[];
   await card.getByRole('button',{name:'預覽技能書',exact:true}).click();
   const reading=page.getByRole('dialog',{name:title,exact:true});await expect(reading).toBeVisible();
+  const shell=await reading.locator('.skill-share-dialog').elementHandle();expect(shell).not.toBeNull();
   await page.route('**/api/v1/skills/social-post/share-content',route=>{held.push(route);});
   try{
     await reading.getByRole('button',{name:'分享技能',exact:true}).click();await expect.poll(()=>held.length).toBeGreaterThan(0);
     await reading.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();await expect(reading).toBeHidden();
+    expect(await shell!.evaluate(element=>element.isConnected)).toBe(true);
     await page.clock.fastForward(8001);await expect(page.getByRole('dialog',{name:`分享「${title}」`,exact:true})).toBeHidden();
     await expect(card.getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();
     for(const route of held)await route.fulfill({json:content}).catch(()=>{});
     await expect(page.getByRole('dialog',{name:`分享「${title}」`,exact:true})).toBeHidden();
+    await card.getByRole('button',{name:'預覽技能書',exact:true}).click();await expect(reading).toBeVisible();
+    expect(await shell!.evaluate(element=>element===element.closest('.skill-intro-dialog')?.querySelector('.skill-share-dialog'))).toBe(true);
+    await expect(reading.locator('.skill-share-dialog')).toBeHidden();await expect(reading.getByRole('button',{name:'分享技能',exact:true})).toBeEnabled();
+    await shell!.dispose();
   }finally{for(const route of held)await route.abort().catch(()=>{});await page.unrouteAll({behavior:'wait'});}
 });
