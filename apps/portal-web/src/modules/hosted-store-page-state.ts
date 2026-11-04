@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {z} from 'zod';
 import {ApiError, type PortalClient} from '../api';
+import {isMissingStoreRead, readStoreRoot, StoreRootReadError} from './hosted-store-read-error';
 import {StoreViewSchema, MerchantProductPageSchema as ProductPageSchema, StorePreviewSchema,
   type StoreView, type MerchantProductView as ProductView} from '../../../../contracts/guild-launchpad/v1/storefront';
 import {ReservationSettingSchema} from '../../../../contracts/guild-launchpad/v1/hosted-shared-order';
@@ -82,7 +83,7 @@ export function useStorePageData({client, root, photosEnabled, appearanceEnabled
     const current = () => !signal.aborted && readGeneration.current === ticket && client.sessionGeneration === session;
     setLoading(true); setPublicationReview(null);
     try {
-      const next = StoreViewSchema.parse(await client.get(root, {signal}));
+      const next = StoreViewSchema.parse(await readStoreRoot(client, root, signal));
       let photos:ProductMediaView[]=[],galleryDrafts:ProductGalleryDraft[]=[], setting:z.infer<typeof ReservationSettingSchema>|null=null;
       let items: ProductView[] = [], draft: Preview | null = null, presentation: StoreAppearance | null = null, review: StorePublicationReview | null = null;
       let branding:StorefrontAppearanceDraft|null=null,brandingError=false,legal:SellerPoliciesDraft|null=null,legalError=false;
@@ -110,9 +111,10 @@ export function useStorePageData({client, root, photosEnabled, appearanceEnabled
     } catch (cause) {
       if (!current()) return 'superseded';
       setReadFailed(true);
-      if (cause instanceof ApiError && cause.status === 404 && !Object.values(photoBlockRef.current).some(Boolean)) setMissing(true);
-      else setError(errorText(cause));
-      if(options?.throwOnError) throw cause;
+      const readCause = cause instanceof StoreRootReadError ? cause.cause : cause;
+      if (isMissingStoreRead(cause, Object.values(photoBlockRef.current).some(Boolean))) setMissing(true);
+      else setError(errorText(readCause));
+      if(options?.throwOnError) throw readCause;
       return 'failed';
     } finally {if (current()) setLoading(false);}
   }

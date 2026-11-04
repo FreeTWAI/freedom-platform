@@ -31,3 +31,46 @@
   .guild-members .guild-member-roster,.guild-members .guild-member-actions,.guild-members .guild-member-confirm { justify-content: flex-start; }
   .guild-members .guild-member-reason,.guild-members .guild-member-confirm { text-align: left; }
 }
+
+/* Guild-only introduction cards; shared member/friend directories stay unchanged. */
+.guild-members { border-color:var(--line); }
+.guild-members .guild-members-heading h4 { color:var(--ink); }
+.guild-members .guild-members-heading p,.guild-members-intro,.guild-members-loading { color:var(--muted); }
+.guild-members-intro { margin:0; font-size:.875rem; line-height:1.6; }
+.guild-members .guild-member-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-items:start; }
+.guild-members .guild-member-card.directory-member { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; gap:12px; padding:16px; border:1px solid var(--line); border-top:3px solid var(--line); background:var(--bg-elev); color:var(--ink); border-radius:14px; min-width:0; }
+.guild-members .guild-member-card-self.directory-member { border-top-color:var(--focus); }
+.guild-member-card-heading { display:flex; align-items:center; gap:12px; min-width:0; }
+.guild-member-card-heading>div { min-width:0; }
+.guild-members .guild-member-card .member-avatar { width:52px; height:52px; flex-shrink:0; }
+.guild-member-card-heading h3 { margin:0; font-size:1.1rem; line-height:1.5; overflow-wrap:anywhere; }
+.guild-member-card-guild,.guild-member-card-caption { margin:0; color:var(--muted); font-size:.875rem; line-height:1.6; overflow-wrap:anywhere; }
+.guild-member-card-title,.guild-member-welcome { margin:0; font-size:.875rem; line-height:1.6; overflow-wrap:anywhere; }
+.guild-member-card-specialties { display:grid; gap:6px; }
+.guild-members .guild-member-card .pill { max-width:100%; white-space:normal; overflow-wrap:anywhere; font-size:.875rem; }
+.guild-members .guild-member-card .guild-member-membership { display:block; grid-column:auto; grid-row:auto; color:var(--muted); }
+.guild-members .guild-member-roster,.guild-members .guild-member-actions,.guild-members .guild-member-confirm { justify-content:flex-start; text-align:left; }
+.guild-members .guild-member-actions { border-top:1px solid var(--line); margin-top:6px; padding-top:10px; }
+.guild-member-admin-label { flex-basis:100%; font-size:.875rem; color:var(--muted); }
+.guild-members .guild-member-reason,.guild-members .guild-member-confirm { color:var(--muted); font-size:.875rem; text-align:left; }
+.guild-member-card-links { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.guild-member-card-links .btn { min-height:44px; font-size:.875rem; }
+.guild-members .guild-member-card-details { margin:0; border-top:1px solid var(--line); }
+.guild-members .guild-member-card-details>summary { color:var(--muted); font-size:.875rem; min-height:44px; }
+.guild-members .guild-member-card-details[open]>summary { color:var(--ink); border-color:var(--line); }
+.guild-members .guild-member-card a:focus-visible,.guild-members .guild-member-card summary:focus-visible { outline:2px solid var(--focus); outline-offset:3px; border-radius:6px; }
+.guild-members .guild-member-card a:hover,.guild-members .guild-member-card summary:hover { color:var(--ink); }
+.guild-member-card-expanded { display:grid; gap:16px; padding-top:12px; font-size:.875rem; line-height:1.6; }
+.guild-member-card-expanded h4 { margin:0 0 6px; font-size:.875rem; }
+.guild-member-card-expanded p,.guild-member-card-expanded dl { margin:0; }
+.guild-member-card-expanded dl>div { display:grid; grid-template-columns:minmax(0,1fr); gap:2px; margin-top:8px; }
+.guild-member-card-expanded dt { color:var(--muted); }
+.guild-member-card-expanded dd { margin:0; overflow-wrap:anywhere; }
+.guild-members .guild-members-empty { border-color:var(--line); color:var(--muted); font-size:.875rem; line-height:1.6; }
+@media(max-width:760px){.guild-members .guild-member-grid { grid-template-columns:minmax(0,1fr); }.guild-members .guild-member-card.directory-member { padding:12px; }}
+
+.guild-member-joined { margin:8px 0 0; font-size:.875rem; color:var(--muted); }
+.guild-members .guild-member-outcomes { min-width:0; }
+.guild-members .guild-member-outcomes>summary { cursor:pointer; padding:10px 0; line-height:1.6; }
+.guild-members .guild-member-outcomes .contribution-heading { flex-wrap:wrap; }
+.guild-members .guild-member-outcomes :is(p,code,a,h3,h4) { overflow-wrap:anywhere; }

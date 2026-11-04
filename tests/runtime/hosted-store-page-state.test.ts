@@ -101,6 +101,29 @@ const app=createRoot(document.getElementById('root'));w.unmount=()=>app.unmount(
         await page.evaluate(async()=>{const w=window as any;w.state.setPhotoBlocking('p',false);w.errors['']={status:404};await w.state.load();});assert.equal((await snapshot(page)).missing,true);
       }finally{await page.close();}
     });
+    await t.test('required child 404 retains the real store recovery entry and reload succeeds',async()=>{
+      for(const child of ['/products','/preview','/appearance','/publication-review']){
+        const page=await screen({mountStore:true},`w.errors['${child}']={status:404,message:'Child unavailable'}`);try{
+          await page.getByRole('alert').filter({hasText:'Child unavailable'}).waitFor();
+          assert.equal(await page.getByText('找不到這間商店。',{exact:true}).count(),0);
+          await page.evaluate(()=>{(window as any).errors={};});
+          await page.getByRole('button',{name:'重新載入',exact:true}).click();
+          await page.getByRole('heading',{name:'Test',exact:true}).waitFor();
+          assert.equal(await page.getByRole('alert').count(),0);
+        }finally{await page.close();}
+      }
+    });
+    await t.test('child 404 after an acknowledged write retains the snapshot and retries only the read',async()=>{
+      const page=await screen();try{await settled(page);const before=await snapshot(page);
+        await page.evaluate(async()=>{const w=window as any;w.errors['/products']={status:404,message:'Child unavailable'};await w.send();});
+        const after=await snapshot(page);assert.equal(after.missing,false);assert.deepEqual(after.view,before.view);assert.equal(after.review,null);
+        assert.equal(await page.evaluate(()=>(window as any).state.readFailed),true);
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),1);
+        await page.evaluate(async()=>{const w=window as any;w.errors={};await w.state.load();});
+        assert.equal(await page.evaluate(()=>(window as any).state.readFailed),false);
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),1);
+      }finally{await page.close();}
+    });
     await t.test('failed load can retry, and an older load never replaces a newer one',async()=>{
       const page=await screen({},"w.errors['']={status:500,message:'Unavailable',code:'capability_denied'}");try{await settled(page);assert.equal((await snapshot(page)).error,'Unavailable 請聯絡業務空間擁有者確認你的權限。');
         await page.evaluate(async()=>{const w=window as any;w.errors={};await w.state.load();});assert.equal((await snapshot(page)).error,'');
