@@ -4,6 +4,8 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/member-communications/portal/**",
+    "tests/runtime/channel-list-format.test.ts",
+    "tests/e2e/channel-list-format.spec.ts",
     "tests/runtime/chat-sticker-preview.test.ts",
     "tests/runtime/chat-sticker-send.test.ts",
     "apps/portal-web/src/GameConsoleComposer.tsx",
