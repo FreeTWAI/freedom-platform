@@ -54,4 +54,6 @@ Migration 032 在 `member_accounts` 加入 nullable `identity_label`。`GET /me/
 
 2026-10-01 的目錄為 41 本技能書、47 個 repo 指引，含 2026-10-01 整理的三件[手動登錄作品](./manual-work-skill-books.md)。上文 2026-09-24 記載的 37 本與 43 個指引是當天的結果。
 
-2026-10-20 新增 12 本[會員分享社群技能書](./member-shared-skill-books-2026-10-20.md)，目前目錄為 53 本、59 個 repo 指引。
+2026-10-20 新增 12 本[會員分享社群技能書](./member-shared-skill-books-2026-10-20.md)，當時目錄為 53 本、59 個 repo 指引。
+
+2026-11-03 再新增 2 本[會員分享社群技能書](./member-shared-skill-books-2026-11-03.md)，目前目錄為 55 本、61 個 repo 指引。台式英文抓蟲器由 migration 198 綁定為自訂公會「語言學習與AI協作公會」的指定技能書，目錄來源仍是 `guilds: []`。

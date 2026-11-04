@@ -10,6 +10,8 @@ import memberShared8 from './share-introductions/webchat-mcp.json' with {type:'j
 import memberShared9 from './share-introductions/gemini-voice-lab.json' with {type:'json'};
 import memberShared10 from './share-introductions/story-bible.json' with {type:'json'};
 import memberShared11 from './share-introductions/human-mode.json' with {type:'json'};
+import memberShared12 from './share-introductions/project-hub.json' with {type:'json'};
+import memberShared13 from './share-introductions/taiwanese-english-checker.json' with {type:'json'};
 import communityAuthor0 from './share-introductions/bidding-radar-concept.json' with {type:'json'};
 import communityAuthor1 from './share-introductions/aiwff-runtime.json' with {type:'json'};
 import communityAuthor2 from './share-introductions/n8n-marketing-flows.json' with {type:'json'};
@@ -53,7 +55,7 @@ import supplierClient from './share-introductions/supplier-client.json' with {ty
 import typoStudio from './share-introductions/typo-studio.json' with {type:'json'};
 import videoAutopilot from './share-introductions/video-autopilot.json' with {type:'json'};
 
-export const skillShareContentVersion='2026-10-20.1';
+export const skillShareContentVersion='2026-11-03.1';
 export type SkillShareContent = {introductions:string[];illustration_url:string;illustration_alt:string};
 
 const content:Record<string,{introductions:string[];illustration_alt:string}> = {
@@ -69,6 +71,8 @@ const content:Record<string,{introductions:string[];illustration_alt:string}> = 
   'gemini-voice-lab':{introductions:memberShared9,illustration_alt:"配音稿經單一滑桿調整與波形處理，試聽評語再回到下一輪的示意。"},
   'story-bible':{introductions:memberShared10,illustration_alt:"角色、場景與世界觀卡整理進設定活頁夾，檢查後供下游取用各層設定的示意。"},
   'human-mode':{introductions:memberShared11,illustration_alt:"四選項先放暫定答案籌碼，再比較論證，最後以五階提示與遊玩比例紀錄回看的示意。"},
+  'project-hub':{introductions:memberShared12,illustration_alt:"散落的專案資料夾與任務卡，由上鎖的本機中樞排成任務樹並分派兩個助手，成果再收進主資料夾並留下紀錄的示意。"},
+  'taiwanese-english-checker':{introductions:memberShared13,illustration_alt:"信件上的小蟲經放大鏡對照規則活頁夾分到三個等級托盤，最後變成乾淨信件並釘上一張重點卡的示意。"},
 
   'bidding-radar-concept':{introductions:communityAuthor0,illustration_alt:"公司描述與補助文件逐條比對後分組，旁邊的雷達掃描標案資料，呈現設計概念。"},
   'aiwff-runtime':{introductions:communityAuthor1,illustration_alt:"任務卡進入本機背景執行器，依序顯示進度並把完成檔案放回資料夾。"},

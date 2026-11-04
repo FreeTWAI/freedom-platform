@@ -1634,6 +1634,57 @@
       "default_branch": "main",
       "kind": "author_source",
       "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "把專案、作業與 Claude Code／Codex 對話放進同一個本機畫面；Git 專案的作業通常在工作副本裡進行，完成後再整合到主資料夾。",
+      "current_scope": "MIT，第三方軟體見 THIRD_PARTY_NOTICES；固定版本的原始碼為 4.125.0，同版日文 README 稱 4.125 為正式版、Windows 11 x64 版為限定試用，繁中 README 仍寫公開 Beta v4.117.0；原作之後改稱 Mac 與 Windows 版皆為正式版，較新版本未經工坊核對。供單人在自己的 Mac 使用，只監聽 127.0.0.1:4545，沒有使用者登入。預設略過 Claude Code 權限確認、Codex 另略過沙箱，可在 _hub/roles.yaml 改成需確認；Git 專案的作業通常在工作副本進行，選擇在主資料夾作業或副本建立失敗時直接改主資料夾；工作副本會複製未納入 Git 的 .env 等設定檔，自動儲存以 git add -A 與 --no-verify 提交，紀錄未加密留在本機。Mac App 未公證；付費功能切換文件不代表已開放販售。工坊未安裝或執行。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-11-03.md。",
+      "upstream": null,
+      "key_paths": [
+        "README.zh-TW.md",
+        "hub/README.zh-TW.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-11-03 的固定 commit README.zh-TW.md、hub/README.zh-TW.md、CONTRIBUTING.zh-TW.md、LICENSE 與 THIRD_PARTY_NOTICES 核對；版本另依日文 README.md 與 hub/package.json，作業位置另依 hub/lib/git.js 與 hub/server.js。未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.zh-TW.md",
+        "hub/README.zh-TW.md",
+        "CONTRIBUTING.zh-TW.md",
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.zh-TW.md"
+      ],
+      "contribution_target": "https://github.com/kieiken/project-hub",
+      "repository": "kieiken/project-hub",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
+    },
+    {
+      "purpose": "貼上英文 Email 或貼文，讓 AI 抓出台式英文、分級說明原因，再給自然的改法。",
+      "current_scope": "MIT。內容是給 AI 讀的 SKILL.md、30 條通用規則與 7 個情境包，沒有程式或檢查引擎；結果由選用的 AI 判讀，可能誤判或漏抓。貼進 AI 服務的英文依該服務的條款處理，不要貼個資或機密。介紹頁試用只在瀏覽器組成提示詞並複製，不代為送出。規則是寫作建議，不是語言能力認證。工坊未安裝或代為執行。",
+      "future_scope": "收錄不代表工坊已安裝、代為部署或驗證上游功能；關係為會員自述，未核對 GitHub 身分。詳見 docs/development/member-shared-skill-books-2026-11-03.md。",
+      "upstream": null,
+      "key_paths": [
+        "SKILL.md",
+        "references/rules.md",
+        "README.md"
+      ],
+      "validation_commands": [
+        "git diff --check"
+      ],
+      "validation_note": "依 2026-11-03 的固定 commit README、SKILL.md、references/rules.md 與 LICENSE 核對；未安裝或執行上游。git diff --check 只檢查修改格式，不是功能驗收。",
+      "guide_files": [
+        "README.md",
+        "SKILL.md",
+        "LICENSE"
+      ],
+      "contribution_target": "https://github.com/WilsonAImaster/taiwanese-english-checker",
+      "repository": "WilsonAImaster/taiwanese-english-checker",
+      "default_branch": "main",
+      "kind": "author_source",
+      "contribution_default_branch": "main"
     }
   ]
 }

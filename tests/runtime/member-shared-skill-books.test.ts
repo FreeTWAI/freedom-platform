@@ -141,7 +141,7 @@ test('new book art is exact-size WebP and matches the recorded prompts and SHA-2
     ['docs/design/skill-illustration-manifest.json',1200,630],
   ] as const){
     const manifest=JSON.parse(await readFile(manifestPath,'utf8'));
-    assert.equal(manifest.assets.length,53);
+    assert.equal(manifest.assets.length,55);
     for(const [id] of expected){
       const entries=manifest.assets.filter((entry:{id:string})=>entry.id===id);assert.equal(entries.length,1,id);
       const entry=entries[0],bytes=await readFile(entry.path),metadata=await sharp(bytes).metadata();

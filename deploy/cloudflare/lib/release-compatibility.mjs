@@ -236,6 +236,8 @@ const FOUNDATION_NAMES = [
   // Private self-reported exercises; no attendance, contribution or release authority.
   '196_event_missions.sql',
   '197_event_registration_policy.sql',
+  // Catalog publication and one administrator-guild book binding; no new runtime capability.
+  '198_member_shared_skill_books_language_guild.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

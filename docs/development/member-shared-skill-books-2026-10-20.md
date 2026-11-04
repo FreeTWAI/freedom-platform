@@ -132,3 +132,5 @@ WebChatMCP.js 與 Human Mode 的會員各有 100 則原文，原先優先考慮�
 - `scripts/verify-public.mjs` 同步 53 本／59 個 repo 的精確期望；這次未執行公開部署驗收。
 - 前輪實跑結果在 job dir `skill-books.report.md`；本輪精修、實跑與未驗項另記 `skill-books-polish.report.md`，不把本機測試當成可信 CI／正式部署證據。context 的 `surface_unmapped` blocker 也保留，不為本次擴大修改治理 descriptors。
 - 本輪完成後重跑 `node scripts/freedom.mjs prepare --base-ref cf7e518b129786fb4c8a23d587982a7df06c25bb --paths <changed paths>` 與 `git diff --check`。
+
+後續：2026-11-03 的[會員分享社群技能書整理](member-shared-skill-books-2026-11-03.md)沿用本次格式，另以 migration 198 為自訂公會綁定一本指定技能書。

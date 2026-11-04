@@ -205,3 +205,41 @@ test('migration 179 publishes twelve member-shared books without changing public
   assert.deepEqual((await pool.query('SELECT * FROM member_skill_book_grants ORDER BY user_id,book_id')).rows,memberGrants);
   assert.deepEqual((await pool.query('SELECT * FROM development_grants ORDER BY grant_id')).rows,developmentGrants);
 });
+
+test('migration 198 binds 台式英文抓蟲器 only to the approved 語言學習與AI協作公會, grants it to active members and replays without changes',async()=>{
+  const sql=await readFile(new URL('../../migrations/198_member_shared_skill_books_language_guild.sql',import.meta.url),'utf8');
+  const ids=['project-hub','taiwanese-english-checker'],guild='guild_custom_e3ab38b68bcd43058b79686477bdabf5',application='e3ab38b6-8bcd-4305-8b79-686477bdabf5';
+  assert.deepEqual((await pool.query('SELECT book_id FROM skill_publications WHERE book_id=ANY($1::text[]) ORDER BY book_id',[ids])).rows.map(row=>row.book_id),ids);
+  const state=async()=>({
+    publications:(await pool.query('SELECT * FROM skill_publications ORDER BY book_id')).rows,
+    bindings:(await pool.query('SELECT * FROM guild_skill_book_bindings ORDER BY community_id,guild_key,book_id')).rows,
+    grants:(await pool.query('SELECT * FROM member_skill_book_grants ORDER BY user_id,guild_key,book_id')).rows,
+    development:(await pool.query('SELECT * FROM development_grants ORDER BY grant_id')).rows,
+    preferences:(await pool.query('SELECT * FROM guild_member_preferences ORDER BY community_id,user_id')).rows,
+    memberships:(await pool.query('SELECT * FROM positioning_profession_memberships ORDER BY membership_id')).rows,
+  });
+  // Fresh and test databases have no approved application for this guild, so only the publications apply.
+  const fresh=await state();await pool.query(sql);await pool.query(sql);assert.deepEqual(await state(),fresh);
+  const community=randomUUID();await pool.query('INSERT INTO communities VALUES($1,$2)',[community,'Synthetic language guild']);
+  await pool.query('INSERT INTO positioning_guild_catalog(guild_key,profession_key,name,purpose,first_step,module_key) VALUES($1,$2,$3,$4,$5,$6)',[guild,'custom_'+guild.slice('guild_custom_'.length),'語言學習與AI協作公會','交流語言學習資源與 AI 工具。','先讀一本技能書。','guilds']);
+  const users:string[]=[];
+  for(const [active,membership,key] of [[true,'active',guild],[true,'left',guild],[false,'active',guild],[true,'active','guild_ai_field']] as const){
+    const id=randomUUID();users.push(id);
+    await pool.query('INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,community,id+'@example.invalid','Synthetic','unused',randomUUID(),active]);
+    await pool.query('INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state) VALUES($1,$2,$3,$4,$5)',[randomUUID(),community,id,key,membership]);
+  }
+  await pool.query("INSERT INTO guild_member_preferences(community_id,user_id,primary_guild_key) VALUES($1,$2,$3)",[community,users[0],guild]);
+  await pool.query('INSERT INTO guild_creation_applications(application_id,community_id,user_id,name,profession,reason) VALUES($1,$2,$3,$4,$5,$6)',[application,community,users[0],'語言學習與AI協作公會','語言實踐者','合成測試申請。']);
+  // A pending application designates nothing.
+  const pending=await state();await pool.query(sql);assert.deepEqual(await state(),pending);
+  await pool.query("UPDATE guild_creation_applications SET state='approved',approved_guild_key=$2 WHERE application_id=$1",[application,guild]);
+  const approved=await state();await pool.query(sql);
+  const after=await state();
+  assert.deepEqual(after.bindings.filter(row=>!approved.bindings.some(old=>old.community_id===row.community_id&&old.guild_key===row.guild_key&&old.book_id===row.book_id)),[{community_id:community,guild_key:guild,book_id:'taiwanese-english-checker'}]);
+  const added=after.grants.filter(row=>!approved.grants.some(old=>old.grant_id===row.grant_id));
+  assert.deepEqual(added.map(row=>[row.community_id,row.user_id,row.guild_key,row.book_id]),[[community,users[0],guild,'taiwanese-english-checker']]);
+  for(const key of ['publications','development','preferences','memberships'] as const)assert.deepEqual(after[key],approved[key],key);
+  assert.deepEqual((await listSkillBooks(pool,{community_id:community,user_id:users[0]})).map(book=>[book.book_id,book.guild_keys]),[['taiwanese-english-checker',[guild]]]);
+  for(const user of users.slice(1))assert.deepEqual(await listSkillBooks(pool,{community_id:community,user_id:user}),[]);
+  await pool.query(sql);assert.deepEqual(await state(),after);
+});

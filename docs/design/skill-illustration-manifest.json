@@ -2,7 +2,7 @@
   "generated_at": "2026-09-23",
   "mode": "builtin-imagegen",
   "style_anchor": "apps/portal-web/public/brand/freedom-workshop.webp",
-  "description": "53 distinct functional workflow illustrations for skill introduction pages and social thumbnails; mechanical WebP resizing and encoding, original logo unchanged.",
+  "description": "55 distinct functional workflow illustrations for skill introduction pages and social thumbnails; mechanical WebP resizing and encoding, original logo unchanged.",
   "assets": [
     {
       "id": "agent-kit",
@@ -584,7 +584,35 @@
       "source_path": "/home/thuang/.codex/generated_images/01a15b1b-eb97-7c73-bc6f-95a2cc323cbe/exec-6a6d9489-2eed-420c-add5-6746750287e3.png",
       "attempts": 2,
       "source_note": "工坊依固定 README 重新繪製的功能隱喻；非原作素材或實際畫面。逐張全尺寸與縮圖目視核對；sharp 僅縮放與編碼。"
+    },
+    {
+      "id": "project-hub",
+      "prompt": "Use case: stylized-concept. Asset: wide 1200:630 conceptual workflow illustration for skill-book guide. Premium clean polished 3D on charcoal #101215 backdrop with subtle reflective floor, cobalt #3044ff, acid lime #c4ff20, chrome. Three clearly separated stages LEFT TO RIGHT connected with simple arrows. Pictorial physical objects and abstract blank cards, never fake screenshots. LEFT: several loose cobalt project folders and scattered blank task cards, with two small rounded chrome helper drones resting apart. CENTER: one compact chrome desk station on a closed laptop-shaped pedestal with a small chrome padlock on its base; above it the task cards are arranged into a tidy branching tree of blank cards, and the two drones are each tethered by a thin lime line to one card. RIGHT: a single cobalt main project folder receiving the finished cards through a chrome clip, next to a small stack of blank history slips. Flow of scattered projects and tasks -> one local hub organizing tasks and dispatching AI helpers -> results merged into the main project folder with a kept history. No letters, words, numbers, pseudo-text, labels, glyphs, watermark, logos or trademarks. No real people or recognizable faces. No decorative particle clouds, no melted geometry. Single cohesive image, no book cover.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/project-hub.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 47046,
+      "sha256": "4fa5c327f874de1a54e9d7f143e65cca44ff1617f93e1e9b6f5866ccc9221543",
+      "generated_at": "2026-11-03",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a1a344-7b2f-7a53-96bb-43fdb83fd5e2/exec-5160286f-ce02-4c2d-9d50-83d0ddeb7b04.png",
+      "attempts": 1,
+      "source_note": "工坊依固定 README 重新繪製的功能隱喻；非原作素材或實際畫面。逐張全尺寸與縮圖目視核對；sharp 僅縮放與編碼。"
+    },
+    {
+      "id": "taiwanese-english-checker",
+      "prompt": "Use case: stylized-concept. Asset: wide 1200:630 conceptual workflow illustration for skill-book guide. Premium clean polished 3D on charcoal #101215 backdrop with subtle reflective floor, cobalt #3044ff, acid lime #c4ff20, chrome. Three clearly separated stages LEFT TO RIGHT connected with simple arrows. Pictorial physical objects and abstract blank cards, never fake screenshots. LEFT: an open envelope with a letter card and a small presentation cue card, both covered with blank cobalt text bars; three small sculpted lime beetles sit on three of the bars. CENTER: a clean chrome magnifier lifting the beetles off the bars into three chrome sorting trays of clearly different heights, beside a thick ring binder with many blank lime tabs. RIGHT: a separate clean copy of the SAME letter card with smooth unbroken text bars and no beetles, plus one small cobalt note card pinned to it with a lime pin. Flow of draft message with hidden mistakes -> graded checking against a tabbed rulebook -> clean rewrite with one pinned takeaway. No letters, words, numbers, pseudo-text, labels, glyphs, watermark, logos or trademarks. No real people or recognizable faces. No decorative particle clouds, no melted geometry. Single cohesive image, no book cover.",
+      "path": "apps/portal-web/public/brand/skill-illustrations/taiwanese-english-checker.webp",
+      "width": 1200,
+      "height": 630,
+      "bytes": 58012,
+      "sha256": "0970e22b8e9c727253cdc5143192b10331917d40b40a307051d8469a6008f15a",
+      "generated_at": "2026-11-03",
+      "mode": "builtin-imagegen",
+      "source_path": "/home/thuang/.codex/generated_images/01a1a344-7b2a-7ba2-aaa1-be7d365d16fe/exec-3eacf342-6ed6-40c3-b94f-bf02f81d1e3d.png",
+      "attempts": 1,
+      "source_note": "工坊依固定 README 重新繪製的功能隱喻；非原作素材或實際畫面。逐張全尺寸與縮圖目視核對；sharp 僅縮放與編碼。"
     }
   ],
-  "updated_at": "2026-10-20"
+  "updated_at": "2026-11-03"
 }
