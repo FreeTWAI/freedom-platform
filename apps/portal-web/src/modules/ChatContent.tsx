@@ -82,7 +82,12 @@ export function ChatExtras({draft,onChange,onSendSticker,disabled,target}:{draft
     {draft.reply&&<div className="chat-reply-draft"><ChatQuote reply={draft.reply}/><button className="btn btn-ghost" type="button" disabled={disabled} onClick={()=>onChange({reply:undefined})}>取消回覆</button></div>}
     {draft.sticker_id&&<div className="chat-sticker-preview" aria-label="待送出的貼圖"><ChatSticker id={draft.sticker_id}/><span>{findChatSticker(draft.sticker_id)?.label}</span><button className="btn btn-ghost" type="button" disabled={disabled} onClick={()=>onChange({sticker_id:undefined})}>改寫文字</button></div>}
     <button className="btn btn-ghost" ref={toggle} type="button" aria-label="選擇貼圖" title="選擇貼圖" disabled={disabled} aria-expanded={open} aria-controls={id} onClick={()=>open?close():setOpen(true)}><svg className="chat-sticker-trigger" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 14.5q4 4 8 0"/><path d="M8.5 9h.01M15.5 9h.01" strokeWidth="3"/></svg><span>選擇貼圖</span></button>
-    {open&&<section className="chat-sticker-picker" id={id} aria-label="工坊貼圖" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}}}>
+    {open&&<section className="chat-sticker-picker" id={id} aria-label="工坊貼圖" onKeyDown={event=>{if(event.key==='Escape'){
+      // The IME owns candidate cancellation, while the enclosing chat must not close.
+      event.stopPropagation();
+      if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;
+      event.preventDefault();close();
+    }}}>
       <div className="chat-picker-heading"><strong>自由工坊貼圖</strong><button className="btn btn-ghost" type="button" onClick={close}>關閉貼圖</button></div>
       <p className="messages-meta">先點選預覽，確認後再送出。其他草稿會保留。</p>
       {selectedSticker&&<div ref={preview} className="chat-sticker-confirm" role="group" tabIndex={-1} aria-label={`貼圖預覽：${selectedSticker.label}`} onKeyDown={event=>{if(event.key==='Enter'&&event.target===event.currentTarget)event.preventDefault();}}>

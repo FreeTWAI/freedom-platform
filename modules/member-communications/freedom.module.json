@@ -50,6 +50,8 @@
     "apps/platform-api/src/routes/member-communications.ts",
     "apps/portal-web/src/modules/ChatContent.css",
     "apps/portal-web/src/modules/ChatContent.tsx",
+    "tests/runtime/chat-sticker-keyboard.test.ts",
+    "tests/e2e/chat-sticker-keyboard.spec.ts",
     "apps/portal-web/src/modules/ChatWorkspace.css",
     "apps/portal-web/src/modules/MemberChannels.tsx",
     "migrations/150_message_retraction.sql",
