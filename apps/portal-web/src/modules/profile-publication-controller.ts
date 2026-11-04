@@ -35,6 +35,11 @@ export function profileSettingsReadMessage(error:unknown){
 export function profileMutationBlocksLeave(state:SharingMutationState|null){return Boolean(state?.live()&&(state.snapshot.busy||state.snapshot.lastFailureUnknown));}
 
 export type ProfileReadState<T>={status:'loading'|'ready'|'error';value:T|null;error:unknown};
+/** Only the exact successful read already applied to the draft may enable editing.
+ * Compare against the live reader snapshot again at command time. */
+export function profileSettingsReadReady<T>(state:ProfileReadState<T>,applied:T|null){
+ return state.status==='ready'&&state.value!==null&&state.value===applied;
+}
 /** One in-flight read, no cross-scope cache, synchronous hidden/abort invalidation. */
 export function createProfileReader<T>(read:(signal:AbortSignal)=>Promise<T>,current:()=>boolean){
  const empty:ProfileReadState<T>={status:'loading',value:null,error:null};

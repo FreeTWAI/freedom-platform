@@ -132,3 +132,47 @@ for(const width of [390,1280])test(`profile theme choices and progressive contro
  expect(writes).toBe(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
+
+
+for(const failure of [
+ {status:503,body:{type:'about:blank',title:'Unavailable',status:503},message:'服務暫時無法讀取設定，請稍後重試。'},
+ {status:200,body:{unexpected:'SECRET'},message:'收到的設定資料格式不符，請稍後重試。'},
+])test(`settings reload ${failure.status} locks stale editing and recovers latest CAS without resending`,async({page})=>{
+ let reads=0;const writes:{body:Record<string,unknown>;version:string|undefined}[]=[];
+ let release:()=>void=()=>{};const held=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/v1/me/profile-publication',async route=>{
+  const request=route.request();
+  if(request.method()==='GET'){
+   reads++;if(reads===2){await held;return route.fulfill({status:failure.status,json:failure.body});}
+   return route.fulfill({json:{...settings,display_name:reads===1?'原設定':'最新設定',aggregate_version:reads===1?'1':'2'}});
+  }
+  writes.push({body:request.postDataJSON(),version:request.headers()['if-match']});
+  if(writes.length===1)return route.fulfill({status:412,json:{type:'about:blank',title:'Conflict',status:412,code:'version_conflict'}});
+  const {confirm_public,...body}=request.postDataJSON();return route.fulfill({json:{...body,avatar_url:null,aggregate_version:'3'}});
+ });
+ await page.route('**/api/v1/me/profile-cover',route=>route.fulfill({json:{version:'1',present:false,upload_available:true,reason:null,draft_versions:[]}}));
+ await login(page);await page.goto('/#profile?view=settings');
+ const name=page.getByLabel('顯示名稱',{exact:true}),save=page.getByRole('button',{name:'儲存',exact:true}),reload=page.getByRole('button',{name:'重讀最新設定',exact:true});
+ await name.fill('未儲存修改');await save.click();await expect(reload).toBeEnabled();
+ await page.getByText('上傳自己的封面圖片',{exact:true}).click();
+ const file=page.getByLabel('選擇封面圖片',{exact:true});
+ await file.setInputFiles({name:'draft.png',mimeType:'image/png',buffer:Buffer.from('synthetic selection')});
+ await expect(reload).toBeDisabled();expect(reads).toBe(1);
+ await page.getByRole('button',{name:'取消選檔',exact:true}).click();
+ page.once('dialog',dialog=>dialog.accept());await reload.click();
+ try{
+  await expect.poll(()=>reads).toBe(2);await expect(name).toBeDisabled();await expect(name).toHaveValue('未儲存修改');
+  await expect(save).toBeDisabled();await expect(file).toBeDisabled();await expect(reload).toBeDisabled();
+  await expect(page.getByRole('radio',{name:'深夜星空',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'返回本人空間',exact:true})).toBeEnabled();
+  await page.locator('.profile-editor-form').evaluate(form=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  expect(writes).toHaveLength(1);
+ }finally{release();}
+ await expect(page.getByRole('alert').filter({hasText:failure.message})).toBeVisible();await expect(name).toBeDisabled();await expect(save).toBeDisabled();await expect(file).toBeDisabled();
+ await page.locator('.profile-editor-form').evaluate(form=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ expect(writes).toHaveLength(1);await expect(page.getByText('SECRET',{exact:false})).toHaveCount(0);
+ await page.getByRole('button',{name:'重讀設定',exact:true}).click();
+ await expect(name).toHaveValue('最新設定');await expect(name).toBeEnabled();await expect(file).toBeEnabled();expect(reads).toBe(3);expect(writes).toHaveLength(1);
+ await name.fill('恢復後的新修改');await save.click();await expect(page.getByText('個人頁與可見範圍已儲存。',{exact:true})).toBeVisible();
+ expect(writes).toHaveLength(2);expect(writes[1].version).toBe('"2"');expect(writes[1].body.display_name).toBe('恢復後的新修改');
+});

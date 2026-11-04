@@ -1,7 +1,7 @@
 import {defaultProfileLayout} from '../../packages/shared/member-profile.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createProfileReader,decodeProfileSettings,readProfileSettings,ProfileSettingsFormatError,profileSettingsReadMessage,profilePublicationPreview,profileMutationBlocksLeave} from '../../apps/portal-web/src/modules/profile-publication-controller.js';
+import {createProfileReader,profileSettingsReadReady,decodeProfileSettings,readProfileSettings,ProfileSettingsFormatError,profileSettingsReadMessage,profilePublicationPreview,profileMutationBlocksLeave} from '../../apps/portal-web/src/modules/profile-publication-controller.js';
 import {ApiError,PortalClient} from '../../apps/portal-web/src/api.js';
 import {subscribeGameConsole} from '../../apps/portal-web/src/game-console-core.js';
 import {parseProfileRoute,visitorProfileHash,canOpenGuestProfile,directoryVisitorProfileHref} from '../../apps/portal-web/src/modules/profile-publication-route.js';
@@ -145,4 +145,21 @@ test('decoder-enabled profile commands retain first malformed 412/422 and later 
   for(let i=0;i<2;i++){await performModuleMutation(client,state,'/profile',{name:'original'},'1',decode);assert.equal(state.keys.size,1);assert.equal(profileMutationBlocksLeave(state),true);}
   await performModuleMutation(client,state,'/profile',{name:'original'},'1',decode);assert.equal(state.keys.size,0);assert.equal(profileMutationBlocksLeave(state),false);assert.deepEqual(calls[0],calls[1]);assert.deepEqual(calls[0],calls[2]);
  }}finally{globalThis.fetch=original;}
+});
+
+
+test('settings editing stays locked through reload failure and until the recovered snapshot is applied',async()=>{
+ type Settings={version:string};
+ const pending:{resolve:(value:Settings)=>void;reject:(error:unknown)=>void}[]=[];let current=true;
+ const reader=createProfileReader(()=>new Promise<Settings>((resolve,reject)=>pending.push({resolve,reject})),()=>current);
+ let applied:Settings|null=null;const canEdit=()=>profileSettingsReadReady(reader.getSnapshot(),applied);
+ reader.start();assert.equal(canEdit(),false);
+ const first={version:'1'};pending[0].resolve(first);await tick();assert.equal(canEdit(),false,'response must first be applied to draft');
+ applied=first;assert.equal(canEdit(),true);
+ const reload=reader.refresh();assert.equal(canEdit(),false,'synchronously blocks commands before rerender');
+ pending[1].reject(new Error('synthetic failure'));await reload;assert.equal(canEdit(),false);assert.equal(applied,first,'does not discard draft snapshot on failure');
+ const retry=reader.refresh();assert.equal(canEdit(),false);void reader.refresh();assert.equal(pending.length,3);
+ const recovered={version:'2'};pending[2].resolve(recovered);await retry;assert.equal(canEdit(),false,'old applied snapshot cannot unlock new response');
+ applied=recovered;assert.equal(canEdit(),true);
+ current=false;assert.equal(canEdit(),false);reader.stop();
 });
