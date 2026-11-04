@@ -93,7 +93,7 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   assert.ok(start>=0&&end>start);
   let confirms=0;
   const context:any={
-    leaveGuard:{current:null},helperBlocked:{current:true},missionBlocked:{current:false},
+    leaveGuard:{current:null},helperBlocked:{current:true},missionBlocked:{current:false},attendanceBlocked:{current:false},
     saving:false,busy:false,mediaUnknown:false,lastFailureUnknown:false,dirty:false,
     setNotice:()=>{},window:{confirm:()=>{confirms++;return false;}},
   };
@@ -103,12 +103,15 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   context.missionBlocked.current=true;
   assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,0);
   context.missionBlocked.current=false;
+  context.attendanceBlocked.current=true;
+  assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,0);
+  context.attendanceBlocked.current=false;
   context.dirty=true;
   assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,1);
   context.dirty=false;assert.equal(context.leaveGuard.current(),true);
   const from=parent.indexOf('    const beforeUnload=');
   const to=parent.indexOf('\n',from);assert.ok(from>=0&&to>from);
-  const unloadContext={unloading:{current:false},helperBlocked:{current:true},missionBlocked:{current:false}};
+  const unloadContext={unloading:{current:false},helperBlocked:{current:true},missionBlocked:{current:false},attendanceBlocked:{current:false}};
   const guard=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.guard=beforeUnload',{loader:'tsx'}).code+';guard',unloadContext);
   const attempt=()=>{
     let prevented=false;
@@ -118,7 +121,9 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   assert.deepEqual(attempt(),{prevented:true,returnValue:''});
   unloadContext.helperBlocked.current=false;unloadContext.missionBlocked.current=true;
   assert.deepEqual(attempt(),{prevented:true,returnValue:''});
-  unloadContext.missionBlocked.current=false;
+  unloadContext.missionBlocked.current=false;unloadContext.attendanceBlocked.current=true;
+  assert.deepEqual(attempt(),{prevented:true,returnValue:''});
+  unloadContext.attendanceBlocked.current=false;
   assert.deepEqual(attempt(),{prevented:false,returnValue:undefined});
 });
 

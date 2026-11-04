@@ -1,0 +1,10 @@
+.event-attendance { min-width: 0; border-top: 1px solid var(--line); padding-top: 1rem; }
+.event-attendance-list { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: .75rem; }
+.event-attendance-list > li { min-width: 0; overflow-wrap: anywhere; padding: .85rem; border: 1px solid var(--line); border-radius: .75rem; color: var(--ink); background: var(--bg-elev); }
+.event-attendance-list p { margin: .4rem 0; }
+.event-attendance .experience-actions { flex-wrap: wrap; }
+.event-attendance .btn { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.event-attendance-confirm { padding: .75rem; margin-top: .5rem; border: 1px solid var(--line); border-radius: .5rem; }
+.event-attendance-confirm label { display: grid; gap: .4rem; margin-bottom: .75rem; }
+.event-attendance-confirm select { max-width: 100%; min-height: 44px; font-size: 16px; color: var(--ink); background: var(--bg-elev); }
+.event-attendance :is(button, select):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
