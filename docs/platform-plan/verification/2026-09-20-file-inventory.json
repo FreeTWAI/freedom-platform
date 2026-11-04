@@ -2074,8 +2074,8 @@
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/project-hub.webp",
-      "bytes": 49906,
-      "sha256": "bbcaa104e558e7bdbc0d4debac90985a87211924319ace7a9beafe16f257989d"
+      "bytes": 52068,
+      "sha256": "0227932ba52739cd69e23bb5e986719a7f7adaf0def4000c44c5785f320f3390"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/project-template.webp",
@@ -14965,7 +14965,7 @@
     {
       "path": "docs/design/skill-illustration-manifest.json",
       "bytes": 24647,
-      "sha256": "68b459efae5a5763f96e9dd09010806c99bf321e6a4441b4f30ad5710f886282"
+      "sha256": "392bf4c0b9cd690b6d6b8e65986d9ad6dfb4cfe239ef4c823834860cc99c6538"
     },
     {
       "path": "docs/design/versefolk-theme-art-manifest.json",
@@ -21554,8 +21554,8 @@
     },
     {
       "path": "modules/community/skill-pages/project-hub.json",
-      "bytes": 983,
-      "sha256": "0df88c6fa27e8c0c5323a398f65e6b034e06d92e4471f98f4e66f10aab1c3e7f"
+      "bytes": 1097,
+      "sha256": "cfb23b844a8dc590156a035d358e6806f42e48b42a2b6b3f53b6b3328c8a86fa"
     },
     {
       "path": "modules/community/skill-pages/project-template.json",

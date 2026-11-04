@@ -317,10 +317,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/project-hub.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 49906,
-      "sha256": "bbcaa104e558e7bdbc0d4debac90985a87211924319ace7a9beafe16f257989d",
-      "source_sha256": "0b1014acf13f3a18875e3fcb34f2ecc2304037813bbfd74dbe7451cc408c98d0",
-      "generated_at": "2026-11-03",
+      "bytes": 52068,
+      "sha256": "0227932ba52739cd69e23bb5e986719a7f7adaf0def4000c44c5785f320f3390",
+      "source_sha256": "afb2d211e179b4275402cbf1873e09ff6e46fb837019407b966f5e9a1b107314",
+      "generated_at": "2026-11-04",
       "mode": "rendered-share-card"
     },
     {
@@ -610,5 +610,5 @@
       "mode": "rendered-share-card"
     }
   ],
-  "updated_at": "2026-11-03"
+  "updated_at": "2026-11-04"
 }
