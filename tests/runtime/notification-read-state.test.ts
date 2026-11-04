@@ -473,3 +473,33 @@ test('bell PWA resume: offline visibility resume then online does not join held 
   responses[1](Response.json({items:[item],unread_count:4}));await settleBell();
   responses[0](Response.json({items:[],unread_count:0}));await settleBell();assert.equal(h.state.unread,4);
 });
+
+for(const policy of [false,true])for(const outcome of ['success','failure'] as const)test(`bell offline resume: old ${outcome} before online cannot publish, preferences=${policy}`,async()=>{
+  const h=sharedCounts();h.state.preferencesEnabled=policy;h.state.scope.current.preferencesEnabled=policy;
+  const previousPage=h.state.page,life=bellLifecycle(h.state),reads=policy?2:1;
+  assert.equal(h.calls.length,reads);assert.equal(h.state.loading,true);
+  life.visibility('hidden');life.navigator.onLine=false;life.visibility('visible');
+  assert.equal(h.calls.length,reads,'offline visibility must not add a GET or POST');
+  if(outcome==='success')h.calls[0].resolve({items:[],unread_count:0});else h.calls[0].reject(new Error('stale offline preview'));
+  if(policy)h.calls[1].resolve({unread_count:0});
+  await settleBell();
+  assert.equal(h.state.unread,1);assert.equal(h.state.page,previousPage);assert.equal(h.state.error,false);
+  assert.equal(h.state.loading,false,'an invalidated preview must not leave loading stuck while offline');
+  assert.equal(h.calls.length,reads);
+  life.navigator.onLine=true;life.window.dispatch('online');
+  assert.equal(h.calls.length,reads*2);assert.equal(h.state.loading,true);
+  assert.notEqual(h.calls[0].options.coalesceScope,h.calls[reads].options.coalesceScope);
+  h.calls[reads].resolve({items:[item],unread_count:7});if(policy)h.calls[reads+1].resolve({unread_count:3});
+  await settleBell();assert.equal(h.state.unread,policy?3:7);assert.equal(h.state.loading,false);assert.equal(h.state.error,false);
+  assert.equal(h.calls.filter(call=>call.key).length,0);assert.equal(h.navigations.length,0);life.cleanup();
+});
+for(const outcome of ['success','failure'] as const)test(`bell offline resume: stale ${outcome} cannot clear the new online loading state`,async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);
+  life.visibility('hidden');life.navigator.onLine=false;life.visibility('visible');
+  assert.equal(h.state.loading,false,'retire loading immediately, even if the old transport never settles');
+  life.navigator.onLine=true;life.window.dispatch('online');assert.equal(h.calls.length,2);assert.equal(h.state.loading,true);
+  if(outcome==='success')h.calls[0].resolve({items:[],unread_count:0});else h.calls[0].reject(new Error('stale offline preview'));
+  await settleBell();assert.equal(h.state.loading,true);assert.equal(h.state.unread,1);assert.equal(h.state.error,false);
+  h.calls[1].resolve({items:[item],unread_count:4});await settleBell();
+  assert.equal(h.state.loading,false);assert.equal(h.state.unread,4);assert.equal(h.state.error,false);life.cleanup();
+});
