@@ -1934,3 +1934,17 @@ test('schema198 catalog publications and guild book binding preserve schema197 a
   future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
   assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
 });
+
+
+test('schema199 descriptive prizes require exact schema approval without claiming award or release authority',()=>{
+ const f=fixtureAt(199),old=prefix(f.scan,198);
+ assert.equal(f.scan.ledger.at(-1).name,'199_event_prize_details.sql');
+ const result=evaluate(f);assert.equal(result.status,'compatible');assert.deepEqual(result.required_shapes,[]);
+ assert.deepEqual(result.required_capabilities,evaluate(fixtureAt(198)).required_capabilities);
+ for(const flag of ['deployment_authority','execution_authority','restore_proof'])assert.equal(result[flag],false);
+ f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];assert(evaluate(f).issues.some(i=>i.code==='release_schema_unsupported'));
+ const renamed=fixtureAt(199);renamed.scan.ledger.at(-1).name='199_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+ const changed=fixtureAt(199);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+ const future=fixtureAt(199);future.scan.ledger.push({name:'200_unreviewed.sql',sha256:'e'.repeat(64)});future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+ const restored=fixtureAt(199);restored.host.rollback_floor.schema_ledger=structuredClone(restored.scan.ledger);restored.host.rollback_floor.schema_ledger_digest=restored.scan.ledger_digest;restored.host.observation.schema_ledger=old.ledger;restored.host.observation.schema_ledger_digest=old.ledger_digest;restored.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);assert(codes(evaluate(restored)).includes('historical_schema_floor_mismatch'));
+});

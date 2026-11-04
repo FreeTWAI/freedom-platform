@@ -156,7 +156,7 @@ test('host DAG profile argument returns planner dependencies; default scan stays
   assert.equal(dag.dependencies.length, dag.ledger.length);
   assert.deepEqual(dag.dependencies.find((entry) => entry.name === A).depends_on, [legacy.at(-1).name]);
   assert.deepEqual(dag.dependencies.find((entry) => entry.name === B).depends_on, [legacy.at(-1).name]);
-  const real = checkMigrations(join(root, 'migrations'), { first: 1, last: 198, known_gaps: [22] });
+  const real = checkMigrations(join(root, 'migrations'), { first: 1, last: 199, known_gaps: [22] });
   assert.equal(real.ok, true);
   assert.equal(Object.hasOwn(real, 'dependencies'), false);
   const deployed = readMigrationSources(join(root, 'migrations')).filter(e => Number(e.name.slice(0, 3)) <= 140);
@@ -183,9 +183,11 @@ test('host DAG profile argument returns planner dependencies; default scan stays
   assert.equal(schema196.ledger.at(-3).name, '194_social_achievements.sql');
   assert.equal(schema196.ledger.at(-2).name, '195_event_helpers.sql');
   assert.equal(schema196.ledger.at(-1).name, '196_event_missions.sql');
-  assert.deepEqual(real.ledger.slice(0,-2), schema196.ledger);
-  assert.equal(real.ledger.at(-2).name, '197_event_registration_policy.sql');
-  assert.equal(real.ledger.at(-1).name, '198_member_shared_skill_books_language_guild.sql');
+  assert.deepEqual(real.ledger.slice(0,-3), schema196.ledger);
+  assert.equal(real.ledger.at(-3).name, '197_event_registration_policy.sql');
+  assert.equal(real.ledger.at(-2).name, '198_member_shared_skill_books_language_guild.sql');
+  assert.equal(real.ledger.at(-1).name, '199_event_prize_details.sql');
+  assert.equal(checkMigrations(join(root, 'migrations'), { first: 1, last: 198, known_gaps: [22] }).ok, false);
   assert.equal(checkMigrations(join(root, 'migrations'), { first: 1, last: 197, known_gaps: [22] }).ok, false);
   assert.equal(checkMigrations(join(root, 'migrations'), { first: 1, last: 196, known_gaps: [22] }).ok, false);
   assert.equal(checkMigrations(join(root, 'migrations'), { first: 1, last: 195, known_gaps: [22] }).ok, false);

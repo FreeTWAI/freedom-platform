@@ -2,6 +2,7 @@ import {eventVideoStorageMode,type EventVideoAssetService} from '../assets/event
 import {readEventVideoHttp} from '../assets/event-video-read.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import {eventPrizeDetailsSchema} from './event-prize-details.js';
 import type { Pool, PoolClient } from 'pg';
 import { checkVersion, command, digest, journal, transaction, type Command } from '../../packages/db/index.js';
 import { Problem,requireCondition } from '../../packages/shared/problem.js';
@@ -26,6 +27,7 @@ import {snapshotBoundedBytes,type ObjectStore,AssetStorageError} from '../../pac
 const details = z.object({
   title:text(120), description:text(3000), starts_at:isoTime, ends_at:isoTime,
   help_need:text(500).nullable().optional(),
+  prize_details:eventPrizeDetailsSchema.optional(),
   registration_policy:z.enum(['guest_allowed','community_member']).optional(),
   mode:z.enum(['online','in_person','hybrid']), location:text(300),
   event_kind:z.enum(['reading_group','meetup','guild_skill_exchange','other']).default('other'),
@@ -244,7 +246,7 @@ export async function eventAttendees(pool:Pool,actor:Actor,id:string,raw:unknown
 
 export async function publicEvent(pool:Pool|PoolClient,id:string){
   const row=(await pool.query(`SELECT e.event_id,e.title,e.description,e.starts_at,e.ends_at,e.mode,e.location,e.online_url,e.event_kind,e.topic,
-    e.visibility,e.registration_policy,e.capacity,e.aggregate_version,u.display_name AS organizer_name,
+    e.visibility,e.registration_policy,e.prize_details,e.capacity,e.aggregate_version,u.display_name AS organizer_name,
     (SELECT orientation FROM community_event_banners b WHERE b.event_id=e.event_id) AS banner_orientation,
     (SELECT mime_type FROM community_event_videos v WHERE v.event_id=e.event_id) AS video_mime,
     ((SELECT count(*)::int FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.state='going' AND NOT is_verification_test_account(r.user_id))+
@@ -255,7 +257,7 @@ export async function publicEvent(pool:Pool|PoolClient,id:string){
   return {event_id:row.event_id,title:row.title,description:row.description,starts_at:row.starts_at,ends_at:row.ends_at,
     mode:row.mode,location:referral&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
     online_url:referral?null:row.online_url,event_kind:row.event_kind,topic:row.topic,visibility:row.visibility,registration_policy:row.registration_policy,
-    capacity:row.capacity,aggregate_version:Number(row.aggregate_version),organizer_name:row.organizer_name,
+    prize_details:row.prize_details,capacity:row.capacity,aggregate_version:Number(row.aggregate_version),organizer_name:row.organizer_name,
     attending_count:row.attending_count,banner_orientation:row.banner_orientation,
     banner_url:row.banner_orientation?`/api/v1/public/events/${id}/banner`:null,
     video_url:row.video_mime?`/api/v1/public/events/${id}/video`:null,video_mime:row.video_mime};
@@ -482,8 +484,8 @@ export async function createEvent(pool:Pool,input:Command) {
     // The command has already checked receipts; replay never consumes this budget.
     await authRateLimitInTransaction(q,'event-create-member',input.actor.user_id,eventCreateLimit,eventCreateWindowSeconds);
     const id=randomUUID();
-    const row=(await q.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need,registration_policy)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,[id,input.actor.community_id,input.actor.user_id,body.guild_key,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,reviewGuildFor(body),body.visibility,body.help_need??null,body.registration_policy??'guest_allowed'])).rows[0];
+    const row=(await q.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need,registration_policy,prize_details)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb) RETURNING *`,[id,input.actor.community_id,input.actor.user_id,body.guild_key,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,reviewGuildFor(body),body.visibility,body.help_need??null,body.registration_policy??'guest_allowed',JSON.stringify(body.prize_details??[])])).rows[0];
     const organizer=(await q.query('SELECT display_name FROM users WHERE user_id=$1',[input.actor.user_id])).rows[0].display_name as string;
     await bulletin(q,row,'submitted',organizer,organizer);
     await notifyMember(q,{community_id:row.community_id,recipient_ref:row.organizer_ref,kind:'event_submitted',source_key:`event/${id}/submitted`,title:'活動已送出審核',body:`「${body.title}」已送出；核准後才會開放報名。`,action:{tab:'events',resource_id:null}});
@@ -511,7 +513,7 @@ export async function updateEvent(pool:Pool,input:Command,id:string) {
     requireCondition(Date.parse(body.starts_at)>Date.now(),422,'event_in_past','活動開始時間須在未來。');
     requireCondition(body.guild_key===row.guild_key&&body.mode===row.mode&&body.event_kind===row.event_kind&&body.visibility===row.visibility,422,'event_review_route_immutable','送出後不能更換主辦公會、形式、類型或參與範圍；請取消並重新提交。');
     const updated=(await q.query(`UPDATE community_events SET title=$2,description=$3,starts_at=$4,ends_at=$5,mode=$6,location=$7,capacity=$8,
-      event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,registration_policy=$14,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need,body.registration_policy??row.registration_policy])).rows[0];
+      event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,registration_policy=$14,prize_details=$15::jsonb,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need,body.registration_policy??row.registration_policy,JSON.stringify(body.prize_details===undefined?row.prize_details:body.prize_details)])).rows[0];
     await journal(q,input.actor,'community_event',id,updated.aggregate_version,'update',{title:body.title});
     return eventView(q,input.actor,updated);
   });
