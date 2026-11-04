@@ -175,3 +175,38 @@ test('late newer event GET cannot silently rebase an older prize draft onto a ne
 for(const [label,value] of [['null',null],['object',{}],['malformed array',[{name:'untrusted'}]],['unknown icon',[{...eventPrizePayload([prize()])[0],icon_id:'unknown'}]]])test(`malformed persisted prizes ${label} cannot be opened as an editable empty list`,async t=>{
  const h=panel(t);await h.ready([stored({prize_details:value})]);assert.match(h.text(),/獎品資料無法確認/);assert.equal(propsOf(h.button('編輯草稿')).disabled,true);assert.equal(h.writes().length,0);
 });
+
+test('shared event keyboard focus and prize fields use the declared semantic focus token',()=>{
+ const root='apps/portal-web/src';
+ for(const [file,selector] of [
+  ['modules/EventsPanel.css','.event-flow :is(button,a,input,select,textarea,summary):focus-visible'],
+  ['modules/EventPrizeDetails.css','.event-prize-editor :is(button,input,textarea):focus-visible'],
+ ]){
+  const source=readFileSync(path.join(root,file),'utf8');
+  const declarations=[...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match=>match[1].trim()===selector);
+  assert.equal(declarations.length,1,`${file} has one shared focus rule`);
+  assert.match(declarations[0][2],/outline:\s*3px\s+solid\s+var\(--focus\)\s*;/,`${file} must not override keyboard focus with an undefined token`);
+  assert.match(declarations[0][2],/outline-offset:\s*3px\s*;/);
+ }
+ // A source contract, not a replacement for native computed-style assertions.
+ for(const theme of ['styles.css','rpg-theme.css','light-theme.css','versefolk-theme.css','dragon-theme.css']){
+  const source=readFileSync(path.join(root,theme),'utf8');
+  assert.match(source,/--focus:\s*#[a-fA-F0-9]{3,8}\s*;/,`${theme} declares the focus color`);
+ }
+});
+
+test('calendar month label can shrink at enlarged text without shrinking navigation targets',()=>{
+ const css=readFileSync('apps/portal-web/src/modules/EventCalendar.css','utf8');
+ const rule=(selector:string)=>{const matches=[...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match=>match[1].trim()===selector);assert.equal(matches.length,1);return matches[0][2];};
+ // Source sizing contract only. The native journey checks actual viewport geometry.
+ assert.match(rule('.event-calendar-nav'),/min-width:\s*0(?:;|$)/);
+ assert.match(rule('.event-calendar-nav'),/max-width:\s*100%(?:;|$)/);
+ assert.match(rule('.event-calendar-nav strong'),/width:\s*7rem(?:;|$)/);
+ assert.match(rule('.event-calendar-nav strong'),/min-width:\s*0(?:;|$)/);
+ assert.match(rule('.event-calendar-nav strong'),/overflow-wrap:\s*anywhere(?:;|$)/);
+ const buttons=rule('.event-calendar-nav .btn');
+ assert.match(buttons,/flex:\s*none(?:;|$)/);
+ assert.match(buttons,/min-width:\s*44px(?:;|$)/);
+ assert.match(buttons,/min-height:\s*44px(?:;|$)/);
+ for(const selector of ['.event-calendar-nav','.event-calendar-nav strong','.event-calendar-nav .btn'])assert.doesNotMatch(rule(selector),/overflow(?:-x)?:\s*(?:hidden|clip)|font-size:\s*\d+px/);
+});

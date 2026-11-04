@@ -69,10 +69,15 @@ for (const width of [320, 390]) test(`inline two-step attendance, keyboard cance
   await expect(choice).toContainText('不會取消報名'); await choice.getByLabel('更正原因').selectOption('not_confirmed');
   for (const scale of [1, 2]) {
     await page.evaluate(value => {document.documentElement.style.fontSize = `${value * 16}px`;}, scale);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    for (const target of await choice.locator('button,select').all()) {const box = await target.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44); expect(box!.width).toBeGreaterThanOrEqual(44);}
-    expect(await choice.getByLabel('更正原因').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(16);
+    // Preserve the actual 2x page and overflowing element bounds even if the first assertion fails.
+    const layout = await page.evaluate(() => ({rootFont: getComputedStyle(document.documentElement).fontSize, viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+      overflow: [...document.querySelectorAll('body *')].flatMap(node => {const r = node.getBoundingClientRect(); if (!node.getClientRects().length || !r.width || r.left >= 0 && r.right <= innerWidth + 1) return []; const css = getComputedStyle(node); return [{tag: node.tagName, className: node.getAttribute('class'), left: r.left, right: r.right, width: r.width, minWidth: css.minWidth, fontSize: css.fontSize, gridTemplateColumns: css.gridTemplateColumns}];})}));
+    await info.attach(`attendance-layout-${width}-${scale}x`, {body: JSON.stringify(layout), contentType: 'application/json'});
     await page.screenshot({path: info.outputPath(`attendance-${width}-${scale}x.png`), fullPage: true});
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewport);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const target of await choice.locator('button,select').all()) {const box = await target.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44); expect(box!.width).toBeGreaterThanOrEqual(44); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);}
+    expect(await choice.getByLabel('更正原因').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(16 * scale);
   }
   await choice.getByRole('button', {name: '確定撤回確認'}).click(); await expect(memberRow(page)).toContainText('已撤回確認，目前尚未確認');
   expect(writes).toHaveLength(2); expect(writes[1].match).toBe('"2"'); expect(JSON.parse(writes[1].body!)).toEqual({action: 'retract', reason: 'not_confirmed'});

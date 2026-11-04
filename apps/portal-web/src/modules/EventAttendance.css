@@ -5,6 +5,6 @@
 .event-attendance .experience-actions { flex-wrap: wrap; }
 .event-attendance .btn { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .event-attendance-confirm { padding: .75rem; margin-top: .5rem; border: 1px solid var(--line); border-radius: .5rem; }
-.event-attendance-confirm label { display: grid; gap: .4rem; margin-bottom: .75rem; }
-.event-attendance-confirm select { max-width: 100%; min-height: 44px; font-size: 16px; color: var(--ink); background: var(--bg-elev); }
+.event-attendance-confirm label { display: grid; grid-template-columns: minmax(0, 1fr); gap: .4rem; margin-bottom: .75rem; }
+.event-attendance-confirm select { width: 100%; min-width: 0; max-width: 100%; min-height: 44px; font-size: 1rem; color: var(--ink); background: var(--bg-elev); }
 .event-attendance :is(button, select):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }

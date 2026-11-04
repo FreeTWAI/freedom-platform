@@ -118,7 +118,12 @@ test('only the current organizer can list/write: reviewer, participant, anonymou
   assert.equal((await request(path(id, randomUUID()), sessions[0], {action: 'confirm'}, 1)).status, 404);
   assert.equal((await request(path(id, host), sessions[0], {action: 'confirm'}, 1)).data.code, 'attendance_self_confirmation');
   assert.equal((await request(`${listPath(id)}/me`)).status, 404, 'There is no self-service attendance read');
-  assert.equal((await app.request(`${origin}/api/v1/public/events/${id}/attendance`)).status, 404);
+  const anonymousPublic = await app.request(`${origin}/api/v1/public/events/${id}/attendance`);
+  assert.equal(anonymousPublic.status, 401, 'Unregistered public lookalike is still protected by the existing member boundary');
+  const anonymousProblem: unknown = await anonymousPublic.json();
+  assert.ok(anonymousProblem !== null && typeof anonymousProblem === 'object' && 'code' in anonymousProblem);
+  assert.equal(anonymousProblem.code, 'login_required');
+  assert.doesNotMatch(JSON.stringify(anonymousProblem), /member_ref|recorded_at|registration_state|"items"/);
   assert.deepEqual(await effects(), before);
 });
 
@@ -255,7 +260,9 @@ test('session expiry while the final receipt INSERT waits rolls back the whole t
     const pid = (await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
     pending = request(path(id), sessions[0], {action: 'confirm'}, 1, key); await waitForBlocked(pid);
     await blocker.query("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM (max(expires_at)-clock_timestamp())))+0.05) FROM sessions WHERE user_id=$1", [host]);
-    await blocker.query('COMMIT'); const result = await pending; assert.equal(result.status, 401); assert.equal(result.data.code, 'session_expired'); assert.deepEqual(await effects(), before);
+    await blocker.query('COMMIT'); const result = await pending; assert.equal(result.status, 401);
+    assert.ok(result.data !== null && typeof result.data === 'object' && 'code' in result.data);
+    assert.equal(result.data.code, 'session_expired'); assert.deepEqual(await effects(), before);
   } finally {await blocker.query('ROLLBACK'); blocker.release(); if (pending) await pending;}
 });
 
@@ -439,7 +446,9 @@ test('private history GET rechecks session expiry after waiting for the event lo
     const pid = (await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
     pending = request(listPath(id)); await waitForBlocked(pid);
     await blocker.query("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM (max(expires_at)-clock_timestamp())))+0.05) FROM sessions WHERE user_id=$1", [host]);
-    await blocker.query('COMMIT'); const denied = await pending; assert.equal(denied.status, 401); assert.equal(denied.data.code, 'session_expired'); assert(!JSON.stringify(denied.data).includes('member_ref'));
+    await blocker.query('COMMIT'); const denied = await pending; assert.equal(denied.status, 401);
+    assert.ok(denied.data !== null && typeof denied.data === 'object' && 'code' in denied.data);
+    assert.equal(denied.data.code, 'session_expired'); assert(!JSON.stringify(denied.data).includes('member_ref'));
   } finally {await blocker.query('ROLLBACK'); blocker.release(); if (pending) await pending;}
 });
 

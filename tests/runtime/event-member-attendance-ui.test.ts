@@ -151,7 +151,7 @@ test('background hides private snapshot; foreground only reloads and never retra
 test('late read cannot overwrite a new current read or restore revoked private details',async t=>{const h=fixture(t);const old=h.reads()[0];h.event('focus');await h.ready(page([retracted()]));await h.settle(old,page([row()]));assert.match(h.text(),/已撤回確認/);h.event('focus');await h.settle(h.reads().at(-1),new ApiError({status:403,code:'organizer_required',message:'目前不是主辦',definitiveResponse:true}),true);assert.doesNotMatch(h.text(),/合成會員/);assert.match(h.text(),/目前不是主辦/);assert.equal(h.writes().length,0);});
 test('current host self row and revoked writer history display no enabled record control',async t=>{const h=fixture(t);await h.ready(page([row({member_ref:OWNER,nickname:'主辦自己',can_confirm:false,confirm_unavailable:'self_confirmation'}),confirmed({can_retract:false,confirm_unavailable:'organizer_unavailable'})]));assert.equal(propsOf(h.button('確認 主辦自己 到場')).disabled,true);assert.equal(propsOf(h.button('撤回 合成會員 的到場確認')).disabled,true);assert.match(h.text(),/目前沒有可用的更正權限/);assert.equal(h.writes().length,0);});
 test('pagination stays owner-bound and disabled during an unknown mutation',async t=>{const h=fixture(t);const items=Array.from({length:20},(_,i)=>row({member_ref:`30000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`,nickname:i===0?'合成會員':`會員${i}`}));await h.ready(page(items,{total:21,next_offset:20}));h.click(h.button('下一頁會員'));assert.match(h.reads().at(-1).path,/offset=20$/);await h.ready(page([row({member_ref:PEER})],{total:21}));h.begin();h.submit();await h.settle(h.writes()[0],new ApiError({message:'lost',network:true}),true);h.click(h.button('重新讀取到場紀錄'));await h.ready(page([row({member_ref:PEER})],{total:21}));assert.equal(propsOf(h.button('上一頁會員')).disabled,true);});
-test('attendance styling uses real tokens and native inline controls, not new dialog or color-only status',()=>{const css=readFileSync('apps/portal-web/src/modules/EventAttendance.css','utf8'),src=readFileSync('apps/portal-web/src/modules/EventAttendance.tsx','utf8');for(const token of ['line','ink','bg-elev','focus'])assert.match(css,new RegExp(`var\\(--${token}\\)`));assert.doesNotMatch(css,/var\(--border\)/);assert.match(css,/min-height:\s*44px/);assert.match(css,/font-size:\s*16px/);assert.match(css,/:focus-visible/);assert.doesNotMatch(src,/<dialog|showModal|window\.confirm|localStorage|type="checkbox"/);assert.match(src,/role="group"/);});
+test('attendance styling uses real tokens and native inline controls, not new dialog or color-only status',()=>{const css=readFileSync('apps/portal-web/src/modules/EventAttendance.css','utf8'),src=readFileSync('apps/portal-web/src/modules/EventAttendance.tsx','utf8');for(const token of ['line','ink','bg-elev','focus'])assert.match(css,new RegExp(`var\\(--${token}\\)`));assert.doesNotMatch(css,/var\(--border\)/);assert.match(css,/min-height:\s*44px/);assert.match(css,/font-size:\s*1rem/);assert.match(css,/:focus-visible/);assert.doesNotMatch(src,/<dialog|showModal|window\.confirm|localStorage|type="checkbox"/);assert.match(src,/role="group"/);});
 
 test('actual EventsPanel registers attendance unknown in route and beforeunload guards and releases after ACK before GET',async t=>{
  document.visibilityState='visible';const {client,requests}=transport();let guard:(()=>boolean)|null=null;
@@ -199,4 +199,17 @@ for(const priorUnknown of [false,true])test(`attendance_busy is definitive only 
  assert.equal(h.blocked(),priorUnknown);assert.equal(h.writes().length,priorUnknown?2:1);
  if(priorUnknown){h.click(h.button('重試原到場操作'));assert.equal(tuple(h.writes().at(-1)),tuple(first));await h.settle(h.writes().at(-1),ack(first));assert.equal(h.blocked(),false);}
  else{assert.equal(h.button('重試原到場操作'),undefined);h.click(h.button('重新讀取到場紀錄'));await h.ready();assert.equal(h.writes().length,1);}
+});
+
+test('attendance reason uses a shrinkable grid track and control while retaining enlarged text',()=>{
+ const css=readFileSync('apps/portal-web/src/modules/EventAttendance.css','utf8');
+ const rule=(selector:string)=>{const matches=[...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match=>match[1].trim()===selector);assert.equal(matches.length,1);return matches[0][2];};
+ // Source sizing contract only, not a native layout measurement.
+ assert.match(rule('.event-attendance-confirm label'),/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+ const select=rule('.event-attendance-confirm select');
+ assert.match(select,/(?:^|;)\s*width:\s*100%/);
+ assert.match(select,/min-width:\s*0(?:;|$)/);
+ assert.match(select,/min-height:\s*44px(?:;|$)/);
+ assert.match(select,/font-size:\s*1rem(?:;|$)/);
+ assert.doesNotMatch(select,/overflow(?:-x)?:\s*(?:hidden|clip)|font-size:\s*\d+px/);
 });
