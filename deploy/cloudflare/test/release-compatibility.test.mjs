@@ -1961,3 +1961,17 @@ test('schema200 manual attendance requires exact ledger approval without widenin
  const future=fixtureAt(200);future.scan.ledger.push({name:'201_unreviewed.sql',sha256:'e'.repeat(64)});future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
  const restored=fixtureAt(200);restored.host.rollback_floor.schema_ledger=structuredClone(restored.scan.ledger);restored.host.rollback_floor.schema_ledger_digest=restored.scan.ledger_digest;restored.host.observation.schema_ledger=old.ledger;restored.host.observation.schema_ledger_digest=old.ledger_digest;restored.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);assert(codes(evaluate(restored)).includes('historical_schema_floor_mismatch'));
 });
+
+
+test('schema201 prize photos require exact ledger approval without enabling persistence, GC or new capabilities',()=>{
+ const f=fixtureAt(201),old=prefix(f.scan,200);
+ assert.equal(f.scan.ledger.at(-1).name,'201_event_prize_photos.sql');
+ const result=evaluate(f);assert.equal(result.status,'compatible');assert.deepEqual(result.required_shapes,[]);
+ assert.deepEqual(result.required_capabilities,evaluate(fixtureAt(200)).required_capabilities);
+ for(const flag of ['deployment_authority','execution_authority','restore_proof'])assert.equal(result[flag],false);
+ f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];assert(codes(evaluate(f)).includes('release_schema_unsupported'));
+ const renamed=fixtureAt(201);renamed.scan.ledger.at(-1).name='201_unreviewed.sql';renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);assert.deepEqual(codes(evaluate(renamed)),['schema_unknown']);
+ const changed=fixtureAt(201);changed.scan.ledger.at(-1).sha256='d'.repeat(64);changed.scan.ledger_digest=compatibilityLedgerDigest(changed.scan.ledger);assert(codes(evaluate(changed)).includes('schema_ledger_mismatch'));
+ const future=fixtureAt(201);future.scan.ledger.push({name:'202_unreviewed.sql',sha256:'e'.repeat(64)});future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+ const restored=fixtureAt(201);restored.host.rollback_floor.schema_ledger=structuredClone(restored.scan.ledger);restored.host.rollback_floor.schema_ledger_digest=restored.scan.ledger_digest;restored.host.observation.schema_ledger=old.ledger;restored.host.observation.schema_ledger_digest=old.ledger_digest;restored.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);assert(codes(evaluate(restored)).includes('historical_schema_floor_mismatch'));
+});

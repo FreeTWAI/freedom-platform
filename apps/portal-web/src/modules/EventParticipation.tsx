@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useLayoutEffect,useRef,useState,type FormEvent} from 'react';
 import {ApiError,type PortalClient,type RequestOptions} from '../api';
 import type {SessionPayload} from '../types';
 import {formatIsoLocal,localInputToIso} from '../format';
@@ -12,7 +12,8 @@ export type EventParticipationDTO={
   waitlist:null|{status:'queued'|'invited'|'accepted'|'declined'|'left'|'expired'|'cancelled';aggregate_version:number;joined_at:string;invited_at:string|null;expires_at:string|null;delivery_status:string};
 };
 export type EventReminderDTO={version:number;enabled:boolean;minutes_before_start:number|null;channel:'in_app'|'email'|null;status:'pending'|'provider_accepted'|'recorded'|'cancelled'|'failed'|null};
-export type EventParticipationProps={client:PortalClient;session:SessionPayload;eventId:string;eventVersion:number;rsvpState?:'going'|'cancelled'|null;referralCode?:string|null;onChanged?:()=>void};
+type RegisterPendingCommand=(isPending:()=>boolean)=>()=>void;
+export type EventParticipationProps={client:PortalClient;session:SessionPayload;eventId:string;eventVersion:number;rsvpState?:'going'|'cancelled'|null;referralCode?:string|null;onChanged?:()=>void;registerPendingCommand?:RegisterPendingCommand};
 export type GuestEventParticipationProps={client:PortalClient;id:string;referralCode?:string|null};
 export type OrganizerParticipationEvent={event_id:string;aggregate_version:number;starts_at:string;ends_at:string;capacity:number|null;state:string};
 export type EventParticipationOrganizerProps={client:PortalClient;session:SessionPayload;event:OrganizerParticipationEvent;onChanged?:()=>void};
@@ -21,11 +22,57 @@ const positive=(value:string)=>/^\d+$/.test(value)&&Number.isSafeInteger(Number(
 const options=(token:string|null):Omit<RequestOptions,'body'>=>token?{eventParticipationToken:token,skipAuthHandler:true,suppressConsole:true}:{suppressConsole:true};
 type FrozenRequest={method:'POST'|'PATCH';path:string;body:unknown;key:string;version?:number};
 
+function participationRecord(value:unknown):value is Record<string,unknown>{return typeof value==='object'&&value!==null&&!Array.isArray(value);}
+function participationInteger(value:unknown,min=1):value is number{return typeof value==='number'&&Number.isSafeInteger(value)&&value>=min;}
+function participationTime(value:unknown):value is string{return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value));}
+// Validate the original response, not a later GET or edited form. Receipts can
+// legitimately be historical or no-ops, so their version need not be expected+1.
+function matchesParticipationAck(request:FrozenRequest,value:unknown):boolean{
+  if(!participationRecord(value)||!participationRecord(request.body))return false;
+  const route=/^(\/public)?\/events\/([^/]+)\/(participation-request|participation|waitlist|reminder|waitlist-policy|schedule)$/.exec(request.path);
+  if(!route)return false;
+  const body=request.body,kind=route[3];
+  if(kind==='participation-request')return Boolean(route[1])&&request.method==='POST'&&value.requested===true&&value.provider_status==='provider_accepted';
+  if(!participationInteger(request.version))return false;
+  if(kind==='reminder'){
+    if(request.method!=='PATCH'||!participationInteger(value.version)||value.version<request.version||
+      typeof value.enabled!=='boolean'||value.enabled!==body.enabled)return false;
+    // The absent disabled choice is the only version-1/null receipt. A saved
+    // disabled row retains its settings and is cancelled, not pending delivery.
+    if(!value.enabled&&value.status===null)return value.version===1&&value.minutes_before_start===null&&value.channel===null;
+    if(value.version<2||!participationInteger(value.minutes_before_start)||!['in_app','email'].includes(value.channel as string))return false;
+    return value.enabled?value.minutes_before_start===body.minutes_before_start&&value.channel===body.channel&&
+      ['pending','provider_accepted','recorded','failed'].includes(value.status as string):value.status==='cancelled';
+  }
+  if(value.event_id!==route[2]||!participationInteger(value.event_version)||value.event_version<request.version||
+    !['pending','published','rejected','cancelled'].includes(value.event_state as string)||!participationTime(value.starts_at)||
+    typeof value.waitlist_enabled!=='boolean'||!(value.response_window_minutes===null||participationInteger(value.response_window_minutes))||
+    !(value.rsvp_state===null||['pending','going','cancelled'].includes(value.rsvp_state as string))||
+    !(value.available_seats===null||participationInteger(value.available_seats,0)))return false;
+  const own=value.waitlist;
+  if(own!==null&&(!participationRecord(own)||!['queued','invited','accepted','declined','left','expired','cancelled'].includes(own.status as string)||
+    !participationInteger(own.aggregate_version)||!participationTime(own.joined_at)||
+    !(own.invited_at===null||participationTime(own.invited_at))||!(own.expires_at===null||participationTime(own.expires_at))||
+    !['pending','recorded','provider_accepted','failed','unknown'].includes(own.delivery_status as string)))return false;
+  if(kind==='waitlist-policy')return !route[1]&&request.method==='PATCH'&&value.waitlist_enabled===body.waitlist_enabled&&value.response_window_minutes===body.response_window_minutes;
+  // This DTO echoes starts_at, but not capacity or ends_at; don't invent proof.
+  if(kind==='schedule')return !route[1]&&request.method==='PATCH'&&participationTime(body.starts_at)&&Date.parse(value.starts_at)===Date.parse(body.starts_at);
+  if(request.method!=='POST'||(kind==='participation')!==Boolean(route[1]))return false;
+  if(body.action==='join')return own!==null;
+  if(body.action==='accept')return participationRecord(own)&&own.status==='accepted'&&value.rsvp_state==='going';
+  if(body.action==='register')return kind==='participation'&&value.rsvp_state==='going';
+  if(body.action==='cancel')return kind==='participation'&&(value.rsvp_state===null||value.rsvp_state==='cancelled');
+  return body.action==='leave'||body.action==='decline';
+}
+
 // An unknown outcome blocks newer commands until this exact command is retried.
 // Draft inputs remain editable; acknowledgements and reloads never replace them.
 function useParticipationTransport(client:PortalClient,scope:string,token:string|null){
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[stale,setStale]=useState(false),[retry,setRetry]=useState(false),[notice,setNotice]=useState(''),[receipt,setReceipt]=useState<unknown>(null);
   const pending=useRef<FrozenRequest|null>(null),inFlight=useRef(false),generation=useRef(0);
+  // Query the command refs synchronously: a same-tick departure must not wait
+  // for busy/retry to render, and read-only refreshes never hold this guard.
+  const hasPendingCommand=useCallback(()=>inFlight.current||pending.current!==null,[]);
   const readSequence=useRef<Record<string,number>>({});
   const controllers=useRef<AbortController[]>([]);
   useEffect(()=>{generation.current++;pending.current=null;inFlight.current=false;setBusy(false);setRetry(false);setStale(false);setError('');setNotice('');setReceipt(null);return()=>{generation.current++;for(const controller of controllers.current)controller.abort();controllers.current=[];}},[client,scope,token]);
@@ -38,17 +85,21 @@ function useParticipationTransport(client:PortalClient,scope:string,token:string
   },[client,token]);
   async function send(request:FrozenRequest):Promise<boolean>{
     if(inFlight.current||stale)return false;
+    const retrying=pending.current===request;
     const epoch=generation.current,csrf=request.path.startsWith('/public/')?null:client.csrfToken,controller=new AbortController();controllers.current.push(controller);inFlight.current=true;setBusy(true);setError('');setNotice('');
     try{
       const requestOptions={...options(token),...(request.path.startsWith('/public/')?{skipAuthHandler:true}:{}),idempotencyKey:request.key,ifMatch:request.version,signal:controller.signal};
       const result=await (request.method==='PATCH'?client.patch(request.path,request.body,requestOptions):client.post(request.path,request.body,requestOptions));
       if(epoch!==generation.current||csrf!==null&&csrf!==client.csrfToken)return false;
+      if(!matchesParticipationAck(request,result))throw new ApiError({message:'操作回應未能核對，請重試原操作確認結果。',network:true});
       pending.current=null;setReceipt(result);setRetry(false);setNotice('操作已確認；未送出的欄位仍保留。');return true;
     }catch(cause){
       if(epoch!==generation.current||csrf!==null&&csrf!==client.csrfToken||controller.signal.aborted)return false;
-      const uncertain=!(cause instanceof ApiError)||cause.network||cause.status>=500;
+      // A later refusal cannot prove that an earlier unknown attempt did not commit.
+      const uncertain=retrying||!(cause instanceof ApiError)||!cause.definitiveResponse||cause.network||cause.status===0||cause.status>=500;
       pending.current=uncertain?request:null;setRetry(uncertain);
-      if(cause instanceof ApiError&&cause.status===412&&request.version!==undefined){setStale(true);setError('資料已由其他操作更新。請先重新載入最新狀態；你的輸入會保留，再確認送出。');}
+      if(!uncertain&&cause instanceof ApiError&&cause.status===412&&request.version!==undefined){setStale(true);setError('資料已由其他操作更新。請先重新載入最新狀態；你的輸入會保留，再確認送出。');}
+      else if(uncertain&&request.path.endsWith('/participation-request'))setError('寄送結果尚未確認。以原資料重試可能再次寄出管理信；不會自動報名或加入候補。');
       else setError(token?'私人參與操作未確認。管理連結可能失效或活動資格已變更；請重試或重新取得管理信。':cause instanceof Error?cause.message:'操作結果尚未確認，請重試原操作。');
       return false;
     }finally{controllers.current=controllers.current.filter(item=>item!==controller);if(epoch===generation.current&&(csrf===null||csrf===client.csrfToken)){inFlight.current=false;setBusy(false);}}
@@ -59,7 +110,7 @@ function useParticipationTransport(client:PortalClient,scope:string,token:string
     const frozen={...body,...(token?{...(path.endsWith('/reminder')?{command_id:key}:{}),...(version!==undefined?{expected_version:version}:{})}:{})};
     return send({method,path,body:frozen,key,version});
   }
-  return {get,mutate,busy,error,stale,retry,notice,receipt,blocked:busy||retry||stale,
+  return {get,mutate,busy,error,stale,retry,notice,receipt,hasPendingCommand,blocked:busy||retry||stale,
     retryCommand:()=>pending.current?send(pending.current):Promise.resolve(false),
     reloaded:()=>{setStale(false);setError('');},setNotice};
 }
@@ -108,8 +159,9 @@ function ReminderForm({value,transport,path,guest,reload,allowed}:{value:EventRe
     <button className="btn btn-ghost btn-small" disabled={transport.blocked||enabled&&(!positive(minutes)||!allowed)}>儲存提醒選擇</button>
   </form>;
 }
-function ParticipationPanel({client,eventId,eventVersion,rsvpState,token,actor,referralCode,onChanged}:{client:PortalClient;eventId:string;eventVersion?:number;rsvpState?:'going'|'cancelled'|null;token:string|null;actor:string;referralCode?:string|null;onChanged?:()=>void}){
+function ParticipationPanel({client,eventId,eventVersion,rsvpState,token,actor,referralCode,onChanged,registerPendingCommand}:{client:PortalClient;eventId:string;eventVersion?:number;rsvpState?:'going'|'cancelled'|null;token:string|null;actor:string;referralCode?:string|null;onChanged?:()=>void;registerPendingCommand?:RegisterPendingCommand}){
   const base=`${token?'/public':''}/events/${eventId}`,transport=useParticipationTransport(client,`${actor}:${eventId}`,token);
+  useLayoutEffect(()=>registerPendingCommand?.(transport.hasPendingCommand),[registerPendingCommand,transport.hasPendingCommand]);
   const [value,setValue]=useState<EventParticipationDTO|null>(null),[reminder,setReminder]=useState<EventReminderDTO|null>(null);
   const reload=useCallback(async()=>{const [participation,currentReminder]=await Promise.all([transport.get<EventParticipationDTO>(`${base}/participation`),transport.get<EventReminderDTO>(`${base}/reminder`)]);if(participation)setValue(participation);if(currentReminder)setReminder(currentReminder);if(participation&&currentReminder)transport.reloaded();},[base,transport.get]);
   // Sibling organizer commands refresh canonical metadata without remounting drafts.
@@ -138,8 +190,10 @@ function ParticipationPanel({client,eventId,eventVersion,rsvpState,token,actor,r
     {!value&&transport.error&&!transport.stale&&!transport.retry&&<button type="button" className="btn btn-ghost btn-small" onClick={()=>void reload()}>重新讀取</button>}
   </section>;
 }
-export function EventParticipation({client,session,eventId,eventVersion,rsvpState,referralCode,onChanged}:EventParticipationProps){
-  return <ParticipationPanel key={`${session.user.user_id}:${client.csrfToken}:${eventId}`} client={client} eventId={eventId} eventVersion={eventVersion} rsvpState={rsvpState} token={null} actor={session.user.user_id} referralCode={referralCode} onChanged={onChanged}/>;
+export function EventParticipation({client,session,eventId,eventVersion,rsvpState,referralCode,onChanged,registerPendingCommand}:EventParticipationProps){
+  const identity=useRef({client,revision:0});
+  if(identity.current.client!==client)identity.current={client,revision:identity.current.revision+1};
+  return <ParticipationPanel key={`${identity.current.revision}:${session.user.user_id}:${client.sessionGeneration}:${client.csrfToken}:${eventId}`} client={client} eventId={eventId} eventVersion={eventVersion} rsvpState={rsvpState} token={null} actor={session.user.user_id} referralCode={referralCode} onChanged={onChanged} registerPendingCommand={registerPendingCommand}/>;
 }
 function ManagementRequest({client,id,referralCode}:GuestEventParticipationProps){
   const transport=useParticipationTransport(client,`request:${id}`,null),[name,setName]=useState(''),[email,setEmail]=useState('');

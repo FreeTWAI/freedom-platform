@@ -19,7 +19,7 @@ test.beforeEach(async({page})=>{
 test('public referral event keeps its share code when the URL query loses it',async({page})=>{
   let registered:string|null=null;
   await page.route(`**/api/v1/public/events/${id}`,route=>route.fulfill({json:publicEvent}));
-  await page.route(`**/api/v1/public/events/${id}/register`,async route=>{registered=route.request().postDataJSON().referral_code;await route.fulfill({json:{registered:true}})});
+  await page.route(`**/api/v1/public/events/${id}/register`,async route=>{registered=route.request().postDataJSON().referral_code;await route.fulfill({json:{registered:true,provider_status:'provider_accepted'}})});
   await page.goto(`/events/${id}?ref=${code}`);
   await expect(page.getByRole('heading',{name:'公開共學活動'})).toBeVisible();
   await expect(page.getByText('線上參與資料將寄至報名信箱')).toBeVisible();
@@ -39,6 +39,73 @@ test('public referral event keeps its share code when the URL query loses it',as
   await page.getByRole('button',{name:'會員登入'}).click();
   await expect(page.getByRole('button',{name:'登入',exact:true})).toBeVisible();
   expect(page.url()).toContain(`/events/${id}`);
+});
+
+for(const malformed of [null,{registered:false,provider_status:'provider_accepted'},{registered:true}])test(`public registration rejects incomplete confirmation ${JSON.stringify(malformed)}`,async({page})=>{
+  const writes:unknown[]=[];
+  await page.route(`**/api/v1/public/events/${id}`,route=>route.fulfill({json:publicEvent}));
+  await page.route(`**/api/v1/public/events/${id}/register`,async route=>{
+    writes.push(route.request().postDataJSON());
+    if(writes.length===1)return route.fulfill({contentType:'application/json',body:JSON.stringify(malformed)});
+    if(writes.length===2)return route.fulfill({status:409,json:{type:'about:blank',title:'Conflict',status:409,code:'event_closed',detail:'活動已開始或取消。'}});
+    return route.fulfill({json:{registered:true,provider_status:'provider_accepted'}});
+  });
+  await page.goto(`/events/${id}?ref=${code}`);
+  const name=page.getByLabel('你的名字',{exact:true}),email=page.getByLabel('接收參與資料的 Email',{exact:true});
+  await name.fill('合成訪客');await email.fill('synthetic@example.test');
+  await page.getByRole('button',{name:'報名並寄送參與資料',exact:true}).click();
+  const retry=page.getByRole('button',{name:'重試原報名與寄信',exact:true});
+  await expect(retry).toBeEnabled();await expect(name).toBeDisabled();await expect(email).toBeDisabled();
+  await expect(page.getByRole('status').filter({hasText:'報名已確認'})).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('可能再次寄出相同郵件');
+  await retry.click();await expect(retry).toBeEnabled();await expect(email).toBeDisabled();
+  await expect(page.getByRole('status').filter({hasText:'報名已確認'})).toHaveCount(0);
+  expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);
+  await retry.click();await expect(page.getByRole('status').filter({hasText:'報名已確認'})).toBeVisible();
+  expect(writes).toHaveLength(3);expect(writes[2]).toEqual(writes[0]);
+  await expect(page.getByRole('button',{name:'報名並寄送參與資料',exact:true})).toBeDisabled();
+});
+
+test('public registration locks same-render repeated submit and restores editing after a first rejection',async({page})=>{
+  let writes=0,release!:()=>void,started!:()=>void;
+  const pending=new Promise<void>(resolve=>{release=resolve;}),requested=new Promise<void>(resolve=>{started=resolve;});
+  await page.route(`**/api/v1/public/events/${id}`,route=>route.fulfill({json:publicEvent}));
+  await page.route(`**/api/v1/public/events/${id}/register`,async route=>{
+    writes++;
+    if(writes===1){started();await pending;return route.fulfill({status:422,json:{type:'about:blank',title:'Invalid input',status:422,code:'invalid_request',detail:'報名資料格式不符。'}});}
+    expect(route.request().postDataJSON().email).toBe('corrected@example.test');
+    return route.fulfill({json:{registered:true,provider_status:'provider_accepted'}});
+  });
+  await page.goto(`/events/${id}?ref=${code}`);
+  const email=page.getByLabel('接收參與資料的 Email',{exact:true});
+  await page.getByLabel('你的名字',{exact:true}).fill('合成訪客');await email.fill('first@example.test');
+  try{
+    await page.locator('form.public-event-register').evaluate(form=>{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
+    await requested;await expect(email).toBeDisabled();expect(writes).toBe(1);
+  }finally{release();}
+  await expect(email).toBeEnabled();await email.fill('corrected@example.test');
+  await page.getByRole('button',{name:'報名並寄送參與資料',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'報名已確認'})).toBeVisible();expect(writes).toBe(2);
+});
+
+test('public refresh failure preserves the unknown registration retry without sending automatically',async({page})=>{
+  let failReads=false;const writes:unknown[]=[];
+  await page.unroute('**/api/v1/site');
+  await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),community_discovery_enabled:true,event_participation_enabled:false}})});
+  await page.route(`**/api/v1/public/events/${id}`,route=>failReads?route.fulfill({status:503,json:{status:503}}):route.fulfill({json:{...publicEvent,visibility:'open'}}));
+  await page.route(`**/api/v1/public/events/${id}/register`,async route=>{
+    writes.push(route.request().postDataJSON());
+    return route.fulfill({json:writes.length===1?{}:{registered:true,provider_status:'provider_accepted'}});
+  });
+  await page.goto(`/events/${id}`);
+  await page.getByLabel('你的名字',{exact:true}).fill('合成訪客');await page.getByLabel('接收參與資料的 Email',{exact:true}).fill('synthetic@example.test');
+  await page.getByRole('button',{name:'報名並寄送參與資料',exact:true}).click();
+  const retry=page.getByRole('button',{name:'重試原報名與寄信',exact:true});await expect(retry).toBeEnabled();
+  failReads=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('heading',{name:'活動目前無法公開查看',exact:true})).toBeVisible();
+  await expect(retry).toBeEnabled();expect(writes).toHaveLength(1);
+  await retry.click();await expect(page.getByRole('status').filter({hasText:'報名已確認'})).toBeVisible();
+  expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);
 });
 
 for(const routeKind of ['path','hash'] as const)test(`public event ${routeKind} login preserves only the referral and keeps browser history intact`,async({page})=>{
@@ -159,10 +226,13 @@ featureTest.describe('event-scoped public registration lifetime',()=>{
       const failedRegistration=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/v1/public/events/${eventB}/register`&&response.request().method()==='POST');
       await submitButton.click();
       expect((await failedRegistration).status()).toBe(503);
-      await expect(page.getByRole('alert')).toHaveText('服務暫時無法回應（503）。尚未確認結果，請稍後重試。');
+      await expect(page.getByRole('alert')).toContainText('尚未確認這次報名結果');
+      await expect(page.getByRole('alert')).toContainText('可能再次寄出相同郵件');
       await expect(nameInput).toHaveValue('活動乙暫存訪客');
       await expect(emailInput).toHaveValue(failEmailB);
-      await expect(submitButton).toBeEnabled();
+      await expect(emailInput).toBeDisabled();
+      await expect(nameInput).toBeDisabled();
+      await expect(page.getByRole('button',{name:'重試原報名與寄信',exact:true})).toBeEnabled();
 
       await page.goBack();
       await expect(page.getByRole('heading',{name:titleA,exact:true})).toBeVisible();

@@ -76,6 +76,8 @@
     "apps/portal-web/src/modules/EventHelpers.css",
     "tests/runtime/event-helper-client.test.ts",
     "tests/e2e/event-helpers.spec.ts",
+    "tests/runtime/event-route-identity.test.ts",
+    "tests/e2e/event-route-identity.spec.ts",
     "modules/community/event-prize-details.ts",
     "migrations/199_event_prize_details.sql",
     "apps/portal-web/src/modules/EventPrizeDetails.tsx",
@@ -101,7 +103,17 @@
     "tests/runtime/event-member-attendance-ui.test.ts",
     "tests/runtime/event-member-attendance-db.test.ts",
     "tests/e2e/event-member-attendance.spec.ts",
-    "docs/development/event-member-attendance.md"
+    "docs/development/event-member-attendance.md",
+    "modules/community/event-prize-photos.ts",
+    "modules/community/event-prize-photo-state.ts",
+    "apps/portal-web/src/modules/event-prize-photo-client.ts",
+    "apps/portal-web/src/modules/EventPrizePhoto.tsx",
+    "apps/portal-web/src/modules/EventPrizePhoto.css",
+    "tests/runtime/event-prize-photo-client.test.ts",
+    "tests/runtime/event-prize-photo-ui.test.ts",
+    "tests/e2e/event-prize-photos.spec.ts",
+    "tests/runtime/event-save-client.test.ts",
+    "tests/runtime/event-public-registration-client.test.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
@@ -124,7 +136,9 @@
     "modules/community/skill-book-guides.ts",
     "modules/community/skill-collaboration.ts",
     "modules/community/skill-share-content.ts",
-    "modules/community/social-posts.ts"
+    "modules/community/social-posts.ts",
+    "modules/community/event-prize-photos.ts",
+    "modules/community/event-prize-photo-state.ts"
   ],
   "dependencies": [
     "command-core",
