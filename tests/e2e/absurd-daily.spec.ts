@@ -479,7 +479,9 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     }
     async function classify(index:number) {
       await expect(board).toBeFocused();
-      await page.clock.runFor(250);
+      // Advance the input cooldown without rendering every intervening RAF.
+      // This is a keyboard/focus regression, not an animation-frame test.
+      await page.clock.fastForward(250);
       await page.keyboard.press(deck[index].valid?'ArrowRight':'ArrowLeft');
       await expect(progress).toContainText(`已分類 ${index+1} / 30 · 分錯 0 次`);
     }
@@ -499,7 +501,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await expect(exit).toBeFocused();
     // A control must not classify a card; only Tab returning to the board
     // restores game shortcuts, without a click or programmatic focus there.
-    await page.clock.runFor(250);
+    await page.clock.fastForward(250);
     await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
     await expect(progress).toContainText('已分類 1 / 30');
     await page.keyboard.press('Tab');
