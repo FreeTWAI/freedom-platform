@@ -18,7 +18,7 @@ function text(value:any):string{return Array.isArray(value)?value.map(text).join
 function find(value:any,predicate:(node:Element)=>boolean):Element|undefined{if(!value||typeof value!=='object')return;if(Array.isArray(value)){for(const child of value){const result=find(child,predicate);if(result)return result;}return;}if(predicate(value))return value;return find(value.props?.children,predicate);}
 const settle=()=>new Promise<void>(resolve=>setImmediate(resolve));
 const stored=(overrides:any={})=>({event_id:id,organizer_ref:userId,organizer_name:'Synthetic member',title:'Original title',description:'Original description',starts_at:'2030-01-01T12:00:00.000Z',ends_at:'2030-01-01T13:00:00.000Z',mode:'online',location:'Original location',event_kind:'other',topic:null,online_url:null,visibility:'workshop',banner_url:null,banner_orientation:null,video_url:null,video_mime:null,registration_policy:'community_member',help_need:null,capacity:null,state:'pending',aggregate_version:1,attending_count:0,my_rsvp:null,guild_key:null,review_guild_key:'guild_member_operations',can_review:false,review_reason:null,...overrides});
-function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean}={}){
+function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean;prepareFailure?:Error}={}){
   type Scope={hooks:any[];index:number;effects:(()=>void)[]};
   const delayedCleanups:Scope[]=[],outer:Scope={hooks:[],index:0,effects:[]};let inner:Scope={hooks:[],index:0,effects:[]},scope=outer,key:string|undefined;
   const reads:any[]=[],writes:any[]=[],media:any[]=[],preparations:any[]=[],listeners=new Map<string,any>(),notices:any[]=[];
@@ -38,7 +38,7 @@ function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean}={}
     if(name==='react')return react;if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};if(name==='../api')return {ApiError};if(name==='./shared')return mutation.exports;
     if(name==='../format')return {formatIsoLocal:(v:string)=>v,hoursFromNowLocalInput:(n:number)=>n===24?'2030-01-01T12:00':'2030-01-01T13:00',localInputToIso:(v:string)=>new Date(v).toISOString()};
     if(name==='./member-inbox')return {announceInboxChange:()=>notices.push('inbox')};if(name==='./social-image')return {prepareSocialImage:async(file:any)=>file};
-    if(name==='./event-banner-client')return {prepareEventMedia:async(c:any,value:any,file:any,kind:string)=>{const command:any={eventId:value.event_id,version:value.aggregate_version,file,kind,generation:c.sessionGeneration,csrfToken:c.csrfToken};preparations.push(command);if(options.deferPrepare)return new Promise(resolve=>{command.resolve=()=>resolve(command);});return command;},sendEventMedia:(c:any,command:any)=>new Promise((resolve,reject)=>media.push({client:c,command,resolve,reject})),readEventMedia:(c:any,command:any)=>c.get(`/events/${command.eventId}`),currentMediaEvent:(a:any,b:any)=>a.aggregate_version>b.aggregate_version?a:b};
+    if(name==='./event-banner-client')return {prepareEventMedia:async(c:any,value:any,file:any,kind:string)=>{const command:any={eventId:value.event_id,version:value.aggregate_version,file,kind,key:webcrypto.randomUUID(),generation:c.sessionGeneration,csrfToken:c.csrfToken};preparations.push(command);if(options.prepareFailure)throw options.prepareFailure;if(options.deferPrepare)return new Promise(resolve=>{command.resolve=()=>resolve(command);});return command;},sendEventMedia:(c:any,command:any)=>new Promise((resolve,reject)=>media.push({client:c,command,resolve,reject})),readEventMedia:(c:any,command:any)=>c.get(`/events/${command.eventId}`),currentMediaEvent:(a:any,b:any)=>a.aggregate_version>b.aggregate_version?a:b};
     if(name.endsWith('.css'))return {};if(['./EventCalendar','./EventParticipation','./EventAttendees','./EventHelpers'].includes(name))return new Proxy({},{get:()=>()=>null});throw Error(name);
   };
   runInNewContext(compiled,{module,exports:module.exports,require,crypto:webcrypto,Error,Date,Intl,URL,URLSearchParams,Event:class{},window:{location:{pathname:'/',hash:'#events',search:'',origin:'http://synthetic.test'},confirm:()=>false,addEventListener:(name:string,fn:any)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name),dispatchEvent:()=>notices.push('world')},localStorage:{getItem:()=>null,setItem:()=>{}},navigator:{}});
@@ -101,13 +101,72 @@ test('late media preparation cannot issue an upload after the owner changes',asy
   const h=harness({deferPrepare:true});await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();assert.equal(h.preparations.length,1);assert.equal(h.media.length,0);
   h.client.sessionGeneration++;h.client.csrfToken='new-session';h.view();h.preparations[0].resolve();await settle();assert.equal(h.media.length,0);assert.equal(h.notices.length,0);h.cleanup();
 });
-test('automatic media reconciliation holds the save lock and replays only the original media command',async()=>{
+test('explicit media reconciliation holds the save lock and replays only the original media command',async()=>{
   const h=harness();await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();h.media[0].reject(unknown());await settle();
-  const read=h.reads.find(call=>call.path===`/events/${id}`);assert.ok(read);assert.equal(h.fields().props.disabled,true);h.submit();assert.equal(h.writes.length,1);assert.equal(h.media.length,1);assert.equal(h.leave(),false);
+  assert.equal(h.reads.some(call=>call.path===`/events/${id}`),false,'unknown does not start read/replay');h.click('重試確認保存');const read=h.reads.find(call=>call.path===`/events/${id}`);assert.ok(read);assert.equal(h.fields().props.disabled,true);h.submit();assert.equal(h.writes.length,1);assert.equal(h.media.length,1);assert.equal(h.leave(),false);
   read.resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.equal(h.media.length,2);assert.equal(h.media[1].command,h.media[0].command);
   h.media[1].resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.match(text(h.view()),/活動已送出審核/);assert.equal(h.form(),undefined);h.cleanup();
 });
 test('late reconciliation read cannot replay media into a replacement owner',async()=>{
-  const h=harness({deferPassiveCleanup:true});await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();h.media[0].reject(unknown());await settle();const read=h.reads.find(call=>call.path===`/events/${id}`);assert.ok(read);
+  const h=harness({deferPassiveCleanup:true});await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();h.media[0].reject(unknown());await settle();h.click('重試確認保存');const read=h.reads.find(call=>call.path===`/events/${id}`);assert.ok(read);
   h.props.client={...h.client};h.view();read.resolve(stored({aggregate_version:2,video_url:'/synthetic-video',video_mime:'video/mp4'}));await settle();assert.equal(h.media.length,1);assert.equal(h.notices.length,0);h.cleanup();
+});
+
+for(const status of [400,403,409,412,415,422,429])test(`unknown media stays frozen after later definitive ${status}`,async()=>{
+  const h=harness();await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();
+  const original=h.media[0].command;h.media[0].reject(unknown());await settle();
+  assert.equal(h.media.length,1);assert.equal(h.reads.some(call=>call.path===`/events/${id}`),false);
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.notices.length,0);
+  const retry=h.button('重試確認保存')!;assert.ok(retry);retry.props.onClick();retry.props.onClick();await settle();
+  let reads=h.reads.filter(call=>call.path===`/events/${id}`);assert.equal(reads.length,1,'same-render retry is singleflight');
+  reads[0].resolve(stored({aggregate_version:9,video_url:'/another-writer-video'}));await settle();
+  assert.equal(h.notices.length,0,'GET current media/version is not original receipt');assert.equal(h.fields().props.disabled,true);
+  assert.equal(h.media.length,2);assert.equal(h.media[1].command,original);assert.equal(h.media[1].command.version,1);
+  h.media[1].reject(denied(status));await settle();
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.ok(h.button('重試確認保存'));assert.equal(h.notices.length,0);
+  h.submit();assert.equal(h.writes.length,1,'cannot restart metadata while original upload is unresolved');
+  h.click('重試確認保存');reads=h.reads.filter(call=>call.path===`/events/${id}`);assert.equal(reads.length,2);
+  reads[1].resolve(stored({aggregate_version:9,video_url:'/another-writer-video'}));await settle();
+  assert.equal(h.media[2].command,original);h.media[2].resolve(stored({aggregate_version:2,video_url:'/saved-video'}));await settle();
+  assert.equal(h.form(),undefined);assert.equal(h.leave(),true,'confirmed receipt releases guard without awaiting list refresh');
+  assert.equal(h.notices.filter(value=>value==='inbox').length,1);assert.equal(h.notices.filter(value=>value==='world').length,1);h.cleanup();
+});
+
+test('an unknown banner does not contaminate the next video command after its receipt',async()=>{
+  const h=harness();await create(h);h.choose('banner');await settle();h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();
+  const banner=h.media[0].command;h.media[0].reject(unknown());await settle();h.click('重試確認保存');
+  h.reads.find(call=>call.path===`/events/${id}`)!.resolve(stored({aggregate_version:2,banner_url:'/saved-banner'}));await settle();
+  assert.equal(h.media[1].command,banner);h.media[1].resolve(stored({aggregate_version:2,banner_url:'/saved-banner'}));await settle();
+  assert.equal(h.media[2].command.kind,'video');assert.notEqual(h.media[2].command.key,banner.key);assert.equal(h.media[2].command.version,2);
+  h.media[2].reject(denied(415));await settle();await ready(h,[stored({aggregate_version:2,banner_url:'/saved-banner'})]);
+  assert.equal(h.fields().props.disabled,false,'first definitive video refusal is correctable');assert.equal(h.button('重試確認保存'),undefined);assert.ok(h.button('重試保存'));assert.equal(h.notices.length,0);h.cleanup();
+});
+
+test('first definitive media refusal permits a corrected command with a new key',async()=>{
+  const h=harness();await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();
+  const original=h.media[0].command;h.media[0].reject(denied(415));await settle();await ready(h,[stored()]);assert.equal(h.fields().props.disabled,false);assert.equal(h.button('重試確認保存'),undefined);
+  h.click('重試保存');h.submit();h.writes[1].resolve(ack(h.writes[1]));await settle();assert.notEqual(h.media[1].command.key,original.key);
+  h.media[1].resolve(stored({aggregate_version:3,video_url:'/saved-video'}));await settle();assert.equal(h.notices.filter(value=>value==='inbox').length,1);h.cleanup();
+});
+
+test('a local preparation failure is not an unknown submitted command',async()=>{
+  const h=harness({prepareFailure:new ApiError({message:'local prepare refused',status:400})});await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();await ready(h,[stored()]);
+  assert.equal(h.media.length,0);assert.equal(h.fields().props.disabled,false);assert.equal(h.button('重試確認保存'),undefined);assert.equal(h.notices.length,0);h.cleanup();
+});
+
+for(const change of ['generation','client'] as const)test(`late explicit media retry cannot confirm a replaced ${change}`,async()=>{
+  const h=harness({deferPassiveCleanup:true});await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();h.media[0].reject(unknown());await settle();h.click('重試確認保存');
+  h.reads.find(call=>call.path===`/events/${id}`)!.resolve(stored({aggregate_version:2,video_url:'/saved-video'}));await settle();assert.equal(h.media.length,2);
+  if(change==='generation'){h.client.sessionGeneration++;h.client.csrfToken='replacement';}else h.props.client={...h.client};
+  h.view();h.media[1].resolve(stored({aggregate_version:2,video_url:'/saved-video'}));await settle();assert.equal(h.notices.length,0);assert.equal(h.form(),undefined);h.cleanup();
+});
+
+test('failed explicit readback preserves the upload and never replays until another click',async()=>{
+  const h=harness();await create(h);h.choose('video');h.submit();h.writes[0].resolve(ack(h.writes[0]));await settle();
+  const original=h.media[0].command;h.media[0].reject(unknown());await settle();h.click('重試確認保存');
+  h.reads.find(call=>call.path===`/events/${id}`)!.reject(new ApiError({message:'readback unavailable',status:503}));await settle();
+  h.view();h.view();assert.equal(h.media.length,1);assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.notices.length,0);
+  h.click('重試確認保存');const reads=h.reads.filter(call=>call.path===`/events/${id}`);assert.equal(reads.length,2);
+  reads[1].resolve(stored({aggregate_version:9,video_url:'/another-writer-video'}));await settle();assert.equal(h.media[1].command,original);
+  h.media[1].resolve(stored({aggregate_version:2,video_url:'/saved-video'}));await settle();h.view();assert.equal(h.leave(),true);assert.equal(h.notices.filter(value=>value==='inbox').length,1);h.cleanup();
 });

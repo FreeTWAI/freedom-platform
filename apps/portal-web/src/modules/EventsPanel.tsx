@@ -23,7 +23,7 @@ export type CommunityEvent = {
 };
 type EventActionAttempt={eventId:string;path:string;kind:'cancel'|'rsvp';body:{going?:boolean;referral_code?:string|null};version?:number};
 type EventSaveAttempt={path:string;body:EventPayload;version?:number;editing:boolean;eventId:string|null;organizerId:string;helpNeed:string|null;registrationPolicy:CommunityEvent['registration_policy'];banner:File|null;video:File|null};
-type MediaSave={result:CommunityEvent;banner:File|null;video:File|null;editing:boolean;command:EventMediaCommand|null};
+type MediaSave={result:CommunityEvent;banner:File|null;video:File|null;editing:boolean;command:EventMediaCommand|null;unknownCommand:EventMediaCommand|null};
 type Guild={guild_key:string;name:string;membership?:{state:string;member_tier?:'intern'|'full'}|null};
 const INTERN_WRITE='實習成員可以閱讀公會內容、在公會聊天室聊天；請會長把你設為正式成員後再發布或編輯。';
 const internExchange=(value:{event_kind:string;guild_key:string|null},guilds:Guild[])=>value.event_kind==='guild_skill_exchange'&&guilds.some(guild=>guild.guild_key===value.guild_key&&guild.membership?.state==='active'&&guild.membership.member_tier==='intern');
@@ -269,11 +269,14 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
         const receipt=await sendEventMedia(client,pending.command);
         if(!isSaveOwner())return false;
         pending.result=currentMediaEvent(pending.result,receipt);
-        pending[kind]=null;pending.command=null;
+        pending[kind]=null;pending.command=null;pending.unknownCommand=null;
       }
     }catch(cause){
       if(!isSaveOwner())return false;
-      const unknown=Boolean(pending.command&&cause instanceof ApiError&&cause.network);
+      // Uncertainty belongs to this exact dispatched upload, not the whole
+      // banner/video pipeline. Local preparation/session refusals are not sends.
+      const unknown=Boolean(pending.command&&(pending.unknownCommand===pending.command||cause instanceof ApiError&&cause.network));
+      pending.unknownCommand=unknown?pending.command:null;
       mediaSave.current=unknown?pending:null;setMediaUnknown(unknown);
       publishEvent(pending.result);
       setBannerError(unknown?'媒體保存結果尚未確認，請先確認原操作。':cause instanceof Error?cause.message:'媒體未能保存，請重試。');
@@ -289,10 +292,10 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
     announceInboxChange();window.dispatchEvent(new Event('freedom-world-facts-updated'));void load();
     return false;
   }
-  async function reconcileMedia(withSaveFlight=false){
-    if(!isSaveOwner()||saveFlight.current&&!withSaveFlight)return;
+  async function reconcileMedia(){
+    if(!isSaveOwner()||saveFlight.current)return;
     const pending=mediaSave.current;if(!pending?.command)return;
-    if(!withSaveFlight)saveFlight.current=true;
+    saveFlight.current=true;
     setSaving(true);setBannerError('');
     try{
       // If this read fails, keep the command and lock. The member can retry
@@ -302,7 +305,7 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
       publishEvent(pending.result);
       await finishMedia(pending);
     }catch(cause){if(isSaveOwner())setBannerError('尚未確認媒體保存結果，請重試確認保存。');}
-    finally{if(!withSaveFlight){saveFlight.current=false;if(isSaveOwner())setSaving(false);}}
+    finally{saveFlight.current=false;if(isSaveOwner())setSaving(false);}
   }
   async function save(event:FormEvent) {
     event.preventDefault();if(actionAttempt.current||reviewAttempt.current||!isSaveOwner()||saveFlight.current||saving||busy||mediaUnknown||preparingBanner||bannerError)return;
@@ -318,8 +321,9 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
       const saved=await mutate<CommunityEvent>(attempt.path,attempt.body,attempt.version,value=>eventSaveReceipt(value,attempt));
       if(!saved||!isSaveOwner())return;
       saveAttempt.current=null;
-      const pending:MediaSave={result:saved,banner:attempt.banner,video:attempt.video,editing:attempt.editing,command:null};
-      if(await finishMedia(pending))await reconcileMedia(true);
+      const pending:MediaSave={result:saved,banner:attempt.banner,video:attempt.video,editing:attempt.editing,command:null,unknownCommand:null};
+      // Only an explicit retry may read back and replay an uncertain upload.
+      await finishMedia(pending);
     }finally{saveFlight.current=false;if(isSaveOwner())setSaving(false);}
   }
   async function removeBanner(item:CommunityEvent){

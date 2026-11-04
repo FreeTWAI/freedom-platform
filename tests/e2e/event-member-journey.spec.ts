@@ -483,8 +483,14 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
   });
   try{
     await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
+    await expect(page.getByRole('alert').filter({hasText:'媒體保存結果尚未確認'})).toBeVisible();
+    expect(reads).toBe(0);expect(reached).toBe(false);
+    expect(commands.filter(entry=>entry.kind===kind)).toHaveLength(1);expect(updates).toEqual(['"1"']);
+    await expect(editor.getByRole('button',{name:'重試確認保存',exact:true})).toBeEnabled();
+    await editor.getByRole('button',{name:'重試確認保存',exact:true}).click();
     if(kind==='banner'&&ack==='lost'){
       await expect(page.getByRole('alert').filter({hasText:'尚未確認媒體保存結果'})).toBeVisible();
+      expect(reads).toBe(1);expect(reached).toBe(false);
       await expect(editor.getByRole('button',{name:'儲存修改',exact:true})).toBeDisabled();
       expect(commands.filter(entry=>entry.kind===kind)).toHaveLength(1);expect(updates).toEqual(['"1"']);
       await editor.getByRole('button',{name:'重試確認保存',exact:true}).click();
