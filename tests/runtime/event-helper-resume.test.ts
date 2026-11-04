@@ -80,7 +80,7 @@ const module={exports:{} as any};
 const source=readFileSync(path.join(fixtureRoot,'apps/portal-web/src/modules/EventHelpers.tsx'),'utf8');
 runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{
  module,exports:module.exports,crypto:webcrypto,AbortController,Error,console,window,document,
- require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require(name);if(name==='../api')return {ApiError};if(name.endsWith('.css'))return {};throw Error(name);}
+ require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name==='../api')return {ApiError};if(name.endsWith('.css'))return {};throw Error(name);}
 });
 const {EventHelpers}=module.exports;
 const descendants=(node:HostNode):HostNode[]=>[node,...node.childNodes.flatMap(descendants)];
