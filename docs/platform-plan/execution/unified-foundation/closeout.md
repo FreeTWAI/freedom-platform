@@ -1,8 +1,31 @@
 # Foundation Complete 收尾
 
+## 2026-10-30 08:25 UTC：兩環境已部署 d026ba76／schema196，staging 舊 handoff 已結清
+
+兩環境現為 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196；[staging 41023423825](https://github.com/FreeTWAI/freedom-platform/actions/runs/41023423825) 與[正式站 41025042462](https://github.com/FreeTWAI/freedom-platform/actions/runs/41025042462) 的 preflight、migration、deploy、health、handoff 五階段均通過，皆為 `release_confirmed`，Deployment 7433524819／7433758011 均為 success。正式站 handoff 沒有失鎖；08:24 UTC 公開 health 為 `ok`、同 SHA。
+
+10/29 staging `5d662e6e` 的失鎖已透過 hosted `mode=handoff` 結清：[41022455441](https://github.com/FreeTWAI/freedom-platform/actions/runs/41022455441) 在 R2 `chain_record` 讀取、任何寫入前報 `release_lease_lost`；相同輸入重試 [41023132536](https://github.com/FreeTWAI/freedom-platform/actions/runs/41023132536) 回傳 `reconciled`／`handoff_reconciled`。原 run 40853952665 與 Deployment 7409321089 保留 failure，不改寫為成功。
+
+工具映像 `ghcr.io/freetwai/freedom-release-operator@sha256:d075c12427c42d69ae52a5beb232841f8f3529dcce36ba34d2f4088d53bc292c` 由同一 main 建置（[41022144027](https://github.com/FreeTWAI/freedom-platform/actions/runs/41022144027)），已安裝於兩環境；main Verify 41017154345／CodeQL 41017154341 均成功。設定僅將 `migrationProfile.last` 由194調至196：staging-next 07:58 UTC config hash 為 `1de2e24870366cc259f1950a597ebd9f4b67b3e98f8f494521ce4cc199bdf789`，next 08:13 UTC 為 `9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d`。
+
+Migration195 活動幫手與196私人自記小任務已在兩環境套用為資料表；不啟用新旗標或功能，其他 pins 與旗標未變。本次沒有備份，也不要求發布備份。租約中斷根因仍未知，由 [#1193](https://github.com/FreeTWAI/freedom-platform/pull/1193) 增加診斷；真人會員旅程與原168項未驗狀態維持。完整來源、artifact digest、復原及發布收據見[本次觀察](rollout-main-d026ba76-2026-10-30.json)。
+
+## 2026-10-29 10:19 UTC 歷史：新版 staging 已部署，handoff 當時失鎖待結清
+
+以下保留當時觀察與待辦；10/30 已由上方 hosted handoff 與兩環境成功發布收據接續。
+
+#1159 已合併為 `5d662e6e`，本身的 main Verify 40843702385／CodeQL 40843702369 均成功；已核對報告 artifact digest，執行期 8,600 案、瀏覽器 1,802 次執行通過。
+[staging run 40853952665](https://github.com/FreeTWAI/freedom-platform/actions/runs/40853952665) 回報 preflight、migration、deploy、health 通過，最後 handoff 為 `release_lease_lost`，workflow 與 Deployment 保留 failure。
+本版沒有新 migration，schema catalog 仍到 194，旗標與 Environment pins 未變。尚未持鎖讀回 journal，不能宣稱 pending 已清除或 lease 正常釋放；沒有重送部署，也未啟動正式站更新。
+正式站 10:19 UTC 公開 health 為 HTTP 200、`ok`、`5c4bf56d`。完整來源、收據與限制見[本次觀察](rollout-main-5d662e6e-2026-10-29.json)。
+
+共用 handoff 復原 [#1173](https://github.com/FreeTWAI/freedom-platform/pull/1173) 已補上「新應用 SHA、相同 schema」的候選身分判定；本機 147 案及 exact-head Verify／CodeQL 通過，獨立 source review 未發現新阻擋，但正式核准尚未送出，映像也尚未建置／安裝。
+下一步沿既有保護規則核准與合併、驗證並安裝映像，再以 `staging-next`、上述完整 source、`mode=handoff`、`recover_release_run_id=40853952665` 持鎖讀回並補完或確認收尾。結清後仍需同 source／image 的成功 staging 發布收據，才可進正式站。
+租約中斷根因未定位；這次失敗不改寫下方較早 schema194 發布與人工對帳的歷史，也不增加備份前置。
+
 ## 2026-10-29 兩環境已部署 schema194，正式站收尾已對帳
 
-兩環境現為 `5c4bf56d`／schema194。[staging 40798095826](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798095826) 五階段、workflow 與 Deployment 全成功；[正式站 40798978135](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798978135) 的 migration、部署、health 通過，handoff 失去 lease，原 workflow／Deployment 保留 failure。
+兩環境當時為 `5c4bf56d`／schema194。[staging 40798095826](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798095826) 五階段、workflow 與 Deployment 全成功；[正式站 40798978135](https://github.com/FreeTWAI/freedom-platform/actions/runs/40798978135) 的 migration、部署、health 通過，handoff 失去 lease，原 workflow／Deployment 保留 failure。
 01:21Z 唯讀確認 DB／Worker 已更新、journal 只缺 handoff。01:26:20–01:26:55Z，release owner 以本機維運工具重新持有同一 lease，核對原失敗 artifact、193列 ledger、政策摘要、GC OFF、零其他維護 session、Worker／bindings 與公開 health，只透過既有 floor transition 追加缺少的 handoff：generation39→40、pending=null，正常釋放。
 沒有重做 migration、部署或備份，也沒有重設 seed。[具日期收據](rollout-shared-actions-2026-10-29.json)保留原失敗與後續對帳；這次需要人工處理末段，不是完整 hosted 自動成功。發布等待已解除，#1159 可續原整合／CI／審查。
 

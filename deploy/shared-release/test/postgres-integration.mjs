@@ -14,8 +14,8 @@ const { runPostgresProcess, openIsolatedPostgres, writeSnapshotDump } = await im
 const { acquireReleaseLease } = await import(pathToFileURL(join(sourceRoot, 'deploy/shared-release/portable/lease.mjs')));
 const image = 'mirror.gcr.io/library/postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd';
 const owner = randomUUID(), name = 'fp-shared-native-' + owner;
-// /tmp is tmpfs on some development hosts. Restore evidence requires disk.
-const root = await mkdtemp('/var/tmp/fp-native-');
+// Keep synthetic fixture data inside the checkout; disk-backed storage is still required.
+const root = await mkdtemp(join(sourceRoot, '.p-'));
 let container, createAttempted = false; const clusters = [];
 const docker = args => execFileSync('/usr/bin/docker', args, { encoding: 'utf8', timeout: 30_000,
   maxBuffer: 1_000_000, stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin' } }).trim();
@@ -23,7 +23,8 @@ const execute = (program, args, options = {}) => runPostgresProcess('/usr/bin/do
   'exec', ...Object.keys(options.connection ?? {}).flatMap(key => ['--env', key]), container, program, ...args,
 ], options);
 const openCluster = async label => {
-  const workRoot = join(root, label); await mkdir(workRoot, { mode: 0o700 });
+  // Short unique paths preserve the native Unix-socket limit in long checkouts.
+  const workRoot = join(root, String(clusters.length)); await mkdir(workRoot, { mode: 0o700 });
   const cluster = await openIsolatedPostgres({ workRoot, binDirectory: '/usr/local/bin', Pool, execute });
   clusters.push(cluster); return cluster;
 };
@@ -54,11 +55,45 @@ try {
   await source.pool.query('CREATE SCHEMA public; CREATE TABLE public.snapshot_rows(id integer PRIMARY KEY, value text NOT NULL)');
   await source.pool.query("INSERT INTO public.snapshot_rows VALUES(1,'before snapshot')");
   const leaseTarget = { database: source.databaseName, role: source.connection.PGUSER, heartbeatMs: 50 };
-  const lease = await acquireReleaseLease(source.pool, leaseTarget); lease.assertHeld();
+  let leaseClient;
+  const observedPool = { connect: async () => { leaseClient = await source.pool.connect(); return leaseClient; } };
+  const lease = await acquireReleaseLease(observedPool, leaseTarget); lease.assertHeld();
+  // Let a real ownership heartbeat run, including pg_locks' bigint bit mapping.
+  await new Promise(resolve => setTimeout(resolve, 150)); lease.assertHeld(); assert.equal(lease.loss(), undefined);
+  const mapping = (await leaseClient.query(`SELECT hashtextextended('freedom.daily.recovery.'||current_database(),0)::text key,
+    classid::bigint high,objid::bigint low,objsubid FROM pg_locks
+    WHERE locktype='advisory' AND pid=pg_backend_pid() AND granted`)).rows[0];
+  const bits = BigInt.asUintN(64, BigInt(mapping.key));
+  assert.equal(BigInt(mapping.high), bits >> 32n); assert.equal(BigInt(mapping.low), bits & 0xffffffffn);
+  assert.equal(mapping.objsubid, 1);
   await assert.rejects(acquireReleaseLease(source.pool, leaseTarget), { code: 'release_lease_busy' });
   const legacy = await source.pool.query("SELECT pg_try_advisory_lock(hashtextextended('freedom.daily.recovery.'||current_database(),0)) locked");
   assert.equal(legacy.rows[0].locked, false);
   await lease.release(); assert.throws(lease.assertHeld, { code: 'release_lease_not_held' });
+  const unlockedLease = await acquireReleaseLease(observedPool, leaseTarget);
+  assert.equal((await leaseClient.query("SELECT pg_advisory_unlock(hashtextextended('freedom.daily.recovery.'||current_database(),0)) unlocked")).rows[0].unlocked, true);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  assert.equal(unlockedLease.signal.aborted, true); assert.equal(unlockedLease.loss().cause, 'lock_not_held');
+  await assert.rejects(unlockedLease.release(), { code: 'release_lease_cleanup_failed' });
+  // Exercise the exact production namespace with a negative hash, not just a
+  // manually chosen signed bigint. Own this extra disposable fixture database.
+  const negativeName = (await source.pool.query(`SELECT 'fp_negative_'||i name FROM generate_series(1,100) i
+    WHERE hashtextextended('freedom.daily.recovery.fp_negative_'||i,0)<0 LIMIT 1`)).rows[0].name;
+  assert.match(negativeName, /^fp_negative_[0-9]+$/);
+  await source.pool.query('CREATE DATABASE ' + negativeName);
+  const negativePool = new Pool({ ...source.pool.options, database: negativeName });
+  let negativeLease;
+  try {
+    negativeLease = await acquireReleaseLease(negativePool, { ...leaseTarget, database: negativeName });
+    await new Promise(resolve => setTimeout(resolve, 150)); negativeLease.assertHeld();
+    const negative = (await negativePool.query(`SELECT hashtextextended('freedom.daily.recovery.'||current_database(),0)::text key,
+      classid::bigint high,objid::bigint low,objsubid FROM pg_locks
+      WHERE locktype='advisory' AND pid=$1 AND granted`, [negativeLease.pid])).rows[0];
+    assert(BigInt(negative.key) < 0n);
+    assert.equal(BigInt(negative.high), BigInt.asUintN(64, BigInt(negative.key)) >> 32n);
+    assert.equal(BigInt(negative.low), BigInt(negative.key) & 0xffffffffn); assert.equal(negative.objsubid, 1);
+  } finally { if (negativeLease) await negativeLease.release(); await negativePool.end(); }
+  await source.pool.query('DROP DATABASE ' + negativeName);
   const lostLease = await acquireReleaseLease(source.pool, leaseTarget);
   await source.pool.query('SELECT pg_terminate_backend($1)', [lostLease.pid]);
   await new Promise((accept, reject) => {
@@ -66,6 +101,8 @@ try {
     const deadline = setTimeout(() => reject(Error('lease loss was not observed')), 3000);
     lostLease.signal.addEventListener('abort', () => { clearTimeout(deadline); accept(); }, { once: true });
   });
+  assert.match(lostLease.loss().cause, /^connection_(error|ended)$/);
+  assert(lostLease.loss().heldMs >= 0);
   assert.throws(lostLease.assertHeld, { code: 'release_lease_not_held' });
   await assert.rejects(lostLease.release(), { code: 'release_lease_cleanup_failed' });
   const snapshot = await source.pool.connect(); let dump;
@@ -110,7 +147,8 @@ try {
     evidence: 'real-local-postgres18', image, network: 'none', diskBacked: true,
     snapshotExcludesLaterWrite: true, dumpReadbackVerified: true, isolatedRestoreVerified: true,
     truncatedRestoreRejected: true, failedStreamBeforeRestore: true, ownedClustersRemoved: clusters.length,
-    legacyLeaseExclusion: true, lostLeaseStopsWork: true,
+    legacyLeaseExclusion: true, lostLeaseStopsWork: true, ownershipHeartbeat: true,
+    missingLockObserved: true, negativeKeyMapping: true, connectionLossDiagnostic: true,
     backup, migration,
     cloudflare: 'not_run', offsiteBackup: 'not_run', production: 'not_run' }));
 } finally {

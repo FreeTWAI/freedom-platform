@@ -7,6 +7,7 @@ import { REPOSITORY, requestFromEnvironment, githubClient, admitRelease, admitIn
 import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
 import { requireFailedReleaseHandoff } from './handoff-admission.mjs';
+import { admitAutomaticRelease } from './automatic-admission.mjs';
 import { checkEnvironment, checkFlagDecisions } from './environment-check.mjs';
 import { MAX_FLAG_CHANGES, readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
 
@@ -23,7 +24,14 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     requireRelease(['admit', 'execute'].includes(env.RELEASE_COMMAND), 'release_command_invalid');
     const request = requestFromEnvironment(env);
     api = suppliedApi ?? githubClient(env.GH_TOKEN);
-    const admission = await admitRelease(request, api);
+    const admission = request.automatic
+      ? await admitAutomaticRelease(request, api, { allowSkip: env.RELEASE_COMMAND === 'admit' })
+      : await admitRelease(request, api);
+    if (admission.skipReason) {
+      Object.assign(receipt, { status: 'skipped', skipReason: admission.skipReason });
+      if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT, 'mode=skip\n');
+      return;
+    }
     Object.assign(receipt, { ...admission, format: 'freedom.shared-release/v1', status: 'admitted' });
     const flagDecisions = readFlagDecisions({ sourceRoot: resolve(['deploy', 'handoff'].includes(request.mode) && env.RELEASE_COMMAND === 'execute'
       ? env.RELEASE_SOURCE_DIRECTORY ?? 'source' : controllerRoot),
@@ -96,6 +104,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
         environment: request.target, production_environment: request.target === 'next',
         transient_environment: false, description: 'Shared release; exact-source checks recorded in Actions',
         payload: { format: 'freedom.shared-release/v1', operatorImage: installation.image,
+          ...(request.automatic ? { automatic: request.automatic } : {}),
           controllerSha: request.controllerSha, configSha256: installation.configSha256,
           runId: request.runId, runAttempt: request.runAttempt,
           actor: admission.original, triggeredBy: admission.triggeredBy },
@@ -165,6 +174,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       + (receipt.sourceSha ? `- Version: \`${receipt.sourceSha}\`\n- Environment: \`${receipt.target}\`\n`
         + `- Requested by: ${receipt.original.login}; run by: ${receipt.triggeredBy.login}\n` : '')
       + `- Provider outcome: \`${receipt.providerOutcome}\`\n`
+      + (receipt.skipReason ? `- Skipped: \`${receipt.skipReason}\`\n` : '')
       + (receipt.handoffReconciliation ? `- Original failed release: [${receipt.handoffReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.handoffReconciliation.runId}); its failure is retained.\n` : '')
       + (receipt.status === 'reconciled' ? '- Handoff reconciled; no migration, publication or backup was repeated.\n' : '')
       + (receipt.operatorProgress?.at(-1)?.failureCode ? `- Failed phase: \`${receipt.operatorProgress.at(-1).failureCode}\`\n` : '')
