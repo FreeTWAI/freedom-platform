@@ -7,6 +7,7 @@ import {createRequire} from 'node:module';
 import {transformSync} from 'esbuild';
 import React from 'react';
 import {ApiError} from '../../apps/portal-web/src/api';
+import {youtubeLinkKind} from '../../apps/portal-web/src/modules/short-video-embed';
 
 // Real React/ReactDOM reconciliation, with an intentionally minimal synthetic
 // DOM host. Image errors are injected through actual production callbacks;
@@ -112,7 +113,7 @@ function fixture(t: TestContext) {
     SocialIcon: () => null, SocialBody: () => null, SocialInteractions: Interactions, PromotionShare: () => null,
     InlineVideo: () => React.createElement('i', {className: 'video'}), SOCIAL_TOPICS: {mood: '近況'}, PLATFORM_LABELS: {other: '其他'},
     formatIsoLocal: (value: string) => value, selectTag: noop, openDelete: noop, hide: noop,
-    setEditingPost: noop, editTrigger: {current: null}, youtubeLinkKind: (url: string) => url?.includes('youtube.com') ? 'video' : null,
+    setEditingPost: noop, editTrigger: {current: null}, youtubeLinkKind,
     reconcileShortComments: noop,
   };
   runInNewContext(compiled, context);
@@ -190,9 +191,35 @@ test('an earlier A callback cannot poison a fresh A after A to B to A', t => {
   flush(() => oldError({target: old, currentTarget: old})); assert.equal(h.output(), 'img');
 });
 test('inline videos remain on the existing video path while detail cards use the thumbnail', t => {
-  const h = fixture(t); h.context.shortVideos = true; const post = {...h.base, url: 'https://youtube.com/watch?v=abc123'};
+  const h = fixture(t); h.context.shortVideos = true; const post = {...h.base, url: 'https://youtube.com/watch?v=dQw4w9WgXcQ'};
   assert.equal(h.render(post, {inline: true}), 'none'); assert(h.find(node => node.getAttribute('class') === 'video'));
   assert.equal(h.render(post, {inline: false}), 'img');
+});
+// The fixture uses the production URL classifier, not substring host matching.
+for (const url of [
+  'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ',
+  'https://notyoutube.com/watch?v=dQw4w9WgXcQ',
+  'https://evil.example/youtube.com/watch?v=dQw4w9WgXcQ',
+  'https://evil.example/?next=https://youtube.com/watch?v=dQw4w9WgXcQ',
+  'https://youtube.com@evil.example/watch?v=dQw4w9WgXcQ',
+  'http://youtube.com/watch?v=dQw4w9WgXcQ',
+  'https://youtube.com/watch?v=short',
+  'not a URL containing youtube.com',
+]) test(`untrusted or invalid video URL keeps the thumbnail: ${url}`, t => {
+  const h = fixture(t); h.context.shortVideos = true;
+  assert.equal(h.render({...h.base, url}, {inline: true}), 'img');
+  assert.equal(h.find(node => node.getAttribute('class') === 'video'), undefined);
+});
+for (const url of [
+  'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  'https://youtu.be/dQw4w9WgXcQ',
+  'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+  'https://www.youtube.com/embed/dQw4w9WgXcQ',
+]) test(`canonical video URL retains inline playback and detail thumbnail: ${url}`, t => {
+  const h = fixture(t); h.context.shortVideos = true;
+  assert.equal(h.render({...h.base, url}, {inline: true}), 'none');
+  assert.equal(Boolean(h.find(node => node.getAttribute('class') === 'video')), true);
+  assert.equal(h.render({...h.base, url}, {inline: false}), 'img');
 });
 for (const boundary of ['wrong post ID', 'wrong post kind', 'wrong thumbnail URL', 'HTTP rejection', 'session before upload', 'session during prepare', 'session after response', 'no CSRF', 'another client']) test(`unconfirmed replacement preserves failed state: ${boundary}`, async t => {
   const h = fixture(t); h.render(); h.error();

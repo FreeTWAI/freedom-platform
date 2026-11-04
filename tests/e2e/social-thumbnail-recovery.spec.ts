@@ -54,7 +54,7 @@ for (const width of [390, 1440]) test(`replacing a failed thumbnail restores its
   await navigate(page, '社群分享'); await selectSocialFeed(page, '全部動態');
   const card = page.locator(`#social-post-${id}`), image = card.locator('img.social-thumb');
   await expect(card.getByRole('heading', {name: title, exact: true})).toBeVisible();
-  // Images are lazy; deliberately bring the thumbnail into the viewport.
+  // Deliberately bring the thumbnail into the viewport.
   await card.scrollIntoViewIfNeeded();
   await expect.poll(() => oldReads).toBe(1);
   await expect(card.locator('.social-placeholder')).toBeVisible();
