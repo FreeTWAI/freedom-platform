@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import type {SessionPayload} from '../types';
 import {BrandPoster} from './Community';
@@ -79,11 +79,15 @@ function PublicMemberContent({client,token,session,onLogin,onReturn,onEdit}:Prop
   function leave(callback?:()=>void){if(!pending.current&&!sending.current)callback?.();}
   const blocked=busy||unknown||stale;
   const design=card?.design??'calm';
+  const shareUrl=new URL(`/member-cards/${token}`,window.location.origin).href;
+  // Private member labels can arrive after export starts. Only a changed public
+  // snapshot or share URL should replace the download's content and cancel it.
+  const downloadCard=useMemo(()=>card?<MemberECard design={card.design??'calm'} nickname={card.nickname} headline={card.headline??null} guildName={card.primary_guild?.name??null} capabilities={card.capabilities} avatarUrl={card.avatar_url} links={card.links??[]} profileLinks={card.profile_links??[]} heading="h1" shareUrl={shareUrl}/>:null,[card,shareUrl]);
   return <main className="public-member-page" data-design={!loading&&!loadError&&card?design:undefined}><BrandPoster compact/>
     {loading&&<p role="status">正在開啟工坊名片…</p>}
     {loadError&&<div className="card stack" role="alert"><h1>暫時無法開啟這張名片</h1><p>{loadError}</p><button type="button" className="btn btn-ghost" onClick={()=>void load()}>重新載入名片</button><button type="button" className="btn btn-primary" disabled={busy||unknown} onClick={()=>leave(onReturn)}>前往自由工坊</button></div>}
     {!loading&&!loadError&&card&&<>
-      <MemberCardDownload shareUrl={new URL(`/member-cards/${token}`,window.location.origin).href}><MemberECard design={design} nickname={card.nickname} headline={card.headline??null} guildName={card.primary_guild?.name??null} capabilities={card.capabilities} avatarUrl={card.avatar_url} links={card.links??[]} profileLinks={card.profile_links??[]} heading="h1" shareUrl={new URL(`/member-cards/${token}`,window.location.origin).href}/></MemberCardDownload>
+      <MemberCardDownload shareUrl={shareUrl}>{downloadCard}</MemberCardDownload>
       {member?.is_self&&<p className="ecard-owner-note">這是你的名片，訪客看到的就是這個樣子。<button type="button" className="btn btn-ghost" disabled={busy||unknown} onClick={()=>leave(onEdit)}>編輯名片</button></p>}
       {member&&!member.is_self&&<MemberCard member={member} labels={labels} client={client}/>}
       {session&&!member&&<p className="field-hint public-card-fallback-hint">這是作者目前公開的名片；會員資訊與好友邀請暫不可用。</p>}
