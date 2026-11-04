@@ -40,7 +40,7 @@ import { assertOriginAllowed, resolveFreedomEnv, type FreedomEnv } from './env.j
 import { createPlatformApp, isMemberCardPage, platformResponseHeaders } from './platform-app.js';
 import { readSessionCookie } from './session-cookie.js';
 import { assertDatabaseReady, ReadinessError } from './readiness.js';
-import { IMMUTABLE_ASSET_CACHE_CONTROL, isFastPathBuildAsset, isHashedBuildAsset } from './static-assets.js';
+import { IMMUTABLE_ASSET_CACHE_CONTROL, isFastPathBuildAsset, isImmutablePublicAsset } from './static-assets.js';
 import { SHARED_NETWORK_KEY, type PlatformRuntime } from './runtime.js';
 import { commerceCheckoutQueryDeps } from './routes/hosted-checkout.js';
 import { GITHUB_SYNC_REQUEST_BUDGET, syncGitHubRepositories } from '../../../modules/community/github-sync.js';
@@ -388,7 +388,7 @@ export function assetHeaders(request:Request,asset:Response,directAsset=false) {
   const headers: Record<string, string> = {};
   for (const [name, value] of asset.headers) if (!ASSET_OVERRIDDEN.has(name.toLowerCase())) headers[name] = value;
   const pathname = new URL(request.url).pathname;
-  if (directAsset && [200, 206, 304].includes(asset.status) && isHashedBuildAsset(pathname) && !/text\/html/i.test(asset.headers.get('content-type') ?? '')) headers['Cache-Control'] = IMMUTABLE_ASSET_CACHE_CONTROL;
+  if (directAsset && [200, 206, 304].includes(asset.status) && isImmutablePublicAsset(pathname, asset.headers.get('content-type'))) headers['Cache-Control'] = IMMUTABLE_ASSET_CACHE_CONTROL;
   if (isMemberCardPage(pathname)) headers['X-Robots-Tag'] = 'noindex, nofollow';
   return headers;
 }
