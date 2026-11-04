@@ -8,19 +8,24 @@ import {activeDevelopmentGuilds} from '../development-access/guild-eligibility.j
 import {testerCommandSchema,testerTriageSchema,mergeTesterProgress} from './account.js';
 import {TESTER_MODULE_IDS} from './ownership.js';
 import {normalizeProgress} from './progress.js';
-import {readTesterAccount,readTesterReport} from './repository.js';
+import {readTesterAccount,readTesterReport,testerFeedbackVersion} from './repository.js';
 
 export async function getTesterAccount(pool: Pool, actor: Actor) {
   return readWithMemberSession(pool, actor, async q => ({...await readTesterAccount(q,actor.user_id),
     can_report: (await activeDevelopmentGuilds(q,actor,'platform')).length > 0}));
 }
-export async function getTesterReport(pool: Pool, actor: Actor, moduleId?:string) {
-  return readWithMemberSession(pool,actor,async q => {
-    requireCondition((await activeDevelopmentGuilds(q,actor,'platform')).length > 0,403,'tester_report_forbidden','測試報告限目前具有平台開發公會正式會員資格的建造者。');
-    requireCondition(moduleId===undefined||TESTER_MODULE_IDS.includes(moduleId),422,'invalid_tester_module','Unknown tester module.');
-    const features = (await readTesterReport(q,actor.community_id)).filter(item=>moduleId===undefined||item.module_id===moduleId);
-    return {features,modules:TESTER_MODULE_IDS.filter(id=>moduleId===undefined||id===moduleId).map(module_id=>({module_id,features:features.filter(item=>item.module_id===module_id)}))};
-  });
+export async function getTesterReport(pool: Pool, communityId: string|null, actor?: Actor, moduleId?:string) {
+  requireCondition(moduleId===undefined||TESTER_MODULE_IDS.includes(moduleId),422,'invalid_tester_module','Unknown tester module.');
+  const read=async(q:import('pg').PoolClient)=>{
+    const can_triage=Boolean(actor&&actor.community_id===communityId&&(await activeDevelopmentGuilds(q,actor,'platform')).length);
+    const features=communityId?(await readTesterReport(q,communityId)).filter(item=>moduleId===undefined||item.module_id===moduleId):[];
+    return {can_triage,features,modules:TESTER_MODULE_IDS.filter(id=>moduleId===undefined||id===moduleId).map(module_id=>{
+      const selected=features.filter(item=>item.module_id===module_id),steps=selected.flatMap(item=>item.steps??[]);
+      return {module_id,features:selected,passed:steps.reduce((sum,step)=>sum+step.passed,0),problems:steps.reduce((sum,step)=>sum+step.problems,0)};
+    })};
+  };
+  if(actor)return readWithMemberSession(pool,actor,read);
+  const q=await pool.connect();try{return await read(q);}finally{q.release();}
 }
 export async function mutateTesterAccount(pool: Pool, raw: Command) {
   const body = testerCommandSchema.parse(raw.body), input = {...raw,body};
@@ -35,9 +40,8 @@ export async function mutateTesterAccount(pool: Pool, raw: Command) {
     if (body.action === 'feedback') {
       await q.query(`INSERT INTO tester_map_feedback(user_id,step_id,result,note) VALUES($1,$2,$3,$4)
         ON CONFLICT(user_id,step_id) DO UPDATE SET result=excluded.result,note=excluded.note,updated_at=clock_timestamp(),
-          status=CASE WHEN tester_map_feedback.result IS DISTINCT FROM excluded.result OR tester_map_feedback.note IS DISTINCT FROM excluded.note THEN 'sent' ELSE tester_map_feedback.status END,
-          issue_number=CASE WHEN tester_map_feedback.result IS DISTINCT FROM excluded.result OR tester_map_feedback.note IS DISTINCT FROM excluded.note THEN NULL ELSE tester_map_feedback.issue_number END,
-          triaged_at=CASE WHEN tester_map_feedback.result IS DISTINCT FROM excluded.result OR tester_map_feedback.note IS DISTINCT FROM excluded.note THEN NULL ELSE tester_map_feedback.triaged_at END`,
+          status=CASE WHEN tester_map_feedback.result IS DISTINCT FROM excluded.result OR tester_map_feedback.note IS DISTINCT FROM excluded.note THEN CASE WHEN excluded.result='pass' AND tester_map_feedback.result IS DISTINCT FROM excluded.result AND tester_map_feedback.status IN ('issue','fixed') THEN tester_map_feedback.status ELSE 'sent' END ELSE tester_map_feedback.status END,
+          triaged_at=CASE WHEN tester_map_feedback.result IS DISTINCT FROM excluded.result OR tester_map_feedback.note IS DISTINCT FROM excluded.note THEN CASE WHEN excluded.result='pass' AND tester_map_feedback.result IS DISTINCT FROM excluded.result AND tester_map_feedback.status IN ('issue','fixed') THEN tester_map_feedback.triaged_at ELSE NULL END ELSE tester_map_feedback.triaged_at END`,
       [input.actor.user_id,body.step_id,body.result,body.note]);
     } else {
       const next = body.action === 'clear' ? {group:null,done:[]} : body.action === 'merge'
@@ -60,6 +64,10 @@ export async function triageTesterFeedback(pool: Pool, raw: Command) {
       [body.feedback_id,input.actor.community_id,QUEST_STEP_IDS]);
     requireCondition(row.rowCount===1,404,'tester_feedback_not_found','Feedback unavailable.');
   },async q=>{
+    // Authorization locks the feedback before receipt lookup; compare only for a new
+    // effect so a successful immutable retry can still return its original ACK.
+    const row=(await q.query(`SELECT ${testerFeedbackVersion} AS version FROM tester_map_feedback f WHERE feedback_id=$1 FOR UPDATE`,[body.feedback_id])).rows[0];
+    requireCondition(row.version===body.version,409,'tester_feedback_conflict','回饋已更新，請重新讀取報告。');
     await q.query(`UPDATE tester_map_feedback SET status=$2,issue_number=$3,triaged_at=clock_timestamp() WHERE feedback_id=$1`,
       [body.feedback_id,body.status,body.status==='seen'?null:body.issue_number]);
     const version=(await q.query(`SELECT coalesce(max(aggregate_version),0)+1 AS version FROM transition_journal WHERE aggregate_type='tester_map_feedback' AND aggregate_id=$1`,[body.feedback_id])).rows[0].version;

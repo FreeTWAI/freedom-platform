@@ -1,4 +1,4 @@
-import {createTesterMapRoutes} from './routes/tester-map.js';
+import {createTesterMapRoutes,createPublicTesterMapRoutes} from './routes/tester-map.js';
 import {createEventMissionRoutes} from './routes/event-missions.js';
 import {createCommunityCertificationRoutes} from './routes/community-certification.js';
 import {createSocialAchievementRoutes} from './routes/social-achievements.js';
@@ -527,6 +527,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/',createHostedCheckoutRoutes(pool,origin,runtime,freedomEnv));
   app.route('/',createHostedPaymentRoutes(pool,runtime,freedomEnv,origin));
   if(runtime.commerceSettings?.checkoutEnabled===true)app.use('/api/v1/me/orders',async(c,next)=>{try{await next();}finally{hostedOrderPrivateCache(c);}});
+  app.route('/api/v1',createPublicTesterMapRoutes(pool,origin,runtime.registrationCommunityId));
   app.use('/api/v1/*',memberBoundary(pool,origin,(path,method)=>onboardingAllowed(path,method,runtime.commerceSettings?.checkoutEnabled===true)));
   // EC-SPEC-10 §8.3 covers setup and catalog writes as well as order actions.
   // Keep this at composition: fulfilment must not depend on operations settings,

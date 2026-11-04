@@ -16,21 +16,22 @@ export const testerCommandSchema = z.discriminatedUnion('action', [
   z.object({action: z.literal('clear')}).strict(),
 ]);
 export type TesterCommand = z.infer<typeof testerCommandSchema>;
-export const testerTriageSchema = z.object({feedback_id:z.uuid(),status:z.enum(['seen','issue','fixed']),issue_number:z.number().int().positive().max(2147483647).nullable().default(null)}).strict().refine(value => value.status !== 'issue' || value.issue_number !== null, 'Issue number required');
+export const testerTriageSchema = z.object({feedback_id:z.uuid(),version:z.string().min(1).max(200),status:z.enum(['seen','issue','fixed']),issue_number:z.number().int().positive().max(2147483647).nullable().default(null)}).strict().refine(value => value.status !== 'issue' || value.issue_number !== null, 'Issue number required');
 export type TesterTriageStatus = 'sent'|'seen'|'issue'|'fixed';
-export type TesterReportItem = {feedback_id:string;result:'pass'|'problem';note:string;status:TesterTriageStatus;issue_number:number|null;updated_at:string};
-export type TesterStepReport = {step_id:string;passed:number;problems:number;items:TesterReportItem[]};
-export type TesterModuleReport = {module_id:string;features:TesterFeatureReport[]};
+export type TesterReportItem = {feedback_id:string;version:string;result:'pass'|'problem';note:string;status:TesterTriageStatus;issue_number:number|null};
+export type TesterStepReport = {step_id:string;feature_ids:string[];passed:number;problems:number;items:TesterReportItem[]};
+export type TesterModuleReport = {module_id:string;features:TesterFeatureReport[];passed:number;problems:number};
 export type TesterFeedback = {step_id: string; result: 'pass'|'problem'; note: string; updated_at: string; status?: TesterTriageStatus; issue_number?:number|null};
 export type TesterAccountView = {version: string; progress: TesterProgress; feedback: TesterFeedback[]; can_report: boolean};
-export type TesterFeatureReport = {module_id?:string;steps?:TesterStepReport[];feature_id: string; testers: number; passed: number; pass_rate: number|null; issues: {step_id: string; note: string; updated_at: string}[]};
+type TesterFeatureSummary = {feature_id:string;testers:number;passed:number;pass_rate:number|null};
+export type TesterFeatureReport = TesterFeatureSummary & {module_id:string;steps:TesterStepReport[];issues:(Omit<TesterReportItem,'result'> & {step_id:string})[]};
 export function mergeTesterProgress(account: TesterProgress, local: TesterProgress): TesterProgress {
   return normalizeProgress({v: 1, group: account.group ?? local.group, done: [...account.done, ...local.done]});
 }
 export const testerFeatureSteps = QUEST_STAGES.flatMap(stage => stage.steps.flatMap(step => step.features.map(feature_id => ({feature_id, module_id:TESTER_FEATURE_MODULES[feature_id], step_id: step.id}))));
 
 /** A tester is counted once per feature; any current problem makes their feature result a problem. */
-export function aggregateTesterFeedback(rows: (TesterFeedback & {user_id: string})[]): TesterFeatureReport[] {
+export function aggregateTesterFeedback(rows: (TesterFeedback & {user_id: string})[]) {
   const latest = new Map<string, TesterFeedback & {user_id: string}>();
   for (const row of rows) {
     const key = `${row.user_id}/${row.step_id}`, prior = latest.get(key);

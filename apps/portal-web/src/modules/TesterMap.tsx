@@ -1,7 +1,7 @@
 import {accountText} from './tester-map/text';
 import type {PortalClient} from '../api';
 import {useTesterAccount} from './tester-map/useTesterAccount';
-import {TesterAccountContext,TesterAccountPanel,TesterStepFeedback} from './tester-map/TesterAccount';
+import {TesterAccountContext,TesterAccountPanel,TesterStepFeedback,TesterReport} from './tester-map/TesterAccount';
 import {useContext, useEffect, useRef, useState} from 'react';
 import {
   ISSUES_URL, REDESIGN_BATCH_PR, TEST_WEEK, TESTER_AREAS, TESTER_COVERAGE_UPDATED_AT, TESTER_FLAGS_OBSERVED_AT,
@@ -87,7 +87,7 @@ const firstOpenStage = (progress: TesterProgress) => {
 };
 
 /** Guests remain local; the member shell supplies its current authenticated client. */
-export function TesterMap({client}: {client?:PortalClient}) {
+export function TesterMap({client,reportClient=client,onLogin}: {client?:PortalClient;reportClient?:PortalClient;onLogin?:()=>void}) {
   const {language, t} = useLanguage();
   const pick = (value: Localized) => value[indexes[language]];
   const account = useTesterAccount(client), {progress} = account;
@@ -130,11 +130,11 @@ export function TesterMap({client}: {client?:PortalClient}) {
       <h2 id="tester-start-title">{pick(accountText.start)}</h2>
       <ol><li>{pick(accountText.startRoute)}</li><li>{pick(accountText.startTry)}</li><li>{pick(accountText.startSend)}</li></ol>
       <p>{pick(accountText.optional)}</p>
-      <button className="btn btn-primary" type="button" onClick={()=>{
+      <div className="actions"><button className="btn btn-secondary btn-small" type="button" onClick={()=>{
         const id=firstOpenStage(progress);if(!id)return;
         setOpenStages(value=>new Set([...value,id]));
         requestAnimationFrame(()=>{const step=document.querySelector<HTMLElement>(`[data-stage-id="${id}"] [data-step-id]`);step?.scrollIntoView({block:'start'});step?.querySelector<HTMLElement>('a,button')?.focus({preventScroll:true});});
-      }}>{pick(accountText.firstStep)}</button>
+      }}>{pick(accountText.firstStep)}</button>{onLogin&&<button className="btn btn-secondary btn-small" type="button" onClick={onLogin}>{pick(accountText.login)}</button>}</div>
     </section>}
     <section className="card stack" aria-labelledby="tester-map-intro">
       <p className="eyebrow" id="tester-map-intro">{t('testerMap.eyebrow')}</p>
@@ -145,7 +145,7 @@ export function TesterMap({client}: {client?:PortalClient}) {
     <section className="stack tester-quest" aria-labelledby="tester-quest-title">
       <h2 id="tester-quest-title">{t('testerMap.quest')}</h2>
       <p>{t('testerMap.questIntro')}</p>
-      <TesterAccountPanel account={account} client={client}/>
+      <TesterAccountPanel account={account} client={client}/>{reportClient&&<TesterReport client={reportClient}/>}
       <fieldset className="card tester-quest-groups">
         <legend>{t('testerMap.chooseGroup')}</legend>
         <label className="tester-quest-group"><input type="radio" name="tester-group" disabled={account.busy} checked={progress.group === null} onChange={() => chooseGroup(null)}/><span><strong>{t('testerMap.noGroup')}</strong></span></label>

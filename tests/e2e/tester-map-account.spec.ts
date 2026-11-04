@@ -10,7 +10,7 @@ async function clear(page:Page) {
   const r=await page.request.post('/api/v1/me/tester-map',{headers:{Origin:new URL(page.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':crypto.randomUUID(),'If-Match':`"${view.version}"`},data:{action:'clear'}});
   expect(r.status()).toBe(200);
 }
-test('TESTER-ACCOUNT-001 login imports guest progress before opening map; feedback stays private and Issue draft requires confirmation',async({page,browser,baseURL})=>{
+test('TESTER-ACCOUNT-001 login imports guest progress before opening map; reports are public and anonymous and Issue draft requires confirmation',async({page,browser,baseURL})=>{
   await login(page);await clear(page);
   const context=await browser.newContext({baseURL});
   const device=await context.newPage();
@@ -19,7 +19,8 @@ test('TESTER-ACCOUNT-001 login imports guest progress before opening map; feedba
     await device.locator('[data-step-id="arrival.preview"]').getByRole('button',{name:'完成這一步',exact:true}).click();
     await device.getByRole('link',{name:'返回登入',exact:true}).click();
     await device.getByLabel('電子郵件',{exact:true}).fill('reviewer@local.test');await device.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await device.getByRole('button',{name:'登入',exact:true}).click();
-    await expect(device.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+    await expect(device.getByRole('heading',{name:'測試員地圖',level:1,exact:true})).toBeVisible();
+    await expect(device).toHaveURL(/#tester-map$/);
     await expect.poll(async()=>((await (await device.request.get('/api/v1/me/tester-map')).json()).progress.done)).toContain('arrival.preview');
     expect(await device.evaluate(()=>localStorage.getItem('freedom-tester-map-progress-v1'))).toBeNull();
     await device.goto('/#tester-map');
@@ -59,8 +60,8 @@ test('TESTER-ACCOUNT-002 failed import retains guest progress and retries the im
     return route.continue();
   });
   await page.getByRole('link',{name:'返回登入',exact:true}).click();await page.getByLabel('電子郵件',{exact:true}).fill('reviewer@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
-  await page.goto('/#tester-map');await expect(page.getByRole('alert')).toContainText('尚未確認儲存結果');
+  await expect(page.getByRole('heading',{name:'測試員地圖',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('尚未確認儲存結果');
   expect(await page.evaluate(()=>localStorage.getItem('freedom-tester-map-progress-v1'))).toContain('arrival.preview');
   fail=false;await page.getByRole('button',{name:'重試',exact:true}).click();
   await expect(page.locator('[data-step-id="arrival.preview"]').getByRole('button',{name:'取消完成',exact:true})).toBeEnabled();
@@ -69,7 +70,7 @@ test('TESTER-ACCOUNT-002 failed import retains guest progress and retries the im
 });
 
 
-test('TESTER-ACCOUNT-003 current builders read anonymous feature reports; revocation blocks a refresh',async({page,e2eAuthPool})=>{
+test('TESTER-ACCOUNT-003 current builders read anonymous feature reports; revocation removes triage but keeps public reports',async({page,e2eAuthPool})=>{
   await login(page);await clear(page);
   const session=await (await page.request.get('/api/v1/session')).json(),user=session.user;
   const membership=crypto.randomUUID();
@@ -93,8 +94,8 @@ test('TESTER-ACCOUNT-003 current builders read anonymous feature reports; revoca
     await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
     await e2eAuthPool.query("UPDATE positioning_profession_memberships SET state='left' WHERE membership_id=$1",[membership]);
     await report.getByRole('button',{name:'重新讀取',exact:true}).click();
-    await expect(report.getByRole('alert')).toHaveText('無法讀取測試報告。');
-    await expect(report.getByText('Synthetic report issue',{exact:true})).toHaveCount(0);
+    await expect(module.getByText('Synthetic report issue',{exact:true})).toBeVisible();
+    await expect(report.locator('fieldset')).toHaveCount(0);
     await clear(page);
   } finally {await e2eAuthPool.query('DELETE FROM positioning_profession_memberships WHERE membership_id=$1',[membership]);}
 });
@@ -109,4 +110,50 @@ test('TESTER-ACCOUNT-004 empty map shows the optional start card and opens the f
  await card.getByRole('button',{name:'試第一步',exact:true}).click();
  await expect(page.locator('[data-stage-id="arrival"]')).toHaveAttribute('open','');
  await expect(page.locator('[data-step-id="arrival.preview"] a').first()).toBeFocused();
+});
+
+test('TESTER-ACCOUNT-005 guest start-card login returns to map and guests read anonymous notes with no triage',async({page,browser,baseURL})=>{
+ await login(page);await clear(page);
+ const session=await (await page.request.get('/api/v1/session')).json();
+ const view=await (await page.request.get('/api/v1/me/tester-map')).json();
+ expect((await page.request.post('/api/v1/me/tester-map',{headers:{Origin:new URL(page.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':crypto.randomUUID(),'If-Match':`"${view.version}"`},data:{action:'feedback',step_id:'arrival.preview',result:'problem',note:'Public anonymous guest report'}})).status()).toBe(200);
+ const context=await browser.newContext({baseURL});const guest=await context.newPage();
+ try{
+   await guest.goto('/#tester-map');const report=guest.locator('#tester-builder-report');
+   await report.getByRole('button',{name:'重新讀取',exact:true}).click();
+   await expect(report.locator('[data-report-module="portal-shell"]').getByText('Public anonymous guest report',{exact:true})).toBeVisible();
+   await expect(report.locator('fieldset')).toHaveCount(0);await expect(report).not.toContainText(session.user.user_id);await expect(report).not.toContainText(session.user.email);
+   await guest.locator('[aria-labelledby="tester-start-title"]').getByRole('button',{name:'登入',exact:true}).click();
+   await guest.getByLabel('電子郵件',{exact:true}).fill('reviewer@local.test');await guest.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await guest.getByRole('button',{name:'登入',exact:true}).click();
+   await expect(guest.getByRole('heading',{name:'測試員地圖',level:1,exact:true})).toBeVisible();await expect(guest).toHaveURL(/#tester-map$/);
+ }finally{await context.close();await clear(page);}
+});
+
+test('TESTER-ACCOUNT-006 rejected triage can be edited and resubmitted; stale triage reloads new feedback with a conflict message',async({page,e2eAuthPool})=>{
+ await login(page);await clear(page);
+ const session=await (await page.request.get('/api/v1/session')).json(),membership=crypto.randomUUID();
+ await e2eAuthPool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+   SELECT $1,community_id,user_id,'guild_platform_engineering','active','full' FROM users WHERE user_id=$2`,[membership,session.user.user_id]);
+ try{
+   const view=await (await page.request.get('/api/v1/me/tester-map')).json();
+   expect((await page.request.post('/api/v1/me/tester-map',{headers:{Origin:new URL(page.url()).origin,'X-CSRF-Token':session.csrf_token,'Idempotency-Key':crypto.randomUUID(),'If-Match':`"${view.version}"`},data:{action:'feedback',step_id:'arrival.preview',result:'problem',note:'Triage retry test'}})).status()).toBe(200);
+   await page.goto('/#tester-map');const report=page.locator('#tester-builder-report');await report.getByRole('button',{name:'重新讀取',exact:true}).click();
+   const module=report.locator('[data-report-module="portal-shell"]');
+   const item=module.locator('li').filter({has:page.getByText('Triage retry test',{exact:true})});
+   const keys:string[]=[];let reject=true;
+   await page.route('**/api/v1/tester-map/report/triage',async route=>{
+     keys.push(route.request().headers()['idempotency-key']);
+     if(reject){reject=false;return route.fulfill({status:422,contentType:'application/problem+json',body:JSON.stringify({type:'about:blank',title:'Synthetic validation rejection',status:422,code:'validation_error'})});}
+     return route.continue();
+   });
+   await item.getByRole('button',{name:'儲存回饋',exact:true}).click();await expect(item.getByRole('alert')).toBeVisible();
+   await expect(item.getByRole('combobox')).toBeEnabled();await item.getByRole('combobox').selectOption('issue');await item.getByLabel('Issue 編號',{exact:true}).fill('1213');
+   await item.getByRole('button',{name:'重試',exact:true}).click();await expect(item.getByRole('link',{name:'Issue #1213',exact:true})).toBeVisible();
+   expect(keys.length).toBe(2);expect(keys[0]).not.toBe(keys[1]);
+   // The displayed token is now stale after the tester edits from another device.
+   await e2eAuthPool.query("UPDATE tester_map_feedback SET note='Newer tester note',status='sent',updated_at=clock_timestamp() WHERE user_id=$1 AND step_id='arrival.preview'",[session.user.user_id]);
+   await item.getByRole('combobox').selectOption('fixed');await item.getByRole('button',{name:'儲存回饋',exact:true}).click();
+   await expect(report.getByRole('alert')).toContainText('資料已更新');await expect(module.getByText('Newer tester note',{exact:true})).toBeVisible();
+   await expect(report.getByText('Triage retry test',{exact:true})).toHaveCount(0);await expect(module.getByRole('combobox')).toBeEnabled();
+ }finally{await e2eAuthPool.query('DELETE FROM positioning_profession_memberships WHERE membership_id=$1',[membership]);await clear(page);}
 });

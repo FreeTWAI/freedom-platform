@@ -1,4 +1,4 @@
--- #1213: private self-reported progress and optional feedback only.
+-- #1213: private self-reported progress and optional public anonymous feedback.
 -- Provisional 198: integration assigns the next number on main.
 -- Medals derive from done/group_id; no scores, ranking, titles or consent projection.
 -- Rollback: stop these routes, then DROP tester_map_feedback, tester_map_accounts.
@@ -9,7 +9,7 @@ CREATE TABLE tester_map_accounts (
   done text[] NOT NULL DEFAULT '{}',
   aggregate_version bigint NOT NULL DEFAULT 1 CHECK(aggregate_version BETWEEN 1 AND 9007199254740991)
 );
--- Private current feedback, opaque builder reference and triage state; no public identity.
+-- Public current feedback, opaque row reference and triage state; no public tester identity.
 -- A step's features are derived from the server allowlist, never caller-supplied.
 CREATE TABLE tester_map_feedback (
   user_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
