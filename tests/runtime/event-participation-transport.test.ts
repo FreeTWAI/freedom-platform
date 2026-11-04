@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {randomUUID} from 'node:crypto';
 import {transformSync} from 'esbuild';
-import {ApiError} from '../../apps/portal-web/src/api.js';
+import {ApiError,PortalClient} from '../../apps/portal-web/src/api.js';
 
 // Actual production hook, controlled promises and hook lifetimes. This is not
 // browser rendering, a real email provider or an exactly-once delivery test.
@@ -38,9 +38,45 @@ function harness(initialToken:string|null=null){
 }
 const sameRequest=(a:any,b:any)=>{assert.equal(a.method,b.method);assert.equal(a.path,b.path);assert.deepEqual(a.body,b.body);assert.equal(a.options.idempotencyKey,b.options.idempotencyKey);assert.equal(a.options.ifMatch,b.options.ifMatch);assert.equal(a.options.eventParticipationToken,b.options.eventParticipationToken);};
 
+// Derive failures from the real wire parser rather than assuming every 4xx is
+// a definitive rejection. No network requests leave this synthetic fetch port.
+async function wireError(t:any,status:number,body:string,contentType='application/json'){
+  const fetcher=t.mock.method(globalThis,'fetch',async()=>new Response(body,{status,headers:{'content-type':contentType}}));
+  try{
+    const client=new PortalClient();client.csrfToken='synthetic-wire-csrf';
+    try{await client.post(join.path,join.body,{idempotencyKey:'synthetic-wire-key',ifMatch:join.version,suppressConsole:true,background:true,skipAuthHandler:true});}
+    catch(cause){assert.ok(cause instanceof ApiError);assert.equal(cause.status,status);return cause;}
+    assert.fail('the error response must reject');
+  }finally{fetcher.mock.restore();}
+}
+for(const status of [400,403,409,412,422,429])for(const [format,body,contentType] of [
+  ['HTML','<html>upstream failure</html>','text/html'],
+  ['truncated JSON','{"type":','application/json'],
+  ['incomplete problem',JSON.stringify({status,title:'Rejected'}),'application/problem+json'],
+] as const)test(`first ${format} ${status} preserves the tuple through edits, reload, another action and a definitive retry rejection`,async t=>{
+  const cause=await wireError(t,status,body,contentType);assert.equal(cause.network,false);assert.equal(cause.definitiveResponse,false);
+  const h=harness(),draft={action:'join'},first=h.mutate({...join,body:draft});h.writes[0].reject(cause);assert.equal(await first,false);
+  assert.equal(h.render().retry,true);assert.equal(h.render().stale,false);assert.equal(h.render().blocked,true);assert.equal(h.render().notice,'');
+  draft.action='leave';await h.render().get(`/events/${id}/participation`);h.render().reloaded();
+  assert.equal(await h.mutate({...join,body:draft,version:9}),false);
+  assert.equal(await h.mutate({method:'PATCH',path:`/events/${id}/reminder`,body:{enabled:false},version:8}),false);
+  assert.equal(h.writes.length,1,'editing, reads and other commands never replace or automatically retry the unknown command');
+  const refusal=await wireError(t,412,JSON.stringify({type:'https://example.test/conflict',title:'Stale',status:412}));assert.equal(refusal.definitiveResponse,true);
+  const retry=h.render().retryCommand();sameRequest(h.writes[0],h.writes[1]);h.writes[1].reject(refusal);assert.equal(await retry,false);
+  assert.equal(h.render().retry,true);assert.equal(h.render().stale,false);assert.equal(h.render().blocked,true);assert.equal(h.render().notice,'');
+  const confirmed=h.render().retryCommand();sameRequest(h.writes[0],h.writes[2]);h.writes[2].resolve(participation());assert.equal(await confirmed,true);assert.equal(h.render().blocked,false);
+});
+
+for(const status of [400,403,409,412,422,429])test(`first wire ProblemDetails ${status} permits a corrected command after any required reload`,async t=>{
+  const cause=await wireError(t,status,JSON.stringify({type:'https://example.test/rejected',title:'Rejected',status}));assert.equal(cause.definitiveResponse,true);assert.equal(cause.network,false);
+  const h=harness(),first=h.mutate(join);h.writes[0].reject(cause);assert.equal(await first,false);assert.equal(h.render().retry,false);assert.equal(h.render().stale,status===412);
+  if(status===412){assert.equal(await h.mutate({...join,version:9}),false);await h.render().get(`/events/${id}/participation`);h.render().reloaded();}
+  const next=h.mutate({...join,body:{action:'leave'},version:9});assert.equal(h.writes[1].options.ifMatch,9);assert.notEqual(h.writes[1].options.idempotencyKey,h.writes[0].options.idempotencyKey);h.writes[1].resolve(participation({event_version:9,waitlist:null}));assert.equal(await next,true);
+});
+
 for(const status of [400,401,403,404,409,412,422,429])test(`unknown then ${status} keeps the original command through reload and explicit retry`,async()=>{
   const h=harness(),first=h.mutate(join);h.writes[0].reject(new ApiError({message:'lost reply',status:503}));assert.equal(await first,false);
-  const retry=h.render().retryCommand();sameRequest(h.writes[0],h.writes[1]);h.writes[1].reject(new ApiError({message:'later refused',status}));assert.equal(await retry,false);
+  const retry=h.render().retryCommand();sameRequest(h.writes[0],h.writes[1]);h.writes[1].reject(new ApiError({message:'later refused',status,definitiveResponse:true}));assert.equal(await retry,false);
   let view=h.render();assert.equal(view.retry,true);assert.equal(view.stale,false,'a later 412 must not make the frozen retry impossible');assert.equal(view.blocked,true);assert.equal(view.notice,'');
   await view.get(`/events/${id}/participation`);view.reloaded();view=h.render();
   assert.equal(await view.mutate('POST',join.path,{action:'leave'},9),false);assert.equal(h.writes.length,2,'read/reload never proves the original command outcome or sends again');
@@ -48,12 +84,12 @@ for(const status of [400,401,403,404,409,412,422,429])test(`unknown then ${statu
 });
 
 for(const status of [400,403,409,422,429])test(`a first definite ${status} still permits editing with a new key`,async()=>{
-  const h=harness(),first=h.mutate(join);h.writes[0].reject(new ApiError({message:'rejected',status}));assert.equal(await first,false);assert.equal(h.render().blocked,false);
+  const h=harness(),first=h.mutate(join);h.writes[0].reject(new ApiError({message:'rejected',status,definitiveResponse:true}));assert.equal(await first,false);assert.equal(h.render().blocked,false);
   const next=h.mutate({...join,body:{action:'leave'}});assert.notEqual(h.writes[1].options.idempotencyKey,h.writes[0].options.idempotencyKey);h.writes[1].resolve(participation({waitlist:null}));assert.equal(await next,true);
 });
 
 test('first 412 needs a successful reload; only then can a newly chosen version create a new command',async()=>{
-  const h=harness(),first=h.mutate(join);h.writes[0].reject(new ApiError({message:'stale',status:412}));await first;
+  const h=harness(),first=h.mutate(join);h.writes[0].reject(new ApiError({message:'stale',status:412,definitiveResponse:true}));await first;
   assert.equal(h.render().stale,true);assert.equal(h.render().retry,false);assert.equal(await h.mutate({...join,version:8}),false);
   h.render().reloaded();const next=h.mutate({...join,version:8});assert.equal(h.writes[1].options.ifMatch,8);assert.notEqual(h.writes[1].options.idempotencyKey,h.writes[0].options.idempotencyKey);h.writes[1].resolve(participation({event_version:8}));assert.equal(await next,true);
 });

@@ -92,7 +92,7 @@ function useParticipationTransport(client:PortalClient,scope:string,token:string
     }catch(cause){
       if(epoch!==generation.current||csrf!==null&&csrf!==client.csrfToken||controller.signal.aborted)return false;
       // A later refusal cannot prove that an earlier unknown attempt did not commit.
-      const uncertain=retrying||!(cause instanceof ApiError)||cause.network||cause.status===0||cause.status>=500;
+      const uncertain=retrying||!(cause instanceof ApiError)||!cause.definitiveResponse||cause.network||cause.status===0||cause.status>=500;
       pending.current=uncertain?request:null;setRetry(uncertain);
       if(!uncertain&&cause instanceof ApiError&&cause.status===412&&request.version!==undefined){setStale(true);setError('資料已由其他操作更新。請先重新載入最新狀態；你的輸入會保留，再確認送出。');}
       else if(uncertain&&request.path.endsWith('/participation-request'))setError('寄送結果尚未確認。以原資料重試可能再次寄出管理信；不會自動報名或加入候補。');
