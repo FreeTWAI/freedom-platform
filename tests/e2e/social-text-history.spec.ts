@@ -19,7 +19,9 @@ test('optional writing and sharing stay collapsed without loading tools, while h
   const optionalLoads:string[]=[],writes:string[]=[];
   page.on('request',request=>{
     if(/\/assets\/(?:SocialPostOptimizer|SocialCrossPlatformShare)-[^/]+\.js/.test(request.url()))optionalLoads.push(request.url());
-    if(request.method()==='POST'&&/\/api\/v1\/(?:social-posts|me\/(?:model-|private-work))/.test(request.url()))writes.push(request.url());
+    const pathname=new URL(request.url()).pathname;
+    // Visibility read beacons are unrelated to composer publication or AI writes.
+    if(request.method()==='POST'&&/^\/api\/v1\/(?:social-posts|me\/(?:model-|private-work))/.test(pathname)&&!/^\/api\/v1\/social-posts\/[^/]+\/read$/.test(pathname))writes.push(request.url());
   });
   const dialog=await composer(page),area=dialog.getByLabel('貼文內容',{exact:true}),tools=dialog.getByRole('button',{name:'文案與分享',exact:true});
   const undo=dialog.getByRole('button',{name:'復原上一步',exact:true}),redo=dialog.getByRole('button',{name:'重做',exact:true});
