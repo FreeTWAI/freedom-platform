@@ -40,7 +40,7 @@ function fixture(kind:Kind,mobile:boolean){
   runInNewContext(production,{module,exports:module.exports,Error,React:{createElement:(type:any,props:any,...children:any[]):Element=>({type,props:props??{},children})},
     require:(name:string)=>{assert.ok(name in imports,`Unexpected import ${name}`);return imports[name];},
     window:{addEventListener:noop,removeEventListener:noop,setTimeout:(run:()=>void,delay:number)=>{const id=++serial;timers.set(id,{run,delay});return id;},clearTimeout:(id:number)=>timers.delete(id),setInterval:()=>++serial,clearInterval:noop},
-    document:{visibilityState:'visible'},navigator:{onLine:true},
+    document:Object.assign(new EventTarget(),{visibilityState:'visible'}),navigator:{onLine:true},
   });
   const props={kind,client:{get:(url:string)=>{assert.match(url,/^\/me\/channels\?kind=/);return new Promise((resolve,reject)=>calls.push({url,resolve,reject}));},post:unused},session:{user:{user_id:'synthetic-user'}},onUnread:(value:unknown)=>unread.push(value),onNavigate:(tab:string)=>navigations.push(tab),active:false};
   function render(){cursor=0;tree=module.exports.MemberChannels(props);while(effects.length)effects.shift()!();}
