@@ -35,6 +35,7 @@
     "tests/runtime/message-image-upload-reader.test.ts",
     "tests/runtime/message-image-ack.test.ts",
     "tests/runtime/message-image-preview.test.ts",
+    "tests/runtime/direct-message-image-retry.test.ts",
     "tests/e2e/message-images.spec.ts",
     "migrations/139_member_message_images.sql",
     "docs/development/member-communications.md",

@@ -239,7 +239,7 @@ type Pending={key:string;body:string;payload:ImagePayload;status:'sending'|'unkn
 function DirectMessageImage({peer,messageId}:{peer:string;messageId:string}){
   const [broken,setBroken]=useState(false);
   const url=messageImageUrl(peer,messageId);
-  return broken?<p className="messages-meta" role="status">圖片無法載入</p>:<a className="message-image-link" href={url} target="_blank" rel="noopener"><img className="message-image" src={url} loading="lazy" decoding="async" alt="傳送的圖片" onError={()=>setBroken(true)}/></a>;
+  return broken?<p className="messages-meta" role="status">圖片無法載入 <button className="btn btn-ghost btn-small" type="button" onClick={()=>setBroken(false)}>重試圖片</button></p>:<a className="message-image-link" href={url} target="_blank" rel="noopener"><img className="message-image" src={url} loading="lazy" decoding="async" alt="傳送的圖片" onError={()=>setBroken(true)}/></a>;
 }
 
 export function DirectMessages({client,session,messageImagesEnabled=false,memberBlockingEnabled=false,onUnread,openPeer,active=true,compact=false,listRequest=0,registerLeave}:{client:PortalClient;session:SessionPayload;messageImagesEnabled?:boolean;memberBlockingEnabled?:boolean;onUnread:(count:InboxUnread)=>void;openPeer:{id:string;request:number}|null;active?:boolean;compact?:boolean;listRequest?:number;registerLeave?:(guard:(()=>boolean)|null)=>void}){
