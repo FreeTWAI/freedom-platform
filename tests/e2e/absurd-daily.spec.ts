@@ -282,6 +282,8 @@ test('AD-6 WebGL loss has a recoverable boundary and public layouts fit narrow, 
   await page.locator('.ad-stage canvas').evaluate(c=>c.dispatchEvent(new Event('webglcontextlost',{cancelable:true})));
   await expect(page.getByRole('button',{name:'重試場景',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'重試場景',exact:true}).click();
+  // Context recovery reconstructs the stage, just like the other recovery paths.
+  await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'繼續這一局',exact:true}).click();
   await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();await expect(page.locator('.ad-stage canvas')).toHaveCount(0);

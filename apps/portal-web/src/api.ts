@@ -393,7 +393,7 @@ export class PortalClient {
         const safeDetail = typeof problem?.detail === 'string' && safePlatformDetail(problem.detail.trim()) ? problem.detail : undefined
         throw new ApiError({
           message: messageFromProblem(response.status, problem, method !== 'GET', path, response.headers.get('retry-after')), status: response.status, cfRay:cloudflareRay(response), requestId:requestId(response),
-          definitiveResponse: problem !== null && !Array.isArray(problem) && problem.status === response.status && typeof problem.type === 'string' && typeof problem.title === 'string',
+          definitiveResponse: isDefinitiveProblemResponse(payload, response.status),
           type: serverFailure && !knownGitHub ? undefined : problem?.type,
           title: serverFailure && !knownGitHub ? undefined : problem?.title,
           detail: serverFailure ? (knownGitHub ? safeDetail : undefined) : problem?.detail,
@@ -470,6 +470,15 @@ function fieldErrors(payload: unknown): {code: string; path: string}[] | undefin
     return [{code, path}]
   })
   return errors.length ? errors : undefined
+}
+
+// Both JSON commands and binary event uploads use this refusal boundary.
+// A status alone, an HTML gateway page or a partial problem cannot settle a write.
+export function isDefinitiveProblemResponse(value: unknown, status: number): value is ProblemDetails {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const problem = value as ProblemDetails
+  return problem.status === status && typeof problem.type === 'string' && problem.type.trim().length > 0
+    && typeof problem.title === 'string' && problem.title.trim().length > 0
 }
 
 function isProblem(value: unknown): value is ProblemDetails {

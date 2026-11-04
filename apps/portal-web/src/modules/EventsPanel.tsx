@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiError, type PortalClient } from '../api';
 import type { SessionPayload } from '../types';
 import { formatIsoLocal, hoursFromNowLocalInput, localInputToIso } from '../format';
@@ -22,7 +22,8 @@ export type CommunityEvent = {
   attending_count:number; my_rsvp:'going'|'cancelled'|null;guild_key:string|null;review_guild_key:string|null;can_review:boolean;review_reason:string|null;
 };
 type EventActionAttempt={eventId:string;path:string;kind:'cancel'|'rsvp';body:{going?:boolean;referral_code?:string|null};version?:number};
-type MediaSave={result:CommunityEvent;banner:File|null;video:File|null;editing:boolean;command:EventMediaCommand|null};
+type EventSaveAttempt={path:string;body:EventPayload;version?:number;editing:boolean;eventId:string|null;organizerId:string;helpNeed:string|null;registrationPolicy:CommunityEvent['registration_policy'];banner:File|null;video:File|null};
+type MediaSave={result:CommunityEvent;banner:File|null;video:File|null;editing:boolean;command:EventMediaCommand|null;unknownCommand:EventMediaCommand|null};
 type Guild={guild_key:string;name:string;membership?:{state:string;member_tier?:'intern'|'full'}|null};
 const INTERN_WRITE='實習成員可以閱讀公會內容、在公會聊天室聊天；請會長把你設為正式成員後再發布或編輯。';
 const internExchange=(value:{event_kind:string;guild_key:string|null},guilds:Guild[])=>value.event_kind==='guild_skill_exchange'&&guilds.some(guild=>guild.guild_key===value.guild_key&&guild.membership?.state==='active'&&guild.membership.member_tier==='intern');
@@ -39,6 +40,27 @@ function localTime(iso:string) {
 }
 const fromEvent=(item:CommunityEvent):EventDraft=>({registration_policy:item.registration_policy??'guest_allowed',help_need:item.help_need??'',title:item.title,description:item.description,starts_at:localTime(item.starts_at),ends_at:localTime(item.ends_at),mode:item.mode,event_kind:item.event_kind??'other',topic:item.topic??'',location:item.location,online_url:item.online_url??'',capacity:item.capacity===null?'':String(item.capacity),guild_key:item.guild_key??'',visibility:item.visibility??'workshop'});
 export const eventPayload=(value:EventDraft):EventPayload=>({...value,...(value.help_need!==undefined?{help_need:value.help_need.trim()||null}:{}),starts_at:localInputToIso(value.starts_at),ends_at:localInputToIso(value.ends_at),topic:value.topic.trim()||null,online_url:value.online_url.trim()||null,capacity:value.capacity===''?null:Number(value.capacity),guild_key:value.guild_key||null});
+// The HTTP boundary serializes aggregate_version as a safe integer. Confirm
+// this original command's snapshot, never a newer list row or today's clock.
+function eventSaveReceipt(value:unknown,attempt:EventSaveAttempt):CommunityEvent {
+  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('invalid_event_receipt');
+  const item=value as CommunityEvent,body=attempt.body;
+  const nullableText=(field:unknown)=>field===null||typeof field==='string';
+  const sameTime=(left:string,right:string)=>typeof left==='string'&&typeof right==='string'&&Number.isFinite(Date.parse(left))&&Date.parse(left)===Date.parse(right);
+  const helpNeed=body.help_need===undefined?attempt.helpNeed:body.help_need?.trim()??null;
+  if(typeof item.event_id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.event_id)
+    ||attempt.eventId!==null&&item.event_id!==attempt.eventId||item.organizer_ref!==attempt.organizerId||typeof item.organizer_name!=='string'
+    ||!Number.isSafeInteger(item.aggregate_version)||item.aggregate_version!==(attempt.editing?attempt.version!+1:1)||item.state!=='pending'
+    ||item.title!==body.title.trim()||item.description!==body.description.trim()||item.location!==body.location.trim()
+    ||!sameTime(item.starts_at,body.starts_at)||!sameTime(item.ends_at,body.ends_at)
+    ||item.mode!==body.mode||item.event_kind!==body.event_kind||item.visibility!==body.visibility
+    ||item.topic!==(body.topic?.trim()??null)||item.online_url!==(body.online_url?.trim()??null)||item.guild_key!==body.guild_key||item.capacity!==body.capacity
+    ||item.help_need!==helpNeed||item.registration_policy!==(body.registration_policy??attempt.registrationPolicy??'guest_allowed')
+    ||!['banner_url','video_url','review_guild_key','review_reason'].every(key=>nullableText(item[key as keyof CommunityEvent]))
+    ||![null,'landscape','portrait'].includes(item.banner_orientation)||![null,'video/mp4','video/webm'].includes(item.video_mime)
+    ||!Number.isSafeInteger(item.attending_count)||item.attending_count<0||![null,'going','cancelled'].includes(item.my_rsvp)||typeof item.can_review!=='boolean')throw new Error('invalid_event_receipt');
+  return item;
+}
 const modeLabel:Record<CommunityEvent['mode'],string>={online:'線上',in_person:'實體',hybrid:'線上與實體'};
 const kindLabel:Record<CommunityEvent['event_kind'],string>={reading_group:'線上讀書會',meetup:'聚會',guild_skill_exchange:'公會技能交流',other:'其他活動'};
 const reviewerFor=(value:EventDraft,guilds:Guild[])=>value.event_kind==='guild_skill_exchange'
@@ -109,7 +131,21 @@ function EventDraftPreview({value,banner,existingBanner}:{value:EventDraft;banne
   </section></details>;
 }
 
-export function EventsPanel({client,session,locationHash,registerLeave,onList,participationEnabled=false,renderMemberCards,renderMissions}:{client:PortalClient;session:SessionPayload;locationHash:string;registerLeave:(guard:(()=>boolean)|null)=>void;onList:()=>void;participationEnabled?:boolean;renderMemberCards?:(eventId:string)=>ReactNode;renderMissions?:(eventId:string,onBlockedChange:(blocked:boolean)=>void)=>ReactNode}) {
+type EventsPanelProps={client:PortalClient;session:SessionPayload;locationHash:string;registerLeave:(guard:(()=>boolean)|null)=>void;onList:()=>void;participationEnabled?:boolean;renderMemberCards?:(eventId:string)=>ReactNode;renderMissions?:(eventId:string,onBlockedChange:(blocked:boolean)=>void)=>ReactNode};
+export function EventsPanel(props:EventsPanelProps){
+  // Drafts, selected files and in-flight commands belong to one account/session.
+  const owner=useRef({client:props.client,generation:props.client.sessionGeneration,userId:props.session.user.user_id,key:0});
+  if(owner.current.client!==props.client||owner.current.generation!==props.client.sessionGeneration||owner.current.userId!==props.session.user.user_id){
+    owner.current={client:props.client,generation:props.client.sessionGeneration,userId:props.session.user.user_id,key:owner.current.key+1};
+  }
+  return <EventsPanelSession key={owner.current.key} {...props}/>;
+}
+function EventsPanelSession({client,session,locationHash,registerLeave,onList,participationEnabled=false,renderMemberCards,renderMissions}:EventsPanelProps) {
+  const saveOwner=useRef({active:true,generation:client.sessionGeneration,csrfToken:client.csrfToken});
+  // Revoke the old owner during commit, before passive cleanup or ACK microtasks.
+  useLayoutEffect(()=>{saveOwner.current.active=true;return()=>{saveOwner.current.active=false;};},[]);
+  const isSaveOwner=()=>saveOwner.current.active&&saveOwner.current.generation===client.sessionGeneration&&saveOwner.current.csrfToken===client.csrfToken;
+  const saveFlight=useRef(false);
   const [items,setItems]=useState<CommunityEvent[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState('');
   // Initial calendar insertion can scroll the submit target between pointer events.
   // Later refreshes must still allow a new draft after a confirmed save.
@@ -139,7 +175,7 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
   const selectedId=/^#events\/([0-9a-f-]{36})(?:\?.*)?$/.exec(locationHash)?.[1]??(!locationHash?/^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1]??null:null);
   const [selectedItem,setSelectedItem]=useState<CommunityEvent|null>(null);
   const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client);
-  const saveAttempt=useRef<{path:string;body:EventPayload;version?:number;editing:boolean}|null>(null);
+  const saveAttempt=useRef<EventSaveAttempt|null>(null);
   const reviewAttempt=useRef<{eventId:string;version:number;decision:'approve'|'reject';reason:string}|null>(null);
   const actionAttempt=useRef<EventActionAttempt|null>(null);
   const recoveringAction=lastFailureUnknown&&actionAttempt.current!==null;
@@ -224,16 +260,23 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
       ?current.map(item=>item.event_id===result.event_id?result:item):[result,...current]);
   }
   async function finishMedia(pending:MediaSave):Promise<boolean>{
+    if(!isSaveOwner())return false;
     try{
       for(const kind of ['banner','video'] as const){
         const file=pending[kind];if(!file)continue;
         pending.command??=await prepareEventMedia(client,pending.result,file,kind);
+        if(!isSaveOwner())return false;
         const receipt=await sendEventMedia(client,pending.command);
+        if(!isSaveOwner())return false;
         pending.result=currentMediaEvent(pending.result,receipt);
-        pending[kind]=null;pending.command=null;
+        pending[kind]=null;pending.command=null;pending.unknownCommand=null;
       }
     }catch(cause){
-      const unknown=Boolean(pending.command&&cause instanceof ApiError&&cause.network);
+      if(!isSaveOwner())return false;
+      // Uncertainty belongs to this exact dispatched upload, not the whole
+      // banner/video pipeline. Local preparation/session refusals are not sends.
+      const unknown=Boolean(pending.command&&(pending.unknownCommand===pending.command||cause instanceof ApiError&&cause.network));
+      pending.unknownCommand=unknown?pending.command:null;
       mediaSave.current=unknown?pending:null;setMediaUnknown(unknown);
       publishEvent(pending.result);
       setBannerError(unknown?'媒體保存結果尚未確認，請先確認原操作。':cause instanceof Error?cause.message:'媒體未能保存，請重試。');
@@ -243,39 +286,45 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
       if(!unknown)void load();
       return unknown;
     }
+    if(!isSaveOwner())return false;
     mediaSave.current=null;setMediaUnknown(false);publishEvent(pending.result);
     discardDrafts();setNotice(pending.editing?'活動已更新，仍待審核。':'活動已送出審核，核准後開放報名。');
     announceInboxChange();window.dispatchEvent(new Event('freedom-world-facts-updated'));void load();
     return false;
   }
   async function reconcileMedia(){
+    if(!isSaveOwner()||saveFlight.current)return;
     const pending=mediaSave.current;if(!pending?.command)return;
+    saveFlight.current=true;
     setSaving(true);setBannerError('');
     try{
       // If this read fails, keep the command and lock. The member can retry
       // reconciliation without issuing metadata or a different upload command.
       pending.result=await readEventMedia(client,pending.command);
+      if(!isSaveOwner())return;
       publishEvent(pending.result);
       await finishMedia(pending);
-    }catch(cause){setBannerError('尚未確認媒體保存結果，請重試確認保存。');}
-    finally{setSaving(false);}
+    }catch(cause){if(isSaveOwner())setBannerError('尚未確認媒體保存結果，請重試確認保存。');}
+    finally{saveFlight.current=false;if(isSaveOwner())setSaving(false);}
   }
   async function save(event:FormEvent) {
-    event.preventDefault();if(actionAttempt.current||reviewAttempt.current||saving||busy||mediaUnknown||preparingBanner||bannerError)return;
+    event.preventDefault();if(actionAttempt.current||reviewAttempt.current||!isSaveOwner()||saveFlight.current||saving||busy||mediaUnknown||preparingBanner||bannerError)return;
     if(lastFailureUnknown&&!saveAttempt.current){setNotice('尚未確認原操作的結果，請先重試原操作。');return;}
-    setSaving(true);setNotice('');
+    saveFlight.current=true;setSaving(true);setNotice('');
     const current=original;
-    const attempt=saveAttempt.current??(current
+    const attempt=saveAttempt.current??{...(current
       ?{path:`/events/${current.event_id}/update`,body:eventPayload(editDraft),version:current.aggregate_version,editing:true}
-      :{path:'/events',body:eventPayload(draft),editing:false});
+      :{path:'/events',body:eventPayload(draft),editing:false}),eventId:current?.event_id??null,organizerId:session.user.user_id,helpNeed:current?.help_need??null,registrationPolicy:current?.registration_policy,
+      banner:current?editBannerFile:bannerFile,video:current?editVideoFile:videoFile};
     saveAttempt.current=attempt;
     try{
-      const saved=await mutate<CommunityEvent>(attempt.path,attempt.body,attempt.version);
-      if(!saved)return;
+      const saved=await mutate<CommunityEvent>(attempt.path,attempt.body,attempt.version,value=>eventSaveReceipt(value,attempt));
+      if(!saved||!isSaveOwner())return;
       saveAttempt.current=null;
-      const pending:MediaSave={result:saved,banner:attempt.editing?editBannerFile:bannerFile,video:attempt.editing?editVideoFile:videoFile,editing:attempt.editing,command:null};
-      if(await finishMedia(pending))await reconcileMedia();
-    }finally{setSaving(false);}
+      const pending:MediaSave={result:saved,banner:attempt.banner,video:attempt.video,editing:attempt.editing,command:null,unknownCommand:null};
+      // Only an explicit retry may read back and replay an uncertain upload.
+      await finishMedia(pending);
+    }finally{saveFlight.current=false;if(isSaveOwner())setSaving(false);}
   }
   async function removeBanner(item:CommunityEvent){
     if(actionAttempt.current||reviewAttempt.current||saveAttempt.current||saving||busy||recoveringSave||recoveringReview||recoveringAction||mediaUnknown){setNotice('請先完成或重試原活動儲存操作。');return;}
