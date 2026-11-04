@@ -38,7 +38,7 @@ test('guides keep working client, local demo, alpha and unimplemented service bo
   assert.match(skillBookGuides['social-post'].status,/未全面驗收/);
 });
 
-test('all 53 books expose distinct covers, original-author stars and the same beginner guidance in public formats',()=>{
+test('all 55 books expose distinct covers, original-author stars and the same beginner guidance in public formats',()=>{
   const covers=new Set<string>();
   for(const book of developmentMap().skill_books){
     const guide=book.guide!;
@@ -57,16 +57,16 @@ test('all 53 books expose distinct covers, original-author stars and the same be
     assert.ok(html.includes('href="/#skills">登入工坊 Star'),book.id);
     assert.ok(html.includes(`href="${book.upstream_url}/fork"`),book.id);
   }
-  assert.equal(covers.size,53);
+  assert.equal(covers.size,55);
   const external=communityCatalog.skill_books.find(book=>book.id==='social-post')!;
   assert.notEqual(external.star_url,external.repository_url);
   assert.equal(external.star_url,'https://github.com/Hao0321/claude-skill-social-post');
   for(const book of skillBooksForGuild('guild_marketing'))assert.ok(book.cover_url&&book.star_url&&book.guide?.beginner);
 });
 
-test('all 53 books keep values checked by raw public HTML assertions unchanged by escapeHtml',()=>{
+test('all 55 books keep values checked by raw public HTML assertions unchanged by escapeHtml',()=>{
   const books=developmentMap().skill_books;
-  assert.equal(books.length,53);
+  assert.equal(books.length,55);
   for(const book of books){
     const guide=book.guide!;
     const fields={

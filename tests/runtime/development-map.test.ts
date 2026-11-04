@@ -33,7 +33,7 @@ for(const [id,title] of [['private-ai','私人 AI 工作室'],['workbench','任�
 
 test('every workspace page and entry flow maps to existing source, tests and an actual managed repository',()=>{
  const map=developmentMap(),repos=new Set(map.repositories.map(repo=>repo.repository));
- assert.equal(repos.size,59);assert.equal(map.skill_books.length,53);
+ assert.equal(repos.size,61);assert.equal(map.skill_books.length,55);
  const types=readFileSync('apps/portal-web/src/types.ts','utf8');
  const tabs=[...types.match(/export type TabId = ([^\n]+)/)![1].matchAll(/'([^']+)'/g)].map(match=>match[1]);
  for(const id of [...tabs,'registration','onboarding','admin','skillbooks'])assert.ok(developmentPages.some(page=>page.id===id),id);

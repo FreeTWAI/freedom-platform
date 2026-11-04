@@ -14,7 +14,7 @@ test.beforeEach(async({page})=>{
   await page.route('**/api/v1/skill-submissions/published',route=>route.fulfill({json:{items:[]}}));
 });
 // Catalog books no guild designates: they sit on the 社群技能書 shelf and are not granted by joining a guild.
-const communityBookIds=['anti-gambling-trader-tw','web-card-game-skill','ai-avatar-bot','ai-manga-translator','line-persona','hao-studio','ai-sister','multi-ai-desktop','multi-ai-chat','video-to-podcast-toolkit','autovtuber','coding-audit-harness','hrflow','hdsljp-api','usage','photo-border-remover','ga4-lp-analytics','sns-feedback-collect','ultracode-token-optimization','keynote-pptx-doctor','webchat-mcp','gemini-voice-lab','story-bible','human-mode'];
+const communityBookIds=['anti-gambling-trader-tw','web-card-game-skill','ai-avatar-bot','ai-manga-translator','line-persona','hao-studio','ai-sister','multi-ai-desktop','multi-ai-chat','video-to-podcast-toolkit','autovtuber','coding-audit-harness','hrflow','hdsljp-api','usage','photo-border-remover','ga4-lp-analytics','sns-feedback-collect','ultracode-token-optimization','keynote-pptx-doctor','webchat-mcp','gemini-voice-lab','story-bible','human-mode','project-hub','taiwanese-english-checker'];
 
 async function openLibrary(page:Page){
   await page.goto('/');
@@ -56,12 +56,12 @@ test('guild skill book introduces a real first deliverable before external readi
 });
 
 
-test('the guild shelf and 社群技能書 hold all 53 books once each; guild search intersects workshop categories without granting books',async({page})=>{
+test('the guild shelf and 社群技能書 hold all 55 books once each; guild search intersects workshop categories without granting books',async({page})=>{
   const library=await openLibrary(page),cards=library.locator('article.skill-library-book');
   const community=page.locator('.community-skill-library'),communityCards=community.locator('article.skill-library-book');
   const grantedBefore=await (await page.request.get('/api/v1/me/skill-books')).json();
   await expect(library.getByRole('status')).toHaveText('顯示 29 / 29 本技能書');
-  await expect(community.getByRole('status')).toHaveText('顯示 24 / 24 本社群技能書');
+  await expect(community.getByRole('status')).toHaveText('顯示 26 / 26 本社群技能書');
   const catalog=await (await page.request.get('/api/v1/community')).json() as {skill_books:SkillBook[]};
   const shelved=async(cards:Locator)=>(await cards.evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-book-id')!))).sort();
   expect(await shelved(communityCards)).toEqual([...communityBookIds].sort());
@@ -69,12 +69,12 @@ test('the guild shelf and 社群技能書 hold all 53 books once each; guild sea
   expect([...await shelved(cards),...await shelved(communityCards)].sort()).toEqual(catalog.skill_books.map(book=>book.id).sort());
   // One badge slot: guild designations above, 社群技能書 below; never both on one book.
   await expect(cards.getByText('社群技能書',{exact:true})).toHaveCount(0);
-  await expect(communityCards.locator('.skill-badge-community')).toHaveCount(24);
+  await expect(communityCards.locator('.skill-badge-community')).toHaveCount(26);
   await expect(communityCards.locator('.skill-badge-official')).toHaveCount(0);
   const illustrations=page.locator('.skill-shelves article.skill-library-book .skill-book-illustration');
-  await expect(illustrations).toHaveCount(53);
+  await expect(illustrations).toHaveCount(55);
   const urls=await illustrations.evaluateAll(images=>images.map(image=>image.getAttribute('src')));
-  expect(new Set(urls).size).toBe(53);
+  expect(new Set(urls).size).toBe(55);
   for(const url of urls){
     expect(url).toMatch(/^\/art\/skills\/[a-z0-9-]+\.webp$/);
     const response=await page.request.get(url!);
@@ -177,7 +177,7 @@ test('book cards credit the original GitHub author and offer direct reading acti
 test('all public book pages and Markdown preserve beginner summaries, covers, original stars and source facts',async({page,request})=>{
   const response=await request.get('/api/v1/development-map');expect(response.status()).toBe(200);
   const map=await response.json() as {skill_books:(SkillBook&{guide_url:string;markdown_url:string})[]};
-  expect(map.skill_books).toHaveLength(53);
+  expect(map.skill_books).toHaveLength(55);
   for(const book of map.skill_books){
     const htmlResponse=await request.get(book.guide_url),markdownResponse=await request.get(book.markdown_url);
     expect(htmlResponse.status(),book.id).toBe(200);expect(markdownResponse.status(),book.id).toBe(200);
@@ -577,7 +577,7 @@ for(const width of [1280,390])test(`both shelves combine content uses, business 
   const guild=await openLibrary(page),community=page.locator('.community-skill-library');
   for(const [shelf,searchLabel,id,use,category,total,noun] of [
     [guild,'搜尋技能書','social-post','文字','內容與行銷',29,'技能書'],
-    [community,'搜尋社群技能書','photo-border-remover','圖片','內容與行銷',24,'社群技能書'],
+    [community,'搜尋社群技能書','photo-border-remover','圖片','內容與行銷',26,'社群技能書'],
   ] as const){
     const search=shelf.getByRole('searchbox',{name:searchLabel,exact:true});
     const uses=shelf.getByRole('combobox',{name:'依內容與技術用途篩選',exact:true});
@@ -613,7 +613,7 @@ for(const width of [1280,390])test(`skill introductions defer unvisited content 
   try {
   const library=await openLibrary(page),card=library.locator('article[data-book-id="supplier-client"]');
   const allShells=page.locator('.community-library .skill-intro-dialog, .community-skill-library .skill-intro-dialog');
-  await expect(allShells).toHaveCount(53);
+  await expect(allShells).toHaveCount(55);
   await expect(allShells.locator(':scope > *')).toHaveCount(0);
   expect(reads).toBe(0);
   const trigger=card.getByRole('button',{name:'預覽技能書',exact:true});

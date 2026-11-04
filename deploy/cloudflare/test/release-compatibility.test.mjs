@@ -1918,3 +1918,19 @@ for (const missing of ['active', 'candidate']) test(`schema190 v3 mixed DAG refu
   assert(result.issues.some(issue => issue.code === 'release_capability_missing' && issue.capability === NULL_SAFE_PASSWORD && issue.source_sha === record.source_sha));
   for (const flag of ['deployment_authority', 'execution_authority', 'restore_proof']) assert.equal(result[flag], false);
 });
+
+test('schema198 catalog publications and guild book binding preserve schema197 approval boundaries and reject unknown ledger names',()=>{
+  const f=fixtureAt(198),old=prefix(f.scan,197);
+  assert.equal(f.scan.ledger.at(-1).name,'198_member_shared_skill_books_language_guild.sql');
+  const result=evaluate(f);assert.equal(result.status,'compatible');assert.deepEqual(result.required_shapes,[]);
+  assert.deepEqual(result.required_capabilities,evaluate(fixtureAt(197)).required_capabilities);
+  for(const flag of ['deployment_authority','execution_authority','restore_proof'])assert.equal(result[flag],false);
+  f.host.release_records[0].schema_ledger_digests=[old.ledger_digest];
+  assert(evaluate(f).issues.some(i=>i.code==='release_schema_unsupported'));
+  const renamed=fixtureAt(198);renamed.scan.ledger.at(-1).name='198_unreviewed.sql';
+  renamed.scan.ledger_digest=compatibilityLedgerDigest(renamed.scan.ledger);
+  assert(evaluate(renamed).issues.some(i=>i.code==='schema_unknown'));
+  const future=fixtureAt(198);future.scan.ledger.push({name:'199_unreviewed.sql',sha256:'e'.repeat(64)});
+  future.scan.ledger_digest=compatibilityLedgerDigest(future.scan.ledger);
+  assert.deepEqual(codes(evaluate(future)),['schema_unknown']);
+});
