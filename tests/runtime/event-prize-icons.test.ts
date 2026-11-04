@@ -19,6 +19,7 @@ const entry = {exports: {} as {
 }};
 new Function('require', 'module', 'exports', compiled)(createRequire(import.meta.url), entry, entry.exports);
 const {EventPrizeIcon, EventPrizeIconPicker} = entry.exports;
+const rawScriptTag = /<\/?script\b/i;
 const renderPicker = (value: EventPrizeIconId = DEFAULT_EVENT_PRIZE_ICON_ID, disabled = false) => renderToStaticMarkup(createElement(EventPrizeIconPicker, {value, disabled, onChange: () => assert.fail('render must not mutate or save')}));
 
 test('presentation catalog has six stable, unique, immutable IDs and visible labels', () => {
@@ -98,7 +99,22 @@ test('multiple prize pickers keep independent names, input IDs, hint IDs and esc
   for (const [, hint] of html.matchAll(/aria-describedby="([^"]+)"/g)) assert.ok(ids.includes(hint));
   assert.match(html, /獎品 1 插圖/);
   assert.match(html, /獎品 2 &lt;script&gt;插圖/);
-  assert.doesNotMatch(html, /<script>/);
+  assert.doesNotMatch(html, rawScriptTag);
+});
+
+test('legend escaping checks detect raw script tags regardless of case or attributes', () => {
+  for (const [legend, escaped] of [
+    ['<script>alert(1)</script>', '&lt;script&gt;alert(1)&lt;/script&gt;'],
+    ['<SCRIPT>alert(1)</SCRIPT>', '&lt;SCRIPT&gt;alert(1)&lt;/SCRIPT&gt;'],
+    ['<ScRiPt src="x">', '&lt;ScRiPt src=&quot;x&quot;&gt;'],
+    ['</SCRIPT>', '&lt;/SCRIPT&gt;'],
+  ]) {
+    // Negative control: an unescaped rendering must be caught by this assertion.
+    assert.match(legend, rawScriptTag);
+    const html = renderToStaticMarkup(createElement(EventPrizeIconPicker, {value: 'gift', legend, onChange: () => {}}));
+    assert.ok(html.includes(`<legend>${escaped}</legend>`));
+    assert.doesNotMatch(html, rawScriptTag);
+  }
 });
 
 test('picker source preserves native interaction, scoped theme tokens and minimum target/text rules', () => {
