@@ -1,5 +1,5 @@
 import {ReportButton} from './MemberReporting';
-import {refreshLoadedMessages} from './message-refresh';
+import {reconcileMessageAck,refreshLoadedMessages} from './message-refresh';
 import {useEffect,useLayoutEffect,useMemo,useId,useRef,useState,type FormEvent} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
@@ -370,7 +370,7 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
         setDrafts(value=>{if((value[key]??'').trim()!==body)return value;const {[key]:_,...rest}=value;return rest;});
         richDrafts.clear(key,extras);
       }
-      if(current.current===key){stick.current=true;setHistory(value=>value&&value.channel.kind===kind&&value.channel.channel_key===key?{...value,items:newestFirst(merge([message],value.items,item=>item.message_id)),next_offset:value.next_offset===null?null:value.next_offset+(value.items.some(item=>item.message_id===message.message_id)?0:1)}:value);}
+      if(current.current===key){stick.current=true;setHistory(value=>value&&value.channel.kind===kind&&value.channel.channel_key===key?{...value,items:newestFirst(merge([reconcileMessageAck(message,value.items)],value.items,item=>item.message_id)),next_offset:value.next_offset===null?null:value.next_offset+(value.items.some(item=>item.message_id===message.message_id)?0:1)}:value);}
       setChannels(value=>value.map(item=>item.channel_key===key?{...item,last_message_at:message.created_at}:item));
       rereadAfterWrite(key);
     }catch(cause){

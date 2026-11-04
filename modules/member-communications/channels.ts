@@ -227,9 +227,14 @@ export async function sendChannelMessage(pool:Pool,input:Command,rawKind:string,
   },async q=>{
     // One budget per sender across both kinds; serialized so concurrent sends cannot exceed it.
     await advisory(q,`member-channel-sender/${actor.community_id}/${actor.user_id}`);
-    const recent=(await q.query(`SELECT count(*)::int AS n FROM member_channel_messages WHERE community_id=$1 AND sender_ref=$2 AND created_at>clock_timestamp()-make_interval(secs=>$3)`,
-      [actor.community_id,actor.user_id,CHANNEL_MESSAGE_RATE_WINDOW_SECONDS])).rows[0].n;
-    requireCondition(recent<CHANNEL_MESSAGE_RATE_LIMIT,429,'message_rate_limited','訊息傳送太頻繁，請稍後再試。');
+    // Select only the newest budget-sized set, supported by sender_recent, then
+    // evaluate the DB clock after the aggregate, never before a lock/data wait.
+    const limited=(await q.query<{limited:boolean}>(`SELECT CASE WHEN count(*)<$4::int THEN false
+      ELSE min(created_at)>clock_timestamp()-make_interval(secs=>$3) END AS limited
+      FROM (SELECT created_at FROM member_channel_messages WHERE community_id=$1 AND sender_ref=$2
+        ORDER BY created_at DESC LIMIT $4) AS latest`,
+      [actor.community_id,actor.user_id,CHANNEL_MESSAGE_RATE_WINDOW_SECONDS,CHANNEL_MESSAGE_RATE_LIMIT])).rows[0].limited;
+    requireCondition(limited===false,429,'message_rate_limited','訊息傳送太頻繁，請稍後再試。');
     // Sequence allocation and the message insert share this lock and transaction,
     // so a higher sequence never commits before a lower one.
     await advisory(q,`member-channel/${actor.community_id}/${target.kind}/${target.key}`);
