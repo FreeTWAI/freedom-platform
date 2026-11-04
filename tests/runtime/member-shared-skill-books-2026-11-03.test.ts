@@ -47,10 +47,15 @@ test('both books keep exact pins, MIT, self-declared author credit and no static
   assert.deepEqual(skillBooksForGuild(languageGuild),[]);
 });
 
-test('guides state the pinned limits members need before installing either book',()=>{
+test('guides state the pinned limits members need before installing either book',async()=>{
   const hub=book('project-hub').guide!,checker=book('taiwanese-english-checker').guide!;
-  for(const pattern of [/v4\.117\.0/,/127\.0\.0\.1:4545/,/沒有使用者登入/,/_hub\/roles\.yaml/,/\.env/,/git add -A/,/--no-verify/,/未加密/,/Windows 為實驗性支援/,/尚未公證/,/不代表已開放販售/,/工坊未安裝或執行/])
+  for(const pattern of [/原始碼為 4\.125\.0（hub\/package\.json）/,/繁中 README 仍寫公開 Beta v4\.117\.0/,/127\.0\.0\.1:4545/,/沒有使用者登入/,/_hub\/roles\.yaml/,/\.env/,/git add -A/,/--no-verify/,/未加密/,/Windows 11 x64 版標為限定試用/,/尚未公證/,/不代表已開放販售/,/工坊未安裝或執行/])
     assert.match(hub.status,pattern);
+  // Upstream works in the main folder for direct mode, non-Git folders and failed copies, so no text may promise a copy.
+  assert.match(hub.features.join('\n'),/通常會替這項作業在 Work\/ 建立工作副本.*作業位置選「在主資料夾作業」、專案原本沒有 Git，或副本建立失敗時，則直接在主資料夾工作/);
+  const hubIntroductions:string[]=JSON.parse(await readFile('modules/community/share-introductions/project-hub.json','utf8'));
+  for(const text of [hub.summary,hub.status,...hub.features,...hub.first_steps,...hubIntroductions])
+    assert.doesNotMatch(text,/替每項作業.*建立.*工作副本|AI 在工作副本裡工作|收錄版本/,text);
   assert.match(hub.first_steps.join('\n'),/HUB_LANG=zh-TW bash hub\/setup\.sh/);
   for(const pattern of [/沒有程式或檢查引擎/,/誤判或漏抓/,/不要貼客戶個資/,/不代為送出/,/不是考試評分或語言能力認證/,/工坊未安裝或代為執行/])
     assert.match(checker.status,pattern);

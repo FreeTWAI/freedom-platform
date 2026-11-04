@@ -23,7 +23,7 @@
 
 2026-11-03 查詢時，兩個原作的 `main` 都比固定版本多 3 個 commit：Project Hub 為 `9f5f6b5a`，台式英文抓蟲器為 `f76e9f93`。導讀只描述固定版本；換版需重新核對，可用既有的 upstream drift 檢查找出差異。
 
-- **Project Hub**：固定版本 README 寫公開 Beta v4.117.0、Windows 為實驗性支援；投稿說明與之後的原作 README 則改稱 Mac 與 Windows 11 x64 版為正式版。導讀依固定版本，並註明較新版本未經工坊核對。分享介紹改用不受版本影響的事實，不再寫 Windows 狀態。使用邊界（只聽 127.0.0.1:4545、略過權限、複製設定檔、`git add -A` 與 `--no-verify`、未加密紀錄、未公證）在 `9f5f6b5a` 的 README 仍相同。
+- **Project Hub**：固定版本的原始碼是 4.125.0（`hub/package.json`）。同一版的日文 `README.md` 稱 4.125 為正式版，發佈的 App 是 Mac 4.125.9 與 Windows 4.125.2，Windows 11 x64 版標為限定試用；繁中 `README.zh-TW.md` 仍寫公開 Beta v4.117.0，尚未跟上。投稿說明與之後的原作 README 改稱 Mac 與 Windows 版皆為正式版。導讀依固定版本的原始碼與日文 README，並註明較新版本未經工坊核對；分享介紹只寫原始碼版本 4.125.0，不寫 Windows 狀態。使用邊界（只聽 127.0.0.1:4545、略過權限、複製設定檔、`git add -A` 與 `--no-verify`、未加密紀錄、未公證）在 `9f5f6b5a` 的 README 仍相同。
 - **台式英文抓蟲器**：之後的 3 個 commit 只改作者簡介、介紹頁導語，並刪除範例的「經作者校對」字樣；規則與 SKILL.md 未變。導讀與分享介紹都沒有引用被刪除的字樣；作者簡介只寫兩版共同的「自述有 17 年英語教學經驗」。
 
 2026-10-01 另有一件手動登錄作品 `aqua5230/usage`（目錄 `usage` 是 ken-kk 維護的 `kieiken/usage`，原作歸屬見其 `NOTICE.md`）。它不是 10-20 之後新加入的作品，本次未轉換。
@@ -33,6 +33,7 @@
 - **Project Hub：在一個畫面管理專案與 Claude Code／Codex**：MIT，第三方軟體見 THIRD_PARTY_NOTICES。
   - 供單人在自己的 Mac 使用：只監聽 `127.0.0.1:4545`，會檢查 Host 與 Origin，但沒有使用者登入。
   - 預設以略過權限確認的方式啟動 Claude Code，Codex 另略過沙箱；可在 `_hub/roles.yaml` 的 `permissions` 改成需確認。
+  - Git 專案的作業通常在 `Work/` 的工作副本進行，整合時才改主資料夾。作業位置選「在主資料夾作業」、專案原本沒有 Git，或副本建立失敗時，會直接在主資料夾工作（`hub/lib/git.js` 的 `prepare()`、`hub/server.js` 的 `workDir()`），所以導讀不保證一定有副本。
   - 工作副本會複製未納入 Git 的 `.env`、`.dev.vars`、`.npmrc` 與 `.claude/settings.local.json`。
   - 自動儲存先 `git add -A`，再以 `--no-verify` 提交。對話、交接與操作紀錄未加密留在本機。
   - Mac App 自行簽署、尚未公證。付費功能切換文件不代表已開放販售。AI 費用依各 CLI 方案。
