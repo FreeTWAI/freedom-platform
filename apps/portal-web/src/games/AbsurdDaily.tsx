@@ -260,7 +260,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
             setNotice('往右滑收鈔，往左滑退票券。也能用下方按鈕。');
     } }
     const l = live.current, remaining = Math.max(0, RULES.photoMs - (l.clock.elapsed - l.roundAt)), cashCard = cashDeck(seed)[Math.min(l.cash.index, 29)];
-    return <section ref={section} data-game-content className="fw-arcade-board" tabIndex={-1} onKeyDown={keyboard} aria-label={GAMES.find(g => g.id === game)!.title}>
+    return <section ref={section} data-game-content className="fw-arcade-board" tabIndex={0} onKeyDown={keyboard} aria-label={GAMES.find(g => g.id === game)!.title}>
     <div className="fw-arcade-toolbar"><button className="fw-arcade-secondary" onClick={onBack}>← 遊樂場</button><span className="fw-arcade-seed">同題 #{seed}</span><button className="fw-arcade-secondary" aria-pressed={sound} onClick={() => { soundRef.current = !sound; setSound(!sound); if (!sound)
         sfx(game); }}>聲音 {sound ? '開' : '關'}</button>{l.started && !l.paused && <button className="fw-arcade-secondary" onClick={setPaused}>暫停</button>}</div>
     <div className="fw-arcade-game-title"><div><h1>{GAMES.find(g => g.id === game)!.title}</h1><p>{game === 'photo' ? CLIENTS[l.client].title : game === 'stamp' ? documentTitle(Math.min(l.stamps.index, 11), l.stamps.practice) : '收鈔往右，票券往左'}</p></div><output className="fw-arcade-counter" aria-live="off">{game === 'photo' ? `${l.client + 1}/3 · ${Math.ceil(remaining / 1000)} 秒` : game === 'stamp' ? l.stamps.practice ? '練習中' : `${Math.min(l.stamps.index, 12)}/12` : `${l.cash.amount / 10000} / 100 萬`}</output></div>

@@ -445,6 +445,94 @@ test('native fullscreen enters on click and escape keeps the game mounted', asyn
   await expect(page.locator('[data-game-stage] canvas')).toHaveCount(1);
 });
 
+for (const mode of ['native','unsupported','rejected'] as const) {
+  test(`${mode} fullscreen re-entry returns to gameplay through real forward and reverse Tab`, async ({page}) => {
+    if (mode !== 'native') await page.addInitScript(mode => {
+      Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:mode==='rejected'});
+      if (mode === 'rejected') Element.prototype.requestFullscreen=async()=>{throw new DOMException('denied','NotAllowedError');};
+    },mode);
+    // Do not use openGame/enterNativeFullscreen: their explicit board.focus()
+    // would conceal the missing tab stop on the manual exit/re-entry path.
+    await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});
+    await page.goto('/play?game=cash&seed=42');
+    await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
+    await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
+    const board=page.locator('.fw-arcade-board'),dialog=page.getByRole('dialog',{name:'遊戲全螢幕'});
+    const exit=page.getByRole('button',{name:'退出全螢幕',exact:true});
+    const enter=page.getByRole('button',{name:'⛶ 全螢幕',exact:true});
+    const back=page.getByRole('button',{name:'← 遊樂場',exact:true});
+    const progress=page.locator('.fw-arcade-controls .fw-arcade-meta'),deck=cashDeck(42);
+    const canvas=page.locator('[data-game-stage] canvas');
+    await canvas.evaluate(el=>{(el as HTMLCanvasElement & {testIdentity?:boolean}).testIdentity=true;});
+    async function expectFullscreen() {
+      await expect(dialog).toBeVisible();
+      await expect(exit).toHaveAttribute('aria-disabled','false');
+      await expect(exit).toHaveAttribute('aria-pressed','true');
+      if (mode === 'native') {
+        await expect.poll(()=>dialog.evaluate(el=>document.fullscreenElement===el)).toBe(true);
+        await expect(dialog).not.toHaveClass(/fullscreen-game--viewport/);
+      } else {
+        await expect(dialog).toHaveClass(/fullscreen-game--viewport/);
+        await expect(dialog).toContainText('全視窗模式');
+        expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
+      }
+    }
+    async function classify(index:number) {
+      await expect(board).toBeFocused();
+      await page.clock.runFor(250);
+      await page.keyboard.press(deck[index].valid?'ArrowRight':'ArrowLeft');
+      await expect(progress).toContainText(`已分類 ${index+1} / 30 · 分錯 0 次`);
+    }
+    await page.getByRole('button',{name:'開始這一局',exact:true}).click();
+    await expectFullscreen();
+    await classify(0);
+    await page.keyboard.press('Shift+Tab');
+    await expect(exit).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
+    await expect(enter).toBeFocused();
+    await expect(enter).toHaveAttribute('aria-disabled','false');
+    await expect(progress).toContainText('已分類 1 / 30');
+
+    await page.keyboard.press('Enter');
+    await expectFullscreen();
+    await expect(exit).toBeFocused();
+    // A control must not classify a card; only Tab returning to the board
+    // restores game shortcuts, without a click or programmatic focus there.
+    await page.clock.runFor(250);
+    await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
+    await expect(progress).toContainText('已分類 1 / 30');
+    await page.keyboard.press('Tab');
+    await classify(1);
+    await page.keyboard.press('Tab');
+    await expect(back).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await classify(2);
+    // Both edges still wrap inside the fullscreen container.
+    await page.keyboard.press('Shift+Tab');
+    await expect(exit).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('button',{name:'收道具鈔 →',exact:true})).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(exit).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(dialog).toHaveCount(0);
+    await expect(enter).toBeFocused();
+    await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
+    expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
+    await expect(progress).toContainText('已分類 3 / 30');
+    await page.keyboard.press('Tab');
+    await classify(3);
+    await page.getByRole('button',{name:'暫停',exact:true}).click();
+    await page.getByRole('button',{name:'繼續這一局',exact:true}).click();
+    await expect(board).toBeFocused();
+    await expect(dialog).toHaveCount(0);
+    await expect(progress).toContainText('已分類 4 / 30 · 分錯 0 次');
+    await expect(canvas).toHaveCount(1);
+    expect(await canvas.evaluate(el=>(el as HTMLCanvasElement & {testIdentity?:boolean}).testIdentity)).toBe(true);
+  });
+}
+
 test('rejected fullscreen request falls back and restores keyboard access', async ({page}) => {
   await installCosmeticFilters(page);
   await page.addInitScript(() => {
