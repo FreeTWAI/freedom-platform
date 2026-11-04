@@ -1,9 +1,9 @@
 .event-calendar{display:grid;gap:.7rem;min-width:0}
 .event-calendar-heading{display:flex;justify-content:space-between;align-items:center;gap:.7rem;flex-wrap:wrap}
 .event-calendar-heading h2{margin:0;font-size:1.15rem}
-.event-calendar-nav{display:flex;align-items:center;gap:.5rem}
-.event-calendar-nav strong{min-width:7rem;text-align:center}
-.event-calendar-nav .btn{min-width:44px;min-height:44px;padding:0}
+.event-calendar-nav{display:flex;align-items:center;gap:.5rem;min-width:0;max-width:100%}
+.event-calendar-nav strong{width:7rem;min-width:0;text-align:center;overflow-wrap:anywhere}
+.event-calendar-nav .btn{flex:none;min-width:44px;min-height:44px;padding:0}
 .event-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;border:1px solid var(--line);background:var(--line);border-radius:var(--radius);overflow:hidden}
 .event-calendar-weekday,.event-calendar-day,.event-calendar-blank{background:var(--bg-elev)}
 .event-calendar-weekday{text-align:center;padding:.35rem;font-size:.8rem;color:var(--muted)}

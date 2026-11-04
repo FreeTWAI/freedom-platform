@@ -227,15 +227,22 @@ for(const width of [320,390])eventTest(`prize keyboard, errors, removal and enla
   const base=await page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).fontSize));
   for(const scale of [1,2]){
     await page.evaluate(size=>{document.documentElement.style.fontSize=`${size}px`;},base*scale);
+    // Retain the actual enlarged layout before any failing geometry assertion.
+    const layout=await page.evaluate(()=>({rootFont:getComputedStyle(document.documentElement).fontSize,viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,
+      overflow:[...document.querySelectorAll('body *')].flatMap(node=>{const r=node.getBoundingClientRect();if(!node.getClientRects().length||!r.width||r.left>=0&&r.right<=innerWidth+1)return [];const css=getComputedStyle(node);return [{tag:node.tagName,className:node.getAttribute('class'),left:r.left,right:r.right,width:r.width,minWidth:css.minWidth,fontSize:css.fontSize,gridTemplateColumns:css.gridTemplateColumns}];})}));
+    await info.attach(`prize-layout-${width}-${scale}x`,{body:JSON.stringify(layout),contentType:'application/json'});
+    await page.evaluate(()=>window.scrollTo(0,0));
+    await page.screenshot({path:info.outputPath(`prize-fields-${width}-${scale}x.png`),fullPage:true});
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewport);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    const calendar=await page.locator('.event-calendar-nav').evaluate(node=>[node,...node.querySelectorAll('button,strong')].map(item=>{const r=item.getBoundingClientRect();return {tag:item.tagName,left:r.left,right:r.right,width:r.width,height:r.height};}));
+    for(const item of calendar){expect(item.left).toBeGreaterThanOrEqual(0);expect(item.right).toBeLessThanOrEqual(width+1);if(item.tag==='BUTTON'){expect(item.width).toBeGreaterThanOrEqual(44);expect(item.height).toBeGreaterThanOrEqual(44);}}
     const geometry=await form.locator('.event-prize-editor').evaluate(node=>({
       targets:[...node.querySelectorAll('button,input:not([type="radio"]),textarea,label.event-prize-icon-option')].map(item=>{const r=item.getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right};}),
       fonts:[...node.querySelectorAll('input:not([type="radio"]),textarea')].map(item=>parseFloat(getComputedStyle(item).fontSize)),
     }));
     for(const target of geometry.targets){expect(target.width).toBeGreaterThanOrEqual(44);expect(target.height).toBeGreaterThanOrEqual(44);expect(target.left).toBeGreaterThanOrEqual(0);expect(target.right).toBeLessThanOrEqual(width+1);}
     for(const size of geometry.fonts)expect(size).toBeGreaterThanOrEqual(16*scale);
-    await page.evaluate(()=>window.scrollTo(0,0));
-    await page.screenshot({path:info.outputPath(`prize-fields-${width}-${scale}x.png`),fullPage:true});
   }
   await page.evaluate(()=>document.documentElement.style.removeProperty('font-size'));
   await field.getByRole('button',{name:'移除獎品 1',exact:true}).click();await field.getByRole('button',{name:'確認移除',exact:true}).click();
