@@ -68,7 +68,10 @@ export function NotificationBell({client,onNavigate,preferencesEnabled=false}:{c
     alive.current=true;void refresh();const update=(event:Event)=>void refresh(event.type===INBOX_UPDATED||event.type==='freedom-notification-preferences-updated');
     const events=['focus','online',INBOX_UPDATED,'freedom-notification-preferences-updated'];
     for(const event of events)window.addEventListener(event,update);
-    return()=>{alive.current=false;generation.current++;for(const event of events)window.removeEventListener(event,update);};
+    // A PWA may resume without focus. Do not join a preview started before suspension.
+    const visible=()=>{if(document.visibilityState!=='visible')return;if(navigator.onLine)void refresh(true);else readScope.current.epoch++;};
+    document.addEventListener('visibilitychange',visible);
+    return()=>{alive.current=false;generation.current++;for(const event of events)window.removeEventListener(event,update);document.removeEventListener('visibilitychange',visible);};
   },[refresh]);
   useEffect(()=>{
     if(!open)return;
