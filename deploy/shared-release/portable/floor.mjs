@@ -224,14 +224,18 @@ export function replayReleaseFloor(chain, { isAncestor }) {
   return { seed, state, head: chain.at(-1) };
 }
 
-function gitAncestor(sourceRoot, before, after) {
+const ancestry = new Map(), ANCESTRY_LIMIT = 4096;
+export function gitAncestor(sourceRoot, before, after) {
   check(isSha(before) && isSha(after), 'release_floor_source_invalid');
+  const cacheKey = JSON.stringify([sourceRoot, before, after]);
+  if (ancestry.has(cacheKey)) return true;
   try {
     execFileSync('/usr/bin/git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
       '-c', 'protocol.allow=never', 'merge-base', '--is-ancestor', before, after], { cwd: sourceRoot, timeout: 15000,
       maxBuffer: 1024, stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1',
         GIT_CONFIG_GLOBAL: '/dev/null', GIT_NO_REPLACE_OBJECTS: '1', GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' } });
-    return true;
+    if (ancestry.size >= ANCESTRY_LIMIT) ancestry.delete(ancestry.keys().next().value);
+    ancestry.set(cacheKey, true); return true;
   } catch { return false; }
 }
 
@@ -310,6 +314,7 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
   };
   return Object.freeze({
     state() { return structuredClone(current.state); },
+    head() { return current.head.sha256; },
     handoffRecoveryState(evidence) {
       const pending = current.state.pending;
       let request;
