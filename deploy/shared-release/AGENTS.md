@@ -1,6 +1,6 @@
 # Shared release Actions entry
 
-This module owns manual release and scheduled backup entries, GitHub admission,
+This module owns automatic/manual release and scheduled backup entries, GitHub admission,
 the reviewed operator image, ordered calls and public receipts. It does not replace the database migration runner,
 consistent database/object backup, isolated restore or retained rollback floor.
 
@@ -19,6 +19,28 @@ with their current repository write authority checked again. Requests select an
 exact merged-main commit and staging-next or next. Exact-source successful main
 Verify and CodeQL runs are required. The workflow/controller comes from the
 main workflow revision, independently of the selected application revision.
+
+事故停止開關是 repository variable `AUTO_RELEASE_ENABLED`：只有精確值 `true` 才開啟
+`workflow_run` 自動准入，未設定或任何其他值都關閉；手動 `workflow_dispatch` 不受影響。
+各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行，不得以自動開關繞過。
+
+Approved main pushes automatically release after both exact-source main checks
+pass: staging-next first, then next using the same source and installed image.
+Authenticate workflow_run notifications against GitHub, not PR artifacts. Keep
+the current operator identity checks. Production requires the completed staging
+job and hashed receipt in the same run/attempt; the enclosing run is still active.
+Queue releases and backups without cancelling mutations. Duplicate/older source
+notifications cannot replay or roll back deployments. Failed/uncertain latest
+deployments stop automation for explicit readback/reconciliation.
+只有最新狀態為 `failure` 且 hosted handoff 成功證據精確綁定原 run／attempt、環境與 SHA，
+才可恢復後續版本的自動發布；保留原 failure，不寫 Deployment。相同 SHA 的 staging
+對帳不能代替完整通過的 staging 發布收據；其他未知狀態仍拒絕。
+
+The installed legacy migration frontier is a minimum. After exact source/tree
+verification, derive the complete candidate frontier from approved source while
+preserving SQL policy, known gap 22 and immutable applied-ledger checks. Routine
+app releases do not require secret/config-hash edits. Changing operator code
+still requires building, independently pulling and installing its reviewed image.
 
 Ordinary releases use the explicit independent contract: preflight, migration,
 deploy, exact-source health and handoff. No-pending-SQL releases verify read-only

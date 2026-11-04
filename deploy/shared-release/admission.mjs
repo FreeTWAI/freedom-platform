@@ -25,18 +25,26 @@ export const releaseFailureCode = error => [error?.code, error?.message].find(is
 export const isSha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export const isDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const positiveId = value => Number.isSafeInteger(value) && value > 0;
+export const sameActor = (actual, expected) => Object.hasOwn(OPERATORS, actual?.login ?? '')
+  && actual.id === OPERATORS[actual.login] && actual.login === expected?.login && actual.id === expected.id;
 const workflowPath = '.github/workflows/shared-release.yml';
 
 export function requestFromEnvironment(env) {
+  const automatic = env.GITHUB_EVENT_NAME === 'workflow_run';
   requireRelease(env.GITHUB_REPOSITORY === REPOSITORY
     && env.GITHUB_REPOSITORY_ID === String(REPOSITORY_ID)
-    && env.GITHUB_EVENT_NAME === 'workflow_dispatch'
+    && (env.GITHUB_EVENT_NAME === 'workflow_dispatch' || automatic)
     && env.GITHUB_REF === 'refs/heads/main'
     && env.GITHUB_WORKFLOW_REF === `${REPOSITORY}/${workflowPath}@refs/heads/main`
     && isSha(env.CONTROLLER_SHA), 'release_workflow_identity_invalid');
   requireRelease(isSha(env.RELEASE_SHA), 'release_exact_sha_required');
   requireRelease(['staging-next', 'next'].includes(env.RELEASE_TARGET), 'release_target_invalid');
   requireRelease(['plan', 'check', 'deploy', 'handoff'].includes(env.RELEASE_MODE), 'release_mode_invalid');
+  if (automatic) requireRelease(env.RELEASE_MODE === 'deploy'
+    && ['RELEASE_TRIGGER_RUN_ID', 'RELEASE_TRIGGER_RUN_ATTEMPT'].every(key =>
+      /^[1-9][0-9]{0,15}$/.test(env[key] ?? '') && positiveId(Number(env[key])))
+    && !env.RELEASE_RECOVER_BACKUP_RUN_ID && !env.RELEASE_RECOVER_RELEASE_RUN_ID,
+  'release_automatic_request_invalid');
   for (const key of ['GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_ACTOR_ID']) {
     requireRelease(/^[1-9][0-9]{0,15}$/.test(env[key] ?? '')
       && positiveId(Number(env[key])), 'release_run_identity_invalid');
@@ -50,7 +58,9 @@ export function requestFromEnvironment(env) {
     ? !recovery && /^[1-9][0-9]{0,15}$/.test(handoff ?? '') && positiveId(Number(handoff))
       && String(Number(handoff)) === handoff && handoff !== env.GITHUB_RUN_ID
     : !handoff, 'release_handoff_recovery_request_invalid');
-  return { ...(recovery ? { recoverRunId: Number(recovery) } : {}),
+  return { ...(automatic ? { automatic: { triggerRunId: Number(env.RELEASE_TRIGGER_RUN_ID),
+    triggerRunAttempt: Number(env.RELEASE_TRIGGER_RUN_ATTEMPT) } } : {}),
+    ...(recovery ? { recoverRunId: Number(recovery) } : {}),
     ...(handoff ? { recoverReleaseRunId: Number(handoff) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
     repositoryId: REPOSITORY_ID, sourceSha: env.RELEASE_SHA, target: env.RELEASE_TARGET,
     mode: env.RELEASE_MODE, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,
@@ -185,6 +195,11 @@ export async function requireStaging(api, admission, installation) {
       .sort((a, b) => b.id - a.id)[0];
   };
   const deployment = await latestDeployment(), binding = deployment?.payload;
+  const automatic = binding?.automatic !== undefined;
+  if (automatic) requireRelease(positiveId(binding.automatic?.triggerRunId) && positiveId(binding.automatic?.triggerRunAttempt)
+    && binding.runId === admission.runId && binding.runAttempt === admission.runAttempt
+    && binding.controllerSha === admission.controllerSha && admission.automatic?.triggerRunId === binding.automatic.triggerRunId
+    && admission.automatic?.triggerRunAttempt === binding.automatic.triggerRunAttempt, 'release_staging_run_invalid');
   requireRelease(positiveId(deployment?.id) && binding?.format === 'freedom.shared-release/v1'
     && binding.operatorImage === installation.image && isSha(binding.controllerSha)
     && isDigest(binding.configSha256) && positiveId(binding.runId) && positiveId(binding.runAttempt), 'release_staging_evidence_missing');
@@ -197,40 +212,22 @@ export async function requireStaging(api, admission, installation) {
   await successfulStatus();
   const workflow = await api(`${prefix}/actions/workflows/shared-release.yml`);
   requireRelease(positiveId(workflow.id) && workflow.path === workflowPath && workflow.state === 'active', 'release_staging_workflow_invalid');
-  const sameActor = (actual, expected) => Object.hasOwn(OPERATORS, actual?.login ?? '')
-    && actual.id === OPERATORS[actual.login] && actual.login === expected?.login && actual.id === expected.id;
   const checkRun = run => {
     requireRelease(run?.id === binding.runId && run.run_attempt === binding.runAttempt
-      && run.workflow_id === workflow.id && run.path === workflowPath && run.event === 'workflow_dispatch'
+      && run.workflow_id === workflow.id && run.path === workflowPath && run.event === (automatic ? 'workflow_run' : 'workflow_dispatch')
       && run.repository?.id === REPOSITORY_ID && run.head_repository?.id === REPOSITORY_ID
       && run.head_branch === 'main' && run.head_sha === binding.controllerSha
-      && run.status === 'completed' && run.conclusion === 'success'
+      && (automatic ? run.status === 'in_progress' && run.conclusion === null
+        : run.status === 'completed' && run.conclusion === 'success')
       && sameActor(run.actor, binding.actor) && sameActor(run.triggering_actor, binding.triggeredBy), 'release_staging_run_invalid');
   };
   const run = await api(`${prefix}/actions/runs/${binding.runId}`); checkRun(run);
   const comparison = await api(`${prefix}/compare/${binding.controllerSha}...${admission.mainShaObserved}`);
   requireRelease(['ahead', 'identical'].includes(comparison.status)
     && comparison.merge_base_commit?.sha === binding.controllerSha, 'release_staging_controller_untrusted');
-  const jobs = await api(`${prefix}/actions/runs/${binding.runId}/attempts/${binding.runAttempt}/jobs?per_page=100`);
-  requireRelease(jobs.total_count === 2 && Array.isArray(jobs.jobs) && jobs.jobs.length === 2
-    && ['admission', 'deploy'].every(name => jobs.jobs.filter(job => job.name === name && job.run_id === binding.runId
-      && job.run_attempt === binding.runAttempt && job.head_sha === binding.controllerSha
-      && job.status === 'completed' && job.conclusion === 'success').length === 1), 'release_staging_jobs_invalid');
-  const deployJob = jobs.jobs.find(job => job.name === 'deploy');
-  requireRelease(Array.isArray(deployJob.steps) && ['Execute the installed environment operator', 'Save public release receipt']
-    .every(name => deployJob.steps.filter(step => step.name === name && step.status === 'completed'
-      && step.conclusion === 'success').length === 1), 'release_staging_jobs_invalid');
-  const name = `release-result-${binding.runId}-${binding.runAttempt}`;
-  const artifacts = await api(`${prefix}/actions/runs/${binding.runId}/artifacts?name=${name}&per_page=100`);
-  requireRelease(artifacts.total_count === 1 && Array.isArray(artifacts.artifacts) && artifacts.artifacts.length === 1,
-    'release_staging_artifact_invalid');
-  const artifact = artifacts.artifacts[0], owner = artifact.workflow_run;
-  requireRelease(positiveId(artifact.id) && artifact.name === name && artifact.expired === false
-    && /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') && owner?.id === binding.runId
-    && owner.repository_id === REPOSITORY_ID && owner.head_repository_id === REPOSITORY_ID
-    && owner.head_sha === binding.controllerSha && owner.head_branch === 'main'
-    && typeof api.readArtifact === 'function', 'release_staging_artifact_invalid');
-  const receipt = await api.readArtifact(artifact);
+  const deployJob = await requireSuccessfulReleaseJobs(api, run, automatic, 'release_staging_jobs_invalid');
+  const name = `release-result-${binding.runId}-${binding.runAttempt}${automatic ? '-staging-next' : ''}`;
+  const { artifact, receipt } = await readReleaseArtifact(api, run, name, 'release_staging_artifact_invalid');
   requireRelease(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'passed'
     && (receipt.releaseKind === undefined || receipt.releaseKind === 'independent')
     && (receipt.releaseKind === 'independent'
@@ -242,8 +239,14 @@ export async function requireStaging(api, admission, installation) {
     && receipt.runId === binding.runId && receipt.runAttempt === binding.runAttempt
     && receipt.deploymentId === deployment.id && receipt.operatorImage === installation.image
     && receipt.configSha256 === binding.configSha256 && sameActor(receipt.original, run.actor)
+    && (!automatic || receipt.releaseKind === 'independent'
+      && receipt.automatic?.triggerRunId === binding.automatic.triggerRunId
+      && receipt.automatic?.triggerRunAttempt === binding.automatic.triggerRunAttempt)
     && sameActor(receipt.triggeredBy, run.triggering_actor), 'release_staging_receipt_invalid');
-  const start = Date.parse(run.run_started_at), completed = Date.parse(receipt.completedAt), end = Date.parse(run.updated_at);
+  // An automatic run is still in progress while production executes. Its
+  // completed staging job bounds the receipt; overall run success is not forged.
+  const start = Date.parse(run.run_started_at), completed = Date.parse(receipt.completedAt),
+    end = Date.parse(automatic ? deployJob.completed_at : run.updated_at);
   let previous = Date.parse(receipt.admittedAt);
   requireRelease(Number.isFinite(start) && Number.isFinite(previous) && Number.isFinite(completed) && Number.isFinite(end)
     && previous >= start && completed >= previous && completed <= end && end <= Date.now() + 60_000
@@ -261,4 +264,36 @@ export async function requireStaging(api, admission, installation) {
   await successfulStatus();
   return Object.freeze({ deploymentId: deployment.id, runId: binding.runId, runAttempt: binding.runAttempt,
     controllerSha: binding.controllerSha, artifactId: artifact.id, artifactDigest: artifact.digest });
+}
+
+// Shared hosted evidence checks: handoff reconciliation cannot weaken the
+// artifact ownership or completed-job checks used by production admission.
+export async function readReleaseArtifact(api, run, name, code) {
+  const artifacts = await api(`/repos/${REPOSITORY}/actions/runs/${run.id}/artifacts?name=${name}&per_page=100`);
+  requireRelease(artifacts.total_count === 1 && Array.isArray(artifacts.artifacts) && artifacts.artifacts.length === 1, code);
+  const artifact = artifacts.artifacts[0], owner = artifact.workflow_run;
+  requireRelease(positiveId(artifact.id) && artifact.name === name && artifact.expired === false
+    && /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') && owner?.id === run.id
+    && owner.repository_id === REPOSITORY_ID && owner.head_repository_id === REPOSITORY_ID
+    && owner.head_sha === run.head_sha && owner.head_branch === 'main'
+    && typeof api.readArtifact === 'function', code);
+  return { artifact, receipt: await api.readArtifact(artifact) };
+}
+
+export async function requireSuccessfulReleaseJobs(api, run, automatic, code) {
+  const jobs = await api(`/repos/${REPOSITORY}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`);
+  requireRelease(Array.isArray(jobs.jobs) && jobs.total_count === jobs.jobs.length
+    && (jobs.jobs.length === 2 && !automatic || jobs.jobs.length === 3
+      && jobs.jobs.filter(job => job.name === 'production' && job.run_id === run.id
+        && job.run_attempt === run.run_attempt && job.head_sha === run.head_sha
+        && (automatic ? job.status === 'in_progress' && job.conclusion === null
+          : job.status === 'completed' && job.conclusion === 'skipped')).length === 1)
+    && ['admission', 'deploy'].every(name => jobs.jobs.filter(job => job.name === name && job.run_id === run.id
+      && job.run_attempt === run.run_attempt && job.head_sha === run.head_sha
+      && job.status === 'completed' && job.conclusion === 'success').length === 1), code);
+  const deployJob = jobs.jobs.find(job => job.name === 'deploy');
+  requireRelease(Array.isArray(deployJob.steps) && ['Execute the installed environment operator', 'Save public release receipt']
+    .every(name => deployJob.steps.filter(step => step.name === name && step.status === 'completed'
+      && step.conclusion === 'success').length === 1), code);
+  return deployJob;
 }
