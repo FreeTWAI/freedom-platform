@@ -383,12 +383,13 @@ test('comment creation is ACK-driven and first-page reconciliation retains each 
  h.toggle();h.toggle();h.requests[2].resolve({items:[commentAvatar('self',null),commentAvatar('other',otherAvatar)],next_cursor:null});await tick();
  assert.deepEqual(Object.fromEntries(h.avatars().map(a=>[a.nickname,a.avatarUrl])),{'Author self':null,'Author other':otherAvatar});
 });
-test('comment edit response carries the acknowledged author avatar',async()=>{
+test('comment edit receipt preserves the current avatar until a fresh authorized read',async()=>{
  const h=commentAvatarHarness();h.requests[0].resolve({items:[commentAvatar('self',selfAvatar)],next_cursor:null});await tick();
  h.find(n=>n.type==='button'&&n.props.children==='編輯留言').props.onClick();
  h.find(n=>n.type==='textarea'&&n.props['aria-label']==='編輯留言').props.onChange({target:{value:'edited'}});
  h.find(n=>n.type==='form'&&n.props.className==='stack').props.onSubmit({preventDefault(){}});
- h.requests[1].resolve({...commentAvatar('self',selfAvatar.replace('v=2','v=3'),2),body:'edited'});await tick();assert.equal(h.avatars()[0].avatarUrl,selfAvatar.replace('v=2','v=3'));
+ h.requests[1].resolve({...commentAvatar('self',selfAvatar.replace('v=2','v=3'),2),body:'edited',edited_at:'2026-11-04T01:00:00Z'});await tick();assert.equal(h.avatars()[0].avatarUrl,selfAvatar);
+ h.toggle();h.toggle();h.requests[2].resolve({items:[{...commentAvatar('self',selfAvatar.replace('v=2','v=3'),2),body:'edited',edited_at:'2026-11-04T01:00:00Z'}],next_cursor:null});await tick();assert.equal(h.avatars()[0].avatarUrl,selfAvatar.replace('v=2','v=3'));
 });
 for(const operation of ['read','create'] as const)for(const change of ['generation','unmount'] as const)test(`late comment ${operation} cannot install avatar after ${change}`,async()=>{
  const h=commentAvatarHarness();if(operation==='create')h.send();
