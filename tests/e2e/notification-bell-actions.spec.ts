@@ -79,5 +79,5 @@ test('clicking an older notification opens its friend response beyond the first 
   const friends=page.locator('.friends-panel');
   await expect(friends.getByRole('button',{name:'收到的邀請',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(friends.getByRole('button',{name:'接受邀請',exact:true})).toHaveCount(20);
-  await expect(friends.getByText('共 102 位待回覆的夥伴',{exact:true})).toBeVisible();
+  await expect(friends.getByText('共 102 則邀請等你回覆',{exact:true})).toBeVisible();
 });
