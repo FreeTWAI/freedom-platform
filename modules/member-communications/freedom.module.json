@@ -87,6 +87,8 @@
     "apps/portal-web/src/modules/ChatWorkspace.tsx",
     "apps/portal-web/src/modules/ChatSearch.tsx",
     "tests/runtime/chat-content.test.ts",
+    "tests/runtime/chat-sticker-image-retry.test.ts",
+    "tests/e2e/chat-sticker-image-retry.spec.ts",
     "migrations/182_commerce_order_notifications.sql",
     "modules/member-communications/**"
   ],

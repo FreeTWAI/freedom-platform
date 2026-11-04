@@ -23,17 +23,17 @@ export const sameChatPayload=(a:MessageContentInput,b:MessageContentInput)=>a.bo
 export function quoteMessage(message:{message_id:string;sender_ref:string;body:string}&MessageContent,sender_name:string):MessageReply{
   return {message_id:message.message_id,sender_ref:message.sender_ref,sender_name,body:[...message.body].slice(0,160).join(''),...(message.sticker?{sticker:message.sticker}:{})};
 }
-export function ChatSticker({id,thumbnail=false}:{id:string;thumbnail?:boolean}){
+export function ChatSticker({id,thumbnail=false,retryable=false}:{id:string;thumbnail?:boolean;retryable?:boolean}){
   const sticker=findChatSticker(id),[broken,setBroken]=useState(false);
   useEffect(()=>setBroken(false),[id,thumbnail]);
   if(!sticker)return null;
-  if(broken)return <span className="messages-body">[貼圖] {sticker.label}</span>;
+  if(broken)return <span className="messages-body">[貼圖] {sticker.label}{retryable&&<button className="btn btn-ghost" type="button" onClick={()=>setBroken(false)}>重試貼圖</button>}</span>;
   return <span className="chat-sticker" role="img" aria-label={`貼圖：${sticker.label}`} data-sticker-id={id}>
     {'image' in sticker?<img className="chat-sticker-image" src={thumbnail?sticker.thumbnail:sticker.image} width={thumbnail?144:512} height={thumbnail?144:512} loading="lazy" alt="" decoding="async" draggable={false} onError={()=>setBroken(true)}/>:<img src={CHAT_STICKER_ATLAS} alt="" decoding="async" draggable={false} onError={()=>setBroken(true)} style={{left:`-${sticker.column*100}%`,top:`-${sticker.row*100}%`}}/>}
   </span>;
 }
 export function ChatBody({message}:{message:{body:string}&MessageContent}){
-  return message.sticker?<ChatSticker id={message.sticker.id}/>:<p className="messages-body">{message.body}</p>;
+  return message.sticker?<ChatSticker id={message.sticker.id} retryable/>:<p className="messages-body">{message.body}</p>;
 }
 export function ChatQuote({reply}:{reply:MessageReply}){
   return <blockquote className="chat-quote" aria-label="回覆的訊息" data-reply-to={reply.message_id}>
