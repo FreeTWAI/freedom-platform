@@ -49,9 +49,16 @@ test('member submits an original-author claim and an admin verification changes 
     const card = await videoCard(page);
     await card.getByRole('button', {name: /^(閱讀|預覽)技能書$/}).click();
     const dialog = page.getByRole('dialog', {name: '影片自動化工具包', exact: true});
+    await dialog.getByText('作者與共同開發（進階）', {exact: true}).click();
     await expect(dialog.getByRole('heading', {name: '認領這件原作', exact: true})).toBeVisible();
     await dialog.getByRole('textbox', {name: '聲明', exact: true}).fill(STATEMENT);
     await dialog.getByLabel('證據網址（建議提供）').fill(EVIDENCE);
+    const advanced = dialog.locator('.skill-intro-advanced');
+    await advanced.locator('summary').click();
+    await expect(advanced).not.toHaveAttribute('open');
+    await advanced.locator('summary').click();
+    await expect(dialog.getByRole('textbox', {name: '聲明', exact: true})).toHaveValue(STATEMENT);
+    await expect(dialog.getByLabel('證據網址（建議提供）')).toHaveValue(EVIDENCE);
     await dialog.getByRole('checkbox', {name: '我聲明這是本人提出的角色與說明，並了解審核完成前不會顯示為已核實。'}).check();
     await dialog.getByRole('button', {name: '送出認領', exact: true}).click();
     await expect(dialog.getByText('已送出認領，等待審核。審核完成前不會顯示為已核實。')).toBeVisible();

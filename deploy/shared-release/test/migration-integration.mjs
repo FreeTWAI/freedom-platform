@@ -10,7 +10,7 @@ import { readMigrationSources } from '../../../packages/db/migration-files.mjs';
 import { runMigrationPlan } from '../../../packages/db/migration-runner.mjs';
 import { LEGACY_MIGRATIONS } from '../../../packages/db/migration-plan.mjs';
 import { observeBackupControl } from '../portable/backup.mjs';
-import { preparePortableMigration, runPortableMigration, observeMigrationOutcome, verifyUnchangedSchema } from '../portable/migration.mjs';
+import { preparePortableMigration, runPortableMigration, observeMigrationOutcome, verifyUnchangedSchema, sourceMigrationProfile } from '../portable/migration.mjs';
 import { runCanonicalSql } from '../portable/canonical-sql.mjs';
 import { acquireReleaseLease } from '../portable/lease.mjs';
 import { deriveCandidateContract } from '../portable/candidate-contract.mjs';
@@ -52,15 +52,18 @@ INSERT INTO shared_release_fixture VALUES(1);
     await pool.query(`GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${backup};
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ${backup};`);
     const beforeLedger = (await pool.query('SELECT name,sha256 FROM schema_migrations ORDER BY name')).rows;
+    const installedProfile = { ...profile, last: 189 };
+    const candidateProfile = sourceMigrationProfile(source, installedProfile);
+    assert.equal(candidateProfile.last, last + 1); assert.equal(installedProfile.last, 189);
     const prepare = ledger => preparePortableMigration({ sourceRoot: source, sourceCommit,
-      profile: { ...profile, last: last + 1 }, installationParent: host, beforeLedger: ledger });
+      profile: candidateProfile, installationParent: host, beforeLedger: ledger });
     const plan = prepare(beforeLedger);
     // Exercise the actual candidate derivation against the admitted source;
     // preserve the independently installed live mode, not the empty DB defaults.
     await pool.query('BEGIN'); await runCanonicalSql(pool, plan.canonical, '20-runtime-grants.psql', { runtime, migrator }); await pool.query('COMMIT');
     const expected = await deriveCandidateContract({ sourceRoot: source, sourceSha: sourceCommit,
       sourceTree: git(source, ['rev-parse', 'HEAD^{tree}']), beforeLedger,
-      profile: { ...profile, last: last + 1 }, materialPolicySha256: (await observeBackupControl(pool)).materialPolicySha256,
+      profile: candidateProfile, materialPolicySha256: (await observeBackupControl(pool)).materialPolicySha256,
       workRoot: root, binDirectory: '/unused', signal: new AbortController().signal },
     { openDatabase: () => openCluster('migration-candidate') });
     assert.deepEqual(expected.materialPolicyAdditions.find(row => row.purpose === 'member.profile-cover'),
