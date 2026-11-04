@@ -15514,8 +15514,8 @@
     },
     {
       "path": "docs/development/repository-guidance-index.json",
-      "bytes": 79541,
-      "sha256": "cdfa3ba3dc0c8e77c05de553ecabe6f1f3aa902d4f0bdf73e43264d1a5ee7e92"
+      "bytes": 79560,
+      "sha256": "16af2f38bbee651df60ea33be0482c72f47fd2b4cd8dcb32aa42ed9653c896ba"
     },
     {
       "path": "docs/development/repository-integration.md",
@@ -20869,8 +20869,8 @@
     },
     {
       "path": "modules/community/community-author-skills.ts",
-      "bytes": 79381,
-      "sha256": "50a3acf43332f23e35f5df38eedf8eac86db606230d4f1903a5eb95e95433143"
+      "bytes": 79613,
+      "sha256": "4e7275e3ad245f5433c56cb0b7bccb40335aef0496d3f865668633210af84893"
     },
     {
       "path": "modules/community/content-relations.ts",
