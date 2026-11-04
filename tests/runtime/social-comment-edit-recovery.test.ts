@@ -264,3 +264,35 @@ test('pagination preserves its exact cursor while projecting the edit delta on c
  await h.answer(1,page({...h.comment,liked:true,like_count:6},'final cursor'));assert(h.requests[1].path.endsWith('?cursor=next%20%2F%3F'));assert(h.container.textContent.includes('retained edit'));assert.equal(h.like().getAttribute('aria-label'),'留言已讚 · 6');
  h.click(h.byText('載入更多留言')!);assert(h.requests[3].path.endsWith('?cursor=final%20cursor'));await h.answer(3,{items:[],next_cursor:null});
 });
+function comments26(h:ReturnType<typeof fixture>){return Array.from({length:26},(_,i)=>({...h.comment,comment_id:`20000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`,body:`comment ${i+1}`,created_at:`2026-11-04T00:00:${String(i).padStart(2,'0')}.000000Z`}));}
+async function editLast(t:TestContext){const h=fixture(t),rows=comments26(h);await h.answer(0,{items:rows,next_cursor:null});const buttons=descendants(h.container).filter(n=>n.nodeName==='BUTTON'&&n.textContent==='編輯留言');h.click(buttons[25]);h.change(editInput(h)!,'last row edited');h.click(h.toggle());h.click(h.toggle());save(h);return {h,rows,saved:{...rows[25],body:'last row edited',revision:2,edited_at:'2026-11-04T01:00:00Z'}};}
+test('refreshing the first 24 of 26 retains a confirmed edit beyond the partial page and its cursor',async t=>{
+ const {h,rows,saved}=await editLast(t);await h.answer(2,saved);await h.answer(1,{items:rows.slice(0,24),next_cursor:'opaque next cursor'});
+ const articles=()=>descendants(h.container).filter(n=>n.nodeName==='ARTICLE');assert.equal(articles().length,25);assert(h.container.textContent.includes('last row edited'));
+ h.click(h.byText('載入更多留言')!);assert(h.requests[3].path.endsWith('?cursor=opaque%20next%20cursor'));await h.answer(3,{items:[rows[24],saved],next_cursor:null});assert.equal(articles().length,26);assert.equal(Boolean(h.byText('載入更多留言')),false);
+});
+test('a partial first page still removes an edited row missing from the already covered time range',async t=>{
+ const h=await begin(t),later={...h.comment,comment_id:'20000000-0000-4000-8000-000000000002',body:'later row',created_at:'2026-11-04T00:00:01.000000Z'};
+ h.click(h.toggle());h.click(h.toggle());save(h);await h.answer(2,ack(h));await h.answer(1,{items:[later],next_cursor:'more'});assert.equal(h.container.textContent.includes('retained edit'),false);assert(h.container.textContent.includes('later row'));
+});
+for(const [label,items,cursor] of [['complete','first',null],['empty','empty','more']] as const)test(`${label} first page does not retain an omitted edited row`,async t=>{
+ const {h,rows,saved}=await editLast(t);await h.answer(2,saved);await h.answer(1,{items:items==='first'?rows.slice(0,24):[],next_cursor:cursor});assert.equal(h.container.textContent.includes('last row edited'),false);
+});
+for(const [time,expected] of [['2026-11-04T00:00:00.000Z',true],['2026-11-04T00:00:00.000001Z',false]] as const)test(`partial-page boundary retains exact timestamp precision and ID order ${time}`,async t=>{
+ const h=fixture(t),earlier={...h.comment,comment_id:'20000000-0000-4000-8000-000000000000',body:'boundary',created_at:time};await h.answer(0,page(h.comment));h.click(h.byText('編輯留言')!);h.change(editInput(h)!,'retained edit');h.click(h.toggle());h.click(h.toggle());save(h);await h.answer(2,ack(h));await h.answer(1,{items:[earlier],next_cursor:'opaque'});assert.equal(h.container.textContent.includes('retained edit'),expected);
+});
+test('a historical receipt cannot retain an unchanged newer row outside a partial first page',async t=>{
+ const {h,rows,saved}=await editLast(t);await h.reject(2);await h.answer(1,{items:[...rows.slice(0,25),{...saved,body:'newer last row',revision:3}],next_cursor:null});save(h);h.click(h.toggle());h.click(h.toggle());await h.answer(3,saved);await h.answer(4,{items:rows.slice(0,24),next_cursor:'more'});assert.equal(h.container.textContent.includes('newer last row'),false);assert.equal(h.container.textContent.includes('last row edited'),false);
+});
+test('an off-page retained edit preserves a later like ACK instead of replaying its old reaction',async t=>{
+ const {h,rows,saved}=await editLast(t);await h.answer(2,saved);
+ const last=descendants(h.container).filter(n=>n.nodeName==='ARTICLE').at(-1)!;const like=descendants(last).find(n=>n.nodeName==='BUTTON'&&/^留言(?:已讚|讚) ·/.test(n.getAttribute('aria-label')??''))!;
+ h.click(like);await h.answer(3,{liked:true,like_count:1});await h.answer(1,{items:rows.slice(0,24),next_cursor:'more'});
+ const retained=descendants(h.container).filter(n=>n.nodeName==='ARTICLE').find(n=>n.textContent.includes('last row edited'))!;assert(retained);assert(descendants(retained).some(n=>n.getAttribute('aria-label')==='留言已讚 · 1'));
+});
+for(const order of ['delete-first','read-first'] as const)test(`off-page edit cannot resurrect after ${order} overlapping deletion`,async t=>{
+ const {h,rows,saved}=await editLast(t);await h.answer(2,saved);const last=()=>descendants(h.container).filter(n=>n.nodeName==='ARTICLE').at(-1)!;
+ h.click(descendants(last()).find(n=>n.nodeName==='BUTTON'&&n.textContent==='刪除留言')!);h.click(descendants(last()).find(n=>n.nodeName==='BUTTON'&&n.textContent==='確定刪除留言')!);assert.equal(h.requests[3].method,'DELETE');
+ await React.act(async()=>{const read=()=>h.requests[1].resolve({items:rows.slice(0,24),next_cursor:'more'}),remove=()=>h.requests[3].resolve({});if(order==='delete-first'){remove();read();}else{read();remove();}await new Promise(r=>setImmediate(r));});
+ assert.equal(descendants(h.container).filter(n=>n.nodeName==='ARTICLE').length,24);assert.equal(h.container.textContent.includes('last row edited'),false);assert.equal(h.updates[0].comment_count,0);
+});

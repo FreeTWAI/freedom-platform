@@ -27,13 +27,14 @@ function applyCommentEdit(comment: Comment, saved: Comment) {
     mentions: comment.mentions?.filter(member => saved.body.includes(`@${member.display_name}`))};
 }
 
+function compareComments(a: Comment, b: Comment) {
+  // Historical receipts use milliseconds; pad rather than truncate precise SQL timestamps.
+  const left = a.created_at.slice(0, -1).padEnd(26, '0'), right = b.created_at.slice(0, -1).padEnd(26, '0');
+  return left.localeCompare(right) || a.comment_id.localeCompare(b.comment_id);
+}
 function mergeComments(current: Comment[], incoming: Comment[]) {
   const all = new Map([...current, ...incoming].map(item => [item.comment_id, item]));
-  return [...all.values()].sort((a, b) => {
-    // Historical receipts use milliseconds; pad rather than truncate precise SQL timestamps.
-    const left = a.created_at.slice(0, -1).padEnd(26, '0'), right = b.created_at.slice(0, -1).padEnd(26, '0');
-    return left.localeCompare(right) || a.comment_id.localeCompare(b.comment_id);
-  });
+  return [...all.values()].sort(compareComments);
 }
 
 export function SocialInteractions({client, post, canHide, onUpdate,onTag,onCommentsChanged,initialOpen=false}: {onCommentsChanged?:()=>void;initialOpen?:boolean;onTag?:(tag:string)=>void;client: PortalClient; post: SocialPost; canHide: boolean; onUpdate: (value: Partial<SocialPost>) => void}) {
@@ -99,14 +100,26 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
     try {
       const page = await client.get<Comments>(`/social-posts/${post.post_id}/comments${next ? `?cursor=${encodeURIComponent(next)}` : ''}`);
       if (token !== sequence.current || !current(generation)) return;
-      // Reads own membership and current metadata. An overlapping edit only
+      // Reads own their covered range and current metadata. An overlapping edit only
       // advances edit fields of rows still present in this authorized page.
       const items = page.items.filter(comment => changes.get(comment.comment_id) !== null).map(comment => {
         const changed = changes.get(comment.comment_id);
         return changed ? applyCommentEdit(comment, changed) : comment;
       });
+      // A partial first page has not covered later, already-visible rows.
+      // Keep only an effective edit ACK beyond that page's last ordered row;
+      // absence inside its covered range (or a complete/empty page) still wins.
+      const last = page.items[page.items.length - 1];
+      const laterEdits = !next && page.next_cursor && last ? [...changes.values()].filter((changed): changed is Comment => changed !== null
+        && compareComments(changed, last) > 0 && !page.items.some(item => item.comment_id === changed.comment_id)) : [];
       const fresh = confirmedComments.current.filter(comment => !page.items.some(item => item.comment_id === comment.comment_id));
-      setComments(current => mergeComments(next ? current : fresh, items)); setCursor(page.next_cursor);
+      setComments(current => {
+        const retained = laterEdits.flatMap(changed => {
+          const row = current.find(item => item.comment_id === changed.comment_id);
+          return row ? [applyCommentEdit(row, changed)] : [];
+        });
+        return mergeComments(next ? current : fresh, [...items, ...retained]);
+      }); setCursor(page.next_cursor);
       confirmedComments.current = fresh;
     } catch (cause) { if (token === sequence.current && current(generation)) setLoadError(cause instanceof Error ? cause.message : '留言暫時無法載入。'); }
     finally { if (token === sequence.current) { pendingReadChanges.current = null; if (current(generation)) setLoading(false); } }
