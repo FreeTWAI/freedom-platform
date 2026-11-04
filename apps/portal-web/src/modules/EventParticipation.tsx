@@ -21,6 +21,49 @@ const positive=(value:string)=>/^\d+$/.test(value)&&Number.isSafeInteger(Number(
 const options=(token:string|null):Omit<RequestOptions,'body'>=>token?{eventParticipationToken:token,skipAuthHandler:true,suppressConsole:true}:{suppressConsole:true};
 type FrozenRequest={method:'POST'|'PATCH';path:string;body:unknown;key:string;version?:number};
 
+function participationRecord(value:unknown):value is Record<string,unknown>{return typeof value==='object'&&value!==null&&!Array.isArray(value);}
+function participationInteger(value:unknown,min=1):value is number{return typeof value==='number'&&Number.isSafeInteger(value)&&value>=min;}
+function participationTime(value:unknown):value is string{return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value));}
+// Validate the original response, not a later GET or edited form. Receipts can
+// legitimately be historical or no-ops, so their version need not be expected+1.
+function matchesParticipationAck(request:FrozenRequest,value:unknown):boolean{
+  if(!participationRecord(value)||!participationRecord(request.body))return false;
+  const route=/^(\/public)?\/events\/([^/]+)\/(participation-request|participation|waitlist|reminder|waitlist-policy|schedule)$/.exec(request.path);
+  if(!route)return false;
+  const body=request.body,kind=route[3];
+  if(kind==='participation-request')return Boolean(route[1])&&request.method==='POST'&&value.requested===true&&value.provider_status==='provider_accepted';
+  if(!participationInteger(request.version))return false;
+  if(kind==='reminder'){
+    if(request.method!=='PATCH'||!participationInteger(value.version)||value.version<request.version||
+      typeof value.enabled!=='boolean'||value.enabled!==body.enabled)return false;
+    // The absent disabled choice is the only version-1/null receipt. A saved
+    // disabled row retains its settings and is cancelled, not pending delivery.
+    if(!value.enabled&&value.status===null)return value.version===1&&value.minutes_before_start===null&&value.channel===null;
+    if(value.version<2||!participationInteger(value.minutes_before_start)||!['in_app','email'].includes(value.channel as string))return false;
+    return value.enabled?value.minutes_before_start===body.minutes_before_start&&value.channel===body.channel&&
+      ['pending','provider_accepted','recorded','failed'].includes(value.status as string):value.status==='cancelled';
+  }
+  if(value.event_id!==route[2]||!participationInteger(value.event_version)||value.event_version<request.version||
+    !['pending','published','rejected','cancelled'].includes(value.event_state as string)||!participationTime(value.starts_at)||
+    typeof value.waitlist_enabled!=='boolean'||!(value.response_window_minutes===null||participationInteger(value.response_window_minutes))||
+    !(value.rsvp_state===null||['pending','going','cancelled'].includes(value.rsvp_state as string))||
+    !(value.available_seats===null||participationInteger(value.available_seats,0)))return false;
+  const own=value.waitlist;
+  if(own!==null&&(!participationRecord(own)||!['queued','invited','accepted','declined','left','expired','cancelled'].includes(own.status as string)||
+    !participationInteger(own.aggregate_version)||!participationTime(own.joined_at)||
+    !(own.invited_at===null||participationTime(own.invited_at))||!(own.expires_at===null||participationTime(own.expires_at))||
+    !['pending','recorded','provider_accepted','failed','unknown'].includes(own.delivery_status as string)))return false;
+  if(kind==='waitlist-policy')return !route[1]&&request.method==='PATCH'&&value.waitlist_enabled===body.waitlist_enabled&&value.response_window_minutes===body.response_window_minutes;
+  // This DTO echoes starts_at, but not capacity or ends_at; don't invent proof.
+  if(kind==='schedule')return !route[1]&&request.method==='PATCH'&&participationTime(body.starts_at)&&Date.parse(value.starts_at)===Date.parse(body.starts_at);
+  if(request.method!=='POST'||(kind==='participation')!==Boolean(route[1]))return false;
+  if(body.action==='join')return own!==null;
+  if(body.action==='accept')return participationRecord(own)&&own.status==='accepted'&&value.rsvp_state==='going';
+  if(body.action==='register')return kind==='participation'&&value.rsvp_state==='going';
+  if(body.action==='cancel')return kind==='participation'&&(value.rsvp_state===null||value.rsvp_state==='cancelled');
+  return body.action==='leave'||body.action==='decline';
+}
+
 // An unknown outcome blocks newer commands until this exact command is retried.
 // Draft inputs remain editable; acknowledgements and reloads never replace them.
 function useParticipationTransport(client:PortalClient,scope:string,token:string|null){
@@ -38,17 +81,21 @@ function useParticipationTransport(client:PortalClient,scope:string,token:string
   },[client,token]);
   async function send(request:FrozenRequest):Promise<boolean>{
     if(inFlight.current||stale)return false;
+    const retrying=pending.current===request;
     const epoch=generation.current,csrf=request.path.startsWith('/public/')?null:client.csrfToken,controller=new AbortController();controllers.current.push(controller);inFlight.current=true;setBusy(true);setError('');setNotice('');
     try{
       const requestOptions={...options(token),...(request.path.startsWith('/public/')?{skipAuthHandler:true}:{}),idempotencyKey:request.key,ifMatch:request.version,signal:controller.signal};
       const result=await (request.method==='PATCH'?client.patch(request.path,request.body,requestOptions):client.post(request.path,request.body,requestOptions));
       if(epoch!==generation.current||csrf!==null&&csrf!==client.csrfToken)return false;
+      if(!matchesParticipationAck(request,result))throw new ApiError({message:'操作回應未能核對，請重試原操作確認結果。',network:true});
       pending.current=null;setReceipt(result);setRetry(false);setNotice('操作已確認；未送出的欄位仍保留。');return true;
     }catch(cause){
       if(epoch!==generation.current||csrf!==null&&csrf!==client.csrfToken||controller.signal.aborted)return false;
-      const uncertain=!(cause instanceof ApiError)||cause.network||cause.status>=500;
+      // A later refusal cannot prove that an earlier unknown attempt did not commit.
+      const uncertain=retrying||!(cause instanceof ApiError)||cause.network||cause.status===0||cause.status>=500;
       pending.current=uncertain?request:null;setRetry(uncertain);
-      if(cause instanceof ApiError&&cause.status===412&&request.version!==undefined){setStale(true);setError('資料已由其他操作更新。請先重新載入最新狀態；你的輸入會保留，再確認送出。');}
+      if(!uncertain&&cause instanceof ApiError&&cause.status===412&&request.version!==undefined){setStale(true);setError('資料已由其他操作更新。請先重新載入最新狀態；你的輸入會保留，再確認送出。');}
+      else if(uncertain&&request.path.endsWith('/participation-request'))setError('寄送結果尚未確認。以原資料重試可能再次寄出管理信；不會自動報名或加入候補。');
       else setError(token?'私人參與操作未確認。管理連結可能失效或活動資格已變更；請重試或重新取得管理信。':cause instanceof Error?cause.message:'操作結果尚未確認，請重試原操作。');
       return false;
     }finally{controllers.current=controllers.current.filter(item=>item!==controller);if(epoch===generation.current&&(csrf===null||csrf===client.csrfToken)){inFlight.current=false;setBusy(false);}}

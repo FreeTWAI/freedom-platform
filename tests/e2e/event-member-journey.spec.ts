@@ -270,7 +270,7 @@ test('event submission blocks departure while pending and saved edits require ex
   discard=true;await page.getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();await expect(page).toHaveURL(/\/#events$/);
 });
 
-for(const width of [1440,390])test(`an unknown event submission keeps its original retry key and cannot be abandoned at ${width}px`,async({page,e2eAuthPool},info)=>{
+for(const width of [1440,390])test(`an unknown event submission survives a later refusal with its original retry key at ${width}px`,async({page,e2eAuthPool},info)=>{
   await page.setViewportSize({width,height:844});await login(page,width===390?'client@local.test':'maker@local.test');await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
   const title='不明結果 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   const otherTitle='其他活動 '+randomUUID().slice(0,8);
@@ -283,13 +283,14 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
   let releaseRefresh!:()=>void,reachedRefresh!:()=>void;
   const heldRefresh=new Promise<void>(resolve=>{releaseRefresh=resolve;}),refreshReached=new Promise<void>(resolve=>{reachedRefresh=resolve;});
   await page.route('**/api/v1/events',async route=>{
-    if(route.request().method()==='GET'&&attempts.length===2){
+    if(route.request().method()==='GET'&&attempts.length===3){
       const response=await route.fetch();expect(response.status()).toBe(200);reachedRefresh();
       await heldRefresh;await route.fulfill({response});return;
     }
     if(route.request().method()!=='POST')return route.continue();
     attempts.push({body:route.request().postData(),key:route.request().headers()['idempotency-key']});
     if(attempts.length===1){const response=await route.fetch();expect(response.status()).toBe(201);await route.abort('failed');}
+    else if(attempts.length===2)await route.fulfill({status:429,contentType:'application/problem+json',body:JSON.stringify({type:'about:blank',title:'合成傳輸層拒絕',status:429,code:'synthetic_transport_refusal',detail:'合成傳輸層拒絕；不代表原請求未完成。'})});
     else await route.continue();
   });
   await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();
@@ -305,8 +306,11 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
   await closeRejectedMobileNavigation(page);
   await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
   try{
+    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'合成傳輸層拒絕'})).toBeVisible();
+    expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);await expect(titleInput).toBeDisabled();
+    await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
     await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();await refreshReached;
-    expect(attempts).toHaveLength(2);expect(attempts[0].key).toBeTruthy();expect(attempts[1]).toEqual(attempts[0]);
+    expect(attempts).toHaveLength(3);expect(attempts[0].key).toBeTruthy();expect(attempts[2]).toEqual(attempts[0]);
     expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_events WHERE title=$1',[title])).rows[0].count)).toBe(1);
     // A confirmed save can close a fresh untouched composer and leave while its
     // real list response is still held. Waiting for that read would hide the race.
@@ -566,4 +570,29 @@ eventTest('legacy draft preserves guest policy until the organizer explicitly ch
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await card.getByLabel('報名方式',{exact:true}).selectOption('community_member');
   await editor.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(editor).toHaveCount(0);
   await page.reload();await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
+});
+
+eventTest('malformed metadata success retains the original command and does not start selected media',async({page,e2eAuthPool,eventFixture:{user,email}},info)=>{
+  await login(page,email);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})}),title=`回條確認 ${user}`;
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('活動已儲存但回條被截斷；確認原命令後才接續原影片。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
+  await form.getByText('加上海報或影片（選填）',{exact:true}).click();
+  await form.getByLabel('活動影片（選填）').setInputFiles({name:'synthetic.mp4',mimeType:'video/mp4',buffer:await readFile('tests/media-fixtures/event-video-160x90.mp4')});
+  const commands:{body:string|null;key:string|undefined}[]=[],uploads:string[]=[];
+  await page.route('**/api/v1/events',async route=>{
+    if(route.request().method()!=='POST')return route.continue();
+    commands.push({body:route.request().postData(),key:route.request().headers()['idempotency-key']});
+    const response=await route.fetch();expect(response.status()).toBe(201);
+    if(commands.length===1)await route.fulfill({response,body:'{}'});else await route.fulfill({response});
+  });
+  await page.route('**/api/v1/events/*/video',async route=>{if(route.request().method()==='POST')uploads.push(route.request().headers()['if-match']);await route.continue();});
+  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'結果尚未確認'})).toBeVisible();
+  await expect(form.getByLabel('活動名稱',{exact:true})).toBeDisabled();await expect(form.getByLabel('活動影片（選填）')).toBeDisabled();expect(uploads).toHaveLength(0);
+  await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
+  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(form).toHaveCount(0);await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();
+  expect(commands).toHaveLength(2);expect(commands[1]).toEqual(commands[0]);expect(uploads).toEqual(['"1"']);
+  const events=(await e2eAuthPool.query('SELECT event_id,aggregate_version FROM community_events WHERE organizer_ref=$1 AND title=$2',[user,title])).rows;
+  expect(events).toHaveLength(1);expect(Number(events[0].aggregate_version)).toBe(2);
+  expect(Number((await e2eAuthPool.query("SELECT count(*) FROM transition_journal WHERE aggregate_id=$1 AND command='save_video'",[events[0].event_id])).rows[0].count)).toBe(1);
+  await info.attach('metadata-ack-recovery',{body:JSON.stringify({commands,uploads,durable_events:1,durable_media_saves:1}),contentType:'application/json'});
 });
