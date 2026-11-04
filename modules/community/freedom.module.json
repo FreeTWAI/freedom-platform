@@ -75,6 +75,8 @@
     "apps/portal-web/src/modules/EventHelpers.tsx",
     "apps/portal-web/src/modules/EventHelpers.css",
     "tests/runtime/event-helper-client.test.ts",
+    "tests/runtime/event-helper-resume.test.ts",
+    "tests/e2e/event-helper-resume.spec.ts",
     "tests/e2e/event-helpers.spec.ts"
   ],
   "public_exports": [
