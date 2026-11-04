@@ -44,6 +44,39 @@ step summary expose it only for the last failed phase. Daily receipts also retai
 independent allowlisted `phaseCode` and `cleanupCode`, including standard SQLSTATE
 and fixed network identifiers; raw errors, causes and provider details stay private.
 
+The dedicated lease heartbeat checks database, backend PID, current/session role
+and the granted session advisory lock in one query. Bigint keys map to unsigned
+high/low 32-bit `pg_locks.classid`/`objid`, with `objsubid=1`. Its client timeout is
+30 seconds to tolerate multi-second event-loop stalls; connection error/end,
+identity changes and missing locks still abort promptly. Positive immutable Git
+ancestry checks are cached in a bounded, source-root-specific map; failures are
+never cached.
+
+A failed phase may carry `leaseLoss: { cause, heldMs, sinceHeartbeatMs, heartbeats,
+errorClass? }`. Only the first cause is retained: `heartbeat_timeout`,
+`heartbeat_failed`, `identity_changed`, `lock_not_held`, `connection_error` or
+`connection_ended`. Durations/counts are nonnegative safe integers; `errorClass`
+accepts only a SQLSTATE or a fixed Node network code. The public projection drops
+malformed diagnostics and strips extra fields, including all error text.
+
+For an independent release whose first four phases passed in this run, only
+lease loss during handoff permits same-run settlement. Destroy the old session,
+then acquire a fresh lease (at most three attempts, two seconds apart on busy)
+and rebuild all signal-bound control/floor/deployer ports. Reuse the hosted
+handoff readback checks: unchanged journal head, exactly this run's pending
+handoff, complete ledger, material-policy digest, GC OFF/zero fences, no other
+release/backup sessions, Worker source/bindings and exact-source public health.
+Append only the missing normal handoff and confirm lease release. No migration,
+publish, backup or flag operation is replayed. Any mismatch or exhausted busy
+budget fails with the original `release_lease_lost`; an already written handoff
+also requires hosted reconciliation. Earlier phase loss never self-settles.
+Success is a normal five-phase release with handoff `leaseLoss` plus
+`leaseRecovered: { cause, attempts }` (matching cause, attempts 1–3), projected into
+both final phases and public `operatorProgress`. Malformed recovery evidence is
+rejected. Such a staging receipt remains eligible under normal production
+admission. Hosted `mode=handoff` retains its independent failed-artifact binding
+and remains the fallback; it is not authorized by same-run evidence.
+
 The rest of this document describes retained legacy and backup contracts where
 seven phases, scheduler handoff or `backupDatabaseUrl` are mentioned.
 
