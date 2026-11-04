@@ -59,6 +59,8 @@
     "tests/e2e/message-load-older.spec.ts",
     "tests/runtime/direct-message-receipts.test.ts",
     "tests/runtime/member-channels-core.test.ts",
+    "tests/runtime/channel-list-resume.test.ts",
+    "tests/e2e/channel-list-resume.spec.ts",
     "tests/runtime/member-communications.test.ts",
     "tests/runtime/message-retraction-client.test.ts",
     "tests/runtime/message-retraction.test.ts",
