@@ -620,6 +620,17 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
             </li>;})}
           </ol>):null,
     [thread,peer,Boolean(attempt),retracting,messageImagesEnabled,changeRichDraft,uid,calendarKey]);
+  // Draft keystrokes must not rebuild every peer, avatar and localized timestamp,
+  // including the hidden phone picker. Live rows, selection and calendar still invalidate.
+  const conversationList=useMemo(()=>(conversations.length===0?<p className="empty">還沒有私訊。可搜尋會員開始對話。</p>:<ul className="messages-list" aria-label="對話列表">
+          {conversations.map(item=><li key={item.participant.user_id} className={item.unread_count?'is-unread':undefined}>
+            <button type="button" className="messages-peer" aria-current={peer===item.participant.user_id?'true':undefined} onClick={()=>select(item.participant.user_id,true)}>
+              <MemberAvatar nickname={item.participant.display_name} avatarUrl={item.participant.avatar_url}/>
+              <span className="chat-peer-copy"><strong>{item.participant.display_name}</strong><MemberPresence online={item.participant.is_online} lastSeen={item.participant.last_seen_at}/><span className="chat-peer-preview">{item.last_message.sender_ref===me?'你：':''}{item.last_message.retracted_at?'訊息已收回':messageImagesEnabled===true&&item.last_message.image&&item.last_message.body==='[圖片]'?'圖片':item.last_message.body.slice(0,40)}</span></span>
+              <span className="chat-peer-tail"><ChatTime value={item.last_message.created_at}/>{item.unread_count>0&&<span className="messages-count">{item.unread_count} 則未讀</span>}</span>
+            </button>
+          </li>)}
+        </ul>),[conversations,peer,me,messageImagesEnabled,select,calendarKey]);
   function switchPane(){setPicking(value=>!value);requestAnimationFrame(()=>{if(picking)heading.current?.focus();else document.getElementById(ids.list)?.focus();});}
   return <div className={`messages-layout chat-workspace${compact?' is-compact':''}`}>
     {singlePane&&peer&&picking&&<button type="button" className="btn btn-ghost messages-switch" aria-expanded={picking} aria-controls={`${uid}-picker`} onClick={switchPane}>回到目前對話</button>}
@@ -633,15 +644,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
         {convStatus==='loading'&&<p role="status">正在讀取對話…</p>}
         {convStatus==='error'&&<div className="banner banner-error" role="alert">對話讀取失敗：{convError}<div className="messages-actions"><button className="btn btn-ghost" type="button" onClick={()=>void loadConversations()}>重新讀取對話</button></div></div>}
         {convRefresh.error&&<p className="banner banner-error" role="alert">對話重新整理失敗：{convRefresh.error}</p>}
-        {convStatus==='ready'&&(conversations.length===0?<p className="empty">還沒有私訊。可搜尋會員開始對話。</p>:<ul className="messages-list" aria-label="對話列表">
-          {conversations.map(item=><li key={item.participant.user_id} className={item.unread_count?'is-unread':undefined}>
-            <button type="button" className="messages-peer" aria-current={peer===item.participant.user_id?'true':undefined} onClick={()=>select(item.participant.user_id,true)}>
-              <MemberAvatar nickname={item.participant.display_name} avatarUrl={item.participant.avatar_url}/>
-              <span className="chat-peer-copy"><strong>{item.participant.display_name}</strong><MemberPresence online={item.participant.is_online} lastSeen={item.participant.last_seen_at}/><span className="chat-peer-preview">{item.last_message.sender_ref===me?'你：':''}{item.last_message.retracted_at?'訊息已收回':messageImagesEnabled===true&&item.last_message.image&&item.last_message.body==='[圖片]'?'圖片':item.last_message.body.slice(0,40)}</span></span>
-              <span className="chat-peer-tail"><ChatTime value={item.last_message.created_at}/>{item.unread_count>0&&<span className="messages-count">{item.unread_count} 則未讀</span>}</span>
-            </button>
-          </li>)}
-        </ul>)}
+        {convStatus==='ready'&&conversationList}
         {convMore.error&&<p className="banner banner-error" role="alert">更多對話讀取失敗：{convMore.error}</p>}
         {convStatus==='ready'&&convNext!==null&&<button className="btn btn-ghost" type="button" disabled={convMore.loading} onClick={()=>void moreConversations()}>{convMore.loading?'正在讀取…':convMore.error?'重試載入更多對話':'載入更多對話'}</button>}
       </section>
