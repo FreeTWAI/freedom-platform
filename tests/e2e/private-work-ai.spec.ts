@@ -5,6 +5,25 @@ import { navigate,openPageTools } from './navigation.js';
 const fixtureEnabled = process.env.FREEDOM_E2E_PRIVATE_AI_FIXTURE === '1';
 test.describe('Social Post uses the existing isolated member model pipeline',()=>{
   test.skip(!fixtureEnabled,'Requires the existing isolated synthetic private-AI fixture; no real provider or account tokens.');
+  test('collapsed optimizer settings cannot block publishing the member post',async({page})=>{
+    await login(page);await readyStep(page,'合成測試：收合文案工具');
+    await page.goto('/#home');await page.getByRole('button',{name:'建立貼文',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true}),draft='收合文案工具後，仍由本人確認發布這則貼文。';
+    const tools=dialog.getByRole('button',{name:'文案與分享',exact:true}),writes:string[]=[],posts:string[]=[];
+    page.on('request',request=>{
+      if(request.method()==='POST'&&/\/me\/(?:model-steps|private-work)/.test(new URL(request.url()).pathname))writes.push(request.url());
+      if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/social-posts/notes')posts.push(request.postDataJSON().text);
+    });
+    await dialog.getByLabel('貼文內容',{exact:true}).fill(draft);await tools.click();
+    await dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true}).click();
+    const tokens=dialog.getByLabel('最多輸出 Token',{exact:true});await tokens.fill('0');
+    expect(await tokens.evaluate((input:HTMLInputElement)=>input.validity.rangeUnderflow)).toBe(true);
+    await tools.click();await expect(tokens).toBeHidden();await expect(tokens).toBeDisabled();
+    expect(await tokens.evaluate((input:HTMLInputElement)=>input.willValidate)).toBe(false);
+    await tools.click();await expect(tokens).toHaveValue('0');await expect(tokens).toBeEnabled();
+    await tools.click();await dialog.getByRole('button',{name:'發布貼文',exact:true}).click();
+    await expect(dialog).not.toBeVisible();expect(posts).toEqual([draft]);expect(writes).toHaveLength(0);
+  });
   for(const lostAck of [false,true])test(`one approved optimization previews copy and survives dialog close, lost execute ACK=${lostAck}`,async({page,e2eAuthPool})=>{
     await login(page);await readyStep(page,`合成測試：文案連線 ${lostAck}`);
     await page.goto('/#home');await page.getByRole('button',{name:'建立貼文',exact:true}).click();
@@ -14,6 +33,7 @@ test.describe('Social Post uses the existing isolated member model pipeline',()=
     page.on('response',async response=>{if(response.request().method()==='POST'&&response.url().endsWith('/me/private-work')&&response.ok())workId=(await response.json()).workId;});
     if(lostAck)await page.route('**/api/v1/me/model-steps/*:execute',async route=>{await route.fetch();await route.abort('failed');});
     await dialog.getByLabel('貼文內容',{exact:true}).fill(draft);
+    await dialog.getByRole('button',{name:'文案與分享',exact:true}).click();
     await dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true}).click();
     await dialog.getByRole('combobox',{name:'我的模型',exact:true}).selectOption({index:1});
     await dialog.getByRole('button',{name:'同意送出草稿，優化一次',exact:true}).click();
@@ -22,6 +42,7 @@ test.describe('Social Post uses the existing isolated member model pipeline',()=
       await dialog.getByRole('button',{name:'關閉發文',exact:true}).click();
       await navigate(page,'社群分享');
       await page.getByRole('button',{name:'建立貼文',exact:true}).click();
+      await dialog.getByRole('button',{name:'文案與分享',exact:true}).click();
       await dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true}).click();
       await dialog.getByRole('button',{name:'取回這次優化的原稿',exact:true}).click();
       await dialog.getByRole('button',{name:'確認原請求結果',exact:true}).click();

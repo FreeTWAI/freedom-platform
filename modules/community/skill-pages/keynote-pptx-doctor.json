@@ -1,0 +1,14 @@
+{
+  "headline": "交給 Keynote 使用者前，先查 pptx 封裝。",
+  "outcomes": ["自製 pptx 的封裝診斷紀錄", "不覆蓋原檔的修復副本", "Keynote 逐頁比較結果或未驗證清單"],
+  "flow": {
+    "title": "診斷封裝，不覆蓋原檔",
+    "lead": "可在瀏覽器本機診斷／修復，或用只靠標準庫的 Python 3 腳本，也能作為 Claude Code Skill。",
+    "steps": [
+      {"icon": "upload", "title": "放入測試簡報", "note": "不含機密的自製 pptx，先留完整備份；可拖入瀏覽器或用 scripts/diagnose.py。"},
+      {"icon": "search", "title": "檢查封裝結構", "note": "查 [Content_Types].xml 缺項、notes master 未註冊、遺失關聯、媒體與副檔名不符等。"},
+      {"icon": "download", "title": "另存修復副本", "note": "瀏覽器下載副本／ZIP，或用 --fix 另存 out.pptx，不覆蓋原檔。"}
+    ],
+    "caption": "封裝修好不等於版面完整：保留原檔，在目標 Keynote 逐頁比對圖片、文字與備註。"
+  }
+}

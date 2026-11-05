@@ -6,6 +6,7 @@
     "modules/agent-commerce/seller-console/**",
     "tests/runtime/seller-console-route.test.ts",
     "tests/runtime/seller-console-view.test.ts",
+    "tests/runtime/seller-console-transport.test.ts",
     "tests/e2e/seller-console.spec.ts",
     "tests/e2e/commerce-store-readiness.spec.ts",
     "tests/e2e/seller-console-settings.spec.ts",

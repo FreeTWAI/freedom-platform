@@ -481,9 +481,10 @@ for(const action of ['upload','hide'])for(const change of ['session','client'])t
   const effect=composerSource.match(/useEffect\(\(\)=>\{(\s*\+\+imageSequence\.current;pending\.current=null;publishLock\.current=null;[\s\S]*?)\},\[client,client\.sessionGeneration\]\)/);assert.ok(effect);
   Object.assign(h.state,{imageSequence:{current:0},confirmedWrites:{current:0},pending:{current:null},publishLock:{current:null},newTextHistory:()=>({value:''})});
   for(const name of ['setTextHistory','setOriginalDraft','setComposeFile','setPreparingImage','setUrl','setTitle','setLinkPreview','setTopic','setMentions','setLocationName','setCheckIn','setPublishing','setPublishError'])h.state[name]=()=>{};
+  let toolsOpen=true;h.state.setComposerToolsOpen=(value:boolean)=>{toolsOpen=value;};
   const old=action==='hide'?h.ui.hide({post_id:'A'}):h.ui.uploadLinkThumb({post_id:'A'},png());await microtasks();assert.equal(h.state.saving,true);
   const patch=change==='session'?{session:++h.client.sessionGeneration}:{client:{sessionGeneration:1,get:h.client.get,post:h.client.post,csrfToken:'new'}};
-  const newer=h.render(patch);runInNewContext(`(()=>{${effect[1]}})()`,h.state);assert.equal(h.state.saving,false,'actual new-session effect unlocks controls');assert.equal(h.state.actionError,'');
+  const newer=h.render(patch);runInNewContext(`(()=>{${effect[1]}})()`,h.state);assert.equal(h.state.saving,false,'actual new-session effect unlocks controls');assert.equal(h.state.actionError,'');assert.equal(toolsOpen,false,'new session collapses optional composer tools');
   const next=action==='hide'?newer.hide({post_id:'B'}):newer.uploadLinkThumb({post_id:'B'},jpeg());await microtasks();assert.equal(h.writes.length,2);assert.equal(h.state.saving,true);
   h.writes[0].reject(new Error('old outcome'));await old;assert.equal(h.state.saving,true,'obsolete finally cannot unlock the new action');assert.equal(h.state.actionError,'');
   h.writes[1].reject(new Error('new outcome'));await next;assert.equal(h.state.saving,false);assert.equal(h.state.actionError,'new outcome');

@@ -1,3 +1,5 @@
+import {communityCatalog} from './catalog.js';
+import {getSkillPageContent,skillShareCardAlt} from './skill-page-content.js';
 import memberShared0 from './share-introductions/hrflow.json' with {type:'json'};
 import memberShared1 from './share-introductions/hdsljp-api.json' with {type:'json'};
 import memberShared2 from './share-introductions/usage.json' with {type:'json'};
@@ -55,72 +57,73 @@ import supplierClient from './share-introductions/supplier-client.json' with {ty
 import typoStudio from './share-introductions/typo-studio.json' with {type:'json'};
 import videoAutopilot from './share-introductions/video-autopilot.json' with {type:'json'};
 
-export const skillShareContentVersion='2026-11-03.1';
+export const skillShareContentVersion='2026-11-03.2';
 export type SkillShareContent = {introductions:string[];illustration_url:string;illustration_alt:string};
 
-const content:Record<string,{introductions:string[];illustration_alt:string}> = {
-  'hrflow':{introductions:memberShared0,illustration_alt:"員工識別證與班表經打卡鐘、請假核准，整理成人資資料夾的三段示意。"},
-  'hdsljp-api':{introductions:memberShared1,illustration_alt:"日期、時鐘與地點經星曆軌道計算，轉成幾何命盤及回傳欄位卡的示意。"},
-  'usage':{introductions:memberShared2,illustration_alt:"本機日誌先彙整成用量條，再呈現在桌面選單列與展開面板的示意。"},
-  'photo-border-remover':{introductions:memberShared3,illustration_alt:"同一組白框山景照片經裁切框移除外側白邊，再輸出無框圖片的示意。"},
-  'ga4-lp-analytics':{introductions:memberShared4,illustration_alt:"著陸頁的區段、捲動與點擊事件經彙總代理，整理成離開漏斗與待辦卡的示意。"},
-  'sns-feedback-collect':{introductions:memberShared5,illustration_alt:"貼文的愛心與留言反應存入本機托盤，再以比較長條與下一步卡片判讀的示意。"},
-  'ultracode-token-optimization':{introductions:memberShared6,illustration_alt:"厚任務卷宗經協調、執行與審查三個工作盤，以短摘要交接後留下證據夾板的示意。"},
-  'keynote-pptx-doctor':{introductions:memberShared7,illustration_alt:"斷開關聯的簡報封裝經放大鏡與扳手檢查修復，另存相同內容副本的示意。"},
-  'webchat-mcp':{introductions:memberShared8,illustration_alt:"本機 MCP 提示經瀏覽器送到網頁聊天服務，回答沿回程箭頭交回 client 的示意。"},
-  'gemini-voice-lab':{introductions:memberShared9,illustration_alt:"配音稿經單一滑桿調整與波形處理，試聽評語再回到下一輪的示意。"},
-  'story-bible':{introductions:memberShared10,illustration_alt:"角色、場景與世界觀卡整理進設定活頁夾，檢查後供下游取用各層設定的示意。"},
-  'human-mode':{introductions:memberShared11,illustration_alt:"四選項先放暫定答案籌碼，再比較論證，最後以五階提示與遊玩比例紀錄回看的示意。"},
-  'project-hub':{introductions:memberShared12,illustration_alt:"散落的專案資料夾與任務卡，由上鎖的本機中樞排成任務樹並分派兩個助手，成果再收進主資料夾並留下紀錄的示意。"},
-  'taiwanese-english-checker':{introductions:memberShared13,illustration_alt:"信件上的小蟲經放大鏡對照規則活頁夾分到三個等級托盤，最後變成乾淨信件並釘上一張重點卡的示意。"},
+const content:Record<string,string[]> = {
+  'hrflow':memberShared0,
+  'hdsljp-api':memberShared1,
+  'usage':memberShared2,
+  'photo-border-remover':memberShared3,
+  'ga4-lp-analytics':memberShared4,
+  'sns-feedback-collect':memberShared5,
+  'ultracode-token-optimization':memberShared6,
+  'keynote-pptx-doctor':memberShared7,
+  'webchat-mcp':memberShared8,
+  'gemini-voice-lab':memberShared9,
+  'story-bible':memberShared10,
+  'human-mode':memberShared11,
+  'project-hub':memberShared12,
+  'taiwanese-english-checker':memberShared13,
 
-  'bidding-radar-concept':{introductions:communityAuthor0,illustration_alt:"公司描述與補助文件逐條比對後分組，旁邊的雷達掃描標案資料，呈現設計概念。"},
-  'aiwff-runtime':{introductions:communityAuthor1,illustration_alt:"任務卡進入本機背景執行器，依序顯示進度並把完成檔案放回資料夾。"},
-  'n8n-marketing-flows':{introductions:communityAuthor2,illustration_alt:"新聞資料通過串接的工作流節點與模型，輸出可供人工確認的貼文草稿。"},
-  'anti-gambling-trader-tw':{introductions:communityAuthor3,illustration_alt:"合成交易紀錄進入本機統計分析，輸出分布、比較與待覆核的報表。"},
-  'web-card-game-skill':{introductions:communityAuthor4,illustration_alt:"程式資料連到瀏覽器中的卡牌對戰、牌組排列與開卡包流程。"},
-  'ai-avatar-bot':{introductions:communityAuthor5,illustration_alt:"網站問題連到知識資料與虛擬角色，再以語音波形呈現角色回答。"},
-  'ai-manga-translator':{introductions:communityAuthor6,illustration_alt:"原圖的對話框經圖片翻譯後覆蓋譯文，旁邊的作品詞彙表連接跨頁人名。"},
-  'line-persona':{introductions:communityAuthor7,illustration_alt:"人格與知識文件連到自選模型，再把常見問答送到手機的 LINE 對話。"},
-  'open-seo-advisor':{introductions:communityAuthor8,illustration_alt:'頁面經過檢查器核對結構、網站地圖與載入，再以內部連結整理成一組頁面。'},
-  'video-to-podcast-toolkit':{introductions:communityAuthor9,illustration_alt:"訪談影片經本機處理分出聲音與字幕，再輸出音檔、三種海報、直式短影音與文案卡。"},
-  'autovtuber':{introductions:communityAuthor10,illustration_alt:"角色表單的髮色與眼色選項經本機 GPU 產生概念圖與 3D 臉型，完成的角色出現在直播畫面。"},
-  'coding-audit-harness':{introductions:communityAuthor11,illustration_alt:"工單交給機械手臂實作，驗收機印出帶指紋的收據，最後由人按下核准鍵。"},
-  'local-workspace-mcp':{introductions:localWorkspaceMcp,illustration_alt:"私人對話通道連到本機檔案，將合成資料整理成報表與圖表。"},
-  'editkin':{introductions:editkin,illustration_alt:"合成影片片段進入可編輯時間軸，調整後在畫面中預覽剪輯結果。"},
-  'positioning-companion':{introductions:positioningCompanion,illustration_alt:"人物比較方向與證據卡，選擇一條由本人確認的小實驗路徑。"},
-  'freedom-party-guild-lounge':{introductions:freedomPartyGuildLounge,illustration_alt:"手機報到產生角色名牌，大屏展示後由同意媒合的活動夥伴相遇。"},
-  'career-guide':{introductions:careerGuide,illustration_alt:'人物比較不同路徑，選出一項可以開始的小練習。'},
-  'community-ops':{introductions:communityOps,illustration_alt:'從迎接新夥伴，到準備活動與圍坐交流的社群流程。'},
-  'partnership':{introductions:partnership,illustration_alt:'兩人訪談需求，整理提案並確認一項共同試作。'},
-  'reconciliation':{introductions:reconciliation,illustration_alt:'兩份交易紀錄逐筆比對，將差異標記出來等待確認。'},
-  'project-delivery':{introductions:projectDelivery,illustration_alt:'大目標拆成任務卡，再經小隊分工完成可驗收成果。'},
-  'music-mv':{introductions:musicMv,illustration_alt:'音樂波形對齊分鏡畫面，呈現聲音與 MV 的編排。'},
-  'commercial-production':{introductions:commercialProduction,illustration_alt:'商品、攝影機與燈光配置，連到不同尺寸的拍攝成品。'},
-  'event-space':{introductions:eventSpace,illustration_alt:'活動場地的報到、座位、舞台與人員動線安排。'},
-  'projection-mapping':{introductions:projectionMapping,illustration_alt:'投影機對應建築表面的分區、素材與播放時序。'},
-  'human-design':{introductions:humanDesign,illustration_alt:'人物與多種觀點卡片，呈現共讀、討論和自我反思。'},
-  'supplier-client':{introductions:supplierClient,illustration_alt:'供應端工作台從資料中心讀取商品與供貨申請。'},
-  'storefront':{introductions:storefront,illustration_alt:'商品素材排列成目錄與店面樣稿，呈現在瀏覽器預覽。'},
-  'agent-kit':{introductions:agentKit,illustration_alt:'本機工具經由連接器讀取中央資料，再回傳狀態面板的示意圖。'},
-  'project-template':{introductions:projectTemplate,illustration_alt:'程式資料夾與模組組成網站，並透過分支協作改進。'},
-  'social-post':{introductions:socialPost,illustration_alt:'整理原本的寫作口吻，再準備不同平台的貼文草稿。'},
-  'typo-studio':{introductions:typoStudio,illustration_alt:'中文內容整理成多頁輪播版面，再匯出圖片。'},
-  'video-autopilot':{introductions:videoAutopilot,illustration_alt:'影片素材經過檢查與時間軸編排，產出橫式及直式預覽。'},
-  'short-drama':{introductions:shortDrama,illustration_alt:'角色與故事構想，展開為分集分鏡與時間軸。'},
-  'hao-studio':{introductions:haoStudio,illustration_alt:'網站的作品、文章與社群內容，在桌面畫面中並排呈現。'},
-  'media-generator':{introductions:mediaGenerator,illustration_alt:'影音點子轉成分鏡畫面，再整理成生成提示文件。'},
-  'pos-pro':{introductions:posPro,illustration_alt:'小店收銀、商品庫存、收據與報表的工作流程。'},
-  'security-scanner':{introductions:securityScanner,illustration_alt:'檢查指定的網站與程式，將發現整理成有優先順序的報告。'},
-  'ai-sister':{introductions:aiSister,illustration_alt:'畫面資料經過辨識、存入記憶，再查回來源卡片的示意圖。'},
-  'multi-ai-desktop':{introductions:multiAiDesktop,illustration_alt:'桌面視窗中的多組對話與檢查點，呈現多個 AI 協作。'},
-  'multi-ai-chat':{introductions:multiAiChat,illustration_alt:'瀏覽器側欄將問題分送到多個對話，再彙整回答。'},
+  'bidding-radar-concept':communityAuthor0,
+  'aiwff-runtime':communityAuthor1,
+  'n8n-marketing-flows':communityAuthor2,
+  'anti-gambling-trader-tw':communityAuthor3,
+  'web-card-game-skill':communityAuthor4,
+  'ai-avatar-bot':communityAuthor5,
+  'ai-manga-translator':communityAuthor6,
+  'line-persona':communityAuthor7,
+  'open-seo-advisor':communityAuthor8,
+  'video-to-podcast-toolkit':communityAuthor9,
+  'autovtuber':communityAuthor10,
+  'coding-audit-harness':communityAuthor11,
+  'local-workspace-mcp':localWorkspaceMcp,
+  'editkin':editkin,
+  'positioning-companion':positioningCompanion,
+  'freedom-party-guild-lounge':freedomPartyGuildLounge,
+  'career-guide':careerGuide,
+  'community-ops':communityOps,
+  'partnership':partnership,
+  'reconciliation':reconciliation,
+  'project-delivery':projectDelivery,
+  'music-mv':musicMv,
+  'commercial-production':commercialProduction,
+  'event-space':eventSpace,
+  'projection-mapping':projectionMapping,
+  'human-design':humanDesign,
+  'supplier-client':supplierClient,
+  'storefront':storefront,
+  'agent-kit':agentKit,
+  'project-template':projectTemplate,
+  'social-post':socialPost,
+  'typo-studio':typoStudio,
+  'video-autopilot':videoAutopilot,
+  'short-drama':shortDrama,
+  'hao-studio':haoStudio,
+  'media-generator':mediaGenerator,
+  'pos-pro':posPro,
+  'security-scanner':securityScanner,
+  'ai-sister':aiSister,
+  'multi-ai-desktop':multiAiDesktop,
+  'multi-ai-chat':multiAiChat,
 };
 
 export function getSkillShareContent(bookId:string):SkillShareContent|null {
   if(!Object.hasOwn(content,bookId))return null;
-  const entry=content[bookId];
-  return {introductions:[...entry.introductions],illustration_url:`/brand/skill-illustrations/${bookId}.webp`,illustration_alt:entry.illustration_alt};
+  // The share image is rendered from the page content, so its alt text repeats the same words.
+  const title=communityCatalog.skill_books.find(book=>book.id===bookId)?.title,page=getSkillPageContent(bookId);
+  return {introductions:[...content[bookId]],illustration_url:`/brand/skill-illustrations/${bookId}.webp`,illustration_alt:title&&page?skillShareCardAlt(title,page):''};
 }
 
 export const skillShareContentBookIds:readonly string[]=Object.keys(content);

@@ -1913,3 +1913,25 @@ test('exact PR 1160 spec admits only the reviewed schema bindings', async () => 
   }
   assert.equal(storeSpecDependenciesProven(before,actual.replace('InstancePageSchema, LaunchPlanSchema,', 'InstancePageSchema, UnknownSchema, LaunchPlanSchema,')),false);
 });
+
+test('browser capacity follows the proven browser profile and fails closed on unknown profiles', () => {
+  const selection = decideAffectedJobs({ event: 'push' });
+  const output = profile => Object.fromEntries(githubOutput(selection, profile).trim().split('\n').map(line => line.split('=')));
+  for (const profile of ['full', 'unknown', undefined]) assert.equal(output(profile).ui_default_shards, 'true');
+  for (const profile of ['newcomer-guides', 'guild-presentation', 'store-setup-entry']) assert.equal(output(profile).ui_default_shards, 'false');
+  assert.equal(Object.fromEntries(githubOutput({ ...selection, jobs: { ...selection.jobs, 'ui-e2e': false } }).trim().split('\n').map(line => line.split('='))).ui_default_shards, 'false');
+});
+
+test('browser collector requires successful independent jobs and attempt-bound complete fragments', async () => {
+  const workflow = await readFile(workflowPath, 'utf8'), shards = jobBlock(workflow, 'ui-default'), collector = jobBlock(workflow, 'ui-e2e');
+  assert.match(shards, /shard: \[1, 2, 3\]/);
+  assert.match(shards, /fail-fast: false/);
+  assert.match(shards, /--default-shard "\$DEFAULT_SHARD"/);
+  assert.match(shards, /PINNED_SHA: \$\{\{ job.workflow_sha \}\}/);
+  assert.match(shards, /browser-default-\$\{\{ github.run_attempt \}\}-\$\{\{ matrix.shard \}\}/);
+  assert.match(collector, /needs: \[select, ui-default\]/);
+  assert.match(collector, /if \[ "\$SHARDS_REQUIRED" != false \]; then test "\$SHARD_RESULT" = success; fi/);
+  assert.match(collector, /pattern: browser-default-\$\{\{ github.run_attempt \}\}-\*/);
+  assert.match(collector, /--default-reports .freedom\/reports\/default-fragments/);
+  assert.doesNotMatch(shards + collector, /continue-on-error|--retries|--grep|--workers/);
+});

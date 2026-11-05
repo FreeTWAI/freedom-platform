@@ -320,7 +320,7 @@ test('cards in one shelf row share a height and keep the GitHub footer on one li
   }
 });
 
-test('a published member work is packaged as a 社群技能書 like every catalog book',async({page})=>{
+test('a published member work is packaged as a community skill book like every catalog book',async({page})=>{
   const id='11111111-1111-4111-8111-111111111111',repo='https://github.com/example/event-form',path=`/development/submissions/${id}`;
   const item={submission_id:id,title:'活動報名表產生器',description:'輸入活動名稱與日期，產生可分享的報名表與提醒訊息草稿。',repository_url:repo,relationship:'curator',relationship_verification:'self_declared',official:false,project_id:'22222222-2222-4222-8222-222222222222',public_path:path,cover_url:'/art/community-skills/default.webp',illustration_url:null,
     source:{repository_full_name:'example/event-form',repository_url:repo,commit_sha:'a'.repeat(40),license_spdx:'MIT',license_evidence_url:null,is_fork:false,archived:false},published_at:'2026-09-29T10:00:00.000Z'};
@@ -341,6 +341,7 @@ test('a published member work is packaged as a 社群技能書 like every catalo
   await expect(card.locator('.skill-badge-community')).toHaveText('社群技能書');
   const cover=card.locator('.skill-library-heading > .skill-book-illustration');
   await expect(cover).toHaveAttribute('src',item.cover_url);
+  await cover.scrollIntoViewIfNeeded();
   await expect.poll(()=>cover.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await expect(card.getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',repo);
   await expect(card.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',`${repo}/fork`);

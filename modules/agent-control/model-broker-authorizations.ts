@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool, PoolClient } from 'pg';

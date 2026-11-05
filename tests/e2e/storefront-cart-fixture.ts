@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import {createHash} from 'node:crypto';
 import {canonicalJSON} from '../../modules/agent-commerce/checkout/terms.js';
 import { serve } from '@hono/node-server';
+import {useSingleRequestConnections} from './owned-http-listener.js';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Pool } from 'pg';
 import type { Browser, Page } from '@playwright/test';
@@ -86,6 +87,8 @@ export async function openCartListener(db: Pool, offline = false, controls: Cart
     fetch: request => (app ? app.fetch(request) : new Response(null, { status: 503 })),
   });
   try {
+    // Keep synthetic writes off the Node API client's idle pooled-socket race; never retry a login.
+    useSingleRequestConnections(server);
     if (!server.listening) {
       await new Promise<void>((resolve, reject) => {
         server.once('listening', resolve);

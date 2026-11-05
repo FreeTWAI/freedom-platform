@@ -1,5 +1,5 @@
 import {Hono,type Context} from 'hono';
-import {LIVE_SITE_ORIGIN,developmentMap,developmentPage,pageMarkdown,skillMarkdown,llmsIndex,developmentCss,collaborationCss,developmentShareJs,pageHtml,indexHtml,skillAgentMarkdown,pageAgentMarkdown} from '../../../../modules/development/service.js';
+import {LIVE_SITE_ORIGIN,developmentMap,developmentPage,pageMarkdown,skillMarkdown,llmsIndex,developmentCss,collaborationCss,skillPageCss,developmentShareJs,pageHtml,indexHtml,skillAgentMarkdown,pageAgentMarkdown} from '../../../../modules/development/service.js';
 import {getSkillCollaboration,type SkillEditorial} from '../../../../modules/community/skill-collaboration.js';
 import type {SkillDiscoveryBook} from '../../../../modules/community/discovery.js';
 import type {GitHubMetrics} from '../../../../modules/github-social/service.js';
@@ -19,7 +19,7 @@ export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHub
    return c.json(getSkillCollaboration(id,await readEditorial?.(id)));
  });
  app.get('/llms.txt',c=>c.text(llmsIndex()));
- app.get('/development.css',c=>{c.header('Content-Type','text/css; charset=utf-8');return c.body(developmentCss+collaborationCss+githubSocialCss);});
+ app.get('/development.css',c=>{c.header('Content-Type','text/css; charset=utf-8');return c.body(developmentCss+collaborationCss+skillPageCss+githubSocialCss);});
  app.get('/development-share.js',c=>{c.header('Content-Type','text/javascript; charset=utf-8');return c.body(developmentShareJs);});
  app.get('/development',c=>c.html(indexHtml()));
  app.get('/development/',c=>c.html(indexHtml()));

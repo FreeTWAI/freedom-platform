@@ -1,3 +1,7 @@
+import {createTesterMapRoutes,createPublicTesterMapRoutes} from './routes/tester-map.js';
+import { performance } from "node:perf_hooks";
+import {gamePreviewMiddleware} from '../../portal-web/src/games/preview.js';
+import {createEventPrizePhotoRoutes,createPublicEventPrizePhotoRoutes,isEventPrizePhotoUpload,isEventPrizePhotoRemove,checkEventPrizePhotoHeaders} from './routes/event-prize-photos.js';
 import {createEventMissionRoutes} from './routes/event-missions.js';
 import {createCommunityCertificationRoutes} from './routes/community-certification.js';
 import {createSocialAchievementRoutes} from './routes/social-achievements.js';
@@ -84,7 +88,7 @@ import { createMaintainerWebhookRoutes, createRepoMaintainerMemberRoutes, isMain
 import { createPublishedSkillRoutes } from './routes/published-skills.js';
 import { checkMessageImageHeaders, createMemberCommunicationRoutes, isMessageImageUpload, messageImagesInstalled } from './routes/member-communications.js';
 import { PageGitHubReader, PageGitHubEventReader } from '../../../modules/development/page-github.js';
-import { createCommunityEventRoutes, checkEventBannerUploadHeaders, checkEventVideoUploadHeaders, isEventBannerUpload, isEventVideoUpload } from './routes/community-events.js';
+import { EVENT_DETAILS_REQUEST_BYTES,isEventDetailsWrite,createCommunityEventRoutes, checkEventBannerUploadHeaders, checkEventVideoUploadHeaders, isEventBannerUpload, isEventVideoUpload } from './routes/community-events.js';
 import { checkHighlightPhotoUploadHeaders, checkHighlightPosterUploadHeaders, createEventHighlightMemberRoutes, createEventHighlightPublicRoutes, isHighlightPhotoUpload, isHighlightPosterUpload } from './routes/event-highlights.js';
 import { createSquadOutcomeRoutes, createPublicSquadOutcomeRoutes } from './routes/squad-outcomes.js';
 import { createEventOutcomeRoutes, createPublicEventOutcomeRoutes } from './routes/event-outcomes.js';
@@ -280,6 +284,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         // Only this route accepts binary input. Its bounded stream reader runs
         // after session, CSRF and completed-member checks, before decoding.
         checkAvatarUploadHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
+      } else if(isEventPrizePhotoRemove(c.req.method,c.req.path)) {
+        requireCondition(c.req.header('Content-Length')===undefined||c.req.header('Content-Length')==='0',422,'invalid_event_prize_photo_remove','移除照片不接受其他欄位。');
+      } else if(isEventPrizePhotoUpload(c.req.method,c.req.path)) {
+        checkEventPrizePhotoHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isEventBannerUpload(c.req.method,c.req.path)) {
         checkEventBannerUploadHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isEventVideoUpload(c.req.method,c.req.path)) {
@@ -316,7 +324,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         requireCondition(/^application\/json[ \t]*(?:;|$)/i.test(c.req.header('Content-Type')??''),415,'json_required','操作需要 JSON。');
         // Notes may embed an image; preview wraps up to 24,000 UTF-8 bytes
         // in {"content":""}, with at most six JSON escape bytes per input byte.
-        const jsonLimit=c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
+        const jsonLimit=isEventDetailsWrite(c.req.method,c.req.path)?EVENT_DETAILS_REQUEST_BYTES:
+          c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
           c.req.method==='POST'&&c.req.path==='/api/v1/commerce/preview'?6*24000+14:
           storePoliciesInstalled(runtime)&&isSellerPoliciesSave(c.req.method,c.req.path)?524288:
           storeVariantsInstalled(runtime)&&isProductGroupReplace(c.req.method,c.req.path)?131072:32768;
@@ -374,6 +383,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         &&/^text\/html(?:;|$)/i.test(c.res.headers.get('Content-Type')??''))c.header('Referrer-Policy','strict-origin');
     });
   });
+  app.use('*',gamePreviewMiddleware(origin));
   registerGuideReleaseRoute(app,runtime.publicGuideAssets);
   app.route('/admin/api',createAdminRoutes(pool,runtime.adminVerifier,{origin,tokenKey:runtime.githubTokenKey(),fetcher:options.githubSocial?.fetcher,readToken:runtime.githubMetricsToken,guildReviewer:runtime.guildReviewer},runtime.guildLaunchpadEnabled===true,runtime.participationMetricsEnabled===true,providerEnvironment(freedomEnv),runtime.commercePayments?.journal,{checkout:hostedCheckoutOptions(origin,runtime,freedomEnv),environment:providerEnvironment(freedomEnv),releaseSha:runtime.health?.release_sha??null},runtime.communityCertificationEnabled===true));
   const skillEventBacklinks=runtime.eventOutcomesEnabled===true?async(id:string,c:Context)=>{
@@ -482,6 +492,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   registerPublicMemberCardRoutes(app, featureContext);
   registerPublicMemberProfiles(app, featureContext);
   app.route('/api/v1',createPublicProfileCoverRoutes(pool,runtime.avatarAssetStore));
+  app.route('/api/v1',createPublicEventPrizePhotoRoutes(pool,runtime.eventPrizePhotoAssetStore));
   registerPublicEventMediaRoutes(app, featureContext);
   registerPublicPromotion(app,pool,runtime,origin);
   registerPublicSocialPosts(app,pool,runtime);
@@ -526,6 +537,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/',createHostedCheckoutRoutes(pool,origin,runtime,freedomEnv));
   app.route('/',createHostedPaymentRoutes(pool,runtime,freedomEnv,origin));
   if(runtime.commerceSettings?.checkoutEnabled===true)app.use('/api/v1/me/orders',async(c,next)=>{try{await next();}finally{hostedOrderPrivateCache(c);}});
+  app.route('/api/v1',createPublicTesterMapRoutes(pool,origin,runtime.registrationCommunityId));
   app.use('/api/v1/*',memberBoundary(pool,origin,(path,method)=>onboardingAllowed(path,method,runtime.commerceSettings?.checkoutEnabled===true)));
   // EC-SPEC-10 §8.3 covers setup and catalog writes as well as order actions.
   // Keep this at composition: fulfilment must not depend on operations settings,
@@ -556,12 +568,14 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createMemberRoutes(pool));
   app.route('/api/v1',createMemberProfileRoutes(pool,{communityCertificationEnabled:runtime.communityCertificationEnabled===true,socialAchievementsEnabled:runtime.socialAchievementsEnabled===true}));
   app.route('/api/v1',createProfileCoverRoutes(pool,runtime.avatarAssetStore));
+  app.route('/api/v1',createEventPrizePhotoRoutes(pool,runtime.eventPrizePhotoAssetStore));
   if(runtime.memberReportingEnabled===true)app.route('/api/v1',createMemberReportingRoutes(pool,runtime.messageImageAssetStore));
   if(runtime.communityCertificationEnabled===true)app.route('/api/v1',createCommunityCertificationRoutes(pool));
   if(runtime.socialAchievementsEnabled===true)app.route('/api/v1',createSocialAchievementRoutes(pool));
   app.route('/api/v1',createMemberCommunicationRoutes(pool,runtime,runtime.memberBlockingEnabled===true,commerceOrderNotificationsInstalled(runtime),runtime.socialAchievementsEnabled===true));
   app.route('/api/v1',createCommunityEventRoutes(pool,runtime.eventEmailSender,origin,runtime));
   app.route('/api/v1',createEventMissionRoutes(pool));
+  app.route('/api/v1',createTesterMapRoutes(pool));
   registerMemberPromotion(app,pool,runtime);
   registerMemberPublicSocialPosts(app,pool,runtime);
   registerMemberServices(app,pool,runtime);

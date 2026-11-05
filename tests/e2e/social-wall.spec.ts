@@ -101,6 +101,9 @@ test('wall tools publish topics, mentions, check-ins and pictures; social commen
  await compose.getByRole('button',{name:'發布貼文',exact:true}).click();const post=card(page,text);await expect(post).toBeVisible();await expect(post).toContainText('作品分享');await expect(post).toContainText('台北松菸');await expect(post.locator('.social-note .social-text-link').filter({hasText:'@'})).toHaveCount(1);
  await post.getByRole('button',{name:'讚 · 0',exact:true}).click();
  await expect(post.getByRole('button',{name:'已讚 · 1',exact:true})).toHaveAttribute('aria-pressed','true');
+ // The visible like count is optimistic; wait for the confirmed write before reading its people.
+ await expect(post.getByRole('button',{name:'已讚 · 1',exact:true})).toBeEnabled();
+ await expect(post.getByRole('button',{name:'查看按讚名單',exact:true})).toContainText('1 人按讚');
  await post.getByRole('button',{name:'查看按讚名單'}).click();const people=page.getByRole('dialog',{name:'按讚名單',exact:true});await expect(people).toContainText('示範創作者');await page.keyboard.press('Escape');await expect(post.getByRole('button',{name:'查看按讚名單'})).toBeFocused();
  await post.getByRole('button',{name:'留言 · 0',exact:true}).click();await post.getByLabel('寫留言',{exact:true}).fill('看起來不錯 ');
  await post.getByRole('button',{name:'插入 emoji'}).click();await post.getByRole('button',{name:'插入 😂',exact:true}).click();

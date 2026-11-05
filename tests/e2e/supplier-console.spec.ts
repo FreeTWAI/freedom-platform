@@ -72,6 +72,7 @@ test('SC-E2E-01 intern supplier completes the S1 journey from the guild to a fre
     await post(b, bStore.root + '/setup', {name: bStoreName, slug: bSlug, currency: 'TWD'}, 201);
     await post(b, bStore.root + '/products', {title: otherTitle, price_minor: 9000, stock: 5}, 201);
     await open(b, bStore.hash);
+    await storeArea(b, '商店資料');
     await b.getByRole('button', {name: '開放 30 分鐘預留', exact: true}).click();
     await expect(b.getByRole('button', {name: '停止接受新預留', exact: true})).toBeEnabled();
 

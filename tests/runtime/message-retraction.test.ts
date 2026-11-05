@@ -143,3 +143,32 @@ test('committed reply replay after retraction preserves its exact target acknowl
   const fresh=await request<Message&ChannelMessage>(other+'/messages',b,body);assert.equal(fresh.status,201);assert.equal(fresh.data.reply_to_message_id,original.data.message_id,'an already-composed reply has the same explicit ACK');
  }
 });
+
+test('replaying the original send after that message itself is retracted acknowledges one durable message without restoring content',async()=>{
+  const {matchesDirectMessageAck,matchesChannelMessageAck}=await import('../../apps/portal-web/src/modules/message-image-client.js');
+  const a=await signIn(DEMO_USERS[0].email);
+  // A second authenticated session models a sibling tab/device retracting a
+  // committed send whose response never reached the original composer.
+  const sibling=await signIn(DEMO_USERS[0].email);
+  for(const channel of [false,true]){
+    const own=channel?'/me/channels/world/world':`/me/conversations/${B}`;
+    const quote=await request<Message&ChannelMessage>(own+'/messages',a,{body:'private quotation'});assert.equal(quote.status,201);
+    for(const content of [{body:'private sent text'},{sticker_id:'workshop-v1-hello'}]){
+      const payload={...content,reply_to_message_id:quote.data.message_id},key=randomUUID();
+      const committed=await request<Message&ChannelMessage>(own+'/messages',a,payload,key);assert.equal(committed.status,201,JSON.stringify(committed.data));
+      const done=await request<Retraction>(`${own}/messages/${committed.data.message_id}/retract`,sibling,{});assert.equal(done.status,200);
+      const replay=await request<Message&ChannelMessage>(own+'/messages',a,payload,key);assert.equal(replay.status,201,JSON.stringify(replay.data));
+      assert.equal(replay.data.message_id,committed.data.message_id);assert.equal(replay.data.created_at,committed.data.created_at);
+      if(channel)assert.equal(replay.data.sequence,committed.data.sequence);
+      assert.equal(replay.data.retracted_at,done.data.retracted_at);assert.equal(replay.data.body,'');
+      for(const field of ['sticker','image','reply_to','reply_to_message_id','sticker_id','image_id'])assert.equal((replay.data as unknown as Record<string,unknown>)[field],undefined,field);
+      assert.equal(channel?matchesChannelMessageAck(replay.data,{sender:A,kind:'world',channelKey:'world',payload}):matchesDirectMessageAck(replay.data,{sender:A,recipient:B,payload}),true);
+      const table=channel?'member_channel_messages':'member_direct_messages';
+      assert.equal((await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE reply_to_message_id=$1 AND sender_ref=$2 AND message_id=$3`,[quote.data.message_id,A,committed.data.message_id])).rows[0].n,1);
+      const receipts=(await pool.query('SELECT response FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2',[A,key])).rows;
+      assert.deepEqual(receipts,[{response:{message_id:committed.data.message_id}}]);
+      assert.equal((await request(own+'/messages',a,{body:'different original content'},key)).status,409,'a tombstone does not authorize another payload under the same key');
+    }
+    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM ${channel?'member_channel_messages':'member_direct_messages'} WHERE reply_to_message_id=$1 AND sender_ref=$2`,[quote.data.message_id,A])).rows[0].n,2,'original-key retries must not create duplicate messages');
+  }
+});

@@ -1,0 +1,19 @@
+.event-prize-editor,.event-prize-details { min-width: 0; display: grid; gap: .75rem; }
+.event-prize-fields,.event-prize-card { min-width: 0; margin: 0; padding: .85rem; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: .65rem; }
+.event-prize-fields legend { font-weight: 700; padding-inline: .35rem; }
+.event-prize-editor .field,.event-prize-editor input,.event-prize-editor textarea { min-width: 0; max-width: 100%; }
+.event-prize-editor input,.event-prize-editor textarea { font-size: 1rem; }
+.event-prize-editor button,.event-prize-editor input { min-height: 44px; }
+.event-prize-editor :is(button,input,textarea):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.event-prize-heading { display: flex; gap: .75rem; align-items: center; min-width: 0; }
+.event-prize-heading > div { min-width: 0; }
+.event-prize-heading h5 { font-size: 1rem; margin: 0; }
+.event-prize-heading p,.event-prize-card p { margin: 0; }
+.event-prize-details :is(h5,p,dd,dt),.event-prize-editor p { overflow-wrap: anywhere; }
+.event-prize-card dl { margin: 0; display: grid; gap: .6rem; }
+.event-prize-card dt { font-weight: 700; }
+.event-prize-card dd { margin: .2rem 0 0; white-space: pre-wrap; }
+
+.event-prize-editor button { justify-self: start; }
+.event-prize-editor [role="group"] { display: flex; flex-wrap: wrap; gap: .5rem; }
+.event-prize-editor [role="group"] p { flex-basis: 100%; }

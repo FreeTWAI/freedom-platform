@@ -268,9 +268,15 @@ export async function sendDirectMessage(pool:Pool,input:Command,rawPeer:string,o
     // Serialize one sender's sends so concurrent requests cannot exceed the budget.
     await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`direct-message-sender/${input.actor.community_id}/${input.actor.user_id}`]);
     await assertCurrentSessionClock(q,input.actor);
-    const recent=(await q.query(`SELECT count(*)::int AS n FROM member_direct_messages WHERE community_id=$1 AND sender_ref=$2 AND created_at>clock_timestamp()-make_interval(secs=>$3)`,
-      [input.actor.community_id,input.actor.user_id,DIRECT_MESSAGE_RATE_WINDOW_SECONDS])).rows[0].n;
-    requireCondition(recent<DIRECT_MESSAGE_RATE_LIMIT,429,'message_rate_limited','訊息傳送太頻繁，請稍後再試。');
+    // Only the newest budget-sized set can determine whether the window is full.
+    // Aggregate first, then take one real DB decision clock after the sender wait
+    // and data read; never use the transaction-start clock or a per-row cutoff.
+    const limited=(await q.query<{limited:boolean}>(`SELECT CASE WHEN count(*)<$4::int THEN false
+      ELSE min(created_at)>clock_timestamp()-make_interval(secs=>$3) END AS limited
+      FROM (SELECT created_at FROM member_direct_messages WHERE community_id=$1 AND sender_ref=$2
+        ORDER BY created_at DESC LIMIT $4) AS latest`,
+      [input.actor.community_id,input.actor.user_id,DIRECT_MESSAGE_RATE_WINDOW_SECONDS,DIRECT_MESSAGE_RATE_LIMIT])).rows[0].limited;
+    requireCondition(limited===false,429,'message_rate_limited','訊息傳送太頻繁，請稍後再試。');
     if(body.image_id){
       // The draft must be this sender's own ready upload for exactly this recipient and not yet sent.
       // The sidecar's composite key and UNIQUE(message_id) repeat these facts for concurrent sends.

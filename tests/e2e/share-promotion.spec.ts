@@ -624,6 +624,39 @@ async function destinationPoints(pool: Pool, code: string) {
   return (await pool.query('SELECT count(*)::int AS n FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.code=$1', [code])).rows[0].n as number;
 }
 
+test('members share a personal tester-map link that lands publicly and credits the platform board', async ({ page, browser, e2eAuthPool, baseURL }) => {
+  await login(page);
+  await navigate(page, '測試員地圖');
+  await page.locator('.tester-map').getByRole('button', { name: '分享', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '分享「測試員地圖」', exact: true });
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  const url = (await dialog.locator('.skill-share-url').innerText()).trim();
+  const code = new URL(url).pathname.split('/').pop()!;
+  const before = await destinationPoints(e2eAuthPool, code);
+  // Chromium may detach the old document's response event after internal navigation; wait for the request instead.
+  const counted = page.context().waitForEvent('request', { predicate: request => request.url().endsWith('/api/v1/promotion/clicks') });
+  await page.goto(url, { waitUntil: 'commit' });
+  await counted;
+  await expect(page).toHaveURL(baseURL + '/#tester-map');
+  expect(await destinationPoints(e2eAuthPool, code)).toBe(before);
+  const guest = await browser.newContext({ userAgent: GUEST_UA + ' TesterMap/' + Date.now() });
+  try {
+    const visitor = await guest.newPage();
+    await visitor.goto(url, { waitUntil: 'commit' });
+    await expect(visitor).toHaveURL(baseURL + '/#tester-map');
+    await expect(visitor.getByRole('heading', { level: 1, name: '測試員地圖', exact: true })).toBeVisible();
+    await expect(visitor.locator('.tester-map .promotion-share')).toHaveCount(0);
+    await expect(visitor.locator('.tester-map').getByRole('link', { name: '測試員地圖', exact: true })).toHaveAttribute('href', '/#tester-map');
+    await expect.poll(() => destinationPoints(e2eAuthPool, code)).toBe(before + 1);
+    const row = (await e2eAuthPool.query('SELECT kind,target_key FROM promotion_links WHERE code=$1', [code])).rows[0];
+    expect(row).toEqual({ kind: 'platform', target_key: 'tester-map' });
+    for (const width of [1280, 390]) {
+      await visitor.setViewportSize({ width, height: 900 });
+      await noOverflow(visitor);
+    }
+  } finally { await guest.close(); }
+});
+
 test('share destination keeps Strict-cookie self exclusion after a cross-site entry without waiting for counting', async ({ page, context, e2eAuthPool, baseURL }) => {
   const link = await destinationLink(page);
   const before = await destinationPoints(e2eAuthPool, link.code);

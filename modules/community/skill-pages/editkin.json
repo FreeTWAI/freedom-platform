@@ -1,0 +1,14 @@
+{
+  "headline": "從原始碼建起剪輯器，親手改一段時間軸。",
+  "outcomes": ["一段合成素材的時間軸試作", "EditGraph JSON 專案檔", "預覽、存檔與輸出的實測紀錄"],
+  "flow": {
+    "title": "可修改的時間軸與 EditGraph",
+    "lead": "Editkin 是剪輯器的社群原始碼版，要自己建置，尚無通過正式發行審查的官方安裝包；完整桌面版另需 Rust 與平台媒體依賴。",
+    "steps": [
+      {"icon": "terminal", "title": "選版本並建置", "note": "讀繁中說明與 BUILDING.md，決定驗證瀏覽器版或桌面版；需 Node.js 22.13 以上。"},
+      {"icon": "scissors", "title": "用合成素材試剪", "note": "在可修改的時間軸上調整一個片段；瀏覽器版的「匯出專案」只下載 EditGraph JSON。"},
+      {"icon": "check", "title": "記錄實測範圍", "note": "整理時間軸修改、合成素材與實測範圍，再向 Hao 的原作提 PR。"}
+    ],
+    "caption": "瀏覽器版無法輸出影片，也不會自動存檔：預覽、存檔與輸出要分開實測並記錄。"
+  }
+}

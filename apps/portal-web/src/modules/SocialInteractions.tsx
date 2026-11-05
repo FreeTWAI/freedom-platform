@@ -1,5 +1,5 @@
 import {ReportButton} from './MemberReporting';
-import {useEffect, useRef, useState, type FormEvent} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState, type FormEvent} from 'react';
 import {ApiError, type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
 import type {SocialPost} from './SocialZone';
@@ -14,13 +14,27 @@ import {SocialPostLike} from './SocialPostLike';
 
 type Comment = {image_url?:string|null;sticker_id?:string|null;mentions?:Mention[];like_count?:number;liked?:boolean;comment_id: string; body: string; created_at: string; edited_at: string | null; revision: number; author: {user_id: string; display_name: string; avatar_url?: string | null}; mine: boolean};
 type Comments = {items: Comment[]; next_cursor: string | null};
+type CommentEditCommand = {commentId: string; revision: number; body: {text: string}; key: string; inFlight: boolean; uncertain: boolean};
+const unconfirmedEdit = '尚未確認儲存結果，原內容已保留。請按「確認上次儲存」重試。';
+function rejectedCommentEdit(cause: unknown) {
+  return cause instanceof ApiError && !cause.network && !cause.timedOut
+    && ({version_conflict: 412, version_required: 428, validation_failed: 422, author_required: 403, not_found: 404, invalid_version: 400, idempotency_required: 400} as Record<string, number>)[cause.code ?? ''] === cause.status;
+}
+// A receipt confirms edit-owned fields, not current visibility, reactions or identity.
+function applyCommentEdit(comment: Comment, saved: Comment) {
+  if (comment.comment_id !== saved.comment_id || comment.revision >= saved.revision) return comment;
+  return {...comment, body: saved.body, revision: saved.revision, edited_at: saved.edited_at,
+    mentions: comment.mentions?.filter(member => saved.body.includes(`@${member.display_name}`))};
+}
+
+function compareComments(a: Comment, b: Comment) {
+  // Historical receipts use milliseconds; pad rather than truncate precise SQL timestamps.
+  const left = a.created_at.slice(0, -1).padEnd(26, '0'), right = b.created_at.slice(0, -1).padEnd(26, '0');
+  return left.localeCompare(right) || a.comment_id.localeCompare(b.comment_id);
+}
 function mergeComments(current: Comment[], incoming: Comment[]) {
   const all = new Map([...current, ...incoming].map(item => [item.comment_id, item]));
-  return [...all.values()].sort((a, b) => {
-    // Historical receipts use milliseconds; pad rather than truncate precise SQL timestamps.
-    const left = a.created_at.slice(0, -1).padEnd(26, '0'), right = b.created_at.slice(0, -1).padEnd(26, '0');
-    return left.localeCompare(right) || a.comment_id.localeCompare(b.comment_id);
-  });
+  return [...all.values()].sort(compareComments);
 }
 
 export function SocialInteractions({client, post, canHide, onUpdate,onTag,onCommentsChanged,initialOpen=false}: {onCommentsChanged?:()=>void;initialOpen?:boolean;onTag?:(tag:string)=>void;client: PortalClient; post: SocialPost; canHide: boolean; onUpdate: (value: Partial<SocialPost>) => void}) {
@@ -34,10 +48,30 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
   const [loadError, setLoadError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [editing, setEditing] = useState<{id: string; text: string} | null>(null);
+  const [editNotice, setEditNotice] = useState('');
+  const generation = client.sessionGeneration;
+  const editScope = useRef({client, generation, postId: post.post_id, commands: new Map<string, CommentEditCommand>()});
+  if (editScope.current.client !== client || editScope.current.generation !== generation || editScope.current.postId !== post.post_id) {
+    editScope.current = {client, generation, postId: post.post_id, commands: new Map()};
+    setEditing(null); setSending(false); setError(''); setEditNotice('');
+  }
+  const latestEdit = useRef({editing, comments});
+  latestEdit.current = {editing, comments};
+  const heldEdit = editing ? editScope.current.commands.get(editing.id) : undefined;
   const [mentions,setMentions]=useState<Mention[]>([]),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState(''),[preparing,setPreparing]=useState(false);
   const input=useRef<HTMLInputElement>(null),imageSeq=useRef(0),root=useRef<HTMLDivElement>(null),mounted=useRef(true);
   const [likePeople,setLikePeople]=useState<Mention[]>([]),[peopleCursor,setPeopleCursor]=useState<string|null>(null),[peopleBusy,setPeopleBusy]=useState(false),[peopleError,setPeopleError]=useState('');
   const peopleDialog=useRef<HTMLDialogElement>(null),peopleTrigger=useRef<HTMLButtonElement>(null),peopleSeq=useRef(0);
+  const peopleOwnerRef=useRef({client,postId:post.post_id,generation:client.sessionGeneration});
+  if(peopleOwnerRef.current.client!==client||peopleOwnerRef.current.postId!==post.post_id||peopleOwnerRef.current.generation!==client.sessionGeneration){
+    peopleOwnerRef.current={client,postId:post.post_id,generation:client.sessionGeneration};
+  }
+  const peopleOwner=peopleOwnerRef.current;
+  const ownsPeople=()=>mounted.current&&peopleOwnerRef.current===peopleOwner&&client.sessionGeneration===peopleOwner.generation;
+  useLayoutEffect(()=>{
+    setLikePeople([]);setPeopleCursor(null);setPeopleBusy(false);setPeopleError('');
+    return()=>{++peopleSeq.current;peopleDialog.current?.close();};
+  },[peopleOwner]);
   const [commentLiking,setCommentLiking]=useState<string|null>(null),commentLikeCommands=useRef(new Map<string,{liked:boolean;key:string}>());
   type CommentCommand={body:{text?:string;image_id?:string;sticker_id?:string;mention_ids?:string[]};file:File|null;uploadKey:string;key:string};
   const pendingComment = useRef<CommentCommand|null>(null);
@@ -56,11 +90,36 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
     return()=>{clearTimeout(timer);observer.disconnect();document.removeEventListener('visibilitychange',schedule);};
   },[client,post.post_id]);
   async function selectImage(next:File|null){const token=++imageSeq.current,generation=client.sessionGeneration;setError('');if(!next){setFile(null);setPreparing(false);return;}setPreparing(true);try{const prepared=await prepareSocialImage(next);if(token===imageSeq.current&&current(generation))setFile(prepared);}catch(e){if(token===imageSeq.current&&current(generation))setError(e instanceof Error?e.message:'圖片無法處理，草稿仍保留。');}finally{if(token===imageSeq.current&&current(generation))setPreparing(false);}}
-  async function loadPeople(next?:string){const token=++peopleSeq.current,generation=client.sessionGeneration;setPeopleBusy(true);setPeopleError('');if(!next){setLikePeople([]);setPeopleCursor(null);}try{const page=await client.get<{items:Mention[];next_cursor:string|null}>(`/social-posts/${post.post_id}/likes${next?`?cursor=${encodeURIComponent(next)}`:''}`);if(token===peopleSeq.current&&current(generation)){setLikePeople(old=>next?[...new Map([...old,...page.items].map(m=>[m.user_id,m])).values()]:page.items);setPeopleCursor(page.next_cursor);}}catch(e){if(token===peopleSeq.current&&current(generation))setPeopleError(e instanceof Error?e.message:'按讚名單暫時無法載入。');}finally{if(token===peopleSeq.current&&current(generation))setPeopleBusy(false);}}
+  async function loadPeople(next?:string,preserve=false){
+    if(!ownsPeople())return;
+    const token=++peopleSeq.current;
+    const currentPeople=()=>token===peopleSeq.current&&ownsPeople();
+    setPeopleBusy(true);setPeopleError('');
+    if(!next){if(!preserve)setLikePeople([]);setPeopleCursor(null);}
+    try{
+      const page=await client.get<{items:Mention[];next_cursor:string|null}>(`/social-posts/${post.post_id}/likes${next?`?cursor=${encodeURIComponent(next)}`:''}`);
+      if(currentPeople()){
+        setLikePeople(old=>next?[...new Map([...old,...page.items].map(m=>[m.user_id,m])).values()]:page.items);
+        setPeopleCursor(page.next_cursor);
+      }
+    }catch(e){if(currentPeople()){
+      if(e instanceof ApiError&&(e.unauthorized||e.accessExpired||e.status===403||e.status===404)){setLikePeople([]);setPeopleCursor(null);}
+      setPeopleError(e instanceof Error?e.message:'按讚名單暫時無法載入。');
+    }}
+    finally{if(currentPeople())setPeopleBusy(false);}
+  }
+  function updatePostLike(value:{liked:boolean;like_count:number}){
+    if(!ownsPeople())return;
+    onUpdate(value);
+    // Only the child's validated canonical ACK reaches this callback. Starting
+    // a new first-page read also fences a pre-ACK page that is still in flight.
+    if(ownsPeople()&&peopleDialog.current?.open)void loadPeople(undefined,true);
+  }
   function closePeople(){++peopleSeq.current;peopleDialog.current?.close();peopleTrigger.current?.focus();}
-  async function likeComment(comment:Comment){if(commentLiking)return;const generation=client.sessionGeneration;const command=commentLikeCommands.current.get(comment.comment_id)??{liked:!comment.liked,key:crypto.randomUUID()};commentLikeCommands.current.set(comment.comment_id,command);setCommentLiking(comment.comment_id);setError('');try{const value=await client.post<{liked:boolean;like_count:number}>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/like`,{liked:command.liked},{idempotencyKey:command.key});if(!current(generation))return;setComments(rows=>rows.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row));confirmedComments.current=confirmedComments.current.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row);commentLikeCommands.current.delete(comment.comment_id);}catch(e){if(current(generation)){if(e instanceof ApiError&&!e.network)commentLikeCommands.current.delete(comment.comment_id);setError(e instanceof Error?e.message:'尚未確認按讚結果，請重試。');}}finally{if(current(generation))setCommentLiking(null);}}
+  async function likeComment(comment:Comment){if(commentLiking)return;const generation=client.sessionGeneration;const command=commentLikeCommands.current.get(comment.comment_id)??{liked:!comment.liked,key:crypto.randomUUID()};commentLikeCommands.current.set(comment.comment_id,command);setCommentLiking(comment.comment_id);setError('');try{const value=await client.post<{liked:boolean;like_count:number}>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/like`,{liked:command.liked},{idempotencyKey:command.key});if(!current(generation))return;++confirmedCommentLikes.current;setComments(rows=>rows.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row));confirmedComments.current=confirmedComments.current.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row);commentLikeCommands.current.delete(comment.comment_id);}catch(e){if(current(generation)){if(e instanceof ApiError&&!e.network)commentLikeCommands.current.delete(comment.comment_id);setError(e instanceof Error?e.message:'尚未確認按讚結果，請重試。');}}finally{if(current(generation))setCommentLiking(null);}}
 
   const confirmedComments = useRef<Comment[]>([]);
+  const confirmedCommentLikes = useRef(0);
   const sequence = useRef(0);
   const pendingReadChanges = useRef<Map<string, Comment | null> | null>(null);
   useEffect(() => () => { ++sequence.current; pendingReadChanges.current = null; }, []);
@@ -74,17 +133,38 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
     pendingReadChanges.current = changes;
     setLoading(true); setLoadError('');
     try {
-      const page = await client.get<Comments>(`/social-posts/${post.post_id}/comments${next ? `?cursor=${encodeURIComponent(next)}` : ''}`);
-      if (token !== sequence.current || !current(generation)) return;
-      const items = mergeComments(
-        [...changes.values()].filter((comment): comment is Comment => comment !== null),
-        page.items.filter(comment => {
-          const changed = changes.get(comment.comment_id);
-          return changed !== null && (!changed || comment.revision >= changed.revision);
-        }),
-      );
+      const path = `/social-posts/${post.post_id}/comments${next ? `?cursor=${encodeURIComponent(next)}` : ''}`;
+      let page: Comments | undefined;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const epoch = confirmedCommentLikes.current;
+        const received = await client.get<Comments>(path);
+        if (token !== sequence.current || !current(generation)) return;
+        if (epoch === confirmedCommentLikes.current) { page = received; break; }
+        // Likes have no comment edit revision. Re-read this exact page once,
+        // rather than overwrite a confirmed reaction or invent membership.
+        if (attempt === 1) { setLoadError('留言剛有更新，請重新載入最新內容。'); return; }
+      }
+      if (!page) return;
+      // Reads own their covered range and current metadata. An overlapping edit only
+      // advances edit fields of rows still present in this authorized page.
+      const items = page.items.filter(comment => changes.get(comment.comment_id) !== null).map(comment => {
+        const changed = changes.get(comment.comment_id);
+        return changed ? applyCommentEdit(comment, changed) : comment;
+      });
+      // A partial first page has not covered later, already-visible rows.
+      // Keep only an effective edit ACK beyond that page's last ordered row;
+      // absence inside its covered range (or a complete/empty page) still wins.
+      const last = page.items[page.items.length - 1];
+      const laterEdits = !next && page.next_cursor && last ? [...changes.values()].filter((changed): changed is Comment => changed !== null
+        && compareComments(changed, last) > 0 && !page.items.some(item => item.comment_id === changed.comment_id)) : [];
       const fresh = confirmedComments.current.filter(comment => !page.items.some(item => item.comment_id === comment.comment_id));
-      setComments(current => mergeComments(next ? current : fresh, items)); setCursor(page.next_cursor);
+      setComments(current => {
+        const retained = laterEdits.flatMap(changed => {
+          const row = current.find(item => item.comment_id === changed.comment_id);
+          return row ? [applyCommentEdit(row, changed)] : [];
+        });
+        return mergeComments(next ? current : fresh, [...items, ...retained]);
+      }); setCursor(page.next_cursor);
       confirmedComments.current = fresh;
     } catch (cause) { if (token === sequence.current && current(generation)) setLoadError(cause instanceof Error ? cause.message : '留言暫時無法載入。'); }
     finally { if (token === sequence.current) { pendingReadChanges.current = null; if (current(generation)) setLoading(false); } }
@@ -136,27 +216,57 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
     } catch (cause) { if (current(generation)) setError(cause instanceof Error ? cause.message : '留言未能刪除。'); }
     finally { if (current(generation)) setSending(false); }
   }
+  function beginEdit(comment: Comment) {
+    const command = editScope.current.commands.get(comment.comment_id);
+    setConfirmDelete(null); setEditNotice(''); setError(command?.uncertain ? unconfirmedEdit : '');
+    setEditing({id: comment.comment_id, text: command?.body.text ?? comment.body});
+  }
   async function saveEdit(event: FormEvent, comment: Comment) {
     event.preventDefault();
-    if (!editing || sending) return;
-    const generation = client.sessionGeneration;
-    setSending(true); setError('');
+    const owner = editScope.current;
+    if (!editing || editing.id !== comment.comment_id || sending || !mounted.current || owner.client !== client
+      || owner.generation !== generation || client.sessionGeneration !== generation || owner.postId !== post.post_id
+      || latestEdit.current.editing?.id !== comment.comment_id || [...owner.commands.values()].some(command => command.inFlight)) return;
+    const command = owner.commands.get(comment.comment_id) ?? {commentId: comment.comment_id, revision: comment.revision,
+      body: {text: editing.text.trim()}, key: crypto.randomUUID(), inFlight: false, uncertain: false};
+    if (!command.body.text) return;
+    command.inFlight = true; owner.commands.set(command.commentId, command);
+    const ownsSession = () => mounted.current && editScope.current === owner && client.sessionGeneration === generation;
+    const visible = () => ownsSession() && latestEdit.current.editing?.id === command.commentId;
+    setSending(true); setError(''); setEditNotice('');
     try {
-      const saved = await client.post<Comment>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/edit`, {text: editing.text.trim()}, {ifMatch: comment.revision});
-      if (!current(generation)) return;
-      pendingReadChanges.current?.set(saved.comment_id, saved);
-      confirmedComments.current = confirmedComments.current.map(item => item.comment_id === saved.comment_id ? saved : item);
-      setComments(current => current.map(item => item.comment_id === saved.comment_id ? saved : item));
-      setEditing(null);
+      const saved = await client.post<Comment>(`/social-posts/${owner.postId}/comments/${command.commentId}/edit`, command.body, {ifMatch: command.revision, idempotencyKey: command.key});
+      if (!ownsSession()) return;
+      if (!saved || saved.comment_id !== command.commentId || saved.body !== command.body.text || saved.revision !== command.revision + 1
+        || typeof saved.edited_at !== 'string' || !Number.isFinite(Date.parse(saved.edited_at))) {
+        throw new ApiError({message: unconfirmedEdit, network: true});
+      }
+      owner.commands.delete(command.commentId);
+      const currentComment = latestEdit.current.comments.find(item => item.comment_id === command.commentId);
+      // Never reinsert a row removed by a newer authorized read or a delete ACK.
+      if (currentComment && currentComment.revision < saved.revision && pendingReadChanges.current?.get(command.commentId) !== null) {
+        pendingReadChanges.current?.set(command.commentId, applyCommentEdit(currentComment, saved));
+      }
+      confirmedComments.current = confirmedComments.current.map(item => applyCommentEdit(item, saved));
+      setComments(rows => rows.map(item => applyCommentEdit(item, saved)));
+      if (visible()) {
+        if (currentComment && currentComment.revision > saved.revision) {
+          setEditing({id: command.commentId, text: currentComment.body});
+          setEditNotice('上次儲存已確認，目前已有較新版本。');
+        } else setEditing(null);
+      }
     } catch (cause) {
-      if (current(generation)) setError(cause instanceof ApiError && cause.status === 412 ? '這則留言已在別處更新，請重新載入留言後再編輯。' : cause instanceof Error ? cause.message : '留言未能更新。');
-    } finally { if (current(generation)) setSending(false); }
+      if (!ownsSession()) return;
+      if (!command.uncertain && rejectedCommentEdit(cause)) owner.commands.delete(command.commentId);
+      else command.uncertain = true;
+      if (visible()) setError(command.uncertain ? unconfirmedEdit : cause instanceof ApiError && cause.status === 412 ? '這則留言已在別處更新，請重新載入留言後再編輯。' : cause instanceof Error ? cause.message : '留言未能更新。');
+    } finally { command.inFlight = false; if (ownsSession()) setSending(false); }
   }
   return <div ref={root} className="social-interactions stack">
     <div className="social-interaction-summary"><button ref={peopleTrigger} type="button" className="social-text-link" aria-label="查看按讚名單" onClick={()=>{peopleDialog.current?.showModal();void loadPeople();}}><SocialIcon name="like"/>{post.like_count??0} 人按讚</button><span title="在前景停留觀看的會員，每人只計一次"><SocialIcon name="eye"/>已讀 {post.read_count??0} 人</span></div>
-    <dialog ref={peopleDialog} className="social-publish-dialog social-people-dialog" aria-label="按讚名單" onCancel={e=>{e.preventDefault();closePeople();}}><header className="social-publish-head"><h2>按讚名單</h2><button type="button" className="btn btn-ghost" onClick={closePeople}>關閉名單</button></header>{likePeople.map(member=><p className="social-person" key={member.user_id}><MemberAvatar nickname={member.display_name}/><SocialMemberLink client={client} member={member}/></p>)}{peopleBusy&&<p role="status">載入中…</p>}{!peopleBusy&&!likePeople.length&&!peopleError&&<p>目前沒有可顯示的按讚會員。</p>}{peopleError&&<p role="alert">{peopleError}</p>}{(peopleCursor||peopleError)&&<button type="button" className="btn btn-ghost" disabled={peopleBusy} onClick={()=>void loadPeople(peopleCursor??undefined)}>{peopleError?'重試':'更多按讚會員'}</button>}</dialog>
+    <dialog ref={peopleDialog} className="social-publish-dialog social-people-dialog" aria-label="按讚名單" onCancel={e=>{e.preventDefault();closePeople();}}><header className="social-publish-head"><h2>按讚名單</h2><button type="button" className="btn btn-ghost" onClick={closePeople}>關閉名單</button></header>{likePeople.map(member=><p className="social-person" key={member.user_id}><MemberAvatar nickname={member.display_name}/><SocialMemberLink client={client} member={member}/></p>)}{peopleBusy&&<p role="status">載入中…</p>}{!peopleBusy&&!likePeople.length&&!peopleError&&<p>目前沒有可顯示的按讚會員。</p>}{peopleError&&<p role="alert">{peopleError}</p>}{(peopleCursor||peopleError)&&<button type="button" className="btn btn-ghost" disabled={peopleBusy} onClick={()=>void loadPeople(peopleCursor??undefined,true)}>{peopleError?'重試':'更多按讚會員'}</button>}</dialog>
     <div className="social-actions">
-      <SocialPostLike client={client} postId={post.post_id} liked={post.liked} count={post.like_count} onUpdate={onUpdate}/>
+      <SocialPostLike client={client} postId={post.post_id} liked={post.liked} count={post.like_count} onUpdate={updatePostLike}/>
       <button type="button" className="btn btn-ghost" aria-expanded={open} aria-controls={`social-comments-${post.post_id}`} onClick={() => { setOpen(!open); if (!open) void load(); else { ++sequence.current; pendingReadChanges.current = null; setLoading(false); } }}><SocialIcon name="comment"/>留言 · {post.comment_count ?? 0}</button>
       <SocialPostShare client={client} post={post}/>
       <ReportButton kind="post" id={post.post_id} label="貼文"/>
@@ -169,14 +279,15 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
       {comments.map(comment => <article className="social-comment" key={comment.comment_id}>
         <div className="social-comment-meta"><MemberAvatar nickname={comment.author.display_name} avatarUrl={comment.author.avatar_url}/><strong>{comment.author.display_name}</strong><time dateTime={comment.created_at}>{formatIsoLocal(comment.created_at)}</time>{comment.edited_at && <span className="social-edited" title={formatIsoLocal(comment.edited_at)}>已編輯</span>}</div>
         {editing?.id === comment.comment_id ? <form className="stack" onSubmit={event => void saveEdit(event, comment)} aria-busy={sending}>
-          <label className="field">編輯留言<textarea aria-label="編輯留言" required rows={2} maxLength={1000} value={editing.text} disabled={sending} onChange={event => setEditing({id: comment.comment_id, text: event.target.value})}/></label>
-          <div className="social-actions"><button className="btn btn-ghost" disabled={sending || !editing.text.trim() || editing.text.trim() === comment.body}>{sending ? '儲存中…' : '儲存留言'}</button><button type="button" className="btn btn-ghost" disabled={sending} onClick={() => setEditing(null)}>取消</button></div>
+          <label className="field">編輯留言<textarea aria-label="編輯留言" required rows={2} maxLength={1000} value={editing.text} disabled={sending || !!heldEdit} onChange={event => { if (!editScope.current.commands.has(comment.comment_id)) setEditing({id: comment.comment_id, text: event.target.value}); }}/></label>
+          <div className="social-actions"><button className="btn btn-ghost" disabled={sending || (!heldEdit && (!editing.text.trim() || editing.text.trim() === comment.body))}>{sending ? '儲存中…' : heldEdit ? '確認上次儲存' : '儲存留言'}</button><button type="button" className="btn btn-ghost" disabled={sending} onClick={() => setEditing(null)}>取消</button></div>
+          {editNotice && <p role="status">{editNotice}</p>}
         </form> : <div className="social-comment-bubble">{comment.body!=='[圖片]'&&comment.body!=='[貼圖]'&&<p className="multiline-text"><SocialRichText client={client} text={comment.body} mentions={comment.mentions} onTag={onTag}/></p>}{comment.sticker_id&&<ChatSticker id={comment.sticker_id}/>} {comment.image_url&&<a href={comment.image_url} target="_blank" rel="noopener noreferrer" aria-label="開啟留言圖片"><img className="social-comment-image" src={comment.image_url} alt="留言附圖" loading="lazy"/></a>}</div>}
         <ReportButton kind="comment" id={comment.comment_id} label="留言"/>
         <div className="social-comment-actions"><button className="social-text-link" type="button" aria-label={`${comment.liked?'留言已讚':'留言讚'} · ${comment.like_count??0}`} aria-pressed={comment.liked??false} disabled={!!commentLiking} onClick={()=>void likeComment(comment)}>{commentLikeCommands.current.has(comment.comment_id)?'重試按讚':comment.liked?'已讚':'讚'}{(comment.like_count??0)>0&&` · ${comment.like_count}`}</button></div>
         {(comment.mine || canHide) && editing?.id !== comment.comment_id && <details className="social-post-menu social-comment-menu"><summary aria-label="留言選項">⋯</summary><div className="social-post-menu-actions">{confirmDelete === comment.comment_id ? <>
           <button type="button" className="btn btn-ghost" disabled={sending} onClick={() => void remove(comment)}>確定刪除留言</button><button type="button" className="btn btn-ghost" onClick={() => setConfirmDelete(null)}>取消</button>
-        </> : <>{comment.mine && <button type="button" className="btn btn-ghost" disabled={sending} onClick={() => { setConfirmDelete(null); setEditing({id: comment.comment_id, text: comment.body}); }}>編輯留言</button>}<button type="button" className="btn btn-ghost" onClick={() => setConfirmDelete(comment.comment_id)}>刪除留言</button></>}</div></details>}
+        </> : <>{comment.mine && <button type="button" className="btn btn-ghost" disabled={sending} onClick={() => beginEdit(comment)}>編輯留言</button>}<button type="button" className="btn btn-ghost" onClick={() => setConfirmDelete(comment.comment_id)}>刪除留言</button></>}</div></details>}
       </article>)}
       {cursor && <button type="button" className="btn btn-ghost" disabled={loading} onClick={() => void load(cursor)}>載入更多留言</button>}
       {(error || loadError) && <button type="button" className="btn btn-ghost" disabled={loading} onClick={() => { setError(''); void load(); }}>重新載入留言</button>}

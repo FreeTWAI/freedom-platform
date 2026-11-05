@@ -67,7 +67,7 @@ test('confirmed command failure is distinguished from an unknown response synchr
 
 test('actual profile-extra reveal effect opens ancestors on late availability without dependency on render-function identity',async()=>{
  const {readFileSync}=await import('node:fs');const {runInNewContext}=await import('node:vm');
- const source=readFileSync(new URL('../../apps/portal-web/src/modules/Membership.tsx',import.meta.url),'utf8');
+ const source=readFileSync(new URL('../../apps/portal-web/src/modules/AccountSettingsPanel.tsx',import.meta.url),'utf8');
  const effect=source.match(/useEffect\(\(\)=>\{\n    const details=profileExtrasRef.current;[\s\S]*?\},\[focusProfileExtras,hasProfileExtras\]\);/);assert.ok(effect);
  class Details{open=false;parentElement:Details|null=null;focused=false;querySelector(){return {focus:()=>{this.focused=true;}};}}
  const parent=new Details(),child=new Details();child.parentElement=parent;

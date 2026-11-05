@@ -1,12 +1,24 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { Pool } from 'pg';
+import { test,after,mock } from 'node:test';
+import type { Pool } from 'pg';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {z} from 'zod';
+import {text,isoTime} from '../../packages/shared/validation.js';
+import {EVENT_DETAILS_REQUEST_BYTES,isEventDetailsWrite} from '../../apps/platform-api/src/routes/community-events.js';
+import {eventPrizeDetailsSchema} from '../../modules/community/event-prize-details.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 import { Hono } from 'hono';
 import { Problem } from '../../packages/shared/problem.js';
 
 const origin = 'http://127.0.0.1:4310';
-const app = createApp(new Pool(), origin);
+// In-process middleware tests only: no listen, sockets, real database or provider.
+let databaseCalls=0,fetchCalls=0;
+const noDatabase=()=>{databaseCalls++;throw new Error('Database calls forbidden in middleware unit tests');};
+const pool={query:noDatabase,connect:noDatabase} as unknown as Pool;
+mock.method(globalThis,'fetch',()=>{fetchCalls++;throw new Error('External fetch forbidden in middleware unit tests');});
+after(()=>{mock.restoreAll();assert.equal(databaseCalls,0);assert.equal(fetchCalls,0);});
+const app = createApp(pool, origin);
 
 function request(body: BodyInit, extra: Record<string, string> = {}) {
   return app.request(new Request(origin + '/api/v1/auth/login', {
@@ -213,7 +225,7 @@ test('slow requests log once at the threshold using nested route patterns, witho
   const logs: unknown[][] = [];
   t.mock.method(console, 'warn', (...args: unknown[]) => { logs.push(args); });
   t.mock.method(console, 'log', (...args: unknown[]) => { logs.push(args); });
-  const local = createApp(new Pool(), origin), child = new Hono(), nested = new Hono();
+  const local = createApp(pool, origin), child = new Hono(), nested = new Hono();
   nested.post('/items/:id', c => { now = 1000; return c.json({ ok: true }); });
   child.route('/nested', nested); local.route('/observability', child);
   // Worker mounts its wildcard static-asset middleware after platform routes.
@@ -236,7 +248,7 @@ test('handled errors retain the existing response and request_failed log, with o
   t.mock.method(console, 'warn', (...args: unknown[]) => { logs.push(args); });
   t.mock.method(console, 'log', (...args: unknown[]) => { logs.push(args); });
   t.mock.method(console, 'error', (...args: unknown[]) => { errors.push(args); });
-  const local = createApp(new Pool(), origin), child = new Hono();
+  const local = createApp(pool, origin), child = new Hono();
   child.get('/items/:id', () => { now = 1500; throw new Error('private database error'); });
   local.route('/observability', child);
   local.use('/*', async (_c, next) => { await next(); });
@@ -251,7 +263,7 @@ test('fast success, unmatched 404, explicit 4xx and Problem 4xx remain quiet', a
   t.mock.method(performance, 'now', () => 0);
   const logs: unknown[][] = [];
   for (const method of ['warn', 'log', 'error'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args); });
-  const local = createApp(new Pool(), origin);
+  const local = createApp(pool, origin);
   local.get('/observability/explicit', c => c.json({ code: 'denied' }, 403));
   local.get('/observability/problem', () => { throw new Problem(409, 'conflict', 'private conflict'); });
   for (const [path, status] of [['/api/v1/health', 200], ['/observability/missing', 404], ['/observability/explicit', 403], ['/observability/problem', 409]] as const) {
@@ -267,7 +279,7 @@ test('fast explicit 5xx logs and the slow-request boundary excludes 999 ms', asy
   t.mock.method(performance, 'now', () => now);
   const logs: unknown[][] = [];
   t.mock.method(console, 'warn', (...args: unknown[]) => { logs.push(args); });
-  const local = createApp(new Pool(), origin);
+  const local = createApp(pool, origin);
   local.get('/observability/below-threshold', c => { now += 999; return c.json({ ok: true }); });
   local.get('/observability/unavailable', c => c.json({ code: 'unavailable' }, 503));
   assert.equal((await local.request(origin + '/observability/below-threshold')).status, 200);
@@ -281,7 +293,102 @@ test('slow unmatched requests use a fixed pattern placeholder rather than the ra
   t.mock.method(performance, 'now', () => calls++ === 0 ? 0 : 1000);
   const logs: unknown[][] = [];
   t.mock.method(console, 'warn', (...args: unknown[]) => { logs.push(args); });
-  const local = createApp(new Pool(), origin);
+  const local = createApp(pool, origin);
   assert.equal((await local.request(origin + '/ebaf4467-a54c-4cbb-866c-179db5a19123?private=secret')).status, 404);
   assert.deepEqual(logs, [[JSON.stringify({ event: 'slow_request', method: 'GET', route: 'unmatched', status: 404, duration_ms: 1000 })]]);
+});
+
+
+function escapedJson(value:unknown):string {
+  const quote=(text:string)=>'"'+text.split('').map(char=>'\\u'+char.charCodeAt(0).toString(16).padStart(4,'0')).join('')+'"';
+  if(typeof value==='string')return quote(value);
+  if(Array.isArray(value))return '['+value.map(escapedJson).join(',')+']';
+  if(value&&typeof value==='object')return '{'+Object.entries(value).map(([key,item])=>quote(key)+':'+escapedJson(item)).join(',')+'}';
+  return JSON.stringify(value);
+}
+const eventId='10000000-0000-4000-8000-000000000001';
+const eventWritePaths=['/api/v1/events',`/api/v1/events/${eventId}/update`];
+const eventRequest=(path:string,body:BodyInit,extra:Record<string,string>={},method='POST')=>app.request(new Request(origin+path,{method,headers:{Origin:origin,'Content-Type':'application/json',...extra},body,duplex:'half'} as RequestInit));
+test('only exact event create and UUID update POSTs receive the larger text ceiling',()=>{
+  assert.equal(EVENT_DETAILS_REQUEST_BYTES,163840);
+  for(const path of eventWritePaths)assert.equal(isEventDetailsWrite('POST',path),true);
+  assert.equal(isEventDetailsWrite('POST','/api/v1/events/AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA/update'),true);
+  for(const path of ['/api/v1/events/','/api/v1/events/not-a-uuid/update',`/api/v1/EVENTS/${eventId}/UPDATE`,`/API/v1/events/${eventId}/update`,'/api/v1/events/10000000-0000-0000-0000-000000000001/update',`/api/v1/events/${eventId}/update/extra`,`/api/v1/events/${eventId}/review`,`/api/v1/events/${eventId}/rsvp`,`/api/v1/events/${eventId}/cancel`])assert.equal(isEventDetailsWrite('POST',path),false);
+  for(const method of ['GET','PATCH','PUT','DELETE'])for(const path of eventWritePaths)assert.equal(isEventDetailsWrite(method,path),false);
+});
+test('bounded maximum event prose and five prizes fit with canonical control escaping and supplementary Unicode escaping',async()=>{
+  for(const char of ['字','\u0001','😀']){
+    const prize_details=Array.from({length:5},(_,i)=>({prize_id:`10000000-0000-4000-8000-00000000000${i}`,name:char.repeat(120),description:char.repeat(500),quantity:500,icon_id:'voucher',completion_rule:char.repeat(500),claim_note:char.repeat(500)}));
+    assert.equal(eventPrizeDetailsSchema.safeParse(prize_details).success,true);
+    const value={title:char.repeat(120),description:char.repeat(3000),help_need:char.repeat(500),starts_at:'2099-01-01T12:00:00.000+15:59',ends_at:'2099-01-02T13:00:00.000+15:59',mode:'in_person',location:char.repeat(300),event_kind:'guild_skill_exchange',topic:char.repeat(160),online_url:'https://example.org/'+char.repeat(480),visibility:'workshop',capacity:500,guild_key:'guild_member_operations',registration_policy:'community_member',prize_details};
+    const source=readFileSync('modules/community/events.ts','utf8'),declaration=source.slice(source.indexOf('const details = z.object('),source.indexOf('const reviewInput='));
+    const schema=runInNewContext(declaration+'\ndetails',{z,text,isoTime,eventPrizeDetailsSchema,URL});assert.equal(schema.safeParse(value).success,true,'actual full event DTO');
+    for(const body of [JSON.stringify(value),escapedJson(value)]){
+      const bytes=Buffer.byteLength(body);assert(bytes>32768&&bytes<EVENT_DETAILS_REQUEST_BYTES);
+      for(const path of eventWritePaths){const response=await eventRequest(path,body,{'Content-Length':String(bytes)});assert.equal(response.status,401);assert.equal((await response.json()).code,'login_required');}
+    }
+  }
+});
+test('event text request cap applies at exact and plus one for streamed bodies, including chunk-split UTF-8',async()=>{
+  for(const path of eventWritePaths)for(const size of [EVENT_DETAILS_REQUEST_BYTES,EVENT_DETAILS_REQUEST_BYTES+1]){
+    const text=new TextEncoder().encode(JSON.stringify({text:'合成😀'})),bytes=new Uint8Array(size).fill(32);bytes.set(text);
+    const body=new ReadableStream<Uint8Array>({start(controller){for(const byte of text)controller.enqueue(Uint8Array.of(byte));controller.enqueue(bytes.subarray(text.length));controller.close();}});
+    const response=await eventRequest(path,body);assert.equal(response.status,size===EVENT_DETAILS_REQUEST_BYTES?401:413);assert.equal((await response.json()).code,size===EVENT_DETAILS_REQUEST_BYTES?'login_required':'body_too_large');
+  }
+});
+test('event declared oversize rejects without pulling and streaming oversize cancels before draining',async()=>{
+  for(const path of eventWritePaths){
+    let pulls=0;const declared=new ReadableStream<Uint8Array>({pull(){pulls++;}},{highWaterMark:0});
+    const rejected=await eventRequest(path,declared,{'Content-Length':String(EVENT_DETAILS_REQUEST_BYTES+1)});assert.equal(rejected.status,413);assert.equal(pulls,0);
+    let streamed=0,cancelled=false;const hostile=new ReadableStream<Uint8Array>({pull(controller){streamed++;if(streamed===40)controller.close();else controller.enqueue(new Uint8Array(8192).fill(32));},cancel(){cancelled=true;}},{highWaterMark:0});
+    const result=await eventRequest(path,hostile);assert.equal(result.status,413);assert.equal((await result.json()).code,'body_too_large');assert(streamed<40);assert.equal(cancelled,true);
+  }
+});
+test('event siblings, malformed update paths and other methods keep the original 32 KiB ceiling',async()=>{
+  const paths=['/api/v1/events/','/api/v1/events/not-a-uuid/update',`/api/v1/EVENTS/${eventId}/UPDATE`,`/API/v1/events/${eventId}/update`,'/api/v1/events/10000000-0000-0000-0000-000000000001/update',`/api/v1/events/${eventId}/update/extra`,`/api/v1/events/${eventId}/review`,`/api/v1/events/${eventId}/rsvp`,`/api/v1/events/${eventId}/cancel`];
+  for(const path of paths){const response=await eventRequest(path,' '.repeat(32769));assert.equal(response.status,413);assert.equal((await response.json()).code,'body_too_large');}
+  for(const method of ['PATCH','PUT','DELETE'])for(const path of eventWritePaths){const response=await eventRequest(path,' '.repeat(32769),{},method);assert.equal(response.status,413);assert.equal((await response.json()).code,'body_too_large');}
+});
+
+test('event prize photo binary allowance requires exact POST, event UUID and stable prize UUID',async()=>{
+  const event='10000000-0000-4000-8000-000000000001',prize='20000000-0000-4000-8000-000000000002';
+  const path=`/api/v1/events/${event}/prizes/${prize}/photo`;
+  for(const exact of [path,path.replace(event,event.toUpperCase()).replace(prize,prize.toUpperCase())]){
+    const response=await app.request(origin+exact,{method:'POST',headers:{Origin:origin,'Content-Type':'image/png'},body:new Uint8Array([1])});
+    assert.equal(response.status,401);assert.equal((await response.json()).code,'login_required');
+  }
+  for(const [method,other] of [['PUT',path],['PATCH',path],['POST',path+'/extra'],['POST',path+'/'],['POST',path.replace(prize,'-'.repeat(36))],['POST',path.replace(prize,'20000000-0000-5000-8000-000000000002')]]){
+    const response=await app.request(origin+other,{method,headers:{Origin:origin,'Content-Type':'image/png'},body:new Uint8Array([1])});
+    assert.equal(response.status,415,`${method} ${other}`);assert.equal((await response.json()).code,'json_required');
+  }
+});
+
+test('event prize photo overflow and wrong MIME refuse before stream/auth; exact removal stays empty',async()=>{
+  const path='/api/v1/events/10000000-0000-4000-8000-000000000001/prizes/20000000-0000-4000-8000-000000000002/photo';
+  for(const headers of [{'Content-Type':'image/png','Content-Length':'2097153'},{'Content-Type':'image/svg+xml','Content-Length':'1'}]){
+    let pulls=0;const body=new ReadableStream<Uint8Array>({pull(){pulls++;}},{highWaterMark:0});
+    const response=await app.request(new Request(origin+path,{method:'POST',headers:{Origin:origin,...headers},body,duplex:'half'} as RequestInit));
+    assert.equal(response.status,headers['Content-Type']==='image/png'?413:415);assert.equal(pulls,0);
+  }
+  const empty=await app.request(origin+path+'/remove',{method:'POST',headers:{Origin:origin,'Content-Length':'0'}});
+  assert.equal(empty.status,401);assert.equal((await empty.json()).code,'login_required');
+  const nonempty=await app.request(origin+path+'/remove',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','Content-Length':'2'},body:'{}'});
+  assert.equal(nonempty.status,422);assert.equal((await nonempty.json()).code,'invalid_event_prize_photo_remove');
+});
+
+test('anonymous attendance requests remain behind the real member boundary, including an unregistered public lookalike',async()=>{
+  const event='10000000-0000-4000-8000-000000000001',member='20000000-0000-4000-8000-000000000001';
+  for(const [path,method,expected] of [
+    [`/api/v1/events/${event}/attendance`,'GET',401],
+    [`/api/v1/events/${event}/attendance/${member}`,'POST',401],
+    [`/api/v1/public/events/${event}/attendance`,'GET',401],
+  ] as const){
+    const response=await app.request(new Request(origin+path,{method,headers:{Origin:origin,...(method==='POST'?{'Content-Type':'application/json'}:{})},...(method==='POST'?{body:JSON.stringify({action:'confirm'})}:{})}));
+    assert.equal(response.status,expected,path);
+    const body:unknown=await response.json();
+    assert.ok(body!==null&&typeof body==='object'&&'code' in body);
+    assert.equal(body.code,'login_required');
+    assert.doesNotMatch(JSON.stringify(body),/member_ref|recorded_at|registration_state|"items"/);
+  }
+  assert.equal(databaseCalls,0);assert.equal(fetchCalls,0);
 });

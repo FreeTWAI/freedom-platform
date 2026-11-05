@@ -73,7 +73,8 @@ export function FloatingMessages({client,open,onToggle,onClose,children,preferen
     <section ref={panel} id="floating-message-panel" className="floating-message-panel" role={mobile?'dialog':'region'} aria-modal={mobile&&open?true:undefined} aria-labelledby="floating-message-title" hidden={!open}
       style={{'--chat-panel-width':`${width}px`,'--chat-panel-height':`${height}px`} as CSSProperties}
       onKeyDown={event=>{
-        if(event.defaultPrevented||document.querySelector('dialog[open]'))return;
+        // Escape belongs to the input method while a candidate is being composed.
+        if(event.defaultPrevented||event.nativeEvent.isComposing||event.nativeEvent.keyCode===229||document.querySelector('dialog[open]'))return;
         if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}
         if(mobile&&event.key==='Tab'){
           const controls=Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href],button,input,textarea,select,[tabindex]'))

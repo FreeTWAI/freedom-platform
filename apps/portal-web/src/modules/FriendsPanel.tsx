@@ -1,4 +1,4 @@
-import {useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {useEffect,useId,useLayoutEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {useModuleMutation,type ModulePanelProps} from './shared';
 import {DirectoryMemberRow,loadLabels,type MemberCardData} from './Membership';
 import {announceInboxChange} from './member-inbox';
@@ -15,19 +15,23 @@ const SCOPE_COPY={
   blocked:{hint:'只有你能查看這份名單。封鎖設定不會替你移除共同頻道的內容。'},
 } as const;
 type FriendAction=Readonly<{userId:string;nickname:string;action:'accept'|'remove';version:number|undefined}>;
+const PENDING_LEAVE_NOTICE='好友操作尚未確認，請先確認原操作結果後再離開。';
 function confirmedFriendAction(value:unknown,action:FriendAction['action']){
   const row=value as {state?:unknown;aggregate_version?:unknown}|null;
   const version=typeof row?.aggregate_version==='string'&&/^\d+$/.test(row.aggregate_version)?Number(row.aggregate_version):row?.aggregate_version;
   if(!row||row.state!==(action==='accept'?'accepted':'removed')||typeof version!=='number'||!Number.isSafeInteger(version)||version<1)throw new Error('好友操作結果尚未確認。');
   return row;
 }
-type Props=ModulePanelProps&{onMessage:(id:string)=>void;initialScope?:'accepted'|'incoming';memberBlockingEnabled?:boolean};
+type Props=ModulePanelProps&{onMessage:(id:string)=>void;initialScope?:'accepted'|'incoming';memberBlockingEnabled?:boolean;registerLeave?:(guard:((nextHash:string|null)=>boolean)|null)=>void};
 export function FriendsPanel(props:Props){
-  // A different member/session never inherits private results or mutation notices.
-  return <FriendsContent key={`${props.session.user.user_id}:${props.client.sessionGeneration}`} {...props}/>;
+  // Replacement clients may restart their session counter. None of these owners
+  // inherit another transport/member/session's private command or leave guard.
+  const transport=useRef({client:props.client,revision:0});
+  if(transport.current.client!==props.client)transport.current={client:props.client,revision:transport.current.revision+1};
+  return <FriendsContent key={`${transport.current.revision}:${props.session.user.user_id}:${props.client.sessionGeneration}`} {...props}/>;
 }
-function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',memberBlockingEnabled=false}:Props){
-  const owner=client.sessionGeneration;
+function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',memberBlockingEnabled=false,registerLeave}:Props){
+  const owner=useRef(client.sessionGeneration).current;
   const directory=useMemo(()=>createFriendsDirectory<MemberCardData>({
     generation:()=>client.sessionGeneration,initialScope,
     read:(query,signal)=>client.get<FriendsPage<MemberCardData>>(`/friends/directory?${query}`,{signal}),
@@ -45,6 +49,26 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
   const [lastAction,setLastAction]=useState<FriendAction|null>(null);
   const writesLocked=busy||lastFailureUnknown;
   const actionInFlight=useRef(false);
+  const pendingCommand=useRef<object|null>(null),unknownCommand=useRef(false);
+  const [settledCommand,setSettledCommand]=useState<object|null>(null);
+  // An undefined mutation result can mean either a known refusal or an unknown
+  // outcome. Only its committed snapshot can release that POST's startup marker.
+  useLayoutEffect(()=>{
+    unknownCommand.current=lastFailureUnknown;
+    if(!busy&&pendingCommand.current===settledCommand){
+      pendingCommand.current=null;
+      if(!lastFailureUnknown)setNotice(previous=>previous===PENDING_LEAVE_NOTICE?'':previous);
+    }
+  },[busy,lastFailureUnknown,settledCommand]);
+  useLayoutEffect(()=>{
+    if(!registerLeave)return;
+    registerLeave(()=>{
+      if(!directory.isCurrent()||(!pendingCommand.current&&!unknownCommand.current))return true;
+      setNotice(PENDING_LEAVE_NOTICE);
+      return false;
+    });
+    return()=>registerLeave(null);
+  },[directory,registerLeave]);
   const input=useRef<HTMLInputElement>(null),results=useRef<HTMLElement>(null);
   const pageTrigger=useRef<Element|null>(null),focusedRevision=useRef(0);
   useEffect(()=>{directory.start();return()=>directory.stop();},[directory]);
@@ -72,6 +96,9 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
     if(busy||actionInFlight.current||!directory.isCurrent()||(lastFailureUnknown&&!retry))return;
     if(retry&&lastAction!==command)return;
     actionInFlight.current=true;
+    // Synchronous ownership also covers another navigation event in this tick,
+    // before React commits the mutation store's busy snapshot.
+    const attempt={};pendingCommand.current=attempt;
     try{
     setLastAction(command);
     setNotice('');setActionTarget({id:command.userId,action:command.action});
@@ -79,8 +106,12 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
     // a later retry is refused. A fresh read cannot settle a prior write.
     const result=await mutate(`/friends/${command.userId}/${command.action}`,{},command.version,value=>confirmedFriendAction(value,command.action));
     if(!directory.isCurrent())return;
+    setSettledCommand(attempt);
     setActionTarget(null);
     if(result!==undefined){
+      // Canonical ACK settles the command now. A slow directory GET is not a
+      // pending write and must not trap the member on this page.
+      pendingCommand.current=null;unknownCommand.current=false;
       setLastAction(null);setConfirming(null);
       announceInboxChange();
       setNotice(command.action==='accept'?`已和${command.nickname}成為好友。`:'好友關係或邀請已移除。');

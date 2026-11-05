@@ -1,0 +1,517 @@
+{
+  "format": "freedom.shared-actions-rollout-observation/v1",
+  "recorded_at": "2026-11-03T15:27:26.716Z",
+  "source": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0",
+  "previous_live_source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+  "controller_source": {
+    "staging-next": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0",
+    "next": "0d470404841a7c630db7a023921675694b7d77eb"
+  },
+  "scope": "Both environments served 1cbd4066 with schema197, then 0d470404 (same schema) after the follow-on rollout. Staging passed on the hosted path. Production first needed a local release-owner reconciliation: backup run 41647097780 finished, but its passed journal record was lost with the lease, so the floor stayed pending. The owner verified live state and appended only that missing record; the following hosted deploy passed every phase. Member journeys and feature activation for this source are not established here.",
+  "schema": {
+    "from": 196,
+    "to": 197,
+    "migration": "migrations/197_event_registration_policy.sql"
+  },
+  "release_source_ci": [
+    {
+      "workflow": ".github/workflows/verify.yml",
+      "runId": 41566822564,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41566822564/attempts/1"
+    },
+    {
+      "workflow": ".github/workflows/codeql.yml",
+      "runId": 41566822565,
+      "attempt": 1,
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41566822565/attempts/1"
+    }
+  ],
+  "operator_image": {
+    "image": "ghcr.io/freetwai/freedom-release-operator@sha256:d075c12427c42d69ae52a5beb232841f8f3529dcce36ba34d2f4088d53bc292c",
+    "build_run": 41022144027,
+    "build_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41022144027",
+    "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30",
+    "note": "deploy/shared-release and packages/media-migration are unchanged from d026ba76 through controller 0d470404."
+  },
+  "config_changes": [
+    {
+      "target": "staging-next",
+      "previousHash": "1de2e24870366cc259f1950a597ebd9f4b67b3e98f8f494521ce4cc199bdf789",
+      "configSha256": "4816eacdea3fd4e89288036553e84361625f7d82025ee7c7163bc56082d99639",
+      "change": "migrationProfile.last 196 -> 197",
+      "semanticChanges": false
+    },
+    {
+      "target": "next",
+      "previousHash": "9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d",
+      "configSha256": "6b7a8c78b032ef71c70f29fdf3307ab6e36afc25daa764bcdeffdebf8596f3e8",
+      "change": "migrationProfile.last 196 -> 197",
+      "semanticChanges": false,
+      "history": [
+        {
+          "at": "2026-11-03T14:02:56Z",
+          "action": "installed"
+        },
+        {
+          "at": "2026-11-03T14:07:12Z",
+          "action": "reverted_to_previous",
+          "reason": "probe 41649890891 stopped at release_floor_unsettled; backup recovery evidence binds the previous config hash"
+        },
+        {
+          "at": "2026-11-03T15:14:03Z",
+          "action": "installed",
+          "reason": "after the owner reconciliation settled the floor"
+        }
+      ]
+    }
+  ],
+  "production_backup_recovery": {
+    "daily_cron_utc": "43 5 * * *",
+    "runs": [
+      {
+        "run": 41304390104,
+        "event": "schedule",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41304390104",
+        "artifactId": 13082809713,
+        "artifactDigest": "sha256:2994685855d608bee513ced143358a6618ba53caed67dc7d2853e381a66c8413",
+        "name": "backup-result-next-41304390104-1",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "configSha256": "9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d",
+        "startedAt": "2026-11-01T12:16:30.503Z",
+        "completedAt": "2026-11-01T12:21:56.782Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "backup",
+            "reportedStatus": "failed",
+            "failureCode": "release_entry_backup_failed",
+            "backupFailure": {
+              "stage": "capture",
+              "code": "daily_backup_cleanup_failed",
+              "cleanupVerified": false,
+              "phaseCode": "backup_capture_failed",
+              "cleanupCode": "release_lease_lost",
+              "snapshotDump": "completed"
+            }
+          }
+        ],
+        "effect": "left a pending backup entry"
+      },
+      {
+        "run": 41456222600,
+        "event": "schedule",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41456222600",
+        "artifactId": 13147857172,
+        "artifactDigest": "sha256:486d2d5d36d11fe2650b4879415dcffe2233616309a599f7306b1b6f8e5989fd",
+        "name": "backup-result-next-41456222600-1",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "configSha256": "9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d",
+        "startedAt": "2026-11-02T13:59:54.051Z",
+        "completedAt": "2026-11-02T14:01:21.928Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "failed",
+            "failureCode": "release_floor_unsettled"
+          }
+        ],
+        "effect": "no journal write"
+      },
+      {
+        "run": 41640271773,
+        "event": "schedule",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41640271773",
+        "artifactId": 13231544269,
+        "artifactDigest": "sha256:62a8405298e89dd404a520939a82552bcba50c77ff5e375768f38aac9f31e32d",
+        "name": "backup-result-next-41640271773-1",
+        "status": "failed",
+        "error": "release_github_request_failed",
+        "startedAt": "2026-11-03T13:00:39.628Z",
+        "completedAt": "2026-11-03T13:00:41.678Z",
+        "operatorProgress": [],
+        "effect": "stopped before the operator; no journal write"
+      },
+      {
+        "run": 41645497475,
+        "event": "workflow_dispatch",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41645497475",
+        "artifactId": 13235073682,
+        "artifactDigest": "sha256:4c26e60f24889b6f216e21816971b10437c79b2543716565c88bd9debc8e004c",
+        "name": "backup-result-next-41645497475-1",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "recoverRunId": 41304390104,
+        "configSha256": "9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d",
+        "startedAt": "2026-11-03T13:35:22.299Z",
+        "completedAt": "2026-11-03T13:41:31.905Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "backup",
+            "reportedStatus": "failed",
+            "failureCode": "release_entry_backup_failed",
+            "backupFailure": {
+              "stage": "capture",
+              "code": "daily_backup_cleanup_failed",
+              "cleanupVerified": false,
+              "phaseCode": "backup_capture_failed",
+              "cleanupCode": "release_lease_lost",
+              "snapshotDump": "completed"
+            }
+          }
+        ],
+        "effect": "abandoned the 41304390104 entry after readback, then its own new backup left a pending entry"
+      },
+      {
+        "run": 41647097780,
+        "event": "workflow_dispatch",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41647097780",
+        "artifactId": 13235718587,
+        "artifactDigest": "sha256:9e79287c38e234952fb5c7a62322df1f8c9836d65597bda171ddd286dcf75b5d",
+        "name": "backup-result-next-41647097780-1",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "recoverRunId": 41645497475,
+        "configSha256": "9dd4bfdb5ece5984aeb57518afbab8901aa87f055a8938a5eb52da7dddfa075d",
+        "startedAt": "2026-11-03T13:51:04.774Z",
+        "completedAt": "2026-11-03T13:58:55.258Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "backup",
+            "reportedStatus": "failed",
+            "failureCode": "release_lease_lost",
+            "controlReadFailure": {
+              "operation": "chain_record"
+            }
+          }
+        ],
+        "effect": "abandoned the 41645497475 entry; its new backup returned passed, but the lease was lost while reading the chain for the passed append, before any PUT. The entry held capture-policy and archive intents, which no hosted recovery accepts."
+      },
+      {
+        "run": 41649890891,
+        "event": "workflow_dispatch",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41649890891",
+        "artifactId": 13236403697,
+        "artifactDigest": "sha256:17248034a1ed40b0cdbf969eede1610a59e2b9e1e1acd579688012ceb7a9d036",
+        "name": "release-result-41649890891-1",
+        "status": "failed",
+        "error": "release_operator_process_failed",
+        "configSha256": "6b7a8c78b032ef71c70f29fdf3307ab6e36afc25daa764bcdeffdebf8596f3e8",
+        "startedAt": "2026-11-03T14:03:53.589Z",
+        "completedAt": "2026-11-03T14:04:42.845Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "failed",
+            "failureCode": "release_floor_unsettled"
+          }
+        ],
+        "workflow": "shared-release.yml",
+        "effect": "probe; preflight stopped before any write"
+      }
+    ],
+    "owner_reconciliation": {
+      "executionOrigin": "local_release_owner_incident_reconciliation",
+      "actor": "teddashh",
+      "actorId": 233386770,
+      "readOnlyInspection": {
+        "startedAt": "2026-11-03T14:58:52.296Z",
+        "completedAt": "2026-11-03T14:59:22.685Z",
+        "status": "ready_for_owner_append"
+      },
+      "startedAt": "2026-11-03T15:12:17.295Z",
+      "completedAt": "2026-11-03T15:13:10.732Z",
+      "status": "backup_passed_reconciled_original_failure_retained",
+      "failedRun": 41647097780,
+      "failedRunAttempt": 1,
+      "failedArtifact": {
+        "id": 13235718587,
+        "digest": "sha256:9e79287c38e234952fb5c7a62322df1f8c9836d65597bda171ddd286dcf75b5d"
+      },
+      "originalWorkflowFailureRetained": true,
+      "automaticRetry": false,
+      "journalAppendCount": 1,
+      "databasePersistentWrites": 0,
+      "providerWrites": 0,
+      "before": {
+        "generation": 76,
+        "sha256": "8467a47a5588694889843feee1a3773630fa27ef2edaa5eaab098d9e7c8b6370",
+        "pending": {
+          "kind": "backup",
+          "stage": 0,
+          "runId": 41647097780
+        },
+        "setId": "7ea73478-19da-4bad-8062-ba905a4aaeda",
+        "archiveSha256": "fb82e58823b4050eea2d2b62fe03b2473f94fe0f98c0ae4108e4dab7d2666b6c",
+        "archiveBytes": 9154560,
+        "captureRevision": "shared-backup-7ea73478-19da-4bad-8062-ba905a4aaeda",
+        "schemaVersion": 196
+      },
+      "after": {
+        "generation": 77,
+        "sha256": "66a88f21c8a15c3fc9e7c6e9b295849d9b943e0d5c795b05fcbcc1cb31f615cf",
+        "pending": null
+      },
+      "checks": {
+        "receiptShape": "backup_failed_with_release_lease_lost_at_chain_record_without_backupFailure",
+        "databaseVerified": true,
+        "materialPolicyVerified": true,
+        "captureRevisionVerified": true,
+        "gcDisabled": true,
+        "deletionFences": 0,
+        "captureBackendAbsent": true,
+        "otherMaintenanceSessions": 0,
+        "workerVerified": true,
+        "archiveReadback": {
+          "key": "daily-v2/next/7ea73478-19da-4bad-8062-ba905a4aaeda.tar",
+          "bytes": 9154560,
+          "sha256": "fb82e58823b4050eea2d2b62fe03b2473f94fe0f98c0ae4108e4dab7d2666b6c",
+          "members": 62,
+          "sealedMembers": 4,
+          "objectMembers": 57,
+          "controlVerified": true
+        },
+        "publicHealth": {
+          "observedAt": "2026-11-03T15:12:41.668Z",
+          "http": 200,
+          "status": "ok",
+          "source": "d026ba76a4fb2c289cfb456dea68676f03f7bd30"
+        }
+      },
+      "restoreBasis": "Not rerun by the owner. The operator calls the passed append only after runDailyBackup returns passed, which requires the isolated restore and cleanup; the floor replay validated that proof in memory before the lost chain read.",
+      "leaseReleased": true
+    }
+  },
+  "deployments": [
+    {
+      "run": 41646567554,
+      "event": "workflow_dispatch",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41646567554",
+      "artifactId": 13235986708,
+      "artifactDigest": "sha256:329c6b02ffc11b2843f38cb40597985311a863154f206703125b9686844d9b43",
+      "name": "release-result-41646567554-1",
+      "status": "passed",
+      "error": null,
+      "configSha256": "4816eacdea3fd4e89288036553e84361625f7d82025ee7c7163bc56082d99639",
+      "startedAt": "2026-11-03T13:42:21.789Z",
+      "completedAt": "2026-11-03T13:50:17.986Z",
+      "operatorProgress": [
+        {
+          "name": "preflight",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "migration",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "deploy",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "health",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "handoff",
+          "reportedStatus": "running"
+        }
+      ],
+      "target": "staging-next"
+    },
+    {
+      "run": 41661769908,
+      "event": "workflow_dispatch",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41661769908",
+      "artifactId": 13241873786,
+      "artifactDigest": "sha256:ba3707307e97235cbda83f1bd371b0b39aab2b6b745eaaa1f0f992cc7097d45d",
+      "name": "release-result-41661769908-1",
+      "status": "passed",
+      "error": null,
+      "configSha256": "6b7a8c78b032ef71c70f29fdf3307ab6e36afc25daa764bcdeffdebf8596f3e8",
+      "startedAt": "2026-11-03T15:15:06.272Z",
+      "completedAt": "2026-11-03T15:23:42.786Z",
+      "operatorProgress": [
+        {
+          "name": "preflight",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "migration",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "deploy",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "health",
+          "reportedStatus": "passed"
+        },
+        {
+          "name": "handoff",
+          "reportedStatus": "running"
+        }
+      ],
+      "target": "next",
+      "floorReadback": {
+        "observedBetween": [
+          "2026-11-03T15:25:06Z",
+          "2026-11-03T15:27:15Z"
+        ],
+        "generation": 85,
+        "sha256": "bf3698483921b7e9f579d6c707614f12d910521e23647353224b2deae6fe1fd4",
+        "pending": null,
+        "sourceSha": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0",
+        "deployedSourceSha": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0",
+        "schemaVersion": 197,
+        "readOnly": true,
+        "note": "The receipt progress shows handoff as running; the journal readback has generation 85 = passed handoff for this run."
+      }
+    }
+  ],
+  "production_health": {
+    "observedAt": "2026-11-03T15:27:15Z",
+    "http": 200,
+    "status": "ok",
+    "release_sha": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0"
+  },
+  "limitation": "Production needed a local release owner again. The restore for archive set 7ea73478 rests on the failed run itself; the owner re-verified the remote archive bytes, control.json and live state, not an isolated restore.",
+  "open_followups": [
+    "Production backup lease loss (capture cleanup and journal reads) hit about half of attempts since 10-30; #1193 is the candidate fix and needs review plus a new operator image.",
+    "No hosted path settles a backup whose passed append was lost after an archive intent.",
+    "The next natural production backup is the first one after this reconciliation.",
+    "current-state.json has not been updated since schema194 (10-28); this record does not change it."
+  ],
+  "follow_on_rollout": {
+    "source": "0d470404841a7c630db7a023921675694b7d77eb",
+    "previous_live_source": "1cbd4066c9a5f5f01663162439448e23f0f3a1d0",
+    "change": "#1199 only; no migration, configs unchanged",
+    "release_source_ci": [
+      {
+        "workflow": ".github/workflows/verify.yml",
+        "runId": 41654889920,
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41654889920/attempts/1"
+      },
+      {
+        "workflow": ".github/workflows/codeql.yml",
+        "runId": 41654889809,
+        "attempt": 1,
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41654889809/attempts/1"
+      }
+    ],
+    "deployments": [
+      {
+        "run": 41665777019,
+        "event": "workflow_dispatch",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41665777019",
+        "artifactId": 13245522641,
+        "artifactDigest": "sha256:9b0e9c7837e87076e37b371fc3ccbe3eba4fa942221124c7159727eadc4daa99",
+        "name": "release-result-41665777019-1",
+        "target": "staging-next",
+        "status": "passed",
+        "error": null,
+        "configSha256": "4816eacdea3fd4e89288036553e84361625f7d82025ee7c7163bc56082d99639",
+        "controllerSha": "0d470404841a7c630db7a023921675694b7d77eb",
+        "startedAt": "2026-11-03T15:38:19.560Z",
+        "completedAt": "2026-11-03T15:44:16.060Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "migration",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "deploy",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "health",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "handoff",
+            "reportedStatus": "running"
+          }
+        ]
+      },
+      {
+        "run": 41667146142,
+        "event": "workflow_dispatch",
+        "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/41667146142",
+        "artifactId": 13246438559,
+        "artifactDigest": "sha256:8212b24aa96b36b8d2694969360c6b7926d197de5e2ffdae3a0c7a778b163be7",
+        "name": "release-result-41667146142-1",
+        "target": "next",
+        "status": "passed",
+        "error": null,
+        "configSha256": "6b7a8c78b032ef71c70f29fdf3307ab6e36afc25daa764bcdeffdebf8596f3e8",
+        "controllerSha": "0d470404841a7c630db7a023921675694b7d77eb",
+        "startedAt": "2026-11-03T15:46:34.100Z",
+        "completedAt": "2026-11-03T15:51:49.254Z",
+        "operatorProgress": [
+          {
+            "name": "preflight",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "migration",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "deploy",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "health",
+            "reportedStatus": "passed"
+          },
+          {
+            "name": "handoff",
+            "reportedStatus": "running"
+          }
+        ],
+        "floorReadback": {
+          "observedBetween": [
+            "2026-11-03T15:53:11Z",
+            "2026-11-03T15:53:53Z"
+          ],
+          "generation": 91,
+          "pending": null,
+          "sourceSha": "0d470404841a7c630db7a023921675694b7d77eb",
+          "deployedSourceSha": "0d470404841a7c630db7a023921675694b7d77eb",
+          "schemaVersion": 197,
+          "lastEvent": {
+            "kind": "passed",
+            "stage": "handoff",
+            "runId": 41667146142
+          },
+          "readOnly": true
+        }
+      }
+    ],
+    "production_health": {
+      "observedAt": "2026-11-03T15:53:11Z",
+      "http": 200,
+      "status": "ok",
+      "release_sha": "0d470404841a7c630db7a023921675694b7d77eb"
+    }
+  }
+}

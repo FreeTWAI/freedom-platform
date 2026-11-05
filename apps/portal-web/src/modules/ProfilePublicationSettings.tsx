@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {ProfilePublicationInput,ProfilePublicationSettingsSchema,defaultProfileLayout,type ProfileLayoutData,type ProfilePublicationSettingsData,type ProfileVisibilityValue} from '../../../../packages/shared/member-profile';
 import type {PortalClient} from '../api';
 import type {SessionPayload} from '../types';
-import {createProfileReader,profilePublicationPreview,profileMutationBlocksLeave} from './profile-publication-controller';
+import {createProfileReader,profileSettingsReadReady,readProfileSettings,profileSettingsReadMessage,profilePublicationPreview,profileMutationBlocksLeave} from './profile-publication-controller';
 import {sharingMutationState} from './authoring-drafts';
 import {useModuleMutation} from './shared';
 import {ProfileText} from './VisitorProfile';
@@ -22,9 +22,10 @@ export function ProfilePublicationSettings(props:{client:PortalClient;session:Se
 function SettingsContent({client,session,registerLeave,onReturn,onView}:Parameters<typeof ProfilePublicationSettings>[0]){
  const generation=client.sessionGeneration,owner=session.user.user_id,scope=useRef({client,generation});scope.current={client,generation};
  const current=()=>scope.current.client===client&&scope.current.generation===generation&&client.sessionGeneration===generation;
- const reader=useMemo(()=>createProfileReader(async signal=>ProfilePublicationSettingsSchema.parse(await client.get('/me/profile-publication',{signal})),current),[client,generation]);
+ const reader=useMemo(()=>createProfileReader(signal=>readProfileSettings(client,signal),current),[client,generation]);
  const load=useSyncExternalStore(reader.subscribe,reader.getSnapshot,reader.getSnapshot);
  const [loadedFor,setLoadedFor]=useState<typeof reader|null>(null);
+ const [appliedRead,setAppliedRead]=useState<Settings|null>(null);
  const [draft,setDraft]=useState<Draft>(empty),[saved,setSaved]=useState<Settings|null>(null),[confirmed,setConfirmed]=useState(false),[notice,setNotice]=useState(''),[validation,setValidation]=useState('');
  const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client,{userId:owner,type:'profile-publication-settings'});
  const mutationState=sharingMutationState({userId:owner,type:'profile-publication-settings'});
@@ -40,14 +41,14 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
  }
  const dirty=saved!==null&&JSON.stringify(draft)!==JSON.stringify(draftOf(saved));
  useEffect(()=>{reader.start();return()=>reader.stop();},[reader]);
- useEffect(()=>{if(load.value&&current()){const data=load.value;setLoadedFor(reader);setSaved(data);setDraft(draftOf(data));setConfirmed(false);}},[load.value]);
+ useEffect(()=>{if(load.value&&current()){const data=load.value;setLoadedFor(reader);setAppliedRead(data);setSaved(data);setDraft(draftOf(data));setConfirmed(false);}},[load.value]);
  useEffect(()=>{
   const guard=()=>(profileMutationBlocksLeave(mutationState)||coverState.current.busy||coverState.current.unknown)?false:!(dirty||coverState.current.dirty)||window.confirm('尚有未儲存的修改，確定離開？');registerLeave(guard);
   const unload=(event:BeforeUnloadEvent)=>{if(dirty||profileMutationBlocksLeave(mutationState)||coverState.current.busy||coverState.current.unknown||coverState.current.dirty){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',unload);
   return()=>{registerLeave(null);window.removeEventListener('beforeunload',unload);};
  },[registerLeave,dirty,mutationState]);
  async function submit(retry=false){
-  if(busy||coverState.current.busy||coverState.current.unknown||coverState.current.dirty||!saved||!current())return;setValidation('');setNotice('');
+  if(busy||(!retry&&profileMutationBlocksLeave(mutationState))||coverState.current.busy||coverState.current.unknown||coverState.current.dirty||!saved||!current()||!profileSettingsReadReady(reader.getSnapshot(),appliedRead))return;setValidation('');setNotice('');
   let operation=pending.current;
   if(!retry){
    const body={...draft,confirm_public:confirmed},parsed=ProfilePublicationInput.safeParse(body);
@@ -59,14 +60,23 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
   if(!current())return;
   if(result){pending.current=null;setSaved(result);setDraft(draftOf(result));setConfirmed(false);setNotice('個人頁與可見範圍已儲存。');}
  }
+ function refreshSettings(confirmDiscard=false){
+  // Recheck synchronously: a command may have started before React renders its lock.
+  if(!current()||profileMutationBlocksLeave(mutationState)||coverState.current.busy||coverState.current.unknown||coverState.current.dirty||reader.getSnapshot().status==='loading')return;
+  if(confirmDiscard&&!window.confirm('丟棄本機修改並重讀最新設定？'))return;
+  setNotice('');setValidation('');void reader.refresh();
+ }
  function update(next:Draft){setDraft(next);setConfirmed(false);setNotice('');}
  const previewData=profilePublicationPreview(draft);
- const locked=busy||lastFailureUnknown||coverStatus.busy||coverStatus.unknown;
+ const operationLocked=busy||lastFailureUnknown||coverStatus.busy||coverStatus.unknown;
+ const readReady=loadedFor===reader&&profileSettingsReadReady(load,appliedRead);
+ const locked=operationLocked||!readReady;
+ const refreshLocked=operationLocked||coverStatus.dirty||load.status==='loading';
  return <section className="profile-publication profile-publication-editor stack" aria-label="對外個人頁設定">
-  <div className="section-head"><h2>對外個人頁</h2><button type="button" className="btn btn-secondary btn-small" disabled={locked} onClick={onReturn}>返回本人空間</button></div>
+  <div className="section-head"><h2>對外個人頁</h2><button type="button" className="btn btn-secondary btn-small" disabled={operationLocked} onClick={onReturn}>返回本人空間</button></div>
   <p className="hint">這裡只設定新的對外個人頁，不會隱藏舊會員目錄、分享名片或其他已發布內容。私人草稿、聯絡資料與訂單不會自動加入。</p><p className="hint">不影響你已公開的名片；名片另行管理。<a href="#account">前往資料與帳號設定，管理分享名片</a></p>
-  {load.status==='error'&&<div role="alert"><p>設定暫時無法讀取。</p><button className="btn btn-secondary btn-small" onClick={()=>void reader.refresh()}>重讀設定</button></div>}
-  {(!saved||loadedFor!==reader)&&load.status!=='error'&&<p role="status">正在讀取設定…</p>}
+  {load.status==='error'&&<div role="alert"><p>{profileSettingsReadMessage(load.error)}</p><button className="btn btn-secondary btn-small" disabled={refreshLocked} onClick={()=>refreshSettings()}>重讀設定</button></div>}
+  {load.status==='loading'&&<p role="status">正在讀取設定…</p>}
   {saved&&loadedFor===reader&&current()&&<form ref={form} className="card stack profile-editor-form" onInvalidCapture={event=>{if(!(event.target instanceof HTMLElement))return;for(let element=event.target.parentElement;element;element=element.parentElement)if(element instanceof HTMLDetailsElement)element.open=true;}} onSubmit={event=>{event.preventDefault();void submit();}}>
    <p>目前已儲存範圍：<strong>{labels[saved.visibility]}</strong></p>
    <fieldset className="fieldset profile-visibility" disabled={locked}><legend>誰可以看這個個人頁？</legend>{(Object.keys(labels) as ProfileVisibilityValue[]).map(value=><label key={value}><input type="radio" name="profile-visibility" checked={draft.visibility===value} onChange={()=>update({...draft,visibility:value})}/>{labels[value]}</label>)}</fieldset>
@@ -77,7 +87,7 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
    <ProfileLayoutEditor value={draft.layout} disabled={locked} onChange={layout=>update({...draft,layout})}/>
    <details><summary className="profile-editor-summary">編輯我的連結（{draft.links.length}/5）</summary><fieldset className="fieldset stack" disabled={locked}><legend>連結（最多五個）</legend>{draft.links.map((link,index)=><div className="profile-link-editor" key={index}><label className="field">連結名稱 {index+1}<input name={`links.${index}.label`} required maxLength={40} value={link.label} onChange={event=>update({...draft,links:draft.links.map((value,i)=>i===index?{...value,label:event.target.value}:value)})}/></label><label className="field">HTTPS 網址 {index+1}<input name={`links.${index}.url`} required type="url" maxLength={500} value={link.url} onChange={event=>update({...draft,links:draft.links.map((value,i)=>i===index?{...value,url:event.target.value}:value)})}/></label><button type="button" className="btn btn-secondary btn-small" onClick={()=>update({...draft,links:draft.links.filter((_,i)=>i!==index)})}>移除連結 {index+1}</button></div>)}{draft.links.length<5&&<button type="button" className="btn btn-secondary btn-small" onClick={()=>update({...draft,links:[...draft.links,{label:'',url:''}]})}>新增連結</button>}</fieldset></details>
    <details ref={coverDetails}><summary className="profile-editor-summary">上傳自己的封面圖片</summary>
-   <ProfileCoverEditor client={client} value={draft} saved={saved} disabled={busy||lastFailureUnknown} onChange={selection=>update({...draft,...selection})} onState={reportCover}/>
+   <ProfileCoverEditor client={client} value={draft} saved={saved} disabled={busy||lastFailureUnknown||!readReady} onChange={selection=>update({...draft,...selection})} onState={reportCover}/>
    <label className="field">封面圖片說明<input name="layout.cover_alt" maxLength={120} disabled={locked} value={draft.layout.cover_alt} onChange={event=>update({...draft,layout:{...draft.layout,cover_alt:event.target.value}})}/></label>
    </details>
    {(coverStatus.busy||coverStatus.unknown||coverStatus.dirty)&&<div className="banner banner-info profile-cover-operation-status" role="status"><p>{coverStatus.unknown?'封面結果尚未確認；請確認原封面操作後再離開。':coverStatus.busy?'封面處理中，請稍候。':'封面已選擇但尚未上傳；請上傳或取消選檔後再儲存個人頁。'}</p><button type="button" className="btn btn-secondary btn-small" onClick={()=>{if(coverDetails.current){coverDetails.current.open=true;coverDetails.current.querySelector('summary')?.focus();}}}>查看封面操作</button></div>}
@@ -89,7 +99,7 @@ function SettingsContent({client,session,registerLeave,onReturn,onView}:Paramete
 
    {saved.visibility!=='private'&&saved.aggregate_version&&<p className="hint">個人頁連結：<a href={visitorProfileHash(owner)}>{visitorProfileHash(owner)}</a>（{labels[saved.visibility]}）</p>}
   </form>}
-  {validation&&<p role="alert">{validation}</p>}{error&&<div role="alert"><p>{error}</p>{!lastFailureUnknown&&<p>若資料版本已更新，重讀會丟棄這份本機修改。<button className="btn btn-secondary btn-small" disabled={busy} onClick={()=>{if(window.confirm('丟棄本機修改並重讀最新設定？'))void reader.refresh();}}>重讀最新設定</button></p>}</div>}
+  {validation&&<p role="alert">{validation}</p>}{error&&<div role="alert"><p>{error}</p>{!lastFailureUnknown&&<p>若資料版本已更新，重讀會丟棄這份本機修改。<button className="btn btn-secondary btn-small" disabled={refreshLocked} onClick={()=>refreshSettings(true)}>重讀最新設定</button></p>}</div>}
   {lastFailureUnknown&&<div className="banner banner-info"><p>結果尚未確認，儲存可能已成功。確認前請留在此頁。</p><button className="btn btn-secondary btn-small" disabled={busy} onClick={()=>void submit(true)}>確認原儲存結果</button></div>}{notice&&<p role="status">{notice}</p>}
  </section>;
 }

@@ -346,3 +346,160 @@ for(const stale of ['load','more'] as const)test(`history: delayed ${stale} cann
   assert.equal(h.state.items.find((entry:any)=>entry.notification_id===item.notification_id)?.read_at,ack.read_at);assert.equal(h.state.itemErrors[item.notification_id],undefined);
   assert.equal(h.state.inFlight.current,null);assert.equal(h.calls.filter(call=>call.key).length,1);assert.equal(h.navigations.length,0);
 });
+
+// Exercise the unchanged production refresh and lifecycle closures together.
+// EventTargets and deferred transports are synthetic, not a browser/PWA run.
+function bellLifecycle(state:any){
+  function target(){
+    const events=new EventTarget(),listeners=new Map<string,Set<EventListener>>();
+    return {
+      addEventListener(type:string,listener:EventListener){
+        if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type)!.add(listener);
+        events.addEventListener(type,listener);
+      },
+      removeEventListener(type:string,listener:EventListener){listeners.get(type)?.delete(listener);events.removeEventListener(type,listener);},
+      dispatch(type:string){events.dispatchEvent(new Event(type));},
+      size(){return [...listeners.values()].reduce((total,set)=>total+set.size,0);},
+    };
+  }
+  const window=target(),document={...target(),visibilityState:'visible'},navigator={onLine:true};
+  Object.assign(state,{window,document,navigator,INBOX_UPDATED:'freedom-inbox-updated',useEffect:(effect:()=>()=>void)=>effect()});
+  const source=readFileSync(new URL('../../apps/portal-web/src/modules/NotificationBell.tsx',import.meta.url),'utf8');
+  const marker='useEffect(()=>{\n    alive.current=true;void refresh();',start=source.indexOf(marker),end=source.indexOf('},[refresh]);',start);
+  assert.ok(start>=0&&end>start,'notification lifecycle effect remains covered');
+  const cleanup=runInNewContext(transformSync(source.slice(start,end+'},[refresh]);'.length),{loader:'ts',format:'cjs'}).code,state) as ()=>void;
+  return {window,document,navigator,cleanup,visibility(value:string){document.visibilityState=value;document.dispatch('visibilitychange');}};
+}
+const settleBell=()=>new Promise<void>(resolve=>setImmediate(resolve));
+
+test('bell PWA resume: visibility alone refreshes with a new snapshot scope, never a read command',async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);
+  assert.equal(h.calls.length,1);
+  h.calls[0].resolve({items:[item],unread_count:1});await settleBell();
+  life.visibility('hidden');assert.equal(h.calls.length,1);
+  life.visibility('visible');assert.equal(h.calls.length,2);
+  assert.notEqual(h.calls[0].options.coalesceScope,h.calls[1].options.coalesceScope);
+  assert.equal(h.calls[1].path,'/me/notifications?limit=6&offset=0');
+  assert.equal(h.calls[1].options.background,true);assert.equal(h.calls[1].options.coalesce,true);
+  h.calls[1].resolve({items:[item],unread_count:3});await settleBell();
+  assert.equal(h.state.unread,3);assert.equal(h.calls.filter(call=>call.key).length,0);
+  assert.equal(h.navigations.length,0);life.cleanup();
+});
+test('bell PWA resume: hidden and offline visibility events do not start network reads',async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);h.calls[0].resolve({items:[],unread_count:0});await settleBell();
+  life.visibility('hidden');life.visibility('hidden');life.navigator.onLine=false;life.visibility('visible');
+  assert.equal(h.calls.length,1);
+  life.navigator.onLine=true;life.window.dispatch('online');assert.equal(h.calls.length,2);
+  h.calls[1].resolve({items:[],unread_count:2});await settleBell();assert.equal(h.state.unread,2);life.cleanup();
+});
+for(const policy of [true,null] as const)test(`bell PWA resume: notification preference policy=${policy} remains authoritative`,async()=>{
+  const h=sharedCounts();h.state.preferencesEnabled=policy;h.state.scope.current.preferencesEnabled=policy;
+  const life=bellLifecycle(h.state);
+  if(policy===null){
+    life.visibility('hidden');life.visibility('visible');assert.equal(h.calls.length,0);assert.equal(h.state.unread,undefined);
+  }else{
+    assert.equal(h.calls.length,2);h.calls[0].resolve({items:[item],unread_count:90});h.calls[1].resolve({unread_count:1});await settleBell();
+    life.visibility('hidden');life.visibility('visible');assert.equal(h.calls.length,4);
+    assert.equal(h.calls[3].path,'/me/notification-preferences/reminders');
+    assert.notEqual(h.calls[1].options.coalesceScope,h.calls[3].options.coalesceScope);
+    h.calls[2].resolve({items:[item],unread_count:99});h.calls[3].resolve({unread_count:2});await settleBell();assert.equal(h.state.unread,2);
+  }
+  life.cleanup();
+});
+for(const outcome of ['success','failure'] as const)test(`bell PWA resume: a pre-resume ${outcome} cannot replace the fresh result`,async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);life.visibility('hidden');life.visibility('visible');assert.equal(h.calls.length,2);
+  h.calls[1].resolve({items:[item],unread_count:4});await settleBell();
+  if(outcome==='success')h.calls[0].resolve({items:[],unread_count:0});else h.calls[0].reject(new Error('stale transport failure'));
+  await settleBell();assert.equal(h.state.unread,4);assert.equal(h.state.error,false);life.cleanup();
+});
+test('bell PWA resume: failure stays unknown and the next visible transition can recover',async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);h.calls[0].resolve({items:[item],unread_count:1});await settleBell();
+  life.visibility('hidden');life.visibility('visible');assert.equal(h.calls.length,2);
+  h.calls[1].reject(new Error('resume unavailable'));await settleBell();assert.equal(h.state.unread,null);assert.equal(h.state.error,true);
+  life.visibility('hidden');life.visibility('visible');assert.equal(h.calls.length,3);
+  h.calls[2].resolve({items:[item],unread_count:5});await settleBell();assert.equal(h.state.unread,5);assert.equal(h.state.error,false);life.cleanup();
+});
+for(const fence of ['session','client','policy'] as const)test(`bell PWA resume: ${fence} change rejects a late resume response`,async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);h.calls[0].resolve({items:[item],unread_count:1});await settleBell();
+  life.visibility('hidden');life.visibility('visible');assert.equal(h.calls.length,2);
+  if(fence==='session')h.state.client.sessionGeneration++;
+  if(fence==='client')h.state.scope.current.client={sessionGeneration:1};
+  if(fence==='policy')h.state.scope.current.preferencesEnabled=true;
+  h.calls[1].resolve({items:[],unread_count:99});await settleBell();assert.equal(h.state.unread,1);life.cleanup();
+});
+test('bell PWA resume: cleanup removes listeners and rejects outstanding responses',async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);life.visibility('hidden');life.visibility('visible');assert.equal(h.calls.length,2);
+  life.cleanup();assert.equal(life.document.size(),0);assert.equal(life.window.size(),0);
+  life.visibility('hidden');life.visibility('visible');life.window.dispatch('focus');life.window.dispatch('online');assert.equal(h.calls.length,2);
+  for(const call of h.calls)call.resolve({items:[],unread_count:99});await settleBell();assert.equal(h.state.unread,1);
+});
+test('bell PWA resume: effect replay leaves one live visibility listener',async()=>{
+  const h=sharedCounts(),first=bellLifecycle(h.state);first.cleanup();
+  const second=bellLifecycle(h.state);assert.equal(h.calls.length,2);
+  assert.equal(first.document.size(),0);assert.equal(second.document.size(),1);
+  first.visibility('visible');second.visibility('hidden');second.visibility('visible');assert.equal(h.calls.length,3);
+  h.calls[2].resolve({items:[],unread_count:3});await settleBell();
+  h.calls[0].resolve({items:[],unread_count:99});h.calls[1].resolve({items:[],unread_count:0});await settleBell();assert.equal(h.state.unread,3);second.cleanup();
+});
+test('bell PWA resume: real PortalClient never joins a held pre-suspension preview',async t=>{
+  const responses:Array<(response:Response)=>void>=[];
+  const fetcher=t.mock.method(globalThis,'fetch',()=>new Promise<Response>(resolve=>responses.push(resolve)));
+  const h=sharedCounts(),client=new PortalClient();client.csrfToken='synthetic-resume-account';
+  h.state.client=client;h.state.scope.current={client,session:client.sessionGeneration,preferencesEnabled:false};
+  const life=bellLifecycle(h.state);
+  t.after(()=>{life.cleanup();for(const respond of responses)respond(Response.json({items:[],unread_count:0}));});
+  assert.equal(fetcher.mock.callCount(),1);
+  life.visibility('hidden');life.visibility('visible');assert.equal(fetcher.mock.callCount(),2,'fresh resume must not subscribe to the old transport');
+  const [oldUrl,oldInit]=fetcher.mock.calls[0].arguments as unknown as [string,RequestInit];
+  const [newUrl,newInit]=fetcher.mock.calls[1].arguments as unknown as [string,RequestInit];
+  assert.equal(oldUrl,newUrl);assert.equal(newInit.method,'GET');assert.equal(newInit.body,undefined);
+  assert.deepEqual([...new Headers(oldInit.headers)],[...new Headers(newInit.headers)]);
+  responses[1](Response.json({items:[item],unread_count:2}));await settleBell();assert.equal(h.state.unread,2);
+  responses[0](Response.json({items:[],unread_count:0}));await settleBell();assert.equal(h.state.unread,2);life.cleanup();
+});
+
+test('bell PWA resume: offline visibility resume then online does not join held pre-suspension transport',async t=>{
+  const responses:Array<(response:Response)=>void>=[];
+  const fetcher=t.mock.method(globalThis,'fetch',()=>new Promise<Response>(resolve=>responses.push(resolve)));
+  const h=sharedCounts(),client=new PortalClient();client.csrfToken='synthetic-resume-account';
+  h.state.client=client;h.state.scope.current={client,session:client.sessionGeneration,preferencesEnabled:false};
+  const life=bellLifecycle(h.state);
+  t.after(()=>{life.cleanup();for(const respond of responses)respond(Response.json({items:[],unread_count:0}));});
+  assert.equal(fetcher.mock.callCount(),1);
+  life.visibility('hidden');life.navigator.onLine=false;life.visibility('visible');
+  assert.equal(fetcher.mock.callCount(),1,'no network while offline');
+  life.navigator.onLine=true;life.window.dispatch('online');
+  assert.equal(fetcher.mock.callCount(),2,'online must use a post-resume snapshot, not the held old one');
+  responses[1](Response.json({items:[item],unread_count:4}));await settleBell();
+  responses[0](Response.json({items:[],unread_count:0}));await settleBell();assert.equal(h.state.unread,4);
+});
+
+for(const policy of [false,true])for(const outcome of ['success','failure'] as const)test(`bell offline resume: old ${outcome} before online cannot publish, preferences=${policy}`,async()=>{
+  const h=sharedCounts();h.state.preferencesEnabled=policy;h.state.scope.current.preferencesEnabled=policy;
+  const previousPage=h.state.page,life=bellLifecycle(h.state),reads=policy?2:1;
+  assert.equal(h.calls.length,reads);assert.equal(h.state.loading,true);
+  life.visibility('hidden');life.navigator.onLine=false;life.visibility('visible');
+  assert.equal(h.calls.length,reads,'offline visibility must not add a GET or POST');
+  if(outcome==='success')h.calls[0].resolve({items:[],unread_count:0});else h.calls[0].reject(new Error('stale offline preview'));
+  if(policy)h.calls[1].resolve({unread_count:0});
+  await settleBell();
+  assert.equal(h.state.unread,1);assert.equal(h.state.page,previousPage);assert.equal(h.state.error,false);
+  assert.equal(h.state.loading,false,'an invalidated preview must not leave loading stuck while offline');
+  assert.equal(h.calls.length,reads);
+  life.navigator.onLine=true;life.window.dispatch('online');
+  assert.equal(h.calls.length,reads*2);assert.equal(h.state.loading,true);
+  assert.notEqual(h.calls[0].options.coalesceScope,h.calls[reads].options.coalesceScope);
+  h.calls[reads].resolve({items:[item],unread_count:7});if(policy)h.calls[reads+1].resolve({unread_count:3});
+  await settleBell();assert.equal(h.state.unread,policy?3:7);assert.equal(h.state.loading,false);assert.equal(h.state.error,false);
+  assert.equal(h.calls.filter(call=>call.key).length,0);assert.equal(h.navigations.length,0);life.cleanup();
+});
+for(const outcome of ['success','failure'] as const)test(`bell offline resume: stale ${outcome} cannot clear the new online loading state`,async()=>{
+  const h=sharedCounts(),life=bellLifecycle(h.state);
+  life.visibility('hidden');life.navigator.onLine=false;life.visibility('visible');
+  assert.equal(h.state.loading,false,'retire loading immediately, even if the old transport never settles');
+  life.navigator.onLine=true;life.window.dispatch('online');assert.equal(h.calls.length,2);assert.equal(h.state.loading,true);
+  if(outcome==='success')h.calls[0].resolve({items:[],unread_count:0});else h.calls[0].reject(new Error('stale offline preview'));
+  await settleBell();assert.equal(h.state.loading,true);assert.equal(h.state.unread,1);assert.equal(h.state.error,false);
+  h.calls[1].resolve({items:[item],unread_count:4});await settleBell();
+  assert.equal(h.state.loading,false);assert.equal(h.state.unread,4);assert.equal(h.state.error,false);life.cleanup();
+});

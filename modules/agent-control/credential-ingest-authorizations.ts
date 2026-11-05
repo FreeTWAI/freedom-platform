@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../identity-membership/service.js';
 import type { RecoveryObservation } from '../agent-execution/model-step-host.js';

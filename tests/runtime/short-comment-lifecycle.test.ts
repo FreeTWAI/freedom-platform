@@ -31,7 +31,7 @@ function hooksHarness(code: string, name: string, props: any) {
   const jsx = (type: string, props: any) => ({type, props}), module = {exports: {} as any};
   runInNewContext(transformSync(code, {loader: 'tsx', format: 'cjs', jsx: 'automatic'}).code, {
     module, exports: module.exports, crypto: webcrypto, URL, setTimeout, clearTimeout,
-    require(name: string) { if (name === 'react') return react; if (name === 'react/jsx-runtime') return {jsx, jsxs: jsx}; if (name === '../api') return {ApiError}; if (name === '../format') return {formatIsoLocal: (value: string) => value}; return new Proxy({}, {get: (_, key) => String(key)}); },
+    require(name: string) { if (name === 'react') return {...react,useLayoutEffect:react.useEffect}; if (name === 'react/jsx-runtime') return {jsx, jsxs: jsx}; if (name === '../api') return {ApiError}; if (name === '../format') return {formatIsoLocal: (value: string) => value}; return new Proxy({}, {get: (_, key) => String(key)}); },
   });
   function render() { index = 0; return module.exports[name](props); }
   function flush() { while (effects.length) effects.shift()!(); }

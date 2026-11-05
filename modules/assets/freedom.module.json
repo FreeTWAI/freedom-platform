@@ -28,7 +28,14 @@
     "tests/runtime/media-session-recovery.test.ts",
     "apps/platform-api/src/routes/profile-covers.ts",
     "tests/runtime/profile-cover-policy.test.ts",
-    "tests/runtime/profile-cover.test.ts"
+    "tests/runtime/profile-cover.test.ts",
+    "migrations/201_event_prize_photos.sql",
+    "apps/platform-api/src/routes/event-prize-photos.ts",
+    "tests/runtime/event-prize-photo.test.ts",
+    "tests/runtime/event-prize-photo-schema.test.ts",
+    "tests/runtime/event-prize-photo-db.test.ts",
+    "deploy/cloudflare/test/event-prize-photo-schema.test.mjs",
+    "docs/development/event-prize-photos-schema.md"
   ],
   "public_exports": [
     "modules/assets/index.ts",
@@ -40,7 +47,9 @@
     "modules/assets/storefront-product-photo.ts",
     "modules/assets/supply-material.ts",
     "modules/assets/profile-cover.ts",
-    "modules/assets/profile-cover-read.ts"
+    "modules/assets/profile-cover-read.ts",
+    "modules/assets/event-prize-photo.ts",
+    "modules/assets/event-prize-photo-read.ts"
   ],
   "dependencies": [
     "command-core",
@@ -64,7 +73,8 @@
     "docs/platform-plan/execution/unified-foundation/05-media-migration.md",
     "modules/assets/storefront-product-photo.md",
     "modules/assets/supply-material.md",
-    "modules/assets/profile-cover.md"
+    "modules/assets/profile-cover.md",
+    "modules/assets/event-prize-photo.md"
   ],
   "invariants": [
     "current-authority-before-replay",

@@ -53,7 +53,8 @@ const rank=(state:TaskState)=>state==='done'?1:0;
 export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:(id:TabId)=>void}){
   const store=useGitHubSocialStore();
   const [busy,setBusy]=useState(false),[connectError,setConnectError]=useState('');
-  const [guideCopied,setGuideCopied]=useState(false);
+  const [guideCopied,setGuideCopied]=useState(false),[guideCopyFailed,setGuideCopyFailed]=useState(false);
+  const guideCopySequence=useRef(0);
   const [sources,setSources]=useState<{[K in SourceId]:Source<Sources[K]>}>(()=>({onboarding:{loading:true,error:''},directory:{loading:true,error:''},avatar:{loading:true,error:''},social:{loading:true,error:''}}));
   const generations=useRef<Record<SourceId,number>>({onboarding:0,directory:0,avatar:0,social:0});
   const mounted=useRef(true);
@@ -76,7 +77,7 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
     const refresh=()=>{all();void store.refreshConnection();};
     all();void store.loadAccount();
     window.addEventListener('focus',refresh);window.addEventListener('freedom-profile-updated',refresh);
-    return()=>{mounted.current=false;window.removeEventListener('focus',refresh);window.removeEventListener('freedom-profile-updated',refresh);};
+    return()=>{mounted.current=false;guideCopySequence.current++;window.removeEventListener('focus',refresh);window.removeEventListener('freedom-profile-updated',refresh);};
   },[load,store]);
 
   // Cards re-order and swap their buttons as states change; keep keyboard focus in the same card.
@@ -99,6 +100,16 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
     setBusy(true);setConnectError('');
     try{window.location.assign(await store.connect('#todos'));}
     catch(cause){setConnectError(cause instanceof Error?cause.message:'無法連結 GitHub，請重試。');setBusy(false);}
+  }
+  async function copyGuide(){
+    const sequence=++guideCopySequence.current;
+    setGuideCopied(false);setGuideCopyFailed(false);
+    try{
+      await navigator.clipboard.writeText(GITHUB_CONNECT_AGENT_INSTRUCTION);
+      if(mounted.current&&sequence===guideCopySequence.current)setGuideCopied(true);
+    }catch{
+      if(mounted.current&&sequence===guideCopySequence.current)setGuideCopyFailed(true);
+    }
   }
   const go=(tab:TabId,label:string,primary:boolean)=><button className={`btn ${primary?'btn-primary':'btn-ghost'}`} type="button" onClick={()=>onNavigate(tab)}>{label}</button>;
   const retrying=(ids:SourceId[],label:string)=>{
@@ -136,7 +147,7 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
     ...(githubState==='loading'?{body:<p>正在確認 GitHub 連結…</p>}
       :githubState==='error'?{body:null,error:github.error,retry:githubRetry}
       :githubState==='unavailable'?{body:<p>站內 GitHub 連結尚未啟用；仍可到 GitHub 網頁提出 Issue。啟用後再回來完成連結。</p>,retry:githubRetry}
-      :githubState==='todo'?{body:<p>站內提出 Issue 需要先連結自己的 GitHub 帳號。按「連結 GitHub」後，在 github.com 親自確認授權，回來再發布想法。沒有帳號可先<a href="https://github.com/signup" target="_blank" rel="noopener noreferrer">申請 GitHub ↗</a>。</p>,action:<><button className="btn btn-primary" type="button" disabled={busy||github.loading} onClick={()=>void connect()}>{busy?'前往 GitHub…':'連結 GitHub'}</button><button className="btn btn-ghost" type="button" onClick={()=>void navigator.clipboard.writeText(GITHUB_CONNECT_AGENT_INSTRUCTION).then(()=>setGuideCopied(true)).catch(()=>setConnectError('無法複製 AI 指引，請稍後重試。'))}>{guideCopied?'已複製 AI 指引':'複製 AI 連結指引'}</button></>}
+      :githubState==='todo'?{body:<p>站內提出 Issue 需要先連結自己的 GitHub 帳號。按「連結 GitHub」後，在 github.com 親自確認授權，回來再發布想法。沒有帳號可先<a href="https://github.com/signup" target="_blank" rel="noopener noreferrer">申請 GitHub ↗</a>。</p>,action:<><button className="btn btn-primary" type="button" disabled={busy||github.loading} onClick={()=>void connect()}>{busy?'前往 GitHub…':'連結 GitHub'}</button><button className="btn btn-ghost" type="button" onClick={()=>void copyGuide()}>{guideCopied?'已複製 AI 指引':'複製 AI 連結指引'}</button></>}
       :{body:<p>已連結 <strong>@{github.value?.github_user?.login??'GitHub'}</strong>。</p>,action:go('account','到我的名片管理 GitHub 連結',false)})});
 
   cards.push({key:'avatar',required:false,title:'上傳頭像',
@@ -170,6 +181,10 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
           {(card.action||retry)&&<div className="member-task-actions">{card.action}
             {retry&&<button className="btn btn-ghost" type="button" disabled={retry.busy} onClick={retry.run}>{retry.label}</button>}</div>}
           {card.key==='github'&&connectError&&<p role="alert">{connectError}</p>}
+          {card.key==='github'&&card.state==='todo'&&guideCopyFailed&&<>
+            <p role="alert">無法自動複製，請選取下方 AI 連結指引手動複製。</p>
+            <label className="field">AI 連結指引<textarea readOnly rows={7} value={GITHUB_CONNECT_AGENT_INSTRUCTION} onFocus={event=>event.currentTarget.select()}/></label>
+          </>}
         </article></li>;
       })}
     </ul>

@@ -49,6 +49,8 @@ const eventTest=test.extend<{eventFixture:{user:string;email:string}}>({
           for(const table of ['community_event_banners','community_event_videos']){
             await q.query(`DELETE FROM ${table} WHERE event_id IN (SELECT event_id FROM community_events WHERE community_id=$1)`,[community]);
           }
+          await q.query('DELETE FROM promotion_clicks WHERE link_id IN (SELECT link_id FROM promotion_links WHERE user_id=$1)',[user]);
+          await q.query('DELETE FROM promotion_links WHERE user_id=$1',[user]);
           await q.query('DELETE FROM community_events WHERE community_id=$1',[community]);
           await q.query('DELETE FROM member_notifications WHERE community_id=$1',[community]);
           // Injected 503/415 and lost ACKs also write bounded client diagnostics.
@@ -270,7 +272,7 @@ test('event submission blocks departure while pending and saved edits require ex
   discard=true;await page.getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();await expect(page).toHaveURL(/\/#events$/);
 });
 
-for(const width of [1440,390])test(`an unknown event submission keeps its original retry key and cannot be abandoned at ${width}px`,async({page,e2eAuthPool},info)=>{
+for(const width of [1440,390])test(`an unknown event submission survives a later refusal with its original retry key at ${width}px`,async({page,e2eAuthPool},info)=>{
   await page.setViewportSize({width,height:844});await login(page,width===390?'client@local.test':'maker@local.test');await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
   const title='不明結果 '+randomUUID().slice(0,8),form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   const otherTitle='其他活動 '+randomUUID().slice(0,8);
@@ -283,13 +285,14 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
   let releaseRefresh!:()=>void,reachedRefresh!:()=>void;
   const heldRefresh=new Promise<void>(resolve=>{releaseRefresh=resolve;}),refreshReached=new Promise<void>(resolve=>{reachedRefresh=resolve;});
   await page.route('**/api/v1/events',async route=>{
-    if(route.request().method()==='GET'&&attempts.length===2){
+    if(route.request().method()==='GET'&&attempts.length===3){
       const response=await route.fetch();expect(response.status()).toBe(200);reachedRefresh();
       await heldRefresh;await route.fulfill({response});return;
     }
     if(route.request().method()!=='POST')return route.continue();
     attempts.push({body:route.request().postData(),key:route.request().headers()['idempotency-key']});
     if(attempts.length===1){const response=await route.fetch();expect(response.status()).toBe(201);await route.abort('failed');}
+    else if(attempts.length===2)await route.fulfill({status:429,contentType:'application/problem+json',body:JSON.stringify({type:'about:blank',title:'合成傳輸層拒絕',status:429,code:'synthetic_transport_refusal',detail:'合成傳輸層拒絕；不代表原請求未完成。'})});
     else await route.continue();
   });
   await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();
@@ -305,8 +308,11 @@ for(const width of [1440,390])test(`an unknown event submission keeps its origin
   await closeRejectedMobileNavigation(page);
   await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
   try{
+    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'合成傳輸層拒絕'})).toBeVisible();
+    expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);await expect(titleInput).toBeDisabled();
+    await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
     await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();await refreshReached;
-    expect(attempts).toHaveLength(2);expect(attempts[0].key).toBeTruthy();expect(attempts[1]).toEqual(attempts[0]);
+    expect(attempts).toHaveLength(3);expect(attempts[0].key).toBeTruthy();expect(attempts[2]).toEqual(attempts[0]);
     expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_events WHERE title=$1',[title])).rows[0].count)).toBe(1);
     // A confirmed save can close a fresh untouched composer and leave while its
     // real list response is still held. Waiting for that read would hide the race.
@@ -479,8 +485,14 @@ for(const kind of ['banner','video'] as const)for(const ack of ['lost','malforme
   });
   try{
     await editor.getByRole('button',{name:'儲存修改',exact:true}).click();
+    await expect(page.getByRole('alert').filter({hasText:'媒體保存結果尚未確認'})).toBeVisible();
+    expect(reads).toBe(0);expect(reached).toBe(false);
+    expect(commands.filter(entry=>entry.kind===kind)).toHaveLength(1);expect(updates).toEqual(['"1"']);
+    await expect(editor.getByRole('button',{name:'重試確認保存',exact:true})).toBeEnabled();
+    await editor.getByRole('button',{name:'重試確認保存',exact:true}).click();
     if(kind==='banner'&&ack==='lost'){
       await expect(page.getByRole('alert').filter({hasText:'尚未確認媒體保存結果'})).toBeVisible();
+      expect(reads).toBe(1);expect(reached).toBe(false);
       await expect(editor.getByRole('button',{name:'儲存修改',exact:true})).toBeDisabled();
       expect(commands.filter(entry=>entry.kind===kind)).toHaveLength(1);expect(updates).toEqual(['"1"']);
       await editor.getByRole('button',{name:'重試確認保存',exact:true}).click();
@@ -566,4 +578,140 @@ eventTest('legacy draft preserves guest policy until the organizer explicitly ch
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await card.getByLabel('報名方式',{exact:true}).selectOption('community_member');
   await editor.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(editor).toHaveCount(0);
   await page.reload();await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
+});
+
+eventTest('malformed metadata success retains the original command and does not start selected media',async({page,e2eAuthPool,eventFixture:{user,email}},info)=>{
+  await login(page,email);await navigate(page,'社群活動');await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})}),title=`回條確認 ${user}`;
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('活動已儲存但回條被截斷；確認原命令後才接續原影片。');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
+  await form.getByText('加上海報或影片（選填）',{exact:true}).click();
+  await form.getByLabel('活動影片（選填）').setInputFiles({name:'synthetic.mp4',mimeType:'video/mp4',buffer:await readFile('tests/media-fixtures/event-video-160x90.mp4')});
+  const commands:{body:string|null;key:string|undefined}[]=[],uploads:string[]=[];
+  await page.route('**/api/v1/events',async route=>{
+    if(route.request().method()!=='POST')return route.continue();
+    commands.push({body:route.request().postData(),key:route.request().headers()['idempotency-key']});
+    const response=await route.fetch();expect(response.status()).toBe(201);
+    if(commands.length===1)await route.fulfill({response,body:'{}'});else await route.fulfill({response});
+  });
+  await page.route('**/api/v1/events/*/video',async route=>{if(route.request().method()==='POST')uploads.push(route.request().headers()['if-match']);await route.continue();});
+  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'結果尚未確認'})).toBeVisible();
+  await expect(form.getByLabel('活動名稱',{exact:true})).toBeDisabled();await expect(form.getByLabel('活動影片（選填）')).toBeDisabled();expect(uploads).toHaveLength(0);
+  await form.getByRole('button',{name:'返回',exact:true}).click();await expect(form).toBeVisible();
+  await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(form).toHaveCount(0);await expect(page.getByText('活動已送出審核，核准後開放報名。',{exact:true})).toBeVisible();
+  expect(commands).toHaveLength(2);expect(commands[1]).toEqual(commands[0]);expect(uploads).toEqual(['"1"']);
+  const events=(await e2eAuthPool.query('SELECT event_id,aggregate_version FROM community_events WHERE organizer_ref=$1 AND title=$2',[user,title])).rows;
+  expect(events).toHaveLength(1);expect(Number(events[0].aggregate_version)).toBe(2);
+  expect(Number((await e2eAuthPool.query("SELECT count(*) FROM transition_journal WHERE aggregate_id=$1 AND command='save_video'",[events[0].event_id])).rows[0].count)).toBe(1);
+  await info.attach('metadata-ack-recovery',{body:JSON.stringify({commands,uploads,durable_events:1,durable_media_saves:1}),contentType:'application/json'});
+});
+
+for(const width of [1280,390])eventTest(`custom event capacity stays editable and persists at ${width}px`,async({page,eventFixture,e2eAuthPool})=>{
+  await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
+  const title=`自訂人數 ${eventFixture.user}`;
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('合成自訂人數回歸');await form.getByLabel('線上場地',{exact:true}).fill('合成教室');
+  await form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+  const select=form.getByRole('combobox',{name:/^人數上限/}),custom=form.getByLabel('自訂人數上限',{exact:true});
+  await select.selectOption('custom');await custom.fill('');await expect(custom).toBeVisible();await expect(select).toHaveValue('custom');
+  const writes:string[]=[];const record=(request:import('@playwright/test').Request)=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes.push(request.postData()??'');};page.on('request',record);
+  try{
+    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(custom).toBeFocused();expect(await custom.evaluate((input:HTMLInputElement)=>input.validity.valueMissing)).toBe(true);expect(writes).toEqual([]);
+    // Native keystrokes must pass through the preset intermediate value 10
+    // without removing the focused input before the final 1 arrives.
+    await custom.pressSequentially('101');await expect(custom).toHaveValue('101');await expect(custom).toBeFocused();await expect(select).toHaveValue('custom');
+    const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
+    await form.getByRole('button',{name:'送出審核',exact:true}).click();const saved=await response;expect(saved.status()).toBe(201);const event=await saved.json();expect(event.capacity).toBe(101);await expect(form).toHaveCount(0);expect(writes).toHaveLength(1);
+    expect((await e2eAuthPool.query('SELECT capacity FROM community_events WHERE event_id=$1',[event.event_id])).rows[0].capacity).toBe(101);
+    await page.goto(`/events/${event.event_id}`);
+    const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
+    const editor=card.locator('form.experience-editor');await editor.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+    const editCustom=editor.getByLabel('自訂人數上限',{exact:true});await expect(editCustom).toHaveValue('101');await editCustom.fill('');await expect(editCustom).toBeVisible();await editCustom.pressSequentially('20');await expect(editCustom).toHaveValue('20');
+    // Choosing a preset is still an explicit mode change.
+    await editor.getByRole('combobox',{name:/^人數上限/}).selectOption('20');await expect(editCustom).toHaveCount(0);
+    const updated=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===`/api/v1/events/${event.event_id}/update`);
+    await editor.getByRole('button',{name:'儲存修改',exact:true}).click();expect((await updated).status()).toBe(200);await expect(editor).toHaveCount(0);
+    expect((await e2eAuthPool.query('SELECT capacity FROM community_events WHERE event_id=$1',[event.event_id])).rows[0].capacity).toBe(20);
+  }finally{page.off('request',record);}
+});
+
+for(const width of [1280,390])eventTest(`extended event years show recoverable validation before any save at ${width}px`,async({page,eventFixture,e2eAuthPool})=>{
+  await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form.experience-editor'),title=`合成日期邊界 ${width}`;
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  let writes=0;page.on('request',request=>{if(request.method()==='POST'&&/^\/api\/v1\/events(?:\/[0-9a-f-]+\/update)?$/.test(new URL(request.url()).pathname))writes++;});
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('日期輸入錯誤後保留的合成內容');await form.getByLabel('線上場地',{exact:true}).fill('合成線上場地');
+  await form.getByLabel('開始時間',{exact:true}).fill('2099-01-01T12:00');await form.getByLabel('結束時間',{exact:true}).fill('2099-01-01T13:00');
+  for(const editing of [false,true]){
+    if(editing)await page.getByRole('button',{name:'編輯草稿',exact:true}).click();
+    for(const label of ['開始時間','結束時間']){
+      const input=form.getByLabel(label,{exact:true});await input.fill('10000-01-01T12:00');
+      // This is a valid native datetime-local value; the product converter only
+      // accepts four-digit years. Exercise the real submit path, not a JS handler.
+      await expect(input).toHaveValue('10000-01-01T12:00');expect(await form.evaluate(node=>(node as HTMLFormElement).checkValidity())).toBe(true);
+      await form.getByRole('button',{name:editing?'儲存修改':'送出審核',exact:true}).click();
+      await expect(page.getByRole('status').filter({hasText:'年份須為四位數'})).toBeVisible();
+      await expect(input).toBeEnabled();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue(title);
+      expect(writes).toBe(editing?1:0);expect(errors).toEqual([]);
+      await input.fill(label==='開始時間'?'2099-01-01T12:00':'2099-01-01T13:00');
+    }
+    if(editing){
+      // The populated textarea contributes its initial text to the wrapping
+      // label. Keep this editor scope and match the label prefix, as above.
+      const description=form.getByLabel(/^活動說明/);
+      await expect(description).toHaveCount(1);await expect(description).toHaveValue('日期輸入錯誤後保留的合成內容');
+      await description.fill('修正日期後的合成內容');
+    }
+    const response=page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith(editing?'/update':'/events'));
+    await form.getByRole('button',{name:editing?'儲存修改':'送出審核',exact:true}).click();const saved=await response;expect(saved.ok()).toBe(true);await saved.finished();
+    await expect(form).toHaveCount(0);expect(writes).toBe(editing?2:1);
+    const rows=(await e2eAuthPool.query('SELECT title,description,starts_at,ends_at FROM community_events WHERE organizer_ref=$1',[eventFixture.user])).rows;
+    expect(rows).toHaveLength(1);expect(rows[0].title).toBe(title);expect(rows[0].description).toBe(editing?'修正日期後的合成內容':'日期輸入錯誤後保留的合成內容');
+    expect(new Date(rows[0].starts_at).toISOString()).toBe('2099-01-01T17:00:00.000Z');expect(new Date(rows[0].ends_at).toISOString()).toBe('2099-01-01T18:00:00.000Z');
+    expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+});
+
+
+for(const width of [1280,390])eventTest(`event clipboard failures preserve the share link and recover at ${width}px`,async({page,context,eventFixture,e2eAuthPool})=>{
+  const id=randomUUID(),title=`合成複製恢復 ${id.slice(0,8)}`;
+  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+    SELECT $1,community_id,user_id,$2,'合成分享活動',now()+interval '2 days',now()+interval '2 days 1 hour','online','合成教室','published','open','other' FROM users WHERE user_id=$3`,[id,title,eventFixture.user]);
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  let referrals=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname==='/api/v1/promotion/links')referrals++;});
+  await page.evaluate(()=>{
+    const native=navigator.clipboard;
+    Object.defineProperty(window,'eventClipboardFixture',{configurable:true,value:{native,resolve:null,reject:null,calls:0}});
+    Object.defineProperty(navigator,'share',{configurable:true,value:undefined});
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:undefined});
+  });
+  const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
+  await card.getByRole('button',{name:'分享活動',exact:true}).click();
+  const manual=page.getByText('請選取上方連結手動複製。',{exact:true}),input=card.getByRole('textbox',{name:/^分享連結/}),copy=card.getByRole('button',{name:'複製連結',exact:true});
+  await expect(manual).toBeVisible();await expect(input).toBeVisible();
+  const url=await input.inputValue();expect(new URL(url).origin).toBe(new URL(page.url()).origin);expect(new URL(url).pathname).toMatch(/^\/go\/[A-Za-z0-9_-]{10}$/);
+  expect(referrals).toBe(1);
+  for(const mode of ['missing','throw','reject']){
+    await page.evaluate(mode=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:mode==='missing'?undefined:{writeText(){if(mode==='throw')throw new Error('合成同步拒絕');return Promise.reject(new Error('合成非同步拒絕'));}}}),mode);
+    await copy.focus();await page.keyboard.press('Enter');await expect(manual).toBeVisible();await expect(page.getByText(/活動專頁連結已複製/)).toHaveCount(0);
+    await input.focus();expect(await input.evaluate((node:HTMLInputElement)=>({start:node.selectionStart,end:node.selectionEnd,value:node.value}))).toEqual({start:0,end:url.length,value:url});
+    await expect(copy).toBeEnabled();expect(referrals).toBe(1);
+  }
+  // Restore the native clipboard and verify its actual bytes, not a success mock.
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:(window as any).eventClipboardFixture.native}));
+  await copy.focus();await page.keyboard.press('Enter');await expect(page.getByText('活動專頁連結已複製。',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(url);await expect(manual).toHaveCount(0);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText(){const f=(window as any).eventClipboardFixture;f.calls++;return new Promise<void>((resolve,reject)=>{f.resolve=resolve;f.reject=reject;});}}}));
+  await copy.click();await expect(page.getByText(/活動專頁連結已複製/)).toHaveCount(0);
+  await expect.poll(()=>page.evaluate(()=>(window as any).eventClipboardFixture.calls)).toBe(1);
+  // Accepted navigation closes this share scope; a late write cannot announce success there.
+  await navigate(page,'會員首頁');await page.evaluate(()=>(window as any).eventClipboardFixture.resolve());
+  await expect(page.getByText(/活動專頁連結已複製|請選取上方連結手動複製/)).toHaveCount(0);
+  await navigate(page,'社群活動');await expect(card).toBeVisible();await expect(copy).toHaveCount(0);expect(errors).toEqual([]);expect(referrals).toBe(1);
+  const rows=(await e2eAuthPool.query('SELECT code,kind,target_key FROM promotion_links WHERE user_id=$1',[eventFixture.user])).rows;
+  expect(rows).toEqual([{code:new URL(url).pathname.slice(4),kind:'event',target_key:id}]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
