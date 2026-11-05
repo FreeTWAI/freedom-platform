@@ -40,37 +40,62 @@ export type InboxUnread=number|null|undefined;
 // history is opened here, and one failed source makes the whole total unconfirmed.
 const SOURCES=['/me/notifications?limit=1&offset=0','/me/conversations?limit=1&offset=0','/me/channels?kind=guild&limit=1&offset=0','/me/channels?kind=squad&limit=1&offset=0'];
 const CHAT_SOURCES=[...SOURCES.slice(1),'/me/channels?kind=world&limit=1&offset=0'];
+type UnreadOwner={client:PortalClient;session:number;scope:'inbox'|'messages';preferencesEnabled:boolean|null};
+const sameUnreadOwner=(a:UnreadOwner,b:UnreadOwner)=>a.client===b.client&&a.session===b.session&&a.scope===b.scope&&a.preferencesEnabled===b.preferencesEnabled;
 export function useInboxUnread(client:PortalClient,scope:'inbox'|'messages'='inbox',preferencesEnabled:boolean|null=false){
-  const [total,setTotal]=useState<InboxUnread>(undefined);
+  const owner:UnreadOwner={client,session:client.sessionGeneration,scope,preferencesEnabled};
+  const currentOwner=useRef(owner);currentOwner.current=owner;
+  // A prior policy/client's count must disappear during render, before effect cleanup.
+  const [result,setResult]=useState<{owner:UnreadOwner;total:InboxUnread}|null>(null);
   const generation=useRef(0);
+  const readScope=useRef({id:'',epoch:0});if(!readScope.current.id)readScope.current.id=crypto.randomUUID();
   const refresh=useCallback(async()=>{
-    const current=++generation.current,session=client.sessionGeneration;
-    const valid=()=>current===generation.current&&session===client.sessionGeneration;
-    if(scope==='messages'&&preferencesEnabled===null){setTotal(undefined);return;}
+    const requestedOwner:UnreadOwner={client,session:client.sessionGeneration,scope,preferencesEnabled};
+    if(!sameUnreadOwner(requestedOwner,currentOwner.current))return;
+    const current=++generation.current;
+    const valid=()=>current===generation.current&&requestedOwner.session===client.sessionGeneration&&sameUnreadOwner(requestedOwner,currentOwner.current);
+    const publish=(total:InboxUnread)=>{if(valid())setResult({owner:requestedOwner,total});};
+    if(scope==='messages'&&preferencesEnabled===null){publish(undefined);return;}
+    // Every later focus/read must stay in this resume epoch, never reuse pre-hide work.
+    const options={skipAuthHandler:true,background:true,coalesce:true,coalesceScope:`${readScope.current.id}:${readScope.current.epoch}:${scope}:${preferencesEnabled}`};
     try{
       if(scope==='messages'&&preferencesEnabled){
         const [direct,channels]=await Promise.all([
-          client.get<{unread_count:number}>(CHAT_SOURCES[0],{skipAuthHandler:true,background:true,coalesce:true}),
-          client.get<{guild:number;squad:number;world:number}>('/me/notification-preferences/channel-reminders',{skipAuthHandler:true,background:true,coalesce:true}),
+          client.get<{unread_count:number}>(CHAT_SOURCES[0],options),
+          client.get<{guild:number;squad:number;world:number}>('/me/notification-preferences/channel-reminders',options),
         ]);
         if(!valid())return;
         const counts=[direct.unread_count,channels.guild,channels.squad,channels.world],sum=counts.reduce((value,count)=>value+count,0);
-        setTotal(counts.every(count=>Number.isSafeInteger(count)&&count>=0)&&Number.isSafeInteger(sum)?sum:null);return;
+        publish(counts.every(count=>Number.isSafeInteger(count)&&count>=0)&&Number.isSafeInteger(sum)?sum:null);return;
       }
-      const pages=await Promise.all((scope==='messages'?CHAT_SOURCES:SOURCES).map(path=>client.get<{unread_count:number}>(path,{skipAuthHandler:true,background:true,coalesce:true})));
+      const pages=await Promise.all((scope==='messages'?CHAT_SOURCES:SOURCES).map(path=>client.get<{unread_count:number}>(path,options)));
       if(!valid())return;
       const sum=pages.reduce((value,page)=>value+page.unread_count,0);
-      setTotal(pages.every(page=>Number.isSafeInteger(page.unread_count)&&page.unread_count>=0)&&Number.isSafeInteger(sum)?sum:null);
-    }catch{if(valid())setTotal(null);}
-  },[client,scope,preferencesEnabled]);
+      publish(pages.every(page=>Number.isSafeInteger(page.unread_count)&&page.unread_count>=0)&&Number.isSafeInteger(sum)?sum:null);
+    }catch{publish(null);}
+  },[client,scope,preferencesEnabled,owner.session]);
   useEffect(()=>{
-    const update=()=>void refresh();
+    let disposed=false,suspended=false,queued=false;
+    const available=()=>!disposed&&!suspended&&document.visibilityState==='visible'&&navigator.onLine!==false;
+    const schedule=()=>{
+      if(!available()||queued)return;queued=true;
+      // Focus, pageshow and visibility can arrive together; one event burst needs one count read.
+      queueMicrotask(()=>{queued=false;if(available())void refresh();});
+    };
+    const update=()=>schedule();
+    const pause=()=>{suspended=true;generation.current++;};
+    // Advance even while offline: the later online event must not borrow a pre-hide read.
+    const resume=()=>{suspended=false;generation.current++;readScope.current.epoch++;schedule();};
+    const visible=()=>{if(document.visibilityState==='visible')resume();else pause();};
     update();
     // Only enabled reminder policy needs a clock refresh for quiet-hour boundaries; no history is opened.
     const timer=scope==='messages'&&preferencesEnabled===true?window.setInterval(update,30000):undefined;
     const events=['focus','online',INBOX_UPDATED,'freedom-profile-updated','freedom-notification-preferences-updated'];
     for(const name of events)window.addEventListener(name,update);
-    return()=>{generation.current++;window.clearInterval(timer);for(const name of events)window.removeEventListener(name,update);};
+    window.addEventListener('pageshow',resume);window.addEventListener('pagehide',pause);document.addEventListener('visibilitychange',visible);
+    return()=>{disposed=true;generation.current++;window.clearInterval(timer);for(const name of events)window.removeEventListener(name,update);
+      window.removeEventListener('pageshow',resume);window.removeEventListener('pagehide',pause);document.removeEventListener('visibilitychange',visible);};
   },[refresh,scope,preferencesEnabled]);
+  const total=result&&sameUnreadOwner(result.owner,owner)?result.total:undefined;
   return {total,refresh};
 }
