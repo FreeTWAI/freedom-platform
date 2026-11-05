@@ -93,7 +93,7 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   assert.ok(start>=0&&end>start);
   let confirms=0;
   const context:any={
-    leaveGuard:{current:null},helperBlocked:{current:true},missionBlocked:{current:false},
+    leaveGuard:{current:null},helperBlocked:{current:true},missionBlocked:{current:false},participationPending:{current:new Set<()=>boolean>()},
     saving:false,busy:false,mediaUnknown:false,lastFailureUnknown:false,dirty:false,
     setNotice:()=>{},window:{confirm:()=>{confirms++;return false;}},
   };
@@ -106,9 +106,12 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   context.dirty=true;
   assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,1);
   context.dirty=false;assert.equal(context.leaveGuard.current(),true);
+  const participation=()=>true;context.participationPending.current.add(participation);
+  assert.equal(context.leaveGuard.current(),false);context.participationPending.current.delete(participation);
+  assert.equal(context.leaveGuard.current(),true);
   const from=parent.indexOf('    const beforeUnload=');
   const to=parent.indexOf('\n',from);assert.ok(from>=0&&to>from);
-  const unloadContext={unloading:{current:false},helperBlocked:{current:true},missionBlocked:{current:false}};
+  const unloadContext={unloading:{current:false},helperBlocked:{current:true},missionBlocked:{current:false},participationPending:{current:new Set<()=>boolean>()}};
   const guard=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.guard=beforeUnload',{loader:'tsx'}).code+';guard',unloadContext);
   const attempt=()=>{
     let prevented=false;
@@ -119,6 +122,10 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   unloadContext.helperBlocked.current=false;unloadContext.missionBlocked.current=true;
   assert.deepEqual(attempt(),{prevented:true,returnValue:''});
   unloadContext.missionBlocked.current=false;
+  assert.deepEqual(attempt(),{prevented:false,returnValue:undefined});
+  unloadContext.participationPending.current.add(participation);
+  assert.deepEqual(attempt(),{prevented:true,returnValue:''});
+  unloadContext.participationPending.current.delete(participation);
   assert.deepEqual(attempt(),{prevented:false,returnValue:undefined});
 });
 

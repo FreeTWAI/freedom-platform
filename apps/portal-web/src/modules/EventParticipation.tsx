@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useLayoutEffect,useRef,useState,type FormEvent} from 'react';
 import {ApiError,type PortalClient,type RequestOptions} from '../api';
 import type {SessionPayload} from '../types';
 import {formatIsoLocal,localInputToIso} from '../format';
@@ -12,7 +12,8 @@ export type EventParticipationDTO={
   waitlist:null|{status:'queued'|'invited'|'accepted'|'declined'|'left'|'expired'|'cancelled';aggregate_version:number;joined_at:string;invited_at:string|null;expires_at:string|null;delivery_status:string};
 };
 export type EventReminderDTO={version:number;enabled:boolean;minutes_before_start:number|null;channel:'in_app'|'email'|null;status:'pending'|'provider_accepted'|'recorded'|'cancelled'|'failed'|null};
-export type EventParticipationProps={client:PortalClient;session:SessionPayload;eventId:string;eventVersion:number;rsvpState?:'going'|'cancelled'|null;referralCode?:string|null;onChanged?:()=>void};
+type RegisterPendingCommand=(isPending:()=>boolean)=>()=>void;
+export type EventParticipationProps={client:PortalClient;session:SessionPayload;eventId:string;eventVersion:number;rsvpState?:'going'|'cancelled'|null;referralCode?:string|null;onChanged?:()=>void;registerPendingCommand?:RegisterPendingCommand};
 export type GuestEventParticipationProps={client:PortalClient;id:string;referralCode?:string|null};
 export type OrganizerParticipationEvent={event_id:string;aggregate_version:number;starts_at:string;ends_at:string;capacity:number|null;state:string};
 export type EventParticipationOrganizerProps={client:PortalClient;session:SessionPayload;event:OrganizerParticipationEvent;onChanged?:()=>void};
@@ -69,6 +70,9 @@ function matchesParticipationAck(request:FrozenRequest,value:unknown):boolean{
 function useParticipationTransport(client:PortalClient,scope:string,token:string|null){
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[stale,setStale]=useState(false),[retry,setRetry]=useState(false),[notice,setNotice]=useState(''),[receipt,setReceipt]=useState<unknown>(null);
   const pending=useRef<FrozenRequest|null>(null),inFlight=useRef(false),generation=useRef(0);
+  // Query the command refs synchronously: a same-tick departure must not wait
+  // for busy/retry to render, and read-only refreshes never hold this guard.
+  const hasPendingCommand=useCallback(()=>inFlight.current||pending.current!==null,[]);
   const readSequence=useRef<Record<string,number>>({});
   const controllers=useRef<AbortController[]>([]);
   useEffect(()=>{generation.current++;pending.current=null;inFlight.current=false;setBusy(false);setRetry(false);setStale(false);setError('');setNotice('');setReceipt(null);return()=>{generation.current++;for(const controller of controllers.current)controller.abort();controllers.current=[];}},[client,scope,token]);
@@ -106,7 +110,7 @@ function useParticipationTransport(client:PortalClient,scope:string,token:string
     const frozen={...body,...(token?{...(path.endsWith('/reminder')?{command_id:key}:{}),...(version!==undefined?{expected_version:version}:{})}:{})};
     return send({method,path,body:frozen,key,version});
   }
-  return {get,mutate,busy,error,stale,retry,notice,receipt,blocked:busy||retry||stale,
+  return {get,mutate,busy,error,stale,retry,notice,receipt,hasPendingCommand,blocked:busy||retry||stale,
     retryCommand:()=>pending.current?send(pending.current):Promise.resolve(false),
     reloaded:()=>{setStale(false);setError('');},setNotice};
 }
@@ -155,8 +159,9 @@ function ReminderForm({value,transport,path,guest,reload,allowed}:{value:EventRe
     <button className="btn btn-ghost btn-small" disabled={transport.blocked||enabled&&(!positive(minutes)||!allowed)}>儲存提醒選擇</button>
   </form>;
 }
-function ParticipationPanel({client,eventId,eventVersion,rsvpState,token,actor,referralCode,onChanged}:{client:PortalClient;eventId:string;eventVersion?:number;rsvpState?:'going'|'cancelled'|null;token:string|null;actor:string;referralCode?:string|null;onChanged?:()=>void}){
+function ParticipationPanel({client,eventId,eventVersion,rsvpState,token,actor,referralCode,onChanged,registerPendingCommand}:{client:PortalClient;eventId:string;eventVersion?:number;rsvpState?:'going'|'cancelled'|null;token:string|null;actor:string;referralCode?:string|null;onChanged?:()=>void;registerPendingCommand?:RegisterPendingCommand}){
   const base=`${token?'/public':''}/events/${eventId}`,transport=useParticipationTransport(client,`${actor}:${eventId}`,token);
+  useLayoutEffect(()=>registerPendingCommand?.(transport.hasPendingCommand),[registerPendingCommand,transport.hasPendingCommand]);
   const [value,setValue]=useState<EventParticipationDTO|null>(null),[reminder,setReminder]=useState<EventReminderDTO|null>(null);
   const reload=useCallback(async()=>{const [participation,currentReminder]=await Promise.all([transport.get<EventParticipationDTO>(`${base}/participation`),transport.get<EventReminderDTO>(`${base}/reminder`)]);if(participation)setValue(participation);if(currentReminder)setReminder(currentReminder);if(participation&&currentReminder)transport.reloaded();},[base,transport.get]);
   // Sibling organizer commands refresh canonical metadata without remounting drafts.
@@ -185,8 +190,10 @@ function ParticipationPanel({client,eventId,eventVersion,rsvpState,token,actor,r
     {!value&&transport.error&&!transport.stale&&!transport.retry&&<button type="button" className="btn btn-ghost btn-small" onClick={()=>void reload()}>重新讀取</button>}
   </section>;
 }
-export function EventParticipation({client,session,eventId,eventVersion,rsvpState,referralCode,onChanged}:EventParticipationProps){
-  return <ParticipationPanel key={`${session.user.user_id}:${client.csrfToken}:${eventId}`} client={client} eventId={eventId} eventVersion={eventVersion} rsvpState={rsvpState} token={null} actor={session.user.user_id} referralCode={referralCode} onChanged={onChanged}/>;
+export function EventParticipation({client,session,eventId,eventVersion,rsvpState,referralCode,onChanged,registerPendingCommand}:EventParticipationProps){
+  const identity=useRef({client,revision:0});
+  if(identity.current.client!==client)identity.current={client,revision:identity.current.revision+1};
+  return <ParticipationPanel key={`${identity.current.revision}:${session.user.user_id}:${client.sessionGeneration}:${client.csrfToken}:${eventId}`} client={client} eventId={eventId} eventVersion={eventVersion} rsvpState={rsvpState} token={null} actor={session.user.user_id} referralCode={referralCode} onChanged={onChanged} registerPendingCommand={registerPendingCommand}/>;
 }
 function ManagementRequest({client,id,referralCode}:GuestEventParticipationProps){
   const transport=useParticipationTransport(client,`request:${id}`,null),[name,setName]=useState(''),[email,setEmail]=useState('');
