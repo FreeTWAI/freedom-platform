@@ -1,6 +1,6 @@
 {
   "format": "freedom.cooking-3d-art/v1",
-  "created_at": "2026-10-28T04:38:56.638Z",
+  "created_at": "2026-11-05T05:04:59.536Z",
   "origin": "original procedural 3D models; actual production createDishStage factory",
   "environment": {
     "browser": "153.0.8010.12",
@@ -70,7 +70,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "bed63f92c5d3a8179f09ff02dc71ca8589bb8fb92b0530a0d112e1599475ee1d"
+      "sha256": "cb89e3629d6530cdd5f1571dc303efa69b30d35d4c314a1b226f634574e841f0"
     },
     {
       "path": "package-lock.json",
@@ -95,9 +95,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 44.39999999999418,
-        "construct": 745.3000000000175,
-        "capture": 5657.299999999988
+        "import": 36.30000001192093,
+        "construct": 1296.9000000059605,
+        "capture": 2908.0999999940395
       }
     },
     {
@@ -116,9 +116,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 346.6000000000058,
-        "capture": 6186.1999999999825
+        "import": 0.09999999403953552,
+        "construct": 684.5,
+        "capture": 2382.2999999821186
       }
     },
     {
@@ -137,9 +137,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 619.1999999999534,
-        "capture": 6412.200000000012
+        "import": 0.29999998211860657,
+        "construct": 1192.2000000178814,
+        "capture": 2776.199999988079
       }
     },
     {
@@ -158,9 +158,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 361.6000000000349,
-        "capture": 5743.399999999965
+        "import": 0.30000001192092896,
+        "construct": 536.5,
+        "capture": 2624.5
       }
     },
     {
@@ -179,9 +179,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.1000000000349246,
-        "construct": 309.3999999999651,
-        "capture": 5389.600000000035
+        "import": 0.19999998807907104,
+        "construct": 678.9000000059605,
+        "capture": 2475.4000000059605
       }
     },
     {
@@ -200,9 +200,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 296.79999999998836,
-        "capture": 5201.300000000047
+        "import": 0.30000001192092896,
+        "construct": 701,
+        "capture": 2444.5999999940395
       }
     },
     {
@@ -221,9 +221,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.1000000000349246,
-        "construct": 299,
-        "capture": 5159.899999999965
+        "import": 0.19999998807907104,
+        "construct": 647.4000000059605,
+        "capture": 2454.699999988079
       }
     },
     {
@@ -242,9 +242,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 306.70000000001164,
-        "capture": 5441.5
+        "import": 0.09999999403953552,
+        "construct": 669.8000000119209,
+        "capture": 2530.9000000059605
       }
     },
     {
@@ -263,9 +263,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.19999999995343387,
-        "construct": 525.5,
-        "capture": 5111.700000000012
+        "import": 0.30000001192092896,
+        "construct": 939.2999999821186,
+        "capture": 2531
       }
     },
     {
@@ -284,9 +284,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 326.69999999995343,
-        "capture": 5357.5
+        "import": 0.19999998807907104,
+        "construct": 645.3000000119209,
+        "capture": 2479.9000000059605
       }
     },
     {
@@ -305,9 +305,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 292.0999999999767,
-        "capture": 5103.5
+        "import": 0.10000002384185791,
+        "construct": 426.19999998807907,
+        "capture": 2314.699999988079
       }
     },
     {
@@ -326,9 +326,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 319.5,
-        "capture": 5342.299999999988
+        "import": 0.20000001788139343,
+        "construct": 586.5999999940395,
+        "capture": 2478.5
       }
     },
     {
@@ -347,9 +347,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 302.0999999999767,
-        "capture": 5308.900000000023
+        "import": 0.09999999403953552,
+        "construct": 604.1000000238419,
+        "capture": 2311.399999976158
       }
     },
     {
@@ -368,9 +368,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.1000000000349246,
-        "construct": 295.5999999999767,
-        "capture": 5443.299999999988
+        "import": 0.29999998211860657,
+        "construct": 650.0999999940395,
+        "capture": 2521.100000023842
       }
     },
     {
@@ -389,9 +389,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 298.8999999999651,
-        "capture": 5481.400000000023
+        "import": 0.5999999940395355,
+        "construct": 642.0999999940395,
+        "capture": 2601
       }
     },
     {
@@ -410,9 +410,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 275.5999999999767,
-        "capture": 5070.900000000023
+        "import": 0.19999998807907104,
+        "construct": 583,
+        "capture": 2560.4000000059605
       }
     },
     {
@@ -431,9 +431,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 301.20000000001164,
-        "capture": 5530.700000000012
+        "import": 0.19999998807907104,
+        "construct": 630.9000000059605,
+        "capture": 2663.800000011921
       }
     },
     {
@@ -452,9 +452,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 316.5,
-        "capture": 5696.600000000035
+        "import": 0.09999999403953552,
+        "construct": 579.1000000238419,
+        "capture": 2792.0999999940395
       }
     },
     {
@@ -473,9 +473,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 315.4000000000233,
-        "capture": 5259.299999999988
+        "import": 0.19999998807907104,
+        "construct": 485.59999999403954,
+        "capture": 2695.4000000059605
       }
     },
     {
@@ -494,9 +494,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 300.9000000000233,
-        "capture": 5420.799999999988
+        "import": 0.29999998211860657,
+        "construct": 634.7000000178814,
+        "capture": 2645.399999976158
       }
     },
     {
@@ -515,9 +515,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 297.5999999999767,
-        "capture": 5980.200000000012
+        "import": 0.09999999403953552,
+        "construct": 641.6000000238419,
+        "capture": 2840.199999988079
       }
     },
     {
@@ -536,9 +536,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.1000000000349246,
-        "construct": 292.0999999999767,
-        "capture": 5333.599999999977
+        "import": 0.10000002384185791,
+        "construct": 503.69999998807907,
+        "capture": 2704.300000011921
       }
     },
     {
@@ -557,9 +557,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 301.79999999998836,
-        "capture": 5206.700000000012
+        "import": 0.19999998807907104,
+        "construct": 482.2000000178814,
+        "capture": 2765
       }
     },
     {
@@ -578,9 +578,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.19999999995343387,
-        "construct": 289.9000000000233,
-        "capture": 5708.900000000023
+        "import": 0.10000002384185791,
+        "construct": 472.2999999821186,
+        "capture": 2764.5
       }
     },
     {
@@ -599,9 +599,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 309.4000000000233,
-        "capture": 5292.099999999977
+        "import": 0.20000001788139343,
+        "construct": 556.0999999940395,
+        "capture": 2748.800000011921
       }
     },
     {
@@ -620,9 +620,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 304.20000000001164,
-        "capture": 5514.900000000023
+        "import": 0.09999999403953552,
+        "construct": 533.5999999940395,
+        "capture": 2591.9000000059605
       }
     },
     {
@@ -641,9 +641,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 301.9000000000233,
-        "capture": 5298.799999999988
+        "import": 0.29999998211860657,
+        "construct": 664.3000000119209,
+        "capture": 2592.800000011921
       }
     },
     {
@@ -662,9 +662,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 290.29999999998836,
-        "capture": 5279.599999999977
+        "import": 0.10000002384185791,
+        "construct": 507.7999999821186,
+        "capture": 2668.5
       }
     },
     {
@@ -683,9 +683,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 325.29999999998836,
-        "capture": 5419.100000000035
+        "import": 0.10000002384185791,
+        "construct": 492.09999999403954,
+        "capture": 2573.699999988079
       }
     },
     {
@@ -704,9 +704,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.20000000001164153,
-        "construct": 299.29999999998836,
-        "capture": 5147.100000000035
+        "import": 0.09999999403953552,
+        "construct": 579.5999999940395,
+        "capture": 2514.199999988079
       }
     },
     {
@@ -725,9 +725,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 320.0999999999767,
-        "capture": 5177.5
+        "import": 0.09999999403953552,
+        "construct": 517,
+        "capture": 2509.0999999940395
       }
     },
     {
@@ -746,9 +746,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 311.20000000001164,
-        "capture": 5502.600000000035
+        "import": 0.20000001788139343,
+        "construct": 591.4000000059605,
+        "capture": 2679.0999999940395
       }
     },
     {
@@ -767,9 +767,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 301,
-        "capture": 5309.5
+        "import": 0.20000001788139343,
+        "construct": 614.0999999940395,
+        "capture": 2630.800000011921
       }
     },
     {
@@ -788,9 +788,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 285.1000000000349,
-        "capture": 5005.399999999965
+        "import": 0.30000001192092896,
+        "construct": 545.5,
+        "capture": 2485.899999976158
       }
     },
     {
@@ -809,9 +809,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 285.79999999998836,
-        "capture": 5701.400000000023
+        "import": 0.3999999761581421,
+        "construct": 557.6000000238419,
+        "capture": 2571.2999999821186
       }
     },
     {
@@ -830,9 +830,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 289.9000000000233,
-        "capture": 5189.399999999965
+        "import": 0.20000001788139343,
+        "construct": 610.0999999940395,
+        "capture": 2540.5
       }
     },
     {
@@ -851,9 +851,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 543.9000000000233,
-        "capture": 5589.700000000012
+        "import": 0.20000001788139343,
+        "construct": 869.7999999821186,
+        "capture": 2918.2000000178814
       }
     },
     {
@@ -872,9 +872,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.1000000000349246,
-        "construct": 340,
-        "capture": 5510.5
+        "import": 0.10000002384185791,
+        "construct": 537.3999999761581,
+        "capture": 2602.600000023842
       }
     },
     {
@@ -893,9 +893,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 307.80000000004657,
-        "capture": 5555.899999999965
+        "import": 0.30000001192092896,
+        "construct": 575.1999999880791,
+        "capture": 2641.5
       }
     },
     {
@@ -914,9 +914,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.19999999995343387,
-        "construct": 324.70000000001164,
-        "capture": 5299.900000000023
+        "import": 0.20000001788139343,
+        "construct": 438.2999999821186,
+        "capture": 2509.9000000059605
       }
     },
     {
@@ -935,9 +935,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 313.70000000001164,
-        "capture": 5317
+        "import": 0.09999999403953552,
+        "construct": 575.7000000178814,
+        "capture": 2571.7999999821186
       }
     },
     {
@@ -956,9 +956,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.1000000000349246,
-        "construct": 462.5999999999767,
-        "capture": 5169.799999999988
+        "import": 0.10000002384185791,
+        "construct": 866,
+        "capture": 2700.199999988079
       }
     },
     {
@@ -977,9 +977,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 310.9000000000233,
-        "capture": 5712.899999999965
+        "import": 0.20000001788139343,
+        "construct": 490.40000000596046,
+        "capture": 2620.5999999940395
       }
     },
     {
@@ -998,9 +998,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 312.20000000001164,
-        "capture": 5239.200000000012
+        "import": 0.20000001788139343,
+        "construct": 496.5,
+        "capture": 2616.199999988079
       }
     },
     {
@@ -1019,9 +1019,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 322.70000000001164,
-        "capture": 5254.100000000035
+        "import": 0.19999998807907104,
+        "construct": 607.5,
+        "capture": 2790.600000023842
       }
     },
     {
@@ -1040,9 +1040,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 302.8999999999651,
-        "capture": 5204.800000000047
+        "import": 0.20000001788139343,
+        "construct": 596.5999999940395,
+        "capture": 2519.199999988079
       }
     },
     {
@@ -1061,9 +1061,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 301,
-        "capture": 5017.900000000023
+        "import": 0.19999998807907104,
+        "construct": 477.30000001192093,
+        "capture": 2480.699999988079
       }
     },
     {
@@ -1082,9 +1082,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.1000000000349246,
-        "construct": 319.5,
-        "capture": 5435
+        "import": 0.19999998807907104,
+        "construct": 614,
+        "capture": 2511.4000000059605
       }
     },
     {
@@ -1103,9 +1103,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 317.5,
-        "capture": 5144.70000000007
+        "import": 0.19999998807907104,
+        "construct": 546.5,
+        "capture": 2571.300000011921
       }
     },
     {
@@ -1124,9 +1124,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 309.70000000006985,
-        "capture": 5578.699999999953
+        "import": 0.4000000059604645,
+        "construct": 581.7000000178814,
+        "capture": 2783.899999976158
       }
     },
     {
@@ -1145,9 +1145,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.2000000000698492,
-        "construct": 591.0999999999767,
-        "capture": 5013.79999999993
+        "import": 0.29999998211860657,
+        "construct": 874.9000000059605,
+        "capture": 2715.5
       }
     },
     {
@@ -1166,9 +1166,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.2000000000698492,
-        "construct": 413.5,
-        "capture": 4963
+        "import": 0.09999999403953552,
+        "construct": 694,
+        "capture": 2568.699999988079
       }
     },
     {
@@ -1187,9 +1187,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 596.3000000000466,
-        "capture": 5058.400000000023
+        "import": 0.09999999403953552,
+        "construct": 823.2000000178814,
+        "capture": 2663.5
       }
     },
     {
@@ -1208,9 +1208,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 574.5,
-        "capture": 5008.300000000047
+        "import": 0.29999998211860657,
+        "construct": 976,
+        "capture": 2634.600000023842
       }
     },
     {
@@ -1229,9 +1229,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.19999999995343387,
-        "construct": 411.30000000004657,
-        "capture": 5025.199999999953
+        "import": 0.19999998807907104,
+        "construct": 757.9000000059605,
+        "capture": 2646.2999999821186
       }
     },
     {
@@ -1250,9 +1250,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 300.9000000000233,
-        "capture": 5092.300000000047
+        "import": 1.2000000178813934,
+        "construct": 489.59999999403954,
+        "capture": 2707.699999988079
       }
     },
     {
@@ -1271,9 +1271,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.10000000009313226,
-        "construct": 307.19999999995343,
-        "capture": 4870.300000000047
+        "import": 0.19999998807907104,
+        "construct": 481.40000000596046,
+        "capture": 2405.7999999821186
       }
     },
     {
@@ -1292,9 +1292,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 301.69999999995343,
-        "capture": 5203.100000000093
+        "import": 0.09999999403953552,
+        "construct": 557.4000000059605,
+        "capture": 2537.5
       }
     },
     {
@@ -1313,9 +1313,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 293.79999999993015,
-        "capture": 5498.600000000093
+        "import": 0.30000001192092896,
+        "construct": 542,
+        "capture": 2473
       }
     },
     {
@@ -1334,9 +1334,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.19999999995343387,
-        "construct": 285.9000000000233,
-        "capture": 5201.5
+        "import": 0.19999998807907104,
+        "construct": 589.7000000178814,
+        "capture": 2621.5999999940395
       }
     },
     {
@@ -1355,9 +1355,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 280.5999999999767,
-        "capture": 5284.300000000047
+        "import": 0.19999998807907104,
+        "construct": 627,
+        "capture": 2669.100000023842
       }
     },
     {
@@ -1376,9 +1376,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.10000000009313226,
-        "construct": 276.5999999999767,
-        "capture": 5275.099999999977
+        "import": 0.19999998807907104,
+        "construct": 481.90000000596046,
+        "capture": 2540.199999988079
       }
     },
     {
@@ -1397,9 +1397,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 305.19999999995343,
-        "capture": 5370.300000000047
+        "import": 0.09999999403953552,
+        "construct": 544,
+        "capture": 2518.800000011921
       }
     },
     {
@@ -1418,9 +1418,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.10000000009313226,
-        "construct": 305.89999999990687,
-        "capture": 5361.900000000023
+        "import": 0.09999999403953552,
+        "construct": 567.4000000059605,
+        "capture": 2389.699999988079
       }
     },
     {
@@ -1439,9 +1439,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.10000000009313226,
-        "construct": 272.69999999995343,
-        "capture": 5031.5
+        "import": 0.09999999403953552,
+        "construct": 472.40000000596046,
+        "capture": 2469
       }
     },
     {
@@ -1460,9 +1460,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999997671694,
-        "construct": 293.9000000000233,
-        "capture": 5667.099999999977
+        "import": 0.30000001192092896,
+        "construct": 495,
+        "capture": 2617.300000011921
       }
     }
   ]

@@ -416,8 +416,25 @@ export function AbsurdDaily() {
     const bookRef=useRef(book), bookDirty=useRef(bookFailed);bookRef.current=book;
     const [lobby,setLobby]=useState<LobbyState>({category:'all',query:'',filter:'all',limit:8,collection:'all'});
     const changeBook=(change:Parameters<typeof updateCookbook>[2])=>{const saved=updateCookbook(localBook,bookRef.current,change,Date.now(),bookDirty.current);bookRef.current=saved.book;bookDirty.current=!saved.available;setBook(saved.book);setSaveNotice(saved.notice);setBookFailed(!saved.available);};
-    const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null,origin='')=>{if(game===null&&next)returnPoint.current={top:window.scrollY,key:origin};restoreLobby.current=next===null;const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,marketCheckpoint=dish&&!keepSeed?readMarket(tabBook):null,nextSeed=keepSeed?seed:marketCheckpoint&&dish&&marketCheckpoint.recipe===dish.id?marketCheckpoint.seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();const update=()=>{setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setRun(n=>n+1);};if(next){flushSync(update);fullscreen.current?.enter();}else update();const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed),...(keepSeed&&new URLSearchParams(location.search).get('practice')==='1'?{practice:'1'}:{})}).toString():'';url.hash='';history.pushState(null,'',url);},[game,seed]);
-    useLayoutEffect(()=>{if(!game&&restoreLobby.current){restoreLobby.current=false;const point=returnPoint.current;if(point){const card=[...document.querySelectorAll<HTMLElement>('[data-arcade-open]')].find(e=>e.dataset.arcadeOpen===point.key);card?.focus({preventScroll:true});window.scrollTo({top:point.top,behavior:'instant'});return;}}(main.current?.querySelector<HTMLElement>('[data-game-content]')??main.current)?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});},[game,run,result]);
+    const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null,origin='')=>{if(game===null&&next)returnPoint.current={top:window.scrollY,key:origin};restoreLobby.current=next===null;const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,marketCheckpoint=dish&&!keepSeed?readMarket(tabBook):null,nextSeed=keepSeed?seed:marketCheckpoint&&dish&&marketCheckpoint.recipe===dish.id?marketCheckpoint.seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();const update=()=>{setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setRun(n=>n+1);};const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed),...(keepSeed&&new URLSearchParams(location.search).get('practice')==='1'?{practice:'1'}:{})}).toString():'';url.hash='';history.pushState(null,'',url);if(next){flushSync(update);fullscreen.current?.enter();}else update();},[game,seed]);
+    useLayoutEffect(()=>{
+        if(!game&&restoreLobby.current){
+            restoreLobby.current=false;
+            const point=returnPoint.current;
+            const restore=()=>{
+                if(document.fullscreenElement)return;
+                const card=point&&[...document.querySelectorAll<HTMLElement>('[data-arcade-open]')].find(e=>e.dataset.arcadeOpen===point.key);
+                (card||main.current)?.focus({preventScroll:true});
+                window.scrollTo({top:point?.top??0,behavior:'instant'});
+            };
+            restore();
+            // Native exit completes after the fullscreen component unmounts.
+            document.addEventListener('fullscreenchange',restore);
+            return()=>document.removeEventListener('fullscreenchange',restore);
+        }
+        (main.current?.querySelector<HTMLElement>('[data-game-content]')??main.current)?.focus({preventScroll:true});
+        window.scrollTo({top:0,behavior:'instant'});
+    },[game,run,result]);
     const nextGame=()=>{if(game==='kitchen'&&recipe){const next=RECIPES[(RECIPES.findIndex(r=>r.id===recipe.id)+1)%RECIPES.length];choose('kitchen',false,next);}else{const choices=[...GAMES,...PARTY_GAMES];choose(choices[(choices.findIndex(g=>g.id===game)+1)%choices.length].id);}};
     useEffect(()=>{document.title='遊戲大廳 · 自由工坊';const previousScroll=history.scrollRestoration;history.scrollRestoration='manual';const back=()=>{restoreLobby.current=initialGame()===null;setGame(initialGame());setRecipe(recipeOf(new URLSearchParams(location.search).get('recipe')));setSeed(seedOf(new URLSearchParams(location.search).get('seed')));setFresh(false);setResult(null);setRun(n=>n+1);};const changed=(event:StorageEvent)=>{if(event.key===COOKBOOK_KEY&&!bookDirty.current){const saved=readCookbook(localBook);bookRef.current=saved.book;setBook(saved.book);setSaveNotice(saved.notice);}};window.addEventListener('popstate',back);window.addEventListener('storage',changed);return()=>{history.scrollRestoration=previousScroll;window.removeEventListener('popstate',back);window.removeEventListener('storage',changed);};},[]);
     const invalid=new URLSearchParams(location.search).get('game')==='kitchen'&&!game;

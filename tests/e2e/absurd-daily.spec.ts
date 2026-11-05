@@ -399,7 +399,7 @@ test.describe('PT-6 touchscreen input',()=>{
 // EasyList https://easylist.to/easylist/easylist.txt, version 202611021446.
 // Download SHA256 e7d918a3a427f4d6ce3141c298f5c41e5d014b5c3dd2192845b0d448f68c729a.
 // These names describe game UI, not advertising; do not override user filters.
-const cosmeticSelectors='.fw-arcade-root,.fw-arcade-header,.fw-arcade-footer,.fw-arcade-button,.fw-arcade-notice,.fw-arcade-result,.fw-arcade-main';
+const cosmeticSelectors='.ad-root,.ad-header,.ad-footer,.ad-button,.ad-notice,.ad-result,.ad-main';
 async function installCosmeticFilters(page:Page){
   // Append to an actual same-origin stylesheet so the test respects style-src 'self'.
   await page.route(/\/assets\/[^/]+\.css(?:\?.*)?$/,async route=>{
@@ -413,17 +413,17 @@ for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,a
   await installCosmeticFilters(page);
   const writes:string[]=[];page.on('request',r=>{if(!['GET','HEAD'].includes(r.method()))writes.push(r.url());});
   await page.goto('/play');
-  await expect(page).toHaveTitle('離譜日常 · 自由工坊');
+  await expect(page).toHaveTitle('遊戲大廳 · 自由工坊');
   await expect(page.locator('.fw-arcade-root')).toBeVisible();
   await expect(page.locator('.fw-arcade-header')).toBeVisible();
   await expect(page.locator('.fw-arcade-footer')).toBeVisible();
   await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
   // Negative control proves the filter is effective, not silently absent.
-  await page.evaluate(()=>{const el=document.createElement('div');el.className='fw-arcade-root';el.id='cosmetic-control';el.textContent='synthetic filter control';document.body.append(el);});
+  await page.evaluate(()=>{const el=document.createElement('div');el.className='ad-root';el.id='cosmetic-control';el.textContent='synthetic filter control';document.body.append(el);});
   await expect(page.locator('#cosmetic-control')).toBeHidden();
   await page.locator('#cosmetic-control').evaluate(el=>el.remove());
   {
-    await page.getByRole('button',{name:action+' →',exact:true}).click();
+    await page.getByRole('button',{name:action+' ↗',exact:true}).click();
     await expect(page).toHaveURL(new RegExp(`[?]game=${game}&seed=`));
     await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
     await expect(page.locator('.fw-arcade-controls')).toBeVisible();
@@ -433,7 +433,7 @@ for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,a
     await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();
     await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
     await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
-    await expect(page.locator('.fw-arcade-welcome h1')).toBeFocused();
+    await expect(page.locator(`[data-arcade-open="game:${game}"]`)).toBeFocused();
     expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
   }
   expect(writes).toEqual([]);
@@ -1289,7 +1289,7 @@ test('leaving fullscreen before starting is respected through a zero-photo retry
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button',{name:'← 遊樂場'}).click();
   await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
-  await expect(page.locator('.fw-arcade-welcome h1')).toBeFocused();
+  await expect(page.locator('[data-arcade-open="game:photo"]')).toBeFocused();
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
 });
 
@@ -1379,7 +1379,7 @@ for (const outcome of ['resolve','reject'] as const) {
     await page.evaluate(()=>(window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen());
     await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
     await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toHaveCount(0);
-    await expect(page.locator('.fw-arcade-welcome h1')).toBeFocused();
+    await expect(page.locator('[data-arcade-open="game:cash"]')).toBeFocused();
     expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
     await expect(page.locator('.fw-arcade-game-card').first()).toBeVisible();
   });
