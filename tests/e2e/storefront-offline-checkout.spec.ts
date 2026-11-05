@@ -647,7 +647,7 @@ test('delegated seller sees masked settings and retains the original cash comman
   await grant(capabilities);await page.getByRole('button',{name:'重試',exact:true}).click();
   await expect(page.locator('.seller-announcement')).toContainText('已保存：確認收現金並完成面交。');
   await expect(page.getByText('正在確認結果',{exact:true})).toHaveCount(0);expect(statuses).toEqual([200,403,200]);expect(requests[2]).toEqual(requests[0]);
-  await page.getByRole('button',{name:'重新確認權限',exact:true}).click();await expect(page.getByRole('button',{name:'重新確認權限',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'重新確認權限',exact:true})).toHaveCount(0);
   const detail=SellerCheckoutOrderSchema.parse(await (await operator.request.get('/api/v1'+store.root+'/checkout-orders/'+cash.order_ref)).json());
   expect(detail.payment_detail?.offline_payments).toHaveLength(1);expect(detail.meetup_handover).not.toBeNull();expect(detail.actions.complete_meetup).toBe(false);
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:4,reserved:0});
@@ -998,8 +998,8 @@ test('order bell tells an eligible seller reader about placement and opening it 
     await expect(brandHome).toHaveAttribute('href', '/#home');
     const brandImage=brandHome.getByRole('img',{name:'自由工坊',exact:true});
     await expect(brandImage).toBeVisible();
-    await expect(brandImage).toHaveAttribute('src','/brand/freedom-workshop-compact.jpeg');
-    await expect(brandImage).toHaveJSProperty('naturalWidth',1536);
+    await expect(brandImage).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
+    await expect(brandImage).toHaveJSProperty('naturalWidth',396);
     await expect(brandHome).toHaveAccessibleName('自由工坊 · 會員首頁');
     await assertCartResponsiveLayout(readerPage,[390,768,1440],width=>info.outputPath(`notify-bell-${width}.png`));
     const detail=readerPage.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===`/api/v1${store.root}/checkout-orders/${order.order_ref}`);
@@ -1047,8 +1047,8 @@ test('buyer order notices open a fresh authorized B07 and the full history keeps
     await expect(brandHome).toHaveAttribute('href', '/#home');
     const brandImage=brandHome.getByRole('img',{name:'自由工坊',exact:true});
     await expect(brandImage).toBeVisible();
-    await expect(brandImage).toHaveAttribute('src','/brand/freedom-workshop-compact.jpeg');
-    await expect(brandImage).toHaveJSProperty('naturalWidth',1536);
+    await expect(brandImage).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
+    await expect(brandImage).toHaveJSProperty('naturalWidth',396);
     await expect(brandHome).toHaveAccessibleName('自由工坊 · 會員首頁');
     await assertCartResponsiveLayout(portal,[390,768,1440],width=>info.outputPath(`notify-history-${width}.png`));
     await action.click();await expect(portal).toHaveURL(`${store.origin}/shops/${store.slug}/orders/${order.order_ref}`);

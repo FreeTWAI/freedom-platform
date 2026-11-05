@@ -57,3 +57,82 @@ test('supplier reservation copy describes shared stock without promising supplie
     assert.ok(markup.includes('btn btn-ghost'));
   }
 });
+
+// Execute the current TSX component and real response parser with a small hook host.
+// This is a component/control-flow regression, not a React DOM or browser test.
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {runInNewContext} from 'node:vm';
+import {transformSync} from 'esbuild';
+import * as React from 'react';
+import {ApiError} from '../../apps/portal-web/src/api.js';
+function entryHarness() {
+  const sourceUrl = new URL('../../apps/portal-web/src/modules/HostedSellerOrders.tsx', import.meta.url);
+  const requireSource = createRequire(sourceUrl);
+  const cells: any[] = [], effects: (() => void)[] = [], cleanups: (() => void)[] = [];
+  let cursor = 0, dirty = false, tree: any;
+  const hooks = {...React,
+    useState(initial: any) {const i = cursor++; if (!(i in cells)) cells[i] = typeof initial === 'function' ? initial() : initial;
+      return [cells[i], (value: any) => {const next = typeof value === 'function' ? value(cells[i]) : value; if (!Object.is(next, cells[i])) {cells[i] = next; dirty = true;}}];},
+    useRef(initial: any) {const i = cursor++; return cells[i] ??= {current: initial};},
+    useEffect(effect: () => (() => void) | void, deps: unknown[]) {const i = cursor++, prev = cells[i];
+      if (!prev || deps.some((value, j) => !Object.is(value, prev[j]))) {cells[i] = deps; effects.push(() => {cleanups[i]?.(); cleanups[i] = effect() ?? (() => {});});}},
+  };
+  const module = {exports: {} as any};
+  const code = transformSync(readFileSync(sourceUrl, 'utf8'), {loader: 'tsx', format: 'cjs', jsx: 'automatic'}).code;
+  runInNewContext(code, {module, exports: module.exports, AbortController,
+    require: (name: string) => name === 'react' ? hooks : name === '../api' ? {ApiError} : name.endsWith('.css') ? {} : requireSource(name)});
+  const requests: {path: string; signal: AbortSignal; resolve: (raw: unknown) => void; reject: (error: unknown) => void}[] = [];
+  const client = {sessionGeneration: 1, get(path: string, options: {signal: AbortSignal}) {
+    return new Promise((resolve, reject) => {requests.push({path, signal: options.signal, resolve, reject});});
+  }};
+  let props = {client, tenantId: id, instanceId: other, readinessHref: '#readiness'};
+  function render(runEffects = true) {cursor = 0; dirty = false; tree = module.exports.SellerOrdersLink(props); if (runEffects) {while (effects.length) effects.shift()!(); if (dirty) render();} return tree;}
+  async function flush() {for (let i = 0; i < 5; i++) {await Promise.resolve(); if (dirty) render();}}
+  function nodes(node = tree): any[] {if (Array.isArray(node)) return node.flatMap(child => nodes(child)); if (!node || typeof node !== 'object') return []; return [node, ...nodes(node.props?.children)];}
+  const text = (node: any): string => Array.isArray(node) ? node.map(text).join('') : node && typeof node === 'object' ? text(node.props?.children) : node == null || typeof node === 'boolean' ? '' : String(node);
+  render();
+  return {client, requests, flush, render, nodes, text: () => text(tree),
+    buttons: () => nodes().filter(node => node.type === 'button'),
+    links: () => nodes().filter(node => node.type === 'a').map(node => text(node)),
+    change(next: Partial<typeof props>, runEffects = true) {props = {...props, ...next}; render(runEffects);},
+    unmount() {for (const cleanup of cleanups) cleanup?.();},
+  };
+}
+const emptyPage = {items: [], next_cursor: null};
+for (const failure of ['network', '503', 'schema'] as const) test(`seller entry ${failure} failure offers a read-only retry and recovers`, async () => {
+  const h = entryHarness(); assert.deepEqual(h.links(), ['開店準備']);
+  assert.equal(h.requests[0].path, `/tenants/${id}/storefronts/${other}/reservations?limit=1`);
+  if (failure === 'schema') h.requests[0].resolve({});
+  else h.requests[0].reject(new ApiError({message: 'failed', status: failure === '503' ? 503 : 0, network: failure === 'network'}));
+  await h.flush(); assert.match(h.text(), /暫時無法讀取訂單入口/); assert.deepEqual(h.links(), ['開店準備']);
+  const retry = h.buttons()[0]; assert.ok(retry); retry.props.onClick(); retry.props.onClick(); await h.flush();
+  assert.equal(h.requests.length, 2); assert.equal(h.buttons().length, 0); assert.deepEqual(h.links(), ['開店準備']);
+  retry.props.onClick(); await h.flush(); assert.equal(h.requests.length, 2, 'stale repeated click cannot issue another read');
+  h.requests[1].resolve(emptyPage); await h.flush(); assert.deepEqual(h.links(), ['開店準備', '預留訂單', '供貨訂單']);
+  assert.equal(h.buttons().length, 0); h.unmount();
+});
+for (const status of [403, 404]) test(`seller entry ${status} hides owner links without offering retry`, async () => {
+  const h = entryHarness(); h.requests[0].reject(new ApiError({message: 'denied', status})); await h.flush();
+  assert.deepEqual(h.links(), ['開店準備']); assert.equal(h.buttons().length, 0); assert.doesNotMatch(h.text(), /暫時無法/); h.unmount();
+});
+test('seller entry valid empty owner page enables links without duplicate unchanged-prop reads', async () => {
+  const h = entryHarness(); h.render(); assert.equal(h.requests.length, 1); h.requests[0].resolve(emptyPage); await h.flush();
+  assert.deepEqual(h.links(), ['開店準備', '預留訂單', '供貨訂單']); h.render(); assert.equal(h.requests.length, 1); h.unmount();
+});
+for (const outcome of ['success', 'failure'] as const) test(`seller entry ignores late ${outcome} after unmount or store change`, async () => {
+  for (const unmount of [true, false]) {
+    const h = entryHarness(); if (unmount) h.unmount(); else h.change({instanceId: id});
+    assert.equal(h.requests[0].signal.aborted, true);
+    if (outcome === 'success') h.requests[0].resolve(emptyPage); else h.requests[0].reject(new Error('late'));
+    await h.flush(); assert.deepEqual(h.links(), ['開店準備']); assert.equal(h.buttons().length, 0);
+    if (!unmount) {h.requests[1].resolve(emptyPage); await h.flush(); assert.equal(h.links().length, 3); h.unmount();}
+  }
+});
+test('seller entry fences session changes and stale failure/retry before new scope effects', async () => {
+  const h = entryHarness(); h.requests[0].reject(new Error('network')); await h.flush(); const retry = h.buttons()[0]; assert.ok(retry);
+  h.change({instanceId: id}, false); assert.equal(h.buttons().length, 0, 'old error cannot appear on new store render');
+  retry.props.onClick(); h.render(); await h.flush(); assert.equal(h.requests.length, 2);
+  h.client.sessionGeneration++; h.requests[1].resolve(emptyPage); await h.flush(); assert.deepEqual(h.links(), ['開店準備']);
+  h.render(); assert.equal(h.buttons().length, 0); h.unmount();
+});

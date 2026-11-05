@@ -105,7 +105,7 @@ migration 不改 membership、主力公會、同意紀錄或開發授權，也�
 
 部署前，release config 擁有者要把兩個環境的 `RELEASE_CONFIG_JSON` `migrationProfile.last` 與 `RELEASE_CONFIG_SHA256` 改到 198。
 
-草稿 PR #1215 也使用 `198_tester_map_accounts.sql`。migration 編號必須連續，後合併的一方要改號，並同步上列 frontier 測試。
+草稿 PR #1215 也使用 `202_tester_map_accounts.sql`。migration 編號必須連續，後合併的一方要改號，並同步上列 frontier 測試。
 
 ## 驗證入口與證據界線
 

@@ -1,0 +1,14 @@
+{
+  "headline": "這次和上次比，數字支持什麼調整？",
+  "outcomes": ["本次／前次反應的合成紀錄", "缺值說明與 next_action", "尚缺的儀表板接線清單"],
+  "flow": {
+    "title": "照契約存紀錄，再判讀下一步",
+    "lead": "MIT 的貼文後測 Skill，不直接寫文或發文；README 的流程用 Codex Desktop、Chrome 外掛與登入中的服務。",
+    "steps": [
+      {"icon": "doc", "title": "存下貼文反應", "note": "依 dashboard-contract.md 記下本次與前次反應；先用合成數字。"},
+      {"icon": "search", "title": "對照判讀方式", "note": "用 hao-evaluation.md 的判讀方式，整理維持觀察、改寫或調整導流的理由。"},
+      {"icon": "pen", "title": "寫下學到與下一步", "note": "learning 與 next_action 寫進紀錄；缺值在 notes 說明，不當成真實零。"}
+    ],
+    "caption": "作者的儀表板不在本 repo，無法只下載就完整試用：先用合成紀錄練習，自行替換作者路徑。"
+  }
+}

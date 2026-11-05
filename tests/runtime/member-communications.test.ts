@@ -526,6 +526,62 @@ test('history with a now disabled or unready peer stays readable but cannot send
   assert.equal(await count('member_direct_messages'),2);
 });
 
+for(const historyCount of [0,250]){
+ test(`direct sender budget admits message 20 and rejects 21 with ${historyCount} old rows and unrelated activity`,async()=>{
+  const a=await signIn(DEMO_USERS[0].email),otherCommunity=randomUUID(),path=`/me/conversations/${B}/messages`;
+  await pool.query('INSERT INTO communities VALUES($1,$2)',[otherCommunity,'合成的其他社群']);
+  const seedMessages=(community:string,sender:string,recipient:string,n:number,age:number)=>pool.query(`
+    INSERT INTO member_direct_messages(community_id,sender_ref,recipient_ref,body,created_at)
+    SELECT $1,$2,$3,'合成限流歷史',clock_timestamp()-make_interval(secs=>$5) FROM generate_series(1,$4::int)`,
+    [community,sender,recipient,n,age]);
+  await seedMessages(DEMO_COMMUNITY,A,B,historyCount,120);
+  await seedMessages(DEMO_COMMUNITY,B,A,25,-60);
+  // Synthetic historical rows for this same sender in another community must
+  // not spend the current community's budget, even when their timestamps lead.
+  await seedMessages(otherCommunity,A,B,25,-60);
+  await seedMessages(DEMO_COMMUNITY,A,C,19,0);
+  const sent=await request(path,a,{body:'第二十則'});assert.equal(sent.status,201,JSON.stringify(sent.data));
+  const limited=await request(`/me/conversations/${C}/messages`,a,{body:'第二十一則'});
+  assert.equal(limited.status,429,JSON.stringify(limited.data));assert.equal(limited.data.code,'message_rate_limited');
+  assert.equal(await count('member_direct_messages WHERE community_id=$1 AND sender_ref=$2',[DEMO_COMMUNITY,A]),historyCount+20);
+  assert.equal(await count('command_receipts'),1,'a rejected send must not leave a receipt');
+ });
+}
+
+test('direct sender budget uses the decision clock after an observed advisory wait crosses the 60-second window',async()=>{
+  const a=await signIn(DEMO_USERS[0].email),path=`/me/conversations/${B}/messages`,blocker=await pool.connect();
+  let pending:ReturnType<typeof request>|undefined,settled=false;
+  try{
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid as number;
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`direct-message-sender/${DEMO_COMMUNITY}/${A}`]);
+    pending=request(path,a,{body:'等待窗口過後的私訊'});pending.then(()=>{settled=true;},()=>{settled=true;});
+    await waitUntilBlocked(pid,1,[pending]);
+    const waiter=(await pool.query(`SELECT xact_start::text AS started FROM pg_stat_activity
+      WHERE $1=ANY(pg_blocking_pids(pid)) AND wait_event_type='Lock' AND wait_event='advisory'`,[pid])).rows[0];
+    assert.ok(waiter,'the real send must wait on the exact sender advisory lock');
+    // Seed only after observing the wait. The DB supplies all timestamps, so
+    // slow request setup cannot miss the boundary and no JS clock is involved.
+    const seeded=(await pool.query(`WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS at), inserted AS (
+      INSERT INTO member_direct_messages(community_id,sender_ref,recipient_ref,body,created_at)
+      SELECT $1,$2,$3,'等待期間到期的合成訊息',at-interval '59 seconds' FROM stamp CROSS JOIN generate_series(1,20)
+      RETURNING created_at)
+      SELECT min(created_at)::text AS created_at,count(*)::int AS n,
+        bool_and(created_at>$4::timestamptz-interval '60 seconds') AS inside_transaction_window FROM inserted`,
+      [DEMO_COMMUNITY,A,B,waiter.started])).rows[0];
+    assert.equal(seeded.n,20);assert.equal(seeded.inside_transaction_window,true,'now() would still count all 20');
+    await pool.query("SELECT pg_sleep_until($1::timestamptz+interval '60 seconds')",[seeded.created_at]);
+    assert.equal(await count("member_direct_messages WHERE community_id=$1 AND sender_ref=$2 AND created_at>clock_timestamp()-interval '60 seconds'",[DEMO_COMMUNITY,A]),0);
+    assert.equal(settled,false,'the sender lock must remain held while the rows age out');
+    await blocker.query('COMMIT');
+    const sent=await pending;assert.equal(sent.status,201,JSON.stringify(sent.data));
+    assert.equal(await count('member_direct_messages WHERE community_id=$1 AND sender_ref=$2',[DEMO_COMMUNITY,A]),21);
+    assert.equal(await count('command_receipts'),1);
+  }finally{
+    await blocker.query('ROLLBACK').catch(()=>{});blocker.release();await pending?.catch(()=>{});
+  }
+});
+
 test('per-sender rate limit holds under concurrency and replays are neither counted nor blocked',async()=>{
   const [a,b]=await signInAll(),path=`/me/conversations/${B}/messages`,firstKey=randomUUID();
   const first=await request(path,a,{body:'first'},{key:firstKey});assert.equal(first.status,201);

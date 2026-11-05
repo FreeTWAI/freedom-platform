@@ -58,6 +58,7 @@ export function HostedStorePublishArea({
   copyAction, copyLink, copyFeedback, manualUrl, manualField,
 }: HostedStorePublishAreaProps) {
   return <section id="store-publish-panel" hidden={area!=='publish'} className="hosted-supply-panel stack" aria-labelledby="store-publish-title"><h3 id="store-publish-title">預覽與發布</h3>
+          <p className="field-hint">這是商店的公開展示頁，不是另一份商品庫。修改先保存在後台，按發布才更新訪客看到的版本。</p>
           <p>{publication?.state === 'published' ? `目前公開第 ${publication.current_revision} 版。` : publication?.state === 'unpublished' ? '已停止公開。' : '尚未發布。'}</p>
           {publication?.state === 'published' && preview?.dirty && <p>有尚未發布的變更。</p>}
           {!appearanceEnabled && appearance && <fieldset disabled={areaLocked || !can('store:manage')} className="hosted-store-templates">
@@ -71,7 +72,7 @@ export function HostedStorePublishArea({
           {appearanceEnabled&&<>
             {appearanceError&&<div><p role="alert">店面外觀暫時無法讀取。請重試。</p><div className="actions"><button type="button" className="btn btn-ghost btn-sm" disabled={loading||locked} onClick={()=>void load()}>重新讀取店面外觀</button></div></div>}
             {appearanceDraft?<HostedStoreAppearance client={client} userId={userId} tenantId={tenantId} instanceId={instanceId} draft={appearanceDraft} writable={can('store:manage')}
-              locked={busy||retry!==null||!!otherDraft||appearanceError||Object.entries(photoBlocks).some(([id,blocking])=>id!=='appearance'&&blocking)}
+              locked={loading||busy||retry!==null||!!otherDraft||appearanceError||Object.entries(photoBlocks).some(([id,blocking])=>id!=='appearance'&&blocking)}
               onState={(dirty,blocking)=>photoState('appearance',dirty,blocking)} onSaved={load}/>:!appearanceError&&<p role="status">正在讀取店面外觀…</p>}
           </>}
           {preview && <div className="actions"><a href={`/api/v1${root}/preview-page`} target="_blank" rel="noopener">預覽已儲存的展示頁</a></div>}

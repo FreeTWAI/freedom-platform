@@ -1,0 +1,68 @@
+name: Native game preview candidates
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+    paths: ['modules/absurd-daily/tools/capture-request.json']
+permissions:
+  contents: read
+concurrency:
+  group: native-game-previews-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  capture:
+    if: >-
+      github.repository == 'FreeTWAI/freedom-platform' &&
+      github.event.pull_request.number == 1061 &&
+      github.event.pull_request.user.login == 'Hao0321' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feat/arcade-playability-20261025'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 3
+          persist-credentials: false
+      - name: Admit only a new explicit capture request at the exact head
+        id: request
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          PREVIOUS_HEAD: ${{ github.event.before }}
+          EVENT_ACTION: ${{ github.event.action }}
+        run: node modules/absurd-daily/tools/capture-ci.mjs admit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: steps.request.outputs.capture == 'true'
+        with:
+          node-version: '24'
+      - name: Validate the bounded operator contract without a browser
+        if: steps.request.outputs.capture == 'true'
+        run: node --test modules/absurd-daily/tools/native-preview-validation.test.mjs
+      - name: Install the repository locked capture dependencies
+        if: steps.request.outputs.capture == 'true'
+        run: npm ci
+      - name: Reproduce and verify the cooking export boundary without a browser
+        if: steps.request.outputs.capture == 'true'
+        run: node modules/absurd-daily/tools/bundle-regression.mjs "$PWD" "$RUNNER_TEMP/native-cooking-bundle-regression.json"
+      - name: Install the repository Playwright Chromium runtime
+        if: steps.request.outputs.capture == 'true'
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Capture candidates without updating product assets
+        if: steps.request.outputs.capture == 'true'
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: node modules/absurd-daily/tools/capture-ci.mjs capture
+      - name: Bound retained candidate evidence to 256 MiB
+        if: always() && steps.request.outputs.capture == 'true'
+        id: evidence
+        run: node modules/absurd-daily/tools/capture-ci.mjs evidence
+      - name: Preserve native originals and failure receipts
+        if: always() && steps.evidence.outputs.bounded == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-game-previews-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-game-previews/
+          retention-days: 1
+          if-no-files-found: error

@@ -136,3 +136,62 @@ test('virtual commerce rehearsal has an independent renderer and account-generat
   const other = element(commerceFeatures['virtual-commerce'].render({...context, session:{...context.session,user:{...context.session.user,user_id:'synthetic-member-b'}}}));
   assert.notEqual(other.key,first.key);
 });
+
+import {readFileSync} from 'node:fs';
+import {dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {buildSync} from 'esbuild';
+
+function staticModuleInputs(relative:string,append='') {
+  const entry=fileURLToPath(new URL(`../../apps/portal-web/src/${relative}`,import.meta.url));
+  const {inputs}=buildSync({
+    stdin:{contents:readFileSync(entry,'utf8')+append,loader:'tsx',sourcefile:entry,resolveDir:dirname(entry)},
+    bundle:true,write:false,metafile:true,packages:'external',platform:'browser',
+    format:'esm',loader:{'.css':'empty'},logLevel:'silent',
+  }).metafile!;
+  const visited=new Set<string>();
+  const visit=(path:string)=>{
+    if(visited.has(path))return;
+    visited.add(path);
+    for(const dependency of inputs[path]?.imports??[])if(!dependency.external&&dependency.kind!=='dynamic-import')visit(dependency.path);
+  };
+  const root=Object.keys(inputs).find(path=>path.endsWith('/'+relative))??'<stdin>';
+  visit(root);
+  assert.ok(visited.size>1,`the actual ${relative} graph must be traversed`);
+  return [...visited];
+}
+const accountOnlyModules=['AccountSettingsPanel','AccountDeactivation','AccountSecurity','AvatarEditor','ClientConnections','MemberShare','TotpSettings'];
+const hasModule=(paths:string[],name:string)=>paths.some(path=>path.endsWith(`/modules/${name}.tsx`));
+
+test('home and member-card consumers do not statically download account editors',()=>{
+  for(const entry of ['App.tsx','modules/MemberHome.tsx','modules/Membership.tsx','modules/PublicMemberPage.tsx','modules/GuildMembers.tsx']){
+    const paths=staticModuleInputs(entry);
+    for(const name of accountOnlyModules)assert.equal(hasModule(paths,name),false,`${entry} eagerly includes ${name}`);
+    if(entry==='modules/MemberHome.tsx')assert.equal(hasModule(paths,'MemberCardDownload'),false,'home does not need the public-card download feature');
+  }
+});
+
+test('account lazy boundary retains all original editors and the negative eager edge is detected',()=>{
+  const identity=readFileSync(new URL('../../apps/portal-web/src/features/identity.tsx',import.meta.url),'utf8');
+  assert.match(identity,/const AccountPanel = lazy\(\(\) => import\('\.\.\/modules\/AccountSettingsPanel'\)\.then\(m => \(\{default: m\.AccountPanel\}\)\)\)/);
+  const account=staticModuleInputs('modules/AccountSettingsPanel.tsx');
+  // The entry itself is <stdin>; its actual subcomponent graph remains complete.
+  for(const name of accountOnlyModules.filter(name=>name!=='AccountSettingsPanel'))assert.equal(hasModule(account,name),true,name);
+  const eager=staticModuleInputs('modules/MemberHome.tsx',"\nimport './AccountSettingsPanel';");
+  for(const name of accountOnlyModules)assert.equal(hasModule(eager,name),true,`negative control must detect ${name}`);
+});
+
+test('account composition preserves the state owner, leave guard and explicit query flags',()=>{
+  const context=fixture({locationHash:'#account?view=connections'});
+  const first=element(identityFeatures.account.render(context));
+  assert.equal(first.props.client,context.client);
+  assert.equal(first.props.session,context.session);
+  assert.equal(first.props.registerLeave,context.registerPageLeave);
+  assert.equal(first.props.onNavigate,context.selectTab);
+  assert.equal(first.props.focusConnections,true);
+  assert.equal(first.props.focusProfileExtras,false);
+  const second=element(identityFeatures.account.render({...context,locationHash:'#account?view=recognition'}));
+  assert.equal(second.type,first.type,'query changes retain the same lazy component identity');
+  assert.equal(second.props.focusConnections,false);
+  assert.equal(second.props.focusProfileExtras,true);
+});

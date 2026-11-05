@@ -24,7 +24,7 @@ import {compareDirectMessages,directMessageReceiptRefreshDue,hasDirectMessageCha
 import {isFirstImageDecoderRejection,matchesDirectMessageAck,messageImageFileError,messageImageUrl,uploadMessageImage,type MessageImage} from './message-image-client';
 import {MessageImagePreview} from './MessageImagePreview';
 import {chatPollDue,idleChatPoll,resetChatPoll} from './adaptive-chat-poll';
-import {refreshLoadedMessages} from './message-refresh';
+import {reconcileMessageAck,refreshLoadedMessages} from './message-refresh';
 import {isOrderNotificationAction,type DirectMessageReceiptPage,type OrderNotificationAction} from '../../../../modules/member-communications/types';
 
 type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social'|'stores'|'reservations';
@@ -239,7 +239,7 @@ type Pending={key:string;body:string;payload:ImagePayload;status:'sending'|'unkn
 function DirectMessageImage({peer,messageId}:{peer:string;messageId:string}){
   const [broken,setBroken]=useState(false);
   const url=messageImageUrl(peer,messageId);
-  return broken?<p className="messages-meta" role="status">圖片無法載入</p>:<a className="message-image-link" href={url} target="_blank" rel="noopener"><img className="message-image" src={url} loading="lazy" decoding="async" alt="傳送的圖片" onError={()=>setBroken(true)}/></a>;
+  return broken?<p className="messages-meta" role="status">圖片無法載入 <button className="btn btn-ghost btn-small" type="button" onClick={()=>setBroken(false)}>重試圖片</button></p>:<a className="message-image-link" href={url} target="_blank" rel="noopener"><img className="message-image" src={url} loading="lazy" decoding="async" alt="傳送的圖片" onError={()=>setBroken(true)}/></a>;
 }
 
 export function DirectMessages({client,session,messageImagesEnabled=false,memberBlockingEnabled=false,onUnread,openPeer,active=true,compact=false,listRequest=0,registerLeave}:{client:PortalClient;session:SessionPayload;messageImagesEnabled?:boolean;memberBlockingEnabled?:boolean;onUnread:(count:InboxUnread)=>void;openPeer:{id:string;request:number}|null;active?:boolean;compact?:boolean;listRequest?:number;registerLeave?:(guard:(()=>boolean)|null)=>void}){
@@ -307,6 +307,8 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   const polling=useRef(false),retryAt=useRef(0),failures=useRef(0),listCheckedAt=useRef(0);
   const idlePoll=useRef(resetChatPoll());
   const receiptRefresh=useRef(new Map<string,symbol>());
+  // Advances before a newer authorized projection is queued, not only after render.
+  const historyRevision=useRef(0);
   const receiptCheckedAt=useRef(new Map<string,number>());
   const [liveError,setLiveError]=useState('');
   const snapshot=useRef({thread,threadStatus,reading,active,sending:false,readingThread:true});snapshot.current={thread,threadStatus,reading,active,readingThread:!singlePane||!picking,sending:pending[peer??'']?.status==='sending'};
@@ -319,6 +321,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     const id=peer,messageId=retractTarget.message_id;setRetracting(true);setRetractError('');
     try{
       const result=await client.post<{message_id:string;retracted_at:string}>(`/me/conversations/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/retract`,{},{idempotencyKey:crypto.randomUUID()});
+      historyRevision.current++;
       setThread(value=>value&&value.participant.user_id===id?{...value,items:value.items.map(message=>message.message_id===messageId?{message_id:message.message_id,sender_ref:message.sender_ref,recipient_ref:message.recipient_ref,created_at:message.created_at,read_at:message.read_at,body:'',retracted_at:result.retracted_at}:message)}:value);
       setConversations(items=>items.map(item=>item.participant.user_id===id&&item.last_message.message_id===messageId?{...item,last_message:{message_id:item.last_message.message_id,sender_ref:item.last_message.sender_ref,recipient_ref:item.last_message.recipient_ref,created_at:item.last_message.created_at,read_at:item.last_message.read_at,body:'',retracted_at:result.retracted_at}}:item));
       // Fence any older list response and reconcile counts without keeping the withdrawn preview.
@@ -388,6 +391,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       threadInFlight.current=null;
       if(receiptRefresh.current.get(id)===receiptVersion)receiptRefresh.current.delete(id);
       receiptCheckedAt.current.set(id,Date.now());
+      historyRevision.current++;
       setThread(existing=>{
         if(!quiet||!existing)return value;
         const fresh=value.items.filter(item=>!existing.items.some(known=>known.message_id===item.message_id));
@@ -415,9 +419,10 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   const live=useRef({pullLatest});live.current={pullLatest};
   async function pullLatest(){
     const shown=snapshot.current,id=currentPeer.current;
-    if(!shown.active||document.visibilityState!=='visible'||!navigator.onLine||polling.current||Date.now()<retryAt.current)return;
+    if(!shown.active||document.visibilityState!=='visible'||!navigator.onLine)return;
     // Other conversations remain discoverable without reloading their previews every second.
     if(convInFlight.current===null&&Date.now()-listCheckedAt.current>=8000)void loadConversations(true);
+    if(polling.current||Date.now()<retryAt.current)return;
     if(!shown.readingThread||!id||shown.threadStatus!=='ready'||!shown.thread||shown.reading||shown.sending||threadInFlight.current||moreState.current.loading)return;
     const refreshDue=receiptRefresh.current.has(id)||directMessageReceiptRefreshDue(shown.thread.items,me,receiptCheckedAt.current.get(id)??0,Date.now());
     if(!refreshDue&&!chatPollDue(idlePoll.current,Date.now(),retryAt.current))return;
@@ -480,6 +485,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       // newly loaded outgoing rows are included in the next receipt read.
       if(value.items.some(item=>item.sender_ref===me&&item.read_at===null))receiptRefresh.current.set(id,Symbol());
       if(scroll.current)anchor.current={top:scroll.current.scrollTop,height:scroll.current.scrollHeight};
+      historyRevision.current++;
       setThread(existing=>existing&&{...existing,items:newestMessages(merge(existing.items,value.items,item=>item.message_id)),next_offset:value.next_offset});setThreadMore({loading:false,error:''});
     }catch(cause){if(current===threadGeneration.current)setThreadMore({loading:false,error:fail(cause)});}
     finally{
@@ -543,7 +549,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     if(image?.imageId)payload.image_id=image.imageId;
     const same=previous?.status==='unknown';
     const attempt:Pending={key:same?previous.key:crypto.randomUUID(),body,payload,status:'sending',stage:image?image.imageId?'message':'upload':undefined,selectionKey:image?.key};
-    const sessionGeneration=client.sessionGeneration;
+    const sessionGeneration=client.sessionGeneration,projectionRevision=historyRevision.current,listGeneration=convGeneration.current;
     sendLocks.current.add(id);
     setPending(value=>({...value,[id]:attempt}));setSendErrors(({[id]:_,...rest})=>rest);
     try{
@@ -565,14 +571,19 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       if(!payload.sticker_id)setDrafts(value=>{if((value[id]??'').trim()!==(payload.body??''))return value;const {[id]:_,...rest}=value;return rest;});
       if(image){selections.current.delete(id);if(selectionRef.current===image){selectionRef.current=null;setSelection(null);}}
       if(!payload.sticker_id)richDrafts.clear(id,extras);
-      if(currentPeer.current===id){stick.current=true;setThread(value=>value&&value.participant.user_id===id?{...value,items:newestMessages(merge([message],value.items,item=>item.message_id)),next_offset:value.next_offset===null?null:value.next_offset+(value.items.some(item=>item.message_id===message.message_id)?0:1)}:value);}
-      setConversations(value=>{
+      if(currentPeer.current===id){stick.current=true;setThread(value=>value&&value.participant.user_id===id?{...value,items:newestMessages(merge([reconcileMessageAck(message,value.items)],value.items,item=>item.message_id)),next_offset:value.next_offset===null?null:value.next_offset+(value.items.some(item=>item.message_id===message.message_id)?0:1)}:value);}
+      // A completed read or local retraction can be queued before React renders.
+      // Its synchronous generations fence the preview without relying on that render.
+      const newerProjection=projectionRevision!==historyRevision.current||listGeneration!==convGeneration.current;
+      if(!newerProjection)setConversations(value=>{
         const existing=value.find(item=>item.participant.user_id===id);
         const participant=existing?.participant??(thread?.participant.user_id===id?thread.participant:null);
         if(!participant)return value;
-        return [{participant,can_send:existing?.can_send??true,unread_count:existing?.unread_count??0,last_message:message},...value.filter(item=>item.participant.user_id!==id)];
+        return [{participant,can_send:existing?.can_send??true,unread_count:existing?.unread_count??0,last_message:reconcileMessageAck(message,existing?[existing.last_message]:[])},...value.filter(item=>item.participant.user_id!==id)];
       });
       rereadAfterWrite(id);
+      // rereadAfterWrite already supersedes any in-flight list request.
+      if(newerProjection&&convInFlight.current===null)void loadConversations(true);
     }catch(cause){
       if(!alive.current||client.sessionGeneration!==sessionGeneration)return;
       if(image&&selections.current.get(id)!==image){setPending(({[id]:_,...rest})=>rest);return;}
@@ -609,18 +620,9 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
             </li>;})}
           </ol>):null,
     [thread,peer,Boolean(attempt),retracting,messageImagesEnabled,changeRichDraft,uid,calendarKey]);
-  function switchPane(){setPicking(value=>!value);requestAnimationFrame(()=>{if(picking)heading.current?.focus();else document.getElementById(ids.list)?.focus();});}
-  return <div className={`messages-layout chat-workspace${compact?' is-compact':''}`}>
-    {singlePane&&peer&&picking&&<button type="button" className="btn btn-ghost messages-switch" aria-expanded={picking} aria-controls={`${uid}-picker`} onClick={switchPane}>回到目前對話</button>}
-    <div id={`${uid}-picker`} hidden={singlePane&&Boolean(peer)&&!picking} className="messages-side">
-      <MemberPicker client={client} me={me} onSelect={id=>select(id,true)}/>
-      <section className="stack" aria-labelledby={ids.list}>
-        <h2 id={ids.list} tabIndex={-1} className="member-section-title">對話</h2>
-        {convStatus==='loading'&&<p role="status">正在讀取對話…</p>}
-        {convStatus==='error'&&<div className="banner banner-error" role="alert">對話讀取失敗：{convError}<div className="messages-actions"><button className="btn btn-ghost" type="button" onClick={()=>void loadConversations()}>重新讀取對話</button></div></div>}
-        {convStatus==='ready'&&<div className="messages-actions"><button className="btn btn-ghost" type="button" aria-disabled={convRefresh.loading} onClick={()=>{if(!convRefresh.loading)void loadConversations(true);}}>{convRefresh.loading?'正在整理對話…':'重新整理對話'}</button></div>}
-        {convRefresh.error&&<p className="banner banner-error" role="alert">對話重新整理失敗：{convRefresh.error}</p>}
-        {convStatus==='ready'&&(conversations.length===0?<p className="empty">還沒有私訊。可搜尋會員開始對話。</p>:<ul className="messages-list" aria-label="對話列表">
+  // Draft keystrokes must not rebuild every peer, avatar and localized timestamp,
+  // including the hidden phone picker. Live rows, selection and calendar still invalidate.
+  const conversationList=useMemo(()=>(conversations.length===0?<p className="empty">還沒有私訊。可搜尋會員開始對話。</p>:<ul className="messages-list" aria-label="對話列表">
           {conversations.map(item=><li key={item.participant.user_id} className={item.unread_count?'is-unread':undefined}>
             <button type="button" className="messages-peer" aria-current={peer===item.participant.user_id?'true':undefined} onClick={()=>select(item.participant.user_id,true)}>
               <MemberAvatar nickname={item.participant.display_name} avatarUrl={item.participant.avatar_url}/>
@@ -628,10 +630,25 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
               <span className="chat-peer-tail"><ChatTime value={item.last_message.created_at}/>{item.unread_count>0&&<span className="messages-count">{item.unread_count} 則未讀</span>}</span>
             </button>
           </li>)}
-        </ul>)}
+        </ul>),[conversations,peer,me,messageImagesEnabled,select,calendarKey]);
+  function switchPane(){setPicking(value=>!value);requestAnimationFrame(()=>{if(picking)heading.current?.focus();else document.getElementById(ids.list)?.focus();});}
+  return <div className={`messages-layout chat-workspace${compact?' is-compact':''}`}>
+    {singlePane&&peer&&picking&&<button type="button" className="btn btn-ghost messages-switch" aria-expanded={picking} aria-controls={`${uid}-picker`} onClick={switchPane}>回到目前對話</button>}
+    <div id={`${uid}-picker`} hidden={singlePane&&Boolean(peer)&&!picking} className="messages-side">
+      <section className="stack" aria-labelledby={ids.list}>
+        <div className="chat-list-toolbar"><h2 id={ids.list} tabIndex={-1} className="member-section-title">對話</h2>
+          <button className="btn btn-ghost" type="button" aria-label="開始新對話" title="開始新對話" aria-controls={`${uid}-discovery`} onClick={()=>focusMemberDiscovery(`${uid}-discovery`)}><span aria-hidden="true">＋</span></button>
+          {convStatus==='ready'&&<button className="btn btn-ghost" type="button" aria-label="重新整理對話" title="重新整理對話" aria-disabled={convRefresh.loading} onClick={()=>{if(!convRefresh.loading)void loadConversations(true);}}><span aria-hidden="true">↻</span></button>}
+        </div>
+        {convRefresh.loading&&<p role="status">正在整理對話…</p>}
+        {convStatus==='loading'&&<p role="status">正在讀取對話…</p>}
+        {convStatus==='error'&&<div className="banner banner-error" role="alert">對話讀取失敗：{convError}<div className="messages-actions"><button className="btn btn-ghost" type="button" onClick={()=>void loadConversations()}>重新讀取對話</button></div></div>}
+        {convRefresh.error&&<p className="banner banner-error" role="alert">對話重新整理失敗：{convRefresh.error}</p>}
+        {convStatus==='ready'&&conversationList}
         {convMore.error&&<p className="banner banner-error" role="alert">更多對話讀取失敗：{convMore.error}</p>}
         {convStatus==='ready'&&convNext!==null&&<button className="btn btn-ghost" type="button" disabled={convMore.loading} onClick={()=>void moreConversations()}>{convMore.loading?'正在讀取…':convMore.error?'重試載入更多對話':'載入更多對話'}</button>}
       </section>
+      <MemberPicker id={`${uid}-discovery`} client={client} me={me} onSelect={id=>select(id,true)}/>
     </div>
     <section hidden={singlePane&&(!peer||picking)} className="messages-thread" data-chat-open={Boolean(peer)&&!picking&&!compact} aria-labelledby={ids.thread} aria-busy={threadStatus==='loading'}>
       {!peer&&<><h2 id={ids.thread}>私人訊息</h2><p className="muted">從對話列表或會員搜尋選擇對象。</p></>}
@@ -664,7 +681,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
             if(!files.length)for(const item of Array.from(event.clipboardData.items)){if(item.kind==='file'){const file=item.getAsFile();if(file)files.push(file);}}
             if(files.length){event.preventDefault();attachImage(files);}
           }}>
-            <ChatExtras key={selection?.key??peer} target={peer} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(held.current[peer])return;richDrafts.change(peer,value);}} onSendSticker={id=>void send(peer,id)}/>
+            <ChatExtras previewFeedback key={selection?.key??peer} target={peer} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(held.current[peer])return;richDrafts.change(peer,value);}} onSendSticker={id=>void send(peer,id)}/>
             {messageImagesEnabled===true&&<div className="message-image-controls">
               <input ref={fileInput} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>{const files=Array.from(event.target.files??[]);event.target.value='';if(files.length)attachImage(files);}}/>
               <button className="btn btn-ghost" type="button" disabled={Boolean(attempt)} onClick={()=>fileInput.current?.click()}>附加圖片</button>
@@ -688,7 +705,14 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   </div>;
 }
 
-function MemberPicker({client,me,onSelect}:{client:PortalClient;me:string;onSelect:(id:string)=>void}){
+function focusMemberDiscovery(id:string){
+  const discovery=document.getElementById(id) as HTMLDetailsElement|null;
+  if(!discovery)return;
+  discovery.open=true;
+  discovery.querySelector<HTMLInputElement>('input')?.focus();
+}
+
+function MemberPicker({id,client,me,onSelect}:{id:string;client:PortalClient;me:string;onSelect:(id:string)=>void}){
   const uid=useId();
   const [query,setQuery]=useState(''),[searched,setSearched]=useState<string|null>(null);
   const [results,setResults]=useState<MemberCardData[]>([]),[next,setNext]=useState<number|null>(null);
@@ -715,8 +739,9 @@ function MemberPicker({client,me,onSelect}:{client:PortalClient;me:string;onSele
     }catch(cause){if(current===generation.current)setMore({loading:false,error:fail(cause)});}
   }
   const visible=results.filter(item=>item.user_id!==me&&!item.is_self);
-  return <section className="stack messages-search" aria-labelledby={`${uid}-picker`}>
-    <h2 id={`${uid}-picker`} className="member-section-title">新對話</h2>
+  return <details id={id} className="messages-search">
+    <summary id={`${uid}-picker`}>開始新對話</summary>
+    <div className="stack">
     <form className="stack" role="search" onSubmit={event=>void search(event)}>
       <label className="field"><span>搜尋會員</span><input type="search" value={query} maxLength={100} onChange={event=>setQuery(event.target.value)}/></label>
       <button className="btn btn-ghost" type="submit" disabled={!query.trim()||status==='loading'}>{status==='loading'?'搜尋中…':'搜尋會員'}</button>
@@ -728,5 +753,5 @@ function MemberPicker({client,me,onSelect}:{client:PortalClient;me:string;onSele
     </ul>)}
     {more.error&&<p className="banner banner-error" role="alert">更多會員讀取失敗：{more.error}</p>}
     {status==='ready'&&next!==null&&<button className="btn btn-ghost" type="button" disabled={more.loading} onClick={()=>void loadMore()}>{more.loading?'正在讀取…':more.error?'重試載入更多會員':'載入更多會員'}</button>}
-  </section>;
+  </div></details>;
 }

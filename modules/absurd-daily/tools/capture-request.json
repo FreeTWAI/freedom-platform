@@ -1,0 +1,87 @@
+{
+  "format": "freedom.native-capture-request/v1",
+  "request_id": "cooking66-party3-20261028-03-index-framing",
+  "source_base_sha": "ba3992ee23fc503e0e2b8f0e2f08dde8fa91d440",
+  "families": [
+    "cooking",
+    "party"
+  ],
+  "source_inputs": [
+    {
+      "path": "apps/portal-web/src/games/cooking/catalog.ts",
+      "sha256": "d63de1257b681027a73f8134526c0d19431f3035d218dff9e8252c7f64dc214a"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/dish-designs.ts",
+      "sha256": "ac7ef44291ae647d5dc87323f599deb107e5294e4d658e5e06923b2fdfe42283"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/dish-model.ts",
+      "sha256": "7248e36cff465c3e3743d26dc5e6b12c1b7f0bd8708b181bb7dc289c8eb6818f"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/dish-stage.ts",
+      "sha256": "db121d183c3a6f61fa448c0708f43c741e3cc797ea6b801781a942f5199b6a05"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/food-geometry.ts",
+      "sha256": "17696fb15efe1c2e429780eec5b6c188b64d27d2653dc5bfc0529f172ae2aea8"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/food-kit.ts",
+      "sha256": "65b3980b5c0bc0a513f8e6f0dac53c493e7e005b3bec20496bb1ce7ec19ab76f"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/food-studio.ts",
+      "sha256": "67d2b4e027402627bb00e8e42c94fd27da39320fbf93d0ea04c85dde11edb743"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/food-surfaces.ts",
+      "sha256": "e3b120c37e7d9081d9a50ca535f4fb88ed85f50155b892f71621b4184dc62eb6"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/market-domain.ts",
+      "sha256": "8340ac2f6bbcf13a98a5d55f1f2fee21561737be1d1b22091ac6db3ca6fe6430"
+    },
+    {
+      "path": "apps/portal-web/src/games/cooking/market-food.ts",
+      "sha256": "7ff4e15be6e959e684e55434623e9a31ad6f2d17777451daefe0ed43ccb3066d"
+    },
+    {
+      "path": "apps/portal-web/src/games/domain.ts",
+      "sha256": "6d582c91e25bc2411cb7a9c83b2190034ad640a2053e184f4033db8b16bf3bd1"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/catalog.ts",
+      "sha256": "17281aa0e2ff9ca0ee648001f1e9b8ae7937003ce22633564096626217e86200"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/domain.ts",
+      "sha256": "b9599a91c79f68a97354cc0de0d8bd156511fa06dfde62ace461ec3da19b23bc"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/stage.ts",
+      "sha256": "1ce46d8f33fc70ae732acdadf73ca46378745bc2394a8cbb9a7ebec2f7103467"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/tofu-batch.ts",
+      "sha256": "abc62a63ed037941e0dd1974ef8f444ce8aee285a5c38b619ba3d717246d39f8"
+    },
+    {
+      "path": "apps/portal-web/src/games/stage-batch.ts",
+      "sha256": "c87936287eebda9a55310b6a864623df23d3aba3f9d83342b8b5a36b80a20fd0"
+    },
+    {
+      "path": "apps/portal-web/vite.config.ts",
+      "sha256": "80320c355964cfb6d4fb697b687bc987adb6cf794001af2b8384498b03679546"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "7fd9ddcebd6c5d9b4f9272f735e1587693404a169beaff6a124f958dddaf87b1"
+    },
+    {
+      "path": "package.json",
+      "sha256": "bed63f92c5d3a8179f09ff02dc71ca8589bb8fb92b0530a0d112e1599475ee1d"
+    }
+  ]
+}

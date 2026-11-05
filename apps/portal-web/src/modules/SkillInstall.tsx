@@ -1,4 +1,4 @@
-import {useId,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
 import {SKILL_INSTALL_TARGETS,SkillInstallError,buildInstallZip,copyText,fetchInstallBundle,installCommands,type InstallBundle,type SkillInstallTarget} from './skill-install-client';
 import './SkillInstall.css';
 
@@ -10,25 +10,43 @@ export function SkillInstall({bookId}:{bookId:string}){
   const [status,setStatus]=useState<Status>({kind:'idle',text:''}),[commands,setCommands]=useState<{shell:string;powershell:string}|null>(null);
   const [name,setName]=useState<string|null>(null);
   const cached=useRef<Promise<InstallBundle>|null>(null),where=SKILL_INSTALL_TARGETS[target];
-  function bundle(){
-    if(!cached.current){cached.current=fetchInstallBundle(bookId).then(value=>{setName(value.name);return value;});cached.current.catch(()=>{cached.current=null;});}
+  const lifecycle=useRef<AbortController|null>(null),pending=useRef(false);
+  useEffect(()=>{
+    const controller=new AbortController();lifecycle.current=controller;
+    setName(null);setCommands(null);setStatus({kind:'idle',text:''});
+    return()=>{controller.abort();cached.current=null;pending.current=false;};
+  },[bookId]);
+  function bundle(signal:AbortSignal){
+    if(!cached.current){
+      const request=fetchInstallBundle(bookId,signal);cached.current=request;
+      request.catch(()=>{if(cached.current===request)cached.current=null;});
+    }
     return cached.current;
   }
-  async function run(action:()=>Promise<string>){
-    setStatus({kind:'busy',text:'正在取得並驗證收錄版本…'});
-    try{setStatus({kind:'done',text:await action()});}
-    catch(error){
-      setStatus({kind:'error',text:error instanceof SkillInstallError?error.message:'安裝沒有完成，請改用下載或指令。'});
-    }
+  async function run(action:(value:InstallBundle)=>string|Promise<string>){
+    const controller=lifecycle.current;
+    if(!controller||controller.signal.aborted||pending.current)return;
+    pending.current=true;setStatus({kind:'busy',text:'正在取得並驗證收錄版本…'});
+    try{
+      const value=await bundle(controller.signal);
+      // Abort can be ignored by transport or occur during verification. Fence
+      // the clipboard/download before starting any effect for a closed dialog.
+      if(controller.signal.aborted)return;
+      setName(value.name);
+      const text=await action(value);
+      if(!controller.signal.aborted)setStatus({kind:'done',text});
+    }catch(error){
+      if(!controller.signal.aborted)setStatus({kind:'error',text:error instanceof SkillInstallError?error.message:'安裝沒有完成，請改用下載或指令。'});
+    }finally{if(lifecycle.current===controller)pending.current=false;}
   }
-  const downloadZip=()=>run(async()=>{
-    const value=await bundle(),link=document.createElement('a');
+  const downloadZip=()=>run(value=>{
+    const link=document.createElement('a');
     link.href=URL.createObjectURL(buildInstallZip(value,target));link.download=value.name+'.zip';
     document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),10_000);
     return '已下載 '+value.name+'.zip。解壓縮後，把「'+value.name+'」資料夾放進 '+where.userPath+'。';
   });
-  const showCommands=()=>run(async()=>{
-    const value=installCommands(await bundle(),target);setCommands(value);
+  const showCommands=()=>run(async bundle=>{
+    const value=installCommands(bundle,target);setCommands(value);
     return await copyText(navigator.clipboard,value.shell)
       ?'已複製 macOS／Linux 指令；Windows 請用下方 PowerShell。'
       :'無法自動複製；指令在下方，請自行選取複製（macOS／Linux 用第一段，Windows 用 PowerShell）。';

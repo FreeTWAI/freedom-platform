@@ -14,14 +14,14 @@
 // every selectable job. The aggregate accepts a skip only for a job this
 // decision left unselected; failure and cancellation do not pass.
 import { execFileSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, resolve, posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { selectImpact, validateDescriptor, isModuleDescriptorPath, ROOT_INSTRUCTIONS, owns } from '../../packages/contribution-tools/context.mjs';
 import { isModuleSourcePath } from '../../packages/contribution-tools/modules.mjs';
 import { artifactPath, parseJson } from '../../packages/contribution-tools/io.mjs';
 import { verificationEnvironment } from '../../packages/contribution-tools/process-env.mjs';
-import { GUIDE_COMPOSITION_PROFILE, STORE_SPEC_PROFILE, STORE_SPEC_FILES } from '../../packages/contribution-tools/pinned-e2e.mjs';
+import { E2E_BASELINE, planE2eSelection, GUIDE_COMPOSITION_PROFILE, STORE_SPEC_PROFILE, STORE_SPEC_FILES } from '../../packages/contribution-tools/pinned-e2e.mjs';
 import { GUILD_PRESENTATION_PROFILE, guildPresentationPath, guildPresentationDependenciesProven, loadGuildPresentationParsers } from '../../packages/contribution-tools/guild-presentation-profile.mjs';
 import { runtimeTextSources } from '../generate-runtime-text.mjs';
 
@@ -1160,9 +1160,11 @@ export function evaluateVerifyAggregate(needs) {
   }
   return { ok: true, reason: parsed.decision.mode === 'docs' ? 'docs_selected_subset' : parsed.decision.mode === 'affected' ? 'affected_selected_subset' : 'full_selection' };
 }
-export function githubOutput(selection) {
+export function githubOutput(selection, e2eProfile = 'full') {
   const lines = [`mode=${selection.mode}`, `reason=${selection.reason}`];
   for (const [id, key] of Object.entries(JOB_OUTPUT_KEYS)) lines.push(`${key}=${selection.jobs[id] ? 'true' : 'false'}`);
+  const narrow = ['newcomer-guides', 'guild-presentation', STORE_SPEC_PROFILE].includes(e2eProfile);
+  lines.push(`ui_default_shards=${selection.jobs['ui-e2e'] && !narrow ? 'true' : 'false'}`);
   return lines.join('\n') + '\n';
 }
 
@@ -1202,7 +1204,16 @@ function main() {
     repository: args.repository, event: args.event, ref: process.env.GITHUB_REF ?? '', base: args.base ?? '', head: args.head ?? '', candidate: args.candidate ?? '',
     pullRequest: args.pullRequest, allowFetch: args.allowFetch,
   });
-  appendFileSync(args.githubOutput, githubOutput(selection));
+  let e2eProfile = 'full';
+  if (selection.jobs['ui-e2e']) {
+    try {
+      const files = readdirSync(resolve(args.repository, 'tests/e2e'))
+        .filter(name => /^[a-z0-9][a-z0-9-]*\.spec\.ts$/.test(name)).map(name => 'tests/e2e/' + name);
+      const decision = collectRepositoryE2eDecision(args);
+      e2eProfile = planE2eSelection(decision.profile, [...new Set([...E2E_BASELINE, ...files])].sort()).profile;
+    } catch { /* Unproven discovery keeps all default shards selected. */ }
+  }
+  appendFileSync(args.githubOutput, githubOutput(selection, e2eProfile));
   console.log(JSON.stringify({ mode: selection.mode, reason: selection.reason, jobs: selection.jobs }));
 }
 const entryArg = process.argv[1];

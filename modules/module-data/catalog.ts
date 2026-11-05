@@ -2456,6 +2456,7 @@ export const TENANT_DATA_CATALOG: TenantDataCatalog = deepFreeze({
             "target_appearance_id",
             "target_gallery_photo_id",
             "target_profile_cover_id",
+            "target_prize_photo_id",
           ],
           tenant_resolution: {
             kind: "direct" as const,
@@ -2559,6 +2560,34 @@ export const TENANT_DATA_CATALOG: TenantDataCatalog = deepFreeze({
             rls: "exempt" as const,
             reason_code: "non_tenant_sidecar",
             reason: "Personal or community asset sidecar with no tenant column. It is listed because a foreign key reaches an asset or scope row. Row security stays off so those flows still see every row.",
+          },
+        },
+        {
+          kind: "table" as const,
+          table: "community_event_prize_photo_targets",
+          columns: [
+            "target_id",
+            "event_id",
+            "prize_id",
+            "community_id",
+            "scope_id",
+            "scope_kind",
+            "owner_principal_id",
+            "owner_user_id",
+            "asset_id",
+            "linked_at_version",
+            "purpose",
+            "asset_state",
+            "created_at",
+          ],
+          tenant_resolution: {
+            kind: "fk_chain" as const,
+            via: ["assets"],
+          },
+          isolation: {
+            rls: "exempt" as const,
+            reason_code: "non_tenant_sidecar",
+            reason: "Community event prize-photo pointer, detected through its asset foreign key. Generated community scope and purpose plus composite event, organizer, scope and asset foreign keys exclude tenant rows; the event domain authorizes reads and writes. Maintenance retains complete asset visibility.",
           },
         },
         {

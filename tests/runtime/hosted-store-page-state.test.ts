@@ -13,12 +13,15 @@ test('store page data and dirty hooks', {timeout:60_000}, async t => {
   let browser:Awaited<ReturnType<typeof chromium.launch>>|undefined;
   try {
     await writeFile(entry,`import {createRoot} from 'react-dom/client';
+import {useState} from 'react';
+import {HostedStore} from '../../apps/portal-web/src/modules/HostedStore';
 import {useStorePageData} from '../../apps/portal-web/src/modules/hosted-store-page-state';
 import {useStoreDirtyForms} from '../../apps/portal-web/src/modules/hosted-store-dirty-state';
 import {ApiError} from '../../apps/portal-web/src/api';
 import {emptySellerPolicies} from '../../contracts/guild-launchpad/v1/storefront-policies';
 import {z} from 'zod';
-const w=window,root='/store',id='10000000-0000-4000-8000-000000000001';
+const w=window,id='10000000-0000-4000-8000-000000000001';
+const root=w.mountStore?'/tenants/'+id+'/storefronts/'+id:'/store';
 const preview={projection:{slug:'test-store',name:'Test',brand:null,description:'',currency:'TWD',products:[],revision:'1',published_at:'2026-10-24T00:00:00Z',transaction_state:'not_enabled'},dirty:true,current_revision:null};
 w.fixture={
  '':{tenant_id:id,instance_id:id,instance_status:'active',setup_state:'ready',store:{slug:'test-store',name:'Test',brand:null,description:'',currency:'TWD',slug_locked:false},publication:{state:'never_published',current_revision:null,published_at:null,public_path:null},product_count:0,product_limit:200,transaction_state:'not_enabled',writable:true,capabilities:['store:publish'],version:'1'},
@@ -46,7 +49,8 @@ function Screen(){
  w.send=()=>data.command({method:'patch',path:root+'/products',body:{title:'same draft'},version:'1',schema:z.object({ok:z.literal(true)}),success:()=>w.successes=(w.successes??0)+1,notice:'saved',product:true});
  return null;
 }
-const app=createRoot(document.getElementById('root'));w.unmount=()=>app.unmount();app.render(<Screen/>);`);
+function StoreScreen(){const [active,setActive]=useState(client);w.reconnect=()=>setActive({...client});return <HostedStore client={active} enabled userId={id} locationHash={'#stores/'+id+'/'+id} registerLeave={()=>{}}/>;}
+const app=createRoot(document.getElementById('root'));w.unmount=()=>app.unmount();app.render(w.mountStore?<StoreScreen/>:<Screen/>);`);
     await esbuild.build({entryPoints:[entry],outfile:bundle,bundle:true,format:'iife',platform:'browser',jsx:'automatic'});
     const script=await readFile(bundle,'utf8');
     browser=await chromium.launch(process.env.CHROMIUM_EXECUTABLE_PATH?{executablePath:process.env.CHROMIUM_EXECUTABLE_PATH}:{});
@@ -54,10 +58,10 @@ const app=createRoot(document.getElementById('root'));w.unmount=()=>app.unmount(
       const page=await browser!.newPage();
       await page.route('http://127.0.0.1:14326/**',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));
       await page.goto('http://127.0.0.1:14326/');
-      await page.evaluate(({options,setup})=>{(window as any).initialOptions=options;(window as any).setup=setup;},{options:initialOptions,setup:init});
+      await page.evaluate(({options,setup})=>{(window as any).initialOptions=options;(window as any).setup=setup;(window as any).mountStore=options.mountStore;},{options:initialOptions,setup:init});
       // Test configuration is applied before effects begin, after the fixture exists.
       await page.addScriptTag({content:script});
-      await page.waitForFunction(()=>!!(window as any).state);
+      await page.waitForFunction(()=>!!(window as any).state || !!document.querySelector('.hosted-store'));
       return page;
     }
     const settled=(page:Page)=>page.waitForFunction(()=>!(window as any).state.loading);
@@ -97,6 +101,29 @@ const app=createRoot(document.getElementById('root'));w.unmount=()=>app.unmount(
         await page.evaluate(async()=>{const w=window as any;w.state.setPhotoBlocking('p',false);w.errors['']={status:404};await w.state.load();});assert.equal((await snapshot(page)).missing,true);
       }finally{await page.close();}
     });
+    await t.test('required child 404 retains the real store recovery entry and reload succeeds',async()=>{
+      for(const child of ['/products','/preview','/appearance','/publication-review']){
+        const page=await screen({mountStore:true},`w.errors['${child}']={status:404,message:'Child unavailable'}`);try{
+          await page.getByRole('alert').filter({hasText:'Child unavailable'}).waitFor();
+          assert.equal(await page.getByText('找不到這間商店。',{exact:true}).count(),0);
+          await page.evaluate(()=>{(window as any).errors={};});
+          await page.getByRole('button',{name:'重新載入',exact:true}).click();
+          await page.getByRole('heading',{name:'Test',exact:true}).waitFor();
+          assert.equal(await page.getByRole('alert').count(),0);
+        }finally{await page.close();}
+      }
+    });
+    await t.test('child 404 after an acknowledged write retains the snapshot and retries only the read',async()=>{
+      const page=await screen();try{await settled(page);const before=await snapshot(page);
+        await page.evaluate(async()=>{const w=window as any;w.errors['/products']={status:404,message:'Child unavailable'};await w.send();});
+        const after=await snapshot(page);assert.equal(after.missing,false);assert.deepEqual(after.view,before.view);assert.equal(after.review,null);
+        assert.equal(await page.evaluate(()=>(window as any).state.readFailed),true);
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),1);
+        await page.evaluate(async()=>{const w=window as any;w.errors={};await w.state.load();});
+        assert.equal(await page.evaluate(()=>(window as any).state.readFailed),false);
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),1);
+      }finally{await page.close();}
+    });
     await t.test('failed load can retry, and an older load never replaces a newer one',async()=>{
       const page=await screen({},"w.errors['']={status:500,message:'Unavailable',code:'capability_denied'}");try{await settled(page);assert.equal((await snapshot(page)).error,'Unavailable 請聯絡業務空間擁有者確認你的權限。');
         await page.evaluate(async()=>{const w=window as any;w.errors={};await w.state.load();});assert.equal((await snapshot(page)).error,'');
@@ -113,6 +140,56 @@ const app=createRoot(document.getElementById('root'));w.unmount=()=>app.unmount(
         const writes=await page.evaluate(()=>(window as any).writes);assert.equal(writes.length,2);assert.deepEqual(writes[0],writes[1]);
         assert.equal(await page.evaluate(()=>(window as any).state.retry),null);assert.equal(await page.evaluate(()=>(window as any).successes),1);assert.equal((await snapshot(page)).refresh,2);
       }finally{await page.close();}}
+    });
+    await t.test('real store recovery asks before a newer read replaces an unsaved settings form',async()=>{
+      const page=await screen({mountStore:true},"w.fixture[''].capabilities=['store:manage','store:write','store:publish']");try{
+        await page.getByRole('navigation',{name:'商店工作區'}).getByRole('button',{name:'商店資料',exact:true}).click();
+        const name=page.getByRole('form',{name:'商店資料',exact:true}).getByLabel('商店名稱',{exact:true});
+        await name.fill('unsaved local draft');
+        await page.evaluate(()=>{const w=window as any;w.errors['']={status:503};w.reconnect();});
+        await page.getByRole('alert').filter({hasText:'目前顯示上次讀取'}).waitFor();
+        const reads=await page.evaluate(()=>(window as any).calls.length);
+        await page.getByRole('button',{name:'重新載入',exact:true}).click();
+        assert.equal(await name.inputValue(),'unsaved local draft');
+        assert.equal(await page.evaluate(()=>(window as any).calls.length),reads);
+        assert.match(await page.evaluate(()=>(window as any).confirmations.at(-1)),/重新載入可能取代未儲存/);
+        await page.evaluate(()=>{const w=window as any;w.confirmResult=true;w.errors={};w.fixture[''].version='2';w.fixture[''].store.name='new server version';});
+        await page.getByRole('button',{name:'重新載入',exact:true}).click();
+        await page.waitForFunction(()=>{const input=document.querySelector('form[aria-label="商店資料"] input') as HTMLInputElement;return input?.value==='new server version';});
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),0);
+      }finally{await page.close();}
+    });
+    await t.test('confirmed write with failed refresh retains data, blocks new writes and retries reads only',async()=>{
+      const page=await screen();try{await settled(page);
+        await page.evaluate(async()=>{const w=window as any;w.state.markDirty('settings',true);w.errors['']={status:503};await w.send();});
+        assert.equal(await page.evaluate(()=>(window as any).successes),1);
+        assert.equal(await page.evaluate(()=>(window as any).state.retry),null);
+        assert.equal(await page.evaluate(()=>(window as any).state.held.current),null);
+        assert.equal(await page.evaluate(()=>(window as any).state.readFailed),true);
+        assert.match(await page.evaluate(()=>(window as any).state.status),/操作已完成，但最新資料尚未讀回/);
+        assert.equal((await snapshot(page)).view.store.name,'Test');
+        assert.equal(await page.evaluate(()=>(window as any).state.hasFormDraft),true);
+        await page.evaluate(async()=>{const w=window as any;await w.send();await w.state.load();});
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),1);
+        await page.evaluate(async()=>{const w=window as any;w.errors={};w.fixture[''].store.name='Updated';await w.state.load();});
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),1);
+        assert.equal(await page.evaluate(()=>(window as any).state.readFailed),false);
+        assert.equal(await page.evaluate(()=>(window as any).state.status),'saved');
+        assert.equal((await snapshot(page)).view.store.name,'Updated');
+        assert.equal(await page.evaluate(()=>(window as any).state.hasFormDraft),true);
+      }finally{await page.close();}
+    });
+    await t.test('conflict read failure never claims reload success and GET recovery does not repeat mutation',async()=>{
+      const page=await screen();try{await settled(page);
+        await page.evaluate(async()=>{const w=window as any;w.writeErrors=[{status:412}];w.errors['']={status:503};await w.send();});
+        assert.equal(await page.evaluate(()=>(window as any).conflicts),1);
+        assert.equal(await page.evaluate(()=>(window as any).state.retry),null);
+        assert.match(await page.evaluate(()=>(window as any).state.status),/最新資料尚未讀回/);
+        assert.doesNotMatch(await page.evaluate(()=>(window as any).state.status),/已重新載入/);
+        await page.evaluate(async()=>{const w=window as any;w.errors={};await w.state.load();});
+        assert.equal(await page.evaluate(()=>(window as any).writes.length),1);
+        assert.match(await page.evaluate(()=>(window as any).state.status),/已重新載入/);
+      }finally{await page.close();}
     });
     await t.test('known version conflict clears editors through callback and reloads without retaining retry',async()=>{
       const page=await screen();try{await settled(page);await page.evaluate(async()=>{const w=window as any;w.writeErrors=[{status:412}];await w.send();});assert.equal(await page.evaluate(()=>(window as any).conflicts),1);assert.equal((await snapshot(page)).refresh,2);assert.equal(await page.evaluate(()=>(window as any).state.retry),null);}finally{await page.close();}

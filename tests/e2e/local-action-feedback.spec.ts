@@ -6,11 +6,11 @@ type CapabilityWindow=Window&{localCapabilities:{kind:'copy'|'share';value:strin
 const languages=[['zh-Hant','繁體中文','複製中…'],['en','English','Copying…'],['ja','日本語','コピー中…'],['ko','한국어','복사 중…'],['es','Español','Copiando…']] as const;
 // Independent expectations for the localized composer, not the deferred optimizer's copy.
 const composerLabels={
-  'zh-Hant':{title:'建立貼文',content:'貼文內容',optimize:'✦ Social Post 優化'},
-  en:{title:'Create post',content:'Post content',optimize:'✦ Social Post optimize'},
-  ja:{title:'投稿を作成',content:'投稿内容',optimize:'✦ Social Post 文章改善'},
-  ko:{title:'게시물 작성',content:'게시물 내용',optimize:'✦ Social Post 다듬기'},
-  es:{title:'Crear publicación',content:'Contenido de la publicación',optimize:'✦ Social Post optimizar'},
+  'zh-Hant':{tools:'文案與分享',title:'建立貼文',content:'貼文內容',optimize:'✦ Social Post 優化'},
+  en:{tools:'Writing and sharing',title:'Create post',content:'Post content',optimize:'✦ Social Post optimize'},
+  ja:{tools:'文章と共有',title:'投稿を作成',content:'投稿内容',optimize:'✦ Social Post 文章改善'},
+  ko:{tools:'글쓰기 및 공유',title:'게시물 작성',content:'게시물 내용',optimize:'✦ Social Post 다듬기'},
+  es:{tools:'Redacción y compartir',title:'Crear publicación',content:'Contenido de la publicación',optimize:'✦ Social Post optimizar'},
 } as const;
 
 // Controlled browser capabilities, not an OS clipboard or a real social post.
@@ -57,6 +57,7 @@ async function optimization(page:Page,language:typeof languages[number][0]='zh-H
   await page.getByRole('button',{name:labels.title,exact:true}).click();const dialog=page.getByRole('dialog',{name:labels.title,exact:true});
   await expect(dialog.getByRole('heading',{name:labels.title,exact:true})).toBeVisible();
   await dialog.getByLabel(labels.content,{exact:true}).fill('本週展示自己的作品，尋找一起做事的夥伴。');
+  await dialog.getByRole('button',{name:labels.tools,exact:true}).click();
   await dialog.getByRole('button',{name:labels.optimize,exact:true}).click();await dialog.getByRole('button',{name:'到自己的 AI 工具',exact:true}).click();return dialog;
 }
 async function promotion(page:Page){

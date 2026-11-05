@@ -14,6 +14,10 @@ Star／取消 Star 在 token refresh、原作 barrier 與實際 provider 併發�
 
 HTML 仍只包含公開快照；獨立的 `assets/skill-social.js` 在訪客瀏覽器內讀自己的 session，重用會員書架的 GitHub 元件和 API。未登入、停用 JavaScript 或讀取 session 失敗時保留原作連結；GitHub 權限不足也顯示前往原作 Star 的替代入口。伺服器的 `no-store` 同樣適用此固定名稱的 script，不把舊入口長期快取。
 
+公開技能頁的固定入口只觀察 GitHub 區塊；進入畫面附近（上下 300px）或鍵盤焦點進入時，才動態載入原有 React／GitHub 元件。未支援 IntersectionObserver 的瀏覽器沿用立即增強。原有 SSR 內容、註冊 CTA 與 Star／Fork／Watch 連結全程可用；模組或 session 讀取失敗不替換公開內容，也不自動發出寫入。
+
+鍵盤仍停在原連結時不替換 DOM，離開區塊後再讀取目前 session 並增強。離頁或隱藏時取消未完成的 session 讀取，返回頁面可重新嘗試；不沿用被取消的私人回應。這是載入順序改善，不是新增登入、GitHub 授權或 Star 的權限。
+
 Fork 連到原作 `/fork`，由本人在 GitHub 選擇擁有者與確認建立。Watch 連到原作頁，使用 GitHub 的 Watch 選單設定通知；`subscribers_count` 是專案追蹤數，不是作者粉絲數。Follow 原作者另連作者帳號頁。這些入口不假稱已建立 Fork 或已追蹤，也不新增 App 權限。GitHub 操作說明見 [Watch 通知設定](https://docs.github.com/en/subscriptions-and-notifications/get-started/configuring-notifications)。
 
 ## 站內操作 GitHub Follow

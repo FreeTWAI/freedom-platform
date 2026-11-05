@@ -1,0 +1,30 @@
+// Reviewable feature -> owning freedom.module.json module_id allowlist.
+// Quest steps explicitly list features in quest.ts; no inferred prefix matching.
+export const TESTER_FEATURE_MODULES: Readonly<Record<string,string>> = {
+  'entry.preview':'portal-shell', 'entry.public':'public-social-post-sharing',
+  'entry.register':'assets', 'entry.email':'assets', 'entry.login':'assets', 'entry.password':'assets',
+  'entry.join':'positioning', 'entry.positioning':'positioning', 'entry.newbie-village':'newbie-village',
+  'home.home':'portal-shell', 'home.explore':'portal-shell', 'home.categories':'social-feed',
+  'home.short':'social-feed', 'home.compose':'social-feed', 'home.interactions':'social-feed',
+  'guilds.list':'positioning', 'guilds.dialog':'positioning', 'guilds.launchpad':'guild-workspace',
+  'guilds.public':'positioning', 'skills.shelf':'positioning', 'skills.read':'positioning',
+  'skills.github':'positioning', 'skills.guides':'development',
+  'profile.space':'member-profile-ui', 'profile.menu':'portal-shell', 'profile.card':'member-card',
+  'profile.security':'assets', 'profile.content':'personal-content', 'profile.todos':'positioning',
+  'people.members':'assets', 'people.friends':'friends-directory', 'people.squads':'member-squads',
+  'people.blocking':'assets', 'chat.panel':'member-communications-ui', 'chat.mobile':'member-communications-ui',
+  'chat.history':'member-communications', 'chat.stickers':'member-communications', 'chat.images':'member-communications',
+  'notify.bell':'member-communications-ui', 'notify.read':'member-communications', 'notify.preferences':'member-communications',
+  'search.content':'community-search', 'search.lists':'community-search', 'search.features':'portal-shell',
+  'events.list':'community', 'events.public':'community', 'events.register':'community', 'events.highlights':'community',
+  'community.page':'community', 'community.hub':'community-hub', 'community.journal':'community-journal',
+  'community.play':'absurd-daily', 'community.install':'portal-shell', 'contrib.page-tools':'development',
+  'contrib.tasks':'work', 'contrib.cocreation':'co-creation', 'contrib.workbench':'work',
+  'contrib.showcase':'work', 'contrib.engagement':'work', 'contrib.opensource':'community',
+  'contrib.marketing':'community', 'contrib.services':'work', 'contrib.promotion':'community',
+  'shop.virtual-commerce':'virtual-commerce', 'shop.supplier':'catalog-commerce', 'shop.retail':'catalog-commerce',
+  'shop.supplier-console':'supplier-console', 'shop.photos':'agent-commerce', 'shop.stores':'agent-commerce',
+  'shop.reservations':'catalog-commerce', 'shop.business':'catalog-commerce', 'admin.boundary':'platform-host',
+  'admin.console':'platform-admin-portal', 'admin.review':'repo-maintainer', 'guilds.manage':'positioning', 'guilds.config':'guild-workspace',
+};
+export const TESTER_MODULE_IDS = [...new Set(Object.values(TESTER_FEATURE_MODULES))].sort();

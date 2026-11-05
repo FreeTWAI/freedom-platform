@@ -271,7 +271,8 @@ for(const failedRead of ['offer','store'] as const){
    });
    const receipt=b.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===withdrawalPath);
    await detail.getByRole('button',{name:'停止採用',exact:true}).click();expect((await receipt).status()).toBe(200);
-   await expect(b.locator('.hosted-store > [role="status"]')).toContainText('已停止採用這項選品');
+   const parentStatus=b.locator('.hosted-store > [role="status"]');
+   await expect(parentStatus).toContainText(failedRead==='store'?'操作已完成，但最新資料尚未讀回。請重新載入；不會重送剛才的操作。':'已停止採用這項選品');
    if(failedRead==='offer')await expect(detail.getByRole('alert')).toHaveText('目前無法讀取供貨方案。');
    else await expect(b.locator('.hosted-store > [role="alert"]')).toBeVisible();
    const unconfirmed=async()=>{
@@ -285,16 +286,32 @@ for(const failedRead of ['offer','store'] as const){
    };
    await unconfirmed();expect(writes).toEqual([{method:'POST',path:withdrawalPath,body:'{}'}]);
    const parentReadsBeforeRetry=storeReads;
-   failing=false;holdRead=true;
-   await detail.getByRole('button',{name:'重試讀取供貨方案',exact:true}).click();await pendingRead;
-   await unconfirmed();expect(writes).toHaveLength(1);expect(storeReads).toBe(parentReadsBeforeRetry);
+   const childRetry=detail.getByRole('button',{name:'重試讀取供貨方案',exact:true});
+   if(failedRead==='store'){
+    await expect(childRetry).toBeDisabled();
+    const parentRetry=b.locator('.hosted-store > .actions').getByRole('button',{name:'重新載入',exact:true});
+    b.once('dialog',async dialog=>{expect(dialog.message()).toContain('重新載入可能取代未儲存的內容');await dialog.dismiss();});
+    await parentRetry.click();
+    await unconfirmed();expect(storeReads).toBe(parentReadsBeforeRetry);expect(writes).toHaveLength(1);
+    await expect(parentStatus).not.toContainText('已停止採用這項選品');
+    failing=false;holdRead=true;
+    b.once('dialog',async dialog=>{expect(dialog.message()).toContain('重新載入可能取代未儲存的內容');await dialog.accept();});
+    await parentRetry.click();
+   }else{
+    failing=false;holdRead=true;await childRetry.click();
+   }
+   await pendingRead;
+   await unconfirmed();expect(writes).toHaveLength(1);
+   const expectedParentReads=parentReadsBeforeRetry+(failedRead==='store'?1:0);
+   expect(storeReads).toBe(expectedParentReads);
+   await expect(parentStatus).toContainText('已停止採用這項選品');
    releaseRead();
    await expect(detail.getByText('已撤回供貨',{exact:true})).toBeVisible();
    await expect(detail.getByRole('heading',{name:'展示：目前無法加入展示頁',exact:true})).toBeVisible();
    await expect(detail.getByRole('heading',{name:'預留：目前無法預留',exact:true})).toBeVisible();
    await expect(detail.getByRole('heading',{name:'結帳購買：目前無法結帳購買',exact:true})).toBeVisible();
    await expect(detail.getByRole('button',{name:'停止採用',exact:true})).toHaveCount(0);
-   await expect(price).toBeEnabled();expect(writes).toHaveLength(1);expect(storeReads).toBe(parentReadsBeforeRetry);
+   await expect(price).toBeEnabled();expect(writes).toEqual([{method:'POST',path:withdrawalPath,body:'{}'}]);expect(storeReads).toBe(expectedParentReads);
   }finally{releaseRead();await Promise.allSettled(contexts.map(context=>context.close()));}
  });
 }

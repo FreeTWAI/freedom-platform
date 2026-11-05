@@ -140,6 +140,14 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   const {t}=useLanguage()
   const [phase, setPhase] = useState<'boot' | 'login' | 'ready'>(initialGoogleCallback?'login':'boot')
   const [session, setSession] = useState<SessionPayload | null>(null)
+  useEffect(() => {
+    if (!session) return;
+    let active = true; const generation = client.sessionGeneration;
+    void import('./modules/tester-map/import-progress').then(({importGuestTesterProgress}) => {
+      if (active && client.sessionGeneration === generation) return importGuestTesterProgress(client);
+    }).catch(() => { /* Keep guest progress; the tester map offers the same import retry. */ });
+    return () => { active = false };
+  }, [session?.user.user_id, session?.csrf_token])
   const [bootError, setBootError] = useState<ActionError | null>(null)
   const [loginNotice, setLoginNotice] = useState<string | null>(null)
   const [publicReturnNotice, setPublicReturnNotice] = useState<string | null>(null)
@@ -159,6 +167,8 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   useEffect(()=>{const update=()=>setProfileLoginRequested(window.history.state?.freedomProfileLogin===window.location.hash);window.addEventListener('popstate',update);window.addEventListener('hashchange',update);return()=>{window.removeEventListener('popstate',update);window.removeEventListener('hashchange',update);};},[]);
   const [entryIntent,setEntryIntent]=useState<EntryIntent|null>(entryIntentFromHash)
   const [siteLoaded,setSiteLoaded]=useState(false)
+  const [testerLoginRequested,setTesterLoginRequested]=useState(false)
+  const beginTesterLogin=()=>setTesterLoginRequested(true)
   const [launchpadLoginRequested,setLaunchpadLoginRequested]=useState(false)
   const [sharedCardToken,setSharedCardToken]=useState(memberCardFromLocation)
   const [memberLoginRequested,setMemberLoginRequested]=useState(false)
@@ -167,7 +177,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   useEffect(()=>{const changed=()=>{setSharedCardToken(memberCardFromLocation());setMemberLoginRequested(false)};window.addEventListener('popstate',changed);return()=>window.removeEventListener('popstate',changed)},[])
   useEffect(()=>{const changed=()=>setResetToken(resetTokenFromHash());window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed)},[])
   useEffect(()=>{const changed=()=>setEmailVerificationToken(/^#verify-email\/([A-Za-z0-9_-]{43})$/.exec(window.location.hash)?.[1]??null);window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed)},[]);
-  useEffect(()=>{const changed=()=>{setLocationHash(window.location.hash);setEntryIntent(entryIntentFromHash());setPublicEventId(eventIdFromLocation());setEventLoginRequested(eventLoginFromLocation());setLaunchpadLoginRequested(false)};window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);return()=>{window.removeEventListener('hashchange',changed);window.removeEventListener('popstate',changed)}},[])
+  useEffect(()=>{const changed=()=>{setLocationHash(window.location.hash);setEntryIntent(entryIntentFromHash());setPublicEventId(eventIdFromLocation());setEventLoginRequested(eventLoginFromLocation());setTesterLoginRequested(false);setLaunchpadLoginRequested(false)};window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);return()=>{window.removeEventListener('hashchange',changed);window.removeEventListener('popstate',changed)}},[])
   const sessionGeneration = useRef(0)
   const loadOnboarding = useCallback(async () => {
     const generation = sessionGeneration.current
@@ -196,7 +206,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
       window.history.replaceState(Object.keys(state).length?state:null,'')
     }
     if(window.history.state?.freedomProfileLogin){const state={...window.history.state};delete state.freedomProfileLogin;window.history.replaceState(state,'');}
-    setProfileLoginRequested(false);
+    setProfileLoginRequested(false);setTesterLoginRequested(false);
     sessionGeneration.current += 1
     client.csrfToken = next.csrf_token
     setSharingDraftAccount(next.user.user_id, client.sessionGeneration)
@@ -313,7 +323,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-hub')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
-    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#tester-map')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#home">{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap/></PageLoadBoundary></main></div>;
+    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#tester-map'&&!testerLoginRequested)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#tester-map" onClick={event=>{event.preventDefault();beginTesterLogin();}}>{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap reportClient={client} onLogin={beginTesterLogin}/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>eventLogin()} onJoin={site?.registration_enabled?()=>eventLogin('register'):undefined}/>;
     const launchpadKey=guildKeyFromHash(locationHash);
     if(!googleCallback&&!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
@@ -353,7 +363,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
       ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={publicEventId?'原本的活動報名':entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
-      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(!eventIdFromLocation() && parseProfileRoute(window.location.hash)?.kind!=='visitor' && !entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(window.location.hash.split('?')[0]!=='#tester-map' && !eventIdFromLocation() && parseProfileRoute(window.location.hash)?.kind!=='visitor' && !entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
     : sharedCardToken ? <PublicMemberPage client={client} token={sharedCardToken} session={session} onLogin={()=>{}} onReturn={returnToWorkshop} onEdit={editOwnCard}/> : <>
     <AuthorClaimProvider client={client}><DevelopmentAccessProvider client={client} session={session}>
     <Workspace key={`${session.user.user_id}:${client.sessionGeneration}`}
@@ -1008,7 +1018,7 @@ function Workspace({
                 window.dispatchEvent(new HashChangeEvent('hashchange'));
               }
               workspaceTopbar.current?.scrollIntoView({block: 'start', behavior: 'instant'});
-            })}><img className="brand-home-logo" src="/brand/freedom-workshop-compact.jpeg" alt="自由工坊" width="1536" height="512"/></a>
+            })}><img className="brand-home-logo" src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="396" height="132"/></a>
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true" focusable="false"><path d={mobileOpen?'M6 6L18 18M18 6L6 18':'M4 6H20M4 12H20M4 18H20'}/></svg>
             </button></div>

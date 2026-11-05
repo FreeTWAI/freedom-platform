@@ -24,6 +24,8 @@
     "apps/portal-web/src/modules/EventParticipation.tsx",
     "apps/portal-web/src/modules/event-participation-token.ts",
     "tests/runtime/event-participation-token.test.ts",
+    "tests/runtime/event-participation-transport.test.ts",
+    "tests/runtime/event-participation-navigation.test.ts",
     "apps/portal-web/src/modules/EventParticipation.css",
     "tests/runtime/event-participation-api.test.ts",
     "tests/runtime/event-participation-reminders.test.ts",

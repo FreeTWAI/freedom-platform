@@ -80,8 +80,8 @@ export function HostedStoreProductsArea({
 }: HostedStoreProductsAreaProps) {
   return <section id="store-products-panel" hidden={area!=='products'} className="hosted-supply-panel stack" aria-labelledby="store-products-title"><h3 id="store-products-title">商品</h3>
           {can('store:publish') && <div className="hosted-store-publication stack">
-            <h4>商品上架</h4>
-            <p>先儲存商品資料{photosEnabled && photoUploadsEnabled && !galleryEnabled ? '，選圖後會自動儲存照片' : ''}，確認內容後即可一鍵上架。</p>
+            <h4>儲存商品 → 確認上架</h4>
+            <p>先儲存商品資料{photosEnabled && photoUploadsEnabled && !galleryEnabled ? '，選圖後會自動儲存照片' : ''}。儲存不會自動更新公開商店，確認內容後再上架。</p>
             {publicationReview && <PublicationReview review={publicationReview}/>}
             <div className="actions"><button type="button" className="btn btn-primary" disabled={publishDisabled || (publication?.state==='published' && !publicationReview?.preview.dirty)} onClick={publishSaved}>
               {busy && held.current?.path.endsWith('/publish-reviewed') ? '正在上架…' : publication?.state==='published' && publicationReview && !publicationReview.preview.dirty ? '商品已全部上架' : '一鍵上架商品'}

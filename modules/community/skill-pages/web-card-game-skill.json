@@ -1,0 +1,14 @@
+{
+  "headline": "先玩一局，再和 Agent 改一個小問題。",
+  "outcomes": ["一項經規則與畫面驗證的小改版", "匯出的測試存檔", "規則與瀏覽器測試的驗證結果"],
+  "flow": {
+    "title": "照 SKILL.md 改，用測試核對",
+    "lead": "原生網頁卡牌遊戲，附 SKILL.md 與資料模型；遊戲執行期無外部依賴，本機開發與測試需 Node.js 20 以上。",
+    "steps": [
+      {"icon": "game", "title": "先玩一局", "note": "依 README 從 repo 根目錄啟動，玩一局並匯出測試存檔。"},
+      {"icon": "robot", "title": "和 Agent 一起改", "note": "讓 Agent 先讀 SKILL.md，針對一項卡牌規則或手機操作問題修改。"},
+      {"icon": "check", "title": "測試後回饋原作", "note": "用既有規則及瀏覽器測試核對修改，附測試存檔與驗證結果回饋原作。"}
+    ],
+    "caption": "改素材前先核對 CREDITS 與個別授權；AI 美術生成可選，服務與費用要自己準備。"
+  }
+}

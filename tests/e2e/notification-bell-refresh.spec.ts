@@ -37,7 +37,12 @@ test('bell overlap uses one transport and collapse makes no additional request',
   // A settled response is never a freshness cache: the next opening re-reads.
   const settled=requests;await bell.click();await expect.poll(()=>requests).toBe(settled+1);
   await expect(page.locator('.notification-bell-item')).toContainText(notice.body);
-  await page.getByRole('heading',{name:'會員首頁',exact:true}).click();
+  // The home heading names the landmark but is intentionally not painted.
+  // Click visible, non-interactive composer padding to exercise outside dismissal.
+  const outside=page.locator('.home-timeline .social-composer-start');
+  await expect(outside).toBeVisible();
+  await outside.click({position:{x:4,y:4}});
+  await expect(page.locator('.social-publish-dialog[open]')).toHaveCount(0);
   await expect(page.getByRole('region',{name:'最近通知'})).toBeHidden();
 });
 
@@ -273,4 +278,52 @@ for(const recovery of ['refresh','pending retry'] as const)test(`full history cl
     await expect(row.locator('.banner-error')).toHaveCount(0);await expect(row.getByRole('button',{name:'前往職業公會',exact:true})).toBeEnabled();
     await expect(page).toHaveURL(url);expect(writes).toBe(recovery==='refresh'?1:2);if(keys.length===2)expect(keys[1]).toBe(keys[0]);
   }finally{if(retry)await retry.abort();}
+});
+
+// Real app integration with synthetic lifecycle events and notification payloads.
+// This is not native PWA suspension, mobile Safari, or OS-resume evidence.
+async function bellVisibility(page:Page,state:'hidden'|'visible'){
+  await page.evaluate(value=>{Object.defineProperty(document,'visibilityState',{configurable:true,value});document.dispatchEvent(new Event('visibilitychange'));},state);
+}
+for(const filtered of [false,true])test(`visibility-only resume refreshes the notification bell with preferences=${filtered}`,async({page},info)=>{
+  let count=1,previews=0,reminders=0;const writes:string[]=[];
+  await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),notification_preferences_enabled:filtered}});});
+  await page.route(preview,async route=>{previews++;await route.fulfill({json:{items:[notice],unread_count:filtered?90:count}});});
+  await page.route('**/api/v1/me/notification-preferences/reminders',async route=>{reminders++;await route.fulfill({json:{items:[],unread_count:count}});});
+  page.on('request',request=>{if(request.method()!=='GET'&&/\/api\/v1\/me\/(notifications|inbox)(?:\/|$)/.test(new URL(request.url()).pathname))writes.push(request.method()+' '+new URL(request.url()).pathname);});
+  await login(page);const bell=page.locator('.notification-bell-trigger');await expect(bell).toHaveAccessibleName('通知，1 則未讀');await frameBarrier(page);
+  const before={previews,reminders};count=3;await bellVisibility(page,'hidden');await frameBarrier(page);
+  expect({previews,reminders}).toEqual(before);await bellVisibility(page,'visible');
+  await expect(bell).toHaveAccessibleName('通知，3 則未讀');await frameBarrier(page);
+  expect(previews-before.previews).toBe(1);expect(reminders-before.reminders).toBe(filtered?1:0);expect(writes).toEqual([]);
+  await expect(page.getByRole('region',{name:'最近通知'})).toHaveCount(0);
+  await info.attach('bell-visibility-resume',{body:JSON.stringify({simulated_visibility:true,focus_dispatched:false,filtered,preview_reads:previews-before.previews,reminder_reads:reminders-before.reminders,writes}),contentType:'application/json'});
+});
+for(const offline of [false,true])test(`visibility-only resume reads a fresh bell snapshot after reconnect=${offline}`,async({page})=>{
+  let hold=false,count=1,reads=0;const waiting:Route[]=[];
+  await page.route(preview,async route=>{reads++;if(hold){waiting.push(route);return;}await route.fulfill({json:{items:[notice],unread_count:count}});});
+  await login(page);const bell=page.locator('.notification-bell-trigger');await expect(bell).toHaveAccessibleName('通知，1 則未讀');
+  hold=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect.poll(()=>waiting.length).toBe(1);
+  const before=reads;
+  try{
+    count=4;hold=false;await bellVisibility(page,'hidden');
+    if(offline)await page.evaluate(()=>Object.defineProperty(navigator,'onLine',{configurable:true,value:false}));
+    await bellVisibility(page,'visible');
+    if(offline){
+      await frameBarrier(page);expect(reads).toBe(before);
+      await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,value:true});window.dispatchEvent(new Event('online'));});
+    }
+    await expect(bell).toHaveAccessibleName('通知，4 則未讀');expect(reads-before).toBe(1);
+    const stale=waiting.shift()!;await stale.fulfill({json:{items:[],unread_count:0}});await frameBarrier(page);
+    await expect(bell).toHaveAccessibleName('通知，4 則未讀');await expect(page.getByRole('region',{name:'最近通知'})).toHaveCount(0);
+  }finally{hold=false;for(const route of waiting)await route.fulfill({json:{items:[],unread_count:0}}).catch(()=>{});}
+});
+test('offline visibility-only resume waits for online before updating the bell',async({page})=>{
+  let count=1,reads=0;await page.route(preview,async route=>{reads++;await route.fulfill({json:{items:[notice],unread_count:count}});});
+  await login(page);const bell=page.locator('.notification-bell-trigger');await expect(bell).toHaveAccessibleName('通知，1 則未讀');await frameBarrier(page);
+  const before=reads;count=2;await bellVisibility(page,'hidden');
+  await page.evaluate(()=>Object.defineProperty(navigator,'onLine',{configurable:true,value:false}));
+  await bellVisibility(page,'visible');await frameBarrier(page);expect(reads).toBe(before);await expect(bell).toHaveAccessibleName('通知，1 則未讀');
+  await page.evaluate(()=>{Object.defineProperty(navigator,'onLine',{configurable:true,value:true});window.dispatchEvent(new Event('online'));});
+  await expect(bell).toHaveAccessibleName('通知，2 則未讀');expect(reads-before).toBe(1);
 });

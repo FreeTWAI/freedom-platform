@@ -36,13 +36,15 @@ process.once('SIGTERM',stop);process.once('SIGINT',stop);
 try{
   const intent=await open(intentPath,'wx',0o600);try{await intent.writeFile(JSON.stringify({containerName,socket,image,task,owner})+'\n');await intent.sync();}finally{await intent.close();}
   createAttempted=true;cleanupComplete=false;
+  // Restoring and dropping the full current schema needs the same lock capacity
+  // as the static CI database; this setting affects only this disposable server.
   container=docker(['create','--name',containerName,'--network','none',
     '--label','freedom.task='+task,'--label','freedom.owner='+owner,'--memory=768m','--cpus=1',
     '--mount','type=volume,target=/var/lib/postgresql',
     '--mount','type=bind,source='+socket+',target=/pgsocket','-e','PGHOST=/pgsocket','-e','POSTGRES_HOST_AUTH_METHOD=trust',
     // The stock image initializes through /var/run/postgresql even when PGHOST
     // is set. Keep that private container socket alongside the mounted test one.
-    '-e','POSTGRES_DB=fp_media_restore',image,'postgres','-c','dynamic_shared_memory_type=mmap','-c','listen_addresses=','-c','unix_socket_directories=/pgsocket,/var/run/postgresql']).trim();
+    '-e','POSTGRES_DB=fp_media_restore',image,'postgres','-c','max_locks_per_transaction=512','-c','dynamic_shared_memory_type=mmap','-c','listen_addresses=','-c','unix_socket_directories=/pgsocket,/var/run/postgresql']).trim();
   phase='verify_container';if(!/^[0-9a-f]{64}$/.test(container))throw Error('restore_fixture_identity_mismatch');inspected();
   phase='start_container';docker(['start',container]);
   phase='wait_for_database';

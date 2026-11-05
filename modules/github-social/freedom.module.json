@@ -19,7 +19,10 @@
     "tests/runtime/skill-book-star-gate.test.ts",
     "modules/github-social/**",
     "apps/portal-web/src/modules/GitHubSocial.css",
-    "apps/portal-web/src/skill-social.tsx"
+    "apps/portal-web/src/skill-social.tsx",
+    "apps/portal-web/src/skill-social-widget.tsx",
+    "tests/runtime/public-skill-social-loading.test.ts",
+    "tests/e2e/public-skill-social-loading.spec.ts"
   ],
   "public_exports": [],
   "dependencies": [
