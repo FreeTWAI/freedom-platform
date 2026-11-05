@@ -1,5 +1,5 @@
 import { accessAwareFetch, expiredAccessStatus, isExpiredAccessResponse, MEMBER_ACCESS_EXPIRED_MESSAGE } from '../access-fetch';
-import { ApiError, type PortalClient } from '../api';
+import { ApiError, isDefinitiveProblemResponse, type PortalClient } from '../api';
 import type { CommunityEvent } from './EventsPanel';
 
 export type EventMediaCommand = Readonly<{
@@ -50,16 +50,18 @@ export async function sendEventMedia(client:PortalClient,command:EventMediaComma
   if(await isExpiredAccessResponse(response)){
     const status=expiredAccessStatus(response);
     if(client.csrfToken===requestCsrfToken){client.accessExpired=true;if(status===401||status===403)client.csrfToken=null;client.onUnauthorized?.();}
-    throw new ApiError({message:MEMBER_ACCESS_EXPIRED_MESSAGE,status,accessExpired:true});
+    throw new ApiError({message:MEMBER_ACCESS_EXPIRED_MESSAGE,status,accessExpired:true,network:true});
   }
   if(client.csrfToken===requestCsrfToken){client.accessExpired=false;if(response.status===401){client.csrfToken=null;client.onUnauthorized?.();}}
   let payload:Record<string,unknown>;
   try{payload=await response.json();}catch{
-    // A format rejection cannot have committed, even when its problem body is unreadable.
-    if(response.status===415)throw new ApiError({message:'媒體格式不符，請重新選擇檔案。',status:415});
     throw unknownMedia();
   }
-  if(!response.ok)throw new ApiError({message:typeof payload?.detail==='string'?payload.detail:'媒體未能保存，請稍後重試。',status:response.status,code:typeof payload?.code==='string'?payload.code:undefined,network:response.status>=500});
+  if(!response.ok){
+    const definitive=isDefinitiveProblemResponse(payload,response.status);
+    throw new ApiError({message:definitive&&response.status<500?(typeof payload.detail==='string'?payload.detail:'媒體未能保存，請修正後重試。'):'媒體保存結果尚未確認，請先確認原操作。',status:response.status,
+      code:definitive&&typeof payload.code==='string'?payload.code:undefined,definitiveResponse:definitive,network:!definitive||response.status>=500});
+  }
   requireMediaSession(client,command);
   const result=mediaEvent(payload,command,command.version+1);
   if(typeof result[`${command.kind}_url`]!=='string'||!result[`${command.kind}_url`])throw unknownMedia();

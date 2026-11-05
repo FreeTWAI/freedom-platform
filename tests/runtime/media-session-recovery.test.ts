@@ -105,10 +105,10 @@ for (const kind of ['banner', 'video'] as const) {
     });
   }
   test(`${kind}: known 415 stays correctable`, async t => {
-    t.mock.method(globalThis, 'fetch', async () => Response.json({detail:'unsupported media'}, {status:415}));
+    t.mock.method(globalThis, 'fetch', async () => Response.json({type:'urn:problem:unsupported-media',title:'Unsupported media',status:415,detail:'unsupported media'}, {status:415}));
     const client = new PortalClient(); client.csrfToken = 'current-session';
     const command = await prepareEventMedia(client, event, file, kind);
-    await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.status === 415 && !cause.network);
+    await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.status === 415 && !cause.network && cause.definitiveResponse);
   });
   test(`${kind}: reconciliation GET failure retains a replayable original command`, async t => {
     const client = new PortalClient(); client.csrfToken = 'current-session';
@@ -139,3 +139,64 @@ for (const kind of ['banner', 'video'] as const) {
     assert.equal(reads, 2);assert.equal(writes, 1);
   });
 }
+
+// The same wire boundary must distinguish refusal from unreadable or mismatched
+// gateway bodies. No actual provider, browser or database is involved.
+for (const kind of ['banner','video'] as const) {
+  for (const status of [400,403,409,412,415,422,429]) {
+    for (const [label,body] of [
+      ['HTML','<html>upstream failure</html>'],['truncated JSON','{'],['empty object','{}'],
+      ['array','[]'],['null','null'],['missing type',JSON.stringify({title:'Rejected',status})],
+      ['mismatched status',JSON.stringify({type:'urn:problem:rejected',title:'Rejected',status:status+1})],
+      ['blank type',JSON.stringify({type:'  ',title:'Rejected',status})],
+      ['blank title',JSON.stringify({type:'urn:problem:rejected',title:'  ',status})],
+    ]) test(`${kind}: first malformed ${label} ${status} cannot establish refusal`,async t=>{
+      const calls:RequestInit[]=[];
+      t.mock.method(globalThis,'fetch',async(_input:unknown,init?:RequestInit)=>{
+        calls.push(init!);
+        return calls.length===1?new Response(body,{status,headers:{'content-type':'application/json'}})
+          :Response.json({...event,aggregate_version:4,[`${kind}_url`]:'/saved-media'});
+      });
+      const client=new PortalClient();client.csrfToken='synthetic-session';
+      const command=await prepareEventMedia(client,event,file,kind);
+      await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&cause.network&&!cause.definitiveResponse);
+      assert.equal(calls.length,1,'no automatic replay');
+      if(client.csrfToken===null){
+        await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&!cause.network);
+        assert.equal(calls.length,1,'an Access-expired owner cannot replay with a new session');return;
+      }
+      await sendEventMedia(client,command);
+      assert.equal(calls[1].method,'POST');assert.equal(calls[1].body,file);
+      assert.deepEqual([...new Headers(calls[1].headers)],[...new Headers(calls[0].headers)]);
+    });
+    test(`${kind}: first valid ProblemDetails ${status} remains correctable`,async t=>{
+      t.mock.method(globalThis,'fetch',async()=>Response.json({type:'urn:problem:rejected',title:'Rejected',status},{status}));
+      const client=new PortalClient();client.csrfToken='synthetic-session';
+      const command=await prepareEventMedia(client,event,file,kind);
+      await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&cause.status===status&&!cause.network&&cause.definitiveResponse);
+      const corrected=await prepareEventMedia(client,event,file,kind);
+      assert.notEqual(corrected.key,command.key);
+    });
+  }
+  test(`${kind}: local session rejection never issues a request`,async t=>{
+    const client=new PortalClient();client.csrfToken='old-session';
+    const command=await prepareEventMedia(client,event,file,kind);
+    client.csrfToken='replacement-session';
+    const fetcher=t.mock.method(globalThis,'fetch',async()=>Response.json({}));
+    await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&!cause.network);
+    assert.equal(fetcher.mock.callCount(),0);
+  });
+}
+
+for(const [label,body,definitive] of [
+  ['complete',{type:'urn:problem:conflict',title:'Conflict',status:409},true],
+  ['blank type',{type:' ',title:'Conflict',status:409},false],
+  ['blank title',{type:'urn:problem:conflict',title:' ',status:409},false],
+  ['wrong status',{type:'urn:problem:conflict',title:'Conflict',status:422},false],
+  ['partial',{detail:'not a complete refusal'},false],
+] as const)test(`PortalClient shares the media refusal boundary: ${label}`,async t=>{
+  t.mock.method(globalThis,'fetch',async()=>Response.json(body,{status:409}));
+  const client=new PortalClient();client.csrfToken='synthetic-session';
+  await assert.rejects(client.post('/events',{}, {suppressConsole:true,background:true,skipAuthHandler:true}),
+    (cause:unknown)=>cause instanceof ApiError&&cause.definitiveResponse===definitive);
+});
