@@ -28,7 +28,7 @@ const LINK_CAP = 200;
 const TAIPEI = 8 * 60 * 60 * 1000;
 
 const PLATFORM_DESCRIPTION = '加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。';
-const platformOg = { title: '自由工坊', description: PLATFORM_DESCRIPTION, image: '/brand/freedom-workshop.webp', width: 1280, height: 720 };
+const platformOg = { title: '自由工坊', description: PLATFORM_DESCRIPTION, image: '/brand/og-freedom-workshop-20261030.jpg', width: 1200, height: 628 };
 
 export function taipeiParts(now: Date) {
   const shifted = new Date(now.getTime() + TAIPEI);

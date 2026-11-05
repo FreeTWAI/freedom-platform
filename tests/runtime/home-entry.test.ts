@@ -248,17 +248,39 @@ test('actual guest-profile entry cannot preempt a Google callback or password re
  context.googleCallback=null;context.resetToken='reset';assert.equal(allowed(),false);context.resetToken=null;context.profileLoginRequested=true;assert.equal(allowed(),false);
 });
 
-// The supplied compact logo is a distinct, byte-preserved header asset. This
-// checks source contracts only; decoded pixels and browser layout are E2E work.
+// The transparent derivative is distinct from the retained original poster.
+// Source and decoded asset checks do not claim native browser layout verification.
 import {createHash} from 'node:crypto';
-test('member home link uses the supplied compact logo without replacing the poster',()=>{
+test('member home link uses the transparent compact logo without replacing the poster',()=>{
   const source=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
   assert.match(source, /className="brand brand-home" href="\/#home" aria-label=/);
-  assert.match(source, /<img className="brand-home-logo" src="\/brand\/freedom-workshop-compact\.jpeg" alt="自由工坊" width="1536" height="512"\/>/);
-  const logo=readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact.jpeg',import.meta.url));
-  assert.equal(createHash('sha256').update(logo).digest('hex'),'70217e355af1d30ff9911c313bc095e7fc83a78ac01d3e51feb03810de72ed6c');
+  assert.match(source, /<img className="brand-home-logo" src="\/brand\/freedom-workshop-compact-transparent\.png" alt="自由工坊" width="396" height="132"\/>/);
+  const logo=readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url));
+  assert.equal(createHash('sha256').update(logo).digest('hex'),'f33136a09613c25752b1a24ad8aa9ef76dde93f31425bb6c5e201fe6d51aa10e');
   const poster=readFileSync(new URL('../../apps/portal-web/src/modules/Community.tsx',import.meta.url),'utf8');
   assert.match(poster,/src="\/brand\/freedom-workshop\.webp"/);
   const css=readFileSync(new URL('../../apps/portal-web/src/SocialLayout.css',import.meta.url),'utf8');
   assert.match(css,/\.brand-home-logo \{ display:block; width:132px; height:44px; flex:none; object-fit:contain; \}/);
+});
+
+
+// These are real decoded deployment bytes, not a filename-only assertion.
+import sharp from 'sharp';
+test('header asset has transparency and bounded bytes; generic OG is opaque and correctly declared', async () => {
+  const header=readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url));
+  const {data,info}=await sharp(header).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  assert.deepEqual([info.width,info.height,info.channels],[396,132,4]);
+  assert.ok(header.length<100_000);
+  const alpha=Array.from({length:info.width*info.height},(_,i)=>data[i*4+3]);
+  assert.equal(Math.min(...alpha),0); assert.equal(Math.max(...alpha),255);
+  assert.ok(alpha.some(value=>value>0&&value<255),'antialiased alpha edges remain');
+  for(const [x,y] of [[0,0],[395,0],[0,131],[395,131]]) assert.equal(data[(y*info.width+x)*4+3],0);
+  const og=readFileSync(new URL('../../apps/portal-web/public/brand/og-freedom-workshop-20261030.jpg',import.meta.url));
+  const metadata=await sharp(og).metadata();
+  assert.deepEqual([metadata.width,metadata.height,metadata.hasAlpha],[1200,628,false]);
+  assert.ok(og.length<160_000);
+  const html=readFileSync(new URL('../../apps/portal-web/index.html',import.meta.url),'utf8');
+  assert.match(html,/property="og:image" content="https:\/\/freetwai\.com\/brand\/og-freedom-workshop-20261030\.jpg"/);
+  assert.match(html,/name="twitter:image" content="https:\/\/freetwai\.com\/brand\/og-freedom-workshop-20261030\.jpg"/);
+  assert.match(html,/property="og:image:width" content="1200"/);assert.match(html,/property="og:image:height" content="628"/);
 });
