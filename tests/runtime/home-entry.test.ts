@@ -209,7 +209,7 @@ for(const view of ['recognition','connections'])test(`${view} account entry uses
 // Execute the actual disclosure effect; this models focus scheduling, not native
 // browser acceptance. The shelf E2E exercises the visible action at both widths.
 function connectionsDisclosureHarness(requested=true){
- const source=readFileSync(new URL('../../apps/portal-web/src/modules/Membership.tsx',import.meta.url),'utf8');
+ const source=readFileSync(new URL('../../apps/portal-web/src/modules/AccountSettingsPanel.tsx',import.meta.url),'utf8');
  const effect=source.match(/  useEffect\(\(\)=>\{\n    const details=connectionsRef.current;[\s\S]*?\n  \},\[focusConnections\]\);/);assert.ok(effect);
  let focused=0,cleanup:(()=>void)|undefined;
  class Details {open=false;isConnected=true;parentElement:Details|null=null;querySelector(){return summary;}}

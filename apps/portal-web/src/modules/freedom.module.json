@@ -40,6 +40,7 @@
     "apps/portal-web/src/modules/MemberECard.tsx",
     "apps/portal-web/src/modules/MemberECard.css",
     "apps/portal-web/src/modules/Membership.tsx",
+    "apps/portal-web/src/modules/AccountSettingsPanel.tsx",
     "apps/portal-web/src/modules/PublicMemberPage.tsx",
     "apps/portal-web/src/modules/MemberCardShareActions.tsx",
     "tests/runtime/member-ecard.test.ts",
