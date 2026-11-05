@@ -263,12 +263,15 @@ export function EventsPanel({client,session,locationHash,registerLeave,onList,pa
   async function save(event:FormEvent) {
     event.preventDefault();if(actionAttempt.current||reviewAttempt.current||saving||busy||mediaUnknown||preparingBanner||bannerError)return;
     if(lastFailureUnknown&&!saveAttempt.current){setNotice('尚未確認原操作的結果，請先重試原操作。');return;}
-    setSaving(true);setNotice('');
     const current=original;
-    const attempt=saveAttempt.current??(current
+    let attempt=saveAttempt.current;
+    // datetime-local can accept years that our ISO conversion cannot encode.
+    // A local validation failure must not acquire the pending-save lock.
+    try{attempt??=current
       ?{path:`/events/${current.event_id}/update`,body:eventPayload(editDraft),version:current.aggregate_version,editing:true}
-      :{path:'/events',body:eventPayload(draft),editing:false});
-    saveAttempt.current=attempt;
+      :{path:'/events',body:eventPayload(draft),editing:false};}
+    catch{setNotice('請確認開始與結束時間，年份須為四位數。活動內容仍保留。');return;}
+    setSaving(true);setNotice('');saveAttempt.current=attempt;
     try{
       const saved=await mutate<CommunityEvent>(attempt.path,attempt.body,attempt.version);
       if(!saved)return;

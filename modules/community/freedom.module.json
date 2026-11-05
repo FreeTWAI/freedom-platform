@@ -75,6 +75,7 @@
     "apps/portal-web/src/modules/EventHelpers.tsx",
     "apps/portal-web/src/modules/EventHelpers.css",
     "tests/runtime/event-helper-client.test.ts",
+    "tests/runtime/event-date-input.test.ts",
     "tests/e2e/event-helpers.spec.ts"
   ],
   "public_exports": [

@@ -567,3 +567,35 @@ eventTest('legacy draft preserves guest policy until the organizer explicitly ch
   await editor.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(editor).toHaveCount(0);
   await page.reload();await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
 });
+
+for(const width of [1280,390])eventTest(`extended event years show recoverable validation before any save at ${width}px`,async({page,eventFixture,e2eAuthPool})=>{
+  await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form.experience-editor'),title=`合成日期邊界 ${width}`;
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  let writes=0;page.on('request',request=>{if(request.method()==='POST'&&/^\/api\/v1\/events(?:\/[0-9a-f-]+\/update)?$/.test(new URL(request.url()).pathname))writes++;});
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('日期輸入錯誤後保留的合成內容');await form.getByLabel('線上場地',{exact:true}).fill('合成線上場地');
+  await form.getByLabel('開始時間',{exact:true}).fill('2099-01-01T12:00');await form.getByLabel('結束時間',{exact:true}).fill('2099-01-01T13:00');
+  for(const editing of [false,true]){
+    if(editing)await page.getByRole('button',{name:'編輯草稿',exact:true}).click();
+    for(const label of ['開始時間','結束時間']){
+      const input=form.getByLabel(label,{exact:true});await input.fill('10000-01-01T12:00');
+      // This is a valid native datetime-local value; the product converter only
+      // accepts four-digit years. Exercise the real submit path, not a JS handler.
+      await expect(input).toHaveValue('10000-01-01T12:00');expect(await form.evaluate(node=>(node as HTMLFormElement).checkValidity())).toBe(true);
+      await form.getByRole('button',{name:editing?'儲存修改':'送出審核',exact:true}).click();
+      await expect(page.getByRole('status').filter({hasText:'年份須為四位數'})).toBeVisible();
+      await expect(input).toBeEnabled();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue(title);
+      expect(writes).toBe(editing?1:0);expect(errors).toEqual([]);
+      await input.fill(label==='開始時間'?'2099-01-01T12:00':'2099-01-01T13:00');
+    }
+    if(editing)await form.getByLabel('活動說明',{exact:true}).fill('修正日期後的合成內容');
+    const response=page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith(editing?'/update':'/events'));
+    await form.getByRole('button',{name:editing?'儲存修改':'送出審核',exact:true}).click();const saved=await response;expect(saved.ok()).toBe(true);await saved.finished();
+    await expect(form).toHaveCount(0);expect(writes).toBe(editing?2:1);
+    const rows=(await e2eAuthPool.query('SELECT title,description,starts_at,ends_at FROM community_events WHERE organizer_ref=$1',[eventFixture.user])).rows;
+    expect(rows).toHaveLength(1);expect(rows[0].title).toBe(title);expect(rows[0].description).toBe(editing?'修正日期後的合成內容':'日期輸入錯誤後保留的合成內容');
+    expect(new Date(rows[0].starts_at).toISOString()).toBe('2099-01-01T17:00:00.000Z');expect(new Date(rows[0].ends_at).toISOString()).toBe('2099-01-01T18:00:00.000Z');
+    expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+});
