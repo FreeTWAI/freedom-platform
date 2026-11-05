@@ -42,6 +42,8 @@
     "apps/portal-web/src/modules/Membership.tsx",
     "apps/portal-web/src/modules/AccountSettingsPanel.tsx",
     "apps/portal-web/src/modules/PublicMemberPage.tsx",
+    "tests/runtime/public-member-download-stability.test.ts",
+    "tests/e2e/public-member-download-stability.spec.ts",
     "apps/portal-web/src/modules/MemberCardShareActions.tsx",
     "tests/runtime/member-card-share-actions.test.ts",
     "tests/e2e/member-card-share-actions.spec.ts",
