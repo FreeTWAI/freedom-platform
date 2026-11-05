@@ -51,7 +51,11 @@ test('optimizer retry admits only its same-origin JavaScript chunk with bounded 
   assert.equal(shareModuleRetryUrl(error(origin+path+'?share-retry=2'),origin,2,'SocialPostOptimizer'),null);
 });
 
-test('optimizer CSS is eager so a stylesheet download cannot reject the deferred JavaScript import',async()=>{
+test('optimizer CSS is eager so a stylesheet download cannot reject the deferred JavaScript import',async t=>{
+  // Vite sets NODE_ENV for its build. Restore the caller's mode before the
+  // mounted tests load ReactDOM, so React and its renderer use the same mode.
+  const nodeEnv=process.env.NODE_ENV;
+  t.after(()=>{if(nodeEnv===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=nodeEnv;});
   const {build}=await import('vite');
   const result=await build({configFile:'apps/portal-web/vite.config.ts',logLevel:'silent',build:{write:false,manifest:true}});
   assert(!Array.isArray(result)&&'output' in result);
