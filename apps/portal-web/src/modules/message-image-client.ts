@@ -30,6 +30,17 @@ export function matchesChannelMessageAck(value:unknown,expected:{sender:string;k
 function matchesMessageContentAck(value:Record<string,unknown>,input:DirectMessageContentInput):boolean{
   const sticker=findChatSticker(input.sticker_id);
   const body=input.body!==undefined?input.body.replace(/\r\n?/g,'\n').trim():input.image_id!==undefined?'[圖片]':sticker?`[貼圖] ${sticker.label}`:undefined;
+  if(value.retracted_at!==undefined&&value.retracted_at!==null){
+    // Only the original keyed POST response correlates this current tombstone
+    // with the sent command. History/GET results cannot acknowledge a send.
+    // The message itself may have been retracted after commit, not just its quote.
+    if(!body||[...body].length>2000||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body))return false;
+    if(input.sticker_id!==undefined&&(!sticker||input.body!==undefined||input.image_id!==undefined))return false;
+    if(input.image_id!==undefined&&!isUuid(input.image_id))return false;
+    if(input.reply_to_message_id!==undefined&&!isUuid(input.reply_to_message_id))return false;
+    return typeof value.retracted_at==='string'&&timestamp(value.retracted_at)&&new Date(value.retracted_at).toISOString()===value.retracted_at&&value.body===''&&
+      ['sticker','image','reply_to','reply_to_message_id','sticker_id','image_id'].every(field=>value[field]===undefined);
+  }
   if(body===undefined||value.body!==body)return false;
   if(input.image_id!==undefined?!isMessageImage(value.image):value.image!==undefined)return false;
   if(input.sticker_id!==undefined){

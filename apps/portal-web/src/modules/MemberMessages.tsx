@@ -24,7 +24,7 @@ import {compareDirectMessages,directMessageReceiptRefreshDue,hasDirectMessageCha
 import {isFirstImageDecoderRejection,matchesDirectMessageAck,messageImageFileError,messageImageUrl,uploadMessageImage,type MessageImage} from './message-image-client';
 import {MessageImagePreview} from './MessageImagePreview';
 import {chatPollDue,idleChatPoll,resetChatPoll} from './adaptive-chat-poll';
-import {refreshLoadedMessages} from './message-refresh';
+import {reconcileMessageAck,refreshLoadedMessages} from './message-refresh';
 import {isOrderNotificationAction,type DirectMessageReceiptPage,type OrderNotificationAction} from '../../../../modules/member-communications/types';
 
 type ActionTab='members'|'squads'|'guilds'|'guild-workspace'|'messages'|'events'|'social'|'stores'|'reservations';
@@ -307,6 +307,8 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   const polling=useRef(false),retryAt=useRef(0),failures=useRef(0),listCheckedAt=useRef(0);
   const idlePoll=useRef(resetChatPoll());
   const receiptRefresh=useRef(new Map<string,symbol>());
+  // Advances before a newer authorized projection is queued, not only after render.
+  const historyRevision=useRef(0);
   const receiptCheckedAt=useRef(new Map<string,number>());
   const [liveError,setLiveError]=useState('');
   const snapshot=useRef({thread,threadStatus,reading,active,sending:false,readingThread:true});snapshot.current={thread,threadStatus,reading,active,readingThread:!singlePane||!picking,sending:pending[peer??'']?.status==='sending'};
@@ -319,6 +321,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     const id=peer,messageId=retractTarget.message_id;setRetracting(true);setRetractError('');
     try{
       const result=await client.post<{message_id:string;retracted_at:string}>(`/me/conversations/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/retract`,{},{idempotencyKey:crypto.randomUUID()});
+      historyRevision.current++;
       setThread(value=>value&&value.participant.user_id===id?{...value,items:value.items.map(message=>message.message_id===messageId?{message_id:message.message_id,sender_ref:message.sender_ref,recipient_ref:message.recipient_ref,created_at:message.created_at,read_at:message.read_at,body:'',retracted_at:result.retracted_at}:message)}:value);
       setConversations(items=>items.map(item=>item.participant.user_id===id&&item.last_message.message_id===messageId?{...item,last_message:{message_id:item.last_message.message_id,sender_ref:item.last_message.sender_ref,recipient_ref:item.last_message.recipient_ref,created_at:item.last_message.created_at,read_at:item.last_message.read_at,body:'',retracted_at:result.retracted_at}}:item));
       // Fence any older list response and reconcile counts without keeping the withdrawn preview.
@@ -388,6 +391,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       threadInFlight.current=null;
       if(receiptRefresh.current.get(id)===receiptVersion)receiptRefresh.current.delete(id);
       receiptCheckedAt.current.set(id,Date.now());
+      historyRevision.current++;
       setThread(existing=>{
         if(!quiet||!existing)return value;
         const fresh=value.items.filter(item=>!existing.items.some(known=>known.message_id===item.message_id));
@@ -480,6 +484,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       // newly loaded outgoing rows are included in the next receipt read.
       if(value.items.some(item=>item.sender_ref===me&&item.read_at===null))receiptRefresh.current.set(id,Symbol());
       if(scroll.current)anchor.current={top:scroll.current.scrollTop,height:scroll.current.scrollHeight};
+      historyRevision.current++;
       setThread(existing=>existing&&{...existing,items:newestMessages(merge(existing.items,value.items,item=>item.message_id)),next_offset:value.next_offset});setThreadMore({loading:false,error:''});
     }catch(cause){if(current===threadGeneration.current)setThreadMore({loading:false,error:fail(cause)});}
     finally{
@@ -543,7 +548,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
     if(image?.imageId)payload.image_id=image.imageId;
     const same=previous?.status==='unknown';
     const attempt:Pending={key:same?previous.key:crypto.randomUUID(),body,payload,status:'sending',stage:image?image.imageId?'message':'upload':undefined,selectionKey:image?.key};
-    const sessionGeneration=client.sessionGeneration;
+    const sessionGeneration=client.sessionGeneration,projectionRevision=historyRevision.current,listGeneration=convGeneration.current;
     sendLocks.current.add(id);
     setPending(value=>({...value,[id]:attempt}));setSendErrors(({[id]:_,...rest})=>rest);
     try{
@@ -565,14 +570,19 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
       if(!payload.sticker_id)setDrafts(value=>{if((value[id]??'').trim()!==(payload.body??''))return value;const {[id]:_,...rest}=value;return rest;});
       if(image){selections.current.delete(id);if(selectionRef.current===image){selectionRef.current=null;setSelection(null);}}
       if(!payload.sticker_id)richDrafts.clear(id,extras);
-      if(currentPeer.current===id){stick.current=true;setThread(value=>value&&value.participant.user_id===id?{...value,items:newestMessages(merge([message],value.items,item=>item.message_id)),next_offset:value.next_offset===null?null:value.next_offset+(value.items.some(item=>item.message_id===message.message_id)?0:1)}:value);}
-      setConversations(value=>{
+      if(currentPeer.current===id){stick.current=true;setThread(value=>value&&value.participant.user_id===id?{...value,items:newestMessages(merge([reconcileMessageAck(message,value.items)],value.items,item=>item.message_id)),next_offset:value.next_offset===null?null:value.next_offset+(value.items.some(item=>item.message_id===message.message_id)?0:1)}:value);}
+      // A completed read or local retraction can be queued before React renders.
+      // Its synchronous generations fence the preview without relying on that render.
+      const newerProjection=projectionRevision!==historyRevision.current||listGeneration!==convGeneration.current;
+      if(!newerProjection)setConversations(value=>{
         const existing=value.find(item=>item.participant.user_id===id);
         const participant=existing?.participant??(thread?.participant.user_id===id?thread.participant:null);
         if(!participant)return value;
-        return [{participant,can_send:existing?.can_send??true,unread_count:existing?.unread_count??0,last_message:message},...value.filter(item=>item.participant.user_id!==id)];
+        return [{participant,can_send:existing?.can_send??true,unread_count:existing?.unread_count??0,last_message:reconcileMessageAck(message,existing?[existing.last_message]:[])},...value.filter(item=>item.participant.user_id!==id)];
       });
       rereadAfterWrite(id);
+      // rereadAfterWrite already supersedes any in-flight list request.
+      if(newerProjection&&convInFlight.current===null)void loadConversations(true);
     }catch(cause){
       if(!alive.current||client.sessionGeneration!==sessionGeneration)return;
       if(image&&selections.current.get(id)!==image){setPending(({[id]:_,...rest})=>rest);return;}

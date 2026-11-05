@@ -87,6 +87,7 @@ PostgreSQL 仍可能在等待該列之前就算好 expression。`COALESCE` 保�
 - 內容是純文字：前後空白會去掉，換行統一為 `\n`，長度 1–2000 字（以 Unicode 字元計）。不解析 HTML／Markdown，也不抓取網址；前端必須當文字顯示。
 - 找不到、跨社群、或未完成加入且沒有往來紀錄的會員一律回 404，無法分辨。已有對話但對方已停用或尚未完成加入時，自己仍能讀取、標已讀，`can_send` 為 `false`，傳送回 `409 recipient_unavailable`。任一方向封鎖時傳送與建立／接受好友邀請回通用 `409 recipient_unavailable`，不回傳反向封鎖欄位。
 - 每位傳送者 60 秒內最多 20 則新訊息（`429 message_rate_limited`）。私訊先取得無序 pair lock，再取得傳送者頻率限制 advisory lock；同時送出也不會超過，雙向傳送使用相同 pair barrier。授權通過後重送既有 key 不計次；收件者以 `FOR SHARE` 鎖定。
+- 私訊與頻道的頻率判定都在原 sender barrier 後，依時間倒序最多選 20 列，既有 `sender_recent` 索引可支援此查詢。少於 20 列時沒有滿額；否則 aggregate 讀完後才取一次 PostgreSQL `clock_timestamp()`，以第 20 新的時間嚴格大於該時刻減 60 秒來判定。固定決策時點下，這與全歷史計數是否至少 20 列等價；相同或未來時間戳仍計入，恰好 60 秒的列不計入。這明確化為「鎖後、資料讀完後的單次決策時鐘」，不是聲稱和舊版逐列 volatile 時鐘在查詢內跨界時完全相同。不得改用交易開始的 `now()`，也不提前固定 cutoff；鎖順序、重播、session／資格與訊息提交後讀回均不變。
 - 私訊不產生通知（避免未讀重複計算）。訊息內容不寫入 command receipt 或 transition journal；receipt 只保留 `message_id`。
 - 私訊標讀先沿用 bulk inbox 的本人 `member-inbox-read-all/<community>/<user>`
   advisory barrier，再以既有方向／顯示邊界選取仍未讀的列，按 message ID 排序 `FOR UPDATE`。
