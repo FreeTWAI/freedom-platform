@@ -28,4 +28,3 @@ export async function enhanceSkillSocial(node:HTMLElement,signal:AbortSignal):Pr
   }
   return false;
 }
-
