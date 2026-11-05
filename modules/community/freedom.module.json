@@ -99,7 +99,18 @@
     "apps/portal-web/src/modules/EventPrizeIconPicker.css",
     "tests/runtime/event-prize-icons.test.ts",
     "apps/portal-web/src/modules/EventPrizeFields.tsx",
-    "docs/development/event-prize-details.md"
+    "docs/development/event-prize-details.md",
+    "modules/community/event-attendance.ts",
+    "modules/community/event-attendance-state.ts",
+    "apps/portal-web/src/modules/EventAttendance.tsx",
+    "apps/portal-web/src/modules/EventAttendance.css",
+    "apps/portal-web/src/modules/event-attendance-client.ts",
+    "migrations/200_event_member_attendance.sql",
+    "tests/runtime/event-member-attendance.test.ts",
+    "tests/runtime/event-member-attendance-ui.test.ts",
+    "tests/runtime/event-member-attendance-db.test.ts",
+    "tests/e2e/event-member-attendance.spec.ts",
+    "docs/development/event-member-attendance.md"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
@@ -172,7 +183,9 @@
         "community.event.cancel",
         "community.event.review",
         "community.event-rsvp.update",
-        "community.event-attendees.list"
+        "community.event-attendees.list",
+        "community.event-attendance.list",
+        "community.event-attendance.record"
       ],
       "auth_profile": "member-session"
     },

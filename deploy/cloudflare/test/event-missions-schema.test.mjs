@@ -20,14 +20,15 @@ test('mission candidate preserves exact PR1170 schema195 ledger without treating
  assert.notEqual(next.ledger_digest,old.ledger_digest);
 });
 
-test('explicit199 scan accepts only complete catalog; historical198/197/196/195 profiles are not silently advanced',()=>{
- assert.equal(checkMigrations(root,profile(199)).ok,true);
+test('explicit200 scan accepts only complete catalog; historical199/198/197/196/195 profiles are not silently advanced',()=>{
+ assert.equal(checkMigrations(root,profile(200)).ok,true);
+ assert.equal(checkMigrations(root,profile(199)).ok,false);
  assert.equal(checkMigrations(root,profile(198)).ok,false);
  assert.equal(checkMigrations(root,profile(197)).ok,false);
  assert.equal(checkMigrations(root,profile(196)).ok,false);
  assert.equal(checkMigrations(root,profile(195)).ok,false);
  assert.equal(checkMigrations(root,profile(194)).ok,false);
- assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(199)));
+ assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(200)));
 });
 
 test('mission schema has no attendee, friend or Contribution write and clearing is not a hard-erasure claim',()=>{

@@ -349,3 +349,20 @@ test('event siblings, malformed update paths and other methods keep the original
   for(const path of paths){const response=await eventRequest(path,' '.repeat(32769));assert.equal(response.status,413);assert.equal((await response.json()).code,'body_too_large');}
   for(const method of ['PATCH','PUT','DELETE'])for(const path of eventWritePaths){const response=await eventRequest(path,' '.repeat(32769),{},method);assert.equal(response.status,413);assert.equal((await response.json()).code,'body_too_large');}
 });
+
+test('anonymous attendance requests remain behind the real member boundary, including an unregistered public lookalike',async()=>{
+  const event='10000000-0000-4000-8000-000000000001',member='20000000-0000-4000-8000-000000000001';
+  for(const [path,method,expected] of [
+    [`/api/v1/events/${event}/attendance`,'GET',401],
+    [`/api/v1/events/${event}/attendance/${member}`,'POST',401],
+    [`/api/v1/public/events/${event}/attendance`,'GET',401],
+  ] as const){
+    const response=await app.request(new Request(origin+path,{method,headers:{Origin:origin,...(method==='POST'?{'Content-Type':'application/json'}:{})},...(method==='POST'?{body:JSON.stringify({action:'confirm'})}:{})}));
+    assert.equal(response.status,expected,path);
+    const body:unknown=await response.json();
+    assert.ok(body!==null&&typeof body==='object'&&'code' in body);
+    assert.equal(body.code,'login_required');
+    assert.doesNotMatch(JSON.stringify(body),/member_ref|recorded_at|registration_state|"items"/);
+  }
+  assert.equal(databaseCalls,0);assert.equal(fetchCalls,0);
+});

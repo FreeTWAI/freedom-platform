@@ -1,4 +1,5 @@
 import {readEventHelper,listEventHelpers,mutateEventHelper,decideEventHelper} from '../../../../modules/community/event-helpers.js';
+import {listEventAttendance,mutateEventAttendance} from '../../../../modules/community/event-attendance.js';
 import type {PlatformRuntime} from '../runtime.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
@@ -89,6 +90,8 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
   app.get('/events/:id/helpers',async c=>{c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');return c.json(await listEventHelpers(pool,c.get('actor'),id(c.req.param('id')),c.req.query()));});
   app.post('/events/:id/helpers/:memberId/decision',async c=>c.json(await decideEventHelper(pool,await moduleCommand(c),id(c.req.param('id')),id(c.req.param('memberId')))));
   app.get('/events/:id/attendees',async c=>{c.header('Cache-Control','private, no-store');return c.json(await eventAttendees(pool,c.get('actor'),id(c.req.param('id')),c.req.query()));});
+  app.get('/events/:id/attendance',async c=>{c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');return c.json(await listEventAttendance(pool,c.get('actor'),id(c.req.param('id')).toLowerCase(),c.req.query()));});
+  app.post('/events/:id/attendance/:memberId',async c=>{c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');return c.json(await mutateEventAttendance(pool,await moduleCommand(c),id(c.req.param('id')),id(c.req.param('memberId'))));});
   app.post('/events/:id/share-code',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>getEventShareCode(q,c.get('actor'),id(c.req.param('id'))))));
   app.get('/events/:id/banner',async c=>{
     const bytes=await readEventBanner(pool,c.get('actor'),id(c.req.param('id')),runtime?.eventBannerAssetStore);

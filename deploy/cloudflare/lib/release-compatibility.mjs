@@ -240,6 +240,8 @@ const FOUNDATION_NAMES = [
   '198_member_shared_skill_books_language_guild.sql',
   // Additive descriptive prize data; exact ledger approval is still required.
   '199_event_prize_details.sql',
+  // Isolated organizer-recorded attendance; no completion, award or runtime grants.
+  '200_event_member_attendance.sql',
   // Private self-reported tester progress/feedback; no ranking, release or contribution authority.
   '202_tester_map_accounts.sql',
 ];
