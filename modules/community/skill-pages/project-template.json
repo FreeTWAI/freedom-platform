@@ -1,0 +1,14 @@
+{
+  "headline": "先跑得起來，再改成你的作品。",
+  "outcomes": ["附測試與用途說明的新專案", "在自己電腦開啟的本機預覽", "一個附測試的小功能 PR"],
+  "flow": {
+    "title": "範本先跑通，再換成自己的身分",
+    "lead": "Node 24 範本附測試、本機預覽與平台協定，在你自己的電腦上執行。",
+    "steps": [
+      {"icon": "terminal", "title": "跑測試與預覽", "note": "在副本執行 npm test 與 npm run build，再啟動本機預覽。"},
+      {"icon": "pen", "title": "照初始化清單改身分", "note": "照清單把專案名稱與 repository 身分改成你的，寫上作品用途。"},
+      {"icon": "code", "title": "提出小功能 PR", "note": "選一個小功能，用 Issue 說明目標，PR 附上測試。"}
+    ],
+    "caption": "範本不含雲端部署、公開註冊或付款；開始前先建立自己的 GitHub 專案或 Fork。"
+  }
+}

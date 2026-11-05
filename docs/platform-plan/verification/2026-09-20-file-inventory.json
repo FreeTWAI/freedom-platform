@@ -619,8 +619,8 @@
     },
     {
       "path": "apps/platform-api/src/routes/development.ts",
-      "bytes": 4416,
-      "sha256": "c8676023cc0147dd3d12cdcbc0a64e4f46c4bbdcdbe8e1d1e47d468c2ac91483"
+      "bytes": 4442,
+      "sha256": "f13270ee273e158cca44b2bf5d7e9279ddbff55d485b94f53dce331c964e57d2"
     },
     {
       "path": "apps/platform-api/src/routes/event-highlights.ts",
@@ -1894,278 +1894,278 @@
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/agent-kit.webp",
-      "bytes": 131140,
-      "sha256": "d725452be5e878ac641eb049c91f1372bbfcc07a7e5ab1c71bcdcfaec8ad612e"
+      "bytes": 42200,
+      "sha256": "ce4ed243b93f46719ecfde4349b487534a92e492c8925769acb40135582d19aa"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/ai-avatar-bot.webp",
-      "bytes": 67190,
-      "sha256": "b14449942e11a7f15776d6f1bfe88aa6c225f711aed9950c27e20f15012a02e3"
+      "bytes": 43464,
+      "sha256": "bf966f571e1829be610b6f00e831238afe5ecabb00c217b560c1fd95dda611f3"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/ai-manga-translator.webp",
-      "bytes": 102748,
-      "sha256": "e174470b2ba779bfd22c5f263b3bf537c0a7e9e7edb8c2e9ade5c333e31d3709"
+      "bytes": 43422,
+      "sha256": "075bac981d4f4f2c12117e816e37017c80d3f2444ed947a412255e8fda21c5d6"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/ai-sister.webp",
-      "bytes": 185230,
-      "sha256": "6bedb1a71a2f1d31d812b1e40744e90853679947f417ed50f6f97d2099a4d7c6"
+      "bytes": 41986,
+      "sha256": "7439c807d853b068891256ce9228ced36f348ad0be6b70ad76151bacab79855b"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/aiwff-runtime.webp",
-      "bytes": 81874,
-      "sha256": "5cfd6527b939e96febd6f5fd62aaf870d783d7c3ec22f503c0fc7c1af92b334b"
+      "bytes": 45510,
+      "sha256": "dbe38357d1ac5c54f9b3cb7c08b9d18a5271c00d7168a583a7a2f1107905d77c"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/anti-gambling-trader-tw.webp",
-      "bytes": 72128,
-      "sha256": "f1424c3fe84d69c1a1ecf1efad722efada8f500efaac2a545795e6c622b4b9d6"
+      "bytes": 48104,
+      "sha256": "9a1ced2136b904afd3fe6b7c8be155adc90d98ddaceeb0c18660381ff5e8a762"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/autovtuber.webp",
-      "bytes": 95710,
-      "sha256": "999f32478eca7034de49e246ac13ea011abed30ba90e27563b3f70c755cf97c7"
+      "bytes": 47180,
+      "sha256": "935525905670907999321ed2301a18bf04dc1377bbfe652ca29b8410a87a7f17"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/bidding-radar-concept.webp",
-      "bytes": 102808,
-      "sha256": "3516369fc2dc4ac01c6161e0a6452188c3f13a0c34498d8213f3c31a1d118c63"
+      "bytes": 48020,
+      "sha256": "e1ca038e5ae26fc82a36263fd42ccade2ce4f8503e710f0349cd96b08b40480d"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/career-guide.webp",
-      "bytes": 160672,
-      "sha256": "5130377488715350db9a74397fe0aa88953c9d1b073ea2ef532cc354c41cbaf7"
+      "bytes": 40202,
+      "sha256": "b64cac78c3ef5c1e8b89d6c3e9a33d56a147e1f131e7ca5b888ef708c3749c6d"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/coding-audit-harness.webp",
-      "bytes": 68290,
-      "sha256": "ffa4fbc20e013f7b612bc15862c7f5bc9b05c87ca7f23d5e8f9879dbcea53381"
+      "bytes": 50608,
+      "sha256": "b876de0a749ccfdc591917206d587d3bf05c4c8f80038b9bf6bfcc7d623064e7"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/commercial-production.webp",
-      "bytes": 131968,
-      "sha256": "88e6562ab20d9e979fcff54e103aee17a8ae631bc4003c5158285a3b420c903f"
+      "bytes": 51196,
+      "sha256": "8cf797169712125b7c4df1e77dfd49509d9e14307f1bd652c8a7021ecb829733"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/community-ops.webp",
-      "bytes": 173754,
-      "sha256": "0f6c591e5caf1e0d8af0a38585e2b9967dd830c11175040d2472c7f133b1c21b"
+      "bytes": 44442,
+      "sha256": "ab636482d2515ba1106f17ab2a925bf29f1f75baecd3b7d3ee4a875a882039f3"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/editkin.webp",
-      "bytes": 91124,
-      "sha256": "e416b84399458f6fd707e9c0ebf6aac0f7772f0d04f2f70e64ef994c541c3cd7"
+      "bytes": 47202,
+      "sha256": "8d72a5f21b89c726023f939cf988d25ec021937dd966ebd70576741c400aff80"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/event-space.webp",
-      "bytes": 158788,
-      "sha256": "b3604073997cd8eebce1b22b0f98bfd7ad7cef9a8bfab39aec353442b3d2f2bc"
+      "bytes": 45094,
+      "sha256": "6894e4d279feed8a4ed4fa6e82e1ab5fc5a1b7b4434aa5e715dfa60cc11ddc68"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/freedom-party-guild-lounge.webp",
-      "bytes": 91070,
-      "sha256": "172a77c63a171240d255e00f2fe72ff805d236ad5afbeb5f64600d72d9a09fee"
+      "bytes": 43116,
+      "sha256": "4790b27e605e4c81b9670f2a2fada0111f68eda1516ca8c7c640159e0e7744f4"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/ga4-lp-analytics.webp",
-      "bytes": 64054,
-      "sha256": "b4b1ec7795b2edfd46f3836df9b108593d76c7652ca3b391b7857885c7b14aa9"
+      "bytes": 49710,
+      "sha256": "a4aea9bb3685f51d998d3624ad7867d166d9735319ea8c830156c0196f2be909"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/gemini-voice-lab.webp",
-      "bytes": 82394,
-      "sha256": "b14264a2e39d5e1e67db1c7e7f29914dd95d8bb678f393b9fc524a791002592e"
+      "bytes": 45902,
+      "sha256": "2aa0c1d39aa095d9751f4c4ff8a64e594f072ab20bc1745dd81716a9212535fa"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/hao-studio.webp",
-      "bytes": 167368,
-      "sha256": "a826d8653c47cd203151803bbf836b2575efb7fa32cbe54830af56c174214043"
+      "bytes": 42092,
+      "sha256": "b32dc374ea118d19c15c28a8642f089e43d0c6e771ac32db63d2bee8ff4588f6"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/hdsljp-api.webp",
-      "bytes": 95848,
-      "sha256": "a9f0843b860b89a706201b8036fc4bf84f1742b3179cf7ae6eed806a20682347"
+      "bytes": 47908,
+      "sha256": "29e1237df6f5f25f602377476a843aae03c1012d3aac22d07368aa4fe916b630"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/hrflow.webp",
-      "bytes": 81296,
-      "sha256": "ce6cf0a0df9d430f55cb316fa0ef521c7e3413665982d9d51daf071b860ca9e3"
+      "bytes": 46708,
+      "sha256": "342feb51fe63f8dda1871ca094159b67946879d7e8b083224bb11496d69649a2"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/human-design.webp",
-      "bytes": 129320,
-      "sha256": "28a00a4d29385088b931e655b36469d715ffa5af193bf97d4aa5abc8c7a41d30"
+      "bytes": 47646,
+      "sha256": "874c1bc34fab81e43ecea5bfbabe98aa7264d0ba97fdb5d28ee90e22c05883bc"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/human-mode.webp",
-      "bytes": 80840,
-      "sha256": "8bb192ff7e82fcdb7689261b3d259a85cbb049bd90d71ec2f7013bb9407eafbc"
+      "bytes": 46634,
+      "sha256": "48a6e26acf210328f47368f1f189581796c0724c446a037f074ec3c952839899"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/keynote-pptx-doctor.webp",
-      "bytes": 73072,
-      "sha256": "9c142b7f3921e04c1e1dcf1e5f2ea0f39ace912314863f155d1235d2231fcd67"
+      "bytes": 51536,
+      "sha256": "987502010d23c85e8baaaff7c666ab15da3020f2afae93c57976897907a44c45"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/line-persona.webp",
-      "bytes": 93732,
-      "sha256": "77a449604dbf04189099c51135119086b7bdb6fb41a0b8e70f24b10577354804"
+      "bytes": 41050,
+      "sha256": "0d395bf36303f0ba32dd9a95cc4e4fa7d060f6df157bf563c7c3fb826e463756"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/local-workspace-mcp.webp",
-      "bytes": 78250,
-      "sha256": "678ef6d708926b6e34aa9450b169453af0bd713bc0d1581b59ab492c1c1ba2d2"
+      "bytes": 49600,
+      "sha256": "72ff7afb9902d838fbb382eb41ba62919205a28bdbeeed42bf3c917fa1ce7e3e"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/media-generator.webp",
-      "bytes": 184890,
-      "sha256": "9e081319fff7b1e9894e848415e9352e14fd79b6dff15e6c29eca2908bd271d9"
+      "bytes": 44436,
+      "sha256": "baaded9a19f2d371f3f1debefd1da29bbf4282d18bf94369c6cbd6f4791402ba"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/multi-ai-chat.webp",
-      "bytes": 161594,
-      "sha256": "a33d6e4f75f9e9c0499dcdbed0d71638c21e7897c2b0bf3c2646aa3550375f71"
+      "bytes": 39110,
+      "sha256": "adde6e9f537c844084616ac5b194e72afac525f5ec1ca21f07db03b332f7cc69"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/multi-ai-desktop.webp",
-      "bytes": 137712,
-      "sha256": "ef00bbf998fc666f3f9ae28c782a5330f219fa577940095883fdfb7359d24bfd"
+      "bytes": 43448,
+      "sha256": "d38743b46dce8f49091aaed7ee0897cf39cd56b2a09697f8b878773271d4d957"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/music-mv.webp",
-      "bytes": 175612,
-      "sha256": "0ea16ac5ed79c0f3bc5f5b1238c561ccaa34ee0c095de7e405af7904ef8c8bcd"
+      "bytes": 44422,
+      "sha256": "d319886a357c67faa5a81f449941fd2ab665692be6c804a20e119a4ed4ffc9d3"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/n8n-marketing-flows.webp",
-      "bytes": 75642,
-      "sha256": "d0d09c247531764641ef86d01eaf3d0f7cf595663a66025bad987fabbdf02a02"
+      "bytes": 46224,
+      "sha256": "2dc19ea59df87acf26ec53a2494fe29044e772082e0fe472c86792b6cc13827d"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/open-seo-advisor.webp",
-      "bytes": 63346,
-      "sha256": "172aaa83a36992a0670640ffa623d54fa3219b7dbcf30d44917f35c180c9845a"
+      "bytes": 52076,
+      "sha256": "566ce29c0cfb1411753affac5b415ec95c1ac42aa602cf0a9ebda1294c09d27d"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/partnership.webp",
-      "bytes": 141488,
-      "sha256": "b35e4f31895c9423a67df82e2323b79e4224860b75e05fe29f5ce7a0aa833fb4"
+      "bytes": 44400,
+      "sha256": "48b28b0cf743043acb92a08711e84fc03197e090430ced9d42b8a3e96ad109f8"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/photo-border-remover.webp",
-      "bytes": 114226,
-      "sha256": "25a726fcc5c167ae41aeab78828f3fab7cbb71e457d5d18a8846ac3ef9974f2f"
+      "bytes": 41854,
+      "sha256": "a939d554d5b4074cb2c1f000f5e17cacc3844b97de1bdbafe05cf445bb0b4142"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/pos-pro.webp",
-      "bytes": 166518,
-      "sha256": "6b38baef104dffa232b2ca2bd965f9d83696b87a34d545410d4848bd3c73aac2"
+      "bytes": 40864,
+      "sha256": "6ff17363a46bd97524a8c7d41dbea647a24fbe6326f52121297623966d23ba77"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/positioning-companion.webp",
-      "bytes": 121754,
-      "sha256": "1e9915de3cf42faff76a87adabc48c1314caf700975083df8858c587b6a1efa1"
+      "bytes": 38388,
+      "sha256": "61f562723610ce15ec98f51e5340796ba46eaaa28e264905a23d986d86a66e0d"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/project-delivery.webp",
-      "bytes": 173962,
-      "sha256": "55a635d6803ce1f5bb3d42c8d8a8074af3e26b528161c6e3d63d75cfe7467478"
+      "bytes": 44106,
+      "sha256": "24ae6067434962db9abd6ce3f2123c38975b8072cd34a0593c860a21fb7c0710"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/project-hub.webp",
-      "bytes": 47046,
-      "sha256": "4fa5c327f874de1a54e9d7f143e65cca44ff1617f93e1e9b6f5866ccc9221543"
+      "bytes": 52068,
+      "sha256": "0227932ba52739cd69e23bb5e986719a7f7adaf0def4000c44c5785f320f3390"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/project-template.webp",
-      "bytes": 136500,
-      "sha256": "a93574b7419e0ec12aab40aefd5e0ff9a30975180c796d502729c0e94076eeae"
+      "bytes": 41870,
+      "sha256": "fcfcbf2ef56cd3672f686aaa159316b3492b681197a66a0c0f788abd3e074438"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/projection-mapping.webp",
-      "bytes": 155480,
-      "sha256": "3f11decbab831b78e429d48d1af4b620bf718b1073b98a1f00efb1dd2405bfb8"
+      "bytes": 47362,
+      "sha256": "1b1eab2d455ba047f36745da93f24647eb4c7bde03a66aaaac73a1d69ac30198"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/reconciliation.webp",
-      "bytes": 159174,
-      "sha256": "db7007bbb95feab5d197924f67c6b0165b4497f089c77926b95db64b9f7c08e0"
+      "bytes": 41860,
+      "sha256": "7666344d65043422d2b7f862df1fd8a8b41880e7c27d3679892fe7d242f1887e"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/security-scanner.webp",
-      "bytes": 171854,
-      "sha256": "3f8d11df068735c78feeb6e53920e59c63f1e49de92955091d1d121cc7d7dbdd"
+      "bytes": 42352,
+      "sha256": "e1020f455641de8692792744dd72f7f907a0cd1abcba9d821c6d492f9f7d16ea"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/short-drama.webp",
-      "bytes": 199770,
-      "sha256": "b0a2fa2c28292a1bbe08f1780b3198d213ff9182a06d4011c770aac437a8b91c"
+      "bytes": 38830,
+      "sha256": "153d681c25661f014a3bf429c53119f800cf11aab619296b8e243bcf357ed2ac"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/sns-feedback-collect.webp",
-      "bytes": 63258,
-      "sha256": "866e4c1e10b6cb854581b098933dc22d2958c0e76a6b25f88ef8464366d715a6"
+      "bytes": 51262,
+      "sha256": "d11e5e1b8ab4f3cf02f67e73d2427d24d0531c06253126c1c1d2d81dc2e5af0d"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/social-post.webp",
-      "bytes": 146936,
-      "sha256": "a3322d294cc21fe4e26e60745251f27e093a03462cec2c0c844a35955473b980"
+      "bytes": 42148,
+      "sha256": "da08c1b496e892f692161a2e77a4a7492e9229c65651854d28d288cf84d38999"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/storefront.webp",
-      "bytes": 158508,
-      "sha256": "a7ef3d10d32a9155a9379f3ca36d07e862186bce31320002e0666f80abb07fda"
+      "bytes": 43862,
+      "sha256": "22f4c806c0b6f9979accd3444fe8d91a226ff27c907a767d5b1aa0720b93d519"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/story-bible.webp",
-      "bytes": 90864,
-      "sha256": "695ed0e9856f190bb7df2347926552a0e47c7b30d9d5712088fa5d2465607eb9"
+      "bytes": 50256,
+      "sha256": "6384c977ff422bffe4852a9f81c033b7b0752646fd447367d86bc7e161d12bfa"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/supplier-client.webp",
-      "bytes": 174386,
-      "sha256": "201b3a47b6798f19911c9500222e890dec466f6fe2102ac0c443337a4ff47f69"
+      "bytes": 41454,
+      "sha256": "086ca891b724ce39a09107314e80d7542f2b9cc1775b01a99f94a98dd11e4fce"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/taiwanese-english-checker.webp",
-      "bytes": 58012,
-      "sha256": "0970e22b8e9c727253cdc5143192b10331917d40b40a307051d8469a6008f15a"
+      "bytes": 48342,
+      "sha256": "4fd797167b9797b3387bdfa0110bc82360e338b676ac1ea421b341797b6daffc"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/typo-studio.webp",
-      "bytes": 131228,
-      "sha256": "a358959b4004479a0dc363cb3b257c49f00f2a1b115ba69120dd21a4b8469c5b"
+      "bytes": 42958,
+      "sha256": "b821b2c85f5ed2276bee044eaad7aa2eee12e56ea49b9daabda009a2702f4c2c"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/ultracode-token-optimization.webp",
-      "bytes": 75956,
-      "sha256": "94bdfe69a07f2290d841415e23c4beccbe89c4d737490151d5f12d9dbb256232"
+      "bytes": 56748,
+      "sha256": "54b9c894b42f8823b286be823733ee189cab06cdb0191d7fb74a31323146fd47"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/usage.webp",
-      "bytes": 46896,
-      "sha256": "1b5fea520301b3aa5efae9c7f34cd5a3771012b07f3db677588f9f0bbc3c4a13"
+      "bytes": 52422,
+      "sha256": "1c2b19e87d865509c21be7c2d53d527d44308be0bc276dab39ee193b74b8fb48"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/video-autopilot.webp",
-      "bytes": 130534,
-      "sha256": "0f1cd83730c238d77f0a049f4d8d4d78423b0bfe9c3ba0cc3c3ac0752961cddc"
+      "bytes": 41600,
+      "sha256": "66d63d4d2eead541570fcf714c1098e41fd632185093fb269f16e8aceb3fd194"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/video-to-podcast-toolkit.webp",
-      "bytes": 88768,
-      "sha256": "4e679d292ee78e19246ad2dc930ebdf64575301fdc232dff90659b0b6040d219"
+      "bytes": 49648,
+      "sha256": "b5e83e8c66108121db2ae3c26eaf97054d2c2276f461881cd35f8f75f8418c69"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/web-card-game-skill.webp",
-      "bytes": 88992,
-      "sha256": "624aea08970552be5d9c5b5b7650f59b7ac0b69928a57cd4d3ce6e6920db2608"
+      "bytes": 42932,
+      "sha256": "3041be903372d1b9ef644aa25f6951c60677d688a7f1e93c0efcf3e6c1377715"
     },
     {
       "path": "apps/portal-web/public/brand/skill-illustrations/webchat-mcp.webp",
-      "bytes": 58106,
-      "sha256": "ea5b6a99d870648d74482e3f3b7b11ab078bc0376e2d7c0dbb58e6d01143950f"
+      "bytes": 42090,
+      "sha256": "d02906fbc9538d1d0155210b4746803b6f2bf58d39d3aef2377ae54b7793054a"
     },
     {
       "path": "apps/portal-web/public/games/absurd-daily/cash.jpg",
@@ -14964,8 +14964,8 @@
     },
     {
       "path": "docs/design/skill-illustration-manifest.json",
-      "bytes": 76371,
-      "sha256": "4166b5a01f9a04ff5a1c8513c90a6279332e4f1874c0d0b5b156841ee9b243e5"
+      "bytes": 24647,
+      "sha256": "392bf4c0b9cd690b6d6b8e65986d9ad6dfb4cfe239ef4c823834860cc99c6538"
     },
     {
       "path": "docs/design/versefolk-theme-art-manifest.json",
@@ -15551,6 +15551,11 @@
       "path": "docs/development/skill-editor-guild-access.md",
       "bytes": 7878,
       "sha256": "83bbbfaf1ebcdf8ff9763eacbc081303dda91baf9673ce219a35e23ae5244027"
+    },
+    {
+      "path": "docs/development/skill-intro-pages-2026-11-03.md",
+      "bytes": 6682,
+      "sha256": "33322d10a9acd51c1e345310d3a15c8e1e4d942eb00d4baf5a3e39bc4132d86b"
     },
     {
       "path": "docs/development/social-account-language.md",
@@ -20929,8 +20934,8 @@
     },
     {
       "path": "modules/community/freedom.module.json",
-      "bytes": 12437,
-      "sha256": "ee714a08e134b55fcfc66e35d890f5e49d2a07e335b03d0a88424bdd41c9184d"
+      "bytes": 12987,
+      "sha256": "d56a133b3bb3ae3de5dc702a746995cb87e6b25fdc85c1ccc5eaf60b812ca05d"
     },
     {
       "path": "modules/community/github-history.ts",
@@ -21028,9 +21033,14 @@
       "sha256": "9d48c692c47461a43239d608946c7b13b8d8c87585c8c4f5935aa2d55c246f37"
     },
     {
+      "path": "modules/community/skill-page-content.ts",
+      "bytes": 10551,
+      "sha256": "b250d93e7666e4ed61a5d5d962480a8f81edea8fa99ab0eb5d0fcc54cec24048"
+    },
+    {
       "path": "modules/community/skill-share-content.ts",
-      "bytes": 14406,
-      "sha256": "36853592ba9247cba21127736912e249207ef3f57587b18a5a629da7951de866"
+      "bytes": 7980,
+      "sha256": "79a6d3c874a988c85df92b58f66d76bb8cf2a536af970321452d9594a5e9e1d8"
     },
     {
       "path": "modules/community/social-content.ts",
@@ -21363,6 +21373,281 @@
       "sha256": "9ac755a68f83cd4a5a5f8a08b6655c2cf3a6aa843d5e2559b9a76955d71530e4"
     },
     {
+      "path": "modules/community/skill-pages/agent-kit.json",
+      "bytes": 1061,
+      "sha256": "4c9a2b0ddb54631294cab1cc70e91d066b9569f3e55f45d2cceac93c931aa2f7"
+    },
+    {
+      "path": "modules/community/skill-pages/ai-avatar-bot.json",
+      "bytes": 1088,
+      "sha256": "d9f3f0825d66b7446c762dff8ba1a09e6fe291f43ccf8ccf61d9642f76cd07db"
+    },
+    {
+      "path": "modules/community/skill-pages/ai-manga-translator.json",
+      "bytes": 1110,
+      "sha256": "95f7e42295a0e674034f8aeecfb53339f362bc6276a915c2033ec39460a7c428"
+    },
+    {
+      "path": "modules/community/skill-pages/ai-sister.json",
+      "bytes": 1047,
+      "sha256": "995f309d66904e7c4df3d542933732bf33c6875b2c12c66f3c8ab785242d25db"
+    },
+    {
+      "path": "modules/community/skill-pages/aiwff-runtime.json",
+      "bytes": 1121,
+      "sha256": "1c5b130a828ef65926c848464941a1c8568cf2dccf0ab49c093fc808152e1e5b"
+    },
+    {
+      "path": "modules/community/skill-pages/anti-gambling-trader-tw.json",
+      "bytes": 1138,
+      "sha256": "20c1efeabcffa3fc146cbf65f8d666d91e203b4bd100202b9104569bed0cb978"
+    },
+    {
+      "path": "modules/community/skill-pages/autovtuber.json",
+      "bytes": 1141,
+      "sha256": "d83be89f90bddfab4fcc991b5f4f2ff50be544ce28af4741c47848d92e28a148"
+    },
+    {
+      "path": "modules/community/skill-pages/bidding-radar-concept.json",
+      "bytes": 1062,
+      "sha256": "6c8fdd4df303ab19869ad9e93411496de543209c2f9d810d6d56a571835b5334"
+    },
+    {
+      "path": "modules/community/skill-pages/career-guide.json",
+      "bytes": 996,
+      "sha256": "17e39318ced5555fcca38214d6964518b805bbbd2400b382e5f1dcf62ad7cd1f"
+    },
+    {
+      "path": "modules/community/skill-pages/coding-audit-harness.json",
+      "bytes": 1072,
+      "sha256": "9250c6f25d4cfbaa20e5895810a7e832fb73a337e1f1845d22a640fa3dafa586"
+    },
+    {
+      "path": "modules/community/skill-pages/commercial-production.json",
+      "bytes": 1033,
+      "sha256": "539ee36daaf88fca4e49f9e6aae80d9a95a0dc009cd1d6b47b8638e666f736aa"
+    },
+    {
+      "path": "modules/community/skill-pages/community-ops.json",
+      "bytes": 1038,
+      "sha256": "92e457662c474e20ca8c9fa9d3d26dfbef497c7456da7c7063cc4b51661d6ba1"
+    },
+    {
+      "path": "modules/community/skill-pages/editkin.json",
+      "bytes": 1103,
+      "sha256": "09077ce5357a14ad62266a5258de483724d7a7ca20f6b1866d1f6493542166ef"
+    },
+    {
+      "path": "modules/community/skill-pages/event-space.json",
+      "bytes": 1031,
+      "sha256": "c65b797457f8670d4f8d0317f8f1f61ee189f97e1916c012ac6c7062ecc03de9"
+    },
+    {
+      "path": "modules/community/skill-pages/freedom-party-guild-lounge.json",
+      "bytes": 1115,
+      "sha256": "26224756bc9384daa5ad5446565957b6a014a29c8698ddb840e53ee1891cbf84"
+    },
+    {
+      "path": "modules/community/skill-pages/ga4-lp-analytics.json",
+      "bytes": 1058,
+      "sha256": "3b7a7a44497873294918ac5d5538b3f206edead2c9f3f6942c19309535e3097e"
+    },
+    {
+      "path": "modules/community/skill-pages/gemini-voice-lab.json",
+      "bytes": 1105,
+      "sha256": "331aa0075480b99eab8a4ac25e0712e8137b4e4a42250827d41c71c98edcd934"
+    },
+    {
+      "path": "modules/community/skill-pages/hao-studio.json",
+      "bytes": 1066,
+      "sha256": "12049627dc196fbc8f551bf3e22d6a3dfc2089ac083aaae78b32e2764c2efd80"
+    },
+    {
+      "path": "modules/community/skill-pages/hdsljp-api.json",
+      "bytes": 1049,
+      "sha256": "7f5619125282edf4e9801369ab58db489027a4e8469d8027444d2ad07c3c3ab0"
+    },
+    {
+      "path": "modules/community/skill-pages/hrflow.json",
+      "bytes": 1112,
+      "sha256": "49b15cf9284c78484c0db30cae5c272f126e93d3b0382de87412af6992f994da"
+    },
+    {
+      "path": "modules/community/skill-pages/human-design.json",
+      "bytes": 1101,
+      "sha256": "806901c23663f1f4fb4d33b3bcf3ee053d3561b37659ef12a1c70a0e7ec400c2"
+    },
+    {
+      "path": "modules/community/skill-pages/human-mode.json",
+      "bytes": 1058,
+      "sha256": "71911244cc2479d7871214f21b7f82e56c0944f2d6cc9a6d9cc62e831b3cb0da"
+    },
+    {
+      "path": "modules/community/skill-pages/keynote-pptx-doctor.json",
+      "bytes": 1037,
+      "sha256": "b4227faf6b58dc3a39d74f98e8bc1fbba62645831df553fdd5c74f0372255819"
+    },
+    {
+      "path": "modules/community/skill-pages/line-persona.json",
+      "bytes": 1107,
+      "sha256": "4fe5248e0168b02eddd571f86027e881b8a8a063b65062c39970ef59b4301abd"
+    },
+    {
+      "path": "modules/community/skill-pages/local-workspace-mcp.json",
+      "bytes": 1058,
+      "sha256": "f020a65bd8c040b8d6fa555b549472cc936fdd65e72e393eebd7dec4ed3ddaab"
+    },
+    {
+      "path": "modules/community/skill-pages/media-generator.json",
+      "bytes": 1026,
+      "sha256": "be74538680c2fc43e31511e9b77f6ef4b4643b93e2be1212cc8b386cd6064351"
+    },
+    {
+      "path": "modules/community/skill-pages/multi-ai-chat.json",
+      "bytes": 1008,
+      "sha256": "bcb3d268638f2df5e7e57716921330f25566888f98ff70fd8235cd6ad6cdda03"
+    },
+    {
+      "path": "modules/community/skill-pages/multi-ai-desktop.json",
+      "bytes": 1053,
+      "sha256": "91c8155574fc9017797ec2d434fcfcfc219218dc7e0a4dbf470aa12693d5c176"
+    },
+    {
+      "path": "modules/community/skill-pages/music-mv.json",
+      "bytes": 950,
+      "sha256": "df80257b622f2c4dd5072a4e7857b9fe6dc443ddee16bd92fbbbf8bc80e49d3c"
+    },
+    {
+      "path": "modules/community/skill-pages/n8n-marketing-flows.json",
+      "bytes": 1019,
+      "sha256": "e20b0cedb2334b64a98ad4340d972e7c7174b3666ca08b9483560ba87606477c"
+    },
+    {
+      "path": "modules/community/skill-pages/open-seo-advisor.json",
+      "bytes": 1072,
+      "sha256": "8d4821a6d74e148d24996acb608416488818da8744e2ba13607a5ddf666a95b3"
+    },
+    {
+      "path": "modules/community/skill-pages/partnership.json",
+      "bytes": 1034,
+      "sha256": "acd9215fb8889b3db46a79437699967f02ff89056380f9dfb5a0603295920410"
+    },
+    {
+      "path": "modules/community/skill-pages/photo-border-remover.json",
+      "bytes": 976,
+      "sha256": "36a1ae4436f57ec86f684aeb1ff4c2d3c2d4751813a68690c5f39ec3980cbdc5"
+    },
+    {
+      "path": "modules/community/skill-pages/pos-pro.json",
+      "bytes": 1045,
+      "sha256": "5b1de4e09a3a290c5f144c7fbbf8446c3c485615c893128353ab4b9ec3d7b22d"
+    },
+    {
+      "path": "modules/community/skill-pages/positioning-companion.json",
+      "bytes": 1065,
+      "sha256": "8a7c2b60454e858375176cbc72ec8c26e378dde9dac512db2beac5dd8f1d75ce"
+    },
+    {
+      "path": "modules/community/skill-pages/project-delivery.json",
+      "bytes": 986,
+      "sha256": "b6fe6b142e3e2f320cbc872aa2a513ec8baaeaef7f57b29b950c117d36ef48b9"
+    },
+    {
+      "path": "modules/community/skill-pages/project-hub.json",
+      "bytes": 1160,
+      "sha256": "b70fa8fc7dd246f82bf7d2c84e2d4d72826bfc5711935cbe03e60aae11468cb9"
+    },
+    {
+      "path": "modules/community/skill-pages/project-template.json",
+      "bytes": 943,
+      "sha256": "e363397cd1856abf82200e09f9421ff7a8b88af40c3a7c7b3a37a52be9c95d19"
+    },
+    {
+      "path": "modules/community/skill-pages/projection-mapping.json",
+      "bytes": 1071,
+      "sha256": "b604a999639f6a6beca2635e1a3134cb270095a9fd2470c5dc0ae8cdc101601c"
+    },
+    {
+      "path": "modules/community/skill-pages/reconciliation.json",
+      "bytes": 1024,
+      "sha256": "584d13fb7807e4c4ad50057877dc59707c36cbb2707598f7fde253aee7f6501b"
+    },
+    {
+      "path": "modules/community/skill-pages/security-scanner.json",
+      "bytes": 1075,
+      "sha256": "c1e61c2b6056749d58856b6ebf1039f0055a60ef3eab4d830a7e58d1b54b7129"
+    },
+    {
+      "path": "modules/community/skill-pages/short-drama.json",
+      "bytes": 1109,
+      "sha256": "10fd7376252b141022e19c9f57445b24911110ddfc1376341260d7f9dd7dd229"
+    },
+    {
+      "path": "modules/community/skill-pages/sns-feedback-collect.json",
+      "bytes": 1032,
+      "sha256": "78d6d86b2755f80f406580fa7c31872e45a933915c2105bed2c405ec69a11289"
+    },
+    {
+      "path": "modules/community/skill-pages/social-post.json",
+      "bytes": 1007,
+      "sha256": "8609cfc247121bd0021324e1a53fafcc2af9fca9c08c146c907d7f7befc1e789"
+    },
+    {
+      "path": "modules/community/skill-pages/storefront.json",
+      "bytes": 1041,
+      "sha256": "4f2931f202404609798fe50f6903128d12afa9707c9e6f4a13af0241141a9c4f"
+    },
+    {
+      "path": "modules/community/skill-pages/story-bible.json",
+      "bytes": 1061,
+      "sha256": "23f18bd24114ebfc0b0b07e5ed912272a5f4c44837592c8142180cf8b4d5a4c3"
+    },
+    {
+      "path": "modules/community/skill-pages/supplier-client.json",
+      "bytes": 1018,
+      "sha256": "5fbbad6060e7ba0eda97f46b47faac6f587c94893597b8078cb8246006296008"
+    },
+    {
+      "path": "modules/community/skill-pages/taiwanese-english-checker.json",
+      "bytes": 939,
+      "sha256": "16dc38fdc21e926072318fb108989df7b0090e3c4138b174b369ba40fea6a745"
+    },
+    {
+      "path": "modules/community/skill-pages/typo-studio.json",
+      "bytes": 1082,
+      "sha256": "891fd2c811dc139a3e6bec8c1ea3249813bbeef22190468c31f5200e552d1722"
+    },
+    {
+      "path": "modules/community/skill-pages/ultracode-token-optimization.json",
+      "bytes": 1086,
+      "sha256": "44854d306675143055015da3948864ef36d86379afe5f3a474bf6c1a4ed9b494"
+    },
+    {
+      "path": "modules/community/skill-pages/usage.json",
+      "bytes": 1076,
+      "sha256": "b34f3e02f174931aca7ed1a5ba6d54ac2dde78526612fc8be84323c2bf6759cc"
+    },
+    {
+      "path": "modules/community/skill-pages/video-autopilot.json",
+      "bytes": 1071,
+      "sha256": "4fb0915222b1d47c3d0ef818a7992f1167ff773083dd68ffcd881ce3e8ecb554"
+    },
+    {
+      "path": "modules/community/skill-pages/video-to-podcast-toolkit.json",
+      "bytes": 1119,
+      "sha256": "5008153d34e915f1f5cafcc4b79ca44824e22eede057f61371fa3c0051b7495b"
+    },
+    {
+      "path": "modules/community/skill-pages/web-card-game-skill.json",
+      "bytes": 1011,
+      "sha256": "c1f2cf9d4cbdb1f6c95d8bdeb612e7560ad0c25e3bff10a4033397e5a10a63f3"
+    },
+    {
+      "path": "modules/community/skill-pages/webchat-mcp.json",
+      "bytes": 1073,
+      "sha256": "19c4282d8b76f5d8ba219caaed10243c4b0d9e5a9abe9d1a8560f8714ac007ca"
+    },
+    {
       "path": "modules/community/social-feed/freedom.module.json",
       "bytes": 3709,
       "sha256": "cb88923b534ecd8f249755354f76a1009c2b0ba8a6a7939b71db655a7816dccf"
@@ -21454,8 +21739,8 @@
     },
     {
       "path": "modules/development/freedom.module.json",
-      "bytes": 4617,
-      "sha256": "2aae85a959eb1028049dbf0b1a49f56ec0fff0ebd345284308fe214bc707eab8"
+      "bytes": 3813,
+      "sha256": "4964ea50eedcb760b0ed36506c6c616280d3854c4a0ca15447ab32d8c4c3ee3c"
     },
     {
       "path": "modules/development/page-github.ts",
@@ -21469,13 +21754,28 @@
     },
     {
       "path": "modules/development/service.ts",
-      "bytes": 50600,
-      "sha256": "817ba5e0aae632493d75f29d59db5b492426dc63258fb0c8717270211aebfadb"
+      "bytes": 53670,
+      "sha256": "dc3686cbdceca1380285827cda1426f42d066d3b6bcdaa8cd6092255627bd98e"
     },
     {
       "path": "modules/development/skill-acquisition.ts",
       "bytes": 2861,
       "sha256": "da4f93971335378942d941316cf7ab4ccd8fcc404807bc42849ff73951d48a62"
+    },
+    {
+      "path": "modules/development/skill-flow.ts",
+      "bytes": 16108,
+      "sha256": "c04196774ede345eedd19c4be681bfbbba5c726552d62dff0bfac6a3e9729f10"
+    },
+    {
+      "path": "modules/development/skill-page.ts",
+      "bytes": 28052,
+      "sha256": "de43f0a668d5f425db6429519eacd59fdbadf6442ac51888f6a3a650b81a19d8"
+    },
+    {
+      "path": "modules/development/skill-share-card.ts",
+      "bytes": 5192,
+      "sha256": "6745c78a0a47a64441b62fc8cb4fa29ea32702f370f20ac16fcf564bcf0a8179"
     },
     {
       "path": "modules/development-access/freedom.module.json",
@@ -23846,6 +24146,11 @@
       "path": "scripts/release-source-archive.py",
       "bytes": 19827,
       "sha256": "f13bfd9ac00e5e205c5c7666f8655d220ecc4bcce8a9fdef402ed3ee1bd56644"
+    },
+    {
+      "path": "scripts/render-skill-share-cards.ts",
+      "bytes": 4289,
+      "sha256": "f537737384faf217e75808766d233c58660313319b65cb5a07bcfc95dd1fdebe"
     },
     {
       "path": "scripts/run-e2e.mjs",
@@ -26819,13 +27124,13 @@
     },
     {
       "path": "tests/runtime/member-shared-skill-books-2026-11-03.test.ts",
-      "bytes": 10606,
-      "sha256": "8a8c04e00609baba415f5c1779a36d2f83b74bae91f82fd9300cb9eb4bda350b"
+      "bytes": 11021,
+      "sha256": "1f3cba55db42607695efae1a68d39f733c686d2c842b923491ed57d5ac55c287"
     },
     {
       "path": "tests/runtime/member-shared-skill-books.test.ts",
-      "bytes": 11197,
-      "sha256": "a312c1d051fd89291c59b2fcf4e09d627024ce1a84155747a0e4c7da9463b819"
+      "bytes": 11626,
+      "sha256": "4dd98d52eabbb7403a70f7adfa528d25c8a626f4ff1fc7b146193a5105139f83"
     },
     {
       "path": "tests/runtime/member-skill-registration.test.ts",
@@ -27498,14 +27803,19 @@
       "sha256": "08ebd9487e1614d113069447e81d5a0557ca4da3114b0514ca9b6a5a171579b7"
     },
     {
+      "path": "tests/runtime/skill-pages.test.ts",
+      "bytes": 8852,
+      "sha256": "d236098f284d08b1b730fa797dff19143cfc7dec71a48c589c7d72a8d1610eb4"
+    },
+    {
       "path": "tests/runtime/skill-share-content.test.ts",
       "bytes": 3062,
       "sha256": "a7c5bb5f1f12b8959845eabb088b7d6ecb7a012ce09784ccd00c61afe5915f6a"
     },
     {
       "path": "tests/runtime/skill-sharing.test.ts",
-      "bytes": 16037,
-      "sha256": "60de9eaad9a5e9af490962010449032b6c87cc72c9ee24c06bdade83fc02f67d"
+      "bytes": 18219,
+      "sha256": "639c1c5b100efddb3b64cc1d4175abb1776e60bb8e7082624abc38077933c719"
     },
     {
       "path": "tests/runtime/skill-submission-upgrades.test.ts",

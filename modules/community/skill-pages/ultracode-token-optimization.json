@@ -1,0 +1,14 @@
+{
+  "headline": "誰決策、誰動手、誰審查，先寫清楚再開跑。",
+  "outcomes": ["標明三種角色的 Workflow 草案", "每次交接的短摘要與完成證據", "runtime 差異與用量比較方式"],
+  "flow": {
+    "title": "三種角色分工，用短摘要交接",
+    "lead": "MIT 文字規則 Skill，沒有執行引擎或 token 硬上限，也不保證固定節省率；需自備 Claude Code／Ultracode Workflow。",
+    "steps": [
+      {"icon": "search", "title": "核對 runtime", "note": "對照 SKILL.md，列出自己環境可用的 agentType 與模型。"},
+      {"icon": "people", "title": "決策、執行、審查分開", "note": "orchestrator 決策、executor 執行、reviewer 審查，避免角色越權造成重工。"},
+      {"icon": "check", "title": "交接附完成證據", "note": "用短摘要交接、保留完成證據；搭配 SKILL.md 的 16 項規則與提交前自檢表。"}
+    ],
+    "caption": "agentType、模型名稱與 budget 行為依作者環境：逐項對照自己的 runtime，不要直接照抄模型配置。"
+  }
+}

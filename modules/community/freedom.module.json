@@ -26,6 +26,8 @@
     "modules/community/skill-book-guides.ts",
     "modules/community/skill-collaboration.ts",
     "modules/community/skill-share-content.ts",
+    "modules/community/skill-page-content.ts",
+    "modules/community/skill-pages/**",
     "modules/community/social-posts.ts",
     "modules/community/share-introductions/**",
     "apps/platform-api/src/routes/community-events.ts",

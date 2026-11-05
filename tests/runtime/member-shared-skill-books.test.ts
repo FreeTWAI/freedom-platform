@@ -16,6 +16,7 @@ import {trackedGitHubRepositories} from '../../modules/community/github-sync.js'
 import {catalogMetricTargets} from '../../modules/github-social/service.js';
 import {memberAuthorClaim,PUBLIC_AUTHOR_CLAIM_SQL} from '../../modules/community/repo-author-claims.js';
 import {SkillBookSourceAccount} from '../../apps/portal-web/src/modules/SkillBookCover.js';
+import {skillShareCardSource} from '../../modules/development/skill-share-card.js';
 
 const expected=[
   ["hrflow", "tesdano-crypto/HRSystem-OpenSource", "a60cd7b14d25b5a8ab90574247e48a4b4038b11c", "Shiang", "author", "Apache-2.0"],
@@ -134,7 +135,7 @@ test('catalog matching supplies all twelve repositories to the published-list SQ
   assert.deepEqual(await listPublishedSkillSubmissions(pool,1),[]);assert.equal(calls,1);
 });
 
-test('new book art is exact-size WebP and matches the recorded prompts and SHA-256 manifests',async()=>{
+test('new book art is exact-size WebP; covers match their prompts and share cards their rendered source in the SHA-256 manifests',async()=>{
   const hashes=new Set<string>();
   for(const [manifestPath,width,height] of [
     ['docs/design/skill-book-art-manifest.json',768,512],
@@ -148,7 +149,9 @@ test('new book art is exact-size WebP and matches the recorded prompts and SHA-2
       assert.equal(metadata.format,'webp');assert.equal(metadata.width,width);assert.equal(metadata.height,height);
       assert.equal(entry.width,width);assert.equal(entry.height,height);assert.equal(entry.bytes,bytes.length);
       assert.equal(entry.sha256,createHash('sha256').update(bytes).digest('hex'));assert.ok(!hashes.has(entry.sha256));hashes.add(entry.sha256);
-      assert.equal(entry.mode,'builtin-imagegen');assert.equal(entry.generated_at,'2026-10-20');assert.ok(entry.prompt.length>100);
+      // Covers are generated art; share images are rendered from the page content, so their source hash is the provenance.
+      if(width===768){assert.equal(entry.mode,'builtin-imagegen');assert.equal(entry.generated_at,'2026-10-20');assert.ok(entry.prompt.length>100);}
+      else{assert.equal(entry.mode,'rendered-share-card');assert.equal(entry.source_sha256,createHash('sha256').update(skillShareCardSource(id)!.html).digest('hex'));}
     }
   }
   assert.equal(hashes.size,24);
