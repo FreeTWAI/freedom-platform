@@ -16,6 +16,8 @@
 
 2026-10-30 發布前的來源觀察：main 已含活動幫手候選 migration195 與私人自記小任務候選 migration196，當時僅確認 repository 來源上限，尚未套用。此觀察已由10/30兩環境成功發布取代；195／196 已套用為資料表，不表示啟用幫手功能或其他新旗標。
 
+10/30 發布後 main 另含社群會員報名政策候選 migration197；只更新 repository 來源上限，截至本紀錄兩環境仍是 schema196，不表示已套用 197 或啟用報名政策。
+
 2026-10-29 10:23 UTC 歷史紀錄（已於10/30結清）：staging 的 `5d662e6e`／schema194 發布回報 preflight、migration、deploy、health 通過，最後 handoff 因 `release_lease_lost` 失敗；journal pending 與 lease 釋放尚未持鎖讀回確認。正式站仍是 `5c4bf56d`，公開 health 回報正常。沒有重送部署或啟動新版正式站；旗標、M1／完整驗收及原政策列觀察不變。詳見[本次失敗收據與待辦](../unified-foundation/rollout-main-5d662e6e-2026-10-29.json)。
 
 2026-10-29 歷史：兩環境當時已套用 migration190–194；`repo_max_migration` 是來源上限，`applied_migration` 是具日期的實際套用觀察。資料表發布不代表啟用 Google 登入或其他新功能。
