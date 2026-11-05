@@ -54,6 +54,8 @@
     "tests/e2e/chat-sticker-keyboard.spec.ts",
     "apps/portal-web/src/modules/ChatWorkspace.css",
     "apps/portal-web/src/modules/MemberChannels.tsx",
+    "tests/runtime/channel-search-empty.test.ts",
+    "tests/e2e/channel-search-empty.spec.ts",
     "migrations/150_message_retraction.sql",
     "modules/member-communications/channel-types.ts",
     "modules/member-communications/content.ts",
