@@ -471,7 +471,9 @@ test('database enforces composite identity, finite versions and immutable identi
 
 test('populated schema199 upgrades to 200 without backfilling attendance or changing historical SQL/ledger/data', async () => {
   const upgradeSchema = `${schema}_upgrade`, oldPool = new Pool({connectionString: databaseUrl, options: `-c search_path=${upgradeSchema}`, max: 2}); let created = false;
-  const sources = readMigrationSources(fileURLToPath(new URL('../../migrations/', import.meta.url)));
+  // This historical upgrade isolates 199 → 200; later migrations have their own fixtures.
+  const sources = readMigrationSources(fileURLToPath(new URL('../../migrations/', import.meta.url)))
+    .filter((source: {name: string}) => Number(source.name.slice(0, 3)) <= 200);
   const historical = sources.filter((source: {name: string}) => Number(source.name.slice(0, 3)) <= 199);
   const profile = legacyMigrationProfile({first: 1, last: 199, known_gaps: [22]});
   // This upgrade fixture is self-contained in a shallow checkout. Preserve
