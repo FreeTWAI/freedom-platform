@@ -572,3 +572,89 @@ test('badges, chips and placeholders stay readable in light, dark and versefolk'
     }
   }
 });
+
+// Read-only transport schedules through the real signed-in App. These responses
+// prove list recovery/lifetime, not server permissions or persisted activity facts.
+function listCard(title: string, mode: 'online' | 'in_person' = 'online', id = ONLINE) {
+  return {event_id: id, title, starts_at: '2026-01-01T16:00:00Z', ends_at: '2026-01-01T17:00:00Z', mode,
+    event_kind: 'other', organizer_name: '合成主辦', attending_count: 0, public_path: `/highlights/${id}`,
+    cover: null, counts: {links: 0, photos: 0, posters: 0}};
+}
+async function controlledList(page: Page) {
+  const reads: import('@playwright/test').Route[] = [], writes: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.startsWith('/api/v1/event-highlights') && request.method() !== 'GET') writes.push(request.method());
+  });
+  await page.route(url => url.pathname === '/api/v1/event-highlights', route => {reads.push(route);});
+  async function reply(index: number, items: ReturnType<typeof listCard>[], cursor: string | null = null, status = 200) {
+    const route = reads[index];
+    await route.fulfill({status, contentType: 'application/json', body: JSON.stringify(status === 200 ? {items, next_cursor: cursor} : {detail: '合成集錦讀取失敗'})});
+    const response = await route.request().response(); if (response) await response.finished();
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  }
+  return {reads, writes, reply, count: async (count: number) => {await expect.poll(() => reads.length).toBe(count);}};
+}
+
+test('list filter round trips reject late first pages and pagination responses', async ({page}) => {
+  await page.setViewportSize({width: 1280, height: 900}); await login(page);
+  const h = await controlledList(page); await openHighlights(page); await h.count(1);
+  const panel = page.locator('.hl-panel'), cards = panel.locator('.hl-grid article');
+  const choose = (name: string) => panel.getByRole('button', {name, exact: true}).click();
+  await expect(panel.getByRole('status')).toHaveText('正在載入活動集錦…');
+  await choose('線上'); await h.count(2); await h.reply(1, [listCard('目前線上')], 'online-page2');
+  await h.reply(0, [listCard('舊全部', 'in_person', GUILD)], 'all-page2');
+  await expect(cards).toHaveCount(1); await expect(cards.first()).toHaveAttribute('aria-label', '目前線上');
+  await choose('載入更多'); await h.count(3);
+  expect(new URL(h.reads[2].request().url()).searchParams.get('cursor')).toBe('online-page2');
+  await choose('全部'); await h.count(4); await expect(cards).toHaveCount(0);
+  await choose('線上'); await h.count(5); await choose('全部'); await h.count(6);
+  await h.reply(5, [listCard('新全部')], 'new-all-page2');
+  await h.reply(3, [listCard('過期全部')], 'stale-page2');
+  await h.reply(4, [], null, 503); await h.reply(2, [listCard('舊線上續頁')], 'stale-page3');
+  await expect(cards).toHaveCount(1); await expect(cards.first()).toHaveAttribute('aria-label', '新全部');
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  await choose('載入更多'); await h.count(7);
+  expect(new URL(h.reads[6].request().url()).searchParams.get('cursor')).toBe('new-all-page2');
+  await choose('線上'); await h.count(8); await h.reply(6, [], null, 503);
+  await expect(panel.getByRole('status')).toHaveText('正在載入活動集錦…');
+  await expect(panel.getByRole('alert')).toHaveCount(0); await h.reply(7, [listCard('最後線上')]);
+  await expect(cards.first()).toHaveAttribute('aria-label', '最後線上'); expect(h.writes).toEqual([]);
+});
+
+test('list retries first and next pages without false empty results or duplicate clicks', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844}); await login(page);
+  const h = await controlledList(page); await openHighlights(page); await h.count(1);
+  const panel = page.locator('.hl-panel'), cards = panel.locator('.hl-grid article');
+  await h.reply(0, [], null, 503); await expect(panel.getByRole('alert')).toHaveText('服務暫時無法回應（503）。請稍後重試。');
+  await expect(panel.locator('.hl-empty')).toHaveCount(0);
+  const retry = panel.getByRole('button', {name: '重試載入', exact: true});
+  expect(await retry.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await retry.focus(); await page.keyboard.press('Enter'); await h.count(2);
+  expect(h.reads[1].request().url()).toBe(h.reads[0].request().url());
+  await h.reply(1, [listCard('第一頁')], 'page+/= 2');
+  const more = panel.getByRole('button', {name: '載入更多', exact: true});
+  await more.evaluate(element => {const button = element as HTMLButtonElement; button.click(); button.click();});
+  await h.count(3); await expect(more).toBeDisabled(); await expect(cards).toHaveCount(1);
+  await h.reply(2, [], null, 503); await expect(cards.first()).toHaveAttribute('aria-label', '第一頁');
+  await expect(panel.locator('.hl-empty')).toHaveCount(0); await noOverflow(page, 'list retry 390');
+  await retry.click(); await h.count(4); expect(h.reads[3].request().url()).toBe(h.reads[2].request().url());
+  expect(new URL(h.reads[3].request().url()).searchParams.get('cursor')).toBe('page+/= 2');
+  await h.reply(3, [listCard('第二頁', 'in_person', GUILD)]); await expect(cards).toHaveCount(2);
+  await expect(panel.getByRole('alert')).toHaveCount(0); await expect(more).toHaveCount(0);
+  await panel.getByRole('button', {name: '實體', exact: true}).click(); await h.count(5);
+  await expect(cards).toHaveCount(0); await expect(panel.locator('.hl-empty')).toHaveCount(0);
+  await h.reply(4, []); await expect(panel.locator('.hl-empty')).toBeVisible(); expect(h.writes).toEqual([]);
+});
+
+test('leaving and reopening the list discards old reads while card detail navigation still works', async ({page}) => {
+  await login(page); const h = await controlledList(page); await openHighlights(page); await h.count(1);
+  await navigate(page, '社群分享'); await openHighlights(page); await h.count(2);
+  await h.reply(1, [listCard('重新進入的活動')]); await h.reply(0, [listCard('離開前的活動')]);
+  const cards = page.locator('.hl-grid article'); await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toHaveAttribute('aria-label', '重新進入的活動');
+  await cards.first().getByRole('link', {name: '重新進入的活動', exact: true}).click();
+  await expect(page.getByRole('heading', {name: '線上分享回顧', level: 2})).toBeVisible();
+  await page.getByRole('link', {name: '返回活動集錦', exact: true}).click(); await h.count(3);
+  await h.reply(2, [listCard('詳情返回的活動')]); await expect(cards.first()).toHaveAttribute('aria-label', '詳情返回的活動');
+  expect(h.writes).toEqual([]);
+});
