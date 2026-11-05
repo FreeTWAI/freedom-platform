@@ -93,7 +93,7 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   assert.ok(start>=0&&end>start);
   let confirms=0;
   const context:any={
-    leaveGuard:{current:null},helperBlocked:{current:true},missionBlocked:{current:false},attendanceBlocked:{current:false},participationPending:{current:new Set<()=>boolean>()},
+    photoWork:{current:{pending:false,dirty:false,refreshing:false}},leaveGuard:{current:null},helperBlocked:{current:true},missionBlocked:{current:false},attendanceBlocked:{current:false},participationPending:{current:new Set<()=>boolean>()},
     saving:false,busy:false,mediaUnknown:false,lastFailureUnknown:false,dirty:false,
     setNotice:()=>{},window:{confirm:()=>{confirms++;return false;}},
   };
@@ -114,7 +114,7 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   assert.equal(context.leaveGuard.current(),true);
   const from=parent.indexOf('    const beforeUnload=');
   const to=parent.indexOf('\n',from);assert.ok(from>=0&&to>from);
-  const unloadContext={unloading:{current:false},helperBlocked:{current:true},missionBlocked:{current:false},attendanceBlocked:{current:false},participationPending:{current:new Set<()=>boolean>()}};
+  const unloadContext={photoWork:{current:{pending:false,dirty:false,refreshing:false}},unloading:{current:false},helperBlocked:{current:true},missionBlocked:{current:false},attendanceBlocked:{current:false},participationPending:{current:new Set<()=>boolean>()}};
   const guard=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.guard=beforeUnload',{loader:'tsx'}).code+';guard',unloadContext);
   const attempt=()=>{
     let prevented=false;
@@ -132,6 +132,11 @@ test('actual parent departure and beforeunload guards preserve unknown helper/mi
   assert.deepEqual(attempt(),{prevented:true,returnValue:''});
   unloadContext.participationPending.current.delete(participation);
   assert.deepEqual(attempt(),{prevented:false,returnValue:undefined});
+  context.photoWork.current.pending=true;assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,1);
+  context.photoWork.current.pending=false;context.photoWork.current.dirty=true;assert.equal(context.leaveGuard.current(),false);assert.equal(confirms,2);
+  unloadContext.photoWork.current.pending=true;assert.deepEqual(attempt(),{prevented:true,returnValue:''});
+  unloadContext.photoWork.current.pending=false;unloadContext.photoWork.current.dirty=true;assert.deepEqual(attempt(),{prevented:true,returnValue:''});
+  unloadContext.photoWork.current.dirty=false;assert.deepEqual(attempt(),{prevented:false,returnValue:undefined});
 });
 
 test('hidden private helper data is cleared and visibility/focus require a fresh authorized read',async()=>{
@@ -168,7 +173,7 @@ test('actual review handler freezes intent and shared decoder transport retains 
   const requests:any[]=[],state:any={keys:new Map(),snapshot:{busy:false,error:null,lastFailureUnknown:false},listeners:new Set(),live:()=>true};
   const client={post:(path:string,body:any,options:any)=>new Promise((resolve,reject)=>requests.push({path,body,options,resolve,reject}))};
   let loads=0;
-  const context:any={saving:false,recoveringSave:false,recoveringAction:false,mediaUnknown:false,actionAttempt:{current:null},saveAttempt:{current:null},reviewAttempt:{current:null},reviewReason:'original reason',setNotice:()=>{},setReviewing:()=>{},setReviewReason:()=>{},announceInboxChange:()=>{},window:{dispatchEvent:()=>{}},Event:class{},load:async()=>loads++,mutate:(...args:any[])=>module.exports.performModuleMutation(client,state,...args)};
+  const context:any={photoLocked:()=>false,saving:false,recoveringSave:false,recoveringAction:false,mediaUnknown:false,actionAttempt:{current:null},saveAttempt:{current:null},reviewAttempt:{current:null},reviewReason:'original reason',setNotice:()=>{},setReviewing:()=>{},setReviewReason:()=>{},announceInboxChange:()=>{},window:{dispatchEvent:()=>{}},Event:class{},load:async()=>loads++,mutate:(...args:any[])=>module.exports.performModuleMutation(client,state,...args)};
   Object.defineProperty(context,'busy',{get:()=>state.snapshot.busy});Object.defineProperty(context,'lastFailureUnknown',{get:()=>state.snapshot.lastFailureUnknown});
   const from=parent.indexOf('  async function review('),to=parent.indexOf('  async function share(',from);assert.ok(from>=0&&to>from);
   const review=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.review=review',{loader:'tsx'}).code+';review',context);
@@ -184,7 +189,7 @@ for(const kind of ['rsvp','cancel'] as const)for(const status of [403,412])test(
   const requests:any[]=[],state:any={keys:new Map(),snapshot:{busy:false,error:null,lastFailureUnknown:false},listeners:new Set(),live:()=>true};
   const client={post:(path:string,body:any,options:any)=>new Promise((resolve,reject)=>requests.push({path,body,options,resolve,reject}))};
   let loads=0;
-  const context:any={saving:false,recoveringSave:false,recoveringReview:false,mediaUnknown:false,actionAttempt:{current:null},saveAttempt:{current:null},reviewAttempt:{current:null},reviewReason:'review',setNotice:()=>{},setReviewing:()=>{},setReviewReason:()=>{},announceInboxChange:()=>{},window:{dispatchEvent:()=>{}},Event:class{},referralCode:()=> 'original-code',load:async()=>loads++,mutate:(...args:any[])=>module.exports.performModuleMutation(client,state,...args)};
+  const context:any={photoLocked:()=>false,saving:false,recoveringSave:false,recoveringReview:false,mediaUnknown:false,actionAttempt:{current:null},saveAttempt:{current:null},reviewAttempt:{current:null},reviewReason:'review',setNotice:()=>{},setReviewing:()=>{},setReviewReason:()=>{},announceInboxChange:()=>{},window:{dispatchEvent:()=>{}},Event:class{},referralCode:()=> 'original-code',load:async()=>loads++,mutate:(...args:any[])=>module.exports.performModuleMutation(client,state,...args)};
   Object.defineProperty(context,'busy',{get:()=>state.snapshot.busy});Object.defineProperty(context,'lastFailureUnknown',{get:()=>state.snapshot.lastFailureUnknown});Object.defineProperty(context,'recoveringAction',{get:()=>state.snapshot.lastFailureUnknown&&context.actionAttempt.current!==null});
   const from=parent.indexOf('  async function sendEventAction('),to=parent.indexOf('  async function share(',from);assert.ok(from>=0&&to>from);
   const functions=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.handlers={action,sendEventAction,review}',{loader:'tsx'}).code+';handlers',context);
@@ -197,13 +202,13 @@ test('metadata and media-removal handlers refuse to clear another unknown action
   for(const recovering of ['recoveringAction','recoveringReview'])for(const [from,to] of [['  async function removeBanner(','  async function removeVideo('],['  async function removeVideo(','  async function sendEventAction(']]){
     const start=parent.indexOf(from),end=parent.indexOf(to,start);assert.ok(start>=0&&end>start);
     const name=from.match(/function (\w+)/)![1];let writes=0;
-    const fn=runInNewContext(transformSync(parent.slice(start,end)+`;globalThis.handler=${name}`,{loader:'tsx'}).code+';handler',{actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null},saving:false,busy:false,recoveringSave:false,recoveringAction:recovering==='recoveringAction',recoveringReview:recovering==='recoveringReview',mediaUnknown:false,setNotice:()=>{},client:{post:()=>writes++}});
+    const fn=runInNewContext(transformSync(parent.slice(start,end)+`;globalThis.handler=${name}`,{loader:'tsx'}).code+';handler',{photoLocked:()=>false,actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null},saving:false,busy:false,recoveringSave:false,recoveringAction:recovering==='recoveringAction',recoveringReview:recovering==='recoveringReview',mediaUnknown:false,setNotice:()=>{},client:{post:()=>writes++}});
     await fn({event_id:'event-a',aggregate_version:1});assert.equal(writes,0);
   }
 });
 
 test('same-render RSVP then cancel cannot replace the pending ref before React updates busy',async()=>{
-  const requests:any[]=[],context:any={saving:false,busy:false,lastFailureUnknown:false,mediaUnknown:false,actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null},setNotice:()=>{},referralCode:()=> 'original-code',sendEventAction:(attempt:any)=>{requests.push(attempt);return new Promise(()=>{});}};
+  const requests:any[]=[],context:any={photoLocked:()=>false,saving:false,busy:false,lastFailureUnknown:false,mediaUnknown:false,actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null},setNotice:()=>{},referralCode:()=> 'original-code',sendEventAction:(attempt:any)=>{requests.push(attempt);return new Promise(()=>{});}};
   const from=parent.indexOf('  async function action('),to=parent.indexOf('  async function review(',from);assert.ok(from>=0&&to>from);
   const action=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.action=action',{loader:'tsx'}).code+';action',context);
   void action({event_id:'original',aggregate_version:1,visibility:'referral'},'rsvp',true);const original=context.actionAttempt.current;
@@ -211,7 +216,7 @@ test('same-render RSVP then cancel cannot replace the pending ref before React u
 });
 
 for(const firstKind of ['review','rsvp'] as const)test(`same-render ${firstKind} cannot create a second command owner`,async()=>{
-  let writes=0;const context:any={saving:false,busy:false,lastFailureUnknown:false,recoveringSave:false,recoveringReview:false,recoveringAction:false,mediaUnknown:false,actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null},reviewReason:'original',setNotice:()=>{},referralCode:()=>null,mutate:()=>{writes++;return new Promise(()=>{});}};
+  let writes=0;const context:any={photoLocked:()=>false,saving:false,busy:false,lastFailureUnknown:false,recoveringSave:false,recoveringReview:false,recoveringAction:false,mediaUnknown:false,actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null},reviewReason:'original',setNotice:()=>{},referralCode:()=>null,mutate:()=>{writes++;return new Promise(()=>{});}};
   const from=parent.indexOf('  async function sendEventAction('),to=parent.indexOf('  async function share(',from);const handlers=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.handlers={action,review}',{loader:'tsx'}).code+';handlers',context);
   const item={event_id:'event-a',aggregate_version:1,visibility:'open'};
   if(firstKind==='review'){void handlers.review(item,'approve');await handlers.action(item,'rsvp',true);assert.equal(context.actionAttempt.current,null);assert.ok(context.reviewAttempt.current);}
@@ -219,4 +224,18 @@ for(const firstKind of ['review','rsvp'] as const)test(`same-render ${firstKind}
   assert.equal(writes,1);
   const saveFrom=parent.indexOf('  async function save('),saveTo=parent.indexOf('  async function removeBanner(',saveFrom);assert.ok(saveFrom>=0&&saveTo>saveFrom);
   const save=runInNewContext(transformSync(parent.slice(saveFrom,saveTo)+';globalThis.save=save',{loader:'tsx'}).code+';save',context);await save({preventDefault(){}});assert.equal(context.saveAttempt.current,null);assert.equal(writes,1);
+});
+
+test('actual event handlers refuse all new effects while the photo command guard is locked',async()=>{
+  const handlers=[
+    ['save','removeBanner'],['removeBanner','removeVideo'],['removeVideo','sendEventAction'],
+    ['sendEventAction','action'],['action','review'],['review','share'],['share','report'],
+  ];
+  for(const [name,next] of handlers){
+    const from=parent.indexOf(`  async function ${name}(`),to=parent.indexOf(`  async function ${next}(`,from);assert.ok(from>=0&&to>from,`${name} production handler exists`);
+    let writes=0;const context={photoLocked:()=>true,setNotice:()=>{},client:{post:()=>{writes++;}},mutate:()=>{writes++;},actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null}};
+    const fn=runInNewContext(transformSync(parent.slice(from,to)+`;globalThis.handler=${name}`,{loader:'tsx'}).code+';handler',context);
+    if(name==='save')await fn({preventDefault(){}});else await fn({event_id:'event-a',aggregate_version:1},name==='review'?'approve':'rsvp',true);
+    assert.equal(writes,0,`${name} cannot issue an effect while photos are unresolved`);assert.equal(context.actionAttempt.current,null);assert.equal(context.reviewAttempt.current,null);assert.equal(context.saveAttempt.current,null);
+  }
 });

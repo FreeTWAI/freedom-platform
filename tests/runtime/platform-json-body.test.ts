@@ -350,6 +350,32 @@ test('event siblings, malformed update paths and other methods keep the original
   for(const method of ['PATCH','PUT','DELETE'])for(const path of eventWritePaths){const response=await eventRequest(path,' '.repeat(32769),{},method);assert.equal(response.status,413);assert.equal((await response.json()).code,'body_too_large');}
 });
 
+test('event prize photo binary allowance requires exact POST, event UUID and stable prize UUID',async()=>{
+  const event='10000000-0000-4000-8000-000000000001',prize='20000000-0000-4000-8000-000000000002';
+  const path=`/api/v1/events/${event}/prizes/${prize}/photo`;
+  for(const exact of [path,path.replace(event,event.toUpperCase()).replace(prize,prize.toUpperCase())]){
+    const response=await app.request(origin+exact,{method:'POST',headers:{Origin:origin,'Content-Type':'image/png'},body:new Uint8Array([1])});
+    assert.equal(response.status,401);assert.equal((await response.json()).code,'login_required');
+  }
+  for(const [method,other] of [['PUT',path],['PATCH',path],['POST',path+'/extra'],['POST',path+'/'],['POST',path.replace(prize,'-'.repeat(36))],['POST',path.replace(prize,'20000000-0000-5000-8000-000000000002')]]){
+    const response=await app.request(origin+other,{method,headers:{Origin:origin,'Content-Type':'image/png'},body:new Uint8Array([1])});
+    assert.equal(response.status,415,`${method} ${other}`);assert.equal((await response.json()).code,'json_required');
+  }
+});
+
+test('event prize photo overflow and wrong MIME refuse before stream/auth; exact removal stays empty',async()=>{
+  const path='/api/v1/events/10000000-0000-4000-8000-000000000001/prizes/20000000-0000-4000-8000-000000000002/photo';
+  for(const headers of [{'Content-Type':'image/png','Content-Length':'2097153'},{'Content-Type':'image/svg+xml','Content-Length':'1'}]){
+    let pulls=0;const body=new ReadableStream<Uint8Array>({pull(){pulls++;}},{highWaterMark:0});
+    const response=await app.request(new Request(origin+path,{method:'POST',headers:{Origin:origin,...headers},body,duplex:'half'} as RequestInit));
+    assert.equal(response.status,headers['Content-Type']==='image/png'?413:415);assert.equal(pulls,0);
+  }
+  const empty=await app.request(origin+path+'/remove',{method:'POST',headers:{Origin:origin,'Content-Length':'0'}});
+  assert.equal(empty.status,401);assert.equal((await empty.json()).code,'login_required');
+  const nonempty=await app.request(origin+path+'/remove',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','Content-Length':'2'},body:'{}'});
+  assert.equal(nonempty.status,422);assert.equal((await nonempty.json()).code,'invalid_event_prize_photo_remove');
+});
+
 test('anonymous attendance requests remain behind the real member boundary, including an unregistered public lookalike',async()=>{
   const event='10000000-0000-4000-8000-000000000001',member='20000000-0000-4000-8000-000000000001';
   for(const [path,method,expected] of [

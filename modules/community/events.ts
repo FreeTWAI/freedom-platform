@@ -1,3 +1,4 @@
+import {eventPrizePhotos,lockRemovedEventPrizePhotos,detachEventPrizePhotos,requireEventPrizePhotoMember} from './event-prize-photos.js';
 import {eventVideoStorageMode,type EventVideoAssetService} from '../assets/event-video.js';
 import {readEventVideoHttp} from '../assets/event-video-read.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -81,7 +82,7 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     (SELECT mime_type FROM community_event_videos WHERE event_id=$1) AS video_mime`,[row.event_id])).rows[0];
   const hideOnline=row.visibility==='referral'&&mine!=='going'&&row.organizer_ref!==actor.user_id&&!canReview;
   const cancelledForParticipant=row.state==='cancelled'&&row.organizer_ref!==actor.user_id;
-  return {...row,location:cancelledForParticipant?null:hideOnline&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
+  return {...row,prize_photos:await eventPrizePhotos(q,row.event_id),location:cancelledForParticipant?null:hideOnline&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
     online_url:cancelledForParticipant||hideOnline?null:row.online_url,
     banner_url:media.banner_orientation?`/api/v1/events/${row.event_id}/banner?v=${row.aggregate_version}`:null,banner_orientation:media.banner_orientation,
     video_url:media.video_mime?`/api/v1/events/${row.event_id}/video?v=${row.aggregate_version}`:null,video_mime:media.video_mime,
@@ -257,7 +258,7 @@ export async function publicEvent(pool:Pool|PoolClient,id:string){
   return {event_id:row.event_id,title:row.title,description:row.description,starts_at:row.starts_at,ends_at:row.ends_at,
     mode:row.mode,location:referral&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
     online_url:referral?null:row.online_url,event_kind:row.event_kind,topic:row.topic,visibility:row.visibility,registration_policy:row.registration_policy,
-    prize_details:row.prize_details,capacity:row.capacity,aggregate_version:Number(row.aggregate_version),organizer_name:row.organizer_name,
+    prize_details:row.prize_details,prize_photos:await eventPrizePhotos(pool,id,true),capacity:row.capacity,aggregate_version:Number(row.aggregate_version),organizer_name:row.organizer_name,
     attending_count:row.attending_count,banner_orientation:row.banner_orientation,
     banner_url:row.banner_orientation?`/api/v1/public/events/${id}/banner`:null,
     video_url:row.video_mime?`/api/v1/public/events/${id}/video`:null,video_mime:row.video_mime};
@@ -349,6 +350,17 @@ export async function authorizeEventBannerWrite(q:PoolClient,actor:Actor,id:stri
  requireCondition(row.organizer_ref===actor.user_id,403,'organizer_required','只能修改自己活動的 Banner。');
  await refuseInternGuildExchange(q,actor,row);
  if(editable){const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');}
+ return row;
+}
+/** Current organizer authority also protects historical photo receipts. Only
+ * new effects require the editable state and an existing saved prize. */
+export async function authorizeEventPrizePhotoOwner(q:PoolClient,actor:Actor,id:string,lock=false,editable=false){
+ await requireEventPrizePhotoMember(q,actor);
+ await lockMemberGuilds(q,actor);const row=await scopedEvent(q,actor,id,lock);
+ requireCondition(row.organizer_ref===actor.user_id,403,'organizer_required','只能修改自己活動的獎品照片。');
+ await refuseInternGuildExchange(q,actor,row);
+ if(editable){const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
+  requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');}
  return row;
 }
 export async function eventBannerResult(q:PoolClient,actor:Actor,id:string){
@@ -502,6 +514,9 @@ export async function createEvent(pool:Pool,input:Command) {
 
 export async function updateEvent(pool:Pool,input:Command,id:string) {
   const body=details.parse(input.body);
+  // Set only by a new transaction that actually detaches photos. Historical
+  // receipts remain replayable after the original event start.
+  let photoRemovalDeadline:number|undefined;
   return command(pool,input,async q=>{
     const row=await scopedEvent(q,input.actor,id);
     requireCondition(row.organizer_ref===input.actor.user_id,403,'organizer_required','只能編輯自己發佈的活動。');
@@ -512,10 +527,26 @@ export async function updateEvent(pool:Pool,input:Command,id:string) {
     requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改待審核且尚未開始的活動。');
     requireCondition(Date.parse(body.starts_at)>Date.now(),422,'event_in_past','活動開始時間須在未來。');
     requireCondition(body.guild_key===row.guild_key&&body.mode===row.mode&&body.event_kind===row.event_kind&&body.visibility===row.visibility,422,'event_review_route_immutable','送出後不能更換主辦公會、形式、類型或參與範圍；請取消並重新提交。');
+    const removedPhotos=body.prize_details===undefined?[]:await lockRemovedEventPrizePhotos(q,id,body.prize_details);
+    if(removedPhotos.length)await requireEventPrizePhotoMember(q,input.actor);
+    // The extra target/Asset locks can wait. Refresh authority and DB clock only
+    // after those locks, before detachment and the event write in this transaction.
+    await assertCurrentSessionClock(q,input.actor);
+    const decisionClock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
+    requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>decisionClock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');
+    requireCondition(Date.parse(body.starts_at)>decisionClock.getTime(),422,'event_in_past','活動開始時間須在未來。');
+    await detachEventPrizePhotos(q,removedPhotos);
+    if(removedPhotos.length)photoRemovalDeadline=Math.min(Date.parse(row.starts_at),Date.parse(body.starts_at));
     const updated=(await q.query(`UPDATE community_events SET title=$2,description=$3,starts_at=$4,ends_at=$5,mode=$6,location=$7,capacity=$8,
       event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,registration_policy=$14,prize_details=$15::jsonb,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need,body.registration_policy??row.registration_policy,JSON.stringify(body.prize_details===undefined?row.prize_details:body.prize_details)])).rows[0];
     await journal(q,input.actor,'community_event',id,updated.aggregate_version,'update',{title:body.title});
     return eventView(q,input.actor,updated);
+  },async q=>{
+    if(photoRemovalDeadline!==undefined){
+      const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
+      requireCondition(photoRemovalDeadline>clock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');
+      await assertCurrentSessionClock(q,input.actor);
+    }
   });
 }
 

@@ -1,3 +1,4 @@
+import * as prizePhotoRules from '../../apps/portal-web/src/modules/event-prize-photo-client.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -6,18 +7,28 @@ import {webcrypto} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
 import {ApiError} from '../../apps/portal-web/src/api.js';
+import * as prizeRules from '../../modules/community/event-prize-details.js';
+import * as prizeIcons from '../../modules/community/event-prize-icons.js';
 const {transformSync}=createRequire(resolve(process.cwd(),'package.json'))('esbuild');
 // Actual TSX and shared mutation with deterministic hooks/transport ports.
 // This proves handler behavior, not React DOM, browser, real mail or hosted CI.
 const source=readFileSync('apps/portal-web/src/modules/EventsPanel.tsx','utf8');
 const compiled=transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code;
 const shared=transformSync(readFileSync('apps/portal-web/src/modules/shared.tsx','utf8'),{loader:'tsx',format:'cjs'}).code;
+// Actual prize draft/payload helpers are loaded through the existing source-model port.
+// Prize controls themselves are exercised by the separate real ReactDOM suite.
+const prizeFields={exports:{} as any};
+runInNewContext(transformSync(readFileSync('apps/portal-web/src/modules/EventPrizeFields.tsx','utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module:prizeFields,exports:prizeFields.exports,crypto:webcrypto,require(name:string){
+ if(name.includes('event-prize-details'))return prizeRules;if(name.includes('event-prize-icons'))return prizeIcons;
+ if(name==='react'||name==='react/jsx-runtime'||name.endsWith('.css'))return {};
+ if(name==='./EventPrizeIcon'||name==='./EventPrizeIconPicker')return {};throw Error(name);
+}});
 const id='20000000-0000-4000-8000-000000000001',userId='20000000-0000-4000-8000-000000000002';
 type Element={type:any;props:any;key?:string};
 function text(value:any):string{return Array.isArray(value)?value.map(text).join(''):value&&typeof value==='object'?text(value.props?.children):typeof value==='string'||typeof value==='number'?String(value):'';}
 function find(value:any,predicate:(node:Element)=>boolean):Element|undefined{if(!value||typeof value!=='object')return;if(Array.isArray(value)){for(const child of value){const result=find(child,predicate);if(result)return result;}return;}if(predicate(value))return value;return find(value.props?.children,predicate);}
 const settle=()=>new Promise<void>(resolve=>setImmediate(resolve));
-const stored=(overrides:any={})=>({event_id:id,organizer_ref:userId,organizer_name:'Synthetic member',title:'Original title',description:'Original description',starts_at:'2030-01-01T12:00:00.000Z',ends_at:'2030-01-01T13:00:00.000Z',mode:'online',location:'Original location',event_kind:'other',topic:null,online_url:null,visibility:'workshop',banner_url:null,banner_orientation:null,video_url:null,video_mime:null,registration_policy:'community_member',help_need:null,capacity:null,state:'pending',aggregate_version:1,attending_count:0,my_rsvp:null,guild_key:null,review_guild_key:'guild_member_operations',can_review:false,review_reason:null,...overrides});
+const stored=(overrides:any={})=>({prize_details:[],event_id:id,organizer_ref:userId,organizer_name:'Synthetic member',title:'Original title',description:'Original description',starts_at:'2030-01-01T12:00:00.000Z',ends_at:'2030-01-01T13:00:00.000Z',mode:'online',location:'Original location',event_kind:'other',topic:null,online_url:null,visibility:'workshop',banner_url:null,banner_orientation:null,video_url:null,video_mime:null,registration_policy:'community_member',help_need:null,capacity:null,state:'pending',aggregate_version:1,attending_count:0,my_rsvp:null,guild_key:null,review_guild_key:'guild_member_operations',can_review:false,review_reason:null,...overrides});
 function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean;prepareFailure?:Error}={}){
   type Scope={hooks:any[];index:number;effects:(()=>void)[]};
   const delayedCleanups:Scope[]=[],outer:Scope={hooks:[],index:0,effects:[]};let inner:Scope={hooks:[],index:0,effects:[]},scope=outer,key:string|undefined;
@@ -39,7 +50,8 @@ function harness(options:{deferPassiveCleanup?:boolean;deferPrepare?:boolean;pre
     if(name==='../format')return {formatIsoLocal:(v:string)=>v,hoursFromNowLocalInput:(n:number)=>n===24?'2030-01-01T12:00':'2030-01-01T13:00',localInputToIso:(v:string)=>new Date(v).toISOString()};
     if(name==='./member-inbox')return {announceInboxChange:()=>notices.push('inbox')};if(name==='./social-image')return {prepareSocialImage:async(file:any)=>file};
     if(name==='./event-banner-client')return {prepareEventMedia:async(c:any,value:any,file:any,kind:string)=>{const command:any={eventId:value.event_id,version:value.aggregate_version,file,kind,key:webcrypto.randomUUID(),generation:c.sessionGeneration,csrfToken:c.csrfToken};preparations.push(command);if(options.prepareFailure)throw options.prepareFailure;if(options.deferPrepare)return new Promise(resolve=>{command.resolve=()=>resolve(command);});return command;},sendEventMedia:(c:any,command:any)=>new Promise((resolve,reject)=>media.push({client:c,command,resolve,reject})),readEventMedia:(c:any,command:any)=>c.get(`/events/${command.eventId}`),currentMediaEvent:(a:any,b:any)=>a.aggregate_version>b.aggregate_version?a:b};
-    if(name.endsWith('.css'))return {};if(['./EventCalendar','./EventParticipation','./EventAttendees','./EventHelpers'].includes(name))return new Proxy({},{get:()=>()=>null});throw Error(name);
+    if(name==='./EventPrizeFields')return prizeFields.exports;if(name==='./EventPrizePhoto')return {EventPrizePhotoEditor:()=>null};if(name==='./event-prize-photo-client')return prizePhotoRules;if(name==='./EventPrizeDetails')return {EventPrizeDetails:()=>null};if(name.includes('modules/community/event-prize-details'))return prizeRules;
+    if(name.endsWith('.css'))return {};if(['./EventCalendar','./EventParticipation','./EventAttendees','./EventHelpers','./EventAttendance'].includes(name))return new Proxy({},{get:()=>()=>null});throw Error(name);
   };
   runInNewContext(compiled,{module,exports:module.exports,require,crypto:webcrypto,Error,Date,Intl,URL,URLSearchParams,Event:class{},window:{location:{pathname:'/',hash:'#events',search:'',origin:'http://synthetic.test'},confirm:()=>false,addEventListener:(name:string,fn:any)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name),dispatchEvent:()=>notices.push('world')},localStorage:{getItem:()=>null,setItem:()=>{}},navigator:{}});
   const clean=(target:Scope,layoutOnly=false)=>{for(const hook of target.hooks)if(!layoutOnly||hook?.layout)hook?.cleanup?.();};

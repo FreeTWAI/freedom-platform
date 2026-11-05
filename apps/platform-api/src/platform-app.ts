@@ -1,6 +1,7 @@
 import {createTesterMapRoutes,createPublicTesterMapRoutes} from './routes/tester-map.js';
 import { performance } from "node:perf_hooks";
 import {gamePreviewMiddleware} from '../../portal-web/src/games/preview.js';
+import {createEventPrizePhotoRoutes,createPublicEventPrizePhotoRoutes,isEventPrizePhotoUpload,isEventPrizePhotoRemove,checkEventPrizePhotoHeaders} from './routes/event-prize-photos.js';
 import {createEventMissionRoutes} from './routes/event-missions.js';
 import {createCommunityCertificationRoutes} from './routes/community-certification.js';
 import {createSocialAchievementRoutes} from './routes/social-achievements.js';
@@ -283,6 +284,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         // Only this route accepts binary input. Its bounded stream reader runs
         // after session, CSRF and completed-member checks, before decoding.
         checkAvatarUploadHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
+      } else if(isEventPrizePhotoRemove(c.req.method,c.req.path)) {
+        requireCondition(c.req.header('Content-Length')===undefined||c.req.header('Content-Length')==='0',422,'invalid_event_prize_photo_remove','移除照片不接受其他欄位。');
+      } else if(isEventPrizePhotoUpload(c.req.method,c.req.path)) {
+        checkEventPrizePhotoHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isEventBannerUpload(c.req.method,c.req.path)) {
         checkEventBannerUploadHeaders(c.req.header('Content-Type'),c.req.header('Content-Length'));
       } else if(isEventVideoUpload(c.req.method,c.req.path)) {
@@ -487,6 +492,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   registerPublicMemberCardRoutes(app, featureContext);
   registerPublicMemberProfiles(app, featureContext);
   app.route('/api/v1',createPublicProfileCoverRoutes(pool,runtime.avatarAssetStore));
+  app.route('/api/v1',createPublicEventPrizePhotoRoutes(pool,runtime.eventPrizePhotoAssetStore));
   registerPublicEventMediaRoutes(app, featureContext);
   registerPublicPromotion(app,pool,runtime,origin);
   registerPublicSocialPosts(app,pool,runtime);
@@ -562,6 +568,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createMemberRoutes(pool));
   app.route('/api/v1',createMemberProfileRoutes(pool,{communityCertificationEnabled:runtime.communityCertificationEnabled===true,socialAchievementsEnabled:runtime.socialAchievementsEnabled===true}));
   app.route('/api/v1',createProfileCoverRoutes(pool,runtime.avatarAssetStore));
+  app.route('/api/v1',createEventPrizePhotoRoutes(pool,runtime.eventPrizePhotoAssetStore));
   if(runtime.memberReportingEnabled===true)app.route('/api/v1',createMemberReportingRoutes(pool,runtime.messageImageAssetStore));
   if(runtime.communityCertificationEnabled===true)app.route('/api/v1',createCommunityCertificationRoutes(pool));
   if(runtime.socialAchievementsEnabled===true)app.route('/api/v1',createSocialAchievementRoutes(pool));

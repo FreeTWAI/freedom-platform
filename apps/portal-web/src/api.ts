@@ -75,6 +75,8 @@ export type RequestOptions = {
   arPattern?: Blob
   /** Closed private profile-cover staging upload; never a generic binary endpoint. */
   profileCover?: Blob
+  /** Closed saved event/prize photo upload; raw original bytes only. */
+  eventPrizePhoto?: Blob
   idempotencyKey?: string
   ifMatch?: number | string
   /** Current authorization for retrying the unchanged Commerce settings command. */
@@ -247,6 +249,33 @@ export class PortalClient {
     finally{this.reads.clear()}
   }
 
+  getEventPrizePhotoAvailability<T>(eventId:string,prizeId:string,options:{signal?:AbortSignal;suppressConsole?:boolean}={}):Promise<T>{
+    const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    if(!uuid.test(eventId)||!uuid.test(prizeId))return Promise.reject(new ApiError({message:'活動或獎品無法確認。',status:422,definitiveResponse:true}))
+    return this.get<T>(`/events/${eventId}/prizes/${prizeId}/photo/availability`,{signal:options.signal,suppressConsole:options.suppressConsole})
+  }
+
+  async replaceEventPrizePhoto<T>(eventId:string,prizeId:string,file:File,options:{idempotencyKey:string;ifMatch:number;signal?:AbortSignal;suppressConsole?:boolean}):Promise<T>{
+    this.requirePrizePhotoCommand(eventId,prizeId,options)
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size===0||file.size>2*1024*1024)throw new ApiError({message:'請選擇 2 MiB 以下的 JPEG、PNG 或 WebP 照片。',status:422,definitiveResponse:true})
+    this.reads.clear()
+    try{return await this.request<T>('POST',`/events/${eventId}/prizes/${prizeId}/photo`,{idempotencyKey:options.idempotencyKey,ifMatch:options.ifMatch,signal:options.signal,suppressConsole:options.suppressConsole,eventPrizePhoto:file})}
+    finally{this.reads.clear()}
+  }
+
+  async removeEventPrizePhoto<T>(eventId:string,prizeId:string,options:{idempotencyKey:string;ifMatch:number;signal?:AbortSignal;suppressConsole?:boolean}):Promise<T>{
+    this.requirePrizePhotoCommand(eventId,prizeId,options)
+    this.reads.clear()
+    // This endpoint requires a genuinely empty body, not a JSON object.
+    try{return await this.request<T>('POST',`/events/${eventId}/prizes/${prizeId}/photo/remove`,{idempotencyKey:options.idempotencyKey,ifMatch:options.ifMatch,signal:options.signal,suppressConsole:options.suppressConsole})}
+    finally{this.reads.clear()}
+  }
+
+  private requirePrizePhotoCommand(eventId:string,prizeId:string,options:{idempotencyKey:string;ifMatch:number}){
+    const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    if(!uuid.test(eventId)||!uuid.test(prizeId)||!uuid.test(options.idempotencyKey)||!Number.isSafeInteger(options.ifMatch)||options.ifMatch<1||options.ifMatch>=Number.MAX_SAFE_INTEGER)throw new ApiError({message:'活動或獎品版本無法確認，請重新讀取。',status:422,definitiveResponse:true})
+  }
+
   async getSession(): Promise<SessionPayload> {
     return this.get<SessionPayload>('/session', { skipAuthHandler: true })
   }
@@ -295,6 +324,11 @@ export class PortalClient {
     if(options.profileCover){
       if(method!=='POST'||path!=='/me/profile-cover'||options.body!==undefined||options.arPattern||!['image/png','image/jpeg','image/webp'].includes(options.profileCover.type)||options.profileCover.size===0||options.profileCover.size>4*1024*1024)throw new ApiError({message:'封面上傳格式不正確。',status:422})
       headers['Content-Type']=options.profileCover.type
+    }
+    if(options.eventPrizePhoto){
+      const photo=options.eventPrizePhoto
+      if(method!=='POST'||!/^\/events\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/prizes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/photo$/.test(path)||options.body!==undefined||options.arPattern||options.profileCover||!['image/png','image/jpeg','image/webp'].includes(photo.type)||photo.size===0||photo.size>2*1024*1024)throw new ApiError({message:'獎品照片上傳格式不正確。',status:422,definitiveResponse:true})
+      headers['Content-Type']=photo.type
     }
     if (needsCsrf) {
       if (!this.csrfToken) {
@@ -350,7 +384,7 @@ export class PortalClient {
       response = await accessAwareFetch(`${API_BASE}${path}`, {
         method, headers, credentials: 'same-origin', signal: controller.signal,
         ...(options.keepalive === true ? {keepalive: true} : {}),
-        body: options.profileCover ?? options.arPattern ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
+        body: options.eventPrizePhoto ?? options.profileCover ?? options.arPattern ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
       })
       if (await isExpiredAccessResponse(response)) {
         const status = expiredAccessStatus(response)

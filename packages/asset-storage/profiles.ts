@@ -4,6 +4,7 @@
 const raster = Object.freeze(['image/png','image/jpeg','image/webp'] as const);
 export const OBJECT_IO_MAX_BYTES = 20 * 1024 * 1024;
 export const MEDIA_OBJECT_PROFILES = Object.freeze({
+  'community.event-prize-photo': Object.freeze({maxBytes:1048576,contentTypes:Object.freeze(['image/webp'] as const),transformVersion:'community.event-prize-photo.webp.v1',source:'modules/assets/event-prize-photo.ts'}),
   'member.profile-cover': Object.freeze({maxBytes:524288,contentTypes:Object.freeze(['image/webp'] as const),transformVersion:'member.profile-cover.webp.v1',source:'modules/assets/profile-cover.ts'}),
   'member.ar-target': Object.freeze({maxBytes:20*1024*1024,contentTypes:Object.freeze(['application/octet-stream'] as const),transformVersion:'member.ar-target.mindar-v2.v1',source:'modules/community-ar/assets.ts'}),
   'member.avatar': Object.freeze({maxBytes:128*1024,contentTypes:raster,transformVersion:'member.avatar.legacy-bytes.v1',source:'modules/identity-membership/avatars.ts'}),

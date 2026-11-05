@@ -92,6 +92,7 @@ export type PlatformRuntime = {
   messageImageAssetStore?: ObjectStore;
   eventBannerAssets?:EventBannerAssetService;
   eventBannerAssetStore?:ObjectStore;
+  eventPrizePhotoAssetStore?:ObjectStore;
   eventVideoAssets?:EventVideoAssetService;
   eventVideoAssetStore?:ObjectStore;
   skillImageAssets?:SkillImageAssetService;
