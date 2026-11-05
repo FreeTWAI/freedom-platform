@@ -589,7 +589,13 @@ for(const width of [1280,390])eventTest(`extended event years show recoverable v
       expect(writes).toBe(editing?1:0);expect(errors).toEqual([]);
       await input.fill(label==='開始時間'?'2099-01-01T12:00':'2099-01-01T13:00');
     }
-    if(editing)await form.getByLabel('活動說明',{exact:true}).fill('修正日期後的合成內容');
+    if(editing){
+      // The populated textarea contributes its initial text to the wrapping
+      // label. Keep this editor scope and match the label prefix, as above.
+      const description=form.getByLabel(/^活動說明/);
+      await expect(description).toHaveCount(1);await expect(description).toHaveValue('日期輸入錯誤後保留的合成內容');
+      await description.fill('修正日期後的合成內容');
+    }
     const response=page.waitForResponse(result=>result.request().method()==='POST'&&new URL(result.url()).pathname.endsWith(editing?'/update':'/events'));
     await form.getByRole('button',{name:editing?'儲存修改':'送出審核',exact:true}).click();const saved=await response;expect(saved.ok()).toBe(true);await saved.finished();
     await expect(form).toHaveCount(0);expect(writes).toBe(editing?2:1);
