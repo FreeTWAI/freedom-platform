@@ -89,3 +89,91 @@ for(const committed of [true,false])test(`provider key recovery with expired pro
  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM commerce_provider_credentials WHERE instance_id=$1',[s.instance])).rows[0].n).toBe(1);
  expect(await page.content()).not.toContain(key);expect(await page.content()).not.toContain(iv);
 });
+
+for(const width of [390,1280])for(const code of ['csrf_rejected','policy_unconfigured','capability_denied'] as const)test(`command PUT refusal preserves the bank draft and offers the correct recovery: ${code} (${width}px)`,async({page,browser,baseURL,e2eAuthPool})=>{
+ await page.setViewportSize({width,height:900});
+ const s=await fixtureStore(e2eAuthPool,browser,baseURL!);
+ await openSeller(page,baseURL!,s.seller.email,`#stores/${s.tenant}/${s.instance}/settings/payments`);
+ const seller=page.locator('.seller-console'),form=seller.getByRole('form',{name:'線下收款設定'});
+ await seller.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();
+ await form.getByLabel('提供銀行匯款',{exact:true}).check();
+ for(const [label,value] of [['銀行代碼','808'],['銀行名稱','合成測試銀行'],['收款帳號','123456789012'],['戶名','合成測試店主']])await form.getByLabel(label,{exact:true}).fill(value);
+ const before=await (await page.request.get('/api/v1'+s.root+'/offline-payment-settings')).json();
+ let writes=0;
+ await page.route('**/offline-payment-settings',async route=>{
+  if(route.request().method()!=='PUT'){await route.continue();return;}
+  writes++;
+  if(writes>1){await route.continue();return;}
+  if(code==='csrf_rejected')await route.continue({headers:{...route.request().headers(),'x-csrf-token':'synthetic-stale-token'}});
+  else await route.fulfill({status:403,contentType:'application/problem+json',json:{status:403,code,detail:'synthetic private detail'}});
+ });
+ await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();
+ const refused=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/offline-payment-settings'));
+ await verifyPassword(page,DEMO_PASSWORD);
+ const response=await refused;expect(response.status()).toBe(403);expect((await response.json()).code).toBe(code);
+ const permission=code==='capability_denied';
+ if(permission)await expect(seller.getByRole('alert').filter({hasText:'你沒有這個操作的權限'})).toHaveCount(2);
+ await expect(seller.getByRole('button',{name:permission?'重新確認權限':'重新確認狀態',exact:true})).toBeVisible();
+ if(!permission){
+  await expect(seller.getByText('你沒有這個操作的權限。請聯絡商店擁有者或管理員授予權限。',{exact:true})).toHaveCount(0);
+  await expect(seller.getByRole('button',{name:'重新確認權限',exact:true})).toHaveCount(0);
+  await expect(seller.getByRole('alert')).toHaveText(code==='csrf_rejected'?'登入狀態已變更，請先保留尚未儲存的內容，再重新整理頁面驗證。':'平台尚未完成身分驗證設定，請聯絡平台管理員處理。');
+ }
+ await expect(form.getByLabel('收款帳號',{exact:true})).toHaveValue('123456789012');
+ await expect(form.getByRole('button',{name:'儲存線下收款設定',exact:true})).toBeDisabled();
+ expect(await (await page.request.get('/api/v1'+s.root+'/offline-payment-settings')).json()).toEqual(before);
+ page.once('dialog',dialog=>dialog.dismiss());
+ if(width===390)await seller.getByRole('combobox',{name:'賣家主控台頁面',exact:true}).selectOption({label:'商店首頁'});else await seller.getByRole('link',{name:'商店首頁',exact:true}).click();
+ await expect(page).toHaveURL(/\/settings\/payments$/);
+ await seller.getByRole('button',{name:permission?'重新確認權限':'重新確認狀態',exact:true}).click();
+ await expect(form.getByRole('button',{name:'儲存線下收款設定',exact:true})).toBeEnabled();
+ await expect(form.getByLabel('收款帳號',{exact:true})).toHaveValue('123456789012');
+ await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+ await expect(seller.getByText('已保存：線下收款設定。',{exact:true})).toBeVisible();expect(writes).toBe(2);
+});
+
+for(const committed of [true,false])test(`unknown payment PUT keeps its complete tuple after recovery proof and actual CSRF refusal: committed=${committed}`,async({page,browser,baseURL,e2eAuthPool})=>{
+ const s=await fixtureStore(e2eAuthPool,browser,baseURL!),hash=`#stores/${s.tenant}/${s.instance}/settings/payments`;
+ await openSeller(page,baseURL!,s.seller.email,hash);
+ const seller=page.locator('.seller-console'),form=seller.getByRole('form',{name:'線下收款設定'});
+ // Start from a saved version so the replay must retain a real If-Match too.
+ await seller.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();
+ await form.getByLabel('提供面交現金付款',{exact:true}).check();
+ await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+ await expect(seller.getByText('已保存：線下收款設定。',{exact:true})).toBeVisible();
+ const before=await (await page.request.get('/api/v1'+s.root+'/offline-payment-settings')).json();
+ await seller.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();
+ await form.getByLabel('等候面交期限（天）',{exact:true}).fill('9');
+ const expire=await expireNextSettingsProof(page,e2eAuthPool),requests:{key:string;body:string|null;version:string;recovery:string|undefined}[]=[];
+ await page.route('**/offline-payment-settings',async route=>{
+  const r=route.request();if(r.method()!=='PUT'){await route.continue();return;}
+  const h=r.headers();requests.push({key:h['idempotency-key'],body:r.postData(),version:h['if-match'],recovery:h['commerce-recovery-verification']});
+  if(requests.length===1){if(committed){const response=await route.fetch();expect(response.status(),await response.text()).toBe(200);}await route.abort('failed');return;}
+  if(requests.length===3){await route.continue({headers:{...h,'x-csrf-token':'synthetic-stale-token'}});return;}
+  await route.continue();
+ });
+ await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+ await expect(seller.getByText('正在確認結果',{exact:true})).toBeVisible();await expire();
+ await seller.getByRole('button',{name:'重試',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'驗證身分'})).toBeVisible();
+ const refused=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/offline-payment-settings')&&r.status()===403);
+ await verifyPassword(page,DEMO_PASSWORD);
+ expect((await (await refused).json()).code).toBe('csrf_rejected');
+ await expect(seller.getByRole('alert')).toHaveText('登入驗證已失效，原操作結果仍未確認。請保留本頁與未儲存內容，恢復登入狀態後按「重試」確認原操作；重新整理會遺失本頁的待確認操作。');
+ await expect(seller.getByRole('button',{name:'重新確認權限',exact:true})).toHaveCount(0);
+ await expect(form.getByLabel('等候面交期限（天）',{exact:true})).toHaveValue('9');
+ await expect(form.getByLabel('等候面交期限（天）',{exact:true})).toBeDisabled();
+ await seller.getByRole('button',{name:'重新確認狀態',exact:true}).click();
+ await expect(seller.getByRole('button',{name:'重新確認狀態',exact:true})).toHaveCount(0);
+ await expect(form.getByRole('button',{name:'捨棄輸入，重新讀取設定',exact:true})).toBeDisabled();
+ await seller.getByRole('link',{name:'商店首頁',exact:true}).click();await expect(page).toHaveURL(new RegExp(hash+'$'));
+ await expect(seller.getByText('尚未確認原操作的結果，請按「重試」確認後再離開。',{exact:true})).toBeVisible();
+ await seller.getByRole('button',{name:'重試',exact:true}).click();
+ await expect(seller.getByText('已保存：線下收款設定。',{exact:true})).toBeVisible();
+ await expect(seller.getByRole('button',{name:'編輯線下收款設定',exact:true})).toBeEnabled();
+ expect(requests).toHaveLength(4);expect(requests[0].version).toBe(`"${before.version}"`);
+ for(const r of requests)expect({key:r.key,body:r.body,version:r.version}).toEqual({key:requests[0].key,body:requests[0].body,version:requests[0].version});
+ expect(requests[2].recovery).toBeTruthy();expect(requests[3].recovery).toBe(requests[2].recovery);
+ const after=await (await page.request.get('/api/v1'+s.root+'/offline-payment-settings')).json();
+ expect(after.settings.cash_on_meetup.deadline_days).toBe(9);expect(BigInt(after.version)).toBe(BigInt(before.version)+1n);
+});

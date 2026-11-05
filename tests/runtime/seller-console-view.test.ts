@@ -34,8 +34,8 @@ test('verification problems describe the actual recovery instead of treating eve
   });
  }
 });
-test('actual or unknown access denials keep permission guidance without reflecting sensitive detail',()=>{
- for(const code of ['capability_denied','tenant_capability_denied','unknown_denial','constructor','__proto__',undefined]){
+test('capability denials keep permission guidance without reflecting sensitive detail',()=>{
+ for(const code of ['capability_denied','tenant_capability_denied']){
   const cause=new ApiError({message:'synthetic secret',status:403,code,detail:'synthetic secret'});
   assert.equal(errorText(cause,true),'你沒有這個操作的權限。請聯絡商店擁有者或管理員授予權限。');
  }
@@ -152,4 +152,8 @@ test('self-shipment failed commands always supply safe form copy',async()=>{
  assert.equal(selfShipmentFailure(new ApiError({message:'private detail',status:422,code:'shipment_date_invalid'})),'寄出日期須在確認收款日到今天之間。');
  assert.equal(selfShipmentFailure(new ApiError({message:'private detail',status:409,code:'constructor'})),'無法登記出貨，請更新訂單後再核對。');
  assert.equal(selfShipmentFailure(new Error('private detail')),'無法登記出貨，請更新訂單後再核對。');
+});
+
+test('unclassified 403 refusals do not claim capability denial or reflect server detail',()=>{
+ for(const code of ['unknown_denial','constructor','__proto__',undefined])assert.equal(errorText(new ApiError({status:403,code,message:'private',detail:'private'})), '操作遭拒，請保留尚未儲存的內容，確認服務狀態後再試。');
 });

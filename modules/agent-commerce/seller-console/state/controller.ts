@@ -8,13 +8,15 @@ export type ReadSlot<T>={data:T|null;state:'idle'|'loading'|'ready'|'failed';tim
 const empty:ReadSlot<never>={data:null,state:'idle',time:null,error:''};
 type Descriptor={path:string;schema:z.ZodType;match?:(value:unknown)=>boolean};
 export type Command={label:string;method?:'post'|'put';path:string;body:Record<string,unknown>;ifMatch?:string;schema:z.ZodType;match?:(value:unknown)=>boolean;sensitive?:boolean;settled?:(success:boolean)=>void;success?:(value:unknown)=>void;failed?:(cause:unknown)=>void;freshAgain?:()=>void;freshRecovery?:(resume:(verificationId:string)=>void)=>void};
+export type Refusal={path:string;status:number;code?:string};
+export function capabilityDenied(cause:{status?:number;code?:string}){return cause.status===403&&['capability_denied','tenant_capability_denied'].includes(cause.code??'');}
 export function errorText(cause:unknown,sensitive=false){
  if(cause instanceof ApiError){
   const code=cause.code??'',known=Object.hasOwn(setupNext,code);
   const next=known?setupNext[code]:'請更新資料後再試。';
   // A 403 can also mean missing platform policy or an expired CSRF token.
   // Keep these messages local: refusal details may contain sensitive input.
-  if(cause.status===403)return known&&!['capability_denied','tenant_capability_denied'].includes(code)?next:NOT_ALLOWED+'。'+permissionHelp;
+  if(cause.status===403)return capabilityDenied(cause)?NOT_ALLOWED+'。'+permissionHelp:known?next:'操作遭拒，請保留尚未儲存的內容，確認服務狀態後再試。';
   // Provider-account errors must never reflect a submitted password or credential fragment.
   return (sensitive?'':cause.detail?cause.detail+' ':'操作未完成。')+next;
  }
@@ -22,7 +24,7 @@ export function errorText(cause:unknown,sensitive=false){
 }
 export function useController(client:PortalClient,root:string,registerLeave:RegisterLeave){
  const [reads,setReads]=useState<Record<string,ReadSlot<unknown>>>({}),[phase,setPhase]=useState<'idle'|'sending'|'unknown'>('idle'),[notice,setNotice]=useState(''),[error,setError]=useState('');
- const [dirty,setDirty]=useState<Record<string,boolean>>({}),[pending,setPending]=useState<string[]>([]),[refused,setRefused]=useState<string|null>(null),[pendingReason,setPendingReason]=useState<'saved'|'conflict'>('saved');
+ const [dirty,setDirty]=useState<Record<string,boolean>>({}),[pending,setPending]=useState<string[]>([]),[refused,setRefused]=useState<Refusal|null>(null),[pendingReason,setPendingReason]=useState<'saved'|'conflict'>('saved');
  const slots=useRef(reads);slots.current=reads;
  const descriptors=useRef(new Map<string,Descriptor>()),tickets=useRef(new Map<string,number>()),serial=useRef(0),abort=useRef(new AbortController()),mounted=useRef(false),generation=useRef(client.sessionGeneration);
  const held=useRef<{attempt:Attempt;command:Command;unresolved:boolean;recoveryVerificationId?:string}|null>(null),busy=useRef(false),dirtyRef=useRef(dirty);dirtyRef.current=dirty;
@@ -62,14 +64,14 @@ export function useController(client:PortalClient,root:string,registerLeave:Regi
   // A denied replay cannot tell us whether the earlier lost acknowledgement committed.
   // Keep the original command through authority changes; never mint a replacement.
   if(cause instanceof ApiError&&held.current.unresolved&&[403,404].includes(cause.status)){
-   setPhase('unknown');setError(errorText(cause,command.sensitive));setRefused(command.path);await load('store');return;
+   setPhase('unknown');setError(cause.code==='csrf_rejected'?'登入驗證已失效，原操作結果仍未確認。請保留本頁與未儲存內容，恢復登入狀態後按「重試」確認原操作；重新整理會遺失本頁的待確認操作。':errorText(cause,command.sensitive));setRefused({path:command.path,status:cause.status,code:cause.code});await load('store');return;
   }
   held.current=null;setPhase('idle');command.settled?.(!cause);
-  if(!cause){setNotice('已保存：'+command.label+'。');await refresh();if(live())command.success?.(result);return;}
+  if(!cause){setRefused(null);setNotice('已保存：'+command.label+'。');await refresh();if(live())command.success?.(result);return;}
   setError(errorText(cause,command.sensitive));command.failed?.(cause);
   if(cause instanceof ApiError){
    if(cause.code==='fresh_auth_required'){command.freshAgain?.();return;}
-   if(cause.status===403){setRefused(command.path);await load('store');}
+   if(cause.status===403){setRefused({path:command.path,status:cause.status,code:cause.code});await load('store');}
    if(cause.status===412||['version_conflict','invalid_version'].includes(cause.code??''))await refresh('conflict');
   }
  }

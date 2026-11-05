@@ -647,7 +647,7 @@ test('delegated seller sees masked settings and retains the original cash comman
   await grant(capabilities);await page.getByRole('button',{name:'重試',exact:true}).click();
   await expect(page.locator('.seller-announcement')).toContainText('已保存：確認收現金並完成面交。');
   await expect(page.getByText('正在確認結果',{exact:true})).toHaveCount(0);expect(statuses).toEqual([200,403,200]);expect(requests[2]).toEqual(requests[0]);
-  await page.getByRole('button',{name:'重新確認權限',exact:true}).click();await expect(page.getByRole('button',{name:'重新確認權限',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'重新確認權限',exact:true})).toHaveCount(0);
   const detail=SellerCheckoutOrderSchema.parse(await (await operator.request.get('/api/v1'+store.root+'/checkout-orders/'+cash.order_ref)).json());
   expect(detail.payment_detail?.offline_payments).toHaveLength(1);expect(detail.meetup_handover).not.toBeNull();expect(detail.actions.complete_meetup).toBe(false);
   expect((await e2eAuthPool.query('SELECT stock,reserved FROM commerce_items WHERE item_id=$1',[store.products[0].product_id])).rows[0]).toEqual({stock:4,reserved:0});
