@@ -399,3 +399,129 @@ test('DP-UI-01 distribution photo choice dialog: 503 keeps it, 403 and 404 clear
     try { await browser?.close(); } finally { await rm(dir, {recursive: true, force: true}); }
   }
 });
+
+// Transport-only regressions: the timer bounds waiting, not server execution.
+// They use controlled fetch/body promises and never launch a browser or replay automatically.
+import {sendGalleryPhoto} from '../../apps/portal-web/src/modules/hosted-store-photo-client.js';
+import type {GalleryPhotoAttempt} from '../../apps/portal-web/src/modules/hosted-store-photo-state.js';
+import {STOREFRONT_GALLERY_PROFILE} from '../../contracts/guild-launchpad/v1/storefront-gallery.js';
+const photoDeadlineTurn=()=>new Promise<void>(resolve=>setImmediate(resolve));
+const deadlinePhotoAttempt=():PhotoAttempt=>Object.freeze({...attempt,file:new File(['synthetic original bytes'],'same-original.png',{type:'image/png'})});
+function deadlineGalleryAttempt(action:GalleryPhotoAttempt['action']):GalleryPhotoAttempt {
+ return Object.freeze({...deadlinePhotoAttempt(),gallery:true,action,photoKey:action==='reorder'?null:'main',file:action==='upload'?deadlinePhotoAttempt().file:null,body:action==='reorder'?'{"photo_keys":["main"]}':action==='describe'?'{"alt_text":"synthetic"}':'{}'});
+}
+function observePhotoRequest(request:Promise<unknown>){
+ const outcome:{state:'pending'|'fulfilled'|'rejected';value?:unknown}={state:'pending'};
+ void request.then(value=>{outcome.state='fulfilled';outcome.value=value;},error=>{outcome.state='rejected';outcome.value=error;});
+ return outcome;
+}
+function assertPhotoTimeout(outcome:ReturnType<typeof observePhotoRequest>){
+ assert.equal(outcome.state,'rejected','a stalled transport/body must stop holding the caller');
+ assert.ok(outcome.value instanceof ApiError&&outcome.value.network&&outcome.value.timedOut,'timeout remains an unknown write outcome');
+}
+for(const operation of ['product-upload','product-remove','gallery-upload','gallery-remove','gallery-reorder','gallery-describe'] as const){
+ test(`PHOTO-DEADLINE ${operation} bounds an abort-ignoring fetch without replay`,async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';
+  let signal:AbortSignal|null|undefined;let calls=0;
+  t.mock.method(globalThis,'fetch',async(_input:RequestInfo|URL,init:RequestInit)=>{calls++;signal=init.signal;return new Promise<Response>(()=>{});});
+  const request=operation.startsWith('gallery-')?sendGalleryPhoto(client,deadlineGalleryAttempt(operation.slice(8) as GalleryPhotoAttempt['action'])):sendProductPhoto(client,operation==='product-remove'?{...deadlinePhotoAttempt(),action:'remove',file:null}:deadlinePhotoAttempt());
+  const outcome=observePhotoRequest(request);
+  t.mock.timers.tick(59_999);await photoDeadlineTurn();assert.equal(outcome.state,'pending');assert.equal(calls,1);
+  t.mock.timers.tick(1);await photoDeadlineTurn();assertPhotoTimeout(outcome);assert.equal(signal?.aborted,true);assert.equal(calls,1);
+  t.mock.timers.tick(120_000);await photoDeadlineTurn();assert.equal(calls,1,'timeout never automatically repeats a write');
+ });
+}
+for(const gallery of [false,true])test(`PHOTO-DEADLINE ${gallery?'gallery':'product'} bounds a stalled JSON body`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';
+ let reading=false;let signal:AbortSignal|null|undefined;
+ const response=Response.json(ack);t.mock.method(response,'json',()=>{reading=true;return new Promise(()=>{});});
+ t.mock.method(globalThis,'fetch',async(_input:RequestInfo|URL,init:RequestInit)=>{signal=init.signal;return response;});
+ const outcome=observePhotoRequest(gallery?sendGalleryPhoto(client,deadlineGalleryAttempt('upload')):sendProductPhoto(client,deadlinePhotoAttempt()));
+ await photoDeadlineTurn();assert.equal(reading,true);t.mock.timers.tick(60_000);await photoDeadlineTurn();assertPhotoTimeout(outcome);assert.equal(signal?.aborted,true);
+});
+test('PHOTO-DEADLINE a stalled Access classification is bounded and cannot expire the session later',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';
+ let finish!:(text:string)=>void,reading=false,notified=0;client.onUnauthorized=()=>{notified++;};
+ const response=new Response('Access expired',{status:403}),clone=response.clone();
+ t.mock.method(clone,'text',()=>{reading=true;return new Promise<string>(resolve=>{finish=resolve;});});t.mock.method(response,'clone',()=>clone);
+ t.mock.method(globalThis,'fetch',async()=>response);const outcome=observePhotoRequest(sendProductPhoto(client,deadlinePhotoAttempt()));
+ await photoDeadlineTurn();assert.equal(reading,true);t.mock.timers.tick(60_000);await photoDeadlineTurn();assertPhotoTimeout(outcome);
+ finish('Access expired');await photoDeadlineTurn();assert.equal(client.csrfToken,'synthetic-session');assert.equal(client.accessExpired,false);assert.equal(notified,0);assertPhotoTimeout(outcome);
+});
+for(const late of ['json-401','access-403','healthy-ack'] as const)test(`PHOTO-DEADLINE late ${late} cannot alter auth or turn a timeout into success`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';client.accessExpired=true;
+ let finish!:(value:Response)=>void,notified=0;client.onUnauthorized=()=>{notified++;};
+ t.mock.method(globalThis,'fetch',()=>new Promise<Response>(resolve=>{finish=resolve;}));
+ const outcome=observePhotoRequest(sendProductPhoto(client,deadlinePhotoAttempt()));t.mock.timers.tick(60_000);await photoDeadlineTurn();assertPhotoTimeout(outcome);
+ finish(late==='json-401'?Response.json({code:'session_expired'},{status:401}):late==='access-403'?new Response('Access expired',{status:403}):Response.json(ack));
+ await photoDeadlineTurn();assertPhotoTimeout(outcome);assert.equal(client.csrfToken,'synthetic-session');assert.equal(client.accessExpired,true);assert.equal(notified,0);
+});
+test('PHOTO-DEADLINE late JSON completion does not acknowledge or release the retained original',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';const a=deadlinePhotoAttempt();
+ let finish!:(value:unknown)=>void;const response=Response.json(ack);t.mock.method(response,'json',()=>new Promise(resolve=>{finish=resolve;}));t.mock.method(globalThis,'fetch',async()=>response);
+ holdPhotoAttempt(client,'deadline-member',a);t.after(()=>releasePhotoAttempt(client,'deadline-member',a));
+ const outcome=observePhotoRequest(sendProductPhoto(client,a));await photoDeadlineTurn();t.mock.timers.tick(60_000);await photoDeadlineTurn();assertPhotoTimeout(outcome);
+ holdPhotoAttempt(client,'deadline-member',retainedPhotoFailure(a,true));finish(ack);await photoDeadlineTurn();assertPhotoTimeout(outcome);
+ const retained=heldPhotoAttempt(client,'deadline-member',a)!;assert.equal(retained.file,a.file);assert.equal(retained.key,a.key);assert.equal(retained.expected,a.expected);assert.equal(retained.hadUnknown,true);assert.equal(photoBlocksLeaving(retained,false),true);
+});
+test('PHOTO-DEADLINE only an explicit retry resends the exact original file, key and version',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';const a=deadlinePhotoAttempt();
+ const sends:Array<{url:string;method:string|undefined;body:unknown;key:string|null;version:string|null}>=[];
+ t.mock.method(globalThis,'fetch',async(input:RequestInfo|URL,init:RequestInit)=>{const headers=new Headers(init.headers);sends.push({url:String(input),method:init.method,body:init.body,key:headers.get('Idempotency-Key'),version:headers.get('If-Match')});return sends.length===1?new Promise<Response>(()=>{}):Response.json(ack);});
+ holdPhotoAttempt(client,'deadline-member',a);t.after(()=>releasePhotoAttempt(client,'deadline-member',a));
+ const outcome=observePhotoRequest(sendProductPhoto(client,a));t.mock.timers.tick(60_000);await photoDeadlineTurn();assertPhotoTimeout(outcome);assert.equal(sends.length,1);
+ const retained=retainedPhotoFailure(a,true);holdPhotoAttempt(client,'deadline-member',retained);assert.throws(()=>reviewPhotoAttempt(retained,'8','new-key'),/unknown/);
+ assert.deepEqual(await sendProductPhoto(client,retained),ack);assert.equal(sends.length,2);assert.deepEqual(sends[1],sends[0]);assert.equal(sends[1].body,a.file);releasePhotoAttempt(client,'deadline-member',retained);assert.equal(heldPhotoAttempt(client,'deadline-member',a),null);
+});
+test('PHOTO-DEADLINE timely success clears the timer and keeps strict ACK validation',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';const signals:AbortSignal[]=[];
+ const fetch=t.mock.method(globalThis,'fetch',async(_input:RequestInfo|URL,init:RequestInit)=>{signals.push(init.signal!);return Response.json(ack);});
+ assert.deepEqual(await sendProductPhoto(client,deadlinePhotoAttempt()),ack);
+ fetch.mock.mockImplementation(async(_input:RequestInfo|URL,init:RequestInit)=>{signals.push(init.signal!);return Response.json({...ack,product_id:instanceId});});
+ await assert.rejects(sendProductPhoto(client,deadlinePhotoAttempt()),(e:unknown)=>e instanceof ApiError&&e.network&&!e.timedOut);
+ t.mock.timers.tick(60_000);assert.equal(signals.length,2);for(const signal of signals)assert.equal(signal.aborted,false);
+});
+test('PHOTO-DEADLINE timely refusal and transport failure clear their timers without weakening classification',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';const signals:AbortSignal[]=[];
+ const fetch=t.mock.method(globalThis,'fetch',async(_input:RequestInfo|URL,init:RequestInit)=>{signals.push(init.signal!);return Response.json({code:'version_conflict',detail:'商品已更新'},{status:412});});
+ await assert.rejects(sendProductPhoto(client,deadlinePhotoAttempt()),(e:unknown)=>e instanceof ApiError&&e.status===412&&!e.network&&!e.timedOut);
+ fetch.mock.mockImplementation(async(_input:RequestInfo|URL,init:RequestInit)=>{signals.push(init.signal!);throw new Error('synthetic transport loss');});
+ await assert.rejects(sendProductPhoto(client,deadlinePhotoAttempt()),(e:unknown)=>e instanceof ApiError&&e.network&&!e.timedOut);
+ t.mock.timers.tick(60_000);for(const signal of signals)assert.equal(signal.aborted,false);
+});
+test('PHOTO-DEADLINE a delayed Access response from an ABA session never invalidates the current login',async t=>{
+ const client=new PortalClient();client.csrfToken='synthetic-a';let finish!:(text:string)=>void,notified=0;client.onUnauthorized=()=>{notified++;};
+ const response=new Response('expired',{status:403}),clone=response.clone();t.mock.method(clone,'text',()=>new Promise<string>(resolve=>{finish=resolve;}));t.mock.method(response,'clone',()=>clone);
+ t.mock.method(globalThis,'fetch',async()=>response);const request=sendProductPhoto(client,deadlinePhotoAttempt());await photoDeadlineTurn();client.csrfToken='synthetic-b';client.csrfToken='synthetic-a';finish('expired');
+ await assert.rejects(request,(e:unknown)=>e instanceof ApiError&&e.network&&!e.timedOut);assert.equal(client.csrfToken,'synthetic-a');assert.equal(client.accessExpired,false);assert.equal(notified,0);
+});
+test('PHOTO-DEADLINE gallery timely ACK remains bound to operation, target and completion version',async t=>{
+ const client=new PortalClient();client.csrfToken='synthetic-session';const a=deadlineGalleryAttempt('remove');
+ const receipt={profile:STOREFRONT_GALLERY_PROFILE,product_id:productId,operation:'remove',photo_key:'main',completed_version:'8',changed:true,current:{profile:STOREFRONT_GALLERY_PROFILE,product_id:productId,version:'8',photos:[],retained_secondary_photos:[],media_installed:true,uploads_enabled:true}};
+ const fetch=t.mock.method(globalThis,'fetch',async()=>Response.json(receipt));assert.deepEqual(await sendGalleryPhoto(client,a),receipt);
+ for(const changed of [{operation:'describe'},{product_id:instanceId},{completed_version:'7'}]){fetch.mock.mockImplementation(async()=>Response.json({...receipt,...changed}));await assert.rejects(sendGalleryPhoto(client,a),(e:unknown)=>e instanceof ApiError&&e.network);}
+});
+test('PHOTO-DEADLINE timely Access expiry still notifies the current session',async t=>{
+ const client=new PortalClient();client.csrfToken='synthetic-session';let notified=0;client.onUnauthorized=()=>{notified++;assert.equal(client.csrfToken,null);assert.equal(client.accessExpired,true);};
+ t.mock.method(globalThis,'fetch',async()=>new Response('Access expired',{status:403}));
+ await assert.rejects(sendProductPhoto(client,deadlinePhotoAttempt()),(e:unknown)=>e instanceof ApiError&&e.accessExpired&&e.status===403&&!e.timedOut);assert.equal(notified,1);
+});
+test('PHOTO-DEADLINE a missing member token sends no photo request',async t=>{
+ const client=new PortalClient();let calls=0;t.mock.method(globalThis,'fetch',async()=>{calls++;throw new Error('must not fetch');});
+ await assert.rejects(sendProductPhoto(client,deadlinePhotoAttempt()),(e:unknown)=>e instanceof ApiError&&e.accessExpired&&e.status===401);assert.equal(calls,0);
+});
+test('PHOTO-DEADLINE an abort-aware fetch cannot replace the timeout classification',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';
+ t.mock.method(globalThis,'fetch',async(_input:RequestInfo|URL,init:RequestInit)=>new Promise<Response>((_resolve,reject)=>{init.signal!.addEventListener('abort',()=>reject(new Error('transport aborted')),{once:true});}));
+ const outcome=observePhotoRequest(sendProductPhoto(client,deadlinePhotoAttempt()));t.mock.timers.tick(60_000);await photoDeadlineTurn();assertPhotoTimeout(outcome);
+});
+for(const action of ['describe','reorder'] as const)test(`PHOTO-DEADLINE explicit gallery ${action} retry preserves its original JSON tuple`,async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const client=new PortalClient();client.csrfToken='synthetic-session';const a=deadlineGalleryAttempt(action);
+ const receipt={profile:STOREFRONT_GALLERY_PROFILE,product_id:productId,operation:action,photo_key:a.photoKey,completed_version:'8',changed:true,current:{profile:STOREFRONT_GALLERY_PROFILE,product_id:productId,version:'10',photos:[],retained_secondary_photos:[],media_installed:true,uploads_enabled:true}};
+ const sends:Array<{url:string;method:string|undefined;body:unknown;key:string|null;version:string|null}>=[];
+ t.mock.method(globalThis,'fetch',async(input:RequestInfo|URL,init:RequestInit)=>{const headers=new Headers(init.headers);sends.push({url:String(input),method:init.method,body:init.body,key:headers.get('Idempotency-Key'),version:headers.get('If-Match')});return sends.length===1?new Promise<Response>(()=>{}):Response.json(receipt);});
+ holdPhotoAttempt(client,'deadline-gallery-member',a);t.after(()=>releasePhotoAttempt(client,'deadline-gallery-member',a));
+ const outcome=observePhotoRequest(sendGalleryPhoto(client,a));t.mock.timers.tick(60_000);await photoDeadlineTurn();assertPhotoTimeout(outcome);assert.equal(sends.length,1);
+ const retained=retainedPhotoFailure(a,true);holdPhotoAttempt(client,'deadline-gallery-member',retained);assert.throws(()=>holdPhotoAttempt(client,'deadline-gallery-member',{...retained,body:'{}'}),/unknown/);
+ assert.deepEqual(await sendGalleryPhoto(client,retained),receipt);assert.deepEqual(sends[1],sends[0]);assert.equal(sends.length,2);assert.equal(sends[1].body,a.body);assert.equal(sends[1].method,action==='describe'?'PATCH':'POST');releasePhotoAttempt(client,'deadline-gallery-member',retained);
+});
