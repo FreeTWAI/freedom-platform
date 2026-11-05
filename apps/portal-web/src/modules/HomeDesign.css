@@ -208,3 +208,8 @@
 @media (max-width: 700px) {
   :is(.community-library,.community-skill-library) .skill-library-filters { grid-template-columns: 1fr; gap: 14px; }
 }
+
+/* Keep these public destinations discoverable without expanding the workshop. */
+.freedom-home .home-discovery-links { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
+.app-frame.social-layout .home-discovery-links .home-journal-entry { display: block; padding: 0; border: 0; border-radius: 0; }
+.freedom-home .home-discovery-links .btn { min-height: 44px; max-width: 100%; white-space: normal; }

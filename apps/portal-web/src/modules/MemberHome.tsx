@@ -27,9 +27,6 @@ function HomeJournal({onOpen}: {onOpen: () => boolean}) {
   const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null), frame = useRef<HTMLIFrameElement>(null), titleId = useId();
   useEffect(() => {
     if (!consumeHomeJournalIntent()) return;
-    // Restore the clicked entry's disclosure after the new mobile document.
-    const disclosure = trigger.current?.closest('details');
-    if (disclosure) disclosure.open = true;
     setOpen(true);
   }, []);
   useEffect(() => {
@@ -47,8 +44,6 @@ function HomeJournal({onOpen}: {onOpen: () => boolean}) {
     return () => window.removeEventListener('message', onMessage);
   }, [open]);
   return <section className="home-journal-entry" aria-label="共創日誌">
-    <h2>共創日誌</h2>
-    <p>閱讀工坊討論整理、開發進展與決策。</p>
     {journalUrl ? <>
       <button ref={trigger} type="button" className="btn btn-ghost" aria-haspopup="dialog" onClick={() => { if (onOpen()) setOpen(true); }}>閱讀共創誌</button>
       <dialog ref={dialog} className="home-journal-dialog" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)}>
@@ -251,6 +246,10 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
     <HomeParticipation client={client} session={session} onNavigate={onNavigate} personalContentEnabled={personalContentEnabled} active={openedParticipation === scope}/>
     </div>
     </details>
+    <nav className="home-discovery-links" aria-label="共創誌與遊戲">
+      <HomeJournal onOpen={openHomeJournal}/>
+      <a className="btn btn-ghost" href="/play" target="_blank" rel="noopener noreferrer">遊戲大廳<span className="sr-only">（另開分頁）</span></a>
+    </nav>
     <section className="home-timeline" aria-label="首頁社群動態"><SocialZone client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
@@ -272,14 +271,6 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
         <button type="button" onClick={() => onNavigate?.('events')}><strong>社群活動</strong><span>查看、提交與管理活動</span><span className="home-destination-arrow" aria-hidden="true">›</span></button>
       </section>
     </nav>
-
-    <HomeJournal onOpen={openHomeJournal}/>
-
-    <section className="card stack" aria-label="自由工坊遊戲大廳">
-      <h2>休息一下，玩出一點新靈感。</h2>
-      <p>64 道料理小遊戲與離譜日常，按分類挑一款，也能把成果分享給工坊夥伴。</p>
-      <a className="btn btn-ghost" href="/play" target="_blank" rel="noopener noreferrer">打開遊戲大廳<span className="sr-only">（另開分頁）</span></a>
-    </section>
 
     <nav className="home-shortcuts" data-guide-anchor="home:shortcuts" aria-label="常用入口">
       {shortcuts.map(entry => <button key={entry.id} type="button" className="home-shortcut" onClick={() => onNavigate?.(entry.id)}>
