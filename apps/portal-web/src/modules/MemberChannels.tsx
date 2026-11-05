@@ -402,6 +402,10 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
   const key=selected?.key,draft=key?drafts[key]??'':'',attempt=key?pending[key]:undefined,sendError=key?sendErrors[key]:undefined;
   const richDraft=richDrafts.get(key??'');
   const changeRichDraft=richDrafts.change,calendarKey=chatCalendarKey();
+  // Reuse localized labels while typing, including when the phone list is hidden.
+  // Keep row handlers fresh so selection still reads the current query and client.
+  const channelRows=useMemo(()=>channels.filter(item=>item.name.toLocaleLowerCase().includes(roomQuery.trim().toLocaleLowerCase()))
+    .map(item=>({item,lastMessageLabel:item.last_message_at?`最後訊息 ${formatIsoLocal(item.last_message_at)}`:'尚無訊息'})),[channels,roomQuery,calendarKey]);
   // Only history/control changes invalidate these rows, not the composer draft.
   // Keep the local calendar key so cached ChatTime labels still roll over.
   const messageHistory=useMemo(()=>history&&key?(history.items.length===0?<p className="empty">這個頻道還沒有訊息。</p>:<ol className="messages-bubbles" aria-label="頻道訊息">
@@ -431,14 +435,14 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
       {listRefresh.error&&<p className="banner banner-error" role="alert">{text.unit}頻道重新整理失敗：{listRefresh.error}</p>}
       {listStatus==='ready'&&(emptyList&&!roomQuery.trim()?<div className="stack"><p className="empty">{text.empty}</p><div className="messages-actions"><button className="btn btn-primary" type="button" onClick={()=>onNavigate(text.home)}>{text.homeLabel}</button></div></div>
         :<ul className="messages-list member-channel-list" aria-label={`${text.unit}頻道列表`}>
-          {channels.filter(item=>item.name.toLocaleLowerCase().includes(roomQuery.trim().toLocaleLowerCase())).map(item=>{const meta=`${uid}-meta-${item.channel_key}`;return <li key={item.channel_key} className={item.unread_count?'is-unread':undefined}>
+          {channelRows.map(({item,lastMessageLabel})=>{const meta=`${uid}-meta-${item.channel_key}`;return <li key={item.channel_key} className={item.unread_count?'is-unread':undefined}>
             <button type="button" className="messages-peer channel-button" data-channel-key={item.channel_key} aria-label={item.name} aria-describedby={meta}
               aria-current={key===item.channel_key?'true':undefined} onClick={()=>select(item)}>
-              <span className="chat-room-icon" aria-hidden="true">{kind==='guild'?'#':'◎'}</span><span className="chat-peer-copy"><strong>{item.name}</strong><span className="messages-meta chat-peer-preview">{item.last_message_at?`最後訊息 ${formatIsoLocal(item.last_message_at)}`:'尚無訊息'}</span></span>
+              <span className="chat-room-icon" aria-hidden="true">{kind==='guild'?'#':'◎'}</span><span className="chat-peer-copy"><strong>{item.name}</strong><span className="messages-meta chat-peer-preview">{lastMessageLabel}</span></span>
               {item.unread_count>0&&<span className="messages-count" aria-hidden="true">{item.unread_count} 則未讀</span>}
             </button>
             {/* The accessible name stays the channel name; time and unread count are its description. */}
-            <span id={meta} hidden>{item.last_message_at?`最後訊息 ${formatIsoLocal(item.last_message_at)}`:'尚無訊息'}{item.unread_count>0?`，${item.unread_count} 則未讀`:'，沒有未讀'}</span>
+            <span id={meta} hidden>{lastMessageLabel}{item.unread_count>0?`，${item.unread_count} 則未讀`:'，沒有未讀'}</span>
           </li>;})}
         </ul>)}
       {listMore.error&&<p className="banner banner-error" role="alert">更多{text.unit}頻道讀取失敗：{listMore.error}</p>}

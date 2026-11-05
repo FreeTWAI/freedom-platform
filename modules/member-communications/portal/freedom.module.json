@@ -6,6 +6,8 @@
     "modules/member-communications/portal/**",
     "tests/runtime/direct-list-render.test.ts",
     "tests/e2e/direct-list-render.spec.ts",
+    "tests/runtime/channel-list-format.test.ts",
+    "tests/e2e/channel-list-format.spec.ts",
     "tests/runtime/chat-sticker-preview.test.ts",
     "tests/runtime/chat-sticker-send.test.ts",
     "apps/portal-web/src/GameConsoleComposer.tsx",
