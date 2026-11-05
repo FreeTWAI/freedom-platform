@@ -76,6 +76,8 @@
     "apps/portal-web/src/modules/EventHelpers.css",
     "tests/runtime/event-helper-client.test.ts",
     "tests/e2e/event-helpers.spec.ts",
+    "tests/runtime/event-detail-retry.test.ts",
+    "tests/e2e/event-detail-retry.spec.ts",
     "tests/runtime/event-route-identity.test.ts",
     "tests/e2e/event-route-identity.spec.ts"
   ],

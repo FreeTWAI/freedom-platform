@@ -198,7 +198,7 @@ for(const entry of ['path','hash'] as const)for(const status of [403,404,503] as
     await openNotification(page,routes,routes.b);
     await expectPendingB(page,routes,timeOrigin);
     await releaseDetailB(page,routes,status);
-    await expect(detail(page).getByText('找不到這場活動，或目前無法查看。',{exact:true})).toBeVisible();
+    await expect(detail(page).getByText(status===503?'活動暫時無法載入，請重新讀取。':'找不到這場活動，或目前無法查看。',{exact:status!==503})).toBeVisible();
     await expect(detail(page).getByRole('heading',{name:routes.a.title,exact:true})).toHaveCount(0);
     await expect(detail(page).getByRole('button',{name:/^(我要參加|取消報名)$/})).toHaveCount(0);
     expect(routes.writes).toEqual([]);

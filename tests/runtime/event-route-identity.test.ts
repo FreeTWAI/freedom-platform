@@ -154,7 +154,7 @@ test('control: B GET success replaces A and subsequent RSVP targets B',async t=>
  const h=fixture(t);await h.start();await h.navigate(1);await h.settle(h.reads('/events/'+IDS[1]).at(-1),event(1));assert.match(h.text(),/合成活動說明 1/);assert.doesNotMatch(h.text(),/合成活動說明 0/);h.click(h.button('我要參加')!);assert.equal(h.writes().at(-1).path,'/events/'+IDS[1]+'/rsvp');
 });
 for(const status of [403,404,503])test(`B GET ${status} shows no stale A and existing list retry self-recovers`,async t=>{
- const h=fixture(t);await h.start();await h.navigate(1);await h.settle(h.reads('/events/'+IDS[1]).at(-1),new ApiError({status,message:'合成讀取失敗',definitiveResponse:true}),true);assert.doesNotMatch(h.text(),/合成活動說明 0/);assert.equal(h.button('我要參加'),undefined);assert.match(h.text(),/找不到這場活動，或目前無法查看/);
+ const h=fixture(t);await h.start();await h.navigate(1);await h.settle(h.reads('/events/'+IDS[1]).at(-1),new ApiError({status,message:'合成讀取失敗',definitiveResponse:true}),true);assert.doesNotMatch(h.text(),/合成活動說明 0/);assert.equal(h.button('我要參加'),undefined);assert.match(h.text(),status===503?/活動暫時無法載入，請重新讀取/:/找不到這場活動，或目前無法查看/);
  h.click(h.button('返回活動列表與行事曆')!);assert.equal(window.location.hash,'#events');assert(h.button('重試'));h.click(h.button('重試')!);
  await h.settle(h.reads('/guilds/directory').at(-1),{items:[]});await h.settle(h.reads('/events/bulletins').at(-1),{items:[]});await h.settle(h.reads('/events').at(-1),{items:[event(0),event(1)]});await h.navigate(1);assert.match(h.text(),/合成活動說明 1/);assert.equal(h.writes().length,0);
 });
