@@ -49,10 +49,10 @@ export async function sendEventMedia(client:PortalClient,command:EventMediaComma
   });}catch{throw unknownMedia();}
   if(await isExpiredAccessResponse(response)){
     const status=expiredAccessStatus(response);
-    if(client.csrfToken===requestCsrfToken){client.accessExpired=true;if(status===401||status===403)client.csrfToken=null;client.onUnauthorized?.();}
+    if(client.csrfToken===requestCsrfToken&&client.sessionGeneration===command.generation){client.accessExpired=true;if(status===401||status===403)client.csrfToken=null;client.onUnauthorized?.();}
     throw new ApiError({message:MEMBER_ACCESS_EXPIRED_MESSAGE,status,accessExpired:true,network:true});
   }
-  if(client.csrfToken===requestCsrfToken){client.accessExpired=false;if(response.status===401){client.csrfToken=null;client.onUnauthorized?.();}}
+  if(client.csrfToken===requestCsrfToken&&client.sessionGeneration===command.generation){client.accessExpired=false;if(response.status===401){client.csrfToken=null;client.onUnauthorized?.();}}
   let payload:Record<string,unknown>;
   try{payload=await response.json();}catch{
     throw unknownMedia();

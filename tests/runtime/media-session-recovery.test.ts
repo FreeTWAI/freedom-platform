@@ -17,6 +17,108 @@ const uploads: [string, (client: PortalClient) => Promise<unknown>][] = [
   ['highlight', client => uploadHighlightImage(client, event.event_id, 'photo', file, 'landscape', '', 'synthetic-key')],
 ];
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return {promise, resolve};
+}
+
+// Exercise the real media helper and Access classifier at both await boundaries.
+// Reusing token text after leaving a session does not restore its lifetime.
+for (const kind of ['banner', 'video'] as const) {
+  for (const accessExpired of [false, true]) {
+    for (const delayedAt of ['fetch', 'Access body'] as const) {
+      for (const owner of ['current', 'ABA'] as const) {
+        test(`${kind}: ${owner} owner, delayed ${accessExpired ? 'Access denial' : '401'} at ${delayedAt}`, async t => {
+          const requested = deferred<void>();
+          const responseReady = deferred<Response>();
+          const classificationStarted = deferred<void>();
+          let releaseBody!: () => void;
+          const status = accessExpired ? 403 : 401;
+          const body = accessExpired ? '<html>Expired Access</html>'
+            : JSON.stringify({type:'urn:problem:unauthorized',title:'Unauthorized',status});
+          const response = delayedAt === 'fetch'
+            ? new Response(body, {status})
+            : new Response(new ReadableStream<Uint8Array>({start(controller) {
+              releaseBody = () => { controller.enqueue(new TextEncoder().encode(body)); controller.close(); };
+            }}), {status});
+          if (delayedAt === 'Access body') {
+            const clone = response.clone.bind(response);
+            t.mock.method(response, 'clone', () => {
+              const copy = clone(), text = copy.text.bind(copy);
+              t.mock.method(copy, 'text', () => { classificationStarted.resolve(); return text(); });
+              return copy;
+            });
+          }
+          const client = new PortalClient(); client.csrfToken = 'session-A';
+          // The normal JSON path must not clear a newer Access-expired flag.
+          client.accessExpired = !accessExpired;
+          const unauthorized: {token:string|null;accessExpired:boolean}[] = [];
+          client.onUnauthorized = () => { unauthorized.push({token:client.csrfToken,accessExpired:client.accessExpired}); };
+          const command = await prepareEventMedia(client, event, file, kind);
+          const fetcher = t.mock.method(globalThis, 'fetch', (input: unknown, init?: RequestInit) => {
+            assert.equal(input, `/api/v1/events/${event.event_id}/${kind}`);
+            assert.equal(init?.method, 'POST'); assert.equal(init?.body, command.file);
+            const headers = new Headers(init?.headers);
+            assert.equal(headers.get('X-CSRF-Token'), command.csrfToken);
+            assert.equal(headers.get('Idempotency-Key'), command.key);
+            assert.equal(headers.get('If-Match'), `"${command.version}"`);
+            requested.resolve(); return responseReady.promise;
+          });
+          const pending = assert.rejects(sendEventMedia(client, command), (cause: unknown) =>
+            cause instanceof ApiError && cause.status === status && cause.accessExpired === accessExpired
+              && cause.network === accessExpired && cause.definitiveResponse === !accessExpired);
+          await requested.promise;
+          if (delayedAt === 'Access body') {
+            responseReady.resolve(response);
+            await classificationStarted.promise;
+          }
+          if (owner === 'ABA') client.csrfToken = 'session-B';
+          client.csrfToken = 'session-A'; // Same token within the current lifetime is a no-op.
+          const generation = client.sessionGeneration;
+          assert.equal(generation, command.generation + (owner === 'ABA' ? 2 : 0));
+          if (delayedAt === 'fetch') responseReady.resolve(response);
+          else releaseBody();
+          await pending;
+          assert.equal(client.csrfToken, owner === 'ABA' ? 'session-A' : null);
+          assert.equal(client.sessionGeneration, generation + (owner === 'current' ? 1 : 0));
+          assert.equal(client.accessExpired, owner === 'ABA' ? !accessExpired : accessExpired);
+          assert.deepEqual(unauthorized, owner === 'ABA' ? [] : [{token:null,accessExpired}]);
+          assert.equal(fetcher.mock.callCount(), 1, 'a denial never automatically replays media');
+          assert.equal(command.csrfToken, 'session-A');
+          assert.equal(Object.isFrozen(command), true, 'the original retry tuple is retained');
+          if (owner === 'ABA') {
+            await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.status === 409);
+            assert.equal(fetcher.mock.callCount(), 1, 'an old command cannot be replayed by the replacement session');
+          }
+        });
+      }
+    }
+  }
+
+  for (const owner of ['current', 'ABA'] as const) test(`${kind}: late success respects the ${owner} owner Access state`, async t => {
+    const requested = deferred<void>(), responseReady = deferred<Response>();
+    const client = new PortalClient(); client.csrfToken = 'session-A';
+    const command = await prepareEventMedia(client, event, file, kind);
+    const fetcher = t.mock.method(globalThis, 'fetch', () => { requested.resolve(); return responseReady.promise; });
+    const receipt = {...event, aggregate_version:4, [`${kind}_url`]:'/saved-media'};
+    const operation = sendEventMedia(client, command);
+    const pending = owner === 'ABA'
+      ? assert.rejects(operation, (cause: unknown) => cause instanceof ApiError && cause.status === 409)
+      : operation.then(result => assert.deepEqual(result, receipt));
+    await requested.promise;
+    if (owner === 'ABA') client.csrfToken = 'session-B';
+    client.csrfToken = 'session-A'; client.accessExpired = true;
+    let unauthorized = 0; client.onUnauthorized = () => { unauthorized++; };
+    const generation = client.sessionGeneration;
+    responseReady.resolve(Response.json(receipt));
+    await pending;
+    assert.equal(client.csrfToken, 'session-A'); assert.equal(client.sessionGeneration, generation);
+    assert.equal(client.accessExpired, owner === 'ABA'); assert.equal(unauthorized, 0);
+    assert.equal(fetcher.mock.callCount(), 1);
+  });
+}
+
 for (const [name, upload] of uploads) {
   for (const accessExpired of [false, true]) {
     test(`${name}: a delayed ${accessExpired ? 'Access denial' : '401'} never signs out a new member`, async t => {
