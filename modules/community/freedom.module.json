@@ -123,7 +123,9 @@
     "tests/runtime/event-save-client.test.ts",
     "tests/runtime/event-public-registration-client.test.ts",
     "tests/runtime/event-date-input.test.ts",
-    "tests/runtime/event-clipboard-recovery.test.ts"
+    "tests/runtime/event-clipboard-recovery.test.ts",
+    "tests/runtime/event-detail-retry.test.ts",
+    "tests/e2e/event-detail-retry.spec.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
