@@ -70,3 +70,13 @@
 .merchant-order-status { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; min-width: 0; }
 .merchant-order-status > p { flex-basis: 100%; margin: 0; }
 .merchant-order-status > .btn-small { width: auto; min-height: 44px; font-size: .875rem; padding: .4rem .75rem; white-space: normal; }
+
+/* Product-first workspace; secondary settings must not precede the catalog. */
+.hosted-store-heading h2, .hosted-store-heading p { margin: 0; }
+.hosted-store-heading { display: grid; gap: .5rem; }
+.hosted-reservation-settings[hidden] { display: none !important; }
+.hosted-retail-nav .btn { white-space: nowrap; }
+.hosted-store .hosted-store-publication { gap: .5rem; padding: .75rem; }
+
+.hosted-store-products .hosted-store-product { gap: .5rem; margin-top: 0; }
+.hosted-store-product h4 { margin: 0; }

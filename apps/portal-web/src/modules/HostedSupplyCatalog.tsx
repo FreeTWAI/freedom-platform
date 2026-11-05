@@ -43,6 +43,7 @@ export function SupplyCatalogList({client}: {client: PortalClient}) {
   const items = [...(data?.items ?? [])].sort((a, b) => Number(b.setup_state === 'setup_required') - Number(a.setup_state === 'setup_required'));
   return <div className="hosted-store stack">
     <h2 data-share-entry="supply" tabIndex={-1}>我的供貨商品庫</h2>
+    <p className="field-hint">提供商品給合作店主，供貨價與商店售價分開管理；不會自動發布公開商店。</p>
     <div className="actions"><a className="btn btn-ghost" href="#guilds/guild_product_quality_supply">前往商品品質與供應公會</a></div>
     {error ? <><p role="alert">暫時無法讀取你的供貨資料。</p><div className="actions"><button type="button" className="btn btn-ghost" onClick={retry}>重試</button></div></> : !data ? <p role="status">正在確認你的供貨資料…</p> : <>
       {data.items.length === 0 && !data.next_cursor && <p>你還沒有供貨商品庫。請從商品品質與供應公會開始供貨設定。</p>}
@@ -100,7 +101,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
     window.addEventListener('beforeunload', unloading); void load();
     return () => {controller.current.abort(); generation.current++; window.removeEventListener('beforeunload', unloading);};
   }, [client, root]);
-  async function load() {
+  async function load(): Promise<'fresh' | 'failed' | 'superseded'> {
     const signal = controller.current.signal, ticket = ++generation.current;
     // Older child replies, successful or failed, belong to a generation this
     // reload has already replaced. Keep a loaded summary visibly incomplete
@@ -120,11 +121,12 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
         try {setting = ReservationSettingSchema.parse(await client.get(root + '/reservation-setting', {signal}));}
         catch (cause) {if (!(cause instanceof ApiError && [403, 404].includes(cause.status))) throw cause;}
       }
-      if (!current()) return;
+      if (!current()) return 'superseded';
       admissibleEpoch.current = ticket;
-      setReservationSetting(setting); setView(next); setProducts(items); setError(''); setReadFailed(false); setRefresh(ticket);
+      setReservationSetting(setting); setView(next); setProducts(items); setError(''); setReadFailed(false); setMissing(false); setStatus(''); setRefresh(ticket);
+      return 'fresh';
     } catch (cause) {
-      if (!current()) return;
+      if (!current()) return 'superseded';
       // This parent read is not a command receipt and does not release an unknown
       // operation. A failure after a previous success must drop the current-looking
       // offer state and waiting count; the receipt, alert, reload, and lock stay.
@@ -133,7 +135,8 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
       applyCooperation({ok: false});
       setReadFailed(true);
       if (cause instanceof ApiError && cause.status === 404) setMissing(true);
-      else setError(errorText(cause));
+      setError(errorText(cause));
+      return 'failed';
     } finally {if (current()) setLoading(false);}
   }
   async function send(attempt: Attempt) {
@@ -147,7 +150,10 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
       if (!parsed.success) throw new ApiError({message: '回應未完整收到，請重試確認原操作。', network: true});
       if (!current()) return;
       held.current = null; attempt.success(parsed.data);
-      await load(); if (current()) announce(attempt.notice);
+      // The receipt confirmed the write. A failed readback must only retry GET,
+      // never turn this acknowledged command back into an unknown operation.
+      const result = await load();
+      if (current() && result !== 'superseded') announce(result === 'fresh' ? attempt.notice : '操作已完成，但最新供貨資料尚未讀回。請重新載入；不會重送剛才的操作。');
     } catch (cause) {
       if (!current()) return;
       // Preserve the exact key, payload and version across unknown responses, including 5xx.
@@ -158,8 +164,12 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
       if (cause.status === 404 && attempt.targetMissingIsStore !== false) setMissing(true);
       else if (cause.status === 412) {
         setEditing(null); setSupplyEditing(null); markDirty('edit', false); markDirty('supply', false);
-        await load(); if (current()) announce('資料剛剛被更新，已重新載入，請確認後再編輯。');
-      } else if (cause.code === 'storefront_already_set_up') {await load(); if (current()) announce('商品庫已經設定過，已重新載入。');}
+        const result = await load();
+        if (current() && result !== 'superseded') announce(result === 'fresh' ? '資料剛剛被更新，已重新載入，請確認後再編輯。' : '資料剛剛被更新，但最新供貨資料尚未讀回；請重新載入後再編輯。');
+      } else if (cause.code === 'storefront_already_set_up') {
+        const result = await load();
+        if (current() && result !== 'superseded') announce(result === 'fresh' ? '商品庫已經設定過，已重新載入。' : '商品庫已經設定過，但最新供貨資料尚未讀回；請重新載入。');
+      }
       else setError(errorText(cause));
     } finally {if (current()) {busyRef.current = false; setBusy(false);}}
   }
@@ -251,7 +261,7 @@ export function HostedSupplyCatalog({client, tenantId, instanceId, registerLeave
             {can('store:write') && view.product_count >= view.product_limit && <p>已達 {view.product_limit} 件共用商品容量上限（含供貨商品與商店選品）。</p>}
           </section>
           <div id="supply-cooperation-panel" className="hosted-supply-panel" hidden={activeArea !== 'cooperation'}>
-            <HostedDistribution supplierOnly client={client} root={root} refresh={refresh} busy={locked} writable={can('store:write')} onDirty={(id, value) => markDirty('distribution/' + id, value)} onCommand={command} onReload={() => leaveOk() ? load() : Promise.resolve()} onCooperation={acceptCooperation}/>
+            <HostedDistribution supplierOnly client={client} root={root} refresh={refresh} busy={locked} writable={can('store:write')} onDirty={(id, value) => markDirty('distribution/' + id, value)} onCommand={command} onReload={async () => {if (leaveOk()) await load();}} onCooperation={acceptCooperation}/>
           </div>
         </>}
         <section id="supply-reservations-panel" className="hosted-supply-panel stack" hidden={activeArea !== 'reservations'} aria-label="預留與訂單">

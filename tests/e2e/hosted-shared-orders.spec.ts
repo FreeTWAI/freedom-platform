@@ -55,9 +55,11 @@ async function createStore(page:Page,name:string) {
   const setup=page.getByRole('form',{name:'建立商店',exact:true});
   await setup.getByLabel('商店名稱',{exact:true}).fill(name);await setup.getByLabel('商店網址',{exact:true}).fill(slug);
   await setup.getByRole('button',{name:'建立商店',exact:true}).click();
+  await page.getByRole('navigation',{name:'商店工作區'}).getByRole('button',{name:'商店資料',exact:true}).click();
   await expect(page.getByRole('button',{name:'開放 30 分鐘預留',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'開放 30 分鐘預留',exact:true}).click();
   await expect(page.getByRole('button',{name:'停止接受新預留',exact:true})).toBeEnabled();
+  await page.getByRole('navigation',{name:'商店工作區'}).getByRole('button',{name:'商品',exact:true}).click();
   return {page,name,hash,slug};
 }
 async function reviewShared(page:Page,slug:string,quantity:string,title:string) {
@@ -155,7 +157,7 @@ test('ordinary A/B/C members open stores, agree supply, opt in, race shared stoc
     await expect(winner.getByRole('region',{name:'我的預留'})).toContainText('已取消');
     await a.page.getByRole('button',{name:'更新供貨訂單',exact:true}).click();await expect(a.page.locator('.hosted-store')).toContainText('已取消');
     expect((await e2eAuthPool.query('SELECT reserved FROM commerce_items WHERE title=$1',[title])).rows).toEqual([{reserved:0}]);
-    await b.page.goto('/'+b.hash);await b.page.getByRole('button',{name:'停止接受新預留',exact:true}).click();
+    await b.page.goto('/'+b.hash);await b.page.getByRole('navigation',{name:'商店工作區'}).getByRole('button',{name:'商店資料',exact:true}).click();await b.page.getByRole('button',{name:'停止接受新預留',exact:true}).click();
     await expect(b.page.getByRole('button',{name:'開放 30 分鐘預留',exact:true})).toBeEnabled();
     await buyerB.goto('/#reservations/'+b.slug);await expect(buyerB.locator('.hosted-store')).toContainText('商品僅供展示');
   }finally{
@@ -188,6 +190,7 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
     await post(b, sellerStore.root + '/setup', {name: '零售 B', slug, currency: 'TWD'}, 201);
     await post(b, sellerStore.root + '/products', {title: otherTitle, price_minor: 900, stock: 5}, 201);
     await open(b, sellerStore.hash);
+    await b.getByRole('navigation',{name:'商店工作區'}).getByRole('button',{name:'商店資料',exact:true}).click();
     await b.getByRole('button', {name: '開放 30 分鐘預留', exact: true}).click();
     await expect(b.getByRole('button', {name: '停止接受新預留', exact: true})).toBeEnabled();
     await a.getByRole('navigation', {name: '供貨工作區'}).getByRole('button', {name: '商品', exact: true}).click();
