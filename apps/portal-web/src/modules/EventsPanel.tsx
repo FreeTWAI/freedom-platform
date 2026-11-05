@@ -173,7 +173,11 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
   // Only the shell's accepted location may switch the editor. A rejected hash
   // or history change must not hide an unsaved draft before the shell restores it.
   const selectedId=/^#events\/([0-9a-f-]{36})(?:\?.*)?$/.exec(locationHash)?.[1]??(!locationHash?/^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1]??null:null);
-  const [selectedItem,setSelectedItem]=useState<CommunityEvent|null>(null);
+  const [selectedRead,setSelectedRead]=useState<{client:PortalClient;generation:number;eventId:string;item:CommunityEvent|null;loading:boolean}|null>(null);
+  // A detail read belongs to its accepted route and transport owner, never the
+  // next route while its own read is still pending or has failed.
+  const currentSelectedRead=selectedRead?.client===client&&selectedRead.generation===client.sessionGeneration&&selectedRead.eventId===selectedId?selectedRead:null;
+  const selectedItem=currentSelectedRead?.item??null;
   const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client);
   const saveAttempt=useRef<EventSaveAttempt|null>(null);
   const reviewAttempt=useRef<{eventId:string;version:number;decision:'approve'|'reject';reason:string}|null>(null);
@@ -226,7 +230,17 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
     finally{if(current()){setLoading(false);setInitialLoadPending(false);}}
   },[client]);
   useEffect(()=>{void load();return()=>{loadRequest.current++;};},[load]);
-  useEffect(()=>{if(!selectedId||items.some(item=>item.event_id===selectedId)){setSelectedItem(null);return;}let active=true;void client.get<CommunityEvent>(`/events/${selectedId}`).then(item=>{if(active)setSelectedItem(item)}).catch(()=>{if(active)setSelectedItem(null)});return()=>{active=false}},[client,items,selectedId]);
+  useEffect(()=>{
+    if(!selectedId||items.some(item=>item.event_id===selectedId)){setSelectedRead(null);return;}
+    let active=true;
+    const owner={client,generation:client.sessionGeneration,eventId:selectedId};
+    const current=()=>active&&client.sessionGeneration===owner.generation;
+    setSelectedRead({...owner,item:null,loading:true});
+    void client.get<CommunityEvent>(`/events/${selectedId}`)
+      .then(item=>{if(current())setSelectedRead({...owner,item:item?.event_id===selectedId?item:null,loading:false});})
+      .catch(()=>{if(current())setSelectedRead({...owner,item:null,loading:false});});
+    return()=>{active=false;};
+  },[client,client.sessionGeneration,items,selectedId]);
   useEffect(()=>{if(selectedId)referralCode(selectedId)},[selectedId]);
   const resumedEvent=useRef<string|null>(null);
   useEffect(()=>{
@@ -438,7 +452,7 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
   };
   const actionRecovery=recoveringAction&&<div className="banner banner-info" role="status"><p>原報名或取消操作還沒確認，請勿再送出另一個活動操作。</p><button type="button" className="btn btn-ghost" disabled={busy||saving} onClick={()=>{if(actionAttempt.current)void sendEventAction(actionAttempt.current);}}>重試原活動操作</button></div>;
   const selected=selectedId&&(items.find(item=>item.event_id===selectedId)??selectedItem);
-  if(selectedId)return <section className="experience-panel event-flow stack" aria-label="活動專頁"><div className="experience-actions"><button className="btn btn-ghost" type="button" onClick={onList}>返回活動列表與行事曆</button></div>{selected?render(selected):<p role="status">{loading?'正在載入活動…':'找不到這場活動，或目前無法查看。'}</p>}{renderMissions?.(selectedId,onMissionBlocked)}<EventAttendees client={client} event={attendeesFor} onClose={()=>{setAttendeesFor(null);attendeesTrigger.current?.focus();attendeesTrigger.current=null;}}/>{actionRecovery}{notice&&<p role="status" className="banner banner-info">{notice}</p>}{error&&<p role="alert" className="banner banner-error">{error}</p>}{bannerError&&<p role="alert" className="banner banner-error">{bannerError}</p>}</section>;
+  if(selectedId)return <section className="experience-panel event-flow stack" aria-label="活動專頁"><div className="experience-actions"><button className="btn btn-ghost" type="button" onClick={onList}>返回活動列表與行事曆</button></div>{selected?render(selected):<p role="status">{loading||!currentSelectedRead||currentSelectedRead.loading?'正在載入活動…':'找不到這場活動，或目前無法查看。'}</p>}{renderMissions?.(selectedId,onMissionBlocked)}<EventAttendees client={client} event={attendeesFor} onClose={()=>{setAttendeesFor(null);attendeesTrigger.current?.focus();attendeesTrigger.current=null;}}/>{actionRecovery}{notice&&<p role="status" className="banner banner-info">{notice}</p>}{error&&<p role="alert" className="banner banner-error">{error}</p>}{bannerError&&<p role="alert" className="banner banner-error">{bannerError}</p>}</section>;
   return <section className="experience-panel event-flow stack" aria-label="活動發佈區">
     <EventAttendees client={client} event={attendeesFor} onClose={()=>{setAttendeesFor(null);attendeesTrigger.current?.focus();attendeesTrigger.current=null;}}/>
     <div className="experience-intro"><div><h2>一起參加活動，也可以自己辦。</h2><p>選一場活動報名，或填好時間、地點，送出你的活動。活動核准後才會開放報名。</p></div><button type="button" className="btn btn-primary" ref={createTrigger} data-guide-anchor="events:submit-event" disabled={initialLoadPending||saving||mediaUnknown} onClick={()=>openCreate()}>辦活動</button></div>

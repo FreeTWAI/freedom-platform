@@ -82,7 +82,9 @@
     "tests/runtime/companion-mainline-contract.test.ts",
     "modules/community/companion-mainline.md",
     "tests/runtime/event-helper-resume.test.ts",
-    "tests/e2e/event-helper-resume.spec.ts"
+    "tests/e2e/event-helper-resume.spec.ts",
+    "tests/runtime/event-route-identity.test.ts",
+    "tests/e2e/event-route-identity.spec.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
