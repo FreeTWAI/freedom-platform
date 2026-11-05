@@ -32,6 +32,8 @@
     "docs/development/member-participation-plan.md",
     "apps/portal-web/src/modules/SocialCrossPlatformShare.tsx",
     "apps/portal-web/src/modules/SocialInteractions.tsx",
+    "tests/runtime/social-comment-like-read.test.ts",
+    "tests/e2e/social-comment-like-read.spec.ts",
     "apps/portal-web/src/modules/SocialPostLike.tsx",
     "tests/e2e/social-post-like.spec.ts",
     "apps/portal-web/src/modules/SocialPostEditor.tsx",

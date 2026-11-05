@@ -58,9 +58,10 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
   async function selectImage(next:File|null){const token=++imageSeq.current,generation=client.sessionGeneration;setError('');if(!next){setFile(null);setPreparing(false);return;}setPreparing(true);try{const prepared=await prepareSocialImage(next);if(token===imageSeq.current&&current(generation))setFile(prepared);}catch(e){if(token===imageSeq.current&&current(generation))setError(e instanceof Error?e.message:'圖片無法處理，草稿仍保留。');}finally{if(token===imageSeq.current&&current(generation))setPreparing(false);}}
   async function loadPeople(next?:string){const token=++peopleSeq.current,generation=client.sessionGeneration;setPeopleBusy(true);setPeopleError('');if(!next){setLikePeople([]);setPeopleCursor(null);}try{const page=await client.get<{items:Mention[];next_cursor:string|null}>(`/social-posts/${post.post_id}/likes${next?`?cursor=${encodeURIComponent(next)}`:''}`);if(token===peopleSeq.current&&current(generation)){setLikePeople(old=>next?[...new Map([...old,...page.items].map(m=>[m.user_id,m])).values()]:page.items);setPeopleCursor(page.next_cursor);}}catch(e){if(token===peopleSeq.current&&current(generation))setPeopleError(e instanceof Error?e.message:'按讚名單暫時無法載入。');}finally{if(token===peopleSeq.current&&current(generation))setPeopleBusy(false);}}
   function closePeople(){++peopleSeq.current;peopleDialog.current?.close();peopleTrigger.current?.focus();}
-  async function likeComment(comment:Comment){if(commentLiking)return;const generation=client.sessionGeneration;const command=commentLikeCommands.current.get(comment.comment_id)??{liked:!comment.liked,key:crypto.randomUUID()};commentLikeCommands.current.set(comment.comment_id,command);setCommentLiking(comment.comment_id);setError('');try{const value=await client.post<{liked:boolean;like_count:number}>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/like`,{liked:command.liked},{idempotencyKey:command.key});if(!current(generation))return;setComments(rows=>rows.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row));confirmedComments.current=confirmedComments.current.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row);commentLikeCommands.current.delete(comment.comment_id);}catch(e){if(current(generation)){if(e instanceof ApiError&&!e.network)commentLikeCommands.current.delete(comment.comment_id);setError(e instanceof Error?e.message:'尚未確認按讚結果，請重試。');}}finally{if(current(generation))setCommentLiking(null);}}
+  async function likeComment(comment:Comment){if(commentLiking)return;const generation=client.sessionGeneration;const command=commentLikeCommands.current.get(comment.comment_id)??{liked:!comment.liked,key:crypto.randomUUID()};commentLikeCommands.current.set(comment.comment_id,command);setCommentLiking(comment.comment_id);setError('');try{const value=await client.post<{liked:boolean;like_count:number}>(`/social-posts/${post.post_id}/comments/${comment.comment_id}/like`,{liked:command.liked},{idempotencyKey:command.key});if(!current(generation))return;++confirmedCommentLikes.current;setComments(rows=>rows.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row));confirmedComments.current=confirmedComments.current.map(row=>row.comment_id===comment.comment_id?{...row,...value}:row);commentLikeCommands.current.delete(comment.comment_id);}catch(e){if(current(generation)){if(e instanceof ApiError&&!e.network)commentLikeCommands.current.delete(comment.comment_id);setError(e instanceof Error?e.message:'尚未確認按讚結果，請重試。');}}finally{if(current(generation))setCommentLiking(null);}}
 
   const confirmedComments = useRef<Comment[]>([]);
+  const confirmedCommentLikes = useRef(0);
   const sequence = useRef(0);
   const pendingReadChanges = useRef<Map<string, Comment | null> | null>(null);
   useEffect(() => () => { ++sequence.current; pendingReadChanges.current = null; }, []);
@@ -74,8 +75,18 @@ export function SocialInteractions({client, post, canHide, onUpdate,onTag,onComm
     pendingReadChanges.current = changes;
     setLoading(true); setLoadError('');
     try {
-      const page = await client.get<Comments>(`/social-posts/${post.post_id}/comments${next ? `?cursor=${encodeURIComponent(next)}` : ''}`);
-      if (token !== sequence.current || !current(generation)) return;
+      const path = `/social-posts/${post.post_id}/comments${next ? `?cursor=${encodeURIComponent(next)}` : ''}`;
+      let page: Comments | undefined;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const epoch = confirmedCommentLikes.current;
+        const received = await client.get<Comments>(path);
+        if (token !== sequence.current || !current(generation)) return;
+        if (epoch === confirmedCommentLikes.current) { page = received; break; }
+        // Likes have no comment edit revision. Re-read this exact page once,
+        // rather than overwrite a confirmed reaction or invent membership.
+        if (attempt === 1) { setLoadError('留言剛有更新，請重新載入最新內容。'); return; }
+      }
+      if (!page) return;
       const items = mergeComments(
         [...changes.values()].filter((comment): comment is Comment => comment !== null),
         page.items.filter(comment => {
