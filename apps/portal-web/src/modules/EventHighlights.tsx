@@ -124,6 +124,7 @@ function HighlightList({ client }: { client: PortalClient }) {
 
 function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalClient; eventId: string;outcomesEnabled:boolean }) {
   const [detail, setDetail] = useState<Detail | null>(null);
+  const readPending = useRef<object | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [openCopy, setOpenCopy] = useState(false);
@@ -139,7 +140,7 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
   const scope = useRef({client, session}); scope.current = {client, session};
   useEffect(() => {
     mounted.current = true; lifetime.current++; pending.current = null; setSubmitting(false); setProgress(null);
-    return () => { mounted.current = false; lifetime.current++; pending.current = null; };
+    return () => { mounted.current = false; lifetime.current++; pending.current = null; readPending.current = null; };
   }, [client, session]);
   const [manual, setManual] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -150,10 +151,16 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
   const fileRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
     const epoch = lifetime.current, generation = client.sessionGeneration;
-    const current = () => mounted.current && epoch === lifetime.current && scope.current.client === client && scope.current.session === generation && client.sessionGeneration === generation;
+    const inScope = () => mounted.current && epoch === lifetime.current && scope.current.client === client && scope.current.session === generation && client.sessionGeneration === generation;
+    if (!inScope()) return;
+    // Explicit refreshes after media operations supersede any older read.
+    // Only the retry button deduplicates; it must never suppress a refresh.
+    const request = {}; readPending.current = request;
+    const current = () => inScope() && readPending.current === request;
     setError(null); setMissing(false);
     try { const value = await client.get<Detail>(`/event-highlights/${eventId}`); if (current()) setDetail(value); }
     catch (err) { if (current()) { setDetail(null); if (err instanceof ApiError && err.status === 404) setMissing(true); else setError(message(err)); } }
+    finally { if (current()) readPending.current = null; }
   }, [client, eventId, session]);
   useEffect(() => { void load(); }, [load]);
   const photos = detail?.items.filter(item => item.kind === 'photo') ?? [];
@@ -224,7 +231,10 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
     catch (err) { setFormError(message(err)); }
   }
   if (missing) return <p>找不到這場活動集錦。<a className="hl-btn" href="#highlights">返回活動集錦</a></p>;
-  if (!detail) return error ? <p role="alert">{error}</p> : <p>正在整理這場活動。</p>;
+  if (!detail) return <>
+    <p><a className="hl-btn" href="#highlights">返回活動集錦</a></p>
+    {error ? <><p role="alert">{error}</p><p><button type="button" className="hl-btn" onClick={() => { if (!readPending.current) void load(); }}>重試載入</button></p></> : <p role="status">正在整理這場活動。</p>}
+  </>;
   const publiclyReadable=['open','referral'].includes(detail.visibility);
   const shareUrl = new URL(detail.public_path, window.location.origin).href;
   const links = detail.items.filter(item => item.kind === 'link');
