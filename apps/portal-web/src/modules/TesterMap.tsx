@@ -1,5 +1,4 @@
 import {accountText} from './tester-map/text';
-import type {PortalClient} from '../api';
 import {useTesterAccount} from './tester-map/useTesterAccount';
 import {TesterAccountContext,TesterAccountPanel,TesterStepFeedback,TesterReport} from './tester-map/TesterAccount';
 import {useContext, useEffect, useRef, useState} from 'react';

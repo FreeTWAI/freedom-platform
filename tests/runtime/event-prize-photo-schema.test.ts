@@ -12,7 +12,7 @@ import {runMigrationPlan} from '../../packages/db/migration-runner.mjs';
 // No listener, external object store or native image decoder is started here.
 const databaseUrl=process.env.TEST_DATABASE_URL;
 const schema=`fp_prize_photo_schema_${process.pid}_${Date.now()}`;
-const sources=readMigrationSources(fileURLToPath(new URL('../../migrations',import.meta.url)));
+const sources=readMigrationSources(fileURLToPath(new URL('../../migrations',import.meta.url))).filter(row=>Number(row.name.slice(0,3))<=201);
 const profile=legacyMigrationProfile({first:1,last:201,known_gaps:[22]});
 let admin:Pool,pool:Pool,created=false;
 before(async()=>{
@@ -30,10 +30,10 @@ type Query=Pick<PoolClient,'query'>;
 type Target={community:string;user:string;principal:string;scope:string;event:string;prize:string;target:string};
 type Upload={asset:string;intent:string;representation:string;expected:number};
 const purpose='community.event-prize-photo';
-const prize=(id=randomUUID())=>({prize_id:id,name:'合成獎品',description:'僅供資料庫契約測試',quantity:1,icon_id:'gift',completion_rule:'主辦評選',claim_note:'現場領取'});
+const prize=(id:string=randomUUID())=>({prize_id:id,name:'合成獎品',description:'僅供資料庫契約測試',quantity:1,icon_id:'gift',completion_rule:'主辦評選',claim_note:'現場領取'});
 const integrity=(error:unknown)=>['23514','23503'].includes((error as {code?:string}).code??'');
 async function tx<T>(body:(q:PoolClient)=>Promise<T>,db=pool){const q=await db.connect();try{await q.query('BEGIN');const result=await body(q);await q.query('COMMIT');return result;}catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();}}
-async function fixture(db:Query=pool,sharedPrize=randomUUID(),createTarget=true):Promise<Target>{
+async function fixture(db:Query=pool,sharedPrize:string=randomUUID(),createTarget=true):Promise<Target>{
   const f={community:randomUUID(),user:randomUUID(),principal:randomUUID(),scope:randomUUID(),event:randomUUID(),prize:sharedPrize,target:randomUUID()};
   await db.query('INSERT INTO communities(community_id,name) VALUES($1,$2)',[f.community,'Synthetic prize photo']);
   await db.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref)

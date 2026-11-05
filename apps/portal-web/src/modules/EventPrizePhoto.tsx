@@ -2,10 +2,10 @@ import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import type {CommunityEvent} from './EventsPanel';
 import type {EventPrizeDetail} from '../../../../modules/community/event-prize-details';
-import {currentPrizePhotoEvent,preparePrizePhotoCommand,prizePhotoAvailability,prizePhotoFileError,sendPrizePhotoCommand,validEventPrizePhoto,type EventPrizePhoto,type PrizePhotoCommand} from './event-prize-photo-client';
+import {currentPrizePhotoEvent,preparePrizePhotoCommand,prizePhotoAvailability,prizePhotoFileError,sendPrizePhotoCommand,validEventPrizePhoto,type EventPrizePhoto as EventPrizePhotoData,type PrizePhotoCommand} from './event-prize-photo-client';
 import './EventPrizePhoto.css';
 
-type ImageProps={eventId:string;prize:EventPrizeDetail;photo:EventPrizePhoto;publicRead?:boolean};
+type ImageProps={eventId:string;prize:EventPrizeDetail;photo:EventPrizePhotoData;publicRead?:boolean};
 export function EventPrizePhoto(props:ImageProps){
   const identity=useRef({eventId:props.eventId,prizeId:props.prize.prize_id,url:props.photo.url,version:props.photo.photo_version,publicRead:props.publicRead,revision:0});
   const previous=identity.current;

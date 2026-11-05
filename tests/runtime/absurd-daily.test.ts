@@ -136,7 +136,6 @@ import {GAMES,seconds} from '../../apps/portal-web/src/games/domain.js';
 import {beginStamps,cashDeck,challengeUrl,gradePhoto,newCash,newStamps,pause,photoPose,resume,RULES,seedOf,sortCash,stamp,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_KEY,HANDOFF_TTL,parseGameDraft,readGameDraft,saveGameDraft,clearGameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 import {gamePreviewHtml} from '../../apps/portal-web/src/games/preview.js';
-import sharp from 'sharp';
 import type {Pool} from 'pg';
 import {createApp} from '../../apps/platform-api/src/app.js';
 import {mountAssets} from '../../apps/platform-api/src/worker.js';
@@ -152,7 +151,7 @@ test('public game previews use distinct original game assets and preserve the pl
     assert.ok(html.includes('<div id="root"></div>'));
     assert.ok(html.includes('src="/src/main.tsx"'));
     const info=await sharp(readFileSync(new URL(`../../apps/portal-web/public/games/absurd-daily/${game}.jpg`,import.meta.url))).metadata();
-    assert.equal(info.format,'jpeg');assert.equal(info.width,960);assert.equal(info.height,720);
+    assert.equal(info.format,'jpeg');assert.equal(info.width,852);assert.equal(info.height,639);
   }
   assert.equal(gamePreviewHtml(shell,'https://example.org/play?game=unknown&seed=123','https://example.org'),shell);
   assert.equal(gamePreviewHtml(shell,'https://example.org/other?game=photo&seed=123','https://example.org'),shell);

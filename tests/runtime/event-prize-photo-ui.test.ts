@@ -150,7 +150,7 @@ function fixture(t:TestContext,event=stored(),component=EventPrizePhotoEditor,st
  return {...h,props,client,requests,reads,writes,available,choose,save,current,confirmed,states,state:()=>states.at(-1),closed:()=>closed};
 }
 test('file selection and cancel are local only, cancel picker retains choice, blobs are revoked',async t=>{
- const made:string[]=[],revoked:string[]=[];t.mock.method(URL,'createObjectURL',()=>{const url=`blob:synthetic-${made.length}`;made.push(url);return url;});t.mock.method(URL,'revokeObjectURL',value=>{revoked.push(value);});
+ const made:string[]=[],revoked:string[]=[];t.mock.method(URL,'createObjectURL',()=>{const url=`blob:synthetic-${made.length}`;made.push(url);return url;});t.mock.method(URL,'revokeObjectURL',(value:string)=>{revoked.push(value);});
  const h=fixture(t);await h.choose();assert.equal(h.writes().length,0);assert.match(h.text(),/尚未儲存的預覽/);assert.match(h.text(),/已送出審核/);assert.equal(h.state().dirty,true);await h.choose(null);assert.equal(h.state().dirty,true);await h.choose(new File(['x'],'second.webp',{type:'image/webp'}));assert.deepEqual(revoked,[made[0]]);h.click(h.button('取消這張預覽'));assert.equal(h.state().dirty,false);assert.deepEqual(revoked,made);assert.equal(h.writes().length,0);
 });
 for(const [name,value,message] of [
