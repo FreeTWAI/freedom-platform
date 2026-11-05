@@ -225,6 +225,9 @@ for(const width of [320,390])eventTest(`prize keyboard, errors, removal and enla
   await expect(field.getByLabel('怎麼領取',{exact:true})).toHaveValue(prize.claim_note);
   // Text enlargement (not browser zoom): preserve the actual computed baseline.
   const base=await page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).fontSize));
+  const calendarText=page.locator('.event-calendar-heading h2,.event-calendar-nav strong,.event-calendar-nav button,.event-calendar-weekday,.event-calendar-day>time');
+  const calendarBaseFonts=await calendarText.evaluateAll(nodes=>nodes.map(node=>parseFloat(getComputedStyle(node).fontSize)));
+  expect(calendarBaseFonts.length).toBeGreaterThan(9);
   for(const scale of [1,2]){
     await page.evaluate(size=>{document.documentElement.style.fontSize=`${size}px`;},base*scale);
     // Retain the actual enlarged layout before any failing geometry assertion.
@@ -233,9 +236,13 @@ for(const width of [320,390])eventTest(`prize keyboard, errors, removal and enla
     await info.attach(`prize-layout-${width}-${scale}x`,{body:JSON.stringify(layout),contentType:'application/json'});
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:info.outputPath(`prize-fields-${width}-${scale}x.png`),fullPage:true});
+    expect(parseFloat(layout.rootFont)).toBeCloseTo(base*scale,2);
+    const calendarFonts=await calendarText.evaluateAll(nodes=>nodes.map(node=>parseFloat(getComputedStyle(node).fontSize)));
+    expect(calendarFonts).toHaveLength(calendarBaseFonts.length);
+    for(const [index,size] of calendarFonts.entries())expect(size).toBeCloseTo(calendarBaseFonts[index]*scale,2);
     expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewport);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    const calendar=await page.locator('.event-calendar-nav').evaluate(node=>[node,...node.querySelectorAll('button,strong')].map(item=>{const r=item.getBoundingClientRect();return {tag:item.tagName,left:r.left,right:r.right,width:r.width,height:r.height};}));
+    const calendar=await page.locator('.event-calendar').evaluate(node=>[node,...node.querySelectorAll('.event-calendar-heading,h2,.event-calendar-nav,.event-calendar-nav button,.event-calendar-nav strong,.event-calendar-grid')].map(item=>{const r=item.getBoundingClientRect();return {tag:item.tagName,left:r.left,right:r.right,width:r.width,height:r.height};}));
     for(const item of calendar){expect(item.left).toBeGreaterThanOrEqual(0);expect(item.right).toBeLessThanOrEqual(width+1);if(item.tag==='BUTTON'){expect(item.width).toBeGreaterThanOrEqual(44);expect(item.height).toBeGreaterThanOrEqual(44);}}
     const geometry=await form.locator('.event-prize-editor').evaluate(node=>({
       targets:[...node.querySelectorAll('button,input:not([type="radio"]),textarea,label.event-prize-icon-option')].map(item=>{const r=item.getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right};}),
