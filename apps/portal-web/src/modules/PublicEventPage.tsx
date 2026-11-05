@@ -3,9 +3,11 @@ import {z} from 'zod';
 import {ApiError,type PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
 import {GuestEventParticipation,readEventParticipationToken} from './EventParticipation';
+import {eventPrizeDetailsSchema} from '../../../../modules/community/event-prize-details';
+import {EventPrizeDetails} from './EventPrizeDetails';
 import './PublicEventPage.css';
 
-const publicEventSchema=z.object({event_id:z.string(),title:z.string(),description:z.string(),starts_at:z.string(),ends_at:z.string(),mode:z.enum(['online','in_person','hybrid']),location:z.string(),online_url:z.string().nullable(),event_kind:z.string(),topic:z.string().nullable(),visibility:z.enum(['referral','open']),registration_policy:z.enum(['guest_allowed','community_member']).default('guest_allowed'),capacity:z.number().nullable(),attending_count:z.number(),organizer_name:z.string(),banner_url:z.string().nullable(),video_url:z.string().nullable(),video_mime:z.enum(['video/mp4','video/webm']).nullable()});
+const publicEventSchema=z.object({prize_details:eventPrizeDetailsSchema.optional(),event_id:z.string(),title:z.string(),description:z.string(),starts_at:z.string(),ends_at:z.string(),mode:z.enum(['online','in_person','hybrid']),location:z.string(),online_url:z.string().nullable(),event_kind:z.string(),topic:z.string().nullable(),visibility:z.enum(['referral','open']),registration_policy:z.enum(['guest_allowed','community_member']).default('guest_allowed'),capacity:z.number().nullable(),attending_count:z.number(),organizer_name:z.string(),banner_url:z.string().nullable(),video_url:z.string().nullable(),video_mime:z.enum(['video/mp4','video/webm']).nullable()});
 type PublicEvent=z.infer<typeof publicEventSchema>;
 const safeUrl=(value:string|null)=>{try{const url=new URL(value??'');return url.protocol==='https:'&&!url.username&&!url.password?url.href:null}catch{return null}};
 const savedCode=(id:string)=>{
@@ -111,7 +113,7 @@ function PublicEventContent({client,id,onLogin,onJoin,revalidatePublic=false,par
     {loading&&<p role="status">正在載入活動…</p>}
     {!privateManagement&&!loading&&!event&&<div className="card stack"><h1>活動目前無法公開查看</h1><p>{error||'請從會員分享的連結開啟，或登入工坊查看。'}</p><button type="button" className="btn btn-primary" onClick={onLogin}>前往會員入口</button></div>}
     {event&&<article className="card public-event-card"><p className="eyebrow">社群活動 · {event.visibility==='referral'?'推薦連結公開':'完全公開'}</p>{ended&&<span className="event-ended-badge">已結束</span>}<h1>{event.title}</h1><p className="muted">由 {event.organizer_name} 發起</p>{event.banner_url&&<img className="public-event-poster" src={event.banner_url} alt="活動海報"/>}{event.video_url&&<video className="public-event-poster" controls preload="metadata" aria-label={`${event.title} 的活動影片`}><source src={event.video_url} type={event.video_mime??undefined}/></video>}
-      {event.topic&&<p><strong>主題：</strong>{event.topic}</p>}<p className="public-event-description">{event.description}</p>
+      {event.topic&&<p><strong>主題：</strong>{event.topic}</p>}<p className="public-event-description">{event.description}</p><EventPrizeDetails value={event.prize_details}/>
       <dl className="public-event-meta"><div><dt>時間</dt><dd>{formatIsoLocal(event.starts_at)} ～ {formatIsoLocal(event.ends_at)}（依裝置時區）</dd></div><div><dt>地點</dt><dd>{locationLink?<a href={locationLink} target="_blank" rel="noopener noreferrer">開啟地點連結</a>:event.location}</dd></div>{onlineLink&&<div><dt>線上參與</dt><dd><a href={onlineLink} target="_blank" rel="noopener noreferrer">開啟線上連結</a></dd></div>}</dl>
       <p className="muted">{event.attending_count}{event.capacity===null?' 人已報名':` / ${event.capacity} 人已報名`}</p>
       {!started&&event.visibility==='referral'&&!code&&<p className="banner banner-info">這場活動須從會員分享的連結報名，請向分享者取得連結。</p>}

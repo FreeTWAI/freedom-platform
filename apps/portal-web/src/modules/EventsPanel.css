@@ -1,6 +1,6 @@
 .event-flow .experience-actions .btn, .event-flow .btn, .event-flow summary { min-height: 44px; }
 .event-flow input, .event-flow select, .event-flow textarea { font-size: 1rem; min-height: 44px; max-width: 100%; }
-.event-flow :is(button,a,input,select,textarea,summary):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.event-flow :is(button,a,input,select,textarea,summary):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .event-jobs { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
 .event-jobs p { flex-basis: 100%; margin: 0; }
 .event-form-options { border: 1px solid var(--line); border-radius: 12px; padding: .6rem .85rem; min-width: 0; }

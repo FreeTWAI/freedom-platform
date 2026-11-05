@@ -87,7 +87,7 @@ import { createMaintainerWebhookRoutes, createRepoMaintainerMemberRoutes, isMain
 import { createPublishedSkillRoutes } from './routes/published-skills.js';
 import { checkMessageImageHeaders, createMemberCommunicationRoutes, isMessageImageUpload, messageImagesInstalled } from './routes/member-communications.js';
 import { PageGitHubReader, PageGitHubEventReader } from '../../../modules/development/page-github.js';
-import { createCommunityEventRoutes, checkEventBannerUploadHeaders, checkEventVideoUploadHeaders, isEventBannerUpload, isEventVideoUpload } from './routes/community-events.js';
+import { EVENT_DETAILS_REQUEST_BYTES,isEventDetailsWrite,createCommunityEventRoutes, checkEventBannerUploadHeaders, checkEventVideoUploadHeaders, isEventBannerUpload, isEventVideoUpload } from './routes/community-events.js';
 import { checkHighlightPhotoUploadHeaders, checkHighlightPosterUploadHeaders, createEventHighlightMemberRoutes, createEventHighlightPublicRoutes, isHighlightPhotoUpload, isHighlightPosterUpload } from './routes/event-highlights.js';
 import { createSquadOutcomeRoutes, createPublicSquadOutcomeRoutes } from './routes/squad-outcomes.js';
 import { createEventOutcomeRoutes, createPublicEventOutcomeRoutes } from './routes/event-outcomes.js';
@@ -319,7 +319,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         requireCondition(/^application\/json[ \t]*(?:;|$)/i.test(c.req.header('Content-Type')??''),415,'json_required','操作需要 JSON。');
         // Notes may embed an image; preview wraps up to 24,000 UTF-8 bytes
         // in {"content":""}, with at most six JSON escape bytes per input byte.
-        const jsonLimit=c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
+        const jsonLimit=isEventDetailsWrite(c.req.method,c.req.path)?EVENT_DETAILS_REQUEST_BYTES:
+          c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
           c.req.method==='POST'&&c.req.path==='/api/v1/commerce/preview'?6*24000+14:
           storePoliciesInstalled(runtime)&&isSellerPoliciesSave(c.req.method,c.req.path)?524288:
           storeVariantsInstalled(runtime)&&isProductGroupReplace(c.req.method,c.req.path)?131072:32768;

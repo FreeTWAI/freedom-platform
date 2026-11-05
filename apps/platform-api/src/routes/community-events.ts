@@ -15,6 +15,13 @@ import {readMemberEventCalendar} from '../../../../modules/community/event-calen
 import {readEventReminder,saveEventReminder} from '../../../../modules/community/event-reminders.js';
 import {mutateEventWaitlist,processEventWaitlist,readEventParticipation,setEventWaitlistPolicy,updateEventSchedule} from '../../../../modules/community/event-waitlist.js';
 
+// Bounded event text/prize payload, including escaped supplementary Unicode.
+export const EVENT_DETAILS_REQUEST_BYTES=160*1024;
+export function isEventDetailsWrite(method:string,path:string){
+  if(method!=='POST')return false;
+  const match=/^\/api\/v1\/events\/([0-9a-fA-F-]{36})\/update$/.exec(path);
+  return path==='/api/v1/events'||Boolean(match&&z.uuid().safeParse(match[1]).success);
+}
 const BANNER_MAX_BYTES=512*1024;
 const VIDEO_MAX_BYTES=20*1024*1024;
 const BANNER_MIME_TYPES=new Set(['image/jpeg','image/png','image/webp']);

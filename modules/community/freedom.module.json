@@ -85,11 +85,21 @@
     "tests/e2e/event-helper-resume.spec.ts",
     "tests/runtime/event-route-identity.test.ts",
     "tests/e2e/event-route-identity.spec.ts",
+    "modules/community/event-prize-details.ts",
+    "migrations/199_event_prize_details.sql",
+    "apps/portal-web/src/modules/EventPrizeDetails.tsx",
+    "apps/portal-web/src/modules/EventPrizeDetails.css",
+    "tests/runtime/event-prize-details.test.ts",
+    "tests/runtime/event-prize-details-db.test.ts",
+    "tests/runtime/event-prize-details-ui.test.ts",
+    "tests/e2e/event-prize-details.spec.ts",
     "modules/community/event-prize-icons.ts",
     "apps/portal-web/src/modules/EventPrizeIcon.tsx",
     "apps/portal-web/src/modules/EventPrizeIconPicker.tsx",
     "apps/portal-web/src/modules/EventPrizeIconPicker.css",
-    "tests/runtime/event-prize-icons.test.ts"
+    "tests/runtime/event-prize-icons.test.ts",
+    "apps/portal-web/src/modules/EventPrizeFields.tsx",
+    "docs/development/event-prize-details.md"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
