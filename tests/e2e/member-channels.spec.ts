@@ -173,6 +173,22 @@ test('idle activity requests slow down and typing, focus, visibility and manual 
   await clock.tick(true);
 });
 
+test('existing conversations precede collapsed member discovery and disclosure preserves search',async({page})=>{
+  await page.setViewportSize({width:320,height:780});
+  const server=await channelServer(page,{});await open(page,server);
+  const direct=panel(page,'私人訊息'),discovery=direct.locator('.messages-search');
+  await expect(discovery).not.toHaveAttribute('open');
+  await expect(direct.getByLabel('搜尋會員',{exact:true})).toBeHidden();
+  // Native closed details also removes descendants from keyboard navigation.
+  const summary=discovery.locator('summary'),start=direct.getByRole('button',{name:'開始新對話',exact:true});
+  await start.focus();await page.keyboard.press('Enter');
+  await expect(direct.getByLabel('搜尋會員',{exact:true})).toBeFocused();
+  const search=direct.getByLabel('搜尋會員',{exact:true});await expect(search).toBeVisible();await search.fill('保留的搜尋');
+  await summary.click();await expect(search).toBeHidden();await summary.focus();await page.keyboard.press('Enter');await expect(search).toHaveValue('保留的搜尋');
+  expect(await direct.locator('.messages-side').evaluate(node=>node.children[0].tagName)).toBe('SECTION');
+  await noOverflow(page);
+});
+
 test('four chat tabs keep their order and keyboard behaviour without mixing room histories',async({page})=>{
   await page.setViewportSize({width:320,height:780});
   const server=await channelServer(page,{guild:[['builders','合成公會甲',3],['Makers','合成公會乙',0]],squad:[[squadA,'合成小隊甲',2]]});
@@ -202,6 +218,7 @@ test('four chat tabs keep their order and keyboard behaviour without mixing room
   for(const label of labels){
     await tab(page,label).click();await noOverflow(page);
     const box=(await tab(page,label).boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x+box.width).toBeLessThanOrEqual(320);
+    expect(await tab(page,label).evaluate(node=>getComputedStyle(node).whiteSpace)).toBe('nowrap');
   }
   await tab(page,'公會閒聊').click();
   const guilds=panel(page,'公會閒聊').locator('.member-channel-list');

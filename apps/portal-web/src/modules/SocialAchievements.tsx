@@ -1,12 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
-import {z} from 'zod';
+import {AchievementState,type AchievementStateValue as State} from './social-achievements-state';
 import {ApiError,type PortalClient} from '../api';
 import {describeError} from '../portal-session';
 import {SOCIAL_POLICY,SOCIAL_DESCRIPTION} from '../../../../modules/social-achievements/policy';
-type Title={title_id:string;label:string;days:number;track:'chat'|'participation';unlocked:boolean};
-type State={counting_enabled:boolean;show_title:boolean;selected_title:string|null;aggregate_version:string|null;status:string;moderation_reason:string|null;appeal_state:string;can_moderate:boolean;chat:{days:number;next_days:number|null;remaining:number};participation:State['chat'];titles:Title[]};
-const Progress=z.object({days:z.number().int().nonnegative(),next_days:z.number().int().positive().nullable(),remaining:z.number().int().nonnegative()});
-const AchievementState=z.object({policy_version:z.literal(SOCIAL_POLICY),counting_enabled:z.boolean(),show_title:z.boolean(),selected_title:z.string().regex(/^(chat|participation)_(1|7|30|90|365)$/).nullable(),aggregate_version:z.string().regex(/^[1-9][0-9]*$/).nullable(),status:z.enum(['active','paused','revoked']),moderation_reason:z.string().nullable(),appeal_state:z.enum(['none','pending','resolved']),can_moderate:z.boolean(),chat:Progress,participation:Progress,titles:z.array(z.object({title_id:z.string().regex(/^(chat|participation)_(1|7|30|90|365)$/),label:z.string(),days:z.number().int().positive(),track:z.enum(['chat','participation']),unlocked:z.boolean()})).min(1)});
 type Pending={path:string;body:unknown;version:string|null;key:string;uncertain?:boolean};
 /** Account/session-keyed by identity registry. Unknown POSTs retain exact tuple in memory. */
 export function SocialAchievements({client,registerPageLeave,registerLeave,onPendingChange}:{client:PortalClient;registerLeave?:(guard:()=>boolean)=>()=>void;registerPageLeave?:(guard:((nextHash:string|null)=>boolean)|null)=>void;onPendingChange?:(pending:boolean)=>void}){

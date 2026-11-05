@@ -112,23 +112,39 @@ The fixed registry in `runtime-suites.mjs` maps these existing IDs:
 | `e2e.harness` | `scripts/run-e2e.test.mjs` only | 60 seconds, no database |
 
 
-The full pinned browser plan keeps its six mode passes. Its default mode (#784)
-first enumerates all cases without sharding, then runs exactly three concurrent
-native Playwright shards, each still `workers: 1` / `fullyParallel: false`.
-The host assigns separate generated `fp_e2e_*` schemas and localhost ports
-14311/14312/14313; run only one full pinned plan per host. Existing dedicated fixture
-passes and narrow guide/guild plans remain unsharded and retain their obligations.
-No candidate CLI profile, file list, shard count or timeout override is accepted.
+The full pinned browser plan keeps its six mode passes. In CI its default mode
+runs exactly three native Playwright shards on independent runners and disposable
+PostgreSQL services, each still `workers: 1` / `fullyParallel: false` / `retries: 0`.
+Shard 1 also enumerates all cases without sharding. Every shard retains the
+75-minute execution cap (including discovery, whose own cap remains 60 seconds).
+The matrix jobs allow 80 minutes including setup and teardown. Matrix fail-fast
+is disabled so one failed host does not discard the other hosts' diagnostics.
 
-The current 75-minute default-mode budget includes discovery and all three
-concurrent processes; discovery keeps its independent 60-second maximum. A failed shard
-cancels its peers by interrupting the Playwright CLI with SIGINT. Playwright then
-runs its configured SIGTERM webServer teardown; the existing 20-second SIGKILL
-escalation remains bounded. Direct SIGTERM to the CLI skips that teardown and
-can leave its separate webServer process group alive. The real-Playwright
-cancellation regression requires all three HTTP servers to receive SIGTERM and exit
-before the runner returns. Timeout or
-cancellation remains failed even if every interrupted child exits zero.
+The `ui-e2e` job requires every selected shard job to succeed and downloads only
+this workflow run's current attempt. Each bounded, regular-file fragment binds
+base/head/candidate, pinned workflow SHA, run ID and attempt. A fragment explicitly
+is not a passing browser receipt. The collector requires exactly three fragments,
+checks raw report hashes, and uses the existing full evaluator to prove the
+unsharded inventory equals the disjoint case union. Only then does it run the five
+fixture passes and produce the full receipt. Its full-plan job budget is 25 minutes
+including setup; narrow plans keep their existing 95-minute bound and do not use
+the matrix. Missing, stale, partial, duplicated or failed evidence cannot fall back
+to a passing subset. Per-case limits and all six mode obligations are unchanged.
+
+The host assigns generated `fp_e2e_*` schemas and localhost ports
+14311/14312/14313. The local single-host full plan remains available: shard 1
+reserves CPU for native games, then a pinned progress reporter releases peers;
+all three share one 75-minute deadline there. That signal schedules work only.
+Run only one such local plan per host. Narrow guide/guild plans remain unsharded.
+No candidate file list, shard count or timeout override is accepted; the matrix
+CLI accepts only one of the three fixed shard indices and requires host binding.
+
+Cancellation interrupts the Playwright CLI with SIGINT so its configured SIGTERM
+webServer teardown runs; escalation to SIGKILL remains bounded at 20 seconds.
+The local plan also cancels peer processes after a failure. Real-Playwright
+cancellation regressions require every started HTTP server to exit before the
+runner returns. Timeout or cancellation remains failed even if interrupted
+children exit zero; interrupted shards never publish a successful fragment.
 Default evidence requires all three ordered `partitions` with host-bound current/total,
 actual exit status and raw-report SHA-256. Their disjoint case union must equal
 the unsharded inventory; a successful subset, duplicate, invented or omitted case

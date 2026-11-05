@@ -23,17 +23,55 @@ export const sameChatPayload=(a:MessageContentInput,b:MessageContentInput)=>a.bo
 export function quoteMessage(message:{message_id:string;sender_ref:string;body:string}&MessageContent,sender_name:string):MessageReply{
   return {message_id:message.message_id,sender_ref:message.sender_ref,sender_name,body:[...message.body].slice(0,160).join(''),...(message.sticker?{sticker:message.sticker}:{})};
 }
-export function ChatSticker({id,thumbnail=false}:{id:string;thumbnail?:boolean}){
+export function ChatSticker({id,thumbnail=false,retryable=false}:{id:string;thumbnail?:boolean;retryable?:boolean}){
   const sticker=findChatSticker(id),[broken,setBroken]=useState(false);
   useEffect(()=>setBroken(false),[id,thumbnail]);
   if(!sticker)return null;
-  if(broken)return <span className="messages-body">[貼圖] {sticker.label}</span>;
+  if(broken)return <span className="messages-body">[貼圖] {sticker.label}{retryable&&<button className="btn btn-ghost" type="button" onClick={()=>setBroken(false)}>重試貼圖</button>}</span>;
   return <span className="chat-sticker" role="img" aria-label={`貼圖：${sticker.label}`} data-sticker-id={id}>
     {'image' in sticker?<img className="chat-sticker-image" src={thumbnail?sticker.thumbnail:sticker.image} width={thumbnail?144:512} height={thumbnail?144:512} loading="lazy" alt="" decoding="async" draggable={false} onError={()=>setBroken(true)}/>:<img src={CHAT_STICKER_ATLAS} alt="" decoding="async" draggable={false} onError={()=>setBroken(true)} style={{left:`-${sticker.column*100}%`,top:`-${sticker.row*100}%`}}/>}
   </span>;
 }
+/** Preview feedback only: loading an image never sends or retries a message. */
+function ChatStickerPreview({id,onRetryFocus}:{id:string;onRetryFocus:()=>void}){
+  const sticker=findChatSticker(id),[attempt,setAttempt]=useState(0);
+  if(!sticker||!('image' in sticker))return <ChatSticker id={id}/>;
+  return <ChatStickerImagePreview key={`${id}:${attempt}`} image={sticker.image} thumbnail={sticker.thumbnail} label={sticker.label} onRetry={()=>{onRetryFocus();setAttempt(value=>value+1);}}/>;
+}
+function ChatStickerImagePreview({image,thumbnail,label,onRetry}:{image:string;thumbnail:string;label:string;onRetry:()=>void}){
+  const [phase,setPhase]=useState<'loading'|'ready'|'error'>('loading'),[thumbBroken,setThumbBroken]=useState(false);
+  const full=useRef<HTMLImageElement>(null),thumb=useRef<HTMLImageElement>(null),owner=useRef<object|null>(null),decoding=useRef<object|null>(null),settled=useRef<object|null>(null);
+  function finish(next:'ready'|'error',ticket:object|null){
+    if(!ticket||owner.current!==ticket||settled.current===ticket)return;
+    settled.current=ticket;setPhase(next);
+  }
+  function decode(element:HTMLImageElement){
+    const ticket=owner.current;
+    if(!ticket||element!==full.current||decoding.current===ticket||settled.current===ticket)return;
+    decoding.current=ticket;
+    // A load event alone does not establish that the full image is decoded.
+    Promise.resolve().then(()=>element.decode()).then(()=>finish('ready',ticket),()=>finish('error',ticket));
+  }
+  useEffect(()=>{
+    const ticket={};owner.current=ticket;setPhase('loading');
+    const thumbnailElement=thumb.current;
+    if(thumbnailElement?.complete&&thumbnailElement.naturalWidth===0)setThumbBroken(true);
+    const element=full.current;
+    if(element?.complete){if(element.naturalWidth>0)decode(element);else finish('error',ticket);}
+    return()=>{if(owner.current===ticket)owner.current=null;};
+  },[]);
+  return <div className="chat-preview-feedback">
+    <div className="chat-preview-frame" role="img" aria-label={`貼圖預覽：${label}`}>
+      {phase!=='ready'&&!thumbBroken&&<img ref={thumb} className="chat-preview-thumb" src={thumbnail} alt="" width={144} height={144} decoding="async" draggable={false} onError={()=>{if(owner.current)setThumbBroken(true);}}/>}
+      {phase!=='ready'&&thumbBroken&&<span className="chat-preview-fallback">[貼圖] {label}</span>}
+      <img ref={full} className="chat-preview-full" data-ready={phase==='ready'} src={image} alt="" width={512} height={512} loading="eager" decoding="async" draggable={false} onLoad={event=>decode(event.currentTarget)} onError={()=>finish('error',owner.current)}/>
+    </div>
+    <p className="messages-meta" role="status">{phase==='loading'?'正在載入清晰預覽…':phase==='error'?'清晰預覽載入失敗；仍可依縮圖或名稱選擇。':'清晰預覽已載入。'}</p>
+    {phase==='error'&&<button type="button" className="btn btn-ghost" onClick={onRetry}>重試載入圖片</button>}
+  </div>;
+}
 export function ChatBody({message}:{message:{body:string}&MessageContent}){
-  return message.sticker?<ChatSticker id={message.sticker.id}/>:<p className="messages-body">{message.body}</p>;
+  return message.sticker?<ChatSticker id={message.sticker.id} retryable/>:<p className="messages-body">{message.body}</p>;
 }
 export function ChatQuote({reply}:{reply:MessageReply}){
   return <blockquote className="chat-quote" aria-label="回覆的訊息" data-reply-to={reply.message_id}>
@@ -59,7 +97,7 @@ export function RetractMessageDialog({target,busy,error,onConfirm,onClose}:{targ
     </div>
   </dialog>;
 }
-export function ChatExtras({draft,onChange,onSendSticker,disabled,target}:{draft:RichChatDraft;onChange:(value:Partial<RichChatDraft>)=>void;onSendSticker:(id:string)=>void;disabled:boolean;target:string}){
+export function ChatExtras({draft,onChange,onSendSticker,disabled,target,previewFeedback=false}:{draft:RichChatDraft;onChange:(value:Partial<RichChatDraft>)=>void;onSendSticker:(id:string)=>void;disabled:boolean;target:string;previewFeedback?:boolean}){
   const [open,setOpen]=useState(false),[search,setSearch]=useState(''),[pack,setPack]=useState('freetwai-v2');
   type Preview={id:string;target:string};
   const [selected,setSelected]=useState<Preview|null>(null),choice=useRef<Preview|null>(null);
@@ -82,11 +120,16 @@ export function ChatExtras({draft,onChange,onSendSticker,disabled,target}:{draft
     {draft.reply&&<div className="chat-reply-draft"><ChatQuote reply={draft.reply}/><button className="btn btn-ghost" type="button" disabled={disabled} onClick={()=>onChange({reply:undefined})}>取消回覆</button></div>}
     {draft.sticker_id&&<div className="chat-sticker-preview" aria-label="待送出的貼圖"><ChatSticker id={draft.sticker_id}/><span>{findChatSticker(draft.sticker_id)?.label}</span><button className="btn btn-ghost" type="button" disabled={disabled} onClick={()=>onChange({sticker_id:undefined})}>改寫文字</button></div>}
     <button className="btn btn-ghost" ref={toggle} type="button" aria-label="選擇貼圖" title="選擇貼圖" disabled={disabled} aria-expanded={open} aria-controls={id} onClick={()=>open?close():setOpen(true)}><svg className="chat-sticker-trigger" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 14.5q4 4 8 0"/><path d="M8.5 9h.01M15.5 9h.01" strokeWidth="3"/></svg><span>選擇貼圖</span></button>
-    {open&&<section className="chat-sticker-picker" id={id} aria-label="工坊貼圖" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}}}>
+    {open&&<section className="chat-sticker-picker" id={id} aria-label="工坊貼圖" onKeyDown={event=>{if(event.key==='Escape'){
+      // The IME owns candidate cancellation, while the enclosing chat must not close.
+      event.stopPropagation();
+      if(event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return;
+      event.preventDefault();close();
+    }}}>
       <div className="chat-picker-heading"><strong>自由工坊貼圖</strong><button className="btn btn-ghost" type="button" onClick={close}>關閉貼圖</button></div>
       <p className="messages-meta">先點選預覽，確認後再送出。其他草稿會保留。</p>
       {selectedSticker&&<div ref={preview} className="chat-sticker-confirm" role="group" tabIndex={-1} aria-label={`貼圖預覽：${selectedSticker.label}`} onKeyDown={event=>{if(event.key==='Enter'&&event.target===event.currentTarget)event.preventDefault();}}>
-        <ChatSticker key={selectedSticker.id} id={selectedSticker.id}/><strong>{selectedSticker.label}</strong>
+        {previewFeedback?<ChatStickerPreview key={selectedSticker.id} id={selectedSticker.id} onRetryFocus={()=>preview.current?.focus()}/>:<ChatSticker key={selectedSticker.id} id={selectedSticker.id}/>}<strong>{selectedSticker.label}</strong>
         <div className="chat-sticker-confirm-actions"><button type="button" className="btn btn-ghost" onClick={cancelPreview}>取消預覽</button><button type="button" className="btn btn-primary" disabled={disabled} onClick={confirmSticker}>送出這張貼圖</button></div>
       </div>}
       <div className="chat-sticker-browse" hidden={Boolean(selectedSticker)}>

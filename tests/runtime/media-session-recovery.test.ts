@@ -17,6 +17,108 @@ const uploads: [string, (client: PortalClient) => Promise<unknown>][] = [
   ['highlight', client => uploadHighlightImage(client, event.event_id, 'photo', file, 'landscape', '', 'synthetic-key')],
 ];
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return {promise, resolve};
+}
+
+// Exercise the real media helper and Access classifier at both await boundaries.
+// Reusing token text after leaving a session does not restore its lifetime.
+for (const kind of ['banner', 'video'] as const) {
+  for (const accessExpired of [false, true]) {
+    for (const delayedAt of ['fetch', 'Access body'] as const) {
+      for (const owner of ['current', 'ABA'] as const) {
+        test(`${kind}: ${owner} owner, delayed ${accessExpired ? 'Access denial' : '401'} at ${delayedAt}`, async t => {
+          const requested = deferred<void>();
+          const responseReady = deferred<Response>();
+          const classificationStarted = deferred<void>();
+          let releaseBody!: () => void;
+          const status = accessExpired ? 403 : 401;
+          const body = accessExpired ? '<html>Expired Access</html>'
+            : JSON.stringify({type:'urn:problem:unauthorized',title:'Unauthorized',status});
+          const response = delayedAt === 'fetch'
+            ? new Response(body, {status})
+            : new Response(new ReadableStream<Uint8Array>({start(controller) {
+              releaseBody = () => { controller.enqueue(new TextEncoder().encode(body)); controller.close(); };
+            }}), {status});
+          if (delayedAt === 'Access body') {
+            const clone = response.clone.bind(response);
+            t.mock.method(response, 'clone', () => {
+              const copy = clone(), text = copy.text.bind(copy);
+              t.mock.method(copy, 'text', () => { classificationStarted.resolve(); return text(); });
+              return copy;
+            });
+          }
+          const client = new PortalClient(); client.csrfToken = 'session-A';
+          // The normal JSON path must not clear a newer Access-expired flag.
+          client.accessExpired = !accessExpired;
+          const unauthorized: {token:string|null;accessExpired:boolean}[] = [];
+          client.onUnauthorized = () => { unauthorized.push({token:client.csrfToken,accessExpired:client.accessExpired}); };
+          const command = await prepareEventMedia(client, event, file, kind);
+          const fetcher = t.mock.method(globalThis, 'fetch', (input: unknown, init?: RequestInit) => {
+            assert.equal(input, `/api/v1/events/${event.event_id}/${kind}`);
+            assert.equal(init?.method, 'POST'); assert.equal(init?.body, command.file);
+            const headers = new Headers(init?.headers);
+            assert.equal(headers.get('X-CSRF-Token'), command.csrfToken);
+            assert.equal(headers.get('Idempotency-Key'), command.key);
+            assert.equal(headers.get('If-Match'), `"${command.version}"`);
+            requested.resolve(); return responseReady.promise;
+          });
+          const pending = assert.rejects(sendEventMedia(client, command), (cause: unknown) =>
+            cause instanceof ApiError && cause.status === status && cause.accessExpired === accessExpired
+              && cause.network === accessExpired && cause.definitiveResponse === !accessExpired);
+          await requested.promise;
+          if (delayedAt === 'Access body') {
+            responseReady.resolve(response);
+            await classificationStarted.promise;
+          }
+          if (owner === 'ABA') client.csrfToken = 'session-B';
+          client.csrfToken = 'session-A'; // Same token within the current lifetime is a no-op.
+          const generation = client.sessionGeneration;
+          assert.equal(generation, command.generation + (owner === 'ABA' ? 2 : 0));
+          if (delayedAt === 'fetch') responseReady.resolve(response);
+          else releaseBody();
+          await pending;
+          assert.equal(client.csrfToken, owner === 'ABA' ? 'session-A' : null);
+          assert.equal(client.sessionGeneration, generation + (owner === 'current' ? 1 : 0));
+          assert.equal(client.accessExpired, owner === 'ABA' ? !accessExpired : accessExpired);
+          assert.deepEqual(unauthorized, owner === 'ABA' ? [] : [{token:null,accessExpired}]);
+          assert.equal(fetcher.mock.callCount(), 1, 'a denial never automatically replays media');
+          assert.equal(command.csrfToken, 'session-A');
+          assert.equal(Object.isFrozen(command), true, 'the original retry tuple is retained');
+          if (owner === 'ABA') {
+            await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.status === 409);
+            assert.equal(fetcher.mock.callCount(), 1, 'an old command cannot be replayed by the replacement session');
+          }
+        });
+      }
+    }
+  }
+
+  for (const owner of ['current', 'ABA'] as const) test(`${kind}: late success respects the ${owner} owner Access state`, async t => {
+    const requested = deferred<void>(), responseReady = deferred<Response>();
+    const client = new PortalClient(); client.csrfToken = 'session-A';
+    const command = await prepareEventMedia(client, event, file, kind);
+    const fetcher = t.mock.method(globalThis, 'fetch', () => { requested.resolve(); return responseReady.promise; });
+    const receipt = {...event, aggregate_version:4, [`${kind}_url`]:'/saved-media'};
+    const operation = sendEventMedia(client, command);
+    const pending = owner === 'ABA'
+      ? assert.rejects(operation, (cause: unknown) => cause instanceof ApiError && cause.status === 409)
+      : operation.then(result => assert.deepEqual(result, receipt));
+    await requested.promise;
+    if (owner === 'ABA') client.csrfToken = 'session-B';
+    client.csrfToken = 'session-A'; client.accessExpired = true;
+    let unauthorized = 0; client.onUnauthorized = () => { unauthorized++; };
+    const generation = client.sessionGeneration;
+    responseReady.resolve(Response.json(receipt));
+    await pending;
+    assert.equal(client.csrfToken, 'session-A'); assert.equal(client.sessionGeneration, generation);
+    assert.equal(client.accessExpired, owner === 'ABA'); assert.equal(unauthorized, 0);
+    assert.equal(fetcher.mock.callCount(), 1);
+  });
+}
+
 for (const [name, upload] of uploads) {
   for (const accessExpired of [false, true]) {
     test(`${name}: a delayed ${accessExpired ? 'Access denial' : '401'} never signs out a new member`, async t => {
@@ -105,10 +207,10 @@ for (const kind of ['banner', 'video'] as const) {
     });
   }
   test(`${kind}: known 415 stays correctable`, async t => {
-    t.mock.method(globalThis, 'fetch', async () => Response.json({detail:'unsupported media'}, {status:415}));
+    t.mock.method(globalThis, 'fetch', async () => Response.json({type:'urn:problem:unsupported-media',title:'Unsupported media',status:415,detail:'unsupported media'}, {status:415}));
     const client = new PortalClient(); client.csrfToken = 'current-session';
     const command = await prepareEventMedia(client, event, file, kind);
-    await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.status === 415 && !cause.network);
+    await assert.rejects(sendEventMedia(client, command), (cause: unknown) => cause instanceof ApiError && cause.status === 415 && !cause.network && cause.definitiveResponse);
   });
   test(`${kind}: reconciliation GET failure retains a replayable original command`, async t => {
     const client = new PortalClient(); client.csrfToken = 'current-session';
@@ -139,3 +241,64 @@ for (const kind of ['banner', 'video'] as const) {
     assert.equal(reads, 2);assert.equal(writes, 1);
   });
 }
+
+// The same wire boundary must distinguish refusal from unreadable or mismatched
+// gateway bodies. No actual provider, browser or database is involved.
+for (const kind of ['banner','video'] as const) {
+  for (const status of [400,403,409,412,415,422,429]) {
+    for (const [label,body] of [
+      ['HTML','<html>upstream failure</html>'],['truncated JSON','{'],['empty object','{}'],
+      ['array','[]'],['null','null'],['missing type',JSON.stringify({title:'Rejected',status})],
+      ['mismatched status',JSON.stringify({type:'urn:problem:rejected',title:'Rejected',status:status+1})],
+      ['blank type',JSON.stringify({type:'  ',title:'Rejected',status})],
+      ['blank title',JSON.stringify({type:'urn:problem:rejected',title:'  ',status})],
+    ]) test(`${kind}: first malformed ${label} ${status} cannot establish refusal`,async t=>{
+      const calls:RequestInit[]=[];
+      t.mock.method(globalThis,'fetch',async(_input:unknown,init?:RequestInit)=>{
+        calls.push(init!);
+        return calls.length===1?new Response(body,{status,headers:{'content-type':'application/json'}})
+          :Response.json({...event,aggregate_version:4,[`${kind}_url`]:'/saved-media'});
+      });
+      const client=new PortalClient();client.csrfToken='synthetic-session';
+      const command=await prepareEventMedia(client,event,file,kind);
+      await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&cause.network&&!cause.definitiveResponse);
+      assert.equal(calls.length,1,'no automatic replay');
+      if(client.csrfToken===null){
+        await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&!cause.network);
+        assert.equal(calls.length,1,'an Access-expired owner cannot replay with a new session');return;
+      }
+      await sendEventMedia(client,command);
+      assert.equal(calls[1].method,'POST');assert.equal(calls[1].body,file);
+      assert.deepEqual([...new Headers(calls[1].headers)],[...new Headers(calls[0].headers)]);
+    });
+    test(`${kind}: first valid ProblemDetails ${status} remains correctable`,async t=>{
+      t.mock.method(globalThis,'fetch',async()=>Response.json({type:'urn:problem:rejected',title:'Rejected',status},{status}));
+      const client=new PortalClient();client.csrfToken='synthetic-session';
+      const command=await prepareEventMedia(client,event,file,kind);
+      await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&cause.status===status&&!cause.network&&cause.definitiveResponse);
+      const corrected=await prepareEventMedia(client,event,file,kind);
+      assert.notEqual(corrected.key,command.key);
+    });
+  }
+  test(`${kind}: local session rejection never issues a request`,async t=>{
+    const client=new PortalClient();client.csrfToken='old-session';
+    const command=await prepareEventMedia(client,event,file,kind);
+    client.csrfToken='replacement-session';
+    const fetcher=t.mock.method(globalThis,'fetch',async()=>Response.json({}));
+    await assert.rejects(sendEventMedia(client,command),(cause:unknown)=>cause instanceof ApiError&&!cause.network);
+    assert.equal(fetcher.mock.callCount(),0);
+  });
+}
+
+for(const [label,body,definitive] of [
+  ['complete',{type:'urn:problem:conflict',title:'Conflict',status:409},true],
+  ['blank type',{type:' ',title:'Conflict',status:409},false],
+  ['blank title',{type:'urn:problem:conflict',title:' ',status:409},false],
+  ['wrong status',{type:'urn:problem:conflict',title:'Conflict',status:422},false],
+  ['partial',{detail:'not a complete refusal'},false],
+] as const)test(`PortalClient shares the media refusal boundary: ${label}`,async t=>{
+  t.mock.method(globalThis,'fetch',async()=>Response.json(body,{status:409}));
+  const client=new PortalClient();client.csrfToken='synthetic-session';
+  await assert.rejects(client.post('/events',{}, {suppressConsole:true,background:true,skipAuthHandler:true}),
+    (cause:unknown)=>cause instanceof ApiError&&cause.definitiveResponse===definitive);
+});

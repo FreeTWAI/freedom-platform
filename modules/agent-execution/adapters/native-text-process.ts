@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import type { FileHandle } from 'node:fs/promises';
 import { z } from 'zod';
 import { NativeTextLimits, NativeTextReceiptSchema, type NativeTextBinding, type NativeTextReceipt } from '../../../contracts/execution/v3/native-text-invocation.js';

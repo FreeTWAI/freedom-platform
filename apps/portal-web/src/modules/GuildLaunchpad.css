@@ -81,3 +81,13 @@
 .guild-launchpad-resource-preview button:disabled:hover{border-color:var(--line);outline:none}
 .guild-launchpad-content h2:focus{outline:2px solid var(--focus);outline-offset:4px}
 .guild-launchpad-content h2{scroll-margin-top:6rem}
+
+/* Management keeps one task in view while every draft remains mounted. */
+.guild-editor-nav{display:flex;flex-wrap:wrap;gap:.5rem;padding-bottom:.75rem;border-bottom:1px solid var(--line)}
+.guild-editor-nav .btn{min-height:44px;width:auto;max-width:100%;white-space:normal}
+.guild-editor-nav .btn[aria-pressed="true"]{background:var(--green-soft);color:var(--ink);box-shadow:inset 0 0 0 2px var(--focus)}
+.guild-editor-panel{display:grid;gap:.8rem;min-width:0}
+.guild-editor-panel>h3{margin:0}
+.guild-editor-panel>h3:focus{outline:2px solid var(--focus);outline-offset:4px}
+.guild-editor-savebar{display:grid;gap:.65rem;border-top:1px solid var(--line);padding-top:1rem}
+.guild-editor-savebar p{margin:0}

@@ -68,7 +68,17 @@ export function NotificationBell({client,onNavigate,preferencesEnabled=false}:{c
     alive.current=true;void refresh();const update=(event:Event)=>void refresh(event.type===INBOX_UPDATED||event.type==='freedom-notification-preferences-updated');
     const events=['focus','online',INBOX_UPDATED,'freedom-notification-preferences-updated'];
     for(const event of events)window.addEventListener(event,update);
-    return()=>{alive.current=false;generation.current++;for(const event of events)window.removeEventListener(event,update);};
+    // A PWA may resume without focus. Do not join a preview started before suspension.
+    const visible=()=>{
+      if(document.visibilityState!=='visible')return;
+      if(navigator.onLine)void refresh(true);
+      else{
+        // Retire both the transport scope and its authority before reconnecting.
+        readScope.current.epoch++;generation.current++;setLoading(false);
+      }
+    };
+    document.addEventListener('visibilitychange',visible);
+    return()=>{alive.current=false;generation.current++;for(const event of events)window.removeEventListener(event,update);document.removeEventListener('visibilitychange',visible);};
   },[refresh]);
   useEffect(()=>{
     if(!open)return;
@@ -126,7 +136,7 @@ export function NotificationBell({client,onNavigate,preferencesEnabled=false}:{c
     {!showAll&&loading&&<p className="field-hint" role="status">{t('notice.loading')}</p>}
     {!showAll&&error&&<div><p role="alert">{t('notice.loadError')}</p><button type="button" className="btn btn-ghost" onClick={()=>void refresh()}>{t('feedback.retry')}</button></div>}
     {!showAll&&!error&&!loading&&page?.items.length===0&&<p>{t('notice.empty')}</p>}
-    {!showAll&&page?.items.map(item=><button key={item.notification_id} type="button" className={`notification-bell-item${item.read_at?'':' is-unread'}`} disabled={all.busy||busy===item.notification_id} onClick={()=>void choose(item)}><strong>{item.title}</strong><span>{item.body}</span><small>{formatIsoLocal(item.created_at)} · {busy===item.notification_id?t('notice.marking'):item.read_at?t('notice.read'):t('notice.unread')}</small></button>)}
+    {!showAll&&page?.items.map(item=><button key={item.notification_id} type="button" className={`notification-bell-item${item.read_at?'':' is-unread'}`} disabled={all.busy||!!busy} onClick={()=>void choose(item)}><strong>{item.title}</strong><span>{item.body}</span><small>{formatIsoLocal(item.created_at)} · {busy===item.notification_id?t('notice.marking'):item.read_at?t('notice.read'):t('notice.unread')}</small></button>)}
     {showAll?<PageLoadBoundary label={t('notice.title')} onHome={()=>setOpen(false)}><Notifications client={client} onUnread={beginUnread} onSocial={action=>{setOpen(false);onNavigate?.(action);}} onOrder={onNavigate?action=>{setOpen(false);onNavigate(action);}:undefined} onNavigate={tab=>{setOpen(false);onNavigate?.({tab:tab as LegacyBellAction['tab'],resource_id:null});}} onOpenPeer={id=>{setOpen(false);onNavigate?.({tab:'messages',resource_id:id});}}/></PageLoadBoundary>:<button type="button" className="btn btn-ghost notification-bell-all" onClick={()=>setShowAll(true)}>{t('notice.seeAll')}</button>}
   </div>}{pendingError&&<div ref={readError} className="notification-bell-read-error" role="alert"><p>{t('notice.readError')}</p><div className="notification-bell-head"><button type="button" className="btn btn-ghost" aria-disabled={!!busy} onClick={()=>void choose(pendingError.item,false)}>{busy?t('notice.marking'):t('feedback.retry')}</button><button type="button" className="btn btn-ghost" onClick={dismissReadError}>{t('notice.dismissError')}</button></div></div>}</div>;
 }

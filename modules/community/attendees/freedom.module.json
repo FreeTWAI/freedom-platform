@@ -21,7 +21,8 @@
     "apps/portal-web/src/modules/EventAttendees.tsx",
     "apps/portal-web/src/modules/MemberExperience.css",
     "tests/runtime/event-attendees.test.ts",
-    "tests/e2e/event-attendees.spec.ts"
+    "tests/e2e/event-attendees.spec.ts",
+    "tests/runtime/event-attendee-navigation.test.ts"
   ],
   "public_exports": [],
   "dependencies": [

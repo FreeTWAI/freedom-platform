@@ -46,7 +46,7 @@ for(const width of [1440,768,390,320])for(const [themeName,theme] of themes){
       }
       const page=await login(0),panel=page.locator('#messages-panel-direct');
       await expect(page.getByRole('button',{name:'平台檢舉案件',exact:true})).toHaveCount(0);
-      await panel.getByLabel('搜尋會員',{exact:true}).fill(names[1]);await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:`傳訊給 ${names[1]}`,exact:true}).click();
+      await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員',{exact:true}).fill(names[1]);await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:`傳訊給 ${names[1]}`,exact:true}).click();
       await expect(panel.locator('.messages-bubbles')).toContainText('合成私人檢舉證據');
       await expect(panel.getByRole('button',{name:/^檢舉/}).first()).toBeVisible();
       await panel.getByRole('button',{name:'搜尋訊息',exact:true}).click();

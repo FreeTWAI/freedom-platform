@@ -38,21 +38,27 @@ export function useVisibleChatRead({active,identity,through,unread,blocked,scrol
     if(!active||!identity||!through||unread<=0||blocked)return;
     const log=scroll.current,bubble=log?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(through)}"]`);
     if(!log||!bubble)return;
+    const viewport=window.visualViewport;
     let frame=0;
     const check=()=>{
       frame=0;
       if(document.visibilityState!=='visible'||!navigator.onLine||attempted.current.get(identity)===through)return;
       if(log.scrollHeight-log.scrollTop-log.clientHeight>=80)return;
       const box=bubble.getBoundingClientRect(),bounds=log.getBoundingClientRect();
-      const top=Math.max(0,bounds.top),bottom=Math.min(innerHeight,bounds.bottom),left=Math.max(0,bounds.left),right=Math.min(innerWidth,bounds.right);
+      // Keyboard and pinch zoom can hide a bubble that is still inside the layout viewport.
+      const visibleTop=viewport?.offsetTop??0,visibleLeft=viewport?.offsetLeft??0;
+      const top=Math.max(0,bounds.top,visibleTop),bottom=Math.min(innerHeight,bounds.bottom,visibleTop+(viewport?.height??innerHeight));
+      const left=Math.max(0,bounds.left,visibleLeft),right=Math.min(innerWidth,bounds.right,visibleLeft+(viewport?.width??innerWidth));
       if(bottom<=top||right<=left||box.bottom<=top||box.top>=bottom||box.right<=left||box.left>=right)return;
       attempted.current.set(identity,through);action.current(through);
     };
     const schedule=()=>{if(!frame)frame=requestAnimationFrame(check)};
     const observer=new IntersectionObserver(schedule);observer.observe(bubble);
     schedule();window.addEventListener('scroll',schedule,true);window.addEventListener('resize',schedule);
+    viewport?.addEventListener('resize',schedule);viewport?.addEventListener('scroll',schedule);
     window.addEventListener('focus',schedule);window.addEventListener('online',schedule);document.addEventListener('visibilitychange',schedule);
     return()=>{cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener('scroll',schedule,true);window.removeEventListener('resize',schedule);
+      viewport?.removeEventListener('resize',schedule);viewport?.removeEventListener('scroll',schedule);
       window.removeEventListener('focus',schedule);window.removeEventListener('online',schedule);document.removeEventListener('visibilitychange',schedule);};
   },[active,identity,through,unread,blocked,scroll]);
 }

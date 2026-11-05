@@ -11,6 +11,8 @@
     "tests/runtime/storefront-cart-pages.test.ts",
     "tests/e2e/storefront-cart.spec.ts",
     "tests/e2e/storefront-cart-fixture.ts",
+    "tests/e2e/owned-http-listener.ts",
+    "tests/runtime/hosted-login-transport.test.ts",
     "tests/e2e/storefront-offline-checkout.spec.ts",
     "tests/runtime/storefront-payment-pages.test.ts",
     "tests/runtime/storefront-payment-observer.test.ts",

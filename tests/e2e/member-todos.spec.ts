@@ -1,3 +1,4 @@
+import {GITHUB_CONNECT_AGENT_INSTRUCTION} from '../../apps/portal-web/src/modules/github-connect-help.js';
 import {navigate} from './navigation.js';
 import {mkdirSync} from 'node:fs';
 import {test,expect,type Page,type Route} from './fixtures.js';
@@ -211,4 +212,59 @@ test('six tasks in two groups put open work first, fit phone and desktop, and ea
     await page.getByRole('button',{name:'設定',exact:true}).click();await page.getByRole('menuitem',{name:'入門指南',exact:true}).click();
     await expect(task(page,'skill-book')).toHaveAttribute('data-task-state','todo');
   }
+});
+
+for(const width of [320,1280])for(const mode of ['missing','throws','rejects'] as const)test(`AI connection guide has selectable fallback and successful retry when clipboard ${mode} at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:844});
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await sources(page,base());await login(page);
+  const github=task(page,'github');
+  await page.evaluate(mode=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:mode==='missing'?undefined:{writeText:()=>{if(mode==='throws')throw Error('synthetic clipboard failure');return Promise.reject(Error('synthetic clipboard denial'));}}}),mode);
+  await github.getByRole('button',{name:'複製 AI 連結指引',exact:true}).click();
+  await expect(github.getByRole('alert')).toHaveText('無法自動複製，請選取下方 AI 連結指引手動複製。');
+  const manual=github.getByRole('textbox',{name:'AI 連結指引',exact:true});
+  await expect(manual).toHaveValue(GITHUB_CONNECT_AGENT_INSTRUCTION);
+  await expect(manual).toHaveAttribute('readonly','');
+  await manual.focus();
+  expect(await manual.evaluate((field:HTMLTextAreaElement)=>[field.selectionStart,field.selectionEnd])).toEqual([0,GITHUB_CONNECT_AGENT_INSTRUCTION.length]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.evaluate(()=>{
+    const state=window as unknown as {copiedGuide?:string};
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{state.copiedGuide=value;}}});
+  });
+  await github.getByRole('button',{name:'複製 AI 連結指引',exact:true}).click();
+  await expect(github.getByRole('button',{name:'已複製 AI 指引',exact:true})).toBeVisible();
+  await expect(manual).toHaveCount(0);await expect(github.getByRole('alert')).toHaveCount(0);
+  expect(await page.evaluate(()=>(window as unknown as {copiedGuide?:string}).copiedGuide)).toBe(GITHUB_CONNECT_AGENT_INSTRUCTION);
+  expect(errors).toEqual([]);
+});
+
+for(const latestSucceeds of [true,false])test(`only the newest AI connection guide copy controls feedback (${latestSucceeds?'success':'failure'})`,async({page})=>{
+  await sources(page,base());await login(page);
+  await page.evaluate(()=>{
+    const pending:{resolve:()=>void;reject:()=>void}[]=[];
+    (window as unknown as {guideCopies:typeof pending}).guideCopies=pending;
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise<void>((resolve,reject)=>pending.push({resolve,reject:()=>reject(Error('synthetic clipboard denial'))}))}});
+  });
+  const github=task(page,'github'),copy=github.getByRole('button',{name:'複製 AI 連結指引',exact:true});
+  await copy.click();await copy.click();
+  await page.evaluate(success=>{const pending=(window as unknown as {guideCopies:{resolve:()=>void;reject:()=>void}[]}).guideCopies;pending[1][success?'resolve':'reject']();},latestSucceeds);
+  const expectLatest=async()=>{
+    if(latestSucceeds){await expect(github.getByRole('button',{name:'已複製 AI 指引',exact:true})).toBeVisible();await expect(github.getByRole('textbox',{name:'AI 連結指引',exact:true})).toHaveCount(0);await expect(github.getByRole('alert')).toHaveCount(0);}
+    else{await expect(github.getByRole('textbox',{name:'AI 連結指引',exact:true})).toHaveValue(GITHUB_CONNECT_AGENT_INSTRUCTION);await expect(copy).toBeVisible();}
+  };
+  await expectLatest();
+  await page.evaluate(success=>{const pending=(window as unknown as {guideCopies:{resolve:()=>void;reject:()=>void}[]}).guideCopies;pending[0][success?'reject':'resolve']();},latestSucceeds);
+  await painted(page);await expectLatest();
+});
+
+test('leaving and reopening the guide ignores an earlier clipboard completion',async({page})=>{
+  await sources(page,base());await login(page);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:()=>new Promise<void>(resolve=>{(window as unknown as {resolveGuide:()=>void}).resolveGuide=resolve;})}}));
+  await task(page,'github').getByRole('button',{name:'複製 AI 連結指引',exact:true}).click();
+  await navigate(page,'會員首頁');await expect(page).toHaveURL(/#home$/);
+  await navigate(page,'入門指南');await expect(page).toHaveURL(/#todos$/);
+  await page.evaluate(()=>(window as unknown as {resolveGuide:()=>void}).resolveGuide());await painted(page);
+  await expect(task(page,'github').getByRole('button',{name:'複製 AI 連結指引',exact:true})).toBeVisible();
+  await expect(task(page,'github').getByRole('textbox',{name:'AI 連結指引',exact:true})).toHaveCount(0);
 });

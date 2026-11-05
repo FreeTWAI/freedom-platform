@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import {randomUUID} from 'node:crypto';
 import type {MiddlewareHandler} from 'hono';
 

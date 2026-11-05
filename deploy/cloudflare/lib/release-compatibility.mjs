@@ -238,6 +238,14 @@ const FOUNDATION_NAMES = [
   '197_event_registration_policy.sql',
   // Catalog publication and one administrator-guild book binding; no new runtime capability.
   '198_member_shared_skill_books_language_guild.sql',
+  // Additive descriptive prize data; exact ledger approval is still required.
+  '199_event_prize_details.sql',
+  // Isolated organizer-recorded attendance; no completion, award or runtime grants.
+  '200_event_member_attendance.sql',
+  // Closed prize photo routing only; persistence and GC remain separately disabled.
+  '201_event_prize_photos.sql',
+  // Private self-reported tester progress/feedback; no ranking, release or contribution authority.
+  '202_tester_map_accounts.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

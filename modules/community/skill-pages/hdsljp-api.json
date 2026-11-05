@@ -1,0 +1,14 @@
+{
+  "headline": "自己架一套命盤計算服務，給人類圖網站用。",
+  "outcomes": ["四個輸入與回傳命盤欄位的對照表", "三個 .se1 星曆檔與 EPHE_PATH 準備情況", "時區與錯誤紀錄，標明準確度尚未核對"],
+  "flow": {
+    "title": "四個出生輸入，算出命盤欄位",
+    "lead": "需自行架設的 Python／Flask 計算 API，沒有現成命盤網站；AGPL-3.0，Swiss Ephemeris 另有授權。",
+    "steps": [
+      {"icon": "calendar", "title": "送出虛構出生資料", "note": "向 POST /calculate 送 birth_date、birth_time、birth_place、tz。"},
+      {"icon": "code", "title": "自架 API 計算", "note": "計算需另備三個 .se1 星曆檔並設定 EPHE_PATH；請求以 X-API-Key 驗證。"},
+      {"icon": "list", "title": "取回命盤欄位", "note": "type、authority、profile 等欄位，及 personality／design 閘門與線位。"}
+    ],
+    "caption": "收到回覆不代表算得準：只用虛構或本人同意的出生資料，準確度要自行核對。"
+  }
+}

@@ -36,11 +36,13 @@ function EventHelpersContent({client,eventId,isOrganizer,onBlockedChange,referra
   const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[unknown,setUnknown]=useState(false),[stale,setStale]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState('');
   const epoch=useRef(0),readSequence=useRef(0),mounted=useRef(false),owner=useRef(client.sessionGeneration);
+  const refreshAfterFlight=useRef(false);
   const pending=useRef<Command|null>(null),inFlight=useRef(false),uncertain=useRef(false),controllers=useRef(new Set<AbortController>());
   const base=`/events/${eventId}/helpers`;
   const current=useCallback((run:number)=>mounted.current&&epoch.current===run&&client.sessionGeneration===owner.current,[client]);
   const load=useCallback(async(nextOffset=0)=>{
     if(!current(epoch.current)||document.visibilityState!=='visible')return;
+    refreshAfterFlight.current=false;
     const run=epoch.current,sequence=++readSequence.current,controller=new AbortController();controllers.current.add(controller);
     setLoading(true);setError('');setOwn(null);setPage(null);
     try{
@@ -54,14 +56,19 @@ function EventHelpersContent({client,eventId,isOrganizer,onBlockedChange,referra
     finally{controllers.current.delete(controller);if(current(run)&&sequence===readSequence.current)setLoading(false);}
   },[base,client,current,isOrganizer]);
   useEffect(()=>{
-    mounted.current=true;owner.current=client.sessionGeneration;epoch.current++;pending.current=null;uncertain.current=false;inFlight.current=false;
+    mounted.current=true;owner.current=client.sessionGeneration;epoch.current++;refreshAfterFlight.current=false;pending.current=null;uncertain.current=false;inFlight.current=false;
     setUnknown(false);setBusy(false);setStale(false);setNotice('');onBlockedChange(false);void load();
-    const ended=()=>{mounted.current=false;epoch.current++;readSequence.current++;for(const controller of controllers.current)controller.abort();setOwn(null);setPage(null);setError('登入狀態已變更，請重新開啟活動。');onBlockedChange(false);};
-    const refresh=()=>{if(!inFlight.current&&document.visibilityState==='visible')void load();};
+    const ended=()=>{mounted.current=false;epoch.current++;refreshAfterFlight.current=false;readSequence.current++;for(const controller of controllers.current)controller.abort();setOwn(null);setPage(null);setError('登入狀態已變更，請重新開啟活動。');onBlockedChange(false);};
+    const refresh=()=>{
+      if(document.visibilityState!=='visible')return;
+      // Coalesce resumes during a command/readback. Its ACK is historical;
+      // only a fresh read after the interrupted flight can restore private UI.
+      if(inFlight.current)refreshAfterFlight.current=true;else void load();
+    };
     const visibility=()=>{if(document.visibilityState==='visible')refresh();else{readSequence.current++;setOwn(null);setPage(null);}};
     window.addEventListener('focus',refresh);window.addEventListener('pageshow',refresh);document.addEventListener('visibilitychange',visibility);
     window.addEventListener('freedom-game-console-session-end',ended);
-    return()=>{mounted.current=false;epoch.current++;readSequence.current++;for(const controller of controllers.current)controller.abort();controllers.current.clear();onBlockedChange(false);window.removeEventListener('freedom-game-console-session-end',ended);window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',refresh);document.removeEventListener('visibilitychange',visibility);};
+    return()=>{mounted.current=false;epoch.current++;refreshAfterFlight.current=false;readSequence.current++;for(const controller of controllers.current)controller.abort();controllers.current.clear();onBlockedChange(false);window.removeEventListener('freedom-game-console-session-end',ended);window.removeEventListener('focus',refresh);window.removeEventListener('pageshow',refresh);document.removeEventListener('visibilitychange',visibility);};
   },[client,load,onBlockedChange]);
   async function send(command:Command){
     if(inFlight.current||!current(epoch.current))return;
@@ -84,7 +91,10 @@ function EventHelpersContent({client,eventId,isOrganizer,onBlockedChange,referra
       setError(unknownNow?'幫忙操作的結果還沒確認。請重試原操作；重新讀取不代表原操作已取消。':cause instanceof Error?cause.message:'操作未完成，請重新讀取後再確認。');
     }finally{
       controllers.current.delete(controller);
-      if(current(run)){inFlight.current=false;setBusy(false);onBlockedChange(pending.current!==null);}
+      if(current(run)){
+        inFlight.current=false;setBusy(false);onBlockedChange(pending.current!==null);
+        if(refreshAfterFlight.current&&document.visibilityState==='visible')void load(isOrganizer?offset:0);
+      }
     }
   }
   function act(path:string,body:Command['body'],expected:number){

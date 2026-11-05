@@ -21,7 +21,7 @@ const result = (id, status, reason) => ({ check_id: id, status, reason });
 
 export { isDisposableDatabaseUrl } from './runtime-databases.mjs';
 
-async function suiteFiles(root, id) {
+async function suiteFiles(root, id, onRead) {
   let files;
   if (id === 'governance.unit') {
     files = (await readdir(resolve(root, 'packages/contribution-tools/test')))
@@ -40,7 +40,10 @@ async function suiteFiles(root, id) {
     files = [...new Set([...FULL_RUNTIME_BASELINE, ...found])].sort();
   } else files = RUNTIME_SUITES[id];
   if (files.length > (id === 'runtime.full' ? MAX_RUNTIME_FILES : MAX_FILES)) throw new Error('file_limit');
-  for (const path of files) await readBounded(root, path);
+  for (const path of files) {
+    const bytes = await readBounded(root, path);
+    onRead?.(path, bytes);
+  }
   return files;
 }
 
@@ -525,9 +528,12 @@ export async function runtimeSourceManifest(root) {
     {cwd:root,env:verificationEnvironment(),timeout:5000,maxBuffer:4096});
   partitionCheck(clean.status === 0 && !clean.error && clean.stdout?.length === 0, 'runtime_source_changed');
   partitionCheck(git.status === 0 && /^[a-f0-9]{40}$/.test(candidate_commit), 'runtime_candidate_unavailable');
-  const files = await suiteFiles(root, 'runtime.full');
   const full_source_manifest = [];
-  for (const path of files) full_source_manifest.push({ path, source_sha256: sha256(await readBounded(root, path)) });
+  // Hash the bytes from mandatory bounded validation, not a second file read.
+  // Each manifest still rechecks Git and rereads every selected source.
+  await suiteFiles(root, 'runtime.full', (path, bytes) => {
+    full_source_manifest.push({ path, source_sha256: sha256(bytes) });
+  });
   return { candidate_commit, full_source_manifest,
     manifest_sha256: sha256(Buffer.from(JSON.stringify(full_source_manifest))) };
 }

@@ -43,12 +43,20 @@ test('PERSONAL-SPACE-UI-02: one failed or unavailable post stays local and hidde
 
 test('PERSONAL-SPACE-UI-03: feature off makes no inventory or post request and does not expose contact fields',async({page})=>{
  let inventoryReads=0,postReads=0;
+ const profileNickname='FEATURE_OFF_PROFILE_READY';
  await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),personal_content_enabled:false}});});
- await page.route(`**/api/v1/members/${owner}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),contacts:{email:'PRIVATE_CONTACT_SENTINEL'},login_email:'PRIVATE_LOGIN_SENTINEL',mfa_secret:'PRIVATE_MFA_SENTINEL'}});});
+ await page.route(`**/api/v1/members/${owner}`,async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),nickname:profileNickname,contacts:{email:'PRIVATE_CONTACT_SENTINEL'},login_email:'PRIVATE_LOGIN_SENTINEL',mfa_secret:'PRIVATE_MFA_SENTINEL'}});});
  await page.route('**/api/v1/me/content',route=>{inventoryReads++;return route.fulfill({json:{items:[]}});});
- await page.route('**/api/v1/social-posts?post_id=*',route=>{postReads++;return route.fulfill({json:{items:[]}});});await login(page);
- await expect(page.getByText(/目前未開放個人內容瀏覽/)).toBeVisible();await expect(page.locator('.personal-space')).not.toContainText('PRIVATE_');expect(inventoryReads).toBe(0);expect(postReads).toBe(0);
- await page.locator('.settings-menu-button').click();await expect(page.getByRole('menuitem',{name:'我的內容',exact:true})).toHaveCount(0);await expect(page.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeVisible();
+ await page.route('**/api/v1/social-posts?post_id=*',route=>{postReads++;return route.fulfill({json:{items:[]}});});
+ try{
+  await login(page);
+  // The feature-off notice renders before the member read. Observe this exact
+  // response in the hero before checking that its private fields were omitted.
+  await expect(page.locator('.personal-space-hero').getByRole('heading',{name:profileNickname,exact:true})).toBeVisible();
+  await expect(page.getByText(/目前未開放個人內容瀏覽/)).toBeVisible();await expect(page.locator('.personal-space')).not.toContainText('PRIVATE_');
+  await page.locator('.settings-menu-button').click();await expect(page.getByRole('menuitem',{name:'我的內容',exact:true})).toHaveCount(0);await expect(page.getByRole('menuitem',{name:'我的個人空間',exact:true})).toBeVisible();
+  expect(inventoryReads).toBe(0);expect(postReads).toBe(0);
+ }finally{await page.unrouteAll({behavior:'wait'});}
 });
 
 test('PERSONAL-SPACE-UI-04: page change cancels late body; failed inventory has retry rather than an empty-state claim',async({page})=>{

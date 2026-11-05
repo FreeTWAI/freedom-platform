@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 import test from 'node:test';
 import React from 'react';
 import {transformSync} from 'esbuild';
+import {parse as parseCss} from 'postcss';
 
 const source=readFileSync('apps/portal-web/src/modules/PositioningPanels.tsx','utf8');
 const extract=(from:string,to:string)=>{const start=source.indexOf(from),end=source.indexOf(to,start);assert.ok(start>=0&&end>start,'actual handler extraction boundary');return source.slice(start,end);};
@@ -209,4 +210,22 @@ test('legacy primary exit explanation stays beside its disabled action inside se
  assert.equal(inner.find(n=>n.type==='button'&&text(n.props.children)==='退出Synthetic guild').props.disabled,true);
  const badge=elements.find(n=>n.props.className==='badge'&&text(n.props.children)==='主要公會');
  assert.ok(badge);assert.ok(!inner.includes(badge),'membership status remains outside collapsed settings');
+});
+
+// Execute the actual panel resolver; field errors must not disappear in a hidden editor section.
+const launchpadSource=readFileSync('apps/portal-web/src/modules/GuildLaunchpad.tsx','utf8');
+function launchpadFunction(from:string,to:string){const start=launchpadSource.indexOf(from),end=launchpadSource.indexOf(to,start);assert.ok(start>=0&&end>start);return launchpadSource.slice(start,end);}
+const editorErrorPanel=runInNewContext(stripTypeScriptTypes(launchpadFunction('function fieldHits(', 'function fieldMessage(')+launchpadFunction('function editorErrorPanel(', 'type BookRef ='))+';editorErrorPanel');
+for(const [path,panel] of [['mission_override','layout'],['body.blocks.2.title','layout'],['blocks.1.enabled','layout'],['body.application_refs.0.release_ref','tools'],['starter.title_label','tools'],['body.support.public_url','tools'],['principal_id','delegations'],['capabilities.0','delegations'],['expires_at','delegations'],['reason',null],['body.reason',null],['schema_version',null]] as const){
+ test(`launchpad editor reveals ${path} in ${panel??'the existing global or dialog error surface'}`,()=>{assert.equal(editorErrorPanel([{path,code:'invalid'}]),panel);});
+}
+
+test('launchpad scoped hidden rule overrides both grid editor panels and the card form',()=>{
+ const css=parseCss(readFileSync('apps/portal-web/src/modules/GuildLaunchpad.css','utf8'));
+ let protectedHidden=false;
+ css.walkRules(rule=>{
+  if(rule.selector==='.guild-launchpad [hidden]')rule.walkDecls('display',declaration=>{if(declaration.value==='none'&&declaration.important)protectedHidden=true;});
+  if(rule.selector.includes('.guild-editor-panel')||rule.selector.includes('.guild-launchpad-editor'))rule.walkDecls('display',declaration=>{assert.equal(Boolean(declaration.important),false,'editor display cannot override the important hidden rule');});
+ });
+ assert.ok(protectedHidden,'all hidden descendants, including the editor form and its sections, remain display:none!important');
 });

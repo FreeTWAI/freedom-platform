@@ -1,0 +1,11 @@
+.event-prize-photo,.event-prize-photo-editor,.event-prize-photo-preview { min-width: 0; display: grid; gap: .65rem; }
+.event-prize-photo img,.event-prize-photo-preview img { display: block; width: 100%; max-width: 20rem; max-height: 18rem; height: auto; object-fit: contain; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-elev); }
+.event-prize-photo-editor { border: 1px solid var(--line); scroll-margin-block: 6rem; }
+.event-prize-photo-editor :is(h4,p),.event-prize-photo p { margin: 0; overflow-wrap: anywhere; }
+.event-prize-photo-preview { padding: .75rem; border: 1px dashed var(--line); border-radius: 12px; }
+.event-prize-photo-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.event-prize-photo-editor input { width: 100%; min-width: 0; font-size: 1rem; }
+.event-prize-photo-editor button,.event-prize-photo button,.event-prize-photo-editor input { min-height: 44px; }
+.event-prize-photo-editor button,.event-prize-photo button { justify-self: start; white-space: normal; }
+.event-prize-photo-editor :is(button,input):focus-visible,.event-prize-photo button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.event-prize-photo-editor [role="group"] { padding: .75rem; border: 1px solid var(--line); border-radius: 12px; display: grid; gap: .65rem; }

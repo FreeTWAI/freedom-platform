@@ -1,0 +1,15 @@
+{
+  "headline": "聽完的評語，一回合一回合累積成規則。",
+  "outcomes": ["配音基線與單變數回合紀錄", "依 voice／style／text 分類的評語", "learnings/rules.md 裡尚未定案的規則"],
+  "flow": {
+    "title": "三支把手，每回合只改一項",
+    "lead": "離線自檢與 --dry-run 不打 API，dry-run 只輸出靜音佔位；真實合成需自己的 Gemini API key。",
+    "steps": [
+      {"icon": "mic", "title": "合成並試聽", "note": "設定自己的 key，先以 --one-request 做基線，之後每回合再合成試聽。"},
+      {"icon": "sliders", "title": "評語對到一支把手", "note": "評語歸到 voice（音色）、style（風格）或 text（文字），這回合只改這一項。"},
+      {"icon": "book", "title": "寫進 rules.md", "note": "評語、做法與證據寫入 learnings/rules.md；換句子確認後才定案，無效與爭議也留存。"}
+    ],
+    "loop": true,
+    "caption": "真實合成會把文字與聲音樣本送到 Google、不保證免費：先用 --dry-run 確認切段，要試聽再設 key。"
+  }
+}

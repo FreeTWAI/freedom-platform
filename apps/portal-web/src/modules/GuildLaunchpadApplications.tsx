@@ -185,6 +185,7 @@ export function GuildLaunchpadApplications({client, guildKey, publicMode, visito
       const detail = details[key];
       return <article key={key} className="application-card stack">
         <div className="application-heading"><CardHeading>{displayName}</CardHeading>{isRecommended && <span className="pill">公會推薦</span>}<span className="pill">{applicationStatus(app)}</span></div>
+        {app.module_requirements.length > 0 && <div className="application-capabilities" aria-label="工具使用的模組"><span>會使用</span><ul>{app.module_requirements.map(requirement => <li key={requirement.requirement_key}>{supply && requirement.module_key === 'storefront' ? '供貨商品庫' : moduleWord(requirement.module_key)}{!requirement.required && '（選用）'}</li>)}</ul></div>}
         <div className="application-actions"><button type="button" className="btn btn-ghost btn-small" aria-expanded={openDetail === key} onClick={() => void release(app)}>版本資料</button>
           {!publicMode && <button type="button" className="btn btn-secondary btn-small" disabled={!startable(app)} onClick={event => { if (flowLeaveGuard.current && !flowLeaveGuard.current()) return; opener.current = event.currentTarget; setLaunch(app); }}>啟動應用</button>}
         </div>
@@ -210,11 +211,12 @@ export function GuildLaunchpadApplications({client, guildKey, publicMode, visito
     {problem && <p role="alert" className="banner banner-error">{problem}<button type="button" className="btn btn-ghost" onClick={retryCatalog}>重試</button></p>}
     {loading && <p role="status" aria-live="polite">正在載入應用…</p>}
     {!loading && !problem && items.length === 0 && <p>此公會目前沒有已核准的應用</p>}
+    <p className="field-hint application-catalog-intro">先看工具會使用哪些模組，再選擇啟動。能否啟動依你的會員資格與業務空間權限判定。</p>
     <details open={!launch} className="stack application-catalog"><summary hidden={!launch}>選擇其他工具</summary>
     {recommended.length ? <>
-      <section className="guild-launchpad-recommendations stack" aria-label="公會推薦"><h3>公會推薦</h3>{recommended.map(app => card(app, true))}</section>
-      {remaining.length > 0 && <section className="stack" aria-label="其他應用"><h3>其他應用</h3>{remaining.map(app => card(app))}</section>}
-    </> : items.map(app => card(app))}
+      <section className="guild-launchpad-recommendations application-catalog-grid" aria-label="公會推薦"><h3>公會推薦</h3>{recommended.map(app => card(app, true))}</section>
+      {remaining.length > 0 && <section className="application-catalog-grid" aria-label="其他應用"><h3>其他應用</h3>{remaining.map(app => card(app))}</section>}
+    </> : <div className="application-catalog-grid">{items.map(app => card(app))}</div>}
     </details>
     {unavailable.map(row => <div role="status" key={row.key}>
       <p>

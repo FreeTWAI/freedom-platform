@@ -44,6 +44,7 @@ jobs:
       runtime_full: ${{ steps.decision.outputs.runtime_full }}
       runtime_aggregate: ${{ steps.decision.outputs.runtime_aggregate }}
       ui_e2e: ${{ steps.decision.outputs.ui_e2e }}
+      ui_default_shards: ${{ steps.decision.outputs.ui_default_shards }}
       static_worker: ${{ steps.decision.outputs.static_worker }}
       governance_consumers: ${{ steps.decision.outputs.governance_consumers }}
       deploy_preflight: ${{ steps.decision.outputs.deploy_preflight }}
@@ -338,12 +339,124 @@ jobs:
           name: runtime-full-matrix-${{ github.run_attempt }}
           path: .freedom/reports/runtime-full-matrix.json
           if-no-files-found: warn
+  ui-default:
+    runs-on: ubuntu-24.04
+    # Independent runner/DB per shard: the unchanged 75-minute execution cap plus setup/cleanup.
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    needs: select
+    if: ${{ !cancelled() && (needs.select.result != 'success' || (needs.select.outputs.ui_e2e == 'true' && needs.select.outputs.ui_default_shards != 'false')) }}
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
+        env:
+          POSTGRES_USER: freedom_local
+          POSTGRES_PASSWORD: local-development-only
+          POSTGRES_DB: fp_foundation_ci
+          # Disposable runner-only synthetic DB: low-privilege fixture LOGIN roles
+          # have no passwords. Never use this authentication mode outside CI.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          # Keep the reviewed disposable DB capacity for browser fixtures.
+          # Full-schema migrations and prior-pass schema cleanup share the lock table.
+          POSTGRES_INITDB_ARGS: '-c max_connections=200 -c max_locks_per_transaction=256 -c dynamic_shared_memory_type=mmap'
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U freedom_local -d fp_foundation_ci"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://freedom_local:local-development-only@127.0.0.1:5432/fp_foundation_ci
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Same immutable PR integration / merge-group candidate in every job.
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify browser PostgreSQL connection and lock capacity
+        env:
+          POSTGRES_SERVICE_ID: ${{ job.services.postgres.id }}
+        run: |
+          [[ "$POSTGRES_SERVICE_ID" =~ ^[a-f0-9]{64}$ ]]
+          settings=$(docker exec "$POSTGRES_SERVICE_ID" psql -U freedom_local -d fp_foundation_ci -v ON_ERROR_STOP=1 -tA -c "SELECT json_build_object('database',current_database(),'server_version_num',current_setting('server_version_num'),'max_connections',current_setting('max_connections'),'max_locks_per_transaction',setting,'pending_restart',pending_restart,'dynamic_shared_memory_type',current_setting('dynamic_shared_memory_type'),'fsync',current_setting('fsync'),'full_page_writes',current_setting('full_page_writes')) FROM pg_settings WHERE name='max_locks_per_transaction'")
+          python3 - "$settings" <<'PYREADBACK'
+          import json,sys
+          s=json.loads(sys.argv[1])
+          assert s['database']=='fp_foundation_ci'
+          assert 180000 <= int(s['server_version_num']) < 190000
+          assert int(s['max_connections'])==200
+          assert int(s['max_locks_per_transaction'])==256 and s['pending_restart'] is False
+          assert s['dynamic_shared_memory_type']=='mmap'
+          assert s['fsync']=='on' and s['full_page_writes']=='on'
+          print(json.dumps(s,sort_keys=True))
+          PYREADBACK
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run contracts:build
+      - run: npm run build
+      - name: Checkout the pinned runner
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .freedom/trusted
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Confirm the pinned runner checkout
+        env:
+          PINNED_SHA: ${{ job.workflow_sha }}
+        run: |
+          test "$(git -C .freedom/trusted rev-parse HEAD)" = "$PINNED_SHA"
+          test -z "$(git -C .freedom/trusted status --porcelain)"
+      - name: Install pinned browser selector dependencies
+        if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}
+        working-directory: .freedom/trusted
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run one fixed default shard for the exact integration tree
+        env:
+          PINNED_SHA: ${{ job.workflow_sha }}
+          DEFAULT_SHARD: ${{ matrix.shard }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . --default-shard "$DEFAULT_SHARD" --output .freedom/reports/default-fragments --allow-fetch \
+              --event "$EVENT_NAME" --base "$BASE_SHA" --head "$HEAD_SHA" \
+              --candidate "$CANDIDATE_SHA" --pull-request "$PR_NUMBER"
+          else
+            node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . --default-shard "$DEFAULT_SHARD" --output .freedom/reports/default-fragments --event "$EVENT_NAME" --candidate "$CANDIDATE_SHA"
+          fi
+      - name: Preserve this attempt's default fragment
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-default-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: .freedom/reports/default-fragments/default-shard-${{ matrix.shard }}.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Preserve synthetic shard failure diagnostics
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-default-diagnostics-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: |
+            .freedom/reports/default-fragments.shard-${{ matrix.shard }}-result.json
+            .freedom/reports/default-fragments.shard-${{ matrix.shard }}-result.json.failure-artifacts/
+          retention-days: 7
+          if-no-files-found: warn
   ui-e2e:
     runs-on: ubuntu-24.04
-    # 95 minutes: setup + three concurrent default shards (75 minutes) + five sequential fixture passes + cleanup.
-    # This remains a total bound, not the sum of all individual worst-case caps.
-    timeout-minutes: 95
-    needs: select
+    # Full plan: validate three fragments, then five fixture passes; narrow plans retain their existing bound.
+    timeout-minutes: ${{ needs.select.outputs.ui_default_shards == 'false' && 95 || 25 }}
+    needs: [select, ui-default]
     if: ${{ !cancelled() && (needs.select.result != 'success' || needs.select.outputs.ui_e2e == 'true') }}
     services:
       postgres:
@@ -355,7 +468,7 @@ jobs:
           # Disposable runner-only synthetic DB: low-privilege fixture LOGIN roles
           # have no passwords. Never use this authentication mode outside CI.
           POSTGRES_HOST_AUTH_METHOD: trust
-          # Three shards budget at most 3 × 46 = 138 connections, plus health checks.
+          # Keep the reviewed disposable DB capacity for browser fixtures.
           # Full-schema migrations and prior-pass schema cleanup share the lock table.
           POSTGRES_INITDB_ARGS: '-c max_connections=200 -c max_locks_per_transaction=256 -c dynamic_shared_memory_type=mmap'
         ports: ['127.0.0.1:5432:5432']
@@ -366,6 +479,12 @@ jobs:
       TEST_DATABASE_URL: postgresql://freedom_local:local-development-only@127.0.0.1:5432/fp_foundation_ci
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
+      - name: Require every selected default shard to succeed
+        env:
+          SHARDS_REQUIRED: ${{ needs.select.outputs.ui_default_shards }}
+          SHARD_RESULT: ${{ needs.ui-default.result }}
+        run: |
+          if [ "$SHARDS_REQUIRED" != false ]; then test "$SHARD_RESULT" = success; fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Same immutable PR integration / merge-group candidate in every job.
@@ -416,23 +535,35 @@ jobs:
         if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}
         working-directory: .freedom/trusted
         run: npm ci --ignore-scripts --no-audit --no-fund
+      # Only this workflow run and attempt; stale or partial artifacts cannot pass.
+      - name: Download this attempt's three default fragments
+        if: ${{ needs.select.outputs.ui_default_shards != 'false' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: browser-default-${{ github.run_attempt }}-*
+          path: .freedom/reports/default-fragments
+          merge-multiple: true
       - name: Check existing browser-spec consumers
         if: ${{ needs.select.outputs.reason == 'browser_specs_only' }}
         run: node .freedom/trusted/scripts/ci/run-pinned-suite.mjs --root . --suite ci.browser-spec-consumers
       - name: Run the pinned browser plan for the exact integration tree
         env:
+          PINNED_SHA: ${{ job.workflow_sha }}
+          SHARDS_REQUIRED: ${{ needs.select.outputs.ui_default_shards }}
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CANDIDATE_SHA: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          fragments=()
+          if [ "$SHARDS_REQUIRED" != false ]; then fragments=(--default-reports .freedom/reports/default-fragments); fi
           if [ "$EVENT_NAME" = pull_request ]; then
-            node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . --allow-fetch \
+            node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . "${fragments[@]}" --allow-fetch \
               --event "$EVENT_NAME" --base "$BASE_SHA" --head "$HEAD_SHA" \
               --candidate "$CANDIDATE_SHA" --pull-request "$PR_NUMBER"
           else
-            node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . --event "$EVENT_NAME" --candidate "$CANDIDATE_SHA"
+            node .freedom/trusted/scripts/ci/run-pinned-e2e.mjs --root . "${fragments[@]}" --event "$EVENT_NAME" --candidate "$CANDIDATE_SHA"
           fi
       - name: Preserve browser evidence and synthetic failure diagnostics
         if: always()
@@ -543,7 +674,10 @@ jobs:
           # Disposable runner-only synthetic DB: low-privilege fixture LOGIN roles
           # have no passwords. Never use this authentication mode outside CI.
           POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_INITDB_ARGS: '-c dynamic_shared_memory_type=mmap'
+          # media-backup-archive drops a fully migrated fixture schema in one transaction;
+          # from schema198 the default 64 lock slots overflow (53200); 256 also overflowed
+          # after merging main on 2026-11-04, so give the one-transaction drop headroom.
+          POSTGRES_INITDB_ARGS: '-c max_locks_per_transaction=512 -c dynamic_shared_memory_type=mmap'
         ports: ['127.0.0.1:5432:5432']
         options: >-
           --health-cmd "pg_isready -U freedom_local -d fp_foundation_ci"

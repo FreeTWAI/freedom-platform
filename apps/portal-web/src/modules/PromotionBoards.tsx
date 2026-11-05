@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
 import type {PortalClient} from '../api';
+import {useLocalAction} from '../useLocalAction';
 import {MemberAvatar} from './MemberAvatar';
 import {PromotionShare} from './PromotionShare';
 import './PromotionBoards.css';
@@ -34,12 +35,15 @@ export function PromotionBoards({client}: {client: PortalClient}) {
   const [mine, setMine] = useState<Mine['items']>([]);
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [copyNotice, setCopyNotice] = useState<{client: PortalClient; session: number; period: Period; attempt: number; text: string} | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
+  const session = client.sessionGeneration;
+  const copyAction = useLocalAction([client, session, period, attempt]);
+  const notice = copyNotice?.client === client && copyNotice.session === session && copyNotice.period === period && copyNotice.attempt === attempt ? copyNotice.text : '';
   useEffect(() => {
     let live = true;
-    setError(''); setLoading(true); setBoards(null); setMine([]); setNotice('');
+    setError(''); setLoading(true); setBoards(null); setMine([]); setCopyNotice(null);
     void Promise.all([
       client.get<Boards>(`/promotion/leaderboards?period=${period}`),
       client.get<Mine>(`/promotion/links/mine?period=${period}`),
@@ -51,8 +55,10 @@ export function PromotionBoards({client}: {client: PortalClient}) {
   const shown = expanded ? mine : mine.slice(0, 10);
   async function copy(path: string) {
     const url = `${window.location.origin}${path}`;
-    try { await navigator.clipboard.writeText(url); setNotice('已複製連結'); }
-    catch { setNotice(url); }
+    const result = await copyAction.run(path, () => { setCopyNotice(null); return navigator.clipboard.writeText(url); });
+    if (result.status === 'done' || result.status === 'failed') {
+      setCopyNotice({client, session, period, attempt, text: result.status === 'done' ? '已複製連結' : url});
+    }
   }
   return <section className="promotion-page stack" aria-label="推廣排行榜">
     <section className="card promotion-start" aria-label="選擇分享內容">
@@ -80,7 +86,7 @@ export function PromotionBoards({client}: {client: PortalClient}) {
       <h2>我的推廣連結</h2>
       <p className="promotion-howto">右側數字是{PERIODS.find(item => item.id === range.period)!.label}的點擊分數。</p>
       {loading ? <p className="promotion-empty">正在讀取你的連結…</p> : error ? <p className="promotion-empty">尚未取得連結紀錄，請重新載入。</p> : shown.length === 0 ? <p className="promotion-empty">還沒有建立分享連結。可以先從上方選一項你覺得有用的內容。</p> : <ul>
-        {shown.map(item => <li key={item.code} className={item.available ? undefined : 'is-unavailable'}><span className="promotion-kind">{COPY[item.kind].label}</span><span className="promotion-link-title">{item.available ? item.title : '已無法開啟'}</span>{item.available && <button type="button" className="btn btn-ghost" onClick={() => void copy(item.path)}>複製</button>}<strong>{item.period_points}</strong></li>)}
+        {shown.map(item => <li key={item.code} className={item.available ? undefined : 'is-unavailable'}><span className="promotion-kind">{COPY[item.kind].label}</span><span className="promotion-link-title">{item.available ? item.title : '已無法開啟'}</span>{item.available && <button type="button" className="btn btn-ghost" disabled={copyAction.pending !== null} aria-busy={copyAction.pending === item.path} onClick={() => void copy(item.path)}>複製</button>}<strong>{item.period_points}</strong></li>)}
       </ul>}
       {mine.length > 10 && <button type="button" className="btn btn-ghost" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '收合' : '顯示全部'}</button>}
     </section>

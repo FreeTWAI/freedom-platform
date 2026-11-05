@@ -11,3 +11,13 @@
 @media(max-width:420px){.launchpad-applications select{font-size:16px}.application-flow .application-primary{width:100%}}
 
 .application-catalog>summary{cursor:pointer;min-height:44px;padding:.5rem 0;color:var(--muted)}
+
+.application-catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;min-width:0}
+.application-catalog-grid>h3{grid-column:1/-1;margin:0}
+.application-catalog-grid .application-card{padding:1rem;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev);min-width:0}
+.application-heading h4{margin:0}
+.application-capabilities{display:grid;gap:.4rem;color:var(--muted);font-size:.875rem}
+.application-capabilities ul{display:flex;flex-wrap:wrap;gap:.4rem;list-style:none;margin:0;padding:0}
+.application-capabilities li{border:1px solid var(--line);border-radius:6px;padding:.2rem .45rem;color:var(--ink);overflow-wrap:anywhere}
+.application-catalog-intro{margin:0}
+@media(max-width:900px){.application-catalog-grid{grid-template-columns:minmax(0,1fr)}}

@@ -101,3 +101,11 @@ The two [supplier material profiles](supply-material.md) use the same branded
 storefront authority and tenant/instance binding. Image uses image/2 MiB/1 MiB;
 video uses video/20 MiB/20 MiB. Both retain earlier Assets. Material intents name
 target_material_id; only image output contributes canonical WebP dimensions.
+
+## Saved event prize photo extension
+
+`community.event-prize-photo` admits only its community-scoped member profile,
+server-owned retained target and `photo` variant (2 MiB source / 1 MiB canonical
+WebP inside 1920×1920). It retires the replaced current Asset and uses only the
+event CAS. See [the domain contract](event-prize-photo.md). Admission stays
+default-OFF; adding the manifest does not grant upload or GC authority.

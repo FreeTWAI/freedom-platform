@@ -12,7 +12,9 @@
     "apps/portal-web/src/modules/SkillBookIntro.css",
     "apps/portal-web/src/modules/SkillShare.tsx",
     "apps/portal-web/src/modules/SkillsPanel.tsx",
-    "apps/portal-web/src/modules/skill-book-commerce-references.ts"
+    "apps/portal-web/src/modules/skill-book-commerce-references.ts",
+    "tests/runtime/skill-share-client.test.ts",
+    "tests/e2e/skill-share-recovery.spec.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/EntryResources.tsx",

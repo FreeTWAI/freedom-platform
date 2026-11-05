@@ -26,14 +26,28 @@ test('the wordmark is a guarded native home link and exploration never forces it
   await expect(exploration).toHaveJSProperty('open',false);
   await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeInViewport();
   const logo=home.locator('.brand-home-logo');
-  await expect(logo).toHaveJSProperty('naturalWidth',1536);
-  await expect(logo).toHaveJSProperty('naturalHeight',512);
+  await expect(logo).toHaveJSProperty('naturalWidth',396);
+  await expect(logo).toHaveJSProperty('naturalHeight',132);
+  const cornerAlpha=await logo.evaluate(element=>{
+    const image=element as HTMLImageElement, canvas=document.createElement('canvas');
+    canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+    const context=canvas.getContext('2d')!;context.drawImage(image,0,0);
+    return [[0,0],[395,0],[0,131],[395,131]].map(([x,y])=>context.getImageData(x,y,1,1).data[3]);
+  });
+  expect(cornerAlpha).toEqual([0,0,0,0]);
+
   for(const width of [1280,390,320]){
     await page.setViewportSize({width,height:844});
     const box=(await logo.boundingBox())!;
     expect(box.width).toBe(132);expect(box.height).toBe(44);
     expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
     await expect(home).toBeInViewport();
+    for(const theme of ['light','dark','versefolk']){
+      await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+      await expect(logo).toBeVisible();
+      await home.screenshot({path:test.info().outputPath(`brand-${theme}-${width}.png`)});
+    }
+
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await expect(exploration).toHaveJSProperty('open',false);
     await expect(exploration.locator(':scope > summary')).toBeVisible();
@@ -64,24 +78,24 @@ test('the wordmark is a guarded native home link and exploration never forces it
   await expect(exploration).toHaveJSProperty('open',false);
   await page.evaluate(()=>scrollTo(0,document.body.scrollHeight));
   await home.click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeInViewport();
+  await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeInViewport();
 });
 
 test('compact header reserves its image space while loading and when the asset fails',async({page})=>{
   await page.setViewportSize({width:320,height:844});
   let release!:()=>void;
   const held=new Promise<void>(resolve=>{release=resolve});
-  await page.route('**/brand/freedom-workshop-compact.jpeg',async route=>{await held;await route.continue();});
+  await page.route('**/brand/freedom-workshop-compact-transparent.png',async route=>{await held;await route.continue();});
   try{
     await login(page);
     const home=page.locator('.brand-home'),logo=home.locator('img');
     const before=(await logo.boundingBox())!;
     expect(before.width).toBe(132);expect(before.height).toBe(44);
     release();
-    await expect(logo).toHaveJSProperty('naturalWidth',1536);
+    await expect(logo).toHaveJSProperty('naturalWidth',396);
     expect(await logo.boundingBox()).toEqual(before);
-    await page.unroute('**/brand/freedom-workshop-compact.jpeg');
-    await page.route('**/brand/freedom-workshop-compact.jpeg',route=>route.abort());
+    await page.unroute('**/brand/freedom-workshop-compact-transparent.png');
+    await page.route('**/brand/freedom-workshop-compact-transparent.png',route=>route.abort());
     await page.reload();
     await expect(home).toHaveAccessibleName('自由工坊 · 會員首頁');
     for(const theme of ['light','dark','versefolk']){
@@ -93,4 +107,53 @@ test('compact header reserves its image space while loading and when the asset f
     await home.press('Enter');
     await expect(page).toHaveURL(/\/#home$/);
   }finally{release();}
+});
+
+test('home keeps accessible headings while feed controls and mobile navigation stay compact',async({page})=>{
+  await login(page);
+  const heading=page.getByRole('heading',{name:'會員首頁',level:1,exact:true});
+  await expect(heading).toHaveCount(1);
+  const feed=page.locator('.home-timeline .social-zone');
+  const filters=feed.locator('.social-feed-navigation');
+  for(const width of [320,390,1280]){
+    await page.setViewportSize({width,height:844});
+    for(const theme of ['light','dark','versefolk']){
+      await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeInViewport();
+      const toolbar=feed.locator('.social-feed-toolbar');
+      expect((await toolbar.boundingBox())!.height).toBeLessThanOrEqual(64);
+      for(const button of await toolbar.getByRole('button').all()){
+        expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
+      await expect(filters.getByRole('button',{name:'社群貼文',exact:true})).toHaveAttribute('aria-pressed','true');
+      for(const category of await filters.getByRole('button').all()){
+        expect(await category.evaluate(element=>getComputedStyle(element).whiteSpace)).toBe('nowrap');
+        expect((await category.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+      }
+      expect(await heading.evaluate(element=>element.parentElement!.getBoundingClientRect().height)).toBe(1);
+    }
+    if(width<861){
+      const toggle=page.locator('.mobile-menu-toggle');
+      await toggle.click();
+      const nav=page.locator('#workspace-navigation');
+      await expect(nav).toBeVisible();
+      for(const item of await nav.locator('.nav-primary button').all()){
+        const box=(await item.boundingBox())!;
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width);
+        const icon=(await item.locator('.workshop-icon').boundingBox())!;
+        const label=(await item.locator('span').last().boundingBox())!;
+        expect(label.x).toBeGreaterThan(icon.x+icon.width);
+      }
+      await nav.getByRole('button',{name:'收合導覽',exact:true}).click();
+      await expect(nav).not.toBeVisible();await expect(toggle).toBeFocused();
+      await toggle.click();await page.keyboard.press('Escape');
+      await expect(nav).not.toBeVisible();await expect(toggle).toBeFocused();
+    }
+  }
+  await filters.getByRole('button',{name:'全部動態',exact:true}).click();
+  await expect(filters.getByRole('button',{name:'全部動態',exact:true})).toHaveAttribute('aria-pressed','true');
+  await filters.getByRole('button',{name:'社群貼文',exact:true}).click();
+  await expect(filters.getByRole('button',{name:'社群貼文',exact:true})).toHaveAttribute('aria-pressed','true');
 });

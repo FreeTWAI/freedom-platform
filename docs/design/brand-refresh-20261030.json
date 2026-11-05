@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-30",
+  "purpose": "Transparent member header and generic platform OG only; original poster and per-content images retained",
+  "reference": {
+    "filename": "user-supplied Freedom Workshop brand reference",
+    "sha256": "70217e355af1d30ff9911c313bc095e7fc83a78ac01d3e51feb03810de72ed6c"
+  },
+  "rights": "User-supplied Freedom Workshop brand; original owner rights retained. Image-generation assistance does not transfer rights or place the brand under MIT.",
+  "assets": [
+    {
+      "path": "apps/portal-web/public/brand/freedom-workshop-compact-transparent.png",
+      "sha256": "f33136a09613c25752b1a24ad8aa9ef76dde93f31425bb6c5e201fe6d51aa10e",
+      "bytes": 85753,
+      "dimensions": [
+        396,
+        132
+      ],
+      "generation_tool": "built-in image_gen.imagegen",
+      "prompt": "Use case: background-extraction. Edit the provided original neon green and chrome Chinese logo. Remove ONLY the plain white background to genuine transparent alpha, including empty white gaps between ornament elements. Preserve EXACT text 自由工坊, original letter shapes, chrome black/blue/purple highlights, neon green fills, star/planet orbit shapes, layout and proportions. Preserve white specular highlights within the metallic logo; do not erase them. Do not redesign, add text, add shadow/background, or crop any ornament. Output a clean transparent PNG for dark and light website headers, wide approximately 3:1 composition.",
+      "transparent_background": true,
+      "generated_source": {
+        "filename": "transparent header generation",
+        "sha256": "704f156ad8ecbebbb7ae0748c7f9b633463bd44d6d8f5678c5aff0c80e3c85d3",
+        "bytes": 1621851
+      },
+      "delivery_export": {
+        "tool": "sharp 0.35.5",
+        "operation": "resize only; no crop, masking, redraw, or added artwork",
+        "format": "PNG compressionLevel 9",
+        "pixel_identity": "not claimed: resizing changes pixels"
+      }
+    },
+    {
+      "path": "apps/portal-web/public/brand/og-freedom-workshop-20261030.jpg",
+      "sha256": "a06da07dd3699c58f27e4d9572ce8a78655aadc5ec9ee25e5775ebf6af71d762",
+      "bytes": 133401,
+      "dimensions": [
+        1200,
+        628
+      ],
+      "generation_tool": "built-in image_gen.imagegen",
+      "prompt": "Use case compositing. Create website Open Graph sharing image, landscape 1.91:1 approximately 1200x630. Input is the exact supplied 自由工坊 brand logo. Preserve original neon lime Chinese text 自由工坊, chrome ornamental stars/orbits and proportions. Place the COMPLETE logo centered on a clean solid white background with generous clear margins, scaled to fit fully without cropping any letters or ornaments. Only extend white canvas above/below and keep safe margin left/right; do not redesign typography or add any slogan, watermark, objects, or additional text. Crisp legible at small social preview size.",
+      "transparent_background": false,
+      "generated_source": {
+        "filename": "opaque Open Graph composition",
+        "sha256": "20e2ce79dd21dab1dcef1313e08fc8fac10d426ea134f2bb35caefddff7f9cd4",
+        "bytes": 1659112
+      },
+      "delivery_export": {
+        "tool": "sharp 0.35.5",
+        "operation": "resize only; no crop, masking, redraw, or added artwork",
+        "format": "JPEG quality 90, mozjpeg true",
+        "pixel_identity": "not claimed: resizing and JPEG encoding change pixels"
+      }
+    }
+  ],
+  "verification": {
+    "decoded_assets": "Header 396x132 RGBA, alpha 0..255; all corners transparent. OG opaque 1200x628 JPEG. Actual output pixels inspected.",
+    "native_browser": "not_run: existing Chromium IPC restriction; no bypass. Mobile/three-theme browser checks remain required."
+  }
+}

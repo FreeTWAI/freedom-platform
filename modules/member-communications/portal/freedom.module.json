@@ -4,6 +4,10 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/member-communications/portal/**",
+    "tests/runtime/direct-list-render.test.ts",
+    "tests/e2e/direct-list-render.spec.ts",
+    "tests/runtime/channel-list-format.test.ts",
+    "tests/e2e/channel-list-format.spec.ts",
     "tests/runtime/chat-sticker-preview.test.ts",
     "tests/runtime/chat-sticker-send.test.ts",
     "apps/portal-web/src/GameConsoleComposer.tsx",
@@ -12,7 +16,11 @@
     "apps/portal-web/src/modules/chat-entry.ts",
     "apps/portal-web/src/modules/chat-leave-guards.ts",
     "tests/e2e/chat-leave-guards.spec.ts",
-    "tests/runtime/notification-read-state.test.ts"
+    "tests/runtime/notification-read-state.test.ts",
+    "tests/runtime/inbox-unread-resume.test.ts",
+    "tests/e2e/inbox-unread-resume.spec.ts",
+    "tests/runtime/notification-bell-busy.test.ts",
+    "tests/e2e/notification-bell-busy.spec.ts"
   ],
   "public_exports": [
     "apps/portal-web/src/modules/adaptive-chat-poll.ts",

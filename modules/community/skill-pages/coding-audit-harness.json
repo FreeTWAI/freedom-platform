@@ -1,0 +1,14 @@
+{
+  "headline": "AI 說測試通過，要拿得出收據。",
+  "outcomes": ["自己寫的規格、工單與驗收指令", "綁定程式碼指紋的驗收收據", "經本人核准完成的練習工單"],
+  "flow": {
+    "title": "Runner 重跑驗收，人下關卡",
+    "lead": "把 harness/ 複製進練習專案使用；它不呼叫 LLM、沒有 Web UI，也不判斷程式品質，雜湊只檢查新鮮度。",
+    "steps": [
+      {"icon": "pen", "title": "寫規格並下 Gate", "note": "寫 SPEC.md、工單與 golden_path.json，看過後親自下 gate-verdict PASS。"},
+      {"icon": "terminal", "title": "Runner 親自重跑驗收", "note": "verify-ticket 重跑 Golden Path 驗收；收據綁定程式碼指紋、驗證編號與審查輪次。"},
+      {"icon": "check", "title": "本人核准才完成", "note": "把收據的綁定欄位抄進 handoff 與 review，再由你以 review-verdict 完成工單。"}
+    ],
+    "caption": "不是沙箱：--trust-commands 以你目前的權限執行專案指令，不可信的 repo 先放進隔離環境。"
+  }
+}

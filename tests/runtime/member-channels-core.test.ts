@@ -305,6 +305,70 @@ test('squad path aliases share one idempotency operation, so a key never inserts
   assert.equal((await pool.query('SELECT last_read_sequence::int AS n FROM member_channel_reads WHERE user_id=$1',[A])).rows[0].n,Number(m1.sequence));
 });
 
+for(const historyCount of [0,250]){
+ test(`channel sender budget admits message 20 and rejects 21 with ${historyCount} old rows and unrelated activity`,async()=>{
+  const a=await signIn(DEMO_USERS[0].email),otherCommunity=randomUUID();await joinGuild(A,'guild_marketing');
+  await pool.query('INSERT INTO communities VALUES($1,$2)',[otherCommunity,'合成的其他社群']);
+  await pool.query(`INSERT INTO member_chat_channels(community_id,kind,channel_key,last_sequence)
+    VALUES($1,'world','world',2019),($2,'world','world',25)`,[DEMO_COMMUNITY,otherCommunity]);
+  const seedMessages=(community:string,sender:string,n:number,age:number,offset:number)=>pool.query(`
+    INSERT INTO member_channel_messages(community_id,kind,channel_key,sequence,sender_ref,body,created_at)
+    SELECT $1,'world','world',$5::bigint+i,$2,'合成限流歷史',clock_timestamp()-make_interval(secs=>$4)
+    FROM generate_series(1,$3::int) AS i`,[community,sender,n,age,offset]);
+  await seedMessages(DEMO_COMMUNITY,A,historyCount,120,0);
+  await seedMessages(DEMO_COMMUNITY,B,25,-60,1000);
+  // Same sender, different historical community: neither it nor another
+  // sender's newer activity may be included before selecting the newest 20.
+  await seedMessages(otherCommunity,A,25,-60,0);
+  await seedMessages(DEMO_COMMUNITY,A,19,0,2000);
+  const sent=await post(a,'guild','guild_marketing','第二十則');assert.equal(sent.status,201,JSON.stringify(sent.data));
+  const limited=await post(a,'world','world','第二十一則');
+  assert.equal(limited.status,429,JSON.stringify(limited.data));assert.equal(limited.data.code,'message_rate_limited');
+  assert.equal(await count('member_channel_messages WHERE community_id=$1 AND sender_ref=$2',[DEMO_COMMUNITY,A]),historyCount+20);
+  assert.equal(await count('command_receipts'),1,'a rejected send must not leave a receipt');
+  assert.equal((await pool.query("SELECT last_sequence FROM member_chat_channels WHERE community_id=$1 AND kind='world'",[DEMO_COMMUNITY])).rows[0].last_sequence,'2019');
+ });
+}
+
+test('channel sender budget uses the decision clock after an observed advisory wait crosses the 60-second window',async()=>{
+  const a=await signIn(DEMO_USERS[0].email),blocker=await pool.connect();
+  let pending:ReturnType<typeof request>|undefined,settled=false;
+  try{
+    await pool.query("INSERT INTO member_chat_channels(community_id,kind,channel_key,last_sequence) VALUES($1,'world','world',20)",[DEMO_COMMUNITY]);
+    const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid as number;
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`member-channel-sender/${DEMO_COMMUNITY}/${A}`]);
+    pending=post(a,'world','world','等待窗口過後的頻道訊息');pending.then(()=>{settled=true;},()=>{settled=true;});
+    const deadline=performance.now()+10000;
+    let started:string|undefined;
+    while(performance.now()<deadline){
+      const waiter=(await pool.query(`SELECT xact_start::text AS started FROM pg_stat_activity
+        WHERE $1=ANY(pg_blocking_pids(pid)) AND wait_event_type='Lock' AND wait_event='advisory'`,[pid])).rows[0];
+      if(waiter){started=waiter.started;break;}
+      assert.equal(settled,false,'the real send finished without waiting for its sender advisory lock');
+      await new Promise(resolve=>setTimeout(resolve,5));
+    }
+    assert.ok(started,'the real send must wait on the exact sender advisory lock');
+    const seeded=(await pool.query(`WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS at), inserted AS (
+      INSERT INTO member_channel_messages(community_id,kind,channel_key,sequence,sender_ref,body,created_at)
+      SELECT $1,'world','world',i,$2,'等待期間到期的合成訊息',at-interval '59 seconds' FROM stamp CROSS JOIN generate_series(1,20) AS i
+      RETURNING created_at)
+      SELECT min(created_at)::text AS created_at,count(*)::int AS n,
+        bool_and(created_at>$3::timestamptz-interval '60 seconds') AS inside_transaction_window FROM inserted`,
+      [DEMO_COMMUNITY,A,started])).rows[0];
+    assert.equal(seeded.n,20);assert.equal(seeded.inside_transaction_window,true,'now() would still count all 20');
+    await pool.query("SELECT pg_sleep_until($1::timestamptz+interval '60 seconds')",[seeded.created_at]);
+    assert.equal(await count("member_channel_messages WHERE community_id=$1 AND sender_ref=$2 AND created_at>clock_timestamp()-interval '60 seconds'",[DEMO_COMMUNITY,A]),0);
+    assert.equal(settled,false,'the sender lock must remain held while the rows age out');
+    await blocker.query('COMMIT');
+    const sent=await pending;assert.equal(sent.status,201,JSON.stringify(sent.data));assert.equal(sent.data.sequence,'21');
+    assert.equal(await count('member_channel_messages WHERE community_id=$1 AND sender_ref=$2',[DEMO_COMMUNITY,A]),21);
+    assert.equal(await count('command_receipts'),1);
+  }finally{
+    await blocker.query('ROLLBACK').catch(()=>{});blocker.release();await pending?.catch(()=>{});
+  }
+});
+
 test('one sender budget covers guild and squad sends under concurrency, while same-key requests and replays add nothing',async()=>{
   const [a]=await signInAll();
   await joinGuild(A,'guild_marketing');const s=await squad(A);

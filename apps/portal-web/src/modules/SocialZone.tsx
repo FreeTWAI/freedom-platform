@@ -67,6 +67,7 @@ const composerMessages={
   preparing:['正在處理圖片…','Preparing image…','画像を処理中…','이미지 처리 중…','Preparando imagen…'],
   preview:['待發布圖片預覽','Post image preview','投稿画像のプレビュー','게시할 이미지 미리보기','Vista previa de la imagen'],
   removeImage:['移除圖片','Remove image','画像を削除','이미지 제거','Quitar imagen'],
+  tools:['文案與分享','Writing and sharing','文章と共有','글쓰기 및 공유','Redacción y compartir'],
   optimize:['✦ Social Post 優化','✦ Social Post optimize','✦ Social Post 文章改善','✦ Social Post 다듬기','✦ Social Post optimizar'],
   restore:['復原原稿','Restore original draft','元の下書きに戻す','원래 초안 복원','Restaurar borrador original'],
   publish:['發布貼文','Publish post','投稿する','게시','Publicar'],
@@ -194,6 +195,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const options = useRef<HTMLDialogElement>(null), optionsTrigger = useRef<HTMLButtonElement>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerToolsOpen,setComposerToolsOpen]=useState(false);
   const [platform, setPlatform] = useState('note');
   const [directPost,setDirectPost]=useState<string|null>(sharedPostFromLocation);
   const focusing=useRef<string|null>(null);
@@ -251,7 +253,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
   const publishLock=useRef<object|null>(null);
   useEffect(()=>{
     ++imageSequence.current;pending.current=null;publishLock.current=null;
-    setTextHistory(newTextHistory());setOriginalDraft(null);setComposeFile(null);setPreparingImage(false);
+    setTextHistory(newTextHistory());setOriginalDraft(null);setComposeFile(null);setPreparingImage(false);setComposerToolsOpen(false);
     setUrl('');setTitle('');setLinkPreview(false);setTopic('mood');setMentions([]);setLocationName('');setCheckIn(false);
     setPublishing(false);setPublishError('');setSaving(false);setActionError('');setNotice('');newPosts.current=[];
     return()=>{++imageSequence.current;publishLock.current=null;};
@@ -728,7 +730,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           {shortVideos && post.kind === 'link' && youtubeLinkKind(post.url) === 'short' && <span className="social-platform-badge social-short-badge">Short</span>}
           {post.kind !== 'note' && <h3>{post.title}</h3>}
           {post.note && <SocialBody text={post.note} client={client} mentions={post.mentions} onTag={selectTag}/>}
-          {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb post={post}/>}
+          {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb key={post.thumbnail_url} post={post}/>}
           {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
           <SocialInteractions onCommentsChanged={view.inline === false ? () => { void reconcileShortComments(post); } : undefined} onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => {if(client!==currentClient.current||feedSession!==client.sessionGeneration)return;++confirmedWrites.current;setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item));}}/>
           <div className="social-actions">
@@ -772,9 +774,17 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           <p className="muted">{composerText('imageHint')}</p>
           {preparingImage && <p role="status">{composerText('preparing')}</p>}
           {composeFile && <div className="social-compose-attachment">{composePreview && <img className="social-compose-preview" src={composePreview} alt={composerText('preview')}/>}<span className="muted">{composeFile.name}</span><button type="button" className="btn btn-ghost" disabled={publishing || !!pending.current} onClick={() => selectComposeImage(null)}>{composerText('removeImage')}</button></div>}
-          <div className="social-composer-tools"><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.past.length} onClick={()=>{setTextHistory(undoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[0]}</button><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.future.length} onClick={()=>{setTextHistory(redoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[1]}</button><button type="button" className="btn btn-ghost" aria-pressed={optimizerEnabled} aria-expanded={optimizerEnabled} aria-controls={`${composerId}-optimizer`} disabled={publishing||!!pending.current||optimization.phase==='busy'} onClick={()=>setOptimizerEnabled(value=>!value)}>{composerText('optimize')}</button><button ref={shareTrigger} type="button" className="btn btn-ghost" aria-expanded={shareOpen} aria-controls={`${composerId}-share`} disabled={publishing||!!pending.current} onClick={()=>setShareOpen(value=>!value)}>{shareText[0]}</button>{originalDraft&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||text!==originalDraft.after} onClick={()=>{setText(originalDraft.before,'replace');setOriginalDraft(null);}}>{composerText('restore')}</button>}</div>
-          {optimizerEnabled&&<div id={`${composerId}-optimizer`}><ShareLoadBoundary key={optimizerLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,optimizerLoader.attempt+1,'SocialPostOptimizer');return <div className="banner banner-error"><p role="alert">{historyText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setOptimizerLoader(current=>({component:optimizerPanelLoader(retryUrl),attempt:current.attempt+1}))}>{historyText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{historyText[2]}</p>}><Optimizer client={client} job={optimizationJob} draft={text} disabled={publishing||!!pending.current} onRecoverDraft={draft=>{setOriginalDraft({before:text,after:draft});setText(draft,'replace');}} onApply={result=>{setOriginalDraft({before:text,after:result});setText(result,'replace');optimizationJob.adopt();}}/></Suspense></ShareLoadBoundary></div>}
-          {shareOpen&&<div id={`${composerId}-share`}><ShareLoadBoundary key={shareLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,shareLoader.attempt+1);return <div className="banner banner-error"><p role="alert">{shareText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setShareLoader(current=>({component:sharePanelLoader(retryUrl),attempt:current.attempt+1}))}>{shareText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{shareText[1]}</p>}><CrossPlatformShare client={client} draft={text} disabled={publishing||!!pending.current} onRestore={value=>{setOriginalDraft({before:text,after:value});setText(value,'replace');}} onClose={()=>{setShareOpen(false);shareTrigger.current?.focus({preventScroll:true});}}/></Suspense></ShareLoadBoundary></div>}
+          <div className="social-composer-tools">
+            <button type="button" className="btn btn-ghost" aria-expanded={composerToolsOpen} aria-controls={`${composerId}-tools`} onClick={()=>setComposerToolsOpen(value=>!value)}>{composerText('tools')}<span aria-hidden="true">{composerToolsOpen?'▴':'▾'}</span></button>
+            {!!(textHistory.past.length||textHistory.future.length)&&<><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.past.length} onClick={()=>{setTextHistory(undoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[0]}</button><button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||!textHistory.future.length} onClick={()=>{setTextHistory(redoText);composer.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus({preventScroll:true});}}>{historyText[1]}</button></>}
+            {originalDraft&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current||text!==originalDraft.after} onClick={()=>{setText(originalDraft.before,'replace');setOriginalDraft(null);}}>{composerText('restore')}</button>}
+          </div>
+          {/* Keep optional panels mounted when collapsed so their in-progress work is retained. */}
+          <fieldset id={`${composerId}-tools`} className="social-composer-optional-tools stack" aria-label={composerText('tools')} disabled={!composerToolsOpen} hidden={!composerToolsOpen}>
+            <div className="social-composer-tools"><button type="button" className="btn btn-ghost" aria-pressed={optimizerEnabled} aria-expanded={optimizerEnabled} aria-controls={`${composerId}-optimizer`} disabled={publishing||!!pending.current||optimization.phase==='busy'} onClick={()=>setOptimizerEnabled(value=>!value)}>{composerText('optimize')}</button><button ref={shareTrigger} type="button" className="btn btn-ghost" aria-expanded={shareOpen} aria-controls={`${composerId}-share`} disabled={publishing||!!pending.current} onClick={()=>setShareOpen(value=>!value)}>{shareText[0]}</button></div>
+            {optimizerEnabled&&<div id={`${composerId}-optimizer`}><ShareLoadBoundary key={optimizerLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,optimizerLoader.attempt+1,'SocialPostOptimizer');return <div className="banner banner-error"><p role="alert">{historyText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setOptimizerLoader(current=>({component:optimizerPanelLoader(retryUrl),attempt:current.attempt+1}))}>{historyText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{historyText[2]}</p>}><Optimizer client={client} job={optimizationJob} draft={text} disabled={publishing||!!pending.current} onRecoverDraft={draft=>{setOriginalDraft({before:text,after:draft});setText(draft,'replace');}} onApply={result=>{setOriginalDraft({before:text,after:result});setText(result,'replace');optimizationJob.adopt();}}/></Suspense></ShareLoadBoundary></div>}
+            {shareOpen&&<div id={`${composerId}-share`}><ShareLoadBoundary key={shareLoader.attempt} fallback={cause=>{const retryUrl=shareModuleRetryUrl(cause,location.origin,shareLoader.attempt+1);return <div className="banner banner-error"><p role="alert">{shareText[3]}</p>{retryUrl&&<button type="button" className="btn btn-ghost" disabled={publishing||!!pending.current} onClick={()=>setShareLoader(current=>({component:sharePanelLoader(retryUrl),attempt:current.attempt+1}))}>{shareText[4]}</button>}</div>;}}><Suspense fallback={<p role="status">{shareText[1]}</p>}><CrossPlatformShare client={client} draft={text} disabled={publishing||!!pending.current} onRestore={value=>{setOriginalDraft({before:text,after:value});setText(value,'replace');}} onClose={()=>{setShareOpen(false);shareTrigger.current?.focus({preventScroll:true});}}/></Suspense></ShareLoadBoundary></div>}
+          </fieldset>
           <div className="social-composer-footer"><span className="muted">{text.length}/2000</span><button className="btn btn-primary" disabled={publishing || preparingImage || (!text.trim()&&!linkPreview)}>{publishing ? composerText('publishing') : pending.current?.kind==='link'&&pending.current.created ? composerText('retryThumbnail') : pending.current ? composerText('retry') : shareOpen?shareText[2]:composerText('publish')}</button></div>
           {publishError && <p className="banner banner-error" role="alert">{composerFeedback(publishError)}</p>}
         </form>
@@ -803,11 +813,17 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
     {error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={loading || more} onClick={retryFeed}>重試</button></div>}
     {actionError && <div className="banner banner-error" role="alert"><p>{actionError}</p><p>重新載入只更新貼文狀態，不會重送操作或確認圖片已更新。若要更換縮圖，請重新選取圖片。</p><button type="button" className="btn btn-ghost" disabled={loading || more || saving} onClick={refreshAfterAction}>重新載入貼文狀態</button><button type="button" className="btn btn-ghost" onClick={() => setActionError('')}>關閉提示</button></div>}
     <div className="social-feed-heading" data-guide-anchor="social:platform">
-      <h2>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
-      <div>{directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}<button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button><button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span><span>{feedText.options}</span></button></div>
-    </div>
-    <div className="social-feed-navigation" role="group" aria-label={feedText.filters}>
-      {FILTERS.filter(item=>item.id==='note'||item.id===''||(item.id==='shorts'&&shortVideos)).map(item=><button key={item.id||'all'} type="button" className="social-feed-category" aria-pressed={!directPost&&platform===item.id} onClick={()=>selectPlatform(item.id)}>{filterLabel(item.id,item.label)}</button>)}
+      <h2 className={!directPost && ['', 'note', 'shorts'].includes(platform) ? 'sr-only' : undefined}>{directPost?'這則貼文':filterLabel(platform,FILTERS.find(item=>item.id===platform)?.label??'')}</h2>
+      <div className="social-feed-toolbar">
+        <div className="social-feed-navigation" role="group" aria-label={feedText.filters}>
+          {FILTERS.filter(item=>item.id==='note'||item.id===''||(item.id==='shorts'&&shortVideos)).map(item=><button key={item.id||'all'} type="button" className="social-feed-category" aria-pressed={!directPost&&platform===item.id} onClick={()=>selectPlatform(item.id)}>{filterLabel(item.id,item.label)}</button>)}
+        </div>
+        <div className="social-feed-tools">
+          <button type="button" className="social-feed-control" aria-label={feedText.refresh} title={feedText.refresh} disabled={loading} onClick={()=>void load(platform)}>↻</button>
+          <button ref={optionsTrigger} type="button" className="social-feed-control social-feed-more" aria-label={feedText.options} title={feedText.options} aria-haspopup="dialog" aria-expanded={optionsOpen} onClick={()=>setOptionsOpen(true)}><span aria-hidden="true">⋯</span></button>
+        </div>
+      </div>
+      {directPost&&<button type="button" className="btn btn-ghost" onClick={clearDirectPost}>回到動態牆</button>}
     </div>
     {tag&&<p className="social-active-tag">#{tag}<button type="button" className="social-text-link" onClick={()=>selectTag('')}>清除標籤篩選</button></p>}
     {loading && <p role="status">正在載入貼文…</p>}

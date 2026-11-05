@@ -1,0 +1,12 @@
+Use case: illustration-story. Asset: ONE 3 by 3 illustrated tile sheet for a Japanese quirky casual-game menu, 1536 by 1024 landscape. EXACTLY 3 equal columns and 3 equal rows with no gutters or dividers; 9 independent complete small scenes, one per tile. NOTHING may cross tile boundaries. Keep all subjects inside each cell with 8% safe margin.
+STYLE: match the TWO supplied reference screenshots, their simple silly flat cartoon ink drawing, economical wobbly charcoal outlines, broad flat cream, dusty red, mustard, indigo, pale aqua and muted green shapes. Original goofy food characters with only a few short ink marks for faces and little stick arms, hand-drawn wooden counters, small plain noren accents, quiet paper. Sparse handmade print texture, NOT detailed food rendering. Amusing little situations, clear silhouettes and open background, not food advertisement beauty shots. No cinematic light, 3D rendering, glossy realism, highly detailed ingredients, dense rice granules, polished anime-food paintings, gold glow, fake UI, buttons, text, labels, letters, numbers, logos, watermarks. Do not copy the reference egg mascot or its face; create original diverse food characters. ALL NINE cells consistent in style and fully independently framed.
+Cell order left to right, then top to bottom:
+1. A margherita pizza dough character stretching itself into a circle, three tomato shapes, basil leaves.
+2. A spaghetti plate character twirling a comically tall but simple single noodle loop around a fork.
+3. A risotto pot character stirring itself with a spoon, two large mushroom characters watching.
+4. A lasagna square character revealing three broad flat layers like a tiny blanket stack.
+5. Three meatball characters rolling into a simple tomato-sauce skillet.
+6. A few big roasted vegetable shapes on a baking tray, bell pepper character proudly lifting its arm.
+7. A square tiramisu character with three broad cream and cocoa layers, a tiny coffee cup friend.
+8. Bow-tie pasta characters literally tying one simple basil ribbon, shallow plate on wooden counter.
+9. A plain cream paper menu slip and rolling pin, simple small flat decoration only.

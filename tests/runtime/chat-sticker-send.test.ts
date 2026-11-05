@@ -7,6 +7,7 @@ import {transformSync} from 'esbuild';
 import {createChatLeaveGuards} from '../../apps/portal-web/src/modules/chat-leave-guards.js';
 import {chatPollDue,idleChatPoll,resetChatPoll} from '../../apps/portal-web/src/modules/adaptive-chat-poll.js';
 import {directMessageReceiptRefreshDue,hasDirectMessageChanges} from '../../apps/portal-web/src/modules/direct-message-receipts.js';
+import {reconcileMessageAck,refreshLoadedMessages} from '../../apps/portal-web/src/modules/message-refresh.js';
 import {ApiError} from '../../apps/portal-web/src/api.js';
 import {findChatSticker} from '../../modules/member-communications/stickers.js';
 import {isFirstImageDecoderRejection,matchesChannelMessageAck,matchesDirectMessageAck} from '../../apps/portal-web/src/modules/message-image-client.js';
@@ -33,9 +34,9 @@ function harness(mode:'direct'|'channel'){
     idlePoll:{current:resetChatPoll()},resetChatPoll,
     drafts,richDrafts:{get:()=>extras,clear:()=>{state.cleared++;}},cleared:0,
     selections:{current:new Map([[target,image]])},selectionRef:{current:image},messageImagesEnabled:true,
-    receiptRefresh:{current:new Map()},conversations:[],thread:null,stick:{current:false},logs:[],uploads:0,
+    historyRevision:{current:0},threadGeneration:{current:0},convGeneration:{current:0},convInFlight:{current:null},loadConversations:()=>{},receiptRefresh:{current:new Map()},conversations:[],thread:null,stick:{current:false},logs:[],uploads:0,
     setPendingState:()=>{},setDrafts:(update:any)=>{state.drafts=update(state.drafts);},setSendErrors:(update:any)=>{state.sendErrors=update(state.sendErrors??{});},setSelection:()=>{},setThread:()=>{},setHistory:()=>{},setConversations:()=>{},setChannels:()=>{},rereadAfterWrite:()=>{},
-    path:(key:string,rest:string)=>`/me/channels/guild/${key}/${rest}`,crypto:{randomUUID},ApiError,findChatSticker,isFirstImageDecoderRejection,matchesDirectMessageAck,matchesChannelMessageAck,
+    path:(key:string,rest:string)=>`/me/channels/guild/${key}/${rest}`,crypto:{randomUUID},ApiError,reconcileMessageAck,findChatSticker,isFirstImageDecoderRejection,matchesDirectMessageAck,matchesChannelMessageAck,
     chatPayload:runInNewContext(`${sourceFunction('ChatContent.tsx','chatPayload')};chatPayload`),
     consoleChannel:(value:string)=>value,logConsoleEvent:(value:unknown)=>state.logs.push(value),
     fail:(cause:any)=>cause.message,unconfirmed:(cause:unknown)=>!(cause instanceof ApiError)||cause.network||cause.status===0||cause.status>=500,
@@ -232,4 +233,170 @@ for(const scenario of [
   };
   await runInNewContext(`${sourceFunction('MemberMessages.tsx','pullLatest')};pullLatest`,state)();
   assert.equal(calls,scenario.expected);assert.equal(refreshes,scenario.expected);
+});
+
+for(const mode of ['direct','channel'] as const)test(`${mode}: original-key retry acknowledges its retracted send while malformed tombstones keep the tuple`,async()=>{
+  const h=harness(mode),sent=h.send(h.target,first);
+  const original=h.calls[0],canonical=h.ack(0);
+  original.reject(new ApiError({message:'committed response was lost',network:true}));await sent;
+  assert.equal(h.state.held.current[h.target].status,'unknown');
+  const {sticker:_removed,...withoutSticker}=canonical;
+  const tombstone={...withoutSticker,body:'',retracted_at:'2026-10-08T12:00:01.000Z'};
+  h.state.drafts[h.target]='later draft must survive';
+  const malformed=h.send(h.target);
+  assert.equal(h.calls[1].key,original.key);assert.deepEqual(h.calls[1].payload,original.payload);
+  h.calls[1].resolve({...tombstone,sticker:canonical.sticker});await malformed;
+  assert.equal(h.state.held.current[h.target].status,'unknown');
+  await h.send(h.target,second);assert.equal(h.calls.length,2);
+  const retry=h.send(h.target);
+  assert.equal(h.calls[2].key,original.key);assert.deepEqual(h.calls[2].payload,original.payload);
+  h.calls[2].resolve(tombstone);await retry;
+  assert.equal(h.state.held.current[h.target],undefined);assert.equal(h.state.sendLocks.current.has(h.target),false);
+  assert.equal(h.state.drafts[h.target],'later draft must survive');assert.equal(h.state.cleared,0);
+  assert.equal(h.state.selections.current.get(h.target),h.image);assert.equal(h.state.uploads,0);
+  assert.equal(h.calls.length,3);assert.equal(h.state.logs.length,1);
+  if(mode==='channel'){
+    const canLeave=runInNewContext(`${sourceFunction('MemberChannels.tsx','canLeave')};canLeave`,{...h.state,window:{alert:()=>{}}});
+    assert.equal(canLeave(),true);
+  }
+});
+
+for(const variant of ['direct-text','direct-image','direct-caption','channel-text'] as const)test(`${variant}: a retracted ACK completes only the held content and never repeats its image upload`,async()=>{
+  const mode=variant==='channel-text'?'channel':'direct',h=harness(mode),image=variant==='direct-image'||variant==='direct-caption';
+  if(!image){h.state.selections.current.clear();h.state.selectionRef.current=null;}
+  if(variant==='direct-image')h.state.drafts[h.target]='';
+  let posted!:()=>void;const dispatched=new Promise<void>(resolve=>{posted=resolve;}),post=h.state.client.post;
+  h.state.client.post=(...args:unknown[])=>{const response=post(...args);posted();return response;};
+  const sent=h.send(h.target);
+  // Wait for the real post-upload dispatch, rather than assuming microtask timing.
+  await dispatched;assert.equal(h.calls.length,1);
+  const original=h.calls[0],canonical=h.ack(0);
+  original.reject(new ApiError({message:'committed response was lost',network:true}));await sent;
+  assert.equal(h.state.held.current[h.target].status,'unknown');assert.equal(h.state.uploads,image?1:0);
+  if(image){assert.ok(original.payload.image_id);assert.equal(h.state.selections.current.get(h.target),h.image);}
+  const retry=h.send(h.target);assert.equal(h.calls.length,2);
+  assert.equal(h.calls[1].key,original.key);assert.deepEqual(h.calls[1].payload,original.payload);
+  h.calls[1].resolve({...canonical,body:'',retracted_at:'2026-10-08T12:00:01.000Z'});await retry;
+  assert.equal(h.state.held.current[h.target],undefined);assert.equal(h.state.sendLocks.current.has(h.target),false);
+  assert.equal(h.state.drafts[h.target],undefined);assert.equal(h.state.cleared,1);
+  assert.equal(h.state.selections.current.has(h.target),false);assert.equal(h.state.selectionRef.current,null);
+  assert.equal(h.state.uploads,image?1:0);assert.equal(h.calls.length,2);
+});
+
+// Model React's independent functional-updater queues. The render snapshot can
+// deliberately lag behind completed reads and local retractions.
+function historyHarness(mode:'direct'|'channel',queued=false){
+  const h=harness(mode),s=h.state,updates:{field:string;update:any}[]=[];
+  const source=readFileSync(new URL(`../../apps/portal-web/src/modules/${mode==='direct'?'MemberMessages.tsx':'MemberChannels.tsx'}`,import.meta.url),'utf8');
+  const mergeLine=source.split('\n').find(line=>line.startsWith('const merge='));assert.ok(mergeLine);
+  s.merge=runInNewContext(transformSync(`${mergeLine};globalThis.extracted=merge`,{loader:'tsx',target:'es2023'}).code+';extracted');
+  s.newestMessages=(rows:any[])=>rows;s.newestFirst=(rows:any[])=>rows;
+  s.messageImagesEnabled=false;s.selections.current.clear();
+  s.visibleThread={participant:{user_id:h.target,display_name:'Peer'},can_send:true,items:[],next_offset:20,retraction_count:'0'};
+  s.history={channel:{kind:'guild',channel_key:h.target},items:[],next_offset:20,retraction_count:'0'};
+  s.list=[];s.thread=s.visibleThread;s.snapshot.current.thread=s.visibleThread;
+  const apply=(field:string,update:any)=>{s[field]=typeof update==='function'?update(s[field]):update;};
+  const write=(field:string,update:any)=>{if(queued)updates.push({field,update});else apply(field,update);};
+  s.setThread=(update:any)=>write('visibleThread',update);s.setHistory=(update:any)=>write('history',update);s.setConversations=(update:any)=>write('list',update);
+  s.listReads=0;s.loadConversations=()=>{s.listReads++;s.convGeneration.current++;s.convInFlight.current=true;};
+  s.threadInFlight={current:null};s.threadReads=0;s.loadThread=()=>{s.threadReads++;};
+  if(mode==='direct')s.rereadAfterWrite=runInNewContext(`${sourceFunction('MemberMessages.tsx','rereadAfterWrite')};rereadAfterWrite`,s);
+  return {...h,flush:()=>{for(const entry of updates.splice(0))apply(entry.field,entry.update);}};
+}
+
+for(const mode of ['direct','channel'] as const)for(const queued of [false,true])for(const redaction of ['message','reply','target'] as const){
+  test(`${mode}: delayed ACK preserves ${redaction} redaction with ${queued?'queued':'rendered'} history`,async()=>{
+    const h=historyHarness(mode,queued),s=h.state;
+    const sent=redaction==='message'?h.send(h.target,first):h.send(h.target),ack:any=h.ack();
+    if(redaction!=='message')ack.reply_to={message_id:h.calls[0].payload.reply_to_message_id,sender_ref:peer,sender_name:'Peer',body:'withdrawn quote'};
+    const latest:any=redaction==='message'?{...ack,body:'',retracted_at:'2026-11-03T21:00:00.000Z'}:{...ack,reply_to_message_id:ack.reply_to.message_id};
+    delete latest.sticker;delete latest.reply_to;
+    const target={message_id:ack.reply_to?.message_id,body:'',retracted_at:'2026-11-03T21:00:00.000Z'};
+    const rows=redaction==='target'?[target]:[latest];
+    s.threadGeneration.current++;s.historyRevision.current++;
+    s.setThread({...s.visibleThread,items:rows,retraction_count:'1'});s.setHistory({...s.history,items:rows,retraction_count:'1'});
+    s.setConversations([{participant:{user_id:h.target},can_send:true,unread_count:0,last_message:latest}]);
+    if(!queued)s.snapshot.current.thread=s.visibleThread;
+    h.calls[0].resolve(ack);await sent;h.flush();
+    const visible=mode==='direct'?s.visibleThread:s.history,row=visible.items.find((item:any)=>item.message_id===ack.message_id);
+    assert.equal(s.held.current[h.target],undefined,'valid original ACK still settles the command');
+    assert.equal(visible.retraction_count,'1');assert.equal(visible.next_offset,redaction==='target'?21:20);
+    assert.equal(visible.items.filter((item:any)=>item.message_id===ack.message_id).length,1);
+    if(redaction==='message'){assert.equal(row.body,'');assert.ok(row.retracted_at);assert.equal(row.sticker,undefined);}
+    else{assert.equal(row.reply_to,undefined);assert.equal(row.reply_to_message_id,ack.reply_to.message_id);}
+    if(mode==='direct'){
+      assert.equal(JSON.stringify(s.list).includes('withdrawn quote'),false);assert.equal(s.list[0].last_message.body,latest.body);
+      assert.equal(s.listReads,1,'one current list read covers the changed projection, not two');
+    }
+    assert.equal(h.calls.length,1,'redaction does not dispatch another write');
+  });
+}
+
+for(const queued of [false,true])test(`direct: queued local quote retraction fences the delayed preview (${queued})`,async()=>{
+  const h=historyHarness('direct',queued),s=h.state,sent=h.send(h.target),ack:any=h.ack();
+  ack.reply_to={message_id:h.calls[0].payload.reply_to_message_id,sender_ref:sender,sender_name:'Me',body:'withdrawn quote'};
+  const target={message_id:ack.reply_to.message_id,body:'',retracted_at:'2026-11-03T21:00:00.000Z'};
+  s.setThread({...s.visibleThread,items:[target]});
+  const unrelated={message_id:randomUUID(),body:'existing latest'};s.list=[{participant:{user_id:h.target},last_message:unrelated}];
+  // The real retract handler starts a list read synchronously, not a thread read.
+  s.loadConversations(true);assert.equal(s.threadGeneration.current,0);
+  h.calls[0].resolve(ack);await sent;h.flush();
+  assert.equal(s.visibleThread.items[0].reply_to,undefined);assert.equal(s.visibleThread.items[0].reply_to_message_id,target.message_id);
+  assert.equal(s.list[0].last_message,unrelated,'do not publish an old quote while its current preview is loading');
+  assert.equal(s.listReads,2,'supersede the pre-ACK read once, without a third request');
+  assert.equal(s.held.current[h.target],undefined);assert.equal(h.calls.length,1);
+});
+
+test('direct: an uncontended send still updates history and its preview immediately',async()=>{
+  const h=historyHarness('direct',true),sent=h.send(h.target,first),ack=h.ack();h.calls[0].resolve(ack);await sent;h.flush();
+  assert.equal(h.state.visibleThread.items[0].message_id,ack.message_id);assert.equal(h.state.list[0].last_message.message_id,ack.message_id);
+  assert.equal(h.state.listReads,0);assert.equal(h.state.visibleThread.next_offset,21);assert.equal(h.state.held.current[h.target],undefined);
+});
+
+for(const queued of [false,true])test(`direct: actual older-page completion fences a delayed quote preview (${queued})`,async()=>{
+  const h=historyHarness('direct',queued),s=h.state,sent=h.send(h.target),ack:any=h.ack();
+  ack.reply_to={message_id:h.calls[0].payload.reply_to_message_id,sender_ref:peer,sender_name:'Peer',body:'withdrawn quote'};
+  const target={message_id:ack.reply_to.message_id,sender_ref:peer,body:'',read_at:null,retracted_at:'2026-11-03T21:00:00.000Z'};
+  Object.assign(s,{peer:h.target,PAGE:20,threadMore:{loading:false},olderInFlight:{current:null},olderQueued:{current:null},quietInFlight:{current:new Map()},moreState:{current:{loading:false,error:''}},scroll:{current:null},anchor:{current:null},setThreadMore:()=>{}});
+  s.client.get=async()=>({items:[target],next_offset:null});
+  const earlier=runInNewContext(`${sourceFunction('MemberMessages.tsx','earlier')};earlier`,s);await earlier();
+  assert.equal(s.threadGeneration.current,0,'older paging does not change read cancellation semantics');
+  assert.equal(s.historyRevision.current,1,'successful projection advances before render');
+  const unrelated={message_id:randomUUID(),body:'existing latest'};s.list=[{participant:{user_id:h.target},last_message:unrelated}];
+  h.calls[0].resolve(ack);await sent;h.flush();
+  const row=s.visibleThread.items.find((item:any)=>item.message_id===ack.message_id);
+  assert.equal(row.reply_to,undefined);assert.equal(row.reply_to_message_id,target.message_id);
+  assert.equal(s.list[0].last_message,unrelated);assert.equal(s.listReads,1);assert.equal(s.visibleThread.next_offset,null);
+  assert.equal(s.held.current[h.target],undefined);assert.equal(h.calls.length,1);
+});
+
+for(const queued of [false,true])test(`direct: actual local retract advances projection before a delayed reply ACK (${queued})`,async()=>{
+  const h=historyHarness('direct',queued),s=h.state,sent=h.send(h.target),ack:any=h.ack();
+  ack.reply_to={message_id:h.calls[0].payload.reply_to_message_id,sender_ref:sender,sender_name:'Me',body:'withdrawn quote'};
+  s.visibleThread.items=[{message_id:ack.reply_to.message_id,sender_ref:sender,recipient_ref:peer,body:'withdrawn quote',created_at:ack.created_at,read_at:null,retracted_at:null}];
+  Object.assign(s,{peer:h.target,retractTarget:{message_id:ack.reply_to.message_id},retractTrigger:{current:null},setRetracting:()=>{},setRetractError:()=>{},setRetractTarget:()=>{}});
+  const retract=runInNewContext(`${sourceFunction('MemberMessages.tsx','retract')};retract`,s),retracting=retract();
+  h.calls[1].resolve({message_id:ack.reply_to.message_id,retracted_at:'2026-11-03T21:00:00.000Z'});await retracting;
+  assert.equal(s.historyRevision.current,1);assert.equal(s.threadGeneration.current,0);
+  h.calls[0].resolve(ack);await sent;h.flush();
+  const row=s.visibleThread.items.find((item:any)=>item.message_id===ack.message_id);
+  assert.equal(row.reply_to,undefined);assert.equal(row.reply_to_message_id,ack.reply_to.message_id);
+  assert.equal(JSON.stringify(s.list).includes('withdrawn quote'),false);assert.equal(s.listReads,2);
+  assert.equal(s.held.current[h.target],undefined);assert.equal(h.calls.length,2,'only the requested send and retract');
+});
+
+for(const queued of [false,true])test(`direct: actual full history refresh fences the delayed ACK before render (${queued})`,async()=>{
+  const h=historyHarness('direct',queued),s=h.state,sent=h.send(h.target,first),ack:any=h.ack();
+  const latest={...ack,body:'',retracted_at:'2026-11-03T21:00:00.000Z'};delete latest.sticker;
+  Object.assign(s,{PAGE:20,olderInFlight:{current:null},olderQueued:{current:null},quietInFlight:{current:new Map()},receiptCheckedAt:{current:new Map()},setThreadMore:()=>{},setThreadRefresh:()=>{},setThreadStatus:()=>{},setThreadError:()=>{},setLiveError:()=>{},setHasNew:()=>{},refreshLoadedMessages,useCallback:(fn:any)=>fn});
+  s.client.get=async()=>({...s.visibleThread,items:[latest],next_offset:null,retraction_count:'1'});
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/modules/MemberMessages.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm',jsx:'transform'}).code;
+  const start=source.indexOf('  const loadThread = useCallback('),end=source.indexOf('\n  useEffect(',start);assert.ok(start>=0&&end>start);
+  const loadThread=runInNewContext(`${source.slice(start,end)};loadThread`,s);assert.equal(await loadThread(h.target,true),true);
+  assert.equal(s.historyRevision.current,1);assert.equal(s.threadInFlight.current,null);
+  const unrelated={message_id:randomUUID(),body:'existing latest'};s.list=[{participant:{user_id:h.target},last_message:unrelated}];
+  h.calls[0].resolve(ack);await sent;h.flush();
+  assert.equal(s.visibleThread.items[0].body,'');assert.ok(s.visibleThread.items[0].retracted_at);assert.equal(s.visibleThread.items[0].sticker,undefined);
+  assert.equal(s.list[0].last_message,unrelated);assert.equal(s.listReads,1);assert.equal(s.held.current[h.target],undefined);
+  assert.equal(h.calls.length,1);
 });

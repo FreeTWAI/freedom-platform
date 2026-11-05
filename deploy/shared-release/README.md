@@ -70,6 +70,21 @@ GitHub 排隊順序可能不同於通知時間，因此來源前後關係仍由�
 先處理既有未結 journal，不能把本機測試或本段流程說明當成已完成正式發布。
 日常應用發布不必重建 operator；operator 本身變更仍經獨立審查、映像驗證與安裝。
 
+### Operator source 與 controller 版本
+
+`Release operator image` 的 `operator_source_sha` 可選已合併 main 的完整 SHA；留空時
+使用本次 workflow 的 controller SHA。兩者都必須通過各自最新的 exact-main push
+Verify 與 CodeQL；controller 尚在排隊、執行中或失敗時，即使舊 source 已通過也拒絕建置。
+所選 source 必須是 controller 本身或其 ancestor；重跑舊 workflow 不得指定更新的 source。
+這項限制只適用工具映像建置，應用版本與發布 controller 的既有分離政策不變。
+
+建置使用所選 source 的乾淨 commit/tree 與 tracked archive，controller 不執行 source
+中的准入程式。必要 regular files、image-native 測試及獨立 pull 仍須通過；它們不表示
+兩個版本的 operator 實作等價，也不保證任意舊 source 含有所需 recovery 能力。安裝前須
+另確認所選 source 具備目標環境需要的功能。跨版本 hosted build → native test → OCI
+revision/source/digest → 獨立 pull 尚待實際驗收，synthetic 准入測試不替代這項證據。
+本次整合發布採相同的已驗 main SHA 作 source/controller，不依賴跨版本建置。
+
 ## 目前安裝狀態
 
 2026-10-27 05:06 UTC：兩環境已透過共用 Actions 完成真實發布，版本均為

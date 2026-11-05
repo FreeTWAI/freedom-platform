@@ -1,0 +1,14 @@
+{
+  "headline": "從髮色到個性，表單一路串到 VRM 模型。",
+  "outcomes": ["硬體、模型路徑與底模授權的檢查紀錄", "備妥底模後產出的 VRM 0.x 模型", "概念圖、角色人設與聲音預覽"],
+  "flow": {
+    "title": "表單串接本機模型，組成 VRM",
+    "lead": "Beta 階段的本機工作站，需 Windows 與 VRAM 10 GB 以上的 NVIDIA GPU；Windows 打包與 VSeeFace／Warudo 實機驗收尚未完成。",
+    "steps": [
+      {"icon": "list", "title": "填角色表單", "note": "在本機註冊有授權的 VRM 0.x 底模後，在 PySide6 表單填髮色、眼色、個性、風格與暱稱。"},
+      {"icon": "layers", "title": "本機模型依序生成", "note": "Ollama、SDXL、TripoSR 依序處理，再組裝成 VRM；HardwareGuard 每秒檢查硬體。"},
+      {"icon": "user", "title": "輸出 VRM 並檢查", "note": "含 ARKit 52 表情的 VRM 0.x 模型，另有概念圖與人設；把 .vrm 載入 VSeeFace 檢查。"}
+    ],
+    "caption": "需自備或另行取得授權的 VRM 0.x 底模；程式授權仍待作者決定，重用或散布前先向作者確認。"
+  }
+}

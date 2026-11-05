@@ -197,6 +197,93 @@ test('workerd: pg over local Hyperdrive reads data and spoofed client headers sh
   assert.ok(!buckets.includes(tokenHash('login-network/192.0.2.77')) && !buckets.includes(tokenHash('login-network/198.51.100.77')));
 });
 
+// #1218: exercise the real bundle/Hyperdrive fixture above, rather than a second
+// Miniflare instance without a database. Health and asset dispatch are covered above.
+async function assertAgentProblem(response: Response, status: number, code: string) {
+  assert.equal(response.status, status, await response.clone().text());
+  assert.match(response.headers.get('content-type') ?? '', /application\/json/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const problem = await response.json() as { type: string; status: number; code: string };
+  assert.equal(problem.type, 'about:blank');
+  assert.equal(problem.status, status);
+  assert.equal(problem.code, code);
+}
+
+test('workerd: agent routes reject missing, malformed and unknown bearer credentials', async () => {
+  const before = (await db.query('SELECT count(*)::int AS n FROM skill_submissions')).rows[0].n;
+  for (const [path, prefix, code] of [
+    ['/agent-api/v1/skill-submissions', 'fpk_', 'upload_key_invalid'],
+    [`/agent-api/v1/skill-submissions/${randomUUID()}`, 'fpg_', 'upload_grant_invalid'],
+  ]) {
+    // The correctly shaped unknown credential reaches the PostgreSQL lookup;
+    // a random UUID bearer alone only exercises the syntax guard.
+    for (const authorization of [undefined, 'Bearer malformed', `Bearer ${prefix}${'A'.repeat(43)}`]) {
+      const response = await call(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(authorization ? { Authorization: authorization } : {}) },
+        body: '{}',
+      });
+      await assertAgentProblem(response, 401, code);
+    }
+    await assertAgentProblem(await call(path), 405, 'agent_method_not_allowed');
+  }
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM skill_submissions')).rows[0].n, before);
+});
+
+test('workerd: a member-issued bearer key creates a private draft without a cookie', async () => {
+  const login = await call('/api/v1/auth/login', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: DEMO_USERS[0].email, password: DEMO_PASSWORD }) });
+  assert.equal(login.status, 200, await login.clone().text());
+  const session = await login.json() as { csrf_token: string };
+  const memberHeaders = { Origin: origin, Cookie: login.headers.get('set-cookie')!.split(';')[0],
+    'Content-Type': 'application/json', 'X-CSRF-Token': session.csrf_token, 'Idempotency-Key': randomUUID() };
+  const issued = await call('/api/v1/me/skill-upload-keys', { method: 'POST', headers: memberHeaders, body: JSON.stringify({ label: 'workerd routing fixture' }) });
+  assert.equal(issued.status, 201, await issued.clone().text());
+  const key = await issued.json() as { token: string; key: { key_id: string } };
+  assert.match(key.token, /^fpk_[A-Za-z0-9_-]{43}$/);
+  const create = () => call('/agent-api/v1/skill-submissions', { method: 'POST',
+    headers: { Authorization: `Bearer ${key.token}`, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }, body: '{}' });
+  const created = await create();
+  assert.equal(created.status, 201, await created.clone().text());
+  assert.equal(created.headers.get('cache-control'), 'no-store');
+  const draft = await created.json() as { submission: { submission_id: string; status: string }; upload_grant: { token: string; submit_url: string } };
+  assert.equal(draft.submission.status, 'awaiting_upload');
+  assert.match(draft.upload_grant.token, /^fpg_[A-Za-z0-9_-]{43}$/);
+  assert.equal(draft.upload_grant.submit_url, `${origin}/agent-api/v1/skill-submissions/${draft.submission.submission_id}`);
+  assert.deepEqual((await db.query('SELECT owner_ref, status, grant_hash FROM skill_submissions WHERE submission_id=$1', [draft.submission.submission_id])).rows,
+    [{ owner_ref: DEMO_USERS[0].user_id, status: 'awaiting_upload', grant_hash: tokenHash(draft.upload_grant.token) }]);
+  const revoked = await call(`/api/v1/me/skill-upload-keys/${key.key.key_id}/revoke`, { method: 'POST',
+    headers: { ...memberHeaders, 'Idempotency-Key': randomUUID() }, body: '{}' });
+  assert.equal(revoked.status, 200, await revoked.clone().text());
+  const count = (await db.query('SELECT count(*)::int AS n FROM skill_submissions')).rows[0].n;
+  await assertAgentProblem(await create(), 401, 'upload_key_invalid');
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM skill_submissions')).rows[0].n, count);
+});
+
+test('workerd: agent network limit rejects request 121 before credential and body validation', async () => {
+  const bucket = tokenHash('skill-agent-network/shared-server');
+  // Reset only this suite-owned database's bucket at the case boundary. Requests
+  // below consume the real production quota; no pre-seeded exhausted counter.
+  await db.query('DELETE FROM auth_rate_limits WHERE bucket=$1', [bucket]);
+  const path = `/agent-api/v1/skill-submissions/${randomUUID()}`;
+  const before = (await db.query('SELECT count(*)::int AS n FROM skill_submissions')).rows[0].n;
+  const send = (attempt: number) => call(path, { method: 'POST', headers: {
+    Authorization: 'Bearer malformed', 'Content-Type': 'application/json',
+    'CF-Connecting-IP': `192.0.2.${attempt}`, 'X-Forwarded-For': `198.51.100.${attempt}`,
+  }, body: '{' });
+  try {
+    for (let attempt = 1; attempt <= 120; attempt++) {
+      await assertAgentProblem(await send(attempt), 401, 'upload_grant_invalid');
+    }
+    assert.deepEqual((await db.query('SELECT attempts FROM auth_rate_limits WHERE bucket=$1', [bucket])).rows, [{ attempts: 120 }]);
+    await assertAgentProblem(await send(121), 429, 'auth_rate_limited');
+    await assertAgentProblem(await send(122), 429, 'auth_rate_limited');
+    assert.deepEqual((await db.query('SELECT attempts FROM auth_rate_limits WHERE bucket=$1', [bucket])).rows, [{ attempts: 120 }]);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM skill_submissions')).rows[0].n, before);
+  } finally {
+    await db.query('DELETE FROM auth_rate_limits WHERE bucket=$1', [bucket]);
+  }
+});
+
 test('workerd: Node-seeded scrypt login, session, CSRF, image 503, logout and immediate revocation', async () => {
   const login = await call('/api/v1/auth/login', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: DEMO_USERS[1].email, password: DEMO_PASSWORD }) });
   assert.equal(login.status, 200);

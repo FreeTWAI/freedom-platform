@@ -1,0 +1,14 @@
+{
+  "headline": "看懂一次查詢的輸入輸出，再動手改。",
+  "outcomes": ["一個通過測試的本機狀態摘要小改動", "這次改動的輸入、輸出與限制", "固定版本的平台 DTO 與共用 client"],
+  "flow": {
+    "title": "CLI 經共用 client 查本機示範服務",
+    "lead": "開發接入範例，在自己的副本跑測試；要執行狀態查詢，需另有本機 Freedom Platform 示範服務。",
+    "steps": [
+      {"icon": "book", "title": "讀 README 分清範圍", "note": "分清現有 demo 查詢，與尚未提供的正式代理授權。"},
+      {"icon": "terminal", "title": "跑測試、看呼叫流程", "note": "在副本執行 npm test，查看 CLI 如何呼叫共用 client；demo 查詢完成後登出。"},
+      {"icon": "code", "title": "改善一項讀取摘要", "note": "挑一項純讀取摘要改善輸出，不在工具內另建會員或任務真相。"}
+    ],
+    "caption": "目前只有本機示範會員查詢：真實 Agent device flow、短效授權與 MCP server 仍待實作。"
+  }
+}

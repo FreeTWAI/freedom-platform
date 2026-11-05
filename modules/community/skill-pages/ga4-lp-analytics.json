@@ -1,0 +1,14 @@
+{
+  "headline": "宣傳頁哪一段留不住讀者，漏斗給你線索。",
+  "outcomes": ["合成著陸頁的區段漏斗", "當月待辦清單", "事件命名、Basic 認證與金鑰位置的核對項目"],
+  "flow": {
+    "title": "三種事件整理成離開漏斗",
+    "lead": "MIT 模板，需自行接上網站；手填可先用合成數字，自動取數另需 GA4 property、GCP 服務帳號與 PHP 同源 proxy。",
+    "steps": [
+      {"icon": "code", "title": "記錄三種事件", "note": "lp-analytics.js 記錄區段到達、捲動深度與 CTA 點擊，送到 GA4；命名勿含個資。"},
+      {"icon": "chart", "title": "診斷頁整理數字", "note": "lp-diagnose.html 能手填合成數字，或由 PHP 同源 proxy 取 GA4 彙總數字。"},
+      {"icon": "list", "title": "看漏斗與當月待辦", "note": "呈現信號色、離開漏斗與當月待辦；漏斗是判讀線索，不保證轉換改善。"}
+    ],
+    "caption": "正式串接前：私鑰放 Web root 外，PHP proxy 與診斷頁都要加 Basic 認證。"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "headline": "視覺、敘事、聲演分三層，夥伴各讀所需。",
+  "outcomes": ["視覺、敘事、聲演三層的自創角色卡", "check 找出的問題清單", "有日期的正本更新紀錄"],
+  "flow": {
+    "title": "三層角色卡當作共用正本",
+    "lead": "Markdown 卡可手填；check／export 需 Python 3.8 以上。這是設定管理，不會自行生圖、配音或保證角色一致。",
+    "steps": [
+      {"icon": "pen", "title": "複製空白角色卡", "note": "從 templates 複製到 library/你的 IP 名稱/，分別寫外貌、行為模式與說話方式。"},
+      {"icon": "layers", "title": "照欄位指南填三層", "note": "視覺、敘事、聲演分層填；恆定外貌留 appearance，逐鏡道具另放 props。"},
+      {"icon": "check", "title": "check 與 export", "note": "check 找缺檔與欄位問題；export 針對 emotion-shot-pipeline，缺欄就不寫檔。"}
+    ],
+    "caption": "library 預設不進 Git：自己備份、保護未發表 IP，參考圖與聲音要有使用權。"
+  }
+}

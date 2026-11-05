@@ -8,7 +8,9 @@
     "apps/portal-web/src/modules/SkillInstall.tsx",
     "apps/portal-web/src/modules/SkillInstall.css",
     "apps/portal-web/src/modules/skill-install-client.ts",
-    "tests/runtime/skill-install-bundle.test.ts"
+    "tests/runtime/skill-install-bundle.test.ts",
+    "tests/runtime/skill-install-lifecycle.test.ts",
+    "tests/e2e/skill-install-lifecycle.spec.ts"
   ],
   "public_exports": [
     "modules/skill-install/index.ts"

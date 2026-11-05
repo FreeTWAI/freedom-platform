@@ -236,11 +236,17 @@ test('store pages stay readable in every theme and width', async ({page, browser
   const created = StoreViewSchema.parse(await post(page, ready.root + '/setup', {name: '小島選物', brand: 'Island Picks', description: '小島上的選物\n每天用得到的手作器物', slug, currency: 'TWD'}, 201));
   for (const product of [{title: '手工茶杯', price_minor: 35000, stock: 5}, {title: '亞麻杯墊', price_minor: 12050, stock: 0}]) ProductViewSchema.parse(await post(page, ready.root + '/products', {...product, description: '一件日常器物'}, 201));
   StoreViewSchema.parse(await post(page, ready.root + '/publish', {}, 200, created.version!));
-  for (const mode of ['light', 'dark']) {await theme(page, mode); for (const width of [360, 768, 1280]) {
+  for (const mode of ['light', 'dark']) {await theme(page, mode); for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({width, height: 900});
     await open(page, ready.hash); await expect(storePage(page)).toContainText('已發布・第 1 版'); await expect(storePage(page).locator('.hosted-store-product')).toHaveCount(2);
+    await expect(page.getByRole('navigation', {name:'商店工作區'}).getByRole('button')).toHaveText(['商品','店面與發布','商店資料','供貨合作']);
+    await expect(page.getByRole('region', {name:'預留設定',exact:true})).toBeHidden();
     for (const [index, area] of (['商品', '供貨合作', '店面與發布', '商店資料'] as const).entries()) {
       await storeArea(page, area);
+      if(area==='商店資料') await expect(page.getByRole('region',{name:'預留設定',exact:true})).toBeVisible();
+      else await expect(page.getByRole('region',{name:'預留設定',exact:true})).toBeHidden();
+      const buttons=page.getByRole('navigation',{name:'商店工作區'}).getByRole('button');
+      for(const button of await buttons.all()){const box=await button.boundingBox();expect(box?.height).toBeGreaterThanOrEqual(44);}
       await capture(page, storePage(page), `store-ready-${index}-${mode}-${width}`, width, testInfo);
     }
     await open(page, setup.hash); await expect(page.getByRole('form', {name: '建立商店', exact: true})).toBeVisible();
@@ -252,7 +258,7 @@ test('store pages stay readable in every theme and width', async ({page, browser
     const path = new URL(request.url()).pathname;
     if (request.method() === 'POST' && /^\/api\/v1\/(hosted-stores\/[^/]+\/(quotes|orders)|me\/hosted-orders\/[^/]+\/cancel)$/.test(path)) orderMutations.push(path);
   });
-  try {const pub = await anonymous.newPage(); for (const width of [360, 768, 1280]) {
+  try {const pub = await anonymous.newPage(); for (const width of [320, 390, 768, 1280]) {
     await pub.setViewportSize({width, height: 900}); await pub.goto(`/shops/${slug}`); await expect(pub.getByRole('heading', {level: 1})).toHaveText('小島選物');
     expect(await pub.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect(pub.getByRole('complementary', {name: '預留與交易說明'})).toContainText('此頁不提供付款，也不會安排出貨。');

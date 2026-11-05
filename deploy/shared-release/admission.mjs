@@ -109,7 +109,7 @@ export async function admitActor(api, login, claimedId) {
   return { login, id: permission.user.id };
 }
 
-async function verifiedRun(api, filename, sourceSha) {
+export async function verifiedRun(api, filename, sourceSha) {
   const workflow = await api(`/repos/${REPOSITORY}/actions/workflows/${filename}`);
   requireRelease(positiveId(workflow.id) && workflow.path === `.github/workflows/${filename}`
     && workflow.state === 'active', 'release_required_workflow_invalid');
