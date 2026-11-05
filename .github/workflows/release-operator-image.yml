@@ -1,6 +1,12 @@
 name: Release operator image
 on:
   workflow_dispatch:
+    inputs:
+      operator_source_sha:
+        description: 'Optional verified main commit (40-character SHA); empty uses workflow source'
+        required: false
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -23,6 +29,7 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           persist-credentials: false
+          path: controller
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
@@ -31,8 +38,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CONTROLLER_SHA: ${{ job.workflow_sha }}
-        run: node deploy/shared-release/image-admission.mjs
+          OPERATOR_SOURCE_SHA: ${{ inputs.operator_source_sha }}
+        run: node controller/deploy/shared-release/image-admission.mjs
+      - name: Check out admitted operator source separately
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ steps.admit.outputs.source_sha }}
+          persist-credentials: false
+          path: operator-source
+      - name: Verify admitted source tree and image implementation
+        env:
+          IMAGE_SOURCE: ${{ steps.admit.outputs.source_sha }}
+          IMAGE_TREE: ${{ steps.admit.outputs.source_tree }}
+          OPERATOR_SOURCE_DIRECTORY: operator-source
+        run: node controller/deploy/shared-release/image-admission.mjs --verify-source
       - name: Build only tracked source without deployment credentials
+        working-directory: operator-source
         env:
           IMAGE_SOURCE: ${{ steps.admit.outputs.source_sha }}
           IMAGE_TAG: ${{ steps.admit.outputs.image_tag }}
