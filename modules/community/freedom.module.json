@@ -62,6 +62,7 @@
     "tests/runtime/member-services.test.ts",
     "tests/runtime/repo-author-claims.test.ts",
     "tests/runtime/share-promotion.test.ts",
+    "tests/runtime/promotion-board-copy.test.ts",
     "tests/runtime/skill-share-content.test.ts",
     "tests/e2e/event-highlights.spec.ts",
     "tests/e2e/member-services.spec.ts",
