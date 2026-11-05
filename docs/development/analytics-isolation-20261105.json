@@ -1,0 +1,62 @@
+{
+  "mode": "isolated replay of fetched public bytes; all beacon requests intercepted locally, none delivered",
+  "htmlSha256": "cf731a182672d8f2ab11dc25577920a52fe549a4c5dd6d1037e9a502dde53f61",
+  "scriptSha256": "637381256384554e1cc3309a62fb238a51b83e7f10b2a56d8ba15dbc73ca762e",
+  "csp": "default-src 'none'; script-src https://static.cloudflareinsights.com; connect-src https://cloudflareinsights.com; frame-ancestors https://freetwai.com; base-uri 'none'; form-action 'none'",
+  "observed": {
+    "referrer": "",
+    "storage": [],
+    "localKeys": [],
+    "sessionKeys": []
+  },
+  "beacons": [
+    {
+      "url": "https://cloudflareinsights.com/cdn-cgi/rum",
+      "method": "POST",
+      "fields": [
+        "bi",
+        "eventType",
+        "firstContentfulPaint",
+        "firstPaint",
+        "location",
+        "memory",
+        "nt",
+        "pageloadId",
+        "siteToken",
+        "st",
+        "startTime",
+        "timingsV2",
+        "versions"
+      ],
+      "siteToken": "b56db9f73ca74016bbb3e4a947449664",
+      "location": "https://aisns.evitina.tw/analytics-freetwai.html",
+      "versions": {
+        "js": "2026.10.1",
+        "timings": 2
+      }
+    }
+  ],
+  "errors": [],
+  "limits": [
+    "Does not establish downstream retention or server-side processing.",
+    "Fresh isolated browser context only; no member cookies or credentials loaded."
+  ],
+  "source_pull_request": 1149,
+  "public_document_url": "https://aisns.evitina.tw/analytics-freetwai.html",
+  "public_script_url": "https://static.cloudflareinsights.com/beacon.min.js",
+  "fetched_document": "<!doctype html><html><head><meta name=\"referrer\" content=\"no-referrer\"><script type=\"module\" src=\"https://static.cloudflareinsights.com/beacon.min.js\" data-cf-beacon='{\"token\":\"b56db9f73ca74016bbb3e4a947449664\",\"spa\":false}'></script></head><body></body></html>",
+  "response_headers": {
+    "cache-control": "no-store",
+    "content-security-policy": "default-src 'none'; script-src https://static.cloudflareinsights.com; connect-src https://cloudflareinsights.com; frame-ancestors https://freetwai.com; base-uri 'none'; form-action 'none'",
+    "content-type": "text/html; charset=utf-8",
+    "etag": "\"tnl3ce79\"",
+    "last-modified": "Tue, 27 Oct 2026 20:53:02 GMT",
+    "date": "Thu, 05 Nov 2026 04:57:20 GMT"
+  },
+  "interpretation": {
+    "siteToken": "Public analytics site identifier observed in the fetched document and intercepted beacon; not a member identifier.",
+    "pageloadId": "Beacon contains a per-page-load identifier; do not describe it as identifier-free.",
+    "network": "Actual deployment sends normal request network metadata to the external service; this isolated probe delivered no beacons.",
+    "privacy": "No parent URL marker, referrer, cookie/storage operations, or stored keys observed in this fresh-context run. This does not establish all browser histories, future external revisions, backend storage, retention, or no-IP processing."
+  }
+}

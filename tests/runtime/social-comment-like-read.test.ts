@@ -32,6 +32,10 @@ class HostNode {
   setAttribute(key: string, value: unknown) {this.attributes[key] = String(value);}
   removeAttribute(key: string) {delete this.attributes[key];}
   getAttribute(key: string) {return this.attributes[key] ?? null;}
+  get open() {return this.getAttribute('open') !== null;}
+  showModal() {this.setAttribute('open', '');}
+  close() {this.removeAttribute('open');}
+  focus() {this.ownerDocument.activeElement = this;}
   setAttributeNS(_namespace: string, key: string, value: unknown) {this.setAttribute(key, value);}
   addEventListener(type: string, fn: Function) {(this.listeners[type] ??= []).push(fn);}
   removeEventListener(type: string, fn: Function) {this.listeners[type] = (this.listeners[type] ?? []).filter(item => item !== fn);}

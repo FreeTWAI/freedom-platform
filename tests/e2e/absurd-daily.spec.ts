@@ -352,7 +352,7 @@ test('PT-5/7: holiday raycasts a real 3D character, accepts keyboard targets, an
     await expect(page.locator('.pt-live-label')).toContainText(`已守住 ${round+1} 個假日`);
   }
   await partyAdvance(page,PT.holidayMs);expect(await partyResult(page,'holiday')).toBe(5100);await page.getByRole('button',{name:'發到自由工坊',exact:true}).click();await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
-  const draft=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),GAME_HANDOFF_KEY);expect(draft.game).toBe('holiday');expect(draft.text).toContain('5100 分');expect(draft.text).toContain('game=holiday');expect(draft.autoPublish).toBeUndefined();await login(page);await expect(page.getByRole('textbox',{name:'貼文內容'})).toHaveValue(/5100 分/);await expect(page.getByRole('button',{name:'發布貼文',exact:true})).toBeVisible();
+  const draft=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),GAME_HANDOFF_KEY);expect(draft.game).toBe('holiday');expect(draft.text).toContain('5100 分');expect(draft.text).toContain('game=holiday');expect(draft.autoPublish).toBeUndefined();await page.clock.resume();await login(page);await expect(page.getByRole('textbox',{name:'貼文內容'})).toHaveValue(/5100 分/);await expect(page.getByRole('button',{name:'發布貼文',exact:true})).toBeVisible();
 });
 
 test('PT-2/6: blur freezes the round, genuine context loss rebuilds it, and restart needs an explicit choice',async({page})=>{
@@ -423,7 +423,7 @@ for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,a
   await expect(page.locator('#cosmetic-control')).toBeHidden();
   await page.locator('#cosmetic-control').evaluate(el=>el.remove());
   {
-    await page.getByRole('button',{name:action+' ↗',exact:true}).click();
+    await page.getByRole('button',{name:action,exact:true}).click();
     await expect(page).toHaveURL(new RegExp(`[?]game=${game}&seed=`));
     await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
     await expect(page.locator('.fw-arcade-controls')).toBeVisible();
@@ -550,8 +550,8 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
     if(i<11)await expect(page.locator('.fw-arcade-counter')).toHaveText(`${i+1}/12`);
   }
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('完成 12 份文件');
-  await socialEntries(page,'stamp');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
+  await socialEntries(page,'stamp');
   await expectResultInNativeFullscreen(page);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
   await page.keyboard.press('Tab');
@@ -576,8 +576,8 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
   for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
-  await socialEntries(page,'cash');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
+  await socialEntries(page,'cash');
   await expectResultInNativeFullscreen(page);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
   await page.evaluate(()=>{
