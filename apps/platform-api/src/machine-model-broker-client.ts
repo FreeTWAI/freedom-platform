@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { createHash, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { base64url, compactVerify, CompactSign } from 'jose';

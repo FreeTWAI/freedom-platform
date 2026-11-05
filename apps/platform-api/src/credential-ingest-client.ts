@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { randomBytes } from 'node:crypto';
 import { CompactSign } from 'jose';
 import { z } from 'zod';

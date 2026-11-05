@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { createHash, randomUUID } from 'node:crypto';
 import { exchange } from './model-step-node-transport.js';
 import { z } from 'zod';

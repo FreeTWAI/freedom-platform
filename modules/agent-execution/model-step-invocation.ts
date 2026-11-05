@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import type { PoolClient } from 'pg';
 import { AdapterFault } from './adapters/common.js';
 
