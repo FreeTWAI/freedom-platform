@@ -1,5 +1,11 @@
+import { FREETWAI_STICKERS } from '../../../modules/member-communications/freetwai-stickers.js';
+
 export const IMMUTABLE_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const FAST_PATH_ASSET_EXTENSIONS = new Set(['js', 'css', 'woff', 'woff2', 'png', 'jpg', 'jpeg', 'webp', 'svg', 'ico']);
+// Exact public catalog entries only. A hash-shaped URL elsewhere is not approval to cache it.
+const HASHED_PUBLIC_STICKER_PATHS = new Set<string>(FREETWAI_STICKERS
+  .flatMap(sticker => [sticker.image, sticker.thumbnail])
+  .filter(path => /^\/art\/chat\/[^/]+\/[^/]+-[a-f0-9]{12}\.webp$/.test(path)));
 
 export function isFastPathBuildAsset(pathname: string) {
   if (!pathname.startsWith('/assets/')) return false;
@@ -18,4 +24,13 @@ export function isFastPathBuildAsset(pathname: string) {
 // Only built asset types qualify; HTML and fixed public filenames remain no-store.
 export function isHashedBuildAsset(pathname: string) {
   return /^\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.(?:js|css|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|wasm|mp4|webm|mp3|ogg|wav)$/.test(pathname);
+}
+
+/** Call only for a successful, directly found GET/HEAD asset, never a shell fallback. */
+export function isImmutablePublicAsset(pathname: string, contentType: string | null, rawPathname = pathname) {
+  if (/text\/html/i.test(contentType ?? '')) return false;
+  return isHashedBuildAsset(pathname)
+    // Hono may decode pathname. Match sticker URLs exactly without changing build-asset rules.
+    || (HASHED_PUBLIC_STICKER_PATHS.has(rawPathname)
+      && (contentType ?? '').split(';', 1)[0].trim().toLowerCase() === 'image/webp');
 }
