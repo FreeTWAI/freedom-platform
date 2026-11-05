@@ -37,7 +37,12 @@ test('bell overlap uses one transport and collapse makes no additional request',
   // A settled response is never a freshness cache: the next opening re-reads.
   const settled=requests;await bell.click();await expect.poll(()=>requests).toBe(settled+1);
   await expect(page.locator('.notification-bell-item')).toContainText(notice.body);
-  await page.getByRole('heading',{name:'會員首頁',exact:true}).click();
+  // The home heading names the landmark but is intentionally not painted.
+  // Click visible, non-interactive composer padding to exercise outside dismissal.
+  const outside=page.locator('.home-timeline .social-composer-start');
+  await expect(outside).toBeVisible();
+  await outside.click({position:{x:4,y:4}});
+  await expect(page.locator('.social-publish-dialog[open]')).toHaveCount(0);
   await expect(page.getByRole('region',{name:'最近通知'})).toBeHidden();
 });
 
