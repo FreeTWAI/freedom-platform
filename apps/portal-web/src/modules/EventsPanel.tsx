@@ -225,6 +225,27 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
   const [reviewing,setReviewing]=useState<string|null>(null),[reviewReason,setReviewReason]=useState('');
   const [notice,setNotice]=useState('');
   const [shareFor,setShareFor]=useState<string|null>(null),[shareUrl,setShareUrl]=useState('');
+  const shareRequest=useRef(0);
+  const shareOwner=useRef({client,userId:session.user.user_id,generation:client.sessionGeneration,locationHash});
+  const owner=shareOwner.current;
+  if(owner.client!==client||owner.userId!==session.user.user_id||owner.generation!==client.sessionGeneration||owner.locationHash!==locationHash){
+    shareRequest.current++;
+    shareOwner.current={client,userId:session.user.user_id,generation:client.sessionGeneration,locationHash};
+  }
+  useEffect(()=>{
+    setShareFor(null);setShareUrl('');setNotice('');
+    return()=>{shareRequest.current++;};
+  },[client,session.user.user_id,client.sessionGeneration,locationHash]);
+  function beginShare(){
+    const token=++shareRequest.current,scope=shareOwner.current;
+    setNotice('');
+    return()=>token===shareRequest.current&&scope===shareOwner.current&&scope.generation===client.sessionGeneration;
+  }
+  async function copyShareLink(url:string,current:()=>boolean,success='活動專頁連結已複製。'){
+    try{await navigator.clipboard.writeText(url);if(current())setNotice(success);}
+    catch{if(current())setNotice('請選取上方連結手動複製。');}
+  }
+
   const [attendeesFor,setAttendeesFor]=useState<{event_id:string;title:string}|null>(null),attendeesTrigger=useRef<HTMLButtonElement|null>(null);
   const [reports,setReports]=useState<Record<string,ReferralView>>({}),reportRequests=useRef<Record<string,number>>({});
   useEffect(()=>{reportRequests.current={};setReports({});},[client,session.user.user_id]);
@@ -477,13 +498,19 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
   }
   async function share(item:CommunityEvent){
     if(photoLocked()||saving||busy||recoveringReview||recoveringAction||mediaUnknown)return;
+    const current=beginShare();
+    setShareFor(null);setShareUrl('');
     try{
       const result=await client.post<{path:string}>('/promotion/links',{kind:'event',target:item.event_id});
+      if(!current())return;
       const url=`${window.location.origin}${result.path}`;
       setShareFor(item.event_id);setShareUrl(url);
-      if(navigator.share){try{await navigator.share({title:item.title,url});setNotice('已開啟分享。');return;}catch(error){if((error as Error).name==='AbortError')return;}}
-      await navigator.clipboard.writeText(url);setNotice('活動專頁連結已複製，分享碼已包含在連結中。');
-    }catch(cause){setNotice(cause instanceof Error?cause.message:'連結未能複製，請從下方欄位複製。');}
+      if(navigator.share){
+        try{await navigator.share({title:item.title,url});if(current())setNotice('已開啟分享。');return;}
+        catch(error){if(!current()||(error as Error).name==='AbortError')return;}
+      }
+      await copyShareLink(url,current,'活動專頁連結已複製，分享碼已包含在連結中。');
+    }catch(cause){if(current())setNotice(cause instanceof Error?cause.message:'分享連結暫時無法產生，請重試。');}
   }
   async function report(item:CommunityEvent,offset=0){
     const id=item.event_id,token=(reportRequests.current[id]??0)+1,generation=client.sessionGeneration;
@@ -529,7 +556,7 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
       {item.state==='rejected'&&item.review_reason&&<p className="banner banner-info">審核理由：<span className="multiline-text">{item.review_reason}</span></p>}
       {exchangeBlocked&&<p className="field-hint">{INTERN_WRITE}</p>}
       <div className="experience-actions">{canJoin&&<button type="button" className={item.my_rsvp==='going'?'btn btn-ghost':'btn btn-primary'} disabled={photoMutationBlocked||busy||saving||recoveringSave||recoveringReview||recoveringAction||mediaUnknown||(item.my_rsvp!=='going'&&(missingReferral||item.capacity!==null&&item.attending_count>=item.capacity))} onClick={()=>void action(item,'rsvp',item.my_rsvp!=='going')}>{item.my_rsvp==='going'?'取消報名':item.capacity!==null&&item.attending_count>=item.capacity?'名額已滿':'我要參加'}</button>}{item.state==='published'&&<a className="btn btn-ghost" href={`#events/${item.event_id}`}>活動專頁</a>}{item.state==='published'&&!ended&&<button type="button" className="btn btn-ghost" disabled={photoMutationBlocked||saving||busy||mediaUnknown} onClick={()=>void share(item)}>分享活動</button>}{mine&&item.state==='published'&&<button type="button" className="btn btn-ghost" onClick={event=>{attendeesTrigger.current=event.currentTarget;setAttendeesFor({event_id:item.event_id,title:item.title});}}>報名名單</button>}{mine&&item.state==='published'&&<button type="button" className="btn btn-ghost" onClick={()=>void report(item)}>分享報名統計</button>}{mine&&item.state==='pending'&&!started&&<button type="button" className="btn btn-ghost" disabled={photoMutationBlocked||busy||saving||recoveringSave||recoveringReview||recoveringAction||mediaUnknown||exchangeBlocked||!eventPrizeDetailsSchema.safeParse((item.prize_details===undefined?[]:item.prize_details)).success} onClick={()=>{if(!leaveGuard.current())return;discardDrafts();beginEdit(item);}}>編輯草稿</button>}{mine&&(item.state==='pending'||item.state==='published')&&<button type="button" className="btn btn-ghost" disabled={photoMutationBlocked||busy||saving||recoveringSave||recoveringReview||recoveringAction||mediaUnknown||exchangeBlocked} onClick={()=>void action(item,'cancel')}>取消活動</button>}{item.can_review&&<button type="button" className="btn btn-primary" disabled={photoMutationBlocked||busy||saving||recoveringSave||recoveringReview||recoveringAction||mediaUnknown} onClick={event=>{if(!leaveGuard.current())return;discardDrafts();reviewTrigger.current=event.currentTarget;setReviewing(item.event_id);setReviewReason('');}}>審核活動</button>}</div>
-      {shareFor===item.event_id&&shareUrl&&<div className="event-share-link"><label className="field">分享連結<input readOnly value={shareUrl} onFocus={event=>event.target.select()}/><small>推薦碼已包含在連結內；訪客每天點開算 1 分（活動推廣排行榜）。</small></label><button type="button" className="btn btn-ghost" onClick={()=>void navigator.clipboard.writeText(shareUrl).then(()=>setNotice('活動專頁連結已複製。')).catch(()=>setNotice('請選取上方連結手動複製。'))}>複製連結</button></div>}
+      {shareFor===item.event_id&&shareUrl&&<div className="event-share-link"><label className="field">分享連結<input readOnly value={shareUrl} onFocus={event=>event.target.select()}/><small>推薦碼已包含在連結內；訪客每天點開算 1 分（活動推廣排行榜）。</small></label><button type="button" className="btn btn-ghost" onClick={()=>void copyShareLink(shareUrl,beginShare())}>複製連結</button></div>}
       {referral&&<div className="event-referral-report"><h4>依分享會員統計報名</h4>{referral.error&&<div className="banner banner-error" role="alert">{referral.error}<button type="button" className="btn btn-ghost" onClick={()=>void report(item,referral.request_offset)}>重試</button></div>}{referral.items.length?<ul>{referral.items.map(row=><li key={row.user_id}>{row.member_name}：點擊 {row.clicks}・報名 {row.registrations} 人</li>)}</ul>:!referral.loading&&!referral.error?<p>尚無分享報名紀錄。</p>:null}{referral.loading&&<p role="status">正在讀取分享統計…</p>}{referral.items.length>0&&<p className="field-hint">目前顯示 {referral.items.length} / {referral.total} 位分享會員。</p>}{referral.next_offset!==null&&!referral.loading&&!referral.error&&<button type="button" className="btn btn-ghost" onClick={()=>void report(item,referral.next_offset!)}>載入更多</button>}</div>}
       {selectedId===item.event_id&&item.help_need&&(item.state==='published'||item.state==='cancelled')&&<EventHelpers key={`${session.user.user_id}:${client.sessionGeneration}:${item.event_id}`} client={client} eventId={item.event_id} userId={session.user.user_id} isOrganizer={mine} referralCode={referralCode(item.event_id)} onBlockedChange={onHelperBlocked}/>}
       {selectedId===item.event_id&&item.state==='published'&&item.mode!=='online'&&renderMemberCards?.(item.event_id)}

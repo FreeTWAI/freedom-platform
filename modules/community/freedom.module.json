@@ -122,7 +122,8 @@
     "tests/e2e/event-prize-photos.spec.ts",
     "tests/runtime/event-save-client.test.ts",
     "tests/runtime/event-public-registration-client.test.ts",
-    "tests/runtime/event-date-input.test.ts"
+    "tests/runtime/event-date-input.test.ts",
+    "tests/runtime/event-clipboard-recovery.test.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",

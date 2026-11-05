@@ -49,6 +49,8 @@ const eventTest=test.extend<{eventFixture:{user:string;email:string}}>({
           for(const table of ['community_event_banners','community_event_videos']){
             await q.query(`DELETE FROM ${table} WHERE event_id IN (SELECT event_id FROM community_events WHERE community_id=$1)`,[community]);
           }
+          await q.query('DELETE FROM promotion_clicks WHERE link_id IN (SELECT link_id FROM promotion_links WHERE user_id=$1)',[user]);
+          await q.query('DELETE FROM promotion_links WHERE user_id=$1',[user]);
           await q.query('DELETE FROM community_events WHERE community_id=$1',[community]);
           await q.query('DELETE FROM member_notifications WHERE community_id=$1',[community]);
           // Injected 503/415 and lost ACKs also write bounded client diagnostics.
@@ -669,4 +671,47 @@ for(const width of [1280,390])eventTest(`extended event years show recoverable v
     expect(new Date(rows[0].starts_at).toISOString()).toBe('2099-01-01T17:00:00.000Z');expect(new Date(rows[0].ends_at).toISOString()).toBe('2099-01-01T18:00:00.000Z');
     expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
+});
+
+
+for(const width of [1280,390])eventTest(`event clipboard failures preserve the share link and recover at ${width}px`,async({page,context,eventFixture,e2eAuthPool})=>{
+  const id=randomUUID(),title=`合成複製恢復 ${id.slice(0,8)}`;
+  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+    SELECT $1,community_id,user_id,$2,'合成分享活動',now()+interval '2 days',now()+interval '2 days 1 hour','online','合成教室','published','open','other' FROM users WHERE user_id=$3`,[id,title,eventFixture.user]);
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  let referrals=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname==='/api/v1/promotion/links')referrals++;});
+  await page.evaluate(()=>{
+    const native=navigator.clipboard;
+    Object.defineProperty(window,'eventClipboardFixture',{configurable:true,value:{native,resolve:null,reject:null,calls:0}});
+    Object.defineProperty(navigator,'share',{configurable:true,value:undefined});
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:undefined});
+  });
+  const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
+  await card.getByRole('button',{name:'分享活動',exact:true}).click();
+  const manual=page.getByText('請選取上方連結手動複製。',{exact:true}),input=card.getByRole('textbox',{name:/^分享連結/}),copy=card.getByRole('button',{name:'複製連結',exact:true});
+  await expect(manual).toBeVisible();await expect(input).toBeVisible();
+  const url=await input.inputValue();expect(new URL(url).origin).toBe(new URL(page.url()).origin);expect(new URL(url).pathname).toMatch(/^\/go\/[A-Za-z0-9_-]{10}$/);
+  expect(referrals).toBe(1);
+  for(const mode of ['missing','throw','reject']){
+    await page.evaluate(mode=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:mode==='missing'?undefined:{writeText(){if(mode==='throw')throw new Error('合成同步拒絕');return Promise.reject(new Error('合成非同步拒絕'));}}}),mode);
+    await copy.focus();await page.keyboard.press('Enter');await expect(manual).toBeVisible();await expect(page.getByText(/活動專頁連結已複製/)).toHaveCount(0);
+    await input.focus();expect(await input.evaluate((node:HTMLInputElement)=>({start:node.selectionStart,end:node.selectionEnd,value:node.value}))).toEqual({start:0,end:url.length,value:url});
+    await expect(copy).toBeEnabled();expect(referrals).toBe(1);
+  }
+  // Restore the native clipboard and verify its actual bytes, not a success mock.
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:(window as any).eventClipboardFixture.native}));
+  await copy.focus();await page.keyboard.press('Enter');await expect(page.getByText('活動專頁連結已複製。',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(url);await expect(manual).toHaveCount(0);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText(){const f=(window as any).eventClipboardFixture;f.calls++;return new Promise<void>((resolve,reject)=>{f.resolve=resolve;f.reject=reject;});}}}));
+  await copy.click();await expect(page.getByText(/活動專頁連結已複製/)).toHaveCount(0);
+  await expect.poll(()=>page.evaluate(()=>(window as any).eventClipboardFixture.calls)).toBe(1);
+  // Accepted navigation closes this share scope; a late write cannot announce success there.
+  await navigate(page,'會員首頁');await page.evaluate(()=>(window as any).eventClipboardFixture.resolve());
+  await expect(page.getByText(/活動專頁連結已複製|請選取上方連結手動複製/)).toHaveCount(0);
+  await navigate(page,'社群活動');await expect(card).toBeVisible();await expect(copy).toHaveCount(0);expect(errors).toEqual([]);expect(referrals).toBe(1);
+  const rows=(await e2eAuthPool.query('SELECT code,kind,target_key FROM promotion_links WHERE user_id=$1',[eventFixture.user])).rows;
+  expect(rows).toEqual([{code:new URL(url).pathname.slice(4),kind:'event',target_key:id}]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
