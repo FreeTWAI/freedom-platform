@@ -567,3 +567,33 @@ eventTest('legacy draft preserves guest policy until the organizer explicitly ch
   await editor.getByRole('button',{name:'儲存修改',exact:true}).click();await expect(editor).toHaveCount(0);
   await page.reload();await card.getByRole('button',{name:'編輯草稿',exact:true}).click();await expect(card.getByLabel('報名方式',{exact:true})).toHaveValue('community_member');
 });
+
+for(const width of [1280,390])eventTest(`custom event capacity stays editable and persists at ${width}px`,async({page,eventFixture,e2eAuthPool})=>{
+  await page.setViewportSize({width,height:900});await login(page,eventFixture.email);await navigate(page,'社群活動');
+  await page.getByRole('button',{name:'辦活動',exact:true}).click();
+  const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
+  const title=`自訂人數 ${eventFixture.user}`;
+  await form.getByLabel('活動名稱',{exact:true}).fill(title);await form.getByLabel('活動說明',{exact:true}).fill('合成自訂人數回歸');await form.getByLabel('線上場地',{exact:true}).fill('合成教室');
+  await form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+  const select=form.getByRole('combobox',{name:/^人數上限/}),custom=form.getByLabel('自訂人數上限',{exact:true});
+  await select.selectOption('custom');await custom.fill('');await expect(custom).toBeVisible();await expect(select).toHaveValue('custom');
+  const writes:string[]=[];const record=(request:import('@playwright/test').Request)=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes.push(request.postData()??'');};page.on('request',record);
+  try{
+    await form.getByRole('button',{name:'送出審核',exact:true}).click();await expect(custom).toBeFocused();expect(await custom.evaluate((input:HTMLInputElement)=>input.validity.valueMissing)).toBe(true);expect(writes).toEqual([]);
+    // Native keystrokes must pass through the preset intermediate value 10
+    // without removing the focused input before the final 1 arrives.
+    await custom.pressSequentially('101');await expect(custom).toHaveValue('101');await expect(custom).toBeFocused();await expect(select).toHaveValue('custom');
+    const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/v1/events');
+    await form.getByRole('button',{name:'送出審核',exact:true}).click();const saved=await response;expect(saved.status()).toBe(201);const event=await saved.json();expect(event.capacity).toBe(101);await expect(form).toHaveCount(0);expect(writes).toHaveLength(1);
+    expect((await e2eAuthPool.query('SELECT capacity FROM community_events WHERE event_id=$1',[event.event_id])).rows[0].capacity).toBe(101);
+    await page.goto(`/events/${event.event_id}`);
+    const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
+    const editor=card.locator('form.experience-editor');await editor.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
+    const editCustom=editor.getByLabel('自訂人數上限',{exact:true});await expect(editCustom).toHaveValue('101');await editCustom.fill('');await expect(editCustom).toBeVisible();await editCustom.pressSequentially('20');await expect(editCustom).toHaveValue('20');
+    // Choosing a preset is still an explicit mode change.
+    await editor.getByRole('combobox',{name:/^人數上限/}).selectOption('20');await expect(editCustom).toHaveCount(0);
+    const updated=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===`/api/v1/events/${event.event_id}/update`);
+    await editor.getByRole('button',{name:'儲存修改',exact:true}).click();expect((await updated).status()).toBe(200);await expect(editor).toHaveCount(0);
+    expect((await e2eAuthPool.query('SELECT capacity FROM community_events WHERE event_id=$1',[event.event_id])).rows[0].capacity).toBe(20);
+  }finally{page.off('request',record);}
+});
