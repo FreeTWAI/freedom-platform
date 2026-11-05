@@ -227,8 +227,8 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
   const [shareFor,setShareFor]=useState<string|null>(null),[shareUrl,setShareUrl]=useState('');
   const shareRequest=useRef(0);
   const shareOwner=useRef({client,userId:session.user.user_id,generation:client.sessionGeneration,locationHash});
-  const owner=shareOwner.current;
-  if(owner.client!==client||owner.userId!==session.user.user_id||owner.generation!==client.sessionGeneration||owner.locationHash!==locationHash){
+  const shareSnapshot=shareOwner.current;
+  if(shareSnapshot.client!==client||shareSnapshot.userId!==session.user.user_id||shareSnapshot.generation!==client.sessionGeneration||shareSnapshot.locationHash!==locationHash){
     shareRequest.current++;
     shareOwner.current={client,userId:session.user.user_id,generation:client.sessionGeneration,locationHash};
   }
