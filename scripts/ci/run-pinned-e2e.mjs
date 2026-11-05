@@ -12,6 +12,7 @@ import { readBounded } from '../../packages/contribution-tools/io.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const defaultConfigFile = fileURLToPath(new URL('./pinned-playwright.config.mjs', import.meta.url));
+const progressReporter = fileURLToPath(new URL('./pinned-e2e-progress-reporter.mjs', import.meta.url));
 const FAILURE_ATTACHMENT_STATUSES = new Set(['failed', 'timedOut', 'interrupted']);
 const DIAGNOSTIC_ENTRY_LIMIT = 512;
 const DIAGNOSTIC_TOTAL_BYTES = 128 * 1024 * 1024;
@@ -145,7 +146,7 @@ export async function cleanupE2ePass(temp, output, passId, failed) {
 // SIGINT enters Playwright's test-runner teardown, which sends the configured
 // SIGTERM to its separate webServer group and drops the private schema.
 // Escalation is bounded independently of the host-owned whole-pass budget.
-function execute(root, cli, pass, env, signal, configFile, { listing = false, shard, timeoutMs } = {}) {
+function execute(root, cli, pass, env, signal, configFile, { listing = false, shard, timeoutMs, nativeComplete } = {}) {
   if (signal.aborted) return Promise.resolve({ exit_code: null, reason: 'test_cancelled' });
   const maximum = listing ? 60_000 : E2E_PASS_TIMEOUT_MS[pass.id];
   const budget = timeoutMs === undefined ? maximum : Math.min(maximum, timeoutMs);
@@ -154,8 +155,12 @@ function execute(root, cli, pass, env, signal, configFile, { listing = false, sh
     const group = process.platform !== 'win32';
     const files = pass.files.map(file => '(?:^|/)' + file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$');
     // Print each failure before a whole-pass timeout can prevent the final summary.
-    const child = spawn(process.execPath, [cli, 'test', '--config', configFile, '--forbid-only', listing ? '--reporter=json' : '--reporter=line,json', ...(listing ? ['--list'] : []), ...(shard ? ['--shard', `${shard.current}/${shard.total}`] : []), '--output', join(dirname(env.PLAYWRIGHT_JSON_OUTPUT_FILE), 'artifacts'), ...files],
-      { cwd: root, env, stdio: 'inherit', detached: group });
+    const reporters = listing ? 'json' : `line,json${nativeComplete ? ',' + progressReporter : ''}`;
+    const child = spawn(process.execPath, [cli, 'test', '--config', configFile, '--forbid-only', '--reporter=' + reporters, ...(listing ? ['--list'] : []), ...(shard ? ['--shard', `${shard.current}/${shard.total}`] : []), '--output', join(dirname(env.PLAYWRIGHT_JSON_OUTPUT_FILE), 'artifacts'), ...files],
+      { cwd: root, env, stdio: nativeComplete ? ['inherit', 'inherit', 'inherit', 'ipc'] : 'inherit', detached: group });
+    if (nativeComplete) child.on('message', message => {
+      if (message?.type === 'freedom.e2e.native-complete') nativeComplete();
+    });
     let reason, escalation;
     const kill = name => {
       try { if (group && child.pid) process.kill(-child.pid, name); else child.kill(name); } catch { /* already exited */ }
@@ -311,6 +316,8 @@ async function main() {
           const peers = new AbortController();
           const signal = AbortSignal.any([controller.signal, peers.signal]);
           let failed;
+          let releasePeers;
+          const nativeCompleted = new Promise(resolve => { releasePeers = resolve; });
           const runPartition = async shard => {
             try {
               const directory = join(temp, `shard-${shard.current}`);
@@ -320,7 +327,8 @@ async function main() {
                 PLAYWRIGHT_JSON_OUTPUT_FILE: join(directory, 'report.json'),
                 PLAYWRIGHT_LAST_RUN_OUTPUT_FILE: join(directory, 'last-run.json') };
               const ran = await execute(root, cli, pass, shardEnv, signal, configFile,
-                { shard, timeoutMs: deadline - Date.now() });
+                { shard, timeoutMs: deadline - Date.now(),
+                  ...(shard.current === 1 ? { nativeComplete: releasePeers } : {}) });
               const data = await readPassReport(shardEnv.PLAYWRIGHT_JSON_OUTPUT_FILE);
               const reason = ran.reason ?? (ran.exit_code !== 0 ? 'test_process_failed' : !data.report ? 'invalid_test_results' : undefined);
               if (reason && !failed) { failed = reason; peers.abort(); }
@@ -330,12 +338,13 @@ async function main() {
               return { current: shard.current, total: shard.total, exit_code: null };
             }
           };
-          // The first native shard includes the 3D game journeys. Let it use
-          // the runner's CPU before the other two browser processes compete
-          // with SwiftShader. Keep all three shards and the original shared
-          // deadline; aborts still prevent queued processes from starting.
-          const first = await runPartition(E2E_DEFAULT_SHARDS[0]);
-          const partitions = [first, ...await Promise.all(E2E_DEFAULT_SHARDS.slice(1).map(runPartition))];
+          // Reserve CPU until every native game case in shard 1 has passed,
+          // then overlap its remaining ordinary journeys with shards 2/3.
+          // Without a completion signal, retain the safe whole-shard wait.
+          // All processes still share one deadline and cancellation boundary.
+          const first = runPartition(E2E_DEFAULT_SHARDS[0]);
+          await Promise.race([first, nativeCompleted]);
+          const partitions = await Promise.all([first, ...E2E_DEFAULT_SHARDS.slice(1).map(runPartition)]);
           executionReason = failed;
           const exit_code = partitions.every(part => part.exit_code === 0) ? 0
             : partitions.find(part => Number.isInteger(part.exit_code) && part.exit_code !== 0)?.exit_code ?? null;

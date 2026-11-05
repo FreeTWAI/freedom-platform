@@ -113,20 +113,25 @@ The fixed registry in `runtime-suites.mjs` maps these existing IDs:
 
 
 The full pinned browser plan keeps its six mode passes. Its default mode (#784)
-first enumerates all cases without sharding, then runs exactly three concurrent
-native Playwright shards, each still `workers: 1` / `fullyParallel: false`.
+first enumerates all cases without sharding, then runs exactly three native
+Playwright shards, each still `workers: 1` / `fullyParallel: false`. Shard 1
+reserves the runner CPU while its `absurd-daily.spec.ts` games execute. A pinned
+reporter releases shards 2/3 after every game has passed, allowing the ordinary
+journeys in all three shards to overlap. Without that signal, peers wait for
+shard 1 to exit. This signal schedules work only; the unchanged complete JSON
+reports and exact inventory union determine success.
 The host assigns separate generated `fp_e2e_*` schemas and localhost ports
 14311/14312/14313; run only one full pinned plan per host. Existing dedicated fixture
 passes and narrow guide/guild plans remain unsharded and retain their obligations.
 No candidate CLI profile, file list, shard count or timeout override is accepted.
 
 The current 75-minute default-mode budget includes discovery and all three
-concurrent processes; discovery keeps its independent 60-second maximum. A failed shard
+processes, including queued time; discovery keeps its independent 60-second maximum. A failed shard
 cancels its peers by interrupting the Playwright CLI with SIGINT. Playwright then
 runs its configured SIGTERM webServer teardown; the existing 20-second SIGKILL
 escalation remains bounded. Direct SIGTERM to the CLI skips that teardown and
 can leave its separate webServer process group alive. The real-Playwright
-cancellation regression requires all three HTTP servers to receive SIGTERM and exit
+cancellation regressions require every started HTTP server to receive SIGTERM and exit
 before the runner returns. Timeout or
 cancellation remains failed even if every interrupted child exits zero.
 Default evidence requires all three ordered `partitions` with host-bound current/total,

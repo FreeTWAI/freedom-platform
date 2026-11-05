@@ -52,6 +52,7 @@ async function openThread(page:Page,kind:'direct'|'guild',h:Awaited<ReturnType<t
  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(h.email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.locator('.shell')).toBeVisible();
  await page.goto('/#messages');await openChat(page);await page.getByRole('tab',{name:kind==='direct'?/^私人訊息/:/^公會閒聊/}).click();const panel=page.locator(`#messages-panel-${kind}`);
  if(kind==='direct'){
+  await panel.getByRole('button',{name:'開始新對話',exact:true}).click();
   await panel.getByLabel('搜尋會員',{exact:true}).fill(h.peerName);await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();await panel.getByRole('button',{name:`傳訊給 ${h.peerName}`,exact:true}).click();
  }else await panel.locator(`[data-channel-key="${guild}"]`).click();
  await expect(panel.locator('.messages-compose')).toBeVisible();return panel;

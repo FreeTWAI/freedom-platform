@@ -9,12 +9,35 @@ import { createHash } from 'node:crypto';
 import { GUILD_PRESENTATION_PROFILE } from '../guild-presentation-profile.mjs';
 import { collectRepositoryE2eDecision } from '../../../scripts/ci/select-affected-jobs.mjs';
 import { cleanupE2ePass } from '../../../scripts/ci/run-pinned-e2e.mjs';
+import NativeProgressReporter from '../../../scripts/ci/pinned-e2e-progress-reporter.mjs';
 import { STORE_SPEC_PROFILE, STORE_SPEC_FILES, STORE_SPEC_PLAN, E2E_BASELINE, E2E_PLAN, E2E_DEFAULT_SHARDS, E2E_PASS_TIMEOUT_MS, evaluateE2ePasses, evaluateE2ePassProgress, GUIDE_DEFAULT_FILES, GUIDE_COMPOSITION_PROFILE, planE2eSelection } from '../pinned-e2e.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const rootDir = '/fixture/tests/e2e';
 const configFile = '/trusted/scripts/ci/pinned-playwright.config.mjs';
 const expectedFiles = ['tests/e2e/other.spec.ts', 'tests/e2e/private-work-ai.spec.ts', 'tests/e2e/member-avatar-asset.spec.ts', 'tests/e2e/message-images.spec.ts', 'tests/e2e/hosted-store-photo.spec.ts', 'tests/e2e/notification-preferences.spec.ts'];
+for (const status of ['passed', 'failed', 'timedOut', 'skipped', 'interrupted']) test(`native scheduling waits for every distinct case and never releases on ${status === 'passed' ? 'partial completion' : status}`, () => {
+  const oldRoot = process.env.FREEDOM_PINNED_E2E_ROOT, oldSend = process.send, messages = [];
+  process.env.FREEDOM_PINNED_E2E_ROOT = '/fixture';
+  process.send = message => messages.push(message);
+  try {
+    const cases = ['one', 'two'].map(id => ({ id, location: { file: '/fixture/tests/e2e/absurd-daily.spec.ts' } }));
+    const reporter = new NativeProgressReporter();
+    reporter.onBegin({}, { allTests: () => cases });
+    reporter.onTestEnd({ id: 'unrelated' }, { status: 'passed' });
+    reporter.onTestEnd(cases[0], { status: 'passed' });
+    reporter.onTestEnd(cases[0], { status: 'passed' });
+    assert.deepEqual(messages, []);
+    reporter.onTestEnd(cases[1], { status });
+    reporter.onTestEnd(cases[1], { status: 'passed' });
+    assert.deepEqual(messages, status === 'passed' ? [{ type: 'freedom.e2e.native-complete' }] : []);
+  } finally {
+    if (oldRoot === undefined) delete process.env.FREEDOM_PINNED_E2E_ROOT;
+    else process.env.FREEDOM_PINNED_E2E_ROOT = oldRoot;
+    if (oldSend === undefined) delete process.send;
+    else process.send = oldSend;
+  }
+});
 const cliEnv = { ...process.env, TEST_DATABASE_URL: 'postgresql://freedom_local@127.0.0.1:55521/fp_foundation_ci', FREEDOM_E2E_PORT: '4391' };
 const state = status => ({ timeout: 45000, annotations: [], expectedStatus: 'passed', projectId: 'chromium', projectName: 'chromium',
   results: [{ status: status === 'expected' ? 'passed' : status }], status });
@@ -467,7 +490,7 @@ async function playwrightFixture(root, config) {
   for (const file of E2E_BASELINE) await writeFile(join(root, file), ordinaryTests);
 }
 
-test('CLI ignores candidate filters, includes new specs and isolates concurrent default state', async () => {
+test('CLI reserves native game CPU, then overlaps ordinary journeys without losing case or state isolation', async () => {
   await withFixture(async root => {
     await playwrightFixture(root, `
     const origin='http://127.0.0.1:'+process.env.FREEDOM_E2E_PORT;
@@ -492,6 +515,22 @@ test('CLI ignores candidate filters, includes new specs and isolates concurrent 
     const isolatedFiles=['aa-state-isolation.spec.ts',
       E2E_BASELINE[Math.floor(E2E_BASELINE.length/2)].slice('tests/e2e/'.length).replace('.spec.ts','-state-isolation.spec.ts'),
       'zz-state-isolation.spec.ts'];
+    await writeFile(join(root,'tests/e2e/absurd-daily.spec.ts'),`
+      import {test,expect} from '@playwright/test';
+      import {existsSync} from 'node:fs';
+      for(const name of ['native game one','native game two'])test(name,async()=>{
+        expect(process.env.FREEDOM_E2E_PORT).toBe(${JSON.stringify(String(E2E_DEFAULT_SHARDS[0].port))});
+        expect(${JSON.stringify(isolatedFiles.slice(1).map((_,peer)=>join(root,`arrived-${peer+1}`)))}.some(path=>existsSync(path))).toBe(false);
+      });
+    `);
+    await writeFile(join(root,'tests/e2e/account-native-release.spec.ts'),`
+      import {test,expect} from '@playwright/test';
+      import {existsSync} from 'node:fs';
+      test('first shard ordinary work overlaps both peers',async()=>{
+        expect(process.env.FREEDOM_E2E_PORT).toBe(${JSON.stringify(String(E2E_DEFAULT_SHARDS[0].port))});
+        await expect.poll(()=>${JSON.stringify(isolatedFiles.slice(1).map((_,peer)=>join(root,`arrived-${peer+1}`)))}.every(path=>existsSync(path)),{timeout:10000}).toBe(true);
+      });
+    `);
     for(const [index,file] of isolatedFiles.entries())await writeFile(join(root,'tests/e2e',file),`
       import {test,expect} from '@playwright/test';
       import {existsSync,writeFileSync} from 'node:fs';
@@ -523,9 +562,9 @@ test('CLI ignores candidate filters, includes new specs and isolates concurrent 
     assert.doesNotMatch(child.stdout + child.stderr, /GitCommitInfo: running "git /);
     const result = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(result.status, 'passed');
-    assert.equal(result.test_count, 2 * (E2E_BASELINE.length + 1) + isolatedFiles.length);
-    assert.equal(result.test_files.length, E2E_BASELINE.length + isolatedFiles.length + 1);
-    assert.ok(result.test_files.every(file => file.counts.tests === (isolatedFiles.some(name=>file.path.endsWith('/'+name))?1:2) && file.counts.passed === file.counts.tests));
+    assert.equal(result.test_count, 2 * (E2E_BASELINE.length + 1) + isolatedFiles.length + 3);
+    assert.equal(result.test_files.length, E2E_BASELINE.length + isolatedFiles.length + 3);
+    assert.ok(result.test_files.every(file => file.counts.tests === ([...isolatedFiles,'account-native-release.spec.ts'].some(name=>file.path.endsWith('/'+name))?1:2) && file.counts.passed === file.counts.tests));
     assert.deepEqual(result.passes.map(pass => pass.exit_code), [0, 0, 0, 0, 0, 0]);
   });
 });
@@ -680,20 +719,20 @@ test('CLI stops after a failing pass 1 and reports test_process_failed', async (
   });
 });
 
-for (const failing of E2E_DEFAULT_SHARDS) test(`default shard ${failing.current} failure cancels every live peer and never starts a fixture pass`, async()=>{
+for (const { failing, released } of [{ failing: E2E_DEFAULT_SHARDS[0], released: false }, ...E2E_DEFAULT_SHARDS.map(failing => ({ failing, released: true }))]) test(`default shard ${failing.current} failure ${released ? 'after' : 'before'} native completion cancels every live peer and never starts a fixture pass`, async()=>{
   await withFixture(async root=>{
     await baseline(root);
     const runnerDir=join(root,'node_modules/@playwright/test');
     await mkdir(runnerDir,{recursive:true});
     await writeFile(join(runnerDir,'package.json'),JSON.stringify({exports:{'./cli':'./cli.cjs'}}));
-    const starts=join(root,'starts'),peers=E2E_DEFAULT_SHARDS.filter(shard=>failing.current!==1&&shard.current!==1&&shard.current!==failing.current);
-    const parts=(failing.current===1?E2E_DEFAULT_SHARDS.slice(0,1):E2E_DEFAULT_SHARDS).map(({current,total})=>`${current}/${total}`);
+    const starts=join(root,'starts'),peers=E2E_DEFAULT_SHARDS.filter(shard=>released&&shard.current!==failing.current);
+    const parts=(released?E2E_DEFAULT_SHARDS:E2E_DEFAULT_SHARDS.slice(0,1)).map(({current,total})=>`${current}/${total}`);
     await writeFile(join(runnerDir,'cli.cjs'),`
       ${lifecycleListing(root)}
       const fs=require('node:fs'),part=process.argv[process.argv.indexOf('--shard')+1];
       fs.appendFileSync(${JSON.stringify(starts)},part+'\\n');
       const result=()=>fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,JSON.stringify({}));
-      if(part==='1/3'&&${failing.current}!==1){result();process.exit(0);}
+      if(part==='1/3'&&${released})process.send({type:'freedom.e2e.native-complete'});
       if(part===${JSON.stringify(`${failing.current}/${failing.total}`)}){
         const timer=setInterval(()=>{if(!${JSON.stringify(peers.map(({current})=>join(root,`ready-${current}`)))}.every(path=>fs.existsSync(path)))return;clearInterval(timer);result();process.exit(1);},10);
       }else{
@@ -709,7 +748,7 @@ for (const failing of E2E_DEFAULT_SHARDS) test(`default shard ${failing.current}
     const result=JSON.parse(await readFile(output,'utf8'));
     assert.equal(result.status,'failed');assert.equal(result.reason,'test_process_failed');
     assert.deepEqual(result.passes.map(pass=>pass.id),['default']);
-    assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),E2E_DEFAULT_SHARDS.map(({current})=>current===failing.current?1:failing.current===1?null:0));
+    assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),E2E_DEFAULT_SHARDS.map(({current})=>current===failing.current?1:released?0:null));
   });
 });
 
@@ -780,7 +819,7 @@ for(const wave of [1,2])test(`CLI cancellation in wave ${wave} tears down all st
       server.listen(Number(port),'127.0.0.1',()=>writeFileSync('server-'+port,String(process.pid)));
       process.on('SIGTERM',()=>{writeFileSync('stopped-'+port,'SIGTERM');server.close(()=>process.exit(0));});
     `);
-    for(const file of E2E_BASELINE)await writeFile(join(root,file),`
+    for(const file of ['tests/e2e/absurd-daily.spec.ts',...E2E_BASELINE])await writeFile(join(root,file),`
       import {test} from '@playwright/test';
       test('pending operation',async()=>{
         if(${wave}===2&&process.env.FREEDOM_E2E_PORT===${JSON.stringify(String(E2E_DEFAULT_SHARDS[0].port))})return;
@@ -853,17 +892,14 @@ for(const wave of [1,2])test(`CLI shared default deadline in wave ${wave} remain
     const runnerDir = join(root, 'node_modules/@playwright/test');
     await mkdir(runnerDir, { recursive: true });
     await writeFile(join(runnerDir, 'package.json'), JSON.stringify({ exports: { './cli': './cli.cjs' } }));
-    const ready = join(root, 'ready'), marker = join(root, 'terminated'), starts = join(root, 'starts'), completed = join(root,'completed');
+    const ready = join(root, 'ready'), marker = join(root, 'terminated'), starts = join(root, 'starts');
     const observed = join(root, 'scheduled-budget.json'), preload = join(root, 'accelerate-fixture.mjs');
     await writeFile(join(runnerDir, 'cli.cjs'), `
       ${lifecycleListing(root)}
       const fs = require('node:fs');
       fs.appendFileSync(${JSON.stringify(starts)}, process.pid+'\\n');
       if(${wave}===2&&process.argv[process.argv.indexOf('--shard')+1]==='1/3'){
-        fs.appendFileSync(${JSON.stringify(ready)},process.pid+'\\n');
-        fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,JSON.stringify({}));
-        setTimeout(()=>{fs.writeFileSync(${JSON.stringify(completed)},String(process.pid));process.exit(0);},80);
-        return;
+        setTimeout(()=>process.send({type:'freedom.e2e.native-complete'}),80);
       }
       process.on('SIGINT', () => {
         fs.appendFileSync(${JSON.stringify(marker)}, process.pid+'\\n');
@@ -904,8 +940,7 @@ for(const wave of [1,2])test(`CLI shared default deadline in wave ${wave} remain
     const started=(await readFile(starts,'utf8')).trim().split('\n').sort();
     const stopped=(await readFile(marker,'utf8')).trim().split('\n').sort();
     assert.equal(new Set(started).size,wave===1?1:E2E_DEFAULT_SHARDS.length);
-    const finished=wave===2?await readFile(completed,'utf8'):null;
-    assert.deepEqual(stopped,started.filter(pid=>pid!==finished));
+    assert.deepEqual(stopped,started);
     const result = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(result.status, 'failed');
     assert.equal(result.reason, 'test_timeout');
