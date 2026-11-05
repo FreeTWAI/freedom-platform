@@ -1,4 +1,6 @@
-import {test} from 'node:test';
+import {test,type TestContext} from 'node:test';
+import {createRequire} from 'node:module';
+import React from 'react';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
@@ -355,7 +357,7 @@ function commentAvatarHarness(sourceText=interactionSource){
   const react={useRef:(value:unknown)=>{const i=index++;return hooks[i]??(hooks[i]={current:value});},useState:(value:unknown)=>{const i=index++;if(!(i in hooks))hooks[i]=value;return[hooks[i],(v:any)=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useEffect:(fn:()=>unknown,deps:unknown[])=>{const i=index++;if(!hooks[i]||deps.some((v,n)=>v!==hooks[i].deps[n])){hooks[i]?.cleanup?.();hooks[i]={deps};effects.push(()=>{hooks[i].cleanup=fn();});}}};
   const jsx=(type:unknown,props:unknown)=>({type,props}),module={exports:{} as any};
   runInNewContext(transformSync(sourceText,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,crypto:webcrypto,URL,require:(name:string)=>{
-    if(name==='react')return react;if(name==='react/jsx-runtime')return{jsx,jsxs:jsx};if(name==='../api')return{ApiError};
+    if(name==='react')return {...react,useLayoutEffect:react.useEffect};if(name==='react/jsx-runtime')return{jsx,jsxs:jsx};if(name==='../api')return{ApiError};
     if(name==='../format')return{formatIsoLocal:(s:string)=>s};return new Proxy({},{get:(_target,key)=>String(key)});
   }});
   function render(){index=0;const tree=module.exports.SocialInteractions(props);while(effects.length)effects.shift()!();return tree;}
@@ -432,4 +434,223 @@ test('comment list/create/edit share one same-community author-presence projecti
  assert.equal(shown.author.avatar_url,listed.items[0].author.avatar_url);
  for(const call of calls){assert.match(call.sql,/LEFT JOIN member_avatar_presence a ON a.user_id=u.user_id AND a.community_id=c.community_id/);assert.match(call.sql,/a.aggregate_version,a.present AS has_avatar,is_verification_test_account\(u.user_id\) AS test_account/);assert.equal(call.values[1],actor.community_id);}
  for(const [start,end] of [['export async function createSocialComment(','export async function removeSocialComment('],['export async function editSocialComment(',null]] as const){const a=commentServerSource.indexOf(start),b=end?commentServerSource.indexOf(end,a):commentServerSource.length;assert.match(commentServerSource.slice(a,b),/return shownComment\(q,inputCommand.actor,/);}
+});
+
+// Complete production SocialInteractions and SocialPostLike mounted with real React/ReactDOM.
+// Bubbling events, dialog/focus and transport are synthetic host implementations,
+// not a native browser, keyboard activation, API server or database acceptance run.
+class HostNode {
+  [key: string]: any;
+  parentNode: HostNode | null = null;
+  childNodes: HostNode[] = [];
+  attributes: Record<string, string> = {};
+  style:Record<string,any> = {setProperty() {}, removeProperty() {}};
+  listeners: Record<string, {fn:Function;capture:boolean}[]> = {};
+  namespaceURI = 'http://www.w3.org/1999/xhtml';
+  constructor(public nodeType: number, public nodeName: string, public ownerDocument: any) {
+    if (nodeType === 1) this.tagName = nodeName;
+  }
+  appendChild(node: HostNode) {
+    node.parentNode?.removeChild(node); this.childNodes.push(node); node.parentNode = this; return node;
+  }
+  removeChild(node: HostNode) {
+    const index = this.childNodes.indexOf(node); assert.notEqual(index, -1);
+    this.childNodes.splice(index, 1); node.parentNode = null; return node;
+  }
+  insertBefore(node: HostNode, before: HostNode) {
+    node.parentNode?.removeChild(node); const index = this.childNodes.indexOf(before); assert.notEqual(index, -1);
+    this.childNodes.splice(index, 0, node); node.parentNode = this; return node;
+  }
+  setAttribute(key: string, value: unknown) {this.attributes[key] = String(value);}
+  removeAttribute(key: string) {delete this.attributes[key];}
+  getAttribute(key: string) {return this.attributes[key] ?? null;}
+  setAttributeNS(_namespace: string, key: string, value: unknown) {this.setAttribute(key, value);}
+  addEventListener(type: string, fn: Function, options?:any) {(this.listeners[type] ??= []).push({fn,capture:options===true||!!options?.capture});}
+  removeEventListener(type: string, fn: Function) {this.listeners[type] = (this.listeners[type] ?? []).filter(item => item.fn !== fn);}
+  get firstChild(): HostNode | null {return this.childNodes[0] ?? null;}
+  get lastChild(): HostNode | null {return this.childNodes.at(-1) ?? null;}
+  get nextSibling(): HostNode | null {return this.parentNode?.childNodes[this.parentNode.childNodes.indexOf(this) + 1] ?? null;}
+  get textContent(): string {return this.nodeType === 3 ? this.nodeValue : this.childNodes.map(node => node.textContent).join('');}
+  set textContent(value: string) {this.childNodes.forEach(node => {node.parentNode = null;}); this.childNodes = []; if (value) this.appendChild(this.ownerDocument.createTextNode(String(value)));}
+  get src() {return this.attributes.src ?? '';}
+  set src(value: string) {this.attributes.src = String(value);}
+  contains(node: HostNode): boolean {return node === this || this.childNodes.some(child => child.contains(node));}
+}
+class HostDocument extends HostNode {
+  constructor() {
+    super(9, '#document', null); this.ownerDocument = this;
+    this.documentElement = new HostNode(1, 'HTML', this); this.body = new HostNode(1, 'BODY', this);
+    this.appendChild(this.documentElement); this.documentElement.appendChild(this.body); this.activeElement = this.body;
+  }
+  createElement(name: string) {return new HostNode(1, name.toUpperCase(), this);}
+  createElementNS(namespace: string, name: string) {const node = this.createElement(name); node.namespaceURI = namespace; return node;}
+  createTextNode(value: string) {const node = new HostNode(3, '#text', this); node.nodeValue = value; return node;}
+}
+const document = new HostDocument();
+const scheduled = new Map<number,Function>();let nextTimer=0;
+const window = {location:{origin:'https://fixture.invalid'},setTimeout(fn:Function){const id=++nextTimer;scheduled.set(id,fn);return id;},clearTimeout(id:number){scheduled.delete(id);},open(){throw Error('No external navigation permitted');},document, HTMLElement: HostNode, HTMLIFrameElement: class {}, listeners:{} as Record<string,Function[]>, addEventListener(type:string,fn:Function) {(this.listeners[type]??=[]).push(fn);}, removeEventListener(type:string,fn:Function) {this.listeners[type]=(this.listeners[type]??[]).filter(x=>x!==fn);}, dispatchEvent(e:any) {for(const fn of [...(this.listeners[e.type]??[])])fn(e);return true;}, get event() {return undefined;}};
+document.defaultView = window;
+Object.assign(globalThis, {document, window, HTMLElement: HostNode, Node: HostNode, IS_REACT_ACT_ENVIRONMENT: true});
+// Initialize ReactDOM after installing its synthetic host, in this test process.
+const require = createRequire(import.meta.url);
+const {createRoot} = require('react-dom/client') as typeof import('react-dom/client');
+const {flushSync} = require('react-dom') as typeof import('react-dom');
+const flush = (fn: () => void) => React.act(() => flushSync(fn));
+
+
+HostNode.prototype.closest = function () { return null; };
+HostNode.prototype.showModal = function () { this.open = true; };
+HostNode.prototype.close = function () { this.open = false; };
+HostNode.prototype.focus = function () { this.ownerDocument.activeElement = this; };
+HostNode.prototype.select = function () {};
+const descendants=(node:HostNode):HostNode[]=>[node,...node.childNodes.flatMap(descendants)];
+document.getElementById=(id:string)=>descendants(document).find(node=>node.attributes.id===id)??null;
+HostNode.prototype.querySelector=function(selector:string){assert.match(selector,/^\.[a-z-]+$/);return descendants(this).find(n=>(n.attributes.class??'').split(' ').includes(selector.slice(1)))??null;};
+HostNode.prototype.hasAttribute=function(key:string){return Object.hasOwn(this.attributes,key);};
+HostNode.prototype.dispatchEvent=function(event:any){
+  event.target??=this;event.bubbles??=true;event.cancelBubble=false;event.defaultPrevented=false;
+  event.preventDefault=()=>{event.defaultPrevented=true;};event.stopPropagation=()=>{event.cancelBubble=true;};
+  const chain:HostNode[]=[];for(let n:HostNode|null=this;n;n=n.parentNode)chain.push(n);
+  for(const n of [...chain].reverse()){event.currentTarget=n;for(const l of n.listeners[event.type]??[])if(l.capture)l.fn(event);if(event.cancelBubble)return !event.defaultPrevented;}
+  for(const n of chain){event.currentTarget=n;for(const l of n.listeners[event.type]??[])if(!l.capture)l.fn(event);if(event.cancelBubble||!event.bubbles)break;}
+  if(event.type==='click'&&!event.defaultPrevented&&this.nodeName==='SUMMARY'&&this.parentNode?.nodeName==='DETAILS'){const details=this.parentNode;if(details.hasAttribute('open'))details.removeAttribute('open');else details.setAttribute('open','');}
+  event.currentTarget=null;return !event.defaultPrevented;
+};
+const propsOf=(node:HostNode)=>node[Object.keys(node).find(k=>k.startsWith('__reactProps$'))!];
+const productionCache=new Map<string,any>();
+function production(name:string):any{
+ if(productionCache.has(name))return productionCache.get(name);
+ const file=`${process.cwd()}/apps/portal-web/src/modules/${name}.tsx`,module={exports:{} as any};
+ const compiled=transformSync(readFileSync(file,'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code;
+ runInNewContext(compiled,{module,exports:module.exports,crypto:webcrypto,URL,Error,setTimeout,clearTimeout,document,require(name:string){
+  if(name==='react')return React;
+  if(name==='react/jsx-runtime')return require('react/jsx-runtime');
+  if(name==='../api')return {ApiError};
+  if(name==='../format')return {formatIsoLocal:(s:string)=>s};
+  if(name==='./SocialPostLike')return production('SocialPostLike');
+  return new Proxy({},{get(_target,key){
+    if(key==='SocialMemberLink')return ({member}:any)=>React.createElement('span',{'data-member':member.user_id},member.display_name);
+    if(key==='SocialRichText')return ({text}:any)=>React.createElement('span',null,text);
+    return ()=>null;
+  }});
+ }});productionCache.set(name,module.exports);return module.exports;
+}
+function fixture(t:TestContext,liked=false){
+ const requests:any[]=[],updates:any[]=[];
+ const transport=(method:string)=>(path:string,body?:any,options?:any)=>new Promise((resolve,reject)=>requests.push({method,path,body,options,resolve,reject}));
+ const client={sessionGeneration:1,csrfToken:'synthetic',get:transport('GET'),post:transport('POST'),delete:transport('DELETE')};
+ let post={post_id:'10000000-0000-4000-8000-000000000001',comment_count:0,like_count:liked?1:0,liked};
+ const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as unknown as HTMLElement);let mounted=true;
+ let componentProps:any={client,post,canHide:false,onUpdate:(value:any)=>{updates.push(value);post={...post,...value};componentProps={...componentProps,post};render();}};
+ let commits=0;
+ const render=()=>root.render(React.createElement(React.Profiler,{id:'people',onRender:()=>{commits++;}},React.createElement(production('SocialInteractions').SocialInteractions,componentProps)));
+ flush(render);
+ function unmount(){if(mounted){flush(()=>root.unmount());mounted=false;document.body.removeChild(container);}}
+ t.after(unmount);
+ const find=(predicate:(n:HostNode)=>boolean)=>descendants(container).find(predicate)!;
+ const like=()=>find(n=>n.nodeName==='BUTTON'&&(n.getAttribute('class')??'').split(' ').includes('social-post-like'));
+ const dialog=()=>find(n=>n.nodeName==='DIALOG');
+ const trigger=()=>find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='查看按讚名單');
+ const button=(text:string)=>find(n=>n.nodeName==='BUTTON'&&n.textContent===text);
+ const rawClick=(node:HostNode)=>{assert(node,'control exists');node.dispatchEvent({type:'click',button:0});};
+ const click=(node:HostNode)=>flush(()=>rawClick(node));
+ const answer=async(index:number,value:any)=>{await React.act(async()=>{requests[index].resolve(value);await new Promise(r=>setImmediate(r));});};
+ const reject=async(index:number,cause:unknown=new ApiError({message:'unknown',network:true}))=>{await React.act(async()=>{requests[index].reject(cause);await new Promise(r=>setImmediate(r));});};
+ const replace=(values:any)=>{componentProps={...componentProps,...values};flush(render);};
+ const memberIds=()=>descendants(dialog()).filter(n=>n.getAttribute('data-member')).map(n=>n.getAttribute('data-member'));
+ return{client,post,requests,updates,container,like,dialog,trigger,button,click,rawClick,answer,reject,replace,unmount,memberIds,render,get commits(){return commits;}};
+}
+const member={user_id:'30000000-0000-4000-8000-000000000001',display_name:'合成測試會員'};
+const people=(items:any[]=[],cursor:string|null=null)=>({items,next_cursor:cursor});
+const ack=(h:ReturnType<typeof fixture>,liked=true)=>({post_id:h.post.post_id,liked,like_count:liked?1:0});
+for(const liked of [false,true])test(`pending ${liked?'unlike':'like'} open list must refresh on canonical ACK`,async t=>{
+ const h=fixture(t,liked);h.click(h.like());assert.equal(h.requests.length,1);assert(h.like().hasAttribute('disabled'));assert.equal(h.like().getAttribute('aria-pressed'),String(!liked));
+ h.click(h.trigger());assert.equal(h.dialog().open,true);await h.answer(1,people(liked?[member]:[]));assert.deepEqual(h.memberIds(),liked?[member.user_id]:[]);
+ await h.answer(0,ack(h,!liked));assert.equal(h.requests.length,3,'open list needs one ACK-driven GET');assert.equal(h.requests[2].path,h.requests[1].path);
+ await h.answer(2,people(liked?[]:[member]));assert.deepEqual(h.memberIds(),liked?[]:[member.user_id]);assert.equal(h.dialog().open,true);
+});
+for(const outcome of ['success','error'])test(`pre-ACK GET ${outcome} arriving after refresh cannot replace current rows or settle its busy state`,async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(0,ack(h));assert.equal(h.requests.length,3);
+ if(outcome==='success')await h.answer(1,people([],'stale'));else await h.reject(1,Error('obsolete'));
+ assert.equal(h.dialog().textContent.includes('載入中…'),true);assert.equal(h.dialog().textContent.includes('obsolete'),false);assert.equal(h.button('更多按讚會員'),undefined);
+ await h.answer(2,people([member]));assert.deepEqual(h.memberIds(),[member.user_id]);assert.equal(h.dialog().textContent.includes('載入中…'),false);
+});
+test('a pre-ACK page arriving after the refreshed page cannot restore obsolete membership',async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(0,ack(h));await h.answer(2,people([member]));await h.answer(1,people([],'old-cursor'));
+ assert.deepEqual(h.memberIds(),[member.user_id]);assert.equal(h.button('更多按讚會員'),undefined);assert.equal(h.requests.length,3);
+});
+for(const close of ['button','cancel'])test(`${close} while pending invalidates the list; ACK neither reopens nor steals focus`,async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());
+ if(close==='button')h.click(h.button('關閉名單'));else flush(()=>{const event:any={type:'cancel',bubbles:false};h.dialog().dispatchEvent(event);assert.equal(event.defaultPrevented,true);});
+ assert.equal(h.dialog().open,false);assert.equal(document.activeElement,h.trigger());const elsewhere=document.createElement('button');elsewhere.focus();
+ await h.answer(0,ack(h));await h.answer(1,people([member]));assert.equal(h.requests.length,2);assert.equal(h.dialog().open,false);assert.equal(document.activeElement,elsewhere);assert.deepEqual(h.memberIds(),[]);
+ h.click(h.trigger());assert.equal(h.requests.length,3);await h.answer(2,people([member]));assert.deepEqual(h.memberIds(),[member.user_id]);
+});
+test('closing after ACK refresh starts prevents late reads from changing a reopened dialog',async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people());await h.answer(0,ack(h));h.click(h.button('關閉名單'));h.click(h.trigger());
+ await h.answer(3,people([{...member,user_id:'fresh',display_name:'fresh'}]));await h.answer(2,people([member],'obsolete'));
+ assert.deepEqual(h.memberIds(),['fresh']);assert.equal(h.button('更多按讚會員'),undefined);assert.equal(h.dialog().open,true);
+});
+test('reopening during the same command uses a new read lifetime and refreshes it on ACK',async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());h.click(h.button('關閉名單'));h.click(h.trigger());await h.answer(1,people([member]));assert.deepEqual(h.memberIds(),[]);
+ await h.answer(2,people());await h.answer(0,ack(h));assert.equal(h.requests.length,4);await h.answer(3,people([member]));assert.deepEqual(h.memberIds(),[member.user_id]);
+});
+for(const invalid of [null,{post_id:'wrong',liked:true,like_count:1},{liked:false,like_count:1},{liked:true,like_count:'1'},{liked:true,like_count:-1}])test(`malformed ACK ${JSON.stringify(invalid)} does not refresh; exact retry does`,async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people());await h.answer(0,invalid===null?null:{...ack(h),...invalid});assert.equal(h.requests.length,2);assert.equal(h.updates.length,0);assert.equal(h.like().getAttribute('aria-pressed'),'false');
+ h.click(h.button('關閉名單'));h.click(h.like());assert.deepEqual(h.requests[2].body,h.requests[0].body);assert.deepEqual(h.requests[2].options,h.requests[0].options);h.click(h.trigger());await h.answer(3,people());await h.answer(2,ack(h));assert.equal(h.requests.length,5);await h.answer(4,people([member]));assert.deepEqual(h.memberIds(),[member.user_id]);
+});
+test('unknown then definitive rejection retains original command and does not treat list membership as ACK',async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people([member]));await h.reject(0);assert.equal(h.updates.length,0);assert.equal(h.like().textContent,'重試按讚 · 0');
+ h.click(h.button('關閉名單'));h.click(h.like());await h.reject(2,new ApiError({message:'denied',status:403}));assert.equal(h.updates.length,0);h.click(h.like());assert.deepEqual(h.requests[3].options,h.requests[0].options);assert.deepEqual(h.requests[3].body,h.requests[0].body);
+ h.click(h.trigger());await h.answer(4,people([member]));await h.answer(3,ack(h));assert.equal(h.requests.length,6);await h.answer(5,people([member]));assert.equal(h.updates.length,1);
+});
+test('initial known rejection starts no refresh; next explicit mutation gets a new key',async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people());await h.reject(0,new ApiError({message:'rate limited',status:429}));assert.equal(h.requests.length,2);assert.equal(h.updates.length,0);
+ h.click(h.button('關閉名單'));h.click(h.like());assert.notEqual(h.requests[2].options.idempotencyKey,h.requests[0].options.idempotencyKey);h.click(h.trigger());await h.answer(3,people());await h.answer(2,ack(h));assert.equal(h.requests.length,5);await h.answer(4,people([member]));
+});
+test('same-tick repeated activation still sends only the original POST',async t=>{
+ const h=fixture(t);flush(()=>{h.rawClick(h.like());h.rawClick(h.like());h.rawClick(h.trigger());});assert.equal(h.requests.filter(r=>r.method==='POST').length,1);await h.answer(1,people());await h.answer(0,ack(h));await h.answer(2,people([member]));assert.equal(h.requests.filter(r=>r.method==='POST').length,1);
+});
+test('ACK refresh starts at first page, invalidates old pagination, then preserves opaque next-page URL and dedupe',async t=>{
+ const h=fixture(t),other={...member,user_id:'other',display_name:'other'},next={...member,user_id:'next',display_name:'next'};h.click(h.like());h.click(h.trigger());await h.answer(1,people([other],'opaque /+?=&'));
+ h.click(h.button('更多按讚會員'));assert.equal(h.requests[2].path,`/social-posts/${h.post.post_id}/likes?cursor=opaque%20%2F%2B%3F%3D%26`);await h.answer(0,ack(h));assert.equal(h.requests[3].path,`/social-posts/${h.post.post_id}/likes`);
+ await h.answer(3,people([member],'fresh /'));await h.answer(2,people([other],'old'));assert.deepEqual(h.memberIds(),[member.user_id]);h.click(h.button('更多按讚會員'));assert.equal(h.requests[4].path,`/social-posts/${h.post.post_id}/likes?cursor=fresh%20%2F`);
+ await h.answer(4,people([member,next]));assert.deepEqual(h.memberIds(),[member.user_id,'next']);assert.equal(h.button('更多按讚會員'),undefined);
+});
+test('fresh first page remains authoritative and never synthesizes the liker from ACK',async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people([member]));await h.answer(0,ack(h));await h.answer(2,people());assert.deepEqual(h.memberIds(),[]);assert.equal(h.like().getAttribute('aria-pressed'),'true');assert.equal(h.trigger().textContent,'1 人按讚');
+});
+for(const status of [0,500])test(`refresh failure ${status} preserves safe prior rows and first-page manual retry without redoing the mutation`,async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people([member],'obsolete-cursor'));await h.answer(0,ack(h));await h.reject(2,new ApiError({message:'refresh unavailable',status,network:status===0}));
+ assert.deepEqual(h.memberIds(),[member.user_id]);assert.equal(h.dialog().textContent.includes('refresh unavailable'),true);assert.equal(h.like().hasAttribute('disabled'),false);assert.equal(h.requests.length,3);h.click(h.button('重試'));assert.equal(h.requests[3].path,h.requests[1].path);assert.deepEqual(h.memberIds(),[member.user_id]);await h.answer(3,people());assert.deepEqual(h.memberIds(),[]);assert.equal(h.requests.filter(r=>r.method==='POST').length,1);
+});
+for(const status of [401,403,404])test(`refresh authority denial ${status} clears prior private rows and cursor`,async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people([member],'old'));await h.answer(0,ack(h));await h.reject(2,new ApiError({message:'not visible',status}));assert.deepEqual(h.memberIds(),[]);assert(h.button('重試'));assert.equal(h.button('更多按讚會員'),undefined);assert.equal(h.requests.length,3);
+});
+for(const transition of ['generation','client','post'])for(const phase of ['before-ACK','during-refresh'])test(`${transition} ${phase} clears the old dialog and fences all old continuations`,async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());await h.answer(1,people([member]));if(phase==='during-refresh')await h.answer(0,ack(h));
+ const oldClient=h.client,props=transition==='generation'?(oldClient.sessionGeneration++,{}):transition==='client'?{client:{...oldClient}}:{post:{...h.post,post_id:'new-post'}};
+ const elsewhere=document.createElement('button');elsewhere.focus();h.replace(props);assert.equal(h.dialog().open,false);assert.deepEqual(h.memberIds(),[]);assert.equal(document.activeElement,elsewhere);
+ h.click(h.trigger());const fresh=h.requests.length-1;await h.answer(fresh,people([{...member,user_id:'fresh'}]));
+ if(phase==='before-ACK')await h.answer(0,ack(h));else await h.answer(2,people([member],'stale'));
+ assert.deepEqual(h.memberIds(),['fresh']);assert.equal(h.requests.length,fresh+1);assert.equal(h.dialog().open,true);assert.equal(document.activeElement,elsewhere);
+});
+test('session generation changed without a render stops old ACK from starting a GET',async t=>{
+ const h=fixture(t);h.click(h.like());h.click(h.trigger());h.client.sessionGeneration++;const commits=h.commits;await h.answer(0,ack(h));await h.answer(1,people([member]));assert.equal(h.commits,commits,'obsolete read causes no React commit, even before layout cleanup');assert.equal(h.requests.length,2);assert.equal(h.updates.length,0);assert.deepEqual(h.memberIds(),[]);
+});
+test('post A to B to A creates a new lifetime; old A GET cannot match by ID alone',async t=>{
+ const h=fixture(t);h.click(h.trigger());h.replace({post:{...h.post,post_id:'B'}});h.replace({post:h.post});h.click(h.trigger());await h.answer(1,people([{...member,user_id:'new-A'}]));await h.answer(0,people([member]));assert.deepEqual(h.memberIds(),['new-A']);
+});
+for(const phase of ['pending','refresh'])test(`account remount/unmount ${phase} prevents late callback, read or focus activity`,async t=>{
+ const old=fixture(t);old.click(old.like());old.click(old.trigger());if(phase==='refresh'){await old.answer(1,people());await old.answer(0,ack(old));}old.unmount();const next=fixture(t);next.click(next.trigger());await next.answer(0,people([{...member,user_id:'new-account'}]));const active=document.activeElement;
+ if(phase==='pending'){await old.answer(0,ack(old));await old.answer(1,people([member]));}else await old.answer(2,people([member]));assert.deepEqual(next.memberIds(),['new-account']);assert.equal(document.activeElement,active);assert.equal(next.requests.length,1);assert.equal(old.requests.length,phase==='pending'?2:3);
+});
+test('post props update alone is not a mutation ACK and never refreshes the dialog',async t=>{
+ const h=fixture(t);h.click(h.trigger());await h.answer(0,people());h.replace({post:{...h.post,liked:true,like_count:1}});assert.equal(h.requests.length,1);assert.deepEqual(h.memberIds(),[]);
+});
+test('a comment-like ACK is independent of the post people list and never triggers its refresh',async t=>{
+ const h=fixture(t);h.replace({initialOpen:true});
+ await h.answer(0,{items:[{comment_id:'comment',body:'comment',created_at:'2026-11-04T00:00:00.000000Z',edited_at:null,revision:1,author:{user_id:'author',display_name:'author'},mine:false,liked:false,like_count:0}],next_cursor:null});
+ h.click(h.trigger());await h.answer(1,people());const button=descendants(h.container).find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='留言讚 · 0')!;
+ h.click(button);assert.equal(h.requests[2].path,`/social-posts/${h.post.post_id}/comments/comment/like`);await h.answer(2,{liked:true,like_count:1});assert.equal(h.requests.length,3);assert.deepEqual(h.memberIds(),[]);assert.equal(button.getAttribute('aria-pressed'),'true');assert.equal(h.updates.length,0);
 });
