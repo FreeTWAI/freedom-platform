@@ -465,7 +465,7 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
           {!countUnconfirmed&&newerUnseen&&history.unread_count>0&&<p className="messages-meta" role="note">還有 {history.unread_count} 則較新的未讀訊息，顯示後會自動已讀。</p>}
           {readError&&<div className="banner banner-error" role="alert">{readError}<div className="messages-actions"><button className="btn btn-ghost" type="button" disabled={reading} onClick={()=>void markRead(history.items[0]?.message_id,true)}>重試標為已讀</button></div></div>}
           <form className="messages-compose" onSubmit={(event:FormEvent)=>{event.preventDefault();void send(selected.key);}}>
-            <ChatExtras target={selected.key} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(!held.current[selected.key])richDrafts.change(selected.key,value);}} onSendSticker={id=>void send(selected.key,id)}/>
+            <ChatExtras previewFeedback target={selected.key} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(!held.current[selected.key])richDrafts.change(selected.key,value);}} onSendSticker={id=>void send(selected.key,id)}/>
             <ChatInput id={`${uid}-compose`} label={kind==='world'?'世界聊天訊息':`在 ${history.channel.name} 發言`} value={draft} sending={Boolean(attempt)} hidden={Boolean(richDraft.sticker_id)} errorId={sendError?ids.error:undefined} mobile={mobile}
               onSend={()=>void send(selected.key)} onChange={value=>{idlePoll.current=resetChatPoll();if(!held.current[selected.key])setDrafts(drafts=>({...drafts,[selected.key]:value}));}}/>
             {attempt?.status==='unknown'&&<p className="messages-meta" role="note">{attempt.payload.sticker_id?'貼圖傳送結果尚未確認。重試只會確認原貼圖，其他草稿保留。':'原訊息已保留。請先重試確認結果，再修改內容或傳送貼圖。'}</p>}

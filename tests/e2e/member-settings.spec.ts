@@ -529,7 +529,7 @@ test('switching conversations ignores late responses and keeps a draft per recip
   await panel.getByRole('button',{name:/合成夥伴甲/}).click();
   await expect(threadRegion.getByRole('status')).toHaveText('正在讀取訊息…');
   // Start a new conversation from the real member directory while A is still loading.
-  await panel.getByLabel('搜尋會員').fill('示範');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
+  await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員').fill('示範');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   const results=panel.getByRole('list',{name:'會員搜尋結果'});
   await expect(results.getByRole('button',{name:/示範合作方/})).toBeVisible();
   await expect(results.getByRole('button',{name:/示範創作者/})).toHaveCount(0);
@@ -593,13 +593,13 @@ test('a slow re-read that started before a confirmed send or read never overwrit
   const peerA=list.getByRole('button',{name:/合成夥伴甲/});
   // Both re-reads snapshot the old state now and answer only after the write is confirmed.
   holding=true;await refreshList.click();await refreshThread.click();
-  await expect(refreshList).toHaveText('正在整理對話…');await expect(refreshThread).toHaveText('正在讀取訊息…');
+  await expect(refreshList).toHaveAttribute('aria-disabled','true');await expect(panel.getByRole('status').filter({hasText:'正在整理對話…'})).toBeVisible();await expect(refreshThread).toHaveText('正在讀取訊息…');
   await expect.poll(()=>held.length).toBeGreaterThanOrEqual(2);holding=false;
   await box.fill('競態中的確認訊息');await threadRegion.getByRole('button',{name:'送出',exact:true}).click();
   await expect(bubbles.last()).toHaveText('競態中的確認訊息');await expect(box).toHaveValue('');
   await box.fill('送出後的新草稿');
   await delivered(2);
-  await expect(refreshList).toHaveText('重新整理對話');await expect(refreshThread).toHaveText('重新讀取訊息');
+  await expect(refreshList).toHaveAttribute('aria-disabled','false');await expect(refreshList).toHaveAccessibleName('重新整理對話');await expect(refreshThread).toHaveText('重新讀取訊息');
   await expect(bubbles.last()).toHaveText('競態中的確認訊息');await expect(peerA).toContainText('你：競態中的確認訊息');
   await expect(box).toHaveValue('送出後的新草稿');expect(sends.length).toBe(1);
 
@@ -610,7 +610,7 @@ test('a slow re-read that started before a confirmed send or read never overwrit
   await threadRegion.getByRole('log').evaluate(node=>{node.scrollTop=node.scrollHeight});await visibility(page,'visible');
   await expect(threadRegion.getByRole('button',{name:'標為已讀',exact:true})).toHaveCount(0);await expect(page.getByRole('tab',{name:/私人訊息/})).toContainText('沒有未讀');
   await delivered(2);
-  await expect(refreshList).toHaveText('重新整理對話');await expect(refreshThread).toHaveText('重新讀取訊息');
+  await expect(refreshList).toHaveAttribute('aria-disabled','false');await expect(refreshList).toHaveAccessibleName('重新整理對話');await expect(refreshThread).toHaveText('重新讀取訊息');
   await expect(threadRegion.getByRole('button',{name:'標為已讀',exact:true})).toHaveCount(0);await expect(threadRegion.getByText(' · 未讀')).toHaveCount(0);
   await expect(peerA).not.toContainText('則未讀');await expect(page.getByRole('tab',{name:/私人訊息/})).toContainText('沒有未讀');
   await expect(box).toHaveValue('送出後的新草稿');expect(reads.length).toBe(1);

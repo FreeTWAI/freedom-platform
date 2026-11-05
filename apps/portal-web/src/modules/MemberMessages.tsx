@@ -613,12 +613,14 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   return <div className={`messages-layout chat-workspace${compact?' is-compact':''}`}>
     {singlePane&&peer&&picking&&<button type="button" className="btn btn-ghost messages-switch" aria-expanded={picking} aria-controls={`${uid}-picker`} onClick={switchPane}>回到目前對話</button>}
     <div id={`${uid}-picker`} hidden={singlePane&&Boolean(peer)&&!picking} className="messages-side">
-      <MemberPicker client={client} me={me} onSelect={id=>select(id,true)}/>
       <section className="stack" aria-labelledby={ids.list}>
-        <h2 id={ids.list} tabIndex={-1} className="member-section-title">對話</h2>
+        <div className="chat-list-toolbar"><h2 id={ids.list} tabIndex={-1} className="member-section-title">對話</h2>
+          <button className="btn btn-ghost" type="button" aria-label="開始新對話" title="開始新對話" aria-controls={`${uid}-discovery`} onClick={()=>focusMemberDiscovery(`${uid}-discovery`)}><span aria-hidden="true">＋</span></button>
+          {convStatus==='ready'&&<button className="btn btn-ghost" type="button" aria-label="重新整理對話" title="重新整理對話" aria-disabled={convRefresh.loading} onClick={()=>{if(!convRefresh.loading)void loadConversations(true);}}><span aria-hidden="true">↻</span></button>}
+        </div>
+        {convRefresh.loading&&<p role="status">正在整理對話…</p>}
         {convStatus==='loading'&&<p role="status">正在讀取對話…</p>}
         {convStatus==='error'&&<div className="banner banner-error" role="alert">對話讀取失敗：{convError}<div className="messages-actions"><button className="btn btn-ghost" type="button" onClick={()=>void loadConversations()}>重新讀取對話</button></div></div>}
-        {convStatus==='ready'&&<div className="messages-actions"><button className="btn btn-ghost" type="button" aria-disabled={convRefresh.loading} onClick={()=>{if(!convRefresh.loading)void loadConversations(true);}}>{convRefresh.loading?'正在整理對話…':'重新整理對話'}</button></div>}
         {convRefresh.error&&<p className="banner banner-error" role="alert">對話重新整理失敗：{convRefresh.error}</p>}
         {convStatus==='ready'&&(conversations.length===0?<p className="empty">還沒有私訊。可搜尋會員開始對話。</p>:<ul className="messages-list" aria-label="對話列表">
           {conversations.map(item=><li key={item.participant.user_id} className={item.unread_count?'is-unread':undefined}>
@@ -632,6 +634,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
         {convMore.error&&<p className="banner banner-error" role="alert">更多對話讀取失敗：{convMore.error}</p>}
         {convStatus==='ready'&&convNext!==null&&<button className="btn btn-ghost" type="button" disabled={convMore.loading} onClick={()=>void moreConversations()}>{convMore.loading?'正在讀取…':convMore.error?'重試載入更多對話':'載入更多對話'}</button>}
       </section>
+      <MemberPicker id={`${uid}-discovery`} client={client} me={me} onSelect={id=>select(id,true)}/>
     </div>
     <section hidden={singlePane&&(!peer||picking)} className="messages-thread" data-chat-open={Boolean(peer)&&!picking&&!compact} aria-labelledby={ids.thread} aria-busy={threadStatus==='loading'}>
       {!peer&&<><h2 id={ids.thread}>私人訊息</h2><p className="muted">從對話列表或會員搜尋選擇對象。</p></>}
@@ -664,7 +667,7 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
             if(!files.length)for(const item of Array.from(event.clipboardData.items)){if(item.kind==='file'){const file=item.getAsFile();if(file)files.push(file);}}
             if(files.length){event.preventDefault();attachImage(files);}
           }}>
-            <ChatExtras key={selection?.key??peer} target={peer} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(held.current[peer])return;richDrafts.change(peer,value);}} onSendSticker={id=>void send(peer,id)}/>
+            <ChatExtras previewFeedback key={selection?.key??peer} target={peer} draft={richDraft} disabled={Boolean(attempt)} onChange={value=>{if(held.current[peer])return;richDrafts.change(peer,value);}} onSendSticker={id=>void send(peer,id)}/>
             {messageImagesEnabled===true&&<div className="message-image-controls">
               <input ref={fileInput} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>{const files=Array.from(event.target.files??[]);event.target.value='';if(files.length)attachImage(files);}}/>
               <button className="btn btn-ghost" type="button" disabled={Boolean(attempt)} onClick={()=>fileInput.current?.click()}>附加圖片</button>
@@ -688,7 +691,14 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   </div>;
 }
 
-function MemberPicker({client,me,onSelect}:{client:PortalClient;me:string;onSelect:(id:string)=>void}){
+function focusMemberDiscovery(id:string){
+  const discovery=document.getElementById(id) as HTMLDetailsElement|null;
+  if(!discovery)return;
+  discovery.open=true;
+  discovery.querySelector<HTMLInputElement>('input')?.focus();
+}
+
+function MemberPicker({id,client,me,onSelect}:{id:string;client:PortalClient;me:string;onSelect:(id:string)=>void}){
   const uid=useId();
   const [query,setQuery]=useState(''),[searched,setSearched]=useState<string|null>(null);
   const [results,setResults]=useState<MemberCardData[]>([]),[next,setNext]=useState<number|null>(null);
@@ -715,8 +725,9 @@ function MemberPicker({client,me,onSelect}:{client:PortalClient;me:string;onSele
     }catch(cause){if(current===generation.current)setMore({loading:false,error:fail(cause)});}
   }
   const visible=results.filter(item=>item.user_id!==me&&!item.is_self);
-  return <section className="stack messages-search" aria-labelledby={`${uid}-picker`}>
-    <h2 id={`${uid}-picker`} className="member-section-title">新對話</h2>
+  return <details id={id} className="messages-search">
+    <summary id={`${uid}-picker`}>開始新對話</summary>
+    <div className="stack">
     <form className="stack" role="search" onSubmit={event=>void search(event)}>
       <label className="field"><span>搜尋會員</span><input type="search" value={query} maxLength={100} onChange={event=>setQuery(event.target.value)}/></label>
       <button className="btn btn-ghost" type="submit" disabled={!query.trim()||status==='loading'}>{status==='loading'?'搜尋中…':'搜尋會員'}</button>
@@ -728,5 +739,5 @@ function MemberPicker({client,me,onSelect}:{client:PortalClient;me:string;onSele
     </ul>)}
     {more.error&&<p className="banner banner-error" role="alert">更多會員讀取失敗：{more.error}</p>}
     {status==='ready'&&next!==null&&<button className="btn btn-ghost" type="button" disabled={more.loading} onClick={()=>void loadMore()}>{more.loading?'正在讀取…':more.error?'重試載入更多會員':'載入更多會員'}</button>}
-  </section>;
+  </div></details>;
 }
