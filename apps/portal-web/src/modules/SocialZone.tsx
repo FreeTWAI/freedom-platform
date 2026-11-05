@@ -730,7 +730,7 @@ export function SocialZone({client, canReview = false, viewer, focusPost, shortV
           {shortVideos && post.kind === 'link' && youtubeLinkKind(post.url) === 'short' && <span className="social-platform-badge social-short-badge">Short</span>}
           {post.kind !== 'note' && <h3>{post.title}</h3>}
           {post.note && <SocialBody text={post.note} client={client} mentions={post.mentions} onTag={selectTag}/>}
-          {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb post={post}/>}
+          {shortVideos && view.inline && post.kind === 'link' && youtubeLinkKind(post.url) ? <InlineVideo url={post.url} title={post.title} poster={post.thumbnail_url}/> : <Thumb key={post.thumbnail_url} post={post}/>}
           {post.kind !== 'note' && <p className="social-points">推廣點擊 {post.total_points}</p>}
           <SocialInteractions onCommentsChanged={view.inline === false ? () => { void reconcileShortComments(post); } : undefined} onTag={selectTag} initialOpen={view.commentsOpen} client={client} post={post} canHide={canHide} onUpdate={update => {if(client!==currentClient.current||feedSession!==client.sessionGeneration)return;++confirmedWrites.current;setItems(current => current.map(item => item.post_id === post.post_id ? {...item, ...update} : item));}}/>
           <div className="social-actions">
