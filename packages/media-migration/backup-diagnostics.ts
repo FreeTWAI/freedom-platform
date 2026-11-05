@@ -140,6 +140,7 @@ export const BACKUP_DIAGNOSTIC_CODES: readonly string[] = Object.freeze([
   'release_floor_legacy_target_changed',
   'release_floor_not_started',
   'release_floor_publish_intent_invalid',
+  'release_floor_release_recovery_invalid',
   'release_floor_request_invalid',
   'release_floor_schedule_unverified',
   'release_floor_schema_invalid',

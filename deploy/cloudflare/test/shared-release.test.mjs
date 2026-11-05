@@ -41,8 +41,9 @@ import { admitAutomaticRelease, automaticDisposition } from '../../shared-releas
 import { admitImage } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
-import { requireFailedReleaseHandoff } from '../../shared-release/handoff-admission.mjs';
+import { requireFailedReleaseHandoff, requireFailedReleaseMigration } from '../../shared-release/handoff-admission.mjs';
 import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff } from '../../shared-release/portable/handoff-recovery.mjs';
+import { reconcileCommittedRelease } from '../../shared-release/portable/migration-recovery.mjs';
 
 async function diskFixture(t, prefix) {
   const candidates = process.env.FREEDOM_RELEASE_TEST_DISK_ROOT ? [process.env.FREEDOM_RELEASE_TEST_DISK_ROOT]
@@ -3869,6 +3870,453 @@ test('hosted handoff binds original evidence without backup credentials and cont
     };
     assert.equal((await runOperator(image.options)).length, 2);
   } finally { process.exitCode = previousExitCode; }
+});
+
+// A confirmed COMMIT whose run lost its lease before deploy. Recovery only reads
+// back and abandons that run; a fresh entry of the same source then deploys.
+function failedReleaseMigrationFixture(source = { sourceSha: sha, sourceTree: tree }) {
+  const f = failedReleaseHandoffFixture(source);
+  f.state.receipt.operatorProgress = [{ name: 'preflight', reportedStatus: 'passed', flagChanges: [] },
+    { name: 'migration', reportedStatus: 'failed', failureCode: 'release_lease_lost',
+      leaseLoss: { cause: 'heartbeat_timeout', heldMs: 290007, sinceHeartbeatMs: 49890, heartbeats: 12 } }];
+  f.admission = { ...requestFromEnvironment({ ...environment(), RELEASE_MODE: 'deploy', RELEASE_RECOVER_MIGRATION_RUN_ID: '77' }),
+    ...source, mainShaObserved: main, admittedAt: new Date(0).toISOString(),
+    original: f.admission.original, triggeredBy: f.admission.triggeredBy };
+  return f;
+}
+function migrationRecoveryResult() {
+  const f = codeResult(); f.admission.recoverMigrationRunId = 77;
+  f.value.phases[0].migrationRecovery = { previousRunId: 77, previousRunAttempt: 1, status: 'abandoned_after_readback' };
+  return f;
+}
+
+test('migration recovery input is deploy-only and never combined with backup, handoff or automatic admission', () => {
+  const deploy = { ...environment(), RELEASE_MODE: 'deploy' }, invalid = { code: 'release_migration_recovery_request_invalid' };
+  assert.equal(requestFromEnvironment({ ...deploy, RELEASE_RECOVER_MIGRATION_RUN_ID: '77' }).recoverMigrationRunId, 77);
+  assert.equal(Object.hasOwn(requestFromEnvironment({ ...deploy, RELEASE_RECOVER_MIGRATION_RUN_ID: '' }), 'recoverMigrationRunId'), false);
+  for (const id of ['100', '0', '-1', '77\n', '1e2', '077', ' 77']) {
+    assert.throws(() => requestFromEnvironment({ ...deploy, RELEASE_RECOVER_MIGRATION_RUN_ID: id }), invalid);
+  }
+  for (const mode of ['plan', 'check']) {
+    assert.throws(() => requestFromEnvironment({ ...environment(), RELEASE_MODE: mode, RELEASE_RECOVER_MIGRATION_RUN_ID: '77' }), invalid);
+  }
+  assert.throws(() => requestFromEnvironment({ ...environment(), RELEASE_MODE: 'handoff',
+    RELEASE_RECOVER_RELEASE_RUN_ID: '76', RELEASE_RECOVER_MIGRATION_RUN_ID: '77' }), invalid);
+  assert.throws(() => requestFromEnvironment({ ...deploy, RELEASE_RECOVER_BACKUP_RUN_ID: '76', RELEASE_RECOVER_MIGRATION_RUN_ID: '77' }), invalid);
+  assert.throws(() => requestFromEnvironment({ ...deploy, GITHUB_EVENT_NAME: 'workflow_run', RELEASE_TRIGGER_RUN_ID: '11',
+    RELEASE_TRIGGER_RUN_ATTEMPT: '2', RELEASE_RECOVER_MIGRATION_RUN_ID: '77' }), { code: 'release_automatic_request_invalid' });
+});
+
+test('migration recovery authenticates only a terminal run that lost its lease during migration', async () => {
+  for (const target of ['staging-next', 'next']) {
+    const f = failedReleaseMigrationFixture(); f.admission.target = target; f.state.receipt.target = target;
+    const proof = await requireFailedReleaseMigration(f.api, f.admission, { ...installation,
+      image: `ghcr.io/freetwai/freedom-release-operator@sha256:${'9'.repeat(64)}` });
+    assert.equal(proof.format, 'freedom.verified-failed-release-migration/v1'); assert.equal(proof.runId, 77);
+    assert.equal(proof.target, target); assert.equal(proof.operatorImage, installation.image); assert(Object.isFrozen(proof));
+    assert.equal(proof.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+    assert(f.calls.every(call => call.method === 'GET'));
+  }
+  const automatic = failedReleaseMigrationFixture();
+  automatic.state.run.event = 'workflow_run'; automatic.admission.target = 'next'; automatic.state.receipt.target = 'next';
+  automatic.state.receipt.automatic = { triggerRunId: 11, triggerRunAttempt: 2 }; automatic.state.artifact.name += '-next';
+  automatic.state.jobs.push({ ...structuredClone(automatic.state.jobs[1]), name: 'production', conclusion: 'failure' });
+  automatic.state.jobs[1].conclusion = 'success'; automatic.state.jobs[1].steps[0].conclusion = 'success';
+  assert.equal((await requireFailedReleaseMigration(automatic.api, automatic.admission, installation)).target, 'next');
+  const boundary = { code: 'release_migration_recovery_boundary_invalid' };
+  for (const mutate of [p => { p[1].failureCode = 'release_migration_commit_unconfirmed'; }, p => { delete p[1].leaseLoss; },
+    p => { p[1].leaseLoss.cause = 'private'; }, p => { p[1].leaseLoss.sinceHeartbeatMs = p[1].leaseLoss.heldMs + 1; },
+    p => { p[0].reportedStatus = 'failed'; }, p => { p[1].reportedStatus = 'passed'; }, p => { p[1].name = 'deploy'; },
+    p => { p.push({ name: 'deploy', reportedStatus: 'failed', failureCode: 'release_lease_lost' }); }, p => { p.shift(); }]) {
+    const bad = failedReleaseMigrationFixture(); mutate(bad.state.receipt.operatorProgress);
+    await assert.rejects(requireFailedReleaseMigration(bad.api, bad.admission, installation), boundary);
+  }
+  // Handoff and migration boundaries never authorize each other.
+  const handoff = failedReleaseHandoffFixture(), migration = failedReleaseMigrationFixture();
+  await assert.rejects(requireFailedReleaseMigration(handoff.api, migration.admission, installation), boundary);
+  await assert.rejects(requireFailedReleaseHandoff(migration.api, handoff.admission, installation),
+    { code: 'release_handoff_recovery_boundary_invalid' });
+  for (const mutate of [s => { s.run.conclusion = 'success'; }, s => { s.run.actor.id++; },
+    s => { s.jobs[1].steps[0].conclusion = 'success'; }, s => { s.artifact.digest = 'invalid'; }, s => { s.receipt.mode = 'handoff'; },
+    s => { s.receipt.providerOutcome = 'not_started'; }, s => { s.receipt.sourceSha = main; }, s => { s.receipt.target = 'next'; },
+    s => { s.receipt.configSha256 = '9'.repeat(64); }, s => { s.receipt.completedAt = '2026-10-26T00:00:00Z'; }]) {
+    const bad = failedReleaseMigrationFixture(); mutate(bad.state);
+    await assert.rejects(requireFailedReleaseMigration(bad.api, bad.admission, installation),
+      { code: 'release_migration_recovery_evidence_invalid' });
+  }
+  for (const patch of [{ mode: 'handoff' }, { releaseKind: undefined }, { recoverRunId: 76 }, { recoverMigrationRunId: 100 },
+    { recoverMigrationRunId: undefined }]) {
+    const bad = failedReleaseMigrationFixture();
+    await assert.rejects(requireFailedReleaseMigration(bad.api, { ...bad.admission, ...patch }, installation),
+      { code: 'release_migration_recovery_request_invalid' });
+    assert.equal(bad.calls.length, 0);
+  }
+});
+
+function abandonedReleaseFloor(stop = 'committed') {
+  const f = floorFixture(), original = { ...f.request, target: 'next', releaseKind: 'independent' };
+  const candidate = { sourceSha: sha, sourceTree: tree, schemaLedger: f.after };
+  f.add(f.event('release-begin-v2', undefined, undefined, { request: original, candidate }));
+  if (stop !== 'begin') f.add(f.event('intent', 'migration', f.commit, { operation: 'commit' }));
+  if (stop !== 'begin' && stop !== 'intent') f.add(f.event('committed', 'migration', { ...f.commit, ledger: f.after }));
+  if (stop === 'passed') f.add(f.event('passed', 'migration', { transactionId: '123', commitStatus: 'confirmed',
+    ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: migrationLedgerDigest(f.after) }));
+  const recovery = { format: 'freedom.verified-failed-release-migration/v1', runId: 12, runAttempt: 1, sourceSha: sha,
+    sourceTree: tree, target: 'next', controllerSha: main, operatorImage: installation.image, configSha256: installation.configSha256,
+    artifactId: 78, artifactDigest: 'sha256:' + '8'.repeat(64), receiptSha256: '9'.repeat(64), completedAt: '2026-11-04T21:53:57.454Z' };
+  const proof = { format: 'freedom.abandoned-committed-release/v1', recovery, settledBy: { runId: 13, runAttempt: 1,
+    controllerSha: main, operatorImage: installation.image, configSha256: installation.configSha256 },
+    transactionId: '123', migrationOutcome: 'committed_ledger_verified', sourceSha: sha, sourceTree: tree, workerSourceSha: main,
+    bindingsSha256: '4'.repeat(64), ledgerSha256: migrationLedgerDigest(f.after), materialPolicySha256: '5'.repeat(64),
+    readOnly: true, observedAt: '2026-11-04T22:30:00.000Z' };
+  return { ...f, original, candidate, proof, abandon: (value = proof, extra = {}) => f.event('release-abandoned', 'migration', value, extra) };
+}
+
+test('abandoned committed release keeps the raised floor and admits only a fresh release of that source', () => {
+  const f = abandonedReleaseFloor();
+  let state = f.add(f.abandon());
+  assert.equal(state.pending, null); assert.equal(state.sourceSha, sha); assert.equal(state.deployedSourceSha, main);
+  assert.deepEqual(state.schemaLedger, f.after); assert.equal(state.schemaVersion, 2);
+  assert.throws(() => replayReleaseFloor([...f.chain, f.abandon()], f.options), /release_floor_stage_mismatch/);
+  const next = { ...f.original, runId: 13 }, run = (kind, stage, proof, extra) => f.event(kind, stage, proof, { runId: 13, ...extra });
+  const any = { isAncestor: () => true }, descendant = 'e'.repeat(40);
+  const evidence = { format: 'freedom.verified-legacy-deployment/v1', target: 'next', sourceSha: descendant, sourceTree: tree,
+    deploymentId: 1, statusId: 2, admittedRunId: 14, admittedRunAttempt: 1, completedAt: '2026-11-04T22:40:00Z', verification: [{}, {}] };
+  const adopted = f.event('legacy-source-adopted', undefined, { evidence, previousSourceSha: sha, bindingsSha256: '4'.repeat(64),
+    ledgerSha256: migrationLedgerDigest(f.after), materialPolicySha256: '5'.repeat(64), readOnly: true, observedAt: '2026-11-04T22:41:00Z' });
+  const backup = f.event('backup-begin', undefined, undefined, { request: { ...f.request, runId: 14 } });
+  // Until this source is deployed: no backup, adoption, legacy release or other source, even with any ancestry.
+  for (const [event, code] of [[backup, /release_floor_backup_source_changed/], [adopted, /release_floor_legacy_adoption_invalid/],
+    [f.event('begin', undefined, undefined, { request: f.request, candidate: f.candidate }), /release_floor_unsettled/],
+    [f.event('release-begin-v2', undefined, undefined, { request: { ...next, sourceSha: descendant },
+      candidate: { ...f.candidate, sourceSha: descendant } }), /release_floor_unsettled/]]) {
+    assert.throws(() => replayReleaseFloor([...f.chain, event], any), code);
+  }
+  f.add(f.event('release-begin-v2', undefined, undefined, { request: next, candidate: f.candidate }));
+  assert.equal(replayReleaseFloor(f.chain, f.options).state.pending.previousSourceSha, main);
+  // The original COMMIT is never repeated; only the read-only schema proof passes.
+  assert.throws(() => replayReleaseFloor([...f.chain, run('intent', 'migration', f.commit, { operation: 'commit' })], f.options),
+    /release_floor_commit_intent_invalid/);
+  f.add(run('passed', 'migration', { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: migrationLedgerDigest(f.after) }));
+  f.add(run('intent', 'deploy', { sourceSha: sha, previousSourceSha: main, previousVersion: f.id, configSha256: '3'.repeat(64),
+    automaticRetry: false }, { operation: 'publish' }));
+  assert.equal(f.add(run('passed', 'deploy', { sourceSha: sha, providerConfirmed: true, versionId: f.id })).deployedSourceSha, sha);
+  f.add(run('passed', 'health', { sourceSha: sha, statusCode: 200, schemaVerified: true, smokePassed: true }));
+  state = f.add(run('passed', 'handoff', { cleanupVerified: true, migrationVerified: true }));
+  assert.equal(state.pending, null); assert.equal(state.deployedSourceSha, sha); assert.deepEqual(state.schemaLedger, f.after);
+  for (const event of [backup, adopted]) assert.doesNotThrow(() => replayReleaseFloor([...f.chain, event], any));
+});
+
+test('committed release abandonment rejects proofs that differ from the retained COMMIT, Worker, floor or runs', () => {
+  const f = abandonedReleaseFloor(), invalid = /release_floor_(release_recovery|request)_invalid/;
+  assert.doesNotThrow(() => replayReleaseFloor([...f.chain, f.abandon()], f.options));
+  for (const mutate of [p => { p.readOnly = false; }, p => { p.transactionId = '124'; },
+    p => { p.migrationOutcome = 'aborted_ledger_verified'; }, p => { p.workerSourceSha = sha; },
+    p => { p.ledgerSha256 = migrationLedgerDigest(f.before); }, p => { p.materialPolicySha256 = '6'.repeat(64); },
+    p => { p.bindingsSha256 = '6'.repeat(64); }, p => { p.sourceSha = main; }, p => { p.sourceTree = main; },
+    p => { p.format = 'freedom.abandoned-backup/v1'; }, p => { p.recovery.format = 'freedom.verified-failed-release-handoff/v1'; },
+    p => { p.recovery.runId = 77; }, p => { p.recovery.runAttempt = 2; }, p => { p.recovery.target = 'staging-next'; },
+    p => { p.recovery.sourceSha = main; }, p => { p.recovery.controllerSha = sha; },
+    p => { p.recovery.operatorImage = `ghcr.io/freetwai/freedom-release-operator@sha256:${'9'.repeat(64)}`; },
+    p => { p.recovery.configSha256 = '9'.repeat(64); }, p => { p.recovery.receiptSha256 = 'private'; },
+    p => { p.recovery.artifactDigest = 'invalid'; }, p => { p.recovery.artifactId = 0; },
+    p => { p.observedAt = '2026-11-04T21:00:00Z'; }, p => { p.observedAt = 'later'; }, p => { delete p.recovery; },
+    p => { p.settledBy.runId = 12; }, p => { p.settledBy.configSha256 = '9'.repeat(64); },
+    p => { p.settledBy.operatorImage = 'docker.io/other'; }, p => { delete p.settledBy; }]) {
+    const proof = structuredClone(f.proof); mutate(proof);
+    assert.throws(() => replayReleaseFloor([...f.chain, f.abandon(proof)], f.options), invalid);
+  }
+  assert.throws(() => replayReleaseFloor([...f.chain, f.abandon(f.proof, { runId: 13 })], f.options), /release_floor_stage_mismatch/);
+  // Only a confirmed COMMIT with no later intent or passed stage, never a backup or seven-phase release.
+  const stale = /release_floor_(release_recovery_invalid|stage_mismatch)/;
+  for (const stop of ['begin', 'intent', 'passed']) {
+    const g = abandonedReleaseFloor(stop);
+    for (const stage of ['migration', 'deploy']) {
+      assert.throws(() => replayReleaseFloor([...g.chain, g.event('release-abandoned', stage, g.proof)], g.options), stale);
+    }
+  }
+  const legacy = floorFixture(); legacy.add(legacy.begin); legacy.runBackup('backup-before', main);
+  legacy.add(legacy.event('intent', 'migration', legacy.commit, { operation: 'commit' }));
+  legacy.add(legacy.event('committed', 'migration', { ...legacy.commit, ledger: legacy.after }));
+  assert.throws(() => replayReleaseFloor([...legacy.chain, legacy.event('release-abandoned', 'migration', f.proof)], legacy.options), stale);
+  const backup = floorFixture(); backup.add(backup.event('backup-begin', undefined, undefined, { request: { ...backup.request, sourceSha: main } }));
+  for (const stage of ['backup', 'migration']) {
+    assert.throws(() => replayReleaseFloor([...backup.chain, backup.event('release-abandoned', stage, f.proof)], backup.options), stale);
+  }
+});
+
+test('release predecessor may trail the floor only for a release of the committed source', () => {
+  const split = { sourceSha: sha, deployedSourceSha: main, bindingsSha256: '4'.repeat(64) };
+  const worker = { sourceSha: main, bindingsSha256: '4'.repeat(64) };
+  assertReleasePredecessor(worker, split, sha);
+  assertReleasePredecessor(worker, { ...split, sourceSha: main }, 'e'.repeat(40));
+  for (const [before, sourceSha] of [[worker, main], [worker, 'e'.repeat(40)], [worker, undefined],
+    [{ ...worker, sourceSha: sha }, sha], [{ ...worker, bindingsSha256: '5'.repeat(64) }, sha]]) {
+    assert.throws(() => assertReleasePredecessor(before, split, sourceSha), /release_entry_predecessor_changed/);
+  }
+});
+
+async function committedReleaseFixture(t, stop = 'committed') {
+  const f = await adoptionFixture(t), sql = 'CREATE TABLE next_fixture(id integer);\n';
+  await writeFile(join(f.sourceRoot, 'migrations/190_next.sql'), sql);
+  const candidate = f.commit(), ledger = [...f.seed.state.schemaLedger, { name: '190_next.sql', sha256: migrationDigest(sql) }];
+  const hosted = failedReleaseMigrationFixture(candidate);
+  const evidence = await requireFailedReleaseMigration(hosted.api, hosted.admission, installation);
+  const chain = [{ sha256: hash(JSON.stringify(f.seed)), record: { data: structuredClone(f.seed) } }];
+  let appends = 0, released = 0, inspections = 0, held = true;
+  const reopenFloor = () => openReleaseFloor({ sourceRoot: f.sourceRoot, intentDirectory: f.sourceRoot, store: {
+    target: 'staging-next', load: async () => structuredClone(chain), readAuthority: async () => structuredClone(f.legacy),
+    append: async ({ data }) => { appends++; const row = { sha256: hash(JSON.stringify(data)), record: { data } }; chain.push(row); return row; },
+  } });
+  const floor = await reopenFloor(), original = { ...hosted.admission, runId: 77, runAttempt: 1,
+    operatorImage: installation.image, configSha256: installation.configSha256 };
+  delete original.recoverMigrationRunId;
+  const attempt = { source: candidate.sourceSha, tree: candidate.sourceTree, database: 'fixture', transactionId: '1503143',
+    beforeDigest: migrationLedgerDigest(f.seed.state.schemaLedger), afterDigest: migrationLedgerDigest(ledger), automaticRetry: false };
+  if (stop !== 'none') await floor.beginIndependent(original, { ...candidate, schemaLedger: ledger });
+  if (!['none', 'begin'].includes(stop)) await floor.intent('migration', 'commit', attempt);
+  if (['committed', 'passed'].includes(stop)) await floor.committed({ ...attempt, schemaVersion: 190, ledger });
+  if (stop === 'passed') await floor.passed('migration', { transactionId: attempt.transactionId, commitStatus: 'confirmed',
+    ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: attempt.afterDigest });
+  appends = 0;
+  const rows = { identity: { database: 'fixture', role: 'fixture_migrator', session_role: 'fixture_migrator', schema: 'public' },
+    readback: {}, status: 'committed', ledger: structuredClone(ledger), policies: structuredClone(f.legacy.retained172.materialPolicy.policies),
+    gc: { policies: 1, enabled: false, domain_enabled: false, fences: 0 }, sessions: { remaining: 0 }, onQuery() {} }, queries = [];
+  const q = { async query(sql, params) {
+    queries.push(sql); rows.onQuery(sql);
+    assert.match(sql, /^(BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY|SET LOCAL statement_timeout|SELECT|ROLLBACK)/);
+    if (sql.includes('current_database() database')) return { rows: [{ ...rows.identity, ...(sql.includes('current_schema()') ? {} : rows.readback) }] };
+    if (sql.includes('pg_xact_status')) { assert.deepEqual(params, [attempt.transactionId]); return { rows: [{ status: rows.status }] }; }
+    if (sql.includes('schema_migrations')) return { rows: structuredClone(rows.ledger) };
+    if (sql.includes('domain_media_storage_policy')) return { rows: structuredClone(rows.policies) };
+    if (sql.includes('asset_maintenance_policy')) return { rows: [{ ...rows.gc }] };
+    if (sql.includes('pg_stat_activity')) {
+      assert.deepEqual(params, [999, 'fixture_migrator', 'fixture_backup']); return { rows: [{ ...rows.sessions }] };
+    }
+    if (sql.includes("current_setting('server_version_num')")) return { rows: [{ major: 18 }] };
+    return { rows: [] };
+  }, release() { released++; } };
+  const workers = [{ sourceSha: f.current.sourceSha, versionId: '11111111-1111-4111-8111-111111111111',
+    bindingsSha256: f.seed.state.bindingsSha256 }], controller = new AbortController();
+  const args = { floor, pool: { connect: async () => q }, database: 'fixture', role: 'fixture_migrator',
+    deployer: { inspect: async () => structuredClone(workers[Math.min(inspections++, workers.length - 1)]) },
+    lease: { pid: 999, signal: controller.signal, assertHeld() {
+      if (!held) throw Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' });
+    } },
+    request: { ...hosted.admission, operatorImage: installation.image, configSha256: installation.configSha256,
+      migrationRecoveryEvidence: evidence } };
+  return { ...f, candidate, ledger, attempt, evidence, floor, reopenFloor, chain, rows, queries, workers, args, controller,
+    appends: () => appends, released: () => released, loseLease: () => { held = false; } };
+}
+
+test('committed migration recovery reads back the original COMMIT and appends one abandonment without SQL mutation', async t => {
+  const f = await committedReleaseFixture(t), before = f.floor.state();
+  assert.equal(before.sourceSha, f.candidate.sourceSha); assert.equal(before.deployedSourceSha, f.current.sourceSha);
+  assert.deepEqual(before.pending.intents, { 'migration:commit': f.attempt });
+  assert.deepEqual(await reconcileCommittedRelease(f.args), { previousRunId: 77, previousRunAttempt: 1, status: 'abandoned_after_readback' });
+  assert.equal(f.appends(), 1); assert.equal(f.released(), 2);
+  assert.equal(f.queries.filter(sql => sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY').length, 2);
+  assert(!f.queries.some(sql => /\b(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|GRANT|REVOKE|COMMIT|TRUNCATE)\b/.test(sql)));
+  const record = f.chain.at(-1).record.data;
+  assert.equal(record.kind, 'release-abandoned'); assert.equal(record.runId, 77); assert.equal(record.stage, 'migration');
+  assert.deepEqual(record.proof.recovery, f.evidence); assert.equal(record.proof.settledBy.runId, 100);
+  assert.equal(record.proof.transactionId, f.attempt.transactionId); assert.equal(record.proof.workerSourceSha, f.current.sourceSha);
+  const floor = await f.reopenFloor();
+  assert.deepEqual(floor.state(), { ...before, pending: null });
+  await assert.rejects(reconcileCommittedRelease({ ...f.args, floor }), { code: 'release_migration_recovery_binding_invalid' });
+  assert.equal(f.appends(), 1);
+  // The same run then releases this committed source through its own entry.
+  assertReleasePredecessor(f.workers[0], floor.state(), f.candidate.sourceSha);
+  assert.throws(() => assertReleasePredecessor(f.workers[0], floor.state(), f.current.sourceSha), /release_entry_predecessor_changed/);
+  await floor.beginIndependent(f.args.request, { ...f.candidate, schemaLedger: f.ledger });
+  await floor.passed('migration', { outcome: 'unchanged', readOnly: true, ledgerVerified: true, runtimeGrantsVerified: true,
+    ledgerSha256: f.attempt.afterDigest });
+  await floor.intent('deploy', 'publish', { sourceSha: f.candidate.sourceSha, previousSourceSha: f.current.sourceSha,
+    previousVersion: f.workers[0].versionId, configSha256: '8'.repeat(64), automaticRetry: false });
+  await floor.passed('deploy', { sourceSha: f.candidate.sourceSha, providerConfirmed: true, versionId: '22222222-2222-4222-8222-222222222222' });
+  await floor.passed('health', { sourceSha: f.candidate.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true });
+  const settled = await floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  assert.equal(settled.pending, null); assert.equal(settled.deployedSourceSha, f.candidate.sourceSha);
+  assert.deepEqual(settled.schemaLedger, f.ledger);
+  assert.equal(f.chain.filter(row => row.record.data.operation === 'commit').length, 1);
+});
+
+test('a second lease loss after the recovery begin cannot replay migration or bypass the new pending run', async t => {
+  for (const migrationPassed of [false, true]) {
+    const f = await committedReleaseFixture(t);
+    await reconcileCommittedRelease(f.args);
+    const candidate = { ...f.candidate, schemaLedger: f.ledger };
+    await f.floor.beginIndependent(f.args.request, candidate);
+    if (migrationPassed) await f.floor.passed('migration', { outcome: 'unchanged', readOnly: true,
+      ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: f.attempt.afterDigest });
+    f.loseLease();
+    assert.throws(() => f.args.lease.assertHeld(), { code: 'release_lease_lost' });
+    const before = f.floor.state(), writes = f.appends(), reads = f.queries.length;
+    assert.equal(before.pending.stage, migrationPassed ? 1 : 0);
+    assert.equal(before.pending.request.runId, 100);
+    assert.deepEqual(before.pending.intents, {});
+    assert.equal(before.pending.committed, undefined);
+    const floor = await f.reopenFloor();
+    const request = { ...f.args.request, runId: 101 };
+    await assert.rejects(floor.beginIndependent(request, candidate), { code: 'release_floor_unsettled' });
+    // Both the original failure and the new run lack authority to abandon this pending state.
+    for (const runId of [77, 100]) {
+      await assert.rejects(reconcileCommittedRelease({ ...f.args, floor, request: { ...request,
+        recoverMigrationRunId: runId, migrationRecoveryEvidence: { ...f.evidence, runId } } }),
+      { code: 'release_migration_recovery_binding_invalid' });
+      assert.throws(() => floor.handoffRecoveryState({ ...f.evidence, runId }), { code: 'release_floor_stage_mismatch' });
+    }
+    await assert.rejects(floor.intent('migration', 'commit', f.attempt),
+      { code: migrationPassed ? 'release_floor_stage_mismatch' : 'release_floor_commit_intent_invalid' });
+    assert.deepEqual(floor.state(), before);
+    assert.equal(f.appends(), writes); assert.equal(f.queries.length, reads);
+    assert.equal(before.sourceSha, f.candidate.sourceSha); assert.equal(before.deployedSourceSha, f.current.sourceSha);
+    assert.deepEqual(before.schemaLedger, f.ledger);
+    assert.equal(f.chain.filter(row => row.record.data.operation === 'commit').length, 1);
+  }
+});
+
+test('committed migration recovery appends nothing unless COMMIT, Worker, ledger, policy, GC, sessions and lease all hold', async t => {
+  const lost = () => Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' }), changed = 'release_migration_recovery_state_changed';
+  const on = (f, match, effect) => { f.rows.onQuery = sql => { if (sql.includes(match)) effect(); }; };
+  for (const [code, mutate] of [
+    ['release_migration_recovery_outcome_unresolved', f => { f.rows.status = 'aborted'; f.rows.ledger = structuredClone(f.seed.state.schemaLedger); }],
+    ['release_migration_recovery_outcome_unresolved', f => { f.rows.status = 'in progress'; }],
+    ['release_migration_recovery_outcome_unresolved', f => { f.rows.ledger.pop(); }],
+    ['release_migration_observe_identity', f => { f.rows.identity.schema = 'private'; }],
+    ['release_migration_recovery_binding_invalid', f => { f.rows.readback = { session_role: 'fixture_app' }; }],
+    [changed, f => { f.workers[0].sourceSha = f.candidate.sourceSha; }], [changed, f => { f.workers[0].bindingsSha256 = '9'.repeat(64); }],
+    [changed, f => { f.workers.push({ ...f.workers[0], versionId: '22222222-2222-4222-8222-222222222222' }); }],
+    [changed, f => { f.workers.push({ ...f.workers[0], sourceSha: f.candidate.sourceSha }); }],
+    [changed, f => { f.rows.policies[0].revision = 'changed'; }], [changed, f => { f.rows.gc.enabled = true; }],
+    [changed, f => { f.rows.gc.domain_enabled = true; }], [changed, f => { f.rows.gc.fences = 1; }],
+    [changed, f => { f.rows.gc.policies = 2; }], [changed, f => { f.rows.sessions.remaining = 1; }],
+    ['release_floor_database_ledger_changed', f => on(f, 'SET LOCAL', () => f.rows.ledger.push({ name: '191_extra.sql', sha256: '0'.repeat(64) }))],
+    ['release_lease_lost', f => f.loseLease()], ['release_lease_lost', f => on(f, 'pg_xact_status', f.loseLease)],
+    ['release_lease_lost', f => on(f, 'pg_stat_activity', () => f.controller.abort(lost()))],
+    ['release_floor_external_state_changed', f => on(f, 'pg_stat_activity', () => f.chain.push({ sha256: 'f'.repeat(64), record: { data: {} } }))],
+  ]) {
+    const f = await committedReleaseFixture(t), before = f.floor.state(); mutate(f);
+    await assert.rejects(reconcileCommittedRelease(f.args), { code });
+    assert.equal(f.appends(), 0); assert.deepEqual(f.floor.state(), before);
+  }
+  const f = await committedReleaseFixture(t), binding = { code: 'release_migration_recovery_binding_invalid' };
+  for (const patch of [{ migrationRecoveryEvidence: { ...f.evidence, runId: 78 } }, { recoverMigrationRunId: 78 }, { recoverRunId: 76 },
+    { mode: 'handoff' }, { releaseKind: undefined }, { runId: 77 }, { sourceSha: f.current.sourceSha }, { target: 'next' },
+    { configSha256: '9'.repeat(64) }, { migrationRecoveryEvidence: { ...f.evidence, artifactDigest: 'invalid' } },
+    { migrationRecoveryEvidence: { ...f.evidence, operatorImage: `ghcr.io/freetwai/freedom-release-operator@sha256:${'9'.repeat(64)}` } },
+    { migrationRecoveryEvidence: { ...f.evidence, format: 'freedom.verified-failed-release-handoff/v1' } }]) {
+    await assert.rejects(reconcileCommittedRelease({ ...f.args, request: { ...f.args.request, ...patch } }), binding);
+  }
+  await assert.rejects(reconcileCommittedRelease({ ...f.args, database: 'other' }), binding);
+  assert.equal(f.appends(), 0); assert.equal(f.queries.length, 0);
+  // Unknown COMMIT, no commit intent, no release or a later stage stop before any readback.
+  for (const stop of ['none', 'begin', 'intent', 'passed']) {
+    const g = await committedReleaseFixture(t, stop);
+    await assert.rejects(reconcileCommittedRelease(g.args), binding);
+    assert.equal(g.appends(), 0); assert.equal(g.queries.length, 0);
+  }
+});
+
+test('migration recovery result requires and publishes only the bounded abandonment summary', () => {
+  const { admission, value } = migrationRecoveryResult(), incomplete = { code: 'release_migration_recovery_incomplete' };
+  value.phases[0].migrationRecovery.private = 'never publish';
+  const published = validateOperatorResult(value, admission, installation, 'e'.repeat(64));
+  assert.deepEqual(published[0].migrationRecovery, { previousRunId: 77, previousRunAttempt: 1, status: 'abandoned_after_readback' });
+  assert(!JSON.stringify(published).includes('never publish'));
+  assert(published.slice(1).every(phase => !Object.hasOwn(phase, 'migrationRecovery')));
+  for (const patch of [undefined, { previousRunId: 78 }, { previousRunAttempt: 0 }, { status: 'committed' }]) {
+    const bad = structuredClone(value);
+    if (patch) Object.assign(bad.phases[0].migrationRecovery, patch); else delete bad.phases[0].migrationRecovery;
+    assert.throws(() => validateOperatorResult(bad, admission, installation, 'e'.repeat(64)), incomplete);
+  }
+  // The recovering run never commits SQL itself.
+  const committed = structuredClone(value);
+  Object.assign(committed.phases[1], { outcome: 'committed', commitStatus: 'confirmed', transactionId: '123' });
+  assert.throws(() => validateOperatorResult(committed, admission, installation, 'e'.repeat(64)), incomplete);
+  assert(!Object.hasOwn(validateOperatorResult(value, codeResult().admission, installation, 'e'.repeat(64))[0], 'migrationRecovery'));
+});
+
+test('operator request carries authenticated migration recovery evidence only when admitted', async t => {
+  for (const recovered of [true, false]) {
+    const image = await operatorFixture(t), result = recovered ? migrationRecoveryResult() : codeResult(), hosted = failedReleaseMigrationFixture();
+    image.options.admission = result.admission;
+    if (recovered) image.options.migrationRecoveryEvidence = await requireFailedReleaseMigration(hosted.api, hosted.admission, installation);
+    const oldRun = image.options.run;
+    image.options.run = async (cmd, args, ...rest) => {
+      if (args[0] !== 'run') return oldRun(cmd, args, ...rest);
+      const input = await readFile(join(image.temporaryRoot, 'input/request.json'), 'utf8'), request = JSON.parse(input);
+      assert.deepEqual(request.requiredPhases, ['preflight', 'migration', 'deploy', 'health', 'handoff']);
+      assert.equal(Object.hasOwn(request, 'migrationRecoveryEvidence'), recovered);
+      if (recovered) assert.deepEqual(request.migrationRecoveryEvidence, { ...image.options.migrationRecoveryEvidence });
+      await writeFile(join(image.temporaryRoot, 'output/result.json'), JSON.stringify({ ...result.value, requestSha256: hash(input) }));
+    };
+    assert.equal((await runOperator(image.options))[0].migrationRecovery?.previousRunId, recovered ? 77 : undefined);
+  }
+});
+
+test('hosted migration recovery authenticates the failed run before any Deployment write and keeps its failure visible', async t => {
+  const previousExitCode = process.exitCode;
+  try {
+    const source = await adoptionFixture(t);
+    for (const [failureCode, operatorFailure] of [['release_lease_lost'], ['release_migration_commit_unconfirmed'],
+      ['release_lease_lost', 'release_migration_recovery_binding_invalid'],
+      ['release_lease_lost', 'release_migration_recovery_state_changed']]) {
+      const f = failedReleaseMigrationFixture(source.current); f.state.receipt.operatorProgress[1].failureCode = failureCode;
+      const root = await diskFixture(t, 'fp-migration-controller-'), runner = join(root, 'runner'); await mkdir(runner);
+      const writes = [], api = async (path, options) => {
+        if (options?.method !== 'POST') return path.includes('/deployments?') ? [] : f.api(path, options);
+        writes.push(path.endsWith('/deployments') ? 'deployment' : options.body.state);
+        return path.endsWith('/deployments') ? { id: 1, sha: options.body.ref } : {};
+      };
+      api.readArtifact = f.api.readArtifact;
+      let executed = 0; process.exitCode = previousExitCode;
+      await releaseMain({ ...environment(), RELEASE_MODE: 'deploy', RELEASE_RECOVER_MIGRATION_RUN_ID: '77',
+        RELEASE_COMMAND: 'execute', RELEASE_SHA: source.current.sourceSha, RELEASE_ENABLED: 'true',
+        RELEASE_CONFIG_JSON: config, RELEASE_CONFIG_SHA256: installation.configSha256, RELEASE_OPERATOR_IMAGE: installation.image,
+        RELEASE_SOURCE_DIRECTORY: source.sourceRoot, RUNNER_TEMP: runner, PUBLIC_RECEIPT_DIRECTORY: join(root, 'public'),
+        GITHUB_STEP_SUMMARY: join(root, 'summary.md'), PATH: process.env.PATH },
+      { api, async executeOperator({ admission, migrationRecoveryEvidence, recoveryEvidence, handoffRecoveryEvidence, onProgress }) {
+        executed++; assert.equal(admission.recoverMigrationRunId, 77); assert.equal(migrationRecoveryEvidence.runId, 77);
+        assert.equal(recoveryEvidence, undefined); assert.equal(handoffRecoveryEvidence, undefined);
+        if (operatorFailure) throw Object.assign(new Error(operatorFailure), { code: operatorFailure });
+        await onProgress([{ name: 'preflight', reportedStatus: 'passed' }]);
+        const result = migrationRecoveryResult();
+        return validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64));
+      } });
+      const receipt = JSON.parse(await readFile(join(root, 'public/receipt.json')));
+      const summary = await readFile(join(root, 'summary.md'), 'utf8');
+      if (operatorFailure) {
+        assert.equal(process.exitCode, 1); assert.equal(executed, 1); assert.equal(receipt.status, 'failed');
+        assert.equal(receipt.error, operatorFailure); assert.equal(receipt.migrationReconciliation.runId, 77);
+        assert.deepEqual(writes, ['deployment', 'in_progress', 'failure']);
+        assert.match(summary, /Requested migration recovery for original failed release: \[77\]/);
+        assert.doesNotMatch(summary, /committed migration|Migration recovery confirmed|COMMIT read back|release settled|no SQL (?:is|was) repeated/);
+      } else if (failureCode === 'release_lease_lost') {
+        assert.equal(process.exitCode, previousExitCode); assert.equal(executed, 1); assert.equal(receipt.status, 'passed');
+        assert.equal(receipt.migrationReconciliation.runId, 77);
+        assert.equal(receipt.migrationReconciliation.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+        assert.equal(receipt.phases[0].migrationRecovery.previousRunId, 77);
+        assert.deepEqual(writes, ['deployment', 'in_progress', 'success']);
+        assert.match(summary, /Requested migration recovery for original failed release: \[77\]/);
+        assert.match(summary, /Migration recovery confirmed: COMMIT read back and original release settled; no SQL was repeated/);
+      } else {
+        assert.equal(process.exitCode, 1); assert.equal(executed, 0); assert.equal(receipt.status, 'failed');
+        assert.equal(receipt.error, 'release_migration_recovery_boundary_invalid'); assert.deepEqual(writes, []);
+      }
+      assert(f.calls.every(call => call.method === 'GET'));
+    }
+  } finally { process.exitCode = previousExitCode; }
+});
+
+test('workflow forwards migration recovery to manual admission and deploy only, never to automatic production', async () => {
+  const text = await readFile(new URL('../../../.github/workflows/shared-release.yml', import.meta.url), 'utf8');
+  assert.match(text, /\n      recover_migration_run_id:\n        description: '[^'\n]*never repeats SQL'\n        required: false\n        type: string\n/);
+  const line = 'RELEASE_RECOVER_MIGRATION_RUN_ID: ${{ inputs.recover_migration_run_id }}';
+  const [admission, rest] = text.split('\njobs:\n')[1].split('\n  deploy:'), [deploy, production] = rest.split('\n  production:');
+  assert.equal(admission.split(line).length, 2); assert.equal(deploy.split(line).length, 2);
+  assert(!production.includes('RECOVER_'));
 });
 
 function leaseFixture() {
