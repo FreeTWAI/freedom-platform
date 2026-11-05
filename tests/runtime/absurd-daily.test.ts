@@ -2,10 +2,41 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+import {createHash} from 'node:crypto';
 import {transformSync} from 'esbuild';
+import sharp from 'sharp';
+import * as jsxRuntime from 'react/jsx-runtime';
 import {GAMES,seconds} from '../../apps/portal-web/src/games/domain.js';
 import {beginStamps,cashDeck,challengeUrl,gradePhoto,newCash,newStamps,pause,photoPose,resume,RULES,seedOf,sortCash,stamp,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_KEY,HANDOFF_TTL,parseGameDraft,readGameDraft,saveGameDraft,clearGameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
+
+test('AD-brand uses the approved transparent wordmark with local sizing and native home links',()=>{
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/AbsurdDaily.tsx',import.meta.url),'utf8');
+  const header=source.match(/<header className="(?:ad|fw-arcade)-header"[\s\S]*?<\/header>/);
+  assert.ok(header,'the actual public game header');
+  const compiled=transformSync(`export default function Header(){return ${header[0]};}`,{loader:'tsx',jsx:'automatic',format:'cjs'}).code;
+  const module={exports:{} as {default?:()=>any}};
+  runInNewContext(compiled,{module,exports:module.exports,require:(id:string)=>{
+    assert.equal(id,'react/jsx-runtime');return jsxRuntime;
+  }});
+  const tree=module.exports.default!(),[brand,home]=tree.props.children,logo=brand.props.children[0];
+  assert.equal(brand.type,'a');assert.equal(brand.props.href,'/');assert.equal(brand.props.onClick,undefined);
+  assert.equal(home.type,'a');assert.equal(home.props.href,'/');assert.equal(home.props.onClick,undefined);
+  assert.equal(logo.type,'img');assert.equal(logo.props.src,'/brand/freedom-workshop-compact-transparent.png');
+  assert.equal(logo.props.alt,'自由工坊');assert.equal(logo.props.width,'396');assert.equal(logo.props.height,'132');
+  assert.equal(tree.props.style?.flexWrap,'wrap');
+  assert.equal(logo.props.style?.width,132);assert.equal(logo.props.style?.height,44);
+  assert.equal(logo.props.style?.maxWidth,'none');assert.equal(logo.props.style?.flexShrink,0);
+});
+
+test('AD-brand reuses the exact PR 1201 PNG with a complete transparent 3:1 image',async()=>{
+  const bytes=readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url));
+  assert.equal(createHash('sha256').update(bytes).digest('hex'),'f33136a09613c25752b1a24ad8aa9ef76dde93f31425bb6c5e201fe6d51aa10e');
+  const {data,info}=await sharp(bytes).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  assert.equal(info.width,396);assert.equal(info.height,132);assert.equal(info.channels,4);
+  for(const [x,y] of [[0,0],[395,0],[0,131],[395,131]])assert.equal(data[(y*396+x)*4+3],0);
+  assert.ok(data.some((value,index)=>index%4===3&&value===255),'the wordmark retains opaque image content');
+});
 test('AD-2 validates seed and emits a public challenge without result or identity',()=>{for(const bad of [0,-1,Infinity,NaN,'1x','0x12','4294967296',null,{},1.5])assert.equal(seedOf(bad),20261023);assert.equal(seedOf('4294967295'),4294967295);const u=new URL(challengeUrl('https://example.org','photo',12));assert.equal(u.pathname,'/play');assert.deepEqual([...u.searchParams],[['game','photo'],['seed','12']]);});
 test('AD-5 every seeded deck contains exactly one million and six unique decoys; last note is fixed',()=>{for(let seed=1;seed<=400;seed++){const d=cashDeck(seed);assert.equal(d.length,30);assert.equal(new Set(d.map(c=>c.id)).size,30);assert.equal(d.reduce((sum,c)=>sum+c.amount,0),RULES.targetCash);assert.equal(d.filter(c=>c.valid).length,24);assert.equal(new Set(d.filter(c=>!c.valid).map(c=>c.label)).size,6);assert.equal(d.at(-1)?.amount,100000);assert.deepEqual(d,cashDeck(seed));}assert.notDeepEqual(cashDeck(1),cashDeck(2));});
 test('AD-5 wrong sort changes neither progress nor money; stale and rapid actions do not consume a card',()=>{let s=newCash(9);const valid=cashDeck(9)[0].valid;let out=sortCash(s,0,!valid,0);assert.equal(out.kind,'wrong');assert.equal(out.state.index,0);assert.equal(out.state.amount,0);assert.equal(out.state.mistakes,1);s=out.state;assert.equal(sortCash(s,0,valid,20).state,s);s=sortCash(s,0,valid,200).state;assert.equal(s.index,1);assert.equal(sortCash(s,0,valid,400).state,s);for(const now of [NaN,Infinity,-1])assert.equal(sortCash(s,1,true,now).state,s);});
