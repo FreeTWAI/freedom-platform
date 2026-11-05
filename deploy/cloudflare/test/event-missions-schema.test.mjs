@@ -55,3 +55,18 @@ test('registration policy197 appends to exact mission196 history and preserves t
  assert.match(sql,/ADD COLUMN registration_policy text NOT NULL DEFAULT 'guest_allowed'/);
  assert.match(sql,/CHECK \(registration_policy IN \('guest_allowed','community_member'\)\)/);
 });
+
+
+test('tester accounts198 appends to exact registration197 history with private self-reported progress and feedback',()=>{
+ const registration=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=197),profile(197));
+ const next=resolveMigrationPlan(sources(),profile(198),registration.ledger);
+ assert.deepEqual(next.pending,['202_tester_map_accounts.sql']);
+ assert.deepEqual(next.ledger.slice(0,-1),registration.ledger);
+ assert.notEqual(next.ledger_digest,registration.ledger_digest);
+ const sql=sources().find(row=>row.name==='202_tester_map_accounts.sql').sql;
+ assert.match(sql,/CREATE TABLE tester_map_accounts/);
+ assert.match(sql,/CREATE TABLE tester_map_feedback/);
+ assert.match(sql,/user_id uuid PRIMARY KEY REFERENCES users\(user_id\) ON DELETE CASCADE/);
+ assert.match(sql,/PRIMARY KEY\(user_id,step_id\)/);
+ assert.doesNotMatch(sql,/\b(?:INSERT INTO|UPDATE|ALTER TABLE)\s+(?:contributions|community_event_rsvps|community_event_helpers|friendships|social_achievement)/i);
+});

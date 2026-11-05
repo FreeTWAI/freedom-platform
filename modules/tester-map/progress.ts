@@ -1,6 +1,6 @@
 // Device-local quest progress. Same pattern as newcomer-guides/engine/preferences.ts:
-// a versioned key, injected storage and defensive parsing. Nothing here is sent to
-// the server; progress and medals are not an official record, XP or reward.
+// a versioned key, injected storage and defensive parsing. Signed-in sync is owned
+// by account-service / the portal importer. Medals are not acceptance, XP or rewards.
 import { TESTER_GROUP_IDS, type Localized, type TesterGroupId } from './areas.js';
 import { QUEST_PATHS, QUEST_STAGES, QUEST_STEP_IDS, type QuestStage } from './quest.js';
 
@@ -75,7 +75,7 @@ export const MILESTONE_MEDALS: Record<Exclude<MedalId, `stage:${string}`>, { nam
   },
 };
 
-/** Every medal, earned or not, in display order. Derived only from local progress. */
+/** Every medal, earned or not, in display order. Derived only from the supplied private progress. */
 export function testerMedals(progress: TesterProgress): { id: MedalId; name: Localized; rule?: Localized; stage?: QuestStage; earned: boolean }[] {
   const complete = (stageId: string) => {
     const stage = QUEST_STAGES.find(item => item.id === stageId);

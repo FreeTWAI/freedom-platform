@@ -238,6 +238,8 @@ const FOUNDATION_NAMES = [
   '197_event_registration_policy.sql',
   // Catalog publication and one administrator-guild book binding; no new runtime capability.
   '198_member_shared_skill_books_language_guild.sql',
+  // Private self-reported tester progress/feedback; no ranking, release or contribution authority.
+  '202_tester_map_accounts.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
