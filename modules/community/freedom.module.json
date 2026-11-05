@@ -84,7 +84,12 @@
     "tests/runtime/event-helper-resume.test.ts",
     "tests/e2e/event-helper-resume.spec.ts",
     "tests/runtime/event-route-identity.test.ts",
-    "tests/e2e/event-route-identity.spec.ts"
+    "tests/e2e/event-route-identity.spec.ts",
+    "modules/community/event-prize-icons.ts",
+    "apps/portal-web/src/modules/EventPrizeIcon.tsx",
+    "apps/portal-web/src/modules/EventPrizeIconPicker.tsx",
+    "apps/portal-web/src/modules/EventPrizeIconPicker.css",
+    "tests/runtime/event-prize-icons.test.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
@@ -108,7 +113,8 @@
     "modules/community/skill-collaboration.ts",
     "modules/community/skill-share-content.ts",
     "modules/community/social-posts.ts",
-    "modules/community/companion-mainline.ts"
+    "modules/community/companion-mainline.ts",
+    "modules/community/event-prize-icons.ts"
   ],
   "dependencies": [
     "command-core",
