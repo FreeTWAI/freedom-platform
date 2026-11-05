@@ -11,11 +11,11 @@ import './party.css';
 export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:number;onBack:()=>void;onResult:(r:RunResult)=>void}) {
   const spec=PARTY_GAMES.find(g=>g.id===game)!;
   const live=useRef<PartyRun>(newParty(game,seed)),stage=useRef<PartyStage|null>(null),host=useRef<HTMLDivElement>(null);
-  const frame=useRef(0),last=useRef<number|null>(null),lastUi=useRef(0),loop=useRef<(t:number)=>void>(()=>{}),gesture=useRef<{id:number;x:number;y:number;round:number|null}|null>(null);
+  const frame=useRef(0),last=useRef<number|null>(null),lastDraw=useRef<number|null>(null),lastUi=useRef(0),loop=useRef<(t:number)=>void>(()=>{}),gesture=useRef<{id:number;x:number;y:number;round:number|null}|null>(null);
   const audio=useRef<AudioContext|null>(null),soundRef=useRef(false),motionRef=useRef(!matchMedia('(prefers-reduced-motion: reduce)').matches),settled=useRef(false);
   const [,repaint]=useState(0),[ready,setReady]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[retry,setRetry]=useState(0),[restart,setRestart]=useState(false),[sound,setSound]=useState(false),[motion,setMotion]=useState(motionRef.current);
   function refresh(){repaint(n=>n+1);}
-  function stop(){cancelAnimationFrame(frame.current);frame.current=0;last.current=null;gesture.current=null;}
+  function stop(){cancelAnimationFrame(frame.current);frame.current=0;last.current=null;lastDraw.current=null;gesture.current=null;}
   function draw(){if(!stage.current)return;const s=live.current;stage.current.update(s,motionRef.current);if(host.current){const stats=stage.current.stats();syncDiagnostics(host.current,{renderCalls:stats.calls,renderTriangles:stats.triangles,renderGeometries:stats.geometries,renderTextures:stats.textures,anchors:JSON.stringify(stage.current.anchors()),elapsed:s.elapsed,round:s.game==='holiday'?s.round:0,lane:s.game==='chair'?s.lane:0,tofuOffset:s.game==='tofu'?tofuPosition(s)[tofuAxis(s)]-s.layers[s.layers.length-1][tofuAxis(s)]:''});}}
   function safeDraw(){try{draw();return true;}catch{live.current=pauseParty(live.current);stop();setReady(false);setError('場景暫時無法顯示。本局仍保留，重建後可繼續。');refresh();return false;}}
   function pauseRun(message='這局先停在這裡。'){const next=pauseParty(live.current);if(next===live.current)return;live.current=next;stop();setNotice(message);safeDraw();refresh();}
@@ -27,7 +27,13 @@ export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:num
     if(dt>R.stallMs){pauseRun('畫面剛才停了一下，已替你暫停。準備好再繼續。');return;}
     const before=live.current;live.current=advanceParty(before,dt);
     if(live.current.score!==before.score)soundEffect(live.current.score>before.score);
-    if(!safeDraw())return;
+    // Advance every simulation frame; bound the expensive 3D presentation to 30fps.
+    // Input, pause, context recovery and the final frame still draw immediately.
+    const drawInterval=1000/30,drawElapsed=lastDraw.current===null?0:t-lastDraw.current;
+    if(lastDraw.current===null||drawElapsed>=drawInterval||live.current.status!=='playing'){
+      lastDraw.current=lastDraw.current===null?t:t-drawElapsed%drawInterval;
+      if(!safeDraw())return;
+    }
     if(t-lastUi.current>=R.uiMs||live.current.status==='done'){lastUi.current=t;refresh();}
     if(live.current.status==='playing')kick();else stop();
   };

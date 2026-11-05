@@ -54,7 +54,8 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
   function mitten(p:Group){const g=group(p);ball(g,C.mint,0,0,0,.55,.22,.57);for(let i=0;i<4;i++)ball(g,C.mint,(i-1.5)*.25,0,.49,.16,.18,.23);ball(g,C.red,0,.2,.12,.22,.03,.25);rb(g,C.cream,0,-.01,-.6,.64,.3,.4);bakeRigidGroup(g,stepGeometry);return g;}
   let lastMix:{amount:number;x:number|undefined;y:number|undefined}|null=null;
   let lastKnead:{held:number;motion:boolean}|null=null;
-  function build(run:CookingRun){lastKnead=null;lastMix=null;openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,.7,.1);objects=null;return;}camera.lookAt(0,0,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
+  let lastStatic:string|null=null;
+  function build(run:CookingRun){lastStatic=null;lastKnead=null;lastMix=null;openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,.7,.1);objects=null;return;}camera.lookAt(0,0,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
    if(['slice','knead','fold'].includes(s.kind)){rb(body,C.edge,0,.04,.1,6.4,.28,4.5);rb(body,'#e7bd84',0,.2,.1,6.1,.08,4.2);rb(body,'#d1a56d',-2.68,.25,.1,.05,.012,3.5);}
    if(s.kind==='slice'){for(let i=0;i<Math.min(8,s.goal);i++){const p=food(body,s.shape,.95);p.position.set(-1.9+i*3.8/(s.goal-1),.28,.05);pieces.push(p);}rb(tool,C.dark,0,.25,-.7,.23,.2,.9);rb(tool,'#bec4bd',0,.22,.18,.19,.07,1.25);rb(tool,C.cream,0,.37,-.62,.07,.02,.43);}
    if(s.kind==='knead'){pieces.push(food(body,'dough',3.8));pieces[0].position.set(0,.26,.1);mitten(tool);}
@@ -94,7 +95,14 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    // its food/tool. Keep the presented frame until one of those inputs changes.
    if(s.kind==='mix'&&lastMix&&lastMix.amount===a.amount&&lastMix.x===point?.x&&lastMix.y===point?.y)return;
    if(s.kind==='knead'&&lastKnead&&lastKnead.held===held&&lastKnead.motion===motion)return;
+   // These scenes have no ambient animation. Retain their actual rendered frame
+   // until a visible gesture, placement, knife pulse or liquid level changes.
+   const staticKey=s.kind==='slice'?`slice/${a.count}/${point?.x}/${point?.y}/${motion?pulse:0}`
+    :s.kind==='fold'||s.kind==='plate'?`${s.kind}/${a.count}/${point?.x}/${point?.y}`
+    :s.kind==='pour'?`pour/${a.amount}/${a.holdAt!==null}`:null;
+   if(staticKey!==null&&staticKey===lastStatic)return;
    renderer.render(scene,camera);
+   lastStatic=staticKey;
    lastKnead=s.kind==='knead'?{held,motion}:null;
    lastMix=s.kind==='mix'?{amount:a.amount,x:point?.x,y:point?.y}:null;
   }

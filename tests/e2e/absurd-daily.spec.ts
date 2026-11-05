@@ -874,7 +874,9 @@ test('UX-7: a real-clock 3D cooking journey completes mixing, timed kneading and
   const recipe=recipeOf('rice-balls')!,errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await page.setViewportSize({width:390,height:844});await page.goto('/play?game=kitchen&practice=1&recipe=rice-balls&seed=42');await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();
   for(const [index,s]of recipe.steps.entries()){
     if(s.kind==='mix'){const first=await scenePoint(page,.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();for(let i=1;i<=s.goal*32;i++){const a=i*Math.PI/16,p=await scenePoint(page,.5+.3*Math.cos(a),.52+.3*Math.sin(a));await page.mouse.move(p.x,p.y);}await page.mouse.up();}
-    if(s.kind==='knead')for(let i=0;i<s.goal;i++){await page.locator('.ck-game').focus();await page.keyboard.down('Space');await page.waitForTimeout(s.holdMs);await page.keyboard.up('Space');await page.waitForTimeout(160);}
+    // One native key press owns the real hold interval. Separate traced down/up
+    // calls also hold the key during the intervening trace snapshots.
+    if(s.kind==='knead')for(let i=0;i<s.goal;i++){await page.locator('.ck-game').focus();await page.keyboard.press('Space',{delay:s.holdMs});await page.waitForTimeout(160);}
     if(s.kind==='fold')for(const direction of s.directions){await page.waitForTimeout(160);await page.locator('.ck-game').focus();await page.keyboard.press(`Arrow${direction[0].toUpperCase()+direction.slice(1)}`);}
     if(index<recipe.steps.length-1)await page.getByRole('button',{name:/^下一步：/}).click();
   }

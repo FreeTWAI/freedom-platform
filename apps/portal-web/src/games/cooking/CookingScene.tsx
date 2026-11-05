@@ -21,7 +21,14 @@ export function CookingScene(props:Props){
   void import('./kitchen-stage').then(({createKitchenStage})=>{if(!current||!host.current)return;owned=createKitchenStage(host.current,()=>{if(current){cancelAnimationFrame(frame.current);owned?.dispose();stage.current=null;captureRef.current=null;setMode('light');setNotice('已切換輕量畫面，這一盤繼續。');onSettled(true);}});stage.current=owned;owned.update(live.current.readRun(),live.current.point,performance.now(),motion.current);clearTimeout(deadline);captureRef.current=final=>{if(!stage.current)throw Error('料理畫面未就緒');stage.current.update(final,null,performance.now(),false);return stage.current.capture();};setMode('3d');onSettled(true);}).catch(()=>{clearTimeout(deadline);owned?.dispose();stage.current=null;captureRef.current=null;fallback();});
   return()=>{current=false;clearTimeout(deadline);cancelAnimationFrame(frame.current);owned?.dispose();stage.current=null;captureRef.current=null;};
  },[attempt,lightweight,onSettled,sceneRequested]);
- useEffect(()=>{if(mode!=='3d')return;if(run.status!=='playing'){draw(performance.now());return;}const loop=(time:number)=>{draw(time);if(stage.current)frame.current=requestAnimationFrame(loop);};frame.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(frame.current);},[mode,run.status]);
+ useEffect(()=>{
+  if(mode!=='3d')return;if(run.status!=='playing'){draw(performance.now());return;}
+  // CookingGame keeps its full simulation cadence. Rasterize this decorative
+  // 3D view at 30fps while retaining the latest run, gesture and exact capture.
+  const interval=1000/30;let lastDraw:number|null=null;
+  const loop=(time:number)=>{const elapsed=lastDraw===null?0:time-lastDraw;if(lastDraw===null||elapsed>=interval){lastDraw=lastDraw===null?time:time-elapsed%interval;draw(time);}if(stage.current)frame.current=requestAnimationFrame(loop);};
+  frame.current=requestAnimationFrame(loop);return()=>cancelAnimationFrame(frame.current);
+ },[mode,run.status]);
  useEffect(()=>{if(mode==='3d'&&run.status!=='playing')draw(performance.now());},[run,point,mode]);
  useEffect(()=>{const media=matchMedia('(prefers-reduced-motion: reduce)'),change=()=>{motion.current=!media.matches;draw(performance.now());};media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
  const step=currentStep(run),target=plateTarget(run),guide=mode==='3d'&&run.status==='playing';
