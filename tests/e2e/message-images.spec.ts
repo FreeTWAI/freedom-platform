@@ -141,14 +141,51 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
   });
 
   for(const mode of ['page','dock'] as const){
-    async function openComposer(page:Page){
-      const thread=await openDirect(page);
+    async function openComposer(page:Page,email='maker@local.test'){
+      const thread=await openDirect(page,true,email);
       if(mode==='page')return thread;
       await openChat(page);const dock=page.locator('.floating-message-panel');
       await dock.getByRole('tab',{name:/^私人訊息/}).click();await dock.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await dock.getByLabel('搜尋會員').fill('示範需求者');
       await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();await dock.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
       return dock.locator('#messages-panel-direct .messages-thread');
     }
+    test(`${mode} failed stored image retries its canonical read without resending or losing the draft`,async({page,e2eAuthPool})=>{
+      await page.setViewportSize({width:mode==='page'?390:1440,height:900});
+      const sender=await isolatedGuardSender(e2eAuthPool),thread=await openComposer(page,sender.email);
+      const caption=`Image retry ${crypto.randomUUID()}`,draft=`Keep draft ${crypto.randomUUID()}`;
+      const reads:string[]=[],uploads:string[]=[],sends:string[]=[];let failRead=true,payload='';
+      page.on('request',request=>{
+        if(request.method()!=='POST')return;const path=new URL(request.url()).pathname;
+        if(/^\/api\/v1\/me\/conversations\/[^/]+\/images$/.test(path))uploads.push(path);
+        if(/^\/api\/v1\/me\/conversations\/[^/]+\/messages$/.test(path)){sends.push(path);payload=request.postData()!;}
+      });
+      await page.route(/\/api\/v1\/me\/conversations\/[^/]+\/messages\/[^/]+\/image$/,async route=>{
+        expect(route.request().method()).toBe('GET');reads.push(route.request().url());
+        if(failRead)return route.fulfill({status:503,headers:{'Cache-Control':'no-store'},contentType:'application/problem+json',json:{type:'about:blank',title:'Service Unavailable',status:503,code:'controlled_image_unavailable'}});
+        const response=await route.fetch();expect(response.status()).toBe(200);expect(response.headers()['cache-control']).toContain('no-store');
+        await route.fulfill({response});
+      });
+      await thread.locator('input[type=file]').setInputFiles(image);await thread.getByRole('textbox').fill(caption);
+      await thread.getByRole('button',{name:'送出',exact:true}).click();await expect(thread.getByRole('textbox')).toHaveValue('');
+      const row=thread.locator('.messages-bubbles>li').filter({hasText:caption}),retry=row.getByRole('button',{name:'重試圖片',exact:true});
+      await row.scrollIntoViewIfNeeded();await expect(retry).toBeVisible();await expect(row.getByRole('status')).toContainText('圖片無法載入');
+      expect(reads).toHaveLength(1);await expect(row.locator('img.message-image')).toHaveCount(0);
+      await thread.getByRole('textbox').fill(draft);
+      const refreshed=page.waitForResponse(response=>response.request().method()==='GET'&&/^\/api\/v1\/me\/conversations\/[^/]+\/messages$/.test(new URL(response.url()).pathname));
+      await thread.getByRole('button',{name:'重新讀取訊息',exact:true}).click();expect((await refreshed).status()).toBe(200);
+      await expect(thread.getByRole('button',{name:'重新讀取訊息',exact:true})).toHaveAttribute('aria-disabled','false');
+      await expect(retry).toBeVisible();expect(reads).toHaveLength(1);
+      await retry.click();await expect.poll(()=>reads.length).toBe(2);await expect(retry).toBeVisible();
+      await expect(thread.getByRole('textbox')).toHaveValue(draft);
+      failRead=false;await retry.press('Enter');
+      const recovered=row.getByRole('img',{name:'傳送的圖片',exact:true});await expect(recovered).toBeVisible();
+      await expect.poll(()=>recovered.evaluate((node:HTMLImageElement)=>node.complete&&node.naturalWidth>0)).toBe(true);
+      expect(reads).toHaveLength(3);expect(new Set(reads).size).toBe(1);expect(new URL(reads[0]).search).toBe('');
+      await expect(row.locator('a.message-image-link')).toHaveAttribute('href',new URL(reads[0]).pathname);
+      await expect(retry).toHaveCount(0);await expect(thread.getByRole('textbox')).toHaveValue(draft);
+      expect(uploads).toHaveLength(1);expect(sends).toHaveLength(1);await assertOneStoredImage(e2eAuthPool,caption,payload,sender.email);
+    });
+
     test(`${mode} first real image decoder rejection keeps an editable image, caption and reply`,async({page,e2eAuthPool})=>{
       const thread=await openComposer(page),quote=`Decoder quote ${crypto.randomUUID()}`,caption=`Rejected image ${crypto.randomUUID()}`;
       await thread.getByRole('textbox').fill(quote);await thread.getByRole('button',{name:'送出',exact:true}).click();
