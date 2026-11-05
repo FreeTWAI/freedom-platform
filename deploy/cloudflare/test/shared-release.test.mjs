@@ -4142,6 +4142,41 @@ test('committed migration recovery reads back the original COMMIT and appends on
   assert.equal(f.chain.filter(row => row.record.data.operation === 'commit').length, 1);
 });
 
+test('a second lease loss after the recovery begin cannot replay migration or bypass the new pending run', async t => {
+  for (const migrationPassed of [false, true]) {
+    const f = await committedReleaseFixture(t);
+    await reconcileCommittedRelease(f.args);
+    const candidate = { ...f.candidate, schemaLedger: f.ledger };
+    await f.floor.beginIndependent(f.args.request, candidate);
+    if (migrationPassed) await f.floor.passed('migration', { outcome: 'unchanged', readOnly: true,
+      ledgerVerified: true, runtimeGrantsVerified: true, ledgerSha256: f.attempt.afterDigest });
+    f.loseLease();
+    assert.throws(() => f.args.lease.assertHeld(), { code: 'release_lease_lost' });
+    const before = f.floor.state(), writes = f.appends(), reads = f.queries.length;
+    assert.equal(before.pending.stage, migrationPassed ? 1 : 0);
+    assert.equal(before.pending.request.runId, 100);
+    assert.deepEqual(before.pending.intents, {});
+    assert.equal(before.pending.committed, undefined);
+    const floor = await f.reopenFloor();
+    const request = { ...f.args.request, runId: 101 };
+    await assert.rejects(floor.beginIndependent(request, candidate), { code: 'release_floor_unsettled' });
+    // Both the original failure and the new run lack authority to abandon this pending state.
+    for (const runId of [77, 100]) {
+      await assert.rejects(reconcileCommittedRelease({ ...f.args, floor, request: { ...request,
+        recoverMigrationRunId: runId, migrationRecoveryEvidence: { ...f.evidence, runId } } }),
+      { code: 'release_migration_recovery_binding_invalid' });
+      assert.throws(() => floor.handoffRecoveryState({ ...f.evidence, runId }), { code: 'release_floor_stage_mismatch' });
+    }
+    await assert.rejects(floor.intent('migration', 'commit', f.attempt),
+      { code: migrationPassed ? 'release_floor_stage_mismatch' : 'release_floor_commit_intent_invalid' });
+    assert.deepEqual(floor.state(), before);
+    assert.equal(f.appends(), writes); assert.equal(f.queries.length, reads);
+    assert.equal(before.sourceSha, f.candidate.sourceSha); assert.equal(before.deployedSourceSha, f.current.sourceSha);
+    assert.deepEqual(before.schemaLedger, f.ledger);
+    assert.equal(f.chain.filter(row => row.record.data.operation === 'commit').length, 1);
+  }
+});
+
 test('committed migration recovery appends nothing unless COMMIT, Worker, ledger, policy, GC, sessions and lease all hold', async t => {
   const lost = () => Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' }), changed = 'release_migration_recovery_state_changed';
   const on = (f, match, effect) => { f.rows.onQuery = sql => { if (sql.includes(match)) effect(); }; };
@@ -4225,7 +4260,9 @@ test('hosted migration recovery authenticates the failed run before any Deployme
   const previousExitCode = process.exitCode;
   try {
     const source = await adoptionFixture(t);
-    for (const failureCode of ['release_lease_lost', 'release_migration_commit_unconfirmed']) {
+    for (const [failureCode, operatorFailure] of [['release_lease_lost'], ['release_migration_commit_unconfirmed'],
+      ['release_lease_lost', 'release_migration_recovery_binding_invalid'],
+      ['release_lease_lost', 'release_migration_recovery_state_changed']]) {
       const f = failedReleaseMigrationFixture(source.current); f.state.receipt.operatorProgress[1].failureCode = failureCode;
       const root = await diskFixture(t, 'fp-migration-controller-'), runner = join(root, 'runner'); await mkdir(runner);
       const writes = [], api = async (path, options) => {
@@ -4243,18 +4280,27 @@ test('hosted migration recovery authenticates the failed run before any Deployme
       { api, async executeOperator({ admission, migrationRecoveryEvidence, recoveryEvidence, handoffRecoveryEvidence, onProgress }) {
         executed++; assert.equal(admission.recoverMigrationRunId, 77); assert.equal(migrationRecoveryEvidence.runId, 77);
         assert.equal(recoveryEvidence, undefined); assert.equal(handoffRecoveryEvidence, undefined);
+        if (operatorFailure) throw Object.assign(new Error(operatorFailure), { code: operatorFailure });
         await onProgress([{ name: 'preflight', reportedStatus: 'passed' }]);
         const result = migrationRecoveryResult();
         return validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64));
       } });
       const receipt = JSON.parse(await readFile(join(root, 'public/receipt.json')));
-      if (failureCode === 'release_lease_lost') {
+      const summary = await readFile(join(root, 'summary.md'), 'utf8');
+      if (operatorFailure) {
+        assert.equal(process.exitCode, 1); assert.equal(executed, 1); assert.equal(receipt.status, 'failed');
+        assert.equal(receipt.error, operatorFailure); assert.equal(receipt.migrationReconciliation.runId, 77);
+        assert.deepEqual(writes, ['deployment', 'in_progress', 'failure']);
+        assert.match(summary, /Requested migration recovery for original failed release: \[77\]/);
+        assert.doesNotMatch(summary, /committed migration|Migration recovery confirmed|COMMIT read back|release settled|no SQL (?:is|was) repeated/);
+      } else if (failureCode === 'release_lease_lost') {
         assert.equal(process.exitCode, previousExitCode); assert.equal(executed, 1); assert.equal(receipt.status, 'passed');
         assert.equal(receipt.migrationReconciliation.runId, 77);
         assert.equal(receipt.migrationReconciliation.receiptSha256, hash(JSON.stringify(f.state.receipt)));
         assert.equal(receipt.phases[0].migrationRecovery.previousRunId, 77);
         assert.deepEqual(writes, ['deployment', 'in_progress', 'success']);
-        assert.match(await readFile(join(root, 'summary.md'), 'utf8'), /committed migration: \[77\]/);
+        assert.match(summary, /Requested migration recovery for original failed release: \[77\]/);
+        assert.match(summary, /Migration recovery confirmed: COMMIT read back and original release settled; no SQL was repeated/);
       } else {
         assert.equal(process.exitCode, 1); assert.equal(executed, 0); assert.equal(receipt.status, 'failed');
         assert.equal(receipt.error, 'release_migration_recovery_boundary_invalid'); assert.deepEqual(writes, []);

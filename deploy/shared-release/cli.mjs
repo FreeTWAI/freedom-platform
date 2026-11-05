@@ -181,7 +181,9 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       + (receipt.skipReason ? `- Skipped: \`${receipt.skipReason}\`\n` : '')
       + (receipt.handoffReconciliation ? `- Original failed release: [${receipt.handoffReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.handoffReconciliation.runId}); its failure is retained.\n` : '')
       + (receipt.status === 'reconciled' ? '- Handoff reconciled; no migration, publication or backup was repeated.\n' : '')
-      + (receipt.migrationReconciliation ? `- Original release with a committed migration: [${receipt.migrationReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.migrationReconciliation.runId}); its failure is retained and no SQL is repeated.\n` : '')
+      + (receipt.migrationReconciliation ? `- Requested migration recovery for original failed release: [${receipt.migrationReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.migrationReconciliation.runId}); its failure is retained.\n` : '')
+      + (receipt.phases.find(phase => phase.name === 'preflight')?.migrationRecovery?.status === 'abandoned_after_readback'
+        ? '- Migration recovery confirmed: COMMIT read back and original release settled; no SQL was repeated.\n' : '')
       + (receipt.operatorProgress?.at(-1)?.failureCode ? `- Failed phase: \`${receipt.operatorProgress.at(-1).failureCode}\`\n` : '')
       + (receipt.error ? `- Stopped: \`${receipt.error}\`\n` : '')
       + (receipt.flagChanges ? `- Flag comparison: ${receipt.flagChangesObservation} (plan null means unobserved)\n`

@@ -239,8 +239,21 @@ bindings 前後未變，才追加 `release-abandoned`：結清原 run，保留�
 
 原 run／Deployment 保留 failure，本 run 另建自己的 Deployment，收據以 `migrationReconciliation`
 連結原失敗。COMMIT 結果不明（只有 intent、沒有 `committed`）、交易已 abort、已有 deploy intent、
-其他失敗原因、原收據過期、config 或 Worker 已變動，都會拒絕。若本 run 結清後又失敗，floor 只接受
-同一版本的一般 deploy（不必再填 run ID）；其他版本、版本銜接與備份要等這個版本部署完成。
+其他失敗原因、原收據過期、config 或 Worker 已變動，都會拒絕。摘要中的 recovery request
+只表示原失敗收據已通過准入；只有經驗證的 operator 結果才會另列 COMMIT 讀回及結清成功。
+
+若本 run 結清後又失敗，先持鎖唯讀核對最新 journal，依實際狀態處理：
+
+- `release-abandoned` 已確認，且尚未產生新的 `release-begin-v2`（`pending=null`）時，
+  才可發起同一版本的一般 deploy，不必再填原 run ID。
+- 新 begin 已確認但 migration `passed` 尚未寫入（stage 0、空 intents），或 migration 已
+  passed 但尚無 publish intent（stage 1、空 intents）時，新的 run 仍未結清。一般 deploy、
+  原 run ID 或新 run ID 的 migration recovery，以及 handoff 都不能用來跳過它。
+  停止重送，保存新 run 收據，由 release owner 持鎖讀回，另行準備並審查符合該狀態的結清程序；
+  本入口不提供這兩種 pending 的恢復，不可刪除 journal、降低 floor 或重跑已提交 SQL。
+- 已有 publish intent 或其他未知效果時，同樣停止並依該階段讀回對帳；不能推定尚未部署。
+
+其他版本、版本銜接與備份要等這個版本部署完成。
 
 ## GitHub Environment 安裝
 
