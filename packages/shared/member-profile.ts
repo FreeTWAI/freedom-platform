@@ -26,6 +26,9 @@ export function moveProfileBlock(value:ProfileLayoutData,id:ProfileLayoutData['b
 export const defaultProfileLayout:ProfileLayoutData={theme:'paper',accent:'violet',cover_style:'horizon',cover_alt:'個人頁封面',about:'',featured:[],blocks:[{id:'about',visible:true},{id:'featured',visible:true},{id:'links',visible:true},{id:'recognition',visible:true}]};
 const layout=ProfileLayout.default(()=>structuredClone(defaultProfileLayout));
 const positiveVersion=z.string().refine(value=>/^[1-9][0-9]{0,18}$/.test(value)&&BigInt(value)<=9223372036854775807n,'版本資料不正確。');
+// HTTP AggregateVersion is a safe integer; direct domain reads retain bigint strings.
+// Normalize only profile aggregate versions, never lossy numbers or cover references.
+const profileAggregateVersion=z.union([positiveVersion,z.number().int().positive().max(Number.MAX_SAFE_INTEGER).transform(value=>String(value))]);
 export const ProfileCoverSnapshot=z.object({version:positiveVersion,generation:positiveVersion}).strict();
 export type ProfileCoverSnapshotData=z.infer<typeof ProfileCoverSnapshot>;
 /** Separate, explicitly confirmed publication; never copy the account DTO. */
@@ -36,7 +39,7 @@ export const ProfilePublicationInput=z.object({
 }).strict().refine(value=>!value.include_cover||value.cover_version!==null,{message:'請先選擇並確認這一張封面。',path:['cover_version']}).refine(value=>value.visibility!=='public'||value.confirm_public,{message:'公開後任何人都能閱讀，包括未登入者；請明確確認。',path:['confirm_public']});
 export const VisitorProfile=z.object({display_name:text(60).min(1),bio:text(280),links:z.array(link).max(5),avatar_url:z.null(),layout,cover:ProfileCoverSnapshot.nullable().default(null)}).strict();
 export type VisitorProfileData=z.infer<typeof VisitorProfile>;
-export const ProfilePublicationSettingsSchema=z.object({visibility:ProfileVisibility,display_name:text(60),bio:text(280),links:z.array(link).max(5),avatar_url:z.null(),layout,cover:ProfileCoverSnapshot.nullable().default(null),include_cover:z.boolean().default(false),cover_version:positiveVersion.nullable().default(null),aggregate_version:positiveVersion.nullable()}).strict();
+export const ProfilePublicationSettingsSchema=z.object({visibility:ProfileVisibility,display_name:text(60),bio:text(280),links:z.array(link).max(5),avatar_url:z.null(),layout,cover:ProfileCoverSnapshot.nullable().default(null),include_cover:z.boolean().default(false),cover_version:positiveVersion.nullable().default(null),aggregate_version:profileAggregateVersion.nullable()}).strict();
 export type ProfilePublicationSettingsData=z.infer<typeof ProfilePublicationSettingsSchema>;
 
 export type ProfileVisibilityValue=z.infer<typeof ProfileVisibility>;
@@ -65,7 +68,7 @@ export function visitorProfile(row:PublicationRow):VisitorProfileData{
 }
 /** Authenticated-only envelope. Never used by the anonymous route. */
 export const MemberVisitorProfile=z.object({profile:VisitorProfile,community_certification:z.object({kind:z.literal('community_certification'),label:z.literal('社群認證'),description:z.literal(CERTIFICATION_DESCRIPTION)}).strict().optional(),social_achievement:z.object({title_id:z.string().regex(/^(chat|participation)_(1|7|30|90|365)$/),label:z.string().min(1).max(30),policy_version:z.literal('social_days_v1'),description:z.string().max(200)}).strict().optional(),actions:z.object({
-  is_self:z.boolean(),friendship:z.object({state:z.enum(['none','removed','pending','accepted']),requester_ref:z.uuid().nullable(),aggregate_version:z.string().nullable()}).strict(),
+  is_self:z.boolean(),friendship:z.object({state:z.enum(['none','removed','pending','accepted']),requester_ref:z.uuid().nullable(),aggregate_version:profileAggregateVersion.nullable()}).strict(),
   can_request:z.boolean(),can_accept:z.boolean(),can_message:z.boolean(),
 }).strict()}).strict();
 export type MemberVisitorProfileData=z.infer<typeof MemberVisitorProfile>;
