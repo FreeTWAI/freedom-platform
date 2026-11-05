@@ -8,6 +8,8 @@ import {
 } from '../../../../modules/tester-map/index';
 import {useLanguage, type InterfaceLanguage} from '../language';
 import type {InterfaceMessage} from '../interface-messages';
+import type {PortalClient} from '../api';
+import {PromotionShare} from './PromotionShare';
 import './TesterMap.css';
 
 const statusKey: Record<CoverageStatus, InterfaceMessage> = {'未測': 'testerMap.status.untested', '測試中': 'testerMap.status.testing', '已測': 'testerMap.status.tested', '有問題': 'testerMap.status.issue'};
@@ -81,8 +83,8 @@ const firstOpenStage = (progress: TesterProgress) => {
   return order.find(id => !stageProgress(QUEST_STAGES.find(stage => stage.id === id)!, progress).complete) ?? null;
 };
 
-/** Static and public: no request, session or permission is read. Progress stays in this browser. */
-export function TesterMap() {
+/** Public map and local progress; the member shell supplies a client for personal sharing. */
+export function TesterMap({client}: {client?: PortalClient}) {
   const {language, t} = useLanguage();
   const pick = (value: Localized) => value[indexes[language]];
   const [progress, setProgress] = useState<TesterProgress>(() => readTesterProgress());
@@ -133,6 +135,9 @@ export function TesterMap() {
       <p className="eyebrow" id="tester-map-intro">{t('testerMap.eyebrow')}</p>
       <p>{t('testerMap.intro', {start: TEST_WEEK.start, end: TEST_WEEK.end, leader: TESTER_GUILD.leaderNickname})}</p>
       <p className="field-hint">{t('testerMap.redesign', {pr: REDESIGN_BATCH_PR})}</p>
+      <div className="actions">{client
+        ? <PromotionShare client={client} kind="platform" target="tester-map" title={t('nav.tester-map')}/>
+        : <a className="btn btn-ghost btn-small" href="/#tester-map">{t('nav.tester-map')}</a>}</div>
     </section>
 
     <section className="stack tester-quest" aria-labelledby="tester-quest-title">
