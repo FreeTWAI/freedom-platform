@@ -163,10 +163,18 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
   },[]);
   useEffect(()=>{
     void handlers.current.loadList();
-    // Coming back to the window or a membership change re-checks the list (never a history nobody opened).
+    // Resume the list independently of an open history, without repeating the same in-flight resume read.
+    let resumeGeneration:number|null=null;
+    const reset=()=>{resumeGeneration=null;};
+    const resume=()=>{
+      if(document.visibilityState!=='visible'||!navigator.onLine||listState.current!=='ready')return;
+      if(listInFlight.current!==null&&resumeGeneration===listGeneration.current)return;
+      void handlers.current.loadList(true);resumeGeneration=listGeneration.current;
+    };
+    const visible=()=>{if(document.visibilityState==='visible')resume();else reset();};
     const recheck=()=>{if(listState.current==='ready')void handlers.current.loadList(true);};
-    window.addEventListener('focus',recheck);window.addEventListener('freedom-profile-updated',recheck);
-    return()=>{window.removeEventListener('focus',recheck);window.removeEventListener('freedom-profile-updated',recheck);};
+    window.addEventListener('focus',resume);window.addEventListener('online',resume);window.addEventListener('offline',reset);document.addEventListener('visibilitychange',visible);window.addEventListener('freedom-profile-updated',recheck);
+    return()=>{window.removeEventListener('focus',resume);window.removeEventListener('online',resume);window.removeEventListener('offline',reset);document.removeEventListener('visibilitychange',visible);window.removeEventListener('freedom-profile-updated',recheck);};
   },[]);
   useEffect(()=>{
     const term=roomQuery.trim();if(term===searched.current)return;
