@@ -1,6 +1,7 @@
 import {test, expect, type Page} from './member-feature-fixture.js';
 import {navigate, selectSocialFeed} from './navigation.js';
 import {collectShortVideoCsp} from './short-video-csp.js';
+import {waitForInitialShortVideoPlayers} from './short-video-readiness.js';
 
 async function login(page: Page) {
   await page.goto('/');
@@ -43,9 +44,12 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
     // The current slide and its neighbour hold a player; every player comes from the allowed origin and an 11-character id.
     const players = feed.locator('iframe');
     await expect(players).toHaveCount(2);
+    const expectedPlayerSources: string[] = [];
     for (const src of await players.evaluateAll(frames => frames.map(frame => (frame as HTMLIFrameElement).src))) {
       expect(src).toMatch(/^https:\/\/www\.youtube-nocookie\.com\/embed\/[A-Za-z0-9_-]{11}\?/);
+      expectedPlayerSources.push(src);
     }
+    await waitForInitialShortVideoPlayers(players, expectedPlayerSources);
     // No native scrollbar, and the player never takes the touch away from the feed.
     const scroller = feed.locator('.short-video-scroller');
     expect(await scroller.evaluate(element => (element as HTMLElement).offsetWidth - element.clientWidth)).toBe(0);
