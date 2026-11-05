@@ -386,6 +386,7 @@ test('a leader publishes recommendations and the member primary action opens the
   try {
     await openGuildSection(page, '管理啟動台');
     const editor = page.locator('.guild-launchpad-editor');
+    await editor.getByRole('button', {name: '工具與提示', exact: true}).click();
     await editor.getByRole('combobox', {name: '加入推薦應用', exact: true}).selectOption(JSON.stringify([appKey, releaseRef]));
     await editor.getByRole('button', {name: '加入推薦', exact: true}).click();
     await editor.getByRole('button', {name: `上移${displayName}`, exact: true}).click();
@@ -436,6 +437,7 @@ test('a leader publishes recommendations and the member primary action opens the
     await expect(memberPage.locator('.launchpad-applications')).toHaveCount(1);
 
     // Disabled application blocks suppress non-manual primary actions in the unsaved reading view.
+    await editor.getByRole('button', {name: '版面與使命', exact: true}).click();
     const applicationsBlock = editor.getByRole('group', {name: '版面區塊'}).locator('.guild-launchpad-block').filter({has: page.locator('p', {hasText: /^應用$/})});
     await applicationsBlock.getByLabel('顯示這個區塊').uncheck();
     await expect(primary(page)).toHaveCount(0);
