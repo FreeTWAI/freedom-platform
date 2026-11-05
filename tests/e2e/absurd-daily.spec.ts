@@ -439,6 +439,32 @@ for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,a
   expect(writes).toEqual([]);
 });
 
+for(const width of [320,390,1440])test(`AD-brand public lobby preserves the latest logo and native home navigation at ${width}px`,async({page},testInfo)=>{
+  await page.setViewportSize({width,height:900});
+  await page.goto('/play');
+  const logo=page.getByRole('img',{name:'自由工坊',exact:true});
+  const header=page.locator('header').filter({has:logo}),brand=logo.locator('..');
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
+  await expect(logo).toHaveJSProperty('naturalWidth',396);await expect(logo).toHaveJSProperty('naturalHeight',132);
+  await expect(logo).toHaveCSS('object-fit','contain');await expect(logo).toHaveCSS('width','132px');await expect(logo).toHaveCSS('height','44px');
+  await expect(header).toHaveCSS('flex-wrap','wrap');
+  await expect(brand).toHaveAttribute('href','/');
+  const home=header.getByRole('link',{name:'回自由工坊 ↗',exact:true});await expect(home).toBeVisible();
+  for(const link of [brand,home]){
+    const box=await link.boundingBox();expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x+box!.width).toBeLessThanOrEqual(width);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await testInfo.attach(`lobby-brand-${width}`,{body:await header.screenshot(),contentType:'image/png'});
+  await brand.focus();await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(url=>url.pathname==='/');
+  await page.goBack();await expect(page).toHaveURL(url=>url.pathname==='/play');
+  await expect(logo).toHaveJSProperty('naturalWidth',396);await expect(logo).toHaveCSS('width','132px');
+  await home.click();await expect(page).toHaveURL(url=>url.pathname==='/');
+});
+
 async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
   // Keep lazy Three startup on a running clock, then freeze gameplay time.
   // Continuous RAF + trace readback on software WebGL can consume a whole
