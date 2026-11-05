@@ -4,7 +4,10 @@ async function composer(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
   await page.getByRole('button',{name:'建立貼文',exact:true}).click();
-  return page.getByRole('dialog',{name:'建立貼文',exact:true});
+  const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true});
+  await expect(dialog.getByRole('button',{name:'✦ Social Post 優化',exact:true})).toBeHidden();
+  await dialog.getByRole('button',{name:'文案與分享',exact:true}).click();
+  return dialog;
 }
 test('optimization is off by default, personal tool handoff previews and restores copy without publishing',async({page})=>{
   await page.context().grantPermissions(['clipboard-read','clipboard-write']);
@@ -20,6 +23,11 @@ test('optimization is off by default, personal tool handoff previews and restore
   const task=await page.evaluate(()=>navigator.clipboard.readText());expect(task).toContain('/social-post');expect(task).toContain(original);
   const result='一起把作品完成。\n我正在找設計夥伴，歡迎交流。';
   await dialog.getByLabel('貼回 AI 優化結果',{exact:true}).fill(result);
+  const tools=dialog.getByRole('button',{name:'文案與分享',exact:true}),requestsBeforeCollapse=[...requests];
+  await tools.click();await expect(dialog.getByLabel('貼回 AI 優化結果',{exact:true})).toBeHidden();
+  await expect(dialog.getByLabel('貼文內容',{exact:true})).toHaveValue(original);
+  await tools.click();await expect(dialog.getByLabel('貼回 AI 優化結果',{exact:true})).toHaveValue(result);
+  expect(requests).toEqual(requestsBeforeCollapse);
   await expect(dialog.getByLabel('貼文內容',{exact:true})).toHaveValue(original);
   await expect(dialog.getByRole('region',{name:'優化文案預覽'})).toContainText(result);
   await dialog.getByRole('button',{name:'採用這版文案',exact:true}).click();
