@@ -311,7 +311,7 @@ async function main() {
           const peers = new AbortController();
           const signal = AbortSignal.any([controller.signal, peers.signal]);
           let failed;
-          const partitions = await Promise.all(E2E_DEFAULT_SHARDS.map(async shard => {
+          const runPartition = async shard => {
             try {
               const directory = join(temp, `shard-${shard.current}`);
               await mkdir(directory);
@@ -329,7 +329,13 @@ async function main() {
               if (!failed) { failed = 'incomplete_test_results'; peers.abort(); }
               return { current: shard.current, total: shard.total, exit_code: null };
             }
-          }));
+          };
+          // The first native shard includes the 3D game journeys. Let it use
+          // the runner's CPU before the other two browser processes compete
+          // with SwiftShader. Keep all three shards and the original shared
+          // deadline; aborts still prevent queued processes from starting.
+          const first = await runPartition(E2E_DEFAULT_SHARDS[0]);
+          const partitions = [first, ...await Promise.all(E2E_DEFAULT_SHARDS.slice(1).map(runPartition))];
           executionReason = failed;
           const exit_code = partitions.every(part => part.exit_code === 0) ? 0
             : partitions.find(part => Number.isInteger(part.exit_code) && part.exit_code !== 0)?.exit_code ?? null;

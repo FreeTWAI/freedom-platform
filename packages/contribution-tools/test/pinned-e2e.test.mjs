@@ -495,11 +495,16 @@ test('CLI ignores candidate filters, includes new specs and isolates concurrent 
     for(const [index,file] of isolatedFiles.entries())await writeFile(join(root,'tests/e2e',file),`
       import {test,expect} from '@playwright/test';
       import {existsSync,writeFileSync} from 'node:fs';
-      test('same member state stays isolated across simultaneous default shards',async({request})=>{
+      test('same member state stays isolated across both default waves',async({request})=>{
         const mine=${JSON.stringify(String(index))};
         await request.post('/state',{data:{value:mine}});
         writeFileSync(${JSON.stringify(join(root,`arrived-${index}`))},'ready');
-        await expect.poll(()=>${JSON.stringify(isolatedFiles.map((_,peer)=>join(root,`arrived-${peer}`)))}.every(path=>existsSync(path)),{timeout:10000}).toBe(true);
+        if(mine==='0'){
+          expect(${JSON.stringify(isolatedFiles.slice(1).map((_,peer)=>join(root,`arrived-${peer+1}`)))}.some(path=>existsSync(path))).toBe(false);
+        }else{
+          expect(existsSync(${JSON.stringify(join(root,'arrived-0'))})).toBe(true);
+          await expect.poll(()=>${JSON.stringify(isolatedFiles.slice(1).map((_,peer)=>join(root,`arrived-${peer+1}`)))}.every(path=>existsSync(path)),{timeout:10000}).toBe(true);
+        }
         expect((await (await request.get('/state')).json()).value).toBe(mine);
       });
     `);
@@ -681,13 +686,14 @@ for (const failing of E2E_DEFAULT_SHARDS) test(`default shard ${failing.current}
     const runnerDir=join(root,'node_modules/@playwright/test');
     await mkdir(runnerDir,{recursive:true});
     await writeFile(join(runnerDir,'package.json'),JSON.stringify({exports:{'./cli':'./cli.cjs'}}));
-    const starts=join(root,'starts'),peers=E2E_DEFAULT_SHARDS.filter(shard=>shard.current!==failing.current);
-    const parts=E2E_DEFAULT_SHARDS.map(({current,total})=>`${current}/${total}`);
+    const starts=join(root,'starts'),peers=E2E_DEFAULT_SHARDS.filter(shard=>failing.current!==1&&shard.current!==1&&shard.current!==failing.current);
+    const parts=(failing.current===1?E2E_DEFAULT_SHARDS.slice(0,1):E2E_DEFAULT_SHARDS).map(({current,total})=>`${current}/${total}`);
     await writeFile(join(runnerDir,'cli.cjs'),`
       ${lifecycleListing(root)}
       const fs=require('node:fs'),part=process.argv[process.argv.indexOf('--shard')+1];
       fs.appendFileSync(${JSON.stringify(starts)},part+'\\n');
       const result=()=>fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,JSON.stringify({}));
+      if(part==='1/3'&&${failing.current}!==1){result();process.exit(0);}
       if(part===${JSON.stringify(`${failing.current}/${failing.total}`)}){
         const timer=setInterval(()=>{if(!${JSON.stringify(peers.map(({current})=>join(root,`ready-${current}`)))}.every(path=>fs.existsSync(path)))return;clearInterval(timer);result();process.exit(1);},10);
       }else{
@@ -703,7 +709,7 @@ for (const failing of E2E_DEFAULT_SHARDS) test(`default shard ${failing.current}
     const result=JSON.parse(await readFile(output,'utf8'));
     assert.equal(result.status,'failed');assert.equal(result.reason,'test_process_failed');
     assert.deepEqual(result.passes.map(pass=>pass.id),['default']);
-    assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),E2E_DEFAULT_SHARDS.map(({current})=>current===failing.current?1:0));
+    assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),E2E_DEFAULT_SHARDS.map(({current})=>current===failing.current?1:failing.current===1?null:0));
   });
 });
 
@@ -739,23 +745,27 @@ test('CLI cancellation interrupts Playwright and retains test_cancelled with a z
       let stdout = '', signalled = false;
       child.stdout.on('data', bytes => {
         stdout += bytes;
-        if (!signalled && (stdout.match(/fixture_runner_ready \d+/g)??[]).length===E2E_DEFAULT_SHARDS.length) { signalled = true; child.kill('SIGTERM'); }
+        if (!signalled && (stdout.match(/fixture_runner_ready \d+/g)??[]).length===1) { signalled = true; child.kill('SIGTERM'); }
       });
       const resultExit = await exit;
       clearTimeout(timer);
       assert.equal(resultExit.code, 1);
       assert.equal(resultExit.signal, null);
-      assert.equal(new Set((await readFile(marker,'utf8')).trim().split('\n')).size,E2E_DEFAULT_SHARDS.length);
+      assert.equal(signalled,true,stdout);
+      assert.equal(new Set((await readFile(marker,'utf8')).trim().split('\n')).size,1);
       const result = JSON.parse(await readFile(output, 'utf8'));
       assert.equal(result.status, 'failed');
       assert.equal(result.reason, 'test_cancelled');
-      assert.equal(result.passes[0].exit_code, 0);
+      assert.equal(result.passes[0].exit_code, null);
+      assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),[0,null,null]);
     } finally { child.kill('SIGTERM'); }
   });
 });
 
-test('CLI cancellation tears down all real Playwright web servers before returning', async () => {
+for(const wave of [1,2])test(`CLI cancellation in wave ${wave} tears down all started real Playwright web servers before returning`, async () => {
   await withFixture(async root => {
+    const liveShards=wave===1?E2E_DEFAULT_SHARDS.slice(0,1):E2E_DEFAULT_SHARDS.slice(1);
+    const startedShards=wave===1?liveShards:E2E_DEFAULT_SHARDS;
     await playwrightFixture(root, `
       const origin='http://127.0.0.1:'+process.env.FREEDOM_E2E_PORT;
       export default {timeout:45000,use:{baseURL:origin},
@@ -773,6 +783,7 @@ test('CLI cancellation tears down all real Playwright web servers before returni
     for(const file of E2E_BASELINE)await writeFile(join(root,file),`
       import {test} from '@playwright/test';
       test('pending operation',async()=>{
+        if(${wave}===2&&process.env.FREEDOM_E2E_PORT===${JSON.stringify(String(E2E_DEFAULT_SHARDS[0].port))})return;
         console.log('native_cancel_ready '+process.env.FREEDOM_E2E_PORT);
         await new Promise(()=>{});
       });
@@ -790,7 +801,7 @@ test('CLI cancellation tears down all real Playwright web servers before returni
       child.stderr.on('data',bytes=>{stderr+=bytes;});
       child.stdout.on('data',bytes=>{
         stdout+=bytes;
-        if(!signalled&&E2E_DEFAULT_SHARDS.every(({port})=>stdout.includes('native_cancel_ready '+port))){
+        if(!signalled&&liveShards.every(({port})=>stdout.includes('native_cancel_ready '+port))){
           signalled=true;child.kill('SIGTERM');
         }
       });
@@ -800,10 +811,13 @@ test('CLI cancellation tears down all real Playwright web servers before returni
       const result=JSON.parse(await readFile(output,'utf8'));
       assert.equal(result.status,'failed');assert.equal(result.reason,'test_cancelled');
       assert.deepEqual(result.passes.map(pass=>pass.id),['default']);
-      for(const {port} of E2E_DEFAULT_SHARDS){
+      for(const {port} of startedShards){
         assert.equal(await readFile(join(root,'stopped-'+port),'utf8'),'SIGTERM');
         const pid=Number(await readFile(join(root,'server-'+port),'utf8'));
         assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+      }
+      for(const {port} of E2E_DEFAULT_SHARDS.filter(shard=>!startedShards.includes(shard))){
+        await assert.rejects(stat(join(root,'server-'+port)),{code:'ENOENT'});
       }
     }finally{
       clearTimeout(timer);
@@ -833,18 +847,24 @@ test('host pass budgets are finite and only the default capacity increases', asy
   assert.match(ui, /timeout-minutes: 95\b/);
 });
 
-test('CLI default deadline remains failure after graceful zero exit and stops later passes', async () => {
+for(const wave of [1,2])test(`CLI shared default deadline in wave ${wave} remains failure after graceful zero exit and stops later passes`, async () => {
   await withFixture(async root => {
     await baseline(root);
     const runnerDir = join(root, 'node_modules/@playwright/test');
     await mkdir(runnerDir, { recursive: true });
     await writeFile(join(runnerDir, 'package.json'), JSON.stringify({ exports: { './cli': './cli.cjs' } }));
-    const ready = join(root, 'ready'), marker = join(root, 'terminated'), starts = join(root, 'starts');
+    const ready = join(root, 'ready'), marker = join(root, 'terminated'), starts = join(root, 'starts'), completed = join(root,'completed');
     const observed = join(root, 'scheduled-budget.json'), preload = join(root, 'accelerate-fixture.mjs');
     await writeFile(join(runnerDir, 'cli.cjs'), `
       ${lifecycleListing(root)}
       const fs = require('node:fs');
       fs.appendFileSync(${JSON.stringify(starts)}, process.pid+'\\n');
+      if(${wave}===2&&process.argv[process.argv.indexOf('--shard')+1]==='1/3'){
+        fs.appendFileSync(${JSON.stringify(ready)},process.pid+'\\n');
+        fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,JSON.stringify({}));
+        setTimeout(()=>{fs.writeFileSync(${JSON.stringify(completed)},String(process.pid));process.exit(0);},80);
+        return;
+      }
       process.on('SIGINT', () => {
         fs.appendFileSync(${JSON.stringify(marker)}, process.pid+'\\n');
         fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE, JSON.stringify({
@@ -866,7 +886,7 @@ test('CLI default deadline remains failure after graceful zero exit and stops la
         if (delay <= 60000 || delay > ${E2E_PASS_TIMEOUT_MS.default}) return realTimeout(callback, delay, ...args);
         appendFileSync(${JSON.stringify(observed)}, delay+'\\n');
         const timer = setInterval(() => {
-          if (!existsSync(${JSON.stringify(ready)}) || readFileSync(${JSON.stringify(ready)},'utf8').trim().split('\\n').length !== ${E2E_DEFAULT_SHARDS.length}) return;
+          if (!existsSync(${JSON.stringify(ready)}) || readFileSync(${JSON.stringify(ready)},'utf8').trim().split('\\n').length !== ${wave===1?1:E2E_DEFAULT_SHARDS.length}) return;
           clearInterval(timer); callback(...args);
         }, 10);
         return timer;
@@ -879,14 +899,18 @@ test('CLI default deadline remains failure after graceful zero exit and stops la
     assert.equal(child.status, 1, child.stdout + child.stderr);
     assert.equal(child.signal, null);
     const budgets=(await readFile(observed,'utf8')).trim().split('\n').map(Number);
-    assert.equal(budgets.length,E2E_DEFAULT_SHARDS.length);assert.ok(budgets.every(delay=>delay>60000&&delay<E2E_PASS_TIMEOUT_MS.default));
+    assert.equal(budgets.length,wave===1?1:E2E_DEFAULT_SHARDS.length);assert.ok(budgets.every(delay=>delay>60000&&delay<E2E_PASS_TIMEOUT_MS.default));
+    if(wave===2)assert.ok(budgets.slice(1).every(delay=>delay<budgets[0]-80),'queued shards receive only the remaining shared deadline');
     const started=(await readFile(starts,'utf8')).trim().split('\n').sort();
     const stopped=(await readFile(marker,'utf8')).trim().split('\n').sort();
-    assert.equal(new Set(started).size,E2E_DEFAULT_SHARDS.length);assert.deepEqual(stopped,started);
+    assert.equal(new Set(started).size,wave===1?1:E2E_DEFAULT_SHARDS.length);
+    const finished=wave===2?await readFile(completed,'utf8'):null;
+    assert.deepEqual(stopped,started.filter(pid=>pid!==finished));
     const result = JSON.parse(await readFile(output, 'utf8'));
     assert.equal(result.status, 'failed');
     assert.equal(result.reason, 'test_timeout');
-    assert.deepEqual(result.passes.map(({ id, exit_code }) => ({ id, exit_code })), [{ id: 'default', exit_code: 0 }]);
+    assert.deepEqual(result.passes.map(({ id, exit_code }) => ({ id, exit_code })), [{ id: 'default', exit_code: wave===1?null:0 }]);
+    assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),wave===1?[0,null,null]:[0,0,0]);
   });
 });
 

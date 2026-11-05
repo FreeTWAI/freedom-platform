@@ -340,7 +340,7 @@ jobs:
           if-no-files-found: warn
   ui-e2e:
     runs-on: ubuntu-24.04
-    # 95 minutes: setup + three concurrent default shards (75 minutes) + five sequential fixture passes + cleanup.
+    # 95 minutes: setup + three default shards (one then two, shared 75-minute budget) + five fixture passes + cleanup.
     # This remains a total bound, not the sum of all individual worst-case caps.
     timeout-minutes: 95
     needs: select
@@ -355,7 +355,7 @@ jobs:
           # Disposable runner-only synthetic DB: low-privilege fixture LOGIN roles
           # have no passwords. Never use this authentication mode outside CI.
           POSTGRES_HOST_AUTH_METHOD: trust
-          # Three shards budget at most 3 × 46 = 138 connections, plus health checks.
+          # Keep the existing DB capacity; at most two shards now share this service.
           # Full-schema migrations and prior-pass schema cleanup share the lock table.
           POSTGRES_INITDB_ARGS: '-c max_connections=200 -c max_locks_per_transaction=256 -c dynamic_shared_memory_type=mmap'
         ports: ['127.0.0.1:5432:5432']
