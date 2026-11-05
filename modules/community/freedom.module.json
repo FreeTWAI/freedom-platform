@@ -75,7 +75,10 @@
     "apps/portal-web/src/modules/EventHelpers.tsx",
     "apps/portal-web/src/modules/EventHelpers.css",
     "tests/runtime/event-helper-client.test.ts",
-    "tests/e2e/event-helpers.spec.ts"
+    "tests/e2e/event-helpers.spec.ts",
+    "modules/community/companion-mainline.ts",
+    "tests/runtime/companion-mainline-contract.test.ts",
+    "modules/community/companion-mainline.md"
   ],
   "public_exports": [
     "modules/community/catalog.ts",
@@ -98,7 +101,8 @@
     "modules/community/skill-book-guides.ts",
     "modules/community/skill-collaboration.ts",
     "modules/community/skill-share-content.ts",
-    "modules/community/social-posts.ts"
+    "modules/community/social-posts.ts",
+    "modules/community/companion-mainline.ts"
   ],
   "dependencies": [
     "command-core",
