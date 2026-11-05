@@ -92,7 +92,7 @@ const clipboard:{writeText?: (text:string)=>Promise<void>}={};
 const navigator:any={clipboard};
 function load(relative:string, imports:Record<string,unknown>){
  const module={exports:{} as any};
- runInNewContext(transformSync(readFileSync(new URL(relative,import.meta.url),'utf8'),{loader:relative.endsWith('tsx')?'tsx':'ts',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,Intl,window,navigator,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require(name);if(name.endsWith('.css'))return {};if(name in imports)return imports[name];throw Error('Unexpected import '+name);}});
+ runInNewContext(transformSync(readFileSync(new URL(relative,import.meta.url),'utf8'),{loader:relative.endsWith('tsx')?'tsx':'ts',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,Intl,window,navigator,require(name:string){if(name==='react')return React;if(name==='react/jsx-runtime')return require('react/jsx-runtime');if(name.endsWith('.css'))return {};if(name in imports)return imports[name];throw Error('Unexpected import '+name);}});
  return module.exports;
 }
 const action=load('../../apps/portal-web/src/useLocalAction.ts',{});
