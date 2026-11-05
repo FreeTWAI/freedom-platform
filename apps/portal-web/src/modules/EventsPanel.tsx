@@ -412,12 +412,14 @@ function EventsPanelSession({client,session,locationHash,registerLeave,onList,pa
       const removed=(current.prize_photos===undefined?[]:current.prize_photos).filter(photo=>!retained.has(photo.prize_id));
       if(removed.length&&!window.confirm(`這次儲存會移除 ${removed.length} 項獎品及其已保存照片。確定儲存嗎？取消不會更改活動。`))return;
     }
-    saveFlight.current=true;setSaving(true);setNotice('');
-    const attempt=saveAttempt.current??{...(current
+    let attempt=saveAttempt.current;
+    // Validate local date conversion before acquiring either pending-save lock.
+    try{attempt??={...(current
       ?{path:`/events/${current.event_id}/update`,body:eventPayload(editDraft),version:editBaseline.current!.version,editing:true}
       :{path:'/events',body:eventPayload(draft),editing:false}),eventId:current?.event_id??null,organizerId:session.user.user_id,helpNeed:current?.help_need??null,registrationPolicy:current?.registration_policy,prizes:eventPrizePayload((current?editDraft:draft).prize_details??eventPrizeDrafts(current?.prize_details??[])),
-      banner:current?editBannerFile:bannerFile,video:current?editVideoFile:videoFile};
-    saveAttempt.current=attempt;
+      banner:current?editBannerFile:bannerFile,video:current?editVideoFile:videoFile};}
+    catch{setNotice('請確認開始與結束時間，年份須為四位數。活動內容仍保留。');return;}
+    saveFlight.current=true;setSaving(true);setNotice('');saveAttempt.current=attempt;
     try{
       const saved=await mutate<CommunityEvent>(attempt.path,attempt.body,attempt.version,value=>eventSaveReceipt(value,attempt));
       if(!saved||!isSaveOwner())return;
