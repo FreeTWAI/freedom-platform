@@ -4586,18 +4586,80 @@ test('operator and CLI preserve lease diagnostics in failed and recovered public
   }
 });
 
+function imageFixtureApi(override = () => undefined) {
+  return fixtureApi(path => {
+    const replacement = override(path); if (replacement !== undefined) return replacement;
+    for (const [workflowId, runId, name] of [[1, 33, 'verify'], [2, 44, 'codeql']]) {
+      if (path.includes(`/workflows/${workflowId}/runs?head_sha=${main}&`))
+        return { total_count: 1, workflow_runs: [{ id: runId }] };
+      if (path.endsWith(`/actions/runs/${runId}`)) return {
+        id: runId, workflow_id: workflowId, path: `.github/workflows/${name}.yml`,
+        head_sha: main, head_branch: 'main', event: 'push', repository: { id: REPOSITORY_ID },
+        head_repository: { id: REPOSITORY_ID }, run_attempt: 1, status: 'completed', conclusion: 'success',
+      };
+    }
+  });
+}
+
 test('image source selection defaults to controller and admits an independently verified main ancestor', async () => {
   const env = { ...environment(), GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/release-operator-image.yml@refs/heads/main` };
   for (const input of [undefined, '']) {
     const value = await admitImage({ ...env, CONTROLLER_SHA: sha, OPERATOR_SOURCE_SHA: input }, fixtureApi());
     assert.equal(value.sourceSha, sha); assert.equal(value.controllerSha, sha);
+    assert.deepEqual(value.controllerVerification, value.verification);
   }
-  const api = fixtureApi();
+  const api = imageFixtureApi();
   const value = await admitImage({ ...env, OPERATOR_SOURCE_SHA: sha }, api);
   assert.equal(value.sourceSha, sha); assert.equal(value.controllerSha, main); assert.equal(value.sourceTree, tree);
   assert(api.calls.includes(`/repos/${REPOSITORY}/compare/${sha}...${main}`));
   assert(api.calls.includes(`/repos/${REPOSITORY}/compare/${main}...${main}`));
   assert(api.calls.includes(`/repos/${REPOSITORY}/actions/workflows/1/runs?head_sha=${sha}&event=push&branch=main&per_page=100`));
+  assert.deepEqual(value.verification.map(run => run.runId), [11, 22]);
+  assert.deepEqual(value.controllerVerification.map(run => run.runId), [33, 44]);
+  assert(api.calls.includes(`/repos/${REPOSITORY}/actions/workflows/2/runs?head_sha=${main}&event=push&branch=main&per_page=100`));
+  assert(api.calls.every(path => !path.includes('conclusion=success')));
+});
+
+test('image source cannot be newer than or diverged from the controller even when both are merged main', async () => {
+  const env = { ...environment(), OPERATOR_SOURCE_SHA: sha,
+    GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/release-operator-image.yml@refs/heads/main` };
+  for (const comparison of [
+    { status: 'behind', merge_base_commit: { sha: main } },
+    { status: 'diverged', merge_base_commit: { sha } },
+    { status: 'ahead', merge_base_commit: { sha: main } },
+    { status: 'identical', merge_base_commit: { sha } },
+  ]) {
+    const observedMain = 'e'.repeat(40);
+    const api = imageFixtureApi(path => path.endsWith('/branches/main') ? { commit: { sha: observedMain } }
+      : path.endsWith(`/compare/${sha}...${main}`) ? comparison : undefined);
+    await assert.rejects(admitImage(env, api), { code: 'release_image_source_after_controller' });
+    for (const revision of [sha, main]) assert(api.calls.includes(`/repos/${REPOSITORY}/compare/${revision}...${observedMain}`));
+    assert(!api.calls.some(path => path.includes(`/runs?head_sha=${main}&`)));
+  }
+});
+
+test('older image source success cannot mask absent, newer failed or pending controller CI', async () => {
+  const env = { ...environment(), OPERATOR_SOURCE_SHA: sha,
+    GITHUB_WORKFLOW_REF: `${REPOSITORY}/.github/workflows/release-operator-image.yml@refs/heads/main` };
+  for (const [workflowId, goodId, latestId] of [[1, 33, 55], [2, 44, 66]]) {
+    const good = await imageFixtureApi()(`/repos/${REPOSITORY}/actions/runs/${goodId}`);
+    for (const patch of [{ status: 'queued', conclusion: null }, { status: 'in_progress', conclusion: null },
+      { conclusion: 'failure' }, { conclusion: 'cancelled' }, { conclusion: 'skipped' }]) {
+      const api = imageFixtureApi(path => path.includes(`/workflows/${workflowId}/runs?head_sha=${main}&`)
+        ? { total_count: 2, workflow_runs: [{ id: goodId }, { id: latestId }] }
+        : path.endsWith(`/runs/${latestId}`) ? { ...good, id: latestId, ...patch } : undefined);
+      await assert.rejects(admitImage(env, api), { code: 'release_verification_not_successful' });
+      assert(api.calls.some(path => path.endsWith(`/runs/${latestId}`)));
+    }
+    const missing = imageFixtureApi(path => path.includes(`/workflows/${workflowId}/runs?head_sha=${main}&`)
+      ? { total_count: 0, workflow_runs: [] } : undefined);
+    await assert.rejects(admitImage(env, missing), { code: 'release_verification_unavailable' });
+    for (const patch of [{ head_sha: sha }, { event: 'pull_request' }, { head_branch: 'feature' },
+      { head_repository: { id: 2 } }, { repository: { id: 2 } }, { run_attempt: 0 }]) {
+      const api = imageFixtureApi(path => path.endsWith(`/runs/${goodId}`) ? { ...good, ...patch } : undefined);
+      await assert.rejects(admitImage(env, api), { code: 'release_verification_identity_invalid' });
+    }
+  }
 });
 
 test('image source input cannot bypass identity, ancestry or latest exact-source CI', async () => {

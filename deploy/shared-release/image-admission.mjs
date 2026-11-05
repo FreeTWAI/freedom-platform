@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha, admitRelease, githubClient } from './admission.mjs';
+import { REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha, admitRelease, verifiedRun, githubClient } from './admission.mjs';
 
 export async function admitImage(env, api) {
   check(env.GITHUB_REPOSITORY === REPOSITORY && env.GITHUB_REPOSITORY_ID === String(REPOSITORY_ID)
@@ -15,10 +15,22 @@ export async function admitImage(env, api) {
   const sourceSha = env.OPERATOR_SOURCE_SHA === undefined || env.OPERATOR_SOURCE_SHA === ''
     ? env.CONTROLLER_SHA : env.OPERATOR_SOURCE_SHA;
   check(isSha(sourceSha), 'release_exact_sha_required');
-  return admitRelease({ format: 'freedom.shared-image-request/v1', repository: REPOSITORY, repositoryId: REPOSITORY_ID,
+  const admitted = await admitRelease({ format: 'freedom.shared-image-request/v1', repository: REPOSITORY, repositoryId: REPOSITORY_ID,
     mode: 'image', sourceSha, controllerSha: env.CONTROLLER_SHA,
     actor: env.GITHUB_ACTOR, actorId: Number(env.GITHUB_ACTOR_ID), triggeringActor: env.GITHUB_TRIGGERING_ACTOR,
     runId: Number(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT) }, api);
+  // A rerun keeps its original controller. Never build a newer source with it,
+  // or use older source CI as evidence that a changed controller is verified.
+  const controllerVerification = [];
+  if (sourceSha !== env.CONTROLLER_SHA) {
+    const comparison = await api(`/repos/${REPOSITORY}/compare/${sourceSha}...${env.CONTROLLER_SHA}`);
+    check(comparison.status === 'ahead'
+      && comparison.merge_base_commit?.sha === sourceSha, 'release_image_source_after_controller');
+    for (const file of ['verify.yml', 'codeql.yml']) {
+      controllerVerification.push(await verifiedRun(api, file, env.CONTROLLER_SHA));
+    }
+  } else controllerVerification.push(...admitted.verification);
+  return { ...admitted, controllerVerification };
 }
 
 // Run from the protected-main controller, never import the selected source.
@@ -52,7 +64,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       await appendFile(process.env.GITHUB_OUTPUT, `source_sha=${value.sourceSha}\nsource_tree=${value.sourceTree}\nimage_tag=ghcr.io/freetwai/freedom-release-operator:${value.sourceSha}\n`);
       await appendFile(process.env.GITHUB_STEP_SUMMARY, `### Release operator image\n\nSource: \`${value.sourceSha}\`\n\n`
         + `Controller: \`${value.controllerSha}\`; source tree: \`${value.sourceTree}\`.\n\n`
-        + `Requested by ${value.original.login}; run by ${value.triggeredBy.login}. Exact-source main Verify and CodeQL passed.\n`);
+        + `Requested by ${value.original.login}; run by ${value.triggeredBy.login}. Operator source and controller each passed exact-main Verify and CodeQL; source is not newer than controller.\n`
+        + `Controller evidence: ${value.controllerVerification.map(run => run.url).join(', ')}.\n`);
     }
   } catch { process.stderr.write('release_image_admission_failed\n'); process.exitCode = 1; }
 }

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       operator_source_sha:
-        description: 'Optional verified main commit (40-character SHA); empty uses workflow source'
+        description: 'Verified main ancestor of the verified controller (40-character SHA); empty uses controller'
         required: false
         type: string
         default: ''
