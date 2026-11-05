@@ -198,7 +198,10 @@ test('shared event keyboard focus and prize fields use the declared semantic foc
 test('calendar month label can shrink at enlarged text without shrinking navigation targets',()=>{
  const css=readFileSync('apps/portal-web/src/modules/EventCalendar.css','utf8');
  const rule=(selector:string)=>{const matches=[...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match=>match[1].trim()===selector);assert.equal(matches.length,1);return matches[0][2];};
+ // The heading is a grid item: its automatic minimum otherwise keeps the whole
+ // calendar at the nav's max-content width even when the nav itself can shrink.
  // Source sizing contract only. The native journey checks actual viewport geometry.
+ for(const selector of ['.event-calendar','.event-calendar-heading'])assert.match(rule(selector),/min-width:\s*0(?:;|$)/);
  assert.match(rule('.event-calendar-nav'),/min-width:\s*0(?:;|$)/);
  assert.match(rule('.event-calendar-nav'),/max-width:\s*100%(?:;|$)/);
  assert.match(rule('.event-calendar-nav strong'),/width:\s*7rem(?:;|$)/);
@@ -208,5 +211,5 @@ test('calendar month label can shrink at enlarged text without shrinking navigat
  assert.match(buttons,/flex:\s*none(?:;|$)/);
  assert.match(buttons,/min-width:\s*44px(?:;|$)/);
  assert.match(buttons,/min-height:\s*44px(?:;|$)/);
- for(const selector of ['.event-calendar-nav','.event-calendar-nav strong','.event-calendar-nav .btn'])assert.doesNotMatch(rule(selector),/overflow(?:-x)?:\s*(?:hidden|clip)|font-size:\s*\d+px/);
+ for(const selector of ['.event-calendar','.event-calendar-heading','.event-calendar-heading h2','.event-calendar-nav','.event-calendar-nav strong','.event-calendar-nav .btn'])assert.doesNotMatch(rule(selector),/overflow(?:-x)?:\s*(?:hidden|clip)|font-size:\s*\d+px/);
 });
