@@ -42,7 +42,6 @@
     "apps/portal-web/src/WorkshopIcon.tsx",
     "apps/portal-web/src/Navigation.tsx",
     "apps/portal-web/src/styles.css",
-    "apps/portal-web/src/modules/PlatformLogo.tsx",
     "apps/portal-web/src/modules/SettingsMenu.tsx",
     "tests/runtime/home-entry.test.ts",
     "tests/runtime/zod-csp-probe.test.ts",

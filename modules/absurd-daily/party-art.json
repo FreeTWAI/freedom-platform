@@ -1,0 +1,142 @@
+{
+  "format": "freedom.party-art/v1",
+  "created_at": "2026-10-28T04:45:16.868Z",
+  "source": "apps/portal-web/src/games/party/stage.ts",
+  "source_sha256": "1ce46d8f33fc70ae732acdadf73ca46378745bc2394a8cbb9a7ebec2f7103467",
+  "native_canvas": {
+    "width": 640,
+    "height": 480,
+    "device_pixel_ratio": 1
+  },
+  "provenance": "Original procedural models; production createPartyStage and newParty(seed42), ready state; operator-entry capture, not gameplay acceptance",
+  "environment": {
+    "browser": "153.0.8010.12",
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "viewport": [
+      1280,
+      900
+    ],
+    "dpr": 1
+  },
+  "compiled_factory": {
+    "file": "_native-party-fixture-C4IK2Mw2.js",
+    "sha256": "010a7a04a7b97ea924bb13ef6d7dc077ac27b36e1213f83376e32fc10f5f4a80"
+  },
+  "source_inputs": [
+    {
+      "path": "apps/portal-web/src/games/party/stage.ts",
+      "sha256": "1ce46d8f33fc70ae732acdadf73ca46378745bc2394a8cbb9a7ebec2f7103467"
+    },
+    {
+      "path": "apps/portal-web/src/games/stage-batch.ts",
+      "sha256": "c87936287eebda9a55310b6a864623df23d3aba3f9d83342b8b5a36b80a20fd0"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/domain.ts",
+      "sha256": "b9599a91c79f68a97354cc0de0d8bd156511fa06dfde62ace461ec3da19b23bc"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/catalog.ts",
+      "sha256": "17281aa0e2ff9ca0ee648001f1e9b8ae7937003ce22633564096626217e86200"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/tofu-batch.ts",
+      "sha256": "abc62a63ed037941e0dd1974ef8f444ce8aee285a5c38b619ba3d717246d39f8"
+    },
+    {
+      "path": "apps/portal-web/vite.config.ts",
+      "sha256": "80320c355964cfb6d4fb697b687bc987adb6cf794001af2b8384498b03679546"
+    },
+    {
+      "path": "modules/absurd-daily/tools/native-party-previews.mjs",
+      "sha256": "fc13f53bb1c4cb2f296d6b25b250ca678398afb6990ec38fb0286aeb605ce93f"
+    },
+    {
+      "path": "package.json",
+      "sha256": "bed63f92c5d3a8179f09ff02dc71ca8589bb8fb92b0530a0d112e1599475ee1d"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "7fd9ddcebd6c5d9b4f9272f735e1587693404a169beaff6a124f958dddaf87b1"
+    },
+    {
+      "path": "apps/portal-web/src/games/domain.ts",
+      "sha256": "6d582c91e25bc2411cb7a9c83b2190034ad640a2053e184f4033db8b16bf3bd1"
+    }
+  ],
+  "total_bytes": 46894,
+  "previews": [
+    {
+      "game": "chair",
+      "seed": 42,
+      "state": "ready",
+      "elapsed_ms": 0,
+      "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
+      "width": 640,
+      "height": 480,
+      "bytes": 10664,
+      "sha256": "5f6b4fed69500dc778c5a99227760135e6eeff28790ea7e048437849cd55047d",
+      "source_png_sha256": "92057fbde8e9041164b4a59cf0ab590c3a38285c52ce2ef1f6dd4218410e9752",
+      "native": {
+        "calls": 76,
+        "triangles": 60264,
+        "geometries": 15,
+        "textures": 7
+      },
+      "canvas_after_dispose": 0,
+      "timing_ms": {
+        "import": 40.5,
+        "construct": 247,
+        "capture": 202.89999999990687
+      }
+    },
+    {
+      "game": "tofu",
+      "seed": 42,
+      "state": "ready",
+      "elapsed_ms": 0,
+      "path": "apps/portal-web/public/games/absurd-daily/party/tofu.webp",
+      "width": 640,
+      "height": 480,
+      "bytes": 16662,
+      "sha256": "1b33bc6215efa5320a0ed2b65cd503cf732fe392ee977442464ae430fdcb0a3b",
+      "source_png_sha256": "fe89429b2a7c50a3f2a06a134250306078e7ccfbd27c1357d990cf4290083a16",
+      "native": {
+        "calls": 48,
+        "triangles": 26776,
+        "geometries": 11,
+        "textures": 6
+      },
+      "canvas_after_dispose": 0,
+      "timing_ms": {
+        "import": 0.09999999997671694,
+        "construct": 86.60000000009313,
+        "capture": 244.29999999993015
+      }
+    },
+    {
+      "game": "holiday",
+      "seed": 42,
+      "state": "ready",
+      "elapsed_ms": 0,
+      "path": "apps/portal-web/public/games/absurd-daily/party/holiday.webp",
+      "width": 640,
+      "height": 480,
+      "bytes": 19568,
+      "sha256": "37c1a57eb827ea45382b629990dc5e7ca7125cab15f1e32d1e557ecbe6f90349",
+      "source_png_sha256": "7735445a8f76cf019b6a88204c63bc43ab99a40d6a72a16b0404c3c995b52767",
+      "native": {
+        "calls": 88,
+        "triangles": 83936,
+        "geometries": 16,
+        "textures": 14
+      },
+      "canvas_after_dispose": 0,
+      "timing_ms": {
+        "import": 0.19999999995343387,
+        "construct": 152.59999999997672,
+        "capture": 197.90000000002328
+      }
+    }
+  ]
+}

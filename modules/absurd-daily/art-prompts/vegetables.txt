@@ -1,0 +1,12 @@
+Use case: illustration-story. Asset: ONE 3 by 3 illustrated tile sheet for a Japanese quirky casual-game menu, 1536 by 1024 landscape. EXACTLY 3 equal columns and 3 equal rows with no gutters or dividers; 9 independent complete small scenes, one per tile. NOTHING may cross tile boundaries. Keep all subjects inside each cell with 8% safe margin.
+STYLE: match the TWO supplied reference screenshots, their simple silly flat cartoon ink drawing, economical wobbly charcoal outlines, broad flat cream, dusty red, mustard, indigo, pale aqua and muted green shapes. Original goofy food characters with only a few short ink marks for faces and little stick arms, hand-drawn wooden counters, small plain noren accents, quiet paper. Sparse handmade print texture, NOT detailed food rendering. Amusing little situations, clear silhouettes and open background, not food advertisement beauty shots. No cinematic light, 3D rendering, glossy realism, highly detailed ingredients, dense rice granules, polished anime-food paintings, gold glow, fake UI, buttons, text, labels, letters, numbers, logos, watermarks. Do not copy the reference egg mascot or its face; create original diverse food characters. ALL NINE cells consistent in style and fully independently framed.
+Cell order left to right, then top to bottom:
+1. A salad bowl character catching three large leafy greens, two tomato friends and one carrot.
+2. A pumpkin soup bowl character borrowing a pumpkin's lid as a hat, wooden spoon.
+3. A baked sweet-potato character stretching beneath a small butter blanket, two sesame marks only.
+4. An avocado-toast character taking a little bow, three broad green avocado slices on toast.
+5. A mushroom risotto pot with three mushroom characters dancing around its wooden spoon.
+6. Vegetable-skewer characters in a row, chunky pepper mushroom and zucchini shapes on sticks.
+7. A wholegrain rice-ball character wrapped in a leafy scarf, a tiny seaweed friend, no dense grains.
+8. A plant-burger character with a mushroom patty and leafy hair, trying to close its bun.
+9. A simple wooden vegetable basket and plain noren, decorative flat background only.

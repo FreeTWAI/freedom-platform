@@ -1,0 +1,12 @@
+Use case: illustration-story. Asset: ONE 3 by 3 illustrated tile sheet for a Japanese quirky casual-game menu, 1536 by 1024 landscape. EXACTLY 3 equal columns and 3 equal rows with no gutters or dividers; 9 independent complete small scenes, one per tile. NOTHING may cross tile boundaries. Keep all subjects inside each cell with 8% safe margin.
+STYLE: match the TWO supplied reference screenshots, their simple silly flat cartoon ink drawing, economical wobbly charcoal outlines, broad flat cream, dusty red, mustard, indigo, pale aqua and muted green shapes. Original goofy food characters with only a few short ink marks for faces and little stick arms, hand-drawn wooden counters, small plain noren accents, quiet paper. Sparse handmade print texture, NOT detailed food rendering. Amusing little situations, clear silhouettes and open background, not food advertisement beauty shots. No cinematic light, 3D rendering, glossy realism, highly detailed ingredients, dense rice granules, polished anime-food paintings, gold glow, fake UI, buttons, text, labels, letters, numbers, logos, watermarks. Do not copy the reference egg mascot or its face; create original diverse food characters. ALL NINE cells consistent in style and fully independently framed.
+Cell order left to right, then top to bottom:
+1. An original goofy office worker speeding on a wheeled office chair around a wooden desk, papers flying in three broad shapes. Clear chair-racing vignette.
+2. A precarious tower of five tofu-block characters, one little block hovering above, silly determined faces, paper sky and wooden counter.
+3. A tiny office desk with six round cubby holes, cheerful holiday suitcase characters popping up while one frowning boss character peeks, hand-drawn carnival game.
+4. An oddball photographer trying to photograph three flat funny everyday objects with a little camera; a silly pigeon sneaks into frame. No film text.
+5. An oversized rubber stamp character aiming at a cream paper sheet, three simple blank red seal shapes; funny precise action.
+6. Two simple coin characters running toward a cash sorting tray while a little hand chases them, flat paper scene. No currency symbols or numbers.
+7. Plain indigo noren with sparse hand-drawn waves, decorative only.
+8. A red and mustard checker paper pattern with one original smiling kettle character, decorative only.
+9. A simple wooden counter with a blank cream menu slip and pencil, decorative only.
