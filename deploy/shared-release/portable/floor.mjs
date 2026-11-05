@@ -57,7 +57,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
     check(event?.format === 'freedom.shared-floor-event/v1', 'release_floor_event_invalid');
     if (event.kind === 'legacy-source-adopted') {
       const proof = event.proof, evidence = proof?.evidence; legacyEvidence(evidence);
-      check(state.pending === null && proof.previousSourceSha === state.sourceSha
+      check(state.pending === null && proof.previousSourceSha === state.sourceSha && state.deployedSourceSha === state.sourceSha
         && evidence.sourceSha !== state.sourceSha && isAncestor(state.sourceSha, evidence.sourceSha)
         && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
         && proof.materialPolicySha256 === state.materialPolicySha256 && proof.readOnly === true
@@ -71,6 +71,10 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       const backup = event.kind === 'backup-begin';
       if (backup) check(event.request.sourceSha === state.sourceSha && state.deployedSourceSha === state.sourceSha
         && event.request.sourceTree === state.sourceTree, 'release_floor_backup_source_changed');
+      // An abandoned committed release leaves its source ahead of the Worker;
+      // only an independent release of that same source may follow it.
+      check(state.deployedSourceSha === state.sourceSha
+        || (event.kind === 'release-begin-v2' && event.request.sourceSha === state.sourceSha), 'release_floor_unsettled');
       const candidate = backup ? { sourceSha: state.sourceSha, sourceTree: state.sourceTree, schemaLedger: state.schemaLedger } : event.candidate;
       check(candidate?.sourceSha === event.request.sourceSha && candidate.sourceTree === event.request.sourceTree
         && ledger(candidate.schemaLedger) >= state.schemaVersion
@@ -127,6 +131,32 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
       check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,
         'release_floor_backup_recovery_invalid');
+      state.pending = null; continue;
+    }
+    if (event.kind === 'release-abandoned') {
+      // Only a code release that lost its run after a confirmed COMMIT and
+      // before any deploy intent. The raised schema/source floor stays; the
+      // Worker remains its predecessor until a later release of this source.
+      const proof = event.proof, recovery = proof?.recovery, commit = pending.intents['migration:commit'];
+      check(pending.kind === 'code' && pending.stage === 0 && pending.committed && commit
+        && Object.keys(pending.intents).length === 1 && /^[1-9][0-9]*$/.test(commit.transactionId)
+        && proof?.format === 'freedom.abandoned-committed-release/v1'
+        && recovery?.format === 'freedom.verified-failed-release-migration/v1'
+        && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'target', 'controllerSha', 'operatorImage', 'configSha256']
+          .every(key => recovery[key] === pending.request[key])
+        && isDigest(recovery.receiptSha256) && /^sha256:[a-f0-9]{64}$/.test(recovery.artifactDigest ?? '')
+        && Number.isSafeInteger(recovery.artifactId) && recovery.artifactId > 0
+        && Number.isFinite(Date.parse(recovery.completedAt)) && Number.isFinite(Date.parse(proof.observedAt))
+        && Date.parse(proof.observedAt) >= Date.parse(recovery.completedAt)
+        && proof.transactionId === commit.transactionId && proof.migrationOutcome === 'committed_ledger_verified'
+        && proof.sourceSha === state.sourceSha && proof.sourceTree === state.sourceTree
+        && proof.workerSourceSha === state.deployedSourceSha && proof.workerSourceSha === pending.previousSourceSha
+        && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
+        && proof.materialPolicySha256 === state.materialPolicySha256 && proof.readOnly === true,
+      'release_floor_release_recovery_invalid');
+      request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
+      check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,
+        'release_floor_release_recovery_invalid');
       state.pending = null; continue;
     }
     if (event.kind === 'intent') {
@@ -370,6 +400,11 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       check(current.state.pending?.kind === 'backup', 'release_floor_not_started');
       const { runId, runAttempt } = current.state.pending.request;
       return append({ kind: 'backup-abandoned', runId, runAttempt, stage: 'backup', proof });
+    },
+    async abandonCommittedRelease(proof) {
+      check(current.state.pending?.kind === 'code', 'release_floor_not_started');
+      const { runId, runAttempt } = current.state.pending.request;
+      return append({ kind: 'release-abandoned', runId, runAttempt, stage: 'migration', proof });
     },
     async intent(stage, operation, proof) {
       check(current.state.pending, 'release_floor_not_started');

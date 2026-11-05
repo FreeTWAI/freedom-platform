@@ -107,6 +107,10 @@ export function validateOperatorResult(value, admission, installation, requestDi
     requireRelease(preflight.leaseHeld === true && preflight.sourceCompatible === true
       && preflight.retainedFloorVerified === true && preflight.flagsPreserved === true
       && isSha(preflight.previousSourceSha), 'release_operator_preflight_incomplete');
+    const recovered = preflight.migrationRecovery;
+    if (admission.recoverMigrationRunId) requireRelease(recovered?.previousRunId === admission.recoverMigrationRunId
+      && Number.isSafeInteger(recovered.previousRunAttempt) && recovered.previousRunAttempt > 0
+      && recovered.status === 'abandoned_after_readback' && schema.outcome === 'unchanged', 'release_migration_recovery_incomplete');
     requireRelease(((schema.outcome === 'unchanged' && schema.readOnly === true)
       || (schema.outcome === 'committed' && schema.commitStatus === 'confirmed' && /^[1-9][0-9]*$/.test(schema.transactionId)))
       && schema.ledgerVerified === true && schema.runtimeGrantsVerified === true, 'release_schema_unconfirmed');
@@ -116,6 +120,8 @@ export function validateOperatorResult(value, admission, installation, requestDi
     requireRelease(handoff.cleanupVerified === true && handoff.leaseReleased === true
       && handoff.retainedFloorAdvanced === true, 'release_handoff_incomplete');
     return value.phases.map(phase => ({ name: phase.name, status: 'passed', ...publicLeaseDiagnostics(phase, admission),
+      ...(phase.name === 'preflight' && admission.recoverMigrationRunId ? { migrationRecovery: { previousRunId: recovered.previousRunId,
+        previousRunAttempt: recovered.previousRunAttempt, status: recovered.status } } : {}),
       ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),
       startedAt: new Date(Date.parse(phase.startedAt)).toISOString(), completedAt: new Date(Date.parse(phase.completedAt)).toISOString() }));
   }
@@ -229,8 +235,8 @@ export function operatorProgress(value, admission, installation, requestDigest) 
   });
 }
 
-export async function runOperator({ admission, installation, sourceRoot, temporaryRoot, registry,
-  config, credentials, scheduleEvidence, recoveryEvidence, handoffRecoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
+export async function runOperator({ admission, installation, sourceRoot, temporaryRoot, registry, config, credentials,
+  scheduleEvidence, recoveryEvidence, handoffRecoveryEvidence, migrationRecoveryEvidence, run = quietCommand, onProgress = async () => {} }) {
   const source = resolve(sourceRoot), privateDir = join(temporaryRoot, 'input'), resultDir = join(temporaryRoot, 'output');
   const workDir = join(temporaryRoot, 'work');
   requireRelease(![source, privateDir, resultDir, workDir].some(path => /[,\r\n]/.test(path)), 'release_mount_path_invalid');
@@ -253,7 +259,8 @@ export async function runOperator({ admission, installation, sourceRoot, tempora
     }
   }
   const requestBytes = json({ ...admission, operatorImage: installation.image, scheduleEvidence, recoveryEvidence, handoffRecoveryEvidence,
-    configSha256: installation.configSha256, requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission) });
+    migrationRecoveryEvidence, configSha256: installation.configSha256,
+    requiredPhases: admission.mode === 'backup' ? BACKUP_PHASES : releasePhases(admission) });
   const name = `freedom-release-${admission.runId}-${admission.runAttempt}`;
   await mkdir(privateDir, { recursive: false, mode: 0o700 });
   await mkdir(resultDir, { recursive: false, mode: 0o700 });

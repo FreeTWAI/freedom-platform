@@ -43,7 +43,7 @@ export function requestFromEnvironment(env) {
   if (automatic) requireRelease(env.RELEASE_MODE === 'deploy'
     && ['RELEASE_TRIGGER_RUN_ID', 'RELEASE_TRIGGER_RUN_ATTEMPT'].every(key =>
       /^[1-9][0-9]{0,15}$/.test(env[key] ?? '') && positiveId(Number(env[key])))
-    && !env.RELEASE_RECOVER_BACKUP_RUN_ID && !env.RELEASE_RECOVER_RELEASE_RUN_ID,
+    && !env.RELEASE_RECOVER_BACKUP_RUN_ID && !env.RELEASE_RECOVER_RELEASE_RUN_ID && !env.RELEASE_RECOVER_MIGRATION_RUN_ID,
   'release_automatic_request_invalid');
   for (const key of ['GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_ACTOR_ID']) {
     requireRelease(/^[1-9][0-9]{0,15}$/.test(env[key] ?? '')
@@ -58,9 +58,15 @@ export function requestFromEnvironment(env) {
     ? !recovery && /^[1-9][0-9]{0,15}$/.test(handoff ?? '') && positiveId(Number(handoff))
       && String(Number(handoff)) === handoff && handoff !== env.GITHUB_RUN_ID
     : !handoff, 'release_handoff_recovery_request_invalid');
+  // A committed migration whose run stopped before deploy; never with backup recovery.
+  const migration = env.RELEASE_RECOVER_MIGRATION_RUN_ID;
+  requireRelease(!migration || (env.RELEASE_MODE === 'deploy' && !recovery && /^[1-9][0-9]{0,15}$/.test(migration)
+    && positiveId(Number(migration)) && String(Number(migration)) === migration && migration !== env.GITHUB_RUN_ID),
+  'release_migration_recovery_request_invalid');
   return { ...(automatic ? { automatic: { triggerRunId: Number(env.RELEASE_TRIGGER_RUN_ID),
     triggerRunAttempt: Number(env.RELEASE_TRIGGER_RUN_ATTEMPT) } } : {}),
     ...(recovery ? { recoverRunId: Number(recovery) } : {}),
+    ...(migration ? { recoverMigrationRunId: Number(migration) } : {}),
     ...(handoff ? { recoverReleaseRunId: Number(handoff) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
     repositoryId: REPOSITORY_ID, sourceSha: env.RELEASE_SHA, target: env.RELEASE_TARGET,
     mode: env.RELEASE_MODE, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,

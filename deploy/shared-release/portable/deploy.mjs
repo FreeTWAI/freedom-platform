@@ -59,8 +59,11 @@ function bindingSet(bindings) {
   }
 }
 
-export function assertReleasePredecessor(before, state) {
-  check(before.sourceSha === state.deployedSourceSha && state.sourceSha === state.deployedSourceSha
+// An abandoned committed release leaves its source floor ahead of the Worker.
+// Only a release of that same committed source may follow it.
+export function assertReleasePredecessor(before, state, sourceSha) {
+  check(before.sourceSha === state.deployedSourceSha
+    && (state.sourceSha === state.deployedSourceSha || sourceSha === state.sourceSha)
     && before.bindingsSha256 === state.bindingsSha256, 'release_entry_predecessor_changed');
 }
 
