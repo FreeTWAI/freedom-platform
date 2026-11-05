@@ -174,7 +174,9 @@ function harness(refusal=412){
  const calls:{path:string;body:unknown;options:any}[]=[],notices:string[]=[];let current=true;
  const state={keys:new Map<string,string>(),snapshot:{busy:false,error:null,lastFailureUnknown:false},listeners:new Set<()=>void>(),live:()=>true};
  const client={post:async(path:string,body:unknown,options:any)=>{calls.push({path,body,options});if(calls.length===1)throw new ApiError({message:'Synthetic lost response',network:true});if(calls.length===2)throw new ApiError({message:'Synthetic refusal',status:refusal,definitiveResponse:true});return{state:'removed',aggregate_version:'8'};}};
- const context:any={actionInFlight:{current:false},busy:false,lastFailureUnknown:false,lastAction:null,directory:{isCurrent:()=>current,refreshAfterMutation:async()=>{}},setLastAction:(value:any)=>context.lastAction=value,setNotice:(value:string)=>notices.push(value),setActionTarget:()=>{},setConfirming:()=>{},announceInboxChange:()=>{},mutate:(path:string,body:unknown,version:number|undefined,decode:(value:unknown)=>unknown)=>performModuleMutation(client as any,state,path,body,version,decode)};
+ // This handler-only harness supplies local bindings, not React commit/leave
+ // behavior; the mounted FriendsPanel navigation suite covers those effects.
+ const context:any={actionInFlight:{current:false},pendingCommand:{current:null},unknownCommand:{current:false},setSettledCommand:()=>{},busy:false,lastFailureUnknown:false,lastAction:null,directory:{isCurrent:()=>current,refreshAfterMutation:async()=>{}},setLastAction:(value:any)=>context.lastAction=value,setNotice:(value:string)=>notices.push(value),setActionTarget:()=>{},setConfirming:()=>{},announceInboxChange:()=>{},mutate:(path:string,body:unknown,version:number|undefined,decode:(value:unknown)=>unknown)=>performModuleMutation(client as any,state,path,body,version,decode)};
  const {act,sendAction}=runInNewContext(actSource+';({act,sendAction})',context);
  return {calls,notices,context,state,act,sendAction,expire:()=>current=false,sync:()=>{context.busy=state.snapshot.busy;context.lastFailureUnknown=state.snapshot.lastFailureUnknown;}};
 }

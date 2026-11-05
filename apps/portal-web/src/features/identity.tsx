@@ -37,7 +37,7 @@ export const identityFeatures = {
   },
   "friends": {
     moduleId: "friends-directory", placement: 'page',
-    render: ({client, session, site, selectTab, friendScope, openMemberMessage}) => <FriendsPanel client={client} session={session} initialScope={friendScope} memberBlockingEnabled={site?.member_blocking_enabled===true} onNavigate={selectTab} onMessage={openMemberMessage} />,
+    render: ({client, session, site, selectTab, friendScope, openMemberMessage, registerPageLeave}) => <FriendsPanel client={client} session={session} initialScope={friendScope} memberBlockingEnabled={site?.member_blocking_enabled===true} onNavigate={selectTab} onMessage={openMemberMessage} registerLeave={registerPageLeave} />,
   },
   "members": {
     moduleId: "friends-directory", placement: 'page',
