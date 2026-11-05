@@ -114,10 +114,12 @@ async function save(page:Page,form:Locator,id?:string){
   const result=await response;expect(result.status()).toBe(id?200:201);
   const body=await result.json();await expect(form).toHaveCount(0);return body;
 }
-async function expectPrize(region:Locator,name=prize.name){
+async function expectPrize(region:Locator,name=prize.name,canManagePhoto=false){
   await expect(region).toBeVisible();
   for(const text of [name,prize.description,'共 3 份',prize.completion_rule,prize.claim_note,'不代表已發獎'])await expect(region).toContainText(text);
-  await expect(region.locator('input,textarea,button')).toHaveCount(0);
+  await expect(region.locator('input,textarea')).toHaveCount(0);
+  await expect(region.getByRole('button')).toHaveCount(canManagePhoto?1:0);
+  if(canManagePhoto)await expect(region.getByRole('button',{name:`管理 ${name} 的照片`,exact:true})).toBeEnabled();
   await expect(region.locator('svg')).toHaveAttribute('aria-hidden','true');
 }
 async function approve(page:Page,reviewerEmail:string,id:string){
@@ -146,7 +148,7 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
   expect(stableId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   await page.goto(`/events/${id}`);await page.reload();
   const card=page.locator('.experience-card'),details=card.getByRole('region',{name:'活動獎品說明',exact:true});
-  await expectPrize(details);
+  await expectPrize(details,prize.name,true);
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
   const editor=card.locator('form.experience-editor');
   for(const [label,value] of [['獎品名稱',prize.name],['獎品介紹（選填）',prize.description],['準備幾份','3'],['要做到什麼',prize.completion_rule],['怎麼領取',prize.claim_note]])await expect(editor.getByLabel(label,{exact:true})).toHaveValue(value);
@@ -154,7 +156,7 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
   const renamed='合成入門書（更新版）';await editor.getByLabel('獎品名稱',{exact:true}).fill(renamed);
   const edited=await save(page,editor,id);
   expect(edited.prize_details).toEqual([{...prize,name:renamed,prize_id:stableId}]);
-  await page.reload();await expectPrize(details,renamed);
+  await page.reload();await expectPrize(details,renamed,true);
   const guest=await browser.newContext({viewport:{width,height:844}});
   try{
     const publicPage=await guest.newPage();
