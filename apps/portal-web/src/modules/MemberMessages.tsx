@@ -419,9 +419,10 @@ export function DirectMessages({client,session,messageImagesEnabled=false,member
   const live=useRef({pullLatest});live.current={pullLatest};
   async function pullLatest(){
     const shown=snapshot.current,id=currentPeer.current;
-    if(!shown.active||document.visibilityState!=='visible'||!navigator.onLine||polling.current||Date.now()<retryAt.current)return;
+    if(!shown.active||document.visibilityState!=='visible'||!navigator.onLine)return;
     // Other conversations remain discoverable without reloading their previews every second.
     if(convInFlight.current===null&&Date.now()-listCheckedAt.current>=8000)void loadConversations(true);
+    if(polling.current||Date.now()<retryAt.current)return;
     if(!shown.readingThread||!id||shown.threadStatus!=='ready'||!shown.thread||shown.reading||shown.sending||threadInFlight.current||moreState.current.loading)return;
     const refreshDue=receiptRefresh.current.has(id)||directMessageReceiptRefreshDue(shown.thread.items,me,receiptCheckedAt.current.get(id)??0,Date.now());
     if(!refreshDue&&!chatPollDue(idlePoll.current,Date.now(),retryAt.current))return;
