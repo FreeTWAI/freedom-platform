@@ -15,6 +15,31 @@ test('whole major amounts convert using store currency rules',()=>{for(const cur
 test('unknown attempts keep the same immutable key, body and version; new key only after settling',()=>{const input={method:'post' as const,path:'/orders/id/cancel',body:{nested:{value:1}},ifMatch:'7'},state=startAttempt(idleAttempt,input);assert.ok(attemptLocked(state));assert.notEqual(state.phase,'idle');input.body.nested.value=2;assert.deepEqual(state.attempt.body,{nested:{value:1}});assert.ok(Object.isFrozen(state.attempt.body));const unknown={...state,phase:'unknown' as const};assert.equal(startAttempt(unknown,input),unknown);const retry=retryAttempt(unknown);assert.equal(retry.attempt,state.attempt);assert.equal(retry.attempt?.key,state.attempt.key);assert.equal(retry.attempt?.ifMatch,'7');assert.ok(attemptLocked(unknown));assert.ok(!attemptLocked(idleAttempt));assert.notEqual(startAttempt(idleAttempt,input).attempt?.key,state.attempt.key);assert.equal(createAttempt(input,'10000000-0000-4000-8000-000000000001').key,'10000000-0000-4000-8000-000000000001');assert.ok(unknownFailure(new TypeError('network')));});
 
 test('every setup problem code has a specific next step',()=>{for(const code of CommerceSetupErrorCodeSchema.options)assert.ok(setupNext[code],code);});
+test('verification problems describe the actual recovery instead of treating every 403 as missing shop permission',async t=>{
+ const problems=[
+  {status:403,code:'policy_unconfigured',expected:'平台尚未完成身分驗證設定，請聯絡平台管理員處理。'},
+  {status:403,code:'csrf_rejected',expected:'登入狀態已變更，請先保留尚未儲存的內容，再重新整理頁面驗證。'},
+  {status:401,code:'session_expired',expected:'登入已到期，請重新登入後確認結果。'},
+  {status:403,code:'principal_disabled',expected:'帳號目前停用，請聯絡管理員。'},
+  {status:403,code:'fresh_auth_required',expected:'請重新輸入密碼驗證身分。'},
+  {status:429,code:'fresh_auth_rate_limited',expected:'密碼驗證次數過多，請稍後再試。'},
+ ];
+ for(const problem of problems){
+  const client=new PortalClient();client.csrfToken='synthetic';
+  t.mock.method(globalThis,'fetch',async()=>Response.json({...problem,detail:'synthetic password or bank-account fragment'},{status:problem.status}));
+  await assert.rejects(client.post('/me/high-risk-verifications',{}, {suppressConsole:true}),(cause:unknown)=>{
+   assert.ok(cause instanceof ApiError);assert.equal(errorText(cause,true),problem.expected);
+   if(problem.status===403)assert.equal(errorText(cause),problem.expected);
+   return true;
+  });
+ }
+});
+test('actual or unknown access denials keep permission guidance without reflecting sensitive detail',()=>{
+ for(const code of ['capability_denied','tenant_capability_denied','unknown_denial','constructor','__proto__',undefined]){
+  const cause=new ApiError({message:'synthetic secret',status:403,code,detail:'synthetic secret'});
+  assert.equal(errorText(cause,true),'你沒有這個操作的權限。請聯絡商店擁有者或管理員授予權限。');
+ }
+});
 test('invalid money never becomes a zero amount',()=>{for(const value of ['bad','',NaN,'1.5'])assert.equal(money(value,'TWD'),'金額無法顯示');assert.match(money(0,'TWD'),/0\.00/);assert.match(money(100,'USD'),/1\.00/);});
 
 test('offline setting field problems reach the seller form without changing other API errors',async t=>{

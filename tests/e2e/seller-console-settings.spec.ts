@@ -2,6 +2,63 @@ import {randomBytes} from 'node:crypto';
 import {test,expect,openSeller,verifyPassword,expireNextSettingsProof} from './seller-console-fixture.js';
 import {fixtureStore} from './hosted-order-fixture.js';
 import {DEMO_PASSWORD} from '../../packages/testing/seed.js';
+
+for(const width of [390,1280])test(`missing verification policy preserves the bank draft and identifies the platform blocker (${width}px)`,async({page,browser,baseURL,e2eAuthPool})=>{
+ await page.setViewportSize({width,height:900});
+ const s=await fixtureStore(e2eAuthPool,browser,baseURL!);
+ await openSeller(page,baseURL!,s.seller.email,`#stores/${s.tenant}/${s.instance}/settings/payments`);
+ const seller=page.locator('.seller-console'),form=seller.getByRole('form',{name:'線下收款設定'});
+ await seller.getByRole('button',{name:'編輯線下收款設定',exact:true}).click();
+ await form.getByLabel('提供銀行匯款',{exact:true}).check();
+ for(const [label,value] of [['銀行代碼','808'],['銀行名稱','合成測試銀行'],['收款帳號','123456789012'],['戶名','合成測試店主']])await form.getByLabel(label,{exact:true}).fill(value);
+ const before=await (await page.request.get('/api/v1'+s.root+'/offline-payment-settings')).json();
+ let writes=0;page.on('request',r=>{if(r.method()==='PUT'&&r.url().endsWith('/offline-payment-settings'))writes++;});
+ // Retire only this run's synthetic policy, preserving the production immutability trigger.
+ const policy=(await e2eAuthPool.query("UPDATE tenant_authority_policies SET status='retired' WHERE status='active' RETURNING *")).rows[0];
+ expect(policy).toBeTruthy();let restored=false;
+ const restore=async()=>{
+  await e2eAuthPool.query(`INSERT INTO tenant_authority_policies(revision,status,fresh_auth_ttl_seconds,transfer_ttl_seconds,recovery_approval_ttl_seconds,max_open_recovery_cases_per_tenant)
+   VALUES($1,'active',$2,$3,$4,$5)`,[String(BigInt(policy.revision)+1n),policy.fresh_auth_ttl_seconds,policy.transfer_ttl_seconds,policy.recovery_approval_ttl_seconds,policy.max_open_recovery_cases_per_tenant]);
+  restored=true;
+ };
+ try{
+  await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();
+  const blocked=page.waitForResponse(r=>r.url().endsWith('/me/high-risk-verifications'));
+  await verifyPassword(page,DEMO_PASSWORD);
+  const response=await blocked;expect(response.status()).toBe(403);expect((await response.json()).code).toBe('policy_unconfigured');
+  const dialog=page.getByRole('dialog',{name:'驗證身分'});
+  await expect(dialog.getByRole('alert')).toHaveText('平台尚未完成身分驗證設定，請聯絡平台管理員處理。');
+  await expect(dialog.getByLabel('密碼',{exact:true})).toHaveValue('');
+  expect(writes).toBe(0);expect(await (await page.request.get('/api/v1'+s.root+'/offline-payment-settings')).json()).toEqual(before);
+  expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM tenant_high_risk_verifications WHERE user_id=$1',[s.seller.id])).rows[0].n).toBe(0);
+  await dialog.getByRole('button',{name:'關閉',exact:true}).click();
+  await expect(form.getByLabel('收款帳號',{exact:true})).toHaveValue('123456789012');
+  await expect(form.getByLabel('戶名',{exact:true})).toHaveValue('合成測試店主');
+  await expect(form.getByRole('button',{name:'儲存線下收款設定',exact:true})).toBeFocused();
+  await restore();
+  await form.getByRole('button',{name:'儲存線下收款設定',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+  await expect(seller.getByText('已保存：線下收款設定。',{exact:true})).toBeVisible();
+  expect(writes).toBe(1);
+  const saved=await (await page.request.get('/api/v1'+s.root+'/offline-payment-settings')).json();expect(saved.settings.bank_transfer.account_number).toBe('123456789012');
+ }finally{if(!restored)await restore();}
+});
+
+test('stale CSRF during payment verification keeps the provider draft and requests a page refresh',async({page,browser,baseURL,e2eAuthPool})=>{
+ const s=await fixtureStore(e2eAuthPool,browser,baseURL!);
+ await openSeller(page,baseURL!,s.seller.email,`#stores/${s.tenant}/${s.instance}/settings/payments`);
+ const seller=page.locator('.seller-console');await seller.getByLabel('特店編號',{exact:true}).fill('1234567');
+ await page.route('**/me/high-risk-verifications',route=>route.continue({headers:{...route.request().headers(),'x-csrf-token':'synthetic-stale-token'}}));
+ await seller.getByRole('button',{name:'新增綠界帳戶',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+ const dialog=page.getByRole('dialog',{name:'驗證身分'});
+ await expect(dialog.getByRole('alert')).toHaveText('登入狀態已變更，請先保留尚未儲存的內容，再重新整理頁面驗證。');
+ await expect(dialog.getByLabel('密碼',{exact:true})).toHaveValue('');
+ expect((await (await page.request.get('/api/v1'+s.root+'/provider-accounts')).json()).items).toEqual([]);
+ await dialog.getByRole('button',{name:'關閉',exact:true}).click();await expect(seller.getByLabel('特店編號',{exact:true})).toHaveValue('1234567');
+ await page.unroute('**/me/high-risk-verifications');
+ await seller.getByRole('button',{name:'新增綠界帳戶',exact:true}).click();await verifyPassword(page,DEMO_PASSWORD);
+ await expect(seller.getByRole('heading',{name:'特店 1234567',exact:true})).toBeVisible();
+});
+
 test('E11 account, one-use fresh auth, write-only key replacement, activation, suspend and resume',async({page,browser,baseURL,e2eAuthPool})=>{
  test.setTimeout(180000);const s=await fixtureStore(e2eAuthPool,browser,baseURL!),hash=`#stores/${s.tenant}/${s.instance}/settings/payments`,logs:string[]=[];page.on('console',m=>logs.push(m.text()));await openSeller(page,baseURL!,s.seller.email,hash);const console=page.locator('.seller-console');await expect(console.getByText('storefront@1.1.0',{exact:true})).toBeVisible();await expect(console.getByText('目前版本已無可用升級。',{exact:true})).toBeVisible();
  await console.getByLabel('特店編號',{exact:true}).fill('1234567');await console.getByRole('button',{name:'新增綠界帳戶',exact:true}).click();await verifyPassword(page,'synthetic-wrong-password');await expect(page.getByRole('dialog',{name:'驗證身分'}).getByRole('alert')).toBeVisible();await expect(page.getByRole('dialog').getByLabel('密碼',{exact:true})).toHaveValue('');expect((await (await page.request.get('/api/v1'+s.root+'/provider-accounts')).json()).items).toEqual([]);await verifyPassword(page,DEMO_PASSWORD);await expect(console.getByRole('heading',{name:'特店 1234567',exact:true})).toBeVisible();const accounts=async()=>(await (await page.request.get('/api/v1'+s.root+'/provider-accounts')).json()).items;expect((await accounts())[0].environment).toBe('sandbox');
