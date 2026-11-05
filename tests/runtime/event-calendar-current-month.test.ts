@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {test,after,mock} from 'node:test';
 import {readFileSync} from 'node:fs';
-import {createRequire} from 'node:module';
 import {runInNewContext} from 'node:vm';
 import {transformSync} from 'esbuild';
+import * as ReactRuntime from 'react';
+import * as JSXRuntime from 'react/jsx-runtime';
 import {createElement,act} from 'react';
 import {createRoot} from 'react-dom/client';
 import type {CommunityEvent} from '../../apps/portal-web/src/modules/EventsPanel.js';
@@ -21,7 +22,7 @@ class DomNode {
   ownerDocument:DomDocument; private text=''; disabled=false;
   constructor(name:string,doc:DomDocument,type=1){this.nodeName=this.tagName=name.toUpperCase();this.nodeType=type;this.ownerDocument=doc;}
   get firstChild(){return this.childNodes[0]??null;}
-  get lastChild(){return this.childNodes.at(-1)??null;}
+  get lastChild():DomNode|null{return this.childNodes.at(-1)??null;}
   get nextSibling(){const nodes=this.parentNode?.childNodes??[];return nodes[nodes.indexOf(this)+1]??null;}
   appendChild(node:DomNode){node.parentNode?.removeChild(node);this.childNodes.push(node);node.parentNode=this;return node;}
   insertBefore(node:DomNode,before:DomNode){node.parentNode?.removeChild(node);this.childNodes.splice(this.childNodes.indexOf(before),0,node);node.parentNode=this;return node;}
@@ -50,12 +51,12 @@ const originalGlobals={window:globalThis.window,document:globalThis.document,act
 const doc=new DomDocument();
 Object.assign(globalThis,{window:doc.defaultView,document:doc,IS_REACT_ACT_ENVIRONMENT:true});
 after(()=>Object.assign(globalThis,{window:originalGlobals.window,document:originalGlobals.document,IS_REACT_ACT_ENVIRONMENT:originalGlobals.act}));
-const require=createRequire(import.meta.url),module={exports:{} as {EventCalendar:React.ComponentType<{events:CommunityEvent[];onOpen:(id:string)=>void}>}};
+const module={exports:{} as {EventCalendar:React.ComponentType<{events:CommunityEvent[];onOpen:(id:string)=>void}>}};
 const source=readFileSync(new URL('../../apps/portal-web/src/modules/EventCalendar.tsx',import.meta.url),'utf8');
 const compiled=transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code;
 // Only CSS has no meaning in this DOM host. The complete production TSX and its
 // real React imports execute unchanged; state and handlers are never reimplemented.
-runInNewContext(compiled,{module,exports:module.exports,require:(name:string)=>name.endsWith('.css')?{}:require(name),Date});
+runInNewContext(compiled,{module,exports:module.exports,require:(name:string)=>{if(name==='react')return ReactRuntime;if(name==='react/jsx-runtime')return JSXRuntime;if(name==='./EventCalendar.css')return {};throw new Error(`Unexpected calendar import: ${name}`);},Date});
 function all(node:DomNode):DomNode[]{return [node,...node.childNodes.flatMap(all)];}
 function label(date:Date){return date.toLocaleDateString('zh-TW',{year:'numeric',month:'long'});}
 function key(date:Date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
