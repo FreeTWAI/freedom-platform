@@ -22,8 +22,13 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
   let api, deployment;
   try {
     requireRelease(['admit', 'execute'].includes(env.RELEASE_COMMAND), 'release_command_invalid');
-    const request = requestFromEnvironment(env);
+    // Scheduled admission selects main using GitHub, without executing source
+    // code or reading environment secrets. Execution uses only this job's output.
+    const selectMain = env.GITHUB_EVENT_NAME === 'schedule' && env.RELEASE_COMMAND === 'admit';
+    let request = requestFromEnvironment(selectMain ? { ...env, RELEASE_SHA: env.CONTROLLER_SHA } : env);
     api = suppliedApi ?? githubClient(env.GH_TOKEN);
+    if (selectMain) request = requestFromEnvironment({ ...env,
+      RELEASE_SHA: (await api(`/repos/${REPOSITORY}/branches/main`)).commit?.sha });
     const admission = request.automatic
       ? await admitAutomaticRelease(request, api, { allowSkip: env.RELEASE_COMMAND === 'admit' })
       : await admitRelease(request, api);
@@ -179,6 +184,8 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
         + `- Requested by: ${receipt.original.login}; run by: ${receipt.triggeredBy.login}\n` : '')
       + `- Provider outcome: \`${receipt.providerOutcome}\`\n`
       + (receipt.skipReason ? `- Skipped: \`${receipt.skipReason}\`\n` : '')
+      + (receipt.skipReason === 'waiting_for_both_main_checks'
+        ? '- Required main CI is not successful: it may be pending, missing or failed. Reconciliation does not rerun CI.\n' : '')
       + (receipt.handoffReconciliation ? `- Original failed release: [${receipt.handoffReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.handoffReconciliation.runId}); its failure is retained.\n` : '')
       + (receipt.status === 'reconciled' ? '- Handoff reconciled; no migration, publication or backup was repeated.\n' : '')
       + (receipt.migrationReconciliation ? `- Requested migration recovery for original failed release: [${receipt.migrationReconciliation.runId}](https://github.com/${REPOSITORY}/actions/runs/${receipt.migrationReconciliation.runId}); its failure is retained.\n` : '')

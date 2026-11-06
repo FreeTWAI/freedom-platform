@@ -1,5 +1,5 @@
 import { REPOSITORY, REPOSITORY_ID, requireRelease as check, isSha, isDigest, admitRelease, sameActor,
-  readReleaseArtifact, requireSuccessfulReleaseJobs } from './admission.mjs';
+  readReleaseArtifact, requireSuccessfulReleaseJobs, automaticReleaseEvent } from './admission.mjs';
 
 const prefix = `/repos/${REPOSITORY}`;
 const id = value => Number.isSafeInteger(value) && value > 0;
@@ -9,19 +9,23 @@ const id = value => Number.isSafeInteger(value) && value > 0;
  * Execution repeats all checks and never retries a failed/uncertain deployment. */
 export async function admitAutomaticRelease(request, api, { allowSkip = false } = {}) {
   const trigger = request.automatic;
-  check(id(trigger?.triggerRunId) && id(trigger.triggerRunAttempt) && request.mode === 'deploy',
+  const event = automaticReleaseEvent(trigger);
+  check(event !== undefined && request.mode === 'deploy',
     'release_automatic_request_invalid');
-  const upstream = await api(`${prefix}/actions/runs/${trigger.triggerRunId}`);
-  check(upstream.id === trigger.triggerRunId && upstream.run_attempt === trigger.triggerRunAttempt
-    && upstream.repository?.id === REPOSITORY_ID && upstream.head_repository?.id === REPOSITORY_ID
-    && upstream.event === 'push' && upstream.head_branch === 'main' && upstream.head_sha === request.sourceSha
-    && ['.github/workflows/verify.yml', '.github/workflows/codeql.yml'].includes(upstream.path)
-    && upstream.status === 'completed' && upstream.conclusion === 'success', 'release_automatic_trigger_invalid');
+  let upstream;
+  if (event === 'workflow_run') {
+    upstream = await api(`${prefix}/actions/runs/${trigger.triggerRunId}`);
+    check(upstream.id === trigger.triggerRunId && upstream.run_attempt === trigger.triggerRunAttempt
+      && upstream.repository?.id === REPOSITORY_ID && upstream.head_repository?.id === REPOSITORY_ID
+      && upstream.event === 'push' && upstream.head_branch === 'main' && upstream.head_sha === request.sourceSha
+      && ['.github/workflows/verify.yml', '.github/workflows/codeql.yml'].includes(upstream.path)
+      && upstream.status === 'completed' && upstream.conclusion === 'success', 'release_automatic_trigger_invalid');
+  }
   const current = await api(`${prefix}/actions/runs/${request.runId}`);
   const workflow = await api(`${prefix}/actions/workflows/shared-release.yml`);
   check(id(workflow.id) && workflow.state === 'active' && workflow.path === '.github/workflows/shared-release.yml'
     && current.id === request.runId && current.run_attempt === request.runAttempt
-    && current.workflow_id === workflow.id && current.path === workflow.path && current.event === 'workflow_run'
+    && current.workflow_id === workflow.id && current.path === workflow.path && current.event === event
     && current.repository?.id === REPOSITORY_ID && current.head_repository?.id === REPOSITORY_ID
     && current.head_branch === 'main' && current.head_sha === request.controllerSha
     && current.status === 'in_progress' && current.conclusion === null
@@ -35,7 +39,12 @@ export async function admitAutomaticRelease(request, api, { allowSkip = false } 
     }
     throw error;
   }
-  check(admission.verification.some(run => run.runId === upstream.id && run.attempt === upstream.run_attempt
+  // The admission job selects current main. A queued run never deploys a stale
+  // selection; once staging starts, production keeps that exact admitted source.
+  if (event === 'schedule' && allowSkip && admission.sourceSha !== admission.mainShaObserved) {
+    return { skipReason: 'scheduled_main_advanced' };
+  }
+  if (upstream) check(admission.verification.some(run => run.runId === upstream.id && run.attempt === upstream.run_attempt
     && run.workflow === upstream.path), 'release_automatic_trigger_superseded');
   const disposition = await automaticDisposition(api, admission);
   if (disposition) {
@@ -48,15 +57,19 @@ export async function admitAutomaticRelease(request, api, { allowSkip = false } 
 export async function automaticDisposition(api, admission) {
   // Read both environments without success filtering. A successful older record
   // must never hide a newer failure, pending mutation, or later deployed source.
+  const scheduled = automaticReleaseEvent(admission.automatic) === 'schedule';
   for (const target of ['next', 'staging-next']) {
     const rows = await api(`${prefix}/deployments?environment=${target}&per_page=100`);
     check(Array.isArray(rows) && rows.every(row => id(row.id)), 'release_automatic_deployments_invalid');
     const latest = rows.filter(row => row.environment === target).sort((a, b) => b.id - a.id)[0];
-    if (!latest) continue;
+    if (!latest) {
+      check(!scheduled, 'release_automatic_previous_unsettled');
+      continue;
+    }
     check(isSha(latest.sha), 'release_automatic_deployments_invalid');
     const statuses = await api(`${prefix}/deployments/${latest.id}/statuses?per_page=1`);
     check(Array.isArray(statuses) && statuses.length === 1
-      && (statuses[0].state === 'success' || statuses[0].state === 'failure'
+      && (statuses[0].state === 'success' || !scheduled && statuses[0].state === 'failure'
         && await reconciledHandoff(api, admission, latest).catch(() => false)),
       'release_automatic_previous_unsettled');
     if (latest.sha === admission.sourceSha) {

@@ -34,6 +34,13 @@ main ruleset 啟用 merge queue，保留原本的獨立審查、CODEOWNERS、最
 逾時設為240分鐘（包含既有完整 CI 的排隊時間）。失敗或衝突退出佇列後須處理原因，
 不自動核准、不刪除檢查，也不反覆重送未知失敗。
 
+啟用佇列前還須讓下方的定期發布補查上 main，驗證一次真正的 schedule run 身分與
+准入結果。GitHub merge queue 的 main push／後續 workflow_run 可能由
+`github-merge-queue[bot]`（ID `118344674`）發起；它不在四位維護者發布名單。
+這個精確 bot 的完成通知不啟動發布工作，改由真正的維護者排程接續；不把 bot 加入
+一般發布、人工重跑或恢復的授權名單。佇列設定仍須另行安裝並讀回核對，新增 cron
+不代表已啟用 merge queue，也不取代獨立正式核准。
+
 驗收需有真實 merge-group 的 verify／CodeQL 成功及 resulting main merge 紀錄。
 本段是待安裝設定，並非已啟用聲明；自動發布仍由下方獨立開關與兩站收據控制。
 參考 [GitHub merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)。
@@ -41,7 +48,7 @@ main ruleset 啟用 merge queue，保留原本的獨立審查、CODEOWNERS、最
 ### main 的兩站發布
 
 Repository variable `AUTO_RELEASE_ENABLED` 只有精確值 `true` 才開啟自動發布；
-未設定或任何其他值都關閉自動化。這是事故停止開關，只限制 `workflow_run` 准入，
+未設定或任何其他值都關閉自動化。這是事故停止開關，限制 `workflow_run` 與 `schedule` 准入，
 不影響手動 `workflow_dispatch`；各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行。
 
 `Shared release` 接收 main push 的 Verify／CodeQL 完成通知，重新查證同一個完整
@@ -49,6 +56,26 @@ source SHA 最新的兩個 main CI run 全部成功，才自動執行 `staging-n
 完整五階段及公開收據上傳成功後，自動執行 `next`。兩環境使用同一 source SHA
 及已安裝的相同 operator digest，不需人手點兩次 Run workflow。PR／fork 的 CI
 不會觸發發布；CI 尚未齊備時只留下 skip 收據，不取得環境憑證。
+
+`Shared release` 另於每小時第 7、17、27、37、47、57 分鐘補查。`schedule` 同樣受
+`AUTO_RELEASE_ENABLED` 控制，共用原 concurrency，不增加寫入權限。准入先向 GitHub
+選目前 main 的完整 SHA，查其最新 push Verify／CodeQL；執行工作只使用准入輸出，
+重新驗證來源、兩項 CI、實際 schedule run 及四位維護者的目前 repo write 權限。
+選版期間 main 前進就略過，等下一次補查；已開始 staging 後仍以同 SHA 完成 production。
+
+這能補接遺失的完成通知、唯讀准入暫時失敗，或兩項 CI 完成後才開啟開關的情況。
+CI 不成功（尚在跑、缺少或失敗）均不發布，也不自動重跑 CI。兩站最新部署必須已有
+success；失敗／不明結果、另一 attempt 的同 SHA staging 都停止，沿用既有人工讀回
+與 handoff／migration recovery。排程不把對帳收據當作新的完整 staging 收據。
+原 workflow_run 的已驗 handoff 接續能力不變。
+
+正常操作是核准最終版本、啟用 auto-merge／加入佇列，之後由 GitHub 完成候選檢查、
+合併、main CI 和兩站發布；不需要聊天室或個人電腦常駐。變更 PR 仍可能使舊 review
+失效。異常看 Actions Summary、原 run 與公開 receipt，先查明再恢復，不靠反覆重送。
+GitHub 的 [schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+可能延遲或漏跑，公開 repo 久未活動也可能停排程；這是定期補查，不是十分鐘內必達。
+實際排程 actor 必須維持在四位維護者名單且仍有寫入權；自然排程與佇列後發布尚須
+以本倉真實 run 驗收，不能以本機測試或既有備份排程代替。
 
 正式准入核對同一 run／attempt 已完成的 staging job、GitHub Deployment 最新狀態、
 經 artifact digest 驗證的收據、版本／tree／工具／設定與五階段。此時整個 run 仍在
