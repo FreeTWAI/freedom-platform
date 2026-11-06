@@ -50,6 +50,8 @@ main ruleset 啟用 merge queue，保留原本的獨立審查、CODEOWNERS、最
 Repository variable `AUTO_RELEASE_ENABLED` 只有精確值 `true` 才開啟自動發布；
 未設定或任何其他值都關閉自動化。這是事故停止開關，限制 `workflow_run` 與 `schedule` 准入，
 不影響手動 `workflow_dispatch`；各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行。
+GitHub expression 的字串比較不分大小寫，因此 controller 在准入及每站執行前另以
+原始值做精確比對；`TRUE`／`True`／含空白或未設定都不能啟動自動發布。
 
 `Shared release` 接收 main push 的 Verify／CodeQL 完成通知，重新查證同一個完整
 source SHA 最新的兩個 main CI run 全部成功，才自動執行 `staging-next`；staging

@@ -19,6 +19,10 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
   await mkdir(output, { recursive: true, mode: 0o700 });
   const receipt = { format: 'freedom.shared-release/v1', status: 'rejected', startedAt: new Date().toISOString(),
     phases: [], providerOutcome: 'not_started' };
+  const skip = async reason => {
+    Object.assign(receipt, { status: 'skipped', skipReason: reason });
+    if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT, 'mode=skip\n');
+  };
   let api, deployment;
   try {
     requireRelease(['admit', 'execute'].includes(env.RELEASE_COMMAND), 'release_command_invalid');
@@ -26,6 +30,12 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     // code or reading environment secrets. Execution uses only this job's output.
     const selectMain = env.GITHUB_EVENT_NAME === 'schedule' && env.RELEASE_COMMAND === 'admit';
     let request = requestFromEnvironment(selectMain ? { ...env, RELEASE_SHA: env.CONTROLLER_SHA } : env);
+    // Actions expression comparisons ignore case. The raw value is the incident
+    // switch authority, checked again before either environment can execute.
+    if (request.automatic && env.AUTO_RELEASE_ENABLED !== 'true') {
+      requireRelease(env.RELEASE_COMMAND === 'admit', 'release_environment_disabled');
+      await skip('automatic_releases_disabled'); return;
+    }
     api = suppliedApi ?? githubClient(env.GH_TOKEN);
     if (selectMain) request = requestFromEnvironment({ ...env,
       RELEASE_SHA: (await api(`/repos/${REPOSITORY}/branches/main`)).commit?.sha });
@@ -33,8 +43,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       ? await admitAutomaticRelease(request, api, { allowSkip: env.RELEASE_COMMAND === 'admit' })
       : await admitRelease(request, api);
     if (admission.skipReason) {
-      Object.assign(receipt, { status: 'skipped', skipReason: admission.skipReason });
-      if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT, 'mode=skip\n');
+      await skip(admission.skipReason);
       return;
     }
     Object.assign(receipt, { ...admission, format: 'freedom.shared-release/v1', status: 'admitted' });

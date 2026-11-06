@@ -82,6 +82,7 @@ jobs:
           RELEASE_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
           RELEASE_TRIGGER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           RELEASE_SCHEDULE: ${{ github.event.schedule }}
+          AUTO_RELEASE_ENABLED: ${{ vars.AUTO_RELEASE_ENABLED }}
           RELEASE_SHA: ${{ inputs.release_sha || github.event.workflow_run.head_sha }}
           RELEASE_TARGET: ${{ inputs.target || 'staging-next' }}
           RELEASE_MODE: ${{ inputs.mode || 'deploy' }}
@@ -141,6 +142,7 @@ jobs:
           RELEASE_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
           RELEASE_TRIGGER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           RELEASE_SCHEDULE: ${{ github.event.schedule }}
+          AUTO_RELEASE_ENABLED: ${{ vars.AUTO_RELEASE_ENABLED }}
           RELEASE_SHA: ${{ needs.admission.outputs.source_sha }}
           RELEASE_TARGET: ${{ needs.admission.outputs.target }}
           RELEASE_MODE: ${{ needs.admission.outputs.mode }}
@@ -217,6 +219,7 @@ jobs:
           RELEASE_TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
           RELEASE_TRIGGER_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
           RELEASE_SCHEDULE: ${{ github.event.schedule }}
+          AUTO_RELEASE_ENABLED: ${{ vars.AUTO_RELEASE_ENABLED }}
           RELEASE_SHA: ${{ needs.admission.outputs.source_sha }}
           RELEASE_TARGET: next
           RELEASE_MODE: ${{ needs.admission.outputs.mode }}

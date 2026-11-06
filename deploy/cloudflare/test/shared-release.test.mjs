@@ -89,7 +89,7 @@ const request = () => ({ ...requestFromEnvironment(environment()), releaseKind: 
 
 function automaticFixture() {
   const env = { ...environment(), GITHUB_EVENT_NAME: 'workflow_run', RELEASE_MODE: 'deploy',
-    RELEASE_TRIGGER_RUN_ID: '11', RELEASE_TRIGGER_RUN_ATTEMPT: '2' };
+    RELEASE_TRIGGER_RUN_ID: '11', RELEASE_TRIGGER_RUN_ATTEMPT: '2', AUTO_RELEASE_ENABLED: 'true' };
   const request = requestFromEnvironment(env);
   const current = { id: 100, run_attempt: 2, workflow_id: 3, path: '.github/workflows/shared-release.yml',
     event: 'workflow_run', repository: { id: REPOSITORY_ID }, head_repository: { id: REPOSITORY_ID },
@@ -187,6 +187,27 @@ test('scheduled CLI selects main through GitHub and leaves pending checks withou
   assert.equal(await readFile(join(directory, 'output'), 'utf8'), 'mode=skip\n');
   assert(f.api.calls.includes(`/repos/${REPOSITORY}/actions/workflows/1/runs?head_sha=${sha}&event=push&branch=main&per_page=100`));
   assert(!f.api.calls.some(path => path.includes('untrusted-selection')));
+});
+
+test('automatic CLI incident switch accepts only raw true before any API or operator call', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'automatic-release-switch-')), exitCode = process.exitCode;
+  t.after(async () => { process.exitCode = exitCode; await rm(root, { recursive: true, force: true }); });
+  const api = () => assert.fail('disabled automation must not access GitHub or create a Deployment');
+  for (const [eventIndex, fixture] of [automaticFixture, scheduledReleaseFixture].entries()) {
+    for (const [index, value] of [undefined, '', 'false', 'TRUE', 'True', ' true', 'true\n'].entries()) {
+      for (const command of ['admit', 'execute']) {
+        const directory = join(root, `${eventIndex}-${index}-${command}`);
+        await releaseMain({ ...fixture().env, AUTO_RELEASE_ENABLED: value, RELEASE_COMMAND: command,
+          PUBLIC_RECEIPT_DIRECTORY: directory }, { api, executeOperator: () => assert.fail('operator must not start') });
+        const receipt = JSON.parse(await readFile(join(directory, 'receipt.json'), 'utf8'));
+        assert.equal(receipt.providerOutcome, 'not_started');
+        assert.equal(receipt.status, command === 'admit' ? 'skipped' : 'failed');
+        assert.equal(command === 'admit' ? receipt.skipReason : receipt.error,
+          command === 'admit' ? 'automatic_releases_disabled' : 'release_environment_disabled');
+      }
+    }
+  }
+  process.exitCode = exitCode;
 });
 
 test('scheduled reconciliation deduplicates success and cannot retry failed, pending or earlier-attempt releases', async () => {
@@ -1305,6 +1326,7 @@ test('automatic incident switch leaves manual admission available and run titles
   assert.equal(runInNewContext(condition, { github: queue, vars: { AUTO_RELEASE_ENABLED: 'true' } }), true);
   assert.match(text, new RegExp(`cron: '${RELEASE_RECONCILE_CRON.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
   assert.equal((text.match(/RELEASE_SCHEDULE: \$\{\{ github.event.schedule \}\}/g) ?? []).length, 3);
+  assert.equal((text.match(/AUTO_RELEASE_ENABLED: \$\{\{ vars.AUTO_RELEASE_ENABLED \}\}/g) ?? []).length, 3);
 });
 
 test('source migration frontier advances without changing private config and rejects gaps, privileged SQL and downgrades', async t => {
