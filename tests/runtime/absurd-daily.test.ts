@@ -1,3 +1,4 @@
+import {blankGameSubmission,prepareGameSubmission,GAME_SUBMISSION_LIMITS} from '../../apps/portal-web/src/games/community-game-submission.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -592,4 +593,36 @@ test('anonymous crawlers get game metadata from the real Worker SPA fallback',as
   mountAssets(missingApp,{fetch:async()=>new Response('not found',{status:404})});
   const missing=await missingApp.request('http://127.0.0.1:8787/play?game=photo&seed=123');
   assert.equal(missing.status,404);assert.ok(!(await missing.text()).includes('og:image'));
+});
+
+
+// Community-game intake is a local draft handoff, not an upload or publication.
+test('community game submission pins repository source and keeps user text inert',()=>{
+ const draft={...blankGameSubmission(),title:'合成測試遊戲',description:'<script>alert(1)</script>\n[link](javascript:alert(1))\n```\n@someone',controls:'方向鍵移動；手機拖曳',license:'測試作者；MIT；素材自行繪製',repository:'https://github.com/example/game/',revision:'A'.repeat(40)};
+ const brief=prepareGameSubmission(draft),url=new URL(brief.url);
+ assert.equal(url.origin,'https://github.com');assert.equal(url.pathname,'/FreeTWAI/freedom-platform/issues/new');
+ assert.deepEqual([...url.searchParams.keys()],['title','body']);assert.equal(url.searchParams.get('body'),brief.body);
+ assert.ok(brief.body.includes('https://github.com/example/game/tree/'+ 'a'.repeat(40)));
+ for(const line of draft.description.split('\n'))assert.ok(brief.body.includes('    '+line));
+ assert.ok(brief.body.includes('尚未審核'));assert.ok(brief.url.length<=8000);assert.equal(draft.revision,'A'.repeat(40));
+});
+test('community game submission rejects unsafe or moving repository sources',()=>{
+ const valid={...blankGameSubmission(),title:'Game',description:'Play',controls:'Keys',license:'MIT',repository:'https://github.com/example/game',revision:'a'.repeat(40)};
+ for(const repository of ['http://github.com/example/game','https://evil.test/example/game','https://github.com.evil.test/example/game','https://user:secret@github.com/example/game','https://github.com/example/game?token=secret','https://github.com/example/game#secret','https://github.com/example/game/tree/main','https://github.com/example/..','javascript:alert(1)'])assert.throws(()=>prepareGameSubmission({...valid,repository}));
+ for(const revision of ['main','a'.repeat(39),'g'.repeat(40)])assert.throws(()=>prepareGameSubmission({...valid,revision}));
+ for(const title of ['   ','a'.repeat(61),'x\ny','x\u0000y','x\u202ey'])assert.throws(()=>prepareGameSubmission({...valid,title}));
+});
+test('community game attachment mode drops inactive source and does not claim upload',()=>{
+ const draft={...blankGameSubmission(),source:'attachment' as const,title:'Game',description:'Play',controls:'Keys',license:'MIT',repository:'https://private.test/?secret=DO-NOT-SEND',revision:'SECRET'};
+ const brief=prepareGameSubmission(draft);
+ assert.ok(!brief.body.includes('DO-NOT-SEND'));assert.ok(!brief.body.includes('SECRET'));assert.ok(brief.body.includes('尚未附檔'));
+ assert.ok(!brief.url.includes('private.test'));assert.equal(blankGameSubmission().title,'');
+});
+test('community game submission bounds fields and encoded URL without truncation',()=>{
+ const draft={...blankGameSubmission(),source:'attachment' as const,title:'Game',description:'Play',controls:'Keys',license:'MIT'};
+ for(const key of ['title','description','controls','license'] as const)assert.throws(()=>prepareGameSubmission({...draft,[key]:'x'.repeat(GAME_SUBMISSION_LIMITS[key]+1)}));
+ assert.throws(()=>prepareGameSubmission({...draft,source:'unknown' as any}));
+ // CJK UTF-8 expansion can exceed the URL budget despite field bounds.
+ const largest={...draft,title:'遊'.repeat(60),description:'戲'.repeat(200),controls:'動'.repeat(200),license:'權'.repeat(160)};
+ try{const brief=prepareGameSubmission(largest);assert.ok(brief.url.length<=8000);assert.ok(brief.body.includes(largest.description));}catch(error){assert.match(String(error),/連結過長/);}
 });
