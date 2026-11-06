@@ -526,6 +526,25 @@ async function socialEntries(page:Page,game:string){
   expect(requests).toEqual([]);page.off('request',record);
 }
 
+test('AD-3 photo action status distinguishes repeated capture failures and saved film without frame announcements',async({page})=>{
+  await openGame(page,'photo');const notice=page.locator('.fw-arcade-notice'),shutter=page.getByRole('button',{name:'拍照快門',exact:true});
+  await expect(notice).toHaveAttribute('role','status');await expect(notice).toHaveAttribute('aria-atomic','true');
+  const original=await page.evaluateHandle(()=>HTMLCanvasElement.prototype.toDataURL);
+  await page.evaluate(()=>{HTMLCanvasElement.prototype.toDataURL=function(){throw Error('Synthetic repeated capture failure');};});
+  try{
+    for(let attempt=1;attempt<=2;attempt++){
+      await shutter.click();await expect(notice).toHaveText(`本局第 ${attempt} 次拍照未保存。Synthetic repeated capture failure 第 1 / 3 位客人，已保存 0 / 2 張，還可拍 2 張。`);
+      await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(shutter).toBeEnabled();await expect(shutter).toHaveText('◎快門 · 2 張');
+    }
+  }finally{await page.evaluate(fn=>{HTMLCanvasElement.prototype.toDataURL=fn;},original);await original.dispose();}
+  await shutter.click();await expect(notice).toContainText('第 1 / 3 位客人，已保存 1 / 2 張，還可拍 1 張。');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);
+  const changes=await notice.evaluateHandle(el=>{const record={count:0};const observer=new MutationObserver(records=>{record.count+=records.length;});observer.observe(el,{childList:true,subtree:true,characterData:true});return {record,observer};});
+  await page.clock.runFor(500);expect(await changes.evaluate(({record})=>record.count)).toBe(0);
+  await shutter.click();await expect(notice).toContainText('第 1 / 3 位客人，已保存 2 / 2 張，還可拍 0 張。');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(2);await expect(shutter).toBeDisabled();
+  expect(await changes.evaluate(({record})=>record.count)).toBeGreaterThan(0);await changes.evaluate(({observer})=>observer.disconnect());await changes.dispose();
+  await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();await shutter.click();await expect(notice).toContainText('第 2 / 3 位客人，已保存 1 / 2 張，還可拍 1 張。');
+});
+
 test('AD-3 public photo studio captures real frames, enforces film, and exports a complete poster',async({page})=>{
   test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openGame(page,'photo');await enterNativeFullscreen(page);
@@ -576,7 +595,7 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
     for(let k=0;k<Math.abs(x);k++)await page.keyboard.press(x>0?'ArrowRight':'ArrowLeft');
     for(let k=0;k<Math.abs(y);k++)await page.keyboard.press(y>0?'ArrowDown':'ArrowUp');
     point={x:point.x+x*.06,y:point.y+y*.06};await page.clock.fastForward(230);await page.keyboard.press('Space');
-    if(i<11)await expect(page.locator('.fw-arcade-counter')).toHaveText(`${i+1}/12`);
+    if(i<11){await expect(page.locator('.fw-arcade-counter')).toHaveText(`${i+1}/12`);await expect(page.locator('.fw-arcade-notice')).toHaveText(`啪！已閱，但看不懂。 已完成 ${i+1} / 12 份 · 多蓋 0 次。`);}
   }
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('完成 12 份文件');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
@@ -595,6 +614,29 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
   expect(await page.evaluate(() => !!document.fullscreenElement?.contains(document.activeElement))).toBe(true);
 });
 
+test('AD-4 repeated practice misses stay uncounted and ignored rapid inputs leave status unchanged',async({page})=>{
+  await openGame(page,'stamp');const board=page.locator('.fw-arcade-board'),notice=page.locator('.fw-arcade-notice');
+  for(let i=0;i<6;i++)await board.press('ArrowRight');
+  for(let attempt=1;attempt<=2;attempt++){
+    await board.press('Space');await expect(notice).toHaveText(`章歪了。墨跡留下，這張再蓋一次。 練習失手 ${attempt} 次，不計入正式文件。`);
+    await board.press('Space');await expect(notice).toHaveText(`章歪了。墨跡留下，這張再蓋一次。 練習失手 ${attempt} 次，不計入正式文件。`);await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');await page.clock.fastForward(230);
+  }
+  for(let i=0;i<6;i++)await board.press('ArrowLeft');await board.press('Space');
+  await expect(notice).toHaveText('練習完成。十二張正式公文，開始！');await expect(page.locator('.fw-arcade-meta')).toContainText('多蓋 0 次');await expect(page.locator('.fw-arcade-counter')).toHaveText('0/12');
+});
+
+test('AD-5 repeated wrong sorts report real mistakes without consuming cards or announcing clock ticks',async({page})=>{
+  await openGame(page,'cash');const board=page.locator('.fw-arcade-board'),notice=page.locator('.fw-arcade-notice'),deck=cashDeck(42),wrong=deck[0].valid?'ArrowLeft':'ArrowRight';
+  for(let attempt=1;attempt<=2;attempt++){
+    await board.press(wrong);await expect(notice).toHaveText(`這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 ${attempt} 次。`);
+    await board.press(wrong);await expect(notice).toHaveText(`這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 ${attempt} 次。`);await expect(page.locator('.fw-arcade-counter')).toHaveText('0 / 100 萬');await page.clock.fastForward(175);
+  }
+  for(let i=0;i<2;i++){
+    await board.press(deck[i].valid?'ArrowRight':'ArrowLeft');await expect(notice).toContainText(`已分類 ${i+1} / 30 張 · 分錯 2 次。`);
+    const accepted=await notice.textContent();await page.clock.runFor(200);await expect(notice).toHaveText(accepted!);
+  }
+});
+
 // Hosted #1044 exhausted 120s after ~108s in the first 29 input/clock pairs.
 // Budget both full cash rounds for recovery/share assertions before teardown;
 // retain desktop rendering, real inputs, and all individual assertion deadlines.
@@ -602,7 +644,7 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   test.setTimeout(180_000);await installCosmeticFilters(page);await openGame(page,'cash');await enterNativeFullscreen(page);const posts:string[]=[];
   page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
-  await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
+  await expect(page.getByText('這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 1 次。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
   for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
@@ -644,10 +686,10 @@ test('AD-5 final cash capture failure retries the completed scene without replay
     await page.clock.fastForward(175);
   }
   await page.evaluate(()=>{
-    const original=HTMLCanvasElement.prototype.toDataURL;
+    const original=HTMLCanvasElement.prototype.toDataURL;let failures=0;
     HTMLCanvasElement.prototype.toDataURL=function(...args){
       if(this.width===960&&this.height===720&&args[0]==='image/jpeg'){
-        HTMLCanvasElement.prototype.toDataURL=original;
+        if(++failures===2)HTMLCanvasElement.prototype.toDataURL=original;
         throw Error('Synthetic final capture failure');
       }
       return original.apply(this,args);
@@ -657,6 +699,10 @@ test('AD-5 final cash capture failure retries the completed scene without replay
   await expect(page.locator('.fw-arcade-notice')).toContainText('完成次數不會重算');
   await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');
   await expect(page.locator('.fw-arcade-result-heading')).toHaveCount(0);
+  await expect(page.locator('.fw-arcade-notice')).toContainText('第 1 次產生成果圖片失敗。');
+  await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
+  await expect(page.locator('.fw-arcade-notice')).toContainText('第 2 次產生成果圖片失敗。');
+  await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');await expect(page.locator('.fw-arcade-result-heading')).toHaveCount(0);
   await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
   const image=page.locator('.fw-arcade-result-photo > img');
