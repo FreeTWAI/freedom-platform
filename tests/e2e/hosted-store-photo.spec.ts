@@ -201,11 +201,21 @@ test('supply-only product photo through the console stays private (AT-11, S1 ste
   await post(page,store.root+'/supply-profile',{name:'合成私人照片商品庫 '+suffix,currency:'TWD'},201);
   const product=await post(page,store.root+'/supply-products',{title,description:'合成尚未公開供貨照片',cost_minor:400,stock:10},201);
   expect((await(await page.request.get('/api/v1'+store.root+'/supply-profile')).json()).retail_enabled).toBe(false);
-  await page.evaluate(hash=>{location.hash=hash;},store.hash+'/supply/products/'+product.product_id);await expect(page.locator('.supplier-console')).toBeVisible();
   const file=await source('synthetic-supply-only-'+suffix+'.png','#486b74'),fileInput=photo(page).getByLabel('商品照片',{exact:true});
-  // The owner-read result can start another product/media refresh after an
-  // enabled assertion. Click the real picker so Playwright rechecks live
-  // actionability rather than dispatching change on a newly disabled input.
+  const ownerPath='/api/v1'+store.root+'/reservation-setting',productPath='/api/v1'+store.root+'/supplier-console/products/'+product.product_id,mediaPath='/api/v1'+store.root+'/product-media';
+  const reads:string[]=[];page.on('request',request=>{const path=new URL(request.url()).pathname;if(request.method()==='GET'&&[productPath,mediaPath].includes(path))reads.push(path);});
+  let releaseOwner!:()=>void,ownerFetched!:()=>void;
+  const ownerHeld=new Promise<void>(resolve=>{releaseOwner=resolve;}),ownerReady=new Promise<void>(resolve=>{ownerFetched=resolve;});
+  // Hold the real owner response until the independent product/photo reads are
+  // usable. Confirming reservation authority must not disable that ready picker.
+  await page.route('**'+ownerPath,async route=>{const response=await route.fetch();ownerFetched();await ownerHeld;await route.fulfill({response});});
+  try{
+    await page.evaluate(hash=>{location.hash=hash;},store.hash+'/supply/products/'+product.product_id);await expect(page.locator('.supplier-console')).toBeVisible();
+    await ownerReady;await expect(fileInput).toBeEnabled();
+    const ownerLink=page.getByRole('link',{name:'預留與訂單',exact:true});await expect(ownerLink).toHaveCount(0);
+    releaseOwner();await expect(ownerLink).toBeVisible();await expect(fileInput).toBeEnabled();
+    expect(reads.filter(path=>path===productPath)).toHaveLength(1);expect(reads.filter(path=>path===mediaPath)).toHaveLength(1);
+  }finally{releaseOwner();await page.unroute('**'+ownerPath);}
   const chooser=page.waitForEvent('filechooser');await fileInput.click();await(await chooser).setFiles(file);
   await expect(photo(page).getByRole('status')).toContainText('已儲存照片變更');
   const image=photo(page).locator(':scope > img');await expect(image).toBeVisible();const privatePath=await image.getAttribute('src');expect(privatePath).toContain(product.product_id+'/photo/2');
