@@ -1,4 +1,5 @@
 import {createCoatingHold} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
+import * as jsxRuntime from 'react/jsx-runtime';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -613,4 +614,32 @@ test('coating hold completes once, keyboard ownership cancels, and a restarted t
  h.hold.begin(-1);h.advance(900);h.advance(900);assert.deepEqual(h.completed,['portion-0']);assert.equal(h.frames.size,0);
  assert.equal(h.hold.begin(-1),false);h.hold.release(-1);assert.equal(h.hold.begin(-1),true);h.advance(900);assert.deepEqual(h.completed,['portion-0','portion-0']);
  h.hold.cancel();h.hold.begin(1);h.advance(-1);assert.equal(h.progress,0);assert.equal(h.frames.size,0);
+});
+
+test('AD-brand uses the approved transparent wordmark with local sizing and native home links',()=>{
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/AbsurdDaily.tsx',import.meta.url),'utf8');
+  const header=source.match(/<header className="(?:ad|fw-arcade)-header"[\s\S]*?<\/header>/);
+  assert.ok(header,'the actual public game header');
+  const compiled=transformSync(`export default function Header(){return ${header[0]};}`,{loader:'tsx',jsx:'automatic',format:'cjs'}).code;
+  const module={exports:{} as {default?:()=>any}};
+  runInNewContext(compiled,{module,exports:module.exports,require:(id:string)=>{
+    assert.equal(id,'react/jsx-runtime');return jsxRuntime;
+  }});
+  const tree=module.exports.default!(),[brand,home]=tree.props.children,logo=brand.props.children[0];
+  assert.equal(brand.type,'a');assert.equal(brand.props.href,'/');assert.equal(brand.props.onClick,undefined);
+  assert.equal(home.type,'a');assert.equal(home.props.href,'/');assert.equal(home.props.onClick,undefined);
+  assert.equal(logo.type,'img');assert.equal(logo.props.src,'/brand/freedom-workshop-compact-transparent.png');
+  assert.equal(logo.props.alt,'自由工坊');assert.equal(logo.props.width,'396');assert.equal(logo.props.height,'132');
+  assert.equal(tree.props.style?.flexWrap,'wrap');
+  assert.equal(logo.props.style?.width,132);assert.equal(logo.props.style?.height,44);
+  assert.equal(logo.props.style?.maxWidth,'none');assert.equal(logo.props.style?.flexShrink,0);
+});
+
+test('AD-brand reuses the exact PR 1201 PNG with a complete transparent 3:1 image',async()=>{
+  const bytes=readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url));
+  assert.equal(createHash('sha256').update(bytes).digest('hex'),'f33136a09613c25752b1a24ad8aa9ef76dde93f31425bb6c5e201fe6d51aa10e');
+  const {data,info}=await sharp(bytes).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  assert.equal(info.width,396);assert.equal(info.height,132);assert.equal(info.channels,4);
+  for(const [x,y] of [[0,0],[395,0],[0,131],[395,131]])assert.equal(data[(y*396+x)*4+3],0);
+  assert.ok(data.some((value,index)=>index%4===3&&value===255),'the wordmark retains opaque image content');
 });
