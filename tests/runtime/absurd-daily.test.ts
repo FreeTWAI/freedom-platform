@@ -174,7 +174,7 @@ test('AD-2 an input timestamp ahead of a queued render cannot double count foreg
 test('AD-7 bounded guest draft survives reload, reads are pure, and stale clearing cannot delete a newer result',()=>{const s=storage(),now=Date.now(),draft={version:1 as const,createdAt:now,game:'photo' as const,seed:7,title:'這張能交嗎？',text:'真的拍到了。',image:'data:image/jpeg;base64,YWJjZA=='};saveGameDraft(s,draft,now);const before=s.getItem(GAME_HANDOFF_KEY);assert.deepEqual(readGameDraft(s,now),draft);assert.equal(s.getItem(GAME_HANDOFF_KEY),before);clearGameDraft(s,now-1);assert.equal(s.getItem(GAME_HANDOFF_KEY),before);clearGameDraft(s,now);assert.equal(readGameDraft(s,now),null);});
 test('AD-7 malformed, expired, future, oversized and unavailable storage cannot falsely succeed',()=>{const now=Date.now(),draft={version:1,createdAt:now,game:'cash',seed:7,title:'盤點',text:'道具鈔',image:'data:image/jpeg;base64,YWJjZA=='};for(const changed of [{version:2},{createdAt:now-HANDOFF_TTL-1},{createdAt:now+61000},{seed:NaN},{seed:0},{image:'data:text/html;base64,AAAA'},{title:''},{text:'x'.repeat(2001)}])assert.equal(parseGameDraft(JSON.stringify({...draft,...changed}),now),null);assert.equal(parseGameDraft('{bad',now),null);assert.equal(readGameDraft({getItem(){throw Error('denied');},setItem(){},removeItem(){}},now),null);assert.throws(()=>saveGameDraft({getItem(){return null;},setItem(){throw Error('quota');},removeItem(){}},draft as any,now),/quota/);});
 
-import {CATEGORIES,RECIPES,recipeOf,recipeSearch,TECHNIQUES} from '../../apps/portal-web/src/games/cooking/catalog.js';
+import {CATEGORIES,RECIPES,recipeOf,recipeSearch,TECHNIQUES,COOKING_RULES} from '../../apps/portal-web/src/games/cooking/catalog.js';
 import {actCooking,advanceCooking,cookingProgress,cookingScore,currentStep,cutGuide,newCookingRun,parseCookingRun,plateTarget,type CookingRun,type CookingAction} from '../../apps/portal-web/src/games/cooking/domain.js';
 import {COOKBOOK_KEY,COOKBOOK_BACKUP,COOKING_RUN_KEY,RUN_TTL,emptyCookbook,parseCookbook,readCookbook,updateCookbook,readCookingRun,saveCookingRun,clearCookingRun} from '../../apps/portal-web/src/games/cooking/storage.js';
 import {readFile} from 'node:fs/promises';
@@ -190,6 +190,51 @@ import {coverOf} from '../../apps/portal-web/src/games/GameCover.js';
 import {syncDiagnostics} from '../../apps/portal-web/src/games/diagnostics.js';
 const {Box3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 import {GAME_SHARE_PLATFORMS,gameShareText,gameSocialLink} from '../../apps/portal-web/src/games/result-share.js';
+
+// Executes the production component closures with real domain/storage and bounded hook/DOM ports.
+// Native dialog focus containment and background inertness are covered by E2E, not this harness.
+function guidedRestartHarness() {
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingGame.tsx',import.meta.url),'utf8');
+  const helpers=source.slice(source.indexOf('export const storagePort='),source.indexOf('/** UX-8')).replace('export const','const');
+  const body=source.slice(source.indexOf('  const [boot]='),source.indexOf('  const cue='));
+  const open=source.match(/aria-label="重新做" onClick=\{(.*?)\}>/)![1];
+  const code=transformSync(`${helpers}\nfunction component(){${body}\nreturn {live,pause,begin,restart,holdStart,holdEnd,setVisualReady,open:${open},dismiss:()=>setConfirmRestart(false),section,restartDialog:typeof restartDialog==='undefined'?null:restartDialog,restartButton:typeof restartButton==='undefined'?null:restartButton,keepButton:typeof keepButton==='undefined'?null:keepButton};}\ncomponent`,{loader:'ts'}).code;
+  const slots:any[]=[],effects:Array<()=>void>=[],data=new Map<string,string>();let index=0,now=0,identity=0,focuses=0,keptFocus=0,opened=0,closed=0;
+  const session={getItem:(key:string)=>data.get(key)??null,setItem:(key:string,value:string)=>data.set(key,value),removeItem:(key:string)=>data.delete(key)};
+  const hooks={useRef:(value:any)=>{const i=index++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=index++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return [slots[i].value,(next:any)=>{slots[i].value=typeof next==='function'?next(slots[i].value):next;}];},useEffect:(fn:()=>any,deps:any[])=>{const i=index++,old=slots[i];if(!old||deps.some((value,j)=>!Object.is(value,old.deps[j]))){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
+  const modal={open:false,showModal(){assert.equal(this.open,false);this.open=true;opened++;},close(){this.open=false;closed++;}},button={focus:()=>focuses++},keep={focus:()=>{assert.equal(modal.open,true);keptFocus++;}};
+  const recipe=recipeOf('margherita-pizza')!;
+  const renderComponent=runInNewContext(code,{...hooks,recipe,seed:42,fresh:false,crypto:{randomUUID:()=>`restart_${++identity}`},performance:{now:()=>now},window:{sessionStorage:session,addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},requestAnimationFrame:()=>1,cancelAnimationFrame(){},COOKING_RULES,TECHNIQUES,recipeOf,newCookingRun,actCooking,advanceCooking,currentStep,readCookingRun,saveCookingRun,clearCookingRun,onResult(){throw Error('unfinished result');},onComplete(){throw Error('unfinished completion');}});
+  let ui:any;
+  const render=()=>{index=0;ui=renderComponent();ui.section.current={focus(){},querySelector:()=>null};if(ui.restartDialog)ui.restartDialog.current=modal;if(ui.restartButton)ui.restartButton.current=button;if(ui.keepButton)ui.keepButton.current=keep;while(effects.length)effects.shift()!();return ui;};
+  render();ui.setVisualReady(true);render();
+  return {render,get ui(){return ui;},modal,session,advance:(ms:number)=>{now+=ms;},stats:()=>({focuses,keptFocus,opened,closed}),unmount:()=>{for(const slot of slots)slot?.cleanup?.();}};
+}
+
+test('UX-2 guided restart opens a modal once and releases it on cancellation (non-native)',()=>{
+  const h=guidedRestartHarness();h.ui.begin();h.render();h.ui.open();h.render();
+  assert.equal(h.modal.open,true);assert.equal(h.stats().opened,1);assert.equal(h.stats().keptFocus,1);h.render();assert.equal(h.stats().opened,1);
+  h.ui.dismiss();h.render();assert.equal(h.modal.open,false);assert.equal(h.stats().closed,1);assert.equal(h.stats().focuses,1);assert.equal(h.ui.live.current.status,'paused');
+});
+
+test('UX-2 guided restart can reopen and unmount without leaving a modal open (non-native)',()=>{
+  const h=guidedRestartHarness();assert.equal(h.stats().focuses,0);
+  for(let i=0;i<2;i++){h.ui.open();h.render();assert.equal(h.modal.open,true);h.ui.dismiss();h.render();assert.equal(h.modal.open,false);}
+  h.ui.open();h.render();h.unmount();assert.equal(h.modal.open,false);assert.equal(h.stats().opened,3);assert.equal(h.stats().closed,3);
+});
+
+test('UX-2 guided restart pauses and persists a held operation without counting a late release (non-native)',()=>{
+  const h=guidedRestartHarness();h.ui.begin();h.render();h.ui.holdStart({kind:'key',key:' '});h.advance(750);h.ui.open();h.render();
+  const saved=JSON.parse(h.session.getItem(COOKING_RUN_KEY)!).run;assert.equal(saved.status,'paused');assert.equal(saved.active.count,0);assert.equal(saved.active.holdAt,null);
+  h.advance(6000);h.ui.holdEnd({kind:'key',key:' '});assert.deepEqual(JSON.parse(h.session.getItem(COOKING_RUN_KEY)!).run,saved);assert.equal(h.ui.live.current.active.count,0);
+  h.ui.dismiss();h.render();assert.equal(h.ui.live.current.status,'paused');h.ui.begin();h.render();h.ui.holdStart({kind:'key',key:' '});h.advance(750);h.ui.holdEnd({kind:'key',key:' '});assert.equal(h.ui.live.current.active.count,1);
+});
+
+test('UX-2 guided restart only replaces the run after explicit confirmation (non-native)',()=>{
+  const h=guidedRestartHarness();h.ui.begin();h.render();h.ui.holdStart({kind:'key',key:' '});h.advance(750);h.ui.holdEnd({kind:'key',key:' '});h.render();const original=h.ui.live.current.id;
+  h.ui.open();h.render();h.ui.dismiss();h.render();assert.equal(h.ui.live.current.id,original);assert.equal(h.ui.live.current.active.count,1);
+  h.ui.open();h.render();h.ui.restart();h.render();assert.notEqual(h.ui.live.current.id,original);assert.equal(h.ui.live.current.status,'ready');assert.equal(h.ui.live.current.active.count,0);assert.equal(h.session.getItem(COOKING_RUN_KEY),null);
+});
 
 test('CK-6: all result kinds encode social handoffs as text/link intents without credentials or publish instructions',()=>{
   for(const game of ['photo','stamp','cash','kitchen'] as const){const link=`https://example.org/play?game=${game}&seed=42${game==='kitchen'?'&recipe=egg-fried-rice':''}`,result={game,title:'黃金蛋炒飯 & <作品>',caption:'這局真的很香！',details:'3 顆星 · 99 分',seed:42,image:'data:image/jpeg;base64,YWJjZA=='};const text=gameShareText(result,link);
