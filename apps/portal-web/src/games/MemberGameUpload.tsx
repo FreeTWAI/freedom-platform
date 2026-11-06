@@ -43,7 +43,8 @@ export function MemberGameUpload({hidden}:{hidden:boolean}) {
       const transport:MemberGameTransport={
         current,
         // A later denial cannot settle an earlier unknown command. Controller owns that distinction.
-        refused:error=>error instanceof ApiError&&error.definitiveResponse&&!error.network&&['invalid_game_source','game_source_type','game_source_too_large','version_required','idempotency_required','version_conflict','game_draft_withdrawn','game_draft_not_found','game_draft_quota'].includes(error.code??''),
+        // Both asset quotas reject prepare before a new Asset or upload intent is created.
+        refused:error=>error instanceof ApiError&&error.definitiveResponse&&!error.network&&['invalid_game_source','game_source_type','game_source_too_large','version_required','idempotency_required','version_conflict','game_draft_withdrawn','game_draft_not_found','game_draft_quota','asset_retained_quota','asset_upload_quota'].includes(error.code??''),
         async read(id,signal){await check(signal);if(!current())throw Error('stale_session');try{return await client.get(`/me/game-drafts/${id}`,{signal,background:true,suppressConsole:true});}catch(error){if(current()&&error instanceof ApiError&&(error.status===401||error.status===403||error.accessExpired))expired();throw error;}},
         async send(command:GameCommand,signal){
           await check(signal);if(!current())throw Error('stale_session');
