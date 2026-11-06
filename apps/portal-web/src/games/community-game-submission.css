@@ -10,3 +10,8 @@
 .game-submission-consent { display: flex; gap: 10px; align-items: center; min-height: 44px; }
 .game-submission-consent input { flex: 0 0 20px; width: 20px; height: 20px; }
 .fw-arcade-root .game-submission .fw-arcade-secondary { justify-self: start; min-height: 44px; padding: 8px 14px; font-size: 16px; }
+
+.member-game-workspace, .member-game-current, .member-game-withdraw { display: grid; gap: 16px; min-width: 0; }
+.member-game-current { border: 1px solid var(--ad-line); border-radius: 12px; padding: 12px; }
+.member-game-workspace input[type=file] { max-width: 100%; overflow: hidden; }
+.member-game-workspace input[type=file]::file-selector-button { min-height: 44px; font: inherit; }

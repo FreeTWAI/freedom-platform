@@ -1774,7 +1774,7 @@ for(const width of [320,1440])test(`community game draft is explicit, bounded an
  await page.goto('/play');
  const section=page.getByRole('region',{name:'社群遊戲投稿'}),toggle=section.locator('summary');
  await toggle.focus();await toggle.press('Enter');
- await expect(section.getByText('目前不是站內檔案上傳',{exact:false})).toBeVisible();
+ await expect(section.getByText('這個 GitHub 選項不會上傳檔案到站內',{exact:false})).toBeVisible();
  await section.getByLabel('遊戲名稱（最多 60 字元）').fill('合成測試遊戲');
  await section.getByLabel('玩法介紹（最多 200 字元）').fill('<img src=x onerror=alert(1)>');
  await section.getByLabel('操作與啟動方式（最多 200 字元）').fill('方向鍵，瀏覽器開啟 index.html');
@@ -1802,4 +1802,62 @@ for(const width of [320,1440])test(`community game draft is explicit, bounded an
  expect(external).toEqual([]);await expect(section.locator('iframe,input[type=file]')).toHaveCount(0);
  // Deliberately do not click the external link or submit a real Issue.
  await page.reload();await section.locator('summary').click();await expect(section.getByLabel('遊戲名稱（最多 60 字元）')).toHaveValue('');
+});
+
+// Synthetic owner API responses exercise the real page/client, not deployed quarantine storage.
+for(const width of [320,1440])test(`member game upload keeps exact retry, keyboard and cold-read boundaries (${width}px)`,async({page})=>{
+ await page.setViewportSize({width,height:900});
+ const id='10000000-0000-4000-8000-000000000001',source=Buffer.from('\ufeff<!doctype html>\r\n<script>globalThis.uploadedGameRan=true</script>');
+ let current={game_id:id,title:'會員合成遊戲',description:'測試來源',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:true};
+ const ack=()=>{const {upload_available,...value}=current;return value;};
+ let sessions=0,creates=0;const uploads:{body:Buffer;key:string;version:string;mime:string}[]=[],requests:string[]=[];
+ await page.route('**/api/v1/session',route=>{sessions++;return route.fulfill({json:{user:{user_id:'30000000-0000-4000-8000-000000000001'},csrf_token:'synthetic-upload-session'}});});
+ await page.route('**/api/v1/me/game-drafts**',async route=>{
+  const request=route.request(),path=new URL(request.url()).pathname;requests.push(request.method()+' '+path);
+  if(path.endsWith('/source')){
+   uploads.push({body:request.postDataBuffer()!,key:request.headers()['idempotency-key'],version:request.headers()['if-match'],mime:request.headers()['content-type']});
+   expect(request.headers()['x-csrf-token']).toBe('synthetic-upload-session');
+   if(uploads.length===1){current={...current,version:'2',source_revision:'1',state:'quarantined'};return route.abort('failed');}
+   const historical=ack();current={...current,version:'3',state:'withdrawn',upload_available:false};return route.fulfill({json:historical});
+  }
+  if(request.method()==='POST'){creates++;return route.fulfill({status:201,json:ack()});}
+  return route.fulfill({json:current});
+ });
+ await page.goto('/play');expect(sessions).toBe(0);
+ const area=page.getByRole('region',{name:'會員私有遊戲來源'}),summary=area.locator('summary');await summary.focus();await summary.press('Enter');
+ const open=area.getByRole('button',{name:'使用目前會員帳號開啟'});await open.focus();await open.press('Enter');
+ await area.getByLabel('私人遊戲名稱',{exact:true}).fill('會員合成遊戲');await area.getByLabel('私人玩法介紹').fill('測試來源');
+ await area.getByRole('button',{name:'建立私人草稿（不含檔案）'}).click();await expect(area.getByLabel('請保留這個草稿編號')).toHaveValue(id);expect(creates).toBe(1);
+ const input=area.getByLabel('選擇單一 HTML 遊戲檔案');await input.setInputFiles({name:'index.html',mimeType:'text/html',buffer:source});
+ await expect(area.getByText('檔案僅留在本頁記憶體，尚未傳送。',{exact:true})).toBeVisible();expect(uploads).toHaveLength(0);
+ await expect(area.getByRole('button',{name:'傳送檔案到私有保存'})).toBeDisabled();
+ const consent=area.getByRole('checkbox');await consent.focus();await consent.press('Space');
+ const send=area.getByRole('button',{name:'傳送檔案到私有保存'});await send.focus();await send.press('Enter');
+ await expect(area.getByRole('button',{name:'重試原操作（不建立新操作）'})).toBeVisible();
+ await expect(area.getByRole('button',{name:'建立私人草稿（不含檔案）'})).toBeDisabled();await expect(area.getByRole('button',{name:'重新讀取目前狀態'})).toBeDisabled();
+ await area.getByRole('button',{name:'重試原操作（不建立新操作）'}).click();await expect(area.getByText('狀態：已撤回；版本 3，來源版本 1。',{exact:true})).toBeVisible();
+ expect(uploads).toHaveLength(2);expect(uploads[0]).toEqual(uploads[1]);expect(uploads[0].body).toEqual(source);expect(uploads[0].mime).toBe('text/html');expect(uploads[0].version).toBe('"1"');
+ expect(requests.filter(r=>r.startsWith('GET')&&r.endsWith('/source'))).toEqual([]);expect(await page.evaluate(()=>(window as any).uploadedGameRan)).toBeUndefined();
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('uploadedGameRan');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await page.reload();await summary.click();await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();await expect(area.getByLabel('請保留這個草稿編號')).toHaveCount(0);
+ await area.getByLabel('已有草稿編號').fill(id);await area.getByRole('button',{name:'讀取這份私人草稿'}).click();await expect(area.getByText('狀態：已撤回；版本 3，來源版本 1。',{exact:true})).toBeVisible();expect(creates).toBe(1);
+});
+test('member game upload shows policy unavailable and confirms withdrawal without any source transfer',async({page})=>{
+ const id='10000000-0000-4000-8000-000000000001';let writes=0,current={game_id:id,title:'關閉測試',description:'',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:false};
+ await page.route('**/api/v1/session',route=>route.fulfill({json:{user:{user_id:'30000000-0000-4000-8000-000000000001'},csrf_token:'synthetic'}}));
+ await page.route('**/api/v1/me/game-drafts**',route=>{const request=route.request();if(request.method()==='POST'){writes++;expect(request.url()).toContain('/withdraw');expect(request.postDataJSON()).toEqual({});expect(request.headers()['if-match']).toBe('"1"');current={...current,state:'withdrawn',version:'2'};const {upload_available,...ack}=current;return route.fulfill({json:ack});}return route.fulfill({json:current});});
+ await page.goto('/play');const area=page.getByRole('region',{name:'會員私有遊戲來源'});await area.locator('summary').click();await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();
+ await area.getByLabel('已有草稿編號').fill(id);await area.getByRole('button',{name:'讀取這份私人草稿'}).click();await expect(area.getByLabel('選擇單一 HTML 遊戲檔案')).toBeDisabled();await expect(area.getByRole('button',{name:'傳送檔案到私有保存'})).toBeDisabled();await expect(area.getByText('來源保存尚未開放或暫時無法使用，目前不能上傳。',{exact:true})).toBeVisible();
+ await area.getByRole('button',{name:'撤回這份私人草稿',exact:true}).click();await expect(area.getByText('撤回後不能再上傳，這個階段不能恢復。來源歷史與已用容量會保留，不是刪除檔案。',{exact:true})).toBeVisible();await area.getByRole('button',{name:'取消撤回'}).click();await expect(area.getByRole('button',{name:'撤回這份私人草稿',exact:true})).toBeFocused();expect(writes).toBe(0);
+ await area.getByRole('button',{name:'撤回這份私人草稿',exact:true}).click();await area.getByRole('button',{name:'確認撤回',exact:true}).click();await expect(area.getByText('狀態：已撤回；版本 2，來源版本 0。',{exact:true})).toBeVisible();expect(writes).toBe(1);
+});
+test('member game upload clears selected source on account change and does not adopt replacement session',async({page})=>{
+ let token='first-session',sessionUnavailable=false;const id='10000000-0000-4000-8000-000000000001';let writes=0;
+ await page.route('**/api/v1/session',route=>sessionUnavailable?route.fulfill({status:503,json:{type:'unavailable',title:'Unavailable',status:503}}):route.fulfill({json:{user:{user_id:token==='first-session'?'30000000-0000-4000-8000-000000000001':'40000000-0000-4000-8000-000000000001'},csrf_token:token}}));
+ await page.route('**/api/v1/me/game-drafts**',route=>{if(route.request().method()!=='GET')writes++;return route.fulfill({json:{game_id:id,title:'清除測試',description:'',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:true}});});
+ await page.goto('/play');const area=page.getByRole('region',{name:'會員私有遊戲來源'});await area.locator('summary').click();await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();await area.getByLabel('已有草稿編號').fill(id);await area.getByRole('button',{name:'讀取這份私人草稿'}).click();await area.getByLabel('選擇單一 HTML 遊戲檔案').setInputFiles({name:'index.html',mimeType:'text/html',buffer:Buffer.from('<html>private-synthetic</html>')});await expect(area.getByRole('checkbox')).toBeVisible();
+ sessionUnavailable=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(area.getByRole('button',{name:'重新確認會員登入'})).toBeVisible();await expect(area.getByLabel('請保留這個草稿編號')).toBeHidden();await expect(area.getByRole('checkbox')).toBeHidden();sessionUnavailable=false;await area.getByRole('button',{name:'重新確認會員登入'}).click();await expect(area.getByRole('checkbox')).toBeVisible();expect(writes).toBe(0);
+ token='replacement-session';await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(area.getByRole('button',{name:'使用目前會員帳號開啟'})).toBeVisible();await expect(area.getByRole('checkbox')).toHaveCount(0);await expect(area.getByLabel('請保留這個草稿編號')).toHaveCount(0);expect(writes).toBe(0);
+ await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();await expect(area.getByLabel('已有草稿編號')).toHaveValue('');await expect(area.getByLabel('請保留這個草稿編號')).toHaveCount(0);
 });

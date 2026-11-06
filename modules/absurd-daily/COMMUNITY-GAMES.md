@@ -56,3 +56,24 @@
 新增測試涵蓋原 bytes／digest／副本隔離、不執行 script、拒絕 caller authority、無讀取 MIME 拒絕、精確上限／超量取消、多位元 UTF-8／跨 chunk、非法內容、固定無秘密錯誤與不釋放他人的 reader。這些只證明來源檢查，不是 native upload、quarantine 持久化、HTTP／Worker、發布、瀏覽器隔離或真人驗收。
 
 下一個必要 implementation：新 game target／revision 與私有 quarantine policy schema、精確 profile／engine target／object-write-effect admission、會員 owner-scoped routes 和完整 prepare／write／finalize／撤回測試。接續審核／發布 origin 前，任何已存來源仍不得公開 serving 或執行。所有新增 migration 編號與 catalog 需依當時主線協調；本階段未新增 migration，未改現有 catalog 或其測試。
+
+## 第三階段候選：會員私有保存，未開放
+
+`game-quarantine.ts`／[私有來源契約](GAME-QUARANTINE.md) 接上目前會員權限、私人草稿與不可變來源版本、既有 Asset lifecycle 和撤回 API。單檔來源存為非執行的 application/octet-stream，仍為 unreviewed；沒有來源 GET、試玩、審核、發布或前端上傳 UI。Migration203 為本候選暫定編號，canonical policy 預設關閉，未執行或部署。
+
+舊「第二階段」段落描述當時 helper-only 的範圍；helper 的 not_stored 語義不變，不能自己授予保存。第三階段另由 server-owned domain adapter 取得當下政策／quota，執行 verified PUT／GET 與原子 finalize。實際 PG／runtime／HTTP／Worker／R2、備份還原與真人驗收仍需證據，不能以 source 靜態測試代替。
+
+## 第四階段候選：會員自行選檔與私有保存 UI
+
+大廳另外提供「上傳自己的遊戲（會員私有保存）」。匿名遊戲與下方 GitHub 公開投稿仍是獨立選項；只有本人按「使用目前會員帳號開啟」才讀取 session。沿用 PortalClient、同源 cookie、CSRF、原 owner API，沒有增加登入、權限、公開來源或 reviewer 入口。
+
+1. 可建立僅含名稱／介紹的私人草稿，或貼上已知 UUID 冷讀本人草稿。建立不代表來源保存已開放。沒有列表 API；重載後不會自動找回所有草稿，必須自行保留編號。
+2. 只有當下 owner GET 明確回傳 upload_available=true 才開放選檔。送出前再次讀取權限／版本／政策；政策關閉或版本改變不送出新來源。UI 沒有啟用預設關閉的政策。
+3. 本人選擇一個 .html，最多 256 KiB。瀏覽器只做有界檔案讀取、fatal UTF-8／控制字元檢查；不解析 HTML、不建立來源 iframe／URL、不下載依賴，也不執行遊戲。原 BOM、換行與所有 bytes 封成不可變 Blob，以 exact text/html 傳送，不以解碼字串重建。
+4. 選檔只留在本頁記憶體；勾選本人有權提供檔案並按「傳送檔案到私有保存」才送出。這個同意不是公開授權或安全保證。原始碼、檔案、操作鍵不存 localStorage／sessionStorage，不進 URL 或 UI 預覽。
+5. 重複點擊只持有一個操作。未知結果保留原 session／target／key／If-Match／bytes，僅明確重試同一操作。已知 target 的重試先 GET 核對目前讀取資格，GET 不代表原操作已完成，不改寫舊操作；政策關閉／撤回仍可能有歷史回條。create 未收回條時沒有 UUID，只有相同 session／原 create 的重試，不猜測新建哪一份。
+6. 回條需吻合原操作的識別、名稱／介紹、精確版本／來源版本／狀態。任何 malformed success 都仍是未知。歷史回條不當成目前狀態；另做 owner GET，拒絕低於已知版本的資料。cold read 失敗時不提供上傳／撤回。
+7. 可見頁面每 60 秒、focus／visibility 及每次 API 工作前核對 user ID 和 CSRF。帳號／session 改變或拒絕時結束舊工作區，清除檔案與操作，晚到回應不能恢復。暫時網路失敗先隱藏私人 UI，保留未知操作供本人重新確認登入，不默默改用新 session。
+8. 撤回需明確確認，維持不可恢復停止新上傳、保留來源歷史與容量，不是刪除。關閉／pagehide／離站會清除本頁資料；選檔或未確認寫入有離頁警告。關閉不是撤回，未知操作可能已保存，重載會失去尚未取得 UUID 的 create 重試資料。
+
+這個候選只是讓會員使用私有保存 API。未部署／啟用政策、未跑真人會員驗收，沒有審核授權、隔離執行 origin、可玩預覽、公開上架或來源下載。安全試玩與 reviewer 設計仍依上表分開審查；現有 native-game-previews／CDP 效能觀察不是任意上傳程式的 sandbox。

@@ -246,6 +246,8 @@ const FOUNDATION_NAMES = [
   '201_event_prize_photos.sql',
   // Private self-reported tester progress/feedback; no ranking, release or contribution authority.
   '202_tester_map_accounts.sql',
+  // Private source quarantine only; no capture/publication/GC capability.
+  '203_member_game_quarantine.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
