@@ -77,6 +77,8 @@ export type RequestOptions = {
   profileCover?: Blob
   /** Closed saved event/prize photo upload; raw original bytes only. */
   eventPrizePhoto?: Blob
+  /** Closed private game quarantine upload; never a rendering or generic binary route. */
+  gameSource?: Blob
   idempotencyKey?: string
   ifMatch?: number | string
   /** Current authorization for retrying the unchanged Commerce settings command. */
@@ -276,6 +278,14 @@ export class PortalClient {
     if(!uuid.test(eventId)||!uuid.test(prizeId)||!uuid.test(options.idempotencyKey)||!Number.isSafeInteger(options.ifMatch)||options.ifMatch<1||options.ifMatch>=Number.MAX_SAFE_INTEGER)throw new ApiError({message:'活動或獎品版本無法確認，請重新讀取。',status:422,definitiveResponse:true})
   }
 
+  async uploadGameSource<T>(id:string,source:Blob,options:{idempotencyKey:string;ifMatch:string;signal?:AbortSignal}):Promise<T>{
+    const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\s\S])/
+    if(!uuid.test(id)||!uuid.test(options.idempotencyKey)||!/^[1-9][0-9]{0,18}$(?![\s\S])/.test(options.ifMatch)||BigInt(options.ifMatch)>=9223372036854775807n||source.type!=='text/html'||source.size===0||source.size>256*1024)throw new ApiError({message:'遊戲檔案或版本無法確認，請重新讀取。',status:422,definitiveResponse:true})
+    this.reads.clear()
+    try{return await this.request<T>('POST',`/me/game-drafts/${id}/source`,{gameSource:source,idempotencyKey:options.idempotencyKey,ifMatch:options.ifMatch,signal:options.signal,background:true,suppressConsole:true})}
+    finally{this.reads.clear()}
+  }
+
   async getSession(): Promise<SessionPayload> {
     return this.get<SessionPayload>('/session', { skipAuthHandler: true })
   }
@@ -329,6 +339,11 @@ export class PortalClient {
       const photo=options.eventPrizePhoto
       if(method!=='POST'||!/^\/events\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/prizes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/photo$/.test(path)||options.body!==undefined||options.arPattern||options.profileCover||!['image/png','image/jpeg','image/webp'].includes(photo.type)||photo.size===0||photo.size>2*1024*1024)throw new ApiError({message:'獎品照片上傳格式不正確。',status:422,definitiveResponse:true})
       headers['Content-Type']=photo.type
+    }
+    if(options.gameSource){
+      const source=options.gameSource
+      if(method!=='POST'||!/^\/me\/game-drafts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/source$(?![\s\S])/.test(path)||options.body!==undefined||options.arPattern||options.profileCover||options.eventPrizePhoto||source.type!=='text/html'||source.size===0||source.size>256*1024)throw new ApiError({message:'遊戲來源上傳格式不正確。',status:422,definitiveResponse:true})
+      headers['Content-Type']='text/html'
     }
     if (needsCsrf) {
       if (!this.csrfToken) {
@@ -384,7 +399,7 @@ export class PortalClient {
       response = await accessAwareFetch(`${API_BASE}${path}`, {
         method, headers, credentials: 'same-origin', signal: controller.signal,
         ...(options.keepalive === true ? {keepalive: true} : {}),
-        body: options.eventPrizePhoto ?? options.profileCover ?? options.arPattern ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
+        body: options.gameSource ?? options.eventPrizePhoto ?? options.profileCover ?? options.arPattern ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
       })
       if (await isExpiredAccessResponse(response)) {
         const status = expiredAccessStatus(response)

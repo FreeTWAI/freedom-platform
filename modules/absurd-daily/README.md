@@ -49,3 +49,8 @@ node modules/absurd-daily/tools/native-previews.mjs capture /absolute/new-eviden
 目前已知限制：2026-10-27 own-cloud Chromium 在啟動時因 socket EPERM 中止，0／66生成；不得用修改 sandbox／profile／flags 重試來規避。此工具的純驗證測試不代替原生執行。原 `cooking-3d-art.json` 的來源 gate 仍如實失敗；不能只換 hash 宣稱重新生成。
 
 預算依本工具實際的 `createDishStage` 預覽契約：calls≤100、geometries<100；textures 如實記錄並驗非負整數。既有66張預覽記錄為6–14 textures，不能套用 `kitchen-stage` 引導麵團觸控測試的≤3 textures門檻；後者是另一個場景／取樣契約，仍原樣保留。
+
+
+## 會員私有來源候選
+
+公開遊戲本身仍不讀會員內容。新增的「上傳自己的遊戲（會員私有保存）」是本人明確開啟才讀 session 的獨立區域，沿既有 PortalClient／CSRF 接 owner-only 草稿、單檔來源與撤回 API。政策預設關閉，沒有公開來源、試玩或自動上架；下方 GitHub 公開投稿保持另一條路。選檔／未知操作只在頁面記憶體，帳號或 session 變更清除，歷史回條不當成目前狀態。完整流程與未完成界線見 [COMMUNITY-GAMES](COMMUNITY-GAMES.md) 及 [GAME-QUARANTINE](GAME-QUARANTINE.md)。

@@ -12,7 +12,8 @@ member session and CSRF middleware plus Idempotency-Key; source/withdraw require
 If-Match. Onboarding, current user/session/principal/personal scope, ownership and
 community are checked again inside canonical transactions, including replay.
 There is no collection/public metadata endpoint and no source-byte GET endpoint.
-The initial metadata receipt supplies the ID for cold owner reads. UI is not wired.
+The initial metadata receipt supplies the ID for cold owner reads. The next UI
+increment wires this owner-only flow; there is still no collection endpoint.
 
 The source reader has a 15-second absolute transport deadline and disconnect
 cancellation. It never parses, executes, sanitizes or fetches HTML dependencies.
@@ -60,7 +61,7 @@ separate gates. This source cannot establish cloud readiness from mock tests.
 
 Still unfinished: reviewer authority and exact-revision decisions, licensing
 consent for publication, isolated-origin execution with network/CPU limits,
-moderation and public delivery/revocation, member upload UI and end-to-end human
+moderation and public delivery/revocation, rollout and end-to-end human
 acceptance. Never present stored or ready Asset state as reviewed, safe or playable.
 
 ## Local candidate evidence, 2026-11-06
@@ -87,3 +88,45 @@ acceptance. Never present stored or ready Asset state as reviewed, safe or playa
 - Read-only independent source review found no definite blocking auth/storage/SQL
   defect; it is not an independent CI receipt or maintainer approval. The prohibited
   tenant-data-catalog test remains byte-identical and its required checks remain.
+
+## Member UI candidate, 2026-11-06
+
+The separate explicitly opened member area in `/play` uses PortalClient/session,
+CSRF and the existing owner APIs. Anonymous play and GitHub submission remain
+separate. Metadata create does not imply byte persistence; new source selection
+and send require current availability, and send re-reads before creating an
+immutable operation. Policy defaults stay closed, with no activation or rollout.
+
+A selected .html file is bounded before read, checked as UTF-8 without HTML parsing,
+and snapshotted as exact original bytes. There is no rendering, execution, source
+GET, URL preview, external dependency fetch or browser persistence of source.
+Unknown operations hold their exact key/version/bytes/session for explicit retry;
+known-target retry first rechecks owner metadata without treating it as a receipt.
+An exact historical ACK is followed by a separate current read and cannot lower a
+newer known version. Create receipt loss has no known UUID, so it retries only the
+original create. There is no automatic post-reload inventory or byte recovery.
+
+Session/account changes and page teardown clear local source/operation references
+and fence late completions. Transient session-check failure hides private UI while
+preserving an uncertain operation. Checks occur on visible 60-second intervals,
+focus/visibility and before API work. Withdraw remains independent of new-upload
+policy, explicitly warns about irreversible stop and retained history/quota, and
+never offers physical erasure or an approval/publication transition.
+
+Local evidence for this UI increment (not backend, rollout or human acceptance):
+- Seven production-controller tests passed via Node24 TypeScript transformation:
+  strict DTOs, exact BOM/CRLF bytes, bounded invalid inputs, policy/version changes,
+  immutable unknown retry, historical ACK/cold-read separation, stale owners and
+  leave protection during an unresolved withdrawal retry GET.
+- Three shared PortalClient transport regressions passed through isolated actual
+  source transformation, using real access-fetch and request-activity code. Unused
+  unrelated console/Zod branches were fail-fast stubs. This is not the complete
+  import graph or semantic typecheck.
+- Standard typecheck failed before compilation because TypeScript is absent.
+  Runtime invocation failed at startup because tsx is absent; no suite body ran.
+  Standard build passed generated-source checks, then failed in the existing npm
+  pack step with ENOENT creating /home/agent/.npm, before Vite. No install, cache
+  workaround or retry was attempted.
+- Browser cases cover 320/1440px, keyboard selection/consent, byte-exact retry,
+  unavailable policy/withdrawal, reload UUID recovery and account-change clearing.
+  They are authored, not executed locally. No screenshots or real-device evidence.

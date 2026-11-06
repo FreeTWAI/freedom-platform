@@ -678,3 +678,106 @@ test('native game source splits UTF8 safely and does not leak upstream errors or
  const locked=gameSourceStream(raw),reader=locked.getReader();
  try{await assert.rejects(validateGameUploadSource({body:locked,contentType:'text/html'}),gameSourceError('invalid_game_source'));assert.equal(locked.locked,true);}finally{reader.releaseLock();}
 });
+
+// MEMBER-GAME-UPLOAD: isolated browser workflow state, no database or source execution.
+import {MemberGameUpload,memberGame,memberGameFileError,exactGameAck,memberGameLeaveRisk,type GameCommand,type CurrentMemberGame} from '../../apps/portal-web/src/games/member-game-upload.js';
+const memberGameId='10000000-0000-4000-8000-000000000001';
+const gameMetadata=():CurrentMemberGame=>({game_id:memberGameId,title:'合成測試',description:'測試介紹',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:true});
+const receipt=(current:CurrentMemberGame)=>{const {upload_available,...ack}=current;return ack;};
+function uploadFixture(){
+ let current=gameMetadata(),live=true,reads=0,send:(command:GameCommand)=>Promise<unknown>=async command=>{
+  if(command.kind==='create')return receipt({...current,title:command.body.title,description:command.body.description});
+  current={...current,version:String(BigInt(command.before.version)+1n),source_revision:command.kind==='upload'?String(BigInt(command.before.source_revision)+1n):command.before.source_revision,state:command.kind==='upload'?'quarantined':'withdrawn',upload_available:command.kind==='upload'};return receipt(current);
+ };
+ const commands:GameCommand[]=[];
+ const controller=new MemberGameUpload({current:()=>live,refused:error=>error==='pre-admission-refused',read:async()=>{reads++;return current;},send:async command=>{commands.push(command);return send(command);}});
+ return {controller,commands,reads:()=>reads,current:()=>current,setCurrent:(value:CurrentMemberGame)=>{current=value;},setSend:(fn:typeof send)=>{send=fn;},end:()=>{live=false;}};
+}
+const sourceFile=(bytes:Uint8Array|string='<!doctype html>\r\n<script>throw Error("must never execute")</script>')=>new File([bytes as BlobPart],'index.html',{type:'text/html'});
+test('member game upload: metadata decoder fails closed on source, policy, stale identity and inconsistent states',()=>{
+ assert.equal(memberGame(gameMetadata(),true).game_id,memberGameId);
+ for(const patch of [{object_key:'private'},{sha256:'a'.repeat(64)},{source:'secret'},{upload_available:'true'},{version:'01'},{version:'1\n'},{source_revision:'0\n'},{game_id:memberGameId+'\n'},{source_revision:'1'},{state:'approved'},{state:['draft']},{state:['quarantined']},{state:{}},{state:null},{trust:'safe'},{state:'withdrawn',upload_available:true},{game_id:'../../other'}])assert.throws(()=>memberGame({...gameMetadata(),...patch},true));
+ const before=receipt(gameMetadata()),command:GameCommand={kind:'upload',key:'test',before,source:new Blob(['<html>'],{type:'text/html'})};
+ const ack={...before,version:'2',source_revision:'1',state:'quarantined'};
+ assert.equal(exactGameAck(ack,command).version,'2');for(const patch of [{version:'3'},{source_revision:'2'},{game_id:'20000000-0000-4000-8000-000000000001'},{title:'other'},{state:'published'},{upload_available:true}])assert.throws(()=>exactGameAck({...ack,...patch},command));
+});
+test('member game upload: explicit file selection is local, bounded, fatal UTF-8 and byte-exact including BOM',async()=>{
+ const f=uploadFixture();await f.controller.load(memberGameId);
+ assert.equal(memberGameFileError(new File([new Uint8Array(256*1024)],'a.html',{type:'text/html'})),null);
+ for(const file of [new File(['x'],'a.zip'),new File(['x'],'a.html',{type:'image/png'}),new File([],'a.html'),new File([new Uint8Array(256*1024+1)],'a.html')])assert.ok(memberGameFileError(file));
+ for(const bytes of [new Uint8Array([255]),new Uint8Array([0]),new TextEncoder().encode('  \n')]){await f.controller.selectFile(sourceFile(bytes));assert.equal(f.controller.getSnapshot().selected,null);}
+ const bytes=new Uint8Array([239,187,191,...new TextEncoder().encode('<html>\r\n台灣<script>globalThis.executed=true</script>')]);
+ await f.controller.selectFile(sourceFile(bytes));assert.equal(f.commands.length,0);assert.equal(f.reads(),1);assert.equal(f.controller.getSnapshot().selected?.byteSize,bytes.length);
+ await f.controller.change('upload');const uploaded=f.commands[0];if(uploaded.kind!=='upload')throw Error('expected upload');assert.deepEqual(new Uint8Array(await uploaded.source!.arrayBuffer()),bytes);assert.equal(uploaded.source!.type,'text/html');assert.equal(f.controller.getSnapshot().selected,null);assert.equal(f.controller.getSnapshot().draft?.state,'quarantined');assert.equal((globalThis as any).executed,undefined);
+});
+test('member game upload: policy OFF and concurrent version changes send no source; withdraw remains available',async()=>{
+ const f=uploadFixture();await f.controller.load(memberGameId);await f.controller.selectFile(sourceFile());f.setCurrent({...f.current(),upload_available:false});await f.controller.change('upload');assert.equal(f.commands.length,0);assert.equal(f.controller.getSnapshot().selected,null);assert.equal(f.controller.getSnapshot().draft?.upload_available,false);
+ await f.controller.change('withdraw');assert.equal(f.commands[0].kind,'withdraw');assert.equal(f.controller.getSnapshot().draft?.state,'withdrawn');
+ const changed=uploadFixture();await changed.controller.load(memberGameId);await changed.controller.selectFile(sourceFile());changed.setCurrent({...changed.current(),version:'2',source_revision:'1',state:'quarantined'});await changed.controller.change('upload');assert.equal(changed.commands.length,0);assert.equal(changed.controller.getSnapshot().selected,null);
+});
+test('member game upload: unknown retry freezes original bytes/key/version; no overwrite or fresh command; retry cold read is not an ACK',async()=>{
+ const f=uploadFixture();await f.controller.load(memberGameId);await f.controller.selectFile(sourceFile());f.setSend(async()=>{throw Error('lost ACK');});await f.controller.change('upload');
+ const original=f.commands[0];assert.equal(f.controller.getSnapshot().phase,'unknown');assert.equal(f.controller.getSnapshot().draft,null);
+ await f.controller.create('other','');await f.controller.load(memberGameId);await f.controller.selectFile(sourceFile('different'));await f.controller.change('withdraw');assert.equal(f.commands.length,1);
+ f.setSend(async()=>{throw 'pre-admission-refused';});await f.controller.retry();assert.equal(f.controller.getSnapshot().phase,'unknown');assert.equal(f.commands[1],original);
+ f.setCurrent({...f.current(),version:'3',source_revision:'1',state:'withdrawn',upload_available:false});
+ f.setSend(async()=>({...receipt(gameMetadata()),version:'2',source_revision:'1',state:'quarantined'}));await f.controller.retry();assert.equal(f.commands[2],original);assert.equal(f.controller.getSnapshot().draft?.state,'withdrawn');assert.equal(f.controller.getSnapshot().draft?.version,'3');
+ f.setCurrent(gameMetadata());await f.controller.load(memberGameId);assert.equal(f.controller.getSnapshot().draft,null,'older cold read cannot replace a newer current view');
+});
+test('member game upload: duplicate clicks and late create/upload ACK cannot affect ended or new owners',async()=>{
+ for(const kind of ['create','upload'] as const){
+  const f=uploadFixture();if(kind==='upload'){await f.controller.load(memberGameId);await f.controller.selectFile(sourceFile());}
+  let finish!:(value:unknown)=>void;f.setSend(()=>new Promise(resolve=>{finish=resolve;}));
+  const run=kind==='create'?f.controller.create('合成測試','測試介紹'):f.controller.change('upload');
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  if(kind==='create')await f.controller.create('duplicate','');else await f.controller.change('upload');
+  assert.equal(f.commands.length,1);f.end();f.controller.dispose();finish(kind==='create'?receipt(gameMetadata()):{...receipt(gameMetadata()),version:'2',source_revision:'1',state:'quarantined'});await run;
+  assert.equal(f.controller.getSnapshot().phase,'closed');assert.equal(f.controller.getSnapshot().draft,null);assert.equal(f.controller.getSnapshot().selected,null);assert.equal(f.controller.getSnapshot().draftId,'');
+ }
+});
+test('member game upload: late file read and malformed ACK stay fenced; a receipt needs independent current read',async()=>{
+ const f=uploadFixture();await f.controller.load(memberGameId);let finish!:(bytes:ArrayBuffer)=>void;const file=sourceFile();Object.defineProperty(file,'arrayBuffer',{value:()=>new Promise<ArrayBuffer>(resolve=>{finish=resolve;})});
+ const selecting=f.controller.selectFile(file);f.controller.dispose();finish(new TextEncoder().encode('<html>').buffer);await selecting;assert.equal(f.controller.getSnapshot().selected,null);
+ const malformed=uploadFixture();malformed.setSend(async()=>({...receipt(gameMetadata()),source:'must not be shown'}));await malformed.controller.create('合成測試','測試介紹');assert.equal(malformed.controller.getSnapshot().phase,'unknown');assert.equal(malformed.controller.getSnapshot().draft,null);
+ const stale=uploadFixture();await stale.controller.load(memberGameId);await stale.controller.selectFile(sourceFile());stale.setSend(async()=>({...receipt(gameMetadata()),version:'2',source_revision:'1',state:'quarantined'}));await stale.controller.change('upload');assert.equal(stale.controller.getSnapshot().phase,'idle');assert.equal(stale.controller.getSnapshot().draft,null);assert.match(stale.controller.getSnapshot().status,/目前狀態讀取失敗/);
+});
+test('member game upload: withdrawal retry remains leave-protected during deferred access GET',async()=>{
+ let reads=0,finish!:(value:unknown)=>void;
+ const controller=new MemberGameUpload({current:()=>true,refused:()=>false,read:async()=>{if(++reads===3)return new Promise(resolve=>{finish=resolve;});return gameMetadata();},send:async()=>{throw Error('lost withdrawal ACK');}});
+ await controller.load(memberGameId);await controller.change('withdraw');assert.equal(controller.getSnapshot().phase,'unknown');
+ const retry=controller.retry();assert.equal(controller.getSnapshot().phase,'reading');assert.equal(controller.getSnapshot().selected,null);assert.equal(controller.getSnapshot().retry,'withdraw');assert.equal(memberGameLeaveRisk(controller.getSnapshot()),true);
+ finish(gameMetadata());await retry;assert.equal(memberGameLeaveRisk(controller.getSnapshot()),true);controller.dispose();assert.equal(memberGameLeaveRisk(controller.getSnapshot()),false);
+});
+// END MEMBER-GAME-UPLOAD
+
+// MEMBER-GAME-API: actual shared PortalClient transport, not HTTP server coverage.
+import {PortalClient,ApiError} from '../../apps/portal-web/src/api.js';
+test('member game API: closed exact HTML body retains CSRF/key/quoted string version and unchanged retry bytes',async t=>{
+ const client=new PortalClient();client.csrfToken='synthetic-game-session';const key='20000000-0000-4000-8000-000000000001';
+ const bytes=new Uint8Array([239,187,191,...new TextEncoder().encode('<html>\r\n台灣')]),source=new Blob([bytes],{type:'text/html'}),requests:RequestInit[]=[];
+ t.mock.method(globalThis,'fetch',async(url:RequestInfo|URL,init?:RequestInit)=>{assert.equal(url,`/api/v1/me/game-drafts/${memberGameId}/source`);requests.push(init!);if(requests.length===1)throw Error('lost');return Response.json({ok:true});});
+ const options={idempotencyKey:key,ifMatch:'9007199254740993'};
+ await assert.rejects(client.uploadGameSource(memberGameId,source,options),ApiError);await client.uploadGameSource(memberGameId,source,options);
+ assert.equal(requests.length,2);assert.equal(requests[0].body,source);assert.equal(requests[1].body,source);assert.deepEqual(new Uint8Array(await (requests[0].body as Blob).arrayBuffer()),bytes);
+ const headers=new Headers(requests[0].headers);assert.equal(headers.get('Content-Type'),'text/html');assert.equal(headers.get('If-Match'),'"9007199254740993"');assert.equal(headers.get('X-CSRF-Token'),'synthetic-game-session');assert.equal(headers.get('Idempotency-Key'),key);assert.equal(requests[0].credentials,'same-origin');assert.equal(requests[0].method,'POST');assert.deepEqual([...headers],[...new Headers(requests[1].headers)]);
+});
+test('member game API: invalid destinations, mixed bodies, oversized source and invalid versions never fetch',async t=>{
+ const client=new PortalClient();client.csrfToken='synthetic';const key='20000000-0000-4000-8000-000000000001',source=new Blob(['<html>'],{type:'text/html'});
+ const fetcher=t.mock.method(globalThis,'fetch',async()=>{throw Error('must not fetch');});
+ for(const id of ['../other','x',memberGameId+'/withdraw',memberGameId+'\n'])await assert.rejects(client.uploadGameSource(id,source,{idempotencyKey:key,ifMatch:'1'}),ApiError);
+ for(const version of ['0','01','1\n','9223372036854775807','9223372036854775808'])await assert.rejects(client.uploadGameSource(memberGameId,source,{idempotencyKey:key,ifMatch:version}),ApiError);
+ for(const blob of [new Blob([],{type:'text/html'}),new Blob(['x'],{type:'text/plain'}),new Blob([new Uint8Array(262145)],{type:'text/html'})])await assert.rejects(client.uploadGameSource(memberGameId,blob,{idempotencyKey:key,ifMatch:'1'}),ApiError);
+ await assert.rejects(client.post(`/me/game-drafts/${memberGameId}/source`,{wrong:true},{gameSource:source}),ApiError);
+ await assert.rejects(client.post('/me/profile-cover',undefined,{gameSource:source}),ApiError);
+ await assert.rejects(client.post(`/me/game-drafts/${memberGameId}/source\n`,undefined,{gameSource:source}),ApiError);
+ await assert.rejects(client.uploadGameSource(memberGameId,source,{idempotencyKey:key+'\n',ifMatch:'1'}),ApiError);
+ await assert.rejects(client.get(`/me/game-drafts/${memberGameId}/source`,{gameSource:source}),ApiError);
+ assert.equal(fetcher.mock.callCount(),0);
+});
+test('member game API: stale session unauthorized result cannot invalidate a newer session',async t=>{
+ const client=new PortalClient();client.csrfToken='old';let finish!:(response:Response)=>void,unauthorized=0;client.onUnauthorized=()=>{unauthorized++;};
+ t.mock.method(globalThis,'fetch',()=>new Promise<Response>(resolve=>{finish=resolve;}));
+ const pending=client.uploadGameSource(memberGameId,new Blob(['<html>'],{type:'text/html'}),{idempotencyKey:'20000000-0000-4000-8000-000000000001',ifMatch:'1'});client.csrfToken='new';client.csrfToken='old';
+ finish(Response.json({type:'expired',title:'Expired',status:401},{status:401}));await assert.rejects(pending,ApiError);assert.equal(unauthorized,0);assert.equal(client.csrfToken,'old');
+});
+// END MEMBER-GAME-API
