@@ -18,7 +18,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, PHASES, requestFromEnvironment, admitRelease,
-  admitInstallation, requireStaging, requireLegacyPredecessor, githubClient, releaseFailureCode, isReleaseFailureCode } from '../../shared-release/admission.mjs';
+  admitInstallation, requireStaging, requireLegacyPredecessor, githubClient, releaseFailureCode, isReleaseFailureCode,
+  RELEASE_RECONCILE_CRON, automaticReleaseEvent, sameAutomaticRelease } from '../../shared-release/admission.mjs';
 import { validateOperatorResult, validateBackupOperatorResult, operatorProgress, publicControlReadFailure, publicLeaseLoss, operatorCommand, runOperator, pullOperatorImage, quietCommand } from '../../shared-release/operator.mjs';
 import { remotePostgresEnvironment, runPostgresProcess, writeSnapshotDump } from '../../shared-release/portable/postgres.mjs';
 import { decodeReceiptArchive, artifactReader } from '../../shared-release/artifacts.mjs';
@@ -88,7 +89,7 @@ const request = () => ({ ...requestFromEnvironment(environment()), releaseKind: 
 
 function automaticFixture() {
   const env = { ...environment(), GITHUB_EVENT_NAME: 'workflow_run', RELEASE_MODE: 'deploy',
-    RELEASE_TRIGGER_RUN_ID: '11', RELEASE_TRIGGER_RUN_ATTEMPT: '2' };
+    RELEASE_TRIGGER_RUN_ID: '11', RELEASE_TRIGGER_RUN_ATTEMPT: '2', AUTO_RELEASE_ENABLED: 'true' };
   const request = requestFromEnvironment(env);
   const current = { id: 100, run_attempt: 2, workflow_id: 3, path: '.github/workflows/shared-release.yml',
     event: 'workflow_run', repository: { id: REPOSITORY_ID }, head_repository: { id: REPOSITORY_ID },
@@ -103,6 +104,176 @@ function automaticFixture() {
   });
   return { env, request, current, overrides, api };
 }
+
+function scheduledReleaseFixture() {
+  const f = automaticFixture();
+  f.env = { ...f.env, GITHUB_EVENT_NAME: 'schedule', RELEASE_SCHEDULE: RELEASE_RECONCILE_CRON,
+    RELEASE_TRIGGER_RUN_ID: '', RELEASE_TRIGGER_RUN_ATTEMPT: '' };
+  f.request = requestFromEnvironment(f.env); f.current.event = 'schedule';
+  f.overrides[`/repos/${REPOSITORY}/branches/main`] = { commit: { sha } };
+  for (const [index, target] of ['next', 'staging-next'].entries()) {
+    f.overrides[`/repos/${REPOSITORY}/deployments?environment=${target}&per_page=100`] = [
+      { id: 50 + index, environment: target, sha: 'e'.repeat(40) }];
+    f.overrides[`/repos/${REPOSITORY}/deployments/${50 + index}/statuses?per_page=1`] = [{ state: 'success' }];
+  }
+  return f;
+}
+
+test('scheduled reconciliation requires actual main workflow identity and current maintainer authority', async () => {
+  const f = scheduledReleaseFixture();
+  const admitted = await admitAutomaticRelease(f.request, f.api, { allowSkip: true });
+  assert.equal(admitted.sourceSha, sha); assert.equal(admitted.verification.length, 2);
+  assert.deepEqual(admitted.automatic, { schedule: RELEASE_RECONCILE_CRON });
+  for (const patch of [{ event: 'workflow_dispatch' }, { event: 'workflow_run' }, { head_branch: 'feature' },
+    { head_repository: { id: 2 } }, { head_sha: sha }, { run_attempt: 3 }, { workflow_id: 8 },
+    { actor: { login: 'teddashh', id: 1 } }, { triggering_actor: { login: 'unknown' } }, { status: 'completed' }]) {
+    const bad = scheduledReleaseFixture(); Object.assign(bad.current, patch);
+    await assert.rejects(admitAutomaticRelease(bad.request, bad.api), { code: 'release_automatic_run_invalid' });
+  }
+  const revoked = scheduledReleaseFixture();
+  revoked.overrides[`/repos/${REPOSITORY}/collaborators/teddashh/permission`] = {
+    permission: 'read', user: { login: 'teddashh', id: OPERATORS.teddashh } };
+  await assert.rejects(admitAutomaticRelease(revoked.request, revoked.api), { code: 'release_operator_permission_missing' });
+  const bot = scheduledReleaseFixture();
+  Object.assign(bot.request, { actor: 'github-merge-queue[bot]', actorId: 118344674 });
+  bot.current.actor = { login: bot.request.actor, id: bot.request.actorId };
+  await assert.rejects(admitAutomaticRelease(bot.request, bot.api), { code: 'release_operator_not_allowed' });
+});
+
+test('scheduled requests cannot masquerade as notifications or carry recovery inputs', () => {
+  const f = scheduledReleaseFixture();
+  for (const patch of [{ RELEASE_SCHEDULE: '* * * * *' }, { RELEASE_SCHEDULE: '' }, { RELEASE_MODE: 'check' },
+    { RELEASE_TRIGGER_RUN_ID: '11' }, { RELEASE_TRIGGER_RUN_ATTEMPT: '2' },
+    { RELEASE_RECOVER_BACKUP_RUN_ID: '77' }, { RELEASE_RECOVER_RELEASE_RUN_ID: '77' }, { RELEASE_RECOVER_MIGRATION_RUN_ID: '77' }]) {
+    assert.throws(() => requestFromEnvironment({ ...f.env, ...patch }), { code: 'release_automatic_request_invalid' });
+  }
+  const marker = { schedule: RELEASE_RECONCILE_CRON }, notification = { triggerRunId: 11, triggerRunAttempt: 2 };
+  for (const bad of [undefined, {}, [], { schedule: 'wrong' }, { ...marker, ...notification }, { ...marker, extra: true }]) {
+    assert.equal(automaticReleaseEvent(bad), undefined);
+    assert.equal(sameAutomaticRelease(marker, bad), false);
+  }
+  assert.equal(sameAutomaticRelease(marker, notification), false);
+});
+
+test('scheduled admission waits for successful exact-source CI without executing or accepting PR checks', async () => {
+  for (const patch of [{ status: 'in_progress', conclusion: null }, { status: 'completed', conclusion: 'failure' }]) {
+    const f = scheduledReleaseFixture(), path = `/repos/${REPOSITORY}/actions/runs/22`;
+    f.overrides[path] = { ...await f.api(path), ...patch };
+    assert.deepEqual(await admitAutomaticRelease(f.request, f.api, { allowSkip: true }), { skipReason: 'waiting_for_both_main_checks' });
+    await assert.rejects(admitAutomaticRelease(f.request, f.api), { code: 'release_verification_not_successful' });
+  }
+  const f = scheduledReleaseFixture(), path = `/repos/${REPOSITORY}/actions/runs/11`;
+  f.overrides[path] = { ...await f.api(path), event: 'pull_request' };
+  await assert.rejects(admitAutomaticRelease(f.request, f.api, { allowSkip: true }), { code: 'release_verification_identity_invalid' });
+});
+
+test('main advancing during scheduled selection skips admission but does not interrupt an admitted source', async () => {
+  const f = scheduledReleaseFixture();
+  f.overrides[`/repos/${REPOSITORY}/branches/main`] = { commit: { sha: main } };
+  assert.deepEqual(await admitAutomaticRelease(f.request, f.api, { allowSkip: true }), { skipReason: 'scheduled_main_advanced' });
+  assert.equal((await admitAutomaticRelease(f.request, f.api)).sourceSha, sha);
+});
+
+test('scheduled CLI selects main through GitHub and leaves pending checks without operator execution', async t => {
+  const f = scheduledReleaseFixture(), path = `/repos/${REPOSITORY}/actions/runs/22`;
+  f.overrides[path] = { ...await f.api(path), status: 'in_progress', conclusion: null };
+  const directory = await mkdtemp(join(tmpdir(), 'scheduled-release-admit-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await releaseMain({ ...f.env, RELEASE_SHA: 'untrusted-selection', RELEASE_COMMAND: 'admit',
+    PUBLIC_RECEIPT_DIRECTORY: directory, GITHUB_OUTPUT: join(directory, 'output') },
+  { api: f.api, executeOperator: () => assert.fail('pending CI must never execute the operator') });
+  const receipt = JSON.parse(await readFile(join(directory, 'receipt.json'), 'utf8'));
+  assert.equal(receipt.status, 'skipped'); assert.equal(receipt.providerOutcome, 'not_started');
+  assert.equal(await readFile(join(directory, 'output'), 'utf8'), 'mode=skip\n');
+  assert(f.api.calls.includes(`/repos/${REPOSITORY}/actions/workflows/1/runs?head_sha=${sha}&event=push&branch=main&per_page=100`));
+  assert(!f.api.calls.some(path => path.includes('untrusted-selection')));
+});
+
+test('automatic CLI incident switch accepts only raw true before any API or operator call', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'automatic-release-switch-')), exitCode = process.exitCode;
+  t.after(async () => { process.exitCode = exitCode; await rm(root, { recursive: true, force: true }); });
+  const api = () => assert.fail('disabled automation must not access GitHub or create a Deployment');
+  for (const [eventIndex, fixture] of [automaticFixture, scheduledReleaseFixture].entries()) {
+    for (const [index, value] of [undefined, '', 'false', 'TRUE', 'True', ' true', 'true\n'].entries()) {
+      for (const command of ['admit', 'execute']) {
+        const directory = join(root, `${eventIndex}-${index}-${command}`);
+        await releaseMain({ ...fixture().env, AUTO_RELEASE_ENABLED: value, RELEASE_COMMAND: command,
+          PUBLIC_RECEIPT_DIRECTORY: directory }, { api, executeOperator: () => assert.fail('operator must not start') });
+        const receipt = JSON.parse(await readFile(join(directory, 'receipt.json'), 'utf8'));
+        assert.equal(receipt.providerOutcome, 'not_started');
+        assert.equal(receipt.status, command === 'admit' ? 'skipped' : 'failed');
+        assert.equal(command === 'admit' ? receipt.skipReason : receipt.error,
+          command === 'admit' ? 'automatic_releases_disabled' : 'release_environment_disabled');
+      }
+    }
+  }
+  process.exitCode = exitCode;
+});
+
+test('scheduled reconciliation deduplicates success and cannot retry failed, pending or earlier-attempt releases', async () => {
+  const f = scheduledReleaseFixture();
+  const rows = target => [{ id: 1, environment: target, sha, payload: { runId: 100, runAttempt: 2 } }];
+  const api = (target, state) => async path => path.includes('/deployments?')
+    ? path.includes(`environment=${target}`) ? rows(target) : [{ id: 2, environment: 'next', sha: 'e'.repeat(40) }]
+    : path.includes('/deployments/2/statuses?') ? [{ state: 'success' }]
+      : path.includes('/compare/') ? { status: 'ahead', merge_base_commit: { sha: 'e'.repeat(40) } } : [{ state }];
+  assert.equal(await automaticDisposition(api('next', 'success'), f.request), 'already_released');
+  for (const target of ['next', 'staging-next']) for (const status of ['failure', 'error', 'in_progress', 'pending']) {
+    await assert.rejects(automaticDisposition(api(target, status), f.request), { code: 'release_automatic_previous_unsettled' });
+  }
+  await assert.rejects(automaticDisposition(api('staging-next', 'success'), f.request), { code: 'release_automatic_previous_attempt' });
+  assert.equal(await automaticDisposition(api('staging-next', 'success'), { ...f.request, target: 'next' }), undefined);
+  await assert.rejects(automaticDisposition(api('staging-next', 'success'), { ...f.request, target: 'next', runAttempt: 3 }),
+    { code: 'release_automatic_previous_attempt' });
+  const recovered = automaticHandoffFixture(); recovered.admission.automatic = f.request.automatic;
+  await assert.rejects(automaticDisposition(recovered.api, recovered.admission), { code: 'release_automatic_previous_unsettled' });
+  await assert.rejects(automaticDisposition(async () => [], f.request), { code: 'release_automatic_previous_unsettled' });
+});
+
+test('scheduled production binds its own completed staging job, exact marker and hashed receipt', async () => {
+  const fixture = () => {
+    const f = automaticStagingFixture(), marker = { schedule: RELEASE_RECONCILE_CRON };
+    f.admission.automatic = marker; f.state.deployment.payload.automatic = marker; f.state.receipt.automatic = marker;
+    f.state.run.event = 'schedule'; return f;
+  };
+  const f = fixture(); assert.equal((await requireStaging(f.api, f.admission, installation)).artifactId, 81);
+  for (const mutate of [f => { f.admission.runAttempt++; }, f => { f.state.run.event = 'workflow_run'; },
+    f => { f.state.receipt.automatic = { triggerRunId: 11, triggerRunAttempt: 2 }; },
+    f => { f.state.deployment.payload.automatic = { schedule: 'wrong' }; },
+    f => { f.state.receipt.automatic = { schedule: RELEASE_RECONCILE_CRON, triggerRunId: 11 }; },
+    f => { f.state.jobs[1].conclusion = 'failure'; }, f => { f.state.receipt.phases.pop(); },
+    f => { f.state.artifact.digest = 'invalid'; }, f => { f.state.receipt.sourceSha = main; }]) {
+    const bad = fixture(); mutate(bad); await assert.rejects(requireStaging(bad.api, bad.admission, installation));
+  }
+});
+
+test('scheduled failed releases retain authenticated manual handoff and migration recovery', async () => {
+  for (const [fixture, verify] of [[failedReleaseHandoffFixture, requireFailedReleaseHandoff],
+    [failedReleaseMigrationFixture, requireFailedReleaseMigration]]) for (const target of ['staging-next', 'next']) {
+    const f = fixture(); f.state.run.event = 'schedule'; f.admission.target = target; f.state.receipt.target = target;
+    f.state.receipt.automatic = { schedule: RELEASE_RECONCILE_CRON }; f.state.artifact.name += '-' + target;
+    f.state.jobs.push({ ...structuredClone(f.state.jobs[1]), name: 'production', conclusion: target === 'next' ? 'failure' : 'skipped' });
+    if (target === 'next') { f.state.jobs[1].conclusion = 'success'; f.state.jobs[1].steps[0].conclusion = 'success'; }
+    assert.equal((await verify(f.api, f.admission, installation)).target, target);
+    f.state.receipt.automatic = { triggerRunId: 11, triggerRunAttempt: 2 };
+    await assert.rejects(verify(f.api, f.admission, installation));
+  }
+});
+
+test('schedule metadata passes through the existing operator contract with the same five phases and request digest', async t => {
+  const f = await operatorFixture(t), original = f.options.run;
+  const { admission, value } = codeResult(); admission.automatic = { schedule: RELEASE_RECONCILE_CRON };
+  const phases = await runOperator({ ...f.options, admission, run: async (...args) => {
+    await original(...args);
+    if (args[1][0] === 'run') {
+      const input = await readFile(join(f.temporaryRoot, 'input/request.json'), 'utf8');
+      assert.deepEqual(JSON.parse(input).automatic, admission.automatic); value.requestSha256 = hash(input);
+      await writeFile(join(f.temporaryRoot, 'output/result.json'), JSON.stringify(value));
+    }
+  } });
+  assert.deepEqual(phases.map(phase => phase.name), ['preflight', 'migration', 'deploy', 'health', 'handoff']);
+  assert.equal(f.calls.filter(call => call[1] === 'run').length, 1);
+});
 
 test('automatic admission authenticates both exact main checks and the actual upstream notification', async () => {
   const f = automaticFixture();
@@ -1123,9 +1294,10 @@ test('automatic incident switch leaves manual admission available and run titles
   const condition = admission.split('    if: >-\n')[1].trim();
   assert.match(condition, /github.event_name == 'workflow_dispatch' \|\|\s*\(vars.AUTO_RELEASE_ENABLED == 'true' &&/);
   for (const enabled of [undefined, '', 'false', 'true']) {
-    for (const event of ['workflow_dispatch', 'workflow_run']) {
+    for (const event of ['workflow_dispatch', 'workflow_run', 'schedule']) {
       const github = { ref: 'refs/heads/main', repository: REPOSITORY, event_name: event,
-        event: { workflow_run: { event: 'push', conclusion: 'success', head_repository: { id: REPOSITORY_ID } } } };
+        event: { workflow_run: { event: 'push', conclusion: 'success', head_repository: { id: REPOSITORY_ID },
+          actor: { login: 'teddashh', id: OPERATORS.teddashh } } } };
       assert.equal(runInNewContext(condition, { github, vars: { AUTO_RELEASE_ENABLED: enabled } }),
         event === 'workflow_dispatch' || enabled === 'true');
       github.repository = 'someone/freedom-platform';
@@ -1133,7 +1305,6 @@ test('automatic incident switch leaves manual admission available and run titles
     }
   }
   const title = text.match(/^run-name: (.*)$/m)[1];
-  assert.equal(title, "${{ github.event_name == 'workflow_run' && format('automatic staging → production at {0}', github.event.workflow_run.head_sha) || format('{0} {1} at {2} by @{3}', inputs.mode, inputs.target, inputs.release_sha, github.actor) }}");
   const format = (template, ...values) => template.replace(/\{(\d+)\}/g, (_, index) => values[index]);
   const github = { event_name: 'workflow_dispatch', actor: 'teddashh', event: { workflow_run: { head_sha: sha } } };
   for (const mode of ['plan', 'check', 'deploy', 'handoff']) {
@@ -1144,6 +1315,18 @@ test('automatic incident switch leaves manual admission available and run titles
   }
   github.event_name = 'workflow_run';
   assert.equal(runInNewContext(title.slice(3, -2), { github, inputs: {}, format }), `automatic staging → production at ${sha}`);
+  github.event_name = 'schedule';
+  assert.equal(runInNewContext(title.slice(3, -2), { github, inputs: {}, format }), 'Reconcile approved main → staging → production');
+  const queue = { ref: 'refs/heads/main', repository: REPOSITORY, event_name: 'workflow_run',
+    event: { workflow_run: { event: 'push', conclusion: 'success', head_repository: { id: REPOSITORY_ID },
+      actor: { login: 'github-merge-queue[bot]', id: 118344674 } } } };
+  assert.equal(runInNewContext(condition, { github: queue, vars: { AUTO_RELEASE_ENABLED: 'true' } }), false);
+  // A bot notification cannot alter the independently authenticated schedule.
+  queue.event_name = 'schedule';
+  assert.equal(runInNewContext(condition, { github: queue, vars: { AUTO_RELEASE_ENABLED: 'true' } }), true);
+  assert.match(text, new RegExp(`cron: '${RELEASE_RECONCILE_CRON.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+  assert.equal((text.match(/RELEASE_SCHEDULE: \$\{\{ github.event.schedule \}\}/g) ?? []).length, 3);
+  assert.equal((text.match(/AUTO_RELEASE_ENABLED: \$\{\{ vars.AUTO_RELEASE_ENABLED \}\}/g) ?? []).length, 3);
 });
 
 test('source migration frontier advances without changing private config and rejects gaps, privileged SQL and downgrades', async t => {
