@@ -1,4 +1,4 @@
-import {createCoatingHold} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
+import {createCoatingHold,coatingKeyOwner} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -613,4 +613,11 @@ test('coating hold completes once, keyboard ownership cancels, and a restarted t
  h.hold.begin(-1);h.advance(900);h.advance(900);assert.deepEqual(h.completed,['portion-0']);assert.equal(h.frames.size,0);
  assert.equal(h.hold.begin(-1),false);h.hold.release(-1);assert.equal(h.hold.begin(-1),true);h.advance(900);assert.deepEqual(h.completed,['portion-0','portion-0']);
  h.hold.cancel();h.hold.begin(1);h.advance(-1);assert.equal(h.progress,0);assert.equal(h.frames.size,0);
+});
+
+for(const [first,second] of [[' ','Enter'],['Enter',' ']])test(`coating keyboard ${JSON.stringify(first)} retains ownership when ${JSON.stringify(second)} releases`,()=>{
+ const h=coatingHarness(),owner=coatingKeyOwner(first)!,other=coatingKeyOwner(second)!;
+ assert.notEqual(owner,other);assert.equal(coatingKeyOwner('Escape'),null);assert.equal(h.hold.begin(owner),true);h.advance(450);
+ assert.equal(h.hold.begin(other),false);h.hold.release(other);assert.equal(h.progress,.5);h.advance(450);assert.deepEqual(h.completed,['portion-0']);
+ h.hold.release(other);h.advance(1000);assert.equal(h.completed.length,1);h.hold.release(owner);assert.equal(h.progress,0);
 });

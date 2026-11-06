@@ -1,3 +1,5 @@
+/** Negative ids keep each keyboard owner distinct from native pointer ids. */
+export function coatingKeyOwner(key:string){return key===' '?-1:key==='Enter'?-2:null;}
 export const COATING_HOLD_MS=900;
 type Owner={input:number;target:string;start:number;frame:number|null;done:boolean};
 /** A cancellable presentation gesture. Only completion requests the existing

@@ -1,5 +1,5 @@
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {createCoatingHold} from './coating-hold';
+import {createCoatingHold,coatingKeyOwner} from './coating-hold';
 
 /** Pointer/keyboard hold is optional; the adjacent original coat button is the
  * single-press accessible alternative. No synthetic pointer click submits. */
@@ -15,8 +15,8 @@ export function CoatingHold({enabled,target,onCoat}:{enabled:boolean;target:stri
    onPointerDown={event=>{if(event.button!==0||!event.isPrimary)return;if(control.current?.begin(event.pointerId)){event.currentTarget.setPointerCapture(event.pointerId);event.preventDefault();}}}
    onPointerMove={event=>{const box=event.currentTarget.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)control.current?.release(event.pointerId);}}
    onPointerUp={event=>control.current?.release(event.pointerId)} onPointerCancel={event=>control.current?.release(event.pointerId)} onLostPointerCapture={event=>control.current?.release(event.pointerId)}
-   onKeyDown={event=>{if((event.key===' '||event.key==='Enter')&&!event.repeat){event.preventDefault();control.current?.begin(-1);}if(event.key==='Escape')control.current?.cancel();}}
-   onKeyUp={event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();control.current?.release(-1);}}}
+   onKeyDown={event=>{const owner=coatingKeyOwner(event.key);if(owner!==null&&!event.repeat){event.preventDefault();control.current?.begin(owner);}if(event.key==='Escape')control.current?.cancel();}}
+   onKeyUp={event=>{const owner=coatingKeyOwner(event.key);if(owner!==null){event.preventDefault();control.current?.release(owner);}}}
    onBlur={()=>control.current?.cancel()} onContextMenu={event=>{event.preventDefault();control.current?.cancel();}}>
    按住裹麵糊
   </button>
