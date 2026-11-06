@@ -1388,3 +1388,40 @@ for (const outcome of ['resolve','reject'] as const) {
     await expect(page.locator('.fw-arcade-game-card').first()).toBeVisible();
   });
 }
+
+
+for(const width of [320,1440])test(`community game draft is explicit, bounded and retained without uploads (${width}px)`,async({page})=>{
+ await page.setViewportSize({width,height:900});
+ const external:string[]=[];page.on('request',request=>{if(new URL(request.url()).hostname==='github.com')external.push(request.url());});
+ await page.goto('/play');
+ const section=page.getByRole('region',{name:'社群遊戲投稿'}),toggle=section.locator('summary');
+ await toggle.focus();await toggle.press('Enter');
+ await expect(section.getByText('目前不是站內檔案上傳',{exact:false})).toBeVisible();
+ await section.getByLabel('遊戲名稱（最多 60 字元）').fill('合成測試遊戲');
+ await section.getByLabel('玩法介紹（最多 200 字元）').fill('<img src=x onerror=alert(1)>');
+ await section.getByLabel('操作與啟動方式（最多 200 字元）').fill('方向鍵，瀏覽器開啟 index.html');
+ await section.getByLabel('作者與素材授權（最多 160 字元）').fill('合成作者；MIT；原創素材');
+ await section.getByLabel('GitHub 原始碼網址',{exact:true}).fill('https://github.com/example/game');
+ await section.getByLabel('完整 commit SHA',{exact:true}).fill('main');
+ await section.getByRole('button',{name:'準備投稿預覽'}).click();await expect(section.getByRole('alert')).toContainText('40 字元');
+ await section.getByLabel('完整 commit SHA',{exact:true}).fill('a'.repeat(40));
+ await section.getByRole('button',{name:'準備投稿預覽'}).click();
+ await expect(section.getByRole('status')).toContainText('尚未送出');await expect(section.getByRole('link',{name:'到 GitHub 預覽投稿 ↗'})).toHaveCount(0);
+ await section.getByRole('checkbox').check();const link=section.getByRole('link',{name:'到 GitHub 預覽投稿 ↗'});
+ const url=new URL((await link.getAttribute('href'))!);expect(url.origin).toBe('https://github.com');expect(url.searchParams.get('body')).toContain('    <img src=x onerror=alert(1)>');
+ await expect(link).toHaveAttribute('rel','noopener noreferrer');await expect(link).toHaveAttribute('referrerpolicy','no-referrer');
+ await toggle.click();await toggle.click();await expect(link).toBeVisible();
+ await section.getByLabel('提供原始碼的方式').selectOption('attachment');await expect(link).toHaveCount(0);await expect(section.getByRole('checkbox')).toHaveCount(0);
+ await section.getByRole('button',{name:'準備投稿預覽'}).click();await expect(section.getByLabel('將傳給 GitHub 的投稿內容')).not.toHaveValue(/example\/game/);
+ await expect(section.getByLabel('將傳給 GitHub 的投稿內容')).toHaveValue(/尚未附檔/);
+ await page.locator('[data-arcade-open="game:photo"]').click();await expect(section).toBeHidden();
+ await page.goBack();await expect(section).toBeVisible();await expect(section.getByLabel('遊戲名稱（最多 60 字元）')).toHaveValue('合成測試遊戲');
+ for(const theme of ['light','dark','versefolk']){
+  await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ }
+ expect(external).toEqual([]);await expect(section.locator('iframe,input[type=file]')).toHaveCount(0);
+ // Deliberately do not click the external link or submit a real Issue.
+ await page.reload();await section.locator('summary').click();await expect(section.getByLabel('遊戲名稱（最多 60 字元）')).toHaveValue('');
+});

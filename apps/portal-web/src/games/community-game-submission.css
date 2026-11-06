@@ -1,0 +1,12 @@
+.game-submission { margin-block: 12px; border-bottom: 1px solid var(--ad-line); color: var(--ad-ink); font: 16px/1.6 system-ui, sans-serif; }
+.game-submission[hidden] { display: none; }
+.game-submission summary { min-height: 44px; padding: 10px 4px; cursor: pointer; font-weight: 700; }
+.game-submission-content { display: grid; gap: 16px; padding: 12px 4px 20px; max-width: 720px; overflow-wrap: anywhere; }
+.game-submission form, .game-submission-preview { display: grid; gap: 16px; min-width: 0; }
+.game-submission-field { display: grid; gap: 6px; min-width: 0; }
+.game-submission-field input, .game-submission-field textarea, .game-submission-field select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--ad-line); border-radius: 8px; background: var(--ad-surface); color: var(--ad-ink); font: inherit; }
+.game-submission-field textarea { resize: vertical; }
+.game-submission small { font-size: 14px; }
+.game-submission-consent { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+.game-submission-consent input { flex: 0 0 20px; width: 20px; height: 20px; }
+.fw-arcade-root .game-submission .fw-arcade-secondary { justify-self: start; min-height: 44px; padding: 8px 14px; font-size: 16px; }
