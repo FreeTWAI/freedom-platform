@@ -6,6 +6,7 @@
     "modules/absurd-daily/**",
     ".github/workflows/native-game-previews.yml",
     "apps/portal-web/src/games/**",
+    "apps/portal-web/src/games/daily-feedback.ts",
     "tests/runtime/absurd-daily.test.ts",
     "tests/runtime/kitchen-food-batch.test.ts",
     "tests/runtime/bounded-cpu-profile.test.ts",

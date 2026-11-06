@@ -133,7 +133,8 @@ test('UX-15f actual dish worker client has one bounded in-flight view and termin
 
 });
 import {GAMES,seconds} from '../../apps/portal-web/src/games/domain.js';
-import {beginStamps,cashDeck,cashNotice,challengeUrl,CLIENTS,gradePhoto,newCash,newStamps,pause,photoNotice,photoPose,resume,RULES,seedOf,sortCash,stamp,stampNotice,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
+import {beginStamps,cashDeck,challengeUrl,CLIENTS,gradePhoto,newCash,newStamps,pause,photoPose,resume,RULES,seedOf,sortCash,stamp,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
+import {cashNotice,photoNotice,stampNotice} from '../../apps/portal-web/src/games/daily-feedback.js';
 import {GAME_HANDOFF_KEY,HANDOFF_TTL,parseGameDraft,readGameDraft,saveGameDraft,clearGameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 import {gamePreviewHtml} from '../../apps/portal-web/src/games/preview.js';
 import type {Pool} from 'pg';
@@ -166,6 +167,15 @@ test('AD-4 fixed seeded target, finite bounds, miss marks and completed clock',(
 test('AD-4 practice is uncounted; its stale pointer cannot stamp the first real document',()=>{const initial=newStamps(3);const p=stamp(initial,-1,stampTarget(3,0),200);assert.equal(p.kind,'practice');assert.equal(p.state.index,0);assert.equal(p.state.practice,false);assert.equal(p.state.startedAt,null);assert.equal(stamp(p.state,0,stampTarget(3,0),250).kind,'ignored');assert.equal(stamp(p.state,-1,stampTarget(3,0),1000).state,p.state);});
 test('AD-3 actual visible anchors and occlusion drive objective and funny captions',()=>{assert.equal(gradePhoto('pigeons',['bird0','bird2'],5).stars,2);assert.equal(gradePhoto('pigeons',['bird0','bird1','bird2'],5).stars,3);assert.match(gradePhoto('backdrop',['board'],5,true).caption,/背景出席/);assert.equal(gradePhoto('umbrella',['feet','head','umbrella'],5).stars,3);assert.match(gradePhoto('umbrella',['feet'],5).caption,/兩隻鞋/);assert.equal(photoPose('pigeons',0,1).birds.filter(x=>x>0).length,0);assert.equal(photoPose('pigeons',6,1).birds.filter(x=>x>0).length,3);assert.ok(photoPose('umbrella',5,1).lift>2);});
 
+test('AD-2 action feedback returns plain text without changing frozen rule state',()=>{
+  const stamps=Object.freeze(newStamps(42,false)),cash=Object.freeze(newCash(42));
+  Object.freeze(stamps.marks);const before=JSON.stringify({stamps,cash});
+  const message='<b>保留原文</b>';
+  assert.equal(photoNotice(message,0,0),`${message} 第 1 / 3 位客人，已保存 0 / 2 張，還可拍 2 張。`);
+  assert.equal(stampNotice(stamps,'miss'),'章歪了。墨跡留下，這張再蓋一次。 已完成 0 / 12 份 · 多蓋 0 次。');
+  assert.equal(cashNotice(cash,'wrong',false),'這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 0 次。');
+  assert.equal(JSON.stringify({stamps,cash}),before);
+});
 test('AD-3 photo feedback preserves the grade and distinguishes saved film for each client',()=>{
   const grade=gradePhoto('pigeons',['bird0'],5),message=`${grade.caption} ${grade.details}`,before=JSON.stringify(grade);
   for(let client=0;client<RULES.clients;client++){
