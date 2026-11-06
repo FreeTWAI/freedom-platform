@@ -32,3 +32,12 @@
 @media(max-width:440px){.pt-light-stage{padding:10px}.pt-light-grid{gap:8px}.pt-light-grid svg{height:72px}.fw-arcade-root .pt-light-grid button{min-height:100px;padding:6px}.pt-light-grid b{width:20px;height:20px;left:3px;top:3px}}
 @media(max-height:500px) and (min-width:560px){.pt-play-area:not(:has(.pt-panel)) .pt-light-stage{width:100%;min-height:0}.pt-play-area:not(:has(.pt-panel)):has(.pt-light-stage){display:block}.pt-play-area:not(:has(.pt-panel)) .pt-light-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .pt-root .pt-kicker,.pt-root .pt-scoreboard small,.pt-root .pt-scoreboard strong>span,.pt-root .pt-live-label,.pt-root .pt-seed small,.pt-root .pt-rule-card>small,.pt-root .pt-play-area>.pt-feedback{font-size:14px}
+/* Domain-driven SVG motion is gameplay, not decorative animation. */
+.pt-light-action-stage{padding:0;min-height:0;touch-action:none}
+.pt-light-world{display:block;width:100%;height:auto;aspect-ratio:4/3;pointer-events:none}
+.pt-light-readout{font-size:14px;line-height:1.7;color:#443b37;background:#fff8e8;margin:0;padding:12px;overflow-wrap:anywhere}
+@media(max-height:500px) and (min-width:560px){
+  .pt-play-area:not(:has(.pt-panel)):has(.pt-light-action-stage){display:grid}
+  .pt-play-area:not(:has(.pt-panel)) .pt-light-action-stage{width:100%}
+  .pt-play-area:not(:has(.pt-panel)) .pt-light-world{max-height:calc(100dvh - 160px);object-fit:contain}
+}

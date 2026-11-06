@@ -93,3 +93,25 @@ CI、獨立review、正式會員／社群帳號、實體手機／Safari、外部
 Verify 42182160341／job127774498252 的真實trace、error-context與截圖顯示：持有Space→Escape→放開已通過退出與0分驗證；重來確認的Escape後，確認列消失、重新開始回焦點、暫停與120分保留，仍在全視窗。artifact13488462863的ZIP SHA256為cd958981b0e93792078ead12b4bae886cdda96c44cb87b08669720030ef4a23e。原測試把取消內層與退出外層當成同一鍵；window capture先卸載確認按鈕，也不能當可靠的React傳播契約。
 
 本修正只在重來確認開啟時明確消耗Escape，普通持有取消仍不阻擋Fullscreen。E2E保留原取消／焦點／分數／退出斷言，拆成先取消內層、再退出外層，補暫停與elapsed不變；沒有加timeout、retry或改分數。新增直接執行production callback的純測試，驗兩種傳播與同局保留；這不是React事件送達證據。本地純測試14/14、0 skip；typecheck、build、完整runtime／React及瀏覽器仍not_run，待新來源CI。另一個event-member-journey的Route失敗屬別scope，本批未改。
+
+### PT-ACTION-LIGHT 重建候選（2026-11-06，未發布／未部署）
+
+以已發布 #1292 的 `324f0f0e9328a8a328d883cbcac4dcd3d20ae63d` 為新獨立 checkout 基底，重新實作辦公椅與豆腐輕量玩法。先前遺失候選的程式與測試證據不沿用。三款都能在載入中、失敗或 context loss 後明選輕量版；同一 PartyRun 保留並暫停，只有本人開始／繼續才計時。重試3D沿同一有界 loader owner，不另建 domain、套件、API、分數或存檔。
+
+辦公椅 SVG 讀實際 x，不以目標 lane 瞬移；顯示真 seed 波次、2800ms horizon、1250ms間距與850ms跳躍。會議桌須換路，推車可跳，葉票與道具以形狀區別。豆腐以真 layers 的 x/z/width/depth 畫三面，移動塊讀 current axis/position，落下凍結 fall.from，綠虛線標示 fall.kept，460ms後才用 domain 新層；.12完美與裁切規則不變。減少動態不停止必要移動、跳躍或落下。
+
+原生與輕量按鈕共用持有輸入規則：Chair resolved 波次／Tofu turn 在按下記錄，跨波／跨落地放開不操作新波；重複、blur、pointer cancel、lost capture、Escape、重試及卸載取消。AT無前置down的click仍可操作，新down可恢復disabled節點吞掉release的情況。場景手勢亦綁原波／turn。沿#1292確認層先消耗Escape並回焦、下一鍵才退出全視窗；不修改共用Fullscreen。
+
+兩款新增done-only本局SVG，豆腐直接畫每一個真實完成層，辦公椅只報總票數、碰撞、波次、心數與連擊，明說未保存逐波路線，不捏造歷史或3D截圖。既有Result收到同張成果，保留PNG轉檔與重試流程。原Logo與素材、renderer、domain/catalog、分享發布權限都未改動。
+
+新本機驗證：Node24以內建TS stripping及只解本checkout相對TS來源的loader，抽取runtime檔原樣pure區塊與既有7條domain案例，22/22通過，0失敗／skip。新增8條涵蓋真投影／幾何、完成4280／2925、成果polygon界線、production按鈕與場景handlers、stop/retry/fallback及必要RAF時序；保留原7條holiday/loader/Escape pure案例。首輪21/22，真SVG底座超出保留區2px，修正production transform後原界線斷言通過，不放寬斷言。
+
+沒有node_modules，且未安裝、借用依賴或換cache。typecheck、build、完整runtime／React harness、瀏覽器均 `not_run`；新瀏覽器來源不是已跑證據。待原環境正常runner驗WebGL完全不可用時兩款全局、同局重試／取消焦點／卸載、按住跨波與跨落地、全視窗Escape、reduced motion與SVG/PNG。豆腐測試在暫停clock先啟動game RAF、再讀同timestamp probe並對照原domain，避免以30fps SVG舊render猜完美窗口。手機／橫式／200%文字、Safari、真人美術與趣味仍未驗收。#1292尚未合main時不宣稱獨立發布前提成立。
+
+### PT-ACTION-LIGHT 移植目前 main（2026-11-06，未部署）
+
+#1292 已隨 #1286 合入 `eb1c8ecf982cf0d8595238082c8c52d1770a29a6`，本候選從該 main 建立獨立分支，移植完成保存的 `0556f6d` 七檔 patch，沒有使用遺失或受拒的舊物件。main 的派對 production 與 #1292 相同；保留整合後共用測試所有新增內容及 Fullscreen 的 result share／native modal Escape 契約。runtime 只去除候選重複的 `stripTypeScriptTypes` import，沿用 main 已存在的 import。反向移除候選 patch 後，兩份共用測試的完整 bytes 都等於此 main，沒有整檔覆蓋。
+
+此新 main worktree 重新執行 production pure／controller 區塊：22/22 通過、0失敗／skip，不以先前候選結果代替。Node內建TS stripping僅確認三個非TSX變更檔語法，不是型別檢查。`module-check`、`git diff --check` 通過；module-check 保留 main 三項 surface_unmapped 警告。根與精確7 paths context 已重新取得，變更規則全文讀取，未變內容與先前實讀原文完整比對；完成檢查只代表本機規則齊備。aggregate verify exit 2／unavailable：descriptors與producer preview bytes通過，runtime因無測試DB、UI因adapter unavailable、surface coverage因registration behavior audit required而not_run，沒有縮小原gate。
+
+依賴不存在且禁止安裝／借用；typecheck、build、完整runtime、React與瀏覽器仍not_run，待本次 draft 的自然CI。舊章節的未發布、未合main及測試紀錄保留為當時歷史，不代表目前 main 或新候選已通過完整驗收。真人美術／趣味、實機與Safari仍未驗，沒有 merge或部署。
