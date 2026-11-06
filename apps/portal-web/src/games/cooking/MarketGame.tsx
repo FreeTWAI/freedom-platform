@@ -1,3 +1,4 @@
+import {CoatingHold} from './CoatingHold';
 import {GameCover} from '../GameCover';
 import {useEffect,useRef,useState,type PointerEvent} from 'react';
 import {applyMarket,advanceMarket,canServe,INGREDIENTS,mainPortions,marketGrade,marketMass,newMarket,readMarket,saveMarket,MARKET_MENUS,type MarketAction,type MarketId,type MarketRun,type Sauce} from './market-domain';
@@ -63,6 +64,7 @@ export function MarketGame({recipe,seed,fresh,onBack,onResult,onComplete}:{recip
    <div className="mk-ingredients">{MARKET_MENUS[run.recipe].map(kind=><button key={kind} disabled={!active||run.portions.length>=16} onClick={()=>{setSauce(null);action({kind:'add',ingredient:kind});setSelected(live.current.portions.length-1);}}><IngredientIcon kind={kind}/><strong>{INGREDIENTS[kind].name}</strong><small>＋{INGREDIENTS[kind].grams}g</small></button>)}</div>
    {(run.recipe==='steak-dinner'||run.recipe==='corn-dog')&&run.portions.length>0&&<label className="mk-piece">目前操作<select aria-label="目前操作的食材" value={Math.min(selected,run.portions.length-1)} onChange={e=>setSelected(Number(e.target.value))}>{run.portions.map((p,i)=><option value={i} key={i}>第{i+1}份 {INGREDIENTS[p.kind].name} · {p.lifted?`瀝油${(p.drain/1000).toFixed(0)}秒`:`正${Math.round(p.a*100)}% / 反${Math.round(p.b*100)}%`}</option>)}</select></label>}
    <div className="mk-tools"><h2>手感，自己抓。</h2><div>
+    {run.recipe==='corn-dog'&&<CoatingHold enabled={active&&!!run.portions[selected]&&!run.portions[selected].coated} target={`${run.seed}/${selected}/${run.portions[selected]?.coated?'coated':'raw'}`} onCoat={()=>{setSauce(null);action({kind:'coat',index:selected});}}/>}
     {run.recipe==='corn-dog'&&<button disabled={!active} onClick={()=>{setSauce(null);action({kind:'coat',index:selected});}}>裹麵糊</button>}
     <button disabled={!active} onClick={()=>{setSauce(null);action(run.recipe==='egg-fried-rice'?{kind:'toss'}:run.recipe==='shawarma'?{kind:'shave'}:{kind:'flip',index:selected});}}>{definition.action}</button>
     {run.recipe==='egg-fried-rice'&&<button className="fw-arcade-secondary" disabled={!active} onClick={()=>action({kind:'stir'})}>鍋鏟拌炒</button>}
