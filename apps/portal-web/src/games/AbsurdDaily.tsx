@@ -1,6 +1,7 @@
 import { flushSync } from 'react-dom';
 import { FullscreenGame, type FullscreenGameHandle } from './FullscreenGame';
 import {GameCover} from './GameCover';
+import {CommunityGameSubmission} from './CommunityGameSubmission';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { beginStamps, cashDeck, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, resume, RULES, seconds, seedOf, sortCash, stamp, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
 import { saveGameDraft } from './result-bridge';
@@ -440,6 +441,7 @@ export function AbsurdDaily() {
     const invalid=new URLSearchParams(location.search).get('game')==='kitchen'&&!game;
     const partyGame:PartyGameId|null=partyOf(game);
     return <div className="fw-arcade-root fw-arcade-toy-console fw-arcade-shotengai"><a className="fw-arcade-skip" href="#fw-arcade-main">跳到遊戲內容</a><header className="fw-arcade-header"><a className="fw-arcade-brand" href="/"><img src="/brand/freedom-workshop.webp" alt="自由工坊" width="72" height="40"/><span>遊戲大廳</span></a><a className="fw-arcade-home-link" href="/">回自由工坊 ↗</a></header><main id="fw-arcade-main" ref={main} tabIndex={-1}>
+      <CommunityGameSubmission hidden={Boolean(game)}/>
       {saveNotice&&<div className="ck-save-warning" role="status"><p>{saveNotice}</p>{bookFailed&&<button className="fw-arcade-secondary" onClick={()=>changeBook({kind:'retry'})}>重試保存食譜本</button>}</div>}
       {game?<FullscreenGame ref={fullscreen}>{result?<Result result={result} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)} onNext={nextGame}/>:game==='kitchen'&&recipe&&marketOf(recipe.id)&&new URLSearchParams(location.search).get('practice')!=='1'?<MarketLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onComplete={(completed:MarketRun)=>changeBook({kind:'market-complete',run:completed})}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:partyGame?<PartyLoader key={`${partyGame}/${run}`} game={partyGame} seed={seed} onBack={()=>choose(null)} onResult={setResult}/>:game&&game!=='kitchen'?<GameBoard key={`${game}/${run}`} game={gameOf(game)!} seed={seed} onBack={()=>choose(null)} onResult={setResult} onStart={target=>fullscreen.current?.enter(target)}/>:null}</FullscreenGame>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={(g,key)=>choose(g,false,null,key)} onRecipe={(r,key)=>choose('kitchen',false,r,key)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
     </main><footer className="fw-arcade-footer">自由工坊原創遊戲 · 作品由你確認後分享</footer></div>;
