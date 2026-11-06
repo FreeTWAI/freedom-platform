@@ -300,15 +300,18 @@ test('UX-2: secondary pointers cannot release or cancel a real cooking hold, and
   await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.move(p.x,p.y);await page.mouse.down();await page.clock.runFor(750);await page.locator('.ck-scene').dispatchEvent('pointercancel',{pointerId:99,isPrimary:false,button:0});await page.mouse.up();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');await page.getByRole('button',{name:'重新做',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),COOKING_RUN_KEY);await page.clock.runFor(6000);await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.elapsed,COOKING_RUN_KEY)).toBe(saved.run.elapsed);await page.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeVisible();
 });
 
-for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const phase of ['playing','step-result'] as const){
-  test(`UX-2 guided restart is modal and cancellable at ${viewport.width}px from ${phase}`,async({page})=>{
+for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const phase of ['playing','step-result'] as const)for(const presentation of ['normal','viewport'] as const){
+  test(`UX-2 guided restart is modal and cancellable at ${viewport.width}px from ${phase} in ${presentation}`,async({page})=>{
     await page.setViewportSize(viewport);await page.clock.install();
+    if(presentation==='viewport')await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=async()=>{throw new DOMException('denied','NotAllowedError');};});
     await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());
     await page.goto('/play');const f=kitchenCheckpoint('slice');
     await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
     await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);
     await expect(page.locator('.ck-visual-light')).toBeVisible();
     await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+    const fullscreen=page.locator('.fullscreen-game');
+    if(presentation==='viewport'){await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(fullscreen).toHaveClass(/fullscreen-game--viewport/);expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();}
     await page.getByRole('button',{name:'繼續料理',exact:true}).click();
     for(let i=0;i<(phase==='playing'?1:currentStep(f.run).goal);i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();}
     const game=page.locator('.ck-game'),restart=page.getByRole('button',{name:'重新做',exact:true}),dialog=page.getByRole('dialog',{name:'重新做這盤料理',exact:true});
@@ -329,6 +332,15 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
     await page.clock.runFor(6000);expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
     const bounds=(await dialog.boundingBox())!;expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.y).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(viewport.width);expect(bounds.y+bounds.height).toBeLessThanOrEqual(viewport.height);
     await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);
+    expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+    if(presentation==='viewport'){
+      await expect(fullscreen).toHaveClass(/fullscreen-game--viewport/);
+      // Neither a native non-modal dialog nor ARIA dialog markup owns fullscreen Escape.
+      await fullscreen.evaluate(el=>{const nonmodal=document.createElement('dialog');nonmodal.dataset.restartControl='nonmodal';nonmodal.textContent='非模態控制';el.append(nonmodal);nonmodal.show();const role=document.createElement('div');role.dataset.restartControl='role';role.setAttribute('role','dialog');role.setAttribute('aria-label','角色標記控制');el.append(role);});
+      const nonmodal=fullscreen.locator('dialog[data-restart-control]');await expect(nonmodal).toHaveAttribute('open','');expect(await nonmodal.evaluate(el=>el.matches(':modal'))).toBe(false);await expect(fullscreen.locator('[data-restart-control=role]')).toHaveAttribute('role','dialog');
+      await restart.focus();await page.keyboard.press('Escape');await expect(fullscreen).not.toHaveClass(/fullscreen-game--viewport/);await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+      await fullscreen.evaluate(el=>{for(const node of el.querySelectorAll('[data-restart-control]'))node.remove();});
+    }
     await page.keyboard.press('Enter');await expect(keep).toBeFocused();await keep.click();await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();
     expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY)).toEqual(JSON.parse(saved!).run);
     await page.reload();await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);

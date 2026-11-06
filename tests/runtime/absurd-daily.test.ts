@@ -247,6 +247,26 @@ test('UX-2 guided restart only replaces the run after explicit confirmation (non
   h.ui.open();h.render();h.ui.restart();h.render();assert.notEqual(h.ui.live.current.id,original);assert.equal(h.ui.live.current.status,'ready');assert.equal(h.ui.live.current.active.count,0);assert.equal(h.session.getItem(COOKING_RUN_KEY),null);
 });
 
+function fullscreenEscapeHarness(mode:'normal'|'viewport'|'native',overlay:'none'|'modal'|'nonmodal'|'role') {
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8');
+  const body=source.slice(source.indexOf('  function captureEscape('),source.indexOf('  function keys('));
+  const modes:string[]=[],messages:string[]=[];let prevented=0,stopped=0,exits=0;
+  const node={querySelector(selector:string){assert.equal(selector,'dialog:modal');return overlay==='modal'?{}:null;}};
+  const capture=runInNewContext(transformSync(`${body}\ncaptureEscape`,{loader:'ts'}).code,{mode,container:{current:node},mounted:{current:true},setMode:(next:string)=>modes.push(next),setMessage:(message:string)=>messages.push(message),document:{fullscreenElement:mode==='native'?node:null,exitFullscreen:()=>{exits++;return Promise.resolve();}}});
+  return {press:(key='Escape')=>capture({key,preventDefault(){prevented++;},stopPropagation(){stopped++;}}),stats:()=>({prevented,stopped,exits,modes,messages})};
+}
+
+test('UX-2 native restart modal owns Escape before fullscreen capture without altering presentation (non-native)',()=>{
+  for(const mode of ['normal','viewport','native'] as const){const h=fullscreenEscapeHarness(mode,'modal');h.press();assert.deepEqual(h.stats(),{prevented:0,stopped:0,exits:0,modes:[],messages:[]});}
+});
+
+test('UX-2 fullscreen Escape still exits without a native modal and ignores other keys (non-native)',()=>{
+  for(const overlay of ['none','nonmodal','role'] as const)for(const mode of ['normal','viewport','native'] as const){
+    const h=fullscreenEscapeHarness(mode,overlay);h.press('Tab');assert.deepEqual(h.stats(),{prevented:0,stopped:0,exits:0,modes:[],messages:[]});h.press();
+    assert.deepEqual(h.stats(),{prevented:mode==='normal'?0:1,stopped:mode==='normal'?0:1,exits:mode==='native'?1:0,modes:mode==='viewport'?['normal']:[],messages:mode==='viewport'?['']:[]});
+  }
+});
+
 test('CK-6: all result kinds encode social handoffs as text/link intents without credentials or publish instructions',()=>{
   for(const game of ['photo','stamp','cash','kitchen'] as const){const link=`https://example.org/play?game=${game}&seed=42${game==='kitchen'?'&recipe=egg-fried-rice':''}`,result={game,title:'黃金蛋炒飯 & <作品>',caption:'這局真的很香！',details:'3 顆星 · 99 分',seed:42,image:'data:image/jpeg;base64,YWJjZA=='};const text=gameShareText(result,link);
     assert.ok(text.includes(link));assert.ok(text.includes(result.details));
