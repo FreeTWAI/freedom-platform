@@ -398,7 +398,7 @@ test.describe('PT-6 touchscreen input',()=>{
 async function blockPartyWebGL(page:Page){
   await page.addInitScript(()=>{
     const get=HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext=function(kind:string,...args:any[]){
+    HTMLCanvasElement.prototype.getContext=function(this:HTMLCanvasElement,kind:string,...args:any[]){
       if(kind==='webgl'||kind==='webgl2'||kind==='experimental-webgl')return null;
       return Reflect.apply(get,this,[kind,...args]);
     } as typeof get;
