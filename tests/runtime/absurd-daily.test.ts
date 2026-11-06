@@ -481,6 +481,19 @@ test('PT-light: timeout, cancellation and a newer owner isolate late imports and
   }
 });
 
+test('PT-light: only an open restart confirmation consumes Escape before the fullscreen owner',()=>{
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+  const start=source.indexOf('  escapeCapture.current='),end=source.indexOf('\n  useEffect(',start);assert.ok(start>=0&&end>start);
+  const input=holidayInput(),gesture={current:{id:1}},calls:string[]=[];
+  const live=pauseParty(actParty(partyTime(startParty(newParty('holiday',42)) as HolidayRun,300),{kind:'pick',hole:holidayTargets(42,0).good,round:0}));
+  const context:any={escapeCapture:{current:undefined},input:{current:input},gesture,restart:false,live,keepRun:()=>{context.restart=false;calls.push('focus-restart');}};
+  const escape=runInNewContext(source.slice(start,end)+'\nescapeCapture.current',context);
+  const event=()=>({preventDefault:()=>calls.push('prevent'),stopPropagation:()=>calls.push('stop')});
+  input.down(0,'key: ',0);escape(event());assert.deepEqual(calls,[],'ordinary Escape must reach fullscreen');assert.equal(input.click(0,0,'key: '),null);assert.equal(gesture.current,null);
+  context.restart=true;input.down(0,'key:Enter',0);escape(event());assert.deepEqual(calls,['prevent','stop','focus-restart']);assert.equal(input.click(0,0,'key:Enter'),null);
+  calls.length=0;escape(event());assert.deepEqual(calls,[],'the next Escape must reach fullscreen');assert.equal(context.live,live);assert.equal(live.status,'paused');assert.equal(live.score,120);
+});
+
 test('PT-light: a loaded scene is released once on context loss or cancellation, including first draw failure',async()=>{
   const h=partyLoaderHarness();await partyMicrotasks();h.resolve();await partyMicrotasks();h.lose();h.lose();h.owner.cancel();assert.deepEqual(h.events,['load','create','install','ready','dispose','lost']);
   const events:string[]=[];
@@ -514,7 +527,7 @@ test('PT-light: actual controller handlers retain live progress, missing release
   const render=()=>{index=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'holiday',seed:42,onBack(){},onResult:(result:any)=>results.push(result)});while(effects.length)effects.shift()!();};
   const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
   const button=(text:string)=>{const found=buttons.find(b=>label(b.children).trim()===text);assert.ok(found,`button ${text}`);return found;};
-  const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:new Button(),preventDefault(){}});
+  const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:new Button(),preventDefault(){},stopPropagation(){}});
   let time=0;const tick=(ms:number)=>{time+=ms;const callbacks=[...frames.values()];frames.clear();for(const callback of callbacks)callback(time);if(dirty)render();};
   const advance=(target:number)=>{for(let i=0;i<1000&&Number(host.dataset.elapsed??0)<target;i++)tick(50);assert.ok(Number(host.dataset.elapsed)>=target);};
   render();await settle();assert.equal(created,1);button('改用輕量玩法').onClick();await settle();assert.equal(section['data-party-mode'],'light');button('開始派對！').onClick();await settle();tick(0);advance(300);
@@ -523,7 +536,7 @@ test('PT-light: actual controller handlers retain live progress, missing release
   const current=good();current.onKeyDown(key(' '));current.onKeyUp(key(' '));await settle();assert.equal(section['data-party-score'],120);
   button('重新開始').onClick();await settle();assert.equal(focused,'確定重來');const frozen=host.dataset.elapsed;
   section.onKeyDown({...key('Enter'),target:host});await settle();tick(500);assert.equal(host.dataset.elapsed,frozen);assert.equal(section['data-party-state'],'paused');
-  section.onKeyDown(key('Escape'));await settle();assert.equal(focused,'重新開始');button('繼續這一局').onClick();await settle();tick(0);
+  for(const listener of escapeListeners)listener(key('Escape'));await settle();assert.equal(focused,'重新開始');button('繼續這一局').onClick();await settle();tick(0);
   advance(2650);good().onClick({detail:0});await settle();assert.equal(section['data-party-score'],260);
   advance(PT.holidayMs);assert.equal(section['data-party-state'],'done');assert.equal(created,1);section.onKeyDown({...key('Enter'),target:new Anchor()});assert.equal(results.length,0,'Enter on the SVG link retains native download behavior');button('查看這局成果').onClick();await settle();assert.equal(results.length,1);assert.match(results[0].image,/^data:image\/svg\+xml/);assert.match(decodeURIComponent(results[0].image.split(',')[1]),/260 分/);
   for(const slot of slots)slot?.cleanup?.();assert.equal(frames.size,0);assert.equal(escapeListeners.size,0);

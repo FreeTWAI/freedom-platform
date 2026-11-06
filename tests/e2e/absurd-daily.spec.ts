@@ -465,7 +465,10 @@ test('PT-light: fullscreen capture cannot turn an Escape-cancelled hold into a h
   await good.press('Enter');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
   await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
   await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');
-  await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.getByRole('group',{name:'確認重新開始'})).toHaveCount(0);await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  // The inner confirmation owns the first Escape; the next one exits fullscreen.
+  await expect(page.getByRole('group',{name:'確認重新開始'})).toHaveCount(0);await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
+  const pausedAt=await partyElapsed(page);await page.clock.runFor(500);expect(await partyElapsed(page)).toBe(pausedAt);await page.keyboard.press('Escape');
+  await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.getByRole('group',{name:'確認重新開始'})).toHaveCount(0);await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');expect(await partyElapsed(page)).toBe(pausedAt);
 });
 
 // Fixed minimal cosmetic-filter excerpt, not a live network dependency.

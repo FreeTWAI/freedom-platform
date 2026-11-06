@@ -80,10 +80,16 @@ CI、獨立review、正式會員／社群帳號、實體手機／Safari、外部
 
 共用載入 owner 綁定 import、15秒期限、首次 draw、context loss 及 dispose。取消、重試、選輕量版或離頁後，舊 import 不建立場景，舊失敗不能覆蓋新局；首次 draw 拋錯也釋放自己的場景。失敗、重試、blur、hidden、卡頓皆保留 domain 並停止時鐘，重建成功不自動繼續。
 
-兩種畫面的六格操作共用 down-time round：pointer、Space、Enter 跨波放開不命中新目標。Space／Enter 由按下記錄、放開提交，repeat 不生成新操作；取消／失焦／lost capture 拒絕舊輸入。沒有前置 down 的輔助科技 click 仍可用。原生window capture先取消Escape的持有輸入，讓外層全螢幕照常退出；不阻擋事件或改共用Fullscreen。重來確認先聚焦「確定重來」，取消或 Escape 回到「重新開始」。輕量格不播放裝飾動畫，減少動態不改判定窗口。
+兩種畫面的六格操作共用 down-time round：pointer、Space、Enter 跨波放開不命中新目標。Space／Enter 由按下記錄、放開提交，repeat 不生成新操作；取消／失焦／lost capture 拒絕舊輸入。沒有前置 down 的輔助科技 click 仍可用。原生window capture先取消Escape的持有輸入；無重來確認時放行外層退出，有確認時先消耗該鍵取消確認並回焦點，下一次Escape才退出全視窗，不改共用Fullscreen。重來確認先聚焦「確定重來」，取消或 Escape 回到「重新開始」。輕量格不播放裝飾動畫，減少動態不改判定窗口。
 
 輕量成果是**本局紀錄 SVG 成果卡，不是3D截圖**，只接受 done run，記錄真實分數、搶救數、誤選數、最長連擊、elapsed與seed。可直接下載SVG，完全不需要WebGL／Canvas2D；既有Result分享仍可將同一張SVG轉成PNG，轉檔失敗沿原重試提示，不捏造成功或代發。沒有換Logo資產、API、排行榜或貢獻值。
 
 驗證界線：本 worktree 沒有 node_modules，且不可安裝或借用依賴；typecheck、build、完整runtime與瀏覽器均 `not_run`。新增純邏輯測試可用 Node 24 對 production helper/domain 執行；其實跑結果隨交付列明，不當作React、原生瀏覽器、PNG解碼或真人美術驗收。新增瀏覽器案例待正常已備妥依賴的受控runner執行：WebGL確實不可用仍完整20波5100分／SVG與PNG，context loss同局接續／重試、跨波pointer與兩鍵、AT、全視窗Escape同波取消、取消焦點與卸載。手機320、橫向／200%文字、Safari及真人趣味仍需實機／視覺確認。
 
 本地實跑：Node 24 讀取上述 production pure modules，從既有runtime檔抽取原樣 PT-LIGHT-PURE 區塊（不是改寫規則的替身），新增6案加原派對7案，同輪13/13通過、0 skipped；首次本地loader不解析絕對`.js`來源而未載入測試，補正只做本機TS路徑解析後通過。四個非TSX變更檔以Node內建type stripping驗語法，並非型別檢查。`module-check`通過但保留主線三項`surface_unmapped`警告（GuildMemberCard、hosted-store-read-error、social-achievements-state），`git diff --check`通過。實際React controller非native案亦因esbuild不存在而`not_run`，不計入13案。
+
+### PT-LIGHT CI Escape修正（2026-11-06，候選未重跑瀏覽器）
+
+Verify 42182160341／job127774498252 的真實trace、error-context與截圖顯示：持有Space→Escape→放開已通過退出與0分驗證；重來確認的Escape後，確認列消失、重新開始回焦點、暫停與120分保留，仍在全視窗。artifact13488462863的ZIP SHA256為cd958981b0e93792078ead12b4bae886cdda96c44cb87b08669720030ef4a23e。原測試把取消內層與退出外層當成同一鍵；window capture先卸載確認按鈕，也不能當可靠的React傳播契約。
+
+本修正只在重來確認開啟時明確消耗Escape，普通持有取消仍不阻擋Fullscreen。E2E保留原取消／焦點／分數／退出斷言，拆成先取消內層、再退出外層，補暫停與elapsed不變；沒有加timeout、retry或改分數。新增直接執行production callback的純測試，驗兩種傳播與同局保留；這不是React事件送達證據。本地純測試14/14、0 skip；typecheck、build、完整runtime／React及瀏覽器仍not_run，待新來源CI。另一個event-member-journey的Route失敗屬別scope，本批未改。

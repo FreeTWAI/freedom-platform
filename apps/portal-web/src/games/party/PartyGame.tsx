@@ -19,11 +19,11 @@ export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:num
   const mode=useRef<'loading'|'native'|'light'|'failed'>('loading'),attempt=useRef<{cancel:()=>void}|null>(null),input=useRef(holidayInput());
   const restartButton=useRef<HTMLButtonElement>(null),confirmRestart=useRef<HTMLButtonElement>(null);
   const [light,setLight]=useState(false);
-  const escapeCapture=useRef<()=>void>(()=>{});
-  escapeCapture.current=()=>{input.current.cancel();gesture.current=null;if(restart)keepRun();};
+  const escapeCapture=useRef<(event:globalThis.KeyboardEvent)=>void>(()=>{});
+  escapeCapture.current=event=>{input.current.cancel();gesture.current=null;if(restart){event.preventDefault();event.stopPropagation();keepRun();}};
   useEffect(()=>{
-    // FullscreenGame stops React propagation. Cancel holds first, but let it exit.
-    const escape=(event:globalThis.KeyboardEvent)=>{if(event.key==='Escape')escapeCapture.current();};
+    // Cancel holds before React. Only an open confirmation owns this Escape.
+    const escape=(event:globalThis.KeyboardEvent)=>{if(event.key==='Escape')escapeCapture.current(event);};
     window.addEventListener('keydown',escape,true);
     return()=>window.removeEventListener('keydown',escape,true);
   },[]);
