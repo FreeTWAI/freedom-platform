@@ -73,3 +73,17 @@ CI、獨立review、正式會員／社群帳號、實體手機／Safari、外部
 32項runtime規則／儲存／圖片測試通過。第一次完整遊戲檔28 passed、0 skipped（原19＋新9）；最後加入PT-R1與PT-U1補強後，派對子集10 passed、0 skipped。這是29個不同瀏覽器案例的聯集，不冒充最後重新跑29項全檔；最新改動只在派對controller／樣式／相應案例，原玩法與共用分享未再變更。型別與build在最後瀏覽器執行前通過。完整輸出、trace、截圖、prototype觀察與原始素材在E槽本輪evidence。
 
 本輪沒有真人受試者。自動化證明三款操作會改變真實本局並到達可分享結算；開發者只判讀角色輪廓／圖層與控制幾何。決策CONTINUE：以三款完整短局提交，真人趣味、重玩及實機效能維持EXTERNAL_PENDING，不從本機分數推定留存。
+
+### PT-LIGHT 第一批候選（2026-11-06，未部署）
+
+假日保衛戰新增真正不依賴 WebGL 的六格 DOM／原創 SVG 玩法。載入中、載入失敗或 context loss 都可明選「改用輕量玩法」；不自動跳過失敗或替玩家計時。沿用同一 `PartyRun`、seed、elapsed、pressed、round、分數與20波規則，按開始／繼續後才推進。六格文字、葉子、帽子與領帶一起辨識，不只用顏色。辦公椅與豆腐本批**尚未有可玩輕量備援**，只保留同局暫停、重建3D及返回，介面明示限制。
+
+共用載入 owner 綁定 import、15秒期限、首次 draw、context loss 及 dispose。取消、重試、選輕量版或離頁後，舊 import 不建立場景，舊失敗不能覆蓋新局；首次 draw 拋錯也釋放自己的場景。失敗、重試、blur、hidden、卡頓皆保留 domain 並停止時鐘，重建成功不自動繼續。
+
+兩種畫面的六格操作共用 down-time round：pointer、Space、Enter 跨波放開不命中新目標。Space／Enter 由按下記錄、放開提交，repeat 不生成新操作；取消／失焦／lost capture 拒絕舊輸入。沒有前置 down 的輔助科技 click 仍可用。原生window capture先取消Escape的持有輸入，讓外層全螢幕照常退出；不阻擋事件或改共用Fullscreen。重來確認先聚焦「確定重來」，取消或 Escape 回到「重新開始」。輕量格不播放裝飾動畫，減少動態不改判定窗口。
+
+輕量成果是**本局紀錄 SVG 成果卡，不是3D截圖**，只接受 done run，記錄真實分數、搶救數、誤選數、最長連擊、elapsed與seed。可直接下載SVG，完全不需要WebGL／Canvas2D；既有Result分享仍可將同一張SVG轉成PNG，轉檔失敗沿原重試提示，不捏造成功或代發。沒有換Logo資產、API、排行榜或貢獻值。
+
+驗證界線：本 worktree 沒有 node_modules，且不可安裝或借用依賴；typecheck、build、完整runtime與瀏覽器均 `not_run`。新增純邏輯測試可用 Node 24 對 production helper/domain 執行；其實跑結果隨交付列明，不當作React、原生瀏覽器、PNG解碼或真人美術驗收。新增瀏覽器案例待正常已備妥依賴的受控runner執行：WebGL確實不可用仍完整20波5100分／SVG與PNG，context loss同局接續／重試、跨波pointer與兩鍵、AT、全視窗Escape同波取消、取消焦點與卸載。手機320、橫向／200%文字、Safari及真人趣味仍需實機／視覺確認。
+
+本地實跑：Node 24 讀取上述 production pure modules，從既有runtime檔抽取原樣 PT-LIGHT-PURE 區塊（不是改寫規則的替身），新增6案加原派對7案，同輪13/13通過、0 skipped；首次本地loader不解析絕對`.js`來源而未載入測試，補正只做本機TS路徑解析後通過。四個非TSX變更檔以Node內建type stripping驗語法，並非型別檢查。`module-check`通過但保留主線三項`surface_unmapped`警告（GuildMemberCard、hosted-store-read-error、social-achievements-state），`git diff --check`通過。實際React controller非native案亦因esbuild不存在而`not_run`，不計入13案。

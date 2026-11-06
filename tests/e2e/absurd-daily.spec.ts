@@ -395,6 +395,79 @@ test.describe('PT-6 touchscreen input',()=>{
   });
 });
 
+async function blockPartyWebGL(page:Page){
+  await page.addInitScript(()=>{
+    const get=HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext=function(kind:string,...args:any[]){
+      if(kind==='webgl'||kind==='webgl2'||kind==='experimental-webgl')return null;
+      return Reflect.apply(get,this,[kind,...args]);
+    } as typeof get;
+  });
+}
+async function openLightHoliday(page:Page){
+  await blockPartyWebGL(page);await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});
+  await page.goto('/play?game=holiday&seed=42');await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');
+  await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');
+  await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));await page.getByRole('button',{name:'開始派對！',exact:true}).click();
+}
+
+test('PT-light: without WebGL, the six real cells complete all waves and export this run as SVG and PNG',async({page})=>{
+  test.setTimeout(150000);await page.setViewportSize({width:320,height:568});await page.emulateMedia({reducedMotion:'reduce'});
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openLightHoliday(page);
+  await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);await expect(page.locator('.pt-light-grid button')).toHaveCount(6);
+  await expect(page.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
+  const geometry=await page.locator('.pt-light-grid button').evaluateAll(buttons=>buttons.map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height,font:parseFloat(getComputedStyle(b).fontSize)})));
+  for(const b of geometry){expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44);expect(b.font).toBeGreaterThanOrEqual(14);}
+  for(let round=0;round<20;round++){
+    await partyAdvance(page,round*PT.holidayRoundMs+250);const good=page.getByRole('button',{name:/第 [1-6] 格：休假/});
+    if(round%3===0)await good.click();else if(round%3===1)await good.press('Space');else await good.press('Enter');
+    await expect(good).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(round<10?(round+1)*100+20*(round+1)*(round+2)/2:2100+(round-9)*300));
+  }
+  await partyAdvance(page,PT.holidayMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','5100');
+  const svgDownload=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).press('Enter');
+  const svg=readFileSync((await (await svgDownload).path())!,'utf8');expect(svg).toContain('5100 分');expect(svg).toContain('搶救 20 個假日');expect(svg).toContain('輕量成果卡');expect(svg).toContain('同題 #42');
+  expect(await partyResult(page,'holiday')).toBe(5100);
+  const pngDownload=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();const png=await sharp((await (await pngDownload).path())!).metadata();expect([png.width,png.height]).toEqual([960,1200]);expect(errors).toEqual([]);
+});
+
+test('PT-light: context loss pauses the same run, fallback is explicit, retry preserves progress, and cancel restores focus',async({page})=>{
+  await openParty(page,'holiday');await partyAdvance(page,300);await page.getByRole('button',{name:/第 [1-6] 格：休假/}).click();
+  await page.locator('.pt-canvas canvas').evaluate(c=>(c as HTMLCanvasElement).getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext());
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();
+  const at=await partyElapsed(page);await page.clock.runFor(4000);expect(await partyElapsed(page)).toBe(at);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await partyAdvance(page,at+200);
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  const pausedAt=await partyElapsed(page);await page.getByRole('button',{name:'重試 3D，保留這局',exact:true}).click();await expect(page.locator('[data-party-stage=ready]')).toBeVisible();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','3d');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');expect(await partyElapsed(page)).toBe(pausedAt);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');
+  await page.getByRole('button',{name:'回遊戲大廳',exact:true}).click();await expect(page.locator('.pt-root')).toHaveCount(0);await page.clock.runFor(16000);await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
+});
+
+for(const light of [false,true])test(`PT-light: ${light?'light':'native'} cells reject held pointer/Space/Enter across waves and retain assistive clicks`,async({page})=>{
+  if(light)await openLightHoliday(page);else await openParty(page,'holiday');
+  for(const [index,key]of ['Space','Enter','pointer'].entries()){
+    const round=index*3;await partyAdvance(page,round*PT.holidayRoundMs+300);
+    const good=page.getByRole('button',{name:/第 [1-6] 格：休假/}),hole=Number((await good.getAttribute('aria-label'))!.match(/第 (\d)/)![1]);
+    const button=page.locator('.pt-hole-controls button').nth(hole-1),score=await page.locator('.pt-root').getAttribute('data-party-score');
+    if(key==='pointer'){const box=(await button.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();}else{await button.focus();await page.keyboard.down(key);}
+    await partyAdvance(page,(round+1)*PT.holidayRoundMs+250);if(key==='pointer')await page.mouse.up();else await page.keyboard.up(key);
+    await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);
+    const fresh=page.getByRole('button',{name:/第 [1-6] 格：休假/});if(key==='pointer')await fresh.click();else await fresh.press(key);await expect(page.locator('.pt-root')).not.toHaveAttribute('data-party-score',score!);
+    await partyAdvance(page,(round+2)*PT.holidayRoundMs+250);const beforeAt=await page.locator('.pt-root').getAttribute('data-party-score');await page.getByRole('button',{name:/第 [1-6] 格：休假/}).evaluate(b=>(b as HTMLButtonElement).click());await expect(page.locator('.pt-root')).not.toHaveAttribute('data-party-score',beforeAt!);
+  }
+});
+
+test('PT-light: fullscreen capture cannot turn an Escape-cancelled hold into a hit, and restart cancellation returns focus',async({page})=>{
+  await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new Error('Synthetic unavailable fullscreen'));});
+  await openLightHoliday(page);await partyAdvance(page,300);
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
+  const good=page.getByRole('button',{name:/第 [1-6] 格：休假/});await good.focus();await page.keyboard.down('Space');await page.keyboard.press('Escape');await page.keyboard.up('Space');
+  await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');
+  await good.press('Enter');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');
+  await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.getByRole('group',{name:'確認重新開始'})).toHaveCount(0);await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+});
+
 // Fixed minimal cosmetic-filter excerpt, not a live network dependency.
 // EasyList https://easylist.to/easylist/easylist.txt, version 202611021446.
 // Download SHA256 e7d918a3a427f4d6ce3141c298f5c41e5d014b5c3dd2192845b0d448f68c729a.
