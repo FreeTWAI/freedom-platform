@@ -24,6 +24,22 @@ const bytes=new TextEncoder().encode('<!doctype html>\n<script>throw "never exec
 const status=(value:number)=>(e:unknown)=>e instanceof Problem&&e.status===value;
 const integrity=(e:unknown)=>['23514','23503'].includes((e as {code?:string}).code??'');
 const command=(actor:Actor,expected?:string,key=randomUUID()):Command=>({actor,key,expected,operation:'synthetic',body:null});
+// Leakage assertion only, never an HTML filter or a source sanitizer.
+function assertNoPrivateGameSource(value:unknown){
+ const serialized=JSON.stringify(value).toLowerCase();
+ for(const token of ['object_key','objectkey','lease_token','leasetoken','<script','never execute','bucket','asset_id','assetid','sha256','digest']){
+  assert.equal(serialized.includes(token),false,`Private game data token: ${token}`);
+ }
+}
+test('private game metadata oracle rejects source and private fields in every letter case',()=>{
+ assertNoPrivateGameSource({game_id:'synthetic',state:'quarantined',source_revision:'1',version:'2'});
+ for(const token of ['object_key','objectKey','lease_token','leaseToken','<script>','<script src=','never execute','bucket','asset_id','assetId','sha256','digest']){
+  for(const variant of [token,token.toUpperCase()]){
+   assert.throws(()=>assertNoPrivateGameSource({nested:[{value:variant}]}),assert.AssertionError);
+   assert.throws(()=>assertNoPrivateGameSource({nested:[{[variant]:'synthetic'}]}),assert.AssertionError);
+  }
+ }
+});
 async function member(community:string):Promise<Actor>{const id=randomUUID(),hash=tokenHash(randomBytes(32).toString('base64url'));
  const row=(await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref) VALUES($1,$2,$3,'Synthetic','not-login',$4) RETURNING *`,[id,community,`${id}@game.test`,randomUUID()])).rows[0];
  await pool.query("INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,'synthetic',clock_timestamp()+interval '1 hour')",[hash,id]);return {...row,session_hash:hash,csrf_token:'synthetic'};
@@ -61,9 +77,8 @@ test('real lifecycle stores exact opaque bytes, immutable revisions, cold metada
  assert.deepEqual(await withdrawGameDraft(pool,withdraw,f.draft.game_id),removed);assert.deepEqual(await uploadGameSource(pool,c,f.draft.game_id,bytes),saved);
  assert.equal((await readGameDraft(pool,f.actor,f.draft.game_id)).state,'withdrawn');assert.equal(await counts(f.draft.game_id),2);await enable();
  await assert.rejects(uploadGameSource(pool,command(f.actor,'4'),f.draft.game_id,bytes,f.store),status(409));
- const forbidden=/object_key|lease_token|<script>|never execute|bucket|asset_id|sha256/;
- assert.doesNotMatch(JSON.stringify(saved),forbidden);
- const facts=(await pool.query("SELECT data FROM scoped_transition_journal WHERE aggregate_type='member_game' AND aggregate_id=$1",[f.draft.game_id])).rows;assert.doesNotMatch(JSON.stringify(facts),forbidden);
+ assertNoPrivateGameSource(saved);
+ const facts=(await pool.query("SELECT data FROM scoped_transition_journal WHERE aggregate_type='member_game' AND aggregate_id=$1",[f.draft.game_id])).rows;assertNoPrivateGameSource(facts);
 });
 test('current owner/community/session is required before old receipts or metadata',async()=>{
  const f=await fixture();await enable();const c=command(f.actor,'1');await uploadGameSource(pool,c,f.draft.game_id,bytes,f.store);
