@@ -2,7 +2,7 @@ import { flushSync } from 'react-dom';
 import { FullscreenGame, type FullscreenGameHandle } from './FullscreenGame';
 import {GameCover} from './GameCover';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { beginStamps, cashDeck, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, resume, RULES, seconds, seedOf, sortCash, stamp, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
+import { beginStamps, cashDeck, cashNotice, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, photoNotice, resume, RULES, seconds, seedOf, sortCash, stamp, stampNotice, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
 import { saveGameDraft } from './result-bridge';
 import { resultExports, type RunResult, type ArcadeGameId } from './result-card';
 import { ResultShare } from './ResultShare';
@@ -85,6 +85,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
     const live = useRef<Live>({ game, seed, clock: { elapsed: 0, last: null, running: false }, client: 0, roundAt: 0, film: 0, photos: [], pan: { x: 0, y: 0 }, targetPan: { x: 0, y: 0 }, fov: 44, stamps: newStamps(seed), cash: newCash(seed), stampPoint: stampTarget(seed, 0), raised: false, pointer: null, done: false, started: false, paused: false });
     const [, repaint] = useState(0), [ready, setReady] = useState(false), [error, setError] = useState(''), [retry, setRetry] = useState(0), [notice, setNotice] = useState(''), [sound, setSound] = useState(false), [flash, setFlash] = useState(0);
     const pendingResult = useRef<Omit<RunResult, 'image'> | null>(null), [captureError, setCaptureError] = useState(false);
+    const captureFailures = useRef(0);
     const updateUi = () => repaint(n => n + 1), lastUi = useRef(0);
     const view = (): StageView => { const l = live.current; return { game, seed, seconds: game === 'photo' ? (l.clock.elapsed - l.roundAt) / 1000 : l.clock.elapsed / 1000, client: l.client, pan: l.pan, fov: l.fov, stamp: l.stamps, stampPoint: l.stampPoint, raised: l.raised, cash: l.cash, motion: motionRef.current }; };
     function draw() { stage.current?.update(view()); if (stage.current && host.current) {
@@ -122,7 +123,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
     }
     catch {
         setCaptureError(true);
-        setNotice('這局已完成，成果畫面還沒保存。請重試產生圖片，完成次數不會重算。');
+        setNotice(`第 ${++captureFailures.current} 次產生成果圖片失敗。這局已完成，成果畫面還沒保存。請重試產生圖片，完成次數不會重算。`);
         updateUi();
     } }
     function photosDone() { const l = live.current; if (!l.photos.length) {
@@ -130,6 +131,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         l.clock = { elapsed: 0, last: null, running: false };
         l.client = 0;
         l.roundAt = 0;
+        captureFailures.current = 0;
         setNotice('這局還沒拍到照片。再開一次照相館，按快門留下怪事。');
         updateUi();
         return;
@@ -151,24 +153,24 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
             l.photos.push({ ...grade, image });
             l.film++;
             sfx('photo');
-            setNotice(`${grade.caption} ${grade.details}`);
+            setNotice(photoNotice(`${grade.caption} ${grade.details}`, l.client, l.film));
             if (motionRef.current)
                 setFlash(n => n + 1);
             updateUi();
         }
         catch (cause) {
-            setNotice(cause instanceof Error ? cause.message : '這張未能保存，請重試。');
+            setNotice(photoNotice(`本局第 ${++captureFailures.current} 次拍照未保存。${cause instanceof Error ? cause.message : '這張未能保存，請重試。'}`, l.client, l.film));
         }
     }
     function applyStamp(point: Point, index = live.current.stamps.practice ? -1 : live.current.stamps.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done)
         return; const outcome = stamp(l.stamps, index, point, l.clock.elapsed); if (outcome.kind === 'ignored')
-        return; l.stamps = outcome.state; l.raised = false; l.stampPoint = point; sfx(outcome.kind === 'miss' ? 'wrong' : 'stamp'); setNotice(outcome.kind === 'practice' ? '練習完成。十二張正式公文，開始！' : outcome.kind === 'hit' ? '啪！已閱，但看不懂。' : '章歪了。墨跡留下，這張再蓋一次。'); render(); updateUi(); if (l.stamps.endedAt !== null) {
+        return; l.stamps = outcome.state; l.raised = false; l.stampPoint = point; sfx(outcome.kind === 'miss' ? 'wrong' : 'stamp'); setNotice(stampNotice(l.stamps, outcome.kind)); render(); updateUi(); if (l.stamps.endedAt !== null) {
         const elapsed = l.stamps.endedAt - (l.stamps.startedAt ?? l.stamps.endedAt);
         settle({ game, seed, title: GAMES[1].title, caption: l.stamps.misses ? '主管：印象深刻，文件也是。' : '主管：下班可以，先批准你的下班。', details: `完成 12 份文件 · ${seconds(elapsed)} 秒 · 多蓋 ${l.stamps.misses} 次` });
     } }
     function applyCash(accept: boolean, index = live.current.cash.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done)
         return; const outcome = sortCash(l.cash, index, accept, l.clock.elapsed); if (outcome.kind === 'ignored')
-        return; l.cash = outcome.state; sfx(outcome.kind === 'wrong' ? 'wrong' : 'cash'); setNotice(outcome.kind === 'wrong' ? '這張分錯了，退回來重新看看。' : accept ? '道具鈔收到。財富看起來很有希望。' : '這張不是錢，老闆先收回去。');
+        return; l.cash = outcome.state; sfx(outcome.kind === 'wrong' ? 'wrong' : 'cash'); setNotice(cashNotice(l.cash, outcome.kind, accept));
         // Settlement stops the clock and refreshes the final scene before capture.
         // Only ongoing actions need this immediate feedback draw.
         if (l.cash.endedAt === null) render();
@@ -308,7 +310,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         settle(pendingResult.current); }}>重試產生成果圖片</button>}
       <div className="fw-arcade-action-area" inert={!ready || !l.started || l.paused || captureError}>
       {game === 'photo' ? <><div className="fw-arcade-pan-pad" aria-label="移動鏡頭"><button aria-label="鏡頭往左" onClick={() => pan(-.35, 0)}>←</button><button aria-label="鏡頭往上" onClick={() => pan(0, .35)}>↑</button><button aria-label="鏡頭往下" onClick={() => pan(0, -.35)}>↓</button><button aria-label="鏡頭往右" onClick={() => pan(.35, 0)}>→</button></div><label className="fw-arcade-zoom"><span>廣角</span><input aria-label="鏡頭廣角" type="range" min="38" max="60" value={l.fov} onChange={e => { l.fov = Number(e.target.value); updateUi(); }}/><span>更廣</span></label><button className="fw-arcade-shutter" disabled={l.film >= RULES.film} onClick={shoot} aria-label="拍照快門"><span aria-hidden="true">◎</span><small>快門 · {2 - l.film} 張</small></button><button className="fw-arcade-secondary" onClick={nextClient}>{l.client === 2 ? '挑選照片' : '下一位客人 →'}</button></> : game === 'stamp' ? <><button className="fw-arcade-stamp-button" onPointerDown={() => { l.stamps = beginStamps(l.stamps, l.clock.elapsed); }} onClick={() => applyStamp(l.stampPoint)}>啪！蓋章</button><p className="fw-arcade-meta">方向鍵微調印章 · 空白鍵落印<br />多蓋 {l.stamps.misses} 次</p></> : <><div className="fw-arcade-sort-buttons"><button className="fw-arcade-secondary" onClick={() => applyCash(false)}>← 退票券</button><button onClick={() => applyCash(true)}>收道具鈔 →</button></div><p className="fw-arcade-meta">已分類 {l.cash.index} / 30 · 分錯 {l.cash.mistakes} 次<br />最後一張剛好湊滿一百萬。</p></>}
-      </div><p className="fw-arcade-notice" role="status">{notice || hints[game]}</p>{game === 'photo' && l.photos.length > 0 && <div className="fw-arcade-contact-sheet" aria-label="這局拍到的照片">{l.photos.map((p, i) => <img key={i} src={p.image} alt={`底片 ${i + 1}：${p.caption}`} width="96" height="72"/>)}</div>}
+      </div><p className="fw-arcade-notice" role="status" aria-atomic="true">{notice || hints[game]}</p>{game === 'photo' && l.photos.length > 0 && <div className="fw-arcade-contact-sheet" aria-label="這局拍到的照片">{l.photos.map((p, i) => <img key={i} src={p.image} alt={`底片 ${i + 1}：${p.caption}`} width="96" height="72"/>)}</div>}
     </div></div>
   </section>;
 }

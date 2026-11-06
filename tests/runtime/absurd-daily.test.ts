@@ -133,7 +133,7 @@ test('UX-15f actual dish worker client has one bounded in-flight view and termin
 
 });
 import {GAMES,seconds} from '../../apps/portal-web/src/games/domain.js';
-import {beginStamps,cashDeck,challengeUrl,gradePhoto,newCash,newStamps,pause,photoPose,resume,RULES,seedOf,sortCash,stamp,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
+import {beginStamps,cashDeck,cashNotice,challengeUrl,CLIENTS,gradePhoto,newCash,newStamps,pause,photoNotice,photoPose,resume,RULES,seedOf,sortCash,stamp,stampNotice,stampTarget,tick} from '../../apps/portal-web/src/games/domain.js';
 import {GAME_HANDOFF_KEY,HANDOFF_TTL,parseGameDraft,readGameDraft,saveGameDraft,clearGameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 import {gamePreviewHtml} from '../../apps/portal-web/src/games/preview.js';
 import type {Pool} from 'pg';
@@ -165,6 +165,90 @@ test('AD-5 a full run settles once with exact original facts',()=>{let s=newCash
 test('AD-4 fixed seeded target, finite bounds, miss marks and completed clock',()=>{for(let seed=1;seed<100;seed++)for(let i=0;i<12;i++){const t=stampTarget(seed,i);assert.ok(Math.abs(t.x)<.7&&Math.abs(t.y)<.6);assert.deepEqual(t,stampTarget(seed,i));}let s=newStamps(42,false);assert.equal(stamp(s,0,{x:NaN,y:0},0).state,s);assert.equal(stamp(s,0,{x:2,y:0},0).state,s);s=beginStamps(s,0);s=stamp(s,0,{x:1.1,y:1.1},250).state;assert.equal(s.index,0);assert.equal(s.misses,1);assert.equal(s.marks.length,1);for(let i=0;i<12;i++){const prev=s;s=stamp(s,i,stampTarget(42,i),500+i*250).state;assert.equal(prev.index,i);assert.equal(s.index,i+1);assert.equal(stamp(s,i,stampTarget(42,i),9000).state,s);}assert.equal(s.endedAt,3250);assert.equal(s.startedAt,0);assert.equal(s.misses,1);assert.equal(stamp(s,12,{x:0,y:0},5000).state,s);});
 test('AD-4 practice is uncounted; its stale pointer cannot stamp the first real document',()=>{const initial=newStamps(3);const p=stamp(initial,-1,stampTarget(3,0),200);assert.equal(p.kind,'practice');assert.equal(p.state.index,0);assert.equal(p.state.practice,false);assert.equal(p.state.startedAt,null);assert.equal(stamp(p.state,0,stampTarget(3,0),250).kind,'ignored');assert.equal(stamp(p.state,-1,stampTarget(3,0),1000).state,p.state);});
 test('AD-3 actual visible anchors and occlusion drive objective and funny captions',()=>{assert.equal(gradePhoto('pigeons',['bird0','bird2'],5).stars,2);assert.equal(gradePhoto('pigeons',['bird0','bird1','bird2'],5).stars,3);assert.match(gradePhoto('backdrop',['board'],5,true).caption,/背景出席/);assert.equal(gradePhoto('umbrella',['feet','head','umbrella'],5).stars,3);assert.match(gradePhoto('umbrella',['feet'],5).caption,/兩隻鞋/);assert.equal(photoPose('pigeons',0,1).birds.filter(x=>x>0).length,0);assert.equal(photoPose('pigeons',6,1).birds.filter(x=>x>0).length,3);assert.ok(photoPose('umbrella',5,1).lift>2);});
+
+test('AD-3 photo feedback preserves the grade and distinguishes saved film for each client',()=>{
+  const grade=gradePhoto('pigeons',['bird0'],5),message=`${grade.caption} ${grade.details}`,before=JSON.stringify(grade);
+  for(let client=0;client<RULES.clients;client++){
+    const notices=[0,1,2].map(film=>photoNotice(message,client,film));assert.equal(new Set(notices).size,3);
+    for(let film=0;film<=RULES.film;film++)assert.equal(notices[film],`${message} 第 ${client+1} / 3 位客人，已保存 ${film} / 2 張，還可拍 ${2-film} 張。`);
+  }
+  assert.equal(JSON.stringify(grade),before);
+});
+test('AD-4 stamp feedback separates practice misses from formal documents and repeated actions',()=>{
+  let state=newStamps(42);
+  for(let i=0;i<2;i++){
+    state=stamp(state,-1,{x:1.1,y:1.1},i*250).state;
+    assert.equal(stampNotice(state,'miss'),`章歪了。墨跡留下，這張再蓋一次。 練習失手 ${i+1} 次，不計入正式文件。`);
+  }
+  const practice=stamp(state,-1,stampTarget(42,0),500);assert.equal(practice.kind,'practice');state=practice.state;
+  assert.equal(stampNotice(state,'practice'),'練習完成。十二張正式公文，開始！');assert.equal(state.misses,0);assert.equal(state.index,0);
+  for(let i=0;i<2;i++){
+    state=stamp(state,0,{x:1.1,y:1.1},750+i*250).state;
+    assert.equal(stampNotice(state,'miss'),`章歪了。墨跡留下，這張再蓋一次。 已完成 0 / 12 份 · 多蓋 ${i+1} 次。`);
+  }
+  for(let i=0;i<2;i++){
+    state=stamp(state,i,stampTarget(42,i),1250+i*250).state;const before=JSON.stringify(state);
+    assert.equal(stampNotice(state,'hit'),`啪！已閱，但看不懂。 已完成 ${i+1} / 12 份 · 多蓋 2 次。`);assert.equal(JSON.stringify(state),before);
+  }
+});
+test('AD-5 cash feedback reports accepted cards and mistakes without changing money or state',()=>{
+  let state=newCash(42);const deck=cashDeck(42),notices:string[]=[];
+  for(let i=0;i<2;i++){
+    state=sortCash(state,0,!deck[0].valid,i*200).state;
+    assert.equal(cashNotice(state,'wrong',!deck[0].valid),`這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 ${i+1} 次。`);assert.equal(state.amount,0);
+  }
+  for(const [i,card] of deck.entries()){
+    state=sortCash(state,i,card.valid,400+i*200).state;const before=JSON.stringify(state);
+    const message=card.valid?'道具鈔收到。財富看起來很有希望。':'這張不是錢，老闆先收回去。';
+    notices.push(cashNotice(state,'correct',card.valid));assert.equal(notices[i],`${message} 已分類 ${i+1} / 30 張 · 分錯 2 次。`);assert.equal(JSON.stringify(state),before);
+  }
+  assert.equal(new Set(notices).size,30);assert.equal(state.amount,RULES.targetCash);assert.equal(state.rejected,6);
+});
+
+// Actual input closures with a controlled renderer, not native capture evidence.
+function dailyFeedbackBoard(game:'photo'|'stamp'){
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/AbsurdDaily.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm'}).code;
+  const functions=['shoot','applyStamp','photosDone'].map(name=>{
+    const start=new RegExp(`^( *)function ${name}\\(`,'m').exec(source);assert.ok(start,name);
+    const tail=source.slice(start.index),end=new RegExp(`^${start[1]}}`,'m').exec(tail);assert.ok(end,`${name} end`);
+    return tail.slice(0,end.index+end[0].length);
+  }).join('\n');
+  const live={current:{game,seed:42,started:true,paused:false,done:false,clock:{elapsed:0},client:0,roundAt:0,film:0,photos:[] as unknown[],stamps:newStamps(42),raised:false,stampPoint:stampTarget(42,0)}};
+  const notices:string[]=[],captureFailures={current:0};let failure:unknown=null;
+  const stage={current:{framing:()=>({visible:['head','feet'],blocked:false,lift:0}),capture:()=>{if(failure!==null)throw failure;return 'controlled-frame';}}};
+  const api=runInNewContext(`${functions};({shoot,applyStamp,photosDone})`,{
+    live,stage,ready:true,RULES,CLIENTS,GAMES,gradePhoto,stamp,photoNotice,stampNotice,seconds,Error,captureFailures,
+    motionRef:{current:false},syncClock(){},render:()=>true,sfx(){},setFlash(){},updateUi(){},settle:()=>assert.fail('not a terminal fixture'),
+    setNotice:(text:string)=>notices.push(text),game,seed:42,
+  }) as {shoot:()=>void;applyStamp:(point:{x:number;y:number},index?:number)=>void;photosDone:()=>void};
+  return {...api,live,notices,captureFailures,fail:(cause:unknown)=>{failure=cause;}};
+}
+test('AD-3 repeated capture failures retain film and the original cause; successful retry uses real progress',()=>{
+  const h=dailyFeedbackBoard('photo');h.fail(Error('same capture error'));
+  for(let attempt=1;attempt<=2;attempt++){
+    h.shoot();assert.equal(h.notices.at(-1),`本局第 ${attempt} 次拍照未保存。same capture error 第 1 / 3 位客人，已保存 0 / 2 張，還可拍 2 張。`);
+    assert.equal(h.live.current.film,0);assert.equal(h.live.current.photos.length,0);
+  }
+  h.fail('non-Error rejection');h.shoot();assert.match(h.notices.at(-1)!,/^本局第 3 次拍照未保存。這張未能保存，請重試。/);
+  h.fail(null);h.shoot();assert.match(h.notices.at(-1)!,/已保存 1 \/ 2 張，還可拍 1 張。$/);
+  h.shoot();assert.match(h.notices.at(-1)!,/已保存 2 \/ 2 張，還可拍 0 張。$/);assert.equal(h.live.current.photos.length,2);assert.equal(h.captureFailures.current,3);
+  h.shoot();assert.equal(h.notices.length,5,'exhausted film has no new action announcement');
+  h.live.current.film=0;h.live.current.client=1;h.live.current.paused=true;h.shoot();assert.equal(h.notices.length,5);
+  h.live.current.paused=false;h.shoot();assert.match(h.notices.at(-1)!,/第 2 \/ 3 位客人，已保存 1 \/ 2 張/);
+});
+test('AD-3 an empty studio restart resets its failure count without claiming saved photos',()=>{
+  const h=dailyFeedbackBoard('photo');h.fail(Error('capture failed'));h.shoot();h.shoot();assert.equal(h.captureFailures.current,2);
+  h.photosDone();assert.equal(h.captureFailures.current,0);assert.equal(h.live.current.started,false);assert.equal(h.live.current.photos.length,0);
+  h.live.current.started=true;h.shoot();assert.match(h.notices.at(-1)!,/^本局第 1 次拍照未保存。/);assert.equal(h.live.current.film,0);
+});
+test('AD-4 ignored rapid and stale stamp inputs do not announce another action',()=>{
+  const h=dailyFeedbackBoard('stamp'),miss={x:1.1,y:1.1},target=stampTarget(42,0);
+  h.applyStamp(miss);assert.match(h.notices.at(-1)!,/練習失手 1 次/);h.applyStamp(miss);assert.equal(h.notices.length,1);
+  h.live.current.clock.elapsed=250;h.applyStamp(miss);assert.match(h.notices.at(-1)!,/練習失手 2 次/);
+  h.live.current.clock.elapsed=500;h.applyStamp(target);assert.equal(h.live.current.stamps.index,0);assert.equal(h.live.current.stamps.misses,0);
+  h.live.current.clock.elapsed=750;h.applyStamp(target,-1);assert.equal(h.notices.length,3);h.applyStamp(target);assert.match(h.notices.at(-1)!,/已完成 1 \/ 12 份 · 多蓋 0 次/);
+  h.live.current.clock.elapsed=1000;h.applyStamp(target,0);assert.equal(h.notices.length,4);h.applyStamp(stampTarget(42,1));assert.match(h.notices.at(-1)!,/已完成 2 \/ 12 份 · 多蓋 0 次/);
+});
 test('AD-2 foreground clock counts elapsed time, pauses, and never charges the background interval',()=>{let c={elapsed:0,last:null as number|null,running:true};c=tick(c,100);c=tick(c,450);assert.equal(c.elapsed,350);c=pause(c);c=tick(c,10000);assert.equal(c.elapsed,350);c=resume(c);c=tick(c,20000);c=tick(c,20100);assert.equal(c.elapsed,450);assert.equal(tick(c,NaN),c);});
 function storage(){const map=new Map<string,string>();return {getItem:(k:string)=>map.get(k)??null,setItem:(k:string,v:string)=>{map.set(k,v);},removeItem:(k:string)=>{map.delete(k);}};}
 test('AD-2 an input timestamp ahead of a queued render cannot double count foreground time',()=>{
@@ -361,7 +445,8 @@ function cashBoard(completedCards:number, failure?:'update'|'capture') {
   const live={current:{game:'cash',seed:42,cash,clock:{elapsed:7500,last:7500,running:true},started:true,paused:false,done:false,pointer:{id:1},raised:true}};
   const events:{kind:string;index:number;running:boolean;raised:boolean;pointer:unknown}[]=[];
   const results:any[]=[],notices:string[]=[];
-  let fail=failure,captureError=false;
+  let fail=failure,captureError=false,now=7500;
+  const captureFailures={current:0};
   const record=(kind:string)=>events.push({kind,index:live.current.cash.index,running:live.current.clock.running,raised:live.current.raised,pointer:live.current.pointer});
   const stage={current:{
     update(){record('update');if(fail==='update'){fail=undefined;throw Error('render failed');}},
@@ -371,11 +456,11 @@ function cashBoard(completedCards:number, failure?:'update'|'capture') {
   const pendingResult={current:null as any};
   const api=runInNewContext(`${functions};({applyCash,settle})`,{
     live,stage,pendingResult,view:()=>({cash:live.current.cash}),host:{current:{dataset:{}}},frame:{current:7},motionRef:{current:true},game:'cash',seed:42,
-    performance:{now:()=>7500},tick,pause,sortCash,seconds,GAMES,cancelAnimationFrame:()=>record('stop'),
+    performance:{now:()=>now},tick,pause,sortCash,cashNotice,seconds,GAMES,captureFailures,cancelAnimationFrame:()=>record('stop'),
     syncDiagnostics,audio:{current:null},setReady:()=>{},setError:()=>{},
     sfx:()=>{},setNotice:(text:string)=>notices.push(text),updateUi:()=>{},onResult:(result:any)=>results.push(result),setCaptureError:(value:boolean)=>{captureError=value;},
   }) as {applyCash:(accept:boolean,index?:number)=>void;settle:(summary:any)=>void};
-  return {...api,live,events,results,pendingResult,notices,get captureError(){return captureError;}};
+  return {...api,live,events,results,pendingResult,notices,advance:(ms:number)=>{now+=ms;},failNext:(value:'update'|'capture')=>{fail=value;},get captureError(){return captureError;}};
 }
 
 test('AD-5 nonterminal cash inputs still render; wrong and stale inputs retain their rules',()=>{
@@ -398,12 +483,26 @@ test('AD-5 terminal cash input stops before its sole update and publishes the co
   h.applyCash(true);assert.equal(h.results.length,1);assert.equal(h.events.length,4);
 });
 
+test('AD-5 repeated wrong and correct cash inputs announce only accepted state changes',()=>{
+  const h=cashBoard(0),deck=cashDeck(42);
+  for(let attempt=1;attempt<=2;attempt++){
+    h.applyCash(!deck[0].valid);assert.equal(h.notices.at(-1),`這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 ${attempt} 次。`);
+    h.applyCash(!deck[0].valid);assert.equal(h.notices.length,attempt,'cooldown does not announce another failure');h.advance(200);
+  }
+  h.applyCash(deck[0].valid);assert.match(h.notices.at(-1)!,/已分類 1 \/ 30 張 · 分錯 2 次/);h.advance(200);
+  h.applyCash(deck[0].valid,0);assert.equal(h.notices.length,3,'stale card does not announce progress');
+  h.applyCash(deck[1].valid);assert.match(h.notices.at(-1)!,/已分類 2 \/ 30 張 · 分錯 2 次/);
+});
+
 for(const failure of ['update','capture'] as const)test(`AD-5 terminal ${failure} failure retains completed facts for explicit capture retry`,()=>{
   const h=cashBoard(29,failure);h.applyCash(true);
   assert.equal(h.captureError,true);assert.equal(h.results.length,0);assert.equal(h.live.current.done,false);
   assert.equal(h.live.current.clock.running,false);assert.equal(h.live.current.cash.index,30);
   assert.match(h.notices.at(-1)!,/完成次數不會重算/);
   const completed=h.live.current.cash,summary=h.pendingResult.current;
+  assert.match(h.notices.at(-1)!,/^第 1 次產生成果圖片失敗。/);
+  h.failNext(failure);h.settle(summary);assert.match(h.notices.at(-1)!,/^第 2 次產生成果圖片失敗。/);
+  assert.equal(h.live.current.cash,completed);assert.equal(h.pendingResult.current,summary);assert.equal(h.results.length,0);
   h.events.length=0;h.settle(summary);
   assert.deepEqual(h.events.map(e=>e.kind),['stop','update','capture','stop']);
   assert.equal(h.live.current.cash,completed);assert.equal(h.pendingResult.current,summary);
