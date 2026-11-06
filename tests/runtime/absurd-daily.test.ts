@@ -280,7 +280,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {PARTY_GAMES,PARTY_RULES as PT,partyOf} from '../../apps/portal-web/src/games/party/catalog.js';
-import {actParty,advanceParty,chairWave,holidayTargets,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyRun,type ChairRun,type TofuRun,type HolidayRun} from '../../apps/portal-web/src/games/party/domain.js';
+import {actParty,advanceParty,chairWave,partyRandom,holidayTargets,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyRun,type ChairRun,type TofuRun,type HolidayRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {DISH_DESIGNS,dishDesign} from '../../apps/portal-web/src/games/cooking/dish-designs.js';
 import {displayMarket} from '../../apps/portal-web/src/games/cooking/market-food.js';
 import {createDishModel,type DishMesh} from '../../apps/portal-web/src/games/cooking/dish-model.js';
@@ -679,6 +679,98 @@ for(const failure of ['update','capture'] as const)test(`AD-5 terminal ${failure
   assert.equal(h.results.length,1);assert.equal(h.live.current.done,true);
 });
 
+// PT-ACTION-LIGHT-PURE-BEGIN: rebuilt from the published base, not old test evidence.
+import {chairView,tofuView,tofuFaces,partyInputStamp,acceptsPartyInput,partyResultSvg,partyResultImage} from '../../apps/portal-web/src/games/party/light-party.js';
+
+test('PT-action-light: chair projection follows actual x, finite horizon, wave spacing and jump time',()=>{
+  let s=startParty(newParty('chair',42)) as ChairRun;
+  s=actParty(s,{kind:'lane',direction:1}) as ChairRun;
+  assert.equal(chairView(s).x,320,'target lane cannot teleport the picture');
+  s=advanceParty(s,50) as ChairRun;assert.equal(s.x,.4);assert.equal(chairView(s).x,320+.4*154);
+  const before=JSON.stringify(s),view=chairView(s);assert.equal(JSON.stringify(s),before);
+  for(const w of view.waves){assert.ok(w.remaining>=0&&w.remaining<=PT.horizonMs);assert.equal(w.y,74+300*(1-w.remaining/PT.horizonMs));assert.deepEqual(chairWave(42,w.index),{index:w.index,at:w.at,lane:w.lane,ticketLane:w.ticketLane,kind:w.kind});}
+  s=partyTime(s,1000);const waves=chairView(s).waves;assert.equal(waves.length,2);assert.equal(waves[1].at-waves[0].at,PT.waveGapMs);assert.equal(waves[0].y-waves[1].y,300*PT.waveGapMs/PT.horizonMs);
+  s=actParty(s,{kind:'jump'}) as ChairRun;s=advanceParty(s,PT.jumpMs/2) as ChairRun;assert.equal(chairView(s).jump,PT.jumpHeight);assert.equal(chairView(s).y,374-PT.jumpHeight*36);
+  const paused=pauseParty(s) as ChairRun;assert.deepEqual(chairView(advanceParty(paused,1000) as ChairRun),chairView(paused));
+});
+
+test('PT-action-light: tofu projects actual dimensions, axis, frozen from and kept through all 460ms',()=>{
+  let s=startParty(newParty('tofu',42)) as TofuRun;s=tofuReady(s,false);
+  const active=tofuPosition(s),axis=tofuAxis(s),original=JSON.stringify(s);assert.deepEqual(tofuView(s).active,active);assert.equal(tofuView(s).axis,axis);assert.equal(JSON.stringify(s),original);
+  s=actParty(s,{kind:'drop'}) as TofuRun;assert.ok(s.fall?.kept);const fall=s.fall!,v=tofuView(s);assert.equal(v.active,fall.from);assert.equal(v.kept,fall.kept);assert.ok(fall.kept);assert.ok(fall.kept.width<3);assert.equal(v.progress,0);
+  const middle=advanceParty(s,230) as TofuRun;assert.equal(tofuView(middle).progress,.5);assert.equal(tofuView(middle).active,fall.from);assert.equal(tofuView(middle).bottom,s.layers.length*PT.tofuHeight+.7);assert.equal(actParty(middle,{kind:'drop'}),middle);
+  const beforeLand=advanceParty(middle,229) as TofuRun;assert.equal(beforeLand.layers.length,1);const landed=advanceParty(beforeLand,1) as TofuRun;assert.equal(landed.layers[1],fall.kept);assert.equal(tofuView(landed).axis,'z');assert.equal(tofuView(landed).layers,landed.layers);
+  const top=landed.layers.at(-1)!;for(const offset of [.119,.121]){const phase=partyRandom(landed.seed,landed.turn)*Math.PI*2,speed=PT.tofuSpeed+(landed.layers.length-1)*PT.tofuSpeedStep,elapsed=landed.activeAt+((Math.asin(offset/PT.tofuAmplitude)-phase+Math.PI*2)%(Math.PI*2))/speed*1000,sample={...landed,elapsed};assert.ok(Math.abs(tofuPosition(sample).z-top.z-offset)<1e-12);assert.equal(tofuView(sample).aligned,offset<PT.tofuPerfect);assert.equal((actParty(sample,{kind:'drop'}) as TofuRun).fall?.perfect,offset<PT.tofuPerfect);}
+  const faces=tofuFaces({x:1,z:-.5,width:1.2,depth:2.1},.96);assert.equal(faces.length,3);assert.ok(faces.every(f=>f.split(' ').length===4));assert.notDeepEqual(faces,tofuFaces({x:0,z:0,width:3,depth:3},.96));
+});
+
+test('PT-action-light: chair completes the unchanged 4280 course and exports only its actual totals',()=>{
+  let s=startParty(newParty('chair',42)) as ChairRun;assert.throws(()=>partyResultSvg(s),/not complete/);
+  for(let i=0;i<PT.chairWaves;i++){const w=chairWave(s.seed,i);while(s.lane!==w.ticketLane){s=actParty(s,{kind:'lane',direction:w.ticketLane>s.lane?1:-1}) as ChairRun;s=partyTime(s,s.elapsed+140);}s=partyTime(s,w.at);}
+  s=partyTime(s,PT.chairMs);assert.equal(s.score,4280);assert.equal(s.tickets,22);assert.equal(s.status,'done');const before=JSON.stringify(s),svg=partyResultSvg(s);
+  for(const text of ['4280 分','22 張假日票','0 次被攔截','完成 22 波','沒有保存逐波路線','同題 #42'])assert.ok(svg.includes(text));assert.equal(JSON.stringify(s),before);assert.equal(decodeURIComponent(partyResultImage(s).split(',')[1]),svg);
+  assert.doesNotMatch(svg,/<(?:image|script|foreignObject)\b/);assert.match(partyResultSvg({...s,score:17,tickets:2,hits:1}),/17 分/);
+});
+
+test('PT-action-light: twelve true tofu layers yield 2925 and the exported polygons fit their actual transform',()=>{
+  let s=startParty(newParty('tofu',42)) as TofuRun;assert.throws(()=>partyResultSvg(s),/not complete/);
+  for(let i=0;i<PT.tofuGoal;i++){s=tofuReady(s,true);s=advanceParty(actParty(s,{kind:'drop'}),PT.tofuFallMs) as TofuRun;}
+  assert.equal(s.score,2925);assert.equal(s.layers.length,13);assert.equal(s.status,'done');assert.equal(tofuView(s).active,null);
+  const before=JSON.stringify(s),svg=partyResultSvg(s);assert.match(svg,/2925 分/);assert.match(svg,/疊了 12 層 · 12 次完美貼齊 · 0 次失手/);assert.equal((svg.match(/<polygon /g)??[]).length,39);
+  for(const [i,layer]of s.layers.entries())for(const face of tofuFaces(layer,i*PT.tofuHeight))assert.ok(svg.includes(`points="${face}"`));
+  const transform=svg.match(/data-final-tower="true" transform="translate\(([-.\d]+) ([-.\d]+)\) scale\(([-.\d]+)\)"/)!;assert.ok(transform);
+  for(const match of svg.matchAll(/points="([^"]+)"/g))for(const pair of match[1].split(' ')){const [x,y]=pair.split(',').map(Number),px=Number(transform[1])+x*Number(transform[3]),py=Number(transform[2])+y*Number(transform[3]);assert.ok(px>=90&&px<=870);assert.ok(py>=320&&py<=735);}
+  assert.equal(JSON.stringify(s),before);assert.notEqual(partyResultSvg({...s,layers:[{x:1,z:-.5,width:1,depth:2}]}),svg);
+});
+
+function partyClosure(start:string,end:string){
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8'),a=source.indexOf(start),b=source.indexOf(end,a);assert.ok(a>=0&&b>a);return stripTypeScriptTypes(source.slice(a,b));
+}
+test('PT-action-light: actual button handlers reject stale/repeated/cancelled holds and recover missing release',()=>{
+  for(const game of ['chair','tofu'] as const){
+    const live={current:startParty(newParty(game,42))},controls={current:holidayInput()};let actions=0;
+    const context={live,controls,restart:false,partyInputStamp,acceptsPartyInput,action:(a:any)=>{actions++;live.current=actParty(live.current,a);}};
+    const make=runInNewContext(partyClosure('  function controlHandlers(', '\n  const s=live.current')+'\ncontrolHandlers',context),a=game==='chair'?{kind:'jump'}:{kind:'drop'},h=make(1,a);
+    const key=(key:string,repeat=false)=>({key,repeat,preventDefault(){}}),pointer={button:0,isPrimary:true,pointerId:1};
+    for(const k of [' ','Enter']){h.onKeyDown(key(k));live.current=game==='chair'?{...live.current,resolved:partyInputStamp(live.current)+1} as ChairRun:{...live.current,turn:partyInputStamp(live.current)+1} as TofuRun;h.onKeyUp(key(k));assert.equal(actions,0);h.onKeyUp(key(k));assert.equal(actions,0);}
+    h.onPointerDown(pointer);live.current=game==='chair'?{...live.current,resolved:8} as ChairRun:{...live.current,turn:8} as TofuRun;h.onPointerUp(pointer);h.onClick({detail:1});assert.equal(actions,0);
+    for(const cancel of [()=>h.onBlur(),()=>h.onPointerCancel(pointer),()=>h.onLostPointerCapture(pointer),()=>controls.current.cancel()]){h.onPointerDown(pointer);cancel();h.onPointerUp(pointer);h.onClick({detail:1});assert.equal(actions,0);}
+    h.onKeyDown(key(' '));h.onKeyDown(key(' ',true));h.onKeyUp(key(' '));h.onKeyUp(key(' '));assert.equal(actions,1);
+    h.onKeyDown(key(' '));controls.current.cancel();h.onKeyUp(key(' '));assert.equal(actions,1);
+    h.onKeyDown(key('Enter'));live.current=game==='chair'?{...live.current,resolved:9} as ChairRun:{...live.current,turn:9,fall:null} as TofuRun;h.onKeyDown(key('Enter'));h.onKeyUp(key('Enter'));assert.equal(actions,2,'fresh down recovers after disabled release was swallowed');
+    h.onClick({detail:0});assert.equal(actions,3,'AT without a down remains supported');context.restart=true;h.onClick({detail:0});assert.equal(actions,3);
+  }
+});
+
+test('PT-action-light: actual scene release cannot jump or drop into the next wave or turn',()=>{
+  for(const game of ['chair','tofu'] as const){
+    const live={current:startParty(newParty(game,42))},gesture={current:null as any};let actions=0;
+    const h=runInNewContext(partyClosure('  function down(', '\n  // Buttons keep native')+'\n({down,up})',{live,gesture,game,R:PT,partyInputStamp,acceptsPartyInput,action:()=>actions++});
+    const target={setPointerCapture(){},hasPointerCapture(){return true;},releasePointerCapture(){},focus(){}},e={button:0,isPrimary:true,pointerId:1,clientX:100,clientY:100,preventDefault(){},currentTarget:target};
+    h.down(e);h.down({...e,pointerId:2});assert.equal(gesture.current.id,1);live.current=game==='chair'?{...live.current,resolved:1} as ChairRun:{...live.current,turn:1} as TofuRun;h.up(e);assert.equal(actions,0);h.down(e);h.up(e);h.up(e);assert.equal(actions,1);
+    h.down(e);gesture.current=null;h.up(e);assert.equal(actions,1);
+  }
+});
+
+test('PT-action-light: actual stop/retry/fallback retains the same paused run and cancels controls',()=>{
+  const code=['stop','chooseLight','retryStage','failStage'].map(name=>partyClosure(`  function ${name}(`,'\n  function ')).join('\n');
+  for(const game of ['chair','tofu'] as const){
+    const live={current:partyTime(startParty(newParty(game,42)),700)},controls={current:holidayInput()},input={current:holidayInput()},gesture={current:{id:1}};let disposed=0;
+    const h=runInNewContext(code+'\n({chooseLight,retryStage,failStage})',{live,controls,input,gesture,pauseParty,frame:{current:2},last:{current:100},lastDraw:{current:100},attempt:{current:{cancel:()=>disposed++}},stage:{current:{}},mode:{current:'native'},cancelAnimationFrame(){},setReady(){},setError(){},setLight(){},setNotice(){},setRetry(){},draw(){},refresh(){},host:{current:{focus(){}}}});
+    for(const operation of [()=>h.failStage('lost'),()=>h.chooseLight(),()=>h.retryStage()]){controls.current.down(1,'key: ',partyInputStamp(live.current));operation();assert.equal(live.current.status,'paused');assert.equal(live.current.elapsed,700);assert.equal(advanceParty(live.current,1000),live.current);assert.equal(controls.current.click(1,partyInputStamp(live.current),'key: '),null);assert.equal(gesture.current,null);}assert.equal(disposed,3);
+  }
+});
+
+test('PT-action-light: the production RAF advances essential motion in light mode with reduced motion',()=>{
+  for(const game of ['chair','tofu'] as const){
+    const live={current:startParty(newParty(game,42))},loop={current:undefined as any},mode={current:'light'},last={current:null as number|null},lastDraw={current:null as number|null};let kicked=0,stopped=0;
+    runInNewContext(partyClosure('  loop.current=t=>{','\n  useEffect('),{loop,live,mode,last,lastDraw,lastUi:{current:0},frame:{current:0},motionRef:{current:false},R:PT,advanceParty,pauseRun(){throw Error('unexpected stall');},soundEffect(){},safeDraw:()=>true,refresh(){},kick:()=>kicked++,stop:()=>stopped++});
+    loop.current(100);const before=live.current;loop.current(200);assert.equal(live.current.elapsed,100);assert.equal(kicked,2);assert.equal(stopped,0);if(game==='tofu')assert.notDeepEqual(tofuView(before as TofuRun).active,tofuView(live.current as TofuRun).active);
+    live.current=pauseParty(live.current);loop.current(700);assert.equal(live.current.elapsed,100);assert.equal(kicked,2);
+  }
+});
+// PT-ACTION-LIGHT-PURE-END
+
 // PT-LIGHT-PURE-BEGIN: this block also runs with Node's built-in TS stripping,
 // against the actual pure modules, when the full suite's dependencies are absent.
 import {holidayCells,holidayInput,holidayResultSvg,holidayResultImage} from '../../apps/portal-web/src/games/party/light-holiday.js';
@@ -753,13 +845,13 @@ test('PT-light: timeout, cancellation and a newer owner isolate late imports and
 test('PT-light: only an open restart confirmation consumes Escape before the fullscreen owner',()=>{
   const source=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
   const start=source.indexOf('  escapeCapture.current='),end=source.indexOf('\n  useEffect(',start);assert.ok(start>=0&&end>start);
-  const input=holidayInput(),gesture={current:{id:1}},calls:string[]=[];
+  const input=holidayInput(),controls=holidayInput(),gesture={current:{id:1}},calls:string[]=[];
   const live=pauseParty(actParty(partyTime(startParty(newParty('holiday',42)) as HolidayRun,300),{kind:'pick',hole:holidayTargets(42,0).good,round:0}));
-  const context:any={escapeCapture:{current:undefined},input:{current:input},gesture,restart:false,live,keepRun:()=>{context.restart=false;calls.push('focus-restart');}};
+  const context:any={escapeCapture:{current:undefined},input:{current:input},controls:{current:controls},gesture,restart:false,live,keepRun:()=>{context.restart=false;calls.push('focus-restart');}};
   const escape=runInNewContext(source.slice(start,end)+'\nescapeCapture.current',context);
   const event=()=>({preventDefault:()=>calls.push('prevent'),stopPropagation:()=>calls.push('stop')});
-  input.down(0,'key: ',0);escape(event());assert.deepEqual(calls,[],'ordinary Escape must reach fullscreen');assert.equal(input.click(0,0,'key: '),null);assert.equal(gesture.current,null);
-  context.restart=true;input.down(0,'key:Enter',0);escape(event());assert.deepEqual(calls,['prevent','stop','focus-restart']);assert.equal(input.click(0,0,'key:Enter'),null);
+  controls.down(1,'key: ',0);input.down(0,'key: ',0);escape(event());assert.equal(controls.click(1,0,'key: '),null);assert.deepEqual(calls,[],'ordinary Escape must reach fullscreen');assert.equal(input.click(0,0,'key: '),null);assert.equal(gesture.current,null);
+  context.restart=true;controls.down(1,'key:Enter',0);input.down(0,'key:Enter',0);escape(event());assert.equal(controls.click(1,0,'key:Enter'),null);assert.deepEqual(calls,['prevent','stop','focus-restart']);assert.equal(input.click(0,0,'key:Enter'),null);
   calls.length=0;escape(event());assert.deepEqual(calls,[],'the next Escape must reach fullscreen');assert.equal(context.live,live);assert.equal(live.status,'paused');assert.equal(live.score,120);
 });
 
@@ -787,6 +879,7 @@ test('PT-light: actual controller handlers retain live progress, missing release
     if(path==='react')return hooks;if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
     if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
     if(path==='./stage')return {createPartyStage:()=>{created++;throw Error('WebGL unavailable');}};
+    if(path==='./light-party')return {partyInputStamp,acceptsPartyInput,partyResultImage};
     if(path==='./light-holiday')return {holidayCells,holidayInput,holidayResultImage};
     if(path==='./catalog')return {PARTY_GAMES,PARTY_RULES:PT};
     if(path==='./domain')return {actParty,advanceParty,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition};
@@ -823,7 +916,7 @@ test('UX-15c: a held holiday canvas gesture retains its original round across a 
   const live={current:partyTime(startParty(newParty('holiday',42)) as HolidayRun,4600)},gesture={current:null as null|{id:number;x:number;y:number;round:number}};
   assert.equal(holidayTargets(42,live.current.round).good,0);
   const actions:unknown[]=[],target={setPointerCapture(){},hasPointerCapture(){return true;},releasePointerCapture(){},focus(){}};
-  const h=runInNewContext(`${closures}\n({down,up})`,{live,gesture,game:'holiday',R:PT,stage:{current:{pick:()=>0}},action:(a:any)=>{actions.push(a);live.current=actParty(live.current,a) as HolidayRun;}});
+  const h=runInNewContext(`${closures}\n({down,up})`,{live,gesture,game:'holiday',R:PT,partyInputStamp,acceptsPartyInput,stage:{current:{pick:()=>0}},action:(a:any)=>{actions.push(a);live.current=actParty(live.current,a) as HolidayRun;}});
   const event={button:0,isPrimary:true,pointerId:1,clientX:100,clientY:100,preventDefault(){},currentTarget:target};
   h.down(event);assert.equal(gesture.current?.round,3);
   live.current=partyTime(live.current,4930);const nextRound=live.current;

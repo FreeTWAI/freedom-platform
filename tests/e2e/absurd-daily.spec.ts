@@ -8,7 +8,7 @@ import type {RunResult} from '../../apps/portal-web/src/games/result-card.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
 import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
-import {chairWave,holidayTargets} from '../../apps/portal-web/src/games/party/domain.js';
+import {chairWave,holidayTargets,actParty,advanceParty,newParty,startParty,tofuAxis,tofuPosition,type TofuRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {PARTY_GAMES,PARTY_RULES as PT,type PartyGameId} from '../../apps/portal-web/src/games/party/catalog.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 import {marketGrade,MARKET_SAVE_KEY,type MarketRun,type MarketId} from '../../apps/portal-web/src/games/cooking/market-domain.js';
@@ -496,6 +496,79 @@ async function openLightHoliday(page:Page){
   await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');
   await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));await page.getByRole('button',{name:'開始派對！',exact:true}).click();
 }
+
+// PT-action-light: no renderer, real controls, unchanged domain and real exports.
+async function openLightAction(page:Page,game:'chair'|'tofu'){
+  await blockPartyWebGL(page);await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});
+  await page.goto(`/play?game=${game}&seed=42`);await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');
+  await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');
+  await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));await page.getByRole('button',{name:'開始派對！',exact:true}).click();
+  await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
+}
+
+test('PT-action-light: chair without WebGL completes all real ticket waves under reduced motion and exports true totals',async({page})=>{
+  test.setTimeout(150000);await page.setViewportSize({width:320,height:568});await page.emulateMedia({reducedMotion:'reduce'});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openLightAction(page,'chair');
+  await expect(page.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
+  const controls=await page.locator('.pt-controls button').evaluateAll(bs=>bs.map(b=>({w:b.getBoundingClientRect().width,h:b.getBoundingClientRect().height,font:parseFloat(getComputedStyle(b).fontSize)})));for(const b of controls){expect(b.w).toBeGreaterThanOrEqual(44);expect(b.h).toBeGreaterThanOrEqual(44);expect(b.font).toBeGreaterThanOrEqual(14);}
+  let lane=0;for(let i=0;i<PT.chairWaves;i++){const wave=chairWave(42,i);while(lane!==wave.ticketLane){const direction=lane<wave.ticketLane?1:-1;if(i%2)await page.getByRole('button',{name:direction===1?'往右換路':'往左換路',exact:true}).press('Enter');else await page.locator('.pt-canvas').press(direction===1?'ArrowRight':'ArrowLeft');lane+=direction;await partyAdvance(page,await partyElapsed(page)+160);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x',String(lane));}await partyAdvance(page,wave.at+20);}
+  await partyAdvance(page,PT.chairMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','4280');
+  const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).press('Enter');const svg=readFileSync((await(await download).path())!,'utf8');expect(svg).toContain('4280 分');expect(svg).toContain('22 張假日票');expect(svg).toContain('沒有保存逐波路線');expect(await partyResult(page,'chair')).toBe(4280);expect(errors).toEqual([]);
+});
+
+test('PT-action-light: tofu uses the actual RAF clock, twelve timed drops, one landing each and true tower SVG/PNG',async({page})=>{
+  test.setTimeout(180000);await page.emulateMedia({reducedMotion:'reduce'});await openLightAction(page,'tofu');
+  // Start's game RAF is already queued. A read-only probe sees those same frame
+  // timestamps, not the 30fps SVG's previous render. No production state writes.
+  const probe=await page.evaluateHandle(()=>{const record={first:null as number|null,at:0,frame:0};const sample=(at:number)=>{record.first??=at;record.at=at;record.frame=requestAnimationFrame(sample);};record.frame=requestAnimationFrame(sample);return record;});
+  let model=startParty(newParty('tofu',42)) as TofuRun;const history=new Map<number,TofuRun>([[0,model]]);
+  const frame=async()=>{await page.clock.runFor(16);const elapsed=await probe.evaluate(r=>r.first===null?0:r.at-r.first);model=advanceParty(model,elapsed-model.elapsed) as TofuRun;expect(model.elapsed).toBe(elapsed);history.set(model.elapsed,model);};
+  const assertProjection=async()=>{
+    const view=await page.locator('[data-light-world=tofu]').evaluate(el=>{const moving=el.querySelector('[data-tofu-layer=moving]');return {elapsed:Number(el.getAttribute('data-view-elapsed')),axis:el.getAttribute('data-axis'),offset:Number(el.getAttribute('data-offset')),progress:Number(el.getAttribute('data-fall-progress')),active:moving?['x','z','width','depth'].map(k=>Number(moving.getAttribute(`data-${k}`))):null};});
+    const snapshot=history.get(view.elapsed);expect(snapshot).toBeDefined();const state=snapshot!,axis=state.fall?.axis??tofuAxis(state),active=state.fall?.from??tofuPosition(state),offset=active[axis]-state.layers.at(-1)![axis];
+    expect(view.axis).toBe(axis);expect(view.offset).toBeCloseTo(offset,8);expect(view.progress).toBeCloseTo(state.fall?Math.min(1,(state.elapsed-state.fall.at)/PT.tofuFallMs):0,8);expect(view.active).toEqual(state.status==='done'?null:[active.x,active.z,active.width,active.depth]);return view;
+  };
+  await frame();
+  for(let layer=0;layer<PT.tofuGoal;layer++){
+    let aligned=false;for(let i=0;i<400;i++){const axis=tofuAxis(model);if(Math.abs(tofuPosition(model)[axis]-model.layers.at(-1)![axis])<.06){aligned=true;break;}await frame();}expect(aligned).toBe(true);await assertProjection();
+    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer%2)await drop.press('Space');else await drop.click();
+    model=actParty(model,{kind:'drop'}) as TofuRun;history.set(model.elapsed,model);expect(model.fall?.perfect).toBe(true);expect(await partyElapsed(page)).toBe(model.elapsed);await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();
+    await page.locator('.pt-canvas').press('Space');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));
+    for(let i=0;i<16;i++)await frame();const middle=await assertProjection();expect(middle.progress).toBeGreaterThan(.4);expect(middle.progress).toBeLessThan(.7);await expect(page.locator('[data-tofu-layer]')).toHaveCount(layer+2);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));
+    while(model.fall)await frame();
+    // Let the bounded 30fps presentation publish the real landing. The model
+    // keeps advancing with the same frame timestamps, never a timeout/retry.
+    if(model.status==='playing'){await frame();await frame();}await assertProjection();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));await expect(page.locator('.pt-scoreboard')).toContainText(`${layer+1} / 12`);
+  }
+  await probe.evaluate(r=>cancelAnimationFrame(r.frame));await probe.dispose();expect(model.score).toBe(2925);await expect(page.locator('[data-tofu-layer]')).toHaveCount(13);
+  const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).click();const svg=readFileSync((await(await download).path())!,'utf8');expect(svg).toContain('2925 分');expect(svg).toContain('疊了 12 層');expect((svg.match(/<polygon /g)??[]).length).toBe(39);expect(await partyResult(page,'tofu')).toBe(2925);
+  const pngDownload=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();const png=await sharp((await(await pngDownload).path())!).metadata();expect([png.width,png.height]).toEqual([960,1200]);
+});
+
+for(const game of ['chair','tofu'] as const)test(`PT-action-light: ${game} retry, cancel and fullscreen Escape retain the run and cancel held controls`,async({page})=>{
+  await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new Error('Synthetic unavailable fullscreen'));});await openLightAction(page,game);await partyAdvance(page,400);
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
+  const control=page.getByRole('button',{name:game==='chair'?'跳一下！':'豆腐落下！',exact:true});await control.focus();await page.keyboard.down('Space');await page.keyboard.press('Escape');await page.keyboard.up('Space');await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);
+  if(game==='tofu')await expect(control).toBeEnabled();else await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-jump','0');
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();const at=await partyElapsed(page),score=await page.locator('.pt-root').getAttribute('data-party-score');await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();
+  await page.getByRole('button',{name:'重試 3D，保留這局',exact:true}).click();await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await page.locator('.pt-canvas').press('Space');await partyAdvance(page,at+500);
+  if(game==='tofu')await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-turn','1');else expect(Number(await page.locator('[data-light-world=chair]').getAttribute('data-jump'))).toBeGreaterThan(0);
+  await page.getByRole('button',{name:'回遊戲大廳',exact:true}).click();await page.clock.runFor(16000);await expect(page.locator('.pt-root')).toHaveCount(0);
+});
+
+test('PT-action-light: a tofu scene hold during a fall cannot drop the next moving block',async({page})=>{
+  await openLightAction(page,'tofu');await partyAdvance(page,400);await page.getByRole('button',{name:'豆腐落下！',exact:true}).click();
+  const host=page.locator('.pt-canvas'),box=(await host.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/3);await page.mouse.down();await partyAdvance(page,1000);await page.mouse.up();
+  await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-turn','1');await expect(page.getByRole('button',{name:'豆腐落下！',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'豆腐落下！',exact:true}).press('Enter');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();
+});
+
+for(const key of ['Space','Enter','pointer'])test(`PT-action-light: chair ${key} release across a wave cannot trigger a new jump`,async({page})=>{
+  await openLightAction(page,'chair');await partyAdvance(page,2000);const jump=page.getByRole('button',{name:'跳一下！',exact:true});
+  if(key==='pointer'){const b=(await jump.boundingBox())!;await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();}else{await jump.focus();await page.keyboard.down(key);}
+  await partyAdvance(page,2300);if(key==='pointer')await page.mouse.up();else await page.keyboard.up(key);await partyAdvance(page,2400);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-jump','0');
+  await jump.press('Enter');await partyAdvance(page,2600);expect(Number(await page.locator('[data-light-world=chair]').getAttribute('data-jump'))).toBeGreaterThan(0);
+});
 
 test('PT-light: without WebGL, the six real cells complete all waves and export this run as SVG and PNG',async({page})=>{
   test.setTimeout(150000);await page.setViewportSize({width:320,height:568});await page.emulateMedia({reducedMotion:'reduce'});
