@@ -48,6 +48,9 @@ export function useSupplierConsoleController({client,userId,scope,route,register
  const profile=slot<SupplyCatalogView>('profile').data;
  const owner=slot<z.infer<typeof ReservationSettingSchema>>('owner');
  const ownerAllowed=owner.state==='ready'&&owner.data!==null;
+ // Only these routes read owner-only reservation data. Confirming ownership
+ // must not restart unrelated product/media reads and disable a ready picker.
+ const routeOwnerAllowed=['partner','reservations','reservation'].includes(route.page)&&ownerAllowed;
  const can=(capability:string)=>!revoked&&refusalMark.current===null&&profile?.writable===true&&profile.capabilities.includes(capability)===true;
  function descriptor(key:string):{path:string;schema:z.ZodType;gate?:'write'|'owner'}|null {
   if(key.startsWith('report:')){const [,from,to]=key.split(':');return {path:'/supplier-console/report?'+new URLSearchParams({from,to}),schema:SupplierReportSchema,gate:'write'};}
@@ -106,9 +109,9 @@ export function useSupplierConsoleController({client,userId,scope,route,register
  useEffect(()=>{mounted.current=true;generation.current=client.sessionGeneration;refusalMark.current=null;setRevoked(false);commandAbort.current=new AbortController();void read('profile');return()=>{mounted.current=false;tickets.current.forEach(t=>t.abort.abort());commandAbort.current.abort();};},[client,root]);
  useEffect(()=>{if(profile?.setup_state==='ready')void read('owner');},[profile?.setup_state]);
  useEffect(()=>{if(profile?.setup_state!=='ready')return;
-  const keys=route.page==='overview'?['overview','products','changes']:route.page==='products'?['profile','products',...(photosEnabled?['media']:[])]:route.page==='product'?['product:'+route.id,'changes:'+route.id,...(photosEnabled?['media']:[])]:route.page==='partners'?['partners']:route.page==='partner'?['partner:'+route.id,'partners',...(ownerAllowed?['partner-reservations:'+route.id]:[])]:route.page==='terms'?['requests','offers','products']:route.page==='review'?['request:'+route.id]:route.page==='reservations'&&ownerAllowed?['partners','products']:route.page==='reservation'&&ownerAllowed?['reservation:'+route.id]:route.page==='materials'?['materials']:route.page==='material'?['materials','material:'+route.id]:route.page==='material-new'?['products']:route.page==='reports'?[reportKey]:route.page==='settings'?['profile']:route.page==='product-new'?['profile','products']:[];
+  const keys=route.page==='overview'?['overview','products','changes']:route.page==='products'?['profile','products',...(photosEnabled?['media']:[])]:route.page==='product'?['product:'+route.id,'changes:'+route.id,...(photosEnabled?['media']:[])]:route.page==='partners'?['partners']:route.page==='partner'?['partner:'+route.id,'partners',...(routeOwnerAllowed?['partner-reservations:'+route.id]:[])]:route.page==='terms'?['requests','offers','products']:route.page==='review'?['request:'+route.id]:route.page==='reservations'&&routeOwnerAllowed?['partners','products']:route.page==='reservation'&&routeOwnerAllowed?['reservation:'+route.id]:route.page==='materials'?['materials']:route.page==='material'?['materials','material:'+route.id]:route.page==='material-new'?['products']:route.page==='reports'?[reportKey]:route.page==='settings'?['profile']:route.page==='product-new'?['profile','products']:[];
   keys.forEach(key=>void read(key));
- },[route.page,route.id,reportKey,profile?.setup_state,profile?.capabilities.join(','),ownerAllowed,photosEnabled]);
+ },[route.page,route.id,reportKey,profile?.setup_state,profile?.capabilities.join(','),routeOwnerAllowed,photosEnabled]);
  useEffect(()=>{
   if(appliedFilter.current!==filterKey){
    appliedFilter.current=filterKey;setPaging({filterKey,cursors:[undefined]});tickets.current.get('reservations')?.abort.abort();

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest, isReleaseFailureCode, sameActor, readReleaseArtifact } from './admission.mjs';
+import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest, isReleaseFailureCode, sameActor, readReleaseArtifact, automaticReleaseEvent } from './admission.mjs';
 import { publicLeaseLoss } from './operator.mjs';
 
 const prefix = `/repos/${REPOSITORY}`, path = '.github/workflows/shared-release.yml';
@@ -37,9 +37,9 @@ async function requireFailedRelease(api, admission, installation, { id, format, 
   const workflow = await api(`${prefix}/actions/workflows/shared-release.yml`);
   check(positive(workflow.id) && workflow.path === path && workflow.state === 'active', code);
   const run = await api(`${prefix}/actions/runs/${id}`);
-  const automatic = run.event === 'workflow_run';
+  const automatic = ['workflow_run', 'schedule'].includes(run.event);
   const checkRun = value => check(value.id === id && positive(value.run_attempt) && value.run_attempt === run.run_attempt
-    && value.workflow_id === workflow.id && value.path === path && value.event === (automatic ? 'workflow_run' : 'workflow_dispatch')
+    && value.workflow_id === workflow.id && value.path === path && value.event === (automatic ? run.event : 'workflow_dispatch')
     && value.repository?.id === REPOSITORY_ID && value.head_repository?.id === REPOSITORY_ID
     && value.head_branch === 'main' && isSha(value.head_sha) && value.head_sha === run.head_sha
     && value.status === 'completed' && value.conclusion === 'failure' && actor(value.actor) && actor(value.triggering_actor),
@@ -67,7 +67,7 @@ async function requireFailedRelease(api, admission, installation, { id, format, 
     && receipt.releaseKind === 'independent' && receipt.providerOutcome === 'unknown_until_confirmed'
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID && receipt.controllerSha === run.head_sha
     && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
-    && (!automatic || positive(receipt.automatic?.triggerRunId) && positive(receipt.automatic?.triggerRunAttempt))
+    && (!automatic || automaticReleaseEvent(receipt.automatic) === run.event)
     && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree
     && /^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(receipt.operatorImage ?? '')
     && receipt.configSha256 === installation.configSha256 && isDigest(receipt.configSha256)

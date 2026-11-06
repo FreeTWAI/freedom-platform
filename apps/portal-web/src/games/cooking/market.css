@@ -4,3 +4,9 @@
 @media(max-width:360px){.fw-arcade-toy-console .mk-hud{grid-template-columns:repeat(2,minmax(0,1fr))}.fw-arcade-toy-console .mk-heading{flex-wrap:wrap}.fw-arcade-toy-console .mk-heading>div{order:-1;flex-basis:100%}.fw-arcade-toy-console .mk-heat>span:last-child{text-align:left}.fw-arcade-toy-console .mk-surface{aspect-ratio:1/1}}
 @media(prefers-reduced-motion:reduce){.fw-arcade-toy-console .mk-game *{scroll-behavior:auto;transition:none}}
 .fw-arcade-toy-console .mk-surface:has(.mk-cover){aspect-ratio:auto}.fw-arcade-toy-console .mk-cover{position:relative;inset:auto;min-height:400px;height:auto}.fw-arcade-toy-console .mk-hud{grid-template-columns:repeat(auto-fit,minmax(min(100%,5.5em),1fr))}.fw-arcade-toy-console .mk-hud strong{display:flex;align-items:baseline;gap:2px;flex-wrap:wrap}.fw-arcade-toy-console .mk-confirm::backdrop{background:#261c15b8}
+
+.fw-arcade-root.fw-arcade-toy-console .mk-coating{grid-column:1/-1;display:grid;gap:6px;min-width:0}
+.fw-arcade-root.fw-arcade-toy-console .mk-coating button{min-height:44px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.fw-arcade-root.fw-arcade-toy-console .mk-coating small{font-size:14px;line-height:1.6}
+.fw-arcade-root.fw-arcade-toy-console .mk-coating-progress{height:8px;border-radius:6px;background:#ddcfb2;overflow:hidden}
+.fw-arcade-root.fw-arcade-toy-console .mk-coating-progress span{display:block;height:100%;background:#b84a29}

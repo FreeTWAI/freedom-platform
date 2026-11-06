@@ -300,6 +300,92 @@ test('UX-2: secondary pointers cannot release or cancel a real cooking hold, and
   await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.move(p.x,p.y);await page.mouse.down();await page.clock.runFor(750);await page.locator('.ck-scene').dispatchEvent('pointercancel',{pointerId:99,isPrimary:false,button:0});await page.mouse.up();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');await page.getByRole('button',{name:'重新做',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),COOKING_RUN_KEY);await page.clock.runFor(6000);await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.elapsed,COOKING_RUN_KEY)).toBe(saved.run.elapsed);await page.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeVisible();
 });
 
+for(const width of [320,1440])for(const kind of ['knead','pour'] as const)test(`UX-2: native Tab cancels the keyboard ${kind} hold without scoring or losing the dish at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:900});await openKitchen(page,'margherita-pizza');
+  const game=page.locator('.ck-game'),recipe=recipeOf('margherita-pizza')!;
+  if(kind==='pour'){
+    const knead=recipe.steps[0];for(let i=0;i<knead.goal;i++){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(knead.holdMs);await page.keyboard.up('Space');}
+    await page.getByRole('button',{name:/^下一步：/}).click();
+  }
+  const step=recipe.steps[kind==='knead'?0:1],hold=page.getByRole('button',{name:kind==='knead'?'按住揉壓，適時放開':'按住倒入，適時放開',exact:true});
+  const checkpoint=()=>page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);
+  const initial=await checkpoint();
+  for(const input of [{origin:'game',key:'Space'},{origin:'button',key:'Space'},{origin:'button',key:'Enter'}]){
+    const owner=input.origin==='game'?game:hold;await owner.focus();await page.keyboard.down(input.key);await page.clock.runFor(300);
+    await page.keyboard.press('Tab');await expect(owner).not.toBeFocused();
+    await expect(input.origin==='game'?page.getByRole('button',{name:'← 遊戲大廳',exact:true}):page.locator('.ck-help > summary')).toBeFocused();
+    await expect(page.locator('.ck-game-reaction')).toHaveText('已取消這次按住操作，重新按住可繼續。');
+    const cancelled=await checkpoint();expect(cancelled.active.holdAt).toBeNull();expect(cancelled.active.count).toBe(0);expect(cancelled.reports).toEqual(initial.reports);expect(cancelled.status).toBe('playing');
+    await page.keyboard.up(input.key);await page.clock.runFor(4000);
+    // Re-focusing and receiving a delayed keyup must not settle the old hold.
+    await owner.focus();await page.keyboard.up(input.key);
+    const after=await checkpoint();expect(after.id).toBe(initial.id);expect(after.active.amount).toBe(cancelled.active.amount);expect(after.active.count).toBe(0);expect(after.reports).toEqual(initial.reports);expect(after.status).toBe('playing');
+    expect(await page.locator('.ck-help').evaluate(el=>(el as HTMLDetailsElement).open)).toBe(false);
+    await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+  }
+  const before=await checkpoint();await hold.focus();await page.keyboard.down('Space');
+  await page.clock.runFor(kind==='knead'?step.holdMs:(step.target-before.active.amount)*step.durationMs);await page.keyboard.up('Space');
+  const completed=await checkpoint();expect(completed.id).toBe(initial.id);expect(completed.active.holdAt).toBeNull();
+  if(kind==='knead'){expect(completed.active.count).toBe(1);await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);}
+  else{expect(completed.status).toBe('step-result');expect(completed.reports).toHaveLength(initial.reports.length+1);expect(completed.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);await expect(page.getByRole('button',{name:/^下一步：/})).toBeVisible();}
+});
+for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const phase of ['playing','step-result'] as const)for(const presentation of ['normal','viewport'] as const){
+  test(`UX-2 guided restart is modal and cancellable at ${viewport.width}px from ${phase} in ${presentation}`,async({page})=>{
+    await page.setViewportSize(viewport);await page.clock.install();
+    if(presentation==='viewport')await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=async()=>{throw new DOMException('denied','NotAllowedError');};});
+    await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());
+    await page.goto('/play');const f=kitchenCheckpoint('slice');
+    await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
+    await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);
+    await expect(page.locator('.ck-visual-light')).toBeVisible();
+    await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+    const fullscreen=page.locator('.fullscreen-game');
+    if(presentation==='viewport'){await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(fullscreen).toHaveClass(/fullscreen-game--viewport/);expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();}
+    await page.getByRole('button',{name:'繼續料理',exact:true}).click();
+    for(let i=0;i<(phase==='playing'?1:currentStep(f.run).goal);i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();}
+    const game=page.locator('.ck-game'),restart=page.getByRole('button',{name:'重新做',exact:true}),dialog=page.getByRole('dialog',{name:'重新做這盤料理',exact:true});
+    await expect(game).toHaveAttribute('data-cooking-state',phase);
+    await restart.focus();await page.keyboard.press('Enter');await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate(el=>el.matches(':modal'))).toBe(true);
+    // Match the existing large-text fixture through CSSOM without injecting a CSP-blocked stylesheet.
+    if(viewport.width===320)await dialog.evaluate(el=>{for(const node of el.querySelectorAll<HTMLElement>('p,button')){const line=parseFloat(getComputedStyle(node).lineHeight);node.style.fontSize=node.tagName==='BUTTON'?'30px':'28px';if(Number.isFinite(line))node.style.lineHeight=`${line*2}px`;}});
+    if(viewport.width===320){await expect(dialog.locator('p')).toHaveCSS('font-size','28px');for(const button of await dialog.getByRole('button').all())await expect(button).toHaveCSS('font-size','30px');}
+    const keep=dialog.getByRole('button',{name:'繼續這一盤',exact:true});await expect(keep).toBeFocused();
+    const pausedPhase=phase==='playing'?'paused':'step-result',background=page.getByRole('button',{name:phase==='playing'?'繼續料理':/^下一步：/,exact:phase==='playing',includeHidden:true});
+    await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);
+    // Native inertness prevents even programmatic focus from escaping to a live background control.
+    await background.evaluate(el=>el.focus());await expect(keep).toBeFocused();
+    for(let i=0;i<5;i++){await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+    const confirm=dialog.getByRole('button',{name:'確定重新做',exact:true});await expect(confirm).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(keep).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(confirm).toBeFocused();
+    const saved=await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY),book=await page.evaluate(key=>localStorage.getItem(key),COOKBOOK_KEY);
+    await page.clock.runFor(6000);expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+    const bounds=(await dialog.boundingBox())!;expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.y).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(viewport.width);expect(bounds.y+bounds.height).toBeLessThanOrEqual(viewport.height);
+    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);
+    expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+    if(presentation==='viewport'){
+      await expect(fullscreen).toHaveClass(/fullscreen-game--viewport/);
+      // Neither a native non-modal dialog nor ARIA dialog markup owns fullscreen Escape.
+      await fullscreen.evaluate(el=>{const nonmodal=document.createElement('dialog');nonmodal.dataset.restartControl='nonmodal';nonmodal.textContent='非模態控制';el.append(nonmodal);nonmodal.show();const role=document.createElement('div');role.dataset.restartControl='role';role.setAttribute('role','dialog');role.setAttribute('aria-label','角色標記控制');el.append(role);});
+      const nonmodal=fullscreen.locator('dialog[data-restart-control]');await expect(nonmodal).toHaveAttribute('open','');expect(await nonmodal.evaluate(el=>el.matches(':modal'))).toBe(false);await expect(fullscreen.locator('[data-restart-control=role]')).toHaveAttribute('role','dialog');
+      await restart.focus();await page.keyboard.press('Escape');await expect(fullscreen).not.toHaveClass(/fullscreen-game--viewport/);await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+      await fullscreen.evaluate(el=>{for(const node of el.querySelectorAll('[data-restart-control]'))node.remove();});
+    }
+    await page.keyboard.press('Enter');await expect(keep).toBeFocused();await keep.click();await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();
+    expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY)).toEqual(JSON.parse(saved!).run);
+    await page.reload();await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);
+    const restored=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);expect(restored).toEqual(JSON.parse(saved!).run);
+    await restart.click();await expect(dialog).toBeVisible();await dialog.getByRole('button',{name:'確定重新做',exact:true}).click();
+    await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();await expect(game).toHaveAttribute('data-cooking-state','ready');
+    expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBeNull();expect(await page.evaluate(key=>localStorage.getItem(key),COOKBOOK_KEY)).toBe(book);
+    await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+    // Ready cancellation must not start cooking; a subsequent explicit start remains usable.
+    await restart.click();await expect(keep).toBeFocused();await page.keyboard.press('Escape');await expect(game).toHaveAttribute('data-cooking-state','ready');
+    await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${currentStep(f.run).goal}`);
+    await page.getByRole('button',{name:'暫停',exact:true}).click();const fresh=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);expect(fresh.id).not.toBe(restored.id);expect(fresh.reports).toHaveLength(0);expect(fresh.active.count).toBe(1);
+    await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(game).toHaveCount(0);await expect(page.locator('dialog:modal')).toHaveCount(0);
+  });
+}
+
 test('UX-1/5: a completed cooking run can replay the same seed or move to the next real recipe',async({page})=>{
   test.setTimeout(120000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
 });
@@ -395,6 +481,82 @@ test.describe('PT-6 touchscreen input',()=>{
   });
 });
 
+async function blockPartyWebGL(page:Page){
+  await page.addInitScript(()=>{
+    const get=HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext=function(this:HTMLCanvasElement,kind:string,...args:any[]){
+      if(kind==='webgl'||kind==='webgl2'||kind==='experimental-webgl')return null;
+      return Reflect.apply(get,this,[kind,...args]);
+    } as typeof get;
+  });
+}
+async function openLightHoliday(page:Page){
+  await blockPartyWebGL(page);await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});
+  await page.goto('/play?game=holiday&seed=42');await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');
+  await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');
+  await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));await page.getByRole('button',{name:'開始派對！',exact:true}).click();
+}
+
+test('PT-light: without WebGL, the six real cells complete all waves and export this run as SVG and PNG',async({page})=>{
+  test.setTimeout(150000);await page.setViewportSize({width:320,height:568});await page.emulateMedia({reducedMotion:'reduce'});
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openLightHoliday(page);
+  await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);await expect(page.locator('.pt-light-grid button')).toHaveCount(6);
+  await expect(page.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
+  const geometry=await page.locator('.pt-light-grid button').evaluateAll(buttons=>buttons.map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height,font:parseFloat(getComputedStyle(b).fontSize)})));
+  for(const b of geometry){expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44);expect(b.font).toBeGreaterThanOrEqual(14);}
+  for(let round=0;round<20;round++){
+    await partyAdvance(page,round*PT.holidayRoundMs+250);const good=page.getByRole('button',{name:/第 [1-6] 格：休假/});
+    if(round%3===0)await good.click();else if(round%3===1)await good.press('Space');else await good.press('Enter');
+    await expect(good).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(round<10?(round+1)*100+20*(round+1)*(round+2)/2:2100+(round-9)*300));
+  }
+  await partyAdvance(page,PT.holidayMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','5100');
+  const svgDownload=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).press('Enter');
+  const svg=readFileSync((await (await svgDownload).path())!,'utf8');expect(svg).toContain('5100 分');expect(svg).toContain('搶救 20 個假日');expect(svg).toContain('輕量成果卡');expect(svg).toContain('同題 #42');
+  expect(await partyResult(page,'holiday')).toBe(5100);
+  const pngDownload=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();const png=await sharp((await (await pngDownload).path())!).metadata();expect([png.width,png.height]).toEqual([960,1200]);expect(errors).toEqual([]);
+});
+
+test('PT-light: context loss pauses the same run, fallback is explicit, retry preserves progress, and cancel restores focus',async({page})=>{
+  await openParty(page,'holiday');await partyAdvance(page,300);await page.getByRole('button',{name:/第 [1-6] 格：休假/}).click();
+  await page.locator('.pt-canvas canvas').evaluate(c=>(c as HTMLCanvasElement).getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext());
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();
+  const at=await partyElapsed(page);await page.clock.runFor(4000);expect(await partyElapsed(page)).toBe(at);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await partyAdvance(page,at+200);
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  const pausedAt=await partyElapsed(page);await page.getByRole('button',{name:'重試 3D，保留這局',exact:true}).click();await expect(page.locator('[data-party-stage=ready]')).toBeVisible();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','3d');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');expect(await partyElapsed(page)).toBe(pausedAt);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');
+  await page.getByRole('button',{name:'回遊戲大廳',exact:true}).click();await expect(page.locator('.pt-root')).toHaveCount(0);await page.clock.runFor(16000);await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
+});
+
+for(const light of [false,true])test(`PT-light: ${light?'light':'native'} cells reject held pointer/Space/Enter across waves and retain assistive clicks`,async({page})=>{
+  if(light)await openLightHoliday(page);else await openParty(page,'holiday');
+  for(const [index,key]of ['Space','Enter','pointer'].entries()){
+    const round=index*3;await partyAdvance(page,round*PT.holidayRoundMs+300);
+    const good=page.getByRole('button',{name:/第 [1-6] 格：休假/}),hole=Number((await good.getAttribute('aria-label'))!.match(/第 (\d)/)![1]);
+    const button=page.locator('.pt-hole-controls button').nth(hole-1),score=await page.locator('.pt-root').getAttribute('data-party-score');
+    if(key==='pointer'){const box=(await button.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();}else{await button.focus();await page.keyboard.down(key);}
+    await partyAdvance(page,(round+1)*PT.holidayRoundMs+250);if(key==='pointer')await page.mouse.up();else await page.keyboard.up(key);
+    await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);
+    const fresh=page.getByRole('button',{name:/第 [1-6] 格：休假/});if(key==='pointer')await fresh.click();else await fresh.press(key);await expect(page.locator('.pt-root')).not.toHaveAttribute('data-party-score',score!);
+    await partyAdvance(page,(round+2)*PT.holidayRoundMs+250);const beforeAt=await page.locator('.pt-root').getAttribute('data-party-score');await page.getByRole('button',{name:/第 [1-6] 格：休假/}).evaluate(b=>(b as HTMLButtonElement).click());await expect(page.locator('.pt-root')).not.toHaveAttribute('data-party-score',beforeAt!);
+  }
+});
+
+test('PT-light: fullscreen capture cannot turn an Escape-cancelled hold into a hit, and restart cancellation returns focus',async({page})=>{
+  await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new Error('Synthetic unavailable fullscreen'));});
+  await openLightHoliday(page);await partyAdvance(page,300);
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
+  const good=page.getByRole('button',{name:/第 [1-6] 格：休假/});await good.focus();await page.keyboard.down('Space');await page.keyboard.press('Escape');await page.keyboard.up('Space');
+  await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');
+  await good.press('Enter');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');
+  // The inner confirmation owns the first Escape; the next one exits fullscreen.
+  await expect(page.getByRole('group',{name:'確認重新開始'})).toHaveCount(0);await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await expect(page.locator('.fullscreen-game')).toHaveClass(/fullscreen-game--viewport/);
+  const pausedAt=await partyElapsed(page);await page.clock.runFor(500);expect(await partyElapsed(page)).toBe(pausedAt);await page.keyboard.press('Escape');
+  await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.getByRole('group',{name:'確認重新開始'})).toHaveCount(0);await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');expect(await partyElapsed(page)).toBe(pausedAt);
+});
+
 // Fixed minimal cosmetic-filter excerpt, not a live network dependency.
 // EasyList https://easylist.to/easylist/easylist.txt, version 202611021446.
 // Download SHA256 e7d918a3a427f4d6ce3141c298f5c41e5d014b5c3dd2192845b0d448f68c729a.
@@ -437,6 +599,32 @@ for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,a
     expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
   }
   expect(writes).toEqual([]);
+});
+
+for(const width of [320,390,1440])test(`AD-brand public lobby preserves the latest logo and native home navigation at ${width}px`,async({page},testInfo)=>{
+  await page.setViewportSize({width,height:900});
+  await page.goto('/play');
+  const logo=page.getByRole('img',{name:'自由工坊',exact:true});
+  const header=page.locator('header').filter({has:logo}),brand=logo.locator('..');
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
+  await expect(logo).toHaveJSProperty('naturalWidth',396);await expect(logo).toHaveJSProperty('naturalHeight',132);
+  await expect(logo).toHaveCSS('object-fit','contain');await expect(logo).toHaveCSS('width','132px');await expect(logo).toHaveCSS('height','44px');
+  await expect(header).toHaveCSS('flex-wrap','wrap');
+  await expect(brand).toHaveAttribute('href','/');
+  const home=header.getByRole('link',{name:'回自由工坊 ↗',exact:true});await expect(home).toBeVisible();
+  for(const link of [brand,home]){
+    const box=await link.boundingBox();expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x+box!.width).toBeLessThanOrEqual(width);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await testInfo.attach(`lobby-brand-${width}`,{body:await header.screenshot(),contentType:'image/png'});
+  await brand.focus();await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(url=>url.pathname==='/');
+  await page.goBack();await expect(page).toHaveURL(url=>url.pathname==='/play');
+  await expect(logo).toHaveJSProperty('naturalWidth',396);await expect(logo).toHaveCSS('width','132px');
+  await home.click();await expect(page).toHaveURL(url=>url.pathname==='/');
 });
 
 async function openGame(page:Page,game:'photo'|'stamp'|'cash'){
@@ -500,6 +688,25 @@ async function socialEntries(page:Page,game:string){
   expect(requests).toEqual([]);page.off('request',record);
 }
 
+test('AD-3 photo action status distinguishes repeated capture failures and saved film without frame announcements',async({page})=>{
+  await openGame(page,'photo');const notice=page.locator('.fw-arcade-notice'),shutter=page.getByRole('button',{name:'拍照快門',exact:true});
+  await expect(notice).toHaveAttribute('role','status');await expect(notice).toHaveAttribute('aria-atomic','true');
+  const original=await page.evaluateHandle(()=>HTMLCanvasElement.prototype.toDataURL);
+  await page.evaluate(()=>{HTMLCanvasElement.prototype.toDataURL=function(){throw Error('Synthetic repeated capture failure');};});
+  try{
+    for(let attempt=1;attempt<=2;attempt++){
+      await shutter.click();await expect(notice).toHaveText(`本局第 ${attempt} 次拍照未保存。Synthetic repeated capture failure 第 1 / 3 位客人，已保存 0 / 2 張，還可拍 2 張。`);
+      await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(shutter).toBeEnabled();await expect(shutter).toHaveText('◎快門 · 2 張');
+    }
+  }finally{await page.evaluate(fn=>{HTMLCanvasElement.prototype.toDataURL=fn;},original);await original.dispose();}
+  await shutter.click();await expect(notice).toContainText('第 1 / 3 位客人，已保存 1 / 2 張，還可拍 1 張。');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);
+  const changes=await notice.evaluateHandle(el=>{const record={count:0};const observer=new MutationObserver(records=>{record.count+=records.length;});observer.observe(el,{childList:true,subtree:true,characterData:true});return {record,observer};});
+  await page.clock.runFor(500);expect(await changes.evaluate(({record})=>record.count)).toBe(0);
+  await shutter.click();await expect(notice).toContainText('第 1 / 3 位客人，已保存 2 / 2 張，還可拍 0 張。');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(2);await expect(shutter).toBeDisabled();
+  expect(await changes.evaluate(({record})=>record.count)).toBeGreaterThan(0);await changes.evaluate(({observer})=>observer.disconnect());await changes.dispose();
+  await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();await shutter.click();await expect(notice).toContainText('第 2 / 3 位客人，已保存 1 / 2 張，還可拍 1 張。');
+});
+
 test('AD-3 public photo studio captures real frames, enforces film, and exports a complete poster',async({page})=>{
   test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openGame(page,'photo');await enterNativeFullscreen(page);
@@ -525,6 +732,9 @@ test('AD-3 public photo studio captures real frames, enforces film, and exports 
   const viewportResult=page.getByRole('dialog',{name:'遊戲全螢幕'});
   await expect(viewportResult.getByRole('button',{name:'系統分享圖片／連結'})).toBeVisible();
   await expect(viewportResult.getByRole('button',{name:'複製同題挑戰連結'})).toBeVisible();
+  await viewportResult.getByRole('button',{name:'分享成果',exact:true}).click();
+  await expect(viewportResult.getByRole('region',{name:'分享這局成果',exact:true})).toBeFocused();
+  await expect(viewportResult.getByRole('button',{name:'發到自由工坊',exact:true})).toBeInViewport();
   await viewportResult.getByRole('button',{name:'退出全螢幕'}).click();
   await expect(page.locator('.fw-arcade-photo-choices [aria-pressed="true"]')).toHaveCount(1);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
@@ -547,7 +757,7 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
     for(let k=0;k<Math.abs(x);k++)await page.keyboard.press(x>0?'ArrowRight':'ArrowLeft');
     for(let k=0;k<Math.abs(y);k++)await page.keyboard.press(y>0?'ArrowDown':'ArrowUp');
     point={x:point.x+x*.06,y:point.y+y*.06};await page.clock.fastForward(230);await page.keyboard.press('Space');
-    if(i<11)await expect(page.locator('.fw-arcade-counter')).toHaveText(`${i+1}/12`);
+    if(i<11){await expect(page.locator('.fw-arcade-counter')).toHaveText(`${i+1}/12`);await expect(page.locator('.fw-arcade-notice')).toHaveText(`啪！已閱，但看不懂。 已完成 ${i+1} / 12 份 · 多蓋 0 次。`);}
   }
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('完成 12 份文件');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
@@ -566,6 +776,29 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
   expect(await page.evaluate(() => !!document.fullscreenElement?.contains(document.activeElement))).toBe(true);
 });
 
+test('AD-4 repeated practice misses stay uncounted and ignored rapid inputs leave status unchanged',async({page})=>{
+  await openGame(page,'stamp');const board=page.locator('.fw-arcade-board'),notice=page.locator('.fw-arcade-notice');
+  for(let i=0;i<6;i++)await board.press('ArrowRight');
+  for(let attempt=1;attempt<=2;attempt++){
+    await board.press('Space');await expect(notice).toHaveText(`章歪了。墨跡留下，這張再蓋一次。 練習失手 ${attempt} 次，不計入正式文件。`);
+    await board.press('Space');await expect(notice).toHaveText(`章歪了。墨跡留下，這張再蓋一次。 練習失手 ${attempt} 次，不計入正式文件。`);await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');await page.clock.fastForward(230);
+  }
+  for(let i=0;i<6;i++)await board.press('ArrowLeft');await board.press('Space');
+  await expect(notice).toHaveText('練習完成。十二張正式公文，開始！');await expect(page.locator('.fw-arcade-meta')).toContainText('多蓋 0 次');await expect(page.locator('.fw-arcade-counter')).toHaveText('0/12');
+});
+
+test('AD-5 repeated wrong sorts report real mistakes without consuming cards or announcing clock ticks',async({page})=>{
+  await openGame(page,'cash');const board=page.locator('.fw-arcade-board'),notice=page.locator('.fw-arcade-notice'),deck=cashDeck(42),wrong=deck[0].valid?'ArrowLeft':'ArrowRight';
+  for(let attempt=1;attempt<=2;attempt++){
+    await board.press(wrong);await expect(notice).toHaveText(`這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 ${attempt} 次。`);
+    await board.press(wrong);await expect(notice).toHaveText(`這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 ${attempt} 次。`);await expect(page.locator('.fw-arcade-counter')).toHaveText('0 / 100 萬');await page.clock.fastForward(175);
+  }
+  for(let i=0;i<2;i++){
+    await board.press(deck[i].valid?'ArrowRight':'ArrowLeft');await expect(notice).toContainText(`已分類 ${i+1} / 30 張 · 分錯 2 次。`);
+    const accepted=await notice.textContent();await page.clock.runFor(200);await expect(notice).toHaveText(accepted!);
+  }
+});
+
 // Hosted #1044 exhausted 120s after ~108s in the first 29 input/clock pairs.
 // Budget both full cash rounds for recovery/share assertions before teardown;
 // retain desktop rendering, real inputs, and all individual assertion deadlines.
@@ -573,7 +806,7 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   test.setTimeout(180_000);await installCosmeticFilters(page);await openGame(page,'cash');await enterNativeFullscreen(page);const posts:string[]=[];
   page.on('request',r=>{if(r.method()==='POST')posts.push(r.url());});
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
-  await expect(page.getByText('這張分錯了，退回來重新看看。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
+  await expect(page.getByText('這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 1 次。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
   for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
@@ -615,10 +848,10 @@ test('AD-5 final cash capture failure retries the completed scene without replay
     await page.clock.fastForward(175);
   }
   await page.evaluate(()=>{
-    const original=HTMLCanvasElement.prototype.toDataURL;
+    const original=HTMLCanvasElement.prototype.toDataURL;let failures=0;
     HTMLCanvasElement.prototype.toDataURL=function(...args){
       if(this.width===960&&this.height===720&&args[0]==='image/jpeg'){
-        HTMLCanvasElement.prototype.toDataURL=original;
+        if(++failures===2)HTMLCanvasElement.prototype.toDataURL=original;
         throw Error('Synthetic final capture failure');
       }
       return original.apply(this,args);
@@ -628,6 +861,10 @@ test('AD-5 final cash capture failure retries the completed scene without replay
   await expect(page.locator('.fw-arcade-notice')).toContainText('完成次數不會重算');
   await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');
   await expect(page.locator('.fw-arcade-result-heading')).toHaveCount(0);
+  await expect(page.locator('.fw-arcade-notice')).toContainText('第 1 次產生成果圖片失敗。');
+  await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
+  await expect(page.locator('.fw-arcade-notice')).toContainText('第 2 次產生成果圖片失敗。');
+  await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');await expect(page.locator('.fw-arcade-result-heading')).toHaveCount(0);
   await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
   await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
   const image=page.locator('.fw-arcade-result-photo > img');
@@ -821,6 +1058,33 @@ function kitchenCheckpoint(kind:Technique|'result'){
   if(kind!=='result')act({kind:'pause'});return {recipe,run};
 }
 
+for(const width of [320,1440])for(const kind of ['slice','knead'] as const)test(`UX-2: recipe help owns repeated native keys without cooking at ${width}px (${kind})`,async({page})=>{
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.setViewportSize({width,height:900});await page.clock.install();
+  // The supported illustration fallback uses the same controls without a GPU dependency.
+  await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());
+  await page.goto(`/play?game=kitchen&practice=1&recipe=${kind==='slice'?'egg-fried-rice':'margherita-pizza'}&seed=42`);
+  await expect(page.locator('.ck-visual-light')).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  const game=page.locator('.ck-game'),help=page.locator('.ck-help'),summary=help.locator('summary'),meter=page.locator('.ck-meter-copy');
+  const tool=page.getByRole('button',{name:kind==='slice'?'沿線切一刀':'按住揉壓，適時放開',exact:true});
+  await tool.focus();await page.keyboard.press('Tab');await expect(summary).toBeFocused();
+  await page.keyboard.down('Space');await page.keyboard.down('Space');await page.clock.runFor(750);await page.keyboard.up('Space');
+  await expect(help).toHaveAttribute('open','');await expect(summary).toBeFocused();
+  let opened=true;for(const key of ['Space','Enter','Space','Enter']){
+    await page.keyboard.press(key);opened=!opened;expect(await help.evaluate(el=>(el as HTMLDetailsElement).open)).toBe(opened);
+    await expect(summary).toBeFocused();await expect(meter).toHaveText(kind==='slice'?'0 / 6':'0 / 4');
+  }
+  await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+  await game.focus();await page.keyboard.down('Space');if(kind==='knead')await page.clock.runFor(750);await page.keyboard.up('Space');
+  await expect(meter).toHaveText(kind==='slice'?'1 / 6':'1 / 4');await game.press('Escape');
+  const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);
+  expect(saved.status).toBe('paused');expect(saved.active.count).toBe(1);expect(saved.active.holdAt).toBeNull();expect(saved.reports).toEqual([]);
+  await page.reload();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeEnabled();await expect(meter).toHaveText(kind==='slice'?'1 / 6':'1 / 4');
+  await summary.focus();await page.keyboard.press('Space');await expect(help).toHaveAttribute('open','');await expect(game).toHaveAttribute('data-cooking-state','paused');
+  await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(meter).toHaveText(kind==='slice'?'1 / 6':'1 / 4');expect(errors).toEqual([]);
+});
+
 test('UX-7: the real pan, boiling pot and oven accept direct scene taps with the same persisted rules',async({page},testInfo)=>{
   test.setTimeout(120000);await page.setViewportSize({width:390,height:844});await page.clock.install();await page.goto('/play');
   for(const kind of ['pan','boil','bake'] as const){await page.goto('/play');const f=kitchenCheckpoint(kind);await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'繼續料理',exact:true}).click();await page.getByRole('button',{name:'中火',exact:true}).click();const advance=()=>page.clock.runFor(currentStep(f.run).durationMs*(kind==='bake'?.8:.55));if(kind==='pan')await withBoundedCpuProfile(page,testInfo,advance);else await advance();await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.click(p.x,p.y);await page.locator('.ck-game').press('Escape');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);if(kind==='pan')expect(saved.active.flipped).toBe(true);if(kind==='boil'){expect(saved.active.count).toBe(1);expect(saved.active.foam).toBe(0);}if(kind==='bake'){expect(saved.reports).toHaveLength(f.run.step+1);expect(saved.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);}}
@@ -967,6 +1231,68 @@ async function expectNativeMarketReady(page:Page,name:'開火，開始做！'|'�
 async function marketOpen(page:Page,id:MarketId){await page.clock.install();await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);await expectNativeMarketReady(page);await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await page.clock.runFor(20);}
 async function marketButton(page:Page,name:string){await marketTime(page,400);await page.getByRole('button',{name,exact:true}).click();}
 async function marketAdd(page:Page,name:string){await marketTime(page,400);await page.locator('.mk-ingredients').getByRole('button',{name:new RegExp(`^${name} `)}).click();}
+// These gesture-ownership tests sample real RAF callbacks at the hold boundaries;
+// do not spend the whole test rendering every software-WebGL frame in virtual time.
+for(const [first,second] of [['Space','Enter'],['Enter','Space']])test(`UX-9: coating hold keeps ${first} ownership after ${second} releases`,async({page})=>{
+ await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true}),progress=page.getByRole('progressbar',{name:'這次裹糊進度'});
+ await hold.focus();await page.keyboard.down(first);await page.clock.fastForward(450);await page.keyboard.press(second);expect(Number(await progress.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+ await page.clock.fastForward(500);expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.portions[0].coated,MARKET_SAVE_KEY)).toBe(true);await page.keyboard.up(first);await expect(hold).toBeDisabled();
+});
+
+test('UX-9: optional corn dog coating hold cancels early, completes once and keeps keyboard fallback reachable on phone',async({page})=>{
+ // This checks continuous gesture ownership, not frame cadence. Advance the
+ // installed clock once per boundary while retaining the actual RAF controller.
+ await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');
+ const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true}),progress=page.getByRole('progressbar',{name:'這次裹糊進度'});
+ const coated=()=>page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.portions.map((p:{coated:boolean})=>p.coated),MARKET_SAVE_KEY);
+ await hold.scrollIntoViewIfNeeded();const box=(await hold.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.width).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(390);
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.clock.fastForward(450);expect(Number(await progress.getAttribute('aria-valuenow'))).toBeGreaterThan(0);await page.mouse.up();await page.clock.fastForward(1000);expect(await coated()).toEqual([false]);await expect(progress).toHaveAttribute('aria-valuenow','0');
+ await page.evaluate(()=>Object.defineProperty(document.documentElement,'requestFullscreen',{configurable:true,value:undefined}));await page.evaluate(()=>Object.defineProperty(Element.prototype,'requestFullscreen',{configurable:true,value:undefined}));await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toBeVisible();await hold.focus();await page.keyboard.down('Space');await page.clock.fastForward(450);await page.keyboard.press('Escape');await page.clock.fastForward(1000);expect(await coated()).toEqual([false]);await expect(progress).toHaveAttribute('aria-valuenow','0');await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toHaveCount(0);await page.keyboard.up('Space');await hold.focus();
+ await page.keyboard.down('Enter');await page.clock.fastForward(1000);await page.keyboard.up('Enter');expect(await coated()).toEqual([true]);await expect(hold).toBeDisabled();await page.clock.fastForward(1000);expect(await coated()).toEqual([true]);
+ await marketAdd(page,'熱狗');const fallback=page.getByRole('button',{name:'裹麵糊',exact:true});await marketTime(page,400);await fallback.focus();await page.keyboard.press('Enter');expect(await coated()).toEqual([true,true]);
+});
+
+test('UX-9: corn dog coating cancels native animation frames on touch release and Escape',async({page},testInfo)=>{
+ // Keep the browser clock native: clock.install wraps cancelAnimationFrame and
+ // would hide an invalid receiver when the real Window method is passed around.
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.stack??error.message));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/play?game=kitchen&recipe=corn-dog&seed=42');
+ await expectNativeMarketReady(page);
+ // This regression exercises the real Window API, not continuous WebGL cost.
+ // Keep the production game and native RAF, then enter its supported context-loss
+ // mode so software rendering cannot delay the input; native gameplay is covered below.
+ const native=await page.locator('.mk-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);
+ await native.evaluate(gl=>gl.getExtension('WEBGL_lose_context')!.loseContext());
+ await expect(page.locator('.mk-fallback')).toBeVisible();
+ await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);
+ expect(await native.evaluate(gl=>gl.isContextLost())).toBe(true);await native.dispose();
+ await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();
+ await page.locator('.mk-ingredients').getByRole('button',{name:/^熱狗 /}).click();
+ const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true});
+ const progress=page.getByRole('progressbar',{name:'這次裹糊進度'});
+ const coated=()=>page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.portions.map((p:{coated:boolean})=>p.coated),MARKET_SAVE_KEY);
+ await hold.scrollIntoViewIfNeeded();
+ const box=(await hold.boundingBox())!,cdp=await page.context().newCDPSession(page);
+ await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+ const startTouch=()=>cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,id:1}]});
+ // Queue the short press in protocol order without turning the start ACK into
+ // hold duration. Both events still travel through Chromium's native input path.
+ await Promise.all([startTouch(),cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})]);
+ expect(errors).toEqual([]);
+ await expect(progress).toHaveAttribute('aria-valuenow','0');
+ expect(await coated()).toEqual([false]);
+ await hold.focus();await page.keyboard.down('Space');
+ await page.keyboard.press('Escape');await page.keyboard.up('Space');
+ await expect(progress).toHaveAttribute('aria-valuenow','0');
+ expect(await coated()).toEqual([false]);
+ await startTouch();await expect.poll(coated).toEqual([true]);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+ await expect(hold).toBeDisabled();
+ await testInfo.attach('native-browser-errors',{body:JSON.stringify(errors,null,2),contentType:'application/json'});
+ expect(errors).toEqual([]);
+});
+
 for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[])test(`UX-9: ${id} cooks through actual controls to its own inspectable, downloadable and shareable result`,async({page},testInfo)=>{
  test.setTimeout(120000);const errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await marketOpen(page,id);
  if(id==='corn-dog'){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,24000);await marketButton(page,'翻這一面');await marketTime(page,24000);await marketButton(page,'起鍋瀝油');await marketTime(page,4000);}
@@ -1198,6 +1524,13 @@ for (const mode of ['native','unsupported','rejected'] as const) {
         expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
       }
     }
+    async function crossViewportHelp(key:'Tab'|'Shift+Tab') {
+      if(mode==='native')return;
+      const help=page.locator('.fullscreen-game__mode-help summary');
+      await expect(help).toBeFocused();
+      await expect(help).toHaveText('全視窗說明');
+      await page.keyboard.press(key);
+    }
     async function classify(index:number) {
       await expect(board).toBeFocused();
       // Advance the input cooldown without rendering every intervening RAF.
@@ -1210,6 +1543,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await expectFullscreen();
     await classify(0);
     await page.keyboard.press('Shift+Tab');
+    await crossViewportHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(dialog).toHaveCount(0);
@@ -1226,6 +1560,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
     await expect(progress).toContainText('已分類 1 / 30');
     await page.keyboard.press('Tab');
+    await crossViewportHelp('Tab');
     await classify(1);
     await page.keyboard.press('Tab');
     await expect(back).toBeFocused();
@@ -1233,6 +1568,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await classify(2);
     // Both edges still wrap inside the fullscreen container.
     await page.keyboard.press('Shift+Tab');
+    await crossViewportHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(page.getByRole('button',{name:'收道具鈔 →',exact:true})).toBeFocused();
@@ -1390,13 +1726,55 @@ for (const outcome of ['resolve','reject'] as const) {
 }
 
 
+for (const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[]) {
+  test(`UX-16: ${id} viewport controls keep the cooking surface usable without sharing an unfinished run`,async({page})=>{
+    await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+    await marketOpen(page,id);
+    await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+    const game=page.getByRole('dialog',{name:'遊戲全螢幕',exact:true});
+    await expect(game).toHaveClass(/fullscreen-game--viewport/);
+    await expect(game.getByRole('button',{name:'完成後分享',exact:true})).toBeDisabled();
+    await expect(game.locator('[data-game-share]')).toHaveCount(0);
+    await game.locator('.fullscreen-game__mode-help summary').click();
+    await expect(game.locator('.fullscreen-game__mode-help p')).toContainText('瀏覽器工具列可能仍會顯示');
+    await game.locator('.fullscreen-game__mode-help summary').click();
+    expect(await game.locator('.fullscreen-game__bar').evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(72);
+    const canvas=await game.locator('.mk-canvas canvas').elementHandle();
+    const surface=game.locator('.mk-surface');
+    expect(await surface.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(300);
+    expect(await surface.evaluate(el=>{const b=el.getBoundingClientRect();return Math.abs(b.width/b.height-6/5);})).toBeLessThan(.01);
+    for(const button of await game.locator('.fullscreen-game__bar button').all()){
+      const metrics=await button.evaluate(el=>({height:el.getBoundingClientRect().height,font:parseFloat(getComputedStyle(el).fontSize)}));
+      expect(metrics.height).toBeGreaterThanOrEqual(44);expect(metrics.font).toBeGreaterThanOrEqual(14);
+    }
+    const tray=game.getByRole('complementary',{name:'食材與工具',exact:true});
+    expect(await tray.evaluate(el=>el.scrollHeight>el.clientHeight&&getComputedStyle(el).overflowY==='auto')).toBe(true);
+    await tray.locator('.mk-help summary').scrollIntoViewIfNeeded();
+    await tray.locator('.mk-help summary').click();
+    await expect(tray.getByRole('button',{name:'重新做這一道',exact:true})).toBeVisible();
+    await game.getByRole('button',{name:'退出全螢幕',exact:true}).click();
+    expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
+    expect(await canvas!.evaluate(el=>el.isConnected)).toBe(true);
+    await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+    await expect(game.getByRole('button',{name:'完成後分享',exact:true})).toBeDisabled();
+    expect(await canvas!.evaluate(el=>el.isConnected)).toBe(true);
+    await page.setViewportSize({width:667,height:375});
+    expect(await game.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await game.getByRole('button',{name:'退出全螢幕',exact:true}).focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toHaveCount(0);
+    expect(await canvas!.evaluate(el=>el.isConnected)).toBe(true);
+    await canvas!.dispose();
+  });
+}
 for(const width of [320,1440])test(`community game draft is explicit, bounded and retained without uploads (${width}px)`,async({page})=>{
  await page.setViewportSize({width,height:900});
  const external:string[]=[];page.on('request',request=>{if(new URL(request.url()).hostname==='github.com')external.push(request.url());});
  await page.goto('/play');
  const section=page.getByRole('region',{name:'社群遊戲投稿'}),toggle=section.locator('summary');
  await toggle.focus();await toggle.press('Enter');
- await expect(section.getByText('目前不是站內檔案上傳',{exact:false})).toBeVisible();
+ await expect(section.getByText('這個 GitHub 選項不會上傳檔案到站內',{exact:false})).toBeVisible();
  await section.getByLabel('遊戲名稱（最多 60 字元）').fill('合成測試遊戲');
  await section.getByLabel('玩法介紹（最多 200 字元）').fill('<img src=x onerror=alert(1)>');
  await section.getByLabel('操作與啟動方式（最多 200 字元）').fill('方向鍵，瀏覽器開啟 index.html');
@@ -1424,4 +1802,62 @@ for(const width of [320,1440])test(`community game draft is explicit, bounded an
  expect(external).toEqual([]);await expect(section.locator('iframe,input[type=file]')).toHaveCount(0);
  // Deliberately do not click the external link or submit a real Issue.
  await page.reload();await section.locator('summary').click();await expect(section.getByLabel('遊戲名稱（最多 60 字元）')).toHaveValue('');
+});
+
+// Synthetic owner API responses exercise the real page/client, not deployed quarantine storage.
+for(const width of [320,1440])test(`member game upload keeps exact retry, keyboard and cold-read boundaries (${width}px)`,async({page})=>{
+ await page.setViewportSize({width,height:900});
+ const id='10000000-0000-4000-8000-000000000001',source=Buffer.from('\ufeff<!doctype html>\r\n<script>globalThis.uploadedGameRan=true</script>');
+ let current={game_id:id,title:'會員合成遊戲',description:'測試來源',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:true};
+ const ack=()=>{const {upload_available,...value}=current;return value;};
+ let sessions=0,creates=0;const uploads:{body:Buffer;key:string;version:string;mime:string}[]=[],requests:string[]=[];
+ await page.route('**/api/v1/session',route=>{sessions++;return route.fulfill({json:{user:{user_id:'30000000-0000-4000-8000-000000000001'},csrf_token:'synthetic-upload-session'}});});
+ await page.route('**/api/v1/me/game-drafts**',async route=>{
+  const request=route.request(),path=new URL(request.url()).pathname;requests.push(request.method()+' '+path);
+  if(path.endsWith('/source')){
+   uploads.push({body:request.postDataBuffer()!,key:request.headers()['idempotency-key'],version:request.headers()['if-match'],mime:request.headers()['content-type']});
+   expect(request.headers()['x-csrf-token']).toBe('synthetic-upload-session');
+   if(uploads.length===1){current={...current,version:'2',source_revision:'1',state:'quarantined'};return route.abort('failed');}
+   const historical=ack();current={...current,version:'3',state:'withdrawn',upload_available:false};return route.fulfill({json:historical});
+  }
+  if(request.method()==='POST'){creates++;return route.fulfill({status:201,json:ack()});}
+  return route.fulfill({json:current});
+ });
+ await page.goto('/play');expect(sessions).toBe(0);
+ const area=page.getByRole('region',{name:'會員私有遊戲來源'}),summary=area.locator('summary');await summary.focus();await summary.press('Enter');
+ const open=area.getByRole('button',{name:'使用目前會員帳號開啟'});await open.focus();await open.press('Enter');
+ await area.getByLabel('私人遊戲名稱',{exact:true}).fill('會員合成遊戲');await area.getByLabel('私人玩法介紹').fill('測試來源');
+ await area.getByRole('button',{name:'建立私人草稿（不含檔案）'}).click();await expect(area.getByLabel('請保留這個草稿編號')).toHaveValue(id);expect(creates).toBe(1);
+ const input=area.getByLabel('選擇單一 HTML 遊戲檔案');await input.setInputFiles({name:'index.html',mimeType:'text/html',buffer:source});
+ await expect(area.getByText('檔案僅留在本頁記憶體，尚未傳送。',{exact:true})).toBeVisible();expect(uploads).toHaveLength(0);
+ await expect(area.getByRole('button',{name:'傳送檔案到私有保存'})).toBeDisabled();
+ const consent=area.getByRole('checkbox');await consent.focus();await consent.press('Space');
+ const send=area.getByRole('button',{name:'傳送檔案到私有保存'});await send.focus();await send.press('Enter');
+ await expect(area.getByRole('button',{name:'重試原操作（不建立新操作）'})).toBeVisible();
+ await expect(area.getByRole('button',{name:'建立私人草稿（不含檔案）'})).toBeDisabled();await expect(area.getByRole('button',{name:'重新讀取目前狀態'})).toBeDisabled();
+ await area.getByRole('button',{name:'重試原操作（不建立新操作）'}).click();await expect(area.getByText('狀態：已撤回；版本 3，來源版本 1。',{exact:true})).toBeVisible();
+ expect(uploads).toHaveLength(2);expect(uploads[0]).toEqual(uploads[1]);expect(uploads[0].body).toEqual(source);expect(uploads[0].mime).toBe('text/html');expect(uploads[0].version).toBe('"1"');
+ expect(requests.filter(r=>r.startsWith('GET')&&r.endsWith('/source'))).toEqual([]);expect(await page.evaluate(()=>(window as any).uploadedGameRan)).toBeUndefined();
+ expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain('uploadedGameRan');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+ await page.reload();await summary.click();await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();await expect(area.getByLabel('請保留這個草稿編號')).toHaveCount(0);
+ await area.getByLabel('已有草稿編號').fill(id);await area.getByRole('button',{name:'讀取這份私人草稿'}).click();await expect(area.getByText('狀態：已撤回；版本 3，來源版本 1。',{exact:true})).toBeVisible();expect(creates).toBe(1);
+});
+test('member game upload shows policy unavailable and confirms withdrawal without any source transfer',async({page})=>{
+ const id='10000000-0000-4000-8000-000000000001';let writes=0,current={game_id:id,title:'關閉測試',description:'',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:false};
+ await page.route('**/api/v1/session',route=>route.fulfill({json:{user:{user_id:'30000000-0000-4000-8000-000000000001'},csrf_token:'synthetic'}}));
+ await page.route('**/api/v1/me/game-drafts**',route=>{const request=route.request();if(request.method()==='POST'){writes++;expect(request.url()).toContain('/withdraw');expect(request.postDataJSON()).toEqual({});expect(request.headers()['if-match']).toBe('"1"');current={...current,state:'withdrawn',version:'2'};const {upload_available,...ack}=current;return route.fulfill({json:ack});}return route.fulfill({json:current});});
+ await page.goto('/play');const area=page.getByRole('region',{name:'會員私有遊戲來源'});await area.locator('summary').click();await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();
+ await area.getByLabel('已有草稿編號').fill(id);await area.getByRole('button',{name:'讀取這份私人草稿'}).click();await expect(area.getByLabel('選擇單一 HTML 遊戲檔案')).toBeDisabled();await expect(area.getByRole('button',{name:'傳送檔案到私有保存'})).toBeDisabled();await expect(area.getByText('來源保存尚未開放或暫時無法使用，目前不能上傳。',{exact:true})).toBeVisible();
+ await area.getByRole('button',{name:'撤回這份私人草稿',exact:true}).click();await expect(area.getByText('撤回後不能再上傳，這個階段不能恢復。來源歷史與已用容量會保留，不是刪除檔案。',{exact:true})).toBeVisible();await area.getByRole('button',{name:'取消撤回'}).click();await expect(area.getByRole('button',{name:'撤回這份私人草稿',exact:true})).toBeFocused();expect(writes).toBe(0);
+ await area.getByRole('button',{name:'撤回這份私人草稿',exact:true}).click();await area.getByRole('button',{name:'確認撤回',exact:true}).click();await expect(area.getByText('狀態：已撤回；版本 2，來源版本 0。',{exact:true})).toBeVisible();expect(writes).toBe(1);
+});
+test('member game upload clears selected source on account change and does not adopt replacement session',async({page})=>{
+ let token='first-session',sessionUnavailable=false;const id='10000000-0000-4000-8000-000000000001';let writes=0;
+ await page.route('**/api/v1/session',route=>sessionUnavailable?route.fulfill({status:503,json:{type:'unavailable',title:'Unavailable',status:503}}):route.fulfill({json:{user:{user_id:token==='first-session'?'30000000-0000-4000-8000-000000000001':'40000000-0000-4000-8000-000000000001'},csrf_token:token}}));
+ await page.route('**/api/v1/me/game-drafts**',route=>{if(route.request().method()!=='GET')writes++;return route.fulfill({json:{game_id:id,title:'清除測試',description:'',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:true}});});
+ await page.goto('/play');const area=page.getByRole('region',{name:'會員私有遊戲來源'});await area.locator('summary').click();await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();await area.getByLabel('已有草稿編號').fill(id);await area.getByRole('button',{name:'讀取這份私人草稿'}).click();await area.getByLabel('選擇單一 HTML 遊戲檔案').setInputFiles({name:'index.html',mimeType:'text/html',buffer:Buffer.from('<html>private-synthetic</html>')});await expect(area.getByRole('checkbox')).toBeVisible();
+ sessionUnavailable=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(area.getByRole('button',{name:'重新確認會員登入'})).toBeVisible();await expect(area.getByLabel('請保留這個草稿編號')).toBeHidden();await expect(area.getByRole('checkbox')).toBeHidden();sessionUnavailable=false;await area.getByRole('button',{name:'重新確認會員登入'}).click();await expect(area.getByRole('checkbox')).toBeVisible();expect(writes).toBe(0);
+ token='replacement-session';await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(area.getByRole('button',{name:'使用目前會員帳號開啟'})).toBeVisible();await expect(area.getByRole('checkbox')).toHaveCount(0);await expect(area.getByLabel('請保留這個草稿編號')).toHaveCount(0);expect(writes).toBe(0);
+ await area.getByRole('button',{name:'使用目前會員帳號開啟'}).click();await expect(area.getByLabel('已有草稿編號')).toHaveValue('');await expect(area.getByLabel('請保留這個草稿編號')).toHaveCount(0);
 });

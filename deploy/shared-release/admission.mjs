@@ -28,9 +28,26 @@ const positiveId = value => Number.isSafeInteger(value) && value > 0;
 export const sameActor = (actual, expected) => Object.hasOwn(OPERATORS, actual?.login ?? '')
   && actual.id === OPERATORS[actual.login] && actual.login === expected?.login && actual.id === expected.id;
 const workflowPath = '.github/workflows/shared-release.yml';
+export const RELEASE_RECONCILE_CRON = '7,17,27,37,47,57 * * * *';
+
+// Keep notification receipts compatible; scheduled reconciliation is a distinct
+// trigger, never a manufactured upstream CI notification.
+export function automaticReleaseEvent(marker) {
+  if (!marker || typeof marker !== 'object' || Array.isArray(marker)) return undefined;
+  if (Object.keys(marker).length === 1 && marker.schedule === RELEASE_RECONCILE_CRON) return 'schedule';
+  if (Object.keys(marker).length === 2 && positiveId(marker.triggerRunId)
+    && positiveId(marker.triggerRunAttempt)) return 'workflow_run';
+}
+
+export function sameAutomaticRelease(left, right) {
+  const event = automaticReleaseEvent(left);
+  return event !== undefined && event === automaticReleaseEvent(right)
+    && (event === 'schedule' || left.triggerRunId === right.triggerRunId && left.triggerRunAttempt === right.triggerRunAttempt);
+}
 
 export function requestFromEnvironment(env) {
-  const automatic = env.GITHUB_EVENT_NAME === 'workflow_run';
+  const scheduled = env.GITHUB_EVENT_NAME === 'schedule';
+  const automatic = env.GITHUB_EVENT_NAME === 'workflow_run' || scheduled;
   requireRelease(env.GITHUB_REPOSITORY === REPOSITORY
     && env.GITHUB_REPOSITORY_ID === String(REPOSITORY_ID)
     && (env.GITHUB_EVENT_NAME === 'workflow_dispatch' || automatic)
@@ -41,8 +58,11 @@ export function requestFromEnvironment(env) {
   requireRelease(['staging-next', 'next'].includes(env.RELEASE_TARGET), 'release_target_invalid');
   requireRelease(['plan', 'check', 'deploy', 'handoff'].includes(env.RELEASE_MODE), 'release_mode_invalid');
   if (automatic) requireRelease(env.RELEASE_MODE === 'deploy'
-    && ['RELEASE_TRIGGER_RUN_ID', 'RELEASE_TRIGGER_RUN_ATTEMPT'].every(key =>
+    && (scheduled ? env.RELEASE_SCHEDULE === RELEASE_RECONCILE_CRON
+      && !env.RELEASE_TRIGGER_RUN_ID && !env.RELEASE_TRIGGER_RUN_ATTEMPT
+      : !env.RELEASE_SCHEDULE && ['RELEASE_TRIGGER_RUN_ID', 'RELEASE_TRIGGER_RUN_ATTEMPT'].every(key =>
       /^[1-9][0-9]{0,15}$/.test(env[key] ?? '') && positiveId(Number(env[key])))
+    )
     && !env.RELEASE_RECOVER_BACKUP_RUN_ID && !env.RELEASE_RECOVER_RELEASE_RUN_ID && !env.RELEASE_RECOVER_MIGRATION_RUN_ID,
   'release_automatic_request_invalid');
   for (const key of ['GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_ACTOR_ID']) {
@@ -63,8 +83,8 @@ export function requestFromEnvironment(env) {
   requireRelease(!migration || (env.RELEASE_MODE === 'deploy' && !recovery && /^[1-9][0-9]{0,15}$/.test(migration)
     && positiveId(Number(migration)) && String(Number(migration)) === migration && migration !== env.GITHUB_RUN_ID),
   'release_migration_recovery_request_invalid');
-  return { ...(automatic ? { automatic: { triggerRunId: Number(env.RELEASE_TRIGGER_RUN_ID),
-    triggerRunAttempt: Number(env.RELEASE_TRIGGER_RUN_ATTEMPT) } } : {}),
+  return { ...(automatic ? { automatic: scheduled ? { schedule: RELEASE_RECONCILE_CRON }
+    : { triggerRunId: Number(env.RELEASE_TRIGGER_RUN_ID), triggerRunAttempt: Number(env.RELEASE_TRIGGER_RUN_ATTEMPT) } } : {}),
     ...(recovery ? { recoverRunId: Number(recovery) } : {}),
     ...(migration ? { recoverMigrationRunId: Number(migration) } : {}),
     ...(handoff ? { recoverReleaseRunId: Number(handoff) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
@@ -202,10 +222,9 @@ export async function requireStaging(api, admission, installation) {
   };
   const deployment = await latestDeployment(), binding = deployment?.payload;
   const automatic = binding?.automatic !== undefined;
-  if (automatic) requireRelease(positiveId(binding.automatic?.triggerRunId) && positiveId(binding.automatic?.triggerRunAttempt)
+  if (automatic) requireRelease(sameAutomaticRelease(binding.automatic, admission.automatic)
     && binding.runId === admission.runId && binding.runAttempt === admission.runAttempt
-    && binding.controllerSha === admission.controllerSha && admission.automatic?.triggerRunId === binding.automatic.triggerRunId
-    && admission.automatic?.triggerRunAttempt === binding.automatic.triggerRunAttempt, 'release_staging_run_invalid');
+    && binding.controllerSha === admission.controllerSha, 'release_staging_run_invalid');
   requireRelease(positiveId(deployment?.id) && binding?.format === 'freedom.shared-release/v1'
     && binding.operatorImage === installation.image && isSha(binding.controllerSha)
     && isDigest(binding.configSha256) && positiveId(binding.runId) && positiveId(binding.runAttempt), 'release_staging_evidence_missing');
@@ -220,7 +239,8 @@ export async function requireStaging(api, admission, installation) {
   requireRelease(positiveId(workflow.id) && workflow.path === workflowPath && workflow.state === 'active', 'release_staging_workflow_invalid');
   const checkRun = run => {
     requireRelease(run?.id === binding.runId && run.run_attempt === binding.runAttempt
-      && run.workflow_id === workflow.id && run.path === workflowPath && run.event === (automatic ? 'workflow_run' : 'workflow_dispatch')
+      && run.workflow_id === workflow.id && run.path === workflowPath
+      && run.event === (automatic ? automaticReleaseEvent(binding.automatic) : 'workflow_dispatch')
       && run.repository?.id === REPOSITORY_ID && run.head_repository?.id === REPOSITORY_ID
       && run.head_branch === 'main' && run.head_sha === binding.controllerSha
       && (automatic ? run.status === 'in_progress' && run.conclusion === null
@@ -246,8 +266,7 @@ export async function requireStaging(api, admission, installation) {
     && receipt.deploymentId === deployment.id && receipt.operatorImage === installation.image
     && receipt.configSha256 === binding.configSha256 && sameActor(receipt.original, run.actor)
     && (!automatic || receipt.releaseKind === 'independent'
-      && receipt.automatic?.triggerRunId === binding.automatic.triggerRunId
-      && receipt.automatic?.triggerRunAttempt === binding.automatic.triggerRunAttempt)
+      && sameAutomaticRelease(receipt.automatic, binding.automatic))
     && sameActor(receipt.triggeredBy, run.triggering_actor), 'release_staging_receipt_invalid');
   // An automatic run is still in progress while production executes. Its
   // completed staging job bounds the receipt; overall run success is not forged.

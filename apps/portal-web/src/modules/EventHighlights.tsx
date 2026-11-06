@@ -61,30 +61,54 @@ export function EventHighlights({ client,outcomesEnabled=false }: { client: Port
 }
 
 function HighlightList({ client }: { client: PortalClient }) {
-  const [mode, setMode] = useState<Filter>('all');
+  const [filter, setFilter] = useState<{ mode: Filter }>({ mode: 'all' });
+  const { mode } = filter;
   const [items, setItems] = useState<Card[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async (nextMode: Filter, nextCursor: string | null, append: boolean) => {
-    setError(null);
+  const [loading, setLoading] = useState(true);
+  type ListRead = { mode: Filter; session: number; pending: object | null };
+  const scope = useRef<ListRead | null>(null);
+  const session = client.sessionGeneration;
+  const load = useCallback(async (owner: ListRead | null, nextCursor: string | null) => {
+    if (!owner || scope.current !== owner || owner.pending || client.sessionGeneration !== owner.session) return;
+    const request = {};
+    owner.pending = request;
+    const current = () => scope.current === owner && owner.pending === request && client.sessionGeneration === owner.session;
+    setError(null); setLoading(true);
     try {
-      const query = new URLSearchParams({ mode: nextMode });
+      const query = new URLSearchParams({ mode: owner.mode });
       if (nextCursor) query.set('cursor', nextCursor);
       const page = await client.get<{ items: Card[]; next_cursor: string | null }>(`/event-highlights?${query}`);
-      setItems(current => append && current ? [...current, ...page.items] : page.items);
+      if (!current()) return;
+      setItems(items => nextCursor && items ? [...items, ...page.items] : page.items);
       setCursor(page.next_cursor);
-    } catch (err) { if (!append) setItems([]); setError(message(err)); }
+    } catch (err) { if (current()) setError(message(err)); }
+    finally { if (current()) { owner.pending = null; setLoading(false); } }
   }, [client]);
-  useEffect(() => { void load(mode, null, false); }, [load, mode]);
+  useEffect(() => {
+    const owner: ListRead = { mode, session, pending: null };
+    scope.current = owner;
+    setItems(null); setCursor(null); setError(null);
+    void load(owner, null);
+    return () => { if (scope.current === owner) scope.current = null; };
+  }, [load, filter, session]);
+  function selectMode(value: Filter) {
+    if (value === scope.current?.mode) return;
+    // Invalidate before React commits the next filter, including queued responses.
+    scope.current = null;
+    setItems(null); setCursor(null); setError(null); setLoading(true); setFilter({ mode: value });
+  }
   return <>
     <p className="hl-intro">活動結束後會收進集錦。公開活動可分享給所有人；社群與公會內部活動仍依目前閱讀權限。夥伴可以補上有權分享的摘要、照片、海報和影片連結。</p>
-    {error && <p role="alert">{error}</p>}
+    {error && <><p role="alert">{error}</p><p><button type="button" className="hl-btn" onClick={() => void load(scope.current, cursor)}>重試載入</button></p></>}
     <div className="hl-chips" data-guide-anchor="highlights:format" role="group" aria-label="活動形式">
       {([['all', '全部'], ['online', '線上'], ['in_person', '實體']] as const).map(([value, label]) =>
-        <button key={value} type="button" className="hl-chip" aria-pressed={mode === value} onClick={() => setMode(value)}>{label}</button>)}
+        <button key={value} type="button" className="hl-chip" aria-pressed={mode === value} onClick={() => selectMode(value)}>{label}</button>)}
     </div>
+    {loading && <p role="status">{items === null ? '正在載入活動集錦…' : '正在載入更多活動…'}</p>}
     {items && items.length === 0 && <p className="hl-empty">還沒有已結束的活動。活動結束後會自動出現在這裡。</p>}
-    <div className="hl-grid" data-guide-anchor="highlights:list">
+    <div className="hl-grid" data-guide-anchor="highlights:list" aria-busy={loading}>
       {items?.map(item => <article className="hl-card" key={item.event_id} aria-label={item.title}>
         <a className="hl-cover" href={`#highlights/${item.event_id}`} aria-label={`查看集錦：${item.title}`}><Cover cover={item.cover} mode={item.mode} whenLabel={when(item.starts_at, item.ends_at)} /></a>
         <h2><a href={`#highlights/${item.event_id}`}>{item.title}</a></h2>
@@ -94,12 +118,13 @@ function HighlightList({ client }: { client: PortalClient }) {
         <p><a className="hl-btn" href={`#highlights/${item.event_id}`}>查看集錦</a></p>
       </article>)}
     </div>
-    {cursor && <p><button type="button" className="hl-btn" onClick={() => void load(mode, cursor, true)}>載入更多</button></p>}
+    {cursor && !error && <p><button type="button" className="hl-btn" disabled={loading} onClick={() => void load(scope.current, cursor)}>載入更多</button></p>}
   </>;
 }
 
 function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalClient; eventId: string;outcomesEnabled:boolean }) {
   const [detail, setDetail] = useState<Detail | null>(null);
+  const readPending = useRef<object | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [openCopy, setOpenCopy] = useState(false);
@@ -115,7 +140,7 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
   const scope = useRef({client, session}); scope.current = {client, session};
   useEffect(() => {
     mounted.current = true; lifetime.current++; pending.current = null; setSubmitting(false); setProgress(null);
-    return () => { mounted.current = false; lifetime.current++; pending.current = null; };
+    return () => { mounted.current = false; lifetime.current++; pending.current = null; readPending.current = null; };
   }, [client, session]);
   const [manual, setManual] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -126,10 +151,16 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
   const fileRef = useRef<HTMLInputElement>(null);
   const load = useCallback(async () => {
     const epoch = lifetime.current, generation = client.sessionGeneration;
-    const current = () => mounted.current && epoch === lifetime.current && scope.current.client === client && scope.current.session === generation && client.sessionGeneration === generation;
+    const inScope = () => mounted.current && epoch === lifetime.current && scope.current.client === client && scope.current.session === generation && client.sessionGeneration === generation;
+    if (!inScope()) return;
+    // Explicit refreshes after media operations supersede any older read.
+    // Only the retry button deduplicates; it must never suppress a refresh.
+    const request = {}; readPending.current = request;
+    const current = () => inScope() && readPending.current === request;
     setError(null); setMissing(false);
     try { const value = await client.get<Detail>(`/event-highlights/${eventId}`); if (current()) setDetail(value); }
     catch (err) { if (current()) { setDetail(null); if (err instanceof ApiError && err.status === 404) setMissing(true); else setError(message(err)); } }
+    finally { if (current()) readPending.current = null; }
   }, [client, eventId, session]);
   useEffect(() => { void load(); }, [load]);
   const photos = detail?.items.filter(item => item.kind === 'photo') ?? [];
@@ -200,7 +231,10 @@ function HighlightDetail({ client, eventId,outcomesEnabled }: { client: PortalCl
     catch (err) { setFormError(message(err)); }
   }
   if (missing) return <p>找不到這場活動集錦。<a className="hl-btn" href="#highlights">返回活動集錦</a></p>;
-  if (!detail) return error ? <p role="alert">{error}</p> : <p>正在整理這場活動。</p>;
+  if (!detail) return <>
+    <p><a className="hl-btn" href="#highlights">返回活動集錦</a></p>
+    {error ? <><p role="alert">{error}</p><p><button type="button" className="hl-btn" onClick={() => { if (!readPending.current) void load(); }}>重試載入</button></p></> : <p role="status">正在整理這場活動。</p>}
+  </>;
   const publiclyReadable=['open','referral'].includes(detail.visibility);
   const shareUrl = new URL(detail.public_path, window.location.origin).href;
   const links = detail.items.filter(item => item.kind === 'link');

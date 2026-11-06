@@ -2,6 +2,7 @@ import {normalizeShareUrl} from '../../packages/shared/share-url';
 import * as React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {test} from 'node:test';
+import type {TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {newTextHistory,recordText,breakTextGroup,undoText,redoText,TEXT_HISTORY_LIMIT} from '../../apps/portal-web/src/modules/text-edit-history';
 import {shareModuleRetryUrl} from '../../apps/portal-web/src/share-module-loader';
@@ -50,7 +51,11 @@ test('optimizer retry admits only its same-origin JavaScript chunk with bounded 
   assert.equal(shareModuleRetryUrl(error(origin+path+'?share-retry=2'),origin,2,'SocialPostOptimizer'),null);
 });
 
-test('optimizer CSS is eager so a stylesheet download cannot reject the deferred JavaScript import',async()=>{
+test('optimizer CSS is eager so a stylesheet download cannot reject the deferred JavaScript import',async t=>{
+  // Vite sets NODE_ENV for its build. Restore the caller's mode before the
+  // mounted tests load ReactDOM, so React and its renderer use the same mode.
+  const nodeEnv=process.env.NODE_ENV;
+  t.after(()=>{if(nodeEnv===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=nodeEnv;});
   const {build}=await import('vite');
   const result=await build({configFile:'apps/portal-web/vite.config.ts',logLevel:'silent',build:{write:false,manifest:true}});
   assert(!Array.isArray(result)&&'output' in result);
@@ -215,4 +220,191 @@ test('party challenges retain the exact two-key contract without a generic local
   assert(!render('https://other.example.test'+route,origin).includes('href="/play?'));
  }
  for(const game of ['unknown','party','chairs']){const url=origin+`/play?game=${game}&seed=42`;assert.equal(parse(url,origin),null);assert(!render(url,origin).includes('<a '));}
+});
+
+test('mounted SocialTextTools mention disclosure',async t=>{
+ // Real ReactDOM and the whole production component, with only DOM, clock and
+ // transport ports controlled. This is not browser layout or native IME evidence.
+ const {readFileSync}=await import('node:fs'),{runInNewContext}=await import('node:vm');
+ const {createRequire}=await import('node:module'),{transformSync}=await import('esbuild');
+ class HostNode {
+  [key:string]:any;
+  parentNode:HostNode|null=null;childNodes:HostNode[]=[];attributes:Record<string,string>={};
+  style={setProperty(){},removeProperty(){}};
+  listeners:Record<string,{fn:Function;capture:boolean}[]>={};
+  namespaceURI='http://www.w3.org/1999/xhtml';
+  private inputValue='';
+  get value(){return this.inputValue;}
+  set value(value:string){this.inputValue=String(value);}
+  get type(){return this.attributes.type??'text';}
+  set type(value:string){this.attributes.type=String(value);}
+  constructor(public nodeType:number,public nodeName:string,public ownerDocument:any){if(nodeType===1)this.tagName=nodeName;}
+  appendChild(node:HostNode){node.parentNode?.removeChild(node);this.childNodes.push(node);node.parentNode=this;return node;}
+  removeChild(node:HostNode){const index=this.childNodes.indexOf(node);assert.notEqual(index,-1);this.childNodes.splice(index,1);node.parentNode=null;return node;}
+  insertBefore(node:HostNode,before:HostNode){node.parentNode?.removeChild(node);const index=this.childNodes.indexOf(before);assert.notEqual(index,-1);this.childNodes.splice(index,0,node);node.parentNode=this;return node;}
+  setAttribute(key:string,value:unknown){this.attributes[key]=String(value);}
+  removeAttribute(key:string){delete this.attributes[key];}
+  getAttribute(key:string){return this.attributes[key]??null;}
+  setAttributeNS(_namespace:string,key:string,value:unknown){this.setAttribute(key,value);}
+  addEventListener(type:string,fn:Function,options?:any){(this.listeners[type]??=[]).push({fn,capture:options===true||!!options?.capture});}
+  removeEventListener(type:string,fn:Function){this.listeners[type]=(this.listeners[type]??[]).filter(item=>item.fn!==fn);}
+  get firstChild():HostNode|null{return this.childNodes[0]??null;}
+  get lastChild():HostNode|null{return this.childNodes.at(-1)??null;}
+  get nextSibling():HostNode|null{return this.parentNode?.childNodes[this.parentNode.childNodes.indexOf(this)+1]??null;}
+  get textContent():string{return this.nodeType===3?this.nodeValue:this.childNodes.map(node=>node.textContent).join('');}
+  set textContent(value:string){this.childNodes.forEach(node=>{node.parentNode=null;});this.childNodes=[];if(value)this.appendChild(this.ownerDocument.createTextNode(String(value)));}
+  contains(node:HostNode):boolean{return node===this||this.childNodes.some(child=>child.contains(node));}
+  closest(selector:string):HostNode|null{return this.nodeName===selector.toUpperCase()?this:this.parentNode?.closest(selector)??null;}
+  querySelector(selector:string):HostNode|null{return descendants(this).find(node=>node.nodeName===selector.toUpperCase())??null;}
+  focus(){this.ownerDocument.activeElement=this;}
+  setSelectionRange(start:number,end:number){this.selectionStart=start;this.selectionEnd=end;}
+  dispatchEvent(event:any){
+   event.target??=this;event.bubbles??=true;event.cancelBubble=false;event.defaultPrevented=false;
+   event.preventDefault=()=>{event.defaultPrevented=true;};event.stopPropagation=()=>{event.cancelBubble=true;};
+   const chain:HostNode[]=[];for(let node:HostNode|null=this;node;node=node.parentNode)chain.push(node);
+   for(const node of [...chain].reverse()){event.currentTarget=node;for(const listener of node.listeners[event.type]??[])if(listener.capture)listener.fn(event);if(event.cancelBubble)return !event.defaultPrevented;}
+   for(const node of chain){event.currentTarget=node;for(const listener of node.listeners[event.type]??[])if(!listener.capture)listener.fn(event);if(event.cancelBubble||!event.bubbles)break;}
+   event.currentTarget=null;return !event.defaultPrevented;
+  }
+ }
+ function descendants(node:HostNode):HostNode[]{return [node,...node.childNodes.flatMap(descendants)];}
+ class HostDocument extends HostNode {
+  constructor(){super(9,'#document',null);this.ownerDocument=this;this.documentElement=new HostNode(1,'HTML',this);this.body=new HostNode(1,'BODY',this);this.appendChild(this.documentElement);this.documentElement.appendChild(this.body);this.activeElement=this.body;}
+  createElement(name:string){return new HostNode(1,name.toUpperCase(),this);}
+  createElementNS(namespace:string,name:string){const node=this.createElement(name);node.namespaceURI=namespace;return node;}
+  createTextNode(value:string){const node=new HostNode(3,'#text',this);node.nodeValue=value;return node;}
+ }
+ const document=new HostDocument(),window={document,HTMLElement:HostNode,HTMLIFrameElement:class{},get event(){return undefined;}};
+ document.defaultView=window;document.oninput=null;
+ const globals={document,window,HTMLElement:HostNode,Node:HostNode,IS_REACT_ACT_ENVIRONMENT:true};
+ const previous=new Map(Object.keys(globals).map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+ Object.assign(globalThis,globals);
+ t.after(()=>{for(const [key,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);}});
+ const require=createRequire(import.meta.url);
+ const {createRoot}=require('react-dom/client') as typeof import('react-dom/client');
+ const {flushSync}=require('react-dom') as typeof import('react-dom');
+ const flush=(fn:()=>void)=>React.act(()=>flushSync(fn));
+ let clock=0,nextTimer=0;
+ const timers=new Map<number,{due:number;fn:()=>void}>();
+ const setTimer=(fn:()=>void,delay:number)=>{const id=++nextTimer;timers.set(id,{due:clock+delay,fn});return id;};
+ const advance=(ms:number)=>flush(()=>{clock+=ms;for(const [id,timer] of [...timers])if(timer.due<=clock){timers.delete(id);timer.fn();}});
+ const source=readFileSync(new URL('../../apps/portal-web/src/modules/SocialTools.tsx',import.meta.url),'utf8');
+ const module={exports:{} as {SocialTextTools:React.ComponentType<any>}};
+ runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{
+  module,exports:module.exports,Error,URL,window,document,setTimeout:setTimer,clearTimeout:(id:number)=>timers.delete(id),
+  require(name:string){
+   if(name==='react')return React;if(name==='react/jsx-runtime')return requireJsx;
+   if(name==='../../../../packages/shared/share-url')return {normalizeShareUrl};
+   if(name==='../language')return {useLanguage:()=>({language:'zh-Hant'})};
+   if(name==='./MemberAvatar')return {MemberAvatar:()=>null};
+   throw Error('Unexpected import '+name);
+  },
+ });
+ function fixture(context:TestContext,strict=false){
+  const requests:{path:string;resolve:(value:any)=>void;reject:(cause:unknown)=>void}[]=[];
+  const client={sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>requests.push({path,resolve,reject}))};
+  const container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as any);
+  const options={disabled:false};let currentText='',currentMentions:unknown[]=[];
+  function Editor(){
+   const [text,setText]=React.useState(''),[mentions,setMentions]=React.useState([]);
+   currentText=text;currentMentions=mentions;
+   return React.createElement('form',null,
+    // The parent owns the textarea; input events deliver its value as real props.
+    React.createElement('textarea',{value:text,onInput:(event:any)=>setText(event.currentTarget.value)}),
+    React.createElement(module.exports.SocialTextTools,{client,text,onChange:setText,mentions,onMentions:setMentions,...options}));
+  }
+  const render=()=>flush(()=>root.render(React.createElement(strict?React.StrictMode:React.Fragment,null,React.createElement(Editor))));
+  let mounted=true;const unmount=()=>{if(mounted){flush(()=>root.unmount());document.body.removeChild(container);mounted=false;}};
+  context.after(unmount);render();
+  const nodes=()=>descendants(container),area=()=>nodes().find(node=>node.nodeName==='TEXTAREA')!;
+  const button=(label:string)=>nodes().find(node=>node.nodeName==='BUTTON'&&node.getAttribute('aria-label')===label)!;
+  const picker=()=>nodes().find(node=>node.nodeName==='SECTION');
+  const click=(node:HostNode)=>{assert(node,'mounted control');assert(container.contains(node));assert(!node.disabled,'control enabled');flush(()=>node.dispatchEvent({type:'click',button:0}));};
+  const input=(node:HostNode,value:string)=>flush(()=>{Object.getOwnPropertyDescriptor(HostNode.prototype,'value')!.set!.call(node,value);node.setSelectionRange(value.length,value.length);node.dispatchEvent({type:'input'});});
+  const type=(value:string)=>input(area(),value);
+  const settle=async(index:number,value:any,reject=false)=>{assert(requests[index]);await React.act(async()=>{requests[index][reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
+  return {requests,options,render,nodes,area,button,picker,click,input,type,settle,unmount,text:()=>currentText,mentions:()=>currentMentions};
+ }
+ await t.test('expanded automatic mention button closes without changing the draft or selection',context=>{
+  const h=fixture(context);h.type('Hello @Alice');h.area().setSelectionRange(2,5);
+  assert.equal(h.button('標註會員').getAttribute('aria-expanded'),'true');assert(h.picker());
+  advance(199);assert.equal(h.requests.length,0);
+  h.click(h.button('標註會員'));
+  assert.equal(h.button('標註會員').getAttribute('aria-expanded'),'false');assert.equal(Boolean(h.picker()),false);
+  assert.equal(h.text(),'Hello @Alice');assert.deepEqual([h.area().selectionStart,h.area().selectionEnd],[2,5]);
+  advance(1);assert.equal(h.requests.length,0,'closing cancels the scheduled search');
+ });
+ await t.test('manual open, close and explicit reopen retain the 200ms search delay',context=>{
+  const h=fixture(context);h.type('Draft');assert.equal(Boolean(h.picker()),false);
+  h.click(h.button('標註會員'));assert.equal(h.button('標註會員').getAttribute('aria-expanded'),'true');
+  advance(199);assert.equal(h.requests.length,0);advance(1);assert.equal(h.requests[0].path,'/members?limit=6&search=');
+  h.click(h.button('標註會員'));assert.equal(Boolean(h.picker()),false);
+  h.click(h.button('標註會員'));advance(199);assert.equal(h.requests.length,1);advance(1);assert.equal(h.requests.length,2);
+  assert.equal(h.text(),'Draft');
+ });
+ for(const failure of [false,true])await t.test(`closed lookup ${failure?'rejection':'response'} cannot reopen the picker`,async context=>{
+  const h=fixture(context);h.type('@Alice');advance(200);assert.equal(h.requests[0].path,'/members?limit=6&search=Alice');
+  h.click(h.button('標註會員'));
+  await h.settle(0,failure?Error('old lookup failed'):{items:[{user_id:'old',nickname:'Old member'}]},failure);
+  assert.equal(Boolean(h.picker()),false);assert.equal(h.button('標註會員').getAttribute('aria-expanded'),'false');
+  assert.equal(h.text(),'@Alice');advance(1000);assert.equal(h.requests.length,1,'no automatic retry');
+ });
+ for(const failure of [false,true])await t.test(`late old lookup ${failure?'rejection':'response'} does not replace an explicit reopened search`,async context=>{
+  const h=fixture(context);h.type('@Alice');advance(200);h.click(h.button('標註會員'));h.click(h.button('標註會員'));advance(200);
+  await h.settle(1,{items:[{user_id:'current',nickname:'Current member'}]});
+  await h.settle(0,failure?Error('old lookup failed'):{items:[{user_id:'old',nickname:'Old member'}]},failure);
+  assert.match(h.picker()!.textContent,/Current member/);assert.doesNotMatch(h.picker()!.textContent,/Old member|無法載入|old lookup/);
+  assert.equal(h.requests.length,2);
+ });
+ for(const failure of ['Error','non-Error'])await t.test(`closing a failed ${failure} lookup and explicitly reopening permits a same-query retry`,async context=>{
+  const h=fixture(context);h.click(h.button('標註會員'));advance(200);await h.settle(0,failure==='Error'?Error('offline'):'offline',true);
+  assert.match(h.picker()!.textContent,failure==='Error'?/offline/:/會員暫時無法載入/);h.click(h.button('標註會員'));assert.equal(Boolean(h.picker()),false);
+  h.click(h.button('標註會員'));advance(200);assert.equal(h.requests[1].path,h.requests[0].path);
+  await h.settle(1,{items:[{user_id:'member-a',nickname:'Alice'}]});assert.match(h.picker()!.textContent,/Alice/);assert.doesNotMatch(h.picker()!.textContent,/offline|無法載入/);
+ });
+ await t.test('search edits debounce, and choosing a member preserves mention insertion',async context=>{
+  const h=fixture(context);h.type('Hello @Al');advance(100);h.type('Hello @Alice');advance(199);assert.equal(h.requests.length,0);advance(1);
+  assert.equal(h.requests[0].path,'/members?limit=6&search=Alice');
+  await h.settle(0,{items:[{user_id:'member-a',nickname:'Alice Smith'}]});
+  const choice=h.nodes().find(node=>node.nodeName==='BUTTON'&&node.getAttribute('class')==='social-mention-choice')!;
+  h.click(choice);assert.equal(h.text(),'Hello @Alice Smith ');assert.deepEqual(JSON.parse(JSON.stringify(h.mentions())),[{user_id:'member-a',display_name:'Alice Smith'}]);
+  assert.equal(Boolean(h.picker()),false);assert.equal(document.activeElement,h.area());
+ });
+ await t.test('manual search input remains editable after reopening',async context=>{
+  const h=fixture(context);h.type('@Alice');h.click(h.button('標註會員'));h.click(h.button('標註會員'));
+  const search=h.nodes().find(node=>node.nodeName==='INPUT')!;h.input(search,'Bob & Co');advance(200);
+  assert.equal(h.requests.length,1);assert.equal(h.requests[0].path,'/members?limit=6&search=Bob%20%26%20Co');
+  assert.equal(h.text(),'@Alice');
+ });
+ await t.test('Escape dismisses the unchanged draft; later editing back is a new automatic disclosure',context=>{
+  const h=fixture(context);h.type('@Alice');
+  const event={type:'keydown',key:'Escape',keyCode:27};flush(()=>h.picker()!.dispatchEvent(event));
+  assert.equal(Boolean(h.picker()),false);assert.equal(document.activeElement,h.button('插入 emoji'));
+  h.render();assert.equal(Boolean(h.picker()),false,'unchanged rerender stays dismissed');
+  h.type('@Alic');assert(h.picker());h.type('@Alice');assert(h.picker());
+  h.click(h.button('標註會員'));assert.equal(Boolean(h.picker()),false);advance(200);assert.equal(h.requests.length,0);
+ });
+ await t.test('emoji and mention disclose only their visible picker and cancel hidden lookups',context=>{
+  const h=fixture(context);h.type('@Alice');advance(199);h.click(h.button('插入 emoji'));
+  assert.equal(h.picker()!.getAttribute('aria-label'),'emoji');assert.equal(h.button('標註會員').getAttribute('aria-expanded'),'false');
+  advance(1);assert.equal(h.requests.length,0);
+  h.click(h.button('標註會員'));assert.equal(h.picker()!.getAttribute('aria-label'),'標註會員');assert.equal(h.button('插入 emoji').getAttribute('aria-expanded'),'false');
+  h.click(h.button('標註會員'));assert.equal(Boolean(h.picker()),false);assert.equal(h.text(),'@Alice');
+ });
+ await t.test('composition guard and emoji selection replacement remain intact',context=>{
+  const h=fixture(context);h.type('Hello');h.area().setSelectionRange(1,4);
+  flush(()=>h.area().dispatchEvent({type:'compositionstart'}));h.click(h.button('插入 emoji'));assert.equal(Boolean(h.picker()),false);
+  flush(()=>h.area().dispatchEvent({type:'compositionend'}));h.click(h.button('插入 emoji'));h.click(h.button('插入 😀'));
+  assert.equal(h.text(),'H😀o');assert.deepEqual([h.area().selectionStart,h.area().selectionEnd],[3,3]);assert.equal(Boolean(h.picker()),false);
+  assert.equal(h.requests.length,0);
+ });
+ await t.test('disabled state and unmount invalidate queued or in-flight lookup work',async context=>{
+  const h=fixture(context);h.type('@Alice');h.options.disabled=true;h.render();advance(200);assert.equal(h.requests.length,0);assert.equal(Boolean(h.picker()),false);
+  h.options.disabled=false;h.render();advance(200);assert.equal(h.requests.length,1);h.unmount();
+  await h.settle(0,{items:[{user_id:'late',nickname:'Late member'}]});assert.equal(timers.size,0);
+ });
+ await t.test('StrictMode replay retains automatic close and explicit reopen',async context=>{
+  const h=fixture(context,true);h.type('@Alice');h.click(h.button('標註會員'));advance(200);assert.equal(h.requests.length,0);assert.equal(Boolean(h.picker()),false);
+  h.click(h.button('標註會員'));advance(200);assert.equal(h.requests.length,1);await h.settle(0,{items:[]});assert.match(h.picker()!.textContent,/沒有符合的會員/);
+ });
 });

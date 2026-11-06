@@ -22,9 +22,9 @@ export function CommunityGameSubmission({ hidden }: { hidden: boolean }) {
   </div>;
   return <section hidden={hidden} className="game-submission" aria-label="社群遊戲投稿">
     <details>
-      <summary>投稿自己的遊戲</summary>
+      <summary>投稿自己的遊戲（GitHub 公開投稿）</summary>
       <div className="game-submission-content">
-        <p>先準備資料，再到 GitHub 由你送出公開投稿。原始碼可用固定版本網址，或在 GitHub 附 ZIP；目前不是站內檔案上傳，也不會自動上架或執行遊戲。</p>
+        <p>先準備資料，再到 GitHub 由你送出公開投稿。原始碼可用固定版本網址，或在 GitHub 附 ZIP；這個 GitHub 選項不會上傳檔案到站內，也不會自動上架或執行遊戲。</p>
         <p><a href={GAME_ISSUES_URL} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">先查看已有投稿與討論 ↗</a>。需要 GitHub 帳號；請勿填入密碼、金鑰、私人資料或未授權素材。</p>
         <form onSubmit={prepare}>
           {field('title', '遊戲名稱', '用一句簡短名稱辨識你的遊戲。')}

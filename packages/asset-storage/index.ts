@@ -214,7 +214,10 @@ export async function writeVerifiedObject(store: ObjectStore, key: AssetObjectKe
   if (metadata.policyRevision !== policy.revision) fail('invalid_policy');
   const bytes = snapshotBoundedBytes(value.bytes, metadata.byteSize);
   if (bytes.byteLength !== metadata.byteSize || await sha256(bytes) !== metadata.sha256) fail('integrity_mismatch');
-  if (metadata.profileId === 'member.ar-target') {
+  if (metadata.profileId === 'member.game-source') {
+    validateText(bytes);
+    if (!new TextDecoder().decode(bytes).trim()) fail('invalid_content');
+  } else if (metadata.profileId === 'member.ar-target') {
     try { inspectArTarget(bytes); } catch { fail('invalid_content'); }
   } else if (metadata.profileId === 'member.profile-cover') {
     try { assertCanonicalWebp(bytes, 1600, 600); } catch { fail('invalid_content'); }
@@ -249,7 +252,10 @@ export async function prepareLegacyMediaRepresentation(body: ReadableStream<Uint
   const profile = MEDIA_OBJECT_PROFILES[profileId];
   if (!(profile.contentTypes as readonly string[]).includes(contentType)) fail('unsupported_content_type');
   const bytes = await readBounded(body, profile.maxBytes);
-  if (profileId === 'member.ar-target') {
+  if (profileId === 'member.game-source') {
+    // New source has no legacy representation. Only the domain validator may prepare it.
+    fail('unsupported_content_type');
+  } else if (profileId === 'member.ar-target') {
     try { inspectArTarget(bytes); } catch { fail('invalid_content'); }
   } else if (profileId === 'member.profile-cover') {
     try { assertCanonicalWebp(bytes, 1600, 600); } catch { fail('invalid_content'); }

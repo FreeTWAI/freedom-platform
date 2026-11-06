@@ -18,3 +18,17 @@
   .pt-play-area:not(:has(.pt-panel))>.pt-tools{grid-column:1/-1;margin:0}
   .pt-play-area:not(:has(.pt-panel))>.pt-restart{grid-column:1/-1}
 }
+/* Non-WebGL holiday board: the six domain-backed buttons are the scene. */
+.pt-light-stage{aspect-ratio:auto;touch-action:pan-y;padding:16px;background:#efe7d9;min-height:280px}
+.pt-light-title,.pt-light-hint{font-size:14px;line-height:1.7;text-align:center;margin:0 0 12px;color:#443b37}
+.pt-light-hint{margin:14px 0 0}
+.fw-arcade-root .pt-light-grid button{display:grid;grid-template-columns:1fr;justify-items:center;gap:2px;min-height:110px;padding:8px;position:relative;border:2px solid #8e7b62;border-radius:18px 13px 16px 11px;color:#443b37;background:#fff8e8;font-size:14px;box-shadow:0 3px 0 #bda78b}
+.pt-light-grid b{position:absolute;top:5px;left:5px;font-size:14px}
+.pt-light-grid svg{width:100%;max-width:105px;height:88px;display:block}
+.fw-arcade-root .pt-light-grid button:disabled{opacity:1;background:#e6dac5;color:#655744;box-shadow:none}
+.fw-arcade-root .pt-root button:focus-visible,.pt-download:focus-visible{outline:3px solid #3f6250;outline-offset:3px}
+.pt-download{display:inline-flex;align-items:center;min-height:44px;padding:9px 12px;font-size:14px;border:1px solid #8e7b62;border-radius:9px;background:#fff8e8;color:#443b37}
+.fw-arcade-root .pt-tools button,.pt-feedback,.pt-root .pt-heading>button,.pt-root .pt-heading>div>p:last-child,.fw-arcade-root .pt-hole-controls button{font-size:14px}
+@media(max-width:440px){.pt-light-stage{padding:10px}.pt-light-grid{gap:8px}.pt-light-grid svg{height:72px}.fw-arcade-root .pt-light-grid button{min-height:100px;padding:6px}.pt-light-grid b{width:20px;height:20px;left:3px;top:3px}}
+@media(max-height:500px) and (min-width:560px){.pt-play-area:not(:has(.pt-panel)) .pt-light-stage{width:100%;min-height:0}.pt-play-area:not(:has(.pt-panel)):has(.pt-light-stage){display:block}.pt-play-area:not(:has(.pt-panel)) .pt-light-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.pt-root .pt-kicker,.pt-root .pt-scoreboard small,.pt-root .pt-scoreboard strong>span,.pt-root .pt-live-label,.pt-root .pt-seed small,.pt-root .pt-rule-card>small,.pt-root .pt-play-area>.pt-feedback{font-size:14px}

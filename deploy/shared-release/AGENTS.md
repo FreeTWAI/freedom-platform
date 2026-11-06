@@ -21,7 +21,7 @@ Verify and CodeQL runs are required. The workflow/controller comes from the
 main workflow revision, independently of the selected application revision.
 
 事故停止開關是 repository variable `AUTO_RELEASE_ENABLED`：只有精確值 `true` 才開啟
-`workflow_run` 自動准入，未設定或任何其他值都關閉；手動 `workflow_dispatch` 不受影響。
+`workflow_run` 與 `schedule` 自動准入，未設定或任何其他值都關閉；手動 `workflow_dispatch` 不受影響。
 各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行，不得以自動開關繞過。
 
 Approved main pushes automatically release after both exact-source main checks
@@ -29,6 +29,12 @@ pass: staging-next first, then next using the same source and installed image.
 Authenticate workflow_run notifications against GitHub, not PR artifacts. Keep
 the current operator identity checks. Production requires the completed staging
 job and hashed receipt in the same run/attempt; the enclosing run is still active.
+Scheduled reconciliation selects current main in read-only admission, then fixes
+that SHA for execution. Authenticate the actual schedule run and the same four
+maintainers' current write authority; never impersonate a CI actor or authorize
+the merge-queue bot. A distinct exact cron marker binds both environment receipts.
+Scheduled runs require existing successful latest deployments in both environments;
+they never retry a failed/uncertain release or promote staging from another attempt.
 Queue releases and backups without cancelling mutations. Duplicate/older source
 notifications cannot replay or roll back deployments. Failed/uncertain latest
 deployments stop automation for explicit readback/reconciliation.

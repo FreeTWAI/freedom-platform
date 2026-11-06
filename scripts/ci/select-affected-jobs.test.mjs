@@ -834,6 +834,42 @@ test('CI services and migration prefetch retain one immutable PostgreSQL image o
   assert.ok(jobBlock(text, 'deploy-preflight').includes(`run: docker pull ${image}\n`));
 });
 
+test('schema fixture lanes retain lock capacity and reject invalid PostgreSQL readback', async () => {
+  const workflow = await readFile(workflowPath, 'utf8');
+  for (const id of ['guild-presentation', 'governance-consumers']) {
+    const job = jobBlock(workflow, id);
+    assert.match(job, /POSTGRES_INITDB_ARGS: '-c max_locks_per_transaction=256 -c dynamic_shared_memory_type=mmap'/u);
+    const start = job.indexOf('      - name: Verify schema fixture PostgreSQL lock capacity\n');
+    assert(start >= 0, id);
+    const end = job.indexOf('      - run: npm ci\n', start);
+    assert(end > start, id);
+    const step = job.slice(start, end);
+    assert.ok(step.includes('POSTGRES_SERVICE_ID: ${{ job.services.postgres.id }}'), id);
+    assert.ok(step.includes('[[ "$POSTGRES_SERVICE_ID" =~ ^[a-f0-9]{64}$ ]]'), id);
+    assert.ok(step.includes('docker exec "$POSTGRES_SERVICE_ID" psql -U freedom_local -d fp_foundation_ci -v ON_ERROR_STOP=1 -tA'), id);
+    assert.ok(step.includes("FROM pg_settings WHERE name='max_locks_per_transaction'"), id);
+    assert.ok(step.includes("'pending_restart',pending_restart"), id);
+    const shell = step.split('        run: |\n')[1].split('\n').map(line => line.replace(/^          /u, '')).join('\n');
+    const syntax = spawnSync('bash', ['-n'], { input: shell, encoding: 'utf8', timeout: 5000 });
+    assert.equal(syntax.status, 0, syntax.stderr);
+    // Execute the actual workflow validator, not a test-owned copy. No DB is opened.
+    const python = shell.split("<<'PYREADBACK'\n")[1]?.split('\nPYREADBACK')[0];
+    assert(python, id);
+    const valid = { database: 'fp_foundation_ci', server_version_num: '180006',
+      max_locks_per_transaction: '256', pending_restart: false,
+      dynamic_shared_memory_type: 'mmap', fsync: 'on', full_page_writes: 'on' };
+    const run = value => spawnSync('python3', ['-', JSON.stringify(value)], { input: python, encoding: 'utf8', timeout: 5000 });
+    assert.equal(run(valid).status, 0, id);
+    for (const patch of [{ database: 'other' }, { server_version_num: '170000' },
+      { server_version_num: '190000' }, { max_locks_per_transaction: '64' },
+      { pending_restart: true }, { pending_restart: 'false' },
+      { dynamic_shared_memory_type: 'posix' }, { fsync: 'off' }, { full_page_writes: 'off' }]) {
+      assert.notEqual(run({ ...valid, ...patch }).status, 0, `${id}: ${JSON.stringify(patch)}`);
+    }
+    assert.notEqual(run({}).status, 0, id);
+  }
+});
+
 test('PostgreSQL prerequisite rejects RAM storage, changed images and weakened durability', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'fp-ci-postgres-readback-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

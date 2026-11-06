@@ -2457,6 +2457,7 @@ export const TENANT_DATA_CATALOG: TenantDataCatalog = deepFreeze({
             "target_gallery_photo_id",
             "target_profile_cover_id",
             "target_prize_photo_id",
+            "target_game_id",
           ],
           tenant_resolution: {
             kind: "direct" as const,
@@ -2688,6 +2689,16 @@ export const TENANT_DATA_CATALOG: TenantDataCatalog = deepFreeze({
             reason: "Maintenance, backup and deletion inventory must see every asset row. Tenant bytes stay on scoped queries, composite foreign keys, asset_scope_purpose, and the purpose allow-list that never GC-claims work.tenant-result or storefront.product-photo.",
           },
         },
+        { kind: "table" as const, table: "member_game_drafts",
+          columns: ["game_id", "scope_id", "scope_kind", "owner_principal_id", "owner_user_id", "community_id", "title", "description", "aggregate_version", "source_revision", "state", "created_at"],
+          tenant_resolution: { kind: "fk_chain" as const, via: ["resource_scopes"] },
+          isolation: { rls: "exempt" as const, reason_code: "non_tenant_sidecar",
+            reason: "Private personal-scope game drafts enter coverage through their scope FK. Current member session, principal, owner and community authorize metadata; structural coverage grants no tenant or source access. No source reader or public projection exists." } },
+        { kind: "table" as const, table: "member_game_source_revisions",
+          columns: ["game_id", "revision", "game_version", "asset_id", "scope_id", "owner_principal_id", "owner_user_id", "purpose", "asset_state", "trust", "created_at"],
+          tenant_resolution: { kind: "fk_chain" as const, via: ["assets"] },
+          isolation: { rls: "exempt" as const, reason_code: "non_tenant_sidecar",
+            reason: "Immutable private game source revisions are detected through their composite Asset FK. Personal-only purpose, owner and game bindings exclude tenant authority. Bytes stay quarantined; withdrawal retains history and quota. Maintenance needs complete inventory; this registration grants no read, execution or export." } },
         // Personal profile rows join the asset/scope graph but do not acquire
         // tenant ownership or export authority from this coverage registration.
         { kind: "table" as const, table: "member_profile_cover_targets",
