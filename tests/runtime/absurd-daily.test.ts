@@ -280,7 +280,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {PARTY_GAMES,PARTY_RULES as PT,partyOf} from '../../apps/portal-web/src/games/party/catalog.js';
-import {actParty,advanceParty,chairWave,holidayTargets,newParty,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyRun,type ChairRun,type TofuRun,type HolidayRun} from '../../apps/portal-web/src/games/party/domain.js';
+import {actParty,advanceParty,chairWave,holidayTargets,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyRun,type ChairRun,type TofuRun,type HolidayRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {DISH_DESIGNS,dishDesign} from '../../apps/portal-web/src/games/cooking/dish-designs.js';
 import {displayMarket} from '../../apps/portal-web/src/games/cooking/market-food.js';
 import {createDishModel,type DishMesh} from '../../apps/portal-web/src/games/cooking/dish-model.js';
@@ -678,6 +678,140 @@ for(const failure of ['update','capture'] as const)test(`AD-5 terminal ${failure
   assert.equal(h.live.current.cash,completed);assert.equal(h.pendingResult.current,summary);
   assert.equal(h.results.length,1);assert.equal(h.live.current.done,true);
 });
+
+// PT-LIGHT-PURE-BEGIN: this block also runs with Node's built-in TS stripping,
+// against the actual pure modules, when the full suite's dependencies are absent.
+import {holidayCells,holidayInput,holidayResultSvg,holidayResultImage} from '../../apps/portal-web/src/games/party/light-holiday.js';
+import {loadPartyStage} from '../../apps/portal-web/src/games/party/stage-loader.js';
+
+test('PT-light: six cells expose only the live open targets, pressed cells and paused state',()=>{
+  const initial=newParty('holiday',42) as HolidayRun;
+  assert.equal(holidayCells(initial).length,6);assert.ok(holidayCells(initial).every(c=>!c.enabled&&c.kind==='waiting'));
+  let run=partyTime(startParty(initial) as HolidayRun,PT.holidayOpenMs);
+  const targets=holidayTargets(run.seed,run.round),cells=holidayCells(run);
+  assert.equal(cells.filter(c=>c.kind==='good').length,1);assert.equal(cells[targets.good].label,'休假');assert.equal(cells[targets.boss].label,'開會');assert.equal(cells.filter(c=>c.enabled).length,6);
+  run=actParty(run,{kind:'pick',hole:targets.good,round:run.round}) as HolidayRun;
+  assert.equal(holidayCells(run)[targets.good].enabled,false);assert.equal(holidayCells(run)[targets.good].label,'已選');
+  assert.ok(holidayCells(pauseParty(run) as HolidayRun).every(c=>!c.enabled));
+  assert.ok(holidayCells(partyTime(run,PT.holidayCloseMs)).every(c=>!c.enabled));
+});
+
+test('PT-light: pointer and both native activation keys retain the down wave and reject cancellation',()=>{
+  for(const owner of ['pointer:1','key: ','key:Enter']){
+    const input=holidayInput();let run=partyTime(startParty(newParty('holiday',42)) as HolidayRun,4600);
+    assert.ok(input.down(0,owner,run.round));assert.equal(input.down(0,'pointer:2',run.round),false);
+    run=partyTime(run,4930);input.up(0,owner);const round=input.click(0,run.round,owner)!;
+    assert.equal(round,3);assert.equal(actParty(run,{kind:'pick',hole:0,round}),run);
+    assert.ok(input.down(0,owner,run.round));input.cancel();assert.equal(input.click(0,run.round,owner),null);
+    assert.ok(input.down(0,owner,run.round));input.lost(0,owner);assert.equal(input.click(0,run.round,owner),null);
+    assert.ok(input.down(0,owner,run.round));input.up(0,owner);input.lost(0,owner);assert.equal(input.click(0,run.round,owner),run.round,'normal pointer release keeps the following click');
+    assert.equal(input.click(0,run.round,owner),null,'one held input can commit only once');
+    input.down(0,owner,3);assert.ok(input.down(0,owner,4),'a new physical down recovers after a disabled cell swallowed release');assert.equal(input.click(0,4,owner),4);
+  }
+});
+
+test('PT-light: assistive clicks work without a down, while a held physical input cannot be stolen',()=>{
+  const input=holidayInput();assert.equal(input.pointerClick(4),null);assert.equal(input.assistive(4,2),2);
+  input.down(4,'pointer:1',2);assert.equal(input.pointerClick(4),null);input.up(4,'pointer:2');assert.equal(input.pointerClick(4),null);input.up(4,'pointer:1');assert.equal(input.pointerClick(4),2);assert.equal(input.pointerClick(4),null);
+  input.down(4,'key: ',2);assert.equal(input.assistive(4,2),null);assert.equal(input.click(4,2,'key:Enter'),null);
+  input.cancel(4);assert.equal(input.assistive(4,2),2);assert.equal(input.click(4,2,'key: '),null);
+});
+
+test('PT-light: a full same-domain holiday run yields a truthful finished SVG without any renderer',()=>{
+  let run=startParty(newParty('holiday',42)) as HolidayRun;
+  assert.throws(()=>holidayResultSvg(run),/not complete/);
+  for(let round=0;round<20;round++){
+    run=partyTime(run,round*PT.holidayRoundMs+250);
+    const good=holidayCells(run).find(c=>c.kind==='good')!;
+    run=actParty(run,{kind:'pick',hole:good.hole,round:run.round}) as HolidayRun;
+    if(round===5){const paused=pauseParty(run);assert.equal(advanceParty(paused,1000),paused);run=resumeParty(paused) as HolidayRun;}
+  }
+  run=partyTime(run,PT.holidayMs);assert.equal(run.score,5100);assert.equal(run.saved,20);assert.equal(run.status,'done');
+  const before=JSON.stringify(run),svg=holidayResultSvg(run);
+  assert.match(svg,/5100 分/);assert.match(svg,/搶救 20 個假日/);assert.match(svg,/誤選 0 次/);assert.match(svg,/最長 20 連擊/);assert.match(svg,/完成 24 秒/);assert.match(svg,/同題 #42/);assert.match(svg,/輕量成果卡/);
+  assert.doesNotMatch(svg,/<(?:image|script|foreignObject)\b|https?:\/\/[^w]/);assert.equal(decodeURIComponent(holidayResultImage(run).split(',')[1]),svg);assert.equal(JSON.stringify(run),before);
+  const altered={...run,score:17,saved:2,mistakes:3,bestCombo:1};const other=holidayResultSvg(altered);assert.match(other,/17 分/);assert.match(other,/搶救 2 個假日 · 誤選 3 次/);assert.doesNotMatch(other,/5100/);
+});
+
+function partyLoaderHarness(){
+  let resolve!:(create:(lost:()=>void)=>{dispose:()=>void})=>void,reject!:(error:Error)=>void,timeout=()=>{},lost=()=>{};
+  const events:string[]=[],pending=new Promise<(lost:()=>void)=>{dispose:()=>void}>((yes,no)=>{resolve=yes;reject=no;});
+  const owner=loadPartyStage({load:()=>{events.push('load');return pending;},install:()=>events.push('install'),ready:()=>events.push('ready'),failed:reason=>events.push(reason),timeoutMs:15000,schedule:fn=>{timeout=fn;return 7;},clear:id=>{assert.equal(id,7);}});
+  return {owner,events,timeout:()=>timeout(),lose:()=>lost(),resolve:()=>resolve(callback=>{events.push('create');lost=callback;return {dispose:()=>events.push('dispose')};}),reject:()=>reject(Error('offline'))};
+}
+const partyMicrotasks=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
+
+test('PT-light: timeout, cancellation and a newer owner isolate late imports and rejections',async()=>{
+  for(const reason of ['timeout','cancel','reject']){
+    const old=partyLoaderHarness();await partyMicrotasks();if(reason==='timeout')old.timeout();else if(reason==='cancel')old.owner.cancel();else{old.reject();await partyMicrotasks();}
+    const current=partyLoaderHarness();await partyMicrotasks();current.resolve();old.resolve();await partyMicrotasks();
+    assert.deepEqual(old.events,reason==='timeout'?['load','timeout']:reason==='reject'?['load','load']:['load']);
+    assert.deepEqual(current.events,['load','create','install','ready']);old.lose();old.timeout();assert.deepEqual(current.events,['load','create','install','ready']);current.owner.cancel();assert.equal(current.events.at(-1),'dispose');
+  }
+});
+
+test('PT-light: only an open restart confirmation consumes Escape before the fullscreen owner',()=>{
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+  const start=source.indexOf('  escapeCapture.current='),end=source.indexOf('\n  useEffect(',start);assert.ok(start>=0&&end>start);
+  const input=holidayInput(),gesture={current:{id:1}},calls:string[]=[];
+  const live=pauseParty(actParty(partyTime(startParty(newParty('holiday',42)) as HolidayRun,300),{kind:'pick',hole:holidayTargets(42,0).good,round:0}));
+  const context:any={escapeCapture:{current:undefined},input:{current:input},gesture,restart:false,live,keepRun:()=>{context.restart=false;calls.push('focus-restart');}};
+  const escape=runInNewContext(source.slice(start,end)+'\nescapeCapture.current',context);
+  const event=()=>({preventDefault:()=>calls.push('prevent'),stopPropagation:()=>calls.push('stop')});
+  input.down(0,'key: ',0);escape(event());assert.deepEqual(calls,[],'ordinary Escape must reach fullscreen');assert.equal(input.click(0,0,'key: '),null);assert.equal(gesture.current,null);
+  context.restart=true;input.down(0,'key:Enter',0);escape(event());assert.deepEqual(calls,['prevent','stop','focus-restart']);assert.equal(input.click(0,0,'key:Enter'),null);
+  calls.length=0;escape(event());assert.deepEqual(calls,[],'the next Escape must reach fullscreen');assert.equal(context.live,live);assert.equal(live.status,'paused');assert.equal(live.score,120);
+});
+
+test('PT-light: a loaded scene is released once on context loss or cancellation, including first draw failure',async()=>{
+  const h=partyLoaderHarness();await partyMicrotasks();h.resolve();await partyMicrotasks();h.lose();h.lose();h.owner.cancel();assert.deepEqual(h.events,['load','create','install','ready','dispose','lost']);
+  const events:string[]=[];
+  loadPartyStage({load:async()=>()=>({dispose:()=>events.push('dispose')}),install:()=>{throw Error('first draw');},ready:()=>events.push('ready'),failed:r=>events.push(r),timeoutMs:15000,schedule:()=>1,clear:()=>{}});
+  await partyMicrotasks();assert.deepEqual(events,['dispose','load']);
+  loadPartyStage({load:async()=>lost=>{lost();return {dispose:()=>events.push('late-dispose')};},install:()=>events.push('install'),ready:()=>events.push('ready'),failed:r=>events.push(r),timeoutMs:15000,schedule:()=>1,clear:()=>{}});
+  await partyMicrotasks();assert.deepEqual(events,['dispose','load','lost','late-dispose']);
+});
+// PT-LIGHT-PURE-END
+
+test('PT-light: actual controller handlers retain live progress, missing releases, restart focus and a renderer-free result (non-native)',async()=>{
+  const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code.replace('import("./stage")','Promise.resolve().then(()=>require("./stage"))');
+  const slots:any[]=[],effects:Array<()=>void>=[],buttons:any[]=[],results:any[]=[],frames=new Map<number,(at:number)=>void>();
+  let index=0,dirty=false,sequence=0,section:any,focused='',created=0;const escapeListeners=new Set<(event:any)=>void>();
+  const same=(a:any[],b:any[])=>a?.length===b?.length&&a.every((value,i)=>Object.is(value,b[i]));
+  const hooks={useRef:(value:any)=>{const i=index++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=index++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return [slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=index++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
+  const host={dataset:{} as Record<string,string|number>,focus:()=>{focused='host';},closest:()=>({scrollIntoView(){}})};
+  const label=(value:any):string=>Array.isArray(value)?value.map(label).join(''):value&&typeof value==='object'?(value.props?.['aria-hidden']?'':label(value.props?.children)):typeof value==='string'?value:'';
+  const jsx=(type:any,props:any)=>{if(type==='section')section=props;if(type==='div'&&props.ref)props.ref.current=host;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focused=label(props.children);}};}return {type,props};};
+  const module={exports:{} as any};class Button{}class Anchor{}
+  runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,matchMedia:()=>({matches:true}),requestAnimationFrame:(callback:(at:number)=>void)=>{const id=++sequence;frames.set(id,callback);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),document:{hidden:false,addEventListener(){},removeEventListener(){}},window:{addEventListener:(name:string,listener:(event:any)=>void,capture?:boolean)=>{if(name==='keydown'&&capture)escapeListeners.add(listener);},removeEventListener:(name:string,listener:(event:any)=>void)=>{if(name==='keydown')escapeListeners.delete(listener);}},require:(path:string)=>{
+    if(path==='react')return hooks;if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
+    if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
+    if(path==='./stage')return {createPartyStage:()=>{created++;throw Error('WebGL unavailable');}};
+    if(path==='./light-holiday')return {holidayCells,holidayInput,holidayResultImage};
+    if(path==='./catalog')return {PARTY_GAMES,PARTY_RULES:PT};
+    if(path==='./domain')return {actParty,advanceParty,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition};
+    if(path==='../diagnostics')return {syncDiagnostics:(node:any,values:any)=>Object.assign(node.dataset,values)};
+    return {GameCover:()=>null};
+  }});
+  const render=()=>{index=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'holiday',seed:42,onBack(){},onResult:(result:any)=>results.push(result)});while(effects.length)effects.shift()!();};
+  const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
+  const button=(text:string)=>{const found=buttons.find(b=>label(b.children).trim()===text);assert.ok(found,`button ${text}`);return found;};
+  const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:new Button(),preventDefault(){},stopPropagation(){}});
+  let time=0;const tick=(ms:number)=>{time+=ms;const callbacks=[...frames.values()];frames.clear();for(const callback of callbacks)callback(time);if(dirty)render();};
+  const advance=(target:number)=>{for(let i=0;i<1000&&Number(host.dataset.elapsed??0)<target;i++)tick(50);assert.ok(Number(host.dataset.elapsed)>=target);};
+  render();await settle();assert.equal(created,1);button('改用輕量玩法').onClick();await settle();assert.equal(section['data-party-mode'],'light');button('開始派對！').onClick();await settle();tick(0);advance(300);
+  const good=()=>{const found=buttons.find(b=>/第 [1-6] 格：休假/.test(b['aria-label']??''));assert.ok(found);return found;};
+  const held=good();held.onKeyDown(key(' '));for(const listener of escapeListeners)listener(key('Escape'));held.onKeyUp(key(' '));await settle();assert.equal(section['data-party-score'],0,'native capture cancels even when an outer React capture swallows Escape');held.onKeyDown(key(' '));advance(1450); // No keyup/onBlur: simulate a disabled node swallowing release.
+  const current=good();current.onKeyDown(key(' '));current.onKeyUp(key(' '));await settle();assert.equal(section['data-party-score'],120);
+  button('重新開始').onClick();await settle();assert.equal(focused,'確定重來');const frozen=host.dataset.elapsed;
+  section.onKeyDown({...key('Enter'),target:host});await settle();tick(500);assert.equal(host.dataset.elapsed,frozen);assert.equal(section['data-party-state'],'paused');
+  for(const listener of escapeListeners)listener(key('Escape'));await settle();assert.equal(focused,'重新開始');button('繼續這一局').onClick();await settle();tick(0);
+  advance(2650);good().onClick({detail:0});await settle();assert.equal(section['data-party-score'],260);
+  advance(PT.holidayMs);assert.equal(section['data-party-state'],'done');assert.equal(created,1);section.onKeyDown({...key('Enter'),target:new Anchor()});assert.equal(results.length,0,'Enter on the SVG link retains native download behavior');button('查看這局成果').onClick();await settle();assert.equal(results.length,1);assert.match(results[0].image,/^data:image\/svg\+xml/);assert.match(decodeURIComponent(results[0].image.split(',')[1]),/260 分/);
+  for(const slot of slots)slot?.cleanup?.();assert.equal(frames.size,0);assert.equal(escapeListeners.size,0);
+});
+
+
 
 test('UX-15c: a held holiday canvas gesture retains its original round across a target change',()=>{
   const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm'}).code;
