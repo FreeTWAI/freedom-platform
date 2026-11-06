@@ -56,3 +56,9 @@
 新增測試涵蓋原 bytes／digest／副本隔離、不執行 script、拒絕 caller authority、無讀取 MIME 拒絕、精確上限／超量取消、多位元 UTF-8／跨 chunk、非法內容、固定無秘密錯誤與不釋放他人的 reader。這些只證明來源檢查，不是 native upload、quarantine 持久化、HTTP／Worker、發布、瀏覽器隔離或真人驗收。
 
 下一個必要 implementation：新 game target／revision 與私有 quarantine policy schema、精確 profile／engine target／object-write-effect admission、會員 owner-scoped routes 和完整 prepare／write／finalize／撤回測試。接續審核／發布 origin 前，任何已存來源仍不得公開 serving 或執行。所有新增 migration 編號與 catalog 需依當時主線協調；本階段未新增 migration，未改現有 catalog 或其測試。
+
+## 第三階段候選：會員私有保存，未開放
+
+`game-quarantine.ts`／[私有來源契約](GAME-QUARANTINE.md) 接上目前會員權限、私人草稿與不可變來源版本、既有 Asset lifecycle 和撤回 API。單檔來源存為非執行的 application/octet-stream，仍為 unreviewed；沒有來源 GET、試玩、審核、發布或前端上傳 UI。Migration203 為本候選暫定編號，canonical policy 預設關閉，未執行或部署。
+
+舊「第二階段」段落描述當時 helper-only 的範圍；helper 的 not_stored 語義不變，不能自己授予保存。第三階段另由 server-owned domain adapter 取得當下政策／quota，執行 verified PUT／GET 與原子 finalize。實際 PG／runtime／HTTP／Worker／R2、備份還原與真人驗收仍需證據，不能以 source 靜態測試代替。

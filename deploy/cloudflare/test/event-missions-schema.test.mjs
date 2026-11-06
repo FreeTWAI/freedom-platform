@@ -20,8 +20,9 @@ test('mission candidate preserves exact PR1170 schema195 ledger without treating
  assert.notEqual(next.ledger_digest,old.ledger_digest);
 });
 
-test('explicit202 scan accepts only complete catalog; historical201/200/199/198/197/196/195/194 profiles are not silently advanced',()=>{
- assert.equal(checkMigrations(root,profile(202)).ok,true);
+test('explicit203 scan accepts only complete catalog; historical202/201/200/199/198/197/196/195/194 profiles are not silently advanced',()=>{
+ assert.equal(checkMigrations(root,profile(203)).ok,true);
+ assert.equal(checkMigrations(root,profile(202)).ok,false);
  assert.equal(checkMigrations(root,profile(201)).ok,false);
  assert.equal(checkMigrations(root,profile(200)).ok,false);
  assert.equal(checkMigrations(root,profile(199)).ok,false);
@@ -30,7 +31,7 @@ test('explicit202 scan accepts only complete catalog; historical201/200/199/198/
  assert.equal(checkMigrations(root,profile(196)).ok,false);
  assert.equal(checkMigrations(root,profile(195)).ok,false);
  assert.equal(checkMigrations(root,profile(194)).ok,false);
- assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(202)));
+ assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(203)));
 });
 
 test('mission schema has no attendee, friend or Contribution write and clearing is not a hard-erasure claim',()=>{
@@ -63,7 +64,7 @@ test('registration policy197 appends to exact mission196 history and preserves t
 
 test('tester accounts202 appends to exact prize-photo201 history with private self-reported progress and feedback',()=>{
  const registration=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=201),profile(201));
- const next=resolveMigrationPlan(sources(),profile(202),registration.ledger);
+ const next=resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=202),profile(202),registration.ledger);
  assert.deepEqual(next.pending,['202_tester_map_accounts.sql']);
  assert.deepEqual(next.ledger.slice(0,-1),registration.ledger);
  assert.notEqual(next.ledger_digest,registration.ledger_digest);

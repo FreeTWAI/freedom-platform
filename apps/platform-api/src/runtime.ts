@@ -93,6 +93,7 @@ export type PlatformRuntime = {
   eventBannerAssets?:EventBannerAssetService;
   eventBannerAssetStore?:ObjectStore;
   eventPrizePhotoAssetStore?:ObjectStore;
+  gameSourceAssetStore?:ObjectStore;
   eventVideoAssets?:EventVideoAssetService;
   eventVideoAssetStore?:ObjectStore;
   skillImageAssets?:SkillImageAssetService;

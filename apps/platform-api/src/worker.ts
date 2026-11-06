@@ -499,6 +499,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
         // Reuse only the installed storage transport. The new purpose has its
         // own canonical default-OFF policy; no banner/avatar grant is reused.
         runtime.eventPrizePhotoAssetStore=runtime.avatarAssetStore;
+        runtime.gameSourceAssetStore=runtime.avatarAssetStore;
         if(env.FREEDOM_SERVICE_COVER_ENABLED==='true'&&runtime.avatarAssetStore){
           runtime.serviceCoverAssetStore=runtime.avatarAssetStore;
           runtime.serviceCoverAssets=createServiceCoverAssetService(pool,{store:runtime.avatarAssetStore,resolvePolicy:resolveServiceCoverUploadPolicy});

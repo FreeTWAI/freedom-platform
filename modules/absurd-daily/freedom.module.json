@@ -13,7 +13,12 @@
     "tests/runtime/market-cooking.test.ts",
     "tests/e2e/absurd-daily.spec.ts",
     "docs/development/absurd-daily.md",
-    "apps/portal-web/public/games/absurd-daily/**"
+    "apps/portal-web/public/games/absurd-daily/**",
+    "apps/platform-api/src/routes/game-uploads.ts",
+    "migrations/203_member_game_quarantine.sql",
+    "tests/runtime/game-quarantine.test.ts",
+    "tests/runtime/game-quarantine-db.test.ts",
+    "deploy/cloudflare/test/game-quarantine-schema.test.mjs"
   ],
   "public_exports": [
     "apps/portal-web/src/games/AbsurdDaily.tsx",
@@ -22,7 +27,11 @@
   ],
   "dependencies": [
     "shared",
-    "asset-storage"
+    "asset-storage",
+    "asset-lifecycle",
+    "command-core",
+    "resource-scopes",
+    "scoped-commands"
   ],
   "contract_families": [],
   "client_profiles": [
@@ -32,7 +41,8 @@
     "AGENTS.md",
     "CONTRIBUTING.md",
     "DESIGN.md",
-    "modules/absurd-daily/README.md"
+    "modules/absurd-daily/README.md",
+    "modules/absurd-daily/GAME-QUARANTINE.md"
   ],
   "invariants": [
     "no-secrets-in-artifacts"
@@ -50,6 +60,18 @@
         "absurd-daily.game-page.view"
       ],
       "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "absurd-daily.private-game-drafts",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/game-uploads.ts",
+      "operations": [
+        "game.draft.create",
+        "game.draft.read",
+        "game.source.upload",
+        "game.draft.withdraw"
+      ],
+      "auth_profile": "member-session"
     }
   ]
 }
