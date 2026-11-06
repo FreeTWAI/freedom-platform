@@ -83,6 +83,8 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
 
   function captureEscape(event: KeyboardEvent<HTMLDivElement>) {
     if (mode === 'normal' || event.key !== 'Escape') return;
+    // The top-layer native modal owns its cancel key before presentation exit.
+    if (container.current?.querySelector('dialog:modal')) return;
     // Exit explicitly before the game's Escape-to-pause handler sees the key.
     event.preventDefault(); event.stopPropagation();
     if (mode === 'viewport') { setMode('normal'); setMessage(''); }

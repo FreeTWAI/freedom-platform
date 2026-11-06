@@ -329,6 +329,62 @@ for(const width of [320,1440])for(const kind of ['knead','pour'] as const)test(`
   if(kind==='knead'){expect(completed.active.count).toBe(1);await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);}
   else{expect(completed.status).toBe('step-result');expect(completed.reports).toHaveLength(initial.reports.length+1);expect(completed.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);await expect(page.getByRole('button',{name:/^下一步：/})).toBeVisible();}
 });
+for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const phase of ['playing','step-result'] as const)for(const presentation of ['normal','viewport'] as const){
+  test(`UX-2 guided restart is modal and cancellable at ${viewport.width}px from ${phase} in ${presentation}`,async({page})=>{
+    await page.setViewportSize(viewport);await page.clock.install();
+    if(presentation==='viewport')await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=async()=>{throw new DOMException('denied','NotAllowedError');};});
+    await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());
+    await page.goto('/play');const f=kitchenCheckpoint('slice');
+    await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);
+    await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);
+    await expect(page.locator('.ck-visual-light')).toBeVisible();
+    await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+    const fullscreen=page.locator('.fullscreen-game');
+    if(presentation==='viewport'){await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(fullscreen).toHaveClass(/fullscreen-game--viewport/);expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();}
+    await page.getByRole('button',{name:'繼續料理',exact:true}).click();
+    for(let i=0;i<(phase==='playing'?1:currentStep(f.run).goal);i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();}
+    const game=page.locator('.ck-game'),restart=page.getByRole('button',{name:'重新做',exact:true}),dialog=page.getByRole('dialog',{name:'重新做這盤料理',exact:true});
+    await expect(game).toHaveAttribute('data-cooking-state',phase);
+    await restart.focus();await page.keyboard.press('Enter');await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate(el=>el.matches(':modal'))).toBe(true);
+    // Match the existing large-text fixture through CSSOM without injecting a CSP-blocked stylesheet.
+    if(viewport.width===320)await dialog.evaluate(el=>{for(const node of el.querySelectorAll<HTMLElement>('p,button')){const line=parseFloat(getComputedStyle(node).lineHeight);node.style.fontSize=node.tagName==='BUTTON'?'30px':'28px';if(Number.isFinite(line))node.style.lineHeight=`${line*2}px`;}});
+    if(viewport.width===320){await expect(dialog.locator('p')).toHaveCSS('font-size','28px');for(const button of await dialog.getByRole('button').all())await expect(button).toHaveCSS('font-size','30px');}
+    const keep=dialog.getByRole('button',{name:'繼續這一盤',exact:true});await expect(keep).toBeFocused();
+    const pausedPhase=phase==='playing'?'paused':'step-result',background=page.getByRole('button',{name:phase==='playing'?'繼續料理':/^下一步：/,exact:phase==='playing',includeHidden:true});
+    await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);
+    // Native inertness prevents even programmatic focus from escaping to a live background control.
+    await background.evaluate(el=>el.focus());await expect(keep).toBeFocused();
+    for(let i=0;i<5;i++){await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+    const confirm=dialog.getByRole('button',{name:'確定重新做',exact:true});await expect(confirm).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(keep).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(confirm).toBeFocused();
+    const saved=await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY),book=await page.evaluate(key=>localStorage.getItem(key),COOKBOOK_KEY);
+    await page.clock.runFor(6000);expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+    const bounds=(await dialog.boundingBox())!;expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.y).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(viewport.width);expect(bounds.y+bounds.height).toBeLessThanOrEqual(viewport.height);
+    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);
+    expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+    if(presentation==='viewport'){
+      await expect(fullscreen).toHaveClass(/fullscreen-game--viewport/);
+      // Neither a native non-modal dialog nor ARIA dialog markup owns fullscreen Escape.
+      await fullscreen.evaluate(el=>{const nonmodal=document.createElement('dialog');nonmodal.dataset.restartControl='nonmodal';nonmodal.textContent='非模態控制';el.append(nonmodal);nonmodal.show();const role=document.createElement('div');role.dataset.restartControl='role';role.setAttribute('role','dialog');role.setAttribute('aria-label','角色標記控制');el.append(role);});
+      const nonmodal=fullscreen.locator('dialog[data-restart-control]');await expect(nonmodal).toHaveAttribute('open','');expect(await nonmodal.evaluate(el=>el.matches(':modal'))).toBe(false);await expect(fullscreen.locator('[data-restart-control=role]')).toHaveAttribute('role','dialog');
+      await restart.focus();await page.keyboard.press('Escape');await expect(fullscreen).not.toHaveClass(/fullscreen-game--viewport/);await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
+      await fullscreen.evaluate(el=>{for(const node of el.querySelectorAll('[data-restart-control]'))node.remove();});
+    }
+    await page.keyboard.press('Enter');await expect(keep).toBeFocused();await keep.click();await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();
+    expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY)).toEqual(JSON.parse(saved!).run);
+    await page.reload();await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(game).toHaveAttribute('data-cooking-state',pausedPhase);
+    const restored=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);expect(restored).toEqual(JSON.parse(saved!).run);
+    await restart.click();await expect(dialog).toBeVisible();await dialog.getByRole('button',{name:'確定重新做',exact:true}).click();
+    await expect(dialog).toHaveCount(0);await expect(restart).toBeFocused();await expect(game).toHaveAttribute('data-cooking-state','ready');
+    expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBeNull();expect(await page.evaluate(key=>localStorage.getItem(key),COOKBOOK_KEY)).toBe(book);
+    await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+    // Ready cancellation must not start cooking; a subsequent explicit start remains usable.
+    await restart.click();await expect(keep).toBeFocused();await page.keyboard.press('Escape');await expect(game).toHaveAttribute('data-cooking-state','ready');
+    await page.getByRole('button',{name:'開始料理',exact:true}).click();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${currentStep(f.run).goal}`);
+    await page.getByRole('button',{name:'暫停',exact:true}).click();const fresh=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);expect(fresh.id).not.toBe(restored.id);expect(fresh.reports).toHaveLength(0);expect(fresh.active.count).toBe(1);
+    await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(game).toHaveCount(0);await expect(page.locator('dialog:modal')).toHaveCount(0);
+  });
+}
 
 test('UX-1/5: a completed cooking run can replay the same seed or move to the next real recipe',async({page})=>{
   test.setTimeout(120000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();

@@ -290,6 +290,82 @@ import {syncDiagnostics} from '../../apps/portal-web/src/games/diagnostics.js';
 const {Box3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 import {GAME_SHARE_PLATFORMS,gameShareText,gameSocialLink} from '../../apps/portal-web/src/games/result-share.js';
 
+// Executes the production component closures with real domain/storage and bounded hook/DOM ports.
+// Native dialog focus containment and background inertness are covered by E2E, not this harness.
+function guidedRestartHarness() {
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingGame.tsx',import.meta.url),'utf8');
+  const helpers=source.slice(source.indexOf('export const storagePort='),source.indexOf('/** UX-8')).replace('export const','const');
+  const body=source.slice(source.indexOf('  const [boot]='),source.indexOf('  const cue='));
+  const open=source.match(/aria-label="重新做" onClick=\{(.*?)\}>/)![1];
+  const code=transformSync(`${helpers}\nfunction component(){${body}\nreturn {live,pause,begin,restart,holdStart,holdEnd,setVisualReady,restartKey:typeof restartKey==='undefined'?null:restartKey,open:${open},dismiss:()=>setConfirmRestart(false),section,restartDialog:typeof restartDialog==='undefined'?null:restartDialog,restartButton:typeof restartButton==='undefined'?null:restartButton,keepButton:typeof keepButton==='undefined'?null:keepButton};}\ncomponent`,{loader:'ts'}).code;
+  const slots:any[]=[],effects:Array<()=>void>=[],data=new Map<string,string>();let index=0,now=0,identity=0,focuses=0,keptFocus=0,confirmedFocus=0,opened=0,closed=0;
+  const session={getItem:(key:string)=>data.get(key)??null,setItem:(key:string,value:string)=>data.set(key,value),removeItem:(key:string)=>data.delete(key)};
+  const hooks={useRef:(value:any)=>{const i=index++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=index++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return [slots[i].value,(next:any)=>{slots[i].value=typeof next==='function'?next(slots[i].value):next;}];},useEffect:(fn:()=>any,deps:any[])=>{const i=index++,old=slots[i];if(!old||deps.some((value,j)=>!Object.is(value,old.deps[j]))){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
+  const modal={open:false,querySelectorAll:()=>[confirm,keep],showModal(){assert.equal(this.open,false);this.open=true;opened++;},close(){this.open=false;closed++;}},button={focus:()=>focuses++},keep={focus:()=>{assert.equal(modal.open,true);keptFocus++;}};
+  const confirm={focus:()=>{assert.equal(modal.open,true);confirmedFocus++;}};
+  const recipe=recipeOf('margherita-pizza')!;
+  const renderComponent=runInNewContext(code,{...hooks,recipe,seed:42,fresh:false,crypto:{randomUUID:()=>`restart_${++identity}`},performance:{now:()=>now},window:{sessionStorage:session,addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},requestAnimationFrame:()=>1,cancelAnimationFrame(){},COOKING_RULES,TECHNIQUES,recipeOf,newCookingRun,actCooking,advanceCooking,currentStep,readCookingRun,saveCookingRun,clearCookingRun,onResult(){throw Error('unfinished result');},onComplete(){throw Error('unfinished completion');}});
+  let ui:any;
+  const render=()=>{index=0;ui=renderComponent();ui.section.current={focus(){},querySelector:()=>null};if(ui.restartDialog)ui.restartDialog.current=modal;if(ui.restartButton)ui.restartButton.current=button;if(ui.keepButton)ui.keepButton.current=keep;while(effects.length)effects.shift()!();return ui;};
+  render();ui.setVisualReady(true);render();
+  return {render,get ui(){return ui;},modal,keep,confirm,session,advance:(ms:number)=>{now+=ms;},stats:()=>({focuses,keptFocus,confirmedFocus,opened,closed}),unmount:()=>{for(const slot of slots)slot?.cleanup?.();}};
+}
+
+test('UX-2 guided restart opens a modal once and releases it on cancellation (non-native)',()=>{
+  const h=guidedRestartHarness();h.ui.begin();h.render();h.ui.open();h.render();
+  assert.equal(h.modal.open,true);assert.equal(h.stats().opened,1);assert.equal(h.stats().keptFocus,1);h.render();assert.equal(h.stats().opened,1);
+  h.ui.dismiss();h.render();assert.equal(h.modal.open,false);assert.equal(h.stats().closed,1);assert.equal(h.stats().focuses,1);assert.equal(h.ui.live.current.status,'paused');
+});
+
+test('UX-2 guided restart can reopen and unmount without leaving a modal open (non-native)',()=>{
+  const h=guidedRestartHarness();assert.equal(h.stats().focuses,0);
+  for(let i=0;i<2;i++){h.ui.open();h.render();assert.equal(h.modal.open,true);h.ui.dismiss();h.render();assert.equal(h.modal.open,false);}
+  h.ui.open();h.render();h.unmount();assert.equal(h.modal.open,false);assert.equal(h.stats().opened,3);assert.equal(h.stats().closed,3);
+});
+
+test('UX-2 guided restart wraps only the two Tab boundaries and preserves browser shortcuts (non-native)',()=>{
+  const h=guidedRestartHarness();h.ui.open();h.render();assert.equal(typeof h.ui.restartKey,'function');
+  const press=(target:any,shiftKey=false,extra:any={})=>{let prevented=false;h.ui.restartKey({key:'Tab',target,currentTarget:h.modal,shiftKey,preventDefault(){prevented=true;},...extra});return prevented;};
+  assert.equal(press(h.keep),true);assert.equal(h.stats().confirmedFocus,1);
+  assert.equal(press(h.confirm,true),true);assert.equal(h.stats().keptFocus,2);
+  assert.equal(press(h.confirm),false);assert.equal(press(h.keep,true),false);
+  for(const extra of [{key:'Escape'},{key:'Enter'},{ctrlKey:true},{altKey:true},{metaKey:true}])assert.equal(press(h.keep,false,extra),false);
+  assert.equal(h.stats().confirmedFocus,1);assert.equal(h.stats().keptFocus,2);assert.equal(h.modal.open,true);
+});
+
+test('UX-2 guided restart pauses and persists a held operation without counting a late release (non-native)',()=>{
+  const h=guidedRestartHarness();h.ui.begin();h.render();h.ui.holdStart({kind:'key',key:' '});h.advance(750);h.ui.open();h.render();
+  const saved=JSON.parse(h.session.getItem(COOKING_RUN_KEY)!).run;assert.equal(saved.status,'paused');assert.equal(saved.active.count,0);assert.equal(saved.active.holdAt,null);
+  h.advance(6000);h.ui.holdEnd({kind:'key',key:' '});assert.deepEqual(JSON.parse(h.session.getItem(COOKING_RUN_KEY)!).run,saved);assert.equal(h.ui.live.current.active.count,0);
+  h.ui.dismiss();h.render();assert.equal(h.ui.live.current.status,'paused');h.ui.begin();h.render();h.ui.holdStart({kind:'key',key:' '});h.advance(750);h.ui.holdEnd({kind:'key',key:' '});assert.equal(h.ui.live.current.active.count,1);
+});
+
+test('UX-2 guided restart only replaces the run after explicit confirmation (non-native)',()=>{
+  const h=guidedRestartHarness();h.ui.begin();h.render();h.ui.holdStart({kind:'key',key:' '});h.advance(750);h.ui.holdEnd({kind:'key',key:' '});h.render();const original=h.ui.live.current.id;
+  h.ui.open();h.render();h.ui.dismiss();h.render();assert.equal(h.ui.live.current.id,original);assert.equal(h.ui.live.current.active.count,1);
+  h.ui.open();h.render();h.ui.restart();h.render();assert.notEqual(h.ui.live.current.id,original);assert.equal(h.ui.live.current.status,'ready');assert.equal(h.ui.live.current.active.count,0);assert.equal(h.session.getItem(COOKING_RUN_KEY),null);
+});
+
+function fullscreenEscapeHarness(mode:'normal'|'viewport'|'native',overlay:'none'|'modal'|'nonmodal'|'role') {
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8');
+  const body=source.slice(source.indexOf('  function captureEscape('),source.indexOf('  function keys('));
+  const modes:string[]=[],messages:string[]=[];let prevented=0,stopped=0,exits=0;
+  const node={querySelector(selector:string){assert.equal(selector,'dialog:modal');return overlay==='modal'?{}:null;}};
+  const capture=runInNewContext(transformSync(`${body}\ncaptureEscape`,{loader:'ts'}).code,{mode,container:{current:node},mounted:{current:true},setMode:(next:string)=>modes.push(next),setMessage:(message:string)=>messages.push(message),document:{fullscreenElement:mode==='native'?node:null,exitFullscreen:()=>{exits++;return Promise.resolve();}}});
+  return {press:(key='Escape')=>capture({key,preventDefault(){prevented++;},stopPropagation(){stopped++;}}),stats:()=>({prevented,stopped,exits,modes,messages})};
+}
+
+test('UX-2 native restart modal owns Escape before fullscreen capture without altering presentation (non-native)',()=>{
+  for(const mode of ['normal','viewport','native'] as const){const h=fullscreenEscapeHarness(mode,'modal');h.press();assert.deepEqual(h.stats(),{prevented:0,stopped:0,exits:0,modes:[],messages:[]});}
+});
+
+test('UX-2 fullscreen Escape still exits without a native modal and ignores other keys (non-native)',()=>{
+  for(const overlay of ['none','nonmodal','role'] as const)for(const mode of ['normal','viewport','native'] as const){
+    const h=fullscreenEscapeHarness(mode,overlay);h.press('Tab');assert.deepEqual(h.stats(),{prevented:0,stopped:0,exits:0,modes:[],messages:[]});h.press();
+    assert.deepEqual(h.stats(),{prevented:mode==='normal'?0:1,stopped:mode==='normal'?0:1,exits:mode==='native'?1:0,modes:mode==='viewport'?['normal']:[],messages:mode==='viewport'?['']:[]});
+  }
+});
+
 test('CK-6: all result kinds encode social handoffs as text/link intents without credentials or publish instructions',()=>{
   for(const game of ['photo','stamp','cash','kitchen'] as const){const link=`https://example.org/play?game=${game}&seed=42${game==='kitchen'?'&recipe=egg-fried-rice':''}`,result={game,title:'黃金蛋炒飯 & <作品>',caption:'這局真的很香！',details:'3 顆星 · 99 分',seed:42,image:'data:image/jpeg;base64,YWJjZA=='};const text=gameShareText(result,link);
     assert.ok(text.includes(link));assert.ok(text.includes(result.details));
