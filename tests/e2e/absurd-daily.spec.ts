@@ -1024,6 +1024,14 @@ test('UX-9: corn dog coating cancels native animation frames on touch release an
  await page.setViewportSize({width:390,height:844});
  await page.goto('/play?game=kitchen&recipe=corn-dog&seed=42');
  await expectNativeMarketReady(page);
+ // This regression exercises the real Window API, not continuous WebGL cost.
+ // Keep the production game and native RAF, then enter its supported context-loss
+ // mode so software rendering cannot delay the input; native gameplay is covered below.
+ const native=await page.locator('.mk-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);
+ await native.evaluate(gl=>gl.getExtension('WEBGL_lose_context')!.loseContext());
+ await expect(page.locator('.mk-fallback')).toBeVisible();
+ await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);
+ expect(await native.evaluate(gl=>gl.isContextLost())).toBe(true);await native.dispose();
  await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();
  await page.locator('.mk-ingredients').getByRole('button',{name:/^熱狗 /}).click();
  const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true});
@@ -1033,8 +1041,9 @@ test('UX-9: corn dog coating cancels native animation frames on touch release an
  const box=(await hold.boundingBox())!,cdp=await page.context().newCDPSession(page);
  await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
  const startTouch=()=>cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,id:1}]});
- await startTouch();
- await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ // Queue the short press in protocol order without turning the start ACK into
+ // hold duration. Both events still travel through Chromium's native input path.
+ await Promise.all([startTouch(),cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})]);
  expect(errors).toEqual([]);
  await expect(progress).toHaveAttribute('aria-valuenow','0');
  expect(await coated()).toEqual([false]);
