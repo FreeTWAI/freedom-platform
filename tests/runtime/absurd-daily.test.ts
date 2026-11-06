@@ -1,5 +1,7 @@
 import {createCoatingHold,coatingKeyOwner} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
 import * as jsxRuntime from 'react/jsx-runtime';
+import {validateGameUploadSource,GAME_UPLOAD_SOURCE_MAX_BYTES,GameUploadSourceError} from '../../modules/absurd-daily/game-upload-source.js';
+import {blankGameSubmission,prepareGameSubmission,GAME_SUBMISSION_LIMITS} from '../../apps/portal-web/src/games/community-game-submission.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -649,4 +651,86 @@ for(const [first,second] of [[' ','Enter'],['Enter',' ']])test(`coating keyboard
  assert.notEqual(owner,other);assert.equal(coatingKeyOwner('Escape'),null);assert.equal(h.hold.begin(owner),true);h.advance(450);
  assert.equal(h.hold.begin(other),false);h.hold.release(other);assert.equal(h.progress,.5);h.advance(450);assert.deepEqual(h.completed,['portion-0']);
  h.hold.release(other);h.advance(1000);assert.equal(h.completed.length,1);h.hold.release(owner);assert.equal(h.progress,0);
+});
+
+// Community-game intake is a local draft handoff, not an upload or publication.
+test('community game submission pins repository source and keeps user text inert',()=>{
+ const draft={...blankGameSubmission(),title:'合成測試遊戲',description:'<script>alert(1)</script>\n[link](javascript:alert(1))\n```\n@someone',controls:'方向鍵移動；手機拖曳',license:'測試作者；MIT；素材自行繪製',repository:'https://github.com/example/game/',revision:'A'.repeat(40)};
+ const brief=prepareGameSubmission(draft),url=new URL(brief.url);
+ assert.equal(url.origin,'https://github.com');assert.equal(url.pathname,'/FreeTWAI/freedom-platform/issues/new');
+ assert.deepEqual([...url.searchParams.keys()],['title','body']);assert.equal(url.searchParams.get('body'),brief.body);
+ assert.ok(brief.body.includes('https://github.com/example/game/tree/'+ 'a'.repeat(40)));
+ for(const line of draft.description.split('\n'))assert.ok(brief.body.includes('    '+line));
+ assert.ok(brief.body.includes('尚未審核'));assert.ok(brief.url.length<=8000);assert.equal(draft.revision,'A'.repeat(40));
+});
+test('community game submission rejects unsafe or moving repository sources',()=>{
+ const valid={...blankGameSubmission(),title:'Game',description:'Play',controls:'Keys',license:'MIT',repository:'https://github.com/example/game',revision:'a'.repeat(40)};
+ for(const repository of ['http://github.com/example/game','https://evil.test/example/game','https://github.com.evil.test/example/game','https://user:secret@github.com/example/game','https://github.com/example/game?token=secret','https://github.com/example/game#secret','https://github.com/example/game/tree/main','https://github.com/example/..','javascript:alert(1)'])assert.throws(()=>prepareGameSubmission({...valid,repository}));
+ for(const revision of ['main','a'.repeat(39),'g'.repeat(40)])assert.throws(()=>prepareGameSubmission({...valid,revision}));
+ for(const title of ['   ','a'.repeat(61),'x\ny','x\u0000y','x\u202ey'])assert.throws(()=>prepareGameSubmission({...valid,title}));
+});
+test('community game attachment mode drops inactive source and does not claim upload',()=>{
+ const draft={...blankGameSubmission(),source:'attachment' as const,title:'Game',description:'Play',controls:'Keys',license:'MIT',repository:'https://private.test/?secret=DO-NOT-SEND',revision:'SECRET'};
+ const brief=prepareGameSubmission(draft);
+ assert.ok(!brief.body.includes('DO-NOT-SEND'));assert.ok(!brief.body.includes('SECRET'));assert.ok(brief.body.includes('尚未附檔'));
+ assert.ok(!brief.url.includes('private.test'));assert.equal(blankGameSubmission().title,'');
+});
+test('community game submission bounds fields and encoded URL without truncation',()=>{
+ const draft={...blankGameSubmission(),source:'attachment' as const,title:'Game',description:'Play',controls:'Keys',license:'MIT'};
+ for(const key of ['title','description','controls','license'] as const)assert.throws(()=>prepareGameSubmission({...draft,[key]:'x'.repeat(GAME_SUBMISSION_LIMITS[key]+1)}));
+ assert.throws(()=>prepareGameSubmission({...draft,source:'unknown' as any}));
+ // CJK UTF-8 expansion can exceed the URL budget despite field bounds.
+ const largest={...draft,title:'遊'.repeat(60),description:'戲'.repeat(200),controls:'動'.repeat(200),license:'權'.repeat(160)};
+ try{const brief=prepareGameSubmission(largest);assert.ok(brief.url.length<=8000);assert.ok(brief.body.includes(largest.description));}catch(error){assert.match(String(error),/連結過長/);}
+});
+
+
+// Native source-input foundation. These tests never store or execute HTML.
+const gameSourceStream=(bytes:Uint8Array)=>new ReadableStream<Uint8Array>({start(c){c.enqueue(bytes);c.close();}});
+const gameSourceError=(code:string)=>(error:unknown)=>error instanceof GameUploadSourceError&&error.code===code&&error.message===code;
+test('native game source keeps exact digest and private immutable snapshot without executing HTML',async()=>{
+ const text='\ufeff<!doctype html>\r\n<script>globalThis.__gameSourceExecuted=true</script>',bytes=new TextEncoder().encode(text);
+ const expected=createHash('sha256').update(bytes).digest('hex');
+ const result=await validateGameUploadSource({body:gameSourceStream(bytes),contentType:'text/html'});
+ bytes.fill(0);const first=result.copyBytes();assert.equal(new TextDecoder('utf-8',{ignoreBOM:true}).decode(first),text);
+ first.fill(1);assert.equal(createHash('sha256').update(result.copyBytes()).digest('hex'),expected);
+ assert.equal(result.sha256,expected);assert.equal(result.byteSize,new TextEncoder().encode(text).length);
+ assert.equal(result.trust,'unreviewed');assert.equal(result.storageState,'not_stored');assert.equal(result.fileName,'index.html');
+ assert.equal(Object.isFrozen(result),true);assert.equal(Reflect.set(result,'sha256','forged'),false);
+ assert.equal(Object.hasOwn(globalThis,'__gameSourceExecuted'),false);
+ assert.deepEqual(Object.keys(result).sort(),['format','trust','storageState','fileName','contentType','byteSize','sha256','copyBytes'].sort());
+ assert.equal(Object.hasOwn(result,'metadata'),false);assert.equal(Object.hasOwn(result,'bytes'),false);
+});
+test('native game source rejects authority fields, accessors and unsupported MIME before pulling',async()=>{
+ for(const patch of [{contentType:'application/zip'},{contentType:'text/plain'},{contentType:'text/html; charset=utf-8'},{owner_ref:'forged'},{objectKey:'private/key'},{policy:{platformPersistenceAllowed:true}},{status:'published'},{sourceSha256:'a'.repeat(64)}]){
+  let pulls=0;const body=new ReadableStream<Uint8Array>({pull(){pulls++;throw Error('must not pull');}},{highWaterMark:0});
+  await assert.rejects(validateGameUploadSource({body,contentType:'text/html',...patch}),gameSourceError('contentType' in patch?'unsupported_game_source_type':'invalid_game_source_request'));
+  assert.equal(pulls,0);assert.equal(body.locked,false);
+ }
+ let accessed=false;const accessor={body:gameSourceStream(new TextEncoder().encode('source')),get contentType(){accessed=true;return 'text/html';}};
+ await assert.rejects(validateGameUploadSource(accessor),gameSourceError('invalid_game_source_request'));assert.equal(accessed,false);
+ for(const request of [null,[],{}, {body:new Uint8Array(2),contentType:'text/html'}])await assert.rejects(validateGameUploadSource(request),gameSourceError('invalid_game_source_request'));
+});
+test('native game source enforces actual bytes and releases overflow reader',async()=>{
+ const exact=new Uint8Array(GAME_UPLOAD_SOURCE_MAX_BYTES).fill(65),accepted=await validateGameUploadSource({body:gameSourceStream(exact),contentType:'text/html'});
+ assert.equal(accepted.byteSize,GAME_UPLOAD_SOURCE_MAX_BYTES);
+ let cancelled=0;const body=new ReadableStream<Uint8Array>({start(c){c.enqueue(exact);c.enqueue(new Uint8Array([65]));},cancel(){cancelled++;}});
+ await assert.rejects(validateGameUploadSource({body,contentType:'text/html'}),gameSourceError('game_source_too_large'));
+ assert.equal(cancelled,1);assert.equal(body.locked,false);
+ const unicode=new TextEncoder().encode('遊'.repeat(Math.floor(GAME_UPLOAD_SOURCE_MAX_BYTES/3)+1));
+ await assert.rejects(validateGameUploadSource({body:gameSourceStream(unicode),contentType:'text/html'}),gameSourceError('game_source_too_large'));
+});
+test('native game source rejects empty, invalid UTF8 and binary control bytes with fixed errors',async()=>{
+ for(const bytes of [new Uint8Array(),new Uint8Array([0xc3,0x28]),new Uint8Array([65,0,66]),new Uint8Array([65,127]),new TextEncoder().encode(' \r\n\t')]){
+  const body=gameSourceStream(bytes);await assert.rejects(validateGameUploadSource({body,contentType:'text/html'}),gameSourceError('invalid_game_source'));assert.equal(body.locked,false);
+ }
+});
+test('native game source splits UTF8 safely and does not leak upstream errors or another readers lock',async()=>{
+ const raw=new TextEncoder().encode('<html>遊戲</html>');let index=0;
+ const body=new ReadableStream<Uint8Array>({pull(c){if(index<raw.length)c.enqueue(raw.slice(index,index+1));else c.close();index++;}});
+ const result=await validateGameUploadSource({body,contentType:'text/html'});assert.deepEqual(result.copyBytes(),raw);assert.equal(body.locked,false);
+ const bad=new ReadableStream<Uint8Array>({pull(){throw Error('SECRET UPSTREAM DATA');}},{highWaterMark:0});
+ await assert.rejects(validateGameUploadSource({body:bad,contentType:'text/html'}),gameSourceError('invalid_game_source'));assert.equal(bad.locked,false);
+ const locked=gameSourceStream(raw),reader=locked.getReader();
+ try{await assert.rejects(validateGameUploadSource({body:locked,contentType:'text/html'}),gameSourceError('invalid_game_source'));assert.equal(locked.locked,true);}finally{reader.releaseLock();}
 });
