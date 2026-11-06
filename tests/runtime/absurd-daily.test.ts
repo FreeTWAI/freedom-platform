@@ -1,3 +1,4 @@
+import {createCoatingHold} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -592,4 +593,24 @@ test('anonymous crawlers get game metadata from the real Worker SPA fallback',as
   mountAssets(missingApp,{fetch:async()=>new Response('not found',{status:404})});
   const missing=await missingApp.request('http://127.0.0.1:8787/play?game=photo&seed=123');
   assert.equal(missing.status,404);assert.ok(!(await missing.text()).includes('og:image'));
+});
+
+// Optional coating gesture stays outside the saved/scored MarketRun contract.
+function coatingHarness(){
+ let now=0,target:string|null='portion-0',serial=0,progress=0;const frames=new Map<number,()=>void>(),completed:string[]=[];
+ const hold=createCoatingHold({now:()=>now,target:()=>target,schedule:tick=>{frames.set(++serial,tick);return serial;},unschedule:id=>{frames.delete(id);},progress:value=>{progress=value;},complete:value=>{completed.push(value);}});
+ return {hold,frames,completed,get progress(){return progress;},target(value:string|null){target=value;},advance(ms:number){now+=ms;const ticks=[...frames.values()];frames.clear();ticks.forEach(tick=>tick());}};
+}
+test('coating hold requires continuous ownership, cancels partial work and ignores stale callbacks',()=>{
+ const h=coatingHarness();assert.equal(h.hold.begin(1),true);assert.equal(h.hold.begin(2),false);
+ const stale=[...h.frames.values()][0];h.advance(450);assert.equal(h.progress,.5);h.hold.release(2);assert.equal(h.progress,.5);
+ h.hold.release(1);assert.equal(h.progress,0);assert.equal(h.frames.size,0);stale();h.advance(1000);assert.deepEqual(h.completed,[]);
+ h.hold.begin(3);h.advance(450);h.target('portion-1');h.advance(500);assert.deepEqual(h.completed,[]);assert.equal(h.progress,0);
+ h.hold.begin(4);h.target(null);h.advance(1000);assert.deepEqual(h.completed,[]);assert.equal(h.hold.begin(5),false);
+});
+test('coating hold completes once, keyboard ownership cancels, and a restarted target can rearm',()=>{
+ const h=coatingHarness();h.hold.begin(-1);h.advance(450);h.hold.cancel();h.advance(1000);assert.deepEqual(h.completed,[]);
+ h.hold.begin(-1);h.advance(900);h.advance(900);assert.deepEqual(h.completed,['portion-0']);assert.equal(h.frames.size,0);
+ assert.equal(h.hold.begin(-1),false);h.hold.release(-1);assert.equal(h.hold.begin(-1),true);h.advance(900);assert.deepEqual(h.completed,['portion-0','portion-0']);
+ h.hold.cancel();h.hold.begin(1);h.advance(-1);assert.equal(h.progress,0);assert.equal(h.frames.size,0);
 });
