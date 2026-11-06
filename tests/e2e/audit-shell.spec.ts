@@ -91,7 +91,7 @@ for (const viewport of VIEWPORTS) {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: '登入', exact: true })).toBeVisible();
     await noHorizontalOverflow(page, `${viewport.name} login`);
-    const logo = page.locator('.login-story .brand-poster img');
+    const logo = page.locator('.login-story .login-entry-logo');
     await expect(logo).toBeVisible();
     await expect.poll(() => logo.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0 && getComputedStyle(img).objectFit === 'contain')).toBe(true);
     await expect(page.locator('h1')).toHaveCount(1);
@@ -107,7 +107,7 @@ for (const viewport of VIEWPORTS) {
 
     const form = await page.locator('.login-card').boundingBox();
     const story = await page.locator('.login-story-copy').boundingBox();
-    const poster = await page.locator('.login-story .brand-poster').boundingBox();
+    const poster = await page.locator('.login-story .login-entry-logo').boundingBox();
     if (viewport.width <= 860) {
       // The role entry is the requested public introduction, followed by the form.
       expect(poster!.y).toBeLessThan(form!.y);

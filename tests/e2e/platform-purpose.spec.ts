@@ -55,7 +55,7 @@ test('existing members reach their chosen entry and all six collaboration destin
   }
 });
 
-test('public purpose is visible before the form on 320px in every theme, keeps original artwork and touch targets',async({page})=>{
+test('public purpose is visible before the form on 320px in every theme, keeps the complete transparent wordmark and touch targets',async({page})=>{
   await page.setViewportSize({width:320,height:800});
   for(const theme of ['light','rpg','versefolk']){
     await page.goto('/');await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
@@ -64,7 +64,7 @@ test('public purpose is visible before the form on 320px in every theme, keeps o
     for(const role of entries){const button=entry.getByRole('button',{name:role.button,exact:true});await expect(button).toBeVisible();expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);}
     expect((await entry.boundingBox())!.y).toBeLessThan((await page.locator('.login-form-area').boundingBox())!.y);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await expect(page.locator('.login-story .brand-poster img')).toHaveAttribute('src','/brand/freedom-workshop.webp');
+    await expect(page.locator('.login-story .login-entry-logo')).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
     await page.screenshot({path:`test-results/platform-purpose-${theme}-320.png`,fullPage:true});
   }
 });
@@ -110,7 +110,7 @@ for(const viewport of [{width:390,height:844},{width:1280,height:800}])for(const
     await page.setViewportSize(viewport);
     let releaseImage!:()=>void;
     const imageGate=new Promise<void>(resolve=>{releaseImage=resolve;});
-    await page.route('**/brand/freedom-workshop.webp',async route=>{await imageGate;await route.continue();});
+    await page.route('**/brand/freedom-workshop-compact-transparent.png',async route=>{await imageGate;await route.continue();});
     try{
       await page.goto('/',{waitUntil:'domcontentloaded'});
       await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
@@ -118,17 +118,21 @@ for(const viewport of [{width:390,height:844},{width:1280,height:800}])for(const
       await expect(first.getByRole('heading',{level:1})).toHaveText('讓你的商品、作品和技術，找到合作夥伴。');
       await expect(page.getByRole('heading',{level:1})).toHaveCount(1);
       await expect(toggle).toContainText('先看免費資源，不用註冊');
-      const before=(await toggle.boundingBox())!,art=page.locator('.login-story .brand-poster img');
+      const before=(await toggle.boundingBox())!,art=page.locator('.login-story .login-entry-logo');
       expect(before.y).toBeGreaterThanOrEqual(0);expect(before.y+before.height).toBeLessThanOrEqual(viewport.height);
       expect(before.height).toBeGreaterThanOrEqual(44);
       expect(before.y+before.height).toBeLessThan((await art.boundingBox())!.y);
       expect(before.y+before.height).toBeLessThan((await page.locator('.login-form-area').boundingBox())!.y);
+      const imageBefore=(await art.boundingBox())!;
+      expect(imageBefore.width/imageBefore.height).toBeCloseTo(3,2);
       expect(await art.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBe(0);
-      releaseImage();await expect.poll(()=>art.evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      releaseImage();await expect(art).toHaveJSProperty('naturalWidth',396);
+      await expect(art).toHaveJSProperty('naturalHeight',132);
+      expect(await art.boundingBox()).toEqual(imageBefore);
       const after=(await toggle.boundingBox())!;
       expect(Math.abs(after.y-before.y)).toBeLessThanOrEqual(1);
       expect(Math.abs(after.height-before.height)).toBeLessThanOrEqual(1);
-      await expect(art).toHaveAttribute('src','/brand/freedom-workshop.webp');
+      await expect(art).toHaveAttribute('src','/brand/freedom-workshop-compact-transparent.png');
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.screenshot({path:`test-results/visitor-first-${theme}-${viewport.width}.png`,fullPage:true});
     }finally{releaseImage();}
