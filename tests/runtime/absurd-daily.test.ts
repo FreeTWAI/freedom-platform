@@ -1,4 +1,4 @@
-import {createCoatingHold} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
+import {createCoatingHold,coatingKeyOwner} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
 import * as jsxRuntime from 'react/jsx-runtime';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -642,4 +642,11 @@ test('AD-brand reuses the exact PR 1201 PNG with a complete transparent 3:1 imag
   assert.equal(info.width,396);assert.equal(info.height,132);assert.equal(info.channels,4);
   for(const [x,y] of [[0,0],[395,0],[0,131],[395,131]])assert.equal(data[(y*396+x)*4+3],0);
   assert.ok(data.some((value,index)=>index%4===3&&value===255),'the wordmark retains opaque image content');
+});
+
+for(const [first,second] of [[' ','Enter'],['Enter',' ']])test(`coating keyboard ${JSON.stringify(first)} retains ownership when ${JSON.stringify(second)} releases`,()=>{
+ const h=coatingHarness(),owner=coatingKeyOwner(first)!,other=coatingKeyOwner(second)!;
+ assert.notEqual(owner,other);assert.equal(coatingKeyOwner('Escape'),null);assert.equal(h.hold.begin(owner),true);h.advance(450);
+ assert.equal(h.hold.begin(other),false);h.hold.release(other);assert.equal(h.progress,.5);h.advance(450);assert.deepEqual(h.completed,['portion-0']);
+ h.hold.release(other);h.advance(1000);assert.equal(h.completed.length,1);h.hold.release(owner);assert.equal(h.progress,0);
 });

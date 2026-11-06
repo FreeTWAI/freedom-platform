@@ -996,6 +996,14 @@ async function expectNativeMarketReady(page:Page,name:'開火，開始做！'|'�
 async function marketOpen(page:Page,id:MarketId){await page.clock.install();await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);await expectNativeMarketReady(page);await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await page.clock.runFor(20);}
 async function marketButton(page:Page,name:string){await marketTime(page,400);await page.getByRole('button',{name,exact:true}).click();}
 async function marketAdd(page:Page,name:string){await marketTime(page,400);await page.locator('.mk-ingredients').getByRole('button',{name:new RegExp(`^${name} `)}).click();}
+// These gesture-ownership tests sample real RAF callbacks at the hold boundaries;
+// do not spend the whole test rendering every software-WebGL frame in virtual time.
+for(const [first,second] of [['Space','Enter'],['Enter','Space']])test(`UX-9: coating hold keeps ${first} ownership after ${second} releases`,async({page})=>{
+ await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true}),progress=page.getByRole('progressbar',{name:'這次裹糊進度'});
+ await hold.focus();await page.keyboard.down(first);await page.clock.fastForward(450);await page.keyboard.press(second);expect(Number(await progress.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+ await page.clock.fastForward(500);expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.portions[0].coated,MARKET_SAVE_KEY)).toBe(true);await page.keyboard.up(first);await expect(hold).toBeDisabled();
+});
+
 test('UX-9: optional corn dog coating hold cancels early, completes once and keeps keyboard fallback reachable on phone',async({page})=>{
  // This checks continuous gesture ownership, not frame cadence. Advance the
  // installed clock once per boundary while retaining the actual RAF controller.
