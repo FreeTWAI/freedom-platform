@@ -6,6 +6,8 @@ import {Float32BufferAttribute,Group,Mesh,Raycaster,Vector3} from 'three';
 import {FoodKit} from '../../apps/portal-web/src/games/cooking/food-kit.js';
 import {marketFood} from '../../apps/portal-web/src/games/cooking/market-food.js';
 import {marketHitPortion} from '../../apps/portal-web/src/games/cooking/market-stage.js';
+import {cornDogPresentation} from '../../apps/portal-web/src/games/cooking/corn-dog-presentation.js';
+import {createCornDogStall} from '../../apps/portal-web/src/games/cooking/corn-dog-stall.js';
 const time=(r:MarketRun,ms:number)=>{while(ms>0){const n=Math.min(ms,1000);r=advanceMarket(r,n);ms-=n;}return r;};
 const act=(r:MarketRun,a:MarketAction)=>applyMarket(time(r,400),a).run;
 function begin(id:MarketRun['recipe']){return applyMarket(newMarket(id,42),{kind:'start'}).run;}
@@ -134,4 +136,37 @@ test('UX-15c all steak garnish materials remain batch-compatible and owned geome
   }
  }finally{kit.dispose();kit.dispose();}
  assert.ok([...shared.values()].every(n=>n===1));
+});
+
+
+test('UX-17 corn-dog presentation follows real heat, submerged portions and pause without changing the run',()=>{
+ let r=act(begin('corn-dog'),{kind:'add',ingredient:'sausage'});
+ const before=JSON.stringify(r),cold=cornDogPresentation({...r,temperature:120});
+ assert.equal(cold.bubbleCount,0);assert.equal(cold.bubbleOpacity,0);
+ const warm=cornDogPresentation({...r,temperature:145}),hot=cornDogPresentation({...r,temperature:185});
+ assert.equal(hot.bubbleCount,6);assert.ok(hot.bubbleOpacity>warm.bubbleOpacity);
+ assert.equal(cornDogPresentation({...r,status:'paused',temperature:185}).heaterGlow,0);
+ assert.equal(cornDogPresentation({...r,heat:0,temperature:185}).heaterGlow,0);
+ assert.equal(cornDogPresentation({...r,heat:3,temperature:185}).heaterGlow,1);
+ assert.equal(cornDogPresentation({...r,status:'done',temperature:185}).bubbleCount,0);
+ assert.equal(cornDogPresentation({...r,portions:r.portions.map(p=>({...p,lifted:true})),temperature:185}).bubbleCount,0);
+ assert.equal(cornDogPresentation({...r,recipe:'steak-dinner',temperature:185}).bubbleCount,0);
+ assert.equal(cornDogPresentation({...r,temperature:NaN}).bubbleCount,0);
+ assert.equal(cornDogPresentation({...r,portions:Array.from({length:16},()=>({...r.portions[0]})),temperature:235}).bubbleCount,24);
+ assert.equal(JSON.stringify(r),before);assert.ok(Object.isFrozen(hot));
+});
+
+test('UX-17 fryer batches static geometry, updates only its dial/lamp and releases owned resources',()=>{
+ const kit=new FoodKit(),stall=createCornDogStall(kit),r=begin('corn-dog');
+ const geometries=kit.geometries.size,materials=kit.materials.size,children=stall.root.children.length;
+ let staticMeshes=0;stall.root.children[0].traverse(node=>{if(node instanceof Mesh)staticMeshes++;});
+ assert.ok(staticMeshes<24,'the 24 static parts must be merged, not left as independent draws');
+ stall.update({...r,heat:0});const initial=stall.dial.rotation.z;
+ for(let i=0;i<100;i++)stall.update({...r,heat:3,temperature:185});
+ assert.notEqual(stall.dial.rotation.z,initial);assert.equal(stall.lamp.material.emissiveIntensity,1);
+ stall.update({...r,status:'paused',heat:3});assert.equal(stall.lamp.material.emissiveIntensity,0);
+ assert.equal(kit.geometries.size,geometries);assert.equal(kit.materials.size,materials);assert.equal(stall.root.children.length,children);
+ let disposed=0,disposedMaterials=0;for(const geometry of kit.geometries)geometry.addEventListener('dispose',()=>disposed++);
+ for(const material of kit.materials.values())material.addEventListener('dispose',()=>disposedMaterials++);
+ kit.dispose();assert.equal(disposed,geometries);assert.equal(disposedMaterials,materials);assert.equal(kit.geometries.size,0);assert.equal(kit.materials.size,0);
 });
