@@ -284,3 +284,26 @@ test('header asset has transparency and bounded bytes; generic OG is opaque and 
   assert.match(html,/name="twitter:image" content="https:\/\/freetwai\.com\/brand\/og-freedom-workshop-20261030\.jpg"/);
   assert.match(html,/property="og:image:width" content="1200"/);assert.match(html,/property="og:image:height" content="628"/);
 });
+
+test('login and registration use the existing transparent wordmark without changing shared posters',()=>{
+  const source=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
+  const component=source.match(/function LoginEntryBrand\(\) \{[\s\S]*?\n\}/);
+  assert.ok(component,'actual authentication brand component');
+  const context={createElement,renderBrand:undefined as undefined|(()=>ReturnType<typeof createElement>)};
+  runInNewContext(transformSync(`${component[0]};globalThis.renderBrand=LoginEntryBrand;`,{loader:'tsx',jsxFactory:'createElement'}).code,context);
+  const html=renderToStaticMarkup(context.renderBrand!());
+  assert.match(html,/<img class="login-entry-logo"/);
+  assert.match(html,/src="\/brand\/freedom-workshop-compact-transparent\.png"/);
+  assert.match(html,/alt="自由工坊"/);
+  assert.match(html,/width="396" height="132"/);
+  assert.doesNotMatch(html,/brand-poster|freedom-workshop\.webp/);
+  const start=source.indexOf('function LoginView('),end=source.indexOf('\nfunction ',start+1);
+  const login=source.slice(start,end<0?undefined:end);
+  assert.equal((login.match(/<LoginEntryBrand\/>/g)??[]).length,3,'standard, discovery and callback login layouts');
+  assert.doesNotMatch(login,/<BrandPoster/);
+  const poster=readFileSync(new URL('../../apps/portal-web/src/modules/Community.tsx',import.meta.url),'utf8');
+  assert.match(poster,/src="\/brand\/freedom-workshop\.webp"/);
+  const css=readFileSync(new URL('../../apps/portal-web/src/styles.css',import.meta.url),'utf8');
+  assert.match(css,/\.login-entry-logo\s*\{[^}]*aspect-ratio: 3 \/ 1;[^}]*object-fit: contain;/);
+  assert.match(css,/\.brand-poster\.brand-poster-original img\[width\]\s*\{[^}]*aspect-ratio: 16 \/ 9;/);
+});
