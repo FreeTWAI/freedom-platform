@@ -525,6 +525,9 @@ test('AD-3 public photo studio captures real frames, enforces film, and exports 
   const viewportResult=page.getByRole('dialog',{name:'遊戲全螢幕'});
   await expect(viewportResult.getByRole('button',{name:'系統分享圖片／連結'})).toBeVisible();
   await expect(viewportResult.getByRole('button',{name:'複製同題挑戰連結'})).toBeVisible();
+  await viewportResult.getByRole('button',{name:'分享成果',exact:true}).click();
+  await expect(viewportResult.getByRole('region',{name:'分享這局成果',exact:true})).toBeFocused();
+  await expect(viewportResult.getByRole('button',{name:'發到自由工坊',exact:true})).toBeInViewport();
   await viewportResult.getByRole('button',{name:'退出全螢幕'}).click();
   await expect(page.locator('.fw-arcade-photo-choices [aria-pressed="true"]')).toHaveCount(1);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
@@ -1386,5 +1389,49 @@ for (const outcome of ['resolve','reject'] as const) {
     await expect(page.locator('[data-arcade-open="game:cash"]')).toBeFocused();
     expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
     await expect(page.locator('.fw-arcade-game-card').first()).toBeVisible();
+  });
+}
+
+
+for (const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[]) {
+  test(`UX-16: ${id} viewport controls keep the cooking surface usable without sharing an unfinished run`,async({page})=>{
+    await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+    await marketOpen(page,id);
+    await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+    const game=page.getByRole('dialog',{name:'遊戲全螢幕',exact:true});
+    await expect(game).toHaveClass(/fullscreen-game--viewport/);
+    await expect(game.getByRole('button',{name:'完成後分享',exact:true})).toBeDisabled();
+    await expect(game.locator('[data-game-share]')).toHaveCount(0);
+    await game.locator('.fullscreen-game__mode-help summary').click();
+    await expect(game.locator('.fullscreen-game__mode-help p')).toContainText('瀏覽器工具列可能仍會顯示');
+    await game.locator('.fullscreen-game__mode-help summary').click();
+    expect(await game.locator('.fullscreen-game__bar').evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(72);
+    const canvas=await game.locator('.mk-canvas canvas').elementHandle();
+    const surface=game.locator('.mk-surface');
+    expect(await surface.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(300);
+    expect(await surface.evaluate(el=>{const b=el.getBoundingClientRect();return Math.abs(b.width/b.height-6/5);})).toBeLessThan(.01);
+    for(const button of await game.locator('.fullscreen-game__bar button').all()){
+      const metrics=await button.evaluate(el=>({height:el.getBoundingClientRect().height,font:parseFloat(getComputedStyle(el).fontSize)}));
+      expect(metrics.height).toBeGreaterThanOrEqual(44);expect(metrics.font).toBeGreaterThanOrEqual(14);
+    }
+    const tray=game.getByRole('complementary',{name:'食材與工具',exact:true});
+    expect(await tray.evaluate(el=>el.scrollHeight>el.clientHeight&&getComputedStyle(el).overflowY==='auto')).toBe(true);
+    await tray.locator('.mk-help summary').scrollIntoViewIfNeeded();
+    await tray.locator('.mk-help summary').click();
+    await expect(tray.getByRole('button',{name:'重新做這一道',exact:true})).toBeVisible();
+    await game.getByRole('button',{name:'退出全螢幕',exact:true}).click();
+    expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
+    expect(await canvas!.evaluate(el=>el.isConnected)).toBe(true);
+    await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+    await expect(game.getByRole('button',{name:'完成後分享',exact:true})).toBeDisabled();
+    expect(await canvas!.evaluate(el=>el.isConnected)).toBe(true);
+    await page.setViewportSize({width:667,height:375});
+    expect(await game.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await game.getByRole('button',{name:'退出全螢幕',exact:true}).focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toHaveCount(0);
+    expect(await canvas!.evaluate(el=>el.isConnected)).toBe(true);
+    await canvas!.dispose();
   });
 }

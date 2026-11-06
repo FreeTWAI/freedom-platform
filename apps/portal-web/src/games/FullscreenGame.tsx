@@ -6,7 +6,7 @@ type Mode = 'normal' | 'native' | 'viewport';
 /** Keep the game mounted while presentation changes, so a run is never reset. */
 export type FullscreenGameHandle = { enter: (focusTarget?: HTMLElement | null) => void };
 
-export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: ReactNode }>(function FullscreenGame({ children }, ref) {
+export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: ReactNode; resultReady?: boolean }>(function FullscreenGame({ children, resultReady = false }, ref) {
   const container = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
   const button = useRef<HTMLButtonElement>(null);
@@ -71,7 +71,7 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
     } catch {
       if (mounted.current) {
         setMode('viewport');
-        setMessage('此瀏覽器使用全視窗模式，瀏覽器工具列可能仍會顯示。');
+        setMessage('全視窗模式');
       }
     } finally { if (mounted.current) setPending(false); }
   }
@@ -91,10 +91,17 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
     }
   }
 
+  function showResultShare() {
+    if (!resultReady) return;
+    const panel = container.current?.querySelector<HTMLElement>('[data-game-share]');
+    panel?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    panel?.focus({ preventScroll: true });
+  }
+
   function keys(event: KeyboardEvent<HTMLDivElement>) {
     if (mode === 'normal') return;
     if (event.key !== 'Tab') return;
-    const controls = Array.from(container.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])
+    const controls = Array.from(container.current?.querySelectorAll<HTMLElement>('a[href], summary, button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])
       .filter(element => element.getClientRects().length > 0 && !element.closest('[inert]'));
     if (!controls.length) return;
     const first = controls[0], last = controls[controls.length - 1];
@@ -103,7 +110,7 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
   }
 
   return <div ref={container} className={`fullscreen-game${mode === 'viewport' ? ' fullscreen-game--viewport' : ''}`} role={mode === 'normal' ? undefined : 'dialog'} aria-modal={mode === 'normal' ? undefined : true} aria-label={mode === 'normal' ? undefined : '遊戲全螢幕'} onKeyDownCapture={captureEscape} onKeyDown={keys}>
-    <div className="fullscreen-game__bar"><button ref={button} type="button" className="fullscreen-game__button" onClick={() => void toggle()} aria-disabled={pending} aria-pressed={mode !== 'normal'}>{mode === 'normal' ? '⛶ 全螢幕' : '退出全螢幕'}</button><span role="status">{message}</span></div>
+    <div className="fullscreen-game__bar"><button ref={button} type="button" className="fullscreen-game__button" onClick={() => void toggle()} aria-disabled={pending} aria-pressed={mode !== 'normal'}>{mode === 'normal' ? '⛶ 全螢幕' : '退出全螢幕'}</button><button type="button" className="fullscreen-game__button" disabled={!resultReady} title={resultReady ? '分享這一局的真實成果' : '完成這一局後即可分享成果'} onClick={showResultShare}>{resultReady ? '分享成果' : '完成後分享'}</button><span role="status">{mode === 'viewport' ? '' : message}</span>{mode === 'viewport' && <details className="fullscreen-game__mode-help"><summary>全視窗說明</summary><p>此瀏覽器使用全視窗模式，瀏覽器工具列可能仍會顯示。</p></details>}</div>
     {children}
   </div>;
 });
