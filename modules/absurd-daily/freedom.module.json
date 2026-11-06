@@ -7,11 +7,13 @@
     ".github/workflows/native-game-previews.yml",
     "apps/portal-web/src/games/**",
     "tests/runtime/absurd-daily.test.ts",
+    "tests/runtime/daily-game-focus.test.ts",
     "tests/runtime/kitchen-food-batch.test.ts",
     "tests/runtime/bounded-cpu-profile.test.ts",
     "tests/e2e/helpers/bounded-cpu-profile.ts",
     "tests/runtime/market-cooking.test.ts",
     "tests/e2e/absurd-daily.spec.ts",
+    "tests/e2e/daily-game-focus.spec.ts",
     "docs/development/absurd-daily.md",
     "apps/portal-web/public/games/absurd-daily/**"
   ],
