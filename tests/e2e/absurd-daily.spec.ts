@@ -300,6 +300,36 @@ test('UX-2: secondary pointers cannot release or cancel a real cooking hold, and
   await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.move(p.x,p.y);await page.mouse.down();await page.clock.runFor(750);await page.locator('.ck-scene').dispatchEvent('pointercancel',{pointerId:99,isPrimary:false,button:0});await page.mouse.up();await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');await page.getByRole('button',{name:'重新做',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),COOKING_RUN_KEY);await page.clock.runFor(6000);await expect(page.locator('.ck-meter-copy')).toHaveText('2 / 4');expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.elapsed,COOKING_RUN_KEY)).toBe(saved.run.elapsed);await page.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeVisible();
 });
 
+for(const width of [320,1440])for(const kind of ['knead','pour'] as const)test(`UX-2: native Tab cancels the keyboard ${kind} hold without scoring or losing the dish at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:900});await openKitchen(page,'margherita-pizza');
+  const game=page.locator('.ck-game'),recipe=recipeOf('margherita-pizza')!;
+  if(kind==='pour'){
+    const knead=recipe.steps[0];for(let i=0;i<knead.goal;i++){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(knead.holdMs);await page.keyboard.up('Space');}
+    await page.getByRole('button',{name:/^下一步：/}).click();
+  }
+  const step=recipe.steps[kind==='knead'?0:1],hold=page.getByRole('button',{name:kind==='knead'?'按住揉壓，適時放開':'按住倒入，適時放開',exact:true});
+  const checkpoint=()=>page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);
+  const initial=await checkpoint();
+  for(const input of [{origin:'game',key:'Space'},{origin:'button',key:'Space'},{origin:'button',key:'Enter'}]){
+    const owner=input.origin==='game'?game:hold;await owner.focus();await page.keyboard.down(input.key);await page.clock.runFor(300);
+    await page.keyboard.press('Tab');await expect(owner).not.toBeFocused();
+    await expect(input.origin==='game'?page.getByRole('button',{name:'← 遊戲大廳',exact:true}):page.locator('.ck-help > summary')).toBeFocused();
+    await expect(page.locator('.ck-game-reaction')).toHaveText('已取消這次按住操作，重新按住可繼續。');
+    const cancelled=await checkpoint();expect(cancelled.active.holdAt).toBeNull();expect(cancelled.active.count).toBe(0);expect(cancelled.reports).toEqual(initial.reports);expect(cancelled.status).toBe('playing');
+    await page.keyboard.up(input.key);await page.clock.runFor(4000);
+    // Re-focusing and receiving a delayed keyup must not settle the old hold.
+    await owner.focus();await page.keyboard.up(input.key);
+    const after=await checkpoint();expect(after.id).toBe(initial.id);expect(after.active.amount).toBe(cancelled.active.amount);expect(after.active.count).toBe(0);expect(after.reports).toEqual(initial.reports);expect(after.status).toBe('playing');
+    expect(await page.locator('.ck-help').evaluate(el=>(el as HTMLDetailsElement).open)).toBe(false);
+    await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+  }
+  const before=await checkpoint();await hold.focus();await page.keyboard.down('Space');
+  await page.clock.runFor(kind==='knead'?step.holdMs:(step.target-before.active.amount)*step.durationMs);await page.keyboard.up('Space');
+  const completed=await checkpoint();expect(completed.id).toBe(initial.id);expect(completed.active.holdAt).toBeNull();
+  if(kind==='knead'){expect(completed.active.count).toBe(1);await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);}
+  else{expect(completed.status).toBe('step-result');expect(completed.reports).toHaveLength(initial.reports.length+1);expect(completed.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);await expect(page.getByRole('button',{name:/^下一步：/})).toBeVisible();}
+});
+
 test('UX-1/5: a completed cooking run can replay the same seed or move to the next real recipe',async({page})=>{
   test.setTimeout(120000);await openKitchen(page,'egg-fried-rice');await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await playRecipe(page,recipeOf('egg-fried-rice')!);await page.getByRole('button',{name:'換一道料理 →',exact:true}).click();await expect(page.locator('.ck-game h1')).toHaveText('滷肉飯');expect(new URL(page.url()).searchParams.get('recipe')).toBe('braised-pork-rice');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
 });
