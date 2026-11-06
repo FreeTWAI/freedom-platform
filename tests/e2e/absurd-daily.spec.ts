@@ -1009,6 +1009,38 @@ test('UX-9: optional corn dog coating hold cancels early, completes once and kee
  await marketAdd(page,'熱狗');const fallback=page.getByRole('button',{name:'裹麵糊',exact:true});await marketTime(page,400);await fallback.focus();await page.keyboard.press('Enter');expect(await coated()).toEqual([true,true]);
 });
 
+test('UX-9: corn dog coating cancels native animation frames on touch release and Escape',async({page},testInfo)=>{
+ // Keep the browser clock native: clock.install wraps cancelAnimationFrame and
+ // would hide an invalid receiver when the real Window method is passed around.
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.stack??error.message));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/play?game=kitchen&recipe=corn-dog&seed=42');
+ await expectNativeMarketReady(page);
+ await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();
+ await page.locator('.mk-ingredients').getByRole('button',{name:/^熱狗 /}).click();
+ const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true});
+ const progress=page.getByRole('progressbar',{name:'這次裹糊進度'});
+ const coated=()=>page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.portions.map((p:{coated:boolean})=>p.coated),MARKET_SAVE_KEY);
+ await hold.scrollIntoViewIfNeeded();
+ const box=(await hold.boundingBox())!,cdp=await page.context().newCDPSession(page);
+ await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+ const startTouch=()=>cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,id:1}]});
+ await startTouch();
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+ expect(errors).toEqual([]);
+ await expect(progress).toHaveAttribute('aria-valuenow','0');
+ expect(await coated()).toEqual([false]);
+ await hold.focus();await page.keyboard.down('Space');
+ await page.keyboard.press('Escape');await page.keyboard.up('Space');
+ await expect(progress).toHaveAttribute('aria-valuenow','0');
+ expect(await coated()).toEqual([false]);
+ await startTouch();await expect.poll(coated).toEqual([true]);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+ await expect(hold).toBeDisabled();
+ await testInfo.attach('native-browser-errors',{body:JSON.stringify(errors,null,2),contentType:'application/json'});
+ expect(errors).toEqual([]);
+});
+
 for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[])test(`UX-9: ${id} cooks through actual controls to its own inspectable, downloadable and shareable result`,async({page},testInfo)=>{
  test.setTimeout(120000);const errors:string[]=[];let posts=0;page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts++;});await marketOpen(page,id);
  if(id==='corn-dog'){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,24000);await marketButton(page,'翻這一面');await marketTime(page,24000);await marketButton(page,'起鍋瀝油');await marketTime(page,4000);}

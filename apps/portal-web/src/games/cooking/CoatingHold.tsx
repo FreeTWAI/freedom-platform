@@ -6,7 +6,7 @@ import {createCoatingHold} from './coating-hold';
 export function CoatingHold({enabled,target,onCoat}:{enabled:boolean;target:string;onCoat:()=>void}){
  const [progress,setProgress]=useState(0),current=useRef({enabled,target,onCoat});
  const control=useRef<ReturnType<typeof createCoatingHold>|null>(null);
- if(!control.current)control.current=createCoatingHold({now:()=>performance.now(),schedule:tick=>requestAnimationFrame(tick),unschedule:cancelAnimationFrame,target:()=>current.current.enabled&&!document.hidden?current.current.target:null,progress:setProgress,complete:()=>current.current.onCoat()});
+ if(!control.current)control.current=createCoatingHold({now:()=>performance.now(),schedule:tick=>requestAnimationFrame(tick),unschedule:frame=>cancelAnimationFrame(frame),target:()=>current.current.enabled&&!document.hidden?current.current.target:null,progress:setProgress,complete:()=>current.current.onCoat()});
  useLayoutEffect(()=>{current.current={enabled,target,onCoat};},[enabled,target,onCoat]);
  useLayoutEffect(()=>{control.current?.cancel();},[enabled,target]);
  useEffect(()=>{const cancel=()=>control.current?.cancel(),escape=(event:KeyboardEvent)=>{if(event.key==='Escape')cancel();};window.addEventListener('keydown',escape,true);document.addEventListener('visibilitychange',cancel);window.addEventListener('blur',cancel);return()=>{window.removeEventListener('keydown',escape,true);document.removeEventListener('visibilitychange',cancel);window.removeEventListener('blur',cancel);cancel();};},[]);
