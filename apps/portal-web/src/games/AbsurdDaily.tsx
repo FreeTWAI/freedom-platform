@@ -265,7 +265,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         }
     } }
     function pointerDown(event: PointerEvent) { syncClock(); const l = live.current; if (!ready || !l.started || l.paused || l.done || l.pointer || pendingResult.current || event.button!==0 || !event.isPrimary)
-        return; event.preventDefault(); l.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: { ...l.targetPan }, index: game === 'cash' ? l.cash.index : l.stamps.practice ? -1 : l.stamps.index }; event.currentTarget.setPointerCapture(event.pointerId); if (game === 'stamp') {
+        return; event.preventDefault(); section.current?.focus({ preventScroll: true }); l.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: { ...l.targetPan }, index: game === 'cash' ? l.cash.index : l.stamps.practice ? -1 : l.stamps.index }; event.currentTarget.setPointerCapture(event.pointerId); if (game === 'stamp') {
         l.stamps = beginStamps(l.stamps, l.clock.elapsed);
         const p = stage.current?.point(event.clientX, event.clientY);
         if (p)
