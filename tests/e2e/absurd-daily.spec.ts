@@ -821,6 +821,33 @@ function kitchenCheckpoint(kind:Technique|'result'){
   if(kind!=='result')act({kind:'pause'});return {recipe,run};
 }
 
+for(const width of [320,1440])for(const kind of ['slice','knead'] as const)test(`UX-2: recipe help owns repeated native keys without cooking at ${width}px (${kind})`,async({page})=>{
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.setViewportSize({width,height:900});await page.clock.install();
+  // The supported illustration fallback uses the same controls without a GPU dependency.
+  await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());
+  await page.goto(`/play?game=kitchen&practice=1&recipe=${kind==='slice'?'egg-fried-rice':'margherita-pizza'}&seed=42`);
+  await expect(page.locator('.ck-visual-light')).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  const game=page.locator('.ck-game'),help=page.locator('.ck-help'),summary=help.locator('summary'),meter=page.locator('.ck-meter-copy');
+  const tool=page.getByRole('button',{name:kind==='slice'?'沿線切一刀':'按住揉壓，適時放開',exact:true});
+  await tool.focus();await page.keyboard.press('Tab');await expect(summary).toBeFocused();
+  await page.keyboard.down('Space');await page.keyboard.down('Space');await page.clock.runFor(750);await page.keyboard.up('Space');
+  await expect(help).toHaveAttribute('open','');await expect(summary).toBeFocused();
+  let opened=true;for(const key of ['Space','Enter','Space','Enter']){
+    await page.keyboard.press(key);opened=!opened;expect(await help.evaluate(el=>(el as HTMLDetailsElement).open)).toBe(opened);
+    await expect(summary).toBeFocused();await expect(meter).toHaveText(kind==='slice'?'0 / 6':'0 / 4');
+  }
+  await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+  await game.focus();await page.keyboard.down('Space');if(kind==='knead')await page.clock.runFor(750);await page.keyboard.up('Space');
+  await expect(meter).toHaveText(kind==='slice'?'1 / 6':'1 / 4');await game.press('Escape');
+  const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);
+  expect(saved.status).toBe('paused');expect(saved.active.count).toBe(1);expect(saved.active.holdAt).toBeNull();expect(saved.reports).toEqual([]);
+  await page.reload();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeEnabled();await expect(meter).toHaveText(kind==='slice'?'1 / 6':'1 / 4');
+  await summary.focus();await page.keyboard.press('Space');await expect(help).toHaveAttribute('open','');await expect(game).toHaveAttribute('data-cooking-state','paused');
+  await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(meter).toHaveText(kind==='slice'?'1 / 6':'1 / 4');expect(errors).toEqual([]);
+});
+
 test('UX-7: the real pan, boiling pot and oven accept direct scene taps with the same persisted rules',async({page},testInfo)=>{
   test.setTimeout(120000);await page.setViewportSize({width:390,height:844});await page.clock.install();await page.goto('/play');
   for(const kind of ['pan','boil','bake'] as const){await page.goto('/play');const f=kitchenCheckpoint(kind);await page.evaluate(run=>sessionStorage.setItem('freedom.cooking.run.v1',JSON.stringify({version:1,savedAt:Date.now(),run})),f.run);await page.goto(`/play?game=kitchen&practice=1&recipe=${f.recipe.id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'繼續料理',exact:true}).click();await page.getByRole('button',{name:'中火',exact:true}).click();const advance=()=>page.clock.runFor(currentStep(f.run).durationMs*(kind==='bake'?.8:.55));if(kind==='pan')await withBoundedCpuProfile(page,testInfo,advance);else await advance();await page.locator('.ck-scene').scrollIntoViewIfNeeded();const p=await scenePoint(page,.5,.5);await page.mouse.click(p.x,p.y);await page.locator('.ck-game').press('Escape');const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);if(kind==='pan')expect(saved.active.flipped).toBe(true);if(kind==='boil'){expect(saved.active.count).toBe(1);expect(saved.active.foam).toBe(0);}if(kind==='bake'){expect(saved.reports).toHaveLength(f.run.step+1);expect(saved.reports.at(-1)!.score).toBeGreaterThanOrEqual(85);}}

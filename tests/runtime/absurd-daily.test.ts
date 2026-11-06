@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+import {stripTypeScriptTypes} from 'node:module';
 import {transformSync} from 'esbuild';
 import {parseDishInit,parseDishView,parseDishReply,nextDishView} from '../../apps/portal-web/src/games/cooking/dish-worker-protocol.js';
 import {newMarket} from '../../apps/portal-web/src/games/cooking/market-domain.js';
@@ -240,6 +241,39 @@ function cook(recipeId:string){let run=newCookingRun(recipeOf(recipeId)!,42,`run
 test('CK-4/5: actual pointer coordinates, holds, heat and ordered gestures complete all 66 dishes once',()=>{
   for(const recipe of RECIPES){const {run,now}=cook(recipe.id);assert.equal(run.reports.length,recipe.steps.length);assert.ok(cookingScore(run)>=85,`${recipe.id}: ${cookingScore(run)}`);assert.equal(cookingProgress(run),1);assert.deepEqual(parseCookingRun(JSON.parse(JSON.stringify(run))),run);assert.deepEqual(actCooking(run,{kind:'next',step:run.step},now+100),run);assert.deepEqual(advanceCooking(run,now+99999),run);}
 });
+// Actual keyboard/hold closures and domain. The target models only closest();
+// native summary toggling and focus are covered separately in the browser suite.
+function cookingSummaryHarness(kind:'slice'|'mix'|'knead'){
+  const recipe=RECIPES.find(r=>r.steps[0].kind===kind)!;let now=0;
+  const live={current:actCooking(newCookingRun(recipe,42,'summary_keys'),{kind:'start',step:0},now)},holdOwner={current:null as {kind:'key';key:string}|null},gesture={current:null};
+  const command=(action:Omit<CookingAction,'step'>)=>{live.current=actCooking(live.current,{...action,step:live.current.step} as CookingAction,now);};
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingGame.tsx',import.meta.url),'utf8');
+  const holdStart=source.indexOf('  const sameHold='),holdEnd=source.indexOf('  const pause='),keyStart=source.indexOf('  const key='),keyEnd=source.indexOf('  const holdButton=');
+  assert.ok(holdStart>=0&&holdEnd>holdStart&&keyStart>=0&&keyEnd>keyStart);
+  const handlers=runInNewContext(stripTypeScriptTypes(source.slice(holdStart,holdEnd)+source.slice(keyStart,keyEnd))+';({key})',{
+    live,holdOwner,gesture,currentStep,command,flush(){},pause:()=>command({kind:'pause'}),
+  }) as {key:(event:any,release?:boolean)=>void};
+  const event=(tag:string,key=' ',repeat=false)=>({key,repeat,ctrlKey:false,metaKey:false,altKey:false,defaultPrevented:false,target:{closest:(selector:string)=>selector.split(',').includes(tag)?{}:null},preventDefault(){this.defaultPrevented=true;}});
+  return {live,event,key:handlers.key,tick:(ms:number)=>{now+=ms;live.current=advanceCooking(live.current,now);}};
+}
+for(const kind of ['slice','mix','knead'] as const)test(`UX-2 recipe summary keys never operate ${kind} or consume native defaults (non-native)`,()=>{
+  const h=cookingSummaryHarness(kind),before=h.live.current.active,reports=h.live.current.reports;
+  for(let i=0;i<3;i++){
+    const down=h.event('summary'),repeat=h.event('summary',' ',true);h.key(down);h.key(repeat);h.tick(750);const up=h.event('summary');h.key(up,true);
+    assert.deepEqual(h.live.current.active,before);assert.equal(h.live.current.status,'playing');assert.equal(h.live.current.reports,reports);
+    assert.equal(down.defaultPrevented,false);assert.equal(repeat.defaultPrevented,false);assert.equal(up.defaultPrevented,false);
+  }
+  for(const key of ['Enter','ArrowLeft','f','Escape']){const event=h.event('summary',key);h.key(event);assert.equal(event.defaultPrevented,false);assert.equal(h.live.current.status,'playing');}
+});
+for(const kind of ['slice','mix','knead'] as const)test(`UX-2 section ${kind} shortcut still acts once and rejects repeat or modified input (non-native)`,()=>{
+  const h=cookingSummaryHarness(kind),down=h.event('section');h.key(down);assert.equal(down.defaultPrevented,true);
+  h.key(h.event('section',' ',true));h.tick(750);h.key(h.event('section'),true);
+  if(kind==='mix')assert.equal(h.live.current.active.amount,Math.PI*2);else assert.equal(h.live.current.active.count,1);
+  const before=h.live.current;for(const modifier of ['ctrlKey','metaKey','altKey'] as const){const event=h.event('section');event[modifier]=true;h.key(event);assert.equal(event.defaultPrevented,false);assert.equal(h.live.current,before);}
+  for(const tag of ['button','input','select','textarea','a']){const event=h.event(tag);h.key(event);assert.equal(event.defaultPrevented,false);assert.equal(h.live.current,before);}
+  const escape=h.event('section','Escape');h.key(escape);assert.equal(escape.defaultPrevented,true);assert.equal(h.live.current.status,'paused');assert.equal(h.live.current.active.holdAt,null);
+});
+
 test('CK-5: wrong cut, stale step, rapid input, invalid coordinates and rewind cannot fabricate progress',()=>{
   let r=newCookingRun(RECIPES[0],42,'gesture_case');r=actCooking(r,{kind:'start',step:0},100);assert.equal(actCooking(r,{kind:'cut-key',step:1},200),r);assert.equal(actCooking(r,{kind:'cut-key',step:0},99),r);
   r=actCooking(r,{kind:'cut',step:0,x1:.2,y1:.5,x2:.8,y2:.5},300);assert.equal(r.active.count,0);assert.equal(r.active.mistakes,1);r=actCooking(r,{kind:'cut-key',step:0},500);const count=r.active.count;r=actCooking(r,{kind:'cut-key',step:0},510);assert.equal(r.active.count,count);
