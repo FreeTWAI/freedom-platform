@@ -43,3 +43,16 @@
 
 在既有 `tests/runtime/absurd-daily.test.ts` 增加純 draft／URL 邊界案例；在 `tests/e2e/absurd-daily.spec.ts` 增加大廳表單、取消／重開、來源切換、明確外站同意、草稿保留與窄版案例。E2E 只驗本機交接 URL，不向 GitHub 發送真 Issue 或附件。
 完整 typecheck／build／runtime／browser 和遠端 exact-head CI 結果以 PR 實跑紀錄為準，不由這份規格宣稱通過。原生檔案上傳、隔離託管、真正 GitHub 會員投稿及真人審核仍未驗收。
+
+
+## 第二階段基礎：單檔來源檢查（未接線）
+
+`game-upload-source.ts` 新增 `validateGameUploadSource`，接受內部 `{body, contentType}`，只接受明確 `text/html` 的單一 UTF-8 來源，實際串流上限 256 KiB。它重用 asset-storage 的 `readBounded`／`sha256`，拒絕額外 owner、policy、object key、狀態或摘要欄位，來源檔名固定為 `index.html`。無 ZIP／多檔／壓縮／遠端 URL 讀取。上限是本來源格式的保守界線，不代表所有遊戲均適用。
+
+回傳獨立 `ValidatedGameSource`，固定 `trust=unreviewed`、`storageState=not_stored`，含實際 bytes 的 digest／大小與每次回傳新副本的 `copyBytes()`。原 BOM／換行完全保留；來源檢查不保證 HTML 可玩、無秘密、無惡意程式、沒有外連或依賴已鎖版，也不解析／執行／sanitise HTML。摘要只綁本檔，不綁它可能引用的遠端依賴。
+
+這不是 `PreparedRepresentation`／`VerifiedObject`，不可直接交給現有 ObjectStore；沒有增加任何 storage profile／purpose，沒有呼叫 persistence、API、資料庫或提供可玩的 preview。UI 沒有假上傳按鈕。未來 HTTP adapter 使用前必須先檢查現行會員／target 權限，並處理 transport deadline／disconnect cancellation；共享 reader 的位元組上限不是逾時保護。
+
+新增測試涵蓋原 bytes／digest／副本隔離、不執行 script、拒絕 caller authority、無讀取 MIME 拒絕、精確上限／超量取消、多位元 UTF-8／跨 chunk、非法內容、固定無秘密錯誤與不釋放他人的 reader。這些只證明來源檢查，不是 native upload、quarantine 持久化、HTTP／Worker、發布、瀏覽器隔離或真人驗收。
+
+下一個必要 implementation：新 game target／revision 與私有 quarantine policy schema、精確 profile／engine target／object-write-effect admission、會員 owner-scoped routes 和完整 prepare／write／finalize／撤回測試。接續審核／發布 origin 前，任何已存來源仍不得公開 serving 或執行。所有新增 migration 編號與 catalog 需依當時主線協調；本階段未新增 migration，未改現有 catalog 或其測試。
