@@ -390,6 +390,10 @@ function DemoBanner() {
   )
 }
 
+function LoginEntryBrand() {
+  return <img className="login-entry-logo" src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="396" height="132" fetchPriority="high"/>;
+}
+
 function LoginView({
   site,
   initialMode='login',
@@ -552,7 +556,7 @@ function LoginView({
   const visitorFirst = !discoveryEnabled && !resetToken && !returnPath && !skillReturn
     && !storefrontReturn && !postReturnPath && !memberPostPath && !entryIntent
     && !onReturnToGuild && !onReturnToEvent && !accessExpired
-  if(googleCallback)return <main className="login-layout"><section className="login-story"><BrandPoster/></section><div className="login-form-area"><div className="card login-card"><GoogleCallback client={client} entry={googleCallback} onLoggedIn={(next,registered)=>completeSession(next,authEpoch.current,registered)}/></div></div></main>
+  if(googleCallback)return <main className="login-layout"><section className="login-story"><LoginEntryBrand/></section><div className="login-form-area"><div className="card login-card"><GoogleCallback client={client} entry={googleCallback} onLoggedIn={(next,registered)=>completeSession(next,authEpoch.current,registered)}/></div></div></main>
   return (
     <main className={`login-layout${discoveryEnabled ? ' discovery-login-layout' : ''}${visitorFirst ? ' visitor-first-layout' : ''}`}>
       <div className="login-entry-tools"><LanguagePicker className="login-language-row"/><InstallAppButton/></div>
@@ -560,7 +564,7 @@ function LoginView({
         <h1 id="visitor-heading">{t('auth.headline')}</h1>
         <EntryResources client={client} communitySearchEnabled={site?.community_search_enabled===true} compact/>
       </section>}
-      {discoveryEnabled ? <section className="login-story discovery-story"><BrandPoster/><PublicDiscovery onJoin={join} registrationEnabled={Boolean(site?.registration_enabled)}/></section> : <section className="login-story"><BrandPoster/><div className="login-story-copy">{!visitorFirst&&<><h1>{t('auth.headline')}</h1><p className="login-purpose-intro">{t('auth.intro')}</p></>}<PlatformPurpose variant="public" disabled={pending||accessExpired||activeMode==='confirm-reset'} onAction={target=>{
+      {discoveryEnabled ? <section className="login-story discovery-story"><LoginEntryBrand/><PublicDiscovery onJoin={join} registrationEnabled={Boolean(site?.registration_enabled)}/></section> : <section className="login-story"><LoginEntryBrand/><div className="login-story-copy">{!visitorFirst&&<><h1>{t('auth.headline')}</h1><p className="login-purpose-intro">{t('auth.intro')}</p></>}<PlatformPurpose variant="public" disabled={pending||accessExpired||activeMode==='confirm-reset'} onAction={target=>{
         if(target!=='supplier'&&target!=='showcase'&&target!=='tasks')return
         onChooseEntry(target);setMode(site?.registration_enabled?'register':'login');setError(null);setResetNotice('')
         requestAnimationFrame(()=>emailInput.current?.focus())
