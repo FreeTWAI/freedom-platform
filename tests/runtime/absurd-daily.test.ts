@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+import {stripTypeScriptTypes} from 'node:module';
 import {transformSync} from 'esbuild';
 import {parseDishInit,parseDishView,parseDishReply,nextDishView} from '../../apps/portal-web/src/games/cooking/dish-worker-protocol.js';
 import {newMarket} from '../../apps/portal-web/src/games/cooking/market-domain.js';
@@ -174,7 +175,7 @@ test('AD-2 an input timestamp ahead of a queued render cannot double count foreg
 test('AD-7 bounded guest draft survives reload, reads are pure, and stale clearing cannot delete a newer result',()=>{const s=storage(),now=Date.now(),draft={version:1 as const,createdAt:now,game:'photo' as const,seed:7,title:'這張能交嗎？',text:'真的拍到了。',image:'data:image/jpeg;base64,YWJjZA=='};saveGameDraft(s,draft,now);const before=s.getItem(GAME_HANDOFF_KEY);assert.deepEqual(readGameDraft(s,now),draft);assert.equal(s.getItem(GAME_HANDOFF_KEY),before);clearGameDraft(s,now-1);assert.equal(s.getItem(GAME_HANDOFF_KEY),before);clearGameDraft(s,now);assert.equal(readGameDraft(s,now),null);});
 test('AD-7 malformed, expired, future, oversized and unavailable storage cannot falsely succeed',()=>{const now=Date.now(),draft={version:1,createdAt:now,game:'cash',seed:7,title:'盤點',text:'道具鈔',image:'data:image/jpeg;base64,YWJjZA=='};for(const changed of [{version:2},{createdAt:now-HANDOFF_TTL-1},{createdAt:now+61000},{seed:NaN},{seed:0},{image:'data:text/html;base64,AAAA'},{title:''},{text:'x'.repeat(2001)}])assert.equal(parseGameDraft(JSON.stringify({...draft,...changed}),now),null);assert.equal(parseGameDraft('{bad',now),null);assert.equal(readGameDraft({getItem(){throw Error('denied');},setItem(){},removeItem(){}},now),null);assert.throws(()=>saveGameDraft({getItem(){return null;},setItem(){throw Error('quota');},removeItem(){}},draft as any,now),/quota/);});
 
-import {CATEGORIES,RECIPES,recipeOf,recipeSearch,TECHNIQUES} from '../../apps/portal-web/src/games/cooking/catalog.js';
+import {CATEGORIES,COOKING_RULES,RECIPES,recipeOf,recipeSearch,TECHNIQUES} from '../../apps/portal-web/src/games/cooking/catalog.js';
 import {actCooking,advanceCooking,cookingProgress,cookingScore,currentStep,cutGuide,newCookingRun,parseCookingRun,plateTarget,type CookingRun,type CookingAction} from '../../apps/portal-web/src/games/cooking/domain.js';
 import {COOKBOOK_KEY,COOKBOOK_BACKUP,COOKING_RUN_KEY,RUN_TTL,emptyCookbook,parseCookbook,readCookbook,updateCookbook,readCookingRun,saveCookingRun,clearCookingRun} from '../../apps/portal-web/src/games/cooking/storage.js';
 import {readFile} from 'node:fs/promises';
@@ -251,6 +252,52 @@ test('CK-5/7: background time, cancelled holds, reversed mixing and out-of-bowl 
   r=actCooking(r,{kind:'pause',step:0},750);const paused=JSON.stringify(r);assert.equal(JSON.stringify(advanceCooking(r,999999)),paused);r=actCooking(r,{kind:'resume',step:0},999999);assert.equal(r.elapsed,750);r=advanceCooking(r,1999999);assert.equal(r.elapsed,1000750);
   const knead=recipeOf('italian-meatballs')!;let k=newCookingRun(knead,42,'cancel_case');k={...k,step:2,status:'playing',reports:[{step:0,score:100,elapsed:0,mistakes:0},{step:1,score:100,elapsed:0,mistakes:0}],lastNow:0};k=actCooking(k,{kind:'hold-start',step:2},20);k=actCooking(k,{kind:'cancel',step:2},400);k=actCooking(k,{kind:'hold-end',step:2},800);assert.equal(k.active.count,0);
 });
+
+// Exercise the actual component closures and production domain/storage without
+// pretending these isolated handlers provide React or native focus evidence.
+function cookingFocusHarness(kind:'knead'|'pour'){
+  const recipe=recipeOf('margherita-pizza')!;let now=0,run=newCookingRun(recipe,42,'focus_hold');
+  const send=(action:Omit<CookingAction,'step'>)=>{run=actCooking(run,{...action,step:run.step} as CookingAction,now);};
+  const time=(ms:number)=>{const end=now+ms;while(now<end){now=Math.min(end,now+50);run=advanceCooking(run,now);}};
+  send({kind:'start'});
+  if(kind==='pour'){
+    const knead=currentStep(run);for(let i=0;i<knead.goal;i++){send({kind:'hold-start'});time(knead.holdMs);send({kind:'hold-end'});}
+    assert.equal(run.status,'step-result');send({kind:'next'});
+  }
+  assert.equal(currentStep(run).kind,kind);
+  const live={current:run},holdOwner={current:null as {kind:'key';key:string}|{kind:'pointer';id:number}|null},gesture={current:null},saved=storage(),notices:string[]=[],writes:boolean[]=[];
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingGame.tsx',import.meta.url),'utf8');
+  const start=source.indexOf('  const clearGesture='),end=source.indexOf('  const pause=');assert.ok(start>=0&&end>start);
+  const handlers=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+`;({holdStart,holdEnd,commit,blur:typeof cancelKeyHold==='function'?cancelKeyHold:()=>{}})`,{
+    live,holdOwner,gesture,pointFrame:{current:0},pendingPoint:{current:null},lastSave:{current:-1000},savedSession:{current:saved},
+    performance:{now:()=>now},COOKING_RULES,TECHNIQUES,actCooking,currentStep,saveCookingRun,
+    setView(){},setPoint(){},setSelectedIngredient(){},setSaveFailed:(failed:boolean)=>writes.push(failed),setNotice:(notice:string)=>notices.push(notice),
+    cancelAnimationFrame(){},requestAnimationFrame(){throw Error('No gesture animation expected');},
+  }) as {holdStart:(owner:NonNullable<typeof holdOwner.current>)=>void;holdEnd:(owner:NonNullable<typeof holdOwner.current>)=>void;commit:(next:CookingRun)=>void;blur:()=>void};
+  return {...handlers,live,holdOwner,saved,notices,writes,tick:(ms:number)=>{const end=now+ms;while(now<end){now=Math.min(end,now+50);handlers.commit(advanceCooking(live.current,now));}}};
+}
+for(const kind of ['knead','pour'] as const)for(const key of [' ','Enter'])test(`UX-2 keyboard ${key===' '?'Space':'Enter'} ${kind} hold cancels on focus loss and restarts from real progress (non-native)`,()=>{
+  const f=cookingFocusHarness(kind),owner={kind:'key' as const,key},step=currentStep(f.live.current),before=f.live.current;
+  f.blur();assert.equal(f.notices.length,0);assert.equal(f.writes.length,0);
+  f.holdStart(owner);f.tick(300);f.holdEnd({kind:'key',key:key===' '?'Enter':' '});assert.notEqual(f.live.current.active.holdAt,null);
+  f.blur();assert.equal(f.holdOwner.current,null);assert.equal(f.live.current.active.holdAt,null);
+  const cancelled=f.live.current,checkpoint=JSON.parse(f.saved.getItem(COOKING_RUN_KEY)!).run;
+  assert.deepEqual(checkpoint,JSON.parse(JSON.stringify(cancelled)));assert.equal(cancelled.status,'playing');assert.equal(cancelled.active.count,0);assert.deepEqual(cancelled.reports,before.reports);
+  assert.match(f.notices.at(-1)!,/已取消這次按住操作/);const noticeCount=f.notices.length;
+  f.tick(4000);f.holdEnd(owner);f.blur();assert.equal(f.live.current.active.amount,cancelled.active.amount);assert.equal(f.live.current.active.count,0);assert.deepEqual(f.live.current.reports,before.reports);assert.equal(f.notices.length,noticeCount);
+  f.holdStart(owner);f.tick(kind==='knead'?step.holdMs:(step.target-f.live.current.active.amount)*step.durationMs);f.holdEnd(owner);
+  assert.equal(f.holdOwner.current,null);
+  if(kind==='knead'){assert.equal(f.live.current.active.count,1);assert.equal(f.live.current.status,'playing');}
+  else{assert.equal(f.live.current.status,'step-result');assert.equal(f.live.current.reports.length,before.reports.length+1);assert.ok(f.live.current.reports.at(-1)!.score>=85);}
+});
+for(const kind of ['knead','pour'] as const)test(`UX-2 focus loss leaves the captured pointer ${kind} hold with its own owner (non-native)`,()=>{
+  const f=cookingFocusHarness(kind),owner={kind:'pointer' as const,id:7},step=currentStep(f.live.current);
+  f.holdStart(owner);f.tick(300);const held=f.live.current.active.holdAt;f.blur();assert.equal(f.live.current.active.holdAt,held);assert.equal(f.holdOwner.current,owner);assert.equal(f.notices.length,0);
+  f.holdEnd({kind:'pointer',id:99});assert.equal(f.holdOwner.current,owner);
+  f.tick(kind==='knead'?step.holdMs-300:step.durationMs*step.target-300);f.holdEnd(owner);assert.equal(f.holdOwner.current,null);
+  if(kind==='knead')assert.equal(f.live.current.active.count,1);else{assert.equal(f.live.current.status,'step-result');assert.ok(f.live.current.reports.at(-1)!.score>=85);}
+});
+
 test('CK-5: flip and skimming are required; over-baking has a reachable low-score ending',()=>{
   const source=cook('egg-fried-rice').run;let r={...newCookingRun(RECIPES[0],42,'pan_case'),step:1,status:'playing' as const,lastNow:0,reports:[source.reports[0]]};r=actCooking(r,{kind:'heat',step:1,value:58},0) as typeof r;for(let t=500;t<=8500;t+=500)r=advanceCooking(r,t) as typeof r;assert.equal(r.status,'playing');assert.equal(r.active.amount>=1,true);r=actCooking(r,{kind:'flip',step:1},9000) as typeof r;assert.equal(r.status,'step-result');
   const recipe=recipeOf('chocolate-brownie')!;let b:CookingRun={...newCookingRun(recipe,42,'bake_case'),step:2,status:'playing',lastNow:0,reports:[{step:0,score:100,elapsed:0,mistakes:0},{step:1,score:100,elapsed:0,mistakes:0}]};for(let t=500;t<=12000&&b.status==='playing';t+=500)b=advanceCooking(b,t);assert.equal(b.status,'done');assert.ok(b.reports.at(-1)!.score<30);
