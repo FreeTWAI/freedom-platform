@@ -1139,13 +1139,13 @@ import {MemberGameUpload,memberGame,memberGameFileError,exactGameAck,memberGameL
 const memberGameId='10000000-0000-4000-8000-000000000001';
 const gameMetadata=():CurrentMemberGame=>({game_id:memberGameId,title:'合成測試',description:'測試介紹',version:'1',state:'draft',source_revision:'0',trust:'unreviewed',visibility:'private',upload_available:true});
 const receipt=(current:CurrentMemberGame)=>{const {upload_available,...ack}=current;return ack;};
-function uploadFixture(){
+function uploadFixture(refused:(error:unknown)=>boolean=error=>error==='pre-admission-refused'){
  let current=gameMetadata(),live=true,reads=0,send:(command:GameCommand)=>Promise<unknown>=async command=>{
   if(command.kind==='create')return receipt({...current,title:command.body.title,description:command.body.description});
   current={...current,version:String(BigInt(command.before.version)+1n),source_revision:command.kind==='upload'?String(BigInt(command.before.source_revision)+1n):command.before.source_revision,state:command.kind==='upload'?'quarantined':'withdrawn',upload_available:command.kind==='upload'};return receipt(current);
  };
  const commands:GameCommand[]=[];
- const controller=new MemberGameUpload({current:()=>live,refused:error=>error==='pre-admission-refused',read:async()=>{reads++;return current;},send:async command=>{commands.push(command);return send(command);}});
+ const controller=new MemberGameUpload({current:()=>live,refused,read:async()=>{reads++;return current;},send:async command=>{commands.push(command);return send(command);}});
  return {controller,commands,reads:()=>reads,current:()=>current,setCurrent:(value:CurrentMemberGame)=>{current=value;},setSend:(fn:typeof send)=>{send=fn;},end:()=>{live=false;}};
 }
 const sourceFile=(bytes:Uint8Array|string='<!doctype html>\r\n<script>throw Error("must never execute")</script>')=>new File([bytes as BlobPart],'index.html',{type:'text/html'});
@@ -1202,6 +1202,53 @@ test('member game upload: withdrawal retry remains leave-protected during deferr
  await controller.load(memberGameId);await controller.change('withdraw');assert.equal(controller.getSnapshot().phase,'unknown');
  const retry=controller.retry();assert.equal(controller.getSnapshot().phase,'reading');assert.equal(controller.getSnapshot().selected,null);assert.equal(controller.getSnapshot().retry,'withdraw');assert.equal(memberGameLeaveRisk(controller.getSnapshot()),true);
  finish(gameMetadata());await retry;assert.equal(memberGameLeaveRisk(controller.getSnapshot()),true);controller.dispose();assert.equal(memberGameLeaveRisk(controller.getSnapshot()),false);
+});
+// Exercise the exact TSX transport predicate with the real ApiError class, not a
+// copied test allowlist. This is source/controller coverage, not a mounted UI.
+function memberGameRefusal(){
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/MemberGameUpload.tsx',import.meta.url),'utf8');
+ const matches=[...source.matchAll(/^\s*refused:(.+),$/gm)];assert.equal(matches.length,1);
+ return runInNewContext(`(${matches[0][1]})`,{ApiError}) as (error:unknown)=>boolean;
+}
+const quotaCodes=['asset_retained_quota','asset_upload_quota'] as const;
+test('member game upload: real transport classifies only definitive quota responses, not ambiguous lookalikes',()=>{
+ const refused=memberGameRefusal();
+ for(const code of quotaCodes){
+  assert.equal(refused(new ApiError({message:'synthetic quota',status:409,code,definitiveResponse:true})),true);
+  for(const error of [new ApiError({message:'unparsed',status:409,code}),new ApiError({message:'network',status:409,code,definitiveResponse:true,network:true}),{status:409,code,definitiveResponse:true,network:false},Object.assign(Error('lookalike'),{code,definitiveResponse:true})])assert.equal(refused(error),false);
+ }
+ for(const code of ['asset_lease_active','asset_not_stored','game_upload_unavailable'])assert.equal(refused(new ApiError({message:'not a pre-admission refusal',status:409,code,definitiveResponse:true})),false);
+});
+test('member game upload: first definitive capacity refusal unlocks cold read, replacement, withdrawal and create',async()=>{
+ for(const code of quotaCodes){
+  const f=uploadFixture(memberGameRefusal()),quota=new ApiError({message:'synthetic quota',status:409,code,definitiveResponse:true});
+  await f.controller.load(memberGameId);await f.controller.selectFile(sourceFile());f.setSend(async()=>{throw quota;});await f.controller.change('upload');
+  assert.equal(f.controller.getSnapshot().phase,'idle',code);assert.equal(f.controller.getSnapshot().retry,null);assert.equal(f.controller.getSnapshot().selected,null);assert.equal(f.controller.getSnapshot().draft,null);assert.equal(memberGameLeaveRisk(f.controller.getSnapshot()),false);
+  const first=f.commands[0];if(first.kind!=='upload')throw Error('expected upload');
+  const reads=f.reads();await f.controller.load(memberGameId);assert.equal(f.reads(),reads+1);assert.equal(f.controller.getSnapshot().draft?.version,'1');
+  const replacement='<html>replacement\r\n';await f.controller.selectFile(sourceFile(replacement));assert.equal(f.controller.getSnapshot().selected?.byteSize,new TextEncoder().encode(replacement).length);await f.controller.change('upload');
+  const second=f.commands[1];if(second.kind!=='upload')throw Error('expected replacement upload');
+  assert.notEqual(second.key,first.key);assert.equal(second.before.version,first.before.version);assert.equal(await second.source!.text(),replacement);assert.notEqual(second.source,first.source);assert.equal(f.controller.getSnapshot().phase,'idle');
+  await f.controller.load(memberGameId);f.setSend(async command=>{assert.equal(command.kind,'withdraw');f.setCurrent({...f.current(),state:'withdrawn',version:'2',upload_available:false});return receipt(f.current());});await f.controller.change('withdraw');assert.equal(f.controller.getSnapshot().draft?.state,'withdrawn');
+  f.setSend(async command=>{if(command.kind!=='create')throw Error('expected create');f.setCurrent({...gameMetadata(),game_id:'20000000-0000-4000-8000-000000000001',...command.body});return receipt(f.current());});await f.controller.create('另一個草稿','');assert.equal(f.commands[3].kind,'create');assert.equal(f.controller.getSnapshot().phase,'idle');assert.equal(f.controller.getSnapshot().draft?.title,'另一個草稿');
+  f.controller.dispose();
+ }
+});
+test('member game upload: quota refusal after unknown preserves original key, bytes and version without unlocking',async()=>{
+ for(const code of quotaCodes){
+  const f=uploadFixture(memberGameRefusal()),bytes=new Uint8Array([239,187,191,...new TextEncoder().encode('<html>\r\n原來源')]);
+  await f.controller.load(memberGameId);await f.controller.selectFile(sourceFile(bytes));f.setSend(async()=>{throw new ApiError({message:'lost ACK',network:true});});await f.controller.change('upload');
+  const original=f.commands[0];if(original.kind!=='upload')throw Error('expected upload');assert.equal(f.controller.getSnapshot().phase,'unknown');
+  f.setCurrent({...f.current(),version:'3',source_revision:'1',state:'withdrawn',upload_available:false});
+  f.setSend(async()=>{throw new ApiError({message:'later quota',status:409,code,definitiveResponse:true});});
+  for(let attempt=1;attempt<=2;attempt++){
+   const reads=f.reads();await f.controller.retry();assert.equal(f.reads(),reads+1);assert.equal(f.commands[attempt],original);assert.equal(f.commands[attempt].key,original.key);assert.equal(original.before.version,'1');assert.deepEqual(new Uint8Array(await original.source!.arrayBuffer()),bytes);
+   const state=f.controller.getSnapshot();assert.equal(state.phase,'unknown',code);assert.equal(state.retry,'upload');assert.equal(state.draft,null);assert.equal(state.selected?.byteSize,bytes.length);assert.equal(memberGameLeaveRisk(state),true);
+   await f.controller.load(memberGameId);await f.controller.selectFile(sourceFile('different'));f.controller.clearFile();await f.controller.create('another','');await f.controller.change('withdraw');await f.controller.change('upload');assert.equal(f.controller.getSnapshot(),state);assert.equal(f.reads(),reads+1);assert.equal(f.commands.length,attempt+1);
+  }
+  f.setSend(async()=>({...receipt(gameMetadata()),version:'2',source_revision:'1',state:'quarantined'}));await f.controller.retry();assert.equal(f.commands[3],original);assert.equal(f.controller.getSnapshot().phase,'idle');assert.equal(f.controller.getSnapshot().draft?.version,'3');assert.equal(f.controller.getSnapshot().draft?.state,'withdrawn');assert.equal(f.controller.getSnapshot().selected,null);
+  f.controller.dispose();
+ }
 });
 // END MEMBER-GAME-UPLOAD
 
