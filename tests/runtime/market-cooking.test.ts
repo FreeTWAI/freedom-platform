@@ -1,3 +1,4 @@
+import {shawarmaPresentation} from '../../apps/portal-web/src/games/cooking/shawarma-presentation.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {advanceMarket,applyMarket,canServe,marketGrade,marketMass,newMarket,parseMarket,readMarket,saveMarket,MARKET_SAVE_KEY,type MarketRun,type MarketAction} from '../../apps/portal-web/src/games/cooking/market-domain.js';
@@ -169,4 +170,16 @@ test('UX-17 fryer batches static geometry, updates only its dial/lamp and releas
  let disposed=0,disposedMaterials=0;for(const geometry of kit.geometries)geometry.addEventListener('dispose',()=>disposed++);
  for(const material of kit.materials.values())material.addEventListener('dispose',()=>disposedMaterials++);
  kit.dispose();assert.equal(disposed,geometries);assert.equal(disposedMaterials,materials);assert.equal(kit.geometries.size,0);assert.equal(kit.materials.size,0);
+});
+
+// Pure presentation regression: temperature updates do not depend on portions/rebuilds.
+test('UX-17 shawarma heat follows temperature and reduced motion freezes spit rotation',()=>{
+ const run=begin('shawarma'),before=JSON.stringify(run);
+ const cold=shawarmaPresentation({...run,temperature:25,elapsed:1200},false),hot=shawarmaPresentation({...run,temperature:235,elapsed:2400},false);
+ assert.equal(cold.cooked,0);assert.ok(hot.cooked>cold.cooked);assert.equal(cold.rotation,1);assert.equal(hot.rotation,2);
+ assert.equal(shawarmaPresentation({...run,elapsed:1200},true).rotation,0);
+ assert.equal(shawarmaPresentation({...run,elapsed:9600,status:'paused'},true).rotation,0);
+ assert.equal(shawarmaPresentation({...run,elapsed:2400,status:'paused'},false).rotation,2);
+ assert.deepEqual(shawarmaPresentation({...run,temperature:NaN,elapsed:NaN},false),{cooked:0,rotation:0});
+ assert.equal(shawarmaPresentation({...run,temperature:999},false).cooked,1);assert.equal(JSON.stringify(run),before);
 });
