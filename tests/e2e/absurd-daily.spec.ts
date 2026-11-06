@@ -1272,9 +1272,11 @@ for (const mode of ['native','unsupported','rejected'] as const) {
         expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
       }
     }
-    async function traverseModeHelp(key:'Tab'|'Shift+Tab') {
+    async function crossViewportHelp(key:'Tab'|'Shift+Tab') {
       if(mode==='native')return;
-      await expect(dialog.locator('.fullscreen-game__mode-help summary')).toBeFocused();
+      const help=page.locator('.fullscreen-game__mode-help summary');
+      await expect(help).toBeFocused();
+      await expect(help).toHaveText('全視窗說明');
       await page.keyboard.press(key);
     }
     async function classify(index:number) {
@@ -1289,7 +1291,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await expectFullscreen();
     await classify(0);
     await page.keyboard.press('Shift+Tab');
-    await traverseModeHelp('Shift+Tab');
+    await crossViewportHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(dialog).toHaveCount(0);
@@ -1306,7 +1308,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
     await expect(progress).toContainText('已分類 1 / 30');
     await page.keyboard.press('Tab');
-    await traverseModeHelp('Tab');
+    await crossViewportHelp('Tab');
     await classify(1);
     await page.keyboard.press('Tab');
     await expect(back).toBeFocused();
@@ -1314,7 +1316,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await classify(2);
     // Both edges still wrap inside the fullscreen container.
     await page.keyboard.press('Shift+Tab');
-    await traverseModeHelp('Shift+Tab');
+    await crossViewportHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(page.getByRole('button',{name:'收道具鈔 →',exact:true})).toBeFocused();
