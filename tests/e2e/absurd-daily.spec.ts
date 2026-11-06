@@ -313,9 +313,10 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
     for(let i=0;i<(phase==='playing'?1:currentStep(f.run).goal);i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();}
     const game=page.locator('.ck-game'),restart=page.getByRole('button',{name:'重新做',exact:true}),dialog=page.getByRole('dialog',{name:'重新做這盤料理',exact:true});
     await expect(game).toHaveAttribute('data-cooking-state',phase);
-    if(viewport.width===320)await page.addStyleTag({content:'.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .ck-confirm,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .ck-confirm p{font-size:28px}.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .ck-confirm button{font-size:30px}'});
     await restart.focus();await page.keyboard.press('Enter');await expect(dialog).toBeVisible();
     expect(await dialog.evaluate(el=>el.matches(':modal'))).toBe(true);
+    // Match the existing large-text fixture through CSSOM without injecting a CSP-blocked stylesheet.
+    if(viewport.width===320)await dialog.evaluate(el=>{for(const node of el.querySelectorAll<HTMLElement>('p,button')){const line=parseFloat(getComputedStyle(node).lineHeight);node.style.fontSize=node.tagName==='BUTTON'?'30px':'28px';if(Number.isFinite(line))node.style.lineHeight=`${line*2}px`;}});
     if(viewport.width===320){await expect(dialog.locator('p')).toHaveCSS('font-size','28px');for(const button of await dialog.getByRole('button').all())await expect(button).toHaveCSS('font-size','30px');}
     const keep=dialog.getByRole('button',{name:'繼續這一盤',exact:true});await expect(keep).toBeFocused();
     const pausedPhase=phase==='playing'?'paused':'step-result',background=page.getByRole('button',{name:phase==='playing'?'繼續料理':/^下一步：/,exact:phase==='playing',includeHidden:true});
@@ -323,6 +324,7 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
     // Native inertness prevents even programmatic focus from escaping to a live background control.
     await background.evaluate(el=>el.focus());await expect(keep).toBeFocused();
     for(let i=0;i<5;i++){await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+    const confirm=dialog.getByRole('button',{name:'確定重新做',exact:true});await expect(confirm).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(keep).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(confirm).toBeFocused();
     const saved=await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY),book=await page.evaluate(key=>localStorage.getItem(key),COOKBOOK_KEY);
     await page.clock.runFor(6000);expect(await page.evaluate(key=>sessionStorage.getItem(key),COOKING_RUN_KEY)).toBe(saved);
     const bounds=(await dialog.boundingBox())!;expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.y).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(viewport.width);expect(bounds.y+bounds.height).toBeLessThanOrEqual(viewport.height);
