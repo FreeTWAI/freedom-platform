@@ -997,13 +997,15 @@ async function marketOpen(page:Page,id:MarketId){await page.clock.install();awai
 async function marketButton(page:Page,name:string){await marketTime(page,400);await page.getByRole('button',{name,exact:true}).click();}
 async function marketAdd(page:Page,name:string){await marketTime(page,400);await page.locator('.mk-ingredients').getByRole('button',{name:new RegExp(`^${name} `)}).click();}
 test('UX-9: optional corn dog coating hold cancels early, completes once and keeps keyboard fallback reachable on phone',async({page})=>{
+ // This checks continuous gesture ownership, not frame cadence. Advance the
+ // installed clock once per boundary while retaining the actual RAF controller.
  await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');
  const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true}),progress=page.getByRole('progressbar',{name:'這次裹糊進度'});
  const coated=()=>page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.portions.map((p:{coated:boolean})=>p.coated),MARKET_SAVE_KEY);
  await hold.scrollIntoViewIfNeeded();const box=(await hold.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.width).toBeGreaterThanOrEqual(44);expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(390);
- await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.clock.runFor(450);expect(Number(await progress.getAttribute('aria-valuenow'))).toBeGreaterThan(0);await page.mouse.up();await page.clock.runFor(1000);expect(await coated()).toEqual([false]);await expect(progress).toHaveAttribute('aria-valuenow','0');
- await page.evaluate(()=>Object.defineProperty(document.documentElement,'requestFullscreen',{configurable:true,value:undefined}));await page.evaluate(()=>Object.defineProperty(Element.prototype,'requestFullscreen',{configurable:true,value:undefined}));await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toBeVisible();await hold.focus();await page.keyboard.down('Space');await page.clock.runFor(450);await page.keyboard.press('Escape');await page.clock.runFor(1000);expect(await coated()).toEqual([false]);await expect(progress).toHaveAttribute('aria-valuenow','0');await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toHaveCount(0);await page.keyboard.up('Space');await hold.focus();
- await page.keyboard.down('Enter');await page.clock.runFor(1000);await page.keyboard.up('Enter');expect(await coated()).toEqual([true]);await expect(hold).toBeDisabled();await page.clock.runFor(1000);expect(await coated()).toEqual([true]);
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.clock.fastForward(450);expect(Number(await progress.getAttribute('aria-valuenow'))).toBeGreaterThan(0);await page.mouse.up();await page.clock.fastForward(1000);expect(await coated()).toEqual([false]);await expect(progress).toHaveAttribute('aria-valuenow','0');
+ await page.evaluate(()=>Object.defineProperty(document.documentElement,'requestFullscreen',{configurable:true,value:undefined}));await page.evaluate(()=>Object.defineProperty(Element.prototype,'requestFullscreen',{configurable:true,value:undefined}));await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toBeVisible();await hold.focus();await page.keyboard.down('Space');await page.clock.fastForward(450);await page.keyboard.press('Escape');await page.clock.fastForward(1000);expect(await coated()).toEqual([false]);await expect(progress).toHaveAttribute('aria-valuenow','0');await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toHaveCount(0);await page.keyboard.up('Space');await hold.focus();
+ await page.keyboard.down('Enter');await page.clock.fastForward(1000);await page.keyboard.up('Enter');expect(await coated()).toEqual([true]);await expect(hold).toBeDisabled();await page.clock.fastForward(1000);expect(await coated()).toEqual([true]);
  await marketAdd(page,'熱狗');const fallback=page.getByRole('button',{name:'裹麵糊',exact:true});await marketTime(page,400);await fallback.focus();await page.keyboard.press('Enter');expect(await coated()).toEqual([true,true]);
 });
 
@@ -1238,6 +1240,11 @@ for (const mode of ['native','unsupported','rejected'] as const) {
         expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
       }
     }
+    async function traverseModeHelp(key:'Tab'|'Shift+Tab') {
+      if(mode==='native')return;
+      await expect(dialog.locator('.fullscreen-game__mode-help summary')).toBeFocused();
+      await page.keyboard.press(key);
+    }
     async function classify(index:number) {
       await expect(board).toBeFocused();
       // Advance the input cooldown without rendering every intervening RAF.
@@ -1250,6 +1257,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await expectFullscreen();
     await classify(0);
     await page.keyboard.press('Shift+Tab');
+    await traverseModeHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(dialog).toHaveCount(0);
@@ -1266,6 +1274,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await page.keyboard.press(deck[1].valid?'ArrowRight':'ArrowLeft');
     await expect(progress).toContainText('已分類 1 / 30');
     await page.keyboard.press('Tab');
+    await traverseModeHelp('Tab');
     await classify(1);
     await page.keyboard.press('Tab');
     await expect(back).toBeFocused();
@@ -1273,6 +1282,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await classify(2);
     // Both edges still wrap inside the fullscreen container.
     await page.keyboard.press('Shift+Tab');
+    await traverseModeHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(page.getByRole('button',{name:'收道具鈔 →',exact:true})).toBeFocused();
