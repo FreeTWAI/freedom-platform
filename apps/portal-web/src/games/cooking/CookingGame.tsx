@@ -61,7 +61,7 @@ export function CookingGame({recipe,seed,fresh=false,onBack,onResult,onComplete}
     if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
     flush(true);
   };
-  const key=(event:KeyboardEvent,release=false)=>{if((event.target as HTMLElement).closest('input,select,textarea,button,a')||event.ctrlKey||event.metaKey||event.altKey)return;
+  const key=(event:KeyboardEvent,release=false)=>{if((event.target as HTMLElement).closest('input,select,textarea,button,a,summary')||event.ctrlKey||event.metaKey||event.altKey)return;
     if(event.key==='Escape'&&!release){event.preventDefault();pause();return;}if(live.current.status!=='playing'||event.repeat)return;const s=currentStep(live.current);
     if(s.kind==='fold'&&event.key.startsWith('Arrow')&&!release){event.preventDefault();command({kind:'fold',index:live.current.active.count,direction:event.key.slice(5).toLowerCase() as Direction});}
     if(s.kind==='pan'&&event.key.toLowerCase()==='f'&&!release){event.preventDefault();command({kind:'flip'});}
