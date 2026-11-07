@@ -1,6 +1,8 @@
 import { validSkillPageContent, type SkillPageContent } from '../community/skill-page-content.js';
 import { skillPageFlow, skillPageHero, skillPageUsage } from '../development/skill-page.js';
 
+export const SKILL_SUBMISSION_PREVIEW_CSS_PATH = '/api/v1/skill-submissions/preview.css';
+
 export type SubmissionPageSource = {
   title: string; description: string; use_notes: string; page_content?: SkillPageContent | null;
 };

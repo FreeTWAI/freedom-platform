@@ -3,12 +3,27 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import sharp from 'sharp';
-import {submittedSkillHtml,submittedSkillAgentMarkdown} from '../../apps/platform-api/src/routes/published-skills.js';
+import {createPublishedSkillRoutes,submittedSkillHtml,submittedSkillAgentMarkdown} from '../../apps/platform-api/src/routes/published-skills.js';
+import {skillPageCss} from '../../modules/development/skill-page.js';
+import {SKILL_SUBMISSION_PREVIEW_CSS_PATH} from '../../modules/skill-submissions/page-content.js';
 import { syntheticSkillPage } from '../fixtures/skill-page-content.js';
 import { skillSubmissionPreviewDocument } from '../../apps/portal-web/src/modules/SkillSubmissionPagePreview.js';
 import {communitySkillArt} from '../../modules/skill-submissions/public.js';
 
 const skill={submission_id:'b371a8d0-0453-4e7e-8730-03cc9803f4e8',title:'剪輯共作 <script>alert(1)</script>',description:'整理素材 & 檢查時間軸',use_notes:'先讀 README，再用測試素材執行。',demo_url:'https://example.com/demo',repository_url:'https://github.com/example/editor',relationship:'curator' as const,relationship_verification:'self_declared' as const,official:false as const,project_id:'ce72bbae-f09a-4e5e-b5b6-f30f311b660e',public_path:'/development/submissions/b371a8d0-0453-4e7e-8730-03cc9803f4e8',cover_url:'/art/community-skills/default.webp',illustration_url:'/api/v1/skill-submissions/b371a8d0-0453-4e7e-8730-03cc9803f4e8/illustration',share_introductions:Array.from({length:100},(_,i)=>`第${i+1}個測試情境：整理公開的剪輯素材。`),source:{repository_full_name:'example/editor',repository_url:'https://github.com/example/editor',commit_sha:'a'.repeat(40),license_spdx:'MIT',license_evidence_url:'https://github.com/example/editor/blob/main/LICENSE',is_fork:false,archived:false},published_at:'2026-09-23T12:00:00Z'};
+
+test('anonymous preview stylesheet serves only shared CSS without reading database or supplied content',async()=>{
+  const pool=new Proxy({}, {get(){assert.fail('static stylesheet must not access the database');}});
+  const app=createPublishedSkillRoutes(pool as never);
+  for(const suffix of ['', '?content=%3Cscript%3Eprivate-draft%3C%2Fscript%3E&url=https%3A%2F%2Fexample.test']){
+    const response=await app.request(SKILL_SUBMISSION_PREVIEW_CSS_PATH+suffix);
+    assert.equal(response.status,200);
+    assert.equal(response.headers.get('Content-Type'),'text/css; charset=utf-8');
+    assert.equal(response.headers.get('Cache-Control'),'no-store');
+    assert.equal(await response.text(),skillPageCss);
+  }
+  assert.equal((await app.request(SKILL_SUBMISSION_PREVIEW_CSS_PATH,{method:'POST',body:'private-draft'})).status,404);
+});
 
 test('published candidate introduction has own illustration metadata, persistent sharing selection and real source collaboration links',()=>{
   const html=submittedSkillHtml(skill,'17');
@@ -101,7 +116,7 @@ test('shared submission reading and real source destinations precede optional il
 
 test('structured member pages and private previews render the same factual problem, mechanism and three-step diagram', () => {
  const source={...skill,page_content:syntheticSkillPage};
- const html=submittedSkillHtml(source), preview=skillSubmissionPreviewDocument(source);
+ const html=submittedSkillHtml(source), preview=skillSubmissionPreviewDocument(source,'https://example.test');
  for(const text of [syntheticSkillPage.headline,syntheticSkillPage.problem,syntheticSkillPage.mechanism,...syntheticSkillPage.outcomes,...syntheticSkillPage.flow.steps.map(step=>step.note),syntheticSkillPage.flow.lead]){
   assert.ok(html.includes(text),text);assert.ok(preview.includes(text),text);
  }
@@ -111,6 +126,7 @@ test('structured member pages and private previews render the same factual probl
  assert.ok(html.indexOf(syntheticSkillPage.problem)<html.indexOf('id="skill-start"'));
  assert.ok(html.indexOf(syntheticSkillPage.flow.lead)>html.indexOf('id="skill-start"'));
  assert.ok(preview.includes("default-src 'none'"));assert.ok(preview.includes("form-action 'none'"));
+ assert.ok(!preview.includes('<style>'));assert.ok(!preview.includes('unsafe-inline'));assert.ok(preview.includes('href="https://example.test/api/v1/skill-submissions/preview.css"'));
  assert.ok(!preview.includes('<script'));assert.ok(!preview.includes('<img'));assert.ok(!preview.includes('Authorization'));
  assert.ok(!preview.includes('<script>alert'));assert.ok(preview.includes('&lt;script&gt;'));
  const markdown=submittedSkillAgentMarkdown(source);

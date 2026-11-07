@@ -142,7 +142,8 @@
         "skill-submissions.upload-protocol.read",
         "skill-submissions.upload-guide.read",
         "skill-submissions.published-agent-guide.read",
-        "skill-submissions.published-page.read"
+        "skill-submissions.published-page.read",
+        "skill-submissions.preview-stylesheet.read"
       ],
       "auth_profile": "public-anonymous-read"
     },

@@ -6,8 +6,8 @@ import type {Pool} from 'pg';
 import type {ObjectStore} from '../../../../packages/asset-storage/index.js';
 import {developmentHtml,LIVE_SITE_ORIGIN,publicSkillShareMarkup,shareIntroNumber,publicSkillDestinations} from '../../../../modules/development/service.js';
 import {listPublishedSkillSubmissions,readPublishedSkillSubmission,readPublishedSkillIllustration,readPublishedUpgrade} from '../../../../modules/skill-submissions/public.js';
-import {skillPageBand} from '../../../../modules/development/skill-page.js';
-import {submissionPageMarkup} from '../../../../modules/skill-submissions/page-content.js';
+import {skillPageBand,skillPageCss} from '../../../../modules/development/skill-page.js';
+import {submissionPageMarkup,SKILL_SUBMISSION_PREVIEW_CSS_PATH} from '../../../../modules/skill-submissions/page-content.js';
 import {skillUploadProtocolMarkdown,skillUploadSkillMarkdown} from '../generated/runtime-text.js';
 
 /** Existing Node deployments link published pages to the live site. */
@@ -75,6 +75,10 @@ export function createPublishedSkillRoutes(pool:Pool,publicOrigin=LIVE_PUBLIC_OR
   app.use('/api/v1/skill-submissions/*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
   app.use('/development/submissions/*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
   const skillMarkdown=authoredUploadText(skillUploadSkillMarkdown,publicOrigin),protocolMarkdown=authoredUploadText(skillUploadProtocolMarkdown,publicOrigin);
+  app.get(SKILL_SUBMISSION_PREVIEW_CSS_PATH,c=>{
+    c.header('Content-Type','text/css; charset=utf-8');
+    return c.body(skillPageCss);
+  });
   app.get('/api/v1/skill-submissions/published',async c=>{
     const limit=z.coerce.number().int().min(1).max(100).optional().parse(c.req.query('limit'));
     const items=await listPublishedSkillSubmissions(pool,limit);

@@ -95,6 +95,8 @@ test('simple tool submission previews without writes, edits freely, then publish
   expect(writes).toEqual([]);
   const frame=page.frameLocator('iframe.skill-submission-page-preview');
   await expect(page.locator('iframe.skill-submission-page-preview')).toHaveAttribute('sandbox','');
+  await expect(frame.locator('.sp-receipt')).toHaveCSS('background-color','rgb(17, 29, 25)');
+  await expect(frame.locator('.sp-hero')).toHaveCSS('display','grid');
   await expect(frame.locator('#skill-problem')).toContainText(syntheticSkillPage.problem);
   await expect(frame.locator('.sp-flow-band')).toContainText(syntheticSkillPage.mechanism);
   for(const step of syntheticSkillPage.flow.steps) await expect(frame.locator('.sf-legend')).toContainText(step.note);
@@ -159,6 +161,9 @@ test('320px tool form and review remain readable in all three themes with option
   }
   await page.getByRole('button', { name: '預覽投稿' }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const preview=page.frameLocator('iframe.skill-submission-page-preview');
+  await expect(preview.locator('.sp-hero')).toHaveCSS('display','grid');
+  expect(await preview.locator('html').evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/simple-work-sharing/review-320.png', fullPage: true });
 });
 
