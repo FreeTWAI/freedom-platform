@@ -107,6 +107,7 @@ test('an anonymous community introduction shows plain usage, real destinations a
  await expect(page.locator('.sp-steps')).toContainText('保留原始檔案。');
  await expect(page.locator('.sp-steps')).toContainText('在自己的環境完成原作範例，再核對輸出。');
  await expect(page.locator('.sf-node-body')).toHaveCount(0);
+ await expect(page.getByRole('link',{name:'運作原理',exact:true})).toHaveCount(0);
  await expect(page.getByRole('heading',{name:'開始使用',exact:true})).toBeVisible();
  await page.getByText('作者、版本與參與開發',{exact:true}).click();
  await expect(page.getByText('整理推薦者（自行聲明，尚未核實作者身分）',{exact:true})).toBeVisible();

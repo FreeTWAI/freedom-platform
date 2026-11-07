@@ -62,6 +62,7 @@ test('all skill pages explain the problem and mechanism along one readable path 
   assert.ok(html.includes('<p class="sp-headline"><span>'+escape(content.headline)+'</span></p>'),book.id);
   for(const outcome of content.outcomes)assert.ok(html.includes('<span>'+escape(outcome)+'</span></li>'),book.id+': '+outcome);
   assert.ok(html.includes('<h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2>'),book.id);
+  assert.ok(html.includes('href="#skill-flow-title">運作原理</a>'),book.id);
   for(const step of content.flow.steps)assert.ok(html.includes('<h3 class="sf-title">'+escape(step.title)+'</h3><p class="sf-note">'+escape(step.note)+'</p>'),book.id+': '+step.title);
   assert.ok(html.includes(escape(content.problem)),book.id);assert.ok(html.includes(escape(content.mechanism)),book.id);
   assert.ok(html.includes('<div class="sp-conditions"><h3>使用條件</h3><p>'+escape(content.flow.lead)+'</p></div>'),book.id);
