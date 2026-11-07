@@ -4,7 +4,7 @@ import type {Context} from 'hono';
 import {z} from 'zod';
 import type {Pool} from 'pg';
 import type {ObjectStore} from '../../../../packages/asset-storage/index.js';
-import {developmentHtml,LIVE_SITE_ORIGIN,publicSkillShareMarkup,shareIntroNumber,publicSkillDestinations} from '../../../../modules/development/service.js';
+import {developmentHtml,LIVE_SITE_ORIGIN,publicSkillShareMarkup,shareIntroNumber,publicSkillDestinations,publicSkillEngagement} from '../../../../modules/development/service.js';
 import {listPublishedSkillSubmissions,readPublishedSkillSubmission,readPublishedSkillIllustration,readPublishedUpgrade} from '../../../../modules/skill-submissions/public.js';
 import {skillPageBand,skillPageCss} from '../../../../modules/development/skill-page.js';
 import {submissionPageMarkup,SKILL_SUBMISSION_PREVIEW_CSS_PATH} from '../../../../modules/skill-submissions/page-content.js';
@@ -56,7 +56,8 @@ export function submittedSkillHtml(skill:Published,intro?:string,publicOrigin=LI
   const destinations=publicSkillDestinations([{url:skill.repository_url,kind:'source'},...(skill.demo_url?[{url:skill.demo_url,kind:'demo' as const}]:[])]);
   const relationship={author:'原作者',maintainer:'維護者',contributor:'貢獻者',curator:'整理推薦者'}[skill.relationship];
   // Only currently published fields reach this template; no inferred install/download actions.
-  const entry=submissionPageMarkup(skill,{coverUrl:skill.cover_url,actions:'<a href="#skill-start">開始使用</a>'+external(skill.repository_url,'查看原作 Repo')});
+  const engagement=publicSkillEngagement({name:skill.source.repository_full_name.split('/')[0],role:'來源帳號',repositoryUrl:skill.source.repository_url,authorEndpoint:'/api/v1/skill-submissions/'+skill.submission_id+'/author-card'});
+  const entry=submissionPageMarkup(skill,{coverUrl:skill.cover_url,actions:'<a href="#skill-start">開始使用</a>'+external(skill.repository_url,'查看原作 Repo'),engagement});
   const source=`<section class="public-skill-source"><h2>版本與來源</h2><p>原作：${escape(skill.source.repository_full_name)}</p><dl><dt>來源 Repo</dt><dd>${escape(skill.source.repository_full_name)}</dd><dt>投稿者自述關係</dt><dd>${escape(relationship)}（自行聲明，尚未核實作者身分）</dd><dt>收錄授權</dt><dd>${escape(skill.source.license_spdx==='NOASSERTION'?'尚未確認':skill.source.license_spdx)}</dd><dt>收錄版本</dt><dd><code>${escape(skill.source.commit_sha)}</code></dd><dt>投稿公開日期</dt><dd>${escape(skill.published_at.slice(0,10))}</dd></dl><p>收錄不代表官方採用或額外授權。${skill.source.license_evidence_url?external(skill.source.license_evidence_url,'閱讀來源授權'):''}</p></section>`;
   const collaboration=`<section><h2>一起開發</h2><p>查看專案任務，認領一項修改並提交 PR。</p><div class="public-skill-actions">${external(skill.repository_url+'/issues','查看任務')}${external(skill.repository_url+'/pulls','查看 PR')}${external(skill.repository_url+'/fork','Fork 專案')}<a href="${skill.public_path}/SKILL.md">讀取協作指令</a></div></section><p><a href="${skill.public_path}/SKILL.md">下載協作指令 SKILL.md</a>（供 Agent 閱讀，非應用程式安裝包）</p>`;
   const details='<details class="public-skill-details"><summary>作者、版本與參與開發</summary>'+source+collaboration+eventBacklinksHtml+'</details>';
@@ -65,7 +66,7 @@ export function submittedSkillHtml(skill:Published,intro?:string,publicOrigin=LI
     +skillPageBand(publicSkillShareMarkup({title:skill.title,path:skill.public_path,introductions:skill.share_introductions,selected,origin:publicOrigin}),'sp-share-band')
     +skillPageBand(publicSkillAcquisition(skill.public_path,selected),'sp-join-band')
     +skillPageBand(details+artwork,'sp-facts-band');
-  return developmentHtml(skill.title,body,{path:skill.public_path,description:selected?skill.share_introductions[selected-1]:skill.description,share:true,shareQuery:selected?`intro=${selected}`:undefined,image:image?{url:image,width:1200,height:630,alt:`${skill.title}功能示意圖`}:undefined,origin:publicOrigin,discoveryEnabled,layout:'skill'});
+  return developmentHtml(skill.title,body,{path:skill.public_path,description:selected?skill.share_introductions[selected-1]:skill.description,share:true,social:true,shareQuery:selected?`intro=${selected}`:undefined,image:image?{url:image,width:1200,height:630,alt:`${skill.title}功能示意圖`}:undefined,origin:publicOrigin,discoveryEnabled,layout:'skill'});
 }
 
 export function createPublishedSkillRoutes(pool:Pool,publicOrigin=LIVE_PUBLIC_ORIGIN,store?:ObjectStore,discoveryEnabled=false,readEventBacklinks?:(id:string,c:Context)=>Promise<string>){

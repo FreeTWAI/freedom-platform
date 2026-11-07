@@ -1,4 +1,4 @@
-import { skillPageContentInstruction } from './skill-page-content-instruction';
+import { skillPageContentInstruction, skillShareIntroductionInstruction } from './skill-page-content-instruction';
 import type { SkillPageContent } from '../../../../modules/community/skill-page-content.js';
 
 export const CHAT_JSON_MAX_BYTES = 800 * 1024;
@@ -52,7 +52,7 @@ ${source}${copied}
 - use_notes：適合誰、需要什麼、第一個使用步驟與限制
 - ${skillPageContentInstruction}
 - relationship：預設 "curator"；只有我明確說自己是原作者、維護者或貢獻者，才改成 author、maintainer 或 contributor
-- share_introductions：剛好 100 則彼此不同的分享短文，每則 8 到 200 字
+- ${skillShareIntroductionInstruction}
 - demo_url：不確定就 null
 不確定的事實寫「尚未確認」。不要寫入任何金鑰或授權。`;
 }

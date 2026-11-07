@@ -137,6 +137,14 @@ function authorClaimMarkup(claim?:PublicAuthorClaim){
  const people=claim.verified.map(person=>'<li>'+escape(person.role_label)+' · @'+escape(person.github_login)+' · '+escape(person.display_name)+'</li>').join('');
  return '<p class="public-author-claim" data-author-claim-status="'+escape(claim.status)+'" style="margin:8px 0">'+escape(claim.label)+'</p>'+(people?'<ul class="public-author-claim-people">'+people+'</ul>':'');
 }
+const skillForkIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="6" cy="5" r="2.3"/><circle cx="18" cy="5" r="2.3"/><circle cx="12" cy="19" r="2.3"/><path d="M6 7.5v2.8c0 2.8 6 1.2 6 5.3v1.1M18 7.5v2.8c0 2.8-6 1.2-6 5.3"/></svg>';
+/** Core actions and attribution stay beside the title, including before JS loads. */
+export function publicSkillEngagement({name,role='作者',repositoryUrl,authorEndpoint,social}:{name:string;role?:string;repositoryUrl:string;authorEndpoint:string;social?:string}){
+ const owner=new URL(repositoryUrl).pathname.split('/')[1],github='https://github.com/'+owner;
+ const controls=social??'<div class="public-skill-support"><a href="'+escape(repositoryUrl)+'" target="_blank" rel="noopener noreferrer" aria-label="到 GitHub Star ↗"><span aria-hidden="true">☆</span> Star</a><a href="'+escape(repositoryUrl)+'/fork" target="_blank" rel="noopener noreferrer" aria-label="Fork 專案 ↗">'+skillForkIcon+' Fork</a></div>';
+ return '<div class="sp-engagement"><div class="sp-author"><span class="sp-author-role">'+escape(role)+'</span><button type="button" class="sp-author-name" data-skill-author data-author-endpoint="'+escape(authorEndpoint)+'" aria-haspopup="dialog" aria-controls="skill-author-dialog"><span>'+escape(name)+'</span><span class="sp-author-arrow" aria-hidden="true">↗</span></button><span class="sp-author-hint">自由工坊名片</span><noscript><a href="'+escape(github)+'" target="_blank" rel="noopener noreferrer">查看來源 GitHub</a></noscript></div><div class="sp-engagement-actions">'+controls+'<a class="sp-share-launch" href="#share-title" data-share-launch aria-haspopup="dialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/></svg>分享</a></div></div>'
+  +'<dialog id="skill-author-dialog" class="sp-author-dialog" aria-labelledby="skill-author-title"><div class="sp-author-dialog-head"><h2 id="skill-author-title">自由工坊名片</h2><button type="button" data-author-close aria-label="關閉作者名片">關閉</button></div><div data-author-card></div><p class="sp-author-source"><a href="'+escape(github)+'" target="_blank" rel="noopener noreferrer">查看來源 GitHub ↗</a></p></dialog>';
+}
 export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics?:GitHubMetrics,editorial?:SkillEditorial|null,discovery?:SkillDiscoveryBook,intro?:string,origin=LIVE_SITE_ORIGIN,authorClaim?:PublicAuthorClaim,discoveryEnabled=false,eventBacklinksHtml=''){
  const skillId=/^\/development\/skills\/([a-z0-9-]+)\.md$/.exec(markdownUrl)?.[1];
  const book=skillId?communityCatalog.skill_books.find(value=>value.id===skillId):undefined;
@@ -145,20 +153,22 @@ export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics
  if(book?.guide){
   const actions='<a href="#skill-start">開始使用</a><a href="'+escape(book.upstream_url)+'" target="_blank" rel="noopener noreferrer">查看原作 Repo ↗</a>';
   const count=(value:number|null|undefined)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?String(value):'—';
-  const date=(value:string|null|undefined)=>value&&!Number.isNaN(Date.parse(value))?escape(new Date(value).toISOString().slice(0,10)):'—';
   const original=escape(book.upstream_url),author=escape(new URL(book.upstream_url).origin+'/'+new URL(book.upstream_url).pathname.split('/')[1]);
-  const stats='<section class="public-github-social" data-skill-social="'+escape(book.id)+'" data-repository="'+original+'" aria-label="'+(book.guide.credit_role?'原作':'原作者')+' GitHub 數據"><div class="public-skill-support">'
-    +'<a href="'+original+'" target="_blank" rel="noopener noreferrer" aria-label="到 GitHub Star ↗">☆ Stars '+count(metrics?.stargazers_count)+'</a>'
-    +'<a href="'+original+'/fork" target="_blank" rel="noopener noreferrer" aria-label="Fork 專案 ↗">Forks '+count(metrics?.forks_count)+'</a>'
-    +'<a href="'+original+'" target="_blank" rel="noopener noreferrer" aria-label="追蹤專案（Watch）↗">Watch '+count(metrics?.subscribers_count)+'</a>'
-    +'<a href="'+author+'" target="_blank" rel="noopener noreferrer">Follow '+(book.guide.credit_role?'來源帳號':'原作者')+' ↗</a></div><p>未結 Issues／PR '+count(metrics?.open_issues_count)+' · 程式更新 '+date(metrics?.pushed_at)+'</p><p>'+(metrics?.checked_at?(metrics.stale?'上次取得的數據':'數據更新')+' · '+date(metrics.checked_at):'尚未取得 GitHub 數據')+'</p></section>';
+  const stats='<section class="public-github-social" data-skill-social="'+escape(book.id)+'" data-skill-social-compact data-repository="'+original+'" aria-label="原作 GitHub 操作"><div class="public-skill-support">'
+    +'<a href="'+original+'" target="_blank" rel="noopener noreferrer" aria-label="到 GitHub Star ↗"><span aria-hidden="true">☆</span> Star '+count(metrics?.stargazers_count)+'</a>'
+    +'<a href="'+original+'/fork" target="_blank" rel="noopener noreferrer" aria-label="Fork 專案 ↗">'+skillForkIcon+' Fork '+count(metrics?.forks_count)+'</a></div></section>';
   // Discovery also counts administrator-approved guild bindings; without it the static designation decides.
   const official=(discovery?.official_guild_keys??officialGuildKeys(book.id)).length>0;
   const guildBadges=official?(discovery?.official_guilds?.length?discovery.official_guilds.map(guild=>'<span title="自由工坊公會指定技能；不代表原作者背書">✦ '+escape(guild.name)+'指定技能</span>').join(''):'<span title="自由工坊公會指定技能；不代表原作者背書">✦ 官方公會技能</span>'):'<span title="社群成員分享的技能書；不隨加入公會解鎖，所有人都能閱讀">社群技能書</span>';
   const badges='<div class="public-skill-badges" aria-label="技能書徽章">'+guildBadges+(discovery?.is_new_today?'<span>每日新技能</span>':'')+(discovery?.week_rank?'<span>工坊週榜 #'+discovery.week_rank+'</span>':'')+(discovery?.month_rank?'<span>工坊月榜 #'+discovery.month_rank+'</span>':'')+'</div>';
   const page=getSkillPageContent(book.id);
-  const credit=book.guide.author_name?'<p>'+escape(book.guide.credit_role??'作者')+' · '+escape(book.guide.author_name)+'</p>':'';
-  const entry=skillPageHero({title:book.title,kind:official?'公會指定技能書':'社群技能書',category:book.guide.beginner.category,format:book.guide.format,purpose:editorial?.summary||book.guide.beginner.purpose,coverUrl:book.cover_url,actions,credit,badges,content:page});
+  const curated=book.guide.credit_role==='策展';
+  const credit=curated&&book.guide.author_name?'<p>策展 · '+escape(book.guide.author_name)+'</p>':'';
+  const verifiedAuthors=authorClaim?.status==='verified_original_author'?authorClaim.verified.filter((person,index,people)=>(person.role==='original_author'||person.role==='co_original_author')&&people.findIndex(other=>(other.role==='original_author'||other.role==='co_original_author')&&other.github_login.toLowerCase()===person.github_login.toLowerCase())===index):[];
+  const authorName=verifiedAuthors.length?verifiedAuthors[0].display_name+(verifiedAuthors.length>1?' 等 '+verifiedAuthors.length+' 位':''):curated?new URL(book.upstream_url).pathname.split('/')[1]:book.guide.author_name??new URL(book.upstream_url).pathname.split('/')[1];
+  const authorRole=verifiedAuthors.length?'原創作者':curated?'來源帳號':book.guide.credit_role??'作者';
+  const engagement=publicSkillEngagement({name:authorName,role:authorRole,repositoryUrl:book.upstream_url,authorEndpoint:'/api/v1/skills/'+book.id+'/author-card',social:stats});
+  const entry=skillPageHero({title:book.title,kind:official?'公會指定技能書':'社群技能書',category:book.guide.beginner.category,format:book.guide.format,purpose:editorial?.summary||book.guide.beginner.purpose,coverUrl:book.cover_url,actions,credit,badges,content:page,engagement});
   const cooperation=getSkillCollaboration(book.id,editorial);
   const content=shareContentFor(book.id),selected=shareIntroNumber(intro,content.introductions.length),selectedText=selected?content.introductions[selected-1]:null;
 
@@ -167,7 +177,7 @@ export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics
   const source='<section class="public-skill-source"><h2>版本與來源</h2><p>GitHub：<a href="'+author+'" target="_blank" rel="noopener noreferrer">'+escape(new URL(book.upstream_url).pathname.split('/')[1])+'</a></p><dl><dt>原作 Repo</dt><dd>'+escape(book.upstream_url)+'</dd><dt>工坊整合參考</dt><dd>'+escape(book.repository_url)+'</dd><dt>指南核對來源</dt><dd>'+escape(book.guide.reading_url)+'</dd><dt>記錄的授權</dt><dd>'+escape(book.license_status)+'</dd><dt>指南核對版本</dt><dd><code>'+escape(book.guide.source_commit)+'</code></dd><dt>核對日期</dt><dd>'+escape(book.guide.reviewed_at)+'</dd></dl></section>';
   const share=publicSkillShareMarkup({title:book.title,path:'/development/skills/'+book.id,introductions:content.introductions,selected,origin});
   const details='<details class="public-skill-details"><summary>完整指南與來源</summary>'+markdownLink+markdownBody(markdown)+'</details>';
-  const extras='<details class="public-skill-details"><summary>作者、版本與參與開發</summary><p><a href="'+(discoveryEnabled?'/?return_to='+encodeURIComponent('/development/skills/'+book.id):'/#skills')+'">登入工坊 Star</a></p>'+authorClaimMarkup(authorClaim)+'<div class="sp-facts">'+stats+source+'</div>'+(cooperation?collaborationHtml(cooperation):'')+eventBacklinksHtml+'</details>';
+  const extras='<details class="public-skill-details"><summary>作者、版本與參與開發</summary><p><a href="'+(discoveryEnabled?'/?return_to='+encodeURIComponent('/development/skills/'+book.id):'/#skills')+'">登入工坊 Star</a></p>'+authorClaimMarkup(authorClaim)+'<div class="sp-facts">'+source+'</div>'+(cooperation?collaborationHtml(cooperation):'')+eventBacklinksHtml+'</details>';
   const join=publicSkillAcquisition('/development/skills/'+book.id,selected);
   const body=entry+(page?skillPageFlow(page):'')+introduction+skillPageBand(destinations,'sp-next-band')+skillPageBand(share,'sp-share-band')+skillPageBand(join,'sp-join-band')+skillPageBand(extras,'sp-facts-band')+skillPageBand(details,'sp-details-band');
   return developmentHtml(book.title,body,{path:'/development/skills/'+book.id,description:selectedText??(editorial?.summary||book.guide.beginner.purpose),image:content.illustration??undefined,share:true,social:true,shareQuery:selected?'intro='+selected:undefined,origin,discoveryEnabled,layout:'skill'});
@@ -256,7 +266,7 @@ document.querySelectorAll('[data-share-root]').forEach(function(root){
   var data=root.dataset||{};
   if(!data.shareBase)return;
   var q=function(selector){return root.querySelector(selector);};
-  var dialog=q('[data-share-dialog]'),opener=q('[data-share-open]'),text=q('[data-share-text]'),count=q('[data-share-count]'),address=q('[data-share-url]');
+  var dialog=q('[data-share-dialog]'),opener=q('[data-share-open]'),activeOpener=opener,text=q('[data-share-text]'),count=q('[data-share-count]'),address=q('[data-share-url]');
   var error=q('[data-share-error]'),status=q('[data-share-status]'),manual=q('[data-share-manual]'),manualLabel=q('[data-share-manual-label]');
   var reroll=q('[data-share-reroll]'),send=q('[data-share-send]'),copy=q('[data-share-copy]'),closer=q('[data-share-close]');
   var links=root.querySelectorAll('[data-share-dialog] [data-share-platform]'),encode=encodeURIComponent;
@@ -302,12 +312,14 @@ document.querySelectorAll('[data-share-root]').forEach(function(root){
       if(current===run)status.textContent=value.text?'已複製介紹與連結':'已複製技能連結';
     },function(){if(current===run)fallback('無法自動複製，請選取並複製下方內容',value);});
   };
-  var closed=function(){reset();opener.focus();};
-  opener.addEventListener('click',function(){
+  var closed=function(){reset();activeOpener.focus();};
+  var openers=[opener].concat(Array.from(document.querySelectorAll('[data-share-launch]')));
+  openers.forEach(function(trigger){trigger.addEventListener('click',function(event){
+    event.preventDefault();activeOpener=trigger;
     if(index<0&&intros.length)index=random(intros.length,-1);
     render();
     if(typeof dialog.showModal==='function'){if(!dialog.open)dialog.showModal();}else dialog.setAttribute('open','');
-  });
+  });});
   reroll.addEventListener('click',function(){if(intros.length<2)return;index=random(intros.length,index);render();});
   send.addEventListener('click',function(){
     var value=payload();reset();var current=run;busy(true);

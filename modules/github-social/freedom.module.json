@@ -30,7 +30,8 @@
     "community",
     "development",
     "shared",
-    "platform-admin-portal"
+    "platform-admin-portal",
+    "member-card"
   ],
   "contract_families": [],
   "client_profiles": [
