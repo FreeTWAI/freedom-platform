@@ -118,3 +118,37 @@ test('production SVG reveals only actual cut progress, including pause, resume a
     }
   }
 });
+
+function preparationCapture(){
+  type Capture=(target:{screenshot(options:{type:'png'}):Promise<Buffer>},info:{attach(name:string,options:{body:Buffer;contentType:string}):Promise<void>},name:string)=>Promise<Buffer>;
+  const module={exports:{} as {capturePreparationScreenshot:Capture}};
+  const source=readFileSync(new URL('../e2e/cooking-preparation-art.spec.ts',import.meta.url),'utf8');let registered=0;
+  runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{module,exports:module.exports,require:(id:string)=>{
+    if(id==='./fixtures.js')return {test(){registered++;}};
+    if(['node:crypto','../../apps/portal-web/src/games/cooking/catalog.js','../../apps/portal-web/src/games/cooking/ingredient-visuals.js','../../apps/portal-web/src/games/cooking/storage.js'].includes(id))return {};
+    throw Error(id);
+  }});
+  assert.equal(registered,5,'only register the real cases; do not run a fake browser');
+  return module.exports.capturePreparationScreenshot;
+}
+test('preparation capture attaches each exact PNG buffer instead of a temporary path',async()=>{
+  const capture=preparationCapture(),body=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4P9P4PwAHMQLLfnZo0AAAAABJRU5ErkJggg==','base64');
+  const names:string[]=[];
+  for(const recipe of ['fish-and-chips','pumpkin-soup','baked-sweet-potato','cream-risotto','plant-burger'])for(const state of ['native-whole','native-cut','svg-two-cuts']){
+    const name=`${recipe}-${state}.png`;let screenshots=0,attachments=0;
+    const actual=await capture({async screenshot(options){assert.equal(options.type,'png');assert.deepEqual(Object.keys(options),['type']);screenshots++;return body;}},{async attach(actualName,options){
+      assert.equal(actualName,name);assert.equal(options.body,body);assert.equal(options.contentType,'image/png');assert.equal('path' in options,false);attachments++;names.push(actualName);
+    }},name);
+    assert.equal(actual,body,'hash comparison uses the same bytes as the attachment');assert.equal(screenshots,1);assert.equal(attachments,1);
+  }
+  assert.equal(new Set(names).size,15);
+});
+test('preparation capture awaits attachment completion and propagates capture or attachment failures',async()=>{
+  const capture=preparationCapture(),body=Buffer.from('synthetic transport fixture'),failure=Error('capture_or_attach_failed');let attached=false;
+  await assert.rejects(capture({async screenshot(){throw failure;}},{async attach(){attached=true;}},'failed-capture.png'),error=>error===failure);assert.equal(attached,false);
+  await assert.rejects(capture({async screenshot(){return body;}},{async attach(){throw failure;}},'failed-attach.png'),error=>error===failure);
+  let release!:()=>void,entered!:()=>void,resolved=false;
+  const gate=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{entered=resolve;});
+  const pending=capture({async screenshot(){return body;}},{async attach(){entered();await gate;}},'pending.png').then(()=>{resolved=true;});
+  await started;assert.equal(resolved,false,'capture must not resolve before attach finishes');release();await pending;assert.equal(resolved,true);
+});

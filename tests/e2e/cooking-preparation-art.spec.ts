@@ -1,9 +1,18 @@
 import {test,expect} from './fixtures.js';
+import type {Locator,TestInfo} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {COOKING_RULES,recipeOf} from '../../apps/portal-web/src/games/cooking/catalog.js';
 import {ingredientVisual,ingredientLayers,ingredientPolygonPoints} from '../../apps/portal-web/src/games/cooking/ingredient-visuals.js';
 import {COOKING_RUN_KEY} from '../../apps/portal-web/src/games/cooking/storage.js';
 import type {CookingRun} from '../../apps/portal-web/src/games/cooking/domain.js';
+
+// Successful pinned runs discard outputPath files. Buffer attachments survive
+// in the JSON report carried by the existing default-shard artifact.
+export async function capturePreparationScreenshot(target:Pick<Locator,'screenshot'>,testInfo:Pick<TestInfo,'attach'>,name:string){
+  const body=await target.screenshot({type:'png'});
+  await testInfo.attach(name,{body,contentType:'image/png'});
+  return body;
+}
 
 // Real production renderer and user controls. No injected run, replacement
 // server, skipped native rendering, screenshot baseline update or fake geometry.
@@ -47,10 +56,10 @@ for(const fixture of [
   // rather than sleeping and hoping that React or the GPU has caught up.
   const advance=()=>page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
   await advance();await expect(host).toHaveAttribute('data-render-calls',/^[1-9]\d*$/);
-  const whole=await canvas.screenshot({path:testInfo.outputPath(`${recipe.id}-native-whole.png`)});
+  const whole=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-whole.png`);
   await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await advance();
   await expect(meter).toHaveText(`1 / ${step.goal}`);
-  const cut=await canvas.screenshot({path:testInfo.outputPath(`${recipe.id}-native-cut.png`)});
+  const cut=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-cut.png`);
   expect(createHash('sha256').update(cut).digest('hex')).not.toBe(createHash('sha256').update(whole).digest('hex'));
   const stats=await host.evaluate(element=>({calls:Number((element as HTMLElement).dataset.renderCalls),geometries:Number((element as HTMLElement).dataset.renderGeometries),textures:Number((element as HTMLElement).dataset.renderTextures)}));
   expect(stats.calls).toBeGreaterThan(0);expect(stats.calls).toBeLessThanOrEqual(100);
@@ -74,7 +83,7 @@ for(const fixture of [
   await advance();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
   await expect(meter).toHaveText(`2 / ${step.goal}`);await expectFaces(2);
   await expectLayout();
-  await page.locator('.ck-visual-light').screenshot({path:testInfo.outputPath(`${recipe.id}-svg-two-cuts.png`)});
+  await capturePreparationScreenshot(page.locator('.ck-visual-light'),testInfo,`${recipe.id}-svg-two-cuts.png`);
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
   await expect(game).toHaveCount(0);await expect(canvas).toHaveCount(0);expect(errors).toEqual([]);
 });
