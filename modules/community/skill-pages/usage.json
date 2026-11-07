@@ -1,14 +1,32 @@
 {
   "headline": "每週用量、還要多久重置，點開選單列就看得到。",
-  "outcomes": ["標明每欄來源的 mock 核對表", "哪些欄位是推算值的註記", "app／LaunchAgent／hook 的移除方式"],
+  "outcomes": [
+    "選單列裡的用量與重置時間",
+    "專案與今日 token 的本機觀察",
+    "標明推算來源的成本概算"
+  ],
+  "problem": "Claude 與 Codex 用量散在各自工具裡，工作到一半才發現快碰到額度，也不容易對照今天花在哪個專案。",
+  "mechanism": "工具讀取本機 Claude Desktop 推算資料、Claude Code statusLine 與 Codex sessions，將可取得的用量、重置時間及成本概算整理到 macOS 選單列。",
   "flow": {
-    "title": "本機紀錄，變成選單列用量",
-    "lead": "限 macOS 的本機工具；本機日誌推算值與概算成本不是官方帳單。工坊未安裝，也未讀取個人日誌。",
+    "title": "本機用量紀錄，整理到選單列",
+    "lead": "限 macOS，日誌推算與概算成本需和官方帳單分開看；安裝包未簽章，會加入每分鐘更新的 LaunchAgent，可先用 mock 查看介面並記下移除方式。",
     "steps": [
-      {"icon": "robot", "title": "列出你用的工具", "note": "Claude Desktop、Claude Code 或 Codex；先查哪些欄位可能沒有資料。"},
-      {"icon": "folder", "title": "依序讀本機紀錄", "note": "Claude 依序讀 Desktop 推算資料或 Code statusLine；Codex 讀 sessions。"},
-      {"icon": "window", "title": "點開選單列看用量", "note": "工作階段、每週用量與重置剩餘時間，加上專案、今日 token 與概算成本。"}
+      {
+        "icon": "folder",
+        "title": "各工具的本機紀錄",
+        "note": "依所用工具取得 Desktop、statusLine 或 sessions 資料；沒有紀錄的欄位保留缺值。"
+      },
+      {
+        "icon": "chart",
+        "title": "整理用量與重置線索",
+        "note": "彙整工作階段、每週使用情況、專案與今日 token，依來源產生可用的推算欄位。"
+      },
+      {
+        "icon": "window",
+        "title": "點開選單列查看",
+        "note": "在選單列查看剩餘重置時間與概算成本，分清實際紀錄、推算值和缺少資料的欄位。"
+      }
     ],
-    "caption": "安裝包未簽章，會新增每分鐘更新的 LaunchAgent：先用 --mock 預覽，記下移除步驟再決定安裝。"
+    "caption": "新增工具或更新紀錄後，重新核對欄位來源，避免把缺值或估算當成完整帳單。"
   }
 }

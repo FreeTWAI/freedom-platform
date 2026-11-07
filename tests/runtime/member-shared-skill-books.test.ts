@@ -37,10 +37,16 @@ test('all twelve source accounts link to the repository owner without implying v
   for(const [id,repo] of expected){
     const book=communityCatalog.skill_books.find(book=>book.id===id)!,account=repo.split('/')[0];
     const link=`<a href="https://github.com/${account}" target="_blank" rel="noopener noreferrer">${account}</a>`;
-    for(const markup of [renderToStaticMarkup(createElement(SkillBookSourceAccount,{book})),pageHtml(book.title,skillMarkdown(id)!,`/development/skills/${id}.md`)]){
-      assert.ok(markup.includes('來源 GitHub 帳號：'+link),id);
-      assert.ok(markup.includes('Repo 擁有者帳號，不代表會員身分已核實。'),id);
-    }
+    const memberMarkup=renderToStaticMarkup(createElement(SkillBookSourceAccount,{book}));
+    assert.ok(memberMarkup.includes('來源 GitHub 帳號：'+link),id);
+    assert.ok(memberMarkup.includes('Repo 擁有者帳號，不代表會員身分已核實。'),id);
+    const publicMarkup=pageHtml(book.title,skillMarkdown(id)!,`/development/skills/${id}.md`);
+    const sourceStart=publicMarkup.indexOf('<section class="public-skill-source">');
+    assert.ok(sourceStart>=0,id);
+    const source=publicMarkup.slice(sourceStart,publicMarkup.indexOf('</section>',sourceStart));
+    assert.ok(source.includes(link),id);
+    assert.ok(source.includes(`https://github.com/${repo}`),id);
+    assert.doesNotMatch(publicMarkup,/<[^>]+data-author-claim-status=/,id);
     assert.equal(book.guide!.contribution_url,`https://github.com/${repo}/issues`);
   }
   assert.equal(renderToStaticMarkup(createElement(SkillBookSourceAccount,{book:{repository_url:'https://github.com.evil.invalid/owner/repo'}})),'<p>來源資訊請見原作連結。</p>');

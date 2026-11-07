@@ -332,7 +332,7 @@ const details:Record<Id,Details>={
     first_steps:['先讀 docs/RELEASE_READINESS.md 與 docs/LICENSES.md，確認目前限制與各模型授權。','依 README 安裝依賴，複製 config.example.toml 並填入模型路徑，核對 GPU 與磁碟空間。','備妥可用的 VRM 0.x 底模並在本機註冊後，填一份測試角色表單，把輸出的 .vrm 載入 VSeeFace 檢查。'],
     first_result:'一份記錄硬體、模型路徑、底模授權與試跑輸出的環境檢查紀錄。',
     contribution:'向 jasonlee(J太郎) 的原作回饋 Windows 實機驗收、底模準備說明或安裝問題；附硬體與設定紀錄，不散布未授權的底模、模型權重或其衍生輸出。',
-    beginner:{category:'作品與開源',purpose:'用一張角色表單，在自己的電腦產生可直播使用的 VTuber 模型。',for_whom:'想做自己的 VTuber 角色，或研究本機 3D 生成流程的人。',make:'一份環境與授權檢查紀錄，備妥底模後再產出第一個 VRM。',workshop_use:'在 AI 開發公會交流本機模型流程，在影音自動化公會討論直播素材與驗收。',next_step:'先確認授權與硬體，備妥合法底模再開始生成。'},
+    beginner:{category:'作品與開源',purpose:'用一張角色表單，在自己的電腦組裝 VRM 模型與角色素材。',for_whom:'想做自己的 VTuber 角色，或研究本機 3D 生成流程的人。',make:'一份環境與授權檢查紀錄，備妥底模後再產出第一個 VRM。',workshop_use:'在 AI 開發公會交流本機模型流程，在影音自動化公會討論直播素材與驗收。',next_step:'先確認授權與硬體，備妥合法底模再開始生成。'},
   },
   'coding-audit-harness':{
     format:'AI 開發驗收框架與稽核技能',summary:'讓 AI 寫完的程式附上可重跑的驗收收據，經人工關卡核准才算完成。',

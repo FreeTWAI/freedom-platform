@@ -6,6 +6,7 @@ import { text } from '../../packages/shared/validation.js';
 import { SERVICE_COVER_INPUT_BYTES } from '../../packages/shared/member-service.js';
 import { normalizeImage } from '../../packages/shared/image-runtime.js';
 import { externalLink, githubCoordinate } from '../opensource-marketing/github.js';
+import { skillPageContentProblems, type SkillPageContent } from '../community/skill-page-content.js';
 
 export const SHARE_INTRODUCTION_COUNT = 100;
 export const COVER_MAX_BYTES = 512 * 1024;
@@ -31,6 +32,11 @@ const coverImage = z.object({
   data_base64: z.string().max(COVER_MAX_BASE64 + 4, { message: '示意圖需為 512 KiB 以下。' }),
 }).strict();
 
+/** Structured prose only: the shared renderer owns the markup and flow artwork. */
+export const submissionPageContent = z.unknown().superRefine((value, ctx) => {
+  for (const message of skillPageContentProblems(value)) ctx.addIssue({ code: 'custom', message });
+}).transform(value => value as SkillPageContent);
+
 // Exactly what an agent may submit. Consent, official status and member ids are
 // intentionally absent: `.strict()` rejects them instead of silently dropping.
 export const skillSubmissionPayload = z.object({
@@ -40,6 +46,8 @@ export const skillSubmissionPayload = z.object({
   use_notes: text(3000),
   demo_url: externalLink.nullable().default(null),
   relationship: z.enum(['author', 'maintainer', 'contributor', 'curator']),
+  // Old upload clients remain compatible. New authoring flows supply the complete page.
+  page_content: submissionPageContent.optional(),
   share_introductions: z.array(introduction).length(SHARE_INTRODUCTION_COUNT, { message: `分享介紹必須剛好 ${SHARE_INTRODUCTION_COUNT} 則。` })
     .superRefine((items, ctx) => {
       const seen = new Map<string, number>();

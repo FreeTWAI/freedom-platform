@@ -1,15 +1,33 @@
 {
   "headline": "聽完的評語，一回合一回合累積成規則。",
-  "outcomes": ["配音基線與單變數回合紀錄", "依 voice／style／text 分類的評語", "learnings/rules.md 裡尚未定案的規則"],
+  "outcomes": [
+    "配音基線與單變數回合紀錄",
+    "依音色、風格、文字分類的評語",
+    "附試聽證據與適用條件的配音規則"
+  ],
+  "problem": "配音聽起來不對，卻說不清該換音色、改語氣還是改句子，每次重做都難以累積有效方法。",
+  "mechanism": "把評語分成 voice、style、text 三類，每回合只調整一項；保留聽感、做法與證據，再換句子驗證，將有效調整累積成規則。",
   "flow": {
-    "title": "三支把手，每回合只改一項",
-    "lead": "離線自檢與 --dry-run 不打 API，dry-run 只輸出靜音佔位；真實合成需自己的 Gemini API key。",
+    "title": "試聽評語，逐回合變成配音規則",
+    "lead": "真實合成使用自己的 Gemini API key，文字與聲音樣本會送到 Google 並可能計費；聲音須有使用權。dry-run 只產生靜音佔位。",
     "steps": [
-      {"icon": "mic", "title": "合成並試聽", "note": "設定自己的 key，先以 --one-request 做基線，之後每回合再合成試聽。"},
-      {"icon": "sliders", "title": "評語對到一支把手", "note": "評語歸到 voice（音色）、style（風格）或 text（文字），這回合只改這一項。"},
-      {"icon": "book", "title": "寫進 rules.md", "note": "評語、做法與證據寫入 learnings/rules.md；換句子確認後才定案，無效與爭議也留存。"}
+      {
+        "icon": "mic",
+        "title": "先有一段配音基線",
+        "note": "用一段文字與選定聲音合成基線，記下實際聽感與待改善處。"
+      },
+      {
+        "icon": "sliders",
+        "title": "每回合只改一項",
+        "note": "把評語歸到音色、風格或文字，只調整其中一項再合成比較。"
+      },
+      {
+        "icon": "book",
+        "title": "以證據累積規則",
+        "note": "將做法與試聽證據寫入 rules.md；無效與爭議結果也保留，換句子驗證後再定案。"
+      }
     ],
     "loop": true,
-    "caption": "真實合成會把文字與聲音樣本送到 Google、不保證免費：先用 --dry-run 確認切段，要試聽再設 key。"
+    "caption": "把候選規則用在新句子，再將試聽結果帶回下一回合，留下有效條件與失效情況。"
   }
 }

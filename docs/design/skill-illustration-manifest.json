@@ -9,10 +9,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/local-workspace-mcp.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 49600,
-      "sha256": "72ff7afb9902d838fbb382eb41ba62919205a28bdbeeed42bf3c917fa1ce7e3e",
-      "source_sha256": "2c811071439e77c6e29cee1addb0e6ee51e6e51ea42a1e565eeb1c89c260d52b",
-      "generated_at": "2026-11-03",
+      "bytes": 49546,
+      "sha256": "c66b539138bdbf14fab300ffdad1f6b6caebce44c5ee0effd0e640eb40005bb9",
+      "source_sha256": "cce091e5010ac13270aeabdc7f5fef90ff1150b1c49f66ca7c51685629e216cd",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -20,10 +20,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/editkin.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 47202,
-      "sha256": "8d72a5f21b89c726023f939cf988d25ec021937dd966ebd70576741c400aff80",
-      "source_sha256": "b450773aba2a353dce61499aa88230deab89fc3b98db14eb1c428f17bc42994f",
-      "generated_at": "2026-11-03",
+      "bytes": 46984,
+      "sha256": "384745ee47da59e4511c62859fd4fc43fc1722a8c2723b50d479d0873eff6432",
+      "source_sha256": "e3c22397ef927518813ca3904699d37f0ee3ba2634d94b0f0b4808ef29e0959f",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -31,10 +31,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/positioning-companion.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 38388,
-      "sha256": "61f562723610ce15ec98f51e5340796ba46eaaa28e264905a23d986d86a66e0d",
-      "source_sha256": "1b49e5a4b5d3c09cd4e58b7008fc1ab029e21bbec9d950e1e823356a0c34eb85",
-      "generated_at": "2026-11-03",
+      "bytes": 42046,
+      "sha256": "5bfc2df69f10f775f56b1459b144bdddd77e8f1ffca5a47e3a917af3be4fd95d",
+      "source_sha256": "76ae50317a5912ced0cf63c1ea6c5fea21486851a344ad6bafe46d3844e247ae",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -42,10 +42,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/freedom-party-guild-lounge.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 43116,
-      "sha256": "4790b27e605e4c81b9670f2a2fada0111f68eda1516ca8c7c640159e0e7744f4",
-      "source_sha256": "6aaafbd069868c2588088a0383d98910ea5c9c5817390cadaa4808270bb41d20",
-      "generated_at": "2026-11-03",
+      "bytes": 43034,
+      "sha256": "16a922000f0d0b8f23fdabeb742fa33eab9791ba7445575d7ceb381a67f5086c",
+      "source_sha256": "294d82f93d9d4dd00983d1e598ad00c508e883f1ae258164aea5df8c54178ea4",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -53,10 +53,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/bidding-radar-concept.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 48020,
-      "sha256": "e1ca038e5ae26fc82a36263fd42ccade2ce4f8503e710f0349cd96b08b40480d",
-      "source_sha256": "c2758f9280456db2d2a697f707b4167845f972d20a7ce8ab2a4b8118ac07f9cd",
-      "generated_at": "2026-11-03",
+      "bytes": 47610,
+      "sha256": "a315d519fbd28385b41fac3d12e127f01ff94dead6395f4975406be2aa08973a",
+      "source_sha256": "3defa522b4bf0f14a02f352c9d9d8edc3693b26532f61f489a4c0d206fee770f",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -64,10 +64,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/aiwff-runtime.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 45510,
-      "sha256": "dbe38357d1ac5c54f9b3cb7c08b9d18a5271c00d7168a583a7a2f1107905d77c",
-      "source_sha256": "c0d0a87aaa0fa1fab7c4bfccb1eb34caafb2f5d7c4dba7b51db459624bd75468",
-      "generated_at": "2026-11-03",
+      "bytes": 45288,
+      "sha256": "116f69b80dcc584c4b02e0f401acb6ca2d8e1df84f4186b2d46886d6014cc103",
+      "source_sha256": "68672c1eddbc5fc8353da03c8b0ba31991acbf1332a395fea24206f91f919567",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -75,10 +75,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/n8n-marketing-flows.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 46224,
-      "sha256": "2dc19ea59df87acf26ec53a2494fe29044e772082e0fe472c86792b6cc13827d",
-      "source_sha256": "638148f1eb2eb2d2a0779dd48f3abae852e85a864c620950f82f8c4cf36ca3c7",
-      "generated_at": "2026-11-03",
+      "bytes": 46516,
+      "sha256": "ea64e7d8eb9bce6442665355fcec37f2a54bf58d019b0d057a4baab73eecd21d",
+      "source_sha256": "df4f80ebebc973bd8d93afbe7d3c8230a15d79c7ca3a37cfb0278bc901b5773a",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -86,10 +86,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/anti-gambling-trader-tw.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 48104,
-      "sha256": "9a1ced2136b904afd3fe6b7c8be155adc90d98ddaceeb0c18660381ff5e8a762",
-      "source_sha256": "0c3c26ea8c76c56cc57ec7e6465aaa25b880435b4662abc0841d2bc04014ec85",
-      "generated_at": "2026-11-03",
+      "bytes": 48964,
+      "sha256": "f2b626320f297eefa1fd484fd76401fdedd769e7ddf880d846648794591f9ed6",
+      "source_sha256": "a845e72029b1a02e069af7d95ada4cf3e2cd18b41fde0f4e547a4fd14ba084fa",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -97,10 +97,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/web-card-game-skill.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 42932,
-      "sha256": "3041be903372d1b9ef644aa25f6951c60677d688a7f1e93c0efcf3e6c1377715",
-      "source_sha256": "96d23ac80763da99d6460fe2ee56c46570b4241d06604c18734967572a5e354d",
-      "generated_at": "2026-11-03",
+      "bytes": 50580,
+      "sha256": "ea27695d4cdf6174274b00759e635d85dce334ff08ec545c07e4daeb4c800833",
+      "source_sha256": "5fd8b366b1fd3374cc2894a33193e3f0959d0204cbb0058847eedfe723986ab4",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -108,10 +108,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/ai-avatar-bot.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 43464,
-      "sha256": "bf966f571e1829be610b6f00e831238afe5ecabb00c217b560c1fd95dda611f3",
-      "source_sha256": "348404f67e5c6db392ca35fbe651fe5a26dac0844994cf9e37017751ed3f2d26",
-      "generated_at": "2026-11-03",
+      "bytes": 45974,
+      "sha256": "de2c1b7ba73356fc875afaf4c18f978f0478071f57245a4f34973b2c0dd472a1",
+      "source_sha256": "433ca66aab3fbfbfaa97300fd10fb386edb87ff8b0a625fce866ad08e8208af3",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -119,10 +119,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/ai-manga-translator.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 43422,
-      "sha256": "075bac981d4f4f2c12117e816e37017c80d3f2444ed947a412255e8fda21c5d6",
-      "source_sha256": "f14b1691d20ee450ccdc2db62b580e9b8fcc5f2b6b50903b9dec246469ef4850",
-      "generated_at": "2026-11-03",
+      "bytes": 42676,
+      "sha256": "04f25ce4d47c13d0df7a9803ecdc517449c8b85fe856febaab84963182d55ae9",
+      "source_sha256": "1b3008f0442fe7eb6810ea037445aaf30ee63f19635358a48372fb6224d1dd80",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -130,10 +130,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/line-persona.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 41050,
-      "sha256": "0d395bf36303f0ba32dd9a95cc4e4fa7d060f6df157bf563c7c3fb826e463756",
-      "source_sha256": "5e4df1283f670f7463262e0ba200b850bb8350254954843030cef67b634f7128",
-      "generated_at": "2026-11-03",
+      "bytes": 41916,
+      "sha256": "0247fcd7876de0d63d07a4955295fc5f9b1d1ef6946f6a05dc7870af2f518848",
+      "source_sha256": "351b938a1c6ffb9cff1947442825ebac12b122dc6f8f4d15fa9fd28265872553",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -141,10 +141,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/open-seo-advisor.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 52076,
-      "sha256": "566ce29c0cfb1411753affac5b415ec95c1ac42aa602cf0a9ebda1294c09d27d",
-      "source_sha256": "7a93714ab48491663a5f116fd132327fbd8a7e8eb9e08f3c0b1c9c3dec109c44",
-      "generated_at": "2026-11-03",
+      "bytes": 52446,
+      "sha256": "2cc36e20700ea9fb935ffa87740fdbd82357e4fa14312d54eb1852a91e27ac40",
+      "source_sha256": "a8f6db2fbccc7134ccde6ba88609fe1ed03dc573e04804d974eab1d6e69a5b6d",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -152,10 +152,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/video-to-podcast-toolkit.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 49648,
-      "sha256": "b5e83e8c66108121db2ae3c26eaf97054d2c2276f461881cd35f8f75f8418c69",
-      "source_sha256": "939c6eacad8c0921aa43a9365e1bbcb6267fad54ef0dc55b4afa2357368f9358",
-      "generated_at": "2026-11-03",
+      "bytes": 51304,
+      "sha256": "cf1424a02fc282d0c883d3c2e8fb384e71faf5980f00466f90eb31088ba8e89c",
+      "source_sha256": "7480ad73d9a565f265329a700bf9442fab8004be90dbee3b9db0cb457eb0e658",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -163,10 +163,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/autovtuber.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 47180,
-      "sha256": "935525905670907999321ed2301a18bf04dc1377bbfe652ca29b8410a87a7f17",
-      "source_sha256": "60ac90a436e680af04f40576e3c573743ce2d58bd2068a6c18cad44d5a856a79",
-      "generated_at": "2026-11-03",
+      "bytes": 50438,
+      "sha256": "0db991b1ce18d5d97d9cc533e27ddc3912aa0eea4e43dded817a242b3d7c6d0b",
+      "source_sha256": "85c334459a335fea935b1db6b19c4165d62478a97cced6c8cf4adde718bb80d1",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -174,10 +174,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/coding-audit-harness.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 50608,
-      "sha256": "b876de0a749ccfdc591917206d587d3bf05c4c8f80038b9bf6bfcc7d623064e7",
-      "source_sha256": "c1e454ca13c02d0d4a8004aa63c217fcee8b730dbfef73699fe6336bd78c3d55",
-      "generated_at": "2026-11-03",
+      "bytes": 52490,
+      "sha256": "b4ab687aa9fd3c55f7aa6b848f2a940d441099d1bb9b77b2f0c65f9676c48402",
+      "source_sha256": "53e73758ed163d5192a51e709392b26dde845af18ff497a46244992930d99586",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -185,10 +185,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/hrflow.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 46708,
-      "sha256": "342feb51fe63f8dda1871ca094159b67946879d7e8b083224bb11496d69649a2",
-      "source_sha256": "33b800d5e5c8f00bcd11e65784465ce02242880c7afba0bd85292fc62d5f5134",
-      "generated_at": "2026-11-03",
+      "bytes": 47826,
+      "sha256": "2f6a86d2ab9a7f10700ec5fe2185d65aa424568e313be3e0a4de90ce43eabaf4",
+      "source_sha256": "08d60fa9da5bba7ecf7594aa12b03035c6e110a5af290531001b8de92e279d6b",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -196,10 +196,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/hdsljp-api.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 47908,
-      "sha256": "29e1237df6f5f25f602377476a843aae03c1012d3aac22d07368aa4fe916b630",
-      "source_sha256": "b3ecb2823eab31dcc04c180b1bc0dcfed95201a7f83dc423750bf15a4e6e905a",
-      "generated_at": "2026-11-03",
+      "bytes": 48888,
+      "sha256": "662b6f4121c1bef7097af8e3fd27c95a2fef6b109a7de3b506282e7d507243dc",
+      "source_sha256": "8b449cc8001fc05354ae9f86ecf9364c0fd280a616f4af7ab464c3d7275d23d2",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -207,10 +207,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/usage.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 52422,
-      "sha256": "1c2b19e87d865509c21be7c2d53d527d44308be0bc276dab39ee193b74b8fb48",
-      "source_sha256": "3cb983379f3f6a1cd1808c93ae68d248d10fd00b57953033301bb371b62ad46a",
-      "generated_at": "2026-11-03",
+      "bytes": 53192,
+      "sha256": "e01bdac9637f0d7cf94f24bb192c3dcd05bc677684e9a62a88960d3c4be3c0de",
+      "source_sha256": "a5dc4ec7d9cb6149ee82084b98c3cae8c9e8e1b8e8779af13ef217b886ca738d",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -218,10 +218,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/photo-border-remover.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 41854,
-      "sha256": "a939d554d5b4074cb2c1f000f5e17cacc3844b97de1bdbafe05cf445bb0b4142",
-      "source_sha256": "0659bc221fabab2f766f835b31bf14e5e99b7824d474b6795b16c22174e20590",
-      "generated_at": "2026-11-03",
+      "bytes": 45664,
+      "sha256": "98ccdde4f8862f7589f7751d83cadaebf650cdc5bfb22b56f1c4b109b18c9947",
+      "source_sha256": "015ea244cca9eea83b35fb5860c94ee3763dadde049158295bb6e07b81b9a08c",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -229,10 +229,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/ga4-lp-analytics.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 49710,
-      "sha256": "a4aea9bb3685f51d998d3624ad7867d166d9735319ea8c830156c0196f2be909",
-      "source_sha256": "fea9e6c847ec3065434ec040fafb16722f1424d1905b5599ad29243e91a8934d",
-      "generated_at": "2026-11-03",
+      "bytes": 50950,
+      "sha256": "dc36ecc987f2c04b989dda74365b4262abb71e0a5bfa057edf77b4dfde907fb7",
+      "source_sha256": "3a9b04196977edeea1db1ac89c827327e1ea2fa79a7b903b74cdfd6bc582d942",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -240,10 +240,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/sns-feedback-collect.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 51262,
-      "sha256": "d11e5e1b8ab4f3cf02f67e73d2427d24d0531c06253126c1c1d2d81dc2e5af0d",
-      "source_sha256": "51ff001a1d3fc2c958e544b282b55578073661cb11da424d06219cfbf182f13f",
-      "generated_at": "2026-11-03",
+      "bytes": 52742,
+      "sha256": "93ce8823c6db9bf23057c2efeda08ccb2b4fd87f214d3f5718776f91e507ab25",
+      "source_sha256": "b37f734c74f14da0b202076f7680f267fc07a285e31855b5097d049f3379a450",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -251,10 +251,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/ultracode-token-optimization.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 56748,
-      "sha256": "54b9c894b42f8823b286be823733ee189cab06cdb0191d7fb74a31323146fd47",
-      "source_sha256": "7bee29256e9111579e586eecfc945150caceab501d99479e66fc03ba5de65e2d",
-      "generated_at": "2026-11-03",
+      "bytes": 57616,
+      "sha256": "f6f2aab269716ccb5d879fa389bf4f34683cc65ec14e4359ba38c409d17d3fba",
+      "source_sha256": "a443d31e278fdb6d3e50b2d84e5e5eec78bf61506ace4f1cd92e9a2ce0213d42",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -262,10 +262,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/keynote-pptx-doctor.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 51536,
-      "sha256": "987502010d23c85e8baaaff7c666ab15da3020f2afae93c57976897907a44c45",
-      "source_sha256": "a0b8771bffbf4544f9e23de8ad0bd1f80e97c87a5afe910a0ef82ea8dd75402a",
-      "generated_at": "2026-11-03",
+      "bytes": 53308,
+      "sha256": "9077a028a837d06076f2a45329879da43725213f64f79dfb842930fe40af85b1",
+      "source_sha256": "fb494565344e664a40fe9d5a053af970c5c0ccee3cb67bd6f1459b26f33056ae",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -273,10 +273,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/webchat-mcp.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 42090,
-      "sha256": "d02906fbc9538d1d0155210b4746803b6f2bf58d39d3aef2377ae54b7793054a",
-      "source_sha256": "844caf5587cac39677dfd8764495702e869f93a57c1f870c91f5cfd243463819",
-      "generated_at": "2026-11-03",
+      "bytes": 42308,
+      "sha256": "2db1f306dfaa09cacd3cd05663d6da88855ea8876492d5dde7fb5c55ae1efb48",
+      "source_sha256": "c124dabc1c71eb6bff884dd39130c15337ca4a4e74303027a840c5ef234d3bf0",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -284,10 +284,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/gemini-voice-lab.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 45902,
-      "sha256": "2aa0c1d39aa095d9751f4c4ff8a64e594f072ab20bc1745dd81716a9212535fa",
-      "source_sha256": "a442f7644e69063cbe8683dd5819ada6c1ce8c6a271b896c9e818f947774dec1",
-      "generated_at": "2026-11-03",
+      "bytes": 47438,
+      "sha256": "fb4d2889b36107c04c49bf48ffc6f153ffa5890a824cec140871d1aea8837e35",
+      "source_sha256": "3046fa2756a27a7eab9ff842016c973cd430b91adea69bfcb49ec6796cabacab",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -295,10 +295,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/story-bible.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 50256,
-      "sha256": "6384c977ff422bffe4852a9f81c033b7b0752646fd447367d86bc7e161d12bfa",
-      "source_sha256": "e52b61d3fd7b9f5249f8f6f0bfa4abcf2d5fa100a04cfc07ea7484e65191b925",
-      "generated_at": "2026-11-03",
+      "bytes": 53854,
+      "sha256": "58ba46cf8a1ed9df1fb07baa196c2a40a7c832c2c401cbfe4439304ddf033d71",
+      "source_sha256": "ba017f63c478b45de1edf4d3c50c44b6025d934992f71994197845d4fe726858",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -306,10 +306,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/human-mode.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 46634,
-      "sha256": "48a6e26acf210328f47368f1f189581796c0724c446a037f074ec3c952839899",
-      "source_sha256": "e598fb21224bf5545cc3b9fd1345b52ae53e36ecb8783357ae8ee2519ab4d256",
-      "generated_at": "2026-11-03",
+      "bytes": 47344,
+      "sha256": "b802c50e8fb9ec5506fcbe1c9da692bc7daef84c2013ef85e5a8ce6a6102613c",
+      "source_sha256": "4d00561229dd4bb591dfc5f3b1b72ce5cb6e38974c44a80a1628e1776a4733b3",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -317,10 +317,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/project-hub.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 52068,
-      "sha256": "0227932ba52739cd69e23bb5e986719a7f7adaf0def4000c44c5785f320f3390",
-      "source_sha256": "afb2d211e179b4275402cbf1873e09ff6e46fb837019407b966f5e9a1b107314",
-      "generated_at": "2026-11-04",
+      "bytes": 53248,
+      "sha256": "ecc9c1443309df1c0414968cf4ad52650ae7a78091bc5954e41d0352f41d85e7",
+      "source_sha256": "fb9b3c99e3c4ccdf6defb205a1e7a0e477d56922284255fd58f2d92fc86e0a18",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -328,10 +328,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/taiwanese-english-checker.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 48342,
-      "sha256": "4fd797167b9797b3387bdfa0110bc82360e338b676ac1ea421b341797b6daffc",
-      "source_sha256": "c18371c9fb7559d46a42299db48975a6d968d9e919ce7442c472b1d0d1dcf793",
-      "generated_at": "2026-11-03",
+      "bytes": 53872,
+      "sha256": "6f37628748a9ba57baeb9b43a2fb48554929c67ffb715aaf418f9bce3c1502b5",
+      "source_sha256": "1ff5b850aa4fb5343a65d5b3378646ae02cca8746557e9265ed2cba6f1209dca",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -339,10 +339,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/career-guide.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 40202,
-      "sha256": "b64cac78c3ef5c1e8b89d6c3e9a33d56a147e1f131e7ca5b888ef708c3749c6d",
-      "source_sha256": "72d3aa43c73830ca3f310da06cccc658f9c00ae79a9ea7f98eca5824c8e90c41",
-      "generated_at": "2026-11-03",
+      "bytes": 42052,
+      "sha256": "0d0134a6deef7931ebc1305d87ddc49b7704c0b65e0e24d2937b2efc5a91b7c0",
+      "source_sha256": "a47347c0c7f37d336213636bc28bd0d10ce08f721db788524916bbf1079b26fd",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -350,10 +350,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/supplier-client.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 41454,
-      "sha256": "086ca891b724ce39a09107314e80d7542f2b9cc1775b01a99f94a98dd11e4fce",
-      "source_sha256": "1ab93009df76a6b8409bea62cf0399d9da07237cba78e29ef95a579b70321ef0",
-      "generated_at": "2026-11-03",
+      "bytes": 44156,
+      "sha256": "59c5397e283a0f6ef204c0718c69803b9bb2e5287a5146a346536a0b7b7dd62a",
+      "source_sha256": "9ff1a48dc2bd870e84f15335d1c869b421ba2162e721c2867285baac7fdd8c35",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -361,10 +361,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/storefront.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 43862,
-      "sha256": "22f4c806c0b6f9979accd3444fe8d91a226ff27c907a767d5b1aa0720b93d519",
-      "source_sha256": "fe8f1cc9684f822154a0fb803b808008f370ad22085e7775416c6c4a19795ca4",
-      "generated_at": "2026-11-03",
+      "bytes": 44774,
+      "sha256": "9954f1bc4d504371015cc7f5726cf708dd4edc12e3f513758cdc92bebee7fa87",
+      "source_sha256": "59cc94cae54c8ce472fa5ec43a8a173b1ed3a1fa4cfefb0aa0ebe765ee8eaae6",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -372,10 +372,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/community-ops.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 44442,
-      "sha256": "ab636482d2515ba1106f17ab2a925bf29f1f75baecd3b7d3ee4a875a882039f3",
-      "source_sha256": "2520ba30a4a1fd4093d63d43c024c4ad0bfe9a97723b2320a02fdd78aff6e707",
-      "generated_at": "2026-11-03",
+      "bytes": 46094,
+      "sha256": "d2c9623524f42e80ad670c87bdedaf1f07cc850e8b480c0b0dc47943d5722c7d",
+      "source_sha256": "1e25033fbf76a592362924e725c0b08234e9ac13332fd0f2fc049704c2f8ccaf",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -383,10 +383,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/partnership.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 44400,
-      "sha256": "48b28b0cf743043acb92a08711e84fc03197e090430ced9d42b8a3e96ad109f8",
-      "source_sha256": "ac0d9fe5a9e205a4249f30043e06db124da3ab3003d769e5ec39c162d06ac2e7",
-      "generated_at": "2026-11-03",
+      "bytes": 46088,
+      "sha256": "6aa8ed7e92d4549989d53f516be87414f1befebe23368665b229f0124b46216a",
+      "source_sha256": "c5b69089a76733948c04e5812966619a3cb803db4862d025ece41e88858bd3d3",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -394,10 +394,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/reconciliation.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 41860,
-      "sha256": "7666344d65043422d2b7f862df1fd8a8b41880e7c27d3679892fe7d242f1887e",
-      "source_sha256": "d81424a602c26770ec8f9732f1798db42136233a84b6a773c2889a8510e9ba6f",
-      "generated_at": "2026-11-03",
+      "bytes": 41820,
+      "sha256": "2896dc4bd92f7591a39d18ca673bbe52e270553cde683a224cf4d54e3cbc0b80",
+      "source_sha256": "3afa816fe5bb4840fd3e6a902a66770fbfd7861de972d61252d4ef7c6a148ca8",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -405,10 +405,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/project-delivery.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 44106,
-      "sha256": "24ae6067434962db9abd6ce3f2123c38975b8072cd34a0593c860a21fb7c0710",
-      "source_sha256": "4e1adf6c6b911b55147c7f6c65cebf97741320bc6e637c0c1dae2a2316ea9d77",
-      "generated_at": "2026-11-03",
+      "bytes": 44236,
+      "sha256": "935ba923074bfff91124e53e1120c5dc330740c21d3def79b045caa8d9db9386",
+      "source_sha256": "9148f73112faf035c0917757c66d3453dec12f82a546266a876db764ca4e02c6",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -416,10 +416,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/agent-kit.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 42200,
-      "sha256": "ce4ed243b93f46719ecfde4349b487534a92e492c8925769acb40135582d19aa",
-      "source_sha256": "e73b1aa5560c1f40ffb6328536c18a58634de4a6929943df068f1159c1986e18",
-      "generated_at": "2026-11-03",
+      "bytes": 38230,
+      "sha256": "b91e2b1c90cb3165745be4eabaa92e8cb42f4b180f11308f375511a6a9c4c462",
+      "source_sha256": "1ef08c19dc86e8e8b650b323751867ebf9110d17b4f7783bc21ee7afff446ce2",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -427,10 +427,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/project-template.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 41870,
-      "sha256": "fcfcbf2ef56cd3672f686aaa159316b3492b681197a66a0c0f788abd3e074438",
-      "source_sha256": "e61ad510c2f31ce5f862a246565468b9dee1db25e0c070c4daf0e949f050ec62",
-      "generated_at": "2026-11-03",
+      "bytes": 44684,
+      "sha256": "bf331cb83f612e415495c5d35253a8777a6c3708a141f5aed0ec8f389f2240b6",
+      "source_sha256": "b5a6460754b369a03954a2ac066f3e581ebbcb666bcd04a2760568af2986dbee",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -438,10 +438,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/social-post.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 42148,
-      "sha256": "da08c1b496e892f692161a2e77a4a7492e9229c65651854d28d288cf84d38999",
-      "source_sha256": "277330076fcb3780cf14e531bfd21cd3791cc1df0164f6c9fe8b602fe5b36514",
-      "generated_at": "2026-11-03",
+      "bytes": 44600,
+      "sha256": "2bf9d938f6cfbc549e7b6788e79d0023ce8d4f761cfbf2a1ebf1a885b9a39cae",
+      "source_sha256": "90e4acef787e5d67f9edf936aece05c951b995b9dbeffc7ef7875fd6e42479d8",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -449,10 +449,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/typo-studio.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 42958,
-      "sha256": "b821b2c85f5ed2276bee044eaad7aa2eee12e56ea49b9daabda009a2702f4c2c",
-      "source_sha256": "ea6c89167b7f843e939c19d0c38b6e994eaec6e7698ad0d08d39c917eab8b98d",
-      "generated_at": "2026-11-03",
+      "bytes": 45184,
+      "sha256": "7971fd99153f52adf06e8a4c7a1646cf77950f6b36fc105ccfbab3b085f58ff6",
+      "source_sha256": "7b88f19b08b9a0f631a418c2c19ac09ef78979a3b761bbbf3b4262aed2624ce2",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -460,10 +460,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/video-autopilot.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 41600,
-      "sha256": "66d63d4d2eead541570fcf714c1098e41fd632185093fb269f16e8aceb3fd194",
-      "source_sha256": "620b49eea13622aab15b237335527702f8c61bacdcafd075a80f3ee42b2d30f6",
-      "generated_at": "2026-11-03",
+      "bytes": 44306,
+      "sha256": "f2c027aaf85389fb213578cc742c7e12965e2206555c80e513bd5c45028dc981",
+      "source_sha256": "81c79dd5ba8817d5eab13e48b41f79c9a8ebdcc234485bc9f438c157adee6eeb",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -471,10 +471,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/short-drama.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 38830,
-      "sha256": "153d681c25661f014a3bf429c53119f800cf11aab619296b8e243bcf357ed2ac",
-      "source_sha256": "5eacebe65f4e64dff5db5ef5285552695892e0ce7f53dabe6d656fbbb3fe0539",
-      "generated_at": "2026-11-03",
+      "bytes": 41692,
+      "sha256": "8cb4213ee10fda38d7b35a2817a53411f498d9596575110efe29944068fb1918",
+      "source_sha256": "cd0faab0ef2a9a00d154132df3de94f35526ac06b9249668216b0cb66af844a4",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -482,10 +482,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/hao-studio.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 42092,
-      "sha256": "b32dc374ea118d19c15c28a8642f089e43d0c6e771ac32db63d2bee8ff4588f6",
-      "source_sha256": "7b79ec9f8986e910f58bce8bb01b1d36d20bafddd0bfe418b6cbc978183c41ae",
-      "generated_at": "2026-11-03",
+      "bytes": 44052,
+      "sha256": "6969cb7aec7c4bc0d10950aa6045a6f82d3b3c635806b9e7fa2a115ca40d4e68",
+      "source_sha256": "80c2528fadb7695171507df494df8e2756f3927a93478a027d578694ab8a68cc",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -493,10 +493,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/media-generator.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 44436,
-      "sha256": "baaded9a19f2d371f3f1debefd1da29bbf4282d18bf94369c6cbd6f4791402ba",
-      "source_sha256": "fc95d0c00bcdb9c1508ad461e7604dc226ba82e8cda24ab0da4e32deb1eb6927",
-      "generated_at": "2026-11-03",
+      "bytes": 45758,
+      "sha256": "d187a65cd24acca30a30d203cf34673ab77387db167058f8870e434f5c9aa5ea",
+      "source_sha256": "4312f75bb740d9e26d40a4b8735205e875062253800aae71a7fe53e1f976de0a",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -504,10 +504,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/pos-pro.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 40864,
-      "sha256": "6ff17363a46bd97524a8c7d41dbea647a24fbe6326f52121297623966d23ba77",
-      "source_sha256": "34eb340821c9bb40174882c647c3181f6c50eb7fe957b9844a35cee0f0c52451",
-      "generated_at": "2026-11-03",
+      "bytes": 44774,
+      "sha256": "e12f5f391fe50e819db1041fed6c75e69805e0b1e96f2be042dbd1044a659a8d",
+      "source_sha256": "821f48f2e95e4f15e51c95e58251241540147fec2998d02fc12a59c14180a61a",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -515,10 +515,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/security-scanner.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 42352,
-      "sha256": "e1020f455641de8692792744dd72f7f907a0cd1abcba9d821c6d492f9f7d16ea",
-      "source_sha256": "303e1d93a0e936e239a0d8fe61334e1b38e7a9bf18389f4ec70593d13896efbc",
-      "generated_at": "2026-11-03",
+      "bytes": 44226,
+      "sha256": "c44d532709bf6a665bc50de00e622748718af96088671b673ef2c8c02d0aabeb",
+      "source_sha256": "c64dbb70aa37b2e348fd12ec95b2b0040a0353bc2a0d49d9ec5a717820bcf692",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -526,10 +526,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/ai-sister.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 41986,
-      "sha256": "7439c807d853b068891256ce9228ced36f348ad0be6b70ad76151bacab79855b",
-      "source_sha256": "e34f4aae540b7f6826f1a1af6691979f5f08272cff7d55283a8336fd1d5357d4",
-      "generated_at": "2026-11-03",
+      "bytes": 37514,
+      "sha256": "015c1788ff9e12425d63faa9264665518d5b79fb280766e565cbe10a49518287",
+      "source_sha256": "d26dc56ae9ef7a473702a74c5f786350902adb5c77751a43d8e6d2224613b5c3",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -537,10 +537,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/multi-ai-desktop.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 43448,
-      "sha256": "d38743b46dce8f49091aaed7ee0897cf39cd56b2a09697f8b878773271d4d957",
-      "source_sha256": "018c435199001919a0c0ff32c795986b734bf5d8cf9775f97456c65b0b81cd67",
-      "generated_at": "2026-11-03",
+      "bytes": 45914,
+      "sha256": "d24a3f97275b4324feb14e3b53b078e5b938323ff142f1e443a64267a0c9714b",
+      "source_sha256": "757a8c2543b9b3dd6e07bc790eed0f2b2bcb30363b7785807a4ebd7989d66dd2",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -548,10 +548,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/multi-ai-chat.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 39110,
-      "sha256": "adde6e9f537c844084616ac5b194e72afac525f5ec1ca21f07db03b332f7cc69",
-      "source_sha256": "58a2ec8c817f633d5e1e06024b62ec18ce51586f14028e4ea20f661f53f8963e",
-      "generated_at": "2026-11-03",
+      "bytes": 39638,
+      "sha256": "bce6cb2ad5d8226089bbc123a908f4a09e1b379bac839f64c10798a0eb581702",
+      "source_sha256": "436ab72805bb4aa4e2ec94edd06ce047ffa2d95720de6e995d4e9fbcae713f79",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -559,10 +559,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/music-mv.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 44422,
-      "sha256": "d319886a357c67faa5a81f449941fd2ab665692be6c804a20e119a4ed4ffc9d3",
-      "source_sha256": "ca0a3ea3f1d21ca538055ca6db8b96d2605ac5d76099bd4fde184f81d58d1d9e",
-      "generated_at": "2026-11-03",
+      "bytes": 45520,
+      "sha256": "5471af262aab203bcf67673973f5de0622a80cb2f6d897ac0e75a7ae76209d3b",
+      "source_sha256": "aec897e4c573a9b72988cc60ea7f0b86c48a01cd46ca9ac25f26df91651dfc2c",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -570,10 +570,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/commercial-production.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 51196,
-      "sha256": "8cf797169712125b7c4df1e77dfd49509d9e14307f1bd652c8a7021ecb829733",
-      "source_sha256": "1c79f8f579ade94564a54354f504488e196cdaaf24cffdf2a73a79eb2f642442",
-      "generated_at": "2026-11-03",
+      "bytes": 49058,
+      "sha256": "401eeff775c74c25f525fd1c00ebb19764e76fb359ec5018b3c949e1a8484cab",
+      "source_sha256": "6cede4888e109a3459d52555f10bbd74b681865eaad953afb378778ee95d3124",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -581,10 +581,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/event-space.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 45094,
-      "sha256": "6894e4d279feed8a4ed4fa6e82e1ab5fc5a1b7b4434aa5e715dfa60cc11ddc68",
-      "source_sha256": "95bab8c7278d59678676765e3fa7b205ead0869b72ef002468e01a5515196d75",
-      "generated_at": "2026-11-03",
+      "bytes": 45808,
+      "sha256": "92547f93f059144452cb47468a2cd3297b004bd57e82e2916ff367b7e86dece0",
+      "source_sha256": "d5b18824e2e45b8b64acaa6de22e131bbf2efa19daa5457057cc59541425f731",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -592,10 +592,10 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/projection-mapping.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 47362,
-      "sha256": "1b1eab2d455ba047f36745da93f24647eb4c7bde03a66aaaac73a1d69ac30198",
-      "source_sha256": "a4010edcb9e5984884bce0bdee0aa557ebc777e8946c822663a8f99753f29f7c",
-      "generated_at": "2026-11-03",
+      "bytes": 47600,
+      "sha256": "d0875101c614db90b67e1b7b4000bbd21dc9b5f99cd5759c5b52eeb43d262357",
+      "source_sha256": "336f127b4cb80c4bfa4cfc3f8673bd50e4bb685c4ccfe01d0098b6dc6a4211fa",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     },
     {
@@ -603,12 +603,12 @@
       "path": "apps/portal-web/public/brand/skill-illustrations/human-design.webp",
       "width": 1200,
       "height": 630,
-      "bytes": 47646,
-      "sha256": "874c1bc34fab81e43ecea5bfbabe98aa7264d0ba97fdb5d28ee90e22c05883bc",
-      "source_sha256": "d88a52f786bb2e60ef8ef0682de60ddf2a2142f4cd1848dcc3a492996c3cc16f",
-      "generated_at": "2026-11-03",
+      "bytes": 46804,
+      "sha256": "c695f588e6148c10917aac59287f829a15b693a79976f14ed5c36c2fde31ddd0",
+      "source_sha256": "9977c21a6e437253a62afe7efe40f26fb3c3e3799015190e132ed1395ff84fce",
+      "generated_at": "2026-11-07",
       "mode": "rendered-share-card"
     }
   ],
-  "updated_at": "2026-11-04"
+  "updated_at": "2026-11-07"
 }

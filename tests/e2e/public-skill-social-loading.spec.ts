@@ -16,9 +16,11 @@ for(const width of [390,1280])test(`public skill reading defers the GitHub bundl
   await page.goto(path);await entryReady(page);
   await expect(page.getByRole('heading',{name:'Hao 社群貼文技能書',exact:true})).toBeVisible();
   await expect(page.getByRole('link',{name:'免費加入，探索更多資源',exact:true})).toHaveAttribute('href',/skill_acquisition=1/);
-  expect((await social(page).boundingBox())!.y).toBeGreaterThan(844+300);
-  expect(chunks).toEqual([]);await expect(social(page).locator('[data-github-book]')).toHaveCount(0);
-  const fallback=social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true});await expect(fallback).toHaveAttribute('href',original+'/fork');
+  await expect(social(page)).toBeHidden();
+  expect(chunks).toEqual([]);
+  await expect(social(page).locator('[data-github-book]')).toHaveCount(0);
+  const fallback=social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true,includeHidden:true});await expect(fallback).toHaveAttribute('href',original+'/fork');
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   await social(page).scrollIntoViewIfNeeded();await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
   expect(chunks).toHaveLength(1);await expect(social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
   await expect(social(page).getByRole('link',{name:'追蹤專案（Watch）↗',exact:true})).toHaveAttribute('href',original);
@@ -27,6 +29,7 @@ for(const width of [390,1280])test(`public skill reading defers the GitHub bundl
 
 test('a failed deferred chunk preserves reading, signup and native GitHub links',async({page})=>{
   let attempts=0;await page.route(url=>widgetChunk(url.href),route=>{attempts++;return route.abort();});await page.goto(path);await entryReady(page);
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   await social(page).scrollIntoViewIfNeeded();await expect.poll(()=>attempts).toBe(1);
   await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
   await expect(social(page).getByRole('link',{name:'追蹤專案（Watch）↗',exact:true})).toHaveAttribute('href',original);
@@ -50,6 +53,7 @@ test('a member still explicitly Stars and unstars after the public widget loads'
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
   await page.goto(path);await entryReady(page);expect(writes).toEqual([]);
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   await social(page).scrollIntoViewIfNeeded();const star=social(page).getByRole('button',{name:'Star',exact:true});await expect(star).toBeEnabled();expect(writes).toEqual([]);
   await star.click();const unstar=social(page).getByRole('button',{name:'取消 Star',exact:true});await expect(unstar).toHaveAttribute('aria-pressed','true');
   await unstar.click();await expect(star).toHaveAttribute('aria-pressed','false');
@@ -61,7 +65,7 @@ test('loading a widget does not remove a focused public link while the reader ta
   await page.route(url=>widgetChunk(url.href),async route=>{await gate;await route.continue();});
   try{
     await page.goto(path);await entryReady(page);
-    const requested=page.waitForRequest(request=>widgetChunk(request.url()));await social(page).scrollIntoViewIfNeeded();await requested;
+    const requested=page.waitForRequest(request=>widgetChunk(request.url()));await page.getByText('作者、版本與參與開發',{exact:true}).click();await social(page).scrollIntoViewIfNeeded();await requested;
     const fallback=social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true});await fallback.focus();
     const chunk=page.waitForResponse(response=>widgetChunk(response.url()));release();await (await chunk).finished();
     await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));

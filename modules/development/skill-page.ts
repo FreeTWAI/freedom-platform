@@ -26,20 +26,22 @@ export function skillPageHero(hero:SkillPageHero){
   +(hero.content?'<p class="sp-headline"><span>'+escape(hero.content.headline)+'</span></p>':'')+'<p class="public-skill-purpose">'+escape(hero.purpose)+'</p><div class="public-skill-actions">'+hero.actions+'</div><div class="sp-hero-notes">'+hero.credit+hero.badges+'</div></div>'+outcomes+'</div></section>';
 }
 export function skillPageFlow(content:SkillPageContent){
- return '<section class="sp-band sp-flow-band" aria-labelledby="skill-flow-title"><div class="sp-wrap"><div class="sp-head"><div><p class="sp-kicker">怎麼運作</p><h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2></div><p class="sp-head-lead">'+escape(content.flow.lead)+'</p></div>'+skillFlowFigure(content.flow)+'</div></section>';
+ return '<section class="sp-band sp-flow-band" aria-labelledby="skill-flow-title"><div class="sp-wrap"><div class="sp-problem" id="skill-problem"><span class="sp-problem-label">原本卡在哪</span><p>'+escape(content.problem)+'</p></div><div class="sp-head"><div><p class="sp-kicker">從問題到成果</p><h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2></div><div class="sp-mechanism"><h3>背後的原理</h3><p>'+escape(content.mechanism)+'</p></div></div>'+skillFlowFigure(content.flow)+'</div></section>';
 }
-/** Every authored guide sentence appears once, in reading order: who, what, cautions, then the first practice. */
-export function skillPageUsage(guide:SkillPageGuide){
+/** Render supplied guidance without inventing missing audience, conditions or results. */
+export function skillPageUsage(guide:SkillPageGuide,usageContext?:string){
  const grid=(count:number)=>count===4?' sp-grid-2':'';
- const audience='<h3 class="sp-sub">適合這些人</h3><ul class="sp-audience">'+guide.audience.map(item=>'<li><span class="sp-chip">'+skillFlowIcon('user')+'</span><span>'+escape(item)+'</span></li>').join('')+'</ul>';
- const features='<h3 class="sp-sub">主要功能</h3><ol class="sp-features'+grid(guide.features.length)+'">'+guide.features.map((item,index)=>'<li><span class="sp-num" aria-hidden="true">'+pad2(index+1)+'</span><p>'+escape(item)+'</p></li>').join('')+'</ol>';
- const status='<div class="sp-status"><span class="sp-chip">'+skillFlowIcon('shield')+'</span><div><h3>使用前先知道</h3><p>'+escape(guide.status)+'</p></div></div>';
- const prepare='<div class="sp-prepare"><h3>開始前準備</h3><ul>'+guide.prerequisites.map(item=>'<li>'+tick+'<span>'+escape(item)+'</span></li>').join('')+'</ul></div>';
+ const audience=guide.audience.length?'<h3 class="sp-sub">適合這些人</h3><ul class="sp-audience">'+guide.audience.map(item=>'<li><span class="sp-chip">'+skillFlowIcon('user')+'</span><span>'+escape(item)+'</span></li>').join('')+'</ul>':'';
+ const features=guide.features.length?'<details class="sp-usage-details"><summary>查看完整功能</summary><h3 class="sp-sub">主要功能</h3><ol class="sp-features'+grid(guide.features.length)+'">'+guide.features.map((item,index)=>'<li><span class="sp-num" aria-hidden="true">'+pad2(index+1)+'</span><p>'+escape(item)+'</p></li>').join('')+'</ol></details>':'';
+ const status=guide.status?'<details class="sp-usage-details"><summary>適用環境與使用範圍</summary><p>'+escape(guide.status)+'</p></details>':'';
+ const conditions=usageContext?'<div class="sp-conditions"><h3>使用條件</h3><p>'+escape(usageContext)+'</p></div>':'';
+ const prepare=guide.prerequisites.length?'<div class="sp-prepare"><h3>開始前準備</h3><ul>'+guide.prerequisites.map(item=>'<li>'+tick+'<span>'+escape(item)+'</span></li>').join('')+'</ul></div>':'';
  const steps='<h3 class="sp-sub">練習步驟</h3><ol class="sp-steps'+(guide.first_steps.length===4?' sp-grid-2':'')+'">'+guide.first_steps.map((item,index)=>'<li><span class="sp-step-num" aria-hidden="true">'+pad2(index+1)+'</span><p>'+escape(item)+'</p></li>').join('')+'</ol>';
  const quickstart=guide.quickstart?'<div class="sp-quick"><h3>原作的起步指令</h3><p>'+escape(guide.quickstart.context)+'</p><pre><code>'+escape(guide.quickstart.commands)+'</code></pre></div>':'';
- const result='<div class="sp-result"><span class="sp-chip">'+skillFlowIcon('star')+'</span><div><h3>練習成果</h3><p>'+escape(guide.first_result)+'</p></div></div>';
- return '<section class="public-skill-introduction" aria-labelledby="skill-use-title"><div class="sp-band sp-usage"><div class="sp-wrap"><div class="sp-head"><div><p class="sp-kicker">適合誰、能做什麼</p><h2 id="skill-use-title">用途與適用範圍</h2></div><p class="sp-head-lead">收錄格式：'+escape(guide.format)+'。以下依 '+escape(guide.reviewed_at)+' 核對的版本整理，實際功能以原作文件為準。</p></div>'+audience+features+status+'</div></div>'
-  +'<div class="sp-start"><div class="sp-wrap"><p class="sp-kicker">第一次使用</p><h2>開始使用</h2>'+prepare+steps+quickstart+result+'</div></div></section>';
+ const result=guide.first_result?'<div class="sp-result"><span class="sp-chip">'+skillFlowIcon('star')+'</span><div><h3>練習成果</h3><p>'+escape(guide.first_result)+'</p></div></div>':'';
+ const usage=audience||features?'<div class="sp-band sp-usage"><div class="sp-wrap"><div class="sp-head"><div><p class="sp-kicker">把它用在你的工作裡</p><h2 id="skill-use-title">用途與適用範圍</h2></div></div>'+audience+features+'</div></div>':'';
+ return '<section class="public-skill-introduction" aria-labelledby="skill-use-title">'+usage
+  +'<div class="sp-start" id="skill-start"><div class="sp-wrap"><p class="sp-kicker">第一次使用</p><h2'+(usage?'':' id="skill-use-title"')+'>開始使用</h2>'+conditions+prepare+steps+quickstart+result+status+'</div></div></section>';
 }
 export function skillPageBand(html:string,name:string){return html?'<div class="sp-band '+name+'"><div class="sp-wrap">'+html+'</div></div>':'';}
 
@@ -108,6 +110,22 @@ html.skill-page .sp-outcomes li{display:flex;gap:12px;align-items:flex-start;fon
 html.skill-page .sp-hero-single .public-skill-cover{width:96px;max-width:none;margin:0 0 22px}
 html.skill-page .public-skill-entry .sp-hero-single .public-skill-cover img{width:96px;height:64px;max-height:none;aspect-ratio:3/2;border:1px solid var(--sp-line);border-radius:12px}
 .sp-flow-band{background:rgba(255,253,248,.62);border-block:1px solid var(--sp-line)}
+.sp-problem{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:start;gap:24px;margin-bottom:48px;padding:0 0 28px;border-bottom:1px solid var(--sp-line)}
+.sp-problem-label{display:inline-flex;align-items:center;gap:10px;font-size:.85rem;font-weight:850;color:var(--sp-coral)}
+.sp-problem-label::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.sp-problem p{margin:0;max-width:46em;font-size:1.15rem;line-height:1.75;color:var(--sp-ink-soft)}
+.sp-mechanism{margin:0}
+html.skill-page .sp-mechanism h3{margin:0 0 8px;font-size:1rem}
+.sp-mechanism p{margin:0;max-width:58em;color:var(--sp-ink-soft);font-size:1rem;line-height:1.8}
+.sp-usage-details{margin-top:24px;border-top:1px solid var(--sp-line);padding-top:12px}
+.sp-usage-details summary{display:flex;align-items:center;min-height:44px;cursor:pointer;font-size:.94rem;font-weight:750;gap:12px}
+.sp-usage-details summary::after{content:"+";margin-left:auto;font-size:1.3rem}
+.sp-usage-details[open] summary::after{content:"−"}
+.sp-usage-details summary::-webkit-details-marker{display:none}
+.sp-usage-details>p{max-width:60em}
+.sp-start .sp-usage-details{border-color:rgba(255,255,255,.18);color:#c7d3cd}
+.sp-start .sp-usage-details summary{color:#eef4ef}
+@media(max-width:720px){.sp-problem{grid-template-columns:1fr;gap:12px;margin-bottom:32px}.sp-problem p{font-size:1rem}}
 .sp-sub{margin:44px 0 16px;font-size:1.05rem;font-weight:850}
 html.skill-page .sp-audience{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:14px}
 html.skill-page .sp-audience li{display:flex;gap:14px;align-items:center;padding:18px 20px;border:1px solid var(--sp-line);border-radius:18px;background:var(--sp-card);font-weight:700;line-height:1.55}
@@ -126,6 +144,9 @@ html.skill-page .sp-features li{padding:24px;border:1px solid var(--sp-line);bor
 html.skill-page .sp-start :is(h2,h3){color:#fff}
 html.skill-page .sp-start h2{font-size:clamp(1.9rem,3.7vw,3rem);line-height:1.12;letter-spacing:-.035em;font-weight:900}
 .sp-start .sp-kicker{color:var(--sp-lime)}
+.sp-conditions{max-width:58em;margin-top:28px}
+.sp-conditions h3{margin:0 0 8px;font-size:1rem}
+.sp-conditions p{margin:0;color:#cfdad3;line-height:1.8}
 html.skill-page .sp-start a{color:var(--sp-lime)}
 html.skill-page .sp-start :is(a,button,summary):focus-visible{outline-color:var(--sp-lime)}
 .sp-prepare{margin:36px 0 0;padding:24px;border:1px solid rgba(255,255,255,.14);border-radius:20px;background:var(--sp-dark-2)}
@@ -138,7 +159,7 @@ html.skill-page .sp-steps{list-style:none;margin:0;padding:0;display:grid;grid-t
 html.skill-page .sp-steps li{padding:24px 24px 8px 0;margin-right:24px;border-right:1px solid rgba(255,255,255,.12)}
 html.skill-page .sp-steps li:last-child{border-right:0;margin-right:0}
 .sp-step-num{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#fff;color:var(--sp-dark);font-family:var(--sp-mono);font-size:.76rem;font-weight:850}
-.sp-steps p{margin:16px 0 0;color:#cfdad3;line-height:1.85;overflow-wrap:anywhere}
+.sp-steps p{margin:16px 0 0;color:#cfdad3;line-height:1.85;overflow-wrap:anywhere;white-space:pre-line}
 .sp-quick{margin:36px 0 0}
 .sp-quick h3{margin:0 0 8px;font-size:1rem}
 .sp-quick p{margin:0 0 12px;color:#cfdad3}

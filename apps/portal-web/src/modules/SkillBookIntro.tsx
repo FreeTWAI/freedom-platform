@@ -58,14 +58,14 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
               if(!element||!selection)return;
               element.focus();const range=document.createRange();range.selectNodeContents(element);selection.removeAllRanges();selection.addRange(range);
             }}/>}</section>}{reading&&<a href={reading} target="_blank" rel="noopener noreferrer">閱讀技能書 ↗</a>}{(book.id??book.book_id)&&<a href={`/development/skills/${encodeURIComponent((book.id??book.book_id)!)}`} target="_blank" rel="noopener noreferrer">完整指南 ↗</a>}</div></details>
-          <details className="skill-intro-details"><summary>功能與使用範圍</summary><div className="stack"><p className="field-hint">以下為原作收錄版本的功能說明，站內應用另依其版本資料。</p><p className="skill-intro-status">{guide.status}</p><p className="muted">{guide.audience.join('、')}</p><ul className="skill-intro-features">{guide.features.map(feature=><li key={feature}>{feature}</li>)}</ul></div></details>
+          <details className="skill-intro-details"><summary>功能與使用範圍</summary><div className="stack"><p className="skill-intro-status">{guide.status}</p><p className="muted">{guide.audience.join('、')}</p><ul className="skill-intro-features">{guide.features.map(feature=><li key={feature}>{feature}</li>)}</ul></div></details>
         </>}
-        {open&&illustration&&illustration.bookId===bookId&&<figure className="skill-intro-illustration"><img src={illustration.url} alt={illustration.alt} width="1200" height="630" decoding="async" onError={()=>setIllustration(null)}/><figcaption>功能示意圖，非實際操作截圖。</figcaption></figure>}
+        {open&&illustration&&illustration.bookId===bookId&&<figure className="skill-intro-illustration"><img src={illustration.url} alt={illustration.alt} width="1200" height="630" decoding="async" onError={()=>setIllustration(null)}/></figure>}
         {isStorefrontReading(bookId,upstream)&&<StorefrontBookUsage onNavigate={close}/>}
         {open&&<SkillBookStar book={book}/>}
         {open&&bookId&&<EventOutcomeBacklinks client={client} kind="skill_book" sourceId={bookId} publicRead={!client.csrfToken}/>}
 
-        <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack">{website&&<a href={website} target="_blank" rel="noopener noreferrer">前往作者網站 ↗</a>}{guide&&/^[0-9a-f]{40}$/.test(guide.source_commit)&&<p className="field-hint">指南閱讀版本：<code>{guide.source_commit.slice(0,12)}</code> · 核對日期：{guide.reviewed_at}</p>}<SkillBookSourceAccount book={book}/>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at} · 依以下收錄版本，不代表外部服務今天的運作狀態。</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
+        <details className="skill-intro-details skill-intro-source"><summary>作者、授權與收錄來源</summary><div className="stack">{website&&<a href={website} target="_blank" rel="noopener noreferrer">前往作者網站 ↗</a>}{guide&&/^[0-9a-f]{40}$/.test(guide.source_commit)&&<p className="field-hint">指南閱讀版本：<code>{guide.source_commit.slice(0,12)}</code> · 核對日期：{guide.reviewed_at}</p>}<SkillBookSourceAccount book={book}/>{book.license_status&&<p>{book.license_status==='NOASSERTION'?'來源未明確宣告授權條款；Fork 不代表額外取得作品、素材或程式的使用權。':`來源記錄的程式授權：${book.license_status}。素材與引用內容請另外查看專案說明。`}</p>}{guide&&<><p className="field-hint">介紹核對：{guide.reviewed_at}</p><ul>{guide.source_evidence.map(evidence=>{const url=httpsLink(evidence.url);return url?<li key={evidence.path}><a href={url} target="_blank" rel="noopener noreferrer">{evidence.path} ↗</a></li>:null;})}</ul></>}{book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<p className="field-hint">收錄版本：<code>{book.source_commit.slice(0,12)}</code></p>}</div></details>
         {open&&bookId&&book.source_commit&&/^[0-9a-f]{40}$/.test(book.source_commit)&&<SkillInstall key={bookId} bookId={bookId}/>}
         {bookId&&<details className="skill-intro-details skill-intro-advanced"><summary>作者與共同開發（進階）</summary><div className="stack">
           {open&&<AuthorClaimPanel key={bookId} bookId={bookId}/>}
@@ -97,7 +97,6 @@ function QuickstartCopy({commands,onSelect}:{commands:string;onSelect:()=>void})
   }
   return <>
     <div className="actions"><button type="button" className="btn btn-ghost btn-small" aria-disabled={status==='pending'} onClick={()=>void copy()}>{status==='pending'?'正在複製…':'複製指令'}</button>{status==='failed'&&<button type="button" className="btn btn-ghost btn-small" onClick={onSelect}>選取指令</button>}</div>
-    <p className="field-hint">只複製文字，不會執行或安裝；請先確認上方準備條件與適用環境，再自行選擇要執行的指令。</p>
     {status==='copied'&&<p role="status" className="field-hint">指令已複製，尚未執行。</p>}
     {status==='failed'&&<p role="status" className="field-hint">未能複製，請選取指令後使用系統複製，或長按文字手動複製。</p>}
   </>;

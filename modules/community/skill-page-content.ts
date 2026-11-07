@@ -56,7 +56,7 @@ import webCardGameSkill from './skill-pages/web-card-game-skill.json' with {type
 import webchatMcp from './skill-pages/webchat-mcp.json' with {type:'json'};
 
 /** Authored for the public skill page: a headline, three outcomes and one three-step flow per catalog book. */
-export type SkillPageContent={headline:string;outcomes:readonly [string,string,string];flow:SkillFlow};
+export type SkillPageContent={headline:string;problem:string;mechanism:string;outcomes:readonly [string,string,string];flow:SkillFlow};
 const sources:Record<string,unknown>={
  'agent-kit':agentKit,
  'ai-avatar-bot':aiAvatarBot,
@@ -119,9 +119,10 @@ const extra=(value:object,keys:readonly string[])=>Object.keys(value).filter(key
 /** Lists what the page or the schematic could not show whole; nothing is truncated at render time. */
 export function skillPageContentProblems(value:unknown):string[]{
  if(!value||typeof value!=='object'||Array.isArray(value))return ['content must be an object'];
- const content=value as Partial<SkillPageContent>,problems=extra(content,['headline','outcomes','flow']).map(key=>`unknown field ${key}`);
+ const content=value as Partial<SkillPageContent>,problems=extra(content,['headline','problem','mechanism','outcomes','flow']).map(key=>`unknown field ${key}`);
  const check=(name:string,text:unknown,min:number,max:number)=>{if(!length(text,min,max))problems.push(`${name} must be ${min}–${max} characters of trimmed plain text without links`);};
  check('headline',content.headline,6,30);
+ check('problem',content.problem,12,100);check('mechanism',content.mechanism,20,160);
  if(typeof content.headline==='string'&&!/[。！？]$/.test(content.headline))problems.push('headline must end with 。！？');
  if(!Array.isArray(content.outcomes)||content.outcomes.length!==3)problems.push('outcomes must list exactly 3 items');
  else{content.outcomes.forEach((item,index)=>check(`outcomes[${index}]`,item,4,30));if(new Set(content.outcomes).size!==3)problems.push('outcomes must differ');}

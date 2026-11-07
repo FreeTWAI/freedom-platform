@@ -391,7 +391,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "npm ci --ignore-scripts\nnpm test\nnpm run connect\nnpm run read -- products",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "供貨與商店",
@@ -442,7 +442,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "npm ci --ignore-scripts\nnpm test\nnpm run build -- --template single-product --input examples/demo-snapshot.json --output dist/product.html --listing-id demo-listing",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "供貨與商店",
@@ -493,7 +493,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "npm ci\nnpm test",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "作品與開源",
@@ -548,7 +548,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "npm test\nnpm run build\nnpm run dev",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "作品與開源",
@@ -652,7 +652,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "npm install\nnpm start",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "website_url": "https://hao0321.github.io/typo-studio/",
     "beginner": {
@@ -709,7 +709,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "python examples/04_shorts_gate.py",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "內容與行銷",
@@ -761,7 +761,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "python scripts/studio_lint.py examples/studio-plan.example.json --studio-ready",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "內容與行銷",
@@ -910,7 +910,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "npm install\nnpm run dev",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "供貨與商店",
@@ -1010,7 +1010,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "cargo build --release -p sister-cli --locked\n./target/release/sister --data-dir ./data replay scenarios/bill-lookup.json\n./target/release/sister --data-dir ./data query 電話",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "website_url": "https://teddashh.github.io/AI-Sister/",
     "beginner": {
@@ -1111,7 +1111,7 @@ export const skillBookGuides:Record<string,SkillBookGuide> = {
     ],
     "quickstart": {
       "commands": "npm ci\nnpm run verify",
-      "context": "在自己的專案副本根目錄執行；指令已對照收錄版本的說明，這次介紹核對沒有代為安裝或執行。"
+      "context": "在自己的專案副本根目錄執行。"
     },
     "beginner": {
       "category": "小隊與協作",

@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { z } from 'zod';
 import { catalogRepositoryKeys } from './repository-match.js';
 import { publicPath } from './service.js';
+import { validSkillPageContent } from '../community/skill-page-content.js';
 
 // Published-only, explicitly sanitised projections for public pages. A row is
 // visible only while its owner is active and onboarded and the pinned project
@@ -12,11 +13,17 @@ export const PUBLISHED = `FROM skill_submissions s
   JOIN users u ON u.user_id=s.owner_ref AND u.community_id=s.community_id
   JOIN oss_projects p ON p.project_id=s.project_id AND p.owner_ref=s.owner_ref AND p.community_id=s.community_id
   JOIN oss_project_versions v ON v.version_id=s.project_version_id AND v.project_id=s.project_id
-  WHERE s.status='published' AND s.consent_to_share AND NOT p.official AND p.sharing_withdrawn_at IS NULL
+  WHERE s.status='published' AND s.consent_to_share AND NOT (s.payload ? 'page_content_draft') AND NOT p.official AND p.sharing_withdrawn_at IS NULL
     AND u.active AND (NOT u.onboarding_required OR u.onboarding_completed_at IS NOT NULL)
     AND NOT is_verification_test_account(u.user_id)`;
-const PUBLIC_PAYLOAD = `s.payload || CASE WHEN p.public_metadata_revised THEN
-  jsonb_build_object('title',p.title,'description',p.description,'use_notes',p.use_notes,'demo_url',p.demo_url) ELSE '{}'::jsonb END`;
+// Keep the author's payload intact. A revised public description cannot carry
+// different old claims; a newly consented page for the exact current metadata can.
+// If metadata changes A→B→A, the original claims again match that same prose.
+const CURRENT_METADATA = `jsonb_build_object('title',p.title,'description',p.description,'use_notes',p.use_notes,'demo_url',p.demo_url)`;
+const AUTHORED_METADATA = `jsonb_build_object('title',s.payload->>'title','description',s.payload->>'description','use_notes',s.payload->>'use_notes','demo_url',s.payload->>'demo_url')`;
+const PUBLIC_PAYLOAD = `CASE WHEN p.public_metadata_revised THEN
+  (CASE WHEN ${AUTHORED_METADATA} IS DISTINCT FROM ${CURRENT_METADATA} THEN s.payload - 'page_content' ELSE s.payload END) || ${CURRENT_METADATA}
+  ELSE s.payload END`;
 const COLUMNS = `s.submission_id,(${PUBLIC_PAYLOAD}) AS payload,s.project_id,s.published_at,(s.image_bytes IS NOT NULL OR s.storage_source='asset') AS has_image,
   v.repository_full_name,v.repository_url,v.commit_sha,v.license_spdx,v.license_evidence_url,v.is_fork,v.archived`;
 export const publishedWorkFrom = PUBLISHED;
@@ -92,7 +99,8 @@ export async function readPublishedSkillSubmission(pool: Pool | PoolClient, id: 
   if (!z.uuid().safeParse(id).success) return null;
   const row = (await pool.query(`SELECT ${COLUMNS} ${PUBLISHED} AND s.submission_id=$1`, [id.toLowerCase()])).rows[0];
   if (!row) return null;
-  return { ...summary(row), use_notes: row.payload.use_notes as string, demo_url: (row.payload.demo_url ?? null) as string | null };
+  return { ...summary(row), use_notes: row.payload.use_notes as string, demo_url: (row.payload.demo_url ?? null) as string | null,
+    page_content: validSkillPageContent(row.payload.page_content) ? row.payload.page_content : null };
 }
 
 export async function readPublishedSkillIllustration(pool: Pool, id: string,store?:import('../../packages/asset-storage/index.js').ObjectStore): Promise<{ bytes: Buffer; mime_type: 'image/webp' } | null> {

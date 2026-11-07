@@ -74,7 +74,8 @@ export function developmentHtml(title:string,body:string,meta?:{path:string;desc
  const acquisitionScript=meta?.share&&publicSkillPath(meta.path)?'<script src="/skill-acquisition.js" defer></script>':'';
  const returnPath=meta?.discoveryEnabled===true&&meta.share&&/^\/development\/(?:skills\/[a-z0-9-]+|submissions\/[0-9a-f-]{36})$/.test(meta.path)?'/?return_to='+encodeURIComponent(meta.path):'/';
  const skill=meta?.layout==='skill';
- return '<!doctype html><html lang="zh-Hant"'+(skill?' class="skill-page"':'')+'><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(title)+(meta?.share?'｜自由工坊技能書':'｜自由工坊開發指引')+'</title>'+head+acquisitionScript+'<link rel="stylesheet" href="/development.css"><link rel="alternate" type="application/json" href="/api/v1/development-map"></head><body>'+(returnPath==='/'?'':PUBLIC_REVALIDATION_MARKUP)+'<nav><a href="'+returnPath+'">自由工坊</a><a href="/development">開發導覽</a><a href="/llms.txt">Agent 文字索引</a></nav>'+(skill?'':'<p class="brand-note">FREEDOM WORKSHOP / 自由工坊 · '+(meta?.share?'作品介紹':'共創指引')+'</p><h1>'+escape(title)+'</h1>')+body+'<footer>'+(meta?.share?'公開作品介紹；來源版本與使用方式請依各原作說明核對。':'這是公開開發文件，沒有會員資料、私人工作或管理權限。')+'</footer></body></html>';
+ const flowLink=body.includes('id="skill-flow-title"')?'<a href="#skill-flow-title">運作原理</a>':'';
+ return '<!doctype html><html lang="zh-Hant"'+(skill?' class="skill-page"':'')+'><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(title)+(meta?.share?'｜自由工坊技能書':'｜自由工坊開發指引')+'</title>'+head+acquisitionScript+'<link rel="stylesheet" href="/development.css"><link rel="alternate" type="application/json" href="/api/v1/development-map"></head><body>'+(returnPath==='/'?'':PUBLIC_REVALIDATION_MARKUP)+'<nav><a href="'+returnPath+'">自由工坊</a>'+(skill?flowLink+'<a href="#skill-start">開始使用</a><a href="#skill-next-title">原作 Repo</a>':'<a href="/development">開發導覽</a><a href="/llms.txt">Agent 文字索引</a>')+'</nav>'+(skill?'':'<p class="brand-note">FREEDOM WORKSHOP / 自由工坊 · '+(meta?.share?'作品介紹':'共創指引')+'</p><h1>'+escape(title)+'</h1>')+body+'<footer>'+(meta?.share?'自由工坊 · 分享工具，也分享把事情做好的方法。':'這是公開開發文件，沒有會員資料、私人工作或管理權限。')+'</footer></body></html>';
 }
 function imageMeta(image:DevelopmentImage,origin:string){
  const src=escape(origin+image.url),alt=escape(image.alt);
@@ -114,10 +115,10 @@ export function publicSkillDestinations(destinations:readonly PublicSkillDestina
   let target:URL;try{target=new URL(url);}catch{return [];}
   if(!['https:','http:'].includes(target.protocol)||target.username||target.password)return [];
   const label=kind==='source'?(target.hostname==='github.com'?'到 GitHub 看原始碼':'查看原作原始碼'):kind==='demo'?'開啟專案線上示範':kind==='website'?'前往作者網站':'閱讀收錄版本說明';
-  const purpose=kind==='source'?'查看程式碼、README 與原作的發行資訊。':kind==='demo'?'查看投稿者或作者提供的展示；可用功能、帳號與費用依該網站說明。':kind==='website'?'查看作者的產品介紹與使用入口。':'核對本書收錄版本的準備條件、安裝與操作說明。';
+  const purpose=kind==='source'?'查看程式碼、README 與原作的發行資訊。':kind==='demo'?'打開線上範例，看看實際操作與成果。':kind==='website'?'查看作者的產品介紹與使用入口。':'核對本書收錄版本的準備條件、安裝與操作說明。';
   return ['<li><a href="'+escape(target.href)+'" target="_blank" rel="noopener noreferrer">'+label+' ↗</a><p class="public-skill-destination">目的地：<bdi>'+escape(target.host+target.pathname)+'</bdi></p><p>'+purpose+'</p></li>'];
  });
- return cards.length?'<section class="public-skill-next" aria-labelledby="skill-next-title"><h2 id="skill-next-title">選擇下一步</h2><p>以下連結在新分頁開啟外部網站。服務、帳號與資料處理由目的地網站負責。</p><ul class="public-skill-destinations">'+cards.join('')+'</ul></section>':'';
+ return cards.length?'<section class="public-skill-next" aria-labelledby="skill-next-title"><h2 id="skill-next-title">開始用這個專案</h2><ul class="public-skill-destinations">'+cards.join('')+'</ul></section>':'';
 }
 export type PublicSkillIntroduction = {
  audience?:readonly string[];scope?:readonly string[];prerequisites?:readonly string[];
@@ -142,7 +143,7 @@ export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics
  const agentUrl=markdownUrl.replace(/\.md$/,'/SKILL.md');
  const markdownLink='<p><a href="'+escape(markdownUrl)+'">讀取 Markdown 原文</a> · <a href="'+escape(agentUrl)+'">下載 Agent SKILL.md</a></p>';
  if(book?.guide){
-  const actions='<a href="#skill-use-title">閱讀使用介紹</a><a href="#skill-next-title">查看原作與使用入口</a><a href="'+(discoveryEnabled?'/?return_to='+encodeURIComponent('/development/skills/'+book.id):'/#skills')+'">登入工坊 Star</a><a href="#join-workshop">探索更多免費資源</a>';
+  const actions='<a href="#skill-start">開始使用</a><a href="'+escape(book.upstream_url)+'" target="_blank" rel="noopener noreferrer">查看原作 Repo ↗</a>';
   const count=(value:number|null|undefined)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?String(value):'—';
   const date=(value:string|null|undefined)=>value&&!Number.isNaN(Date.parse(value))?escape(new Date(value).toISOString().slice(0,10)):'—';
   const original=escape(book.upstream_url),author=escape(new URL(book.upstream_url).origin+'/'+new URL(book.upstream_url).pathname.split('/')[1]);
@@ -156,18 +157,19 @@ export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics
   const guildBadges=official?(discovery?.official_guilds?.length?discovery.official_guilds.map(guild=>'<span title="自由工坊公會指定技能；不代表原作者背書">✦ '+escape(guild.name)+'指定技能</span>').join(''):'<span title="自由工坊公會指定技能；不代表原作者背書">✦ 官方公會技能</span>'):'<span title="社群成員分享的技能書；不隨加入公會解鎖，所有人都能閱讀">社群技能書</span>';
   const badges='<div class="public-skill-badges" aria-label="技能書徽章">'+guildBadges+(discovery?.is_new_today?'<span>每日新技能</span>':'')+(discovery?.week_rank?'<span>工坊週榜 #'+discovery.week_rank+'</span>':'')+(discovery?.month_rank?'<span>工坊月榜 #'+discovery.month_rank+'</span>':'')+'</div>';
   const page=getSkillPageContent(book.id);
-  const credit=(book.guide.author_name?'<p>來源標示的'+escape(book.guide.credit_role??'作者')+'：'+escape(book.guide.author_name)+'</p>':'')+authorClaimMarkup(authorClaim);
+  const credit=book.guide.author_name?'<p>'+escape(book.guide.credit_role??'作者')+' · '+escape(book.guide.author_name)+'</p>':'';
   const entry=skillPageHero({title:book.title,kind:official?'公會指定技能書':'社群技能書',category:book.guide.beginner.category,format:book.guide.format,purpose:editorial?.summary||book.guide.beginner.purpose,coverUrl:book.cover_url,actions,credit,badges,content:page});
   const cooperation=getSkillCollaboration(book.id,editorial);
   const content=shareContentFor(book.id),selected=shareIntroNumber(intro,content.introductions.length),selectedText=selected?content.introductions[selected-1]:null;
-  const illustration=content.illustration?'<figure class="public-skill-illustration"><img src="'+escape(content.illustration.url)+'" alt="'+escape(content.illustration.alt)+'" width="1200" height="630" loading="lazy" decoding="async"><figcaption>分享到社群時的預覽圖。</figcaption></figure>':'';
-  const introduction=skillPageUsage(book.guide);
+
+  const introduction=skillPageUsage(book.guide,page?.flow.lead);
   const destinations=publicSkillDestinations([{url:book.upstream_url,kind:'source'},...(book.introduction_url?[{url:book.introduction_url,kind:'website' as const}]:[]),{url:book.guide.reading_url,kind:'guide'}]);
-  const source='<section class="public-skill-source"><h2>版本與來源</h2><p>原作、自由工坊站內應用與可攜版本是不同交付；各來源連結標明自己的目的地，不代表已在工坊啟用。</p><p>來源 GitHub 帳號：<a href="'+author+'" target="_blank" rel="noopener noreferrer">'+escape(new URL(book.upstream_url).pathname.split('/')[1])+'</a>（Repo 擁有者帳號，不代表會員身分已核實。）</p><dl><dt>原作 Repo</dt><dd>'+escape(book.upstream_url)+'</dd><dt>工坊整合參考</dt><dd>'+escape(book.repository_url)+'</dd><dt>指南核對來源</dt><dd>'+escape(book.guide.reading_url)+'</dd><dt>記錄的授權</dt><dd>'+escape(book.license_status)+'</dd><dt>指南核對版本</dt><dd><code>'+escape(book.guide.source_commit)+'</code></dd><dt>核對日期</dt><dd>'+escape(book.guide.reviewed_at)+'</dd></dl></section>';
+  const source='<section class="public-skill-source"><h2>版本與來源</h2><p>GitHub：<a href="'+author+'" target="_blank" rel="noopener noreferrer">'+escape(new URL(book.upstream_url).pathname.split('/')[1])+'</a></p><dl><dt>原作 Repo</dt><dd>'+escape(book.upstream_url)+'</dd><dt>工坊整合參考</dt><dd>'+escape(book.repository_url)+'</dd><dt>指南核對來源</dt><dd>'+escape(book.guide.reading_url)+'</dd><dt>記錄的授權</dt><dd>'+escape(book.license_status)+'</dd><dt>指南核對版本</dt><dd><code>'+escape(book.guide.source_commit)+'</code></dd><dt>核對日期</dt><dd>'+escape(book.guide.reviewed_at)+'</dd></dl></section>';
   const share=publicSkillShareMarkup({title:book.title,path:'/development/skills/'+book.id,introductions:content.introductions,selected,origin});
   const details='<details class="public-skill-details"><summary>完整指南與來源</summary>'+markdownLink+markdownBody(markdown)+'</details>';
-  const body=entry+(page?skillPageFlow(page):'')+introduction+skillPageBand(destinations,'sp-next-band')+'<div class="sp-band sp-share-band"><div class="sp-wrap'+(illustration?' sp-share-grid':'')+'">'+illustration+share+'</div></div>'
-   +skillPageBand(publicSkillAcquisition('/development/skills/'+book.id,selected),'sp-join-band')+skillPageBand('<div class="sp-facts">'+stats+source+'</div>','sp-facts-band')+skillPageBand(cooperation?collaborationHtml(cooperation):'','sp-collab-band')+skillPageBand(eventBacklinksHtml,'sp-events-band')+skillPageBand(details,'sp-details-band');
+  const extras='<details class="public-skill-details"><summary>作者、版本與參與開發</summary><p><a href="'+(discoveryEnabled?'/?return_to='+encodeURIComponent('/development/skills/'+book.id):'/#skills')+'">登入工坊 Star</a></p>'+authorClaimMarkup(authorClaim)+'<div class="sp-facts">'+stats+source+'</div>'+(cooperation?collaborationHtml(cooperation):'')+eventBacklinksHtml+'</details>';
+  const join=publicSkillAcquisition('/development/skills/'+book.id,selected);
+  const body=entry+(page?skillPageFlow(page):'')+introduction+skillPageBand(destinations,'sp-next-band')+skillPageBand(share,'sp-share-band')+skillPageBand(join,'sp-join-band')+skillPageBand(extras,'sp-facts-band')+skillPageBand(details,'sp-details-band');
   return developmentHtml(book.title,body,{path:'/development/skills/'+book.id,description:selectedText??(editorial?.summary||book.guide.beginner.purpose),image:content.illustration??undefined,share:true,social:true,shareQuery:selected?'intro='+selected:undefined,origin,discoveryEnabled,layout:'skill'});
  }
  return developmentHtml(title,markdownLink+markdownBody(markdown),{path:markdownUrl.replace(/\.md$/,''),description:developmentPage(markdownUrl.split('/').at(-1)!.replace(/\.md$/,''))?.purpose??title,origin});

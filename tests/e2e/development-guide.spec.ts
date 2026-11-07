@@ -36,12 +36,14 @@ test('a visitor without JavaScript can follow real repo links and read a complet
   await expect(page.getByRole('heading',{name:'要 Fork 哪一個 Repo？'})).toBeVisible();
   await expect(page.getByRole('link',{name:'https://github.com/FreeTWAI/freedom-supplier-client',exact:false}).first()).toBeVisible();
   await page.goto('/development/skills/security-scanner');
-  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-use-title');
+  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-start');
   await expect(page.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href','https://teddashh.github.io/ai-security-scanner/');
   await expect(page.getByRole('link',{name:'閱讀收錄版本說明 ↗',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'開始使用',exact:true})).toBeVisible();
   await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
   await expect(page.locator('.public-skill-destination').first()).toHaveText('目的地：github.com/teddashh/ai-security-scanner');
+  await expect(page.getByRole('heading',{name:'一起開發',exact:true})).toBeHidden();
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   await expect(page.getByRole('heading',{name:'一起開發',exact:true})).toBeVisible();
   await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner/fork');
   await expect(page.locator('.collaboration-repository')).toHaveText('預設 PR → teddashh/ai-security-scanner:main');
@@ -70,6 +72,7 @@ test('public skill share previews and copies the chosen introduction with its pe
  });
  await page.setViewportSize({width:390,height:844});
  await page.goto('/development/skills/video-autopilot');
+ await page.getByText('作者、版本與參與開發',{exact:true}).click();
  await expect(page.getByRole('heading',{name:'一起開發',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'建立可重現的剪輯測試素材',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'分享技能書',exact:true}).click();
@@ -101,8 +104,12 @@ test('an anonymous community introduction shows plain usage, real destinations a
  await page.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(value:string)=>{(window as any).__copiedIntroduction=value;}}});});
  await page.goto(path);
  await expect(page.getByRole('heading',{name:skill.title,exact:true})).toBeVisible();
- await expect(page.locator('.public-skill-notes')).toHaveCount(2);
+ await expect(page.locator('.sp-steps')).toContainText('保留原始檔案。');
+ await expect(page.locator('.sp-steps')).toContainText('在自己的環境完成原作範例，再核對輸出。');
+ await expect(page.locator('.sf-node-body')).toHaveCount(0);
+ await expect(page.getByRole('link',{name:'運作原理',exact:true})).toHaveCount(0);
  await expect(page.getByRole('heading',{name:'開始使用',exact:true})).toBeVisible();
+ await page.getByText('作者、版本與參與開發',{exact:true}).click();
  await expect(page.getByText('整理推薦者（自行聲明，尚未核實作者身分）',{exact:true})).toBeVisible();
  const source=page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true}),demo=page.getByRole('link',{name:'開啟專案線上示範 ↗',exact:true});
  await expect(source).toHaveAttribute('href',skill.repository_url);await expect(demo).toHaveAttribute('href',skill.demo_url!);

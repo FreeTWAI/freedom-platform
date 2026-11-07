@@ -1,14 +1,32 @@
 {
   "headline": "誰決策、誰動手、誰審查，先寫清楚再開跑。",
-  "outcomes": ["標明三種角色的 Workflow 草案", "每次交接的短摘要與完成證據", "runtime 差異與用量比較方式"],
+  "outcomes": [
+    "決策、執行與審查的角色規劃",
+    "附完成證據的短摘要交接",
+    "可對照自己 runtime 的規則與自檢表"
+  ],
+  "problem": "多 Agent 工作時每次都貼整段背景，決策、執行與審查互相重做，對話越長卻未必更接近完成。",
+  "mechanism": "文字規則將 orchestrator、executor、reviewer 的責任分開，以短摘要和完成證據交接，搭配 16 項規則與提交前自檢，減少重複傳遞與角色混用。",
   "flow": {
-    "title": "三種角色分工，用短摘要交接",
-    "lead": "MIT 文字規則 Skill，沒有執行引擎或 token 硬上限，也不保證固定節省率；需自備 Claude Code／Ultracode Workflow。",
+    "title": "清楚分工，以短摘要和證據交接",
+    "lead": "需自備 Claude Code／Ultracode Workflow；這份 Skill 沒有執行引擎或 token 硬上限。agentType、模型與 budget 行為需對照自己的 runtime。",
     "steps": [
-      {"icon": "search", "title": "核對 runtime", "note": "對照 SKILL.md，列出自己環境可用的 agentType 與模型。"},
-      {"icon": "people", "title": "決策、執行、審查分開", "note": "orchestrator 決策、executor 執行、reviewer 審查，避免角色越權造成重工。"},
-      {"icon": "check", "title": "交接附完成證據", "note": "用短摘要交接、保留完成證據；搭配 SKILL.md 的 16 項規則與提交前自檢表。"}
+      {
+        "icon": "list",
+        "title": "任務與可用角色",
+        "note": "寫清任務目標，核對環境支援的角色、模型與各自責任。"
+      },
+      {
+        "icon": "people",
+        "title": "決策、執行、審查分工",
+        "note": "由協調者決策、執行者修改、審查者檢查，避免同一工作重複展開。"
+      },
+      {
+        "icon": "check",
+        "title": "短摘要附完成證據",
+        "note": "每次交接保留必要背景與證據，再用規則和自檢表核對；實際用量需自行比較。"
+      }
     ],
-    "caption": "agentType、模型名稱與 budget 行為依作者環境：逐項對照自己的 runtime，不要直接照抄模型配置。"
+    "caption": "將重複工作與用量觀察帶回角色規劃，調整下一輪交接內容與執行範圍。"
   }
 }

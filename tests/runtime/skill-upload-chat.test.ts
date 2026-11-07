@@ -129,3 +129,18 @@ test('project bridge failures keep the card; acknowledged public or static books
     assert.equal(refreshed,result?1:0);assert.equal(notices,result?1:0);
   }
 });
+
+test('both authoring paths preserve a structured seed and request source-grounded complete page content', async () => {
+ const { syntheticSkillPage } = await import('../fixtures/skill-page-content.js');
+ const { agentInstruction } = await import('../../apps/portal-web/src/modules/skill-upload-instruction.js');
+ const seed={title:'合成技能',description:'來源介紹',use_notes:'閱讀原作',relationship:'curator',demo_url:null,page_content:syntheticSkillPage};
+ const before=JSON.stringify(seed);
+ const chat=chatSkillInstruction('https://github.com/example/synthetic',seed);
+ const agent=agentInstruction('https://example.test',{token:'synthetic-only',expiresAt:'synthetic-expiry',submitUrl:'https://example.test/agent-api/v1/skill-submissions/synthetic'},seed);
+ for(const text of [chat,agent]){
+  for(const key of ['headline','problem','mechanism','outcomes','flow','steps'])assert.ok(text.includes(key),key);
+  assert.ok(text.includes('page_content：'+JSON.stringify(syntheticSkillPage)));
+  assert.ok(text.includes('使用環境、前置資料與條件'));assert.ok(text.includes('不要虛構功能'));
+ }
+ assert.equal(JSON.stringify(seed),before);assert.ok(!chat.includes('synthetic-only'));
+});

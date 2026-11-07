@@ -1,3 +1,4 @@
+import { fillSkillPageContent } from './skill-page-content-fixture.js';
 import { randomUUID } from 'node:crypto';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 import { navigate, signOut } from './navigation.js';
@@ -149,6 +150,7 @@ test('open-source entry clearly collects GitHub/use/license context and rejects 
   await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://untrusted.example/owner/repository');
   await page.getByLabel('作品名稱',{exact:true}).fill('不應送出網路的測試');
   await page.getByLabel('一句話介紹',{exact:true}).fill('驗證只接受 GitHub 儲存庫。');
+  await fillSkillPageContent(page);
   await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
   await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
   await page.getByRole('button',{name:'確認並公開',exact:true}).click();

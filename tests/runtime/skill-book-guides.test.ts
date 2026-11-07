@@ -20,7 +20,7 @@ test('every catalog and featured skill book carries a complete, specific guide w
     assert.ok(guide.source_evidence.some(evidence=>evidence.url===guide.reading_url),book.id);
     assert.equal(new URL(guide.contribution_url).pathname,`${new URL(book.repository_url).pathname}/issues`);
     if(guide.website_url){const url=new URL(guide.website_url);assert.equal(url.protocol,'https:');assert.equal(url.username,'');}
-    if(guide.quickstart){assert.ok(guide.quickstart.commands.trim());assert.match(guide.quickstart.context,/沒有代為安裝或執行/);assert.doesNotMatch(guide.quickstart.commands,/curl.*\|\s*(sh|bash)|wrangler deploy|sudo|--remote/);}
+    if(guide.quickstart){assert.ok(guide.quickstart.commands.trim());assert.match(guide.quickstart.context,/在自己.*執行/);assert.doesNotMatch(guide.quickstart.commands,/curl.*\|\s*(sh|bash)|wrangler deploy|sudo|--remote/);}
     summaries.add(guide.summary);deliverables.add(guide.first_result);
   }
   assert.equal(summaries.size,communityCatalog.skill_books.length);assert.equal(deliverables.size,communityCatalog.skill_books.length);
@@ -54,7 +54,7 @@ test('all 55 books expose distinct covers, original-author stars and the same be
     for(const value of [book.cover_url!,book.star_url!,book.repository_url,book.upstream_url+'/fork',guide.first_result,guide.status,guide.source_commit])assert.ok(markdown.includes(value),`${book.id}/${value}`);
     const html=pageHtml(book.title,markdown,book.markdown_url);
     assert.ok(html.includes(`src="${book.cover_url}"`),book.id);
-    assert.ok(html.includes('href="/#skills">登入工坊 Star'),book.id);
+    assert.ok(html.includes('href="#skill-start">開始使用'),book.id);
     assert.ok(html.includes(`href="${book.upstream_url}/fork"`),book.id);
   }
   assert.equal(covers.size,55);

@@ -1,3 +1,4 @@
+import { fillSkillPageContent } from './skill-page-content-fixture.js';
 import {buildSync} from 'esbuild';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -102,7 +103,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('Private skill');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
     expect(await fixture(page,f=>f.calls.length)).toBe(0);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
@@ -132,7 +133,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('Rejected publication');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
     await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
     await page.getByRole('button',{name:'確認並公開',exact:true}).click();
@@ -156,7 +157,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('Ambiguous save');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     await fixture(page,f=>f.reject(0));
     await page.getByRole('button',{name:'重試儲存私人草稿',exact:true}).click();
@@ -175,7 +176,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('Reload private skill');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Server-backed private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Server-backed private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     await fixture(page,f=>f.resolve(0,{submission_id:'reload-skill',status:'ready_for_review',can_edit:true,aggregate_version:1,payload:{...f.calls[0].body},public_path:null}));
     await expect(page.getByText(/已保存私人草稿，待本人預覽/)).toBeVisible();
@@ -196,7 +197,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('Unknown save');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     await fixture(page,f=>f.reject(0));
     await remount(page);
@@ -212,7 +213,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('   ');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Retained description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Retained description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     expect(await page.getByLabel('作品名稱',{exact:true}).evaluate((el:HTMLInputElement)=>el.validationMessage)).toContain('不能只有空白');
     expect(await fixture(page,f=>f.calls.length)).toBe(0);
@@ -233,7 +234,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('Owner private content');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     await fixture(page,f=>f.session(f.other));
     await fixture(page,f=>f.resolve(0,{submission_id:'old-owner-save',status:'ready_for_review',can_edit:true,aggregate_version:1,payload:{...f.calls[0].body},public_path:null}));
@@ -246,7 +247,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');
     await page.getByLabel('作品名稱',{exact:true}).fill('Publish save recovery');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
     await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
     await page.getByRole('button',{name:'確認並公開',exact:true}).click();
@@ -265,7 +266,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await mountSharingFixture(page,'skill');
     await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo.git/');
     await page.getByLabel('作品名稱',{exact:true}).fill('Unknown publish');
-    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
+    await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);
     await page.getByRole('button',{name:'預覽投稿',exact:true}).click();
     await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
     await page.getByRole('button',{name:'確認並公開',exact:true}).click();
@@ -423,7 +424,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'manual skill retry preserves draft edit contract and canonical publication link':async page=>{
     await mountSharingFixture(page,'skill');
-    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');await page.getByLabel('作品名稱',{exact:true}).fill('Original title');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');
+    await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');await page.getByLabel('作品名稱',{exact:true}).fill('Original title');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');await fillSkillPageContent(page);
     await remount(page);await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();
     await page.getByRole('button',{name:'確認並公開',exact:true}).click();
     await fixture(page,f=>f.resolve(0,{submission_id:'10000000-0000-4000-8000-000000000099',status:'ready_for_review',can_edit:true,aggregate_version:1,payload:{...f.calls[0].body},public_path:null}));
@@ -439,7 +440,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'late old-session manual create cannot trigger publication':async page=>{
     for(const replacement of ['switch','same-user']){
-      await mountSharingFixture(page,'skill');await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');await page.getByLabel('作品名稱',{exact:true}).fill('Private');await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();await page.getByRole('button',{name:'確認並公開',exact:true}).click();
+      await mountSharingFixture(page,'skill');await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/synthetic/repo');await page.getByLabel('作品名稱',{exact:true}).fill('Private');await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');await fillSkillPageContent(page);await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await page.getByLabel('我同意公開這份作品介紹與來源關係',{exact:true}).check();await page.getByRole('button',{name:'確認並公開',exact:true}).click();
       await fixture(page,replacement==='switch'?f=>f.session(f.other):f=>f.session(f.owner));await fixture(page,f=>f.resolve(0,{submission_id:'late-draft',aggregate_version:1}));
       await expect(page.getByLabel('作品名稱',{exact:true})).toHaveValue('');expect(await fixture(page,f=>f.calls.length)).toBe(1);
     }

@@ -40,7 +40,14 @@
     "packages/skill-upload-client/README.md",
     "packages/skill-upload-client/package.json",
     "packages/skill-upload-client/test/cli.test.mjs",
-    "packages/skill-upload-client/**"
+    "packages/skill-upload-client/**",
+    "modules/skill-submissions/page-content.ts",
+    "modules/skill-submissions/page-draft.ts",
+    "apps/portal-web/src/modules/SkillSubmissionPageFields.tsx",
+    "apps/portal-web/src/modules/SkillSubmissionPagePreview.tsx",
+    "apps/portal-web/src/modules/skill-page-content-instruction.ts",
+    "tests/e2e/skill-page-content-fixture.ts",
+    "tests/fixtures/skill-page-content.ts"
   ],
   "public_exports": [
     "modules/skill-submissions/limits.ts",
@@ -50,13 +57,17 @@
     "modules/skill-submissions/repository-match.ts",
     "modules/skill-submissions/service.ts",
     "modules/skill-submissions/upload-authority.ts",
-    "modules/opensource-marketing/service.ts"
+    "modules/opensource-marketing/service.ts",
+    "modules/skill-submissions/page-content.ts",
+    "modules/skill-submissions/page-draft.ts"
   ],
   "dependencies": [
     "command-core",
     "asset-lifecycle",
     "asset-storage",
-    "shared"
+    "shared",
+    "community",
+    "development"
   ],
   "contract_families": [],
   "client_profiles": [
@@ -131,7 +142,8 @@
         "skill-submissions.upload-protocol.read",
         "skill-submissions.upload-guide.read",
         "skill-submissions.published-agent-guide.read",
-        "skill-submissions.published-page.read"
+        "skill-submissions.published-page.read",
+        "skill-submissions.preview-stylesheet.read"
       ],
       "auth_profile": "public-anonymous-read"
     },

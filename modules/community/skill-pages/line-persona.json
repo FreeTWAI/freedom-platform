@@ -1,14 +1,32 @@
 {
   "headline": "常見問答寫成知識檔，LINE 分身替你接待。",
-  "outcomes": ["虛構人物的人格與知識檔", "能回答合成 FAQ 的 LINE 分身", "核對過的回答、webhook 與停止方式"],
+  "outcomes": [
+    "可分開維護的人格與知識文件",
+    "承接 LINE 問答的角色回覆",
+    "可選雲端或相容本機模型的接線"
+  ],
+  "problem": "想讓 LINE 回覆有一致口吻與知識依據，卻得自己串接角色設定、訊息入口與模型服務。",
+  "mechanism": "Markdown 定義角色與知識，LINE webhook 接收訊息後交給選定模型，再把符合設定的回覆送回對話，讓人格與資料可以分開維護。",
   "flow": {
-    "title": "照人格與知識檔，在 LINE 回答",
-    "lead": "LINE AI 分身框架，由 AGENTS.md 引導設定；可切換相容雲端或本機模型，LINE 訊息仍經 LINE 服務，雲端模型也會收到問答資料。",
+    "title": "LINE 訊息，接上角色與知識設定",
+    "lead": "需自己的 LINE 憑證、HTTPS webhook 與模型設定；訊息會經過 LINE，使用雲端模型時問答也會送往該服務，費用依選用服務計算。",
     "steps": [
-      {"icon": "pen", "title": "寫人格與知識檔", "note": "用虛構人物資料編寫 persona/profile.md 與 persona/knowledge.md。"},
-      {"icon": "robot", "title": "分身照資料回答", "note": "LINE 訊息經 HTTPS webhook 進來，由你選的雲端或本機模型依人格與知識資料回答。"},
-      {"icon": "check", "title": "測一題 FAQ", "note": "本人完成 LINE 與模型設定後測一題 FAQ，核對回答、webhook 與停止服務方式。"}
+      {
+        "icon": "chat",
+        "title": "使用者傳來訊息",
+        "note": "LINE 將訊息送到你設定的 HTTPS webhook，作為對話的入口。"
+      },
+      {
+        "icon": "book",
+        "title": "依角色與知識作答",
+        "note": "載入 Markdown 角色與知識內容，交給選定的雲端或相容本機模型產生回覆。"
+      },
+      {
+        "icon": "phone",
+        "title": "回到 LINE 對話",
+        "note": "回覆送回原對話，逐題核對口吻與 FAQ 內容，再調整角色設定。"
+      }
     ],
-    "caption": "channel token、secret 與模型憑證由本人私下設定；先用合成 FAQ，確認後再放願意分享的資料。"
+    "caption": "把回答不清楚的情境補進知識與角色文件，下一輪用相同問題對照修正效果。"
   }
 }

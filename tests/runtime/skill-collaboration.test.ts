@@ -58,13 +58,16 @@ test('all pages expose a loadable agent skill and discovery links without granti
  for(const path of ['/development/unknown/SKILL.md','/development/skills/unknown/SKILL.md','/api/v1/skills/unknown/collaboration'])assert.equal((await app.request(origin+path)).status,404);
 });
 
-test('public share HTML is crawler-readable with canonical metadata, visible cooperation and safe external script',async()=>{
+test('public share HTML keeps canonical metadata and cooperation in collapsed details after usage',async()=>{
  const app=createDevelopmentRoutes();
  const response=await app.request(origin+'/development/skills/video-autopilot');assert.equal(response.status,200);
  const html=await response.text();
  assert.match(html,/<link rel="canonical" href="https:\/\/freetwai\.com\/development\/skills\/video-autopilot">/);
  assert.match(html,/<meta property="og:image" content="https:\/\/freetwai\.com\/brand\/skill-illustrations\/video-autopilot.webp">/);
- assert.ok(html.indexOf('id="collaboration-title"')<html.indexOf('<details class="public-skill-details"'));
+ const usage=html.indexOf('id="skill-start"'),details=html.indexOf('<details class="public-skill-details"><summary>作者、版本與參與開發</summary>');
+ const cooperation=html.indexOf('id="collaboration-title"');
+ assert.ok(usage>=0&&usage<details);
+ assert.ok(details<cooperation&&cooperation<html.indexOf('</details>',details));
  assert.ok(html.includes('href="https://github.com/Hao0321/video-autopilot-kit/fork">從原作開始共創'));
  assert.ok(html.includes('預設 PR → Hao0321/video-autopilot-kit:main'));
  assert.ok(!html.includes('Fork 共創版本'));assert.ok(html.includes('/development/skills/video-autopilot/SKILL.md'));

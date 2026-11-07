@@ -1,3 +1,4 @@
+import { validSkillPageDraft, type SkillPageDraft } from './page-draft.js';
 import {readSkillImage,skillImageStorageMode,type SkillImageAssetService} from '../assets/skill-image.js';
 import {lockSkillUploadGrant,assertSkillUploadGrantClock} from './upload-authority.js';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -9,6 +10,8 @@ import { tokenHash, type Actor } from '../identity-membership/service.js';
 import { authRateLimit } from '../identity-membership/members.js';
 import { importProjectWithinTransaction, projectInput, withdrawProjectSharing, type GitHubRead } from '../opensource-marketing/service.js';
 import type { NormalizedSubmission } from './payload.js';
+import { submissionPageContent } from './payload.js';
+import { validSkillPageContent } from '../community/skill-page-content.js';
 import { lockMemberDrafts, MAX_ACTIVE_DRAFTS } from './limits.js';
 import { catalogBookForRepository, repositoryDisplayName, repositoryKey } from './repository-match.js';
 import { publishedWorkFrom } from './public.js';
@@ -40,7 +43,12 @@ const publishInput = z.object({ consent_to_share: z.literal(true, { message: '�
 // Browser forms keep the agent protocol (including its 100 introductions) intact.
 // Manual submissions use one share introduction derived only from the author's text.
 const manualInput = projectInput.omit({ consent_to_share: true }).extend({
-  use_notes: projectInput.shape.use_notes.default('請先閱讀原作 README，依其中的安裝步驟開始使用；使用條件與授權以原作文件為準。'),
+  use_notes: z.string().trim().max(3000).default('請先閱讀原作 README，依其中的安裝步驟開始使用；使用條件與授權以原作文件為準。'),
+  page_content: submissionPageContent.optional(),
+  page_content_draft: z.unknown().refine(validSkillPageDraft, { message: '介紹頁草稿格式不符或欄位過長。' }).transform(value => value as SkillPageDraft).optional(),
+}).superRefine((body, ctx) => {
+  if (body.page_content && body.page_content_draft) ctx.addIssue({ code: 'custom', message: '請提供完整介紹頁或未完成草稿，不能同時提供。' });
+  if (!body.page_content_draft && !body.use_notes) ctx.addIssue({ code: 'custom', path: ['use_notes'], message: '請填寫如何開始使用。' });
 });
 function manualPayload(body: z.output<typeof manualInput>) {
   const introduction = [...`我分享了「${body.title}」：${body.description}`.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ')].slice(0, 200).join('');
@@ -69,10 +77,11 @@ function uniqueConstraint(error: unknown) {
   const pg = error as { code?: string; constraint?: string };
   return pg.code === '23505' ? pg.constraint ?? '' : null;
 }
-function upgradeSeed(payload: { repository_url: string; title: string; description: string; use_notes: string; demo_url: string | null; relationship: string }) {
+function upgradeSeed(payload: { repository_url: string; title: string; description: string; use_notes: string; demo_url: string | null; relationship: string; page_content?: unknown }) {
   return {
     repository_url: payload.repository_url, title: payload.title, description: payload.description,
     use_notes: payload.use_notes, demo_url: payload.demo_url ?? null, relationship: payload.relationship,
+    ...(validSkillPageContent(payload.page_content) ? { page_content: payload.page_content } : {}),
   };
 }
 
@@ -263,7 +272,15 @@ export async function upgradeSubmission(pool: Pool, input: Command, id: string) 
     const existing = await openUpgrade(q, input.actor, id);
     if (existing) return { submission: submissionView(existing), created: false };
     await requireDraftCapacity(q, input.actor);
-    const seed = upgradeSeed(current.payload);
+    // A public metadata revision supersedes the old page claims, but does not
+    // destroy the author's original submission payload.
+    const project = current.project_id ? (await q.query(`SELECT title,description,use_notes,demo_url,public_metadata_revised
+      FROM oss_projects WHERE project_id=$1 AND community_id=$2 AND owner_ref=$3`,
+      [current.project_id, input.actor.community_id, input.actor.user_id])).rows[0] : null;
+    const metadataDiffers = project?.public_metadata_revised && ['title', 'description', 'use_notes', 'demo_url'].some(key => (current.payload[key] ?? null) !== (project[key] ?? null));
+    const seed = upgradeSeed(metadataDiffers
+      ? { ...current.payload, title: project.title, description: project.description, use_notes: project.use_notes, demo_url: project.demo_url, page_content: undefined }
+      : current.payload);
     const draftId = randomUUID();
     await q.query('SAVEPOINT upgrade_insert');
     try {
@@ -381,6 +398,7 @@ export async function publishSubmission(pool: Pool, input: Command, id: string, 
     checkVersion(current.aggregate_version, input.expected);
     requireCondition(current.status === 'ready_for_review', 409, 'submission_not_ready', current.status === 'published' ? '這份投稿已公開。' : '這份草稿尚未上傳完成或已撤回，不能公開。');
     const payload = current.payload;
+    requireCondition(!payload.page_content_draft, 422, 'page_content_incomplete', '介紹頁尚未完成，請補齊內容並預覽後再公開。');
     // Source facts and publication share this transaction and its user lock.
     // A failed publication rolls the import back as well; command replay reads
     // the single committed receipt without fetching GitHub again.

@@ -435,3 +435,16 @@ test('both repositories cataloged on 2026-11-03 hide their member submissions wh
   for(const limit of [1,100])assert.deepEqual((await listPublishedSkillSubmissions(pool,limit)).map(row=>row.submission_id),[visible.submission_id]);
   for(const id of hidden)assert.equal((await readPublishedSkillSubmission(pool,id))?.submission_id,id);
 });
+
+
+test('a complete manual page remains intact in the private upgrade seed', async t => {
+ const {syntheticSkillPage:page}=await import('../fixtures/skill-page-content.js');
+ mockGitHub(t,{'example/structured':{id:991}});const owner=await login();
+ const saved=await api('/me/skill-submissions/manual',owner,{...manualBody('https://github.com/example/structured','結構化筆記工具'),page_content:page});
+ assert.equal(saved.status,201,JSON.stringify(saved.data));
+ const published=await api(`/me/skill-submissions/${saved.data.submission_id}/publish`,owner,{consent_to_share:true},saved.data.aggregate_version);
+ assert.equal(published.status,200,JSON.stringify(published.data));
+ const upgrade=await api(`/me/skill-submissions/${saved.data.submission_id}/upgrade`,owner,{});
+ assert.equal(upgrade.status,201,JSON.stringify(upgrade.data));assert.deepEqual(upgrade.data.seed.page_content,page);
+ assert.equal(upgrade.data.status,'awaiting_upload');assert.equal(upgrade.data.public_path,null);
+});
