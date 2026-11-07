@@ -25,7 +25,8 @@ test('published candidate introduction has own illustration metadata, persistent
   assert.ok(html.includes('開啟專案線上示範 ↗'));
   assert.ok(html.includes('目的地：<bdi>example.com/demo</bdi>'));
   assert.ok(html.includes('開始使用'));assert.ok(!html.includes('投稿者尚未分別補充'));
-  assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2>一起開發</h2>'));
+  const start=html.indexOf('id="skill-start"');
+  assert.ok(start>=0&&start<html.indexOf('<h2>一起開發</h2>'));
   assert.ok(html.includes('投稿公開日期'));assert.ok(html.includes('2026-09-23'));
   assert.ok(html.includes('整理推薦者（自行聲明'));assert.ok(html.includes('非應用程式安裝包'));
   assert.ok(!html.includes('<pre>'));assert.ok(!html.includes('立即啟動'));assert.ok(!html.includes('下載應用'));
