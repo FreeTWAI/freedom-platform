@@ -251,6 +251,7 @@ test('public skill counts are actionable: a connected member stars in place and 
   });
   await context.route('https://github.com/**',route=>route.fulfill({contentType:'text/html',body:'<h1>Synthetic GitHub destination</h1>'}));
   await login(page);await page.goto('/development/skills/social-post');
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   const social=page.locator('[data-skill-social="social-post"]');
   // Optional GitHub controls load when reached, after the public reading content.
   await social.scrollIntoViewIfNeeded();
@@ -276,10 +277,12 @@ test('public skill OAuth returns to the same book and connecting never submits a
   await page.route('https://github.com/login/oauth/authorize?*',route=>route.fulfill({contentType:'text/html',body:'<p>Synthetic authorization</p>'}));
   await page.route('**/api/v1/me/github/complete',route=>{expect(route.request().headers()['x-csrf-token']).toBeTruthy();connected=true;return route.fulfill({json:{return_to:'/development/skills/social-post'}});});
   await login(page);await page.goto('/development/skills/social-post');
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   await page.locator('[data-skill-social="social-post"]').scrollIntoViewIfNeeded();
   await page.getByRole('button',{name:'連結 GitHub 後 Star',exact:true}).click();await expect(page).toHaveURL(/^https:\/\/github.com\/login\/oauth\/authorize/);
   expect(connects).toEqual([{return_to:'/development/skills/social-post'}]);expect(writes).toBe(0);
   await page.goto('/github/callback?code=synthetic&state=synthetic');await expect(page).toHaveURL(/\/development\/skills\/social-post$/);
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   await page.locator('[data-skill-social="social-post"]').scrollIntoViewIfNeeded();
   await expect(page.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toBe(0);
 });
@@ -300,6 +303,7 @@ for(const target of ['https://elsewhere.example.invalid/#join/tasks','//elsewher
 
 test('public Star, Fork, Watch and Follow remain links without login or JavaScript',async({page,browser})=>{
   await page.goto('/development/skills/social-post');
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   const social=page.locator('[data-skill-social="social-post"]');
   await social.scrollIntoViewIfNeeded();
   await expect(social.locator('.github-book-social')).toBeVisible();
@@ -307,6 +311,7 @@ test('public Star, Fork, Watch and Follow remain links without login or JavaScri
   const context=await browser.newContext({javaScriptEnabled:false});
   try{
     const plain=await context.newPage();await plain.goto(new URL('/development/skills/social-post',page.url()).href);
+    await plain.getByText('作者、版本與參與開發',{exact:true}).click();
     const links=plain.locator('[data-skill-social="social-post"]');
     for(const [name,url] of [['到 GitHub Star ↗',original],['Fork 專案 ↗',original+'/fork'],['追蹤專案（Watch）↗',original],['Follow 原作者 ↗','https://github.com/Hao0321']])await expect(links.getByRole('link',{name,exact:true})).toHaveAttribute('href',url);
   }finally{await context.close();}
