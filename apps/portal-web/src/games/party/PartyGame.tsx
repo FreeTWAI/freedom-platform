@@ -12,7 +12,7 @@ import {partyInputStamp,acceptsPartyInput,partyResultImage} from './light-party'
 import './party.css';
 
 /** PT-2/6: UI owns input and lifecycle; the pure domain owns every score. */
-export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:number;onBack:()=>void;onResult:(r:RunResult)=>void}) {
+export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;seed:number;onStart?:(target:HTMLElement|null)=>void;onBack:()=>void;onResult:(r:RunResult)=>void}) {
   const spec=PARTY_GAMES.find(g=>g.id===game)!;
   const live=useRef<PartyRun>(newParty(game,seed)),stage=useRef<PartyStage|null>(null),host=useRef<HTMLDivElement>(null);
   const frame=useRef(0),last=useRef<number|null>(null),lastDraw=useRef<number|null>(null),lastUi=useRef(0),loop=useRef<(t:number)=>void>(()=>{}),gesture=useRef<{id:number;x:number;y:number;round:number|null;stamp:number}|null>(null);
@@ -74,7 +74,7 @@ export function PartyGame({game,seed,onBack,onResult}:{game:PartyGameId;seed:num
   function retryStage(){live.current=pauseParty(live.current);stop();attempt.current?.cancel();stage.current=null;mode.current='loading';setReady(false);setError('');setRetry(n=>n+1);}
   function keepRun(){setRestart(false);restartButton.current?.focus({preventScroll:true});}
   useEffect(()=>{const hidden=()=>{if(document.hidden)pauseRun('離開畫面時已暫停，回來後按繼續。');};const blur=()=>pauseRun('這局已暫停，準備好再繼續。');document.addEventListener('visibilitychange',hidden);window.addEventListener('blur',blur);return()=>{document.removeEventListener('visibilitychange',hidden);window.removeEventListener('blur',blur);stop();void audio.current?.close().catch(()=>{});};},[]);
-  function begin(){if(restart)return;if(mode.current!=='native'&&mode.current!=='light')return;live.current=live.current.status==='paused'?resumeParty(live.current):startParty(live.current);setNotice('');last.current=null;if(!safeDraw())return;refresh();kick();host.current?.focus({preventScroll:true});host.current?.closest('.pt-play-area')?.scrollIntoView({block:'start',behavior:'instant'});}
+  function begin(){if(restart||!['ready','paused'].includes(live.current.status))return;if(mode.current!=='native'&&mode.current!=='light')return;live.current=live.current.status==='paused'?resumeParty(live.current):startParty(live.current);setNotice('');last.current=null;if(!safeDraw())return;onStart?.(host.current);refresh();kick();host.current?.focus({preventScroll:true});host.current?.closest('.pt-play-area')?.scrollIntoView({block:'start',behavior:'instant'});}
   function action(a:PartyAction){if(mode.current!=='native'&&mode.current!=='light')return;const before=live.current;live.current=actParty(before,a);if(before!==live.current){if(a.kind==='pick')soundEffect(live.current.score>before.score);safeDraw();refresh();}}
   function reset(){stop();live.current=newParty(game,seed);settled.current=false;setRestart(false);setNotice('');safeDraw();refresh();host.current?.focus({preventScroll:true});}
   function result(){

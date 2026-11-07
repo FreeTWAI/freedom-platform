@@ -16,6 +16,7 @@
     "tests/runtime/market-cooking.test.ts",
     "tests/e2e/absurd-daily.spec.ts",
     "tests/e2e/daily-game-focus.spec.ts",
+    "tests/e2e/cooking-preparation-art.spec.ts",
     "docs/development/absurd-daily.md",
     "apps/portal-web/public/games/absurd-daily/**",
     "apps/platform-api/src/routes/game-uploads.ts",

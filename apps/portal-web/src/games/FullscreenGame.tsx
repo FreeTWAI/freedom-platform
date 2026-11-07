@@ -35,6 +35,9 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
     if (mode !== 'normal') {
       const target = entryFocus.current; entryFocus.current = null;
       const active = document.activeElement;
+      // Native entry and viewport fallback settle after the game's start scroll.
+      // Reveal only the same connected DOM owner while the player still focuses it.
+      if (mounted.current && target?.isConnected && active === target && container.current?.contains(target)) target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
       // A player may have started the game or reached its result while the
       // browser was still resolving fullscreen. Do not steal their focus.
       if (active instanceof HTMLElement && active !== button.current && container.current?.contains(active)) return;

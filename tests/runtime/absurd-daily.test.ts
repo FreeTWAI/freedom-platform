@@ -9,7 +9,7 @@ import {runInNewContext} from 'node:vm';
 import {stripTypeScriptTypes} from 'node:module';
 import {transformSync} from 'esbuild';
 import {parseDishInit,parseDishView,parseDishReply,nextDishView} from '../../apps/portal-web/src/games/cooking/dish-worker-protocol.js';
-import {newMarket} from '../../apps/portal-web/src/games/cooking/market-domain.js';
+import {newMarket,applyMarket} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 
 test('UX-15g restored completed guided run skips kitchen startup while restart and retry retain real capture (non-native)',async()=>{
  const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingScene.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code.replace('import("./kitchen-stage")','Promise.resolve().then(()=>require("./kitchen-stage"))');
@@ -304,7 +304,7 @@ function guidedRestartHarness() {
   const modal={open:false,querySelectorAll:()=>[confirm,keep],showModal(){assert.equal(this.open,false);this.open=true;opened++;},close(){this.open=false;closed++;}},button={focus:()=>focuses++},keep={focus:()=>{assert.equal(modal.open,true);keptFocus++;}};
   const confirm={focus:()=>{assert.equal(modal.open,true);confirmedFocus++;}};
   const recipe=recipeOf('margherita-pizza')!;
-  const renderComponent=runInNewContext(code,{...hooks,recipe,seed:42,fresh:false,crypto:{randomUUID:()=>`restart_${++identity}`},performance:{now:()=>now},window:{sessionStorage:session,addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},requestAnimationFrame:()=>1,cancelAnimationFrame(){},COOKING_RULES,TECHNIQUES,recipeOf,newCookingRun,actCooking,advanceCooking,currentStep,readCookingRun,saveCookingRun,clearCookingRun,onResult(){throw Error('unfinished result');},onComplete(){throw Error('unfinished completion');}});
+  const renderComponent=runInNewContext(code,{...hooks,recipe,seed:42,fresh:false,onStart:undefined,crypto:{randomUUID:()=>`restart_${++identity}`},performance:{now:()=>now},window:{sessionStorage:session,addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},requestAnimationFrame:()=>1,cancelAnimationFrame(){},COOKING_RULES,TECHNIQUES,recipeOf,newCookingRun,actCooking,advanceCooking,currentStep,readCookingRun,saveCookingRun,clearCookingRun,onResult(){throw Error('unfinished result');},onComplete(){throw Error('unfinished completion');}});
   let ui:any;
   const render=()=>{index=0;ui=renderComponent();ui.section.current={focus(){},querySelector:()=>null};if(ui.restartDialog)ui.restartDialog.current=modal;if(ui.restartButton)ui.restartButton.current=button;if(ui.keepButton)ui.keepButton.current=keep;while(effects.length)effects.shift()!();return ui;};
   render();ui.setVisualReady(true);render();
@@ -1376,3 +1376,96 @@ test('member game API: stale session unauthorized result cannot invalidate a new
  finish(Response.json({type:'expired',title:'Expired',status:401},{status:401}));await assert.rejects(pending,ApiError);assert.equal(unauthorized,0);assert.equal(client.csrfToken,'old');
 });
 // END MEMBER-GAME-API
+
+// FULLSCREEN-START-PURE-BEGIN
+/** Execute the production start handlers without JSX/WebGL; native activation is covered separately. */
+function fullscreenStartHandler(file:string,start:string,end:string,name:string,context:Record<string,unknown>){
+ const source=readFileSync(new URL(`../../apps/portal-web/src/games/${file}`,import.meta.url),'utf8'),from=source.indexOf(start),to=source.indexOf(end,from);
+ assert.ok(from>=0&&to>from,`production ${name} boundaries`);
+ return runInNewContext(stripTypeScriptTypes(source.slice(from,to))+`\n${name}`,context) as (...args:any[])=>void;
+}
+function fullscreenStartHarness(kind:'legacy'|'guided'|'market'|'party',status='ready'){
+ let calls=0,frames=0,drawn=true;
+ const target={focus(){},scrollIntoView(){},querySelector:()=>({scrollIntoView(){}}),closest:()=>({scrollIntoView(){}})};
+ const recipe=recipeOf('rice-balls')!;
+ const initial=kind==='party'?newParty('chair',42):kind==='market'?newMarket('corn-dog',42):kind==='guided'?newCookingRun(recipe,42,'fullscreen-start'): {started:false,paused:false,clock:{elapsed:0,last:null,running:false}};
+ const live={current:{...initial,status} as any};
+ const context:any={game:'photo',hints:{},live,ready:true,visualReady:true,confirm:false,confirmRestart:false,restart:false,mode:kind==='party'?{current:'light'}:'ready',onStart:(node:unknown)=>{assert.equal(node,target);calls++;},section:{current:target},surface:{current:target},host:{current:target},last:{current:null},frame:{current:0},loop:{current(){}},step:{current(){}},checkpointOwned:{current:false},performance:{now:()=>100},requestAnimationFrame:()=>++frames,cancelAnimationFrame(){},setNotice(){},refresh(){},updateUi(){},kick(){frames++;},stop(){},finish(){},safeDraw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},draw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},startParty,resumeParty,currentStep,applyMarket,commit:(run:unknown)=>{live.current=run;},resume:(clock:any)=>({...clock,running:true}),command:(action:any)=>{live.current=actCooking(live.current,{...action,step:live.current.step},100);}};
+ const begin=kind==='legacy'?fullscreenStartHandler('AbsurdDaily.tsx','    function start()','    function setPaused()','start',context):kind==='party'?fullscreenStartHandler('party/PartyGame.tsx','  function begin()','  function action(','begin',context):kind==='market'?fullscreenStartHandler('cooking/MarketGame.tsx',' function action(',' step.current=','action',context):fullscreenStartHandler('cooking/CookingGame.tsx','  const begin=','  const restart=','begin',context);
+ return {context,live,begin:()=>kind==='market'?begin({kind:'start'}):begin(),calls:()=>calls,frames:()=>frames,draw:(ok:boolean)=>{drawn=ok;}};
+}
+for(const kind of ['legacy','guided','market','party'] as const)test(`fullscreen start: actual ${kind} cold-start handler invokes its presentation owner synchronously`,()=>{
+ const h=fullscreenStartHarness(kind);h.begin();assert.equal(h.calls(),1);assert.equal(kind==='legacy'?h.live.current.started:h.live.current.status,kind==='legacy'?true:'playing');
+});
+for(const kind of ['guided','market','party'] as const)test(`fullscreen start: actual ${kind} rejects unavailable, invalid and failed starts without consuming its first start`,()=>{
+ const h=fullscreenStartHarness(kind);
+ if(kind==='guided')h.context.visualReady=false;else if(kind==='party')h.context.mode.current='loading';else h.context.mode='loading';
+ h.begin();assert.equal(h.calls(),0);assert.equal(h.live.current.status,'ready');
+ if(kind==='guided')h.context.visualReady=true;else if(kind==='party')h.context.mode.current='light';else h.context.mode='fallback';
+ h.live.current={...h.live.current,status:'done'};h.begin();assert.equal(h.calls(),0);
+ h.live.current={...h.live.current,status:'ready'};
+ if(kind!=='guided'){h.draw(false);h.begin();assert.equal(h.calls(),0);h.draw(true);}
+ h.begin();assert.equal(h.calls(),1);assert.equal(h.live.current.status,'playing');
+ h.begin();assert.equal(h.calls(),1,'repeated start is not a new presentation request');
+ h.live.current={...h.live.current,status:'paused'};h.begin();assert.equal(h.calls(),2,'an accepted resume reaches the same presentation owner');
+ h.live.current={...h.live.current,status:'ready'};h.begin();assert.equal(h.calls(),3,'a restarted run still uses the same presentation owner');
+});
+for(const kind of ['guided','market','party'] as const)test(`fullscreen start: actual ${kind} cold restored pause uses the first resume gesture`,()=>{
+ const h=fullscreenStartHarness(kind,'paused');h.begin();assert.equal(h.calls(),1);assert.equal(h.live.current.status,'playing');
+});
+test('fullscreen start: existing presentation owner suppresses repeat attempts after lobby entry and explicit exit',async()=>{
+ let requests=0,api:any;const node={requestFullscreen:async()=>{requests++;}},context:any={ref:{},mode:'normal',pending:false,mounted:{current:true},autoAttempted:{current:false},container:{current:node},entryFocus:{current:null},navigator:{userActivation:{isActive:true}},document:{fullscreenEnabled:true,fullscreenElement:null},setPending:(value:boolean)=>{context.pending=value;},setMode:(value:string)=>{context.mode=value;},setMessage(){},useImperativeHandle:(_ref:unknown,create:()=>unknown)=>{api=create();}};
+ context.toggle=fullscreenStartHandler('FullscreenGame.tsx','  async function toggle()','  useImperativeHandle','toggle',context);
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),from=source.indexOf('  useImperativeHandle'),to=source.indexOf('\n  function captureEscape',from);
+ runInNewContext(stripTypeScriptTypes(source.slice(from,to)),context);
+ context.navigator.userActivation.isActive=false;api.enter();assert.equal(requests,0,'cold loading is not a gesture');
+ context.navigator.userActivation.isActive=true;api.enter();api.enter();assert.equal(requests,1,'one synchronous owner before the promise settles');
+ await Promise.resolve();await Promise.resolve();context.mode='normal';context.pending=false;api.enter();assert.equal(requests,1,'manual exit cannot be undone by later start/resume');
+});
+for(const kind of ['guided','market','party'] as const)test(`fullscreen start: ${kind} confirmation guard cannot start`,()=>{
+ const h=fullscreenStartHarness(kind);h.context[kind==='guided'?'confirmRestart':kind==='market'?'confirm':'restart']=true;
+ h.begin();assert.equal(h.calls(),0);assert.equal(h.live.current.status,'ready');assert.equal(h.frames(),0);
+});
+for(const kind of ['guided','market','party'] as const)test(`fullscreen start: ${kind} optional callback preserves existing gameplay`,()=>{
+ const h=fullscreenStartHarness(kind);h.context.onStart=undefined;h.begin();assert.equal(h.calls(),0);assert.equal(h.live.current.status,'playing');
+});
+test('fullscreen start: guided step-result cannot start or consume presentation',()=>{const h=fullscreenStartHarness('guided','step-result');h.begin();assert.equal(h.calls(),0);assert.equal(h.live.current.status,'step-result');});
+test('fullscreen start: expired paused market cannot restart or consume presentation',()=>{const h=fullscreenStartHarness('market','paused');h.live.current.elapsed=300000;h.begin();assert.equal(h.calls(),0);assert.equal(h.live.current.status,'paused');assert.equal(h.frames(),0);});
+test('fullscreen start: failed party mode does not start',()=>{const h=fullscreenStartHarness('party');h.context.mode.current='failed';h.begin();assert.equal(h.calls(),0);assert.equal(h.live.current.status,'ready');});
+test('fullscreen start: native party and ready market accept their supported modes',()=>{for(const kind of ['party','market'] as const){const h=fullscreenStartHarness(kind);if(kind==='party')h.context.mode.current='native';h.begin();assert.equal(h.calls(),1);assert.equal(h.live.current.status,'playing');}});
+test('fullscreen start: production captureEscape consumes presentation exit before game pause',()=>{
+ let prevented=0,stopped=0,exits=0;
+ const context:any={mode:'native',container:{current:{querySelector:()=>null}},document:{fullscreenElement:null,exitFullscreen:async()=>{exits++;}},mounted:{current:true},setMode(){},setMessage(){}};
+ context.document.fullscreenElement=context.container.current;
+ const capture=fullscreenStartHandler('FullscreenGame.tsx','  function captureEscape','  function showResultShare','captureEscape',context);
+ capture({key:'Escape',preventDefault(){prevented++;},stopPropagation(){stopped++;}});
+ assert.equal(prevented,1);assert.equal(stopped,1);assert.equal(exits,1);
+});
+function fullscreenEntryLayoutHarness(){
+ const listeners=new Map<string,()=>void>();let layout=()=>{},cleanup=()=>{},inside=true,reject=false,resolveRequest=()=>{};
+ class Element{isConnected=true;scrolls:unknown[]=[];focuses=0;focus(){this.focuses++;}scrollIntoView(options:unknown){this.scrolls.push(JSON.parse(JSON.stringify(options)));}}
+ const target=new Element(),other=new Element(),button=new Element(),node=Object.assign(new Element(),{contains:(element:unknown)=>inside&&[target,other,button].includes(element as Element),requestFullscreen:()=>reject?Promise.reject(Error('unavailable')):new Promise<void>(resolve=>{resolveRequest=resolve;})});
+ const context:any={mode:'normal',pending:false,mounted:{current:true},autoAttempted:{current:false},container:{current:node},entryFocus:{current:target},button:{current:button},HTMLElement:Element,document:{activeElement:target,fullscreenEnabled:true,fullscreenElement:null,addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name),exitFullscreen:()=>Promise.resolve()},setMode:(next:any)=>{context.mode=typeof next==='function'?next(context.mode):next;},setPending:(value:boolean)=>{context.pending=value;},setMessage(){},useEffect:(fn:()=>()=>void)=>{cleanup=fn();},useLayoutEffect:(fn:()=>void)=>{layout=fn;}};
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),from=source.indexOf('  useEffect(() => {'),to=source.indexOf("  useEffect(() => {\n    if (mode !== 'viewport')",from);assert.ok(from>=0&&to>from);
+ runInNewContext(stripTypeScriptTypes(source.slice(from,to)),context);
+ const toggle=fullscreenStartHandler('FullscreenGame.tsx','  async function toggle()','  useImperativeHandle','toggle',context);
+ return {context,target,other,node,layout:()=>layout(),cleanup:()=>cleanup(),native:()=>{context.document.fullscreenElement=node;listeners.get('fullscreenchange')?.();},reject:()=>{reject=true;},outside:()=>{inside=false;},resolve:()=>resolveRequest(),toggle};
+}
+for(const presentation of ['native','viewport'] as const)test(`fullscreen start: actual settled ${presentation} layout reveals its still-focused entry once`,async()=>{
+ const h=fullscreenEntryLayoutHarness();if(presentation==='viewport')h.reject();
+ const request=h.toggle();h.layout();assert.equal(h.target.scrolls.length,0,'starting a request is not presentation settlement');
+ if(presentation==='native'){h.native();h.resolve();}await request;assert.equal(h.context.mode,presentation);
+ h.layout();assert.deepEqual(h.target.scrolls,[{block:'nearest',inline:'nearest',behavior:'instant'}]);assert.equal(h.target.focuses,0,'do not refocus an already-owned target');assert.equal(h.context.entryFocus.current,null);
+ h.layout();assert.equal(h.target.scrolls.length,1,'the consumed entry cannot scroll again');h.cleanup();
+});
+for(const reason of ['normal','manual','moved-focus','detached','outside','no-container','unmounted'] as const)test(`fullscreen start: settled layout rejects ${reason} scroll ownership`,()=>{
+ const h=fullscreenEntryLayoutHarness();if(reason!=='normal')h.native();
+ if(reason==='manual')h.context.entryFocus.current=null;
+ if(reason==='moved-focus')h.context.document.activeElement=h.other;
+ if(reason==='detached')h.target.isConnected=false;
+ if(reason==='outside')h.outside();
+ if(reason==='no-container')h.context.container.current=null;
+ if(reason==='unmounted')h.cleanup();
+ h.layout();assert.deepEqual(h.target.scrolls,[]);if(reason==='moved-focus')assert.equal(h.target.focuses,0);if(reason!=='unmounted')h.cleanup();
+});
+// FULLSCREEN-START-PURE-END
