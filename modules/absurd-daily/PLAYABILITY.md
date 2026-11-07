@@ -243,3 +243,11 @@ build後以實際公開頁遊玩，驗9種引導操作、4道自由料理、6款
 新增純 process 測試直接執行 production handler 與真 domain，涵蓋三種 controller、冷 paused、無效／失敗開始及原 Fullscreen owner；修正前核心三條開始均無 callback，修正後通過。這不是 React 事件派送、使用者啟用權或原生全螢幕證據。新增三種 controller × 原生／拒絕／不支援的瀏覽器來源，檢查冷載入不自動請求、有效開始、暫停保存、退出後繼續與重開；既有玩法 helper 仿原 GameBoard，先驗真開始進入，再以真按鈕退出，保留原 normal／Escape／Tab／觸控案例的意圖與斷言。
 
 本地驗證使用當前 main 文字與遊戲來源的獨立快照；55 張無關技能書 WebP 仍為舊基底，不能稱完整 main 整合。使用既有本地依賴、禁止網路／資料庫／server 的 process fence，完整 runtime 檔在 import 階段因缺 `three` 停止，0 案實跑；沒有安裝或以替身 renderer 宣稱整份通過。純 handler、語法、module 與差異檢查的精確結果隨交付列明。完整 typecheck／標準 build／runtime／原生瀏覽器／真機仍待正式候選 CI 與驗收，不把測試清單或語法解析當已執行。
+
+### UX-18a 官方 CI 的 fixture 與原生進場定位（候選，待重驗）
+
+PR #1305 的首輪候選 1612ec32／merge 8b470473 在官方 runtime 的本檔為 160/163：三個舊 guided-restart fixture 剝除 props 解構後漏宣告 `onStart`。補明確 `undefined` 模擬省略的 optional prop，原斷言不變；本地原五案負控重現三個 ReferenceError，修正後與新 handler 區塊合跑。官方錯誤收據只有 case identity/status，錯誤文字來自本地因果重現，不能混稱。
+
+同輪 UI1 為 793/795，新九個全螢幕案例通過。兩個既有派對測項揭露不同問題：200% 文字迴圈未退出原生全螢幕就改視窗尺寸；667×375 原生開始後，畫面仍為該尺寸，但 canvas 與操作被標題／HUD 推到視窗下方。前者以真退出按鈕保留 normal-mode 文字／owner 前置，料理的同類 200% 測項亦明確退出；後者保留原三款的全部 375px 幾何斷言，等真原生模式成立後再量測。
+
+既有 Fullscreen mode-change layout effect 現在只對本次 entry 所記錄、仍連接於同 container、而且仍是當下焦點的 DOM 做 `nearest`／`instant` 定位。原生 `fullscreenchange` 或 viewport fallback 的狀態切入即是完成訊號，不用 timeout／RAF 猜測；移焦、拆除、換 container、手動進場無 target 或已卸載時不捲動。這是當下 DOM／焦點擁有者的可見性修正，不是 run-version token。分數、進度、既有 focus guard 與手動退出選擇不變。真 effect 的正反控不等於瀏覽器幾何通過；此修仍待後續 exact candidate CI 驗證。

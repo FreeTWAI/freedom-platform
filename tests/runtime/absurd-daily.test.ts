@@ -304,7 +304,7 @@ function guidedRestartHarness() {
   const modal={open:false,querySelectorAll:()=>[confirm,keep],showModal(){assert.equal(this.open,false);this.open=true;opened++;},close(){this.open=false;closed++;}},button={focus:()=>focuses++},keep={focus:()=>{assert.equal(modal.open,true);keptFocus++;}};
   const confirm={focus:()=>{assert.equal(modal.open,true);confirmedFocus++;}};
   const recipe=recipeOf('margherita-pizza')!;
-  const renderComponent=runInNewContext(code,{...hooks,recipe,seed:42,fresh:false,crypto:{randomUUID:()=>`restart_${++identity}`},performance:{now:()=>now},window:{sessionStorage:session,addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},requestAnimationFrame:()=>1,cancelAnimationFrame(){},COOKING_RULES,TECHNIQUES,recipeOf,newCookingRun,actCooking,advanceCooking,currentStep,readCookingRun,saveCookingRun,clearCookingRun,onResult(){throw Error('unfinished result');},onComplete(){throw Error('unfinished completion');}});
+  const renderComponent=runInNewContext(code,{...hooks,recipe,seed:42,fresh:false,onStart:undefined,crypto:{randomUUID:()=>`restart_${++identity}`},performance:{now:()=>now},window:{sessionStorage:session,addEventListener(){},removeEventListener(){}},document:{addEventListener(){},removeEventListener(){}},requestAnimationFrame:()=>1,cancelAnimationFrame(){},COOKING_RULES,TECHNIQUES,recipeOf,newCookingRun,actCooking,advanceCooking,currentStep,readCookingRun,saveCookingRun,clearCookingRun,onResult(){throw Error('unfinished result');},onComplete(){throw Error('unfinished completion');}});
   let ui:any;
   const render=()=>{index=0;ui=renderComponent();ui.section.current={focus(){},querySelector:()=>null};if(ui.restartDialog)ui.restartDialog.current=modal;if(ui.restartButton)ui.restartButton.current=button;if(ui.keepButton)ui.keepButton.current=keep;while(effects.length)effects.shift()!();return ui;};
   render();ui.setVisualReady(true);render();
@@ -1440,5 +1440,32 @@ test('fullscreen start: production captureEscape consumes presentation exit befo
  const capture=fullscreenStartHandler('FullscreenGame.tsx','  function captureEscape','  function showResultShare','captureEscape',context);
  capture({key:'Escape',preventDefault(){prevented++;},stopPropagation(){stopped++;}});
  assert.equal(prevented,1);assert.equal(stopped,1);assert.equal(exits,1);
+});
+function fullscreenEntryLayoutHarness(){
+ const listeners=new Map<string,()=>void>();let layout=()=>{},cleanup=()=>{},inside=true,reject=false,resolveRequest=()=>{};
+ class Element{isConnected=true;scrolls:unknown[]=[];focuses=0;focus(){this.focuses++;}scrollIntoView(options:unknown){this.scrolls.push(JSON.parse(JSON.stringify(options)));}}
+ const target=new Element(),other=new Element(),button=new Element(),node=Object.assign(new Element(),{contains:(element:unknown)=>inside&&[target,other,button].includes(element as Element),requestFullscreen:()=>reject?Promise.reject(Error('unavailable')):new Promise<void>(resolve=>{resolveRequest=resolve;})});
+ const context:any={mode:'normal',pending:false,mounted:{current:true},autoAttempted:{current:false},container:{current:node},entryFocus:{current:target},button:{current:button},HTMLElement:Element,document:{activeElement:target,fullscreenEnabled:true,fullscreenElement:null,addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name),exitFullscreen:()=>Promise.resolve()},setMode:(next:any)=>{context.mode=typeof next==='function'?next(context.mode):next;},setPending:(value:boolean)=>{context.pending=value;},setMessage(){},useEffect:(fn:()=>()=>void)=>{cleanup=fn();},useLayoutEffect:(fn:()=>void)=>{layout=fn;}};
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),from=source.indexOf('  useEffect(() => {'),to=source.indexOf("  useEffect(() => {\n    if (mode !== 'viewport')",from);assert.ok(from>=0&&to>from);
+ runInNewContext(stripTypeScriptTypes(source.slice(from,to)),context);
+ const toggle=fullscreenStartHandler('FullscreenGame.tsx','  async function toggle()','  useImperativeHandle','toggle',context);
+ return {context,target,other,node,layout:()=>layout(),cleanup:()=>cleanup(),native:()=>{context.document.fullscreenElement=node;listeners.get('fullscreenchange')?.();},reject:()=>{reject=true;},outside:()=>{inside=false;},resolve:()=>resolveRequest(),toggle};
+}
+for(const presentation of ['native','viewport'] as const)test(`fullscreen start: actual settled ${presentation} layout reveals its still-focused entry once`,async()=>{
+ const h=fullscreenEntryLayoutHarness();if(presentation==='viewport')h.reject();
+ const request=h.toggle();h.layout();assert.equal(h.target.scrolls.length,0,'starting a request is not presentation settlement');
+ if(presentation==='native'){h.native();h.resolve();}await request;assert.equal(h.context.mode,presentation);
+ h.layout();assert.deepEqual(h.target.scrolls,[{block:'nearest',inline:'nearest',behavior:'instant'}]);assert.equal(h.target.focuses,0,'do not refocus an already-owned target');assert.equal(h.context.entryFocus.current,null);
+ h.layout();assert.equal(h.target.scrolls.length,1,'the consumed entry cannot scroll again');h.cleanup();
+});
+for(const reason of ['normal','manual','moved-focus','detached','outside','no-container','unmounted'] as const)test(`fullscreen start: settled layout rejects ${reason} scroll ownership`,()=>{
+ const h=fullscreenEntryLayoutHarness();if(reason!=='normal')h.native();
+ if(reason==='manual')h.context.entryFocus.current=null;
+ if(reason==='moved-focus')h.context.document.activeElement=h.other;
+ if(reason==='detached')h.target.isConnected=false;
+ if(reason==='outside')h.outside();
+ if(reason==='no-container')h.context.container.current=null;
+ if(reason==='unmounted')h.cleanup();
+ h.layout();assert.deepEqual(h.target.scrolls,[]);if(reason==='moved-focus')assert.equal(h.target.focuses,0);if(reason!=='unmounted')h.cleanup();
 });
 // FULLSCREEN-START-PURE-END
