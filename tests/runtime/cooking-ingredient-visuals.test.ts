@@ -1,12 +1,22 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ingredientVisual,ingredientPolygonPoints} from '../../apps/portal-web/src/games/cooking/ingredient-visuals';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {transformSync} from 'esbuild';
+import * as React from 'react';
+import * as jsxRuntime from 'react/jsx-runtime';
+import {renderToStaticMarkup} from 'react-dom/server';
+import * as ingredients from '../../apps/portal-web/src/games/cooking/ingredient-visuals';
+import * as cues from '../../apps/portal-web/src/games/cooking/cues';
+import * as domain from '../../apps/portal-web/src/games/cooking/domain';
+import {ingredientVisual,ingredientLayers,ingredientPolygonPoints} from '../../apps/portal-web/src/games/cooking/ingredient-visuals';
 import {RECIPES,type Shape} from '../../apps/portal-web/src/games/cooking/catalog';
 
-const cases=[['香蕉','fruit','banana'],['檸檬','fruit','citrus'],['柚子片','fruit','citrus'],['番茄','fruit','tomato'],['芒果','fruit','mango'],['芒果丁','fruit','mango'],['酪梨','greens','avocado']] as const;
+const cases=[['香蕉','fruit','banana'],['檸檬','fruit','citrus'],['柚子片','fruit','citrus'],['番茄','fruit','tomato'],['芒果','fruit','mango'],['芒果丁','fruit','mango'],['酪梨','greens','avocado'],['馬鈴薯','carrot','potato'],['南瓜','carrot','pumpkin'],['地瓜','carrot','sweet-potato'],['蘑菇','dough','mushroom']] as const;
 test('ingredient visuals match only explicit labels and their existing shape',()=>{
   for(const [label,shape,id] of cases){
     assert.equal(ingredientVisual(label,shape)?.id,id);
+    for(const other of ['greens','carrot','meat','rice','dough','noodle','egg','fruit','cream','chocolate','fish'] as const)if(other!==shape)assert.equal(ingredientVisual(label,other),null,`${label}/${other}`);
     assert.equal(ingredientVisual(label,'cream'),null);
     assert.equal(ingredientVisual(label,shape==='greens'?'fruit':'greens'),null);
     for(const changed of [` ${label}`,`${label} `,`${label}醬`,`${label}與生菜`])assert.equal(ingredientVisual(changed,shape),null);
@@ -15,17 +25,18 @@ test('ingredient visuals match only explicit labels and their existing shape',()
     for(const shape of ['fruit','greens','meat','dough'] as Shape[])assert.equal(ingredientVisual(label,shape),null);
   }
 });
-test('actual catalog keeps all seven covered steps and every other label on the fallback',()=>{
+test('actual catalog adds only five preparation steps and preserves the original seven',()=>{
   const covered=RECIPES.flatMap(recipe=>recipe.steps.flatMap((step,index)=>ingredientVisual(step.ingredient,step.shape)?[`${recipe.id}/${index}`]:[]));
-  assert.deepEqual(covered,['fish-and-chips/3','seafood-paella/0','yuzu-soda/0','banana-smoothie/0','mango-shaved-ice/0','mango-shaved-ice/1','avocado-toast/0']);
+  assert.deepEqual(covered,['cream-risotto/0','fish-and-chips/0','fish-and-chips/3','seafood-paella/0','yuzu-soda/0','banana-smoothie/0','mango-shaved-ice/0','mango-shaved-ice/1','pumpkin-soup/0','baked-sweet-potato/0','avocado-toast/0','plant-burger/0']);
   assert.equal(RECIPES.length,66);
 });
 test('shared original contours are finite, nondegenerate, bounded and modest',()=>{
   for(const [label,shape] of cases){
     const visual=ingredientVisual(label,shape)!;
-    assert.ok(visual.layers.length>=2&&visual.layers.length<=7,label);
-    assert.ok(new Set(visual.layers.map(layer=>layer.color)).size<=4,'at most four opaque batch materials');
-    for(const layer of visual.layers){
+    assert.ok(new Set([...visual.layers,...(visual.cutLayers??[])].map(layer=>layer.color)).size<=4,'both states share at most four opaque materials');
+    for(const layers of [visual.layers,...(visual.cutLayers?[visual.cutLayers]:[])]){
+    assert.ok(layers.length>=2&&layers.length<=7,label);
+    for(const layer of layers){
       assert.match(layer.color,/^#[0-9a-f]{6}$/);
       assert.ok(layer.points.length>=3&&layer.points.length<=16);
       let area=0;
@@ -37,11 +48,12 @@ test('shared original contours are finite, nondegenerate, bounded and modest',()
       const svg=ingredientPolygonPoints(layer.points).split(' ').map(pair=>pair.split(',').map(Number));
       assert.deepEqual(svg,layer.points.map(([x,y])=>[x*26,y*26]),'SVG uses the same complete contour, not an independent glyph');
     }
+    }
   }
 });
 test('contours have no self intersections and concave banana remains a crescent',()=>{
   const cross=(a:readonly number[],b:readonly number[],c:readonly number[])=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
-  for(const [label,shape] of cases)for(const {points} of ingredientVisual(label,shape)!.layers){
+  for(const [label,shape] of cases)for(const {points} of [...ingredientVisual(label,shape)!.layers,...(ingredientVisual(label,shape)!.cutLayers??[])]){
     for(let i=0;i<points.length;i++)for(let j=i+2;j<points.length;j++){
       if(i===0&&j===points.length-1)continue;
       const a=points[i],b=points[(i+1)%points.length],c=points[j],d=points[(j+1)%points.length];
@@ -57,7 +69,52 @@ test('shared visual data is deeply immutable and calls reuse the same definition
     const visual=ingredientVisual(label,shape)!;
     assert.equal(ingredientVisual(label,shape),visual);
     assert.ok(Object.isFrozen(visual)&&Object.isFrozen(visual.layers));
-    for(const layer of visual.layers){assert.ok(Object.isFrozen(layer)&&Object.isFrozen(layer.points));for(const point of layer.points)assert.ok(Object.isFrozen(point));}
+    if(visual.cutLayers)assert.ok(Object.isFrozen(visual.cutLayers));
+    for(const layer of [...visual.layers,...(visual.cutLayers??[])]){assert.ok(Object.isFrozen(layer)&&Object.isFrozen(layer.points));for(const point of layer.points)assert.ok(Object.isFrozen(point));}
     const before=JSON.stringify(visual);ingredientPolygonPoints(visual.layers[0].points);assert.equal(JSON.stringify(visual),before);
+  }
+});
+
+test('preparation states have different actual contours and leave old visuals unchanged',()=>{
+  for(const [label,shape] of cases){
+    const visual=ingredientVisual(label,shape)!;
+    assert.equal(ingredientLayers(visual),visual.layers);
+    if(visual.cutLayers){
+      assert.equal(ingredientLayers(visual,true),visual.cutLayers);
+      assert.notDeepEqual(visual.layers.map(l=>l.points),visual.cutLayers.map(l=>l.points),'a cut is not a palette swap');
+    }else assert.equal(ingredientLayers(visual,true),visual.layers);
+  }
+  for(const label of ['馬鈴薯與紅蘿蔔','南瓜濃湯','奶油地瓜','野菇','野菇與洋蔥','蘑菇醬'])for(const shape of ['carrot','dough','greens','cream'] as const)assert.equal(ingredientVisual(label,shape),null);
+  assert.equal(ingredientVisual('地瓜','dough'),null,'the baking stage is outside this five-step slice');
+});
+
+function svgScene(){
+  const module={exports:{} as {CookingScene:React.ComponentType<any>}};
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingIllustration.tsx',import.meta.url),'utf8');
+  runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,require:(id:string)=>{
+    if(id==='react/jsx-runtime')return jsxRuntime;if(id==='./ingredient-visuals')return ingredients;
+    if(id==='./cues')return cues;if(id==='./domain')return domain;throw Error(id);
+  }});
+  return (run:domain.CookingRun)=>renderToStaticMarkup(React.createElement(module.exports.CookingScene,{run,point:null,onPointerDown(){},onPointerMove(){},onPointerUp(){},onPointerCancel(){}}));
+}
+test('production SVG reveals only actual cut progress, including pause, resume and restart',()=>{
+  const render=svgScene();
+  for(const recipe of RECIPES){
+    const step=recipe.steps[0],visual=ingredientVisual(step.ingredient,step.shape);if(!visual?.cutLayers)continue;
+    const run={...domain.newCookingRun(recipe,42,'preparation_svg'),status:'playing' as const};
+    for(const status of ['playing','paused'] as const)for(const count of [0,1,step.goal,0]){
+      const frame={...run,status,elapsed:5000,active:{...run.active,count}},before=JSON.stringify(frame),html=render(frame);
+      const groups=[...html.matchAll(/data-ingredient="([^"]+)" data-preparation="(whole|cut)">([\s\S]*?)<\/g>/g)];
+      assert.equal(groups.length,step.goal);
+      groups.forEach((group,i)=>{
+        assert.equal(group[1],visual.id);assert.equal(group[2],i<count?'cut':'whole');
+        const polygons=[...group[3].matchAll(/<polygon points="([^"]*)" fill="([^"]*)"/g)],layers=ingredientLayers(visual,i<count);
+        assert.equal(polygons.length,layers.length);
+        polygons.forEach((polygon,j)=>{assert.equal(polygon[1],ingredientPolygonPoints(layers[j].points));assert.equal(polygon[2],layers[j].color);});
+      });
+      assert.equal(JSON.stringify(frame),before,'render does not advance or mutate the run');
+      assert.ok(html.includes(`${step.title}操作區`));
+      assert.equal(html,render({...frame,elapsed:15000}),'elapsed time alone cannot reveal a cut');
+    }
   }
 });
