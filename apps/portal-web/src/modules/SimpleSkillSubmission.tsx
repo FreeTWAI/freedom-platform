@@ -1,3 +1,4 @@
+import { validSkillPageDraft, type SkillPageDraft } from '../../../../modules/skill-submissions/page-draft.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { requireItems, type PortalClient } from '../api';
 import { useModuleMutation } from './shared';
@@ -5,12 +6,27 @@ import { relationshipLabels } from './SkillUpload';
 import './WorkSharing.css';
 import { authoringDraftState, sharingMutationState, useAuthoringDraft } from './authoring-drafts';
 import { PublishedSkillLinks, skillPublicationPath } from './SkillPublication';
+import { validSkillPageContent, type SkillPageContent } from '../../../../modules/community/skill-page-content.js';
+import { blankSkillPageFields, manualSkillPageContent, skillPageFields, SkillSubmissionPageFields, type ManualSkillPageFields } from './SkillSubmissionPageFields';
+import { SkillSubmissionPagePreview } from './SkillSubmissionPagePreview';
 
 type Relationship = keyof typeof relationshipLabels;
-type Draft = { repository_url: string; title: string; description: string; use_notes: string; demo_url: string; relationship: Relationship };
-type Submission = { project_id?: string|null; submission_id: string; status: string; can_edit?: boolean; aggregate_version: number | string; public_path: string | null; seed?: unknown; payload: (Omit<Draft, 'demo_url'> & { demo_url: string | null }) | null };
-const blank: Draft = { repository_url: '', title: '', description: '', use_notes: '', demo_url: '', relationship: 'curator' };
+type Draft = { repository_url: string; title: string; description: string; use_notes: string; demo_url: string; relationship: Relationship; page?: ManualSkillPageFields };
+type SubmissionPayload = Omit<Draft, 'demo_url' | 'page'> & { demo_url: string | null; page_content?: SkillPageContent; page_content_draft?: SkillPageDraft };
+type Submission = { project_id?: string|null; submission_id: string; status: string; can_edit?: boolean; aggregate_version: number | string; public_path: string | null; seed?: unknown; payload: SubmissionPayload | null };
+const blank: Draft = { repository_url: '', title: '', description: '', use_notes: '', demo_url: '', relationship: 'curator', page: blankSkillPageFields() };
 const defaultNotes = '請先閱讀原作 README，依其中的安裝步驟開始使用；使用條件與授權以原作文件為準。';
+function fromPayload(payload: SubmissionPayload): Draft {
+  return { repository_url: payload.repository_url, title: payload.title, description: payload.description, use_notes: payload.use_notes,
+    demo_url: payload.demo_url ?? '', relationship: payload.relationship,
+    ...(validSkillPageContent(payload.page_content) ? { page: skillPageFields(payload.page_content) } : validSkillPageDraft(payload.page_content_draft) ? { page: payload.page_content_draft } : {}),
+  };
+}
+function comparable(value: unknown): string {
+  const ordered = (item: unknown): unknown => Array.isArray(item) ? item.map(ordered) : item && typeof item === 'object'
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)).map(([key, field]) => [key, ordered(field)])) : item;
+  return JSON.stringify(ordered(value));
+}
 
 // Opt into the existing mutation attempt history: a later 429 must not erase
 // an earlier ambiguous save or rotate its idempotency key before reconciliation.
@@ -19,7 +35,9 @@ function manualSubmission(value: unknown): Submission {
   if (!item || typeof item.submission_id !== 'string' || !item.submission_id || item.status !== 'ready_for_review'
     || item.can_edit !== true || item.public_path !== null || !['number', 'string'].includes(typeof item.aggregate_version)
     || !Number.isSafeInteger(Number(item.aggregate_version)) || Number(item.aggregate_version) < 1
-    || !item.payload || !['repository_url', 'title', 'description', 'use_notes'].every(key => typeof item.payload?.[key as keyof Draft] === 'string')
+    || !item.payload || !['repository_url', 'title', 'description', 'use_notes'].every(key => typeof item.payload?.[key as keyof SubmissionPayload] === 'string')
+    || (item.payload.page_content_draft !== undefined && !validSkillPageDraft(item.payload.page_content_draft))
+    || (item.payload.page_content !== undefined && !validSkillPageContent(item.payload.page_content))
     || !Object.hasOwn(relationshipLabels, item.payload.relationship) || !(item.payload.demo_url === null || typeof item.payload.demo_url === 'string')) {
     throw Error('私人草稿回應格式不符。');
   }
@@ -78,9 +96,9 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
         else {
           const payload = item.payload;
           setResumedAdvanced(false);
-          setDraft({ ...payload, demo_url: payload.demo_url ?? '' });
+          setDraft(fromPayload(payload));
           // Resumed drafts retain the existing retry label; consent is always renewed.
-          setSaved(item); setPublished(null); setPublishAttempted(true); setConsent(false); setReview(true); setError(null);
+          setSaved(item); setPublished(null); setPublishAttempted(true); setConsent(false); setReview(!payload.page_content_draft); setError(null);
         }
         setResumedId(resumeId);
       }).catch(cause => { if (live()) setLoadError(cause instanceof Error ? cause.message : '私人投稿暫時無法載入。'); });
@@ -95,21 +113,28 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
   useEffect(() => { if (review) previewHeading.current?.focus(); }, [review]);
   useEffect(() => { if (published) success.current?.focus(); }, [published]);
   function preview(event: FormEvent) {
-    event.preventDefault(); if (pending || saveUnknown || publishUnknown || !current()) return; setPublished(null); setError(null); setConsent(false); setReview(true);
+    event.preventDefault(); if (pending || saveUnknown || publishUnknown || !current() || !validPageDraft()) return; setPublished(null); setError(null); setConsent(false); setReview(true);
+  }
+  function validPageDraft() {
+    if (!draft.page || (draft.use_notes.trim() && validSkillPageContent(manualSkillPageContent(draft.page)))) return true;
+    setError('請依欄位提示補齊效益主標、問題、原理、三個不同成果、三個完整步驟與起步方法；請用純文字，不填網址。');
+    return false;
   }
   function resume(item: Submission) {
     if (!item.payload || pending || saveUnknown || publishUnknown || !current()) return;
     const payload = item.payload;
-    setDraft({ repository_url: payload.repository_url, title: payload.title, description: payload.description, use_notes: payload.use_notes, demo_url: payload.demo_url ?? '', relationship: payload.relationship });
-    setSaved(item); setPublished(null); setPublishAttempted(true); setError(null); setConsent(false); setReview(true);
+    setDraft(fromPayload(payload));
+    setSaved(item); setPublished(null); setPublishAttempted(true); setError(null); setConsent(false); setReview(!payload.page_content_draft);
   }
   function draftBody() {
     return {
       repository_url: draft.repository_url.trim(), relationship: draft.relationship, title: draft.title.trim(), description: draft.description.trim(),
-      use_notes: draft.use_notes.trim() || defaultNotes, demo_url: draft.demo_url.trim() || null,
+      use_notes: draft.use_notes.trim() || (draft.page ? '' : defaultNotes), demo_url: draft.demo_url.trim() || null,
+      ...(draft.page ? validSkillPageContent(manualSkillPageContent(draft.page)) && draft.use_notes.trim()
+        ? { page_content: manualSkillPageContent(draft.page) } : { page_content_draft: draft.page } : {}),
     };
   }
-  const dirty = !saved?.payload || Object.entries(draftBody()).some(([key, value]) => saved.payload?.[key as keyof Draft] !== value);
+  const dirty = !saved?.payload || Object.entries(draftBody()).some(([key, value]) => comparable(saved.payload?.[key as keyof SubmissionPayload]) !== comparable(value));
   async function persistDraft() {
     const body = draftBody();
     if (saved && (!saved.can_edit || !dirty)) return saved;
@@ -127,14 +152,14 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
         setSaveUnknown(saveUnknown || sharingMutationState({ userId, type: 'skill' }).snapshot.lastFailureUnknown);
         return;
       }
-      if (submission.payload) setDraft({ ...submission.payload, demo_url: submission.payload.demo_url ?? '' });
-      setSaved(submission); setSaveUnknown(false); setPublished(null); setConsent(false); setReview(true);
+      if (submission.payload) setDraft(fromPayload(submission.payload));
+      setSaved(submission); setSaveUnknown(false); setPublished(null); setConsent(false); setReview(!submission.payload?.page_content_draft);
       void loadDrafts();
     } finally { lock.current = false; if (current()) { setWorking(false); setSaving(false); } }
   }
   async function publish(event: FormEvent) {
     event.preventDefault();
-    if (lock.current || pending || saveUnknown || !consent || !current()) return;
+    if (lock.current || pending || saveUnknown || !consent || !current() || (!publishUnknown && !validPageDraft())) return;
     lock.current = true; setWorking(true);
     try {
       // An unknown publish may already have advanced the server version. Replay
@@ -145,7 +170,7 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
         setSaveUnknown(sharingMutationState({ userId, type: 'skill' }).snapshot.lastFailureUnknown);
         return;
       }
-      if (submission.payload) setDraft({ ...submission.payload, demo_url: submission.payload.demo_url ?? '' });
+      if (submission.payload) setDraft(fromPayload(submission.payload));
       setSaved(submission);
       setPublishAttempted(true);
       setLastCommand('publish');
@@ -184,6 +209,7 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
     </section> : review ? <form className="stack" onSubmit={event => void publish(event)} aria-busy={pending}>
       <h2 ref={previewHeading} tabIndex={-1}>確認這樣分享，好嗎？</h2>
       <h3>{draft.title}</h3><p className="work-sharing-preview">{draft.description}</p>
+      <SkillSubmissionPagePreview source={{ title: draft.title, description: draft.description, use_notes: draft.use_notes || defaultNotes, ...(draft.page ? { page_content: manualSkillPageContent(draft.page) } : {}) }}/>
       <dl className="meta"><div><dt>專案網址</dt><dd className="work-sharing-preview">{draft.repository_url}</dd></div><div><dt>與作品的關係</dt><dd>{relationshipLabels[draft.relationship]}（自行聲明）</dd></div></dl>
       <details><summary>使用說明與展示網址</summary><div className="stack"><p className="work-sharing-preview">{draft.use_notes || defaultNotes}</p>{draft.demo_url && <p className="work-sharing-preview">{draft.demo_url}</p>}</div></details>
       <p className="hint">確認後即公開為社群技能書。系統會讀取 GitHub 的公開版本與授權；來源關係仍為本人自行聲明。</p>
@@ -192,25 +218,28 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
       {saved && <p role="status" className="hint">{publishUnknown || (lastCommand === 'publish' && pending) ? '已保存草稿；公開結果尚未確認，請先確認原公開操作。' : '已保存私人草稿，待本人預覽；尚未送審或公開，來源與授權尚未核可。可稍後從下方草稿繼續。'}</p>}
       {saved && <div className="actions"><button type="button" className="btn btn-ghost" disabled={pending || saveUnknown || publishUnknown || upgrade.busy} onClick={() => void withdraw()}>撤銷這份私人投稿</button></div>}
     </form> : <form className="stack" onSubmit={event => {
+      if ((event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-action') === 'save') { event.preventDefault(); void saveDraft(); return; }
       event.currentTarget.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach(validateField);
       if (!event.currentTarget.reportValidity()) { event.preventDefault(); return; }
-      if ((event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-action') === 'save') { event.preventDefault(); void saveDraft(); }
-      else preview(event);
+      preview(event);
     }} onInput={event => {
       const field = event.target;
       if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) validateField(field);
     }}>
-      <div className="section-head"><h2>投稿你的開源工具</h2><p>貼網址、寫一句用途，先預覽再公開。</p></div>
+      <div className="section-head"><h2>投稿你的開源工具</h2><p>填寫真實用途與三步流程，先預覽再公開。</p></div>
       <fieldset disabled={pending || saveUnknown || publishUnknown} className="stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <label className="field">GitHub 專案網址<input name="repository_url" required type="url" maxLength={300} placeholder="https://github.com/你的帳號/專案名稱" data-guide-anchor="opensource:repository" value={draft.repository_url} onChange={event => setDraft({ ...draft, repository_url: event.target.value })}/></label>
       <label className="field">作品名稱<input required maxLength={120} placeholder="例如：自動整理會議筆記" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/></label>
       <label className="field">一句話介紹<textarea aria-label="一句話介紹" required maxLength={2000} rows={3} placeholder="它能幫誰，解決什麼問題？" value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })}/></label>
+      {draft.page ? <SkillSubmissionPageFields value={draft.page} onChange={page => setDraft({ ...draft, page })}/> : <div className="stack"><p className="hint">這是先前保存的介紹，原文會保留；可以補上問題、原理與流程圖。</p><button type="button" className="btn btn-secondary btn-small" onClick={() => setDraft({ ...draft, page: blankSkillPageFields() })}>補齊完整介紹頁</button></div>}
+      {draft.page && <label className="field">如何開始使用<textarea aria-label="如何開始使用" required maxLength={3000} rows={4} placeholder="依原作文件寫出第一次操作的方法：開啟哪個入口或執行什麼指令、準備哪些資料、如何看到結果。" value={draft.use_notes} onChange={event => setDraft({ ...draft, use_notes: event.target.value })}/><span className="field-hint">提供可照著操作的真實起步步驟。</span></label>}
       <label className="field">我與作品的關係<select value={draft.relationship} onChange={event => setDraft({ ...draft, relationship: event.target.value as Relationship })}>{Object.entries(relationshipLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select><span className="field-hint">推薦別人的工具也可以，原作者與授權都會保留。這是你的聲明，不是作者身分驗證。</span></label>
-      <details><summary>補充使用說明與展示網址（選填）</summary><div className="stack"><label className="field">如何開始使用<textarea aria-label="如何開始使用" maxLength={3000} rows={3} placeholder={defaultNotes} value={draft.use_notes} onChange={event => setDraft({ ...draft, use_notes: event.target.value })}/></label><label className="field">展示網址（選填）<input type="url" maxLength={2000} placeholder="https://…" value={draft.demo_url} onChange={event => setDraft({ ...draft, demo_url: event.target.value })}/></label></div></details>
-      <p className="hint">預覽不會寫入資料。儲存私人草稿後可重載續寫；尚未儲存的內容只保留在目前登入的頁面中。</p><div className="actions"><button className="btn btn-primary">預覽投稿</button><button className="btn btn-secondary btn-small" data-action="save" disabled={publishUnknown}>儲存私人草稿</button></div>
+      <details><summary>補充使用說明與展示網址（選填）</summary><div className="stack">{!draft.page && <label className="field">如何開始使用<textarea aria-label="如何開始使用" maxLength={3000} rows={3} placeholder={defaultNotes} value={draft.use_notes} onChange={event => setDraft({ ...draft, use_notes: event.target.value })}/></label>}<label className="field">展示網址（選填）<input type="url" maxLength={2000} placeholder="https://…" value={draft.demo_url} onChange={event => setDraft({ ...draft, demo_url: event.target.value })}/></label></div></details>
+      <p className="hint">預覽不會寫入資料。儲存私人草稿後可重載續寫；尚未儲存的內容只保留在目前登入的頁面中。</p><div className="actions"><button className="btn btn-primary">預覽投稿</button><button className="btn btn-secondary btn-small" data-action="save" formNoValidate disabled={publishUnknown}>儲存私人草稿</button></div>
       </fieldset>
     </form>}
     {!published && review && (!saved || saved.can_edit) && <div className="actions"><button type="button" className="btn btn-secondary btn-small" disabled={pending || saveUnknown || publishUnknown} onClick={() => void saveDraft()}>儲存私人草稿</button></div>}
+    {!published && saved?.payload?.page_content_draft && !review && <p role="status">未完成的介紹已保存為私人草稿；補齊後才能預覽公開。</p>}
     {!published && saved && dirty && <p role="status">目前修改尚未儲存。</p>}
     {saveUnknown && <div className="stack"><p role="alert">儲存結果尚未確認，請先重試原請求；內容與操作識別碼已保留，不會公開。</p><button type="button" className="btn btn-secondary btn-small" disabled={pending} onClick={() => void saveDraft()}>重試儲存私人草稿</button></div>}
     {error && <p className="banner banner-error" role="alert">{error}</p>}

@@ -9,10 +9,12 @@ import { CHAT_JSON_MAX_BYTES, chatSkillInstruction, parseChatSkillJson, reposito
 import { agentInstruction, SKILL_UPLOAD_GUIDE as GUIDE } from './skill-upload-instruction';
 export { agentInstruction } from './skill-upload-instruction';
 import './SkillUpload.css';
+import { validSkillPageContent, type SkillPageContent } from '../../../../modules/community/skill-page-content';
+import { SkillSubmissionPagePreview } from './SkillSubmissionPagePreview';
 import { PublishedSkillLinks, skillPublicationPath } from './SkillPublication';
 
 type Relationship = 'author' | 'maintainer' | 'contributor' | 'curator';
-type SubmissionPayload = { repository_url: string; title: string; description: string; use_notes: string; demo_url: string | null; relationship: Relationship; share_introductions: string[] };
+type SubmissionPayload = { repository_url: string; title: string; description: string; use_notes: string; demo_url: string | null; relationship: Relationship; share_introductions: string[]; page_content?: SkillPageContent };
 type Seed = ChatSkillSeed & { repository_url: string };
 type CatalogBookRef = { book_id: string; title: string; public_path: string };
 type Submission = { submission_id: string; status: 'awaiting_upload' | 'ready_for_review' | 'published' | 'revoked'; aggregate_version: string | number; payload: SubmissionPayload | null; project_id: string | null; public_path: string | null; illustration_url: string | null; grant_expires_at: string | null; grant_consumed_at: string | null; grant_revoked_at: string | null; created_at: string; updated_at: string; seed?: Seed | null; upgrades_submission_id?: string | null; catalog_book?: CatalogBookRef | null };
@@ -106,6 +108,8 @@ function SubmissionPreview({ submission, busy, onPublish, onShelf }: { submissio
   const illustration = localPath(submission.illustration_url);
   return <section ref={region} tabIndex={-1} className="skill-upload-preview stack" aria-label={`預覽：${payload.title}`}>
     <h4>{payload.title}</h4>
+    <SkillSubmissionPagePreview source={payload}/>
+    {!validSkillPageContent(payload.page_content) && <p className="field-hint">這份舊草稿尚未補齊問題、原理與三個操作步驟，介紹頁會保留原本的說明；可請 Agent 補充後重新上傳。</p>}
     {illustration && <img className="skill-upload-illustration" src={illustration} alt={`${payload.title}的投稿插圖`}/>}
     <p className="skill-upload-copy">{payload.description}</p>
     <div className="help-box"><strong>如何開始</strong><p className="skill-upload-copy">{payload.use_notes}</p></div>
@@ -310,6 +314,7 @@ export function SkillUpload({ client, onPublished, openRequest = null, onChanged
     setChatError(null); setNotice(null); setDraftResult(null); rowActions.setError(null);
     const parsed = parseChatSkillJson(chatJson);
     if (!parsed.ok) { setChatError(parsed.message); return; }
+    if (!validSkillPageContent(parsed.value.page_content)) { setChatError('請讓 AI 依說明補齊 page_content：一句主張、問題、運作原理、三個成果與三個操作步驟，再貼上完整 JSON。'); return; }
     const session = dialogSession.current;
     setChatBusy(true);
     try {

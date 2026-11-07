@@ -435,7 +435,7 @@ test('publish imports real pinned GitHub source once, needs consent and current 
  assert.equal((await readPublishedSkillIllustration(pool,id))?.mime_type,'image/webp');
  const html=await platform.request(origin+`/development/submissions/${id}`);assert.equal(html.status,200);
  const markup=await html.text();assert.equal(markup.includes(maliciousTitle),false);assert.match(markup,/&lt;script&gt;/);
- assert.match(markup,/<h2>開始使用<\/h2>/);assert.ok(markup.includes(payload().use_notes));
+ assert.match(markup,/<h2(?: id="skill-use-title")?>開始使用<\/h2>/);assert.ok(markup.includes(payload().use_notes));
  assert.match(markup,/<bdi>github.com\/example\/project<\/bdi>/);assert.ok(markup.includes('到 GitHub 看原始碼'));
  assert.ok(!markup.includes('開啟專案線上示範'));assert.ok(markup.includes(sha));
  for(const secret of [owner.user.email,owner.user.user_id,'grant_hash'])assert.equal(markup.includes(secret),false,secret);
@@ -639,4 +639,74 @@ test('an agent draft waiting on the member draft lock cannot be issued after its
   assert.equal(result.data.upload_grant??null,null);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM skill_submissions WHERE owner_ref=$1',[owner.user.user_id])).rows[0].n,0);
  }finally{await holder.query('ROLLBACK').catch(()=>{});holder.release();await Promise.resolve(pending).catch(()=>{});}
+});
+
+test('structured pages reject executable or incomplete claims without consuming the grant, then persist and replay exact authored content',async()=>{
+ const {syntheticSkillPage:page}=await import('../fixtures/skill-page-content.js');
+ const owner=await login(),key=await newKey(owner),draft=await agentDraft(key.token),id=draft.submission.submission_id;
+ const invalid=[{...page,headline:'<script>alert(1)</script>。'},{...page,mechanism:'https://attacker.example/replace-the-guide'},{...page,extra:'hidden'},{...page,flow:{...page.flow,steps:page.flow.steps.slice(0,2)}},{...page,flow:{...page.flow,steps:page.flow.steps.map((step,i)=>i===0?{...step,icon:'script'}:step)}}];
+ for(const page_content of invalid){
+  const rejected=await agent(`/skill-submissions/${id}`,draft.upload_grant.token,payload({page_content}));assert.equal(rejected.status,422,JSON.stringify(rejected.data));
+ }
+ const untouched=(await api(`/me/skill-submissions/${id}`,owner)).data;assert.equal(untouched.status,'awaiting_upload');assert.equal(untouched.grant_consumed_at,null);
+ const body=payload({page_content:page});
+ assert.equal((await agent(`/skill-submissions/${id}`,draft.upload_grant.token,body)).status,200);
+ const reordered=Object.fromEntries(Object.entries(body).reverse());assert.equal((await agent(`/skill-submissions/${id}`,draft.upload_grant.token,reordered)).status,200);
+ const saved=(await api(`/me/skill-submissions/${id}`,owner)).data;assert.deepEqual(saved.payload.page_content,page);
+ assert.equal((await agent(`/skill-submissions/${id}`,draft.upload_grant.token,payload({page_content:{...page,headline:'修改之後仍應保留原始草稿。'}}))).status,409);
+ assert.equal((await api(`/skill-submissions/${id}`)).status,404);
+});
+
+test('manual structured content stays private until consent and metadata edits invalidate public claims without destroying the original payload',async t=>{
+ const {syntheticSkillPage:page}=await import('../fixtures/skill-page-content.js');mockGitHub(t);
+ const owner=await login(),other=await login(DEMO_USERS[1].email);
+ const body={repository_url:'https://github.com/example/project',title:'筆記工具',description:'依真實文字整理筆記。',relationship:'curator',use_notes:'先閱讀 README。',page_content:page};
+ const saved=await api('/me/skill-submissions/manual',owner,body);assert.equal(saved.status,201,JSON.stringify(saved.data));
+ const id=saved.data.submission_id;assert.deepEqual(saved.data.payload.page_content,page);
+ assert.equal((await api(`/me/skill-submissions/${id}`,other)).status,404);assert.equal((await api(`/skill-submissions/${id}`)).status,404);
+ assert.equal((await api(`/me/skill-submissions/${id}/publish`,owner,{consent_to_share:false},saved.data.aggregate_version)).status,422);
+ const published=await api(`/me/skill-submissions/${id}/publish`,owner,{consent_to_share:true},saved.data.aggregate_version);assert.equal(published.status,200,JSON.stringify(published.data));
+ assert.deepEqual((await readPublishedSkillSubmission(pool,id))?.page_content,page);
+ const project=(await api('/opensource/projects',owner)).data.items.find((item:any)=>item.project_id===published.data.project_id);
+ const revised=await api(`/opensource/projects/${project.project_id}:revise`,owner,{title:'目前的標題',description:'修改後描述目前實際功能。',use_notes:'目前請先閱讀新版文件。',demo_url:null},project.aggregate_version);assert.equal(revised.status,200,JSON.stringify(revised.data));
+ const current=await readPublishedSkillSubmission(pool,id);assert.equal(current?.page_content,null);assert.equal(current?.title,'目前的標題');assert.equal(current?.description,'修改後描述目前實際功能。');
+ assert.deepEqual((await pool.query('SELECT payload FROM skill_submissions WHERE submission_id=$1',[id])).rows[0].payload.page_content,page);
+ const html=await (await platform.request(origin+`/development/submissions/${id}`)).text();assert.ok(html.includes('目前的標題'));assert.ok(!html.includes(page.mechanism));
+ const upgrade=await api(`/me/skill-submissions/${id}/upgrade`,owner,{});assert.equal(upgrade.status,201,JSON.stringify(upgrade.data));
+ assert.equal(upgrade.data.seed.title,'目前的標題');assert.equal(upgrade.data.seed.page_content,undefined);
+ const next=upgrade.data,grant=await api(`/me/skill-submissions/${next.submission_id}/grant`,owner,{},next.aggregate_version);
+ const freshPage={...page,headline:'把目前的筆記整理成可核對的摘要。'};
+ const freshPayload=payload({...upgrade.data.seed,page_content:freshPage});
+ assert.equal((await agent(`/skill-submissions/${next.submission_id}`,grant.data.upload_grant.token,freshPayload)).status,200);
+ const ready=(await api(`/me/skill-submissions/${next.submission_id}`,owner)).data;
+ const republished=await api(`/me/skill-submissions/${next.submission_id}/publish`,owner,{consent_to_share:true},ready.aggregate_version);assert.equal(republished.status,200,JSON.stringify(republished.data));
+ assert.deepEqual((await readPublishedSkillSubmission(pool,next.submission_id))?.page_content,freshPage);
+ assert.equal((await readPublishedSkillSubmission(pool,id))?.page_content,null,'old different metadata cannot regain its page claims');
+ const currentProject=(await api('/opensource/projects',owner)).data.items.find((item:any)=>item.project_id===project.project_id);
+ const withdrawn=await api(`/opensource/projects/${project.project_id}/withdraw`,owner,{},currentProject.aggregate_version);assert.equal(withdrawn.status,200,JSON.stringify(withdrawn.data));
+ for(const old of [id,next.submission_id])assert.equal((await api(`/skill-submissions/${old}`)).status,404);
+ const prepared=await api(`/opensource/projects/${project.project_id}/skill-submission`,owner,{},withdrawn.data.aggregate_version);assert.equal(prepared.status,201,JSON.stringify(prepared.data));
+ const privateAgain=prepared.data.submission;
+ const restored=await api(`/me/skill-submissions/${privateAgain.submission_id}/manual`,owner,{...body,title:'目前的標題',description:'修改後描述目前實際功能。',use_notes:'目前請先閱讀新版文件。',demo_url:null,page_content:freshPage},privateAgain.aggregate_version);assert.equal(restored.status,200,JSON.stringify(restored.data));
+ const last=await api(`/me/skill-submissions/${privateAgain.submission_id}/publish`,owner,{consent_to_share:true},restored.data.aggregate_version);assert.equal(last.status,200,JSON.stringify(last.data));
+ assert.deepEqual((await readPublishedSkillSubmission(pool,privateAgain.submission_id))?.page_content,freshPage);
+ for(const old of [id,next.submission_id])assert.equal((await api(`/skill-submissions/${old}`)).status,404,'withdrawn historical links remain private');
+});
+
+test('incomplete manual page is owner-only, retains every field and cannot publish until replaced by a complete page',async t=>{
+ const {syntheticSkillPage:page}=await import('../fixtures/skill-page-content.js');const {seen}=mockGitHub(t);
+ const owner=await login(),other=await login(DEMO_USERS[1].email);
+ const partial={headline:'還在寫的主標',problem:'',mechanism:' 尚未整理的原文 ',outcomes:'一個暫存成果\n',flow:{...page.flow,steps:page.flow.steps.map((step,index)=>({...step,note:index===0?'未完成的第一步':''}))}};
+ const body={repository_url:'https://github.com/example/project',title:'私人未完成頁',description:'只保存自己的表單草稿。',relationship:'curator',use_notes:'',page_content_draft:partial};
+ const key=randomUUID(),saved=await api('/me/skill-submissions/manual',owner,body,undefined,key);assert.equal(saved.status,201,JSON.stringify(saved.data));
+ const id=saved.data.submission_id;assert.deepEqual(saved.data.payload.page_content_draft,partial);assert.equal(saved.data.payload.use_notes,'');
+ assert.deepEqual((await api('/me/skill-submissions/manual',owner,body,undefined,key)).data,saved.data);
+ assert.deepEqual((await api(`/me/skill-submissions/${id}`,owner)).data.payload.page_content_draft,partial);
+ assert.equal((await api(`/me/skill-submissions/${id}`,other)).status,404);assert.equal((await api(`/skill-submissions/${id}`)).status,404);
+ const denied=await api(`/me/skill-submissions/${id}/publish`,owner,{consent_to_share:true},saved.data.aggregate_version);assert.equal(denied.status,422,JSON.stringify(denied.data));assert.equal(denied.data.code,'page_content_incomplete');assert.equal(seen.length,0);
+ for(const invalid of [{...partial,hidden:'unknown'},{...partial,headline:'字'.repeat(31)},{...partial,flow:{...partial.flow,steps:[]}}])assert.equal((await api('/me/skill-submissions/manual',owner,{...body,page_content_draft:invalid})).status,422);
+ const draft=await agentDraft((await newKey(owner)).token);assert.equal((await agent(`/skill-submissions/${draft.submission.submission_id}`,draft.upload_grant.token,payload({page_content_draft:partial}))).status,422);
+ const {page_content_draft:unused,...rest}=body;
+ const complete=await api(`/me/skill-submissions/${id}/manual`,owner,{...rest,use_notes:'開啟範例並輸入筆記後執行整理。',page_content:page},saved.data.aggregate_version);assert.equal(complete.status,200,JSON.stringify(complete.data));assert.equal(complete.data.payload.page_content_draft,undefined);
+ const published=await api(`/me/skill-submissions/${id}/publish`,owner,{consent_to_share:true},complete.data.aggregate_version);assert.equal(published.status,200,JSON.stringify(published.data));assert.deepEqual((await readPublishedSkillSubmission(pool,id))?.page_content,page);
 });

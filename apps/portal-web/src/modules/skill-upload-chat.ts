@@ -1,3 +1,6 @@
+import { skillPageContentInstruction } from './skill-page-content-instruction';
+import type { SkillPageContent } from '../../../../modules/community/skill-page-content.js';
+
 export const CHAT_JSON_MAX_BYTES = 800 * 1024;
 
 export type ChatSkillSeed = {
@@ -6,6 +9,7 @@ export type ChatSkillSeed = {
   use_notes: string;
   relationship: string;
   demo_url: string | null;
+  page_content?: SkillPageContent;
 };
 
 /** Lower-case owner/repo of a GitHub repository root. Anything else is null. */
@@ -28,6 +32,7 @@ export function seedCopyBlock(seed: ChatSkillSeed): string {
     `use_notes：${JSON.stringify(seed.use_notes)}`,
     `relationship：${JSON.stringify(seed.relationship)}`,
     `demo_url：${JSON.stringify(seed.demo_url)}`,
+    ...(seed.page_content ? [`page_content：${JSON.stringify(seed.page_content)}`] : []),
   ].join('\n');
 }
 
@@ -45,6 +50,7 @@ ${source}${copied}
 - title：技能名稱
 - description：真實介紹
 - use_notes：適合誰、需要什麼、第一個使用步驟與限制
+- ${skillPageContentInstruction}
 - relationship：預設 "curator"；只有我明確說自己是原作者、維護者或貢獻者，才改成 author、maintainer 或 contributor
 - share_introductions：剛好 100 則彼此不同的分享短文，每則 8 到 200 字
 - demo_url：不確定就 null

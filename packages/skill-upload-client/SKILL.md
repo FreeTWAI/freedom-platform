@@ -20,6 +20,8 @@ description: 把一個真實的公開 GitHub 技能 repo 整理成自由工坊�
 - `repository_url`：repo 根網址，例如 `https://github.com/owner/repo`。
 - 來源與授權：核對儲存庫身分、README 與 LICENSE。沒有授權時如實說明，不要推定可重用；只撰寫自己的介紹，不複製未獲授權的原文或素材。網站公開時會自行讀取 GitHub，保存當時的 repository ID、commit SHA 與授權依據；不要自行填入或冒充這些驗證欄位。
 - `title`、`description`、`use_notes`：依照 README 與實際程式內容撰寫；不要誇大功能、不要承諾收入、不要寫成官方或平台認證。
+- `page_content`：新投稿必須依同一份來源補齊 `headline`、`problem`、`mechanism`、3 個不同的 `outcomes`，以及 `flow.title`、`flow.lead`、`flow.caption` 和剛好 3 個含固定 `icon`／`title`／`note` 的步驟。主標要具體並以「。」「！」「？」結尾；問題說明使用情境，原理描述程式如何工作，流程寫真實輸入→處理→產出。字數與圖示規則見 `protocol.md`。資料不足先補讀程式和文件，不虛構原理、不把導航或範例文字當成功能。
+- 介紹頁由平台共用版型產生；只提供上述結構化純文字，不上傳 HTML 或 SVG。預覽仍是私人草稿，發布仍由會員本人決定。
 - `relationship`：照會員自己的說法選 `author`、`maintainer`、`contributor` 或 `curator`；網站會標示為「自述」。
 - `share_introductions`：**剛好 100 則**，每則 8–200 字、單行、彼此不重複（大小寫或空白不同不算不同），適合貼到社群的分享介紹。不要放個人資料、聯絡方式、追蹤碼或不實宣稱。
 - `demo_url`：只有真的存在的公開 HTTPS 示範頁才填，否則用 `null`。

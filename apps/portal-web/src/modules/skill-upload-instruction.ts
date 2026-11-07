@@ -1,5 +1,6 @@
 import { formatIsoLocal } from '../format';
 import { seedCopyBlock, type ChatSkillSeed } from './skill-upload-chat';
+import { skillPageContentInstruction } from './skill-page-content-instruction';
 
 export const SKILL_UPLOAD_GUIDE = '/development/skill-upload';
 
@@ -21,8 +22,9 @@ export function agentInstruction(origin: string, secret: SkillUploadInstructionS
 1. title：技能名稱。
 2. description：真實介紹，只寫專案確實具備的功能與授權。
 3. use_notes：適合誰、需要什麼、第一個使用步驟與限制。
-4. share_introductions：剛好 100 則彼此不同的分享短文，每則 8–200 字，不重複、不誇大。
-5. 插圖（選填）：只依公開指南的格式提供；無法確認格式就省略 cover_image。
+4. ${skillPageContentInstruction}
+5. share_introductions：剛好 100 則彼此不同的分享短文，每則 8–200 字，不重複、不誇大。
+6. 插圖（選填）：只依公開指南的格式提供；無法確認格式就省略 cover_image。
 
 規則：
 - relationship 預設 curator（推薦／整理者）；只有我明確聲明是原作者、維護者或貢獻者，才改為 author／maintainer／contributor。這是本人自行聲明，不是身分驗證。
@@ -43,6 +45,22 @@ Content-Type: application/json
   "use_notes": "如何開始使用與限制",
   "demo_url": null,
   "relationship": "curator",
+  "page_content": {
+    "headline": "請改為原作可支持的具體效益。",
+    "problem": "請依文件描述使用者實際遇到的問題。",
+    "mechanism": "請說明這個專案實際接收什麼資料、如何處理，以及產生什麼結果。",
+    "outcomes": ["第一個真實產出", "第二個真實產出", "第三個真實產出"],
+    "flow": {
+      "title": "請填真實流程名稱",
+      "lead": "請依原作文件說明使用環境、前置資料與條件。",
+      "steps": [
+        {"icon": "doc", "title": "實際輸入", "note": "請說明專案需要的真實輸入。"},
+        {"icon": "sliders", "title": "核心處理", "note": "請說明程式實際執行的處理。"},
+        {"icon": "check", "title": "實際產出", "note": "請說明使用者取得的真實結果。"}
+      ],
+      "caption": "請用一句話補充這個流程的真實條件與範圍。"
+    }
+  },
   "share_introductions": ["第 1 則分享短文", "第 2 則分享短文", "……共 100 則，彼此不同"]
 }
 `;

@@ -1,3 +1,4 @@
+import { fillSkillPageContent, syntheticSkillPage } from './skill-page-content-fixture.js';
 import { navigate, openAccountSettings } from './navigation.js';
 import { test, expect, type Locator, type Page } from './fixtures.js';
 import { DEMO_PASSWORD, DEMO_USERS } from '../../packages/testing/seed.js';
@@ -163,7 +164,7 @@ test('a seeded draft is completed in chat, and a different repository does not r
   const dialog = page.getByRole('dialog', { name: '上傳技能', exact: true });
   const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
   await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
-  await paste.fill(JSON.stringify({ repository_url: 'https://github.com/example/other-book', title: '另一件' }));
+  await paste.fill(JSON.stringify({ repository_url: 'https://github.com/example/other-book', title: '另一件', page_content: syntheticSkillPage }));
   await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
   await expect.poll(() => uploads.length).toBe(1);
   expect(uploads[0]).toContain('/sub-new');
@@ -178,7 +179,7 @@ test('a seeded draft is completed in chat, and a different repository does not r
   await expect(dialog.getByLabel('公開儲存庫網址', { exact: true })).toHaveValue(seed.repository_url);
   await expect(dialog.getByRole('button', { name: '複製給聊天 AI', exact: true })).toBeFocused();
   await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
-  await paste.fill(JSON.stringify({ repository_url: 'https://github.com/Example/Seeded-Book', title: '種子技能' }));
+  await paste.fill(JSON.stringify({ repository_url: 'https://github.com/Example/Seeded-Book', title: '種子技能', page_content: syntheticSkillPage }));
   await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
   await expect(dialog.getByText('升級：種子技能', { exact: true })).toBeVisible();
   await expect.poll(() => grants.some(path => path.includes('sub-seed'))).toBe(true);
@@ -254,7 +255,7 @@ test('a paste still reaches a seeded draft after its grant expired', async ({ pa
   await expect(dialog.getByText('正在補完：種子技能', { exact: true })).toBeVisible();
   const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
   await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
-  await paste.fill(JSON.stringify({ repository_url: 'https://github.com/Example/Seeded-Book', title: '種子技能' }));
+  await paste.fill(JSON.stringify({ repository_url: 'https://github.com/Example/Seeded-Book', title: '種子技能', page_content: syntheticSkillPage }));
   await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
   await expect.poll(() => grants).toEqual(['/me/skill-submissions/sub-seed/grant']);
   await expect.poll(() => uploads.some(path => path.endsWith('/sub-seed'))).toBe(true);
@@ -502,7 +503,7 @@ test('publish, revoke, and chat upload show their results inside the drafts sect
     await page.getByRole('button', { name: '上傳技能', exact: true }).click();
     const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
     await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
-    await paste.fill(JSON.stringify({ repository_url: 'https://github.com/example/skill-demo', title: '流程整理技能' }));
+    await paste.fill(JSON.stringify({ repository_url: 'https://github.com/example/skill-demo', title: '流程整理技能', page_content: syntheticSkillPage }));
     await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
     const uploadedNotice = dialog.getByRole('region', { name: '我的技能投稿', exact: true }).getByText('草稿已上傳，請預覽內容後再送出。', { exact: true });
     await expectInsideDialog(uploadedNotice);
@@ -690,7 +691,7 @@ function fullBook(title: string) {
     use_notes: '安裝後先閱讀 README，再執行第一個範例。',
     demo_url: null,
     relationship: 'curator',
-    share_introductions: blurbs,
+    share_introductions: blurbs, page_content: syntheticSkillPage,
   });
 }
 
@@ -700,6 +701,7 @@ async function publishSimple(page: Page, title: string) {
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/freetwai-test/simple-work');
   await page.getByLabel('作品名稱', { exact: true }).fill(title);
   await page.getByLabel('一句話介紹', { exact: true }).fill('幫創作者把零散想法整理成合作提案。');
+  await fillSkillPageContent(page);
   await page.getByRole('button', { name: '預覽投稿', exact: true }).click();
   await page.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
   await page.getByRole('button', { name: '確認並公開', exact: true }).click();
@@ -793,6 +795,7 @@ test('private submission resume waits through create and publication across remo
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/synthetic/repo');
   await page.getByLabel('作品名稱', { exact: true }).fill('Original operation');
   await page.getByLabel('一句話介紹', { exact: true }).fill('Original description');
+  await fillSkillPageContent(page);
   await page.getByRole('button', { name: '預覽投稿', exact: true }).click();
   await page.getByLabel('我同意公開這份作品介紹與來源關係', { exact: true }).check();
   await page.getByRole('button', { name: '確認並公開', exact: true }).click();

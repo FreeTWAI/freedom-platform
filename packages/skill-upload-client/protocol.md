@@ -59,12 +59,32 @@ Content-Type: application/json
   "use_notes": "1–3000 字",
   "demo_url": null,
   "relationship": "author | maintainer | contributor | curator",
+  "page_content": {
+    "headline": "依原作資料填寫具體效益。",
+    "problem": "描述誰在什麼情境下遇到什麼真實問題。",
+    "mechanism": "說明專案實際接收的輸入、執行的處理，以及產生的結果。",
+    "outcomes": ["第一個真實產出", "第二個真實產出", "第三個真實產出"],
+    "flow": {
+      "title": "真實流程名稱",
+      "lead": "說明使用環境、前置資料與必要條件。",
+      "steps": [
+        {"icon": "doc", "title": "實際輸入", "note": "說明程式需要的真實輸入。"},
+        {"icon": "sliders", "title": "核心處理", "note": "說明程式實際執行的處理。"},
+        {"icon": "check", "title": "實際產出", "note": "說明使用者取得的真實結果。"}
+      ],
+      "caption": "補充這個流程的真實使用條件與範圍。"
+    }
+  },
   "share_introductions": ["剛好 100 則，每則 8–200 字，單行、彼此不同"],
   "cover_image": {"mime_type": "image/png | image/jpeg | image/webp", "data_base64": "…"}
 }
 ```
 
 - `repository_url` 必須是公開 GitHub 儲存庫的根網址；`demo_url` 可省略或為公開 HTTPS 網址。
+- 新投稿請完整提供 `page_content`，依 README、LICENSE 與實際程式碼撰寫；上例只是欄位結構，不可當成作品內容直接上傳。舊客戶端仍可省略，網站保留原介紹，不會替缺少的內容虛構功能。
+- `page_content` 使用共用技能書版型，僅接受純文字與固定圖示：`headline` 6–30 字且以「。」「！」「？」結尾；`problem` 12–100 字；`mechanism` 20–160 字；`outcomes` 剛好 3 個不同項目，每個 4–30 字。
+- `flow` 含 `title` 4–24 字、`lead` 10–100 字、`caption` 10–90 字，`steps` 必須剛好 3 步。每步 `title` 2–14 字、`note` 8–60 字、`icon` 為固定圖示名稱（例如 `doc`、`sliders`、`check`；完整白名單為原始碼 `SKILL_FLOW_ICONS`）。`loop` 可省略或為布林值，僅真實循環才用 `true`。過長而無法完整排入示意圖的文字也會被拒絕，請縮寫後核對原意。
+- 不接受 `page_content`／`flow`／步驟中的額外欄位、HTML、SVG 或網址。流程必須描述專案實際的輸入、處理與產出，不以閱讀本站的導航步驟替代；不確定時補讀來源或等待作者補充。
 - `share_introductions` 會先做 Unicode NFC 與前後空白整理；大小寫或空白不同不算不同。不可含換行或控制字元。
 - `cover_image` 可省略。只接受標準 base64（無換行、無 `data:` 前綴），解碼後 512 KiB 以內、靜態點陣圖、長寬各 4096 以內。SVG、GIF、APNG、動態 WebP 會被拒絕。伺服器會重新編碼為 WebP 並移除中繼資料；不會去抓取任何遠端圖片。
 - 不接受 `consent_to_share`、`official`、會員 ID 或其他欄位。公開同意只能由會員本人在網站勾選。

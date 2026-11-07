@@ -4,6 +4,8 @@ import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import sharp from 'sharp';
 import {submittedSkillHtml,submittedSkillAgentMarkdown} from '../../apps/platform-api/src/routes/published-skills.js';
+import { syntheticSkillPage } from '../fixtures/skill-page-content.js';
+import { skillSubmissionPreviewDocument } from '../../apps/portal-web/src/modules/SkillSubmissionPagePreview.js';
 import {communitySkillArt} from '../../modules/skill-submissions/public.js';
 
 const skill={submission_id:'b371a8d0-0453-4e7e-8730-03cc9803f4e8',title:'剪輯共作 <script>alert(1)</script>',description:'整理素材 & 檢查時間軸',use_notes:'先讀 README，再用測試素材執行。',demo_url:'https://example.com/demo',repository_url:'https://github.com/example/editor',relationship:'curator' as const,relationship_verification:'self_declared' as const,official:false as const,project_id:'ce72bbae-f09a-4e5e-b5b6-f30f311b660e',public_path:'/development/submissions/b371a8d0-0453-4e7e-8730-03cc9803f4e8',cover_url:'/art/community-skills/default.webp',illustration_url:'/api/v1/skill-submissions/b371a8d0-0453-4e7e-8730-03cc9803f4e8/illustration',share_introductions:Array.from({length:100},(_,i)=>`第${i+1}個測試情境：整理公開的剪輯素材。`),source:{repository_full_name:'example/editor',repository_url:'https://github.com/example/editor',commit_sha:'a'.repeat(40),license_spdx:'MIT',license_evidence_url:'https://github.com/example/editor/blob/main/LICENSE',is_fork:false,archived:false},published_at:'2026-09-23T12:00:00Z'};
@@ -16,18 +18,19 @@ test('published candidate introduction has own illustration metadata, persistent
   assert.ok(html.includes(`rel="canonical" href="https://freetwai.com${skill.public_path}"`));
   assert.ok(html.includes('/issues'));assert.ok(html.includes('/pulls'));assert.ok(html.includes('/SKILL.md'));
   assert.match(html,/<a href="https:\/\/github\.com\/example\/editor" target="_blank" rel="noopener noreferrer">到 GitHub 看原始碼 ↗<\/a>/);
-  // Same entry packaging as a platform skill book: cover first, then purpose, source and the 社群技能書 badge.
-  assert.match(html,/<section class="public-skill-entry"><figure class="public-skill-cover"><img src="\/art\/community-skills\/default\.webp" alt="" width="768" height="512"><\/figure>/);
+  // Legacy pages use the same shared hero and usage bands without invented flow.
+  assert.match(html,/<section class="public-skill-entry"><div class="sp-hero sp-hero-single">/);
+  assert.ok(html.includes('src="/art/community-skills/default.webp"'));
   assert.ok(html.includes('原作：example/editor'));
   assert.ok(html.includes('開啟專案線上示範 ↗'));
   assert.ok(html.includes('目的地：<bdi>example.com/demo</bdi>'));
-  assert.ok(html.includes('用途與適用範圍'));assert.ok(html.includes('投稿者尚未分別補充'));
+  assert.ok(html.includes('開始使用'));assert.ok(!html.includes('投稿者尚未分別補充'));
   assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2>一起開發</h2>'));
   assert.ok(html.includes('投稿公開日期'));assert.ok(html.includes('2026-09-23'));
   assert.ok(html.includes('整理推薦者（自行聲明'));assert.ok(html.includes('非應用程式安裝包'));
   assert.ok(!html.includes('<pre>'));assert.ok(!html.includes('立即啟動'));assert.ok(!html.includes('下載應用'));
   assert.ok(html.indexOf('Fork 專案')>html.indexOf('<h2>一起開發</h2>'));
-  assert.ok(html.includes('>社群技能書</span>'));assert.ok(!html.includes('社群投稿'));assert.ok(html.includes('自行聲明'));assert.ok(html.includes('a'.repeat(40)));
+  assert.ok(html.includes('社群技能書 · 會員分享'));assert.ok(!html.includes('社群投稿'));assert.ok(html.includes('自行聲明'));assert.ok(html.includes('a'.repeat(40)));
   assert.ok(!html.includes('<script>alert'));assert.ok(html.includes('&lt;script&gt;'));
   assert.ok(!html.includes('Authorization'));assert.ok(!html.includes('token'));
 });
@@ -68,15 +71,15 @@ test('every 社群技能書 gets a delivered cover, and drawn art follows the so
 
 test('member-authored usage remains readable plain text; absent instructions and unknown licenses stay explicit',()=>{
  const html=submittedSkillHtml({...skill,use_notes:'第一段 <img src=x onerror=alert(1)>\n第二行\n\n下一步：先閱讀 README。',source:{...skill.source,license_spdx:'NOASSERTION'}});
- assert.match(html,/<p class="public-skill-notes">第一段 &lt;img src=x onerror=alert\(1\)&gt;\n第二行<\/p><p class="public-skill-notes">下一步：先閱讀 README。<\/p>/);
+ assert.ok(html.includes('第一段 &lt;img src=x onerror=alert(1)&gt;\n第二行\n\n下一步：先閱讀 README。'));
  assert.ok(!html.includes('<img src=x'));assert.match(html,/<dt>收錄授權<\/dt><dd>尚未確認<\/dd>/);
- assert.ok(submittedSkillHtml({...skill,use_notes:'',demo_url:null}).includes('使用步驟尚待補充'));
+ assert.ok(!submittedSkillHtml({...skill,use_notes:'',demo_url:null}).includes('使用步驟尚待補充'));
 });
 
 test('published member skills receive the same optional signup without hiding their use notes',()=>{
  const html=submittedSkillHtml(skill,'17');
  assert.ok(html.indexOf('先讀 README，再用測試素材執行。')<html.indexOf('id="join-workshop"'));
- assert.ok(html.includes('免費加入，探索更多資源'));assert.ok(html.includes('不用註冊就能閱讀'));
+ assert.ok(html.includes('免費加入，探索更多資源'));assert.ok(html.includes('id="join-workshop"'));
  assert.ok(html.includes('return_to='+encodeURIComponent(skill.public_path)+'&amp;skill_intro=17'));
  assert.ok(html.includes('<script src="/skill-acquisition.js" defer></script>'));
  assert.ok(html.includes('整理推薦者（自行聲明'));assert.ok(html.includes('非應用程式安裝包'));
@@ -85,12 +88,30 @@ test('published member skills receive the same optional signup without hiding th
 
 test('shared submission reading and real source destinations precede optional illustration and acquisition',()=>{
  const html=submittedSkillHtml(skill,'17');
- const reading=html.indexOf('<section class="public-skill-introduction"');
+ const reading=html.indexOf('id="skill-start"');
  const destinations=html.indexOf('<section class="public-skill-next"');
  const illustration=html.indexOf('<figure class="public-skill-illustration"');
  assert.ok(reading>0&&destinations>reading&&illustration>destinations);
  assert.ok(html.indexOf('id="join-workshop"')>destinations);
  assert.ok(html.includes(skill.use_notes));
- assert.ok(html.includes('href="#skill-use-title"'));
- assert.ok(html.includes('href="#skill-next-title"'));
+ assert.ok(html.includes('href="#skill-start"'));
+ assert.ok(html.includes('id="skill-next-title"'));
+});
+
+test('structured member pages and private previews render the same factual problem, mechanism and three-step diagram', () => {
+ const source={...skill,page_content:syntheticSkillPage};
+ const html=submittedSkillHtml(source), preview=skillSubmissionPreviewDocument(source);
+ for(const text of [syntheticSkillPage.headline,syntheticSkillPage.problem,syntheticSkillPage.mechanism,...syntheticSkillPage.outcomes,...syntheticSkillPage.flow.steps.map(step=>step.note),syntheticSkillPage.flow.lead]){
+  assert.ok(html.includes(text),text);assert.ok(preview.includes(text),text);
+ }
+ assert.match(html,/<html[^>]*class="skill-page"/);
+ assert.match(html,/<details[^>]*><summary>作者、版本與參與開發<\/summary>/);
+ assert.equal((html.match(/<h1\b/g)??[]).length,1);
+ assert.ok(html.indexOf(syntheticSkillPage.problem)<html.indexOf('id="skill-start"'));
+ assert.ok(html.indexOf(syntheticSkillPage.flow.lead)>html.indexOf('id="skill-start"'));
+ assert.ok(preview.includes("default-src 'none'"));assert.ok(preview.includes("form-action 'none'"));
+ assert.ok(!preview.includes('<script'));assert.ok(!preview.includes('<img'));assert.ok(!preview.includes('Authorization'));
+ assert.ok(!preview.includes('<script>alert'));assert.ok(preview.includes('&lt;script&gt;'));
+ const markdown=submittedSkillAgentMarkdown(source);
+ assert.ok(markdown.includes('"page_content"'));assert.ok(markdown.includes(syntheticSkillPage.mechanism));
 });

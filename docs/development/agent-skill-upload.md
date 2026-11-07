@@ -102,7 +102,7 @@ metadata 後以 PostgreSQL `clock_timestamp()` 重驗期限。清單查詢等待
 `modules/skill-submissions/public.ts`：
 
 - `listPublishedSkillSubmissions(pool, limit=100)` → `{submission_id,title,description,repository_url,relationship,relationship_verification:'self_declared',official:false,project_id,public_path,illustration_url,share_introductions,source:{repository_full_name,repository_url,commit_sha,license_spdx,license_evidence_url,is_fork,archived},published_at}[]`
-- `readPublishedSkillSubmission(pool, id)` → 上述欄位加上 `use_notes`、`demo_url`，找不到時回 `null`
+- `readPublishedSkillSubmission(pool, id)` → 上述欄位加上 `use_notes`、`demo_url`、`page_content|null`，找不到時回 `null`
 - `readPublishedSkillIllustration(pool, id)` → `{bytes, mime_type:'image/webp'}` 或 `null`
 
 只列出已公開、擁有者仍啟用且完成加入（選定主要公會）、固定版本仍存在的投稿。已被已公開升級取代的簡易投稿，以及儲存庫已是目錄技能書的投稿，不會出現在這份清單；兩個條件都在 SQL 裡，所以 `LIMIT` 仍會補滿。直接讀取簡易投稿本身仍然回傳它。若已有已公開的升級，`GET /development/submissions/:id` 與 `GET /development/submissions/:id/SKILL.md` 以 302 轉到升級後的同一路徑，並保留查詢字串（例如 `?intro=N`）。升級後來被撤回時，簡易投稿會重新出現，轉址也消失。`readPublishedSkillTitles` 仍回傳簡易投稿自己的標題。推廣連結若目標是 `submission:` 加上簡易投稿，公開頁的標題、選中的分享介紹、圖片與連結改走已公開的升級。不輸出擁有者 ID、email、草稿或授權資料。公開圖片網址為 `/api/v1/skill-submissions/:id/illustration`，由根路由提供。
@@ -122,6 +122,18 @@ npx tsx --test --test-concurrency=1 tests/runtime/skill-submissions.test.ts
 
 ## 公開介紹頁的閱讀與外連
 
+新手動投稿與 Agent 草稿可把完整 `page_content` 存在既有 `payload` JSONB，使用共用
+`SkillPageContent` 驗證：效益主標、使用問題、運作原理、三個不同產出及三步流程。
+每個步驟只有固定圖示名稱與純文字；未知欄位、HTML／SVG、連結及超出版型容量的
+內容都會被拒絕。正文與流程圖由共用 renderer 產生，不執行投稿 markup。
+API 為舊客戶端保留省略此欄位的相容性；新手動表單及 Agent 指令要求完整資料，
+由本人預覽後沿原同意／版本／idempotency 流程公開，沒有新增 migration 或發布權限。
+
+原作 metadata 修訂後，公開投影使用當前標題、說明與使用筆記，並在四欄 metadata 與原投稿不一致時省略其
+`page_content`，避免新版文字搭配過時的功能與流程；精確一致的新稿經同意公開後可保留完整頁。原作者 payload 仍完整保存在
+投稿紀錄，私人草稿與歷史內容不被覆寫。沒有結構內容的舊稿保留真實原文與同版型，
+不從 Repo 名稱或圖片推測功能。
+
 目錄技能書與經同意公開的社群投稿共用用途／適用範圍、開始使用、預期成果與示範、
 下一步及來源版本的閱讀結構。目錄沿用原有 guide；投稿僅讀取上述公開投影，
 使用說明以逸出的純文字段落呈現，不執行 HTML 或安裝指令。沒有獨立結構欄位的
@@ -136,3 +148,5 @@ npx tsx --test --test-concurrency=1 tests/runtime/skill-submissions.test.ts
 `/go` 的 SameSite、本人／機器人排除及歸因流程不在本次呈現變更內；私人草稿、
 撤下及作者失去資格的內容仍由原投影拒絕，維持 `no-store`。
 這是共用模板，沒有宣稱逐本內容已由作者核對，或真人閱讀／社群平台預覽已驗收。
+
+手動私人草稿可使用 `page_content_draft` 保存尚未完成、長度有界的表單欄位，僅本人可讀；Agent 上傳不接受此欄位，未完成草稿不能公開。補齊後改存完整 `page_content` 並移除草稿欄位。已修訂的作品以 title、description、use_notes、demo_url 四欄做 null-safe 精確比對：僅不相符時省略舊結構內容；新版經同意公開且四欄完全一致時可顯示。A→B→A 恢復同一份文字時允許原圖恢復，這不代表重新驗證原作功能。

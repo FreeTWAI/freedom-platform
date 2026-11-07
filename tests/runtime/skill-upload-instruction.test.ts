@@ -7,7 +7,7 @@ import { formatIsoLocal } from '../../apps/portal-web/src/format.js';
 import { chatSkillInstruction, type ChatSkillSeed } from '../../apps/portal-web/src/modules/skill-upload-chat.js';
 import { agentInstruction, SKILL_UPLOAD_GUIDE } from '../../apps/portal-web/src/modules/skill-upload-instruction.js';
 
-// Synthetic values only. Frozen plain output from main 95aae4daccb01eabfca6feff551a7f8f3b9a178d.
+// Synthetic values only. Frozen complete-page instruction output.
 const origin = 'https://example.test';
 const secret = Object.freeze({ token: 'synthetic-private-grant', expiresAt: 'synthetic-expiry', submitUrl: `${origin}/agent-api/v1/skill-submissions/synthetic-draft` });
 const expectedPlain = `# 自由工坊 · 技能上傳（私人指令，請勿轉傳）
@@ -17,8 +17,16 @@ const expectedPlain = `# 自由工坊 · 技能上傳（私人指令，請勿轉
 1. title：技能名稱。
 2. description：真實介紹，只寫專案確實具備的功能與授權。
 3. use_notes：適合誰、需要什麼、第一個使用步驟與限制。
-4. share_introductions：剛好 100 則彼此不同的分享短文，每則 8–200 字，不重複、不誇大。
-5. 插圖（選填）：只依公開指南的格式提供；無法確認格式就省略 cover_image。
+4. page_content：依 README 與實際程式碼填完整介紹頁，全部為純文字，不傳 HTML、SVG、網址或額外欄位：
+  - headline：6–30 字的具體效益主標，以「。」「！」「？」結尾。
+  - problem：12–100 字，說明誰在什麼情境遇到什麼問題。
+  - mechanism：20–160 字，解釋專案實際如何處理輸入、完成工作與產生結果；不要只重複效益。
+  - outcomes：剛好 3 個不同的真實產出，每個 4–30 字；不是捏造使用成效。
+  - flow：title 4–24 字、lead 10–100 字（使用環境、前置資料與條件）、caption 10–90 字、steps 剛好 3 步。
+  - 每步含 icon、title（2–14 字）、note（8–60 字）。icon 使用 doc、sliders、check 等協定列出的固定圖示名稱；步驟寫專案真實的輸入→處理→輸出，不以「看介紹、看原作、開始使用」冒充功能。
+  - flow.loop 只有真實循環才填 true，否則省略或 false。資料不足時先補讀原作文件，不要虛構功能或把範例文字當成果。
+5. share_introductions：剛好 100 則彼此不同的分享短文，每則 8–200 字，不重複、不誇大。
+6. 插圖（選填）：只依公開指南的格式提供；無法確認格式就省略 cover_image。
 
 規則：
 - relationship 預設 curator（推薦／整理者）；只有我明確聲明是原作者、維護者或貢獻者，才改為 author／maintainer／contributor。這是本人自行聲明，不是身分驗證。
@@ -39,6 +47,22 @@ Content-Type: application/json
   "use_notes": "如何開始使用與限制",
   "demo_url": null,
   "relationship": "curator",
+  "page_content": {
+    "headline": "請改為原作可支持的具體效益。",
+    "problem": "請依文件描述使用者實際遇到的問題。",
+    "mechanism": "請說明這個專案實際接收什麼資料、如何處理，以及產生什麼結果。",
+    "outcomes": ["第一個真實產出", "第二個真實產出", "第三個真實產出"],
+    "flow": {
+      "title": "請填真實流程名稱",
+      "lead": "請依原作文件說明使用環境、前置資料與條件。",
+      "steps": [
+        {"icon": "doc", "title": "實際輸入", "note": "請說明專案需要的真實輸入。"},
+        {"icon": "sliders", "title": "核心處理", "note": "請說明程式實際執行的處理。"},
+        {"icon": "check", "title": "實際產出", "note": "請說明使用者取得的真實結果。"}
+      ],
+      "caption": "請用一句話補充這個流程的真實條件與範圍。"
+    }
+  },
   "share_introductions": ["第 1 則分享短文", "第 2 則分享短文", "……共 100 則，彼此不同"]
 }
 `;

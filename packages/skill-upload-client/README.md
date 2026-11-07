@@ -37,6 +37,8 @@ freedom-skill-upload submit --submission <草稿 ID> --grant-stdin --file skill.
 
 內容格式與規則見 [protocol.md](protocol.md)；給 AI agent 的操作指引見 [SKILL.md](SKILL.md)。
 
+新投稿的 `page_content` 包含效益主標、使用問題、運作原理、三個真實產出與三步流程。請從原作 README 和程式碼整理，讓本人先預覽同一套公開技能書版型，再決定發布。CLI 傳送這些結構化文字；不接收自訂 HTML／SVG，也不代替會員公開。
+
 ## 安全設計
 
 - 只連到設定的網站（HTTPS，或本機測試用的 `http://127.0.0.1`／`localhost`／`[::1]`），不跟隨轉址，也不送 cookie。

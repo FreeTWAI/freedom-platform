@@ -1,3 +1,4 @@
+import { syntheticSkillPage } from './skill-page-content-fixture.js';
 import { navigate } from './navigation.js';
 import { test, expect, type Page, type Request } from './fixtures.js';
 
@@ -18,7 +19,7 @@ function submission(id: string, status: Status, version: number, withPayload = f
     grant_revoked_at: status === 'revoked' ? '2026-09-23T01:00:00Z' : null,
     payload: withPayload ? {
       repository_url: 'https://github.com/example/skill-demo', title: '流程整理技能', description: '讀取 README 後整理出的真實介紹。',
-      use_notes: '安裝 Node.js 後執行第一個範例。', demo_url: 'javascript:alert(1)', relationship: 'maintainer', share_introductions: blurbs,
+      use_notes: '安裝 Node.js 後執行第一個範例。', demo_url: 'javascript:alert(1)', relationship: 'maintainer', share_introductions: blurbs, page_content: syntheticSkillPage,
     } : null,
   };
 }
@@ -400,10 +401,14 @@ for (const viewport of [
     // The paste field sits below the dialog's visible area; scroll the dialog, not the page.
     const paste = dialog.getByRole('textbox', { name: '貼上 JSON', exact: true });
     await paste.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
-    await paste.fill('```json\n{"repository_url":"https://github.com/example/skill-demo","title":"流程"}\n```');
+    await paste.fill(JSON.stringify({repository_url:'https://github.com/example/skill-demo',title:'缺少介紹頁'}));
+    await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
+    await expect(dialog.getByRole('alert').filter({hasText:'補齊 page_content'})).toBeVisible();
+    expect(agentCalls).toBe(0);expect(requests.filter(request=>request.path.endsWith('/grant'))).toHaveLength(0);
+    await paste.fill('```json\n' + JSON.stringify({ repository_url: 'https://github.com/example/skill-demo', title: '流程', page_content: syntheticSkillPage }) + '\n```');
     await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();
     await expect(dialog.getByRole('alert').filter({ hasText: 'share_introductions' })).toBeVisible();
-    expect(agentBodies[0]).toEqual({ repository_url: 'https://github.com/example/skill-demo', title: '流程' });
+    expect(agentBodies[0]).toEqual({ repository_url: 'https://github.com/example/skill-demo', title: '流程', page_content: syntheticSkillPage });
     expect(requests.filter(request => request.path.endsWith('/grant'))).toHaveLength(1);
 
     await dialog.getByRole('button', { name: '用這份 JSON 建立草稿', exact: true }).click();

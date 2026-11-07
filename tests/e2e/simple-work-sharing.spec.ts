@@ -1,3 +1,4 @@
+import { fillSkillPageContent, syntheticSkillPage } from './skill-page-content-fixture.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { test, expect, type Page } from './fixtures.js';
@@ -14,6 +15,7 @@ async function fillTool(page: Page, title: string) {
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/freetwai-test/simple-work');
   await page.getByLabel('作品名稱', { exact: true }).fill(title);
   await page.getByLabel('一句話介紹', { exact: true }).fill('幫創作者把零散想法整理成合作提案。');
+  await fillSkillPageContent(page);
 }
 
 // Save-only cases keep private drafts intentionally; each owns a member so
@@ -91,6 +93,11 @@ test('simple tool submission previews without writes, edits freely, then publish
   await page.getByRole('button', { name: '預覽投稿' }).click();
   await expect(page.getByRole('heading', { name: '確認這樣分享，好嗎？' })).toBeFocused();
   expect(writes).toEqual([]);
+  const frame=page.frameLocator('iframe.skill-submission-page-preview');
+  await expect(page.locator('iframe.skill-submission-page-preview')).toHaveAttribute('sandbox','');
+  await expect(frame.locator('#skill-problem')).toContainText(syntheticSkillPage.problem);
+  await expect(frame.locator('.sp-flow-band')).toContainText(syntheticSkillPage.mechanism);
+  for(const step of syntheticSkillPage.flow.steps) await expect(frame.locator('.sf-legend')).toContainText(step.note);
   await expect(page.getByRole('button', { name: '確認並公開' })).toBeDisabled();
   await page.getByRole('button', { name: '修改內容' }).click();
   await expect(page.getByLabel('作品名稱', { exact: true })).toHaveValue('想法整理工具');
@@ -103,7 +110,9 @@ test('simple tool submission previews without writes, edits freely, then publish
   expect(writes).toHaveLength(2);
   const path = await completed.getByRole('link', { name: '閱讀已公開技能書 ↗' }).getAttribute('href');
   const response = await page.request.get(path!);
-  expect(response.status()).toBe(200); expect(await response.text()).toContain('一起完成作品');
+  expect(response.status()).toBe(200); const markup=await response.text();expect(markup).toContain('一起完成作品');
+  expect(markup).toContain(syntheticSkillPage.problem);expect(markup).toContain(syntheticSkillPage.mechanism);
+  expect(markup).toContain(syntheticSkillPage.flow.lead);
   await completed.getByRole('button', { name: '複製作品連結' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(new URL(path!, page.url()).href);
   await navigate(page, '技能書架');
@@ -338,4 +347,29 @@ test('normalized private saves stay clean and a committed unknown publish retrie
   expect(writes).toHaveLength(4); expect(writes[2].path).toMatch(/\/publish$/); expect(writes[3]).toEqual(writes[2]);
   const result = await (await page.request.get('/api/v1/me/skill-submissions/' + writes[2].path.split('/').at(-2))).json();
   expect(result.status).toBe('published'); expect(Number(result.aggregate_version)).toBe(3);
+});
+
+test('unfinished structured page saves privately, reloads intact and requires completion before preview or publication',async({page,e2eAuthPool})=>{
+ await page.setViewportSize({width:390,height:844});await login(page,await privateSkillMember(e2eAuthPool));await navigate(page,'開源投稿');
+ await page.getByLabel('GitHub 專案網址',{exact:true}).fill('https://github.com/freetwai-test/simple-work');
+ await page.getByLabel('作品名稱',{exact:true}).fill('逐步完成的介紹頁');await page.getByLabel('一句話介紹',{exact:true}).fill('先保存未完成的內容，再補齊介紹頁。');
+ await page.getByRole('textbox',{name:/^效益主標/}).fill('先留下尚未完成的想法');
+ await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
+ await expect(page.getByRole('status').filter({hasText:'未完成的介紹已保存'})).toBeVisible();
+ const draft=(await(await page.request.get('/api/v1/me/skill-submissions')).json()).items.find((item:any)=>item.payload?.title==='逐步完成的介紹頁');
+ expect(draft.public_path).toBeNull();expect(draft.payload.page_content_draft.headline).toBe('先留下尚未完成的想法');expect(draft.payload.page_content).toBeUndefined();
+ await page.reload();await page.getByText(/繼續未公開的草稿/).click();await page.getByRole('button',{name:'繼續投稿：逐步完成的介紹頁',exact:true}).click();
+ await expect(page.getByRole('textbox',{name:/^效益主標/})).toHaveValue('先留下尚未完成的想法');
+ await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await expect(page.getByRole('heading',{name:'確認這樣分享，好嗎？'})).toHaveCount(0);
+ await fillSkillPageContent(page);await page.getByLabel('如何開始使用',{exact:true}).fill('');
+ await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'未完成的介紹已保存'})).toBeVisible();
+ const missingNotes=await(await page.request.get('/api/v1/me/skill-submissions/'+draft.submission_id)).json();
+ expect(missingNotes.payload.use_notes).toBe('');expect(missingNotes.payload.page_content_draft.mechanism).toBe(syntheticSkillPage.mechanism);expect(missingNotes.payload.page_content).toBeUndefined();
+ await page.getByLabel('如何開始使用',{exact:true}).fill('開啟範例並輸入會議筆記，再執行整理並閱讀輸出摘要。');
+ await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'確認這樣分享，好嗎？'})).toBeVisible();
+ const complete=await(await page.request.get('/api/v1/me/skill-submissions/'+draft.submission_id)).json();
+ expect(complete.payload.page_content_draft).toBeUndefined();expect(complete.payload.page_content.mechanism).toBe(syntheticSkillPage.mechanism);expect(complete.public_path).toBeNull();
+ await expect(page.getByRole('button',{name:'重試公開投稿',exact:true})).toBeDisabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
