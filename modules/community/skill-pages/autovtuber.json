@@ -1,14 +1,32 @@
 {
   "headline": "從髮色到個性，表單一路串到 VRM 模型。",
-  "outcomes": ["硬體、模型路徑與底模授權的檢查紀錄", "備妥底模後產出的 VRM 0.x 模型", "概念圖、角色人設與聲音預覽"],
+  "outcomes": [
+    "備妥授權底模後產出的 VRM 0.x",
+    "概念圖、角色人設與聲音預覽",
+    "重型模型依序載入與硬體監看"
+  ],
+  "problem": "做一個虛擬角色得在人物設定、概念圖、模型與聲音工具間來回搬資料，流程很難接續。",
+  "mechanism": "表單將角色條件交給 Ollama、SDXL 與 TripoSR 依序處理，再組裝 VRM；一次載入一個重型 GPU 模型，HardwareGuard 持續監看硬體。",
   "flow": {
-    "title": "表單串接本機模型，組成 VRM",
-    "lead": "Beta 階段的本機工作站，需 Windows 與 VRAM 10 GB 以上的 NVIDIA GPU；Windows 打包與 VSeeFace／Warudo 實機驗收尚未完成。",
+    "title": "角色表單，串起本機生成流程",
+    "lead": "Beta 工作站需 Windows 與 VRAM 10 GB 以上的 NVIDIA GPU；Windows 打包與 VSeeFace／Warudo 實機驗收尚未完成，程式授權重用前需向作者確認。",
     "steps": [
-      {"icon": "list", "title": "填角色表單", "note": "在本機註冊有授權的 VRM 0.x 底模後，在 PySide6 表單填髮色、眼色、個性、風格與暱稱。"},
-      {"icon": "layers", "title": "本機模型依序生成", "note": "Ollama、SDXL、TripoSR 依序處理，再組裝成 VRM；HardwareGuard 每秒檢查硬體。"},
-      {"icon": "user", "title": "輸出 VRM 並檢查", "note": "含 ARKit 52 表情的 VRM 0.x 模型，另有概念圖與人設；把 .vrm 載入 VSeeFace 檢查。"}
+      {
+        "icon": "list",
+        "title": "角色條件與授權底模",
+        "note": "填髮色、眼色、個性與風格；需先註冊有授權的 VRM 0.x 底模，否則生成會被擋下。"
+      },
+      {
+        "icon": "layers",
+        "title": "模型依序生成與組裝",
+        "note": "本機模型逐段產生內容並組裝角色，HardwareGuard 每秒檢查硬體狀態。"
+      },
+      {
+        "icon": "user",
+        "title": "取得角色素材與 VRM",
+        "note": "輸出含 ARKit 52 表情的 VRM 0.x、概念圖、人設與聲音預覽，再到目標軟體核對。"
+      }
     ],
-    "caption": "需自備或另行取得授權的 VRM 0.x 底模；程式授權仍待作者決定，重用或散布前先向作者確認。"
+    "caption": "在目標軟體核對外觀與表情後，回到角色條件調整；每次生成都保留底模授權來源。"
   }
 }

@@ -1,14 +1,32 @@
 {
   "headline": "自己架一套命盤計算服務，給人類圖網站用。",
-  "outcomes": ["四個輸入與回傳命盤欄位的對照表", "三個 .se1 星曆檔與 EPHE_PATH 準備情況", "時區與錯誤紀錄，標明準確度尚未核對"],
+  "outcomes": [
+    "出生資料對應的結構化命盤欄位",
+    "類型、權威、人生角色與閘門線位",
+    "可接自己網站的自架計算 API"
+  ],
+  "problem": "想在自架人類圖網站顯示計算結果，卻缺少能接收出生資料並回傳結構化命盤欄位的後端。",
+  "mechanism": "Flask API 接收日期、時間、地點與時區，結合另行準備的星曆檔進行計算，再回傳類型、權威、人生角色與閘門線位等欄位。",
   "flow": {
-    "title": "四個出生輸入，算出命盤欄位",
-    "lead": "需自行架設的 Python／Flask 計算 API，沒有現成命盤網站；AGPL-3.0，Swiss Ephemeris 另有授權。",
+    "title": "出生資料，轉成命盤資料欄位",
+    "lead": "需自行架設的計算 API，沒有現成命盤網站；程式採 AGPL-3.0，Swiss Ephemeris 另有授權。計算準確度尚需核對，使用虛構或本人同意的資料。",
     "steps": [
-      {"icon": "calendar", "title": "送出虛構出生資料", "note": "向 POST /calculate 送 birth_date、birth_time、birth_place、tz。"},
-      {"icon": "code", "title": "自架 API 計算", "note": "計算需另備三個 .se1 星曆檔並設定 EPHE_PATH；請求以 X-API-Key 驗證。"},
-      {"icon": "list", "title": "取回命盤欄位", "note": "type、authority、profile 等欄位，及 personality／design 閘門與線位。"}
+      {
+        "icon": "calendar",
+        "title": "四項出生輸入",
+        "note": "提供日期、時間、地點與時區，向 calculate 端點送出請求。"
+      },
+      {
+        "icon": "code",
+        "title": "星曆計算與金鑰驗證",
+        "note": "自架服務使用三個另備的 .se1 星曆檔，透過 EPHE_PATH 定位並以 API key 驗證請求。"
+      },
+      {
+        "icon": "list",
+        "title": "取得結構化命盤",
+        "note": "回傳類型、權威、人生角色，以及 personality／design 閘門與線位，供網站使用。"
+      }
     ],
-    "caption": "收到回覆不代表算得準：只用虛構或本人同意的出生資料，準確度要自行核對。"
+    "caption": "保留輸入時區與錯誤紀錄，逐項核對計算欄位，找到差異後再回查設定。"
   }
 }

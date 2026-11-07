@@ -1,14 +1,32 @@
 {
   "headline": "AI 說測試通過，要拿得出收據。",
-  "outcomes": ["自己寫的規格、工單與驗收指令", "綁定程式碼指紋的驗收收據", "經本人核准完成的練習工單"],
+  "outcomes": [
+    "規格、工單與驗收指令的對應",
+    "綁定程式碼指紋的驗收收據",
+    "由人確認收據後完成的工單"
+  ],
+  "problem": "AI 說工單完成，卻可能引用舊測試結果；審查者很難知道驗收到底跑在哪一版程式碼上。",
+  "mechanism": "Runner 親自重跑 Golden Path，把結果綁定程式碼指紋、驗證編號與審查輪次；人再用對應收據完成審查，避免舊證據套到新改動。",
   "flow": {
-    "title": "Runner 重跑驗收，人下關卡",
-    "lead": "把 harness/ 複製進練習專案使用；它不呼叫 LLM、沒有 Web UI，也不判斷程式品質，雜湊只檢查新鮮度。",
+    "title": "驗收重跑，收據綁住程式版本",
+    "lead": "需自行撰寫規格與驗收指令，由人下 Gate。雜湊檢查證據新鮮度，無法判斷品質或防止同權限修改；信任指令會以目前權限執行，不可信專案需隔離。",
     "steps": [
-      {"icon": "pen", "title": "寫規格並下 Gate", "note": "寫 SPEC.md、工單與 golden_path.json，看過後親自下 gate-verdict PASS。"},
-      {"icon": "terminal", "title": "Runner 親自重跑驗收", "note": "verify-ticket 重跑 Golden Path 驗收；收據綁定程式碼指紋、驗證編號與審查輪次。"},
-      {"icon": "check", "title": "本人核准才完成", "note": "把收據的綁定欄位抄進 handoff 與 review，再由你以 review-verdict 完成工單。"}
+      {
+        "icon": "pen",
+        "title": "規格與人核准的關卡",
+        "note": "用 SPEC、工單與 Golden Path 定義通過條件，由人確認後開啟執行。"
+      },
+      {
+        "icon": "terminal",
+        "title": "Runner 重跑並開收據",
+        "note": "驗收由 Runner 執行，收據記錄程式碼指紋、驗證編號與審查輪次。"
+      },
+      {
+        "icon": "check",
+        "title": "對照收據完成審查",
+        "note": "handoff 與 review 對上同一份收據，再由人核准工單完成。"
+      }
     ],
-    "caption": "不是沙箱：--trust-commands 以你目前的權限執行專案指令，不可信的 repo 先放進隔離環境。"
+    "caption": "程式碼或審查輪次變動後重新驗收，讓下一次核准使用對應版本的新收據。"
   }
 }

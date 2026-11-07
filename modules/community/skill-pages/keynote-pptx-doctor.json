@@ -1,14 +1,32 @@
 {
-  "headline": "交給 Keynote 使用者前，先查 pptx 封裝。",
-  "outcomes": ["自製 pptx 的封裝診斷紀錄", "不覆蓋原檔的修復副本", "Keynote 逐頁比較結果或未驗證清單"],
+  "headline": "修復簡報封裝，替 Keynote 匯入找出路。",
+  "outcomes": [
+    "PPTX 封裝結構的診斷結果",
+    "保留原檔的獨立修復副本",
+    "可在瀏覽器本機執行的修復流程"
+  ],
+  "problem": "簡報在 PowerPoint 看似正常，交給 Keynote 卻打不開或匯入出錯，手動拆檔修復又容易傷到原檔。",
+  "mechanism": "工具檢查 PPTX 封裝內的內容型別、關聯、備忘稿登錄與媒體命名等結構，修復後另存副本，保留原檔供前後比較。",
   "flow": {
-    "title": "診斷封裝，不覆蓋原檔",
-    "lead": "可在瀏覽器本機診斷／修復，或用只靠標準庫的 Python 3 腳本，也能作為 Claude Code Skill。",
+    "title": "檢查簡報封裝，另存修復副本",
+    "lead": "可在瀏覽器本機處理，或用 Python 標準函式庫執行；結構修復後仍需在實際 Keynote 比較文字、圖片與備忘稿，部分檔案可能仍無法修復。",
     "steps": [
-      {"icon": "upload", "title": "放入測試簡報", "note": "不含機密的自製 pptx，先留完整備份；可拖入瀏覽器或用 scripts/diagnose.py。"},
-      {"icon": "search", "title": "檢查封裝結構", "note": "查 [Content_Types].xml 缺項、notes master 未註冊、遺失關聯、媒體與副檔名不符等。"},
-      {"icon": "download", "title": "另存修復副本", "note": "瀏覽器下載副本／ZIP，或用 --fix 另存 out.pptx，不覆蓋原檔。"}
+      {
+        "icon": "upload",
+        "title": "待匯入的 PPTX",
+        "note": "提供有問題的簡報並保留原檔，讓修復與版面比較都有依據。"
+      },
+      {
+        "icon": "code",
+        "title": "修復封裝內的結構",
+        "note": "檢查內容型別、關聯、備忘稿與媒體副檔名等項目，修正可處理的結構問題。"
+      },
+      {
+        "icon": "download",
+        "title": "取得獨立修復副本",
+        "note": "另存修復檔或 ZIP，再到 Keynote 開啟，逐頁比對排版與內容。"
+      }
     ],
-    "caption": "封裝修好不等於版面完整：保留原檔，在目標 Keynote 逐頁比對圖片、文字與備註。"
+    "caption": "把仍然失敗的檔案結構與匯入結果記下，回頭定位這次修復尚未涵蓋的問題。"
   }
 }

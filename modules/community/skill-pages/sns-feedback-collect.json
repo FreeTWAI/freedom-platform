@@ -1,14 +1,32 @@
 {
   "headline": "這次和上次比，數字支持什麼調整？",
-  "outcomes": ["本次／前次反應的合成紀錄", "缺值說明與 next_action", "尚缺的儀表板接線清單"],
+  "outcomes": [
+    "本次與前次貼文反應的比較紀錄",
+    "保留缺值說明的判讀依據",
+    "學習重點與具體下一步"
+  ],
+  "problem": "貼文發布後看了幾個數字，卻沒和前次表現一起留下，下一篇仍不知道該觀察、改寫還是調整導流。",
+  "mechanism": "Skill 依資料契約保存本次與前次反應，再按判讀指南整理 learning 與 next_action；缺值另寫說明，避免把缺資料誤當成真實零。",
   "flow": {
-    "title": "照契約存紀錄，再判讀下一步",
-    "lead": "MIT 的貼文後測 Skill，不直接寫文或發文；README 的流程用 Codex Desktop、Chrome 外掛與登入中的服務。",
+    "title": "貼文反應，整理成下一次的調整",
+    "lead": "貼文後測 Skill，處理分析紀錄；作者私人儀表板與相關測試不在 repo，下載後無法直接跑完整流程，需自行替換路徑與接線。",
     "steps": [
-      {"icon": "doc", "title": "存下貼文反應", "note": "依 dashboard-contract.md 記下本次與前次反應；先用合成數字。"},
-      {"icon": "search", "title": "對照判讀方式", "note": "用 hao-evaluation.md 的判讀方式，整理維持觀察、改寫或調整導流的理由。"},
-      {"icon": "pen", "title": "寫下學到與下一步", "note": "learning 與 next_action 寫進紀錄；缺值在 notes 說明，不當成真實零。"}
+      {
+        "icon": "doc",
+        "title": "本次與前次反應",
+        "note": "依紀錄契約保存貼文反應與時間脈絡，缺少的數字在 notes 註明。"
+      },
+      {
+        "icon": "search",
+        "title": "按判讀指南比較",
+        "note": "比較反應與導流情況，整理繼續觀察、改寫或調整導流的依據。"
+      },
+      {
+        "icon": "pen",
+        "title": "留下學習與下一步",
+        "note": "寫入 learning 和 next_action，保留缺值說明供下次比較；寫文與發布另行處理。"
+      }
     ],
-    "caption": "作者的儀表板不在本 repo，無法只下載就完整試用：先用合成紀錄練習，自行替換作者路徑。"
+    "caption": "下一次回收反應時，把這次的 next_action 一起拿來比較，確認調整是否值得延續。"
   }
 }
