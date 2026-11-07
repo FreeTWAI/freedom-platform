@@ -233,3 +233,13 @@ build後以實際公開頁遊玩，驗9種引導操作、4道自由料理、6款
 ### UX-15g：真正載入順序與缺圖大字
 
 第一輪31個實際畫面18通過／13失敗：八類手帳仍有13px標籤／12px收藏數字，四個大廳狀態被較高specificity的舊lazy樣式覆回cover，以及缺圖320px／200%時數鈔長標題的內容遭固定圖片高度裁切。按真實owner加強新root限定、補14px角色；missing art改為正常流自動增高，原圖維持contain，不以縮字或隱藏長標題處理。派對的封面span另明確清除原badge的inset，避免共用span語法位移整幅插畫。保留原31張與JSON，再跑相同失敗場景及相鄰頁面。
+
+## UX-18 冷同題連結的開始與全螢幕（2026-11-07 候選，未部署）
+
+直接開啟同題連結時，原三款 GameBoard 的開始會呼叫既有 Fullscreen owner，但引導料理、自由料理與派對的真開始 handler 沒有接線；從大廳選卡會先進全螢幕，因此一般大廳流程掩蓋了這個缺口。本批只補三個 loader／controller 的 `onStart`，不改 Fullscreen API、domain、分數、保存或分享權限。
+
+在有效開始或冷頁已保存 paused 局的首次繼續，由該次使用者輸入同步呼叫既有 `enter`。載入、模組完成與 RAF 不要求全螢幕；未就緒、確認重來中、domain 拒絕或首次 draw 已失敗暫停時不呼叫。原 `autoAttempted` 仍是呈現選擇的權威：大廳已進入或玩家已退出後，暫停／繼續、同頁重開不會再次要求全螢幕。原生拒絕或不支援仍沿既有全視窗備援。
+
+新增純 process 測試直接執行 production handler 與真 domain，涵蓋三種 controller、冷 paused、無效／失敗開始及原 Fullscreen owner；修正前核心三條開始均無 callback，修正後通過。這不是 React 事件派送、使用者啟用權或原生全螢幕證據。新增三種 controller × 原生／拒絕／不支援的瀏覽器來源，檢查冷載入不自動請求、有效開始、暫停保存、退出後繼續與重開；既有玩法 helper 仿原 GameBoard，先驗真開始進入，再以真按鈕退出，保留原 normal／Escape／Tab／觸控案例的意圖與斷言。
+
+本地驗證使用當前 main 文字與遊戲來源的獨立快照；55 張無關技能書 WebP 仍為舊基底，不能稱完整 main 整合。使用既有本地依賴、禁止網路／資料庫／server 的 process fence，完整 runtime 檔在 import 階段因缺 `three` 停止，0 案實跑；沒有安裝或以替身 renderer 宣稱整份通過。純 handler、語法、module 與差異檢查的精確結果隨交付列明。完整 typecheck／標準 build／runtime／原生瀏覽器／真機仍待正式候選 CI 與驗收，不把測試清單或語法解析當已執行。
