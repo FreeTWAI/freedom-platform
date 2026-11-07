@@ -3,6 +3,77 @@ import { navigate } from './navigation.js';
 import {test,expect} from './fixtures.js';
 import {submittedSkillHtml} from '../../apps/platform-api/src/routes/published-skills.js';
 
+const publicAuthorFixture={items:[{name:'測試作者',role:'作者',card_path:'/member-cards/'+'a'.repeat(43),card:{nickname:'測試作者',headline:'把影音工具做得更好用。',design:'editorial',primary_guild:{guild_key:'guild_creator',name:'影音創作公會'},capabilities:['影片剪輯','工具開發'],avatar_url:null,links:[{label:'作者網站',url:'https://example.com/author'}],profile_links:[]}}]};
+
+for(const width of [1440,390,320])test(`skill hero exposes Star Fork share and an author lightbox in the first viewport at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:844});let reads=0;
+ await page.route('**/api/v1/skills/video-autopilot/author-card',route=>{reads++;return route.fulfill({json:publicAuthorFixture});});
+ await page.goto('/development/skills/video-autopilot?intro=63');
+ const hero=page.locator('.sp-engagement'),author=hero.locator('[data-skill-author]'),share=hero.locator('[data-share-launch]');
+ for(const control of [author,hero.getByRole('link',{name:'到 GitHub Star ↗'}),hero.getByRole('link',{name:'Fork 專案 ↗'}),share]){
+  await expect(control).toBeVisible();const box=await control.boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);expect(box!.y).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual(844);
+ }
+ expect(reads).toBe(0);expect(await page.evaluate(()=>scrollY)).toBe(0);
+ await page.screenshot({path:`test-results/skill-hero-${width}.png`});
+ await share.click();const sharing=page.locator('[data-share-dialog]');await expect(sharing).toBeVisible();await expect(sharing.locator('[data-share-count]')).toHaveText('介紹 63／100');
+ await page.keyboard.press('Escape');await expect(share).toBeFocused();
+ await author.click();const card=page.getByRole('dialog',{name:'自由工坊名片',exact:true});await expect(card).toBeVisible();
+ await expect(card.getByRole('heading',{name:'測試作者',exact:true})).toBeVisible();await expect(card).toContainText('影音創作公會');await expect(card).toContainText('影片剪輯');
+ await expect(card.getByRole('link',{name:'作者網站',exact:false})).toHaveAttribute('href','https://example.com/author');
+ expect(reads).toBe(1);expect(await card.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+ await page.screenshot({path:`test-results/skill-author-${width}.png`});
+ await page.keyboard.press('Escape');await expect(card).toBeHidden();await expect(author).toBeFocused();await expect(card.locator('.ecard')).toHaveCount(0);
+ await author.click();await expect(card.getByRole('heading',{name:'測試作者',exact:true})).toBeVisible();expect(reads).toBe(2);
+ await card.getByRole('button',{name:'關閉作者名片'}).click();await expect(author).toBeFocused();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('author lightbox handles unpublished cards, retry and withdrawn cards without retaining the old card',async({page})=>{
+ let mode:'missing'|'failed'|'ready'='missing';
+ await page.route('**/api/v1/skills/video-autopilot/author-card',route=>mode==='failed'?route.fulfill({status:503,json:{error:'unavailable'}}):route.fulfill({json:mode==='ready'?publicAuthorFixture:{items:[]}}));
+ await page.goto('/development/skills/video-autopilot');const author=page.locator('[data-skill-author]'),dialog=page.getByRole('dialog',{name:'自由工坊名片',exact:true});
+ await author.click();await expect(dialog).toContainText('目前沒有可查看的作者工坊名片。');await page.keyboard.press('Escape');
+ mode='failed';await author.click();await expect(dialog.getByRole('alert')).toHaveText('作者名片暫時無法載入。');
+ mode='ready';await dialog.getByRole('button',{name:'重新載入名片'}).click();await expect(dialog.getByRole('heading',{name:'測試作者',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');mode='missing';await author.click();await expect(dialog).toContainText('目前沒有可查看的作者工坊名片。');await expect(dialog.locator('.ecard')).toHaveCount(0);
+});
+
+test('author lightbox shows every public co-author, including more than ten',async({page})=>{
+ const items=Array.from({length:11},(_,index)=>({...publicAuthorFixture.items[0],name:`共同作者 ${index+1}`,role:'共同原創作者',card_path:'/member-cards/'+String.fromCharCode(97+index).repeat(43),card:{...publicAuthorFixture.items[0].card,nickname:`共同作者 ${index+1}`}}));
+ await page.route('**/api/v1/skills/video-autopilot/author-card',route=>route.fulfill({json:{items}}));
+ await page.goto('/development/skills/video-autopilot');await page.locator('[data-skill-author]').click();
+ const dialog=page.getByRole('dialog',{name:'自由工坊名片',exact:true});
+ await expect(dialog.locator('.ecard')).toHaveCount(11);await expect(dialog.getByRole('heading',{name:'共同作者 11',exact:true})).toHaveCount(1);
+ await page.keyboard.press('Escape');await expect(dialog.locator('.ecard')).toHaveCount(0);
+});
+
+test('author lightbox times out a stalled lazy script and can retry once it arrives',async({page})=>{
+ await page.clock.install();
+ let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});let requested=false;
+ await page.route('**/*skill-social-widget*.js',async route=>{requested=true;await held;await route.continue();});
+ await page.route('**/api/v1/skills/video-autopilot/author-card',route=>route.fulfill({json:publicAuthorFixture}));
+ try{
+  await page.goto('/development/skills/video-autopilot');await page.locator('[data-skill-author]').click();
+  const dialog=page.getByRole('dialog',{name:'自由工坊名片',exact:true});
+  await expect(dialog.getByRole('status')).toHaveText('正在開啟作者名片…');
+  await expect.poll(()=>requested).toBe(true);await page.clock.runFor(15001);
+  await expect(dialog.getByRole('alert')).toHaveText('作者名片暫時無法載入。');
+  release();await dialog.getByRole('button',{name:'重新載入名片'}).click();
+  await expect(dialog.getByRole('heading',{name:'測試作者',exact:true})).toBeVisible();
+ }finally{release();}
+});
+
+test('a late author response cannot replace a reopened card',async({page})=>{
+ let release!:()=>void;const held=new Promise<void>(resolve=>{release=resolve;});let reads=0;
+ await page.route('**/api/v1/skills/video-autopilot/author-card',async route=>{reads++;if(reads===1){await held;await route.fulfill({json:publicAuthorFixture});}else await route.fulfill({json:{items:[]}});});
+ try{
+  await page.goto('/development/skills/video-autopilot');const author=page.locator('[data-skill-author]'),dialog=page.getByRole('dialog',{name:'自由工坊名片',exact:true});
+  await author.click();await expect.poll(()=>reads).toBe(1);await page.keyboard.press('Escape');await author.click();
+  await expect(dialog).toContainText('目前沒有可查看的作者工坊名片。');release();
+  await expect(dialog.locator('.ecard')).toHaveCount(0);await page.keyboard.press('Escape');await expect(author).toBeFocused();
+ }finally{release();}
+});
+
 test('development tools follow the current page on desktop and phone without a duplicate footer',async({page})=>{
  await page.goto('/');
  await expect(page.locator('.development-context')).toHaveCount(0);

@@ -43,7 +43,8 @@
     "community-certification",
     "google-identity",
     "event-missions",
-    "absurd-daily"
+    "absurd-daily",
+    "skill-author-cards"
   ],
   "format": "freedom.module/v1",
   "instructions": [

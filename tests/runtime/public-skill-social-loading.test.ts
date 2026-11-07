@@ -12,12 +12,13 @@ class Node extends EventTarget {
   isConnected=true;
   dataset={skillSocial:'social-post',repository:'https://github.com/example/book'};
   child={};
+  hasAttribute(name:string){return name==='data-skill-social-compact';}
   contains(value:unknown){return value===this||value===this.child;}
 }
 function deferred<T>(){let resolve!:(value:T)=>void,reject!:(reason:unknown)=>void;const promise=new Promise<T>((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 function loader(options:{nodes?:number;observer?:boolean;importer?:()=>unknown;renderer?:(node:Node,signal:AbortSignal)=>Promise<boolean>}={}){
   const nodes=Array.from({length:options.nodes??1},()=>new Node());
-  const document=Object.assign(new EventTarget(),{visibilityState:'visible',activeElement:null as unknown,querySelectorAll:()=>nodes});
+  const document=Object.assign(new EventTarget(),{visibilityState:'visible',activeElement:null as unknown,querySelectorAll:(selector:string)=>selector==='[data-skill-social]'?nodes:[]});
   const window=new EventTarget();let notify!:(entries:{target:Node;isIntersecting:boolean}[])=>void;
   const observed:Node[]=[],unobserved:Node[]=[],renders:{node:Node;signal:AbortSignal}[]=[];let imports=0,observerOptions:unknown;
   class Observer{constructor(callback:typeof notify,settings:unknown){notify=callback;observerOptions=settings;}observe(node:Node){observed.push(node);}unobserve(node:Node){unobserved.push(node);}}
@@ -79,7 +80,7 @@ function renderer(read:()=>Promise<unknown>){
   const modules:Record<string,unknown>={
     './zod-csp':{},'react-dom':{flushSync:(callback:()=>void)=>{flushing=true;try{callback();}finally{flushing=false;}}},'react-dom/client':{createRoot:(target:unknown)=>{assert.equal(target,node);return {render:(value:unknown)=>{assert.equal(flushing,true,'the SSR replacement commits inside the same focus fence');renders.push(value);}};}},
     './api':{ApiError,PortalClient},'./modules/GitHubSocial':{GitHubBookSocial:'book',GitHubSocialProvider:'provider'},
-    './modules/SkillBookCover':{skillBookStarUrl:()=>node.dataset.repository},'react/jsx-runtime':{jsx:(type:unknown,props:unknown)=>({type,props})},
+    './modules/MemberECard':{},'./modules/SkillBookCover':{skillBookStarUrl:()=>node.dataset.repository},'react/jsx-runtime':{jsx:(type:unknown,props:unknown)=>({type,props})},
   };
   const exports:any={};runInNewContext(compile(widget),{exports,document,require:(path:string)=>{assert.ok(path in modules,path);return modules[path];}});
   return {node,document,calls,renders,ApiError,enhance:(signal=new AbortController().signal)=>exports.enhanceSkillSocial(node,signal) as Promise<boolean>};

@@ -30,13 +30,13 @@ async function login(email=DEMO_USERS[0].email):Promise<Session>{
 }
 const projectBody={repository_url:'https://github.com/example/project',title:'公共程式範例',description:'讓人整理共同筆記。',use_notes:'先閱讀 README，再建立自己的 fork。',relationship:'curator',consent_to_share:true};
 const campaignBody={title:'作品介紹',audience:'新加入的會員',goal:'閱讀說明後試用',draft_text:'這份工具可以整理共同筆記；歡迎試用並回饋。'};
-function mockGitHub(t:TestContext,options:{sha?:string;repositoryId?:number;license?:string|null;isFork?:boolean;isPrivate?:boolean}={}){
-  const state={sha:'a'.repeat(40),repositoryId:501,license:'MIT' as string|null,isFork:false,isPrivate:false,archived:false,...options};
+function mockGitHub(t:TestContext,options:{sha?:string;repositoryId?:number;license?:string|null;isFork?:boolean;isPrivate?:boolean;ownerId?:number}={}){
+  const state={sha:'a'.repeat(40),repositoryId:501,license:'MIT' as string|null,isFork:false,isPrivate:false,archived:false,ownerId:undefined as number|undefined,...options};
   const seen:string[]=[];
   t.mock.method(globalThis,'fetch',async(url:string,init:RequestInit)=>{
     seen.push(url);assert.equal(new URL(url).hostname,'api.github.com');assert.equal(init.redirect,'manual');assert.notEqual(init.redirect,'error');
     assert.equal(new Headers(init.headers).get('Authorization'),null);
-    if(url==='https://api.github.com/repos/example/project')return Response.json({id:state.repositoryId,full_name:'example/project',private:state.isPrivate,visibility:state.isPrivate?'private':'public',default_branch:'main',fork:state.isFork,archived:state.archived});
+    if(url==='https://api.github.com/repos/example/project')return Response.json({id:state.repositoryId,full_name:'example/project',private:state.isPrivate,visibility:state.isPrivate?'private':'public',default_branch:'main',fork:state.isFork,archived:state.archived,...(state.ownerId!==undefined?{owner:{id:state.ownerId}}:{})});
     if(url==='https://api.github.com/repos/example/project/commits/main')return Response.json({sha:state.sha});
     if(url===`https://api.github.com/repos/example/project/license?ref=${state.sha}`)return state.license?Response.json({path:'LICENSE',license:{spdx_id:state.license}}):new Response('',{status:404});
     throw new Error(`Unexpected test URL ${url}`);
@@ -179,6 +179,18 @@ test('owner refresh creates immutable versions while campaigns retain their orig
   state.repositoryId=502;
   assert.equal((await request(`/opensource/projects/${project.project_id}:refresh`,owner,{},refreshed.data.aggregate_version)).data.code,'repository_identity_changed');
   assert.equal((await request('/opensource/projects',owner)).data.items[0].current_version.commit_sha,'b'.repeat(40));
+});
+test('an inspected owner id is pinned in source facts and a same-commit ownership change creates a new version',async t=>{
+  const {state,seen}=mockGitHub(t,{ownerId:101}),owner=await login(),project=await importOne(owner);
+  assert.equal(project.current_version.source_snapshot.repository_owner_id,'101');
+  assert.equal(seen.length,3,'owner identity is read from the existing metadata response');
+  state.ownerId=202;
+  const refreshed=await request(`/opensource/projects/${project.project_id}:refresh`,owner,{},project.aggregate_version);
+  assert.equal(refreshed.status,200);assert.equal(refreshed.data.current_version.commit_sha,project.current_version.commit_sha);
+  assert.notEqual(refreshed.data.current_version.version_id,project.current_version.version_id);
+  assert.notEqual(refreshed.data.current_version.facts_sha256,project.current_version.facts_sha256);
+  assert.equal(refreshed.data.current_version.source_snapshot.repository_owner_id,'202');
+  assert.equal((await pool.query('SELECT source_snapshot FROM oss_project_versions WHERE version_id=$1',[project.current_version.version_id])).rows[0].source_snapshot.repository_owner_id,'101');
 });
 test('community readers cannot edit another member candidate or use it as their owned campaign source',async t=>{
   const {seen}=mockGitHub(t),owner=await login(),other=await login(DEMO_USERS[1].email),project=await importOne(owner);

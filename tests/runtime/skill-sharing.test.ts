@@ -61,11 +61,11 @@ const platforms=['line','facebook','x','threads'] as const;
 const platformLinks=(html:string)=>[...html.matchAll(/<a href="([^"]*)" target="_blank" rel="noopener noreferrer" data-share-platform="([a-z]+)"/g)].map(match=>[match[2],unescape(match[1]!)]);
 function element(extra:Fake={}):Fake{
  return {hidden:false,disabled:false,textContent:'',value:'',focused:false,selected:false,listeners:{} as Record<string,()=>void>,
-  addEventListener(name:string,fn:()=>void){this.listeners[name]=fn;},focus(){this.focused=true;},select(){this.selected=true;},click(){this.listeners.click();},...extra};
+  addEventListener(name:string,fn:()=>void){this.listeners[name]=fn;},focus(){this.focused=true;},select(){this.selected=true;},click(){this.listeners.click({preventDefault(){}});},...extra};
 }
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 function harness(html:string,navigator:Fake,random?:number[]){
- const draws:number[]=[];
+ const draws:number[]=[],hero=element();
  const dialog=element({open:false,showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();}});
  const nodes:Record<string,Fake>={'[data-share-dialog]':dialog};
  for(const name of ['open','text','count','url','error','status','manual','manual-label','reroll','send','copy','close'])nodes[`[data-share-${name}]`]??=element();
@@ -74,9 +74,9 @@ function harness(html:string,navigator:Fake,random?:number[]){
  const root={dataset:{shareBase:attribute(html,'data-share-base'),shareTitle:attribute(html,'data-share-title'),shareSelected:attribute(html,'data-share-selected'),shareContent:attribute(html,'data-share-content')},querySelector:(selector:string)=>nodes[selector],
   querySelectorAll:(selector:string)=>selector==='[data-share-dialog] [data-share-platform]'?links:[]};
  const crypto={getRandomValues(buffer:Uint32Array){const value=random?.length?random.shift()!:Math.floor(Math.random()*0x100000000);draws.push(value);buffer[0]=value;return buffer;}};
- runInNewContext(developmentShareJs,{document:{querySelectorAll:(selector:string)=>selector==='[data-share-root]'?[root]:[]},navigator,window:{crypto},Uint32Array,Promise,JSON,Number,Array,Math});
+ runInNewContext(developmentShareJs,{document:{querySelectorAll:(selector:string)=>selector==='[data-share-root]'?[root]:selector==='[data-share-launch]'?[hero]:[]},navigator,window:{crypto},Uint32Array,Promise,JSON,Number,Array,Math});
  const get=(name:string)=>nodes[`[data-share-${name}]`];
- return {get,dialog,draws,links:()=>links.map(link=>link.href as string),intro:()=>get('text').textContent as string,url:()=>get('url').textContent as string};
+ return {get,dialog,draws,hero,links:()=>links.map(link=>link.href as string),intro:()=>get('text').textContent as string,url:()=>get('url').textContent as string};
 }
 
 test('opening the public preview never sends, uses rejection-sampled crypto randomness and rerolls without repeating',async()=>{
@@ -200,7 +200,7 @@ test('catalog skill CTA follows readable content and preserves the selected intr
 });
 
 
-test('every public skill prioritizes real instructions and destinations over supplementary art and social counts',()=>{
+test('every public skill offers author, Star, Fork and share in the hero while retaining instructions and destinations',()=>{
  for(const item of communityCatalog.skill_books){
   const html=render(undefined,item.id);
   const reading=html.indexOf('<section class="public-skill-introduction"');
@@ -208,9 +208,19 @@ test('every public skill prioritizes real instructions and destinations over sup
   const share=html.indexOf('data-share-root');
   const social=html.indexOf('<section class="public-github-social"');
   assert.ok(reading>0&&destinations>reading,item.id);
-  assert.ok(share>destinations&&social>destinations,item.id);
+  assert.ok(share>destinations&&social>0&&social<reading,item.id);
+  assert.ok(html.indexOf('data-skill-author')<social,item.id);
+  assert.ok(html.indexOf('data-share-launch')<reading,item.id);
   assert.ok(html.indexOf('href="#skill-start"')<reading,item.id);
   assert.ok(html.includes('href="/#skills">登入工坊 Star'),item.id);
   assert.ok(html.includes(escape(item.guide!.first_result)),item.id);
  }
+});
+
+test('hero sharing uses the same selected introduction and returns focus to the hero trigger',()=>{
+ const page=harness(render('63'),{});
+ page.hero.click();assert.equal(page.dialog.open,true);assert.equal(page.intro(),content.introductions[62]);
+ page.get('close').click();assert.equal(page.hero.focused,true);
+ page.get('open').click();assert.equal(page.intro(),content.introductions[62]);
+ page.get('close').click();assert.equal(page.get('open').focused,true);
 });

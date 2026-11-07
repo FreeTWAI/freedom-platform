@@ -7,7 +7,7 @@ import {Pool} from 'pg';
 import {createPool,LOCAL_DATABASE_URL} from '../../packages/db/index.js';
 import {Problem} from '../../packages/shared/problem.js';
 import {migrate} from '../../scripts/database.js';
-import {GitHubSocial,type GitHubSocialConfig} from '../../modules/github-social/service.js';
+import {cachedRepositoryIdentity,GitHubSocial,type GitHubSocialConfig} from '../../modules/github-social/service.js';
 import {GitHubSocialProvider,type GitHubDenialDiagnostic} from '../../modules/github-social/provider.js';
 import type {Actor} from '../../modules/identity-membership/service.js';
 
@@ -276,6 +276,16 @@ test('provider bounds response size, rejects redirects and malformed/private sna
   for(const [fetcher,code] of providers)await assert.rejects(()=>new GitHubSocialProvider(fetcher).metrics(repository),error=>{assert.ok(errorCode(code)(error));assert.doesNotMatch(String(error),/must-not-leak/);return true;});
 });
 
+test('repository metrics pin immutable repository and owner ids only for complete matching provider metadata',async()=>{
+  const identity={id:234567,full_name:repository.toUpperCase(),owner:{id:987654}};
+  const read=(body:unknown)=>new GitHubSocialProvider(async()=>Response.json(body)).metrics(repository);
+  assert.deepEqual((await read({...snapshot,...identity})).repository_identity,{id:'234567',full_name:repository.toUpperCase(),owner_id:'987654'});
+  for(const metadata of [{},{...identity,owner:undefined},{...identity,owner:{id:0}},{...identity,id:Number.MAX_SAFE_INTEGER+1}]){
+    const result=await read({...snapshot,...metadata});assert.equal(result.stargazers_count,42);assert.equal(result.repository_identity,undefined);
+  }
+  await assert.rejects(()=>read({...snapshot,...identity,full_name:'different/repository'}),errorCode('github_invalid_response'));
+});
+
 test('provider aborts requests at the deadline and limits simultaneous outbound requests',async context=>{
   context.mock.timers.enable({apis:['setTimeout']});
   const hanging:typeof fetch=async(_input,init)=>new Promise((_resolve,reject)=>init!.signal!.addEventListener('abort',()=>reject(new Error('aborted')),{once:true}));
@@ -428,11 +438,15 @@ test('explicit star and unstar use only authenticated member token and GitHub-co
 
 test('post-star counters come only from repository response and metrics failure cannot undo confirmed star',async()=>{
   await connect();const before=mock.calls.length;await social.metrics(book);assert.equal(mock.calls.length,before);mock.stats.stargazers_count=47;
+  Object.assign(mock.stats,{id:234567,full_name:repository,owner:{id:987654}});
   await social.star(actor,book,true);assert.equal((await social.cachedMetrics(book)).stargazers_count,47);
+  assert.deepEqual(await cachedRepositoryIdentity(pool,repository),{id:'234567',full_name:repository,owner_id:'987654'});
+  assert.equal('repository_identity' in await social.cachedMetrics(book),false,'internal ownership metadata is not part of the public counts DTO');
   await social.star(actor,book,true);assert.equal((await social.cachedMetrics(book)).stargazers_count,47); // Retried desired state is not +1.
   const metricCalls=mock.calls.filter(call=>call.url===`https://api.github.com/repos/${repository}`);assert.equal(metricCalls.length,2);assert.ok(metricCalls.every(call=>call.headers.get('authorization')==='Bearer ghu_synthetic'));
   mock.metricsStatus=503;assert.equal((await social.star(actor,book,false)).confirmed,true);assert.equal(mock.starred,false);
   const stale=await social.cachedMetrics(book);assert.equal(stale.stargazers_count,47);assert.equal(stale.stale,true);assert.equal(stale.error,'github_unavailable');
+  assert.equal(await cachedRepositoryIdentity(pool,repository),null,'retained statistics after failure do not authorize source cards');
 });
 
 test('expired tokens refresh once under concurrent commands, reverify identity and persist rotated encryption',async()=>{

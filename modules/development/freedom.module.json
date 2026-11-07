@@ -48,7 +48,8 @@
     "modules/development/skill-acquisition.ts",
     "apps/portal-web/public/skill-acquisition.js",
     "tests/runtime/skill-acquisition.test.ts",
-    "tests/e2e/skill-acquisition.spec.ts"
+    "tests/e2e/skill-acquisition.spec.ts",
+    "docs/development/skill-sharing-2026-11-07.md"
   ],
   "public_exports": [
     "modules/development/page-github.ts",

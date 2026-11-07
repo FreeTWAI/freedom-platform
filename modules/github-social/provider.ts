@@ -4,11 +4,13 @@ import {Problem} from '../../packages/shared/problem.js';
 export type GitHubSocialConfig={clientId:string;clientSecret:string;tokenKey:string;redirectUri:string;appId?:string;appSlug?:string};
 export type GitHubTokens={access_token:string;refresh_token?:string;expires_at:number|null;refresh_expires_at:number|null};
 export type GitHubIdentity={id:string;login:string};
-export type RepositorySnapshot={stargazers_count:number;forks_count:number;open_issues_count:number;subscribers_count:number;pushed_at:string|null;language:string|null;archived:boolean};
+export type RepositoryIdentity={id:string;full_name:string;owner_id:string};
+export type RepositorySnapshot={stargazers_count:number;forks_count:number;open_issues_count:number;subscribers_count:number;pushed_at:string|null;language:string|null;archived:boolean;repository_identity?:RepositoryIdentity};
 export type GitHubDenialReason='not_accessible_by_integration'|'not_accessible_by_token'|'sso_required'|'oauth_app_restricted'|'unknown';
 export type GitHubDenialDiagnostic={event:'github_provider_denied';status:403;route:string;reason:GitHubDenialReason;accepted_permissions:string|null;github_request_id:string|null;sso_required:boolean};
 const counter=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const repositorySchema=z.object({stargazers_count:counter,forks_count:counter,open_issues_count:counter,subscribers_count:counter,pushed_at:z.iso.datetime().nullable(),language:z.string().max(100).nullable(),archived:z.boolean(),private:z.literal(false)});
+const repositoryIdentitySchema=z.object({id:z.number().int().positive().safe(),full_name:z.string().max(140).regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_.-]+$/),owner:z.object({id:z.number().int().positive().safe()})});
 const tokensSchema=z.object({access_token:z.string().regex(/^ghu_[A-Za-z0-9_]+$/).max(1024),token_type:z.literal('bearer'),scope:z.literal('').optional(),expires_in:z.number().int().positive().max(86400).optional(),refresh_token:z.string().regex(/^ghr_[A-Za-z0-9_]+$/).max(1024).optional(),refresh_token_expires_in:z.number().int().positive().max(366*86400).optional()});
 const identitySchema=z.object({id:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),login:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/)});
 const API='https://api.github.com';
@@ -93,7 +95,12 @@ export class GitHubSocialProvider {
   async metrics(repository:string,token?:string):Promise<RepositorySnapshot>{
     const response=await this.request(`${API}/repos/${repository}`,token?{headers:{Authorization:`Bearer ${token}`}}:{}),parsed=repositorySchema.safeParse(response.body);
     if(!parsed.success)throw new GitHubProviderError('github_invalid_response');
-    const {private:_private,...snapshot}=parsed.data;return snapshot;
+    const {private:_private,...snapshot}=parsed.data,identity=repositoryIdentitySchema.safeParse(response.body);
+    // Older count-only snapshots remain usable for statistics, never identity.
+    // Pin immutable IDs only when the provider identifies the requested source.
+    if(!identity.success)return snapshot;
+    if(identity.data.full_name.toLowerCase()!==repository.toLowerCase())throw new GitHubProviderError('github_invalid_response');
+    return {...snapshot,repository_identity:{id:String(identity.data.id),full_name:identity.data.full_name,owner_id:String(identity.data.owner.id)}};
   }
   private async token(config:GitHubSocialConfig,fields:Record<string,string>):Promise<GitHubTokens>{
     const {body}=await this.request('https://github.com/login/oauth/access_token',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:config.clientId,client_secret:config.clientSecret,...fields})});

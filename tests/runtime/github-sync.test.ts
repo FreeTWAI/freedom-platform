@@ -988,7 +988,7 @@ test('an events failure and a repository failure still let the other sync parts 
         urls.push(url);
         if (url.includes('/events')) throw new Error('events down');
         if (url.includes('/issues')) return new Response('unavailable', {status: 500});
-        return json(metricBody());
+        return json({...metricBody(),id:234567,full_name:targets[0].repository,owner:{id:987654}});
       },
     });
     assert.equal(summary.requests, 3);
@@ -999,6 +999,8 @@ test('an events failure and a repository failure still let the other sync parts 
     assert.equal((await pool.query("SELECT last_error FROM github_feed_state WHERE feed_name='freedom_platform_events'")).rows[0].last_error, 'github_unavailable');
     assert.equal((await repoRow(PLATFORM)).last_error, 'github_unavailable');
     assert.equal((await pool.query('SELECT snapshot->>\'stargazers_count\' AS stars FROM github_repository_metrics WHERE repository_key=$1', [targets[0].key])).rows[0].stars, '9');
+    assert.deepEqual((await pool.query("SELECT snapshot->'repository_identity' AS identity FROM github_repository_metrics WHERE repository_key=$1",[targets[0].key])).rows[0].identity,
+      {id:'234567',full_name:targets[0].repository,owner_id:'987654'},'the existing bounded refresh persists identity alongside counts');
   } finally {
     await quietSides();
   }
