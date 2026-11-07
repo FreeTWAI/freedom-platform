@@ -18,9 +18,9 @@ for(const width of [390,1280])test(`public skill reading defers the GitHub bundl
   await expect(page.getByRole('link',{name:'免費加入，探索更多資源',exact:true})).toHaveAttribute('href',/skill_acquisition=1/);
   await expect(social(page)).toBeHidden();
   expect(chunks).toEqual([]);
+  await expect(social(page).locator('[data-github-book]')).toHaveCount(0);
+  const fallback=social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true,includeHidden:true});await expect(fallback).toHaveAttribute('href',original+'/fork');
   await page.getByText('作者、版本與參與開發',{exact:true}).click();
-  expect(chunks).toEqual([]);await expect(social(page).locator('[data-github-book]')).toHaveCount(0);
-  const fallback=social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true});await expect(fallback).toHaveAttribute('href',original+'/fork');
   await social(page).scrollIntoViewIfNeeded();await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
   expect(chunks).toHaveLength(1);await expect(social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
   await expect(social(page).getByRole('link',{name:'追蹤專案（Watch）↗',exact:true})).toHaveAttribute('href',original);

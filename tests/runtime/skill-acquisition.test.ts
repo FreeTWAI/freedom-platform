@@ -113,7 +113,7 @@ test('content checking has a bounded deadline instead of blocking completed regi
 });
 test('CTA remains readable, actionable and honest with JavaScript disabled',()=>{
   const html=publicSkillAcquisition(book,7);
-  assert.ok(html.includes('不用註冊就能閱讀'));assert.ok(html.includes('依加入資格領取指定技能書'));
+  assert.ok(html.includes('不用註冊就能閱讀'));assert.ok(html.includes('找到一起實作的夥伴'));
   assert.ok(html.includes('收藏工具、分享作品'));assert.ok(html.includes('href="#skill-use-title"'));
   assert.ok(html.includes('join=1&amp;skill_acquisition=1&amp;return_to='));assert.ok(html.includes('&amp;skill_intro=7'));
   assert.ok(html.includes('data-skill-library href="/#skills" hidden'));assert.ok(!html.includes('<form'));

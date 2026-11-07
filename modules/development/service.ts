@@ -161,7 +161,7 @@ export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics
   const cooperation=getSkillCollaboration(book.id,editorial);
   const content=shareContentFor(book.id),selected=shareIntroNumber(intro,content.introductions.length),selectedText=selected?content.introductions[selected-1]:null;
 
-  const introduction=skillPageUsage(book.guide);
+  const introduction=skillPageUsage(book.guide,page?.flow.lead);
   const destinations=publicSkillDestinations([{url:book.upstream_url,kind:'source'},...(book.introduction_url?[{url:book.introduction_url,kind:'website' as const}]:[]),{url:book.guide.reading_url,kind:'guide'}]);
   const source='<section class="public-skill-source"><h2>版本與來源</h2><p>GitHub：<a href="'+author+'" target="_blank" rel="noopener noreferrer">'+escape(new URL(book.upstream_url).pathname.split('/')[1])+'</a></p><dl><dt>原作 Repo</dt><dd>'+escape(book.upstream_url)+'</dd><dt>工坊整合參考</dt><dd>'+escape(book.repository_url)+'</dd><dt>指南核對來源</dt><dd>'+escape(book.guide.reading_url)+'</dd><dt>記錄的授權</dt><dd>'+escape(book.license_status)+'</dd><dt>指南核對版本</dt><dd><code>'+escape(book.guide.source_commit)+'</code></dd><dt>核對日期</dt><dd>'+escape(book.guide.reviewed_at)+'</dd></dl></section>';
   const share=publicSkillShareMarkup({title:book.title,path:'/development/skills/'+book.id,introductions:content.introductions,selected,origin});

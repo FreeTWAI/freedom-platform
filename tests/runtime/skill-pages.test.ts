@@ -63,6 +63,8 @@ test('all skill pages explain the problem and mechanism along one readable path 
   assert.ok(html.includes('<h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2>'),book.id);
   for(const step of content.flow.steps)assert.ok(html.includes('<h3 class="sf-title">'+escape(step.title)+'</h3><p class="sf-note">'+escape(step.note)+'</p>'),book.id+': '+step.title);
   assert.ok(html.includes(escape(content.problem)),book.id);assert.ok(html.includes(escape(content.mechanism)),book.id);
+  assert.ok(html.includes('<div class="sp-conditions"><h3>使用條件</h3><p>'+escape(content.flow.lead)+'</p></div>'),book.id);
+  assert.ok(html.indexOf('class="sp-conditions"')>html.indexOf('id="skill-start"'),book.id);
   assert.equal((html.match(/class="sf-connector"/g)??[]).length,2,book.id);
   assert.match(html,/<details class="public-skill-details"><summary>作者、版本與參與開發<\/summary>/);
   assert.doesNotMatch(html,/流程圖僅供參考|功能示意圖，非實際操作截圖|以下連結在新分頁開啟外部網站/);
