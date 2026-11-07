@@ -185,7 +185,7 @@ test('several verified original authors stay public while a pending maintainer a
   const page = await app.request(origin + '/development/skills/local-workspace-mcp');
   const html = await page.text();
   assert.equal(page.status, 200);
-  assert.equal(html.includes('來源標示的作者：Mini'), true);
+  assert.match(html, /<p>作者 · Mini<\/p>/);
   assert.equal(html.includes('已核實原作者'), true);
   assert.equal(html.includes('data-author-claim-status="verified_original_author"'), true);
   for (const leak of [SECRET, EVIDENCE, 'maker@local.test', email, '已驗證']) assert.equal(html.includes(leak), false, leak);

@@ -132,6 +132,11 @@ async function skillResumeHost(initialResume: string | null) {
  const {readFileSync}=await import('node:fs');
  const {runInNewContext}=await import('node:vm');
  const {requireItems}=await import('../../apps/portal-web/src/api.js');
+ const [pageDraft,pageContent,pageFields]=await Promise.all([
+  import('../../modules/skill-submissions/page-draft.js'),
+  import('../../modules/community/skill-page-content.js'),
+  import('../../apps/portal-web/src/modules/SkillSubmissionPageFields.js'),
+ ]);
  // Narrow React hook-host model. The production resume effect and the real
  // authoring/mutation stores run here; this is not browser/layout evidence.
  const slots:any[]=[];let cursor=0,dirty=false,resumeId=initialResume;
@@ -155,6 +160,10 @@ async function skillResumeHost(initialResume: string | null) {
   if(name==='./WorkSharing.css')return {};
   if(name==='./SkillUpload')return {relationshipLabels:{curator:'推薦／整理者'}};
   if(name==='./SkillPublication')return {skillPublicationPath,PublishedSkillLinks:()=>null};
+  if(name==='../../../../modules/skill-submissions/page-draft.js')return pageDraft;
+  if(name==='../../../../modules/community/skill-page-content.js')return pageContent;
+  if(name==='./SkillSubmissionPageFields')return pageFields;
+  if(name==='./SkillSubmissionPagePreview')return {SkillSubmissionPagePreview:()=>null};
   if(name==='./authoring-drafts')return {authoringDraftState,sharingMutationState,useAuthoringDraft:(userId:string,key:string,initial:unknown)=>{const draft=authoringDraftState(userId,key,initial);return [draft.read(),draft.write,draft.live];}};
   if(name==='./shared')return {useModuleMutation:(_client:PortalClient,scope:{userId:string;type:string})=>{const mutation=sharingMutationState(scope);return {...mutation.snapshot,setError:()=>{},mutate:(path:string,body:unknown,version?:number)=>performModuleMutation(client,mutation,path,body,version)};}};
   throw Error('Unexpected skill resume dependency '+name);
