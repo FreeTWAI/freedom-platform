@@ -139,3 +139,42 @@ to anticipate an unobserved failure.
 The new cases and their PNGs require the next exact-candidate official CI run.
 Local discovery/type checks and pure tests are not native browser evidence.
 No merge, deployment, human visual approval or complete-game acceptance is implied.
+
+## Official union failure follow-up, 2026-11-07
+
+Draft #1309 head `76fbdc14edbb4b5510877adcbaa2151c341ea46e` received actual
+browser evidence in run `42383640560`, attempt 1. Its default shard 1 had 806
+passing and three failing cases. The plant-burger trace shows the test queried
+an exit button before `fullscreenchange` updated it, got zero matches and never
+clicked exit. The art cases now wait for entered presentation and its settled
+control before clicking the real exit button; no timeout or exit assertion is
+weakened.
+
+Both new 667×375 cases failed before their first cut. Original PNGs show the
+board clipped below the viewport, and trace geometry records the live scene
+from y=219.6875 to y=477.390625 in a 375px viewport. Draw counts remained within
+the existing limits (88 calls, 18 geometries, 3 textures). The settled-entry
+handler had scrolled the tall keyboard section, rather than the actual scene.
+The cooking start now supplies that scene as a separate view target. After
+native or viewport entry settles, only that connected child of the original,
+still-focused section in the same fullscreen host may scroll. The scene never
+receives keyboard focus. For an entry with a supplied focus owner, detached or
+moved targets, moved focus, unmount and stale ownership cannot cause a delayed
+scroll or refocus. Callers without a separate
+view retain the original target; explicit exit and the one-attempt latch remain
+unchanged.
+
+The ordinary cooking begin/resume layout scroll remains unchanged: the failing
+run did not reach resume in these two cases, so no separate resume defect is
+claimed. The cases additionally check section focus at start/resume and record
+resumed geometry before any screenshot can scroll it. Original resource and
+geometry limits, native API ownership, seven case registrations and 25 expected
+PNG Buffer attachments remain intact. No scene dimensions, CSS, CI selection,
+renderer, game state or timeout is changed.
+
+Production-handler probes include positive and negative ownership cases and
+run against both candidate source and the exact failing source. They do not
+substitute for mounted React, native WebGL or browser geometry. The corrected
+candidate still requires its own official CI and PNG inspection; the previous
+failure artifacts do not prove the fix passes. Local missing Three dependencies
+and build packaging restrictions remain explicit verification boundaries.

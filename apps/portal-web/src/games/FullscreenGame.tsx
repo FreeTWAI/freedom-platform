@@ -4,13 +4,14 @@ import './fullscreen-game.css';
 type Mode = 'normal' | 'native' | 'viewport';
 
 /** Keep the game mounted while presentation changes, so a run is never reset. */
-export type FullscreenGameHandle = { enter: (focusTarget?: HTMLElement | null) => void };
+export type FullscreenGameHandle = { enter: (focusTarget?: HTMLElement | null, viewTarget?: HTMLElement | null) => void };
 
 export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: ReactNode; resultReady?: boolean }>(function FullscreenGame({ children, resultReady = false }, ref) {
   const container = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
   const button = useRef<HTMLButtonElement>(null);
   const entryFocus = useRef<HTMLElement | null>(null);
+  const entryView = useRef<HTMLElement | null>(null);
   const autoAttempted = useRef(false);
   const [mode, setMode] = useState<Mode>('normal');
   const [pending, setPending] = useState(false);
@@ -33,11 +34,13 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
 
   useLayoutEffect(() => {
     if (mode !== 'normal') {
-      const target = entryFocus.current; entryFocus.current = null;
+      const target = entryFocus.current, view = entryView.current; entryFocus.current = null; entryView.current = null;
       const active = document.activeElement;
+      if (!mounted.current || (target && (!target.isConnected || active !== target || !container.current?.contains(target)))) return;
       // Native entry and viewport fallback settle after the game's start scroll.
-      // Reveal only the same connected DOM owner while the player still focuses it.
-      if (mounted.current && target?.isConnected && active === target && container.current?.contains(target)) target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+      // A tall keyboard owner can extend beyond the viewport. Reveal its exact
+      // live view only while both DOM owners remain connected and focus is unchanged.
+      if (target && view?.isConnected && target.contains(view)) view.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
       // A player may have started the game or reached its result while the
       // browser was still resolving fullscreen. Do not steal their focus.
       if (active instanceof HTMLElement && active !== button.current && container.current?.contains(active)) return;
@@ -79,9 +82,9 @@ export const FullscreenGame = forwardRef<FullscreenGameHandle, { children: React
     } finally { if (mounted.current) setPending(false); }
   }
 
-  useImperativeHandle(ref, () => ({ enter: (focusTarget) => {
+  useImperativeHandle(ref, () => ({ enter: (focusTarget, viewTarget) => {
     // A cold deep link has no gesture; the visible button remains available.
-    if (!autoAttempted.current && mode === 'normal' && !pending && (!navigator.userActivation || navigator.userActivation.isActive)) { entryFocus.current = focusTarget ?? null; void toggle(); }
+    if (!autoAttempted.current && mode === 'normal' && !pending && (!navigator.userActivation || navigator.userActivation.isActive)) { entryFocus.current = focusTarget ?? null; entryView.current = viewTarget ?? focusTarget ?? null; void toggle(); }
   } }), [mode, pending]);
 
   function captureEscape(event: KeyboardEvent<HTMLDivElement>) {

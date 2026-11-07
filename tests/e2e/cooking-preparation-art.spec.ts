@@ -38,9 +38,11 @@ for(const fixture of [
   // #1305 can enter fullscreen on Begin. Use its real control to restore the
   // requested viewport before reviewing artwork; never force the browser API.
   const fullscreen=page.locator('.fullscreen-game__button[aria-pressed]');
-  await expect(fullscreen).toHaveAttribute('aria-disabled','false');
   const exit=page.getByRole('button',{name:'退出全螢幕',exact:true});
-  if(await exit.count())await exit.click();
+  // requestFullscreen can resolve before fullscreenchange updates the button.
+  // Wait for the actual entered presentation, rather than skipping a late exit.
+  await expect(exit).toBeVisible();await expect(fullscreen).toHaveAttribute('aria-pressed','true');
+  await expect(exit).toHaveAttribute('aria-disabled','false');await exit.click();
   await expect(fullscreen).toHaveAttribute('aria-pressed','false');
   await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>document.fullscreenElement===null)).toBe(true);
@@ -142,7 +144,7 @@ for(const mode of ['native','rejected'] as const)test(`preparation art fullscree
   const savedRun=()=>page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);
   await page.clock.pauseAt(new Date(started.getTime()+60_000));
   await page.getByRole('button',{name:'開始料理',exact:true}).click();await expectPresentation();
-  await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(meter).toHaveText(`0 / ${step.goal}`);
+  await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(game).toBeFocused();await expect(meter).toHaveText(`0 / ${step.goal}`);
   await advance();await expectNativeResources('whole');await expectLandscape('started');
   const whole=await capturePreparationScreenshot(canvas,testInfo,`pumpkin-soup-${mode}-fullscreen-native-whole.png`);
   await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await advance();
@@ -154,7 +156,7 @@ for(const mode of ['native','rejected'] as const)test(`preparation art fullscree
   const paused=await savedRun();expect(paused.active.count).toBe(1);expect(paused.step).toBe(0);expect(paused.reports).toEqual([]);
   await advance();expect(await savedRun()).toEqual(paused);await expect(meter).toHaveText(`1 / ${step.goal}`);
   await page.getByRole('button',{name:'繼續料理',exact:true}).click();await advance();
-  await expect(game).toHaveAttribute('data-cooking-state','playing');await expectPresentation();await expect(meter).toHaveText(`1 / ${step.goal}`);
+  await expect(game).toHaveAttribute('data-cooking-state','playing');await expect(game).toBeFocused();await expectPresentation();await expect(meter).toHaveText(`1 / ${step.goal}`);await expectLandscape('resumed');
   expect(await originalCanvas!.evaluate(element=>element.isConnected&&element===document.querySelector('.ck-kitchen-canvas canvas'))).toBe(true);
   await page.getByRole('button',{name:'輕量插畫',exact:true}).click();await expectPresentation();
   await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(canvas).toHaveCount(0);
