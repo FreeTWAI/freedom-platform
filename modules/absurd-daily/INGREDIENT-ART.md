@@ -178,3 +178,34 @@ substitute for mounted React, native WebGL or browser geometry. The corrected
 candidate still requires its own official CI and PNG inspection; the previous
 failure artifacts do not prove the fix passes. Local missing Three dependencies
 and build packaging restrictions remain explicit verification boundaries.
+
+
+## Official resume follow-up, 2026-11-07
+
+The next official Draft #1309 head, `134be68706d012dd3a2fe077db4cfbff762ad93c`,
+was tested in run `42390468143`, attempt 1. Its default shard 1 passed 807 cases
+and failed only the two new fullscreen cases, now at resumed geometry. The five
+original art cases passed. Both new cases passed start and first-cut geometry
+(scene bottom 375.390625 against the unchanged 376px ceiling), kept the real
+first cut and stayed within resources (88 calls, 22 geometries, 3 textures).
+
+Original failure PNGs and traces now establish the previously unverified resume
+issue. Both traces show fullscreen scrollTop 102 at start/cut, 325 during the
+resume click's actionability scroll, then 69 immediately after the real resume
+handler. Section focus and native/viewport ownership still pass. Scene dimensions
+stay unchanged, but it moves down 33px to bottom 408.390625. The actual CSS
+resources in those traces retain 72px fullscreen scroll padding and 12px layout
+scroll margin; the resumed layout top of 83.890625 matches the existing
+layout-target start alignment, with the mission header above the live scene.
+
+Only a successfully accepted paused-to-playing resume now reveals its live
+scene with nearest alignment after the existing section focus. A ready cold
+start keeps its original layout scroll. Fullscreen entry, its one-attempt latch,
+manual exit, asynchronous ownership guards, CSS, renderer and all browser
+assertions/timeouts remain unchanged. Actual-handler probes cover the optional
+callback, existing native/viewport ownership, explicit exit, rejected resumes,
+and preserved run identity, step, reports and cut progress. They fail against
+the exact previous source and pass against the candidate, without simulating
+browser geometry. The same seven official browser cases and 25 expected PNGs
+must still execute and be inspected on the next exact candidate; SVG and reentry
+were not reached in this failed run, and local process tests do not verify them.

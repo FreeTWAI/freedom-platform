@@ -1386,13 +1386,13 @@ function fullscreenStartHandler(file:string,start:string,end:string,name:string,
 }
 function fullscreenStartHarness(kind:'legacy'|'guided'|'market'|'party',status='ready'){
  let calls=0,frames=0,drawn=true;
- const view={scrollIntoView(){}},layout={scrollIntoView(){}},target={focus(){},scrollIntoView(){},querySelector:(selector:string)=>selector==='.ck-live-scene'?view:layout,closest:()=>layout};
+ const view={scrolls:[] as unknown[],scrollIntoView(options:unknown){this.scrolls.push(JSON.parse(JSON.stringify(options)));}},layout={scrolls:[] as unknown[],scrollIntoView(options:unknown){this.scrolls.push(JSON.parse(JSON.stringify(options)));}},target={focuses:[] as unknown[],focus(options:unknown){this.focuses.push(JSON.parse(JSON.stringify(options)));},scrollIntoView(){},querySelector:(selector:string)=>selector==='.ck-live-scene'?view:layout,closest:()=>layout};
  const recipe=recipeOf('rice-balls')!;
  const initial=kind==='party'?newParty('chair',42):kind==='market'?newMarket('corn-dog',42):kind==='guided'?newCookingRun(recipe,42,'fullscreen-start'): {started:false,paused:false,clock:{elapsed:0,last:null,running:false}};
  const live={current:{...initial,status} as any};
  const context:any={game:'photo',hints:{},live,ready:true,visualReady:true,confirm:false,confirmRestart:false,restart:false,mode:kind==='party'?{current:'light'}:'ready',onStart:(node:unknown)=>{assert.equal(node,target);calls++;},section:{current:target},surface:{current:target},host:{current:target},last:{current:null},frame:{current:0},loop:{current(){}},step:{current(){}},checkpointOwned:{current:false},performance:{now:()=>100},requestAnimationFrame:()=>++frames,cancelAnimationFrame(){},setNotice(){},refresh(){},updateUi(){},kick(){frames++;},stop(){},finish(){},safeDraw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},draw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},startParty,resumeParty,currentStep,applyMarket,commit:(run:unknown)=>{live.current=run;},resume:(clock:any)=>({...clock,running:true}),command:(action:any)=>{live.current=actCooking(live.current,{...action,step:live.current.step},100);}};
  const begin=kind==='legacy'?fullscreenStartHandler('AbsurdDaily.tsx','    function start()','    function setPaused()','start',context):kind==='party'?fullscreenStartHandler('party/PartyGame.tsx','  function begin()','  function action(','begin',context):kind==='market'?fullscreenStartHandler('cooking/MarketGame.tsx',' function action(',' step.current=','action',context):fullscreenStartHandler('cooking/CookingGame.tsx','  const begin=','  const restart=','begin',context);
- return {context,live,target,view,begin:()=>kind==='market'?begin({kind:'start'}):begin(),calls:()=>calls,frames:()=>frames,draw:(ok:boolean)=>{drawn=ok;}};
+ return {context,live,target,view,layout,begin:()=>kind==='market'?begin({kind:'start'}):begin(),calls:()=>calls,frames:()=>frames,draw:(ok:boolean)=>{drawn=ok;}};
 }
 for(const kind of ['legacy','guided','market','party'] as const)test(`fullscreen start: actual ${kind} cold-start handler invokes its presentation owner synchronously`,()=>{
  const h=fullscreenStartHarness(kind);h.begin();assert.equal(h.calls(),1);assert.equal(kind==='legacy'?h.live.current.started:h.live.current.status,kind==='legacy'?true:'playing');
@@ -1501,5 +1501,22 @@ for(const reason of ['detached-view','view-moved-to-other-owner','moved-focus','
 test('fullscreen start: an omitted view keeps the old host target, and manual exit cannot replace it',async()=>{
  const h=fullscreenEntryLayoutHarness();h.enter(h.target);assert.equal(h.context.entryView.current,h.target);h.native();h.resolve();await h.settled();h.layout();assert.equal(h.target.scrolls.length,1);assert.equal(h.view.scrolls.length,0);
  h.context.mode='normal';h.context.pending=false;h.context.document.fullscreenElement=null;h.enter(h.target,h.view);assert.equal(h.context.entryFocus.current,null);assert.equal(h.context.entryView.current,null);h.layout();assert.equal(h.target.scrolls.length,1);assert.equal(h.view.scrolls.length,0);h.cleanup();
+});
+test('cooking resume: accepted actual handler reveals the live scene without a presentation callback',()=>{
+ const h=fullscreenStartHarness('guided','paused');h.context.onStart=undefined;h.live.current={...h.live.current,active:{...h.live.current.active,count:1}};const before=h.live.current;
+ h.begin();assert.equal(h.live.current.status,'playing');assert.equal(h.live.current.id,before.id);assert.equal(h.live.current.step,before.step);assert.deepEqual(h.live.current.active,before.active);assert.deepEqual(h.live.current.reports,before.reports);
+ assert.deepEqual(h.view.scrolls,[{block:'nearest',inline:'nearest',behavior:'instant'}]);assert.deepEqual(h.layout.scrolls,[]);assert.deepEqual(h.target.focuses,[{preventScroll:true}]);h.begin();assert.equal(h.view.scrolls.length,1,'a repeated start does not scroll again');assert.equal(h.target.focuses.length,1);
+});
+for(const mode of ['native','viewport','normal'] as const)test(`cooking resume: actual ${mode} presentation owner cannot turn scene reveal into another fullscreen entry`,()=>{
+ const h=fullscreenStartHarness('guided','paused'),presentation=fullscreenEntryLayoutHarness();presentation.context.autoAttempted.current=true;presentation.context.mode=mode;presentation.context.entryFocus.current=null;presentation.context.entryView.current=null;
+ h.context.onStart=(owner:unknown,scene:unknown)=>presentation.enter(owner,scene);h.begin();
+ assert.equal(h.live.current.status,'playing');assert.deepEqual(h.view.scrolls,[{block:'nearest',inline:'nearest',behavior:'instant'}]);assert.deepEqual(h.layout.scrolls,[]);assert.deepEqual(h.target.focuses,[{preventScroll:true}]);assert.equal(presentation.context.mode,mode,'manual exit remains normal');assert.equal(presentation.settled(),null,'no new native request');assert.equal(presentation.context.entryFocus.current,null);assert.equal(presentation.context.entryView.current,null);presentation.cleanup();
+});
+test('cooking resume: ready cold start retains its original synchronous layout reveal',()=>{
+ const h=fullscreenStartHarness('guided');h.begin();assert.equal(h.live.current.status,'playing');assert.equal(h.calls(),1);assert.deepEqual(h.view.scrolls,[]);assert.deepEqual(h.layout.scrolls,[{block:'start',behavior:'instant'}]);assert.deepEqual(h.target.focuses,[{preventScroll:true}]);
+});
+for(const reason of ['unavailable','confirmation','step-result','rejected-command'] as const)test(`cooking resume: ${reason} cannot reveal or focus a rejected resume`,()=>{
+ const h=fullscreenStartHarness('guided','paused');if(reason==='unavailable')h.context.visualReady=false;if(reason==='confirmation')h.context.confirmRestart=true;if(reason==='step-result')h.live.current={...h.live.current,status:'step-result'};if(reason==='rejected-command')h.context.command=()=>{};const before=h.live.current;
+ h.begin();assert.equal(h.live.current,before);assert.equal(h.calls(),0);assert.deepEqual(h.view.scrolls,[]);assert.deepEqual(h.layout.scrolls,[]);assert.deepEqual(h.target.focuses,[]);
 });
 // FULLSCREEN-START-PURE-END
