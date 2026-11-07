@@ -9,6 +9,7 @@ import {getSkillShareContent} from '../../modules/community/skill-share-content.
 import {indexHtml,pageHtml,skillMarkdown,skillPageCss} from '../../modules/development/service.js';
 import {SKILL_SHARE_CARD_SIZE,SKILL_SHARE_MANIFEST,skillShareCardSource} from '../../modules/development/skill-share-card.js';
 import {wrapFlowText} from '../../modules/development/skill-flow.js';
+import {skillPageUsage} from '../../modules/development/skill-page.js';
 
 const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const sha256=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
@@ -91,6 +92,14 @@ test('skill page styles only touch shared elements under html.skill-page and oth
   }
  };
  block(false);assert.deepEqual(unscoped,[]);
+});
+
+test('community guidance preserves a reading anchor without inventing missing audience or results',()=>{
+ const html=skillPageUsage({format:'',audience:[],features:[],prerequisites:[],status:'',first_steps:['先準備筆記，再依 README 完成範例。'],first_result:'',reviewed_at:''},'在本機執行，需先安裝原作指定版本。');
+ assert.equal((html.match(/id="skill-use-title"/g)??[]).length,1);
+ assert.ok(html.includes('id="skill-start"'));assert.ok(html.includes('先準備筆記，再依 README 完成範例。'));
+ assert.ok(html.includes('在本機執行，需先安裝原作指定版本。'));
+ assert.doesNotMatch(html,/適合這些人|查看完整功能|適用環境與使用範圍|開始前準備|練習成果/);
 });
 
 test('share images are rendered cards whose alt text repeats the name, headline and step titles on them',async()=>{

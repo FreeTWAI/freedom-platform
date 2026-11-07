@@ -28,19 +28,20 @@ export function skillPageHero(hero:SkillPageHero){
 export function skillPageFlow(content:SkillPageContent){
  return '<section class="sp-band sp-flow-band" aria-labelledby="skill-flow-title"><div class="sp-wrap"><div class="sp-problem" id="skill-problem"><span class="sp-problem-label">原本卡在哪</span><p>'+escape(content.problem)+'</p></div><div class="sp-head"><div><p class="sp-kicker">從問題到成果</p><h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2></div><div class="sp-mechanism"><h3>背後的原理</h3><p>'+escape(content.mechanism)+'</p></div></div>'+skillFlowFigure(content.flow)+'</div></section>';
 }
-/** Every authored guide sentence appears once, in reading order: who, what, cautions, then the first practice. */
+/** Render supplied guidance without inventing missing audience, conditions or results. */
 export function skillPageUsage(guide:SkillPageGuide,usageContext?:string){
  const grid=(count:number)=>count===4?' sp-grid-2':'';
- const audience='<h3 class="sp-sub">適合這些人</h3><ul class="sp-audience">'+guide.audience.map(item=>'<li><span class="sp-chip">'+skillFlowIcon('user')+'</span><span>'+escape(item)+'</span></li>').join('')+'</ul>';
- const features='<h3 class="sp-sub">主要功能</h3><ol class="sp-features'+grid(guide.features.length)+'">'+guide.features.map((item,index)=>'<li><span class="sp-num" aria-hidden="true">'+pad2(index+1)+'</span><p>'+escape(item)+'</p></li>').join('')+'</ol>';
- const status='<details class="sp-usage-details"><summary>適用環境與使用範圍</summary><p>'+escape(guide.status)+'</p></details>';
+ const audience=guide.audience.length?'<h3 class="sp-sub">適合這些人</h3><ul class="sp-audience">'+guide.audience.map(item=>'<li><span class="sp-chip">'+skillFlowIcon('user')+'</span><span>'+escape(item)+'</span></li>').join('')+'</ul>':'';
+ const features=guide.features.length?'<details class="sp-usage-details"><summary>查看完整功能</summary><h3 class="sp-sub">主要功能</h3><ol class="sp-features'+grid(guide.features.length)+'">'+guide.features.map((item,index)=>'<li><span class="sp-num" aria-hidden="true">'+pad2(index+1)+'</span><p>'+escape(item)+'</p></li>').join('')+'</ol></details>':'';
+ const status=guide.status?'<details class="sp-usage-details"><summary>適用環境與使用範圍</summary><p>'+escape(guide.status)+'</p></details>':'';
  const conditions=usageContext?'<div class="sp-conditions"><h3>使用條件</h3><p>'+escape(usageContext)+'</p></div>':'';
- const prepare='<div class="sp-prepare"><h3>開始前準備</h3><ul>'+guide.prerequisites.map(item=>'<li>'+tick+'<span>'+escape(item)+'</span></li>').join('')+'</ul></div>';
+ const prepare=guide.prerequisites.length?'<div class="sp-prepare"><h3>開始前準備</h3><ul>'+guide.prerequisites.map(item=>'<li>'+tick+'<span>'+escape(item)+'</span></li>').join('')+'</ul></div>':'';
  const steps='<h3 class="sp-sub">練習步驟</h3><ol class="sp-steps'+(guide.first_steps.length===4?' sp-grid-2':'')+'">'+guide.first_steps.map((item,index)=>'<li><span class="sp-step-num" aria-hidden="true">'+pad2(index+1)+'</span><p>'+escape(item)+'</p></li>').join('')+'</ol>';
  const quickstart=guide.quickstart?'<div class="sp-quick"><h3>原作的起步指令</h3><p>'+escape(guide.quickstart.context)+'</p><pre><code>'+escape(guide.quickstart.commands)+'</code></pre></div>':'';
- const result='<div class="sp-result"><span class="sp-chip">'+skillFlowIcon('star')+'</span><div><h3>練習成果</h3><p>'+escape(guide.first_result)+'</p></div></div>';
- return '<section class="public-skill-introduction" aria-labelledby="skill-use-title"><div class="sp-band sp-usage"><div class="sp-wrap"><div class="sp-head"><div><p class="sp-kicker">把它用在你的工作裡</p><h2 id="skill-use-title">用途與適用範圍</h2></div></div>'+audience+'<details class="sp-usage-details"><summary>查看完整功能</summary>'+features+'</details></div></div>'
-  +'<div class="sp-start" id="skill-start"><div class="sp-wrap"><p class="sp-kicker">第一次使用</p><h2>開始使用</h2>'+conditions+prepare+steps+quickstart+result+status+'</div></div></section>';
+ const result=guide.first_result?'<div class="sp-result"><span class="sp-chip">'+skillFlowIcon('star')+'</span><div><h3>練習成果</h3><p>'+escape(guide.first_result)+'</p></div></div>':'';
+ const usage=audience||features?'<div class="sp-band sp-usage"><div class="sp-wrap"><div class="sp-head"><div><p class="sp-kicker">把它用在你的工作裡</p><h2 id="skill-use-title">用途與適用範圍</h2></div></div>'+audience+features+'</div></div>':'';
+ return '<section class="public-skill-introduction" aria-labelledby="skill-use-title">'+usage
+  +'<div class="sp-start" id="skill-start"><div class="sp-wrap"><p class="sp-kicker">第一次使用</p><h2'+(usage?'':' id="skill-use-title"')+'>開始使用</h2>'+conditions+prepare+steps+quickstart+result+status+'</div></div></section>';
 }
 export function skillPageBand(html:string,name:string){return html?'<div class="sp-band '+name+'"><div class="sp-wrap">'+html+'</div></div>':'';}
 
