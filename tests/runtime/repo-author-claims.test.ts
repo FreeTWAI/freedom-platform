@@ -185,7 +185,7 @@ test('several verified original authors stay public while a pending maintainer a
   const page = await app.request(origin + '/development/skills/local-workspace-mcp');
   const html = await page.text();
   assert.equal(page.status, 200);
-  assert.match(html, /<p>作者 · Mini<\/p>/);
+  assert.match(html, /<button\b[^>]*data-skill-author[^>]*data-author-endpoint="\/api\/v1\/skills\/local-workspace-mcp\/author-card"[^>]*><span>示範創作者<\/span>/);
   assert.equal(html.includes('已核實原作者'), true);
   assert.equal(html.includes('data-author-claim-status="verified_original_author"'), true);
   for (const leak of [SECRET, EVIDENCE, 'maker@local.test', email, '已驗證']) assert.equal(html.includes(leak), false, leak);

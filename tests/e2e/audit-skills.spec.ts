@@ -178,8 +178,16 @@ for (const width of [1280, 390]) {
     test('public skill page and Agent SKILL.md stay usable without a session', async ({ page }) => {
       await page.goto('/development/skills/social-post');
       await expect(page.getByRole('heading', { name: 'Hao 社群貼文技能書', level: 1 })).toBeVisible();
+      const author = page.locator('[data-skill-author]');
+      await expect(author).toBeInViewport();
+      await author.click();
+      const card = page.getByRole('dialog', { name: '自由工坊名片', exact: true });
+      await expect(card).toBeVisible();
+      await expect(card.getByRole('link', { name: '查看來源 GitHub ↗', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321');
+      await card.getByRole('button', { name: '關閉作者名片', exact: true }).click();
+      await expect(author).toBeFocused();
       await page.getByText('作者、版本與參與開發', { exact: true }).click();
-      await expect(page.getByRole('link', { name: 'Follow 原作者 ↗', exact: true }).first()).toHaveAttribute('href', 'https://github.com/Hao0321');
+      await expect(page.locator('.public-skill-source').getByRole('link', { name: 'Hao0321', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321');
       await summariesReachable(page.locator('body'));
       await noOverflow(page);
       const response = await page.request.get('/development/skills/social-post/SKILL.md');

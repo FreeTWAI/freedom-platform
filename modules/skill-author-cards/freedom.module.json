@@ -1,0 +1,50 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "skill-author-cards",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/skill-author-cards/**",
+    "apps/platform-api/src/routes/skill-author-cards.ts",
+    "tests/runtime/skill-author-cards.test.ts"
+  ],
+  "public_exports": [
+    "modules/skill-author-cards/service.ts",
+    "apps/platform-api/src/routes/skill-author-cards.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "community",
+    "member-card",
+    "shared",
+    "skill-submissions",
+    "github-social"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "docs/platform-plan/execution/unified-foundation/00-baseline-and-decisions.md",
+    "docs/platform-plan/execution/unified-foundation/02-principal-command.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "skill-author-cards.public-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/skill-author-cards.ts",
+      "operations": [
+        "skill-author-cards.catalog.read",
+        "skill-author-cards.submission.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    }
+  ]
+}

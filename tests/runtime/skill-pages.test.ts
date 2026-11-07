@@ -70,7 +70,7 @@ test('all skill pages explain the problem and mechanism along one readable path 
   assert.equal((html.match(/class="sf-connector"/g)??[]).length,2,book.id);
   assert.match(html,/<details class="public-skill-details"><summary>作者、版本與參與開發<\/summary>/);
   assert.doesNotMatch(html,/流程圖僅供參考|功能示意圖，非實際操作截圖|以下連結在新分頁開啟外部網站/);
-  const order=['class="public-skill-entry"','id="skill-flow-title"','id="skill-use-title"','<h2>開始使用</h2>','class="public-skill-next"','data-share-root','id="join-workshop"','class="public-github-social"'].map(marker=>html.indexOf(marker));
+  const order=['class="public-skill-entry"','class="sp-engagement"','class="public-github-social"','data-share-launch','id="skill-flow-title"','id="skill-use-title"','<h2>開始使用</h2>','class="public-skill-next"','data-share-root','id="join-workshop"'].map(marker=>html.indexOf(marker));
   assert.ok(order.every((index,position)=>index>0&&(position===0||index>order[position-1]!)),book.id+': '+order.join(','));
  }
  assert.doesNotMatch(indexHtml(),/class="skill-page"/);

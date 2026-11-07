@@ -20,7 +20,7 @@ export function externalHttpsUrl(value: string): string {
   return url.href;
 }
 export const externalLink = z.string().trim().min(1).max(2000).transform(externalHttpsUrl);
-const repoSchema=z.object({id:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),full_name:z.string().regex(coordinate),private:z.literal(false),visibility:z.literal('public'),default_branch:z.string().min(1).max(255),fork:z.boolean(),archived:z.boolean()});
+const repoSchema=z.object({id:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),full_name:z.string().regex(coordinate),private:z.literal(false),visibility:z.literal('public'),default_branch:z.string().min(1).max(255),fork:z.boolean(),archived:z.boolean(),owner:z.object({id:z.number().int().positive().safe()}).optional()});
 const commitSchema=z.object({sha:z.string().regex(/^[a-f0-9]{40}$/)});
 const licenseSchema=z.object({license:z.object({spdx_id:z.string().min(1).max(100)}).nullable(),path:z.string().min(1).max(500)});
 
@@ -176,6 +176,7 @@ export async function inspectGitHubRepository(repositoryUrl:string,fetcher:typeo
   const repository_url=`https://github.com/${fullName}`;
   return {
     repository_id:String(repo.data.id),repository_full_name:fullName,repository_url,
+    ...(repo.data.owner?{repository_owner_id:String(repo.data.owner.id)}:{}),
     commit_sha:commit.data.sha,default_branch:repo.data.default_branch,
     readme_url:`${repository_url}/tree/${commit.data.sha}#readme`,
     license_spdx:license?.data?.license?.spdx_id??'NOASSERTION',

@@ -7,7 +7,7 @@ import {Problem,requireCondition} from '../../packages/shared/problem.js';
 import type {Actor} from '../identity-membership/service.js';
 import {communityCatalog} from '../community/catalog.js';
 import {recordConfirmedStar,reconcileConfirmedStar} from '../community/discovery.js';
-import {GitHubProviderError,GitHubSocialProvider,type GitHubSocialConfig,type GitHubTokens,type RepositorySnapshot} from './provider.js';
+import {GitHubProviderError,GitHubSocialProvider,type GitHubSocialConfig,type GitHubTokens,type RepositoryIdentity,type RepositorySnapshot} from './provider.js';
 import {DESIGN_CLAIM_MARKER,issuePageMarker,PLATFORM_REPOSITORY} from '../development/page-github.js';
 export type {GitHubSocialConfig} from './provider.js';
 
@@ -54,6 +54,20 @@ export async function failRepositoryMetrics(q:Pool|PoolClient,key:string,code:st
   const safe=/^[a-z0-9_]{1,80}$/.test(code)?code:'github_unavailable';
   return (await q.query<MetricsRow>(`INSERT INTO github_repository_metrics(repository_key,retry_after,last_error) VALUES($1,now()+interval '1 hour',$2)
     ON CONFLICT(repository_key) DO UPDATE SET retry_after=now()+interval '1 hour',last_error=$2 RETURNING snapshot,checked_at,retry_after,last_error`,[key,safe])).rows[0];
+}
+export function repositoryIdentity(value:unknown,coordinate:string,repositoryId?:string):RepositoryIdentity|null{
+  const id=z.string().regex(/^[1-9][0-9]{0,15}$/).refine(value=>Number.isSafeInteger(Number(value)));
+  const parsed=z.object({id,full_name:z.string().max(140),owner_id:id}).safeParse(value);
+  if(!parsed.success||parsed.data.full_name.toLowerCase()!==coordinate.toLowerCase()||(repositoryId&&parsed.data.id!==repositoryId))return null;
+  return parsed.data;
+}
+/** Pure cache read: a failed refresh or an old statistics snapshot is not current
+ * ownership evidence. Three hours bounds reuse while allowing the catalog sweep. */
+export async function cachedRepositoryIdentity(q:Pool|PoolClient,coordinate:string,repositoryId?:string):Promise<RepositoryIdentity|null>{
+  const row=(await q.query(`SELECT snapshot->'repository_identity' AS identity FROM github_repository_metrics
+    WHERE repository_key=$1 AND last_error IS NULL AND checked_at>clock_timestamp()-interval '3 hours'
+      AND checked_at<=clock_timestamp()`,[coordinate.toLowerCase()])).rows[0];
+  return repositoryIdentity(row?.identity,coordinate,repositoryId);
 }
 function encode(key:Buffer,context:string,value:unknown){
   const nonce=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,nonce);cipher.setAAD(Buffer.from(context));
@@ -456,7 +470,8 @@ export class GitHubSocial {
   }
   private metricsView(bookId:string,repositoryUrl:string,row:MetricsRow):GitHubMetrics{
     const checked=row.checked_at?new Date(row.checked_at):null;
-    return {book_id:bookId,repository_url:repositoryUrl,...(row.snapshot??nullSnapshot),checked_at:checked?.toISOString()??null,stale:!checked||Date.now()-checked.getTime()>=HOUR||!!row.last_error,error:row.last_error};
+    const {stargazers_count,forks_count,open_issues_count,subscribers_count,pushed_at,language,archived}=row.snapshot??nullSnapshot;
+    return {book_id:bookId,repository_url:repositoryUrl,stargazers_count,forks_count,open_issues_count,subscribers_count,pushed_at,language,archived,checked_at:checked?.toISOString()??null,stale:!checked||Date.now()-checked.getTime()>=HOUR||!!row.last_error,error:row.last_error};
   }
   private saveMetrics(q:PoolClient,key:string,snapshot:RepositorySnapshot){return saveRepositoryMetrics(q,key,snapshot);}
   private failMetrics(q:PoolClient,key:string,code:string){return failRepositoryMetrics(q,key,code);}

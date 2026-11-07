@@ -86,6 +86,7 @@ Content-Type: application/json
 - `flow` 含 `title` 4–24 字、`lead` 10–100 字、`caption` 10–90 字，`steps` 必須剛好 3 步。每步 `title` 2–14 字、`note` 8–60 字、`icon` 為固定圖示名稱（例如 `doc`、`sliders`、`check`；完整白名單為原始碼 `SKILL_FLOW_ICONS`）。`loop` 可省略或為布林值，僅真實循環才用 `true`。過長而無法完整排入示意圖的文字也會被拒絕，請縮寫後核對原意。
 - 不接受 `page_content`／`flow`／步驟中的額外欄位、HTML、SVG 或網址。流程必須描述專案實際的輸入、處理與產出，不以閱讀本站的導航步驟替代；不確定時補讀來源或等待作者補充。
 - `share_introductions` 會先做 Unicode NFC 與前後空白整理；大小寫或空白不同不算不同。不可含換行或控制字元。
+- 分享文案須逐則說清楚專案名稱或產品類型、核心用途與使用價值，讓從未看過 Repo 的人也能讀懂。允許圍繞同一核心定位換句話說，不以次要功能、測試 gate、版本、安裝或貢獻邀請湊滿 100 則。依 README 與實際程式碼區分手冊、設計方案和工具，逐則審查內容；API 的字數與重複驗證不代表文案事實或品質已通過審核。完整撰寫規則見 `SKILL.md`。
 - `cover_image` 可省略。只接受標準 base64（無換行、無 `data:` 前綴），解碼後 512 KiB 以內、靜態點陣圖、長寬各 4096 以內。SVG、GIF、APNG、動態 WebP 會被拒絕。伺服器會重新編碼為 WebP 並移除中繼資料；不會去抓取任何遠端圖片。
 - 不接受 `consent_to_share`、`official`、會員 ID 或其他欄位。公開同意只能由會員本人在網站勾選。
 

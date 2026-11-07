@@ -1,6 +1,6 @@
 import { formatIsoLocal } from '../format';
 import { seedCopyBlock, type ChatSkillSeed } from './skill-upload-chat';
-import { skillPageContentInstruction } from './skill-page-content-instruction';
+import { skillPageContentInstruction, skillShareIntroductionInstruction } from './skill-page-content-instruction';
 
 export const SKILL_UPLOAD_GUIDE = '/development/skill-upload';
 
@@ -23,7 +23,7 @@ export function agentInstruction(origin: string, secret: SkillUploadInstructionS
 2. description：真實介紹，只寫專案確實具備的功能與授權。
 3. use_notes：適合誰、需要什麼、第一個使用步驟與限制。
 4. ${skillPageContentInstruction}
-5. share_introductions：剛好 100 則彼此不同的分享短文，每則 8–200 字，不重複、不誇大。
+5. ${skillShareIntroductionInstruction}
 6. 插圖（選填）：只依公開指南的格式提供；無法確認格式就省略 cover_image。
 
 規則：

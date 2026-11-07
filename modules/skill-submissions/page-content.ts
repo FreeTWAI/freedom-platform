@@ -8,12 +8,12 @@ export type SubmissionPageSource = {
 };
 
 /** Public pages and the private preview share this escaped, programmatic layout. */
-export function submissionPageMarkup(source: SubmissionPageSource, options: { coverUrl?: string | null; actions?: string } = {}) {
+export function submissionPageMarkup(source: SubmissionPageSource, options: { coverUrl?: string | null; actions?: string; engagement?: string } = {}) {
   const content = validSkillPageContent(source.page_content) ? source.page_content : null;
   const hero = skillPageHero({
     title: source.title, kind: '社群技能書', category: '會員分享', format: '原作工具',
     purpose: source.description, coverUrl: options.coverUrl, content,
-    actions: options.actions ?? '<a href="#skill-start">開始使用</a>', credit: '', badges: '',
+    actions: options.actions ?? '<a href="#skill-start">開始使用</a>', credit: '', badges: '', engagement: options.engagement,
   });
   // Legacy prose stays whole. Missing structured claims are never inferred from
   // a title, repository slug, cover or the fact that the work was published.

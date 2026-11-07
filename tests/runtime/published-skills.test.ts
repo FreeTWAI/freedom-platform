@@ -45,7 +45,10 @@ test('published candidate introduction has own illustration metadata, persistent
   assert.ok(html.includes('投稿公開日期'));assert.ok(html.includes('2026-09-23'));
   assert.ok(html.includes('整理推薦者（自行聲明'));assert.ok(html.includes('非應用程式安裝包'));
   assert.ok(!html.includes('<pre>'));assert.ok(!html.includes('立即啟動'));assert.ok(!html.includes('下載應用'));
-  assert.ok(html.indexOf('Fork 專案')>html.indexOf('<h2>一起開發</h2>'));
+  assert.ok(html.indexOf('Fork 專案')<start);
+  assert.ok(html.indexOf('data-skill-author')<start);
+  assert.ok(html.indexOf('data-share-launch')<start);
+  assert.ok(html.includes('/api/v1/skill-submissions/'+skill.submission_id+'/author-card'));
   assert.ok(html.includes('社群技能書 · 會員分享'));assert.ok(!html.includes('社群投稿'));assert.ok(html.includes('自行聲明'));assert.ok(html.includes('a'.repeat(40)));
   assert.ok(!html.includes('<script>alert'));assert.ok(html.includes('&lt;script&gt;'));
   assert.ok(!html.includes('Authorization'));assert.ok(!html.includes('token'));

@@ -87,6 +87,7 @@ import { onboardingDiagnostics } from './onboarding-diagnostics.js';
 import { createSkillSubmissionRoutes, createAgentSkillSubmissionRoutes, isAgentSkillUploadPath } from './routes/skill-submissions.js';
 import { createMaintainerWebhookRoutes, createRepoMaintainerMemberRoutes, isMaintainerWebhookPath } from './routes/repo-maintainer.js';
 import { createPublishedSkillRoutes } from './routes/published-skills.js';
+import { createPublicSkillAuthorCardRoutes } from './routes/skill-author-cards.js';
 import { checkMessageImageHeaders, createMemberCommunicationRoutes, isMessageImageUpload, messageImagesInstalled } from './routes/member-communications.js';
 import { PageGitHubReader, PageGitHubEventReader } from '../../../modules/development/page-github.js';
 import { EVENT_DETAILS_REQUEST_BYTES,isEventDetailsWrite,createCommunityEventRoutes, checkEventBannerUploadHeaders, checkEventVideoUploadHeaders, isEventBannerUpload, isEventVideoUpload } from './routes/community-events.js';
@@ -514,6 +515,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.get('/api/v1/pages/github-events',async c=>c.json(await pageGitHubEvents.read()));
   app.route('/api/v1',createGitHubMetricsRoutes(async()=>publicSocial));
   app.route('/api/v1',createPublicAuthorClaimRoutes(pool));
+  app.route('/api/v1',createPublicSkillAuthorCardRoutes(pool));
   app.route('/api/v1',createSkillDiscoveryRoutes(pool));
   app.route('/api/v1',createPublicClientConnectionRoutes(pool,origin,authNetwork));
   app.route('/client-api/v1',createClientApiRoutes(pool));

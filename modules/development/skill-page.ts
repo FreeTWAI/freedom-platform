@@ -14,7 +14,7 @@ export type SkillPageGuide={
 export type SkillPageHero={
  title:string;kind:string;category:string;format:string;purpose:string;coverUrl?:string|null;
  /** Trusted markup built by the caller from escaped values. */
- actions:string;credit:string;badges:string;content:SkillPageContent|null;
+ actions:string;credit:string;badges:string;content:SkillPageContent|null;engagement?:string;
 };
 /** Title, punchline and the outcome card; the cover stays as the shelf thumbnail. */
 export function skillPageHero(hero:SkillPageHero){
@@ -23,7 +23,7 @@ export function skillPageHero(hero:SkillPageHero){
  const cover=hero.coverUrl?'<figure class="public-skill-cover"><img src="'+escape(hero.coverUrl)+'" alt="" width="768" height="512"></figure>':'';
  const outcomes=hero.content?'<div class="sp-receipt-wrap"><div class="sp-receipt"><div class="sp-receipt-head">'+cover+'<p class="sp-receipt-label" id="skill-outcomes-title">你會拿到</p><span class="sp-receipt-count" aria-hidden="true">'+pad2(hero.content.outcomes.length)+'</span></div><ul class="sp-outcomes" aria-labelledby="skill-outcomes-title">'+hero.content.outcomes.map(item=>'<li>'+tick+'<span>'+escape(item)+'</span></li>').join('')+'</ul><p class="sp-receipt-foot">'+escape(hero.format)+'</p></div></div>':'';
  return '<section class="public-skill-entry"><div class="sp-hero'+(outcomes?'':' sp-hero-single')+'"><div class="sp-hero-copy">'+(outcomes?'':cover)+'<p class="sp-eyebrow">'+escape(hero.kind)+' · '+escape(hero.category)+'</p><h1 class="sp-title" data-size="'+titleSize(hero.title)+'">'+title+'</h1>'
-  +(hero.content?'<p class="sp-headline"><span>'+escape(hero.content.headline)+'</span></p>':'')+'<p class="public-skill-purpose">'+escape(hero.purpose)+'</p><div class="public-skill-actions">'+hero.actions+'</div><div class="sp-hero-notes">'+hero.credit+hero.badges+'</div></div>'+outcomes+'</div></section>';
+  +(hero.engagement??'')+(hero.content?'<p class="sp-headline"><span>'+escape(hero.content.headline)+'</span></p>':'')+'<p class="public-skill-purpose">'+escape(hero.purpose)+'</p><div class="public-skill-actions">'+hero.actions+'</div><div class="sp-hero-notes">'+hero.credit+hero.badges+'</div></div>'+outcomes+'</div></section>';
 }
 export function skillPageFlow(content:SkillPageContent){
  return '<section class="sp-band sp-flow-band" aria-labelledby="skill-flow-title"><div class="sp-wrap"><div class="sp-problem" id="skill-problem"><span class="sp-problem-label">原本卡在哪</span><p>'+escape(content.problem)+'</p></div><div class="sp-head"><div><p class="sp-kicker">從問題到成果</p><h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2></div><div class="sp-mechanism"><h3>背後的原理</h3><p>'+escape(content.mechanism)+'</p></div></div>'+skillFlowFigure(content.flow)+'</div></section>';
@@ -210,7 +210,7 @@ html.skill-page .skill-acquisition-actions a{min-height:48px;padding:10px 20px;b
 html.skill-page .skill-acquisition-actions a.skill-acquisition-primary{background:var(--sp-ink);border-color:var(--sp-ink);color:#fff}
 html.skill-page :is(.skill-acquisition-note,.skill-acquisition-status){color:var(--sp-muted)}
 .sp-band.sp-join-band{padding-top:0}
-.sp-facts{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:20px;align-items:start}
+.sp-facts{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
 html.skill-page :is(.public-github-social,.public-skill-source){margin:0;padding:28px;border:1px solid var(--sp-line);border-radius:24px;background:var(--sp-card)}
 html.skill-page .public-github-social>p{margin:10px 0 0;color:var(--sp-muted);font-size:.9rem}
 html.skill-page .public-skill-support>a,html.skill-page .public-github-social :is(.btn,.github-count-control){border:1px solid var(--sp-line-strong);background:#fff;color:var(--sp-ink);font-weight:750}
@@ -252,4 +252,30 @@ ${skillFlowCss}
 @media (max-width:720px){.sp-band,.sp-start{padding-block:56px}.sp-band.sp-next-band{padding-bottom:24px}.sp-band.sp-share-band{padding-top:24px}.sp-band:is(.sp-join-band,.sp-facts-band,.sp-collab-band,.sp-events-band,.sp-details-band){padding-top:0}html.skill-page .sp-grid-2{grid-template-columns:minmax(0,1fr)}html.skill-page .sp-steps{border-top:0}html.skill-page .sp-steps li{margin:0;padding:20px 0;border-right:0;border-top:1px solid rgba(255,255,255,.14)}.sp-share-grid,html.skill-page :is(.public-skill-acquisition,.public-collaboration){padding:22px;border-radius:22px}html.skill-page :is(.public-github-social,.public-skill-source,.sp-events-band section){padding:20px}html.skill-page .public-skill-details{padding:0 20px}.sp-receipt{transform:none}.sp-receipt-wrap{padding:14px 6px}.sp-receipt-wrap::before{inset:0 -2% 26% 20%}}
 @media (max-width:480px){html.skill-page nav{width:calc(100% - 32px)}html.skill-page nav a:first-child{width:100%}.sp-wrap,html.skill-page .public-skill-entry>.sp-hero,html.skill-page footer{width:calc(100% - 32px)}html.skill-page .public-skill-actions a:first-child{width:100%;justify-content:center}.sp-outcomes{padding:18px 18px 6px}.sp-receipt-head,.sp-receipt-foot{padding-inline:18px}.sp-status,.sp-result{flex-direction:column}}
 @media (prefers-reduced-motion:reduce){html.skill-page .public-skill-actions a{transition:none}html.skill-page .public-skill-actions a:hover{transform:none}}
+.sp-engagement{display:flex;align-items:center;flex-wrap:wrap;gap:16px 24px;margin:0 0 26px;padding:16px 0;border-block:1px solid var(--sp-line-strong)}
+.sp-author{display:grid;gap:0;min-width:0;max-width:100%;margin-right:auto}
+.sp-author-role,.sp-author-hint{color:var(--sp-muted);font-size:.75rem;font-weight:700}
+.sp-author-name{display:flex;align-items:center;gap:14px;min-height:44px;max-width:100%;padding:0;border:0;background:none;color:var(--sp-ink);font:inherit;font-size:clamp(1.35rem,2.2vw,1.75rem);line-height:1.3;font-weight:900;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.sp-author-name>span:first-child{min-width:0}.sp-author-arrow{font-size:1rem;color:var(--sp-lime-ink)}
+.sp-author-name:hover>span:first-child{text-decoration:underline;text-underline-offset:.18em}
+.sp-engagement-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;max-width:100%}
+html.skill-page .sp-engagement .public-github-social{margin:0;padding:0;border:0;border-radius:0;background:none;max-width:100%}
+.sp-engagement .public-skill-support{gap:8px}
+html.skill-page .sp-engagement :is(.public-skill-support>a,.sp-share-launch){display:inline-flex;align-items:center;justify-content:center;gap:7px;box-sizing:border-box;min-height:44px;padding:8px 12px;border:1px solid var(--sp-line-strong);border-radius:999px;background:var(--sp-card);color:var(--sp-ink);font-size:.9rem;font-weight:800;text-decoration:none;white-space:nowrap}
+html.skill-page .sp-engagement .sp-share-launch{background:var(--sp-lime);border-color:var(--sp-lime-ink)}
+.sp-engagement .github-social-overview{gap:6px}.sp-engagement .github-social-actions{gap:8px}
+.sp-engagement .github-metrics-details{display:none}
+html.skill-page .sp-engagement .github-book-social .github-metrics-note{max-width:200px;font-size:.75rem;margin:4px 0 0}
+.sp-author-dialog{box-sizing:border-box;width:min(620px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:20px;border:1px solid var(--sp-line-strong);border-radius:20px;background:var(--sp-paper-2);color:var(--sp-ink);overflow:auto;overscroll-behavior:contain}
+.sp-author-dialog::backdrop{background:rgba(10,20,15,.65)}
+.sp-author-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:-20px;z-index:2;padding:10px 0 14px;background:var(--sp-paper-2)}
+html.skill-page .sp-author-dialog-head h2{font-size:1.1rem;margin:0}
+.sp-author-dialog button:not(.ecard-link){min-height:44px;padding:8px 16px;border:1px solid var(--sp-line-strong);border-radius:999px;background:var(--sp-card);color:var(--sp-ink);font:inherit;font-size:.9rem;font-weight:750;cursor:pointer}
+.sp-author-source{margin:16px 0 0;font-size:.9rem}
+.sp-author-card-entry+.sp-author-card-entry{margin-top:24px}
+html.skill-page .sp-author-dialog .ecard :is(h1,h3){color:var(--ecard-ink)}
+html.skill-page .sp-author-dialog .ecard footer{box-sizing:border-box;width:100%;margin:0;padding:20px 0 0;color:var(--ecard-ink);border-color:var(--ecard-line)}
+.sp-author-dialog .member-avatar{display:grid;place-items:center;overflow:hidden;background:var(--ecard-accent);color:var(--ecard-surface);font-size:1.6rem;font-weight:800}
+.sp-author-dialog .member-avatar img{width:100%;height:100%;object-fit:cover}
+@media(max-width:480px){html.skill-page .public-skill-entry>.sp-hero{padding-top:28px}.sp-engagement{gap:12px;margin-bottom:22px}.sp-author-dialog{padding:14px}.sp-author-dialog-head{top:-14px}.sp-engagement-actions{width:100%}}
 `;
