@@ -349,7 +349,8 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       const pending = current.state.pending;
       let request;
       if (pending) {
-        check(pending.kind === 'code' && pending.stage === 3, 'release_floor_stage_mismatch');
+        check(pending.kind === 'code' && (pending.stage === 3
+          || (pending.stage === 2 && evidence.failureBoundary === 'health_lease_lost')), 'release_floor_stage_mismatch');
         request = pending.request;
       } else {
         // An earlier handoff may have committed before its reply/lease cleanup
@@ -371,7 +372,10 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       const source = pending ? pending.candidate : current.state;
       check(source.sourceSha === evidence.sourceSha && source.sourceTree === evidence.sourceTree
         && current.state.deployedSourceSha === evidence.sourceSha, 'release_floor_request_invalid');
-      return { alreadySettled: pending === null, sourceSha: source.sourceSha, sourceTree: source.sourceTree };
+      const deployed = chain.findLast(item => item.record.data.kind === 'passed' && item.record.data.stage === 'deploy'
+        && item.record.data.runId === evidence.runId && item.record.data.runAttempt === evidence.runAttempt)?.record.data.proof;
+      return { alreadySettled: pending === null, healthPending: pending?.stage === 2,
+        sourceSha: source.sourceSha, sourceTree: source.sourceTree, workerVersionId: deployed?.versionId };
     },
     verifyLegacySource(evidence) {
       legacyEvidence(evidence);

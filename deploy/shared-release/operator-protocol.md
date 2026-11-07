@@ -69,13 +69,41 @@ release/backup sessions, Worker source/bindings and exact-source public health.
 Append only the missing normal handoff and confirm lease release. No migration,
 publish, backup or flag operation is replayed. Any mismatch or exhausted busy
 budget fails with the original `release_lease_lost`; an already written handoff
-also requires hosted reconciliation. Earlier phase loss never self-settles.
+also requires hosted reconciliation. Migration and deploy loss never self-settle.
 Success is a normal five-phase release with handoff `leaseLoss` plus
 `leaseRecovered: { cause, attempts }` (matching cause, attempts 1–3), projected into
 both final phases and public `operatorProgress`. Malformed recovery evidence is
 rejected. Such a staging receipt remains eligible under normal production
 admission. Hosted `mode=handoff` retains its independent failed-artifact binding
 and remains the fallback; it is not authorized by same-run evidence.
+
+An independent release with exactly preflight/migration/deploy passed may also
+recover a `release_lease_lost` during read-only health, with valid public `leaseLoss`
+and no external abort. Retire old pools and acquire a fresh lease with the same
+three-attempt busy bound. Require the exact retained pre-health head and the same
+run's stage 2, confirmed Worker version ID/source/bindings, complete DB ledger and
+policy, GC OFF/zero fences and zero foreign release/backup sessions. Repeat the full
+exact-source public health/protocol/assets/anonymous smoke, then repeat the live
+DB/policy/session/Worker checks. Append health once, returning the fresh lease and
+floor to the entry for its normal handoff. A changed head or uncertain health append
+cannot self-settle. Health may retain the same allowlisted `leaseLoss` and
+`leaseRecovered` diagnostics as handoff. No SQL, publish, backup or flags are replayed.
+
+Hosted `mode=handoff` additionally accepts authenticated terminal independent
+failure progress of exactly three passed phases followed by health failed with
+`release_lease_lost` and valid public diagnostics. Its verified evidence uses the
+distinct `freedom.verified-failed-release-health/v1` format (rejected by old images)
+and `failureBoundary: health_lease_lost`; original run/attempt/source/tree/target,
+controller/image/config and artifact digest remain bound. Fresh lease-held journal
+replay must show stage 2 after confirmed deploy, stage 3 after a valid health proof,
+or the original run's final handoff with no later work. The confirmed deploy's
+Worker version ID must still match. Full DB/policy/GC/session/Worker checks surround
+the exact-source public smoke. Append only missing health and handoff; never replace
+existing proofs or repeat unknown writes. A settled journal is read-only. Unknown
+migration/publish outcomes and unrelated failures refuse. Original workflow and
+Deployment failure remain; the hosted result is `reconciled`, never a new deployment.
+This source extension requires a reviewed, independently pulled and installed new
+operator image; it does not establish or fix the cause of connection resets.
 
 A deploy with `recoverMigrationRunId` closes an earlier independent release that lost
 its lease after a confirmed COMMIT. The controller authenticates the terminal run,

@@ -225,14 +225,23 @@ image 在 lease 內另核對 Worker、未變的 bindings、完整 SQL catalog、
 attempt；只重跑 deploy／failed jobs，可能因 admission 屬於舊 attempt 而被拒絕。
 這不授予未知結果的 migration／部署重做權；先確認前次 provider 與 DB 的實際結果。
 
-### 部署與健康檢查已完成，只有 handoff 失敗
+### 部署已確認，health 失去租約或最後 handoff 失敗
+
+一般五階段發布若已確認 deploy，卻在唯讀 health 階段失去租約，也可在同 run 重新取得
+新租約。必須讀回與開始 health 前完全相同的 journal head、原 run 的 stage 2、已確認的
+Worker version ID／source／bindings，並核對完整 ledger／政策、GC OFF／零 fences 及零其他
+發布／備份 session。重新執行指定版本的 health、protocol、assets、anonymous smoke，
+再核對 DB、政策與 Worker 未變，才寫 health，將新 lease／floor 交回原流程完成 handoff。
+最多三次 busy 重取、間隔兩秒；成功的 health 保留 `leaseLoss`／`leaseRecovered`。
+若 health 紀錄可能已寫入、head 已變、smoke 失敗、外部中斷或較早階段失敗，停止同 run 復原，
+保留原失敗供 hosted 讀回；不重送未知 PUT，也不重做 SQL、publish、備份或旗標操作。
 
 一般五階段發布若只有 handoff 的租約連線失去，會在同一 run 內先銷毀舊連線，
 最多嘗試三次取得新 session 的同一把鎖（busy 間隔兩秒）。重新建立控制紀錄、floor 與 Worker reader，
 核對原 journal head 未變、pending 正是本 run 的 handoff、完整 ledger／素材政策、GC OFF／零 fences、
 沒有其他發布或備份 session、Worker／bindings 及指定版本公開 health，才追加唯一缺少的 handoff。
 成功仍是正常五階段 `passed`，handoff 另保留 `leaseLoss` 與 `leaseRecovered: { cause, attempts }`，
-可沿既有 staging 收據准入正式發布。任一差異、鎖持續 busy 或較早階段失去租約都不自動收尾；
+可沿既有 staging 收據准入正式發布。任一差異、鎖持續 busy 或 migration／deploy 失去租約都不自動收尾；
 不重做 migration、部署、備份或旗標變更，保留 `release_lease_lost` 並沿下列 hosted 入口對帳。
 若 handoff 已寫入才失去回覆／清理失敗，也留給 hosted 入口確認，不在同 run 重送。
 
@@ -248,14 +257,24 @@ client timeout 為 30 秒，容忍多秒同步工作；連線 error／end、身�
 此入口須先合併並安裝包含它的 operator 映像；沒有安裝的舊映像不能執行新模式。
 
 控制程式核對原 run 的身分、attempt、失敗 job 與有 digest 的公開收據，要求
-preflight、migration、deploy、health 全部已通過，只有最後 handoff 失敗。
+preflight、migration、deploy、health 全部已通過，只有最後 handoff 失敗；另接受恰好
+preflight、migration、deploy 通過，health 以 `release_lease_lost` 及合法公開 `leaseLoss` 失敗。
 取得同一把資料庫鎖後，讀回既有 journal、完整 ledger、素材政策、GC／殘留工作、
 Worker 版本及設定，並重新檢查指定版本的 health。全部相符才補上唯一缺少的 handoff。
 若 handoff 其實已寫入、只是回覆或鎖清理失敗，則只讀回確認，不重複寫紀錄。
 
+health 失鎖證據使用獨立 `freedom.verified-failed-release-health/v1` 格式與
+`failureBoundary: health_lease_lost`，舊映像會拒絕此格式。只有原 run／attempt、
+source／tree、環境、controller、原映像與 config 全相符，且 journal 證明 deploy 已確認，
+才可接受 stage 2（缺 health）或 stage 3（health 已寫入、回覆可能遺失）。重新取得 lease 後
+核對原 confirmed Worker version ID、DB／政策／GC／sessions、完整公開 smoke，並再次讀回
+DB 與 Worker，才依序追加缺少的 health、handoff；已存在的 health proof 不覆蓋。
+若最後已是原 run 的 handoff，僅重新驗證。未知 publish／migration、後續 journal 工作或
+讀回不符一律停止；已寫入但結果不明的 append 仍須下次 hosted 讀回決定，不能直接重送。
+
 這個模式不執行 migration、重新部署、備份或旗標變更，也不建立新的 GitHub Deployment。
 原 run／Deployment 保留 failure；新的 Actions 收據以 `reconciled` 連結原失敗及此次操作者。
-若失敗早於 handoff、原收據已過期、config 已變動或 journal 已有後續工作，會拒絕復原；
+若不符合上述兩種失敗邊界、原收據已過期、config 已變動或 journal 已有後續工作，會拒絕復原；
 不能用此入口跳過未知寫入的對帳，也不能將一次收尾成功當成新版本發布成功。
 
 使用自己的 GitHub 登入即可。原始發起人及重跑者都會再查當下權限，帳號同名但 ID

@@ -29,7 +29,7 @@ on:
         required: false
         type: string
       recover_release_run_id:
-        description: 'Required only for handoff: failed deploy run whose migration, deploy and health already passed'
+        description: 'Required only for handoff: deploy passed, then health lost its lease or final handoff failed'
         required: false
         type: string
       recover_migration_run_id:

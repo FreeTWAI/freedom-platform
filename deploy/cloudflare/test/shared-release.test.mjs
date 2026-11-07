@@ -43,7 +43,7 @@ import { admitImage, verifyImageCheckout } from '../../shared-release/image-admi
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
 import { requireFailedReleaseHandoff, requireFailedReleaseMigration } from '../../shared-release/handoff-admission.mjs';
-import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff } from '../../shared-release/portable/handoff-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff, settleOwnHealth } from '../../shared-release/portable/handoff-recovery.mjs';
 import { reconcileCommittedRelease } from '../../shared-release/portable/migration-recovery.mjs';
 
 async function diskFixture(t, prefix) {
@@ -3768,6 +3768,34 @@ function failedReleaseHandoffFixture(source = { sourceSha: sha, sourceTree: tree
   return { admission, state, api, calls };
 }
 
+function healthFailureProgress() {
+  return ['preflight', 'migration', 'deploy', 'health'].map((name, i) => ({ name,
+    reportedStatus: i === 3 ? 'failed' : 'passed',
+    ...(i === 3 ? { failureCode: 'release_lease_lost', leaseLoss: lossFixture() } : {}) }));
+}
+
+test('hosted health recovery requires exact terminal lease-loss progress and authenticated original bindings', async () => {
+  const f = failedReleaseHandoffFixture(); f.state.receipt.operatorProgress = healthFailureProgress();
+  const proof = await requireFailedReleaseHandoff(f.api, f.admission, installation);
+  assert.equal(proof.format, 'freedom.verified-failed-release-health/v1');
+  assert.equal(proof.failureBoundary, 'health_lease_lost'); assert.deepEqual(proof.leaseLoss, lossFixture());
+  assert.equal(proof.receiptSha256, hash(JSON.stringify(f.state.receipt)));
+  for (const mutate of [p => { p[3].failureCode = 'release_smoke_not_passed'; }, p => { delete p[3].leaseLoss; },
+    p => { p[3].leaseLoss.cause = 'PRIVATE'; }, p => { p[3].leaseLoss.heldMs = -1; },
+    p => { p[2].reportedStatus = 'failed'; }, p => { p[3].reportedStatus = 'passed'; },
+    p => { p[2].name = 'migration'; }, p => { p.pop(); }, p => { p.push({ name: 'handoff', reportedStatus: 'running' }); }]) {
+    const bad = failedReleaseHandoffFixture(); bad.state.receipt.operatorProgress = healthFailureProgress();
+    mutate(bad.state.receipt.operatorProgress);
+    await assert.rejects(requireFailedReleaseHandoff(bad.api, bad.admission, installation), /release_handoff_recovery_boundary_invalid/);
+  }
+  for (const mutate of [s => { s.receipt.sourceSha = main; }, s => { s.receipt.sourceTree = main; },
+    s => { s.receipt.configSha256 = '9'.repeat(64); }, s => { s.run.run_attempt++; },
+    s => { s.run.status = 'in_progress'; }, s => { s.artifact.expired = true; }]) {
+    const bad = failedReleaseHandoffFixture(); bad.state.receipt.operatorProgress = healthFailureProgress(); mutate(bad.state);
+    await assert.rejects(requireFailedReleaseHandoff(bad.api, bad.admission, installation));
+  }
+});
+
 test('handoff input is explicit, four-operator admitted and separate from deploy/backup recovery', async () => {
   for (const [login, id] of Object.entries(OPERATORS)) {
     const input = requestFromEnvironment({ ...environment(), RELEASE_MODE: 'handoff', RELEASE_RECOVER_RELEASE_RUN_ID: '77',
@@ -3829,10 +3857,11 @@ test('handoff can authenticate either failed automatic environment without redoi
   assert.equal((await requireFailedReleaseHandoff(manual.api, manual.admission, installation)).runId, 77);
 });
 
-async function pendingHandoffFixture(t, stop = 'health', descendant = false) {
+async function pendingHandoffFixture(t, stop = 'health', descendant = false, healthFailure = false) {
   const f = await adoptionFixture(t);
   if (descendant) await writeFile(join(f.sourceRoot, 'app.txt'), 'next application, unchanged migrations');
   const candidate = descendant ? f.commit() : f.current, hosted = failedReleaseHandoffFixture(candidate);
+  if (healthFailure) hosted.state.receipt.operatorProgress = healthFailureProgress();
   const evidence = await requireFailedReleaseHandoff(hosted.api, hosted.admission, installation);
   const chain = [{ sha256: hash(JSON.stringify(f.seed)), record: { data: structuredClone(f.seed) } }];
   let appends = 0;
@@ -3867,7 +3896,8 @@ async function pendingHandoffFixture(t, stop = 'health', descendant = false) {
     if (sql.includes("current_setting('server_version_num')")) return { rows: [{ major: 18 }] };
     return { rows: [] };
   }, release() { released++; } };
-  const worker = { sourceSha: candidate.sourceSha, bindingsSha256: f.seed.state.bindingsSha256 };
+  const worker = { sourceSha: candidate.sourceSha, bindingsSha256: f.seed.state.bindingsSha256,
+    versionId: '11111111-1111-4111-8111-111111111111' };
   const args = { floor, pool: { connect: async () => q }, deployer: { inspect: async () => worker },
     lease: { pid: 999, assertHeld() { if (leaseLost) throw Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' }); } },
     request: { ...hosted.admission, operatorImage: installation.image, configSha256: installation.configSha256, handoffRecoveryEvidence: evidence },
@@ -3891,6 +3921,56 @@ test('handoff reads retained ledger/policy/Worker and appends exactly once; repl
   assert.equal(repeated.alreadySettled, true);
   assert.equal((await completeReleaseHandoff({ ...f.args, observed: { ...repeated, healthVerified: true } })).alreadySettled, true);
   assert.equal(f.appends(), 1);
+});
+
+test('hosted health recovery completes only missing health and handoff, then reads settled state without another append', async t => {
+  for (const stop of ['deploy', 'health']) {
+    const f = await pendingHandoffFixture(t, stop, true, true);
+    const observed = await inspectReleaseHandoff(f.args);
+    assert.equal(observed.healthPending, stop === 'deploy'); assert.equal(f.appends(), 0);
+    const healthProof = { sourceSha: f.candidate.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true };
+    if (stop === 'deploy') {
+      await assert.rejects(completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true } }),
+        /release_floor_health_unverified/);
+      assert.equal(f.appends(), 0);
+    }
+    await completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true, healthProof } });
+    assert.equal(f.appends(), stop === 'deploy' ? 2 : 1);
+    assert.equal(f.floor.state().pending, null); assert.equal(f.floor.state().sourceSha, f.candidate.sourceSha);
+    assert.equal(f.chain.at(-1).record.data.proof.reconciliation.originalWorkflowFailureRetained, true);
+    f.args.floor = await f.reopenFloor();
+    const repeated = await inspectReleaseHandoff(f.args); assert.equal(repeated.alreadySettled, true);
+    await completeReleaseHandoff({ ...f.args, observed: { ...repeated, healthVerified: true, healthProof } });
+    assert.equal(f.appends(), stop === 'deploy' ? 2 : 1);
+    assert(f.queries.every(sql => /^(BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY|SELECT|ROLLBACK)/.test(sql)));
+  }
+});
+
+test('health recovery refuses unknown publish, another Worker version, identity drift and unsafe live state', async t => {
+  for (const mutate of [
+    f => { f.chain.pop(); }, // publish intent without provider-confirmed deploy
+    f => { f.worker.versionId = '22222222-2222-4222-8222-222222222222'; },
+    f => { f.worker.sourceSha = f.current.sourceSha; }, f => { f.worker.bindingsSha256 = '9'.repeat(64); },
+    f => { f.rows.ledger[0].sha256 = '9'.repeat(64); }, f => { f.rows.policies[0].revision = 'changed'; },
+    f => { f.rows.gc[0].enabled = true; }, f => { f.rows.gc[0].domain_enabled = true; },
+    f => { f.rows.gc[0].fences = 1; }, f => { f.rows.sessions[0].remaining = 1; },
+    f => { f.args.request.handoffRecoveryEvidence = { ...f.evidence, runAttempt: 2 }; },
+    f => { f.args.request.handoffRecoveryEvidence = { ...f.evidence, operatorImage: installation.image.replace(/.$/, '9') }; },
+    f => { f.args.request.handoffRecoveryEvidence = { ...f.evidence, failureBoundary: 'arbitrary' }; },
+    f => { f.args.request.handoffRecoveryEvidence = { ...f.evidence, format: 'freedom.verified-failed-release-handoff/v1' }; },
+    f => { f.args.request.handoffRecoveryEvidence = { ...f.evidence, failureBoundary: undefined }; },
+  ]) {
+    const f = await pendingHandoffFixture(t, 'deploy', true, true); mutate(f);
+    f.args.floor = await f.reopenFloor();
+    await assert.rejects(inspectReleaseHandoff(f.args)); assert.equal(f.appends(), 0);
+  }
+  const f = await pendingHandoffFixture(t, 'deploy', true, true);
+  const observed = await inspectReleaseHandoff(f.args);
+  for (const patch of [{ sourceSha: f.current.sourceSha }, { schemaVerified: false }, { smokePassed: false }, { statusCode: 503 }]) {
+    await assert.rejects(completeReleaseHandoff({ ...f.args, observed: { ...observed, healthVerified: true,
+      healthProof: { sourceSha: f.candidate.sourceSha, statusCode: 200, schemaVerified: true, smokePassed: true, ...patch } } }));
+    assert.equal(f.appends(), 0);
+  }
 });
 
 test('handoff settles a deployed Git descendant with unchanged ledger and replays without another append', async t => {
@@ -4618,18 +4698,19 @@ test('lease diagnostics project safe fields into passed results and public progr
   assert.deepEqual(operatorProgress(failed, f.admission, installation, 'e'.repeat(64))[0].leaseLoss, loss);
 });
 
-async function ownHandoffFixture(t) {
-  const f = await pendingHandoffFixture(t, 'health', true);
+async function ownHandoffFixture(t, stop = 'health') {
+  const f = await pendingHandoffFixture(t, stop, true);
   const request = f.floor.state().pending.request, controller = new AbortController(); controller.abort();
   let acquired = 0, oldReleased = 0, freshReleased = 0, health = 0, opened = 0, renewed = 0;
   const loss = lossFixture(), error = Object.assign(Error('release_lease_lost'), { code: 'release_lease_lost' });
   const args = { request, error, expectedHead: f.floor.head(),
-    phases: ['preflight', 'migration', 'deploy', 'health'].map(name => ({ name, status: 'passed' })),
+    phases: ['preflight', 'migration', 'deploy', ...(stop === 'health' ? ['health'] : [])].map(name => ({ name, status: 'passed' })),
     lease: { signal: controller.signal, loss: () => loss, release: async () => { oldReleased++; } },
     renewConnections: async () => { assert.equal(oldReleased, 1); renewed++; },
     acquire: async () => { assert.equal(renewed, 1); acquired++; return { ...f.args.lease, release: async () => { freshReleased++; } }; },
     reopen: async fresh => { opened++; assert.notEqual(fresh, args.lease); return { ...f.args, floor: await f.reopenFloor() }; },
-    verifyHealth: async () => { health++; }, pause: async ms => assert.equal(ms, 2000) };
+    verifyHealth: async () => { health++; return { sourceSha: f.candidate.sourceSha, statusCode: 200, smokePassed: true }; },
+    pause: async ms => assert.equal(ms, 2000) };
   return { ...f, own: args, loss, counts: () => ({ acquired, oldReleased, freshReleased, health, opened, renewed }) };
 }
 
@@ -4643,6 +4724,58 @@ test('same-run handoff re-acquires a fresh lease and appends only its missing ha
   assert.equal(f.chain.at(-1).record.data.stage, 'handoff');
   const result = codeResult(); result.admission.mode = 'deploy'; Object.assign(result.value.phases[4], proof);
   assert(validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64)).every(p => p.status === 'passed'));
+});
+
+test('same-run health recovery returns its fresh lease and floor for the normal handoff without replaying publish', async t => {
+  const f = await ownHandoffFixture(t, 'deploy'), recovered = await settleOwnHealth(f.own);
+  assert.deepEqual(f.counts(), { acquired: 1, oldReleased: 1, freshReleased: 0, health: 1, opened: 1, renewed: 1 });
+  assert.equal(f.appends(), 1); assert.equal(recovered.floor.state().pending.stage, 3);
+  assert.notEqual(recovered.lease, f.own.lease); assert.notEqual(recovered.floor, f.floor);
+  assert.equal(f.chain.at(-1).record.data.stage, 'health');
+  await recovered.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  await recovered.lease.release(); assert.equal(f.counts().freshReleased, 1); assert.equal(f.appends(), 2);
+  const result = codeResult(); result.admission.mode = 'deploy';
+  Object.assign(result.value.phases[3], recovered.proof, { sourceSha: result.admission.sourceSha });
+  const phases = validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64));
+  assert.deepEqual(phases[3].leaseRecovered, { cause: f.loss.cause, attempts: 1 });
+  assert.deepEqual(operatorProgress(result.value, result.admission, installation, 'e'.repeat(64))[3].leaseLoss, f.loss);
+});
+
+test('same-run health refuses changed head, uncertain health append, drift during smoke, failed smoke and interrupted work', async t => {
+  for (const mutate of [
+    async f => { f.chain.at(-1).sha256 = '9'.repeat(64); },
+    async f => { await f.floor.passed('health', { sourceSha: f.candidate.sourceSha, statusCode: 200, smokePassed: true, schemaVerified: true }); },
+    async f => { f.rows.sessions[0].remaining = 1; },
+    async f => { f.own.verifyHealth = async () => { throw Error('smoke failed'); }; },
+    async f => { f.own.verifyHealth = async () => ({ sourceSha: main, statusCode: 200, smokePassed: true }); },
+    async f => { const verify = f.own.verifyHealth; f.own.verifyHealth = async () => { f.worker.versionId = '22222222-2222-4222-8222-222222222222'; return verify(); }; },
+    async f => { const verify = f.own.verifyHealth; f.own.verifyHealth = async () => { f.worker.bindingsSha256 = '9'.repeat(64); return verify(); }; },
+    async f => { const verify = f.own.verifyHealth; f.own.verifyHealth = async () => { f.rows.gc[0].enabled = true; return verify(); }; },
+    async f => { f.own.verifyHealth = async () => f.loseLease(); },
+  ]) {
+    const f = await ownHandoffFixture(t, 'deploy'); await mutate(f); const appends = f.appends();
+    await assert.rejects(settleOwnHealth(f.own), { code: 'release_lease_lost' }); assert.equal(f.appends(), appends);
+    assert.equal(f.counts().freshReleased, 1);
+  }
+  for (const mutate of [f => { f.own.signal = AbortSignal.abort(); }, f => { f.own.phases[2].status = 'failed'; },
+    f => { f.own.phases.pop(); }, f => { f.own.lease.loss = () => undefined; },
+    f => { f.own.error = Object.assign(Error('smoke failed'), { code: 'release_smoke_not_passed' }); },
+    f => { f.own.request = { ...f.own.request, mode: 'handoff' }; }]) {
+    const f = await ownHandoffFixture(t, 'deploy'); mutate(f);
+    await assert.rejects(settleOwnHealth(f.own)); assert.equal(f.counts().acquired, 0); assert.equal(f.appends(), 0);
+  }
+});
+
+test('health recovery bounds busy retries and preserves original sanitized loss diagnostics on failure', async t => {
+  const f = await ownHandoffFixture(t, 'deploy'); let attempts = 0, waits = 0;
+  f.own.error.controlReadFailure = { operation: 'list', token: 'PRIVATE' };
+  f.own.acquire = async () => { attempts++; throw Object.assign(Error('busy'), { code: 'release_lease_busy' }); };
+  f.own.pause = async ms => { assert.equal(ms, 2000); waits++; };
+  await assert.rejects(settleOwnHealth(f.own), error => {
+    assert.equal(error.code, 'release_lease_lost'); assert.deepEqual(error.controlReadFailure, { operation: 'list' });
+    assert(!JSON.stringify(error).includes('PRIVATE')); return true;
+  });
+  assert.equal(attempts, 3); assert.equal(waits, 2); assert.equal(f.appends(), 0);
 });
 
 test('same-run settlement refuses changed head, other sessions, Worker, ledger, policy, GC, health and lease drift', async t => {
@@ -4686,12 +4819,14 @@ test('same-run handoff retries busy at most three times; earlier loss and unrela
   }
 });
 
-test('production admission accepts a normal successful staging receipt with recovered handoff diagnostics', async () => {
-  const f = stagingFixture(), result = codeResult(); result.admission.mode = 'deploy';
-  Object.assign(result.value.phases[4], { leaseLoss: lossFixture(), leaseRecovered: { cause: 'connection_error', attempts: 1 } });
-  Object.assign(f.state.receipt, { releaseKind: 'independent', providerOutcome: 'release_confirmed',
-    operatorEvidence: 'validated-independent-release/v1', phases: validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64)) });
-  await requireStaging(f.api, { ...request(), sourceTree: tree, target: 'next', mainShaObserved: main, releaseKind: 'independent' }, installation);
+test('production admission accepts normal successful staging receipts with recovered health or handoff diagnostics', async () => {
+  for (const index of [3, 4]) {
+    const f = stagingFixture(), result = codeResult(); result.admission.mode = 'deploy';
+    Object.assign(result.value.phases[index], { leaseLoss: lossFixture(), leaseRecovered: { cause: 'connection_error', attempts: 1 } });
+    Object.assign(f.state.receipt, { releaseKind: 'independent', providerOutcome: 'release_confirmed',
+      operatorEvidence: 'validated-independent-release/v1', phases: validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64)) });
+    await requireStaging(f.api, { ...request(), sourceTree: tree, target: 'next', mainShaObserved: main, releaseKind: 'independent' }, installation);
+  }
 });
 
 test('unknown lock acquisition outcomes and busy sessions are destroyed instead of returning an advisory lock to the pool', async () => {
