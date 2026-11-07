@@ -159,7 +159,7 @@ html.skill-page .sp-steps{list-style:none;margin:0;padding:0;display:grid;grid-t
 html.skill-page .sp-steps li{padding:24px 24px 8px 0;margin-right:24px;border-right:1px solid rgba(255,255,255,.12)}
 html.skill-page .sp-steps li:last-child{border-right:0;margin-right:0}
 .sp-step-num{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#fff;color:var(--sp-dark);font-family:var(--sp-mono);font-size:.76rem;font-weight:850}
-.sp-steps p{margin:16px 0 0;color:#cfdad3;line-height:1.85;overflow-wrap:anywhere}
+.sp-steps p{margin:16px 0 0;color:#cfdad3;line-height:1.85;overflow-wrap:anywhere;white-space:pre-line}
 .sp-quick{margin:36px 0 0}
 .sp-quick h3{margin:0 0 8px;font-size:1rem}
 .sp-quick p{margin:0 0 12px;color:#cfdad3}
