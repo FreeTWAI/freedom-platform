@@ -32,6 +32,8 @@ test('page content rejects anything the hero, the schematic or the share card co
   [(value:any)=>{value.flow.steps[0].extra=1;},/unknown field flow\.steps\[0\]\.extra/],
   [(value:any)=>{value.headline='沒有句號的標語';},/headline must end/],
   [(value:any)=>{value.headline=' 前面有空白。';},/headline must be/],
+  [(value:any)=>{delete value.problem;},/problem must be/],
+  [(value:any)=>{value.mechanism='<script>evil</script>';},/mechanism must be/],
   [(value:any)=>{value.outcomes.pop();},/exactly 3/],
   [(value:any)=>{value.outcomes[2]=value.outcomes[0];},/outcomes must differ/],
   [(value:any)=>{value.outcomes[1]='看 https://example.com 的說明';},/outcomes\[1\]/],
@@ -52,7 +54,7 @@ test('schematic text breaks after punctuation or between words before it splits 
  assert.deepEqual(wrapFlowText('跑測試與預覽',15,200),['跑測試與預覽']);
 });
 
-test('skill pages use the light layout: hero outcomes, the three-step schematic, then usage and the dark start band',()=>{
+test('all skill pages explain the problem and mechanism along one readable path before usage and optional project details',()=>{
  for(const book of communityCatalog.skill_books){
   const html=render(book.id),content=getSkillPageContent(book.id)!;
   assert.ok(html.startsWith('<!doctype html><html lang="zh-Hant" class="skill-page">'),book.id);
@@ -60,7 +62,10 @@ test('skill pages use the light layout: hero outcomes, the three-step schematic,
   for(const outcome of content.outcomes)assert.ok(html.includes('<span>'+escape(outcome)+'</span></li>'),book.id+': '+outcome);
   assert.ok(html.includes('<h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2>'),book.id);
   for(const step of content.flow.steps)assert.ok(html.includes('<h3 class="sf-title">'+escape(step.title)+'</h3><p class="sf-note">'+escape(step.note)+'</p>'),book.id+': '+step.title);
-  assert.match(html,/<svg class="sf-svg" viewBox="0 0 960 \d+" width="960" height="\d+" aria-hidden="true" focusable="false">/,book.id);
+  assert.ok(html.includes(escape(content.problem)),book.id);assert.ok(html.includes(escape(content.mechanism)),book.id);
+  assert.equal((html.match(/class="sf-connector"/g)??[]).length,2,book.id);
+  assert.match(html,/<details class="public-skill-details"><summary>作者、版本與參與開發<\/summary>/);
+  assert.doesNotMatch(html,/流程圖僅供參考|功能示意圖，非實際操作截圖|以下連結在新分頁開啟外部網站/);
   const order=['class="public-skill-entry"','id="skill-flow-title"','id="skill-use-title"','<h2>開始使用</h2>','class="public-skill-next"','data-share-root','id="join-workshop"','class="public-github-social"'].map(marker=>html.indexOf(marker));
   assert.ok(order.every((index,position)=>index>0&&(position===0||index>order[position-1]!)),book.id+': '+order.join(','));
  }

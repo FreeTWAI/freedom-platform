@@ -145,6 +145,7 @@ test.describe('discovery ON Star entries',()=>{
     expect((await (await page.request.get('/api/v1/site')).json()).community_discovery_enabled).toBe(true);
     if(authenticated){await page.goto('/');await signIn(page);await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();}
     await page.goto(path);
+    await page.getByText('作者、版本與參與開發',{exact:true}).click();
     const star=page.getByRole('link',{name:'登入工坊 Star',exact:true});
     await expect(star).toHaveAttribute('href','/?return_to='+encodeURIComponent(path));
     let validations=0;await page.route(url=>url.pathname===path,route=>{validations++;return route.continue();});

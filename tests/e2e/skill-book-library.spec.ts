@@ -190,7 +190,7 @@ test('all public book pages and Markdown preserve beginner summaries, covers, or
       expect(html,book.id).toContain(value);expect(markdown,book.id).toContain(value);
     }
     expect(html,book.id).toContain(`src="${book.cover_url}"`);
-    expect(html,book.id).toContain('href="/#skills">登入工坊 Star');
+    expect(html,book.id).toContain('href="#skill-start">開始使用');
     expect(html.match(/<script[^>]*>/gi),book.id).toEqual(['<script src="/development-share.js" defer>','<script src="/assets/skill-social.js" type="module">','<script src="/skill-acquisition.js" defer>']);
     expect(html,book.id).not.toMatch(/<script(?![^>]*src=)[^>]*>/);
   }
@@ -198,18 +198,18 @@ test('all public book pages and Markdown preserve beginner summaries, covers, or
   await page.goto(example.guide_url);
   await expect(page.getByRole('heading',{name:example.title,exact:true})).toBeVisible();
   await expect(page.locator('.public-skill-purpose')).toHaveText(example.guide!.beginner.purpose);
-  const details=page.locator('.public-skill-details');
+  const details=page.locator('.public-skill-details').filter({has:page.getByText('完整指南與來源',{exact:true})});
   await expect(details).not.toHaveAttribute('open');
   await expect(page.getByRole('link',{name:'閱讀收錄版本說明 ↗',exact:true})).toHaveAttribute('href',example.guide!.reading_url);
   await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
   await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',`${example.upstream_url}/fork`);
+  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   await page.locator('.public-collaboration details > summary').click();
   await expect(page.getByRole('link',{name:'查看工坊整合版本',exact:true})).toHaveAttribute('href',example.repository_url);
-  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-use-title');
+  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-start');
   await expect(page.locator('.public-skill-cover img')).toHaveAttribute('src',example.cover_url!);
   await expect.poll(()=>page.locator('.public-skill-cover img').evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-  const star=page.getByRole('link',{name:'登入工坊 Star',exact:true});
-  await expect(star).toHaveAttribute('href','/#skills');
+  await expect(page.locator('.public-skill-entry').getByRole('link',{name:'查看原作 Repo ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
   await details.locator('summary').click();
   await expect(details.getByText(example.guide!.beginner.workshop_use,{exact:true})).toBeVisible();
   for(const width of [390,320]){
@@ -245,7 +245,7 @@ test('the original repository leads member introductions and public skill pages'
   }
   await page.keyboard.press('Escape');
   await page.goto('/development/skills/security-scanner');
-  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-use-title');
+  await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-start');
   await expect(page.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href',website);
   await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',original);
 });
@@ -506,36 +506,9 @@ for(const width of [1280,390])test(`practice is readable immediately, before sup
 
 
 // Measure the rendered caption and its actual painted surface, not theme token strings.
-function illustrationCaptionContrast(element: Element) {
-  const rgba = (value: string) => {
-    const match = /^rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)(?:,\s*([\d.]+))?\)$/.exec(value);
-    if (!match) throw new Error(`Unsupported computed color: ${value}`);
-    return [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4] ?? 1)];
-  };
-  const style = getComputedStyle(element), foreground = rgba(style.color);
-  let background: number[] | null = null;
-  for (let node: Element | null = element; node; node = node.parentElement) {
-    const paint = getComputedStyle(node), color = rgba(paint.backgroundColor);
-    if (Number(paint.opacity) !== 1) throw new Error('Caption ancestor is translucent');
-    if (!background) {
-      if (paint.backgroundImage !== 'none') throw new Error('Caption background image needs explicit contrast analysis');
-      if (color[3] === 1) background = color;
-      else if (color[3] !== 0) throw new Error('Caption background needs alpha compositing');
-    }
-  }
-  if (!background || foreground[3] !== 1) throw new Error('Caption needs opaque foreground and an opaque surface');
-  const luminance = (rgb: number[]) => rgb.slice(0, 3).reduce((sum, value, index) => {
-    const channel = value / 255;
-    return sum + [0.2126, 0.7152, 0.0722][index] * (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
-  }, 0);
-  const a = luminance(foreground), b = luminance(background);
-  return { foreground, background, fontSize: Number.parseFloat(style.fontSize), fontWeight: style.fontWeight,
-    ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
-}
-
 for (const theme of ['light', 'dark', 'versefolk'] as const) {
   for (const width of [390, 1280]) {
-    test(`catalog and member illustration captions have readable contrast in ${theme} at ${width}px`, async ({ page }) => {
+    test(`catalog and member illustrations keep descriptive alternatives without redundant captions in ${theme} at ${width}px`, async ({ page }) => {
       await page.addInitScript(value => localStorage.setItem('freedom-theme', value), theme);
       await page.setViewportSize({ width, height: 900 });
       const id = '11111111-1111-4111-8111-111111111111';
@@ -555,14 +528,12 @@ for (const theme of ['light', 'dark', 'versefolk'] as const) {
       ];
       for (const { trigger, dialog } of entries) {
         await trigger.click();
-        const caption = dialog.locator('.skill-intro-illustration > figcaption');
-        await expect(caption).toHaveText('功能示意圖，非實際操作截圖。');
-        await caption.scrollIntoViewIfNeeded();
-        await expect(caption).toBeInViewport();
+        const illustration = dialog.locator('.skill-intro-illustration > img');
+        await expect(illustration).toHaveAttribute('alt', /.+/);
+        await expect(dialog.locator('.skill-intro-illustration > figcaption')).toHaveCount(0);
+        await illustration.scrollIntoViewIfNeeded();
+        await expect(illustration).toBeInViewport();
         await expect.poll(() => dialog.locator('.skill-intro-illustration > img').evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
-        const contrast = await caption.evaluate(illustrationCaptionContrast);
-        expect(contrast.fontSize).toBeGreaterThanOrEqual(14);
-        expect(contrast.ratio, JSON.stringify(contrast)).toBeGreaterThanOrEqual(4.5);
         expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
         await dialog.getByRole('button', { name: '關閉技能書介紹', exact: true }).click();
         await expect(dialog).toBeHidden();

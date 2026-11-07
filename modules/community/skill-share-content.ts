@@ -57,7 +57,7 @@ import supplierClient from './share-introductions/supplier-client.json' with {ty
 import typoStudio from './share-introductions/typo-studio.json' with {type:'json'};
 import videoAutopilot from './share-introductions/video-autopilot.json' with {type:'json'};
 
-export const skillShareContentVersion='2026-11-03.2';
+export const skillShareContentVersion='2026-11-06.1';
 export type SkillShareContent = {introductions:string[];illustration_url:string;illustration_alt:string};
 
 const content:Record<string,string[]> = {

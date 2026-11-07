@@ -44,15 +44,14 @@ test('invalid intro queries fall back to the book summary without selecting anyt
  assert.equal(shareIntroNumber('1',100),1);assert.equal(shareIntroNumber('100',100),100);assert.equal(shareIntroNumber('100',99),null);assert.equal(shareIntroNumber('3',0),null);
 });
 
-test('OG and Twitter images use the absolute 1200×630 illustration shown below the compact entry, not the cover',()=>{
+test('OG and Twitter retain the 1200×630 share card while the page uses its readable flow',()=>{
  const html=render();const image='https://freetwai.com'+content.illustration_url;
  assert.match(content.illustration_url,/^\/brand\/skill-illustrations\/video-autopilot\.webp$/);
  assert.equal(meta(html,'og:image'),image);assert.equal(meta(html,'og:image:width'),'1200');assert.equal(meta(html,'og:image:height'),'630');
  assert.equal(unescape(meta(html,'og:image:alt')!),content.illustration_alt);assert.ok(content.illustration_alt.trim().length>0);
  assert.equal(meta(html,'twitter:card'),'summary_large_image');assert.equal(meta(html,'twitter:image'),image);assert.equal(unescape(meta(html,'twitter:image:alt')!),content.illustration_alt);
- const figure=html.indexOf('<figure class="public-skill-illustration"><img src="'+content.illustration_url+'" alt="'+escape(content.illustration_alt)+'" width="1200" height="630"');
- assert.ok(figure>0);assert.ok(html.indexOf('</section>',html.indexOf('class="public-skill-entry"'))<figure);
- assert.ok(html.includes(`src="${book.cover_url}"`));assert.ok(figure<html.indexOf('data-share-root'));
+ assert.ok(html.includes(`src="${book.cover_url}"`));
+ assert.ok(html.includes('class="sf-legend"'));assert.doesNotMatch(html,/<figure class="public-skill-illustration"/);
  assert.match(html,/<script src="\/development-share\.js" defer><\/script>/);assert.doesNotMatch(html,/<script(?! src=)|onclick=|onerror=/);
  assert.ok(html.includes('<dialog class="public-share-dialog"'));assert.ok(html.includes('換一句'));assert.ok(html.includes('複製介紹與連結'));
 });
@@ -176,7 +175,7 @@ test('all catalog introductions show authored usage and source before collaborat
   assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2 id="collaboration-title">'),item.id);
   assert.ok(html.includes('到 GitHub 看原始碼 ↗'),item.id);
   assert.ok(html.includes('<bdi>'+escape(new URL(item.upstream_url).host+new URL(item.upstream_url).pathname)+'</bdi>'),item.id);
-  assert.ok(html.includes('<figcaption>分享到社群時的預覽圖。</figcaption>'),item.id);
+  assert.ok(html.includes('class="sf-legend"'),item.id);
   assert.ok(html.includes('<dt>指南核對版本</dt><dd><code>'+escape(guide.source_commit)),item.id);
  }
 });
@@ -206,11 +205,11 @@ test('every public skill prioritizes real instructions and destinations over sup
   const html=render(undefined,item.id);
   const reading=html.indexOf('<section class="public-skill-introduction"');
   const destinations=html.indexOf('<section class="public-skill-next"');
-  const illustration=html.indexOf('<figure class="public-skill-illustration"');
+  const share=html.indexOf('data-share-root');
   const social=html.indexOf('<section class="public-github-social"');
   assert.ok(reading>0&&destinations>reading,item.id);
-  assert.ok(illustration>destinations&&social>destinations,item.id);
-  assert.ok(html.indexOf('href="#skill-use-title"')<reading,item.id);
+  assert.ok(share>destinations&&social>destinations,item.id);
+  assert.ok(html.indexOf('href="#skill-start"')<reading,item.id);
   assert.ok(html.includes('href="/#skills">登入工坊 Star'),item.id);
   assert.ok(html.includes(escape(item.guide!.first_result)),item.id);
  }
