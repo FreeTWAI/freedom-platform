@@ -178,6 +178,7 @@ for (const width of [1280, 390]) {
     test('public skill page and Agent SKILL.md stay usable without a session', async ({ page }) => {
       await page.goto('/development/skills/social-post');
       await expect(page.getByRole('heading', { name: 'Hao 社群貼文技能書', level: 1 })).toBeVisible();
+      await page.getByText('作者、版本與參與開發', { exact: true }).click();
       await expect(page.getByRole('link', { name: 'Follow 原作者 ↗', exact: true }).first()).toHaveAttribute('href', 'https://github.com/Hao0321');
       await summariesReachable(page.locator('body'));
       await noOverflow(page);

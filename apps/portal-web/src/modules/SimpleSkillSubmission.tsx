@@ -218,7 +218,14 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
       {saved && <p role="status" className="hint">{publishUnknown || (lastCommand === 'publish' && pending) ? '已保存草稿；公開結果尚未確認，請先確認原公開操作。' : '已保存私人草稿，待本人預覽；尚未送審或公開，來源與授權尚未核可。可稍後從下方草稿繼續。'}</p>}
       {saved && <div className="actions"><button type="button" className="btn btn-ghost" disabled={pending || saveUnknown || publishUnknown || upgrade.busy} onClick={() => void withdraw()}>撤銷這份私人投稿</button></div>}
     </form> : <form className="stack" onSubmit={event => {
-      if ((event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-action') === 'save') { event.preventDefault(); void saveDraft(); return; }
+      if ((event.nativeEvent as SubmitEvent).submitter?.getAttribute('data-action') === 'save') {
+        event.preventDefault();
+        const fields = [...event.currentTarget.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-manual-source]')];
+        fields.forEach(validateField);
+        const invalid = fields.find(field => !field.checkValidity());
+        if (invalid) { invalid.reportValidity(); return; }
+        void saveDraft(); return;
+      }
       event.currentTarget.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea').forEach(validateField);
       if (!event.currentTarget.reportValidity()) { event.preventDefault(); return; }
       preview(event);
@@ -228,9 +235,9 @@ export function SimpleSkillSubmission({ client, userId, resumeId = null, withdra
     }}>
       <div className="section-head"><h2>投稿你的開源工具</h2><p>填寫真實用途與三步流程，先預覽再公開。</p></div>
       <fieldset disabled={pending || saveUnknown || publishUnknown} className="stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-      <label className="field">GitHub 專案網址<input name="repository_url" required type="url" maxLength={300} placeholder="https://github.com/你的帳號/專案名稱" data-guide-anchor="opensource:repository" value={draft.repository_url} onChange={event => setDraft({ ...draft, repository_url: event.target.value })}/></label>
-      <label className="field">作品名稱<input required maxLength={120} placeholder="例如：自動整理會議筆記" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/></label>
-      <label className="field">一句話介紹<textarea aria-label="一句話介紹" required maxLength={2000} rows={3} placeholder="它能幫誰，解決什麼問題？" value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })}/></label>
+      <label className="field">GitHub 專案網址<input name="repository_url" data-manual-source required type="url" maxLength={300} placeholder="https://github.com/你的帳號/專案名稱" data-guide-anchor="opensource:repository" value={draft.repository_url} onChange={event => setDraft({ ...draft, repository_url: event.target.value })}/></label>
+      <label className="field">作品名稱<input data-manual-source required maxLength={120} placeholder="例如：自動整理會議筆記" value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })}/></label>
+      <label className="field">一句話介紹<textarea aria-label="一句話介紹" data-manual-source required maxLength={2000} rows={3} placeholder="它能幫誰，解決什麼問題？" value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })}/></label>
       {draft.page ? <SkillSubmissionPageFields value={draft.page} onChange={page => setDraft({ ...draft, page })}/> : <div className="stack"><p className="hint">這是先前保存的介紹，原文會保留；可以補上問題、原理與流程圖。</p><button type="button" className="btn btn-secondary btn-small" onClick={() => setDraft({ ...draft, page: blankSkillPageFields() })}>補齊完整介紹頁</button></div>}
       {draft.page && <label className="field">如何開始使用<textarea aria-label="如何開始使用" required maxLength={3000} rows={4} placeholder="依原作文件寫出第一次操作的方法：開啟哪個入口或執行什麼指令、準備哪些資料、如何看到結果。" value={draft.use_notes} onChange={event => setDraft({ ...draft, use_notes: event.target.value })}/><span className="field-hint">提供可照著操作的真實起步步驟。</span></label>}
       <label className="field">我與作品的關係<select value={draft.relationship} onChange={event => setDraft({ ...draft, relationship: event.target.value as Relationship })}>{Object.entries(relationshipLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select><span className="field-hint">推薦別人的工具也可以，原作者與授權都會保留。這是你的聲明，不是作者身分驗證。</span></label>

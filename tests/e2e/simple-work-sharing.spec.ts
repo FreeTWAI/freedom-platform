@@ -150,7 +150,8 @@ test('320px tool form and review remain readable in all three themes with option
   await fillTool(page, '讓不同專業的夥伴一起完成可分享的作品');
   for (const theme of ['light', 'dark', 'versefolk']) {
     await page.evaluate(value => { localStorage.setItem('freedom-theme', value); document.documentElement.dataset.theme = value; window.dispatchEvent(new Event('freedom-theme-changed')); }, theme);
-    await expect(page.getByLabel('如何開始使用', { exact: true })).toBeHidden();
+    await expect(page.getByLabel('如何開始使用', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('展示網址（選填）', { exact: true })).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const sizes = await page.locator('.work-sharing-form input, .work-sharing-form textarea').evaluateAll(nodes => nodes.filter(node => (node as HTMLElement).offsetParent).map(node => parseFloat(getComputedStyle(node).fontSize)));
     expect(sizes.every(size => size >= 16)).toBe(true);
