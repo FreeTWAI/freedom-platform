@@ -526,3 +526,16 @@ test('registered project continues an awaiting Agent draft through an exact-ID G
   expect(reads).toContain(`/api/v1/me/skill-submissions/${id}`);expect(writes).toEqual([]);
   await expect(dialog.getByRole('button',{name:'送出技能',exact:true})).toHaveCount(0);
 });
+
+
+test('an unfinished manual page opens its original form without an advanced publish action',async({page})=>{
+ await mockUploads(page);
+ const draft={...submission('sub-partial','ready_for_review',2,true),payload:{...submission('sub-partial','ready_for_review',2,true).payload!,page_content:undefined,page_content_draft:{...syntheticSkillPage,outcomes:syntheticSkillPage.outcomes.join('\n'),mechanism:''}}};
+ await page.route('**/api/v1/me/skill-submissions',route=>route.fulfill({json:{items:[draft]}}));
+ await page.route('**/api/v1/me/skill-submissions/sub-partial',route=>route.fulfill({json:draft}));
+ await login(page);await navigate(page,'技能書架');await page.getByRole('button',{name:'上傳技能',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'上傳技能',exact:true});await dialog.getByRole('button',{name:'預覽並送出：流程整理技能',exact:true}).click();
+ await expect(dialog.getByRole('region',{name:'未完成的介紹：流程整理技能'})).toBeVisible();
+ await expect(dialog.getByRole('link',{name:'繼續填寫介紹',exact:true})).toHaveAttribute('href','#opensource?submission=sub-partial');
+ await expect(dialog.getByRole('button',{name:'送出技能',exact:true})).toHaveCount(0);
+});

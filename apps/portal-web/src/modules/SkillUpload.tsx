@@ -10,11 +10,12 @@ import { agentInstruction, SKILL_UPLOAD_GUIDE as GUIDE } from './skill-upload-in
 export { agentInstruction } from './skill-upload-instruction';
 import './SkillUpload.css';
 import { validSkillPageContent, type SkillPageContent } from '../../../../modules/community/skill-page-content';
+import type { SkillPageDraft } from '../../../../modules/skill-submissions/page-draft';
 import { SkillSubmissionPagePreview } from './SkillSubmissionPagePreview';
 import { PublishedSkillLinks, skillPublicationPath } from './SkillPublication';
 
 type Relationship = 'author' | 'maintainer' | 'contributor' | 'curator';
-type SubmissionPayload = { repository_url: string; title: string; description: string; use_notes: string; demo_url: string | null; relationship: Relationship; share_introductions: string[]; page_content?: SkillPageContent };
+type SubmissionPayload = { repository_url: string; title: string; description: string; use_notes: string; demo_url: string | null; relationship: Relationship; share_introductions: string[]; page_content?: SkillPageContent; page_content_draft?: SkillPageDraft };
 type Seed = ChatSkillSeed & { repository_url: string };
 type CatalogBookRef = { book_id: string; title: string; public_path: string };
 type Submission = { submission_id: string; status: 'awaiting_upload' | 'ready_for_review' | 'published' | 'revoked'; aggregate_version: string | number; payload: SubmissionPayload | null; project_id: string | null; public_path: string | null; illustration_url: string | null; grant_expires_at: string | null; grant_consumed_at: string | null; grant_revoked_at: string | null; created_at: string; updated_at: string; seed?: Seed | null; upgrades_submission_id?: string | null; catalog_book?: CatalogBookRef | null };
@@ -104,6 +105,7 @@ function SubmissionPreview({ submission, busy, onPublish, onShelf }: { submissio
   }, [submission.submission_id]);
   const payload = submission.payload;
   if (!payload) return <p className="field-hint">Agent 尚未上傳內容。</p>;
+  if (payload.page_content_draft) return <section className="stack" aria-label={`未完成的介紹：${payload.title}`}><h4>{payload.title}</h4><p>這份私人介紹尚未完成，補齊並預覽後才能公開。</p><a className="btn btn-secondary btn-small" href={`#opensource?submission=${encodeURIComponent(submission.submission_id)}`}>繼續填寫介紹</a></section>;
   const repository = httpsLink(payload.repository_url), demo = httpsLink(payload.demo_url), blurbs = payload.share_introductions ?? [];
   const illustration = localPath(submission.illustration_url);
   return <section ref={region} tabIndex={-1} className="skill-upload-preview stack" aria-label={`預覽：${payload.title}`}>
