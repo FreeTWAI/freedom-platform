@@ -241,7 +241,7 @@ test('a denied Star offers GitHub re-authorization once and does not retry the w
 });
 
 
-test('public skill counts are actionable: a connected member stars in place and Fork, Watch and Follow open the original',async({page,context})=>{
+test('public skill first-viewport actions support Star, Fork, sharing and the author source',async({page,context})=>{
   let starred=false;const writes:unknown[]=[];
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:true,connected:true,github_user:{id:'public-skill-member',login:'public-skill-member'}}}));
   await page.route('**/api/v1/github/books/*/metrics',route=>route.fulfill({json:metrics}));
@@ -251,20 +251,27 @@ test('public skill counts are actionable: a connected member stars in place and 
   });
   await context.route('https://github.com/**',route=>route.fulfill({contentType:'text/html',body:'<h1>Synthetic GitHub destination</h1>'}));
   await login(page);await page.goto('/development/skills/social-post');
-  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   const social=page.locator('[data-skill-social="social-post"]');
-  // Optional GitHub controls load when reached, after the public reading content.
-  await social.scrollIntoViewIfNeeded();
+  await expect(social).toBeInViewport();
   await expect(social.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toEqual([]);
   await social.locator('.github-star-count').click();await expect(social.getByRole('button',{name:'取消 Star',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(page).toHaveURL(/\/development\/skills\/social-post$/);await expect(social.locator('.github-star-count')).toHaveText('127');
   await social.getByRole('button',{name:'取消 Star',exact:true}).click();await expect(social.getByRole('button',{name:'Star',exact:true})).toHaveAttribute('aria-pressed','false');
   expect(writes).toEqual([{starred:true,confirmed:true},{starred:false,confirmed:true}]);
   await page.setViewportSize({width:320,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  for(const [name,url] of [['Fork 專案 ↗',original+'/fork'],['追蹤專案（Watch）↗',original],['Follow 原作者 ↗','https://github.com/Hao0321']]){
-    const link=social.getByRole('link',{name,exact:true});expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    const opened=page.waitForEvent('popup');await link.click();const popup=await opened;await expect(popup).toHaveURL(url);await expect(popup.getByRole('heading')).toHaveText('Synthetic GitHub destination');await popup.close();
+  const fork=social.getByRole('link',{name:'Fork 專案 ↗',exact:true});
+  const author=page.locator('[data-skill-author]'),share=page.locator('.sp-engagement [data-share-launch]');
+  for(const control of [social.getByRole('button',{name:'Star',exact:true}),fork,author,share]){
+    await expect(control).toBeInViewport();expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
+  const forkOpened=page.waitForEvent('popup');await fork.click();const forkPage=await forkOpened;
+  await expect(forkPage).toHaveURL(original+'/fork');await expect(forkPage.getByRole('heading')).toHaveText('Synthetic GitHub destination');await forkPage.close();
+  await share.click();await expect(page.locator('[data-share-dialog]')).toBeVisible();
+  await page.locator('[data-share-close]').click();await expect(share).toBeFocused();
+  await author.click();const card=page.getByRole('dialog',{name:'自由工坊名片',exact:true});await expect(card).toBeVisible();
+  const authorOpened=page.waitForEvent('popup');await card.getByRole('link',{name:'查看來源 GitHub ↗',exact:true}).click();const authorPage=await authorOpened;
+  await expect(authorPage).toHaveURL('https://github.com/Hao0321');await expect(authorPage.getByRole('heading')).toHaveText('Synthetic GitHub destination');await authorPage.close();
+  await card.getByRole('button',{name:'關閉作者名片',exact:true}).click();await expect(author).toBeFocused();
   await page.screenshot({path:'test-results/public-skill-github-actions-phone.png',fullPage:false});
 });
 
@@ -277,13 +284,11 @@ test('public skill OAuth returns to the same book and connecting never submits a
   await page.route('https://github.com/login/oauth/authorize?*',route=>route.fulfill({contentType:'text/html',body:'<p>Synthetic authorization</p>'}));
   await page.route('**/api/v1/me/github/complete',route=>{expect(route.request().headers()['x-csrf-token']).toBeTruthy();connected=true;return route.fulfill({json:{return_to:'/development/skills/social-post'}});});
   await login(page);await page.goto('/development/skills/social-post');
-  await page.getByText('作者、版本與參與開發',{exact:true}).click();
-  await page.locator('[data-skill-social="social-post"]').scrollIntoViewIfNeeded();
+  await expect(page.locator('[data-skill-social="social-post"]')).toBeInViewport();
   await page.getByRole('button',{name:'連結 GitHub 後 Star',exact:true}).click();await expect(page).toHaveURL(/^https:\/\/github.com\/login\/oauth\/authorize/);
   expect(connects).toEqual([{return_to:'/development/skills/social-post'}]);expect(writes).toBe(0);
   await page.goto('/github/callback?code=synthetic&state=synthetic');await expect(page).toHaveURL(/\/development\/skills\/social-post$/);
-  await page.getByText('作者、版本與參與開發',{exact:true}).click();
-  await page.locator('[data-skill-social="social-post"]').scrollIntoViewIfNeeded();
+  await expect(page.locator('[data-skill-social="social-post"]')).toBeInViewport();
   await expect(page.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toBe(0);
 });
 
@@ -301,18 +306,24 @@ for(const target of ['https://elsewhere.example.invalid/#join/tasks','//elsewher
   await expect(page).toHaveURL(origin+'/#skills');
 });
 
-test('public Star, Fork, Watch and Follow remain links without login or JavaScript',async({page,browser})=>{
+test('public Star, Fork, sharing and author source stay available without login or JavaScript',async({page,browser})=>{
   await page.goto('/development/skills/social-post');
-  await page.getByText('作者、版本與參與開發',{exact:true}).click();
   const social=page.locator('[data-skill-social="social-post"]');
-  await social.scrollIntoViewIfNeeded();
+  await expect(social).toBeInViewport();
   await expect(social.locator('.github-book-social')).toBeVisible();
   await expect(social.getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
+  await expect(social.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
+  await page.locator('[data-skill-author]').click();const card=page.getByRole('dialog',{name:'自由工坊名片',exact:true});
+  await expect(card).toBeVisible();await expect(card.getByRole('link',{name:'查看來源 GitHub ↗',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
+  await card.getByRole('button',{name:'關閉作者名片',exact:true}).click();
   const context=await browser.newContext({javaScriptEnabled:false});
   try{
     const plain=await context.newPage();await plain.goto(new URL('/development/skills/social-post',page.url()).href);
-    await plain.getByText('作者、版本與參與開發',{exact:true}).click();
     const links=plain.locator('[data-skill-social="social-post"]');
-    for(const [name,url] of [['到 GitHub Star ↗',original],['Fork 專案 ↗',original+'/fork'],['追蹤專案（Watch）↗',original],['Follow 原作者 ↗','https://github.com/Hao0321']])await expect(links.getByRole('link',{name,exact:true})).toHaveAttribute('href',url);
+    await expect(links).toBeInViewport();
+    for(const [name,url] of [['到 GitHub Star ↗',original],['Fork 專案 ↗',original+'/fork']])await expect(links.getByRole('link',{name,exact:true})).toHaveAttribute('href',url);
+    await expect(plain.getByRole('link',{name:'查看來源 GitHub',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
+    const share=plain.locator('.sp-engagement [data-share-launch]');await expect(share).toHaveAttribute('href','#share-title');
+    await share.click();await expect(plain.locator('#share-title')).toBeInViewport();
   }finally{await context.close();}
 });
