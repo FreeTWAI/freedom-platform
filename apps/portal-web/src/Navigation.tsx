@@ -25,8 +25,8 @@ const groups: { label: string; pages: TabId[] }[] = [
   { label: '管理', pages: ['guild-workspace', 'business'] },
 ];
 
-export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEnabled, communitySearchEnabled, personalContentEnabled, mobileOpen, onCloseMobile, currentHash = `#${current}` }: {
-  current: TabId; onSelect: (id: TabId, hash?: string) => void; currentHash?: string; canManageGuild: boolean; guildLaunchpadEnabled: boolean; communitySearchEnabled: boolean; personalContentEnabled: boolean; mobileOpen: boolean; onCloseMobile?: (returnFocus: boolean) => void;
+export function Navigation({ current, onSelect, canManageGuild, canManagePlatform = false, guildLaunchpadEnabled, communitySearchEnabled, personalContentEnabled, mobileOpen, onCloseMobile, currentHash = `#${current}` }: {
+  current: TabId; onSelect: (id: TabId, hash?: string) => void; currentHash?: string; canManageGuild: boolean; canManagePlatform?: boolean; guildLaunchpadEnabled: boolean; communitySearchEnabled: boolean; personalContentEnabled: boolean; mobileOpen: boolean; onCloseMobile?: (returnFocus: boolean) => void;
 }) {
   const {t}=useLanguage();
   const navigationId = useId();
@@ -108,7 +108,7 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
     <label className="nav-search"><span className="sr-only">{t('nav.search')}</span><input ref={searchRef} type="search" autoComplete="off" value={query} onChange={event=>setQuery(event.target.value)} maxLength={80} placeholder={t('nav.example')} onKeyDown={event=>{if(event.key==='Escape'&&query&&!event.nativeEvent.isComposing&&event.nativeEvent.keyCode!==229){event.preventDefault();event.stopPropagation();setQuery('')}}}/></label>
     <p className="field-hint" role="status" aria-atomic="true">{normalizedQuery && !supplyMatches && searchMatches.length===0 ? <>{t('nav.results')} · 0. {t('nav.searchHint')}</> : ''}</p>
     {query.trim()?<div className="nav-search-results" role="region" aria-label={t('nav.results')}>{supplyMatches && item('stores', 'nav.commerceSupply', '#stores/supply')}{searchMatches.map(id => item(id))}{(supplyMatches || searchMatches.length > 0) && <p className="field-hint">{t('nav.searchHint')}</p>}</div>:<>
-    {groups.map(group => <details className="nav-section" key={group.label} open={expanded.includes(group.label)}>
+    {groups.filter(group => group.label !== '管理' || canManageGuild || guildLaunchpadEnabled || canManagePlatform).map(group => <details className="nav-section" key={group.label} open={expanded.includes(group.label)}>
       <summary onClick={event => { event.preventDefault(); setExpanded(value => value.includes(group.label) ? value.filter(label => label !== group.label) : [...value, group.label]); }}>
         {t(groupKeys[group.label])}<span aria-hidden="true">⌄</span>
       </summary>
@@ -124,7 +124,7 @@ export function Navigation({ current, onSelect, canManageGuild, guildLaunchpadEn
             {(['supplier', 'retail', 'virtual-commerce'] as TabId[]).map(id => item(id))}
           </div>
         </div> : group.pages.filter(id => (id !== 'my-content' || personalContentEnabled) && (id !== 'guild-workspace' || canManageGuild) && (id !== 'business' || guildLaunchpadEnabled)).map(id => item(id, `nav.${id}`, `#${id}`, true))}
-        {group.label === '管理' && <a className="nav-item" href="/admin">{t('nav.admin')} <span aria-hidden="true">↗</span></a>}
+        {group.label === '管理' && canManagePlatform && <a className="nav-item" href="/admin">{t('nav.admin')} <span aria-hidden="true">↗</span></a>}
       </div>
     </details>)}
     <div className="nav-footer">{item('community')}</div>

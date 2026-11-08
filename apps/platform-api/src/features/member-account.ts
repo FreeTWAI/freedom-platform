@@ -5,6 +5,8 @@ import { sessionCookieName } from '../session-cookie.js';
 import { deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { sessionView } from '../../../../modules/identity-membership/service.js';
+import { readWithMemberSession } from '../../../../packages/db/member-session.js';
+import { canHideMemberContent } from '../../../../modules/community/moderation.js';
 import { requireCondition } from '../../../../packages/shared/problem.js';
 import { requestEmailChange } from '../../../../modules/identity-membership/email-change.js';
 import { authRateLimit } from '../../../../modules/identity-membership/members.js';
@@ -38,7 +40,13 @@ export function registerMemberAccountRoutes(app: PlatformFeatureApp, context: Pl
     const actor=c.get('actor');await authRateLimit(pool,'google-unlink-user',actor.user_id,8);await authRateLimit(pool,'google-unlink-network',authNetwork(c),20);
     const body=z.object({password:z.string().min(1).max(200),identity_id:z.uuid()}).strict().parse(await c.req.json());return c.json(await unlinkGoogleIdentity(pool,actor,body.password,body.identity_id));
   });
-  app.get('/api/v1/session',c=>c.json(sessionView(c.get('actor'))));
+  app.get('/api/v1/session',async c=>{
+    const actor=c.get('actor');
+    // Navigation hint only. /admin still requires its independent Access identity.
+    const admin_entry_visible=await readWithMemberSession(pool,actor,q=>canHideMemberContent(q,actor));
+    c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');
+    return c.json({...sessionView(actor),admin_entry_visible});
+  });
   app.post('/api/v1/me/account/email-change/request',async c=>{
     requireCondition(runtime.eventEmailSender,503,'email_change_unavailable','Email 變更郵件服務尚未設定。');
     const actor=c.get('actor');
