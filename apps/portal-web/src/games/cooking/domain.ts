@@ -1,3 +1,4 @@
+import {ingredientVisual,preparationSpan} from './ingredient-visuals';
 import { COOKING_RULES as RULES, recipeOf, type CookingStep, type Direction, type Recipe } from './catalog';
 
 export type CookingPhase = 'ready'|'playing'|'paused'|'step-result'|'done';
@@ -18,7 +19,12 @@ export function newCookingRun(recipe: Recipe, seed: number, id: string): Cooking
   return {version:1,id,recipeId:recipe.id,seed,step:0,status:'ready',elapsed:0,stepElapsed:0,lastNow:null,active:active(),reports:[]};
 }
 export const currentStep = (run: CookingRun) => recipeOf(run.recipeId)!.steps[run.step];
-export const cutGuide = (run: CookingRun) => .22 + .56 * (run.active.count + 1) / (currentStep(run).goal + 1);
+export function cutGuideAt(step:CookingStep,count:number) {
+  const span=step.kind==='slice'?preparationSpan(ingredientVisual(step.ingredient,step.shape)?.id):.56;
+  // Keep the original arithmetic byte-for-byte for every other ingredient.
+  return span===.56?.22+.56*(count+1)/(step.goal+1):.5-span/2+span*(count+1)/(step.goal+1);
+}
+export const cutGuide = (run: CookingRun) => cutGuideAt(currentStep(run),run.active.count);
 export function plateTarget(run: CookingRun) {const angle = -Math.PI / 2 + run.active.count * 2 * Math.PI / currentStep(run).goal; return {x:.5 + .23 * Math.cos(angle), y:.53 + .18 * Math.sin(angle)};}
 export function cookingProgress(run: CookingRun) {if(run.status==='step-result'||run.status==='done')return 1;const s=currentStep(run),a=run.active; return bound(s.kind==='mix'?a.amount/(s.goal*Math.PI*2):['slice','knead','fold','plate'].includes(s.kind)?a.count/s.goal:s.kind==='pour'?a.amount/s.target:a.amount);}
 export function cookingScore(run: CookingRun) {return run.reports.length?Math.round(run.reports.reduce((sum,r)=>sum+r.score,0)/run.reports.length):0;}

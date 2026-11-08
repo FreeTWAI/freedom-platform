@@ -1,5 +1,4 @@
-import {GameCover} from '../GameCover';
-import {useEffect,useRef,useState,type KeyboardEvent,type PointerEvent,type MouseEvent} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState,type KeyboardEvent,type PointerEvent,type MouseEvent} from 'react';
 import {PARTY_GAMES,PARTY_RULES as R,type PartyGameId} from './catalog';
 import {actParty,advanceParty,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition,type PartyAction,type PartyRun} from './domain';
 import type {RunResult} from '../result-card';
@@ -8,7 +7,7 @@ import {syncDiagnostics} from '../diagnostics';
 import {holidayCells,holidayInput} from './light-holiday';
 import {loadPartyStage} from './stage-loader';
 import {LightPartyScene} from './LightPartyScene';
-import {partyInputStamp,acceptsPartyInput,partyResultImage} from './light-party';
+import {partyInputStamp,acceptsPartyInput,partyResultImage,chairView} from './light-party';
 import './party.css';
 
 /** PT-2/6: UI owns input and lifecycle; the pure domain owns every score. */
@@ -21,8 +20,34 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
   const mode=useRef<'loading'|'native'|'light'|'failed'>('loading'),attempt=useRef<{cancel:()=>void}|null>(null),input=useRef(holidayInput()),controls=useRef(holidayInput());
   const restartButton=useRef<HTMLButtonElement>(null),confirmRestart=useRef<HTMLButtonElement>(null);
   const [light,setLight]=useState(false);
+  const holidayRoot=useRef<HTMLElement>(null),holidayOverlay=useRef<HTMLDivElement>(null),holidayModal=useRef<HTMLDialogElement>(null),helpButton=useRef<HTMLButtonElement>(null),helpClose=useRef<HTMLButtonElement>(null);
+  const restoreHolidayFocus=useRef<'restart'|'help'|null>(null);
+  const [help,setHelp]=useState(false);
+  useLayoutEffect(()=>{
+    if(!restart&&!help){
+      const target=restoreHolidayFocus.current;restoreHolidayFocus.current=null;
+      if(target==='restart')restartButton.current?.focus({preventScroll:true});
+      if(target==='help')helpButton.current?.focus({preventScroll:true});
+      return;
+    }
+    const bar=holidayRoot.current?.closest('.fullscreen-game')?.querySelector<HTMLElement>('.fullscreen-game__bar');
+    const prior=bar?.inert;if(bar)bar.inert=true;
+    const dialog=holidayModal.current,panel=holidayOverlay.current;
+    // Native top-layer modality makes Escape dismiss this panel before fullscreen.
+    // Bind its fixed rect to the in-stage panel, including resize and page scroll.
+    const place=()=>{if(!dialog||!panel)return;const rect=panel.getBoundingClientRect();Object.assign(dialog.style,{left:`${rect.left}px`,top:`${rect.top}px`,width:`${rect.width}px`,height:`${rect.height}px`});};
+    let observer:ResizeObserver|undefined;
+    if(dialog&&panel){place();dialog.showModal();observer=new ResizeObserver(place);observer.observe(panel);window.addEventListener('resize',place);window.addEventListener('scroll',place,true);}
+    (restart?confirmRestart.current:helpClose.current)?.focus({preventScroll:true});
+    const contain=(event:FocusEvent)=>{const panel=holidayOverlay.current;if(panel&&event.target instanceof Node&&!panel.contains(event.target)){(restart?confirmRestart.current:helpClose.current)?.focus({preventScroll:true});}};
+    document.addEventListener('focusin',contain);
+    return()=>{observer?.disconnect();window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);if(dialog?.open)dialog.close();if(bar)bar.inert=prior??false;document.removeEventListener('focusin',contain);};
+  },[game,restart,help]);
+  // begin() runs before React removes inert from the scene. Focus the same host
+  // after that DOM commit, without moving focus on ordinary score updates.
+  useLayoutEffect(()=>{if(live.current.status==='playing')host.current?.focus({preventScroll:true});},[game,live.current.status]);
   const escapeCapture=useRef<(event:globalThis.KeyboardEvent)=>void>(()=>{});
-  escapeCapture.current=event=>{input.current.cancel();controls.current.cancel();gesture.current=null;if(restart){event.preventDefault();event.stopPropagation();keepRun();}};
+  escapeCapture.current=event=>{input.current.cancel();controls.current.cancel();gesture.current=null;if(restart){event.preventDefault();event.stopPropagation();keepRun();}else if(help){event.preventDefault();event.stopPropagation();closeHelp();}};
   useEffect(()=>{
     // Cancel holds before React. Only an open confirmation owns this Escape.
     const escape=(event:globalThis.KeyboardEvent)=>{if(event.key==='Escape')escapeCapture.current(event);};
@@ -72,11 +97,11 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
   useEffect(()=>{if(restart)confirmRestart.current?.focus();},[restart]);
   function chooseLight(){live.current=pauseParty(live.current);stop();attempt.current?.cancel();stage.current=null;mode.current='light';setLight(true);setError('');setReady(true);setNotice('已改用輕量玩法，分數與進度保留。按繼續才會計時。');draw();refresh();host.current?.focus({preventScroll:true});}
   function retryStage(){live.current=pauseParty(live.current);stop();attempt.current?.cancel();stage.current=null;mode.current='loading';setReady(false);setError('');setRetry(n=>n+1);}
-  function keepRun(){setRestart(false);restartButton.current?.focus({preventScroll:true});}
+  function keepRun(){restoreHolidayFocus.current='restart';setRestart(false);}
   useEffect(()=>{const hidden=()=>{if(document.hidden)pauseRun('離開畫面時已暫停，回來後按繼續。');};const blur=()=>pauseRun('這局已暫停，準備好再繼續。');document.addEventListener('visibilitychange',hidden);window.addEventListener('blur',blur);return()=>{document.removeEventListener('visibilitychange',hidden);window.removeEventListener('blur',blur);stop();void audio.current?.close().catch(()=>{});};},[]);
-  function begin(){if(restart||!['ready','paused'].includes(live.current.status))return;if(mode.current!=='native'&&mode.current!=='light')return;live.current=live.current.status==='paused'?resumeParty(live.current):startParty(live.current);setNotice('');last.current=null;if(!safeDraw())return;onStart?.(host.current);refresh();kick();host.current?.focus({preventScroll:true});host.current?.closest('.pt-play-area')?.scrollIntoView({block:'start',behavior:'instant'});}
+  function begin(){if(restart||!['ready','paused'].includes(live.current.status))return;if(mode.current!=='native'&&mode.current!=='light')return;live.current=live.current.status==='paused'?resumeParty(live.current):startParty(live.current);setNotice('');last.current=null;if(!safeDraw())return;onStart?.(host.current);refresh();kick();host.current?.focus({preventScroll:true});}
   function action(a:PartyAction){if(mode.current!=='native'&&mode.current!=='light')return;const before=live.current;live.current=actParty(before,a);if(before!==live.current){if(a.kind==='pick')soundEffect(live.current.score>before.score);safeDraw();refresh();}}
-  function reset(){stop();live.current=newParty(game,seed);settled.current=false;setRestart(false);setNotice('');safeDraw();refresh();host.current?.focus({preventScroll:true});}
+  function reset(){restoreHolidayFocus.current='restart';stop();live.current=newParty(game,seed);settled.current=false;setRestart(false);setNotice('');safeDraw();refresh();host.current?.focus({preventScroll:true});}
   function result(){
     const completed=live.current;if(restart)return;if(completed.status!=='done'||settled.current)return;
     settled.current=true;
@@ -86,6 +111,20 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
       if(!image)throw Error('No result image.');
       onResult({game,seed:completed.seed,title:spec.title,...partySummary(completed),image});
     }catch{settled.current=false;setNotice('這局已完成，圖片還沒產生。可以重試查看成果。');}
+  }
+  function closeHelp(){restoreHolidayFocus.current='help';setHelp(false);}
+  function holidayKey(e:KeyboardEvent<HTMLElement>){
+    if(restart||help){
+      if(e.key==='Tab'){
+        const choices=Array.from(holidayOverlay.current?.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],[tabindex="0"]')??[]).filter(node=>node.getClientRects().length>0);
+        const first=choices[0],last=choices[choices.length-1];
+        if(first&&(!holidayOverlay.current?.contains(document.activeElement)||e.shiftKey&&document.activeElement===first)){e.preventDefault();last.focus();}
+        else if(last&&!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+        e.stopPropagation();
+      }
+      return;
+    }
+    key(e);
   }
   function key(e:KeyboardEvent<HTMLElement>){
     if(e.repeat||e.altKey||e.ctrlKey||e.metaKey)return;
@@ -132,22 +171,29 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
     onKeyDown={e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();if(!e.repeat&&!e.altKey&&!e.ctrlKey&&!e.metaKey)input.current.down(cell.hole,`key:${e.key}`,s.round);}}}
     onKeyUp={e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();if(e.altKey||e.ctrlKey||e.metaKey){input.current.cancel(cell.hole);return;}const round=input.current.click(cell.hole,s.round,`key:${e.key}`);if(round!==null)action({kind:'pick',hole:cell.hole,round});}}}
     onClick={e=>{const round=e.detail===0?input.current.assistive(cell.hole,s.round):input.current.pointerClick(cell.hole);if(round!==null)action({kind:'pick',hole:cell.hole,round});}}>
-    <b>{cell.hole+1}</b>{light&&<svg viewBox="0 0 100 90" aria-hidden="true" focusable="false"><ellipse cx="50" cy="76" rx="43" ry="10" fill="#d4b88b" stroke="#443b37" strokeWidth="3"/>{(cell.kind==='good'||cell.kind==='boss')&&<><path d="M22 70 Q15 22 48 22 Q82 20 79 70Z" fill="#fff8e8" stroke="#443b37" strokeWidth="3"/><circle cx="38" cy="45" r="3" fill="#443b37"/><circle cx="62" cy="45" r="3" fill="#443b37"/><path d="M41 55 Q50 63 59 55" fill="none" stroke="#443b37" strokeWidth="3"/>{cell.kind==='good'?<path d="M48 24 Q43 3 69 8 Q68 26 48 24Z" fill="#7d9973" stroke="#443b37" strokeWidth="3"/>:<><path d="M27 26 V17 H73 V26Z" fill="#897c9b" stroke="#443b37" strokeWidth="3"/><path d="M46 61 H54 L59 73 L50 79 L41 73Z" fill="#897c9b" stroke="#443b37" strokeWidth="2"/></>}</>}<path d="M10 72 Q50 87 90 72 V81 Q50 96 10 81Z" fill="#dec49c" stroke="#443b37" strokeWidth="3"/></svg>}<span>{cell.label}</span></button>)}</div>;}
-  return <section className={`pt-root pt-${game}`} onKeyDown={key} data-party-mode={light?'light':'3d'} data-party-state={s.status} data-party-score={s.score}>
-    <header className="pt-heading"><div><p className="pt-kicker">日常派對 / {spec.tag}</p><h1>{spec.title}</h1><p>{spec.subtitle}</p></div><button className="fw-arcade-secondary" onClick={onBack}>回遊戲大廳</button></header>
-    <div className="pt-layout"><div className="pt-play-area">
-      <div className="pt-scoreboard" aria-label="本局狀態"><div><small>本局得分</small><strong>{s.score}<span>分</span></strong></div><div><small>{s.game==='tofu'?'豆腐樓層':'剩餘時間'}</small><strong>{s.game==='tofu'?`${s.layers.length-1} / ${R.tofuGoal}`:Math.ceil((duration-s.elapsed)/1000)}{s.game!=='tofu'&&<span>秒</span>}</strong></div><div><small>{s.game==='chair'?'下班意志':s.game==='tofu'?'還能失手':'最長連擊'}</small><strong>{s.game==='chair'?`${'♥'.repeat(s.lives)}${'♡'.repeat(R.chairLives-s.lives)}`:s.game==='tofu'?`${R.tofuMisses-s.misses} 次`:`${s.bestCombo} 次`}</strong></div></div>
-      <div className="pt-scene-frame">{!light&&s.status==='ready'&&<GameCover id={game} eager className="sg-party-cover"/>}<div ref={host} className={`pt-canvas${light?` pt-light-stage${game==='holiday'?'':' pt-light-action-stage'}`:''}`} tabIndex={0} role="application" aria-label={`${spec.title} ${light?'輕量玩法':'3D 場景'}。${spec.keys}`} data-party-stage={error?'failed':ready?'ready':'loading'} onPointerDown={light&&game==='holiday'?undefined:down} onPointerUp={light&&game==='holiday'?undefined:up} onBlur={()=>{gesture.current=null;}} onLostPointerCapture={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}} onPointerCancel={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}}>{light&&s.game!=='holiday'&&<LightPartyScene run={s}/>} {light&&s.game==='holiday'&&<><p className="pt-light-title">假日蒸籠 · 輕量玩法</p>{holeControls()}<p className="pt-light-hint">葉子是休假，領帶是開會。點格子或按 1–6。</p></>}</div>
-        {playing&&!light&&<span className="pt-live-label">{s.game==='chair'?`假日票 ${s.tickets} 張`:s.game==='tofu'?s.fall?'豆腐穩穩落下…':aligned?'對齊了！現在落下':`完美貼齊 ${s.perfects} 次 · 等對齊再落下`:`已守住 ${s.game==='holiday'?s.saved:0} 個假日`}</span>}
+    <b>{cell.hole+1}</b>{light&&<svg viewBox="0 0 100 90" aria-hidden="true" focusable="false"><ellipse cx="50" cy="76" rx="43" ry="10" fill="#d4b88b" stroke="#443b37" strokeWidth="3"/>{(cell.kind==='good'||cell.kind==='boss')&&<><path d="M22 70 Q15 22 48 22 Q82 20 79 70Z" fill="#fff8e8" stroke="#443b37" strokeWidth="3"/><circle cx="38" cy="45" r="3" fill="#443b37"/><circle cx="62" cy="45" r="3" fill="#443b37"/><path d="M41 55 Q50 63 59 55" fill="none" stroke="#443b37" strokeWidth="3"/>{cell.kind==='good'?<path d="M48 24 Q43 3 69 8 Q68 26 48 24Z" fill="#7d9973" stroke="#443b37" strokeWidth="3"/>:<><path d="M27 26 V17 H73 V26Z" fill="#897c9b" stroke="#443b37" strokeWidth="3"/><path d="M46 61 H54 L59 73 L50 79 L41 73Z" fill="#897c9b" stroke="#443b37" strokeWidth="2"/></>}</>}<path d="M10 72 Q50 87 90 72 V81 Q50 96 10 81Z" fill="#dec49c" stroke="#443b37" strokeWidth="3"/></svg>}<span>{cell.kind==='empty'?'空':cell.label}</span></button>)}</div>;}
+  // Every party game shares one bounded shell; controls never own the hit-test host.
+  {
+    const modal=restart||help,covered=modal||!ready||!!error||!playing;
+    const next=s.game==='chair'?chairView(s).waves[0]:null;
+    return <section ref={holidayRoot} className={`pt-root pt-${game} pt-holiday-stage${s.game==='chair'?' pt-chair-stage':s.game==='tofu'?' pt-tofu-stage':''}`} onKeyDown={holidayKey} data-party-mode={light?'light':'3d'} data-party-state={s.status} data-party-score={s.score}>
+      <header className="pt-holiday-heading" inert={modal}><h1>{spec.title}</h1><button className="fw-arcade-secondary" aria-label="回遊戲大廳" title="回遊戲大廳" onClick={onBack}>↩</button></header>
+      <div className="pt-scoreboard" aria-label="本局狀態"><div><small>本局得分</small><strong>{s.score}<span>分</span></strong></div><div><small>剩餘時間</small><strong>{Math.ceil((duration-s.elapsed)/1000)}<span>秒</span></strong></div><div><small>{s.game==='chair'?'下班意志':s.game==='tofu'?'豆腐樓層':'最長連擊'}</small>{s.game==='chair'?<strong aria-label={`剩餘 ${s.lives} 顆心`}>{'♥'.repeat(s.lives)}{'♡'.repeat(R.chairLives-s.lives)}</strong>:s.game==='tofu'?<strong aria-label={`完成 ${s.layers.length-1} / ${R.tofuGoal} 層，還能失手 ${R.tofuMisses-s.misses} 次`}>{s.layers.length-1}/{R.tofuGoal}<span>層 · </span>{R.tofuMisses-s.misses}<span>次</span></strong>:<strong>{s.bestCombo}<span>次</span></strong>}</div></div>
+      <div className="pt-holiday-field pt-play-area" data-light={light?'true':'false'}>
+        <div className="pt-holiday-world" inert={covered}>
+          <div ref={host} className={`pt-canvas${light?' pt-light-stage':''}`} tabIndex={0} role="application" aria-label={`${spec.title} ${light?'輕量玩法':'3D 場景'}。${s.game!=='holiday'?spec.keys:'按 1–6 或點休假，避開開會。'}`} data-party-stage={error?'failed':ready?'ready':'loading'} onPointerDown={light&&s.game==='holiday'?undefined:down} onPointerUp={light&&s.game==='holiday'?undefined:up} onBlur={()=>{gesture.current=null;}} onLostPointerCapture={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}} onPointerCancel={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}}/>
+          {light&&(s.game==='holiday'?<div className="pt-holiday-light-board">{holeControls()}</div>:<div className={s.game==='chair'?'pt-chair-light-board':'pt-tofu-light-board'}><LightPartyScene run={s}/></div>)}
+        </div>
+        {s.game==='chair'?<div className="pt-controls pt-chair-controls" aria-label="遊戲操作" inert={covered}><button disabled={!playing||!ready||!!error} aria-label="往左換路" {...controlHandlers(0,{kind:'lane',direction:-1})}>← <span>往左</span></button><button className="pt-primary-control" disabled={!playing||!ready||!!error} {...controlHandlers(1,{kind:'jump'})}>跳一下！ <span aria-hidden="true">↑</span></button><button disabled={!playing||!ready||!!error} aria-label="往右換路" {...controlHandlers(2,{kind:'lane',direction:1})}><span>往右</span> →</button></div>:s.game==='tofu'?<div className="pt-controls pt-tofu-controls" aria-label="遊戲操作" inert={covered}><button className="pt-drop pt-primary-control" disabled={!playing||!ready||!!error||!!s.fall} {...controlHandlers(3,{kind:'drop'})}>{s.fall?'豆腐降落中…':'豆腐落下！'} <span aria-hidden="true">↓</span></button></div>:!light&&<div className="pt-controls" aria-label="遊戲操作" inert={covered}>{holeControls()}</div>}
+        <div className="pt-holiday-feedback" inert={modal}><p className="pt-live-label">{light?'輕量玩法 · ':''}{s.game==='chair'?`假日票 ${s.tickets} 張 · ${s.resolved} / ${R.chairWaves} 波`:s.game==='tofu'?`還能失手 ${R.tofuMisses-s.misses} 次 · 完美貼齊 ${s.perfects} 次`:`已守住 ${s.saved} 個假日 · ${Math.min(20,s.round+1)} / 20 波`}</p><p className="pt-feedback" role="status">{playing&&s.elapsed-s.feedbackAt<1100?s.feedback:playing?s.game==='chair'?next?`第 ${next.index+1} 波 · ${next.kind==='meeting'?'會議桌要換路':'推車可以跳'}`:'前方暫時沒有障礙':s.game==='tofu'?s.fall?'豆腐穩穩落下…':aligned?'對齊了！現在落下':`${tofuAxis(s).toUpperCase()} 軸移動 · 等對齊再落下`:'點休假，避開開會。':notice||(s.game==='chair'?'左右滑換路，輕點跳躍。':s.game==='tofu'?'點場景、落下按鈕或空白鍵。':'葉子是休假，領帶是開會。')}</p></div>
+        {covered&&<div className="pt-holiday-overlay" ref={holidayOverlay}>
+          {modal?<dialog ref={holidayModal} className="pt-holiday-modal" aria-label={restart?'重新開始這局':'玩法與設定'} onCancel={event=>{event.preventDefault();if(restart)keepRun();else closeHelp();}}>{restart?<div className="pt-panel pt-restart" role="group" aria-label="確認重新開始"><h2>{s.game==='chair'?'再逃一次會議？':s.game==='tofu'?'再疊一座豆腐樓？':'再守一次假日？'}</h2><p>這局會從零開始，題目不變。</p><button ref={confirmRestart} onClick={reset}>確定重來</button><button className="fw-arcade-secondary" onClick={keepRun}>保留這局</button></div>
+          :<div className="pt-panel pt-holiday-help"><h2>{s.game==='chair'?'會議可以等，下班不能。':s.game==='tofu'?'手要穩，豆腐要嫩。':'搶救休假，放過開會。'}</h2><p>{spec.rule} {s.game==='chair'?'撞到會扣一顆心；三顆心用完就結束。換路需要移動時間，按住等下一波不算。':s.game==='tofu'?'堆到 12 層就完成；三次失手或 60 秒結束。沒有對齊的部分會被切掉，下一塊會變窄。':'空蒸籠也會扣分。每波只有短短一刻，按住等下一波不算。'}</p><p>{s.game==='chair'?'左右滑至少 28 像素或按左右按鈕換路，輕點場景或按跳一下跳躍。鍵盤 ← →、A / D 換路，空白鍵跳躍。會議桌要躲開，矮推車可以跳過；葉子黃票是假日票。':s.game==='tofu'?'豆腐交替沿 X、Z 軸移動，靠齊下層時點場景、落下按鈕或按空白鍵。落下後等它落定；按住跨層不會替下一塊落下。完美貼齊保留大小並增加連擊。':'直接點 3D 角色、六格按鈕，或按鍵盤 1–6。葉子和「休假」、領帶和「開會」會一起標示。'}</p><p>同題 #{seed} · {s.game==='chair'?'30 秒、22 波、3 顆心':s.game==='tofu'?'60 秒、12 層、3 次失手':'24 秒、20 波'}。離開視窗會暫停，按繼續才重新計時。重新整理或離頁會重新開始；分數不計入平台貢獻。</p><button ref={helpClose} onClick={closeHelp}>回到遊戲</button></div>}</dialog>
+          :error||!ready?<div className="pt-panel" role={error?'alert':'status'}><h2>{error?'場景先休息一下。':'正在搭建你的迷你世界…'}</h2><p>{error||'角色和道具就快到齊了。'}</p><button onClick={chooseLight}>改用輕量玩法</button>{error&&<button onClick={retryStage}>重建 3D 場景</button>}<button className="fw-arcade-secondary" onClick={onBack}>先回遊戲大廳</button></div>
+          :<div className="pt-panel" aria-label={done?'本局完成':s.status==='paused'?'遊戲暫停':'開玩說明'}><p className="pt-kicker">{done?'本局完成':s.status==='paused'?'這局幫你留著。':s.game==='chair'?'30 秒 · 22 波 · 3 顆心':s.game==='tofu'?'60 秒 · 12 層 · 3 次失手':'24 秒 · 20 波假日'}</p><h2>{done?summary.caption:s.status==='paused'?'準備好再繼續。':s.game==='chair'?'會議可以等，下班不能。':s.game==='tofu'?'手要穩，豆腐要嫩。':'把假日，好好搶回來。'}</h2><p>{done?summary.details:s.status==='paused'?notice:spec.rule}</p>{s.status==='ready'&&<p>{s.game==='chair'?'左右滑或按左右按鈕換路，輕點或按跳一下跳躍。':s.game==='tofu'?'等豆腐靠齊，點場景、落下按鈕或空白鍵。':'點角色、六格按鈕或按 1–6。'}離頁會重新開始。</p>}<button onClick={done?result:begin}>{done?'查看這局成果':s.status==='paused'?'繼續這一局':'開始派對！'}</button>{done&&light&&<a className="pt-download" download={`${s.game}-${s.seed}.svg`} href={partyResultImage(s)}>下載本局成果 SVG</a>}{done&&light&&s.game==='tofu'&&<p>輕量成果卡呈現本局實際堆疊與成績，不是 3D 截圖。</p>}{done&&light&&s.game==='chair'&&<p>輕量成果卡只記錄本局總計，沒有保存逐波路線。</p>}{done&&notice&&<p role="status">{notice}</p>}</div>}
+        </div>}
       </div>
-      {(error||!ready)&&<div className="pt-panel" role={error?'alert':'status'}><span className="pt-panel-symbol" aria-hidden="true">✳</span><h2>{error?'場景先休息一下。':'正在搭建你的迷你世界…'}</h2><p>{error||'角色和道具就快到齊了。'}</p><button onClick={chooseLight}>改用輕量玩法</button>{error&&<button onClick={retryStage}>重建 3D 場景</button>}<button className="fw-arcade-secondary" onClick={onBack}>先回遊戲大廳</button></div>}
-      {ready&&!error&&!playing&&<div className="pt-panel" aria-label={done?'本局完成':s.status==='paused'?'遊戲暫停':'開玩說明'}><span className="pt-panel-symbol" aria-hidden="true">{done?'✦':s.status==='paused'?'Ⅱ':'↗'}</span><div><p className="pt-kicker">{done?'本局完成':s.status==='paused'?'休息一下再出發':`${spec.duration} · 一看就會玩`}</p><h2>{done?summary.caption:s.status==='paused'?'這局幫你留著。':game==='chair'?'會議可以等，下班不能。':game==='tofu'?'手要穩，豆腐要嫩。':'把假日，好好搶回來。'}</h2><p>{done?summary.details:s.status==='paused'?notice:spec.rule}</p></div><button onClick={done?result:begin}>{done?'查看這局成果':s.status==='paused'?'繼續這一局':'開始派對！'}<span aria-hidden="true"> ↗</span></button></div>}
-      <p className="pt-feedback" role="status">{playing&&s.elapsed-s.feedbackAt<1100?s.feedback:playing?'放輕鬆，這局只管好玩。':notice||'每個小小失誤，都有它的喜感。'}</p>
-      {(!light||s.game!=='holiday')&&<div className="pt-controls" aria-label="遊戲操作">
-        {s.game==='chair'?<><button disabled={!playing||!!error} aria-label="往左換路" {...controlHandlers(0,{kind:'lane',direction:-1})}>← <span>往左</span></button><button className="pt-primary-control" disabled={!playing||!!error} {...controlHandlers(1,{kind:'jump'})}>跳一下！ <span aria-hidden="true">↑</span></button><button disabled={!playing||!!error} aria-label="往右換路" {...controlHandlers(2,{kind:'lane',direction:1})}><span>往右</span> →</button></>:s.game==='tofu'?<button className="pt-drop pt-primary-control" disabled={!playing||!!error||!!s.fall} {...controlHandlers(3,{kind:'drop'})}>{s.fall?'豆腐降落中…':'豆腐落下！'} <span aria-hidden="true">↓</span></button>:holeControls()}
-      </div>}
-      <div className="pt-tools"><button className="fw-arcade-secondary" disabled={!playing} onClick={()=>pauseRun()}>暫停 <span aria-hidden="true">Ⅱ</span></button><button ref={restartButton} className="fw-arcade-secondary" onClick={()=>{pauseRun();setRestart(true);}}>重新開始</button><button className="fw-arcade-secondary" aria-pressed={sound} onClick={()=>{soundRef.current=!sound;setSound(!sound);if(!sound)soundEffect(true);}}>音效{sound?'開':'關'}</button><button className="fw-arcade-secondary" aria-pressed={!motion} onClick={()=>{motionRef.current=!motion;setMotion(!motion);safeDraw();}}>減少動態{motion?'關':'開'}</button>{light&&<button className="fw-arcade-secondary" onClick={retryStage}>重試 3D，保留這局</button>}{light&&done&&<a className="pt-download" download={`${s.game}-${s.seed}.svg`} href={partyResultImage(s)}>下載本局成果 SVG</a>}</div>
-      {restart&&<div className="pt-restart" role="group" aria-label="確認重新開始"><p>這局會從零開始，題目不變。</p><button ref={confirmRestart} onClick={reset}>確定重來</button><button className="fw-arcade-secondary" onClick={keepRun}>保留這局</button></div>}
-    </div><aside className="pt-rule-card"><span className="pt-rule-number">0{PARTY_GAMES.findIndex(g=>g.id===game)+1}</span><p className="pt-kicker">這局怎麼玩</p><h2>{game==='chair'?'勇敢下班。':game==='tofu'?'嫩中求穩。':'拒絕加班。'}</h2><p>{spec.rule}</p><div className="pt-rule-hint"><span aria-hidden="true">⌨</span><p>{spec.keys}</p></div><p>{game==='chair'?'手機：左右滑換路，輕點跳躍。會議桌要躲開，矮推車可以跳過。':game==='tofu'?'一層比一層窄也沒關係。完美貼齊會連擊，三次失手就下課。':'戴葉子的笑臉是休假；戴帽子、領帶的是開會。文字按鈕也能玩。'}</p><div className="pt-seed">同題 #{seed}<small>朋友打開分享連結，挑戰相同題目。</small></div><small>短局遊戲：重新整理或離頁會重新開始。這裡的分數不計入平台貢獻。</small></aside></div>
-  </section>;
+      <div className="pt-holiday-tools-viewport" inert={modal}><div className="pt-tools" aria-label="遊戲工具"><button className="fw-arcade-secondary" disabled={!playing} onClick={()=>pauseRun()}>暫停 <span aria-hidden="true">Ⅱ</span></button><button ref={restartButton} className="fw-arcade-secondary" onClick={()=>{pauseRun();setRestart(true);}}>重新開始</button><button ref={helpButton} className="fw-arcade-secondary" onClick={()=>{pauseRun('看完玩法後，按繼續回到這一局。');setHelp(true);}}>玩法與設定</button><button className="fw-arcade-secondary" aria-pressed={sound} onClick={()=>{soundRef.current=!sound;setSound(!sound);if(!sound)soundEffect(true);}}>音效{sound?'開':'關'}</button><button className="fw-arcade-secondary" aria-pressed={!motion} onClick={()=>{motionRef.current=!motion;setMotion(!motion);safeDraw();}}>減少動態{motion?'關':'開'}</button>{light&&<button className="fw-arcade-secondary" onClick={retryStage}>重試 3D，保留這局</button>}</div></div>
+    </section>;
+  }
 }

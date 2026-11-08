@@ -160,3 +160,55 @@ test('guided kitchen retains its JavaScript-only component bundle boundary',()=>
   const bundle=buildSync({entryPoints:['apps/portal-web/src/games/cooking/CookingGame.tsx'],bundle:true,write:false,platform:'browser',format:'iife'});
   assert.equal(bundle.outputFiles.length,1);assert.ok(bundle.outputFiles[0].contents.length>0);
 });
+
+test('only explicit mushroom slice guides move, with independent coordinates and unchanged cut scoring',()=>{
+ for(const recipe of RECIPES)for(let index=0;index<recipe.steps.length;index++){
+  const step=recipe.steps[index],mushroom=step.kind==='slice'&&step.ingredient==='蘑菇'&&step.shape==='dough';
+  let run=domain.actCooking({...domain.newCookingRun(recipe,42,'mushroom-scale'),step:index},{kind:'start',step:index},1000);
+  for(let count=0;count<step.goal;count++){
+   const expected=mushroom?.30+.40*(count+1)/(step.goal+1):.22+.56*(count+1)/(step.goal+1);
+   assert.equal(domain.cutGuide({...run,active:{...run.active,count}}),expected,`${recipe.id}/${index}/${count}`);
+   if(mushroom){
+    const now=1500+count*500;
+    const missed=domain.actCooking(run,{kind:'cut',step:index,x1:0,y1:.23,x2:0,y2:.78},now);assert.equal(missed.active.count,count);
+    run=domain.actCooking(run,{kind:'cut',step:index,x1:expected,y1:.23,x2:expected,y2:.78},now);assert.equal(run.active.count,count+1);
+   }
+  }
+  if(mushroom){assert.equal(run.status,'step-result');assert.equal(run.reports.length,1);assert.equal(run.reports[0].score,100);assert.equal(run.active.mistakes,0);}
+ }
+});
+
+
+test('lightweight mushroom glyph bounds remain separate and each real guide intersects its own whole polygon',()=>{
+ const render=svgScene(),contains=(points:readonly (readonly number[])[],x:number,y:number)=>{
+  let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){
+   const a=points[i],b=points[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+  }return inside;
+ };
+ for(const recipe of RECIPES)for(let stepIndex=0;stepIndex<recipe.steps.length;stepIndex++){
+  const step=recipe.steps[stepIndex],visual=ingredientVisual(step.ingredient,step.shape);if(step.kind!=='slice'||!visual)continue;
+  const run={...domain.newCookingRun(recipe,42,'svg-mushroom-guides'),step:stepIndex,status:'playing' as const};
+  for(let count=0;count<=step.goal;count++){
+   const html=render({...run,active:{...run.active,count}});
+   const groups=[...html.matchAll(/<g transform="translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\) scale\(([-\d.]+)\)" data-ingredient="([^"]+)" data-preparation="(whole|cut)"/g)];
+   if(!visual.cutLayers)continue;
+   assert.equal(groups.length,Math.min(step.goal,8));
+   type GlyphBox={minX:number;maxX:number;minY:number;maxY:number};
+   const boxes:GlyphBox[]=groups.map((g,i):GlyphBox=>{
+    const [x,y,angle,scale]=g.slice(1,5).map(Number);const mushroom:boolean=visual.id==='mushroom';
+    assert.equal(x,mushroom?(.30+.40*(i+1)/(step.goal+1))*800:235+i*330/(step.goal-1));
+    assert.equal(scale,i<count?42/70:(mushroom?Math.min(65,(320/(step.goal+1)-4)*70/52):65)/70);
+    const radians=angle*Math.PI/180;const points:number[][]=ingredientLayers(visual,i<count).flatMap(l=>l.points.map(([px,py])=>[x+26*scale*(px*Math.cos(radians)-py*Math.sin(radians)),y+26*scale*(px*Math.sin(radians)+py*Math.cos(radians))]));
+    const box={minX:Math.min(...points.map(p=>p[0])),maxX:Math.max(...points.map(p=>p[0])),minY:Math.min(...points.map(p=>p[1])),maxY:Math.max(...points.map(p=>p[1]))};
+    if(mushroom){
+     assert.ok(box.minX>=240&&box.maxX<=560,'all actual polygon vertices stay within the new span');
+     if(i>=count){assert.equal(angle,0);assert.equal(y,276);assert.ok(contains(ingredientLayers(visual)[0].points,0,0),'guide at the glyph centre intersects filled whole food, not air');}
+    }
+    return box;
+   });
+   if(visual.id==='mushroom')for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
+    const a=boxes[i],b=boxes[j];assert.ok(b.minX-a.maxX>=4||b.minY-a.maxY>=4||a.minY-b.maxY>=4,'whole and cut glyphs leave an independently measured visible gap');
+   }
+  }
+ }
+});

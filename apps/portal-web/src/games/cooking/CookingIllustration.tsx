@@ -1,8 +1,8 @@
 import type { PointerEventHandler } from 'react';
 import type { Shape } from './catalog';
-import {ingredientVisual,ingredientLayers,ingredientPolygonPoints} from './ingredient-visuals';
+import {ingredientVisual,ingredientLayers,ingredientPolygonPoints,preparationSpan} from './ingredient-visuals';
 import {cookingCue} from './cues';
-import { cookingProgress, currentStep, cutGuide, plateTarget, type CookingRun } from './domain';
+import { cookingProgress, currentStep, cutGuide, cutGuideAt, plateTarget, type CookingRun } from './domain';
 
 const colors:Record<Shape,string>={greens:'#88a96d',carrot:'#e9a14d',meat:'#c97b67',rice:'#f5deb1',dough:'#efca8d',noodle:'#e3b469',egg:'#f1c15d',fruit:'#d87564',cream:'#f7e9ce',chocolate:'#9a6850',fish:'#e4a28b'};
 function Ingredient({shape,ingredient,x,y,size=70,angle=0,cut=false}:{shape:Shape;ingredient:string;x:number;y:number;size?:number;angle?:number;cut?:boolean}) {
@@ -28,12 +28,17 @@ function Ingredient({shape,ingredient,x,y,size=70,angle=0,cut=false}:{shape:Shap
 export function CookingScene({run,point,onPointerDown,onPointerMove,onPointerUp,onPointerCancel}:{run:CookingRun;point:{x:number;y:number}|null;onPointerDown:PointerEventHandler<SVGSVGElement>;onPointerMove:PointerEventHandler<SVGSVGElement>;onPointerUp:PointerEventHandler<SVGSVGElement>;onPointerCancel:PointerEventHandler<SVGSVGElement>}) {
   const cue=cookingCue(run),s=currentStep(run),a=run.active,p=cookingProgress(run),hold=a.holdAt===null?0:Math.min(1.7,(run.elapsed-a.holdAt)/s.holdMs),target=plateTarget(run);
   const glyphs=Array.from({length:Math.min(s.goal,8)},(_,i)=>i);
+  // Lightweight fallback remains separate whole/cut illustrations, not the
+  // native continuous mesh. Centre each mushroom under its real guide and
+  // reserve a gap between neighbours inside the narrower preparation span.
+  const mushroom=s.kind==='slice'&&ingredientVisual(s.ingredient,s.shape)?.id==='mushroom';
+  const wholeSize=mushroom?Math.min(65,(800*preparationSpan('mushroom')/(s.goal+1)-4)*70/52):65;
   return <svg className={`ck-scene ck-scene-${s.kind}`} viewBox="0 0 800 560" role="img" aria-label={`${s.title}操作區`} data-cooking-scene={s.kind} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onLostPointerCapture={onPointerCancel}>
     <rect width="800" height="560" fill="#efe2ca"/>
     <path d="M0 510H800M0 38H800" stroke="#d9c5a8" strokeWidth="2"/>
     {s.kind==='slice'?<>
       <rect x="119" y="111" width="560" height="328" rx="41" fill="#d9ae76" stroke="#88603f" strokeWidth="3"/><rect x="140" y="131" width="518" height="287" rx="30" fill="#e9c693" stroke="#bb8c56" strokeWidth="2"/>
-      {glyphs.map(i=><Ingredient key={i} shape={s.shape} ingredient={s.ingredient} x={235+i*330/(s.goal-1)} y={i<a.count?346:276} size={i<a.count?42:65} angle={i<a.count?i*24-40:0} cut={i<a.count}/>)}
+      {glyphs.map(i=><Ingredient key={i} shape={s.shape} ingredient={s.ingredient} x={mushroom?cutGuideAt(s,i)*800:235+i*330/(s.goal-1)} y={i<a.count?346:276} size={i<a.count?42:wholeSize} angle={i<a.count?i*24-40:0} cut={i<a.count}/>)}
       {run.status==='playing'&&<path d={`M${cutGuide(run)*800} 175V364`} stroke="#9c4d36" strokeWidth="4" strokeDasharray="12 9"/>}
       <g transform={`translate(${point?point.x*800:cutGuide(run)*800+55} ${point?point.y*560:130}) rotate(-15)`}><path d="M-18-12H15V70Q-3 94-18 73Z" fill="#e6e5d5" stroke="#73513b" strokeWidth="3"/><rect x="-14" y="-77" width="25" height="66" rx="8" fill="#9e6a4d" stroke="#73513b" strokeWidth="3"/></g>
     </>:s.kind==='mix'?<>

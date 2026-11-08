@@ -65,13 +65,16 @@
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-confirm button{display:block;width:100%;margin:8px 0;white-space:normal}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive[data-market-status=ready] .mk-hud{display:flex}
 /* Keep fire, the primary gesture equivalent and serving available while browsing
-   any palette. Only the secondary palette scrolls; it never overlays the food. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(44px,1fr) auto auto;gap:3px;overflow:hidden}
+   any palette. Max-content action rows cannot compress a scrollable heat/palette
+   row below its buttons. Only the secondary palette scrolls vertically; it never
+   overlays the food. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:max-content minmax(44px,1fr) max-content max-content;gap:3px;overflow:hidden}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-scroll{height:clamp(44px,12dvh,120px);min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;scroll-padding:4px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch{margin:0}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch button{padding:5px 8px;white-space:nowrap}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-primary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;min-width:0}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-primary button{min-width:44px;white-space:normal;overflow-wrap:anywhere;margin:0;padding:6px}
+/* This shared row spacing must also override the older .mk-immersive .mk-serve rule. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-primary button{min-width:44px;white-space:normal;overflow-wrap:anywhere;margin:0;padding:6px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span:last-child{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-live-score{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive[data-market-status=ready] .mk-tray{display:grid}
@@ -108,7 +111,9 @@
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-workbench{grid-column:1/-1;grid-row:2}
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-scroll{height:auto}
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market>.fw-arcade-result{grid-column:1/-1;grid-row:2}
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-play-space{grid-template-columns:minmax(0,1fr) minmax(240px,30%);grid-template-rows:auto minmax(44px,1fr)}
+ /* Keep the ordinary 240px dock, but let its minimum grow with enlarged text.
+    Otherwise the compact Serve label wraps and steals height from the heat row. */
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-play-space{grid-template-columns:minmax(0,1fr) minmax(max(240px,9em),30%);grid-template-rows:auto minmax(44px,1fr)}
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{grid-column:1/-1}
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{grid-column:2;grid-row:2;border-top:0;border-left:2px solid #7f634d}
 }

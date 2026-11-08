@@ -1,3 +1,4 @@
+import {cutGuideAt} from '../../apps/portal-web/src/games/cooking/domain.js';
 import {withBoundedCpuProfile} from './helpers/bounded-cpu-profile.js';
 import {readFileSync} from 'node:fs';
 import sharp from 'sharp';
@@ -437,7 +438,7 @@ test('PT-4: tofu uses actual moving-block timing, rejects an in-flight second dr
     let aligned=false;for(let t=0;t<180;t++){const offset=Math.abs(Number(await page.locator('.pt-canvas').getAttribute('data-tofu-offset')));if(offset<.105){aligned=true;break;}await page.clock.runFor(offset>.7?90:10);}expect(aligned).toBe(true);
     const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer===0)await page.locator('.pt-canvas').press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.locator('.pt-canvas').press('Space');await page.clock.runFor(510);
   }
-  await expect(page.locator('.pt-scoreboard')).toContainText('12 / 12');expect(await partyResult(page,'tofu')).toBe(2925);
+  await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 12 / 12 層，"]')).toBeVisible();expect(await partyResult(page,'tofu')).toBe(2925);
 });
 
 test('PT-5/7: holiday raycasts a real 3D character, accepts keyboard targets, and carries the result to confirmed site sharing',async({page})=>{
@@ -547,7 +548,7 @@ test('PT-action-light: tofu uses the actual RAF clock, twelve timed drops, one l
     while(model.fall)await frame();
     // Let the bounded 30fps presentation publish the real landing. The model
     // keeps advancing with the same frame timestamps, never a timeout/retry.
-    if(model.status==='playing'){await frame();await frame();}await assertProjection();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));await expect(page.locator('.pt-scoreboard')).toContainText(`${layer+1} / 12`);
+    if(model.status==='playing'){await frame();await frame();}await assertProjection();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));await expect(page.locator(`.pt-scoreboard strong[aria-label^="完成 ${layer+1} / 12 層，"]`)).toBeVisible();
   }
   await probe.evaluate(r=>cancelAnimationFrame(r.frame));await probe.dispose();expect(model.score).toBe(2925);await expect(page.locator('[data-tofu-layer]')).toHaveCount(13);
   const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).click();const svg=readFileSync((await(await download).path())!,'utf8');expect(svg).toContain('2925 分');expect(svg).toContain('疊了 12 層');expect((svg.match(/<polygon /g)??[]).length).toBe(39);expect(await partyResult(page,'tofu')).toBe(2925);
@@ -1200,7 +1201,7 @@ async function playRecipe(page:Page,recipe:Recipe){
   for(let index=0;index<recipe.steps.length;index++){
     const s=recipe.steps[index];await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);
     if(['knead','pan','boil','bake','pour'].includes(s.kind)){await expect(page.getByRole('meter')).toBeVisible();await expect(page.getByRole('meter')).toHaveAttribute('aria-valuetext',/目標/);}
-    if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);const x=.22+.56*(i+1)/(s.goal+1),from=await scenePoint(page,x,.23),to=await scenePoint(page,x,.78);await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:5});await page.mouse.up();}
+    if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);const x=cutGuideAt(s,i),from=await scenePoint(page,x,.23),to=await scenePoint(page,x,.78);await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:5});await page.mouse.up();}
     if(s.kind==='mix'){const first=await scenePoint(page,.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16,p=await scenePoint(page,.5+.3*Math.cos(angle),.52+.3*Math.sin(angle));await page.mouse.move(p.x,p.y);}await page.mouse.up();}
     if(s.kind==='knead')for(let i=0;i<s.goal;i++){await page.locator('.ck-game').focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs);await page.keyboard.up('Space');await page.clock.runFor(160);}
     if(s.kind==='pan'||s.kind==='boil'||s.kind==='bake'){const slider=page.getByRole('slider'),box=await slider.boundingBox();await slider.click({position:{x:8+(box!.width-16)*s.heat/100,y:box!.height/2}});
@@ -1355,8 +1356,23 @@ async function marketSceneBounds(page:Page,fullscreen=true){
  expect(paletteContrast).toHaveLength(3);
  for(const palette of paletteContrast){expect(palette.opaque,JSON.stringify(palette)).toBe(true);expect(palette.contrast,JSON.stringify(palette)).toBeGreaterThanOrEqual(4.5);}
  for(const control of await root.locator('.mk-heading button,.mk-primary button,.mk-heat button,.fullscreen-game__bar button').all()){
-  const metrics=await control.evaluate(el=>{const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2),root=el.closest('.fullscreen-game')!,r=root.getBoundingClientRect(),style=getComputedStyle(root),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;let contained=b.x>=Math.max(-1,r.left+safe('left')-1)&&b.y>=Math.max(-1,r.top+safe('top')-1)&&b.right<=Math.min(innerWidth+1,r.right-safe('right')+1)&&b.bottom<=Math.min(innerHeight+1,r.bottom-safe('bottom')+1);for(let p=el.parentElement;p;p=p.parentElement){const style=getComputedStyle(p),r=p.getBoundingClientRect();if(style.display==='contents')continue;if(/hidden|auto|scroll|clip/.test(style.overflowX))contained&&=b.left>=r.left-1&&b.right<=r.right+1;if(/hidden|auto|scroll|clip/.test(style.overflowY))contained&&=b.top>=r.top-1&&b.bottom<=r.bottom+1;}return {width:b.width,height:b.height,contained,hit:hit===el||el.contains(hit)};});
-  expect(metrics.width).toBeGreaterThanOrEqual(44);expect(metrics.height).toBeGreaterThanOrEqual(44);expect(metrics.contained).toBe(true);expect(metrics.hit).toBe(true);
+  const metrics=await control.evaluate(el=>{
+   const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2),root=el.closest('.fullscreen-game')!,r=root.getBoundingClientRect(),style=getComputedStyle(root),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;
+   const name=(node:Element)=>node.getAttribute('aria-label')||node.textContent?.trim()||node.tagName;
+   const viewportContained=b.x>=Math.max(-1,r.left+safe('left')-1)&&b.y>=Math.max(-1,r.top+safe('top')-1)&&b.right<=Math.min(innerWidth+1,r.right-safe('right')+1)&&b.bottom<=Math.min(innerHeight+1,r.bottom-safe('bottom')+1);
+   const clippingAncestors=[];let contained=viewportContained;
+   for(let p=el.parentElement;p;p=p.parentElement){
+    const style=getComputedStyle(p),r=p.getBoundingClientRect();if(style.display==='contents')continue;
+    const clipX=/hidden|auto|scroll|clip/.test(style.overflowX),clipY=/hidden|auto|scroll|clip/.test(style.overflowY);
+    const withinX=!clipX||(b.left>=r.left-1&&b.right<=r.right+1),withinY=!clipY||(b.top>=r.top-1&&b.bottom<=r.bottom+1);
+    contained&&=withinX&&withinY;
+    if(clipX||clipY)clippingAncestors.push({tag:p.tagName,className:p.className,rect:r.toJSON(),overflowX:style.overflowX,overflowY:style.overflowY,rows:style.gridTemplateRows,withinX,withinY});
+   }
+   const controlStyle=getComputedStyle(el);
+   return {control:name(el),rect:b.toJSON(),rootRect:r.toJSON(),viewport:{width:innerWidth,height:innerHeight},insets:Object.fromEntries(['top','right','bottom','left'].map(side=>[side,safe(side)])),mode:root.matches(':fullscreen')?'native':root.classList.contains('fullscreen-game--viewport')?'viewport':'normal',fontSize:controlStyle.fontSize,lineHeight:controlStyle.lineHeight,viewportContained,clippingAncestors,width:b.width,height:b.height,contained,hit:hit===el||el.contains(hit),hitTarget:hit?{tag:hit.tagName,className:hit.getAttribute('class'),name:name(hit).slice(0,120)}:null};
+  });
+  const diagnostic=JSON.stringify({expectedMode:fullscreen?'presentation':'normal',...metrics});
+  expect(metrics.width,diagnostic).toBeGreaterThanOrEqual(44);expect(metrics.height,diagnostic).toBeGreaterThanOrEqual(44);expect(metrics.contained,diagnostic).toBe(true);expect(metrics.hit,diagnostic).toBe(true);
  }
 }
 async function marketButton(page:Page,name:string){await marketTime(page,400);const button=page.getByRole('button',{name,exact:true});if(!await button.isVisible())await marketPanel(page,/醬/.test(name)?'sauces':'tools');await button.click();}
@@ -2114,8 +2130,21 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
  await testInfo.attach(`market-${id}-200-percent-paused.png`,{body:await root.screenshot(),contentType:'image/png'});
  await game.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(game).toHaveAttribute('data-market-status','playing');await expect(surface).toBeFocused();
  await root.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(root).not.toHaveClass(/fullscreen-game--viewport/);
- await page.setViewportSize({width:667,height:375});await marketSceneBounds(page,false);await root.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await marketSceneBounds(page);
- await testInfo.attach(`market-${id}-200-percent-landscape.png`,{body:await root.screenshot(),contentType:'image/png'});
+ await page.setViewportSize({width:667,height:375});
+ // Insets were cleared above. This combines 200% text with landscape, not a nonzero-inset stress.
+ await test.step('200% landscape: normal-stage controls remain fully inside their rows',async()=>{
+  await marketSceneBounds(page,false);
+  await marketButton(page,'關');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(0);
+  await marketButton(page,'中');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(2);
+  await testInfo.attach(`market-${id}-200-percent-landscape-normal.png`,{body:await root.screenshot(),contentType:'image/png'});
+ });
+ await root.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+ await test.step('200% landscape: presentation controls remain fully inside their rows',async()=>{
+  await marketSceneBounds(page);
+  await marketButton(page,'關');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(0);
+  await marketButton(page,'中');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(2);
+  await testInfo.attach(`market-${id}-200-percent-landscape.png`,{body:await root.screenshot(),contentType:'image/png'});
+ });
  await expect.poll(()=>surface.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(44);
  await root.getByRole('button',{name:'退出全螢幕',exact:true}).focus();await page.keyboard.press('Escape');
  await expect(root).not.toHaveClass(/fullscreen-game--viewport/);await expect(game).toHaveAttribute('data-market-status','playing');
@@ -2286,4 +2315,484 @@ test('AD-scene light: no WebGL requires explicit fallback, failed capture preser
   await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await page.getByRole('button',{name:'分享成果',exact:true}).click();const share=page.getByRole('region',{name:'分享這局成果',exact:true});await expect(share).toBeFocused();
   expect(await share.evaluate(el=>{const owner=el.closest('.fullscreen-game');return !!owner&&owner.contains(el)&&getComputedStyle(owner).overflowY!=='visible';})).toBe(true);
   await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
+});
+
+// PT-HOLIDAY-SCENE: sustained fullscreen journeys, separate from openParty's
+// intentional exit coverage. Browser execution is required to validate these cases.
+async function openHolidayScene(page:Page,light:boolean,rejected:boolean){
+  if(rejected)await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+  if(light)await blockPartyWebGL(page);
+  await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});await page.goto('/play?game=holiday&seed=42');
+  if(light){await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();}
+  await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');
+  await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));await page.getByRole('button',{name:'開始派對！',exact:true}).click();
+  await holidayFullscreen(page,rejected);
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode',light?'light':'3d');
+  await expect(page.locator('.pt-canvas canvas')).toHaveCount(light?0:1);
+  expect(await page.locator('.pt-hole-controls').evaluate(el=>!el.closest('.pt-canvas')&&!!el.closest('.pt-holiday-stage'))).toBe(true);
+}
+async function holidayFullscreen(page:Page,rejected:boolean){
+  const stage=page.locator('.fullscreen-game--holiday[data-game-stage]');
+  await expect(stage).toHaveAttribute('role','dialog');
+  if(rejected){await expect(stage).toHaveClass(/fullscreen-game--viewport/);expect(await page.evaluate(()=>document.fullscreenElement===null)).toBe(true);}
+  else await expect.poll(()=>stage.evaluate(el=>document.fullscreenElement===el)).toBe(true);
+}
+async function holidayHitPoint(page:Page,hole:number){
+  const canvas=page.locator('.pt-canvas'),box=(await canvas.boundingBox())!;
+  const anchor=JSON.parse((await canvas.getAttribute('data-anchors'))!)[hole];
+  const point={x:box.x+anchor.x*box.width,y:box.y+anchor.y*box.height};
+  expect(await canvas.evaluate((el,p)=>{const hit=document.elementFromPoint(p.x,p.y);return !!hit&&el.contains(hit);},point)).toBe(true);
+  return point;
+}
+async function holidayControlHit(control:ReturnType<Page['locator']>){
+  await control.scrollIntoViewIfNeeded();await expect(control).toBeVisible();
+  const geometry=await control.evaluate(el=>{const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return {width:b.width,height:b.height,inside:b.left>=0&&b.top>=0&&b.right<=innerWidth&&b.bottom<=innerHeight,hit:!!hit&&(el===hit||el.contains(hit))};});
+  expect(geometry.width).toBeGreaterThanOrEqual(44);expect(geometry.height).toBeGreaterThanOrEqual(44);expect(geometry.inside).toBe(true);expect(geometry.hit).toBe(true);
+}
+async function holidayStageBounds(page:Page){
+  const stage=page.locator('.fullscreen-game--holiday[data-game-stage]');
+  const failures=await stage.evaluate(root=>{
+    const outer=root.getBoundingClientRect(),bad:string[]=[];
+    if(outer.left<0||outer.top<0||outer.right>innerWidth+1||outer.bottom>innerHeight+1)bad.push('stage outside viewport');
+    for(const selector of ['.fullscreen-game__bar','.pt-holiday-stage','.pt-scoreboard','.pt-holiday-field','.pt-hole-controls']){
+      const el=root.querySelector<HTMLElement>(selector);if(el&&getComputedStyle(el).display==='contents')continue;if(!el||!el.checkVisibility()){bad.push(`missing:${selector}`);continue;}const b=el.getBoundingClientRect();
+      if(b.left<outer.left-1||b.top<outer.top-1||b.right>outer.right+1||b.bottom>outer.bottom+1)bad.push(selector);
+    }
+    return bad;
+  });expect(failures).toEqual([]);
+  if(await page.locator('.pt-canvas canvas').count()){
+    const box=(await page.locator('.pt-canvas').boundingBox())!;expect(box.width/box.height).toBeCloseTo(4/3,2);
+  }
+}
+for(const light of [false,true])for(const rejected of [false,true])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} twenty waves retain ${rejected?'rejected':'native'} fullscreen through real results and same-seed replay`,async({page})=>{
+  const errors:string[]=[],writes:string[]=[],social:string[]=[];
+  page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')writes.push(r.url());if(/^https:\/\/(x\.com|www\.(threads\.com|facebook\.com|instagram\.com))\//.test(r.url()))social.push(r.url());});
+  await page.setViewportSize({width:390,height:844});await openHolidayScene(page,light,rejected);
+  for(let round=0;round<20;round++){
+    await partyAdvance(page,round*PT.holidayRoundMs+250);const hole=holidayTargets(42,round).good,good=page.locator('.pt-hole-controls button').nth(hole);
+    await expect(good).toHaveAttribute('aria-label',`第 ${hole+1} 格：休假`);
+    if(!light&&round%3===0){const p=await holidayHitPoint(page,hole);await page.mouse.click(p.x,p.y);}
+    else if(round%3===1)await page.locator('.pt-canvas').press(String(hole+1));
+    else {await holidayControlHit(good);if(round%2)await good.press('Enter');else await good.click();}
+    await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(round<10?(round+1)*100+10*(round+1)*(round+2):2100+(round-9)*300));
+    if(!light)await expect(page.locator('.pt-live-label')).toContainText(`已守住 ${round+1} 個假日`);
+    await holidayFullscreen(page,rejected);
+  }
+  await partyAdvance(page,PT.holidayMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await holidayFullscreen(page,rejected);await holidayControlHit(page.getByRole('button',{name:'查看這局成果',exact:true}));
+  if(light){const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).click();const svg=readFileSync((await(await download).path())!,'utf8');expect(svg).toContain('5100 分');expect(svg).toContain('搶救 20 個假日');expect(svg).toContain('同題 #42');}
+  else {
+    // Fail the real canvas export once; no saved-result or scoring injection.
+    await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(...args){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Synthetic holiday capture failure');};});
+    await page.getByRole('button',{name:'查看這局成果',exact:true}).click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','5100');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+  }
+  // Both actual holiday result sources exercise the shared encoder's retries.
+  await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob,failed=new Set<string>();HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const kind=type??'image/png';if(!failed.has(kind)){failed.add(kind);callback(null);return;}return original.call(this,callback,type,quality);};});
+  await page.getByRole('button',{name:'查看這局成果',exact:true}).click();await expect(page.locator('.fw-arcade-result-heading')).toContainText('5100 分');await holidayFullscreen(page,rejected);
+  const pngRetry=page.getByRole('button',{name:'重試產生成果圖',exact:true});await expect(pngRetry).toBeEnabled();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toHaveCount(0);await pngRetry.click();
+  const jpegRetry=page.getByRole('button',{name:'重試準備工坊圖片',exact:true});await expect(jpegRetry).toBeEnabled();await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeDisabled();await jpegRetry.click();await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await holidayFullscreen(page,rejected);
+  const png=page.getByRole('link',{name:'下載完整成果 PNG',exact:true});await expect(png).toBeVisible();const download=page.waitForEvent('download');await png.click();const meta=await sharp((await(await download).path())!).metadata();expect([meta.format,meta.width,meta.height]).toEqual(['png',960,1200]);
+  await page.getByRole('button',{name:'分享成果',exact:true}).click();await expect(page.locator('[data-game-share]')).toBeFocused();await socialEntries(page,'holiday');
+  expect(writes).toEqual([]);expect(social).toEqual([]);expect(await page.evaluate(key=>sessionStorage.getItem(key),GAME_HANDOFF_KEY)).toBeNull();
+  await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');expect(errors).toEqual([]);
+});
+
+for(const light of [false,true])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} input rejects secondary, duplicate, cancelled and stale contacts with honest wrong-cell penalties`,async({page})=>{
+  await openHolidayScene(page,light,true);await partyAdvance(page,250);
+  const cells=page.locator('.pt-hole-controls button'),targets=holidayTargets(42,0),good=cells.nth(targets.good);
+  await good.click({button:'right'});await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');
+  // Synthetic dispatch is narrowly used for browser cancellation/secondary
+  // sequences; successful scoring below always uses ordinary physical inputs.
+  await good.dispatchEvent('pointerdown',{pointerId:71,isPrimary:false,button:0});await good.dispatchEvent('pointerup',{pointerId:71,isPrimary:false,button:0});await good.dispatchEvent('click',{detail:1});
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');
+  await good.dispatchEvent('pointerdown',{pointerId:72,isPrimary:true,button:0});await good.dispatchEvent('pointercancel',{pointerId:72,isPrimary:true});await good.dispatchEvent('pointerup',{pointerId:72,isPrimary:true,button:0});await good.dispatchEvent('click',{detail:1});await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');
+  await good.click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await page.locator('.pt-canvas').press(String(targets.good+1));await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await cells.nth(targets.boss).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','40');const empty=[0,1,2,3,4,5].find(i=>i!==targets.good&&i!==targets.boss)!;await cells.nth(empty).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','25');
+  for(const [index,key] of ['Space','Enter','pointer'].entries()){
+    const round=1+index*2;await partyAdvance(page,round*PT.holidayRoundMs+250);const target=cells.nth(holidayTargets(42,round).good),score=await page.locator('.pt-root').getAttribute('data-party-score');
+    if(key==='pointer'){const b=(await target.boundingBox())!;await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();}else{await target.focus();await page.keyboard.down(key);}
+    await partyAdvance(page,(round+1)*PT.holidayRoundMs+250);if(key==='pointer')await page.mouse.up();else await page.keyboard.up(key);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);
+    await cells.nth(holidayTargets(42,round+1).good).click();await expect(page.locator('.pt-root')).not.toHaveAttribute('data-party-score',score!);
+  }
+  if(!light){
+    await partyAdvance(page,8*PT.holidayRoundMs+250);const p=await holidayHitPoint(page,holidayTargets(42,8).good),score=await page.locator('.pt-root').getAttribute('data-party-score');
+    await page.mouse.move(p.x,p.y);await page.mouse.down();await partyAdvance(page,9*PT.holidayRoundMs+250);await page.mouse.up();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);
+  }
+  await partyAdvance(page,10*PT.holidayRoundMs+250);const assistive=cells.nth(holidayTargets(42,10).good),beforeAT=Number(await page.locator('.pt-root').getAttribute('data-party-score'));
+  // AT activation supplies a detail-zero click without pointer/key down.
+  await assistive.evaluate(button=>(button as HTMLButtonElement).click());await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(beforeAT+120));await expect(assistive).toBeDisabled();await holidayFullscreen(page,true);
+  await partyAdvance(page,11*PT.holidayRoundMs+250);const held=cells.nth(holidayTargets(42,11).good);await held.focus();await page.keyboard.down('Space');
+  const before=await page.locator('.pt-root').getAttribute('data-party-score');await page.getByRole('button',{name:'玩法與設定',exact:true}).click();await page.keyboard.up('Space');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',before!);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'玩法與設定',exact:true})).toBeFocused();await holidayFullscreen(page,true);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',before!);
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await holidayFullscreen(page,true);await page.keyboard.press('Escape');await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',before!);
+});
+
+for(const rejected of [false,true])test(`PT-HOLIDAY-SCENE: genuine context loss, explicit light fallback and native retry retain ${rejected?'rejected':'native'} fullscreen ownership`,async({page})=>{
+  await openHolidayScene(page,false,rejected);await partyAdvance(page,250);await page.locator('.pt-canvas').press(String(holidayTargets(42,0).good+1));
+  const lost=await page.locator('.pt-canvas canvas').evaluate(c=>{const ext=(c as HTMLCanvasElement).getContext('webgl2')?.getExtension('WEBGL_lose_context');ext?.loseContext();return !!ext;});expect(lost).toBe(true);
+  await expect(page.getByRole('alert')).toContainText('本局已暫停');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const at=await partyElapsed(page);await holidayFullscreen(page,rejected);
+  await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await expect(page.locator('.pt-light-grid button')).toHaveCount(6);await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+  await page.getByRole('button',{name:'重試 3D，保留這局',exact:true}).click();await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');await expect(page.locator('.pt-canvas canvas')).toHaveCount(1);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');expect(await partyElapsed(page)).toBe(at);await holidayFullscreen(page,rejected);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await partyAdvance(page,PT.holidayRoundMs+250);const p=await holidayHitPoint(page,holidayTargets(42,1).good);await page.mouse.click(p.x,p.y);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','260');
+});
+
+async function holidayModalTextScale(page:Page,factor:number){
+  const measurements=await page.locator('.pt-holiday-modal').evaluate((dialog,scale)=>{
+    const nodes=[dialog,...dialog.querySelectorAll('*')].filter((node):node is HTMLElement=>node instanceof HTMLElement);
+    const before=nodes.map(node=>({node,font:parseFloat(getComputedStyle(node).fontSize),line:parseFloat(getComputedStyle(node).lineHeight)}));
+    for(const {node,font,line} of before){node.style.fontSize=`${font*scale}px`;if(Number.isFinite(line))node.style.lineHeight=`${line*scale}px`;}
+    return before.map(({node,font,line})=>({font,actualFont:parseFloat(getComputedStyle(node).fontSize),line,actualLine:parseFloat(getComputedStyle(node).lineHeight)}));
+  },factor);
+  expect(measurements.length).toBeGreaterThan(3);for(const m of measurements){expect(m.actualFont).toBeCloseTo(m.font*factor,2);if(Number.isFinite(m.line))expect(m.actualLine).toBeCloseTo(m.line*factor,2);}
+}
+
+for(const light of [false,true])for(const rejected of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const scale of [1,1.25,2])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} ${rejected?'rejected':'native'} fullscreen ${viewport.width}x${viewport.height} ${scale*100}% text keeps safe bounds, true targets and modal Tab access`,async({page})=>{
+  await page.setViewportSize(viewport);await openHolidayScene(page,light,rejected);
+  const stage=page.locator('.fullscreen-game--holiday[data-game-stage]');
+  await stage.evaluate((root,factor)=>{
+    const el=root as HTMLElement;for(const [side,value] of Object.entries({top:12,right:16,bottom:18,left:14}))el.style.setProperty(`--holiday-safe-${side}`,`${value}px`);
+    // Text-only enlargement, not a claim that browser page zoom was automated.
+    const styles=[root,...root.querySelectorAll('*')].filter((n):n is HTMLElement=>n instanceof HTMLElement).map(n=>({n,font:parseFloat(getComputedStyle(n).fontSize),line:parseFloat(getComputedStyle(n).lineHeight)}));
+    for(const {n,font,line} of styles){n.style.fontSize=`${font*factor}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*factor}px`;}
+  },scale);
+  await partyAdvance(page,250);await holidayStageBounds(page);
+  expect(await stage.evaluate(root=>{const style=getComputedStyle(root);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([12,16,18,14]);
+  const cells=page.locator('.pt-hole-controls button');for(let i=0;i<6;i++)await holidayControlHit(cells.nth(i));
+  // Reverse traversal catches controls stranded before a centered scroll origin.
+  await cells.last().focus();await holidayControlHit(cells.last());await cells.first().focus();await holidayControlHit(cells.first());await expect(cells.first()).toBeFocused();
+  const good=cells.nth(holidayTargets(42,0).good);await good.click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  if(!light){await partyAdvance(page,PT.holidayRoundMs+250);const p=await holidayHitPoint(page,holidayTargets(42,1).good);await page.mouse.click(p.x,p.y);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','260');}
+  const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();
+  const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);
+  const modal=page.locator('.pt-holiday-overlay').filter({has:close});await expect(modal).toBeVisible();
+  const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+  for(let i=0;i<12;i++){await page.keyboard.press(i<6?'Tab':'Shift+Tab');expect(await modal.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+  await close.click();await expect(help).toBeFocused();await holidayFullscreen(page,rejected);
+  const sound=page.getByRole('button',{name:'音效關',exact:true});await holidayControlHit(sound);await sound.click();await expect(page.getByRole('button',{name:'音效開',exact:true})).toHaveAttribute('aria-pressed','true');
+  const motion=page.getByRole('button',{name:'減少動態關',exact:true});await holidayControlHit(motion);await motion.click();await expect(page.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
+  const restart=page.getByRole('button',{name:'重新開始',exact:true});await holidayControlHit(restart);await restart.click();await holidayModalTextScale(page,scale);const group=page.getByRole('group',{name:'確認重新開始'});await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();
+  for(let i=0;i<4;i++){await page.keyboard.press('Tab');expect(await group.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+  await page.keyboard.press('Escape');await expect(restart).toBeFocused();await holidayFullscreen(page,rejected);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await holidayStageBounds(page);
+  await page.locator('.pt-canvas').focus();
+  for(let i=0;i<16;i++){await page.keyboard.press('Tab');expect(await stage.evaluate(el=>el.contains(document.activeElement)&&!document.activeElement?.closest('[inert]'))).toBe(true);}
+});
+
+for(const rejected of [false,true])test(`PT-HOLIDAY-SCENE: explicit light selection rejects a late native module in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+  if(rejected)await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+  const now=new Date('2026-10-25T00:00:00Z');await page.clock.install({time:now});await page.clock.pauseAt(new Date(now.getTime()+60_000));
+  let capture!:(route:Route)=>void;const requested=new Promise<Route>(resolve=>{capture=resolve;});
+  await page.route(/\/assets\/stage-(?!batch-)[^/]+\.js(?:\?.*)?$/,route=>{capture(route);});
+  await page.goto('/play?game=holiday&seed=42',{waitUntil:'domcontentloaded'});const route=await requested,response=await route.fetch(),url=route.request().url();
+  await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','loading');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
+  await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await page.getByRole('button',{name:'開始派對！',exact:true}).click();await holidayFullscreen(page,rejected);
+  await partyAdvance(page,250);await page.locator('.pt-hole-controls button').nth(holidayTargets(42,0).good).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await route.fulfill({response});await page.evaluate(async moduleUrl=>{await import(moduleUrl);},url);
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);await holidayFullscreen(page,rejected);
+  await partyAdvance(page,PT.holidayRoundMs+250);await page.locator('.pt-canvas').press(String(holidayTargets(42,1).good+1));await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','260');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
+});
+
+// PT-CHAIR-SCENE: keep fullscreen for the entire journey. openParty and
+// openLightAction deliberately exit after Start and do not prove this contract.
+async function chairFullscreen(page:Page,rejected:boolean){
+  const stage=page.locator('.fullscreen-game--chair[data-game-stage]');
+  await expect(stage).toHaveAttribute('role','dialog');
+  if(rejected){await expect(stage).toHaveClass(/fullscreen-game--viewport/);expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();}
+  else await expect.poll(()=>stage.evaluate(el=>document.fullscreenElement===el)).toBe(true);
+}
+async function openChairScene(page:Page,light:boolean,rejected:boolean){
+  if(rejected)await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+  if(light)await blockPartyWebGL(page);
+  await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});await page.goto('/play?game=chair&seed=42');
+  if(light){await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();}
+  await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');
+  await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));await page.getByRole('button',{name:'開始派對！',exact:true}).click();
+  await chairFullscreen(page,rejected);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode',light?'light':'3d');
+  await expect(page.locator('.pt-canvas canvas')).toHaveCount(light?0:1);
+  if(!light)expect(Number(await page.locator('.pt-canvas').getAttribute('data-render-triangles'))).toBeGreaterThan(0);
+  expect(await page.locator('.pt-chair-controls').evaluate(el=>!el.closest('.pt-canvas')&&!!el.closest('.pt-chair-stage'))).toBe(true);
+}
+async function chairLane(page:Page,target:number,method:'pointer'|'keyboard'|'assistive'='keyboard'){
+  const host=page.locator('.pt-canvas');let lane=Number(await host.getAttribute('data-lane'));
+  while(lane!==target){
+    const direction=lane<target?1:-1,button=page.getByRole('button',{name:direction===1?'往右換路':'往左換路',exact:true});
+    if(method==='pointer')await button.click();else if(method==='assistive')await button.evaluate(el=>(el as HTMLButtonElement).click());else await host.press(direction===1?'ArrowRight':'ArrowLeft');
+    lane+=direction;await expect(host).toHaveAttribute('data-lane',String(lane));await partyAdvance(page,await partyElapsed(page)+160);
+  }
+}
+async function chairStageBounds(page:Page){
+  const stage=page.locator('.fullscreen-game--chair[data-game-stage]');
+  expect(await stage.evaluate(root=>{
+    const outer=root.getBoundingClientRect(),bad:string[]=[];
+    if(outer.left<0||outer.top<0||outer.right>innerWidth+1||outer.bottom>innerHeight+1)bad.push('owner');
+    for(const selector of ['.fullscreen-game__bar','.pt-chair-stage','.pt-scoreboard','.pt-holiday-field','.pt-chair-controls']){
+      const el=root.querySelector<HTMLElement>(selector);if(el&&getComputedStyle(el).display==='contents')continue;if(!el||!el.checkVisibility()){bad.push(`missing:${selector}`);continue;}const b=el.getBoundingClientRect();
+      if(b.left<outer.left-1||b.top<outer.top-1||b.right>outer.right+1||b.bottom>outer.bottom+1)bad.push(selector);
+    }return bad;
+  })).toEqual([]);
+  const box=await page.locator('.pt-canvas').boundingBox(),diagnostic=`Chair world actual rect: ${JSON.stringify(box)}`;
+  expect(box,diagnostic).not.toBeNull();
+  // A 4:3 sliver is not a usable world. This floor prevents near-disappearance,
+  // but does not establish art quality or human playability acceptance.
+  expect(box!.width,`${diagnostic}; minimum width is 128 CSS px`).toBeGreaterThanOrEqual(128);
+  expect(box!.height,`${diagnostic}; minimum height is 96 CSS px`).toBeGreaterThanOrEqual(96);
+  expect(box!.width/box!.height,`${diagnostic}; world must remain 4:3`).toBeCloseTo(4/3,2);
+}
+for(const light of [false,true])for(const rejected of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} complete thirty seconds in ${rejected?'rejected':'native'} fullscreen, retry real capture and replay same seed`,async({page})=>{
+  const errors:string[]=[],writes:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')writes.push(r.url());});
+  await page.setViewportSize({width:390,height:844});await openChairScene(page,light,rejected);
+  for(let index=0;index<PT.chairWaves;index++){
+    const wave=chairWave(42,index);await chairLane(page,wave.ticketLane,index%3===0?'pointer':index%3===1?'keyboard':'assistive');await partyAdvance(page,wave.at+20);
+    await chairFullscreen(page,rejected);
+    if(light)await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x',String(wave.ticketLane));
+  }
+  await partyAdvance(page,PT.chairMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','4280');expect(await partyElapsed(page)).toBe(30000);
+  const result=page.getByRole('button',{name:'查看這局成果',exact:true});await holidayControlHit(result);await chairFullscreen(page,rejected);
+  if(light){const downloading=page.waitForEvent('download');const svgLink=page.getByRole('link',{name:'下載本局成果 SVG',exact:true});await holidayControlHit(svgLink);await svgLink.click();const svg=readFileSync((await(await downloading).path())!,'utf8');for(const text of ['4280 分','22 張假日票','剩餘 3 顆心','同題 #42'])expect(svg).toContain(text);}
+  else{
+    await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(...args){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Synthetic chair capture failure');};});
+    await result.click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','4280');
+  }
+  await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob,failed=new Set<string>();HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const kind=type??'image/png';if(!failed.has(kind)){failed.add(kind);callback(null);return;}return original.call(this,callback,type,quality);};});
+  await result.click();await expect(page.locator('.fw-arcade-result-heading')).toContainText('4280 分');await chairFullscreen(page,rejected);
+  await page.getByRole('button',{name:'重試產生成果圖',exact:true}).click();const jpegRetry=page.getByRole('button',{name:'重試準備工坊圖片',exact:true});await expect(jpegRetry).toBeEnabled();await jpegRetry.click();await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
+  const png=page.getByRole('link',{name:'下載完整成果 PNG',exact:true});await holidayControlHit(png);const downloading=page.waitForEvent('download');await png.click();const meta=await sharp((await(await downloading).path())!).metadata();expect([meta.format,meta.width,meta.height]).toEqual(['png',960,1200]);
+  await page.getByRole('button',{name:'分享成果',exact:true}).click();await expect(page.locator('[data-game-share]')).toBeFocused();await socialEntries(page,'chair');
+  const replay=page.getByRole('button',{name:'同一題再來一次',exact:true});await holidayControlHit(replay);await replay.press('Enter');expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');expect(writes).toEqual([]);expect(errors).toEqual([]);
+});
+
+for(const light of [false,true])for(const rejected of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} three actual collisions end once in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+  await openChairScene(page,light,rejected);
+  for(let index=0;index<3;index++){const wave=chairWave(42,index);await chairLane(page,wave.lane,'pointer');await partyAdvance(page,wave.at+20);await chairFullscreen(page,rejected);}
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');expect(await partyElapsed(page)).toBe(chairWave(42,2).at);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');
+  const at=await partyElapsed(page);await page.clock.runFor(2000);expect(await partyElapsed(page)).toBe(at);await page.getByRole('button',{name:'查看這局成果',exact:true}).click();await expect(page.locator('.fw-arcade-result-heading')).toContainText('0 分');await chairFullscreen(page,rejected);
+});
+
+for(const light of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} secondary cancelled duplicate and stale holds cannot move a later wave`,async({page})=>{
+  await openChairScene(page,light,true);await partyAdvance(page,300);const host=page.locator('.pt-canvas'),right=page.getByRole('button',{name:'往右換路',exact:true});
+  await right.click({button:'right'});await expect(host).toHaveAttribute('data-lane','0');
+  await right.dispatchEvent('pointerdown',{pointerId:91,isPrimary:false,button:0});await right.dispatchEvent('pointerup',{pointerId:91,isPrimary:false,button:0});await right.dispatchEvent('click',{detail:1});await expect(host).toHaveAttribute('data-lane','0');
+  await right.dispatchEvent('pointerdown',{pointerId:92,isPrimary:true,button:0});await right.dispatchEvent('pointercancel',{pointerId:92,isPrimary:true});await right.dispatchEvent('pointerup',{pointerId:92,isPrimary:true,button:0});await right.dispatchEvent('click',{detail:1});await expect(host).toHaveAttribute('data-lane','0');
+  await right.click();await expect(host).toHaveAttribute('data-lane','1');await partyAdvance(page,500);await chairLane(page,0);await right.dispatchEvent('click',{detail:1});await expect(host).toHaveAttribute('data-lane','0');
+  for(const [index,key] of ['Space','Enter','pointer'].entries()){
+    const wave=chairWave(42,index);await partyAdvance(page,wave.at-200);
+    if(key==='pointer'){const b=(await right.boundingBox())!;await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();}else{await right.focus();await page.keyboard.down(key);}
+    await partyAdvance(page,wave.at+20);if(key==='pointer')await page.mouse.up();else await page.keyboard.up(key);await expect(host).toHaveAttribute('data-lane','0');await chairFullscreen(page,true);
+  }
+  // A native host swipe is owned by the down-time wave too.
+  await partyAdvance(page,chairWave(42,3).at-200);const rect=(await host.boundingBox())!;await page.mouse.move(rect.x+rect.width*.4,rect.y+rect.height*.5);await page.mouse.down();await page.mouse.move(rect.x+rect.width*.7,rect.y+rect.height*.5);await partyAdvance(page,chairWave(42,3).at+20);await page.mouse.up();await expect(host).toHaveAttribute('data-lane','0');
+  await right.evaluate(el=>(el as HTMLButtonElement).click());await expect(host).toHaveAttribute('data-lane','1');await partyAdvance(page,await partyElapsed(page)+160);await chairLane(page,0);
+  await right.focus();await page.keyboard.down('Space');const help=page.getByRole('button',{name:'玩法與設定',exact:true});await help.click();await page.keyboard.up('Space');await expect(host).toHaveAttribute('data-lane','0');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+  await page.keyboard.press('Escape');await expect(help).toBeFocused();await chairFullscreen(page,true);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await page.getByRole('button',{name:'暫停',exact:true}).click();await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();await chairFullscreen(page,true);
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await page.getByRole('button',{name:'確定重來',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');expect(await partyElapsed(page)).toBe(0);await page.getByRole('button',{name:'開始派對！',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','playing');
+  // Presentation owns fullscreen Escape, not the game's pause action. Pause
+  // explicitly, then prove exiting presentation preserves that frozen run.
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const exitAt=await partyElapsed(page);
+  await page.keyboard.press('Escape');await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(exitAt);
+});
+
+for(const rejected of [false,true])test(`PT-CHAIR-SCENE: real context loss preserves position, score and clock through light and native recovery in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+  await openChairScene(page,false,rejected);await partyAdvance(page,2300);await chairLane(page,1);const score=await page.locator('.pt-root').getAttribute('data-party-score');
+  const lost=await page.locator('.pt-canvas canvas').evaluate(c=>{const ext=(c as HTMLCanvasElement).getContext('webgl2')?.getExtension('WEBGL_lose_context');ext?.loseContext();return !!ext;});expect(lost).toBe(true);
+  await expect(page.getByRole('alert')).toContainText('本局已暫停');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const at=await partyElapsed(page);await chairFullscreen(page,rejected);
+  const light=page.getByRole('button',{name:'改用輕量玩法',exact:true});await holidayControlHit(light);await light.click();await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x','1');await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);
+  const retry=page.getByRole('button',{name:'重試 3D，保留這局',exact:true});await holidayControlHit(retry);await retry.click();await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');await expect(page.locator('.pt-canvas canvas')).toHaveCount(1);await expect(page.locator('.pt-canvas')).toHaveAttribute('data-lane','1');expect(await partyElapsed(page)).toBe(at);await chairFullscreen(page,rejected);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await chairLane(page,-1);await partyAdvance(page,chairWave(42,1).at+20);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','260');await chairFullscreen(page,rejected);
+});
+
+for(const rejected of [false,true])test(`PT-CHAIR-SCENE: explicit light choice owns late native import in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+  if(rejected)await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+  const now=new Date('2026-10-25T00:00:00Z');await page.clock.install({time:now});await page.clock.pauseAt(new Date(now.getTime()+60_000));
+  let capture!:(route:Route)=>void;const requested=new Promise<Route>(resolve=>{capture=resolve;});await page.route(/\/assets\/stage-(?!batch-)[^/]+\.js(?:\?.*)?$/,route=>{capture(route);});
+  await page.goto('/play?game=chair&seed=42',{waitUntil:'domcontentloaded'});const route=await requested,response=await route.fetch(),url=route.request().url();await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','loading');
+  await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await page.getByRole('button',{name:'開始派對！',exact:true}).click();await chairFullscreen(page,rejected);await partyAdvance(page,300);await chairLane(page,1,'pointer');const at=await partyElapsed(page);
+  await route.fulfill({response});await page.evaluate(async moduleUrl=>{await import(moduleUrl);},url);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x','1');expect(await partyElapsed(page)).toBe(at);await chairFullscreen(page,rejected);
+  await page.getByRole('button',{name:'跳一下！',exact:true}).press('Enter');await partyAdvance(page,at+200);expect(Number(await page.locator('[data-light-world=chair]').getAttribute('data-jump'))).toBeGreaterThan(0);await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
+});
+
+for(const light of [false,true])for(const rejected of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const scale of [1,1.25,2])test(`PT-CHAIR-SCENE: ${light?'light':'native'} ${rejected?'rejected':'native'} ${viewport.width}x${viewport.height} ${scale*100}% text safe insets, real controls and modal reachability`,async({page},testInfo)=>{
+  await page.setViewportSize(viewport);await openChairScene(page,light,rejected);const stage=page.locator('.fullscreen-game--chair[data-game-stage]');
+  const attachWorldEvidence=async(phase:'playing'|'resumed')=>{
+    if(scale!==2||viewport.width===1440)return;
+    const name=`chair-${light?'light':'native'}-${rejected?'rejected':'fullscreen'}-${viewport.width}x${viewport.height}-200-percent-${phase}`;
+    // Capture before bounds assertions so a failing world retains its real
+    // dimensions and viewport pixels. These are browser artifacts, not mocks.
+    await testInfo.attach(`${name}.json`,{body:JSON.stringify({viewport:page.viewportSize(),textScale:scale,phase,mode:light?'light':'native',fullscreen:rejected?'rejected':'native',minimumWorldCssPx:{width:128,height:96},world:await page.locator('.pt-canvas').boundingBox(),stage:await stage.boundingBox()},null,2),contentType:'application/json'});
+    await testInfo.attach(`${name}.png`,{body:await page.screenshot(),contentType:'image/png'});
+  };
+  await stage.evaluate((root,factor)=>{
+    const el=root as HTMLElement;for(const [side,value]of Object.entries({top:12,right:16,bottom:18,left:14}))el.style.setProperty(`--chair-safe-${side}`,`${value}px`);
+    // Text-only enlargement is deliberate; this does not claim browser zoom.
+    const nodes=[root,...root.querySelectorAll('*')].filter((n):n is HTMLElement=>n instanceof HTMLElement).map(n=>({n,font:parseFloat(getComputedStyle(n).fontSize),line:parseFloat(getComputedStyle(n).lineHeight)}));
+    for(const {n,font,line}of nodes){n.style.fontSize=`${font*factor}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*factor}px`;}
+  },scale);
+  await partyAdvance(page,250);await attachWorldEvidence('playing');await chairStageBounds(page);expect(await stage.evaluate(root=>{const style=getComputedStyle(root);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([12,16,18,14]);
+  const buttons=page.locator('.pt-chair-controls button');await expect(buttons).toHaveCount(3);for(const button of await buttons.all())await holidayControlHit(button);
+  await chairLane(page,1,'pointer');await chairLane(page,0,'keyboard');await page.getByRole('button',{name:'跳一下！',exact:true}).press('Enter');await partyAdvance(page,await partyElapsed(page)+200);
+  if(light)expect(Number(await page.locator('[data-light-world=chair]').getAttribute('data-jump'))).toBeGreaterThan(0);
+  const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);const overlay=page.locator('.pt-holiday-overlay').filter({has:close});
+  const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+  for(let i=0;i<8;i++){await page.keyboard.press(i<4?'Tab':'Shift+Tab');expect(await overlay.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+  await page.keyboard.press('Escape');await expect(help).toBeFocused();await chairFullscreen(page,rejected);
+  // First and last actual tool targets remain reachable via their own scroller.
+  const restart=page.getByRole('button',{name:'重新開始',exact:true}),last=page.getByRole('button',{name:light?'重試 3D，保留這局':'減少動態關',exact:true});await holidayControlHit(last);await holidayControlHit(restart);await restart.click();await holidayModalTextScale(page,scale);
+  const confirm=page.getByRole('button',{name:'確定重來',exact:true}),keep=page.getByRole('button',{name:'保留這局',exact:true});await expect(confirm).toBeFocused();await holidayControlHit(confirm);await holidayControlHit(keep);await keep.press('Enter');await expect(restart).toBeFocused();await chairFullscreen(page,rejected);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await attachWorldEvidence('resumed');await chairStageBounds(page);await expect(page.locator('.pt-canvas')).toBeFocused();
+  for(let i=0;i<16;i++){await page.keyboard.press(i<8?'Tab':'Shift+Tab');expect(await stage.evaluate(el=>el.contains(document.activeElement)&&!document.activeElement?.closest('[inert]'))).toBe(true);}
+});
+
+// PT-TOFU-SCENE: the same real domain runs inside the bounded party shell.
+async function tofuFullscreen(page:Page,rejected:boolean){
+  const stage=page.locator('.fullscreen-game--tofu[data-game-stage]');
+  await expect(stage).toHaveAttribute('role','dialog');
+  if(rejected){await expect(stage).toHaveClass(/fullscreen-game--viewport/);expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();}
+  else await expect.poll(()=>stage.evaluate(el=>document.fullscreenElement===el)).toBe(true);
+}
+// Read-only frame clock for pre-pause aiming; tests never use it after a pause.
+// Recovery tests inspect retained production state instead of advancing this mirror.
+const tofuClocks=new WeakMap<Page,{state:TofuRun;elapsed:()=>Promise<number>}>();
+async function openTofuScene(page:Page,light:boolean,rejected:boolean){
+  if(rejected)await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+  if(light)await blockPartyWebGL(page);
+  await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});await page.goto('/play?game=tofu&seed=42');
+  if(light){await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();}
+  await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');
+  await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));await page.getByRole('button',{name:'開始派對！',exact:true}).click();
+  const probe=await page.evaluateHandle(()=>{const record={first:null as number|null,at:0};const sample=(at:number)=>{record.first??=at;record.at=at;requestAnimationFrame(sample);};requestAnimationFrame(sample);return record;});
+  tofuClocks.set(page,{state:startParty(newParty('tofu',42)) as TofuRun,elapsed:()=>probe.evaluate(r=>r.first===null?0:r.at-r.first)});
+  await tofuFullscreen(page,rejected);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode',light?'light':'3d');
+  await expect(page.locator('.pt-canvas canvas')).toHaveCount(light?0:1);
+  if(!light)expect(Number(await page.locator('.pt-canvas').getAttribute('data-render-triangles'))).toBeGreaterThan(0);
+  expect(await page.locator('.pt-tofu-controls').evaluate(el=>!el.closest('.pt-canvas')&&!!el.closest('.pt-tofu-stage'))).toBe(true);
+}
+async function tofuStageBounds(page:Page){
+  const stage=page.locator('.fullscreen-game--tofu[data-game-stage]');
+  expect(await stage.evaluate(root=>{
+    const outer=root.getBoundingClientRect(),bad:string[]=[];
+    if(outer.left<0||outer.top<0||outer.right>innerWidth+1||outer.bottom>innerHeight+1)bad.push('owner');
+    for(const selector of ['.fullscreen-game__bar','.pt-tofu-stage','.pt-scoreboard','.pt-holiday-field','.pt-tofu-controls']){
+      const el=root.querySelector<HTMLElement>(selector);if(el&&getComputedStyle(el).display==='contents')continue;if(!el||!el.checkVisibility()){bad.push(`missing:${selector}`);continue;}const b=el.getBoundingClientRect();
+      if(b.left<outer.left-1||b.top<outer.top-1||b.right>outer.right+1||b.bottom>outer.bottom+1)bad.push(selector);
+    }return bad;
+  })).toEqual([]);
+  const box=await page.locator('.pt-canvas').boundingBox(),diagnostic=`Tofu world actual rect: ${JSON.stringify(box)}`;
+  expect(box,diagnostic).not.toBeNull();
+  // A 4:3 sliver is not a usable world. This floor prevents near-disappearance,
+  // but does not establish art quality or human playability acceptance.
+  expect(box!.width,`${diagnostic}; minimum width is 128 CSS px`).toBeGreaterThanOrEqual(128);
+  expect(box!.height,`${diagnostic}; minimum height is 96 CSS px`).toBeGreaterThanOrEqual(96);
+  expect(box!.width/box!.height,`${diagnostic}; world must remain 4:3`).toBeCloseTo(4/3,2);
+  for(const owner of [stage,page.locator('.pt-holiday-world')]){
+    const bounds=(await owner.boundingBox())!;expect(box!.x,diagnostic).toBeGreaterThanOrEqual(bounds.x-1);expect(box!.y,diagnostic).toBeGreaterThanOrEqual(bounds.y-1);expect(box!.x+box!.width,diagnostic).toBeLessThanOrEqual(bounds.x+bounds.width+1);expect(box!.y+box!.height,diagnostic).toBeLessThanOrEqual(bounds.y+bounds.height+1);
+  }
+  const lightWorld=page.locator('[data-light-world=tofu]');
+  if(await lightWorld.count()){const svg=(await lightWorld.boundingBox())!;for(const key of ['x','y','width','height'] as const)expect(svg[key],`light world ${key} must map to the empty pointer host`).toBeCloseTo(box![key],1);}
+  expect(await page.locator('.pt-canvas').evaluate(host=>host.querySelectorAll('button,a,svg').length)).toBe(0);
+}
+async function tofuWaitOffset(page:Page,accept:(offset:number)=>boolean){
+ const clock=tofuClocks.get(page)!;
+ for(let i=0;i<500;i++){const elapsed=await clock.elapsed();while(clock.state.elapsed<elapsed&&clock.state.status==='playing')clock.state=advanceParty(clock.state,elapsed-clock.state.elapsed) as TofuRun;expect(clock.state.status).toBe('playing');const axis=tofuAxis(clock.state),offset=Math.abs(tofuPosition(clock.state)[axis]-clock.state.layers.at(-1)![axis]);if(accept(offset))return;await page.clock.runFor(16);}
+ throw Error('Actual moving tofu did not reach the requested timing window');
+}
+async function tofuDrop(page:Page,method:'pointer'|'keyboard'|'host'='pointer'){
+ const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});
+ if(method==='host'){const b=(await page.locator('.pt-canvas').boundingBox())!;await page.mouse.click(b.x+b.width/2,b.y+b.height/2);}else if(method==='keyboard')await drop.press('Space');else await drop.click();
+ const clock=tofuClocks.get(page)!;clock.state=actParty(clock.state,{kind:'drop'}) as TofuRun;expect(clock.state.fall).not.toBeNull();
+ await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();
+}
+for(const light of [false,true])for(const rejected of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} complete twelve earned layers in ${rejected?'rejected':'native'} fullscreen, retry real capture and replay same seed`,async({page})=>{
+  const errors:string[]=[],writes:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')writes.push(r.url());});
+  await page.setViewportSize({width:390,height:844});await openTofuScene(page,light,rejected);
+  for(let layer=0;layer<PT.tofuGoal;layer++){
+    await tofuWaitOffset(page,offset=>offset<.055);const before=await page.locator('.pt-root').getAttribute('data-party-score');await tofuDrop(page,layer%3===0?'pointer':layer%3===1?'keyboard':'host');
+    await page.locator('.pt-canvas').press('Space');await page.clock.runFor(250);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',before!);await expect(page.locator(`.pt-scoreboard strong[aria-label^="完成 ${layer} / 12 層，"]`)).toBeVisible();
+    if(light){const progress=Number(await page.locator('[data-light-world=tofu]').getAttribute('data-fall-progress'));expect(progress).toBeGreaterThan(.4);expect(progress).toBeLessThan(.7);}
+    await page.clock.runFor(280);await expect(page.locator(`.pt-scoreboard strong[aria-label^="完成 ${layer+1} / 12 層，"]`)).toBeVisible();await tofuFullscreen(page,rejected);
+  }
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','2925');
+  const result=page.getByRole('button',{name:'查看這局成果',exact:true});await holidayControlHit(result);await tofuFullscreen(page,rejected);
+  if(light){const downloading=page.waitForEvent('download');const svgLink=page.getByRole('link',{name:'下載本局成果 SVG',exact:true});await holidayControlHit(svgLink);await svgLink.click();const svg=readFileSync((await(await downloading).path())!,'utf8');for(const text of ['2925 分','疊了 12 層','12 次完美貼齊','同題 #42'])expect(svg).toContain(text);}
+  else{
+    await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(...args){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Synthetic tofu capture failure');};});
+    await result.click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','2925');
+  }
+  await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob,failed=new Set<string>();HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const kind=type??'image/png';if(!failed.has(kind)){failed.add(kind);callback(null);return;}return original.call(this,callback,type,quality);};});
+  await result.click();await expect(page.locator('.fw-arcade-result-heading')).toContainText('2925 分');await tofuFullscreen(page,rejected);
+  await page.getByRole('button',{name:'重試產生成果圖',exact:true}).click();const jpegRetry=page.getByRole('button',{name:'重試準備工坊圖片',exact:true});await expect(jpegRetry).toBeEnabled();await jpegRetry.click();await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
+  const png=page.getByRole('link',{name:'下載完整成果 PNG',exact:true});await holidayControlHit(png);const downloading=page.waitForEvent('download');await png.click();const meta=await sharp((await(await downloading).path())!).metadata();expect([meta.format,meta.width,meta.height]).toEqual(['png',960,1200]);
+  await page.getByRole('button',{name:'分享成果',exact:true}).click();await expect(page.locator('[data-game-share]')).toBeFocused();await socialEntries(page,'tofu');
+  const replay=page.getByRole('button',{name:'同一題再來一次',exact:true});await holidayControlHit(replay);await replay.press('Enter');expect(new URL(page.url()).searchParams.get('seed')).toBe('42');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');expect(writes).toEqual([]);expect(errors).toEqual([]);
+});
+
+
+for(const light of [false,true])for(const rejected of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} clipped overlap and three real misses finish and restart in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+ await openTofuScene(page,light,rejected);
+ for(let i=0;i<2;i++){
+  await tofuWaitOffset(page,o=>o>2.3&&o<2.4);await tofuDrop(page,i?'keyboard':'pointer');await page.clock.runFor(550);await expect(page.locator(`.pt-scoreboard strong[aria-label^="完成 ${i+1} / 12 層，"]`)).toBeVisible();
+  if(light){const layer=page.locator(`[data-tofu-layer="${i+1}"]`);const size=Number(await layer.getAttribute(i?'data-depth':'data-width'));expect(size).toBeGreaterThan(.45);expect(size).toBeLessThan(.85);}
+ }
+ const score=await page.locator('.pt-root').getAttribute('data-party-score');expect(Number(score)).toBeGreaterThan(0);expect(Number(score)).toBeLessThan(100);
+ for(let i=0;i<3;i++){await tofuWaitOffset(page,o=>o>1.3);await tofuDrop(page);await page.clock.runFor(550);await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 2 / 12 層，"]')).toBeVisible();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);await tofuFullscreen(page,rejected);}
+ await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+ await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();await page.getByRole('button',{name:'確定重來',exact:true}).press('Enter');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await tofuFullscreen(page,rejected);
+});
+for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} cancelled secondary and held contacts cannot drop a later turn`,async({page})=>{
+ await openTofuScene(page,light,true);const host=page.locator('.pt-canvas'),drop=page.getByRole('button',{name:'豆腐落下！',exact:true});await partyAdvance(page,250);
+ await drop.click({button:'right'});await drop.dispatchEvent('pointerdown',{pointerId:91,isPrimary:false,button:0});await drop.dispatchEvent('pointerup',{pointerId:91,isPrimary:false,button:0});await drop.dispatchEvent('click',{detail:1});await expect(drop).toBeEnabled();
+ await drop.dispatchEvent('pointerdown',{pointerId:92,isPrimary:true,button:0});await drop.dispatchEvent('pointercancel',{pointerId:92,isPrimary:true});await drop.dispatchEvent('pointerup',{pointerId:92,isPrimary:true,button:0});await drop.dispatchEvent('click',{detail:1});await expect(drop).toBeEnabled();
+ await tofuWaitOffset(page,o=>o<.055);await tofuDrop(page);const box=(await host.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.clock.runFor(550);await page.mouse.up();await expect(drop).toBeEnabled();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');
+ // Tab from the host reaches the actual sibling drop button. Holding it while
+ // opening help must never replay that old press after the explicit resume.
+ await host.press('Tab');await expect(drop).toBeFocused();await page.keyboard.down('Space');const help=page.getByRole('button',{name:'玩法與設定',exact:true});await help.click();await page.keyboard.up('Space');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);await page.keyboard.press('Escape');await expect(help).toBeFocused();await tofuFullscreen(page,true);
+ await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await expect(host).toBeFocused();await page.keyboard.up('Space');await expect(drop).toBeEnabled();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');
+});
+for(const rejected of [false,true])test(`PT-TOFU-SCENE: genuine context loss during landing preserves tower and explicit resume in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+ await openTofuScene(page,false,rejected);await tofuWaitOffset(page,o=>o<.055);await tofuDrop(page);await page.clock.runFor(200);
+ const lost=await page.locator('.pt-canvas canvas').evaluate(c=>{const ext=(c as HTMLCanvasElement).getContext('webgl2')?.getExtension('WEBGL_lose_context');ext?.loseContext();return !!ext;});expect(lost).toBe(true);await expect(page.getByRole('alert')).toContainText('本局已暫停');const at=await partyElapsed(page);await tofuFullscreen(page,rejected);
+ await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);const view=page.locator('[data-light-world=tofu]');expect(Number(await view.getAttribute('data-fall-progress'))).toBeGreaterThan(0);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+ await page.getByRole('button',{name:'重試 3D，保留這局',exact:true}).click();await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');await expect(page.locator('.pt-canvas canvas')).toHaveCount(1);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');expect(await partyElapsed(page)).toBe(at);await tofuFullscreen(page,rejected);await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await expect(page.locator('.pt-canvas')).toBeFocused();await page.clock.runFor(550);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 1 / 12 層，"]')).toBeVisible();
+});
+
+for(const light of [false,true])for(const rejected of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const scale of [1,1.25,2])test(`PT-TOFU-SCENE: ${light?'light':'native'} ${rejected?'rejected':'native'} ${viewport.width}x${viewport.height} ${scale*100}% text safe insets, real controls and modal reachability`,async({page},testInfo)=>{
+  await page.setViewportSize(viewport);await openTofuScene(page,light,rejected);const stage=page.locator('.fullscreen-game--tofu[data-game-stage]');
+  const attachWorldEvidence=async(phase:'playing'|'resumed')=>{
+    if(scale!==2||viewport.width===1440)return;
+    const name=`tofu-${light?'light':'native'}-${rejected?'rejected':'fullscreen'}-${viewport.width}x${viewport.height}-200-percent-${phase}`;
+    // Capture before bounds assertions so a failing world retains its real
+    // dimensions and viewport pixels. These are browser artifacts, not mocks.
+    await testInfo.attach(`${name}.json`,{body:JSON.stringify({viewport:page.viewportSize(),textScale:scale,phase,mode:light?'light':'native',fullscreen:rejected?'rejected':'native',minimumWorldCssPx:{width:128,height:96},world:await page.locator('.pt-canvas').boundingBox(),stage:await stage.boundingBox()},null,2),contentType:'application/json'});
+    await testInfo.attach(`${name}.png`,{body:await page.screenshot(),contentType:'image/png'});
+  };
+  await stage.evaluate((root,factor)=>{
+    const el=root as HTMLElement;for(const [side,value]of Object.entries({top:12,right:16,bottom:18,left:14}))el.style.setProperty(`--tofu-safe-${side}`,`${value}px`);
+    // Text-only enlargement is deliberate; this does not claim browser zoom.
+    const nodes=[root,...root.querySelectorAll('*')].filter((n):n is HTMLElement=>n instanceof HTMLElement).map(n=>({n,font:parseFloat(getComputedStyle(n).fontSize),line:parseFloat(getComputedStyle(n).lineHeight)}));
+    for(const {n,font,line}of nodes){n.style.fontSize=`${font*factor}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*factor}px`;}
+  },scale);
+  await partyAdvance(page,250);await attachWorldEvidence('playing');await tofuStageBounds(page);expect(await stage.evaluate(root=>{const style=getComputedStyle(root);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([12,16,18,14]);
+  const buttons=page.locator('.pt-tofu-controls button');await expect(buttons).toHaveCount(1);for(const button of await buttons.all())await holidayControlHit(button);
+  await tofuWaitOffset(page,offset=>offset<.055);await tofuDrop(page,'pointer');await page.clock.runFor(550);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');
+  const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);const overlay=page.locator('.pt-holiday-overlay').filter({has:close});
+  const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
+  for(let i=0;i<8;i++){await page.keyboard.press(i<4?'Tab':'Shift+Tab');expect(await overlay.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+  await page.keyboard.press('Escape');await expect(help).toBeFocused();await tofuFullscreen(page,rejected);
+  // First and last actual tool targets remain reachable via their own scroller.
+  const restart=page.getByRole('button',{name:'重新開始',exact:true}),last=page.getByRole('button',{name:light?'重試 3D，保留這局':'減少動態關',exact:true});await holidayControlHit(last);await holidayControlHit(restart);await restart.click();await holidayModalTextScale(page,scale);
+  const confirm=page.getByRole('button',{name:'確定重來',exact:true}),keep=page.getByRole('button',{name:'保留這局',exact:true});await expect(confirm).toBeFocused();await holidayControlHit(confirm);await holidayControlHit(keep);await keep.press('Enter');await expect(restart).toBeFocused();await tofuFullscreen(page,rejected);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await attachWorldEvidence('resumed');await tofuStageBounds(page);await expect(page.locator('.pt-canvas')).toBeFocused();
+  for(let i=0;i<16;i++){await page.keyboard.press(i<8?'Tab':'Shift+Tab');expect(await stage.evaluate(el=>el.contains(document.activeElement)&&!document.activeElement?.closest('[inert]'))).toBe(true);}
+});
+
+for(const rejected of [false,true])test(`PT-TOFU-SCENE: explicit light choice owns late native import in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+ if(rejected)await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+ const now=new Date('2026-10-25T00:00:00Z');await page.clock.install({time:now});await page.clock.pauseAt(new Date(now.getTime()+60_000));
+ let capture!:(route:Route)=>void;const requested=new Promise<Route>(resolve=>{capture=resolve;});await page.route(/\/assets\/stage-(?!batch-)[^/]+\.js(?:\?.*)?$/,route=>{capture(route);});
+ await page.goto('/play?game=tofu&seed=42',{waitUntil:'domcontentloaded'});const route=await requested,response=await route.fetch(),url=route.request().url();await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','loading');
+ await page.getByRole('button',{name:'改用輕量玩法',exact:true}).click();await page.getByRole('button',{name:'開始派對！',exact:true}).click();await tofuFullscreen(page,rejected);await partyAdvance(page,300);const at=await partyElapsed(page),offset=await page.locator('[data-light-world=tofu]').getAttribute('data-offset');
+ await route.fulfill({response});await page.evaluate(async moduleUrl=>{await import(moduleUrl);},url);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);expect(await partyElapsed(page)).toBe(at);await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-offset',offset!);await tofuFullscreen(page,rejected);
+ await page.getByRole('button',{name:'豆腐落下！',exact:true}).press('Enter');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.clock.runFor(550);await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-turn','1');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
+});
+for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} sixty-second idle expiry keeps zero score and no invented tower`,async({page})=>{
+ await openTofuScene(page,light,true);await partyAdvance(page,PT.tofuMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();expect(await partyElapsed(page)).toBe(PT.tofuMs);await tofuFullscreen(page,true);
 });

@@ -74,8 +74,38 @@ for(const fixture of [
   // rather than sleeping and hoping that React or the GPU has caught up.
   const advance=()=>page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
   await advance();await expect(host).toHaveAttribute('data-render-calls',/^[1-9]\d*$/);
+  const mushroom=visual.id==='mushroom';
+  async function mushroomGuide(mode:'native'|'svg',count:number){
+    // Independent expected span, not the implementation helper under test.
+    const x=.30+.40*(count+1)/(step.goal+1),path=page.locator(mode==='native'?'.ck-toy-guides path[stroke-dasharray="15 12"]':'.ck-visual-light path[stroke-dasharray="12 9"]');
+    await expect(path).toBeVisible();await expect(path).toHaveAttribute('d',`M${x*800} 175V364`);
+    if(mode==='svg'){
+      const geometry=await page.locator('.ck-visual-light .ck-scene').evaluate((node,input)=>{
+        const svg=node as SVGSVGElement,screen=svg.getScreenCTM()!;
+        const groups=[...svg.querySelectorAll<SVGGElement>('[data-ingredient="mushroom"]')];
+        const boxes=groups.map(group=>{const b=group.getBBox(),matrix=screen.inverse().multiply(group.getScreenCTM()!),corners=[[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]].map(([x,y])=>new DOMPoint(x,y).matrixTransform(matrix));return {left:Math.min(...corners.map(p=>p.x)),right:Math.max(...corners.map(p=>p.x)),top:Math.min(...corners.map(p=>p.y)),bottom:Math.max(...corners.map(p=>p.y))};});
+        const target=new DOMPoint(input.x*800,276).matrixTransform(screen),whole=groups[input.count];
+        const intersects=whole.getAttribute('data-preparation')==='whole'&&[...whole.querySelectorAll('polygon')].some(p=>p.isPointInFill(target.matrixTransform(p.getScreenCTM()!.inverse())));
+        return {boxes,intersects};
+      },{x,count});
+      expect(geometry.intersects).toBe(true);expect(geometry.boxes).toHaveLength(step.goal);
+      geometry.boxes.forEach(box=>{expect(box.left).toBeGreaterThanOrEqual(240);expect(box.right).toBeLessThanOrEqual(560);});
+      for(let i=0;i<geometry.boxes.length;i++)for(let j=i+1;j<geometry.boxes.length;j++){
+        const a=geometry.boxes[i],b=geometry.boxes[j];expect(b.left-a.right>=2||b.top-a.bottom>=2||a.top-b.bottom>=2).toBe(true);
+      }
+      await testInfo.attach(`${recipe.id}-svg-guide-${count}-geometry`,{body:JSON.stringify(geometry),contentType:'application/json'});
+    }
+    return x;
+  }
+  async function mushroomStroke(mode:'native'|'svg',count:number){
+    const x=await mushroomGuide(mode,count),box=await page.locator('.ck-scene').boundingBox();expect(box).not.toBeNull();
+    await page.mouse.move(box!.x+x*box!.width,box!.y+.23*box!.height);await page.mouse.down();
+    await page.mouse.move(box!.x+x*box!.width,box!.y+.78*box!.height,{steps:5});await page.mouse.up();
+  }
   const whole=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-whole.png`);
-  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await advance();
+  if(mushroom){await capturePreparationScreenshot(game,testInfo,`${recipe.id}-native-whole-stage.png`);await mushroomStroke('native',0);}
+  else await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
+  await advance();
   await expect(meter).toHaveText(`1 / ${step.goal}`);
   const cut=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-cut.png`);
   expect(createHash('sha256').update(cut).digest('hex')).not.toBe(createHash('sha256').update(whole).digest('hex'));
@@ -98,8 +128,10 @@ for(const fixture of [
     expect(actual).toEqual(Array.from({length:step.goal},(_,i)=>({id:visual.id,state:i<count?'cut':'whole',layers:ingredientLayers(visual,i<count).map(layer=>({points:ingredientPolygonPoints(layer.points),color:layer.color}))})));
   }
   await expectFaces(1);await expect(meter).toHaveText(`1 / ${step.goal}`);
-  await advance();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
+  await advance();
+  if(mushroom)await mushroomStroke('svg',1);else await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
   await expect(meter).toHaveText(`2 / ${step.goal}`);await expectFaces(2);
+  if(mushroom)await mushroomGuide('svg',2);
   await expectLayout();
   await capturePreparationScreenshot(page.locator('.ck-visual-light'),testInfo,`${recipe.id}-svg-two-cuts.png`);
   // Return through the real renderer control and progress to the last intact
@@ -110,7 +142,11 @@ for(const fixture of [
     await advance();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
     await expect(meter).toHaveText(`${count+1} / ${step.goal}`);
   }
-  await advance();await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-late-cut.png`);
+  await advance();
+  if(mushroom){await mushroomGuide('native',step.goal-1);await capturePreparationScreenshot(game,testInfo,`${recipe.id}-native-late-cut-stage.png`);}
+  const late=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-late-cut.png`);
+  expect(createHash('sha256').update(late).digest('hex')).not.toBe(createHash('sha256').update(whole).digest('hex'));
+  expect(createHash('sha256').update(late).digest('hex')).not.toBe(createHash('sha256').update(cut).digest('hex'));
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
   await expect(game).toHaveCount(0);await expect(canvas).toHaveCount(0);expect(errors).toEqual([]);
 });

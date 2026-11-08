@@ -197,11 +197,11 @@ test('real SVG fallback renders the same filled ingredient contours and retains 
 // Four new solids intentionally no longer share the SVG fallback's flat contours.
 test('single volumetric foods partition exactly at guide planes with bounded resources',()=>{
  for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
-  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>(),planes=Array.from({length:7},(_,i)=>9.3*(-.28+.56*(i+1)/8));
+  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>(),planes=Array.from({length:7},(_,i)=>id==='mushroom'?-1.86+3.72*(i+1)/8:9.3*(-.28+.56*(i+1)/8));
   const model=preparation.createPreparationModel(id,planes,owned,materials);
   try{
    assert.equal(model.segments.length,8);assert.equal(model.root.name,`ingredient/${id}`);assert.ok(owned.size<=26);assert.ok(materials.size<=4);
-   const bounds=new T.Box3().setFromObject(model.root),size=bounds.getSize(new T.Vector3());assert.ok(size.x>5&&size.y>.5&&size.z>1.3);assert.ok(bounds.min.y>=.249);
+   const bounds=new T.Box3().setFromObject(model.root),size=bounds.getSize(new T.Vector3());assert.ok(id==='mushroom'?size.x>3.719&&size.x<3.721:size.x>5);assert.ok(size.y>.5&&size.z>1.3);assert.ok(bounds.min.y>=.249);
    model.root.traverse(o=>{if(o instanceof T.Mesh){assert.ok(owned.has(o.geometry));for(const v of o.geometry.getAttribute('position').array)assert.ok(Number.isFinite(v));assert.equal((o.material as T.MeshStandardMaterial).map,null);}});
    for(let i=0;i<7;i++){
     const a=model.faces[i].right.geometry.getAttribute('position'),b=model.faces[i+1].left.geometry.getAttribute('position');
@@ -244,7 +244,7 @@ test('all five real preparations keep the connected remainder on the board and l
  for(const {recipe,step} of ingredientSteps){
   const visual=ingredients.ingredientVisual(step.ingredient,step.shape);if(step.kind!=='slice'||!visual||!preparation.isVolumetricPreparation(visual.id))continue;
   covered.add(recipe.id);const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
-  const planes=Array.from({length:step.goal},(_,i)=>9.3*(-.28+.56*(i+1)/(step.goal+1))),model=preparation.createPreparationModel(visual.id,planes,owned,materials);
+  const planes=Array.from({length:step.goal},(_,i)=>visual.id==='mushroom'?-1.86+3.72*(i+1)/(step.goal+1):9.3*(-.28+.56*(i+1)/(step.goal+1))),model=preparation.createPreparationModel(visual.id,planes,owned,materials);
   try{
    model.root.updateMatrixWorld(true);const originalBottoms=model.segments.map(g=>new T.Box3().setFromObject(g,true).min.y-.25),originalHeights=planes.map(x=>model.surfaceHeight(x)),initialDrop=model.segments[0].position.y,refs=resources(model.root);
    for(const count of [...Array.from({length:step.goal+1},(_,i)=>i),0]){
@@ -266,7 +266,7 @@ test('all five real preparations keep the connected remainder on the board and l
 
 test('hero silhouettes have raised root tips, a tall lobed pumpkin and a camera-visible mushroom stalk',()=>{
  for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
-  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>(),model=preparation.createPreparationModel(id,Array.from({length:7},(_,i)=>9.3*(-.28+.56*(i+1)/8)),owned,materials);
+  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>(),model=preparation.createPreparationModel(id,Array.from({length:7},(_,i)=>id==='mushroom'?-1.86+3.72*(i+1)/8:9.3*(-.28+.56*(i+1)/8)),owned,materials);
   try{
    model.root.updateMatrixWorld(true);const skinPoints:T.Vector3[]=[];
    model.root.traverse(o=>{if(o instanceof T.Mesh&&o.name==='preparation/skin'){const p=o.geometry.attributes.position;for(let i=0;i<p.count;i++)skinPoints.push(new T.Vector3().fromBufferAttribute(p,i).applyMatrix4(o.matrixWorld));}});
@@ -285,6 +285,61 @@ test('hero silhouettes have raised root tips, a tall lobed pumpkin and a camera-
      if(ray.intersectObjects(meshes,false)[0]?.object.name==='preparation/stalk')visible++;
     }
     assert.ok(visible>=6,`stalk must occupy visible pixels from the actual camera direction, got ${visible}/9`);
+   }
+  }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
+ }
+});
+
+test('mushroom cap, flesh border and tapered stalk have explicit real dimensions at every knife plane',()=>{
+ for(const recipeId of ['cream-risotto','plant-burger']){
+  const recipe=catalog.recipeOf(recipeId)!,step=recipe.steps[0],owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
+  // Independent dimensions: no production scale helper is used for expectations.
+  const planes=Array.from({length:step.goal},(_,i)=>-1.86+3.72*(i+1)/(step.goal+1));
+  const model=preparation.createPreparationModel('mushroom',planes,owned,materials),boundaries=[-1.86,...planes,1.86];
+  try{
+   model.root.updateMatrixWorld(true);
+   const whole=new T.Box3().setFromObject(model.root,true),size=whole.getSize(new T.Vector3());
+   assert.ok(Math.abs(size.x-3.72)<1e-6);assert.ok(Math.abs(size.z-2.36)<1e-6,'depth is not enlarged to disguise a long cap');
+   assert.ok(size.y>2.26&&size.y<2.28,'domed cap has explicit height, not a scaled capsule');
+   const skins=model.segments.map(g=>g.getObjectByName('preparation/skin') as T.Mesh);
+   for(let i=0;i<model.segments.length;i++){
+    const box=new T.Box3().setFromObject(skins[i],true);
+    assert.ok(Math.abs(box.min.x-boundaries[i])<1e-6);assert.ok(Math.abs(box.max.x-boundaries[i+1])<1e-6);
+    assert.ok(box.max.z-box.min.z>.5&&box.max.y-box.min.y>.2,'each actual section has cap volume');
+    const positions=skins[i].geometry.getAttribute('position'),colors=skins[i].geometry.getAttribute('color');
+    let brown=0,underside=0;
+    for(let j=0;j<positions.count;j++){
+     if(positions.getY(j)>1.26){assert.ok(colors.getX(j)<.3);brown++;}
+     if(positions.getY(j)<1.23){assert.ok(colors.getX(j)>.4);underside++;}
+    }
+    assert.ok(brown>0&&underside>0,'brown dome and lighter underside are actual material partitions');
+    const faceColors=model.faces[i].right.geometry.getAttribute('color');let pale=0,skin=0;
+    for(let j=0;j<faceColors.count;j++){if(faceColors.getX(j)>.85)pale++;if(faceColors.getX(j)<.3)skin++;}
+    assert.ok(pale>0&&skin>0,'pale actual flesh is bordered by brown cap skin');
+   }
+   for(const index of [0,planes.length-1]){
+    const ray=new T.Raycaster(new T.Vector3(planes[index],8,0),new T.Vector3(0,-1,0));
+    const hits=ray.intersectObjects(skins,false);assert.ok(hits.length>0,'first and last knife planes intersect real visible cap mesh');
+    assert.ok(hits[0].point.y>1.8);assert.ok(Math.abs(hits[0].point.y-model.surfaceHeight(planes[index]))<1e-6);
+   }
+   const stalks=model.segments.flatMap(g=>{const m=g.getObjectByName('preparation/stalk');return m?[m as T.Mesh]:[];});
+   for(const mesh of [...stalks,...model.faces.flatMap(f=>[f.left,f.right])]){
+    const p=mesh.geometry.getAttribute('position'),n=mesh.geometry.getAttribute('normal');
+    for(let i=0;i<p.count;i+=3){
+     const a=new T.Vector3().fromBufferAttribute(p,i),b=new T.Vector3().fromBufferAttribute(p,i+1),c=new T.Vector3().fromBufferAttribute(p,i+2),face=b.sub(a).cross(c.sub(a));
+     if(face.lengthSq()>1e-14)assert.ok(face.dot(new T.Vector3().fromBufferAttribute(n,i))>0,'triangle winding and outward shading normals agree, including both sides of stalk cuts');
+    }
+   }
+   let foot=0,waist=0;
+   for(const stalk of stalks){const p=stalk.geometry.getAttribute('position');for(let i=0;i<p.count;i++){const radius=Math.hypot(p.getX(i)+stalk.parent!.position.x,p.getZ(i));if(Math.abs(p.getY(i))<1e-6)foot=Math.max(foot,radius);if(Math.abs(p.getY(i)-.625)<1e-6)waist=Math.max(waist,radius);}}
+   assert.ok(Math.abs(foot-.42)<1e-6&&Math.abs(waist-.32)<1e-6,'stalk has a broader foot and cap connection, not a blunt cylinder');
+   const refs=resources(model.root);
+   for(let count=0;count<=step.goal;count++){
+    model.update(count);model.root.updateMatrixWorld(true);
+    for(let i=0;i<count;i++)assert.ok(Math.abs(new T.Box3().setFromObject(model.segments[i],true).min.y-.25)<1e-6);
+    const remaining=new T.Box3();model.segments.slice(count).forEach(g=>remaining.union(new T.Box3().setFromObject(g,true)));assert.ok(Math.abs(remaining.min.y-.25)<1e-6);
+    const bounds=new T.Box3().setFromObject(model.root,true);assert.ok(bounds.min.x>-2.5&&bounds.max.x<1.861&&bounds.min.z>=-1.181&&bounds.max.z<1.831,'all real cut pieces fit comfortably on the unchanged board');
+    assert.deepEqual(resources(model.root),refs);
    }
   }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
  }
