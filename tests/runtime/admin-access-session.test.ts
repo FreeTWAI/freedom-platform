@@ -1,5 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {stripTypeScriptTypes} from 'node:module';
+import {runInNewContext} from 'node:vm';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {Navigation} from '../../apps/portal-web/src/Navigation.js';
 import {MEMBER_ACCESS_EXPIRED_MESSAGE} from '../../apps/portal-web/src/access-fetch.js';
 import {ApiError,PortalClient} from '../../apps/portal-web/src/api.js';
 import {ADMIN_ACCESS_EXPIRED_MESSAGE,AdminClient,AdminRequestError} from '../../apps/portal-web/src/modules/admin-client.js';
@@ -182,4 +188,50 @@ test('avatar upload treats an opaque redirect as an expired site session and kee
   assertManualXhr(init);assert.equal(init?.method,'POST');assert.equal(init?.body,file);
   assert.equal(header(init,'X-CSRF-Token'),'avatar-csrf');assert.equal(header(init,'Idempotency-Key'),'avatar-key');assert.equal(header(init,'If-Match'),'"4"');
   assert.equal(client.csrfToken,'avatar-csrf','an opaque redirect is not a 401 or 403');assert.equal(unauthorized,1);
+});
+
+// Execute the current Workspace effect with deferred reads. This verifies
+// ownership/order only, not React rendering or native browser focus.
+const workspaceSource=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
+const entryStart=workspaceSource.indexOf('  // Admin navigation follows only');
+const entryEnd=workspaceSource.indexOf('  const [tab, setTab]',entryStart);
+assert.ok(entryStart>=0&&entryEnd>entryStart);
+const entryEffect=stripTypeScriptTypes(workspaceSource.slice(entryStart,entryEnd));
+function adminEntryHarness(){
+ const listeners=new Map<string,()=>void>(),calls:{resolve:(value:any)=>void;reject:(cause:unknown)=>void}[]=[];
+ const session={user:{user_id:'synthetic-member'},csrf_token:'synthetic-csrf'};
+ let visible:any=null,expired=0,cleanup=()=>{};
+ const client={sessionGeneration:1,get(path:string,options:unknown){assert.equal(path,'/session');assert.deepEqual(JSON.parse(JSON.stringify(options)),{background:true});return new Promise((resolve,reject)=>calls.push({resolve,reject}));}};
+ const events={addEventListener(name:string,handler:()=>void){listeners.set(name,handler);},removeEventListener(name:string){listeners.delete(name);}};
+ const document={...events,visibilityState:'visible'};
+ runInNewContext(entryEffect,{client,session,document,window:{...events,setInterval(handler:()=>void,delay:number){assert.equal(delay,60000);listeners.set('interval',handler);return 1;},clearInterval(){listeners.delete('interval');}},setAdminEntrySession:(value:unknown)=>{visible=value;},onSessionExpired:()=>{expired++;},useEffect:(run:()=>()=>void)=>{cleanup=run();}});
+ return {client,session,document,calls,fire:(name='focus')=>listeners.get(name)?.(),cleanup:()=>cleanup(),state:()=>({visible,expired}),reply:(index:number,allowed:unknown=true,extra:Record<string,unknown>={})=>calls[index].resolve({...session,admin_entry_visible:allowed,...extra})};
+}
+const settled=()=>new Promise<void>(resolve=>setImmediate(resolve));
+
+test('admin navigation is hidden while pending and accepts only a true server hint for its current session',async()=>{
+ const h=adminEntryHarness();assert.equal(h.state().visible,null);h.reply(0);await settled();assert.equal(h.state().visible.admin_entry_visible,true);
+ for(const flag of [false,null,'true',1]){h.fire();assert.equal(h.state().visible,null);h.reply(h.calls.length-1,flag);await settled();assert.equal(h.state().visible,null);}
+ h.fire();h.calls[h.calls.length-1].resolve({...h.session});await settled();assert.equal(h.state().visible,null);
+ assert.equal(h.state().expired,0);h.cleanup();
+});
+
+test('admin navigation discards older reads and stays hidden on network failure or hidden document',async()=>{
+ const h=adminEntryHarness();h.reply(0);await settled();h.fire();assert.equal(h.state().visible,null);
+ h.fire();h.reply(2,false);await settled();h.reply(1,true);await settled();assert.equal(h.state().visible,null);
+ h.fire();h.reply(3);await settled();h.fire();h.calls[4].reject(new Error('offline'));await settled();assert.equal(h.state().visible,null);assert.equal(h.state().expired,0);
+ h.fire();h.document.visibilityState='hidden';h.fire('visibilitychange');h.reply(5);await settled();assert.equal(h.state().visible,null);assert.equal(h.calls.length,6);
+ h.document.visibilityState='visible';h.fire('visibilitychange');h.reply(6);await settled();assert.equal(h.state().visible.admin_entry_visible,true);h.cleanup();
+});
+
+test('admin navigation cannot survive another user, another session, a changed client generation or unmount',async()=>{
+ for(const extra of [{user:{user_id:'another-member'}},{csrf_token:'another-session'}]){const h=adminEntryHarness();h.reply(0,true,extra);await settled();assert.equal(h.state().visible,null);assert.equal(h.state().expired,1);h.cleanup();}
+ const generation=adminEntryHarness();generation.client.sessionGeneration++;generation.reply(0);await settled();assert.equal(generation.state().visible,null);assert.equal(generation.state().expired,0);generation.cleanup();
+ const unmounted=adminEntryHarness();unmounted.cleanup();unmounted.reply(0);await settled();assert.equal(unmounted.state().visible,null);assert.equal(unmounted.state().expired,0);
+});
+
+test('rendered member navigation exposes the admin link only with its explicit visibility hint',()=>{
+ const base={current:'home' as const,onSelect:()=>{},canManageGuild:false,guildLaunchpadEnabled:false,communitySearchEnabled:false,personalContentEnabled:false,mobileOpen:false};
+ for(const extra of [{},{canManagePlatform:false},{canManageGuild:true},{guildLaunchpadEnabled:true}])assert.doesNotMatch(renderToStaticMarkup(createElement(Navigation,{...base,...extra})),/href="\/admin"/);
+ assert.match(renderToStaticMarkup(createElement(Navigation,{...base,canManagePlatform:true})),/href="\/admin"/);
 });

@@ -140,15 +140,15 @@ function nativeAnchors(view:StageView){
 
 test('daily photo projection matches native Three transforms for every client, pose, aspect, pan, FOV and motion mode',()=>{
  let combinations=0;
- for(const client of [0,1,2])for(const seconds of [0,2.4,3.3,5,8.9,12])for(const aspect of [9/16,1,4/3,16/9])for(const pan of [{x:0,y:0},{x:-1.8,y:-2.8},{x:1.8,y:2.8}])for(const fov of [38,44,60])for(const motion of [false,true]){
-  const view={...sceneView(),client,seconds,pan,fov,motion},camera=new PerspectiveCamera(fov,aspect,.1,60);camera.position.set(pan.x,1.95+pan.y,6);camera.lookAt(pan.x,1.95+pan.y,0);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
+ for(const client of [0,1,2])for(const seconds of [0,2.4,3.3,5,8.9,12])for(const aspect of [390/844,9/16,1,4/3,16/9])for(const pan of [{x:0,y:0},{x:-1.8,y:-2.8},{x:1.8,y:2.8}])for(const fov of [38,44,60])for(const motion of [false,true]){
+  const view={...sceneView(),client,seconds,pan,fov,motion},camera=new PerspectiveCamera(aspect<1?2*Math.atan(Math.tan(fov*Math.PI/360)/aspect)*180/Math.PI:fov,aspect,.1,60);camera.position.set(pan.x,1.95+pan.y,6);camera.lookAt(pan.x,1.95+pan.y,0);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
   const actualCamera=dailyCamera(view,aspect);assert.deepEqual(actualCamera.projectionMatrix.elements,camera.projectionMatrix.elements);assert.deepEqual(actualCamera.matrixWorld.elements,camera.matrixWorld.elements);
   const original=nativeAnchors(view),actual=photoAnchors(view);assert.deepEqual(actual.map(a=>a.id),original.map(a=>a.id));
   for(let i=0;i<actual.length;i++){assert.equal(actual[i].visible,original[i].visible);for(let j=0;j<2;j++){const expected=original[i].points[j];assert.ok(expected.distanceTo(new Vector3(...actual[i].points[j]))<1e-12);}}
   const visible=original.filter(a=>a.visible&&a.points.every(p=>{const v=p.clone().project(camera);return v.z>=-1&&v.z<=1&&Math.abs(v.x)<=.97&&Math.abs(v.y)<=.97;})).map(a=>a.id),pose=domain.photoPose(domain.CLIENTS[client].id,seconds,42);
   assert.deepEqual(photoFraming(view,aspect),{visible,blocked:client===0&&Math.abs(pose.boardX)<.85,lift:pose.lift});combinations++;
  }
- assert.equal(combinations,1296);
+ assert.equal(combinations,1620);
 });
 
 test('daily paper picking raycasts the visible paper plane and rejects outside paper or viewport',()=>{
@@ -299,4 +299,91 @@ for(const renderer of ['native','light'] as const)for(const trigger of ['shutter
  // A stale held shutter cannot spend the remaining film even after resume.
  shutter.onPointerUp(h.pointer({pointerId:2}));shutter.onClick({detail:1});assert.equal(l.film,1);assert.equal(h.stats().captures,1);
  const fresh=h.button('拍照快門');fresh.onPointerDown(h.pointer({pointerId:3}));fresh.onPointerUp(h.pointer({pointerId:3}));fresh.onClick({detail:1});assert.equal(l.film,2);assert.equal(l.photos.length,2);assert.equal(l.photos[0],photo);assert.equal(h.stats().captures,2);h.unmount();
+});
+
+test('PHOTO composition keeps critical film/time distinct from the shutter label and preserves album ownership',async()=>{
+ const h=board('photo');await h.resolve();await h.start();const l=h.api.live.current;
+ const text=(node:any):string=>Array.isArray(node)?node.map(text).join(''):node&&typeof node==='object'?text(node.props?.children):node==null||typeof node==='boolean'?'':String(node);
+ const field=(key:string)=>h.nodes.find(n=>Object.hasOwn(n.props,key));
+ assert.equal(text(field('data-photo-film')),'2 張');assert.equal(text(field('data-photo-time')),'12 秒');
+ assert.ok(!field('data-photo-film').props.className.includes('daily-sr'));
+ h.api.shoot();await h.flush();assert.equal(text(field('data-photo-film')),'1 張');assert.equal(l.photos.length,1);
+ const photos=l.photos,first=l.photos[0],elapsed=l.clock.elapsed;
+ h.button('檢視本局照片與評語').onClick({currentTarget:h.target});await h.flush();
+ assert.equal(l.paused,true);assert.equal(l.photos,photos);assert.equal(l.photos[0],first);assert.equal(l.clock.elapsed,elapsed);assert.equal(l.fov,44);
+ const dialog=h.nodes.find(n=>n.type==='dialog');assert.ok(dialog);assert.match(text(dialog),/本局照片與評語/);
+ h.button('關閉相簿').onClick();await h.flush();assert.equal(h.nodes.some(n=>n.type==='dialog'),false);assert.equal(l.paused,true);
+ await h.start();assert.equal(l.film,1);assert.equal(l.photos,photos);assert.equal(l.clock.elapsed,elapsed);h.unmount();
+});
+
+test('PHOTO floating action controls are outside the renderer pointer subtree and keep named keyboard actions',async()=>{
+ const h=board('photo');await h.resolve();await h.start();
+ const host=h.nodes.find(n=>Object.hasOwn(n.props,'data-game-stage'));assert.ok(host);assert.equal(host.props.children,undefined);
+ for(const label of ['鏡頭往左','鏡頭往上','鏡頭往下','鏡頭往右','拍照快門','下一位客人 →']){
+  const button=h.button(label);assert.equal(typeof button.onPointerDown,'function');assert.equal(typeof button.onKeyUp,'function');
+  assert.notEqual(button.onPointerDown,host.props.onPointerDown);
+ }
+ const section=h.nodes.find(n=>n.type==='section');assert.match(section.props.className,/daily-photo/);
+ h.api.nextClient();h.api.nextClient();await h.flush();assert.ok(h.button('挑選照片'));h.unmount();
+});
+
+for(const game of ['stamp','cash'] as const)test(`PHOTO composition does not add photo controls or styling to ${game}`,async()=>{
+ const h=board(game);await h.resolve();await h.start();
+ assert.equal(h.nodes.find(n=>n.type==='section').props.className,`fw-arcade-board daily-scene${game==='stamp'?' daily-stamp':''}`);
+ assert.equal(h.nodes.some(n=>Object.hasOwn(n.props,'data-photo-film')),false);
+ assert.equal(h.nodes.some(n=>n.props['aria-label']==='檢視本局照片與評語'),false);h.unmount();
+});
+
+test('PHOTO visible goals follow manual and timed clients while shot feedback uses only saved grades',async()=>{
+ const h=board('photo');await h.resolve();await h.start();
+ const text=(node:any):string=>Array.isArray(node)?node.map(text).join(''):node&&typeof node==='object'?text(node.props?.children):node==null||typeof node==='boolean'?'':String(node);
+ const field=(key:string)=>h.nodes.find(n=>Object.hasOwn(n.props,key));
+ assert.equal(text(field('data-photo-goal')),'臉和雙腳');assert.equal(text(field('data-photo-feedback')),'等時機');
+ assert.equal(field('data-photo-goal').props['aria-label'],domain.CLIENTS[0].request);
+ h.api.shoot();await h.flush();const l=h.api.live.current,saved=l.photos[0];assert.equal(text(field('data-photo-feedback')),`已存${saved.stars}★`);
+ h.failCapture(true);h.api.shoot();await h.flush();assert.equal(field('data-photo-feedback'),undefined);const alert=h.nodes.find(n=>n.props.className==='daily-photo-failure');assert.equal(text(alert),'未存，按快門');assert.match(alert.props['aria-label'],/照片未保存，請再按快門/);assert.equal(l.photos.length,1);assert.equal(l.film,1);
+ h.advance(12016);const [id,frame]=[...h.frames.entries()][0];h.frames.delete(id);frame(12016);await h.flush();
+ assert.equal(l.client,1);assert.equal(l.paused,false);assert.equal(l.clock.elapsed,12016);assert.equal(l.film,0);assert.equal(text(field('data-photo-goal')),'全身全傘');assert.equal(field('data-photo-goal').props['aria-label'],domain.CLIENTS[1].request);assert.equal(text(field('data-photo-feedback')),'等時機');
+ h.api.nextClient();await h.flush();assert.equal(l.client,2);assert.equal(l.paused,false);assert.equal(l.clock.elapsed,12016);assert.equal(text(field('data-photo-goal')),'三鴿同框');assert.equal(field('data-photo-goal').props['aria-label'],domain.CLIENTS[2].request);
+ assert.equal(l.photos[0],saved);h.unmount();
+});
+
+for(const input of ['pad','keyboard'] as const)test(`PHOTO ${input} reaches the measured wide-portrait umbrella target through actual handlers`,async()=>{
+ const h=board('photo');await h.resolve();await h.start();h.api.nextClient();await h.flush();
+ const l=h.api.live.current,slider=h.nodes.find(n=>n.type==='input'&&n.props['aria-label']==='鏡頭廣角');slider.props.onChange({target:{value:'60'}});
+ const count=input==='pad'?2:3,step=input==='pad'?.35:.25;
+ for(let i=0;i<count;i++)for(const [key,label]of [['ArrowRight','鏡頭往右'],['ArrowUp','鏡頭往上']]){
+  if(input==='pad')h.button(label).onClick({detail:0});
+  else h.api.keyboard({key,repeat:false,preventDefault(){},target:{closest(){return null;}}});
+ }
+ assert.ok(Math.abs(l.targetPan.x-count*step)<1e-12);assert.ok(Math.abs(l.targetPan.y-count*step)<1e-12);assert.equal(l.fov,60);
+ for(let frame=0;frame<5;frame++){h.advance(50);const [id,callback]=h.frames.entries().next().value!;h.frames.delete(id);callback(l.clock.last+50);await h.flush();}
+ assert.ok(l.pan.x>l.targetPan.x*.98&&l.pan.x<l.targetPan.x);assert.ok(l.pan.y>l.targetPan.y*.98&&l.pan.y<l.targetPan.y);
+ const v={...sceneView(),client:1,seconds:(l.clock.elapsed-l.roundAt)/1000,fov:l.fov,pan:l.pan};
+ for(const aspect of [320/568,390/844]){const f=photoFraming(v,aspect);assert.equal(domain.gradePhoto('umbrella',f.visible,v.seconds,f.blocked,f.lift).stars,3);}
+ h.unmount();
+});
+
+
+test('STAMP visible facts follow actual practice, misses, time and pause while actions stay outside the pointer host',async()=>{
+ const h=board('stamp');await h.resolve();await h.start();const l=h.api.live.current;
+ const text=(node:any):string=>Array.isArray(node)?node.map(text).join(''):node&&typeof node==='object'?text(node.props?.children):node==null||typeof node==='boolean'?'':String(node);
+ const field=(key:string)=>h.nodes.find(n=>Object.hasOwn(n.props,key));
+ assert.equal(text(field('data-stamp-goal')),'蓋藍圈');assert.equal(text(field('data-stamp-time')),'不計時');assert.equal(field('data-stamp-time').props['aria-label'],'練習不計時');assert.equal(text(field('data-stamp-misses')),'歪0');
+ h.api.applyStamp({x:1,y:1});await h.flush();assert.equal(text(field('data-stamp-misses')),'歪1');assert.equal(text(field('data-stamp-time')),'不計時');
+ h.advance(220);h.api.applyStamp(domain.stampTarget(42,0));await h.flush();assert.equal(text(field('data-stamp-misses')),'歪0');assert.equal(text(field('data-stamp-time')),'0:00');assert.equal(field('data-stamp-time').props['aria-label'],'本局已用時間 0:00');
+ h.advance(220);h.api.pointerDown(h.pointer());h.advance(1234);h.api.setPaused();await h.flush();assert.equal(text(field('data-stamp-time')),'0:01');assert.equal(field('data-stamp-time').props['aria-label'],'本局已用時間 0:01');
+ const elapsed=l.clock.elapsed;h.advance(60000);await h.flush();assert.equal(text(field('data-stamp-time')),'0:01');assert.equal(field('data-stamp-time').props['aria-label'],'本局已用時間 0:01');await h.start();assert.equal(l.clock.elapsed,elapsed);
+ const host=field('data-game-stage');assert.equal(host.props.children,undefined);assert.notEqual(h.button('啪！蓋章').onPointerDown,host.props.onPointerDown);
+ h.api.applyStamp(domain.stampTarget(42,0));await h.flush();assert.equal(l.stamps.index,1);assert.equal(text(field('data-stamp-misses')),'歪0');
+ assert.equal(h.nodes.some(n=>n.props['data-photo-goal']!==undefined),false);h.unmount();
+});
+
+
+for(const [width,height]of [[320,568],[390,844],[667,375],[296,482],[358,758],[635,289]])test(`STAMP actual light drawing ${width}x${height} projects the unchanged target ring through the same camera`,()=>{
+ const h=lightStagePorts();h.host.clientWidth=width;h.host.clientHeight=height;const stage=h.create(),view=sceneView('stamp');stage.update(view);
+ const camera=dailyCamera(view,width/height),canvas=h.canvases[0],target=domain.stampTarget(42,0),expected=Array.from({length:64},(_,i)=>{const a=i*Math.PI/32,p=project(camera,[(target.x+Math.cos(a)*domain.RULES.stampRadius)*1.2,.092,(target.y+Math.sin(a)*domain.RULES.stampRadius)*1.5]);return [(p.x+1)*canvas.width/2,(1-p.y)*canvas.height/2];});
+ const paths:number[][][]=[];let path:number[][]=[];for(const c of h.calls){if(c.canvas!==0)continue;if(c.method==='beginPath')path=[];else if(c.method==='moveTo'||c.method==='lineTo')path.push(c.args.slice(0,2));else if(c.method==='fill')paths.push(path.map(p=>[...p]));}
+ assert.equal(paths.filter(p=>p.length===64&&p.every((point,i)=>Math.hypot(point[0]-expected[i][0],point[1]-expected[i][1])<1e-9)).length,1);
+ const p=project(camera,[target.x*1.2,.086,target.y*1.5]),hit=stage.point((p.x+1)*width/2,(1-p.y)*height/2);assert.ok(hit);assert.ok(Math.hypot(hit.x-target.x,hit.y-target.y)<1e-12);stage.dispose();
 });

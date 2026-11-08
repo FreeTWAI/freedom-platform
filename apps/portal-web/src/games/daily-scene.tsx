@@ -133,6 +133,9 @@ export function createDailyLightStage(host: HTMLElement, onLost?: () => void): S
     function stampScene(v: DailyView) {
         desk();const s=v.stamp;if(!s)return;
         for(let i=0;i<Math.min(s.index,12);i++)plane(2.55,-.5,1.25,1.65,.05+i*.035,PAPER);
+        plane(0,0,3,3.7,.064,'#d8c3ab');plane(0,0,3,3.7,.075,PAPER);
+        plane(0,-1.91,.52,.24,.16,INK);plane(0,-1.88,.44,.16,.19,GOLD);
+        plane(1.88,1.2,.70,.68,.23,INK);plane(1.88,1.2,.59,.57,.24,'#a34232');
         plane(0,0,3,3.7,.086,PAPER);plane(0,0,2.76,3.45,.088,PAPER,'#b8a58b');
         paperText(documentTitle(Math.min(s.index,11),s.practice),0,-1.38,.09,.19);
         paperText(s.practice?'不計時練習':`公文 ${Math.min(s.index+1,12)} / 12`,0,-1.04,.09,.13);
@@ -146,7 +149,8 @@ export function createDailyLightStage(host: HTMLElement, onLost?: () => void): S
         if(f&&age>=0&&age<420){ctx.save();ctx.globalAlpha=1-age/500;mark(f.point.x*1.2,f.point.y*1.5,f.hit);ctx.restore();paperText(f.hit?'上張已閱':'沒有蓋中',0,1.5,.11,.14,f.hit?'#487300':'#a53c4b');}
         const pulse=1-Math.min(1,Math.max(0,v.seconds*1000-s.lastAt)/180), active=v.raised||pulse>0||s.endedAt!==null;
         const x=active?v.stampPoint.x*1.2:1.88,z=active?v.stampPoint.y*1.5:1.2,y=v.raised?1.15:.10+(1-Math.max(0,pulse))*.15;
-        plane(x,z,.49,.47,y,INK);rect(x,y+.10,z,.46,.18,'#ce795e');rect(x,y+.44,z,.11,.60,TEAL);oval(x,y+.8,z,.23,.18,TEAL);rect(x,y+.81,z+.18,.22,.06,GOLD);
+        plane(x,z,.49,.47,y,INK);rect(x,y+.10,z,.46,.18,'#ce795e');polygon([[-.13,.18],[-.17,.25],[-.095,.34],[-.09,.49],[-.12,.59],[-.26,.72],[-.25,.81],[-.18,.88],[0,.91],[.18,.88],[.25,.81],[.26,.72],[.12,.59],[.09,.49],[.095,.34],[.17,.25],[.13,.18]].map(([dx,dy])=>[x+dx,y+dy,z] as WorldPoint),TEAL);
+        rect(x,y+.27,z+.08,.26,.035,GOLD);rect(x,y+.58,z+.08,.26,.035,GOLD);
         const crabX=1.98+(v.motion?Math.sin(v.seconds*.8)*.12:0);
         oval(crabX,.33,.1,.34,.18,'#d98565');for(const side of [-1,1]) {line([crabX+side*.15,.4,.1],[crabX+side*.15,.8,.1],'#d98565',3);oval(crabX+side*.15,.8,.13,.075,.08,PAPER);oval(crabX+side*.15,.8,.14,.03,.04,INK);}
     }

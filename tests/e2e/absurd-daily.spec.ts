@@ -780,7 +780,7 @@ test('AD-3 photo action status distinguishes repeated capture failures and saved
   try{
     for(let attempt=1;attempt<=2;attempt++){
       await shutter.click();await expect(notice).toHaveText(`本局第 ${attempt} 次拍照未保存。Synthetic repeated capture failure 第 1 / 3 位客人，已保存 0 / 2 張，還可拍 2 張。`);
-      await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(shutter).toBeEnabled();await expect(shutter).toHaveText('◎快門 · 2 張');
+      await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(shutter).toBeEnabled();await expect(page.locator('[data-photo-film]')).toBeVisible();await expect(page.locator('[data-photo-film]')).toHaveText('2 張');
     }
   }finally{await page.evaluate(fn=>{HTMLCanvasElement.prototype.toDataURL=fn;},original);await original.dispose();}
   await shutter.click();await expect(notice).toContainText('第 1 / 3 位客人，已保存 1 / 2 張，還可拍 1 張。');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);
@@ -1596,7 +1596,7 @@ for (const {game,width,height} of [
     if (game === 'stamp') await page.getByRole('button',{name:'啪！蓋章'}).click();
     if (game === 'cash') await page.getByRole('button',{name:cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券'}).click();
     const before = await counter.textContent();
-    const progress = game === 'photo' ? page.getByRole('button',{name:'拍照快門'}) : game === 'stamp' ? counter : page.locator('.fw-arcade-controls .fw-arcade-meta');
+    const progress = game === 'photo' ? page.locator('[data-photo-film]') : game === 'stamp' ? counter : page.locator('.fw-arcade-controls .fw-arcade-meta');
     const progressBefore = await progress.textContent();
     const canvas = page.locator('[data-game-stage] canvas');
     await expect(canvas).toHaveCount(1);
@@ -2171,7 +2171,11 @@ async function openDailyScene(page:Page,game:'photo'|'stamp'|'cash',light:boolea
 async function dailyWorldPoint(page:Page,game:'stamp'|'cash',world:number[]){
   const host=page.locator('.fw-arcade-stage');await host.scrollIntoViewIfNeeded();
   const box=(await host.boundingBox())!;
-  const camera=new PerspectiveCamera(game==='stamp'?40:42,box.width/box.height,.1,60);
+  const aspect=box.width/box.height;
+  // Full-height STAMP keeps the original pose and paper, but fits its
+  // portrait FOV; independently construct the actual projection for clicks.
+  const stampFov=2*Math.atan(Math.tan(20*Math.PI/180)*(aspect<1?Math.max(1.7,.90/aspect):1))*180/Math.PI;
+  const camera=new PerspectiveCamera(game==='stamp'?stampFov:42,aspect,.1,60);
   camera.position.set(0,5.3,2.7);camera.lookAt(0,0,.23);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
   const p=new Vector3(...world).project(camera),point={x:box.x+(p.x+1)*box.width/2,y:box.y+(1-p.y)*box.height/2};
   // Check the exact contact pixel, not just visibility of a broad parent box.
@@ -2259,7 +2263,7 @@ for(const light of [false,true]){
   test(`AD-scene ${mode}: held shutter across the actual twelve-second client boundary cannot spend the next film`,async({page})=>{
     await openDailyScene(page,'photo',light);const shutter=page.getByRole('button',{name:'拍照快門',exact:true});
     await shutter.focus();await page.keyboard.down('Enter');await page.clock.fastForward(12016);await page.keyboard.up('Enter');
-    await expect(page.locator('.fw-arcade-counter')).toContainText('2/3');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(shutter).toHaveText('◎快門 · 2 張');
+    await expect(page.locator('.fw-arcade-counter')).toContainText('2/3');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(page.locator('[data-photo-film]')).toBeVisible();await expect(page.locator('[data-photo-film]')).toHaveText('2 張');
     await shutter.press('Enter');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);await expect(page.locator('.fw-arcade-notice')).toContainText('第 2 / 3 位客人，已保存 1 / 2 張');
   });
 }
@@ -2346,8 +2350,8 @@ async function holidayHitPoint(page:Page,hole:number){
 }
 async function holidayControlHit(control:ReturnType<Page['locator']>){
   await control.scrollIntoViewIfNeeded();await expect(control).toBeVisible();
-  const geometry=await control.evaluate(el=>{const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return {width:b.width,height:b.height,inside:b.left>=0&&b.top>=0&&b.right<=innerWidth&&b.bottom<=innerHeight,hit:!!hit&&(el===hit||el.contains(hit))};});
-  expect(geometry.width).toBeGreaterThanOrEqual(44);expect(geometry.height).toBeGreaterThanOrEqual(44);expect(geometry.inside).toBe(true);expect(geometry.hit).toBe(true);
+  const geometry=await control.evaluate(el=>{const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return {width:b.width,height:b.height,inside:b.left>=0&&b.top>=0&&b.right<=innerWidth&&b.bottom<=innerHeight,hit:!!hit&&(el===hit||el.contains(hit)),childrenInside:[...el.children].every(child=>{const c=child.getBoundingClientRect();return c.left>=b.left-1&&c.top>=b.top-1&&c.right<=b.right+1&&c.bottom<=b.bottom+1;})};});
+  expect(geometry.width).toBeGreaterThanOrEqual(44);expect(geometry.height).toBeGreaterThanOrEqual(44);expect(geometry.inside).toBe(true);expect(geometry.hit).toBe(true);expect(geometry.childrenInside).toBe(true);
 }
 async function holidayStageBounds(page:Page){
   const stage=page.locator('.fullscreen-game--holiday[data-game-stage]');
@@ -2361,7 +2365,8 @@ async function holidayStageBounds(page:Page){
     return bad;
   });expect(failures).toEqual([]);
   if(await page.locator('.pt-canvas canvas').count()){
-    const box=(await page.locator('.pt-canvas').boundingBox())!;expect(box.width/box.height).toBeCloseTo(4/3,2);
+    const box=(await page.locator('.pt-canvas').boundingBox())!,diagnostic=`Holiday world actual rect: ${JSON.stringify(box)}`;
+    expect(box.width,`${diagnostic}; minimum width is 128 CSS px`).toBeGreaterThanOrEqual(128);expect(box.height,`${diagnostic}; minimum height is 96 CSS px`).toBeGreaterThanOrEqual(96);expect(box.width/box.height).toBeCloseTo(4/3,2);
   }
 }
 for(const light of [false,true])for(const rejected of [false,true])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} twenty waves retain ${rejected?'rejected':'native'} fullscreen through real results and same-seed replay`,async({page})=>{
@@ -2446,16 +2451,22 @@ async function holidayModalTextScale(page:Page,factor:number){
   expect(measurements.length).toBeGreaterThan(3);for(const m of measurements){expect(m.actualFont).toBeCloseTo(m.font*factor,2);if(Number.isFinite(m.line))expect(m.actualLine).toBeCloseTo(m.line*factor,2);}
 }
 
-for(const light of [false,true])for(const rejected of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const scale of [1,1.25,2])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} ${rejected?'rejected':'native'} fullscreen ${viewport.width}x${viewport.height} ${scale*100}% text keeps safe bounds, true targets and modal Tab access`,async({page})=>{
+for(const light of [false,true])for(const rejected of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const scale of [1,1.25,2])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} ${rejected?'rejected':'native'} fullscreen ${viewport.width}x${viewport.height} ${scale*100}% text keeps safe bounds, true targets and modal Tab access`,async({page},testInfo)=>{
   await page.setViewportSize(viewport);await openHolidayScene(page,light,rejected);
   const stage=page.locator('.fullscreen-game--holiday[data-game-stage]');
+  const attachWorldEvidence=async(phase:'playing'|'resumed')=>{
+    if(scale!==2||viewport.width===1440)return;
+    const name=`holiday-${light?'light':'native'}-${rejected?'rejected':'fullscreen'}-${viewport.width}x${viewport.height}-200-percent-${phase}`;
+    await testInfo.attach(`${name}.json`,{body:JSON.stringify({viewport:page.viewportSize(),textScale:scale,phase,world:await page.locator('.pt-canvas').boundingBox(),stage:await stage.boundingBox()},null,2),contentType:'application/json'});
+    await testInfo.attach(`${name}.png`,{body:await page.screenshot(),contentType:'image/png'});
+  };
   await stage.evaluate((root,factor)=>{
     const el=root as HTMLElement;for(const [side,value] of Object.entries({top:12,right:16,bottom:18,left:14}))el.style.setProperty(`--holiday-safe-${side}`,`${value}px`);
     // Text-only enlargement, not a claim that browser page zoom was automated.
     const styles=[root,...root.querySelectorAll('*')].filter((n):n is HTMLElement=>n instanceof HTMLElement).map(n=>({n,font:parseFloat(getComputedStyle(n).fontSize),line:parseFloat(getComputedStyle(n).lineHeight)}));
     for(const {n,font,line} of styles){n.style.fontSize=`${font*factor}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*factor}px`;}
   },scale);
-  await partyAdvance(page,250);await holidayStageBounds(page);
+  await partyAdvance(page,250);await attachWorldEvidence('playing');await holidayStageBounds(page);
   expect(await stage.evaluate(root=>{const style=getComputedStyle(root);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([12,16,18,14]);
   const cells=page.locator('.pt-hole-controls button');for(let i=0;i<6;i++)await holidayControlHit(cells.nth(i));
   // Reverse traversal catches controls stranded before a centered scroll origin.
@@ -2473,7 +2484,7 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   const restart=page.getByRole('button',{name:'重新開始',exact:true});await holidayControlHit(restart);await restart.click();await holidayModalTextScale(page,scale);const group=page.getByRole('group',{name:'確認重新開始'});await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();
   for(let i=0;i<4;i++){await page.keyboard.press('Tab');expect(await group.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
   await page.keyboard.press('Escape');await expect(restart).toBeFocused();await holidayFullscreen(page,rejected);
-  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await holidayStageBounds(page);
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await attachWorldEvidence('resumed');await holidayStageBounds(page);
   await page.locator('.pt-canvas').focus();
   for(let i=0;i<16;i++){await page.keyboard.press('Tab');expect(await stage.evaluate(el=>el.contains(document.activeElement)&&!document.activeElement?.closest('[inert]'))).toBe(true);}
 });
@@ -2588,7 +2599,7 @@ for(const light of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} 
   await page.getByRole('button',{name:'重新開始',exact:true}).click();await page.getByRole('button',{name:'確定重來',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');expect(await partyElapsed(page)).toBe(0);await page.getByRole('button',{name:'開始派對！',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','playing');
   // Presentation owns fullscreen Escape, not the game's pause action. Pause
   // explicitly, then prove exiting presentation preserves that frozen run.
-  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const exitAt=await partyElapsed(page);
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const exitAt=await partyElapsed(page);await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(exitAt);
 });
 

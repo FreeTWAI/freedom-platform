@@ -89,3 +89,64 @@ nine receipt hashes were reverified. Semantic reading is reused only for these
 byte-identical texts. All 268 current chunks were retrieved before editing;
 final binding repeats this on a fixed clean commit. Completeness is local
 integrity evidence, not CI approval, permission or product acceptance.
+
+
+## Exact 7f25d1e9 regression repair candidate (2026-11-09)
+
+Verify 42508072805 UI shard 1 completed 774 passed / 62 failed / zero skipped
+or flaky. Sixty failures are Party; two mushroom-art cases are a separate repair.
+This is completed assertion/timeout evidence, not the earlier runner-loss event.
+Artifact 13630154941 (118,684,647 bytes, SHA-256
+`e28bd4b3e475ffc16a787ade7c0e9c83cc16a4871107a8de2a214a5c5c988ae6`)
+binds base 242dbd4, head 7f25d1e9 and candidate eb52519b. Original screenshots,
+traces and JSON were read and retained unchanged.
+
+The failures have distinct causes:
+
+- Forty-six geometry/hit-test cases: legacy landscape `align-items:start`
+  collapses the size-contained world to 0×0; at 320×568 / 200% the long Chair
+  flex labels wrap vertically and leave a 51×39 world (Tofu 88×66). A late
+  resumed Holiday case also reaches 0×0. The field now stretches its world,
+  reserves a 96px minimum world row, isolates retired layout rules and uses
+  compact primary controls with complete accessible names. Lives and misses
+  remain visible. The world background extends behind the edge controls instead
+  of exposing separate cream control cards. This is not new 3D art acceptance.
+- PT-6 fails its existing owner-containment check before Start in landscape;
+  inactive second-row cells overflow their original owner. Compact labels and
+  explicit control geometry address it; its assertion remains unchanged.
+- Two native Tofu completions show the next block in the actual renderer, but
+  stale React HUD/drop state after a completed 460ms landing. Semantic score,
+  wave and turn changes now publish immediately instead of waiting for the
+  90ms UI throttle. Original duration, scoring and completion assertions remain.
+- Four context-loss cases observe one old 16ms render sample before fallback
+  publishes the retained simulation state. Failure now synchronizes diagnostics
+  after releasing the failed renderer, without rendering or resuming it.
+- Two hold/cancel cases fail only at presentation Escape after Pause disables
+  the focused button. Pause now transfers focus to enabled Resume within the
+  stage. The cancelled-input, score, frozen-clock and Escape checks remain.
+- Five native duration journeys time out while still playing. Original traces
+  show roughly 2.2–2.5 seconds of CI wall time per simulated second. This is a
+  renderer-throughput issue under that host, not measured phone FPS. Renderer
+  optimization is a separate candidate and must pass the unchanged formal
+  journeys before these failures can be called resolved.
+
+Six production-controller regressions cover between-draw context loss, exact
+landing-frame HUD/drop publication and Pause-to-Resume focus. The first focused
+run retained a failure because an old source-extraction fixture omitted the
+newly used input-stamp port; after adding that real production port, 224/224
+runtime cases passed with no skips. Browser source retains all original cases
+and adds Holiday minimum-world and before-assertion PNG evidence, matching the
+existing Chair/Tofu diagnostics. Local browser/GPU/PNG execution remains not_run;
+new formal screenshots, ordinary clicks/Tab, full results/replay, physical touch,
+Safari, OS sharing and human composition/art/fun acceptance remain required.
+
+
+Independent source review found two additional compact-control risks in the
+first repair: a centered three-row Chair pad could begin above its scroll
+origin, and the fixed 104px Tofu rail could not contain a 200% nowrap label.
+The follow-up uses a three-column, 176px Chair rail in short landscape and
+single visible direction/drop indicators with unchanged complete accessible
+names. Scrollable control grids start at a nonnegative origin. Browser hit
+checks additionally require each visible control child to fit its button;
+no existing size, containment, focus, clock or score assertion was removed.
+The follow-up still requires actual new-head browser and screenshot validation.

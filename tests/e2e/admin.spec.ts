@@ -96,7 +96,7 @@ test('an optional admin module load failure leaves navigation and the member wor
 });
 test.afterEach(async()=>{const drop=dropAdminBrowserSchema;dropAdminBrowserSchema=undefined;if(drop)await drop();});
 
-test('admin entry never grants access through a member login or onboarding',async({page})=>{
+test('ordinary members cannot see the admin entry and direct links still require administrator verification',async({page})=>{
   await page.goto('/admin');
   await expect(page.getByRole('heading',{name:'需要管理員驗證',exact:true})).toBeVisible();
   await expect(page.getByRole('navigation',{name:'平台管理選單'})).toHaveCount(0);
@@ -105,9 +105,11 @@ test('admin entry never grants access through a member login or onboarding',asyn
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
   await expect(page.locator('.shell')).toBeVisible();
   await openFeatureSearch(page);
-  await page.getByRole('navigation',{name:'主要工作區'}).locator('details > summary').filter({hasText:/^管理/}).click();
-  await page.getByRole('link',{name:/^平台管理/}).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.locator('a[href="/admin"]')).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.locator('a[href="/admin"]')).toHaveCount(0);
+  // Hiding navigation is not the authorization boundary.
+  await page.goto('/admin');
   await expect(page.getByRole('heading',{name:'需要管理員驗證',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'會員管理',exact:true})).toHaveCount(0);
 });
@@ -337,4 +339,44 @@ test('admin appointment, access sync, revocation and reactivation use real isola
     try{await second?.close();await page.goto('about:blank');}
     finally{await dropSchema();}
   }
+});
+
+async function memberAdminEntryFixture(page:Page){
+ let mode:'allow'|'deny'|'hold'|'error'|'missing'='allow',started=0;
+ let release=()=>{};const held=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/v1/session',async route=>{
+  const response=await route.fetch();if(!response.ok())return route.fulfill({response});
+  const body=await response.json(),current=mode;started++;
+  if(current==='hold')await held;
+  if(current==='error')return route.fulfill({status:503,json:{type:'about:blank',status:503,detail:'合成暫時錯誤'}});
+  return route.fulfill({response,json:{...body,admin_entry_visible:current==='missing'?undefined:current==='allow'||current==='hold'}});
+ });
+ await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
+ await expect(page.locator('.shell')).toBeVisible();await openFeatureSearch(page);
+ return {set:(next:typeof mode)=>{mode=next;},started:()=>started,release};
+}
+
+test('a confirmed admin entry remains usable on desktop and mobile without bypassing Access',async({page})=>{
+ // Synthetic presentation fixture only; the real server has no admin identity.
+ const fixture=await memberAdminEntryFixture(page);try{
+  const link=page.locator('a[href="/admin"]');await expect(link).toHaveCount(1);
+  await page.getByRole('navigation',{name:'主要工作區'}).locator('details > summary').filter({hasText:/^管理/}).click();await expect(link).toBeVisible();
+  await page.setViewportSize({width:390,height:844});await openFeatureSearch(page);
+  await expect(link).toBeVisible();await link.click();
+  await expect(page).toHaveURL(/\/admin$/);await expect(page.getByRole('heading',{name:'需要管理員驗證',exact:true})).toBeVisible();await expect(page.getByRole('navigation',{name:'平台管理選單'})).toHaveCount(0);
+ }finally{fixture.release();}
+});
+
+test('admin entry clears during refresh and ignores an older allowed response after revocation',async({page})=>{
+ const fixture=await memberAdminEntryFixture(page);try{
+  const link=page.locator('a[href="/admin"]');await expect(link).toHaveCount(1);
+  const before=fixture.started();fixture.set('hold');await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await expect.poll(fixture.started).toBeGreaterThan(before);await expect(link).toHaveCount(0);
+  fixture.set('deny');const denied=page.waitForResponse(response=>response.url().endsWith('/api/v1/session')&&response.status()===200);await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await denied;await expect(link).toHaveCount(0);
+  const older=page.waitForResponse(response=>response.url().endsWith('/api/v1/session')&&response.status()===200);fixture.release();await (await older).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));await expect(link).toHaveCount(0);
+  fixture.set('allow');await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(link).toHaveCount(1);
+  fixture.set('error');const failed=page.waitForResponse(response=>response.url().endsWith('/api/v1/session')&&response.status()===503);await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await failed;await expect(link).toHaveCount(0);await expect(page.locator('.shell')).toBeVisible();
+  fixture.set('allow');await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(link).toHaveCount(1);
+  fixture.set('missing');const missing=page.waitForResponse(response=>response.url().endsWith('/api/v1/session')&&response.status()===200);await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await (await missing).finished();await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));await expect(link).toHaveCount(0);
+ }finally{fixture.release();}
 });

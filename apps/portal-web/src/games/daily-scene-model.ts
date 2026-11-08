@@ -11,11 +11,23 @@ export function dailyCamera(view: StageView, aspect: number, camera = new Perspe
     camera.near = .1; camera.far = 60;
     if (view.game === 'photo') {
         camera.position.set(view.pan.x, 1.95 + view.pan.y, 6);
-        camera.fov = view.fov;
+        // view.fov is the original square-camera zoom input (38–60), not a
+        // promise of vertical degrees on a tall screen. Preserve that square
+        // horizontal field of view in portrait, adding vertical world area.
+        // Native rendering, light drawing and scoring all use this projection.
+        camera.fov = camera.aspect < 1
+            ? 2 * Math.atan(Math.tan(view.fov * Math.PI / 360) / camera.aspect) * 180 / Math.PI
+            : view.fov;
         camera.lookAt(view.pan.x, 1.95 + view.pan.y, 0);
     } else {
         camera.position.set(0, 5.3, 2.7);
-        camera.fov = view.game === 'stamp' ? 40 : 42;
+        // The old panel was almost square. In the new full-height workbench,
+        // fit the same paper below/above the floating HUD without changing
+        // camera position, look direction, paper geometry or stamp radius.
+        // Only STAMP's effective FOV grows; landscape keeps its original 40°.
+        camera.fov = view.game === 'stamp'
+            ? 2 * Math.atan(Math.tan(20 * Math.PI / 180) * (camera.aspect < 1 ? Math.max(1.7, .90 / camera.aspect) : 1)) * 180 / Math.PI
+            : 42;
         camera.lookAt(0, 0, .23);
     }
     camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);

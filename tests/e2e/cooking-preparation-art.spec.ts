@@ -14,6 +14,96 @@ export async function capturePreparationScreenshot(target:Pick<Locator,'screensh
   return body;
 }
 
+type GuideBox={left:number;right:number;top:number;bottom:number;width:number;height:number};
+type GuidePaint={paintIssues:string[];stroke:string;strokeWidth:number;strokeOpacity:number;opacity:number;visible:boolean;length:number;bounds:GuideBox;owner:GuideBox;viewport:{width:number;height:number};samples:{painted:boolean;inputOwned:boolean}[]};
+// SVG geometry boxes exclude stroke. A vertical Mx yVh path has zero geometric
+// width even when its dashes are visibly painted. Check the actual paint contract
+// instead, including inherited visibility, transformed stroke and hit ownership.
+export function preparationGuideProblems(paint:GuidePaint):string[]{
+  const issues:string[]=[...paint.paintIssues];
+  const numbers=[paint.strokeWidth,paint.strokeOpacity,paint.opacity,paint.length,...Object.values(paint.bounds),...Object.values(paint.owner),...Object.values(paint.viewport)];
+  if(!numbers.every(Number.isFinite))return ['non-finite guide geometry'];
+  if(!paint.visible||paint.opacity<.99||paint.strokeOpacity<.99||paint.stroke==='none'||paint.stroke==='transparent'||paint.strokeWidth<=0)issues.push('unpainted guide');
+  if(Math.abs(paint.length-189)>.01)issues.push('guide length');
+  const b=paint.bounds,o=paint.owner;
+  if(b.width<1||b.height<1||o.width<=0||o.height<=0)issues.push('empty painted bounds');
+  if(b.left<o.left-1||b.right>o.right+1||b.top<o.top-1||b.bottom>o.bottom+1)issues.push('outside owner');
+  if(b.left<0||b.right>paint.viewport.width||b.top<0||b.bottom>paint.viewport.height)issues.push('outside viewport');
+  if(paint.samples.length!==3||paint.samples.some(sample=>!sample.painted||!sample.inputOwned))issues.push('unpainted dash or wrong input owner');
+  return issues;
+}
+
+// This function is serialized unchanged into the browser and invoked directly by
+// CPU boundary fixtures. Input ownership is not a compositing/occlusion proof.
+export function observePreparationGuide(path:SVGPathElement,probe?:{target:'owner'|'ancestor';styles:Record<string,string>}){
+  // A negative fixture must measure and restore in one JS task. In particular,
+  // ResizeObserver must never consume the temporary one-pixel stage geometry.
+  const probeTarget=probe?(probe.target==='ancestor'?path.closest('.ck-scene-wrap'):path.ownerSVGElement):null;
+  if(probe&&!probeTarget)throw Error('Missing guide probe target');
+  const previous=probeTarget?.getAttribute('style')??null;
+  try{
+    if(probe&&probeTarget)for(const [property,value] of Object.entries(probe.styles))(probeTarget as HTMLElement|SVGElement).style.setProperty(property,value);
+    const svg=path.ownerSVGElement!,scene=path.closest('.ck-live-scene')!.querySelector('.ck-scene')!;
+    const style=getComputedStyle(path),matrix=path.getScreenCTM()!,box=path.getBBox(),half=parseFloat(style.strokeWidth)/2;
+    const corners=[[box.x-half,box.y-half],[box.x+box.width+half,box.y-half],[box.x-half,box.y+box.height+half],[box.x+box.width+half,box.y+box.height+half]].map(([x,y])=>new DOMPoint(x,y).matrixTransform(matrix));
+    const left=Math.min(...corners.map(p=>p.x)),right=Math.max(...corners.map(p=>p.x)),top=Math.min(...corners.map(p=>p.y)),bottom=Math.max(...corners.map(p=>p.y));
+    const paintIssues:string[]=[],clips:{owner:string;left:number;right:number;top:number;bottom:number;clipX:boolean;clipY:boolean}[]=[];
+    let visible=true,opacity=1;
+    if(matrix.b!==0||matrix.c!==0||matrix.a<=0||matrix.d<=0)paintIssues.push('unsupported stroke transform');
+    for(let ancestor:Element|null=path;ancestor;ancestor=ancestor.parentElement){
+      const css=getComputedStyle(ancestor),owner=`${ancestor.tagName}.${ancestor.getAttribute('class')??''}`;
+      visible&&=css.display!=='none'&&css.visibility==='visible'&&css.contentVisibility!=='hidden';opacity*=Number(css.opacity);
+      // Current guide ancestry has no filters or masks. The existing viewfinder
+      // drop-shadow is unrelated; do not erase its source or broadly allow filters.
+      for(const property of ['clip-path','mask-image','-webkit-mask-image','mask-border-source','-webkit-mask-box-image-source','filter','backdrop-filter','-webkit-backdrop-filter','perspective','vector-effect']){
+        const value=css.getPropertyValue(property).trim();
+        if(value&&value!=='none')paintIssues.push(`unsupported ${property} on ${owner}`);
+      }
+      if(css.clip&&css.clip!=='auto')paintIssues.push(`unsupported clip on ${owner}`);
+      if(css.mixBlendMode&&css.mixBlendMode!=='normal')paintIssues.push(`unsupported mix-blend-mode on ${owner}`);
+      // Client clip rectangles below support unscaled CSS boxes, including the
+      // production translate(-50%,-50%). SVG viewBox scaling is handled by CTM.
+      if(css.transform&&css.transform!=='none'){
+        const parts=/^matrix\(([^)]+)\)$/.exec(css.transform)?.[1].split(',').map(Number);
+        if(!parts||parts.length!==6||!parts.every(Number.isFinite)||parts[0]!==1||parts[1]!==0||parts[2]!==0||parts[3]!==1)paintIssues.push(`unsupported CSS transform on ${owner}`);
+      }
+      for(const property of ['rotate','scale','zoom']){
+        const value=css.getPropertyValue(property).trim(),allowed=property==='rotate'?['','none','0deg']:property==='scale'?['','none','1','1 1']:['','normal','1'];
+        if(!allowed.includes(value))paintIssues.push(`unsupported ${property} on ${owner}`);
+      }
+      const contained=/(^|\s)(paint|strict|content)(\s|$)/.test(css.contain),clipsAxis=(value:string)=>['hidden','clip','auto','scroll'].includes(value);
+      const clipX=contained||clipsAxis(css.overflowX),clipY=contained||clipsAxis(css.overflowY);
+      if(!clipX&&!clipY)continue;
+      const margin=css.getPropertyValue('overflow-clip-margin').trim();
+      if(margin&&margin!=='0px')paintIssues.push(`unsupported overflow-clip-margin on ${owner}`);
+      const rect=ancestor.getBoundingClientRect(),root=ancestor===document.documentElement;
+      const width=root?document.documentElement.clientWidth:ancestor.clientWidth,height=root?innerHeight:ancestor.clientHeight;
+      const clipLeft=root?0:rect.left+ancestor.clientLeft,clipTop=root?0:rect.top+ancestor.clientTop;
+      // A central rectangle inset by the largest corner radii is conservative:
+      // it never treats a rounded-off corner as visible. Unknown radii fail closed.
+      const radius=(value:string)=>{
+        const values=value.trim().split(/\s+/);if(values.length<1||values.length>2)return [NaN,NaN];
+        return [values[0],values[1]??values[0]].map((part,index)=>/^\d*\.?\d+(px|%)$/.test(part)?parseFloat(part)*(part.endsWith('%')?(index?height:width)/100:1):NaN);
+      };
+      const [tl,tr,br,bl]=[css.borderTopLeftRadius,css.borderTopRightRadius,css.borderBottomRightRadius,css.borderBottomLeftRadius].map(radius);
+      const clip={owner,left:clipLeft+Math.max(tl[0],bl[0]),right:clipLeft+width-Math.max(tr[0],br[0]),top:clipTop+Math.max(tl[1],tr[1]),bottom:clipTop+height-Math.max(bl[1],br[1]),clipX,clipY};
+      clips.push(clip);
+      if(![width,height,clip.left,clip.right,clip.top,clip.bottom].every(Number.isFinite)||width<=0||height<=0)paintIssues.push(`invalid ancestor clip on ${owner}`);
+      else if((clipX&&(left<clip.left-1||right>clip.right+1))||(clipY&&(top<clip.top-1||bottom>clip.bottom+1)))paintIssues.push(`clipped by ancestor ${owner}`);
+    }
+    const dash=style.strokeDasharray.split(/[ ,]+/).map(value=>parseFloat(value)),period=dash[0]+dash[1],length=path.getTotalLength();
+    if(dash.length!==2||!dash.every(value=>Number.isFinite(value)&&value>0))paintIssues.push('unsupported dash pattern');
+    const last=Math.floor((length-dash[0])/period),samples=[0,Math.floor(last/2),last].map(index=>{
+      const point=path.getPointAtLength(index*period+dash[0]/2),screen=new DOMPoint(point.x,point.y).matrixTransform(matrix),hit=document.elementFromPoint(screen.x,screen.y);
+      return {local:{x:point.x,y:point.y},screen:{x:screen.x,y:screen.y},hit:hit?`${hit.tagName}.${hit.getAttribute('class')??''}`:null,painted:path.isPointInStroke(point),inputOwned:hit!==null&&(hit===scene||scene.contains(hit))};
+    });
+    const rect=svg.getBoundingClientRect();
+    return {paintIssues,clips,centerline:{width:box.width,height:box.height},dash,stroke:style.stroke,strokeWidth:parseFloat(style.strokeWidth),strokeOpacity:Number(style.strokeOpacity),opacity,visible,length,bounds:{left,right,top,bottom,width:right-left,height:bottom-top},owner:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height},viewport:{width:document.documentElement.clientWidth,height:innerHeight},samples};
+  }finally{
+    if(probeTarget){if(previous===null)probeTarget.removeAttribute('style');else probeTarget.setAttribute('style',previous);}
+  }
+}
+
 // The browser fixture cannot claim physical notch/home-indicator emulation.
 // Override production env-backed properties to stress actual CSS deterministically.
 const kitchenInsets={top:28,right:24,bottom:32,left:40};
@@ -78,7 +168,34 @@ for(const fixture of [
   async function mushroomGuide(mode:'native'|'svg',count:number){
     // Independent expected span, not the implementation helper under test.
     const x=.30+.40*(count+1)/(step.goal+1),path=page.locator(mode==='native'?'.ck-toy-guides path[stroke-dasharray="15 12"]':'.ck-visual-light path[stroke-dasharray="12 9"]');
-    await expect(path).toBeVisible();await expect(path).toHaveAttribute('d',`M${x*800} 175V364`);
+    const owner=page.locator(mode==='native'?'.ck-toy-guides':'.ck-visual-light .ck-scene');
+    await expect(owner).toBeVisible();
+    await expect(path).toHaveAttribute('d',`M${x*800} 175V364`);
+    await expect(path).toHaveCSS('visibility','visible');
+    await expect(path).toHaveCSS('stroke',mode==='native'?'rgb(255, 240, 196)':'rgb(156, 77, 54)');
+    await expect(path).toHaveCSS('stroke-width',mode==='native'?'6px':'4px');
+    const paint=await path.evaluate(observePreparationGuide);
+    expect(paint.centerline).toEqual({width:0,height:189});
+    expect(preparationGuideProblems(paint)).toEqual([]);
+    await testInfo.attach(`${recipe.id}-${mode}-guide-${count}-paint`,{body:JSON.stringify(paint),contentType:'application/json'});
+    if(mode==='native'&&count===0||mode==='svg'&&count===1){
+      // Formal CI exercises this same observer against mutations on the actual
+      // production guide/ancestor, then restores them before any real gesture.
+      const fixtures:{label:string;target:'owner'|'ancestor';styles:Record<string,string>;failure:string}[]=[
+        {label:'clip-path',target:'owner',styles:{'clip-path':'inset(100%)'},failure:'unsupported clip-path'},
+        {label:'mask-image',target:'owner',styles:{'mask-image':'linear-gradient(transparent, transparent)'},failure:'unsupported mask-image'},
+        {label:'filter',target:'owner',styles:{filter:'opacity(0)'},failure:'unsupported filter'},
+        {label:'ancestor-overflow',target:'ancestor',styles:{height:'1px','min-height':'0px','max-height':'1px',overflow:'hidden'},failure:'clipped by ancestor'},
+      ];
+      for(const fixture of fixtures)await test.step(`${mode} guide rejects ${fixture.label}`,async()=>{
+        const target=fixture.target==='owner'?owner:page.locator('.ck-scene-wrap'),previous=await target.getAttribute('style');
+        const rejected=await path.evaluate(observePreparationGuide,{target:fixture.target,styles:fixture.styles}),issues=preparationGuideProblems(rejected);
+        expect(issues.some(issue=>issue.startsWith(fixture.failure))).toBe(true);
+        expect(await target.getAttribute('style')).toBe(previous);
+        expect(preparationGuideProblems(await path.evaluate(observePreparationGuide))).toEqual([]);
+        await testInfo.attach(`${recipe.id}-${mode}-${fixture.label}-rejected`,{body:JSON.stringify({issues,observation:rejected}),contentType:'application/json'});
+      });
+    }
     if(mode==='svg'){
       const geometry=await page.locator('.ck-visual-light .ck-scene').evaluate((node,input)=>{
         const svg=node as SVGSVGElement,screen=svg.getScreenCTM()!;
@@ -108,6 +225,7 @@ for(const fixture of [
   await advance();
   await expect(meter).toHaveText(`1 / ${step.goal}`);
   const cut=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-cut.png`);
+  if(mushroom)await capturePreparationScreenshot(game,testInfo,`${recipe.id}-native-cut-stage.png`);
   expect(createHash('sha256').update(cut).digest('hex')).not.toBe(createHash('sha256').update(whole).digest('hex'));
   const stats=await host.evaluate(element=>({calls:Number((element as HTMLElement).dataset.renderCalls),geometries:Number((element as HTMLElement).dataset.renderGeometries),textures:Number((element as HTMLElement).dataset.renderTextures)}));
   expect(stats.calls).toBeGreaterThan(0);expect(stats.calls).toBeLessThanOrEqual(100);
@@ -115,11 +233,13 @@ for(const fixture of [
   await testInfo.attach('native-preparation-diagnostics',{body:JSON.stringify({recipe:recipe.id,step:0,scope:'observed draw/resource counts, not FPS or human visual acceptance',...stats}),contentType:'application/json'});
 
   await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(game).toHaveAttribute('data-cooking-state','paused');
+  if(mushroom)await expect(page.locator('.ck-toy-guides')).toHaveCount(0);
   const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);
   expect(saved.active.count).toBe(1);expect(saved.step).toBe(0);expect(saved.reports).toEqual([]);
   await advance();await expect(meter).toHaveText(`1 / ${step.goal}`);
   await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(game).toHaveAttribute('data-cooking-state','playing');
   await expect(meter).toHaveText(`1 / ${step.goal}`);
+  if(mushroom)await mushroomGuide('native',1);
   await page.getByRole('button',{name:'輕量插畫',exact:true}).click();
   await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(canvas).toHaveCount(0);
   const food=page.locator('.ck-visual-light [data-ingredient]');
@@ -147,6 +267,15 @@ for(const fixture of [
   const late=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-late-cut.png`);
   expect(createHash('sha256').update(late).digest('hex')).not.toBe(createHash('sha256').update(whole).digest('hex'));
   expect(createHash('sha256').update(late).digest('hex')).not.toBe(createHash('sha256').update(cut).digest('hex'));
+  if(mushroom){
+    await page.getByRole('button',{name:'輕量插畫',exact:true}).click();
+    await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(canvas).toHaveCount(0);
+    await expectFaces(step.goal-1);await mushroomGuide('svg',step.goal-1);
+    await capturePreparationScreenshot(game,testInfo,`${recipe.id}-svg-late-cut-stage.png`);
+    await page.getByRole('button',{name:'立體料理台',exact:true}).click();
+    await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(canvas).toHaveCount(1);
+    await advance();await expect(meter).toHaveText(`${step.goal-1} / ${step.goal}`);
+  }
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
   await expect(game).toHaveCount(0);await expect(canvas).toHaveCount(0);expect(errors).toEqual([]);
 });

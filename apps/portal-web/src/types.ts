@@ -8,6 +8,8 @@ export type User = {
 export type SessionPayload = {
   user: User
   csrf_token: string
+  /** Server-derived navigation hint; never authorizes an admin API. */
+  admin_entry_visible?: boolean
 }
 
 export type ProblemDetails = {

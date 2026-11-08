@@ -764,7 +764,7 @@ test('PT-action-light: actual stop/retry/fallback retains the same paused run an
 test('PT-action-light: the production RAF advances essential motion in light mode with reduced motion',()=>{
   for(const game of ['chair','tofu'] as const){
     const live={current:startParty(newParty(game,42))},loop={current:undefined as any},mode={current:'light'},last={current:null as number|null},lastDraw={current:null as number|null};let kicked=0,stopped=0;
-    runInNewContext(partyClosure('  loop.current=t=>{','\n  useEffect('),{loop,live,mode,last,lastDraw,lastUi:{current:0},frame:{current:0},motionRef:{current:false},R:PT,advanceParty,pauseRun(){throw Error('unexpected stall');},soundEffect(){},safeDraw:()=>true,refresh(){},kick:()=>kicked++,stop:()=>stopped++});
+    runInNewContext(partyClosure('  loop.current=t=>{','\n  useEffect('),{loop,live,mode,last,lastDraw,lastUi:{current:0},frame:{current:0},motionRef:{current:false},R:PT,advanceParty,partyInputStamp,pauseRun(){throw Error('unexpected stall');},soundEffect(){},safeDraw:()=>true,refresh(){},kick:()=>kicked++,stop:()=>stopped++});
     loop.current(100);const before=live.current;loop.current(200);assert.equal(live.current.elapsed,100);assert.equal(kicked,2);assert.equal(stopped,0);if(game==='tofu')assert.notDeepEqual(tofuView(before as TofuRun).active,tofuView(live.current as TofuRun).active);
     live.current=pauseParty(live.current);loop.current(700);assert.equal(live.current.elapsed,100);assert.equal(kicked,2);
   }
@@ -1684,4 +1684,28 @@ test('PT-TOFU-SCENE: actual share shortcut scrolls only its bounded result (non-
  const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare()'),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
  const result={scrollTop:20,getBoundingClientRect:()=>({top:50}),scrollTo:(value:unknown)=>calls.push(value)},panel={closest:()=>result,getBoundingClientRect:()=>({top:330}),scrollIntoView:()=>assert.fail('must not scroll the whole stage'),focus:(value:unknown)=>calls.push(['focus',value])};
  const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{holiday:false,chair:false,tofu:true,resultReady:true,container:{current:{querySelector:()=>panel}}});run();assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{top:300,behavior:'instant'},['focus',{preventScroll:true}]]);
+});
+
+
+// Reproduce the precise 7f CI failures with the real controller. Renderer ports
+// make these lifecycle/state assertions, not browser timing or pixel evidence.
+for(const game of ['chair','tofu'] as const)test(`PT-REPAIR: ${game} context loss publishes the last undrawn simulation frame without resuming`,async()=>{
+ const h=game==='chair'?await chairControllerHarness('native'):await tofuControllerHarness('native');
+ await h.click('開始派對！');h.tick(0);h.tick(16);
+ assert.equal(h.run().elapsed,16);assert.equal(Number(h.host.dataset.elapsed),0,'frame is deliberately between native draws');
+ h.lose();await h.settle();assert.equal(h.run().status,'paused');assert.equal(Number(h.host.dataset.elapsed),16);
+ await h.click('改用輕量玩法');h.tick(1000);assert.equal(h.run().elapsed,16);assert.equal(Number(h.host.dataset.elapsed),16);
+ await h.click('重試 3D，保留這局');assert.equal(h.run().status,'paused');assert.equal(Number(h.host.dataset.elapsed),16);h.cleanup();
+});
+for(const mode of ['native','light'] as const)test(`PT-REPAIR: ${mode} tofu landing publishes earned score and enabled drop in the exact landing frame`,async()=>{
+ const h=await tofuControllerHarness(mode);await h.click('開始派對！');h.tick(0);
+ h.seek(s=>Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers.at(-1)![tofuAxis(s)])<.04);
+ await h.click('豆腐落下！');const at=h.run().elapsed;
+ h.advance(at+459);assert.equal(h.run().layers.length,1);assert.equal(h.section()['data-party-score'],0);assert.equal(h.button('豆腐降落中…').disabled,true);
+ h.tick(1);assert.equal(h.run().layers.length,2);assert.equal(h.run().score,165);assert.equal(h.section()['data-party-score'],165);assert.equal(h.button('豆腐落下！').disabled,false);h.cleanup();
+});
+for(const mode of ['native','light'] as const)test(`PT-REPAIR: ${mode} clicked pause hands focus to enabled resume inside the stage`,async()=>{
+ const h=await chairControllerHarness(mode);await h.click('開始派對！');h.tick(0);h.advance(250);
+ await h.click('暫停');assert.equal(h.run().status,'paused');assert.equal(h.button('暫停').disabled,true);assert.equal(h.focus(),'繼續這一局');
+ assert.equal(h.button('繼續這一局').disabled,undefined);const at=h.run().elapsed;h.tick(1000);assert.equal(h.run().elapsed,at);h.cleanup();
 });

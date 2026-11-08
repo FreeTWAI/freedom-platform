@@ -2,6 +2,7 @@ import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTextur
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup} from './stage-batch';
+import {createStampHandleGeometry} from './stamp-tool';
 import {dailyCamera,paperPoint,cashCardPose,cashContains,captureDailyFrame,PAPER as PAPER_GEOMETRY} from './daily-scene-model';
 import { cashDeck, CLIENTS, documentTitle, photoPose, RULES, stampTarget, type CashState, type GameId, type Point, type StampState } from './domain';
 export type StageView = {
@@ -330,7 +331,31 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         rb(world, LIME, -2.25, .055, 1.6, .08, .08, 1.0).rotation.y = -.4;
         bakeRigidGroup(world,geometries,new Set([lamp.children[lamp.children.length-1]]));
     }
-    function buildStamp() { desk(); paperMat = new MeshBasicMaterial({ color: PAPER, toneMapped: false }); materials.add(paperMat); paperMesh = new Mesh(plane, paperMat); paperMesh.scale.set(3, 3.7, 1); paperMesh.rotation.x = -Math.PI / 2; paperMesh.position.y = .086; world.add(paperMesh); stampRoot = group(world, 0, .4, 0); rb(stampRoot, '#ec6549', 0, .09, 0, .46, .18, .43); rb(stampRoot, INK, 0, .005, 0, .49, .025, .47); mesh(stampRoot, cylinder, BLUE, 0, .44, 0, .11, .6, .11); ball(stampRoot, BLUE, 0, .8, 0, .23, .18, .20); rb(stampRoot, LIME, 0, .81, .18, .22, .06, .05); tower = group(world, 2.5, .03, -.6); for (let i = 0; i < 12; i++) {
+    function buildStamp() {
+        desk();
+        // Actual layered stock and a small sprung clip sit below/behind the
+        // unchanged y=.086 contact plane. No decoration covers a target.
+        for (const y of [.064, .075]) rb(world, PAPER, 0, y, 0, 3, .009, 3.7);
+        const clip=group(world,0,.10,-1.91);
+        rb(clip,INK,0,0,0,.52,.12,.24);
+        rb(clip,LIME,0,.075,.03,.44,.035,.16);
+        for(const side of [-1,1]){
+            mesh(clip,torus,'#d8d9be',side*.15,.14,-.03,.085,.12,.085).rotation.x=-.45;
+        }
+        // The idle stamp has a physical ink-pad cradle rather than hovering
+        // beside the sheet. Its existing resting pose stays unchanged.
+        rb(world,INK,1.88,.155,1.2,.70,.17,.68);
+        rb(world,'#a34232',1.88,.238,1.2,.59,.012,.57);
+        rb(world,LIME,1.88,.13,1.55,.30,.09,.025);
+        paperMat = new MeshBasicMaterial({ color: PAPER, toneMapped: false }); materials.add(paperMat);
+        paperMesh = new Mesh(plane, paperMat); paperMesh.scale.set(3, 3.7, 1); paperMesh.rotation.x = -Math.PI / 2; paperMesh.position.y = .086; world.add(paperMesh);
+        stampRoot = group(world, 0, .4, 0);
+        rb(stampRoot, '#ec6549', 0, .09, 0, .46, .18, .43);
+        rb(stampRoot, INK, 0, .005, 0, .49, .025, .47);
+        const handle=mesh(stampRoot,geo(createStampHandleGeometry()),BLUE,0,0,0,1);handle.name='stamp-turned-handle';
+        for(const y of [.27,.58])mesh(stampRoot,torus,LIME,0,y,0,.12,.12,.12).rotation.x=Math.PI/2;
+        for(const side of [-1,1])ball(stampRoot,LIME,side*.15,.184,.12,.025,.012,.025);
+ tower = group(world, 2.5, .03, -.6); for (let i = 0; i < 12; i++) {
         const page = rb(tower, PAPER, Math.sin(i) * .04, i * .065, 0, 1.35, .055, 1.7);
         page.name = `sheet${i}`;
         page.rotation.y = Math.sin(i) * .025;
