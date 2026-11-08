@@ -21,10 +21,10 @@ be summarized as all 72 games redesigned.
 
 Four preparation foods now use original curved solid geometry: potato, pumpkin,
 sweet potato and mushroom. The five affected first-step recipes are fish-and-chips,
-pumpkin-soup, baked-sweet-potato, cream-risotto and plant-burger. Whole and cut
-models share bounded resources but remain separate visibility states. Accepted
-domain cut counts alone reveal the inside; elapsed time and rejected gestures do
-not. SVG fallback retains the existing 2D artwork and still accepts input.
+pumpkin-soup, baked-sweet-potato, cream-risotto and plant-burger. Each scene now uses one large continuous food, partitioned at the actual knife
+planes. Only accepted cuts separate a segment and reveal its true cross-section;
+elapsed time and rejected gestures do not. Per-step geometry and materials are
+bounded and released on rebuild/exit. SVG fallback retains the existing 2D artwork and still accepts input.
 
 The new models have no external assets or textures. Existing disposal ownership,
 heat isolation and draw/resource budgets are unchanged. The dish-result renderer,
@@ -48,7 +48,7 @@ main 242dbd400a28c283fc684f5b6cbf11070769baae, and does not alter Ted's branches
 
 - Full `npm run typecheck` and `npm run build`: passed locally. The existing large
   chunk build warning remains.
-- Focused actual runtime tests: 230 passed, zero skipped across absurd-daily,
+- Focused actual runtime tests: 229 passed, zero skipped across absurd-daily,
   daily-game-focus, cooking-ingredient-visuals and kitchen-food-batch. Geometry
   tests use installed Three, with the existing renderer boundary stub. They are
   not native GPU or visual acceptance.
@@ -110,6 +110,36 @@ clicks, 200% text, both compact/landscape flows and keyboard help, with extra hi
 and non-overlap checks and PNG retention. No force-click, longer timeout or deleted
 case is used. These repairs need a new official run; the old failure is not fixed
 by Ted's earlier approval or by the 12 passing preparation cases.
+
+## Follow-up after bf9292fd
+
+Verify 42462370423 failed. UI shard 1 finished with 767 passed and one failed,
+without retries; UI shards 2/3, the full runtime aggregate, static checks and
+CodeQL passed. All four paused-help cases, the unavailable-art/storage fallback and all
+12 preparation cases passed. Artifact 13610878934 contains the report and 40 PNGs.
+The actual remaining 200% failure PNG was inspected: Start was pushed into a
+second column outside its overlay. The legacy compact theme still supplied
+`flex-wrap: wrap` and `overflow: visible` despite the new column/max-height rules.
+The overlay now explicitly disables wrapping, contains overflow and preserves
+its action button's natural height. No expectation or normal click was removed.
+The paused/landscape portions of that 200% case had not been reached.
+
+The same real screenshots exposed a separate art weakness: small whole foods
+repeated in a line, with tiny detached cut faces. The new candidate instead has
+one dominant continuous potato, pumpkin, sweet potato or mushroom. Its skin and
+flesh are actual geometry partitioned at each domain knife plane. Accepted cuts
+separate full cross-sections on the board; pumpkin seeds and mushroom stalk cuts
+are geometry, not painted screenshots. The knife follows the food's height.
+The rules, pointer coordinates, save data and SVG fallback remain unchanged.
+
+Geometry tests now cover every cut count, board contact and footprint,
+nonintersecting separated slices, exact guide projection, hidden internal faces,
+no elapsed-only redraw, fixed per-step resources and one-time disposal. The two
+overlapping old lifecycle/accepted-cut probes were combined into one stronger
+five-recipe test, with an explicit nonempty set of all five recipe IDs. This
+changes the focused total from 230 to 229 without dropping those guarantees.
+The new models and the 200% overlay repair require new native CI images; no
+visual pass is claimed for them before those images are inspected.
 
 ## Remaining rollout work
 

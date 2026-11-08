@@ -219,6 +219,8 @@
 .fw-arcade-root.fw-arcade-toy-console .fullscreen-game.fullscreen-game--integrated .fullscreen-game__button:first-child { flex: 0 0 44px; }
 /* Paused recipe help lives in the visible overlay. The covered cooking dock
    stays inert, so no keyboard action can land behind the pause surface. */
-.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay { display: flex; flex-direction: column; align-items: stretch; max-height: calc(100% - var(--ck-toolbar-bottom, 102px) - 24px); }
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; overflow: auto; max-height: calc(100% - var(--ck-toolbar-bottom, 102px) - 24px); }
 .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay>div { min-height: 0; flex: 0 1 auto; overflow: auto; }
 .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay>.ck-help { align-self: stretch; text-align: left; flex: 0 1 auto; min-height: 44px; overflow: auto; }
+
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay>button { flex: 0 0 auto; }

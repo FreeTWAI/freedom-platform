@@ -132,42 +132,6 @@ test('real ingredient meshes use shared contours, bounded opaque parts and no pe
  }
 });
 
-test('actual batched preparation roots show one variant only and release both states once',()=>{
- for(const {recipe,step,index} of ingredientSteps){
-  const visual=ingredients.ingredientVisual(step.ingredient,step.shape)!;if(!visual.cutLayers)continue;
-  const f=factory(true),run={...domain.newCookingRun(recipe,42,'preparation_lifecycle'),step:index,status:'playing' as const},disposed=new Map<T.BufferGeometry|T.Material,number>();
-  const track=(r:T.BufferGeometry|T.Material)=>{if(!disposed.has(r)){disposed.set(r,0);r.addEventListener('dispose',()=>disposed.set(r,disposed.get(r)!+1));}};
-  try{
-   f.stage.update(run,null,1000,false);const roots=ingredientRoots(f.scene()),before=resources(f.scene()),extrusions=f.extrusions.length;
-   f.extrusions.forEach(track);roots.forEach(root=>root.traverse(o=>{if(o instanceof T.Mesh){track(o.geometry);track(o.material as T.Material);}}));
-   assert.ok(extrusions<=14);
-   const foodGeometry=new Set([...f.extrusions,...roots.flatMap(root=>[...resources(root).geometries])]);assert.ok(foodGeometry.size<=32,'both states and per-copy merged geometry fit the fixed preparation budget');
-   const foodMaterials=new Set(roots.flatMap(root=>[...resources(root).materials]));assert.ok(foodMaterials.size<=4);
-   for(const motion of [false,true])for(const status of ['playing','paused'] as const)for(const count of [0,1,step.goal,0]){
-    const frame={...run,status,elapsed:5000,active:{...run.active,count}},saved=JSON.stringify(frame);
-    f.stage.update(frame,null,5000,motion);
-    roots.forEach((root,i)=>{
-     assert.equal(root.children.length,2,'parent must not be flattened across hidden states');
-     const whole=root.getObjectByName('preparation/whole')!,cut=root.getObjectByName('preparation/cut')!;
-     assert.equal(whole.visible,i>=count);assert.equal(cut.visible,i<count);
-     const visible:T.Mesh[]=[];root.traverseVisible(o=>{if(o instanceof T.Mesh)visible.push(o);});
-     const expected=i<count?cut:whole;
-     assert.deepEqual(new Set(visible),new Set(expected.children),'no hidden variant was merged into the shown mesh');
-     assert.ok(visible.length<=4);assert.ok(visible.every(mesh=>mesh.parent===expected));
-    });
-    assert.deepEqual(resources(f.scene()),before);assert.equal(f.extrusions.length,extrusions);assert.equal(JSON.stringify(frame),saved);
-    const renders=f.renders();f.stage.update({...frame,elapsed:15000},null,15000,motion);assert.equal(f.renders(),renders,'unchanged cuts have no clock-driven redraw');
-   }
-   f.stage.update({...run,step:index+1},null,16000,false);for(const count of disposed.values())assert.equal(count,1);
-   const nextExtrusion=f.extrusions.length,previousResources=disposed.size;
-   f.stage.update(run,null,17000,false);f.extrusions.slice(nextExtrusion).forEach(track);
-   ingredientRoots(f.scene()).forEach(root=>{assert.equal(root.getObjectByName('preparation/whole')!.visible,true);assert.equal(root.getObjectByName('preparation/cut')!.visible,false);root.traverse(o=>{if(o instanceof T.Mesh){track(o.geometry);track(o.material as T.Material);}});});
-   assert.ok(disposed.size>previousResources,'fresh whole and hidden cut resources are tracked before direct exit');
-  }finally{f.stage.dispose();f.stage.dispose();}
-  for(const count of disposed.values())assert.equal(count,1,'rebuild and direct exit each dispose their own assets exactly once');
- }
-});
-
 test('ingredient heat is isolated, batches preserve real geometry and all step resources dispose once',()=>{
  // Explicit presentation fixture: current catalog uses these fruits in slice/plate.
  // Project a real banana step into the existing pan renderer to cover its heat/batch branch.
@@ -231,46 +195,46 @@ test('real SVG fallback renders the same filled ingredient contours and retains 
 });
 
 // Four new solids intentionally no longer share the SVG fallback's flat contours.
-test('volumetric preparations have curved depth, bounded shared resources and distinct cut surfaces',()=>{
+test('single volumetric foods partition exactly at guide planes with bounded resources',()=>{
  for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
-  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
-  const model=preparation.createPreparationModel(id,owned,materials);
-  try {
-   assert.equal(model.whole.name,'preparation/whole');assert.equal(model.cut.name,'preparation/cut');assert.equal(model.cut.visible,false);
-   assert.ok(owned.size<=14);assert.ok(materials.size<=4);
-   for(const variant of [model.whole,model.cut]){
-    assert.ok(variant.children.length<=4);
-    const bounds=new T.Box3().setFromObject(variant),size=bounds.getSize(new T.Vector3());
-    assert.ok(size.y>.15,`${id} has solid volume, not stacked flat layers`);
-    assert.ok(size.x>.3&&size.z>.3);
-    variant.traverse(o=>{if(o instanceof T.Mesh){assert.ok(owned.has(o.geometry));assert.equal((o.material as T.MeshStandardMaterial).map,null);assert.ok((o.material as T.MeshStandardMaterial).roughness<1);for(const value of o.geometry.getAttribute('position').array)assert.ok(Number.isFinite(value));}});
+  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>(),planes=Array.from({length:7},(_,i)=>9.3*(-.28+.56*(i+1)/8));
+  const model=preparation.createPreparationModel(id,planes,owned,materials);
+  try{
+   assert.equal(model.segments.length,8);assert.equal(model.root.name,`ingredient/${id}`);assert.ok(owned.size<=26);assert.ok(materials.size<=4);
+   const bounds=new T.Box3().setFromObject(model.root),size=bounds.getSize(new T.Vector3());assert.ok(size.x>5&&size.y>.5&&size.z>1.3);assert.ok(bounds.min.y>=.249);
+   model.root.traverse(o=>{if(o instanceof T.Mesh){assert.ok(owned.has(o.geometry));for(const v of o.geometry.getAttribute('position').array)assert.ok(Number.isFinite(v));assert.equal((o.material as T.MeshStandardMaterial).map,null);}});
+   for(let i=0;i<7;i++){
+    const a=model.faces[i].right.geometry.getAttribute('position'),b=model.faces[i+1].left.geometry.getAttribute('position');
+    for(const [mesh,position] of [[model.faces[i].right,a],[model.faces[i+1].left,b]] as const)for(let n=0;n<position.count;n++)assert.ok(Math.abs(position.getX(n)+mesh.parent!.position.x-planes[i])<(id==='pumpkin'&&n>=120?.00601:1e-6),'the flesh lies on the knife plane; only raised seeds stand .006 above it');
    }
-   const copy=model.whole.clone(true);assert.deepEqual(resources(copy),resources(model.whole),'copies share, rather than allocate, geometry and materials');
-   model.cut.visible=true;assert.notDeepEqual(snapshot(new T.Scene().add(model.whole)),snapshot(new T.Scene().add(model.cut)));model.cut.visible=false;
+   const refs=resources(model.root);for(const count of [...Array.from({length:8},(_,i)=>i),0]){model.update(count);model.faces.forEach((f,i)=>{assert.equal(f.left.visible,i>0&&i<=count);assert.equal(f.right.visible,i<count);assert.equal(model.segments[i].position.z,i<count?.65:0);});assert.deepEqual(resources(model.root),refs);
+    model.root.updateMatrixWorld(true);const world=new T.Box3().setFromObject(model.root,true);assert.ok(world.min.x>=-3.05&&world.max.x<=3.05,`${id}/${count}: slices remain across the board`);assert.ok(world.min.z>=-2&&world.max.z<=2.2,`${id}/${count}: slices remain within board depth`);assert.ok(world.min.y>=.249);
+    const intervals=model.segments.map((segment,i)=>{let min=Infinity,max=-Infinity;segment.traverse(o=>{if(o instanceof T.Mesh){const a=o.geometry.getAttribute('position');for(let j=0;j<a.count;j++){const v=new T.Vector3().fromBufferAttribute(a,j).applyMatrix4(o.matrixWorld);const x=i<count?v.x+.15*(v.y-.25):v.x;min=Math.min(min,x);max=Math.max(max,x);}}});return {min,max};});
+    for(let i=0;i<count;i++){const contact=new T.Box3().setFromObject(model.segments[i],true);assert.ok(Math.abs(contact.min.y-.25)<1e-6,`${id}/${count}/${i}: every separated slice rests on the board`);const facing=new T.Vector3(1,0,0).applyNormalMatrix(new T.Matrix3().getNormalMatrix(model.segments[i].matrixWorld));assert.ok(facing.dot(new T.Vector3(0,1,1).normalize())>.1,'leaned flesh face points toward the actual oblique camera');}
+    for(let i=0;i<count-1;i++)assert.ok(intervals[i].max<intervals[i+1].min,`${id}/${count}: parallel leaned slice volumes do not intersect`);
+    if(count>0&&count<model.segments.length){const cutBounds=new T.Box3().setFromObject(model.segments[count-1],true),uncutBounds=new T.Box3().setFromObject(model.segments[count],true);assert.ok(cutBounds.max.x<uncutBounds.min.x,`${id}/${count}: separated slice does not intersect uncut body`);}
+   }
   }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
  }
 });
 
-test('accepted cuts, not elapsed time or rejected gestures, reveal volumetric food interiors',()=>{
+test('accepted domain cuts separate one hero segment; rejected cuts and time never do; lifecycle releases all assets once',()=>{
+ const covered=new Set<string>();
  for(const {recipe,step,index} of ingredientSteps){
   const visual=ingredients.ingredientVisual(step.ingredient,step.shape)!;if(step.kind!=='slice'||!preparation.isVolumetricPreparation(visual.id))continue;
-  const f=factory(true);let run=domain.newCookingRun(recipe,42,'real-solid-cut');run={...run,step:index};run=domain.actCooking(run,{kind:'start',step:index},1000);
+  covered.add(recipe.id);const f=factory(true);let run=domain.actCooking({...domain.newCookingRun(recipe,42,'hero-cut'),step:index},{kind:'start',step:index},1000);
+  const disposed=new Map<T.BufferGeometry|T.Material,number>();const track=(root:T.Object3D)=>root.traverse(o=>{if(o instanceof T.Mesh)for(const r of [o.geometry,...(Array.isArray(o.material)?o.material:[o.material])])if(!disposed.has(r)){disposed.set(r,0);r.addEventListener('dispose',()=>disposed.set(r,disposed.get(r)!+1));}});
   try{
-   f.stage.update(run,null,1000,false);const roots=ingredientRoots(f.scene());assert.equal(f.extrusions.length,0);
-   const refs=resources(roots[0]);for(const root of roots)assert.deepEqual(resources(root),refs,'all copies share their step template resources');
-   const rejected=domain.actCooking(run,{kind:'cut',step:index,x1:0,y1:0,x2:0,y2:0},1200);assert.equal(rejected.active.count,0);f.stage.update(rejected,null,1200,false);
-   assert.equal(roots[0].getObjectByName('preparation/cut')!.visible,false);
-   run=domain.actCooking(rejected,{kind:'cut-key',step:index},1500);assert.equal(run.active.count,1);f.stage.update(run,null,1500,false);
-   assert.equal(roots[0].getObjectByName('preparation/cut')!.visible,true);assert.equal(roots[0].getObjectByName('preparation/whole')!.visible,false);
-   assert.equal(roots[1].getObjectByName('preparation/cut')!.visible,false);
-   f.scene().updateMatrixWorld(true);
-   for(const [root,name,offset] of [[roots[0],'preparation/cut',.18],[roots[1],'preparation/whole',0]] as const){
-    const variant=root.getObjectByName(name)!;const bounds=new T.Box3().setFromObject(variant);
-    assert.ok(bounds.min.y>=.238&&bounds.min.y<=.261,`${recipe.id} touches the .24-high cutting board without sinking or floating`);
-    const target=root.localToWorld(new T.Vector3(offset,0,0));
-    const ray=new T.Raycaster(new T.Vector3(target.x,4,target.z),new T.Vector3(0,-1,0));
-    const hits=ray.intersectObjects(variant.children,false);assert.ok(hits.length>0,'solid food is hittable above the board');assert.ok(hits[0].point.y>.3);
-   }
-  }finally{f.stage.dispose();}
+   f.stage.update(run,null,1000,false);const roots=ingredientRoots(f.scene());assert.equal(roots.length,1,'one dominant food, not a row of small whole foods');const root=roots[0];track(root);const refs=resources(root);assert.equal(f.extrusions.length,0);
+   const segments=root.children.filter(o=>o.name.startsWith('preparation/segment/'));assert.equal(segments.length,step.goal+1);
+   const camera=new T.OrthographicCamera(-4.65,4.65,3.255,-3.255,.1,40);camera.position.set(0,8.5,8.5);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);
+   for(let count=0;count<step.goal;count++){const face=segments[count].getObjectByName('preparation/right-face') as T.Mesh;const x=face.geometry.getAttribute('position').getX(0)+segments[count].position.x;const screen=new T.Vector3(x,.3,0).project(camera);assert.ok(Math.abs((screen.x+1)/2-domain.cutGuide({...run,active:{...run.active,count}}))<1e-6);}
+   run=domain.actCooking(run,{kind:'cut',step:index,x1:0,y1:0,x2:0,y2:0},1200);assert.equal(run.active.count,0);f.stage.update(run,null,1200,false);assert.ok(segments.every(g=>g.position.z===0));assert.ok(segments.every(g=>!g.getObjectByName('preparation/left-face')!.visible&&!g.getObjectByName('preparation/right-face')!.visible),'all internal faces remain hidden before an accepted cut');
+   run=domain.actCooking(run,{kind:'cut-key',step:index},1500);assert.equal(run.active.count,1);f.stage.update(run,null,1500,false);assert.equal(segments[0].position.z,.65);assert.equal(segments[1].position.z,0);assert.equal(segments[0].getObjectByName('preparation/right-face')!.visible,true);assert.equal(segments[1].getObjectByName('preparation/left-face')!.visible,true);
+   const before=snapshot(f.scene()),renderCount=f.renders();f.stage.update({...run,status:'paused',elapsed:9000},null,9000,false);assert.equal(f.renders(),renderCount,'elapsed time alone must not redraw static cuts');assert.deepEqual(snapshot(f.scene()),before);assert.deepEqual(resources(root),refs);
+   f.stage.update({...run,step:index+1},null,10000,false);for(const count of disposed.values())assert.equal(count,1);
+   f.stage.update({...run,status:'playing'},null,11000,false);ingredientRoots(f.scene()).forEach(track);
+  }finally{f.stage.dispose();f.stage.dispose();}for(const count of disposed.values())assert.equal(count,1);
  }
+ assert.ok(covered.size>=5,'hero lifecycle must cover at least five actual recipe steps');assert.deepEqual([...covered].sort(),['baked-sweet-potato','cream-risotto','fish-and-chips','plant-burger','pumpkin-soup'].sort());
 });
