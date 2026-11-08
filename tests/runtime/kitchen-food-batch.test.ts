@@ -1,4 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {runInNewContext} from 'node:vm';import {createHash} from 'node:crypto';import {transformSync} from 'esbuild';import * as T from 'three';import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import * as preparation from '../../apps/portal-web/src/games/cooking/preparation-model';
 import * as ingredients from '../../apps/portal-web/src/games/cooking/ingredient-visuals';
 import * as React from 'react';import * as jsxRuntime from 'react/jsx-runtime';import {renderToStaticMarkup} from 'react-dom/server';import * as cues from '../../apps/portal-web/src/games/cooking/cues';
 import {createKitchenFoodBatch} from '../../apps/portal-web/src/games/cooking/kitchen-food-batch';import {bakeRigidGroup} from '../../apps/portal-web/src/games/stage-batch';import * as domain from '../../apps/portal-web/src/games/cooking/domain';import * as catalog from '../../apps/portal-web/src/games/cooking/catalog';
@@ -23,7 +24,7 @@ test('shared opaque food preserves world vertices and normals for moving uniform
 test('unsupported bytes, material identity, transparency, shader, scale and shadow configuration reject without mutation',()=>{const changes:Array<(x:ReturnType<typeof fixture>)=>void>=[x=>(x.copies[1].children[0] as T.Mesh).geometry.attributes.position.setX(0,.6),x=>{(x.copies[1].children[0] as T.Mesh).material=x.material.clone();},x=>{x.material.transparent=true;},x=>{x.material.onBeforeCompile=()=>{};},x=>{x.copies[1].scale.y=.8;},x=>{x.copies[1].scale.x=-1;},x=>{(x.copies[1].children[0] as T.Mesh).castShadow=false;}];for(const change of changes){const x=fixture();change(x);assert.equal(createKitchenFoodBatch(x.parent,x.copies),null);assert.equal(x.parent.children.length,5);x.copies.forEach(r=>assert.equal(r.children[0].visible,true));}});
 test('dynamic fallback, compact visibility, bounds and idempotent cleanup preserve shared ownership',()=>{const {parent,copies,material}=fixture(),geometry=(copies[0].children[0] as T.Mesh).geometry,batch=createKitchenFoodBatch(parent,copies)!;let shared=0,disposed=0;geometry.addEventListener('dispose',()=>shared++);material.addEventListener('dispose',()=>shared++);batch.meshes[0].addEventListener('dispose',()=>disposed++);copies[0].scale.y=.7;batch.update();assert.equal(batch.meshes[0].visible,false);copies.forEach(r=>assert.equal(r.children[0].visible,true));copies[0].scale.setScalar(1.4);copies.forEach(r=>r.visible=false);batch.update();assert.equal(batch.meshes[0].count,0);copies[4].visible=true;copies[4].position.set(19,7,4);batch.update();assert.equal(batch.meshes[0].count,1);assert.ok(batch.meshes[0].boundingBox!.max.x>19);batch.dispose();batch.dispose();batch.update();assert.equal(disposed,1);assert.equal(shared,0);assert.equal(parent.children.length,5);});
 // Actual factory/update logic, GPU/DOM boundary only stubbed. Disabled batch is a task-shaped negative control.
-function factory(optimized:boolean,stepOverride?:catalog.CookingStep){let scene:T.Scene,renders=0;const extrusions:T.ExtrudeGeometry[]=[];function observedExtrusion(...args:ConstructorParameters<typeof T.ExtrudeGeometry>){const geometry=new T.ExtrudeGeometry(...args);extrusions.push(geometry);return geometry;}class Renderer{domElement={setAttribute(){},addEventListener(){},removeEventListener(){},remove(){}};shadowMap={};info={render:{calls:0,triangles:0},memory:{geometries:0,textures:0}};setSize(){}setPixelRatio(){}dispose(){}forceContextLoss(){}render(s:T.Scene){renders++;scene=s;s.updateMatrixWorld(true);}}const module={exports:{} as any};const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/kitchen-stage.ts',import.meta.url),'utf8');runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{module,exports:module.exports,devicePixelRatio:1,require:(id:string)=>{if(id==='three')return {...T,WebGLRenderer:Renderer,ExtrudeGeometry:observedExtrusion};if(id.includes('RoundedBox'))return {RoundedBoxGeometry};if(id==='../stage-batch')return {bakeRigidGroup};if(id==='./kitchen-food-batch')return {createKitchenFoodBatch:optimized?createKitchenFoodBatch:()=>null};if(id==='./dish-model')return {createDishModel(){throw Error('not used');}};if(id==='./domain')return stepOverride?{...domain,currentStep:()=>stepOverride}:domain;if(id==='./catalog')return catalog;if(id==='./ingredient-visuals')return ingredients;throw Error(id);}});return {stage:module.exports.createKitchenStage({append(){}},()=>{}),scene:()=>scene!,renders:()=>renders,extrusions};}
+function factory(optimized:boolean,stepOverride?:catalog.CookingStep){let scene:T.Scene,renders=0;const extrusions:T.ExtrudeGeometry[]=[];function observedExtrusion(...args:ConstructorParameters<typeof T.ExtrudeGeometry>){const geometry=new T.ExtrudeGeometry(...args);extrusions.push(geometry);return geometry;}class Renderer{domElement={setAttribute(){},addEventListener(){},removeEventListener(){},remove(){}};shadowMap={};info={render:{calls:0,triangles:0},memory:{geometries:0,textures:0}};setSize(){}setPixelRatio(){}dispose(){}forceContextLoss(){}render(s:T.Scene){renders++;scene=s;s.updateMatrixWorld(true);}}const module={exports:{} as any};const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/kitchen-stage.ts',import.meta.url),'utf8');runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{module,exports:module.exports,devicePixelRatio:1,require:(id:string)=>{if(id==='three')return {...T,WebGLRenderer:Renderer,ExtrudeGeometry:observedExtrusion};if(id.includes('RoundedBox'))return {RoundedBoxGeometry};if(id==='../stage-batch')return {bakeRigidGroup};if(id==='./kitchen-food-batch')return {createKitchenFoodBatch:optimized?createKitchenFoodBatch:()=>null};if(id==='./dish-model')return {createDishModel(){throw Error('not used');}};if(id==='./domain')return stepOverride?{...domain,currentStep:()=>stepOverride}:domain;if(id==='./catalog')return catalog;if(id==='./ingredient-visuals')return ingredients;if(id==='./preparation-model')return preparation;throw Error(id);}});return {stage:module.exports.createKitchenStage({append(){}},()=>{}),scene:()=>scene!,renders:()=>renders,extrusions};}
 function snapshot(scene:T.Scene){const values:{key:string;matrix:number[]}[]=[];let draws=0;scene.updateMatrixWorld(true);scene.traverseVisible(o=>{if(!(o instanceof T.Mesh))return;draws++;const hash=createHash('sha256');for(const name of Object.keys(o.geometry.attributes).sort()){const a=o.geometry.attributes[name] as T.BufferAttribute;hash.update(name).update(new Uint8Array(a.array.buffer,a.array.byteOffset,a.array.byteLength));}if(o.geometry.index){const a=o.geometry.index.array;hash.update(new Uint8Array(a.buffer,a.byteOffset,a.byteLength));}const m=o.material as T.MeshStandardMaterial,key=hash.digest('hex')+m.color.getHexString()+`/${o.castShadow}/${o.receiveShadow}/${o.layers.mask}/${o.renderOrder}`;if(o instanceof T.InstancedMesh){for(let i=0;i<o.count;i++){const matrix=new T.Matrix4();o.getMatrixAt(i,matrix);values.push({key,matrix:new T.Matrix4().multiplyMatrices(o.matrixWorld,matrix).toArray()});}}else values.push({key,matrix:o.matrixWorld.toArray()});});values.sort((a,b)=>a.key.localeCompare(b.key)||a.matrix[12]-b.matrix[12]||a.matrix[13]-b.matrix[13]||a.matrix[14]-b.matrix[14]);return {values,draws};}
 test('real pan/boil heat, toss and steam frames preserve expanded geometry/material/transforms with fewer draws',()=>{for(const [id,kind,before,after] of [['egg-fried-rice','pan',39,27],['pearl-milk-tea','boil',37,31]] as const){const recipe=catalog.recipeOf(id)!,step=recipe.steps.findIndex(s=>s.kind===kind),original=factory(false),candidate=factory(true);let run={...domain.newCookingRun(recipe,42,'oracle'),step,status:'playing' as const};for(const [i,time] of [1000,1100,1250,1500].entries()){run={...run,elapsed:time,active:{...run.active,amount:i*.2,heat:40+i*10,foam:i*.15,flipped:i>0,lastAt:1100}};original.stage.update(run,null,time,true);candidate.stage.update(run,null,time,true);const a=snapshot(original.scene()),b=snapshot(candidate.scene());assert.equal(a.draws,before);assert.equal(b.draws,after);assert.equal(a.values.length,b.values.length);for(let j=0;j<a.values.length;j++){assert.equal(a.values[j].key,b.values[j].key);a.values[j].matrix.forEach((n,k)=>assert.ok(Math.abs(n-b.values[j].matrix[k])<2e-6,`${id}/${i}/${j}/${k}`));}}original.stage.dispose();candidate.stage.dispose();}});
 test('special attribute layouts and material render hooks fail closed',()=>{
@@ -105,6 +106,7 @@ function resources(scene:T.Object3D){const geometries=new Set<T.BufferGeometry>(
 
 test('real ingredient meshes use shared contours, bounded opaque parts and no per-frame resources',()=>{
  for(const {recipe,step,index} of ingredientSteps){
+  if(step.kind==='slice'&&preparation.isVolumetricPreparation(ingredients.ingredientVisual(step.ingredient,step.shape)!.id))continue;
   const f=factory(true),run={...domain.newCookingRun(recipe,42,'ingredient_mesh'),step:index,status:'playing' as const};
   try{
    f.stage.update(run,null,1000,false);const visual=ingredients.ingredientVisual(step.ingredient,step.shape)!,roots=ingredientRoots(f.scene());
@@ -205,7 +207,7 @@ function svgScene(){
  const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingIllustration.tsx',import.meta.url),'utf8');
  runInNewContext(transformSync(source,{loader:'tsx',format:'cjs',jsx:'automatic'}).code,{module,exports:module.exports,require:(id:string)=>{
   if(id==='react/jsx-runtime')return jsxRuntime;
-  if(id==='./ingredient-visuals')return ingredients;
+  if(id==='./ingredient-visuals')return ingredients;if(id==='./preparation-model')return preparation;
   if(id==='./cues')return cues;
   if(id==='./domain')return domain;
   throw Error(id);
@@ -226,4 +228,49 @@ test('real SVG fallback renders the same filled ingredient contours and retains 
  const recipe=catalog.recipeOf('tomato-spaghetti')!,html=render({...domain.newCookingRun(recipe,42,'ingredient_unknown'),status:'playing'});
  assert.ok(html.includes('番茄與蒜'));assert.equal(html.includes('data-ingredient='),false);
  assert.ok(html.includes('M-26-18Q-1-32 24-18L3 32Q-4 40-10 26Z'),'unmapped composite keeps the existing generic fruit');
+});
+
+// Four new solids intentionally no longer share the SVG fallback's flat contours.
+test('volumetric preparations have curved depth, bounded shared resources and distinct cut surfaces',()=>{
+ for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
+  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
+  const model=preparation.createPreparationModel(id,owned,materials);
+  try {
+   assert.equal(model.whole.name,'preparation/whole');assert.equal(model.cut.name,'preparation/cut');assert.equal(model.cut.visible,false);
+   assert.ok(owned.size<=14);assert.ok(materials.size<=4);
+   for(const variant of [model.whole,model.cut]){
+    assert.ok(variant.children.length<=4);
+    const bounds=new T.Box3().setFromObject(variant),size=bounds.getSize(new T.Vector3());
+    assert.ok(size.y>.15,`${id} has solid volume, not stacked flat layers`);
+    assert.ok(size.x>.3&&size.z>.3);
+    variant.traverse(o=>{if(o instanceof T.Mesh){assert.ok(owned.has(o.geometry));assert.equal((o.material as T.MeshStandardMaterial).map,null);assert.ok((o.material as T.MeshStandardMaterial).roughness<1);for(const value of o.geometry.getAttribute('position').array)assert.ok(Number.isFinite(value));}});
+   }
+   const copy=model.whole.clone(true);assert.deepEqual(resources(copy),resources(model.whole),'copies share, rather than allocate, geometry and materials');
+   model.cut.visible=true;assert.notDeepEqual(snapshot(new T.Scene().add(model.whole)),snapshot(new T.Scene().add(model.cut)));model.cut.visible=false;
+  }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
+ }
+});
+
+test('accepted cuts, not elapsed time or rejected gestures, reveal volumetric food interiors',()=>{
+ for(const {recipe,step,index} of ingredientSteps){
+  const visual=ingredients.ingredientVisual(step.ingredient,step.shape)!;if(step.kind!=='slice'||!preparation.isVolumetricPreparation(visual.id))continue;
+  const f=factory(true);let run=domain.newCookingRun(recipe,42,'real-solid-cut');run={...run,step:index};run=domain.actCooking(run,{kind:'start',step:index},1000);
+  try{
+   f.stage.update(run,null,1000,false);const roots=ingredientRoots(f.scene());assert.equal(f.extrusions.length,0);
+   const refs=resources(roots[0]);for(const root of roots)assert.deepEqual(resources(root),refs,'all copies share their step template resources');
+   const rejected=domain.actCooking(run,{kind:'cut',step:index,x1:0,y1:0,x2:0,y2:0},1200);assert.equal(rejected.active.count,0);f.stage.update(rejected,null,1200,false);
+   assert.equal(roots[0].getObjectByName('preparation/cut')!.visible,false);
+   run=domain.actCooking(rejected,{kind:'cut-key',step:index},1500);assert.equal(run.active.count,1);f.stage.update(run,null,1500,false);
+   assert.equal(roots[0].getObjectByName('preparation/cut')!.visible,true);assert.equal(roots[0].getObjectByName('preparation/whole')!.visible,false);
+   assert.equal(roots[1].getObjectByName('preparation/cut')!.visible,false);
+   f.scene().updateMatrixWorld(true);
+   for(const [root,name,offset] of [[roots[0],'preparation/cut',.18],[roots[1],'preparation/whole',0]] as const){
+    const variant=root.getObjectByName(name)!;const bounds=new T.Box3().setFromObject(variant);
+    assert.ok(bounds.min.y>=.238&&bounds.min.y<=.261,`${recipe.id} touches the .24-high cutting board without sinking or floating`);
+    const target=root.localToWorld(new T.Vector3(offset,0,0));
+    const ray=new T.Raycaster(new T.Vector3(target.x,4,target.z),new T.Vector3(0,-1,0));
+    const hits=ray.intersectObjects(variant.children,false);assert.ok(hits.length>0,'solid food is hittable above the board');assert.ok(hits[0].point.y>.3);
+   }
+  }finally{f.stage.dispose();}
+ }
 });

@@ -183,3 +183,78 @@ for(const mode of ['native','rejected'] as const)test(`preparation art fullscree
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(game).toHaveCount(0);await expect(canvas).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>document.fullscreenElement===null)).toBe(true);expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');expect(errors).toEqual([]);
 });
+
+// A fullscreen viewport is the stage itself, not a taller document containing
+// an illustration followed by an unrelated controls card. Keep every normal
+// gameplay action in this one screen. Enlarged text may scroll the tool dock.
+for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])test(`immersive kitchen: canvas and controls share ${viewport.width}x${viewport.height} stage`,async({page},testInfo)=>{
+  const step=recipeOf('fish-and-chips')!.steps[0];
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.setViewportSize(viewport);
+  const started=new Date('2026-11-08T12:00:00Z');await page.clock.install({time:started});
+  await page.goto('/play?game=kitchen&practice=1&recipe=fish-and-chips&seed=42');
+  await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await page.clock.pauseAt(new Date(started.getTime()+60_000));
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  const fullscreen=page.locator('.fullscreen-game'),stage=page.locator('[data-game-stage]');
+  await expect(fullscreen).toHaveAttribute('role','dialog');
+  await expect(page.getByRole('button',{name:'退出全螢幕',exact:true})).toHaveAttribute('aria-disabled','false');
+  await expect(stage.getByRole('button',{name:'沿線切一刀',exact:true})).toBeVisible();
+  const geometry=await fullscreen.evaluate(element=>{
+    const area=element.querySelector('[data-game-stage]')!.getBoundingClientRect();
+    const rect=(node:Element)=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
+    return {viewport:{width:innerWidth,height:innerHeight},stage:rect(element.querySelector('[data-game-stage]')!),scroll:element.scrollHeight,height:element.clientHeight,
+      controls:[...element.querySelectorAll('.fullscreen-game__button,.ck-console-toolbar button,.ck-tool-action,.ck-visual-tools button')].map(node=>({text:node.textContent,...rect(node)})),
+      canvas:rect(element.querySelector('.ck-live-scene')!),inside:!!element.querySelector('[data-game-stage] .ck-game-controls'),area:area.width*area.height};
+  });
+  expect(geometry.inside).toBe(true);expect(geometry.area).toBeGreaterThan(0);
+  expect(geometry.scroll).toBeLessThanOrEqual(geometry.height+1);
+  expect(geometry.stage.width).toBeCloseTo(geometry.viewport.width,0);expect(geometry.stage.height).toBeCloseTo(geometry.viewport.height,0);
+  for(const control of geometry.controls){expect(control.width,control.text??'').toBeGreaterThanOrEqual(44);expect(control.height,control.text??'').toBeGreaterThanOrEqual(44);expect(control.left).toBeGreaterThanOrEqual(-1);expect(control.top).toBeGreaterThanOrEqual(-1);expect(control.right).toBeLessThanOrEqual(geometry.viewport.width+1);expect(control.bottom).toBeLessThanOrEqual(geometry.viewport.height+1);}
+  expect(geometry.canvas.left).toBeGreaterThanOrEqual(-1);expect(geometry.canvas.right).toBeLessThanOrEqual(geometry.viewport.width+1);expect(geometry.canvas.top).toBeGreaterThanOrEqual(-1);expect(geometry.canvas.bottom).toBeLessThanOrEqual(geometry.viewport.height+1);
+  await testInfo.attach('immersive-stage-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
+  if(viewport.height<520){
+    await page.locator('.ck-help summary').click();
+    const panels=await page.evaluate(()=>{const a=document.querySelector('.ck-visual-tools')!.getBoundingClientRect(),b=document.querySelector('.ck-game-controls')!.getBoundingClientRect();return {modeBottom:a.bottom,dockTop:b.top};});
+    expect(panels.modeBottom).toBeLessThanOrEqual(panels.dockTop);
+    await page.locator('.ck-help summary').click();
+  }
+  await page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
+  // Use the real pointer path across the guide, rather than an injected run.
+  const surface=page.locator('.ck-scene'),box=(await surface.boundingBox())!;
+  const path=page.locator('.ck-toy-guides path').first(),guide=await path.getAttribute('d'),x=Number(guide!.match(/^M([\d.]+)/)![1])/800;
+  await page.mouse.move(box.x+box.width*x,box.y+box.height*.2);await page.mouse.down();
+  await page.mouse.move(box.x+box.width*x,box.y+box.height*.8,{steps:8});await page.mouse.up();
+  await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-cut.png`);
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');
+  await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await page.getByRole('button',{name:'輕量插畫',exact:true}).click();await expect(page.locator('.ck-visual-light')).toBeVisible();
+  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`2 / ${step.goal}`);
+  await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-fallback.png`);
+  await page.getByRole('button',{name:'重新做',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'重新做這盤料理',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'繼續這一盤',exact:true}).click();
+  await expect(page.locator('.ck-meter-copy')).toHaveText(`2 / ${step.goal}`);
+  await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
+  await expect(fullscreen).toHaveCount(0);expect(errors).toEqual([]);
+});
+
+
+test('immersive kitchen: 320x568 viewport fallback keeps controls separate',async({page},testInfo)=>{
+  const step=recipeOf('fish-and-chips')!.steps[0];
+  await page.setViewportSize({width:320,height:568});
+  await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+  await page.goto('/play?game=kitchen&practice=1&recipe=fish-and-chips&seed=42');
+  await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  await expect(page.locator('.fullscreen-game--viewport')).toBeVisible();
+  const geometry=await page.evaluate(()=>{const a=document.querySelector('.ck-visual-tools button')!.getBoundingClientRect(),b=document.querySelector('.fullscreen-game__bar')!.getBoundingClientRect();return {modeRight:a.right,barLeft:b.left,barRight:b.right,width:innerWidth};});
+  expect(geometry.modeRight).toBeLessThanOrEqual(geometry.barLeft);expect(geometry.barRight).toBeLessThanOrEqual(geometry.width);
+  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await capturePreparationScreenshot(page.locator('.fullscreen-game'),testInfo,'immersive-320x568-viewport.png');
+  await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();
+  await expect(page.locator('.fullscreen-game--viewport')).toHaveCount(0);
+});

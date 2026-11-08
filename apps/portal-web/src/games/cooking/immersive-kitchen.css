@@ -1,0 +1,211 @@
+/* The kitchen is one bounded play surface. HUD and actions belong to the
+   scene, never a second column or a document section beneath the canvas. */
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated {
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  overflow: hidden;
+  height: min(860px, calc(100dvh - 86px));
+  min-height: 480px;
+  border-radius: 20px;
+  background: #dfab72;
+}
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated:is(:fullscreen,.fullscreen-game--viewport) {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__bar {
+  position: absolute;
+  z-index: 12;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  padding: 0;
+  background: none;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+}
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__button {
+  background: #fff9eaeF;
+  color: #49362f;
+  border: 1px solid #92734d;
+  box-shadow: 0 2px 7px #49362f25;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive {
+  --ck-dock-space: 180px;
+  --ck-top-space: 150px;
+  position: relative;
+  width: 100%;
+  max-width: none !important;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+}
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-game-layout,
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-scene-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  box-shadow: none;
+  overflow: hidden;
+  background: #eabf91;
+}
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar {
+  position: absolute;
+  z-index: 10;
+  inset: max(62px, calc(env(safe-area-inset-top) + 54px)) 12px auto;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar .ck-game-heading { min-width: 0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-game-heading h1 { font-size: 17px; line-height: 1.25; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-step-label { font-size: 14px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar button { flex-shrink: 0; padding: 6px 9px; font-size: 14px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-stage-mission {
+  position: absolute;
+  z-index: 4;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 8px 13px;
+  border: 1px solid #b9996c;
+  border-radius: 16px;
+  background: #fff7e9eb;
+  box-shadow: 0 3px 12px #6e442d18;
+  pointer-events: none;
+}
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-mission-icon { display: none; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-stage-mission small { display: none; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-stage-mission strong { font-size: 15px; line-height: 1.4; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-mission-dots { margin-left: 8px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-live-scene {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--ck-top-space) + (100% - var(--ck-top-space) - var(--ck-dock-space)) / 2);
+  transform: translate(-50%, -50%);
+  width: min(100%, calc((100dvh - 330px) * 10 / 7));
+  min-width: min(100%, 320px);
+  max-width: 100%;
+  aspect-ratio: 10 / 7;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-scene { width: 100%; height: auto; aspect-ratio: 10 / 7; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-kitchen-canvas { position: absolute; inset: 0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-kitchen-canvas canvas { width: 100%; height: 100%; display: block; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-game-controls {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  gap: 6px;
+  width: min(520px, calc(100% - 24px));
+  max-height: min(42%, 250px);
+  padding: 10px 12px;
+  border: 1px solid #997b54;
+  border-radius: 18px;
+  background: #fff8e9f2;
+  box-shadow: 0 5px 20px #49362f28;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-tool-heading { gap: 8px; font-size: 14px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-tool-heading>span { display: none; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-meter-copy { color: #49362f; font-weight: 750; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-progress { height: 5px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-action-controls { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; order: 0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-action-controls>button { flex: 1; min-width: 0; width: auto; min-height: 48px; padding: 8px 12px; font-size: 15px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-tool-action>span { font-size: 20px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-heat { width: 100%; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-heat-presets { gap: 6px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-heat-presets button { padding: 4px 8px; min-height: 44px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-heat-presets button>span { display: none; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-heat-fine { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-heat-fine output { display: none; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-heat input { margin: 0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-timing { padding: 0; gap: 3px; font-size: 14px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-timing-bar { height: 8px; margin: 4px 4px 0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-game-reaction { margin: 0; padding: 0; background: none; font-size: 14px; line-height: 1.4; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-goal { display: none; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-help { font-size: 14px; margin: 0; border: 0; padding: 0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-help summary { min-height: 44px; display: flex; align-items: center; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-help[open] { max-height: 38dvh; overflow: auto; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-fold-controls { display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; width: 100%; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-fold-controls button { padding: 7px 4px; font-size: 14px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools { position: absolute; z-index: 13; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); margin: 0; font-size: 14px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools small { font-size: 14px; line-height: 1.6; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-scene-overlay { z-index: 8; inset: 114px 12px 12px; background: #fff7e9e8; border: 1px solid #b9996c; border-radius: 18px; padding: 24px; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive[data-cooking-state=ready] .ck-scene-overlay { inset: auto 12px 24px; background: #fff7e9f2; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive[data-cooking-state=ready] .ck-game-controls { display: none; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-save-warning { position: absolute; z-index: 15; inset: 110px 12px auto; margin: 0; }
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated>.fw-arcade-result { height: 100%; max-width: none; margin: 0; padding: 70px 18px 20px; overflow: auto; box-sizing: border-box; background: var(--ad-bg); }
+@media (orientation: landscape) and (max-height: 520px) {
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive { --ck-top-space: 62px; --ck-dock-space: 0px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar { top: 10px; left: 12px; right: 255px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar>button:first-child { font-size: 0; width: 44px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar>button:first-child::before { content: '←'; font-size: 20px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-step-label { display: none; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-stage-mission { top: 64px; left: 30%; max-width: 54%; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-live-scene { width: min(58%, calc((100dvh - 80px) * 10 / 7)); min-width: 0; left: 30%; top: 58%; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-game-controls { bottom: 12px; left: auto; right: 12px; transform: none; width: 35%; max-height: calc(100% - 80px); padding: 8px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools { top: 66px; left: auto; right: 12px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-scene-overlay { inset: 66px 12px 12px; }
+}
+@media(max-width: 370px) and (orientation: portrait) {
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar>button:first-child { font-size: 0; width: 44px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-console-toolbar>button:first-child::before { content: '←'; font-size: 20px; }
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-game-heading h1 { font-size: 15px; }
+  .fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__button { padding: 8px; }
+}
+
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools { display: flex; align-items: center; gap: 8px; max-width: calc(100% - 250px); }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools button { font-size: 14px; padding: 6px 10px; min-height: 44px; flex-shrink: 0; border: 1px solid #92734d; border-radius: 12px; box-shadow: 0 2px 7px #49362f25; background: #fff9eaef; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools small { position: absolute; top: 50px; left: 0; width: min(280px,80vw); background: #fff9ea; padding: 10px; border-radius: 10px; border: 1px solid #92734d; }
+/* Presentation actions remain thumb-sized without competing with the recipe. */
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__button:first-child { width: 44px; padding: 8px; font-size: 0; }
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__button:first-child::before { content: '⛶'; font-size: 22px; }
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__button:first-child[aria-pressed=true]::before { content: '↙'; }
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools { max-width: calc(100% - 175px); }
+/* A renderer fallback must remain announced without covering pause/restart or
+   the touch targets. Its full reason remains on the mode switch's tooltip. */
+.fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-visual-tools small {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .fw-arcade-root.fw-arcade-toy-console .ck-immersive .ck-game-controls { max-height: calc(100% - 134px); }
+}
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__mode-help { width: 44px; flex: 0 0 44px; }
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__mode-help summary { width: 44px; min-height: 44px; display: grid; place-items: center; font-size: 0; background: #fff9eaef; border: 1px solid #92734d; border-radius: 12px; }
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game--integrated .fullscreen-game__mode-help summary::before { content: '?'; font-size: 20px; }

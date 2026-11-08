@@ -129,7 +129,7 @@ function preparationCapture(){
     throw Error(id);
   }});
   assert.equal(registered.filter(name=>name.startsWith('preparation art:')).length,5,'preserve the five original real cases; do not run a fake browser');
-  assert.deepEqual(registered.filter(name=>!name.startsWith('preparation art:')),['native','rejected'].map(mode=>`preparation art fullscreen: pumpkin-soup keeps native cuts through ${mode} presentation at 667x375`));
+  assert.deepEqual(registered.filter(name=>!name.startsWith('preparation art:')),[...['native','rejected'].map(mode=>`preparation art fullscreen: pumpkin-soup keeps native cuts through ${mode} presentation at 667x375`),...['320x568','390x844','667x375','1440x900'].map(size=>`immersive kitchen: canvas and controls share ${size} stage`),'immersive kitchen: 320x568 viewport fallback keeps controls separate']);
   return module.exports.capturePreparationScreenshot;
 }
 test('preparation capture attaches each exact PNG buffer instead of a temporary path',async()=>{

@@ -1,4 +1,4 @@
-import {GameCover} from '../GameCover';
+import './immersive-kitchen.css';
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { RunResult } from '../result-card';
 import { COOKING_RULES, TECHNIQUES, recipeOf, type Direction, type Recipe } from './catalog';
@@ -76,16 +76,16 @@ export function CookingGame({recipe,seed,fresh=false,onBack,onResult,onComplete,
   const directHint=({slice:'沿虛線，劃開食材',mix:'順時針，攪一攪！',knead:'按住麵糰，瞄準時機放開',pan:'點鍋子，或向上滑翻面',boil:'看到大泡沫，就點鍋子撈',bake:'香氣到了，點爐門出爐',pour:'按住倒入，接近目標就放開',fold:'照箭頭，把食材包起來',plate:'把左邊食材拖到光圈裡'} as const)[currentStep(view).kind];
   const cueText=cue?view.active.holdAt!==null&&cue.value>=cue.min&&cue.value<=cue.max?'就是現在，放開！':cue.value>=cue.min&&cue.value<=cue.max?'剛剛好！可以動手了':cue.value>cue.max?'快動手，別過頭囉！':currentStep(view).kind==='knead'?'按住，等圓點進入金色區':currentStep(view).kind==='pour'?'慢慢倒，瞄準金色區':'再等一下，讓香氣出來。':'';
   const s=currentStep(view),a=view.active,playing=view.status==='playing',paused=view.status==='paused',p=cookingProgress(view),directions:Record<Direction,string>={left:'← 向左',right:'向右 →',up:'↑ 向上',down:'↓ 向下'};
-  return <section className="ck-game ck-toy-game" data-cooking-state={view.status} ref={section} tabIndex={-1} onBlurCapture={cancelKeyHold} onKeyDown={e=>key(e)} onKeyUp={e=>key(e,true)} aria-label={`${recipe.name}料理遊戲`}>
+  return <section className="ck-game ck-toy-game ck-immersive" data-cooking-state={view.status} ref={section} tabIndex={-1} onBlurCapture={cancelKeyHold} onKeyDown={e=>key(e)} onKeyUp={e=>key(e,true)} aria-label={`${recipe.name}料理遊戲`}>
+    <div className="ck-game-layout"><div className="ck-scene-wrap" data-game-stage>
     <div className="fw-arcade-toolbar ck-console-toolbar"><button className="fw-arcade-secondary" onClick={()=>{pause();onBack();}}>← 遊戲大廳</button><div className="ck-game-heading"><div><h1>{recipe.name}</h1><span className="ck-step-label">第 {view.step+1} / {recipe.steps.length} 步</span></div></div>{playing&&<button className="fw-arcade-secondary" onClick={pause}>暫停</button>}<button ref={restartButton} className="fw-arcade-secondary" aria-label="重新做" onClick={()=>{pause();setConfirmRestart(true);}}>↻ 重做</button></div>
     {confirmRestart&&<dialog ref={restartDialog} className="ck-confirm" aria-label="重新做這盤料理" onKeyDown={restartKey} onCancel={e=>{e.preventDefault();setConfirmRestart(false);}}><p>這一盤要重新來嗎？手帳裡的最佳成績會保留。</p><button onClick={restart}>確定重新做</button><button ref={keepButton} className="fw-arcade-secondary" onClick={()=>setConfirmRestart(false)}>繼續這一盤</button></dialog>}
-    <div className="ck-game-layout"><div className="ck-scene-wrap"><div className="ck-stage-mission"><span className="ck-mission-icon" aria-hidden="true">{({slice:'↙',mix:'↻',knead:'↓',pan:'↥',boil:'♨',bake:'♨',pour:'◡',fold:'↪',plate:'✦'} as const)[s.kind]}</span><div><small>{s.title}・{view.step+1}/{recipe.steps.length}</small><strong>{directHint}</strong></div><span className="ck-mission-dots" aria-label={`已完成 ${view.reports.length} 步，共 ${recipe.steps.length} 步`}>{recipe.steps.map((_,i)=><i key={i} className={i<view.reports.length?'done':i===view.step?'current':''}/>)}</span></div>
-      {view.status==='ready'&&<GameCover id={recipe.id} eager className="sg-guided-cover"/>}
+    <div className="ck-stage-mission"><span className="ck-mission-icon" aria-hidden="true">{({slice:'↙',mix:'↻',knead:'↓',pan:'↥',boil:'♨',bake:'♨',pour:'◡',fold:'↪',plate:'✦'} as const)[s.kind]}</span><div><small>{s.title}・{view.step+1}/{recipe.steps.length}</small><strong>{directHint}</strong></div><span className="ck-mission-dots" aria-label={`已完成 ${view.reports.length} 步，共 ${recipe.steps.length} 步`}>{recipe.steps.map((_,i)=><i key={i} className={i<view.reports.length?'done':i===view.step?'current':''}/>)}</span></div>
       <CookingScene captureRef={captureRef} run={view} point={point} readRun={()=>live.current} onSettled={setVisualReady} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancelPointer}/>
       {(view.status==='ready'||paused)&&<div className="ck-scene-overlay"><div><span className="ck-tiny-title">{paused?'鍋鏟先放著，這一盤幫你留好。':'今天輪到你掌廚！'}</span><h2>{paused?'接著做這一盤':s.title}</h2><p>{directHint}</p></div><button disabled={!visualReady} onClick={begin}>{paused?'繼續料理':'開始料理'}</button></div>}
       {view.status==='step-result'&&<div className="ck-scene-overlay ck-step-success"><div><h2>這一步完成了</h2><p>{s.title} · {view.reports.at(-1)!.score} 分</p></div><button onClick={()=>{clearGesture();command({kind:'next'});setNotice('下一道工序，接招！');section.current?.focus({preventScroll:true});}}>下一步：{recipe.steps[view.step+1].title} →</button></div>}
       {view.status==='done'&&<div className="ck-scene-overlay"><h2>料理上桌！{cookingScore(view)} 分</h2><p role="status">{exportError?'成績已保留，圖片再試一次就好。':'正在端出你的拿手菜…'}</p>{exportError&&<><button disabled={exporting} onClick={()=>void exportResult()}>重試產生3D成果</button><button className="fw-arcade-secondary" disabled={exporting} onClick={()=>void exportResult(false)}>先用文字成果圖</button></>}</div>}
-    </div><aside className="ck-game-controls" aria-label="料理工具盤">
+    <aside className="ck-game-controls" aria-label="料理工具盤">
       <div className="ck-tool-heading"><span>你的工具盤</span><output className="ck-meter-copy">{['slice','knead','fold','plate'].includes(s.kind)?`${a.count} / ${s.goal}`:s.kind==='mix'?`${Math.min(s.goal,a.amount/(Math.PI*2)).toFixed(1)} / ${s.goal} 圈`:s.kind==='pour'?(a.holdAt===null?'按住，開始倒入':'慢慢倒，接近目標放開'):a.amount<.35?'香氣準備中…':a.amount<.8?'越來越香了！':'準備上桌！'}</output></div>
       <div className="ck-progress" role="progressbar" aria-label="目前料理步驟進度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p*100)}><span style={{width:`${p*100}%`}}/></div>
       <div className="ck-action-controls" inert={!playing}>
@@ -103,7 +103,8 @@ export function CookingGame({recipe,seed,fresh=false,onBack,onResult,onComplete,
       <p className="fw-arcade-notice ck-game-reaction" role="status">{notice||'不用趕，先摸摸你的料理台。'}</p>
       <div className="ck-goal"><FoodArt recipe={recipe}/><div><small>今天要端出這一道</small><strong>{recipe.name}</strong><span>{recipe.ingredients.join(' · ')}</span></div></div>
       <details className="ck-help"><summary>看食譜／鍵盤操作</summary><p>{TECHNIQUES[s.kind].hint}</p><p>{s.kind==='fold'?'方向鍵包食材':'空白鍵操作；揉壓、倒入請按住再放開'} · Esc 暫停</p><ol className="ck-step-track" aria-label="料理步驟">{recipe.steps.map((item,i)=><li key={i} aria-current={i===view.step?'step':undefined} className={i<view.reports.length?'is-done':''}><span>{i<view.reports.length?'✓':i+1}</span><span>{item.title}</span></li>)}</ol><p>本機手帳保存最佳成績；本分頁保留最近一盤，可在 7 天內繼續。這是料理遊戲，實際烹調請依食譜與食材狀況。</p></details>
-    </aside></div>
+    </aside>
     {saveFailed&&<div className="ck-save-warning" role="status"><p>這台裝置尚未保存進度。這一盤仍可繼續，先別重新整理。</p><button className="fw-arcade-secondary" onClick={()=>flush(true)}>重試保存</button></div>}
+    </div></div>
   </section>;
 }
