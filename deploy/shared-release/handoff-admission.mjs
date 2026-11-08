@@ -13,10 +13,17 @@ export async function requireFailedReleaseHandoff(api, admission, installation) 
   check(admission.mode === 'handoff' && admission.releaseKind === 'independent'
     && positive(id) && id !== admission.runId, 'release_handoff_recovery_request_invalid');
   return requireFailedRelease(api, admission, installation, { id, format: 'freedom.verified-failed-release-handoff/v1',
-    code: 'release_handoff_recovery_evidence_invalid', boundary: progress => check(Array.isArray(progress) && progress.length === 5
-      && ['preflight', 'migration', 'deploy', 'health', 'handoff'].every((phase, i) =>
-        progress[i]?.name === phase && progress[i].reportedStatus === (i === 4 ? 'failed' : 'passed'))
-      && isReleaseFailureCode(progress[4].failureCode), 'release_handoff_recovery_boundary_invalid') });
+    code: 'release_handoff_recovery_evidence_invalid', boundary: progress => {
+      const health = Array.isArray(progress) && progress.length === 4;
+      const phases = health ? ['preflight', 'migration', 'deploy', 'health'] : ['preflight', 'migration', 'deploy', 'health', 'handoff'];
+      check(Array.isArray(progress) && progress.length === phases.length
+        && phases.every((phase, i) => progress[i]?.name === phase
+          && progress[i].reportedStatus === (i === phases.length - 1 ? 'failed' : 'passed'))
+        && (health ? progress[3].failureCode === 'release_lease_lost' && publicLeaseLoss(progress[3].leaseLoss)
+          : isReleaseFailureCode(progress[4].failureCode)), 'release_handoff_recovery_boundary_invalid');
+      return health ? { format: 'freedom.verified-failed-release-health/v1',
+        failureBoundary: 'health_lease_lost', leaseLoss: publicLeaseLoss(progress[3].leaseLoss) } : {};
+    } });
 }
 
 // Same terminal evidence for a run that lost its lease during migration. Only the
@@ -74,9 +81,9 @@ async function requireFailedRelease(api, admission, installation, { id, format, 
     && sameActor(run.actor, receipt.original) && sameActor(run.triggering_actor, receipt.triggeredBy), code);
   const start = Date.parse(run.run_started_at), end = Date.parse(run.updated_at), finish = Date.parse(receipt.completedAt);
   check([start, end, finish].every(Number.isFinite) && finish >= start && finish <= end && end <= Date.now() + 60000, code);
-  boundary(receipt.operatorProgress);
+  const boundaryEvidence = boundary(receipt.operatorProgress);
   checkRun(await api(`${prefix}/actions/runs/${id}`));
-  return Object.freeze({ format, runId: id, runAttempt: run.run_attempt,
+  return Object.freeze({ format, ...boundaryEvidence, runId: id, runAttempt: run.run_attempt,
     sourceSha: receipt.sourceSha, sourceTree: receipt.sourceTree, target: receipt.target, controllerSha: run.head_sha,
     operatorImage: receipt.operatorImage, configSha256: receipt.configSha256, artifactId: artifact.id, artifactDigest: artifact.digest,
     receiptSha256: createHash('sha256').update(JSON.stringify(receipt)).digest('hex'), completedAt: receipt.completedAt });

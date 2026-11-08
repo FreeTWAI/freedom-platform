@@ -195,7 +195,7 @@ export function publicLeaseLoss(value) {
 }
 function publicLeaseDiagnostics(phase, admission) {
   const leaseLoss = publicLeaseLoss(phase.leaseLoss), recovery = phase.leaseRecovered;
-  if (recovery !== undefined) requireRelease(phase.name === 'handoff' && phase.status === 'passed'
+  if (recovery !== undefined) requireRelease(['health', 'handoff'].includes(phase.name) && phase.status === 'passed'
     && admission.mode === 'deploy' && admission.releaseKind === 'independent' && leaseLoss
     && recovery && typeof recovery === 'object' && !Array.isArray(recovery) && recovery.cause === leaseLoss.cause
     && Number.isInteger(recovery.attempts) && recovery.attempts >= 1 && recovery.attempts <= 3,

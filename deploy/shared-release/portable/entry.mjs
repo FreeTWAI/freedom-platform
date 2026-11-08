@@ -21,7 +21,7 @@ import { runPortableBackup } from './backup.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
 import { reconcileCommittedRelease } from './migration-recovery.mjs';
-import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff } from './handoff-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff, settleOwnHealth } from './handoff-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -82,6 +82,20 @@ export async function main(args = process.argv.slice(2)) {
         token: credentials.cloudflareApiToken, signal: held.signal }), pool: pools.migrator,
       database: config.database.name, role: connections.migrator.role };
   };
+  const renewConnections = async () => {
+    const ended = await Promise.allSettled(Object.values(pools).map(pool => pool.end()));
+    check(ended.every(item => item.status === 'fulfilled'), 'release_entry_pool_cleanup_failed');
+    for (const [key, value] of Object.entries(connections)) {
+      pools[key] = new Pool(value.options); pools[key].on('error', stop);
+    }
+  };
+  const verifyHealth = async (held, name) => {
+    const workRoot = await directory(name);
+    await waitForPublicRelease({ target: config.target, sourceSha: request.sourceSha, access, signal: held.signal,
+      record: value => save(join(workRoot, `edge-${value.attempt}.json`), value) });
+    return verifyPublicSmoke({ target: config.target, sourceSha: request.sourceSha, sourceRoot: SOURCE,
+      access, workRoot, signal: held.signal });
+  };
   const phase = async (name, operation) => {
     same(name, phases[result.phases.length], 'release_entry_phase_order');
     const item = { name, status: 'running', startedAt: new Date().toISOString() }; result.phases.push(item); await save(path, result);
@@ -136,8 +150,17 @@ export async function main(args = process.argv.slice(2)) {
           database: config.database.name, role: connections.migrator.role });
         await waitForPublicRelease({ target: config.target, sourceSha: request.sourceSha, access, signal: lease.signal,
           record: value => save(join(WORK, `handoff-health-${value.attempt}.json`), value) });
+        if (request.handoffRecoveryEvidence.failureBoundary === 'health_lease_lost') {
+          const proof = await verifyHealth(lease, 'handoff-smoke');
+          const rechecked = await inspectReleaseHandoff({ floor, pool: pools.migrator, deployer, lease, request,
+            database: config.database.name, role: connections.migrator.role });
+          check(rechecked.alreadySettled === handoffObserved.alreadySettled && rechecked.healthPending === handoffObserved.healthPending,
+            'release_handoff_recovery_state_changed');
+          handoffObserved.healthProof = { ...proof, schemaVerified: true };
+        }
         handoffObserved.healthVerified = true;
-        return { ...handoffObserved, leaseHeld: true, retainedFloorVerified: true };
+        const { healthProof: _healthProof, ...publicObserved } = handoffObserved;
+        return { ...publicObserved, leaseHeld: true, retainedFloorVerified: true };
       }
       // Refuse oversized changes before recovery/adoption can write the floor.
       // Build/render checks again against the verified predecessor before begin.
@@ -236,12 +259,18 @@ export async function main(args = process.argv.slice(2)) {
       await floor.passed('deploy', value); return value;
     });
     await phase('health', async () => {
-      const workRoot = await directory('health');
-      await waitForPublicRelease({ target: config.target, sourceSha: request.sourceSha, access, signal: lease.signal,
-        record: value => save(join(workRoot, `edge-${value.attempt}.json`), value) });
-      const value = await verifyPublicSmoke({ target: config.target, sourceSha: request.sourceSha, sourceRoot: SOURCE, access, workRoot, signal: lease.signal });
-      await floor.verifyDatabase(pools.migrator);
-      const proof = { ...value, schemaVerified: true }; await floor.passed('health', proof); return proof;
+      const expectedHead = floor.head();
+      try {
+        const value = await verifyHealth(lease, 'health');
+        await floor.verifyDatabase(pools.migrator);
+        const proof = { ...value, schemaVerified: true }; await floor.passed('health', proof); return proof;
+      } catch (error) {
+        const recovered = await settleOwnHealth({ request, phases: result.phases.slice(0, -1), lease, expectedHead, error,
+          signal: controller.signal, acquire, renewConnections, reopen: held => reopen(held, 'health-control-intents'),
+          verifyHealth: held => verifyHealth(held, 'health-recheck') });
+        ({ lease, floor, deployer } = recovered);
+        return recovered.proof;
+      }
     });
     if (!independentRelease) await phase('backup-after', async () => (await backup('backup-after', request.sourceSha)).proof);
     await phase('handoff', async () => {
@@ -253,13 +282,7 @@ export async function main(args = process.argv.slice(2)) {
         return { ...(independentRelease ? {} : { scheduledBackupsVerified: true }), cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true };
       } catch (error) {
         return settleOwnHandoff({ request, phases: result.phases.slice(0, -1), lease, expectedHead, error,
-          signal: controller.signal, acquire, renewConnections: async () => {
-            const ended = await Promise.allSettled(Object.values(pools).map(pool => pool.end()));
-            check(ended.every(item => item.status === 'fulfilled'), 'release_entry_pool_cleanup_failed');
-            for (const [key, value] of Object.entries(connections)) {
-              pools[key] = new Pool(value.options); pools[key].on('error', stop);
-            }
-          }, reopen: held => reopen(held, 'handoff-control-intents'),
+          signal: controller.signal, acquire, renewConnections, reopen: held => reopen(held, 'handoff-control-intents'),
           verifyHealth: held => waitForPublicRelease({ target: config.target, sourceSha: request.sourceSha, access, signal: held.signal,
             record: value => save(join(WORK, `handoff-health-${value.attempt}.json`), value) }) });
       }
