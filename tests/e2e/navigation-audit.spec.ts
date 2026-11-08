@@ -26,7 +26,7 @@ test('navigation separates collaboration, commerce and management without granti
   await expect(management.getByRole('button', { name: '公會管理', includeHidden: true, exact: true })).toHaveCount(0);
   await nav.locator('.nav-more > summary').click();
   await management.locator(':scope > summary').click();
-  await expect(management.getByRole('link', { name: /平台管理/ })).toHaveAttribute('href', '/admin');
+  await expect(nav.getByRole('link', { name: /平台管理/, includeHidden: true })).toHaveCount(0);
   await expect(nav.getByText('參與平台', { exact: true })).toHaveCount(0);
   await expect(nav.getByText('我的協作', { exact: true })).toHaveCount(0);
   await navigate(page, '開源投稿');
@@ -56,14 +56,14 @@ test('navigation separates collaboration, commerce and management without granti
   await expect(commerce.getByRole('button', { name: 'AI 整理供貨商品', includeHidden: true, exact: true })).toHaveAttribute('aria-current', 'page');
 });
 
-test('a synthetic maintainer permission projection reveals guild management beside platform management', async ({ page }) => {
+test('a synthetic maintainer permission projection reveals guild management without platform management', async ({ page }) => {
   await page.route('**/api/v1/guild-workspace', route => route.fulfill({ json: { managed_guilds: [], managed_books: [{ book_id: 'social-post', title: '測試維護技能' }], can_discuss: false } }));
   await page.route('**/api/v1/skill-books/social-post/editor', route => route.fulfill({ json: { book_id: 'social-post', summary: '測試技能摘要', collaboration_intro: '從公開任務開始', tasks: [], milestones: [], aggregate_version: 1 } }));
   await login(page); await navigate(page, '公會管理');
   const nav = page.getByRole('navigation', { name: '主要工作區' });
   const group = nav.getByRole('button', { name: '公會管理', includeHidden: true, exact: true }).locator('xpath=ancestor::details[1]');
   await expect(group.locator(':scope > summary')).toContainText('管理');
-  await expect(group.getByRole('link', { name: /平台管理/, includeHidden: true })).toHaveAttribute('href', '/admin');
+  await expect(nav.getByRole('link', { name: /平台管理/, includeHidden: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '公會管理', level: 1, exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '技能書編輯', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '公會長議事區', exact: true })).toHaveCount(0);
