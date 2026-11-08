@@ -101,7 +101,7 @@ test('knead redraws pressure, release and motion changes while identical resting
 
 const ingredientSteps=catalog.RECIPES.flatMap(recipe=>recipe.steps.flatMap((step,index)=>ingredients.ingredientVisual(step.ingredient,step.shape)?[{recipe,step,index}]:[]));
 function ingredientRoots(scene:T.Scene){const roots:T.Group[]=[];scene.traverse(o=>{if(o instanceof T.Group&&o.name.startsWith('ingredient/'))roots.push(o);});return roots;}
-function resources(scene:T.Scene){const geometries=new Set<T.BufferGeometry>(),materials=new Set<T.Material>();scene.traverse(o=>{if(o instanceof T.Mesh){geometries.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);}});return {geometries,materials};}
+function resources(scene:T.Object3D){const geometries=new Set<T.BufferGeometry>(),materials=new Set<T.Material>();scene.traverse(o=>{if(o instanceof T.Mesh){geometries.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);}});return {geometries,materials};}
 
 test('real ingredient meshes use shared contours, bounded opaque parts and no per-frame resources',()=>{
  for(const {recipe,step,index} of ingredientSteps){
@@ -109,15 +109,17 @@ test('real ingredient meshes use shared contours, bounded opaque parts and no pe
   try{
    f.stage.update(run,null,1000,false);const visual=ingredients.ingredientVisual(step.ingredient,step.shape)!,roots=ingredientRoots(f.scene());
    assert.equal(roots.length,step.goal+(step.kind==='plate'?1:0));
-   assert.equal(f.extrusions.length,visual.layers.length,'raw contour geometry is shared by all copies within this step');
+   const layers=[...visual.layers,...(visual.cutLayers??[])];
+   assert.equal(f.extrusions.length,layers.length,'both states share raw contour geometry across all copies');
    f.extrusions.forEach((geometry,i)=>{
     const contour=geometry.parameters.shapes as T.Shape,points=contour.getPoints();
-    assert.deepEqual(points.slice(0,visual.layers[i].points.length).map(p=>[p.x,p.y]),visual.layers[i].points.map(([x,y])=>[x*.3,-y*.3]));
+    assert.deepEqual(points.slice(0,layers[i].points.length).map(p=>[p.x,p.y]),layers[i].points.map(([x,y])=>[x*.3,-y*.3]));
     geometry.computeBoundingBox();assert.ok(geometry.boundingBox!.min.z>=0&&geometry.boundingBox!.max.z<.071);
    });
    for(const root of roots){
-    assert.equal(root.children.length,new Set(visual.layers.map(layer=>layer.color)).size,'same-color details are rigidly batched');
-    assert.ok(root.children.length<=4);
+    const variants=visual.cutLayers?root.children:[root];
+    if(visual.cutLayers)assert.equal(variants.length,2,'whole and cut remain independently switchable groups');
+    variants.forEach((variant,i)=>{const stateLayers=i===1?visual.cutLayers!:visual.layers;assert.equal(variant.children.length,new Set(stateLayers.map(layer=>layer.color)).size,'same-color details are rigidly batched within each variant');assert.ok(variant.children.length<=4);});
     root.traverse(o=>{if(o instanceof T.Mesh){const m=o.material as T.MeshStandardMaterial;assert.equal(m.transparent,false);assert.equal(m.map,null);assert.equal(m.roughness,1);assert.equal(m.side,T.DoubleSide);const positions=o.geometry.getAttribute('position');for(const value of positions.array)assert.ok(Number.isFinite(value));o.updateMatrix();for(let i=0;i<positions.count;i++){const p=new T.Vector3().fromBufferAttribute(positions,i).applyMatrix4(o.matrix);assert.ok(Math.abs(p.x)<=.301&&Math.abs(p.z)<=.301&&p.y>=.059&&p.y<=.281,'extruded and batched pieces stay inside the original food footprint');}}});
    }
    const before=resources(f.scene()),extrusions=f.extrusions.length,renders=f.renders();
@@ -125,6 +127,42 @@ test('real ingredient meshes use shared contours, bounded opaque parts and no pe
    f.stage.update({...run,elapsed:2016,active:{...run.active,count:1}}, {x:.7,y:.6},2016,false);
    assert.equal(f.renders(),renders+1);assert.deepEqual(resources(f.scene()),before);assert.equal(f.extrusions.length,extrusions);
   }finally{f.stage.dispose();}
+ }
+});
+
+test('actual batched preparation roots show one variant only and release both states once',()=>{
+ for(const {recipe,step,index} of ingredientSteps){
+  const visual=ingredients.ingredientVisual(step.ingredient,step.shape)!;if(!visual.cutLayers)continue;
+  const f=factory(true),run={...domain.newCookingRun(recipe,42,'preparation_lifecycle'),step:index,status:'playing' as const},disposed=new Map<T.BufferGeometry|T.Material,number>();
+  const track=(r:T.BufferGeometry|T.Material)=>{if(!disposed.has(r)){disposed.set(r,0);r.addEventListener('dispose',()=>disposed.set(r,disposed.get(r)!+1));}};
+  try{
+   f.stage.update(run,null,1000,false);const roots=ingredientRoots(f.scene()),before=resources(f.scene()),extrusions=f.extrusions.length;
+   f.extrusions.forEach(track);roots.forEach(root=>root.traverse(o=>{if(o instanceof T.Mesh){track(o.geometry);track(o.material as T.Material);}}));
+   assert.ok(extrusions<=14);
+   const foodGeometry=new Set([...f.extrusions,...roots.flatMap(root=>[...resources(root).geometries])]);assert.ok(foodGeometry.size<=32,'both states and per-copy merged geometry fit the fixed preparation budget');
+   const foodMaterials=new Set(roots.flatMap(root=>[...resources(root).materials]));assert.ok(foodMaterials.size<=4);
+   for(const motion of [false,true])for(const status of ['playing','paused'] as const)for(const count of [0,1,step.goal,0]){
+    const frame={...run,status,elapsed:5000,active:{...run.active,count}},saved=JSON.stringify(frame);
+    f.stage.update(frame,null,5000,motion);
+    roots.forEach((root,i)=>{
+     assert.equal(root.children.length,2,'parent must not be flattened across hidden states');
+     const whole=root.getObjectByName('preparation/whole')!,cut=root.getObjectByName('preparation/cut')!;
+     assert.equal(whole.visible,i>=count);assert.equal(cut.visible,i<count);
+     const visible:T.Mesh[]=[];root.traverseVisible(o=>{if(o instanceof T.Mesh)visible.push(o);});
+     const expected=i<count?cut:whole;
+     assert.deepEqual(new Set(visible),new Set(expected.children),'no hidden variant was merged into the shown mesh');
+     assert.ok(visible.length<=4);assert.ok(visible.every(mesh=>mesh.parent===expected));
+    });
+    assert.deepEqual(resources(f.scene()),before);assert.equal(f.extrusions.length,extrusions);assert.equal(JSON.stringify(frame),saved);
+    const renders=f.renders();f.stage.update({...frame,elapsed:15000},null,15000,motion);assert.equal(f.renders(),renders,'unchanged cuts have no clock-driven redraw');
+   }
+   f.stage.update({...run,step:index+1},null,16000,false);for(const count of disposed.values())assert.equal(count,1);
+   const nextExtrusion=f.extrusions.length,previousResources=disposed.size;
+   f.stage.update(run,null,17000,false);f.extrusions.slice(nextExtrusion).forEach(track);
+   ingredientRoots(f.scene()).forEach(root=>{assert.equal(root.getObjectByName('preparation/whole')!.visible,true);assert.equal(root.getObjectByName('preparation/cut')!.visible,false);root.traverse(o=>{if(o instanceof T.Mesh){track(o.geometry);track(o.material as T.Material);}});});
+   assert.ok(disposed.size>previousResources,'fresh whole and hidden cut resources are tracked before direct exit');
+  }finally{f.stage.dispose();f.stage.dispose();}
+  for(const count of disposed.values())assert.equal(count,1,'rebuild and direct exit each dispose their own assets exactly once');
  }
 });
 
