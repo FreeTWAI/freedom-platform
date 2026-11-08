@@ -233,7 +233,7 @@ function dailyFeedbackBoard(game:'photo'|'stamp'){
   const stage={current:{framing:()=>({visible:['head','feet'],blocked:false,lift:0}),capture:()=>{if(failure!==null)throw failure;return 'controlled-frame';}}};
   const api=runInNewContext(`${functions};({shoot,applyStamp,photosDone})`,{
     live,stage,ready:true,RULES,CLIENTS,GAMES,gradePhoto,stamp,photoNotice,stampNotice,seconds,Error,captureFailures,
-    motionRef:{current:false},syncClock(){},render:()=>true,sfx(){},setFlash(){},updateUi(){},settle:()=>assert.fail('not a terminal fixture'),
+    pendingResult:{current:null},stop(){},nextClient(){assert.fail('unexpired feedback fixture');},motionRef:{current:false},syncClock(){},render:()=>true,sfx(){},setFlash(){},updateUi(){},settle:()=>assert.fail('not a terminal fixture'),
     setNotice:(text:string)=>notices.push(text),game,seed:42,
   }) as {shoot:()=>void;applyStamp:(point:{x:number;y:number},index?:number)=>void;photosDone:()=>void};
   return {...api,live,notices,captureFailures,fail:(cause:unknown)=>{failure=cause;}};
@@ -625,7 +625,7 @@ function cashBoard(completedCards:number, failure?:'update'|'capture') {
   }};
   const pendingResult={current:null as any};
   const api=runInNewContext(`${functions};({applyCash,settle})`,{
-    live,stage,pendingResult,view:()=>({cash:live.current.cash}),host:{current:{dataset:{}}},frame:{current:7},motionRef:{current:true},game:'cash',seed:42,
+    live,stage,pendingResult,controls:{current:{cancel(){}}},view:()=>({cash:live.current.cash}),host:{current:{dataset:{}}},frame:{current:7},motionRef:{current:true},game:'cash',seed:42,
     performance:{now:()=>now},tick,pause,sortCash,cashNotice,seconds,GAMES,captureFailures,cancelAnimationFrame:()=>record('stop'),
     syncDiagnostics,audio:{current:null},setReady:()=>{},setError:()=>{},
     sfx:()=>{},setNotice:(text:string)=>notices.push(text),updateUi:()=>{},onResult:(result:any)=>results.push(result),setCaptureError:(value:boolean)=>{captureError=value;},
@@ -1390,7 +1390,7 @@ function fullscreenStartHarness(kind:'legacy'|'guided'|'market'|'party',status='
  const recipe=recipeOf('rice-balls')!;
  const initial=kind==='party'?newParty('chair',42):kind==='market'?newMarket('corn-dog',42):kind==='guided'?newCookingRun(recipe,42,'fullscreen-start'): {started:false,paused:false,clock:{elapsed:0,last:null,running:false}};
  const live={current:{...initial,status} as any};
- const context:any={game:'photo',hints:{},live,ready:true,visualReady:true,confirm:false,confirmRestart:false,restart:false,mode:kind==='party'?{current:'light'}:'ready',onStart:(node:unknown)=>{assert.equal(node,target);calls++;},section:{current:target},surface:{current:target},host:{current:target},last:{current:null},frame:{current:0},loop:{current(){}},step:{current(){}},checkpointOwned:{current:false},focusHandoff:{current:null},document:{activeElement:target},performance:{now:()=>100},requestAnimationFrame:()=>++frames,cancelAnimationFrame(){},setNotice(){},refresh(){},updateUi(){},kick(){frames++;},stop(){},finish(){},safeDraw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},draw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},startParty,resumeParty,currentStep,applyMarket,commit:(run:unknown)=>{live.current=run;},resume:(clock:any)=>({...clock,running:true}),command:(action:any)=>{live.current=actCooking(live.current,{...action,step:live.current.step},100);}};
+ const context:any={pendingResult:{current:null},dialog:null,focusAfterCommit:{current:false},useLayoutEffect(){},game:'photo',hints:{},live,ready:true,visualReady:true,confirm:false,confirmRestart:false,restart:false,mode:kind==='party'?{current:'light'}:'ready',onStart:(node:unknown)=>{assert.equal(node,target);calls++;},section:{current:target},surface:{current:target},host:{current:target},last:{current:null},frame:{current:0},loop:{current(){}},step:{current(){}},checkpointOwned:{current:false},focusHandoff:{current:null},document:{activeElement:target},performance:{now:()=>100},requestAnimationFrame:()=>++frames,cancelAnimationFrame(){},setNotice(){},refresh(){},updateUi(){},kick(){frames++;},stop(){},finish(){},safeDraw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},draw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},startParty,resumeParty,currentStep,applyMarket,commit:(run:unknown)=>{live.current=run;},resume:(clock:any)=>({...clock,running:true}),command:(action:any)=>{live.current=actCooking(live.current,{...action,step:live.current.step},100);}};
  const begin=kind==='legacy'?fullscreenStartHandler('AbsurdDaily.tsx','    function start()','    function setPaused()','start',context):kind==='party'?fullscreenStartHandler('party/PartyGame.tsx','  function begin()','  function action(','begin',context):kind==='market'?fullscreenStartHandler('cooking/MarketGame.tsx',' function action(',' step.current=','action',context):fullscreenStartHandler('cooking/CookingGame.tsx','  const begin=','  const restart=','begin',context);
  return {context,live,target,view,layout,begin:()=>kind==='market'?begin({kind:'start'}):begin(),calls:()=>calls,frames:()=>frames,draw:(ok:boolean)=>{drawn=ok;}};
 }

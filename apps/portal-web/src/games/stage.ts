@@ -1,7 +1,8 @@
-import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
+import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, PlaneGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup} from './stage-batch';
+import {dailyCamera,paperPoint,cashCardPose,cashContains,captureDailyFrame,PAPER as PAPER_GEOMETRY} from './daily-scene-model';
 import { cashDeck, CLIENTS, documentTitle, photoPose, RULES, stampTarget, type CashState, type GameId, type Point, type StampState } from './domain';
 export type StageView = {
     game: GameId;
@@ -14,6 +15,8 @@ export type StageView = {
     stampPoint: Point;
     raised: boolean;
     cash?: CashState;
+    cashDrag?: Point;
+    stampFeedback?: { point: Point; hit: boolean; at: number };
     motion: boolean;
 };
 export type Stage = {
@@ -25,6 +28,7 @@ export type Stage = {
         lift: number;
     };
     point: (clientX: number, clientY: number) => Point | null;
+    cashContains?: (clientX:number,clientY:number)=>boolean;
     dispose: () => void;
     stats: () => {
         calls: number;
@@ -68,7 +72,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     host.append(renderer.domElement);
     const scene = new Scene();
     scene.background = new Color('#f0dfc5');
-    const camera = new PerspectiveCamera(44, 4 / 3, .1, 60), ray = new Raycaster(), ground = new Plane(new Vector3(0, 1, 0), 0), intersection = new Vector3();
+    const camera = new PerspectiveCamera(44, 4 / 3, .1, 60);
     scene.add(new HemisphereLight('#fff6df', '#9c8266', .9));
     // CK-2: three matte ink-wash bands; no reflective environment or specular highlights.
     const gradient=new DataTexture(new Uint8Array([95,180,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
@@ -352,11 +356,11 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         textures.delete(target.map as CanvasTexture);
         target.map.dispose();
     } target.map = t; target.needsUpdate = true; }
-    function updatePaper(s: StampState) { const id = `${s.index}/${s.practice}/${s.marks.map(m => `${m.x.toFixed(2)},${m.y.toFixed(2)},${m.hit}`).join(';')}`; if (id === paperKey || !paperMat)
+    function updatePaper(s: StampState, feedback:StageView['stampFeedback'], elapsed:number) { const recent=feedback?.hit&&s.endedAt===null&&elapsed-feedback.at<420?feedback:null; const id = `${s.index}/${s.practice}/${s.marks.map(m => `${m.x.toFixed(2)},${m.y.toFixed(2)},${m.hit}`).join(';')}/${recent?.at??''}`; if (id === paperKey || !paperMat)
         return; paperKey = id; paperTexture = texture((ctx, c) => { ctx.fillStyle = PAPER; ctx.fillRect(0, 0, c.width, c.height); ctx.strokeStyle = '#aeb5c2'; ctx.lineWidth = 3; ctx.strokeRect(35, 35, 698, 954); ctx.fillStyle = INK; ctx.font = 'bold 45px sans-serif'; ctx.textAlign = 'left'; const title = documentTitle(Math.min(s.index, 11), s.practice); ctx.fillText(title.slice(0, 11), 65, 120); if (title.length > 11)
         ctx.fillText(title.slice(11), 65, 180); ctx.font = '28px sans-serif'; ctx.fillText(s.practice ? '先蓋中一次，再正式上班' : `公文 ${Math.min(s.index + 1, 12)} / 12　 收發室：螃蟹`, 65, 230); ctx.fillStyle = '#d8c3ab'; for (let i = 0; i < 4; i++)
-        ctx.fillRect(70, 290 + i * 45, 500 - i * 40, 7); const target = stampTarget(s.seed, Math.min(s.index, 11)), x = 384 + target.x * 307, y = 512 + target.y * 415; ctx.strokeStyle = BLUE; ctx.lineWidth = 6; ctx.setLineDash([12, 9]); ctx.beginPath(); ctx.arc(x, y, RULES.stampRadius * 307, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.font = '26px sans-serif'; ctx.fillStyle = BLUE; ctx.textAlign = 'center'; ctx.fillText('蓋這裡', x, y + 100); for (const m of s.marks) {
-        const mx = 384 + m.x * 307, my = 512 + m.y * 415;
+        ctx.fillRect(70, 290 + i * 45, 500 - i * 40, 7); const target = stampTarget(s.seed, Math.min(s.index, 11)), x = 384 + target.x * (768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width), y = 512 + target.y * (1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height); ctx.strokeStyle = BLUE; ctx.lineWidth = 6; ctx.setLineDash([12, 9]); ctx.beginPath(); ctx.ellipse(x, y, RULES.stampRadius*(768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width), RULES.stampRadius*(1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height), 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.font = '26px sans-serif'; ctx.fillStyle = BLUE; ctx.textAlign = 'center'; ctx.fillText('蓋這裡', x, y + 100); for (const m of s.marks) {
+        const mx = 384 + m.x * (768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width), my = 512 + m.y * (1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height);
         ctx.save();
         ctx.translate(mx, my);
         ctx.rotate(m.x * .2);
@@ -367,7 +371,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         ctx.font = 'bold 46px sans-serif';
         ctx.fillText('已閱', 0, 17);
         ctx.restore();
-    } ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.font = '26px sans-serif'; ctx.fillText('備註：已閱，但看不懂。', 65, 937); }); replaceTexture(paperMat, paperTexture); }
+    } if(recent){const x=384+recent.point.x*(768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width),y=512+recent.point.y*(1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height);ctx.save();ctx.translate(x,y);ctx.strokeStyle='#487300';ctx.fillStyle='#487300';ctx.lineWidth=7;ctx.strokeRect(-75,-48,150,96);ctx.font='bold 26px sans-serif';ctx.textAlign='center';ctx.fillText('上張已閱 ✓',0,10);ctx.restore();} ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.font = '26px sans-serif'; ctx.fillText('備註：已閱，但看不懂。', 65, 937); }); replaceTexture(paperMat, paperTexture); }
     function updateCash(s: CashState) {
         const card = cashDeck(s.seed)[Math.min(s.index, 29)], id = String(card.id);
         if (id === cashKey || !cashMesh)
@@ -473,7 +477,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             camera.fov = view.game === 'stamp' ? 40 : 42;
             camera.lookAt(0, 0, .23);
             if (view.stamp) {
-                updatePaper(view.stamp);
+                updatePaper(view.stamp,view.stampFeedback,view.seconds*1000);
                 if (stampRoot) {
                     const pulse = 1 - Math.min(1, Math.max(0, view.seconds * 1000 - view.stamp.lastAt) / 180);
                     stampRoot.position.set(view.raised || pulse > 0 || view.stamp.endedAt !== null ? view.stampPoint.x * 1.2 : 1.88, view.raised ? 1.15 : .10 + (1 - Math.max(0, pulse)) * .15, view.raised || pulse > 0 || view.stamp.endedAt !== null ? view.stampPoint.y * 1.5 : 1.20);
@@ -490,15 +494,14 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             if (view.cash) {
                 updateCash(view.cash);
                 if (cashMesh) {
-                    const dt = Math.max(0, view.seconds * 1000 - view.cash.lastAt);
-                    cashMesh.position.x = view.motion && view.cash.feedback === 'wrong' ? Math.sin(dt * .045) * Math.exp(-dt / 85) * .18 : 0;
-                    cashMesh.position.y = .25 + (view.motion && view.cash.feedback === 'correct' ? Math.exp(-dt / 80) * .12 : 0);
+                    const pose=cashCardPose(view,host.clientWidth/Math.max(1,host.clientHeight));
+                    // The card's parent sits at y=.08; shared pose is world-space.
+                    cashMesh.position.set(pose.x,pose.y-.08,pose.z);
                 }
                 tower?.children.forEach((m, i) => { m.visible = i < view.cash!.index - view.cash!.rejected; });
             }
         }
-        camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
-        camera.updateProjectionMatrix();
+        dailyCamera(view,host.clientWidth/Math.max(1,host.clientHeight),camera);
         scene.updateMatrixWorld(true);
         renderer.render(scene, camera);
         ready = true;
@@ -517,11 +520,10 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     renderer.domElement.addEventListener('webglcontextlost', lost);
     return {
         update,
-        capture() { if (!ready || disposed)
-            throw Error('場景尚未準備好，請稍後再拍。'); renderer.render(scene, camera); const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 720; const ctx = canvas.getContext('2d'); if (!ctx)
-            throw Error('圖片無法產生。'); ctx.drawImage(renderer.domElement, 0, 0, 960, 720); return canvas.toDataURL('image/jpeg', .9); },
+        capture() { if(!ready||disposed)throw Error('場景尚未準備好，請稍後再拍。');renderer.render(scene,camera);return captureDailyFrame(renderer.domElement); },
         framing() { scene.updateMatrixWorld(true); const visible = anchors.filter(a => a.object.visible && a.points.every(p => { const v = a.object.localToWorld(p.clone()).project(camera); return v.z >= -1 && v.z <= 1 && Math.abs(v.x) <= .97 && Math.abs(v.y) <= .97; })).map(a => a.id); return { visible, blocked: !!board && Math.abs(board.position.x) < .85, lift: clientRoot?.position.y ?? 0 }; },
-        point(x, y) { const r = host.getBoundingClientRect(); ray.setFromCamera(new Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera); return ray.ray.intersectPlane(ground, intersection) ? { x: intersection.x / 1.2, y: intersection.z / 1.5 } : null; },
+        point(x,y) {return lastView?paperPoint(lastView,host.getBoundingClientRect(),x,y):null;},
+        cashContains(x,y) {return !!lastView&&cashContains(lastView,host.getBoundingClientRect(),x,y);},
         stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }; },
         dispose,
     };
