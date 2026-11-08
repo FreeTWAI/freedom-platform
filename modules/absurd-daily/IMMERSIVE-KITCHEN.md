@@ -71,6 +71,15 @@ The first local combined test run exposed old scroll expectations after an
 unnecessary handler change; the original accepted-start/view-target behavior was
 restored and all 229 tests were rerun. The failure is not a passed run.
 
+A follow-up static review found three candidate layout/accessibility defects:
+legacy-theme precedence and relative overlay positioning, fixed canvas sizing
+covering lower targets after fullscreen exit/help expansion, and a covered but
+focusable help summary while paused. The follow-up uses explicit scoped styles,
+ResizeObserver measurements of the real stage/HUD with safe-area spacing, and an
+inert non-playing tool dock. Existing browser cases now assert the windowed-help
+canvas boundary and paused focus exclusion. Local typecheck/build and all 229
+focused runtime cases were rerun; native browser verification is still pending.
+
 ## Remaining rollout work
 
 1. Review exact-head CI screenshots and all gameplay states, including every

@@ -228,7 +228,19 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
   await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
   await page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
   await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-cut.png`);
+  if(viewport.width===320){
+    await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();
+    await page.locator('.ck-help summary').click();await page.clock.runFor(1000/30);
+    await expect.poll(()=>page.evaluate(()=>{const canvas=document.querySelector('.ck-live-scene')!.getBoundingClientRect(),dock=document.querySelector('.ck-game-controls')!.getBoundingClientRect();return canvas.bottom<=dock.top;})).toBe(true);
+    await capturePreparationScreenshot(fullscreen,testInfo,'immersive-320x568-windowed-help.png');
+    await page.locator('.ck-help summary').click();
+    await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+    await expect(fullscreen).toHaveAttribute('role','dialog');
+  }
   await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');
+  await expect(page.locator('.ck-game-controls')).toHaveJSProperty('inert',true);
+  await page.getByRole('button',{name:'繼續料理',exact:true}).focus();await page.keyboard.press('Tab');
+  await expect(page.locator('.ck-help summary')).not.toBeFocused();
   await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
   await page.getByRole('button',{name:'輕量插畫',exact:true}).click();await expect(page.locator('.ck-visual-light')).toBeVisible();
   await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`2 / ${step.goal}`);
