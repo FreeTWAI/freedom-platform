@@ -368,7 +368,11 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         ball(crab, PAPER, side * .15, .58, .07, .07);
         ball(crab, INK, side * .15, .59, .13, .03);
         ball(crab, '#ec785a', side * .48, .2, .18, .18, .15, .09);
-    } }
+    }
+        // Only the crab root moves. Preserve all triangles/materials/shadows,
+        // combining its rigid descendants instead of submitting each limb.
+        bakeRigidGroup(crab,geometries);
+    }
     function buildCash() { desk(); const cardGroup = group(world, 0, .08, 0); cashMesh = new Mesh(plane, new MeshBasicMaterial({ color: PAPER, toneMapped: false })); materials.add(cashMesh.material as Material); cashMesh.scale.set(3.2, 2.15, 1); cashMesh.rotation.x = -Math.PI / 2; cashMesh.position.y = .25; cardGroup.add(cashMesh); tower = group(world, 2.6, .04, -.15); for (let i = 0; i < 24; i++) {
         const m = rb(tower, LIME, Math.sin(i) * .03, i * .025, 0, 1.3, .022, 1.85);
         m.name = `bill${i}`;

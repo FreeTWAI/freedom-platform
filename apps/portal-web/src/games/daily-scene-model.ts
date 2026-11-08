@@ -24,10 +24,11 @@ export function dailyCamera(view: StageView, aspect: number, camera = new Perspe
         // The old panel was almost square. In the new full-height workbench,
         // fit the same paper below/above the floating HUD without changing
         // camera position, look direction, paper geometry or stamp radius.
-        // Only STAMP's effective FOV grows; landscape keeps its original 40°.
+        // Portrait CASH also fits its full card between the HUD and sorting trays.
+        // Both games keep their original landscape projection and shared picking.
         camera.fov = view.game === 'stamp'
             ? 2 * Math.atan(Math.tan(20 * Math.PI / 180) * (camera.aspect < 1 ? Math.max(1.7, .90 / camera.aspect) : 1)) * 180 / Math.PI
-            : 42;
+            : 2 * Math.atan(Math.tan(21 * Math.PI / 180) * (camera.aspect < 1 ? Math.max(2.2, .95 / camera.aspect) : 1)) * 180 / Math.PI;
         camera.lookAt(0, 0, .23);
     }
     camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);

@@ -65,7 +65,9 @@
  .pt-scoreboard>div+div{border-color:var(--ad-line)}
  .pt-holiday-field.pt-play-area{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(96px,1fr) auto auto;gap:0;align-items:stretch;position:relative;min-height:0;min-width:0;overflow:hidden;background:var(--pt-world-bg)}
  .pt-holiday-world{display:flex;align-self:stretch;align-items:center;justify-content:center;position:relative;container-type:size;min-width:0;min-height:0;overflow:hidden}
- .pt-holiday-world .pt-canvas{position:relative;flex:none;width:min(100cqw,133.333333cqh);height:auto;aspect-ratio:4/3;min-height:0;margin:0;padding:0;background:transparent;isolation:isolate}
+ /* Fit from the exact 3/4 height, not a truncated 4/3 width multiplier.
+    At the 96px world floor this preserves the full 128px scene width. */
+ .pt-holiday-world .pt-canvas{position:relative;flex:none;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;min-height:0;margin:0;padding:0;background:transparent;isolation:isolate}
  .pt-holiday-world .pt-canvas canvas{position:relative;z-index:0;width:100%;height:100%;display:block}
  .pt-holiday-world .pt-canvas:focus-visible{outline:3px solid var(--ad-accent);outline-offset:-3px;box-shadow:none}
  .pt-holiday-stage[data-party-state] .pt-controls{display:block;margin:0;padding:6px 8px;border:0;background:transparent;min-width:0}
@@ -150,8 +152,8 @@
  --pt-world-bg:#d4e8d6;--chair-safe-top:env(safe-area-inset-top,0px);--chair-safe-right:env(safe-area-inset-right,0px);--chair-safe-bottom:env(safe-area-inset-bottom,0px);--chair-safe-left:env(safe-area-inset-left,0px);
  --holiday-safe-top:var(--chair-safe-top);--holiday-safe-right:var(--chair-safe-right);--holiday-safe-bottom:var(--chair-safe-bottom);--holiday-safe-left:var(--chair-safe-left);
  .pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
- .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:min(100cqw,133.333333cqh);height:auto;aspect-ratio:4/3;touch-action:none}
- .pt-chair-light-board{position:absolute;width:min(100cqw,133.333333cqh);aspect-ratio:4/3;pointer-events:none}
+ .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;touch-action:none}
+ .pt-chair-light-board{position:absolute;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;pointer-events:none}
  .pt-chair-light-board .pt-light-world{display:block;width:100%;height:100%;max-height:none;aspect-ratio:4/3}
  .pt-chair-light-board .pt-light-readout{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;padding:0;margin:0}
  .pt-chair-stage[data-party-state] .pt-chair-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;align-content:start;gap:6px;min-height:0;overflow:auto;overscroll-behavior:contain;scroll-padding:6px}
@@ -178,8 +180,8 @@
  --pt-world-bg:#f5dcb3;--tofu-safe-top:env(safe-area-inset-top,0px);--tofu-safe-right:env(safe-area-inset-right,0px);--tofu-safe-bottom:env(safe-area-inset-bottom,0px);--tofu-safe-left:env(safe-area-inset-left,0px);
  --holiday-safe-top:var(--tofu-safe-top);--holiday-safe-right:var(--tofu-safe-right);--holiday-safe-bottom:var(--tofu-safe-bottom);--holiday-safe-left:var(--tofu-safe-left);
  .pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
- .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:min(100cqw,133.333333cqh);height:auto;aspect-ratio:4/3;touch-action:none}
- .pt-tofu-light-board{position:absolute;width:min(100cqw,133.333333cqh);aspect-ratio:4/3;pointer-events:none}
+ .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;touch-action:none}
+ .pt-tofu-light-board{position:absolute;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;pointer-events:none}
  .pt-tofu-light-board .pt-light-world{display:block;width:100%;height:100%;max-height:none;aspect-ratio:4/3}
  .pt-tofu-light-board .pt-light-readout{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;padding:0;margin:0}
  .pt-tofu-stage[data-party-state] .pt-tofu-controls{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;align-content:start;min-height:0;overflow:auto;overscroll-behavior:contain;scroll-padding:6px}

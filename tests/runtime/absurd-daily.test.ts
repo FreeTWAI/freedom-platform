@@ -1709,3 +1709,24 @@ for(const mode of ['native','light'] as const)test(`PT-REPAIR: ${mode} clicked p
  await h.click('暫停');assert.equal(h.run().status,'paused');assert.equal(h.button('暫停').disabled,true);assert.equal(h.focus(),'繼續這一局');
  assert.equal(h.button('繼續這一局').disabled,undefined);const at=h.run().elapsed;h.tick(1000);assert.equal(h.run().elapsed,at);h.cleanup();
 });
+
+
+test('PT-BOUNDS: native and light world CSS fits exact 4:3 without a truncated width multiplier (source only)',()=>{
+ const css=readFileSync(new URL('../../apps/portal-web/src/games/party/party.css',import.meta.url),'utf8');
+ // Native host, both light hosts and both sibling SVG boards must use the
+ // same height-first fit. This is a source guard, not a browser layout result.
+ const rectangles=[...css.matchAll(/\.(?:pt-canvas|pt-light-stage|pt-chair-light-board|pt-tofu-light-board)\{[^{}]*width:auto;height:min\((\d+)cqh,(\d+)cqw\);aspect-ratio:(\d+)\/(\d+);/g)];
+ assert.equal(rectangles.length,5);
+ assert.doesNotMatch(css,/133\.333/);
+ for(const [,vertical,horizontal,numerator,denominator] of rectangles){
+  const heightFactor=Number(vertical)/100,widthFactor=Number(horizontal)/100,ratio=Number(numerator)/Number(denominator);
+  assert.equal(heightFactor,1);assert.equal(widthFactor,.75);assert.equal(ratio,4/3);
+  for(const [availableWidth,availableHeight] of [[128,96],[535,96],[288,216],[1200,700],[320,568]]){
+   const height=Math.min(availableHeight*heightFactor,availableWidth*widthFactor),width=height*ratio;
+   assert.ok(width>=128);assert.ok(height>=96);assert.ok(width<=availableWidth);assert.ok(height<=availableHeight);
+  }
+ }
+ const built=transformSync(css,{loader:'css',minify:true,target:'es2023'}).code;
+ assert.equal((built.match(/height:min\(100cqh,75cqw\)/g)??[]).length,5,'minification retains exact height percentages');
+ assert.doesNotMatch(built,/133\.333/);
+});

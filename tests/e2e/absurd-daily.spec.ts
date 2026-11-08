@@ -2175,7 +2175,8 @@ async function dailyWorldPoint(page:Page,game:'stamp'|'cash',world:number[]){
   // Full-height STAMP keeps the original pose and paper, but fits its
   // portrait FOV; independently construct the actual projection for clicks.
   const stampFov=2*Math.atan(Math.tan(20*Math.PI/180)*(aspect<1?Math.max(1.7,.90/aspect):1))*180/Math.PI;
-  const camera=new PerspectiveCamera(game==='stamp'?stampFov:42,aspect,.1,60);
+  const cashFov=2*Math.atan(Math.tan(21*Math.PI/180)*(aspect<1?Math.max(2.2,.95/aspect):1))*180/Math.PI;
+  const camera=new PerspectiveCamera(game==='stamp'?stampFov:cashFov,aspect,.1,60);
   camera.position.set(0,5.3,2.7);camera.lookAt(0,0,.23);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
   const p=new Vector3(...world).project(camera),point={x:box.x+(p.x+1)*box.width/2,y:box.y+(1-p.y)*box.height/2};
   // Check the exact contact pixel, not just visibility of a broad parent box.

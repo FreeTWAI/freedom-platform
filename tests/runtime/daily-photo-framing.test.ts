@@ -98,15 +98,54 @@ test('PHOTO max-wide portrait umbrella has stable actual pad and keyboard target
   }
 });
 
-test('PHOTO projection preserves obstruction, pigeon timing, all Daily poses and the explicit STAMP portrait fit',()=>{
+test('PHOTO projection preserves obstruction, pigeon timing, all Daily poses and explicit STAMP/CASH portrait fits',()=>{
   for(const [width,height]of sizes){
     const aspect=width/height,backdrop=photoFraming(view(0,0),aspect),birds=photoFraming(view(2,0),aspect);
     assert.equal(backdrop.blocked,true);assert.ok(gradePhoto('backdrop',backdrop.visible,0,backdrop.blocked,backdrop.lift).stars<3);
     assert.equal(gradePhoto('pigeons',birds.visible,0,birds.blocked,birds.lift).stars,0);
     for(const game of ['stamp','cash'] as const){
-      const expectedFov=game==='stamp'&&aspect<1?2*Math.atan(Math.tan(Math.PI/9)*Math.max(1.7,.90/aspect))*180/Math.PI:game==='stamp'?40:42;
+      const expectedFov=game==='stamp'&&aspect<1?2*Math.atan(Math.tan(Math.PI/9)*Math.max(1.7,.90/aspect))*180/Math.PI:game==='stamp'?40:aspect<1?2*Math.atan(Math.tan(21*Math.PI/180)*Math.max(2.2,.95/aspect))*180/Math.PI:42;
       const old=new PerspectiveCamera(expectedFov,aspect,.1,60);old.position.set(0,5.3,2.7);old.lookAt(0,0,.23);old.updateProjectionMatrix();old.updateMatrixWorld(true);
       const actual=dailyCamera({...view(),game},aspect);assert.deepEqual(actual.projectionMatrix.elements,old.projectionMatrix.elements);assert.deepEqual(actual.matrixWorld.elements,old.matrixWorld.elements);
+    }
+  }
+});
+
+import {photoModelBounds} from '../e2e/helpers/photo-model-bounds.js';
+// Unlike the two scoring anchors, these include every real native client mesh
+// vertex / actual light draw path. The foreground board is not the client.
+for(const renderer of ['native','light'] as const)for(const [width,height]of [[320,568],[296,482],[390,844],[358,758],[667,375],[635,289]])test(`PHOTO actual ${renderer} client clears the initial HUD at ${width}x${height}`,t=>{
+  const v={...view(0,.2,60),pan:{x:0,y:.35}},actual=photoModelBounds(renderer,width,height,v),old=photoModelBounds(renderer,width,height,{...v,fov:44,pan:{x:0,y:0}});
+  const header=width<height?166:60;
+  assert.ok(actual.bounds.top>header,JSON.stringify(actual.bounds));
+  assert.ok(actual.bounds.left>8&&actual.bounds.right<width-12&&actual.bounds.bottom<height-16);
+  assert.ok(actual.vertices>(renderer==='native'?20000:900),'observe real geometry, not replacement anchor boxes');
+  assert.ok(actual.framing.visible.includes('head')&&actual.framing.visible.includes('feet'));
+  assert.equal(actual.framing.blocked,true,'the timed foreground obstruction remains');
+  if(width===320||width===296||width>height)assert.ok(old.bounds.top<header,'old default reproduces HUD overlap');
+  // The old landscape client itself was NOT foot-cropped: the visible cropped
+  // legs in the f0 PNG belong to the foreground board. Do not regress that fact.
+  if(width>height)assert.ok(old.bounds.bottom<height);
+  t.diagnostic(JSON.stringify({renderer,width,height,vertices:actual.vertices,old:old.bounds,current:actual.bounds}));
+});
+
+test('PHOTO close-up still changes real framing; every unchanged goal remains achievable with real control steps',()=>{
+  for(const [width,height]of sizes){
+    const aspect=width/height,home={...view(0,.2,60),pan:{x:0,y:.35}};
+    const wide=photoModelBounds('native',width,height,home),close=photoModelBounds('native',width,height,{...home,fov:38});
+    assert.ok(close.bounds.bottom-close.bounds.top>(wide.bounds.bottom-wide.bounds.top)*1.6);
+    assert.ok(!photoFraming({...home,fov:38,pan:{x:1.8,y:2.8}},aspect).visible.includes('feet'),'pan and zoom can still lose a target');
+    for(const client of [0,1,2]){
+      // Umbrella: two right and one up pad steps from the new home, or three
+      // right and two up keyboard steps. Timing still comes from photoPose.
+      for(const pan of client===1?[{x:.7,y:.7},{x:.75,y:.85}]:[{x:0,y:.35}]){
+        let successful=false;
+        for(let sample=0;sample<=120;sample++){
+          const v={...view(client,sample/10,60),pan},f=photoFraming(v,aspect);
+          if(gradePhoto(CLIENTS[client].id,f.visible,v.seconds,f.blocked,f.lift).stars===3)successful=true;
+        }
+        assert.ok(successful,`${width}x${height}/${CLIENTS[client].id}/${JSON.stringify(pan)}`);
+      }
     }
   }
 });

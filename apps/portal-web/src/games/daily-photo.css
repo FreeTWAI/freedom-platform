@@ -22,7 +22,11 @@
    goal and latest saved-photo grade in the live world at every transition. */
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-goal,
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-feedback{position:absolute;top:calc(max(10px,var(--game-safe-top)) + 106px);left:60px;right:100px;padding:3px 4px;border:1px solid var(--ad-line);border-radius:10px;background:var(--ad-surface);color:var(--ad-ink);font-size:.875rem;font-weight:700;line-height:1.4;text-align:center;white-space:nowrap}
-.fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-feedback{top:calc(max(10px,var(--game-safe-top)) + 164px);left:88px;right:84px}
+.fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-feedback{top:auto;bottom:max(12px,var(--game-safe-bottom));left:60px;right:92px}
+/* Saved-shot feedback and capture errors stay off the client's head. The
+   current goal remains visible above the live subject. */
+/* The paused overlay owns the lower center, including its Resume action. */
+.fw-arcade-root.fw-arcade-toy-console .daily-photo[data-playing="false"] .daily-photo-feedback{visibility:hidden}
 /* No independently scrolling controls lane. Clear space between these floating
    controls is still the live scene and continues to receive camera gestures. */
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .fw-arcade-controls,
@@ -42,7 +46,7 @@
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-album{z-index:4;left:max(8px,var(--game-safe-left));right:auto;top:calc(max(10px,var(--game-safe-top)) + 164px);bottom:auto;width:72px;min-width:72px}
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-scene-mode{position:absolute;top:calc(max(10px,var(--game-safe-top)) + 106px);right:max(12px,var(--game-safe-right));z-index:4;max-width:none;width:80px}
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-scene-mode button{width:100%;min-height:48px;padding:4px;font-size:.875rem;line-height:1.3;background:var(--ad-surface)}
-.fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-failure{position:absolute;top:calc(max(10px,var(--game-safe-top)) + 164px);left:88px;right:max(12px,var(--game-safe-right));padding:8px;background:var(--ad-surface);border:2px solid var(--ad-line);border-radius:10px;color:var(--ad-ink);font-size:.875rem;line-height:1.4;pointer-events:auto}
+.fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-failure{position:absolute;top:auto;bottom:max(12px,var(--game-safe-bottom));left:60px;right:120px;padding:3px 4px;background:var(--ad-surface);border:2px solid var(--ad-line);border-radius:10px;color:var(--ad-ink);font-size:.875rem;line-height:1.3;pointer-events:auto}
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .fw-arcade-stage-cover{z-index:3;inset:calc(max(10px,var(--game-safe-top)) + 220px) max(12px,var(--game-safe-right)) max(12px,var(--game-safe-bottom)) max(8px,var(--game-safe-left));display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:8px;padding:12px;overflow:hidden;background:#fff9edf5}
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-overlay-copy{min-height:0;flex:0 1 auto;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-overlay-copy strong{display:block;font-size:1.125rem;line-height:1.4;color:var(--ad-ink)}
@@ -54,7 +58,7 @@
    stay at the edges; their text and 44px targets do not scale down to fit. */
 @media(orientation:landscape) and (max-height:540px){
  .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-goal{top:max(10px,var(--game-safe-top));left:calc(50% - 64px);right:auto;width:128px}
- .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-feedback{top:calc(max(10px,var(--game-safe-top)) + 54px);left:calc(50% - 24px);right:auto;width:128px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-feedback{top:calc(max(10px,var(--game-safe-top)) + 164px);bottom:auto;left:calc(max(8px,var(--game-safe-left)) + 88px);right:auto;width:144px}
  .fw-arcade-root.fw-arcade-toy-console .daily-photo .fw-arcade-toolbar{width:194px}
  .fw-arcade-root.fw-arcade-toy-console .daily-photo .fw-arcade-toolbar>button:nth-child(4){position:static}
  .fw-arcade-root.fw-arcade-toy-console .daily-photo .fw-arcade-game-title{right:auto;max-width:none;gap:8px}
@@ -64,5 +68,5 @@
  .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-scene-mode{left:max(8px,var(--game-safe-left));right:auto;top:calc(max(10px,var(--game-safe-top)) + 164px)}
  .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-album{left:auto;right:max(12px,var(--game-safe-right));top:calc(max(10px,var(--game-safe-top)) + 54px);bottom:auto}
  .fw-arcade-root.fw-arcade-toy-console .daily-photo .fw-arcade-stage-cover{inset:calc(max(10px,var(--game-safe-top)) + 54px) calc(max(12px,var(--game-safe-right)) + 112px) max(12px,var(--game-safe-bottom)) calc(max(8px,var(--game-safe-left)) + 212px)}
- .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-failure{left:calc(50% - 24px);right:124px;top:calc(max(10px,var(--game-safe-top)) + 54px)}
+ .fw-arcade-root.fw-arcade-toy-console .daily-photo .daily-photo-failure{left:calc(max(8px,var(--game-safe-left)) + 88px);right:auto;width:144px;top:calc(max(10px,var(--game-safe-top)) + 164px);bottom:auto}
 }

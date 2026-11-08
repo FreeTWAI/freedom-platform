@@ -1,5 +1,6 @@
 import {test,expect,type Page,type Locator} from './fixtures.js';
 import sharp from 'sharp';
+import {photoModelBounds} from './helpers/photo-model-bounds.js';
 import {RULES} from '../../apps/portal-web/src/games/domain.js';
 
 // These are future real-browser observations, not visual acceptance from DOM
@@ -134,6 +135,24 @@ async function inspectComposition(page:Page){
   expect(await page.locator('.fw-arcade-controls').evaluate(el=>{const s=getComputedStyle(el);return s.backgroundColor==='rgba(0, 0, 0, 0)'&&s.borderTopWidth==='0px'&&el.scrollHeight<=el.clientHeight+1;})).toBe(true);
   return geometry;
 }
+async function inspectActualClient(page:Page,light:boolean,client=0,time=.2){
+  await expect(page.getByRole('slider',{name:'鏡頭廣角',exact:true})).toHaveValue('60');
+  const geometry=await page.locator('.fw-arcade-stage').evaluate(el=>{
+    const r=el.getBoundingClientRect(),owner=el.closest('.fullscreen-game')!;
+    const selectors='.fw-arcade-toolbar button,.fw-arcade-counter,.daily-photo-film,.daily-photo-goal,.daily-photo-feedback,.daily-photo-failure,.fw-arcade-pan-pad button,.fw-arcade-zoom>span,.fw-arcade-zoom input,.fw-arcade-shutter,.daily-photo-next,.daily-photo-album,.daily-scene-mode button';
+    return {width:r.width,height:r.height,hud:[...owner.querySelectorAll(selectors)].map(node=>{const b=node.getBoundingClientRect();return {name:node.className,left:b.left-r.left,right:b.right-r.left,top:b.top-r.top,bottom:b.bottom-r.top};}).filter(b=>b.right>b.left&&b.bottom>b.top)};
+  });
+  // Production Three vertices / light draw paths are projected on the CPU and
+  // compared with actual browser HUD rectangles. This is not pixel segmentation
+  // or proof of WebGL output: retained PNGs still require human inspection.
+  for(const seconds of [Math.max(0,time-.02),time,time+.02]){
+    const actual=photoModelBounds(light?'light':'native',geometry.width,geometry.height,{game:'photo',seed:42,seconds,client,pan:{x:0,y:.35},fov:60,stampPoint:{x:0,y:0},raised:false,motion:true});
+    expect(actual.bounds.left).toBeGreaterThan(0);expect(actual.bounds.right).toBeLessThan(geometry.width);
+    expect(actual.bounds.top).toBeGreaterThan(0);expect(actual.bounds.bottom).toBeLessThan(geometry.height);
+    const covered=geometry.hud.filter(h=>actual.points.some(p=>p.x>h.left-1&&p.x<h.right+1&&p.y>h.top-1&&p.y<h.bottom+1)).map(h=>h.name);
+    expect(covered,JSON.stringify({bounds:actual.bounds,hud:geometry.hud})).toEqual([]);
+  }
+}
 for(const light of [false,true])for(const viewport of sizes)for(const scale of [1,2]){
   test(`PHOTO world ${light?'light':'native'} ${viewport.width} ${scale*100}%: full canvas, unclipped HUD, real actions and modal return`,async({page},testInfo)=>{
     await page.setViewportSize(viewport);await openPhoto(page,light);
@@ -144,6 +163,7 @@ for(const light of [false,true])for(const viewport of sizes)for(const scale of [
     await expect(page.locator('[data-photo-goal]')).toHaveText('臉和雙腳');await expect(page.locator('[data-photo-goal]')).toBeVisible();
     await expect(page.locator('[data-photo-feedback]')).toHaveText(/^已存[0-3]★$/);await expect(page.locator('[data-photo-feedback]')).toBeVisible();
     await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);
+    await inspectActualClient(page,light);
     const geometry=await inspectComposition(page),prefix=`photo-world-${light?'light':'native'}-${viewport.width}x${viewport.height}-${scale*100}pct`;
     const png=await owner.screenshot({animations:'disabled'});await testInfo.attach(`${prefix}-viewport.png`,{body:png,contentType:'image/png'});
     const stats=await sharp(png).stats();expect(stats.channels.some(c=>c.stdev>20)).toBe(true);
@@ -151,14 +171,18 @@ for(const light of [false,true])for(const viewport of sizes)for(const scale of [
     await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(owner).not.toHaveClass(/fullscreen-game--viewport/);
     // Reveal the owner once after exit, never an individual action. Both
     // presentation PNGs retain the identical first shot at the frozen 200ms.
-    await owner.scrollIntoViewIfNeeded();await inspectComposition(page);
+    await owner.scrollIntoViewIfNeeded();await inspectComposition(page);await inspectActualClient(page,light);
     await testInfo.attach(`${prefix}-normal.png`,{body:await owner.screenshot({animations:'disabled'}),contentType:'image/png'});
     await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await expect(owner).toHaveClass(/fullscreen-game--viewport/);
     // All snapshots above show the same real first shot at 200ms. Now verify
     // pointer/keyboard actions without scrolling controls into view for them.
     const before=await page.evaluate(()=>({x:scrollX,y:scrollY,owners:[...document.querySelectorAll('.fullscreen-game,[data-daily-stage],.fw-arcade-controls')].map(e=>[e.scrollLeft,e.scrollTop])}));
     for(const name of ['鏡頭往左','鏡頭往上','鏡頭往下','鏡頭往右'])await page.getByRole('button',{name,exact:true}).click();
+    await page.getByRole('slider',{name:'鏡頭廣角',exact:true}).press('Home');
+    await expect(page.getByRole('slider',{name:'鏡頭廣角',exact:true})).toHaveValue('38');
+    await testInfo.attach(`${prefix}-real-close-up.png`,{body:await owner.screenshot({animations:'disabled'}),contentType:'image/png'});
     await page.getByRole('slider',{name:'鏡頭廣角',exact:true}).press('End');
+    await expect(page.getByRole('slider',{name:'鏡頭廣角',exact:true})).toHaveValue('60');
     await shutter.press('Enter');await expect(page.locator('[data-photo-film]')).toHaveText('0 張');await expect(shutter).toBeDisabled();
     expect(await page.evaluate(()=>({x:scrollX,y:scrollY,owners:[...document.querySelectorAll('.fullscreen-game,[data-daily-stage],.fw-arcade-controls')].map(e=>[e.scrollLeft,e.scrollTop])}))).toEqual(before);
     const album=page.getByRole('button',{name:'檢視本局照片與評語',exact:true});await album.click();await scaleText(owner,scale);
@@ -177,7 +201,8 @@ for(const light of [false,true])for(const viewport of sizes)for(const scale of [
     // Use real discoverable controls at the same wide-zoom target tested by
     // the independent framing probe; keep the actual saved result observable.
     await page.getByRole('slider',{name:'鏡頭廣角',exact:true}).press('End');
-    for(let press=0;press<2;press++){await page.getByRole('button',{name:'鏡頭往右',exact:true}).click();await page.getByRole('button',{name:'鏡頭往上',exact:true}).click();}
+    for(let press=0;press<2;press++)await page.getByRole('button',{name:'鏡頭往右',exact:true}).click();
+    await page.getByRole('button',{name:'鏡頭往上',exact:true}).click();
     await page.clock.runFor(300);await shutter.click();await expect(page.locator('[data-photo-feedback]')).toHaveText('已存3★');
     await testInfo.attach(`${prefix}-umbrella-reachable.png`,{body:await owner.screenshot({animations:'disabled'}),contentType:'image/png'});
     // A real timed transition must reveal the third goal without pausing or
@@ -203,14 +228,14 @@ for(const viewport of sizes)test(`PHOTO recovery ${viewport.width}: explicit lig
   await page.clock.pauseAt(new Date('2026-11-08T12:01:00Z'));await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await scaleText(page.locator('.fullscreen-game'),2);
   await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Controlled capture failure');};});
-  const shutter=page.getByRole('button',{name:'拍照快門',exact:true});await shutter.click();await expect(page.locator('[data-photo-film]')).toHaveText('2 張');await expect(page.locator('.daily-photo-failure')).toHaveText('未存，按快門');await expect(page.locator('.daily-photo-failure')).toHaveAccessibleName('照片未保存，請再按快門。完整錯誤可在玩法說明檢視。');await expect(page.locator('[data-photo-feedback]')).toHaveCount(0);
+  const shutter=page.getByRole('button',{name:'拍照快門',exact:true});await shutter.click();await expect(page.locator('[data-photo-film]')).toHaveText('2 張');await expect(page.locator('.daily-photo-failure')).toHaveText('未存重拍');await expect(page.locator('.daily-photo-failure')).toHaveAccessibleName('照片未保存，請再按快門。完整錯誤可在玩法說明檢視。');await expect(page.locator('[data-photo-feedback]')).toHaveCount(0);
   // The alert mounts after the first enlargement. Scale it too, then prove
   // this recovery checkpoint really exercises doubled alert text.
   const normalFailureFont=await page.locator('.daily-photo-failure').evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
   await scaleText(page.locator('.fullscreen-game'),2);
   expect(await page.locator('.daily-photo-failure').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(normalFailureFont*2,5);
   for(const field of ['data-photo-film','data-photo-time','data-photo-client','data-photo-goal'])await expect(page.locator(`[${field}]`)).toBeVisible();
-  await textBounds(page.locator('.fullscreen-game'));
+  await textBounds(page.locator('.fullscreen-game'));await inspectActualClient(page,true,0,0);
   const coveredAlert=await page.locator('.daily-photo-failure').evaluate(alert=>{
     const r=alert.getBoundingClientRect(),owner=alert.closest('.fullscreen-game')!,bounds=owner.getBoundingClientRect();
     const other=[...owner.querySelectorAll('.fw-arcade-counter,.daily-photo-film,.daily-photo-goal,.daily-photo-feedback,button,input,.fw-arcade-zoom>span')].filter(node=>!node.closest('.daily-sr'));

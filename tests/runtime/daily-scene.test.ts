@@ -15,21 +15,21 @@ function board(game:domain.GameId){
  const instrumented=body.replace('    const l = live.current, remaining', '    expose({live,stage,pendingResult,shoot,photosDone,nextClient,start,setPaused,pointerDown,pointerMove,pointerUp,keyboard,applyCash,applyStamp,changeRenderer,stop});\n    const l = live.current, remaining');
  const code=transformSync(instrumented+'\nexports.GameBoard=GameBoard;', {loader:'tsx',format:'cjs',jsx:'automatic',target:'es2023'}).code.replaceAll('import("./stage")','controlledImport("native")').replaceAll('import("./daily-scene")','controlledImport("light")');
  const slots:any[]=[],effects:(()=>void)[]=[],nodes:any[]=[],timers=new Map<number,()=>void>(),frames=new Map<number,(now:number)=>void>(),listeners=new Map<string,()=>void>();
- let index=0,dirty=false,now=0,id=0,api:any,disposed=0,captures=0,created=0,failCapture=false,failUpdate=false;
+ let index=0,dirty=false,now=0,id=0,api:any,disposed=0,captures=0,created=0,lost:()=>void=()=>{},failCapture=false,failUpdate=false;
  const loads:{mode:string;resolve:(value:any)=>void;reject:(error:Error)=>void}[]=[],results:any[]=[];
  const same=(a:any[]|undefined,b:any[]|undefined)=>!!a&&!!b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
  const effect=(fn:()=>any,deps?:any[])=>{const i=index++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}};
  const hooks={useRef:(value:any)=>{const i=index++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=index++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return [slots[i].value,(next:any)=>{const v=typeof next==='function'?next(slots[i].value):next;if(!Object.is(v,slots[i].value)){slots[i].value=v;dirty=true;}}];},useEffect:effect,useLayoutEffect:effect};
  const owned=new Set<number>(),target={dataset:{},focus(){},getBoundingClientRect:()=>({left:0,top:0,width:400,height:300}),setPointerCapture:(id:number)=>owned.add(id),hasPointerCapture:(id:number)=>owned.has(id),releasePointerCapture:(id:number)=>owned.delete(id),open:false,showModal(){this.open=true;},close(){this.open=false;}};
  const jsx=(type:any,props:any)=>{if(props.ref)props.ref.current=target;const node={type,props};nodes.push(node);return node;};
- const create=()=>{created++;return {update(){if(failUpdate)throw Error('controlled update failure');},framing:()=>({visible:['head','feet'],blocked:false,lift:0}),point:()=>domain.stampTarget(42,api.live.current.stamps.index),capture(){captures++;if(failCapture)throw Error('capture unavailable');return 'controlled-image';},stats:()=>({calls:1,triangles:2,geometries:3,textures:0}),dispose(){disposed++;}};};
+ const create=(_host:unknown,onLost:()=>void)=>{lost=onLost;created++;return {update(){if(failUpdate)throw Error('controlled update failure');},framing:()=>({visible:['head','feet'],blocked:false,lift:0}),point:()=>domain.stampTarget(42,api.live.current.stamps.index),capture(){captures++;if(failCapture)throw Error('capture unavailable');return 'controlled-image';},stats:()=>({calls:1,triangles:2,geometries:3,textures:0}),dispose(){disposed++;}};};
  const module={exports:{} as any};
  runInNewContext(code,{...domain,...feedback,...hooks,holidayInput,module,exports:module.exports,Error,GameCover:()=>null,expose:(value:any)=>{api=value;},hints:{photo:'photo',stamp:'stamp',cash:'cash'},syncDiagnostics(){},performance:{now:()=>now},matchMedia:()=>({matches:false,addEventListener:(name:string,fn:()=>void)=>listeners.set(`media:${name}`,fn),removeEventListener:(name:string)=>listeners.delete(`media:${name}`)}),document:{hidden:false,addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)},window:{setTimeout:(fn:()=>void)=>{timers.set(++id,fn);return id;},addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)},clearTimeout:(id:number)=>timers.delete(id),requestAnimationFrame:(fn:(n:number)=>void)=>{frames.set(++id,fn);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),controlledImport:(mode:string)=>new Promise((resolve,reject)=>loads.push({mode,resolve,reject})),require:(name:string)=>{assert.equal(name,'react/jsx-runtime');return {jsx,jsxs:jsx,Fragment:'fragment'};}});
  const render=()=>{index=0;dirty=false;nodes.length=0;module.exports.GameBoard({game,seed:42,onBack(){},onStart(){},onResult:(result:any)=>results.push(result)});while(effects.length)effects.shift()!();};
  const flush=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
  const pointer=(extra:Record<string,unknown>={})=>({pointerId:1,button:0,isPrimary:true,clientX:150,clientY:150,currentTarget:target,preventDefault(){},...extra});
  render();
- return {get api(){return api;},loads,nodes,results,frames,timers,listeners,target,pointer,render,flush,advance:(ms:number)=>{now+=ms;},resolve:async()=>{loads.shift()!.resolve({createStage:create,createDailyLightStage:create});await flush();},start:async()=>{api.start();await flush();},failCapture:(value:boolean)=>{failCapture=value;},failUpdate:(value:boolean)=>{failUpdate=value;},stats:()=>({disposed,captures,created}),unmount:()=>{for(const slot of slots)slot?.cleanup?.();},button:(label:string)=>{const node=nodes.find(n=>n.type==='button'&&(n.props['aria-label']===label||n.props.children===label));assert.ok(node,`button ${label}`);return node.props;}};
+ return {lose:()=>lost(),get api(){return api;},loads,nodes,results,frames,timers,listeners,target,pointer,render,flush,advance:(ms:number)=>{now+=ms;},resolve:async()=>{loads.shift()!.resolve({createStage:create,createDailyLightStage:create});await flush();},start:async()=>{api.start();await flush();},failCapture:(value:boolean)=>{failCapture=value;},failUpdate:(value:boolean)=>{failUpdate=value;},stats:()=>({disposed,captures,created}),unmount:()=>{for(const slot of slots)slot?.cleanup?.();},button:(label:string)=>{const node=nodes.find(n=>n.type==='button'&&(n.props['aria-label']===label||n.props.children===label));assert.ok(node,`button ${label}`);return node.props;}};
 }
 
 test('daily stamp rule keeps the inclusive radius, exact cooldown, stale subject and bounds',()=>{
@@ -59,7 +59,7 @@ test('daily actual shutter rejects an expired client before the next RAF',async(
 test('daily zero-photo completion resets camera, gesture, film and clock together',async()=>{
  const h=board('photo');await h.resolve();await h.start();const l=h.api.live.current;
  l.client=2;l.pan={x:1,y:2};l.targetPan={x:-1,y:-2};l.fov=60;l.film=2;l.raised=true;h.api.pointerDown(h.pointer());
- h.api.photosDone();assert.equal(l.started,false);assert.equal(l.client,0);assert.equal(l.film,0);assert.equal(l.fov,44);assert.equal(JSON.stringify(l.pan),'{"x":0,"y":0}');assert.equal(JSON.stringify(l.targetPan),'{"x":0,"y":0}');assert.equal(l.pointer,null);assert.equal(l.raised,false);assert.equal(h.frames.size,0);assert.equal(l.clock.elapsed,0);assert.equal(l.clock.running,false);h.unmount();
+ h.api.photosDone();assert.equal(l.started,false);assert.equal(l.client,0);assert.equal(l.film,0);assert.equal(l.fov,60);assert.equal(JSON.stringify(l.pan),'{"x":0,"y":0.35}');assert.equal(JSON.stringify(l.targetPan),'{"x":0,"y":0.35}');assert.equal(l.pointer,null);assert.equal(l.raised,false);assert.equal(h.frames.size,0);assert.equal(l.clock.elapsed,0);assert.equal(l.clock.running,false);h.unmount();
 });
 
 for(const game of ['photo','stamp','cash'] as const)test(`daily actual ${game} pause/blur/Escape cancels ownership without resetting progress`,async()=>{
@@ -233,11 +233,11 @@ for(const hold of ['pointer','keyboard'] as const)test(`daily actual client tran
 
 test('daily cash feedback pose, drag and contact share the actual moving card plane',()=>{
  let combinations=0;
- for(const feedback of ['wrong','correct'] as const)for(const age of [-10,0,15,35,70,160,600])for(const aspect of [1,4/3,2])for(const motion of [false,true])for(const cashDrag of [{x:0,y:0},{x:.06,y:.04},{x:-.06,y:-.04}]){
+ for(const feedback of ['wrong','correct'] as const)for(const age of [-10,0,15,35,70,160,600])for(const aspect of [.45,.6,1,4/3,2])for(const motion of [false,true])for(const cashDrag of [{x:0,y:0},{x:.06,y:.04},{x:-.06,y:-.04}]){
   const view={...sceneView('cash'),seconds:1+age/1000,motion,cashDrag,cash:{...domain.newCash(42),lastAt:1000,feedback}};
   const dt=Math.max(0,view.seconds*1000-1000),shake=motion&&feedback==='wrong'?Math.sin(dt*.045)*Math.exp(-dt/85)*.18:0,y=.08+.25+(motion&&feedback==='correct'?Math.exp(-dt/80)*.12:0);
   // Build the native camera and plane independently of dailyCamera/planePoint.
-  const camera=new PerspectiveCamera(42,aspect,.1,60);camera.position.set(0,5.3,2.7);camera.lookAt(0,0,.23);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
+  const camera=new PerspectiveCamera(aspect<1?2*Math.atan(Math.tan(21*Math.PI/180)*Math.max(2.2,.95/aspect))*180/Math.PI:42,aspect,.1,60);camera.position.set(0,5.3,2.7);camera.lookAt(0,0,.23);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
   const center=new Vector3(0,y,0).project(camera),ray=new Raycaster();ray.setFromCamera(new Vector2(center.x+cashDrag.x*2,center.y-cashDrag.y*2),camera);
   const drag=ray.ray.intersectPlane(new Plane(new Vector3(0,1,0),-y),new Vector3());assert.ok(drag);
   const expected={x:drag.x+shake,y,z:drag.z},actual=cashCardPose(view,aspect),offset=cashDragOffset(view,aspect);
@@ -255,7 +255,7 @@ test('daily cash feedback pose, drag and contact share the actual moving card pl
   }
   combinations++;
  }
- assert.equal(combinations,252);
+ assert.equal(combinations,420);
 });
 
 test('daily actual completed cash illustration draws all 24 accepted bills and six rejected vouchers',()=>{
@@ -310,7 +310,7 @@ test('PHOTO composition keeps critical film/time distinct from the shutter label
  h.api.shoot();await h.flush();assert.equal(text(field('data-photo-film')),'1 張');assert.equal(l.photos.length,1);
  const photos=l.photos,first=l.photos[0],elapsed=l.clock.elapsed;
  h.button('檢視本局照片與評語').onClick({currentTarget:h.target});await h.flush();
- assert.equal(l.paused,true);assert.equal(l.photos,photos);assert.equal(l.photos[0],first);assert.equal(l.clock.elapsed,elapsed);assert.equal(l.fov,44);
+ assert.equal(l.paused,true);assert.equal(l.photos,photos);assert.equal(l.photos[0],first);assert.equal(l.clock.elapsed,elapsed);assert.equal(l.fov,60);
  const dialog=h.nodes.find(n=>n.type==='dialog');assert.ok(dialog);assert.match(text(dialog),/本局照片與評語/);
  h.button('關閉相簿').onClick();await h.flush();assert.equal(h.nodes.some(n=>n.type==='dialog'),false);assert.equal(l.paused,true);
  await h.start();assert.equal(l.film,1);assert.equal(l.photos,photos);assert.equal(l.clock.elapsed,elapsed);h.unmount();
@@ -329,7 +329,7 @@ test('PHOTO floating action controls are outside the renderer pointer subtree an
 
 for(const game of ['stamp','cash'] as const)test(`PHOTO composition does not add photo controls or styling to ${game}`,async()=>{
  const h=board(game);await h.resolve();await h.start();
- assert.equal(h.nodes.find(n=>n.type==='section').props.className,`fw-arcade-board daily-scene${game==='stamp'?' daily-stamp':''}`);
+ assert.equal(h.nodes.find(n=>n.type==='section').props.className,`fw-arcade-board daily-scene${game==='stamp'?' daily-stamp':' daily-cash'}`);
  assert.equal(h.nodes.some(n=>Object.hasOwn(n.props,'data-photo-film')),false);
  assert.equal(h.nodes.some(n=>n.props['aria-label']==='檢視本局照片與評語'),false);h.unmount();
 });
@@ -341,7 +341,7 @@ test('PHOTO visible goals follow manual and timed clients while shot feedback us
  assert.equal(text(field('data-photo-goal')),'臉和雙腳');assert.equal(text(field('data-photo-feedback')),'等時機');
  assert.equal(field('data-photo-goal').props['aria-label'],domain.CLIENTS[0].request);
  h.api.shoot();await h.flush();const l=h.api.live.current,saved=l.photos[0];assert.equal(text(field('data-photo-feedback')),`已存${saved.stars}★`);
- h.failCapture(true);h.api.shoot();await h.flush();assert.equal(field('data-photo-feedback'),undefined);const alert=h.nodes.find(n=>n.props.className==='daily-photo-failure');assert.equal(text(alert),'未存，按快門');assert.match(alert.props['aria-label'],/照片未保存，請再按快門/);assert.equal(l.photos.length,1);assert.equal(l.film,1);
+ h.failCapture(true);h.api.shoot();await h.flush();assert.equal(field('data-photo-feedback'),undefined);const alert=h.nodes.find(n=>n.props.className==='daily-photo-failure');assert.equal(text(alert),'未存重拍');assert.match(alert.props['aria-label'],/照片未保存，請再按快門/);assert.equal(l.photos.length,1);assert.equal(l.film,1);
  h.advance(12016);const [id,frame]=[...h.frames.entries()][0];h.frames.delete(id);frame(12016);await h.flush();
  assert.equal(l.client,1);assert.equal(l.paused,false);assert.equal(l.clock.elapsed,12016);assert.equal(l.film,0);assert.equal(text(field('data-photo-goal')),'全身全傘');assert.equal(field('data-photo-goal').props['aria-label'],domain.CLIENTS[1].request);assert.equal(text(field('data-photo-feedback')),'等時機');
  h.api.nextClient();await h.flush();assert.equal(l.client,2);assert.equal(l.paused,false);assert.equal(l.clock.elapsed,12016);assert.equal(text(field('data-photo-goal')),'三鴿同框');assert.equal(field('data-photo-goal').props['aria-label'],domain.CLIENTS[2].request);
@@ -356,7 +356,7 @@ for(const input of ['pad','keyboard'] as const)test(`PHOTO ${input} reaches the 
   if(input==='pad')h.button(label).onClick({detail:0});
   else h.api.keyboard({key,repeat:false,preventDefault(){},target:{closest(){return null;}}});
  }
- assert.ok(Math.abs(l.targetPan.x-count*step)<1e-12);assert.ok(Math.abs(l.targetPan.y-count*step)<1e-12);assert.equal(l.fov,60);
+ assert.ok(Math.abs(l.targetPan.x-count*step)<1e-12);assert.ok(Math.abs(l.targetPan.y-(.35+count*step))<1e-12);assert.equal(l.fov,60);
  for(let frame=0;frame<5;frame++){h.advance(50);const [id,callback]=h.frames.entries().next().value!;h.frames.delete(id);callback(l.clock.last+50);await h.flush();}
  assert.ok(l.pan.x>l.targetPan.x*.98&&l.pan.x<l.targetPan.x);assert.ok(l.pan.y>l.targetPan.y*.98&&l.pan.y<l.targetPan.y);
  const v={...sceneView(),client:1,seconds:(l.clock.elapsed-l.roundAt)/1000,fov:l.fov,pan:l.pan};
@@ -386,4 +386,70 @@ for(const [width,height]of [[320,568],[390,844],[667,375],[296,482],[358,758],[6
  const paths:number[][][]=[];let path:number[][]=[];for(const c of h.calls){if(c.canvas!==0)continue;if(c.method==='beginPath')path=[];else if(c.method==='moveTo'||c.method==='lineTo')path.push(c.args.slice(0,2));else if(c.method==='fill')paths.push(path.map(p=>[...p]));}
  assert.equal(paths.filter(p=>p.length===64&&p.every((point,i)=>Math.hypot(point[0]-expected[i][0],point[1]-expected[i][1])<1e-9)).length,1);
  const p=project(camera,[target.x*1.2,.086,target.y*1.5]),hit=stage.point((p.x+1)*width/2,(1-p.y)*height/2);assert.ok(hit);assert.ok(Math.hypot(hit.x-target.x,hit.y-target.y)<1e-12);stage.dispose();
+});
+
+test('CASH dynamic two-action recovery keeps completed facts while unavailable renderer is replaced',async()=>{
+ const h=board('cash');await h.resolve();await h.start();const l=h.api.live.current;
+ for(const card of domain.cashDeck(42).slice(0,29)){h.api.applyCash(card.valid);h.advance(160);}
+ h.failUpdate(true);h.api.applyCash(domain.cashDeck(42)[29].valid);await h.flush();
+ const completed=l.cash,summary=h.api.pendingResult.current;assert.equal(completed.index,30);assert.equal(completed.amount,1000000);assert.equal(completed.rejected,6);assert.equal(h.results.length,0);
+ assert.equal(h.nodes.find(n=>n.props.className==='daily-scene-mode').props.inert,true);
+ assert.equal(h.button('重試產生成果圖片').disabled,true);const fallback=h.button('用輕量畫面恢復');assert.equal(typeof fallback.onClick,'function');
+ fallback.onClick();await h.flush();h.failUpdate(false);await h.resolve();
+ assert.equal(l.cash,completed);assert.equal(h.api.pendingResult.current,summary);assert.equal(h.button('重試產生成果圖片').disabled,false);
+ assert.equal(h.nodes.find(n=>n.props.className==='daily-scene-mode').props.inert,false);
+ assert.equal(h.nodes.some(n=>n.type==='button'&&n.props.children==='用輕量畫面恢復'),false);
+ h.button('重試產生成果圖片').onClick();await h.flush();assert.equal(h.results.length,1);assert.equal(l.cash,completed);assert.match(h.results[0].details,/100 萬道具鈔 · 退回 6 張票券/);h.unmount();
+});
+
+for(const game of ['photo','stamp','cash'] as const)test(`recovery mode focus exclusion is scoped to covered CASH: ${game}`,async()=>{
+ const h=board(game),mode=()=>h.nodes.find(n=>n.props.className==='daily-scene-mode');
+ assert.equal(mode().props.inert,false,'loading alone does not cover the mode control');await h.resolve();await h.start();assert.equal(mode().props.inert,false);
+ h.failUpdate(true);h.listeners.get('media:change')!();await h.flush();assert.equal(mode().props.inert,game==='cash');
+ assert.equal(typeof h.button('用輕量畫面繼續').onClick,'function','explicit recovery fallback remains available');h.unmount();
+});
+
+for(const game of ['photo','stamp','cash'] as const)test(`daily actual ${game} context loss preserves the last active partial frame, never recovery time`,async()=>{
+ const h=board(game);await h.resolve();await h.start();const l=h.api.live.current;
+ h.advance(432);const [id,callback]=h.frames.entries().next().value!;h.frames.delete(id);callback(432);
+ h.advance(8);h.lose();await h.flush();assert.equal(l.clock.elapsed,440);assert.equal(l.clock.running,false);assert.equal(l.paused,true);
+ h.advance(10000);h.api.changeRenderer('light');await h.flush();await h.resolve();assert.equal(l.clock.elapsed,440);
+ await h.start();assert.equal(l.clock.elapsed,440);h.advance(17);h.api.setPaused();await h.flush();assert.equal(l.clock.elapsed,457);
+ h.advance(10000);h.lose();await h.flush();assert.equal(l.clock.elapsed,457);h.unmount();
+});
+
+test('daily actual STAMP context-loss recovery keeps exact cooldown, twelve hits and capture retry facts',async()=>{
+ const h=board('stamp');await h.resolve();await h.start();const l=h.api.live.current;
+ h.api.applyStamp(domain.stampTarget(42,0));h.advance(220);h.api.applyStamp(domain.stampTarget(42,0));assert.equal(l.stamps.index,1);
+ h.advance(212);const [id,callback]=h.frames.entries().next().value!;h.frames.delete(id);callback(432);h.advance(8);h.lose();await h.flush();
+ const preserved=l.stamps;h.advance(10000);h.api.changeRenderer('light');await h.flush();await h.resolve();await h.start();assert.equal(l.stamps,preserved);
+ for(let index=1;index<12;index++){
+  if(index===11)h.failCapture(true);
+  h.api.applyStamp(domain.stampTarget(42,index));await h.flush();assert.equal(l.stamps.index,index+1);assert.equal(l.stamps.misses,0);
+  if(index<11){const accepted=l.stamps;h.advance(219);h.api.applyStamp(domain.stampTarget(42,index+1));assert.equal(l.stamps,accepted);h.advance(1);}
+ }
+ assert.equal(l.stamps.endedAt,2640);assert.equal(h.results.length,0);assert.equal(h.stats().captures,1);assert.equal(l.clock.running,false);
+ const completed=l.stamps,summary=h.api.pendingResult.current;assert.match(summary.details,/完成 12 份文件/);assert.match(summary.details,/多蓋 0 次/);
+ h.advance(10000);h.api.applyStamp(domain.stampTarget(42,11));assert.equal(l.stamps,completed);
+ h.failCapture(false);h.button('重試產生成果圖片').onClick();await h.flush();assert.equal(h.results.length,1);assert.equal(h.results[0].details,summary.details);assert.equal(h.stats().captures,2);assert.equal(l.stamps,completed);h.unmount();
+});
+
+import {photoModelBounds} from '../e2e/helpers/photo-model-bounds.js';
+test('PHOTO real controller homes the full client below the HUD, preserves zoom/pan and resets every new client',async()=>{
+ const h=board('photo');await h.resolve();await h.start();const l=h.api.live.current;
+ const assertHome=()=>{assert.equal(l.fov,60);assert.equal(l.pan.y,.35);assert.equal(l.pan.x,0);assert.equal(l.targetPan.y,.35);assert.equal(l.targetPan.x,0);};
+ assertHome();
+ for(const renderer of ['native','light'] as const)for(const [width,height]of [[320,568],[296,482],[667,375],[635,289]]){
+  const v={...sceneView(),client:l.client,seconds:.2,fov:l.fov,pan:l.pan},actual=photoModelBounds(renderer,width,height,v);
+  assert.ok(actual.bounds.top>(width<height?166:60),JSON.stringify({renderer,width,height,bounds:actual.bounds}));
+  assert.ok(actual.bounds.bottom<height-16);assert.equal(actual.framing.blocked,true);
+ }
+ const zoom=()=>h.nodes.find(n=>n.props['aria-label']==='鏡頭廣角').props;
+ assert.equal(zoom().min,'38');assert.equal(zoom().max,'60');zoom().onChange({target:{value:'38'}});assert.equal(l.fov,38);
+ for(let i=0;i<40;i++){h.button('鏡頭往右').onClick({detail:0});h.button('鏡頭往上').onClick({detail:0});}
+ assert.equal(l.targetPan.x,1.8);assert.equal(l.targetPan.y,2.8);
+ h.api.nextClient();await h.flush();assert.equal(l.client,1);assertHome();
+ zoom().onChange({target:{value:'38'}});h.button('鏡頭往左').onClick({detail:0});
+ h.advance(12016);const [id,frame]=[...h.frames.entries()][0];h.frames.delete(id);frame(12016);await h.flush();
+ assert.equal(l.client,2);assertHome();h.unmount();
 });

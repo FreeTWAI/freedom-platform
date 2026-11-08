@@ -54,7 +54,7 @@ test('STAMP turned handle is finite solid radial geometry with a real narrow wai
 
 // Execute the real native factory/Three meshes with controlled renderer and DOM
 // ports. No GPU, raster image, browser or touch acceptance is implied.
-function native(width:number,height:number){
+function native(width:number,height:number,unbatchedCrab=false){
     let scene:T.Scene,camera:T.PerspectiveCamera,removed=0,disposed=0,lost=0,disconnected=0;
     class Renderer{
         domElement={setAttribute(){},addEventListener(){},removeEventListener(){},remove(){removed++;}};shadowMap={};info={render:{calls:0,triangles:0},memory:{geometries:0,textures:0}};
@@ -63,7 +63,9 @@ function native(width:number,height:number){
     const context=new Proxy({},{get:()=>()=>{},set:()=>true});
     const document={createElement(){return {width:0,height:0,getContext:()=>context};}};
     const exports={exports:{} as {createStage:(host:unknown,lost:()=>void)=>Stage}};
-    runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/games/stage.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{
+    let source=readFileSync(new URL('../../apps/portal-web/src/games/stage.ts',import.meta.url),'utf8');
+    if(unbatchedCrab){const call='bakeRigidGroup(crab,geometries);';assert.ok(source.includes(call));source=source.replace(call,'');}
+    runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{
         module:exports,exports:exports.exports,document,window:{devicePixelRatio:1},ResizeObserver:class{observe(){}disconnect(){disconnected++;}},
         require:(id:string)=>{if(id==='three')return {...T,WebGLRenderer:Renderer};if(id.includes('RoundedBox'))return {RoundedBoxGeometry};if(id.includes('BufferGeometryUtils'))return {mergeGeometries};if(id==='./stage-batch')return {bakeRigidGroup};if(id==='./stamp-tool')return {createStampHandleGeometry};if(id==='./daily-scene-model')return model;if(id==='./domain')return domain;throw Error(id);},
     });
@@ -92,4 +94,30 @@ for(const [width,height]of sizes)test(`STAMP actual native factory ${width}x${he
     h.stage.dispose();h.stage.dispose();assert.equal(disposals.get(handle.geometry),1);
     for(const times of disposals.values())assert.equal(times,1);
     assert.deepEqual(h.cleanup(),{removed:1,disposed:1,lost:1,disconnected:1});
+});
+
+// Compare actual factory geometry, not a lower-detail substitute. The reference
+// disables only the new crab bake; both factories run the same animation code.
+test('STAMP rigid crab batching retains animated triangle attributes and shadows with 22 fewer submissions',t=>{
+ const reference=native(1440,900,true),candidate=native(1440,900),v=view();
+ function crab(scene:T.Scene){let found:T.Group|undefined;scene.traverse(o=>{if(o instanceof T.Group&&o.position.y===.2&&o.position.z===.10)found=o;});assert.ok(found);return found;}
+ function stream(root:T.Group){
+  root.updateWorldMatrix(true,true);const streams=new Map<string,number[]>();
+  root.traverse(o=>{if(!(o instanceof T.Mesh))return;const m=o.material as T.MeshToonMaterial,key=[m.type,m.color.getHex(),m.side,m.transparent,o.castShadow,o.receiveShadow].join('/'),values=streams.get(key)??[];streams.set(key,values);
+   const g=o.geometry,normals=new T.Matrix3().getNormalMatrix(o.matrixWorld),position=g.getAttribute('position'),normal=g.getAttribute('normal'),uv=g.getAttribute('uv');
+   for(let j=0;j<(g.index?.count??position.count);j++){const i=g.index?.getX(j)??j,p=new T.Vector3().fromBufferAttribute(position,i).applyMatrix4(o.matrixWorld),n=new T.Vector3().fromBufferAttribute(normal,i).applyNormalMatrix(normals);values.push(...p.toArray(),...n.toArray(),uv.getX(i),uv.getY(i));}
+  });return streams;
+ }
+ function submissions(scene:T.Scene){let count=0;scene.traverseVisible(o=>{if(o instanceof T.Mesh)count+=1+Number(o.castShadow);});return count;}
+ let oldCalls=0,newCalls=0;
+ for(const seconds of [0,.22,3]){
+  reference.stage.update({...v,seconds});candidate.stage.update({...v,seconds});const a=crab(reference.scene()),b=crab(candidate.scene());
+  assert.equal(a.children.length,15);assert.equal(b.children.length,4);assert.deepEqual(a.position,b.position);assert.deepEqual(a.quaternion.toArray(),b.quaternion.toArray());
+  const before=stream(a),after=stream(b);assert.deepEqual([...before.keys()].sort(),[...after.keys()].sort());
+  for(const [key,values]of before){const actual=after.get(key)!;assert.equal(actual.length,values.length);for(let i=0;i<values.length;i++)assert.ok(Math.abs(actual[i]-values[i])<1e-6,`${key} attribute ${i}`);}
+  oldCalls=submissions(reference.scene());newCalls=submissions(candidate.scene());assert.equal(oldCalls-newCalls,22);assert.ok(newCalls<=75,`conservative visible color+shadow submissions ${newCalls}`);
+ }
+ const resources=new Set<T.BufferGeometry>();crab(candidate.scene()).traverse(o=>{if(o instanceof T.Mesh)resources.add(o.geometry);});const disposed=new Map<T.BufferGeometry,number>();for(const g of resources)g.addEventListener('dispose',()=>disposed.set(g,(disposed.get(g)??0)+1));
+ candidate.stage.dispose();candidate.stage.dispose();for(const g of resources)assert.equal(disposed.get(g),1);reference.stage.dispose();
+ t.diagnostic(JSON.stringify({oldCalls,newCalls,note:'CPU visible submission upper bound, not WebGL measured calls'}));
 });
