@@ -17,6 +17,39 @@
 
 本 repo 的維護者負責「自由工坊的會員入口、中央資料庫與跨模組業務規則。」這個模組；公會職稱與自填 GitHub slug 不授予寫入權。
 
+## Core Modules
+
+- `apps/` - 應用程式與伺服器入口 (如前端的 portal-web 及 Hono 伺服器 platform-api)。
+- `modules/` - 平台核心的業務邏輯實作。
+- `packages/` - 共用套件，包含資料庫 (db)、連線 (client-connections)、SDK 等共用工具。
+- `contracts/` - API 契約、訊息 schemas 以及預覽/執行期的定義檔。
+
+## Developer Usage
+
+開發與執行這個 repository 的主要方式如下：
+
+```sh
+# 1. 安裝套件相依性
+npm ci
+
+# 2. 啟動資料庫與測試資料 (或使用 npm run demo 包含 build 和 start)
+npm run db:up
+npm run db:migrate
+npm run db:seed
+
+# 3. 建置靜態資源
+npm run build
+
+# 4. 啟動伺服器
+npm run start
+```
+
+測試指令包含 `npm run test:e2e` (使用 Playwright 測試)，也可以參考 package.json 了解更多如 `npm test` 或是 `npm run test:contracts` 的測試腳本。
+
+## API Specifications
+
+後端 API 是以 [Hono](https://hono.dev/) 搭配 Node 伺服器 (`@hono/node-server`) 所實作，多數核心的應用程式邏輯與路由都在 `apps/platform-api/` 底下。API 設計採用標準的 JSON request / response，包含認證 (session/cookie) 以及標準的 `Idempotency-Key`。詳細的會員與社群 API 規格及路由合約，請參考 [docs/development/member-api.md](docs/development/member-api.md)。
+
 程式／內容入口：[apps/portal-web/src/modules/](apps/portal-web/src/modules/)、[apps/platform-api/src/routes/](apps/platform-api/src/routes/)、[modules/](modules/)、[migrations/](migrations/)、[packages/db/](packages/db/)。協作先讀 [CONTRIBUTING.md](CONTRIBUTING.md)，讓 Agent 讀 [AGENTS.md](AGENTS.md)；從[本倉 Issues](https://github.com/FreeTWAI/freedom-platform/issues)認領、[查看既有 PR](https://github.com/FreeTWAI/freedom-platform/pulls)避免重工。
 
 會員、權限、公會、商品、商店、合作和稽核的權威寫入在本 repo 的 API／PostgreSQL。外倉用版本化契約；本機、staging、public 使用分開的資料庫。GitHub Issue／PR 保存程式協作事實；Seller／bank 保存實收事實。 跨 repo 的協定由[中央平台](https://github.com/FreeTWAI/freedom-platform)維護。
