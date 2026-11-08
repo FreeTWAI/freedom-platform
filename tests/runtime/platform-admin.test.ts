@@ -381,3 +381,57 @@ for(const phase of ['user','guild','receipt','replay'] as const)test(`member app
   assert.deepEqual(await appointmentSnapshot(),before);
  }finally{await blocker.query('ROLLBACK');blocker.release();if(pending)await pending;}
 });
+
+test('member session shows the admin entry only for a current verified nomination in its community',async()=>{
+ const session=await login(),read=()=>member('/session',session.cookie);
+ assert.equal((await member('/session')).status,401);
+ assert.equal((await read()).data.admin_entry_visible,false);
+ await join();await pool.query('INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,$2,$3)',[DEMO_COMMUNITY,guild,DEMO_USERS[0].user_id]);
+ assert.equal((await read()).data.admin_entry_visible,false,'a guild office is not a platform admin nomination');
+ await pool.query('UPDATE users SET email=$2,email_verified_at=NULL WHERE user_id=$1',[DEMO_USERS[0].user_id,email]);
+ assert.equal((await read()).data.admin_entry_visible,false,'an unverified matching mailbox must not reveal the entry');
+ await pool.query('UPDATE users SET email_verified_at=now() WHERE user_id=$1',[DEMO_USERS[0].user_id]);
+ const visible=await read();assert.equal(visible.status,200);assert.equal(visible.data.admin_entry_visible,true);
+ assert.deepEqual(Object.keys(visible.data).sort(),['admin_entry_visible','csrf_token','user']);assert.equal(visible.response.headers.get('cache-control'),'private, no-store');assert.equal(visible.response.headers.get('vary'),'Cookie');
+ const forged=await app.request(origin+'/admin/api/bootstrap',{headers:{Cookie:session.cookie,'X-Admin-Entry-Visible':'true'}});assert.equal(forged.status,401,'the member visibility hint does not authorize admin data');
+ await pool.query('UPDATE platform_admins SET active=false WHERE admin_id=$1',[adminId]);assert.equal((await read()).data.admin_entry_visible,false);
+ await pool.query('UPDATE platform_admins SET active=true WHERE admin_id=$1',[adminId]);assert.equal((await read()).data.admin_entry_visible,true);
+ const other=await outsider();await pool.query('UPDATE platform_admins SET community_id=$2 WHERE admin_id=$1',[adminId,other.community]);assert.equal((await read()).data.admin_entry_visible,false);
+ await pool.query('UPDATE platform_admins SET community_id=$2 WHERE admin_id=$1',[adminId,DEMO_COMMUNITY]);
+ await pool.query('UPDATE users SET active=false WHERE user_id=$1',[DEMO_USERS[0].user_id]);assert.equal((await read()).status,401);
+ assert.equal((await request('/bootstrap')).status,200,'independent Access administration remains available without an active member');
+});
+
+test('revoked or expired member sessions cannot return the admin navigation projection',async()=>{
+ await pool.query('UPDATE users SET email=$2,email_verified_at=now() WHERE user_id=$1',[DEMO_USERS[0].user_id,email]);
+ const session=await login({...DEMO_USERS[0],email});assert.equal((await member('/session',session.cookie)).data.admin_entry_visible,true);
+ await pool.query('UPDATE sessions SET expires_at=clock_timestamp()-interval \'1 second\' WHERE user_id=$1',[DEMO_USERS[0].user_id]);assert.equal((await member('/session',session.cookie)).status,401);
+ const renewed=await login({...DEMO_USERS[0],email});await pool.query('UPDATE sessions SET revoked_at=clock_timestamp() WHERE user_id=$1',[DEMO_USERS[0].user_id]);assert.equal((await member('/session',renewed.cookie)).status,401);
+});
+
+for(const expire of [false,true])test(`admin entry projection ${expire?'rejects':'permits'} a session after a real admin-table wait`,{timeout:10000},async()=>{
+ await pool.query('UPDATE users SET email=$2,email_verified_at=now() WHERE user_id=$1',[DEMO_USERS[0].user_id,email]);
+ const session=await login({...DEMO_USERS[0],email});
+ await pool.query('UPDATE sessions SET expires_at=clock_timestamp()+make_interval(secs=>$2) WHERE user_id=$1',[DEMO_USERS[0].user_id,expire?2:300]);
+ const holder=await pool.connect();let pending:ReturnType<typeof member>|undefined;
+ try{
+  await holder.query('BEGIN');await holder.query('LOCK TABLE platform_admins IN ACCESS EXCLUSIVE MODE');
+  const holderPid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=member('/session',session.cookie);
+  const deadline=Date.now()+5000;let waiting=false;
+  while(Date.now()<deadline){
+   const rows=(await database.query(`SELECT a.query FROM pg_stat_activity a JOIN pg_locks l ON l.pid=a.pid
+    WHERE l.locktype='relation' AND NOT l.granted AND l.mode='AccessShareLock' AND l.relation=$1::regclass
+    AND $2=ANY(pg_blocking_pids(a.pid))`,[`${schema}.platform_admins`,holderPid])).rows;
+   if(rows.some((row:any)=>row.query.includes('FROM users u WHERE u.user_id'))){waiting=true;break;}await delay(10);
+  }
+  assert.equal(waiting,true,'the navigation projection must really wait on platform_admins');
+  if(expire){
+   while(!(await pool.query('SELECT bool_and(expires_at<=clock_timestamp()) AS expired FROM sessions WHERE user_id=$1',[DEMO_USERS[0].user_id])).rows[0].expired){assert.ok(Date.now()<deadline,'natural session deadline must pass');await delay(10);}
+  }
+  await holder.query('COMMIT');const response=await pending;
+  assert.equal(response.status,expire?401:200);
+  if(expire){assert.equal(response.data.code,'session_expired');assert.equal('admin_entry_visible' in response.data,false);}
+  else assert.equal(response.data.admin_entry_visible,true);
+ }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});}
+});
