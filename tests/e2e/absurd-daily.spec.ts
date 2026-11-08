@@ -1339,9 +1339,21 @@ async function marketInsets(page:Page,enabled:boolean){await page.locator('.full
 // Read geometry and real hit targets before clicking. A 44px box that is clipped
 // by a scroll container or covered by another row is not an accessible control.
 async function marketSceneBounds(page:Page,fullscreen=true){
- const root=page.locator('.fullscreen-game');if(!fullscreen)await root.scrollIntoViewIfNeeded();
- const geometry=await root.evaluate(el=>{const r=el.getBoundingClientRect(),s=el.querySelector('.mk-surface')!.getBoundingClientRect(),d=el.querySelector('.mk-tray')!.getBoundingClientRect(),style=getComputedStyle(el),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;return {within:r.x>=-1&&r.y>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,contained:s.x>=r.x+safe('left')-1&&s.y>=r.y+safe('top')-1&&s.right<=r.right-safe('right')+1&&s.bottom<=r.bottom-safe('bottom')+1&&d.x>=r.x+safe('left')-1&&d.right<=r.right-safe('right')+1&&d.bottom<=r.bottom-safe('bottom')+1,overlap:s.x<d.right&&s.right>d.x&&s.y<d.bottom&&s.bottom>d.y,ratio:s.width/s.height,height:s.height,horizontal:el.scrollWidth<=el.clientWidth};});
- expect(geometry.within).toBe(true);expect(geometry.contained).toBe(true);expect(geometry.overlap).toBe(false);expect(geometry.ratio).toBeCloseTo(6/5,2);expect(geometry.height).toBeGreaterThan(44);expect(geometry.horizontal).toBe(true);
+ const root=page.locator('.fullscreen-game');// Normal mode is a full-height document-flow stage. Align its border box,
+ // before checking whole-stage viewport bounds. Nearest scrolling left the
+ // stage partially outside at 195px in CI. This only positions the page;
+ // all game controls still use ordinary clicks and the unchanged hit checks.
+ if(!fullscreen)await root.evaluate(el=>el.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'}));
+ const geometry=await root.evaluate(el=>{const r=el.getBoundingClientRect(),s=el.querySelector('.mk-surface')!.getBoundingClientRect(),d=el.querySelector('.mk-tray')!.getBoundingClientRect(),style=getComputedStyle(el),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;return {rects:{root:r.toJSON(),surface:s.toJSON(),tray:d.toJSON()},viewport:{width:innerWidth,height:innerHeight},insets:Object.fromEntries(['top','right','bottom','left'].map(side=>[side,safe(side)])),columns:['.mk-game','.mk-workbench','.mk-play-space','.mk-tray'].map(selector=>({selector,value:getComputedStyle(el.querySelector(selector)!).gridTemplateColumns})),within:r.x>=-1&&r.y>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,contained:s.x>=r.x+safe('left')-1&&s.y>=r.y+safe('top')-1&&s.right<=r.right-safe('right')+1&&s.bottom<=r.bottom-safe('bottom')+1&&d.x>=r.x+safe('left')-1&&d.right<=r.right-safe('right')+1&&d.bottom<=r.bottom-safe('bottom')+1,overlap:s.x<d.right&&s.right>d.x&&s.y<d.bottom&&s.bottom>d.y,ratio:s.width/s.height,height:s.height,horizontal:el.scrollWidth<=el.clientWidth};});
+ expect(geometry.within,JSON.stringify(geometry)).toBe(true);expect(geometry.contained,JSON.stringify(geometry)).toBe(true);expect(geometry.overlap).toBe(false);expect(geometry.ratio).toBeCloseTo(6/5,2);expect(geometry.height).toBeGreaterThan(44);expect(geometry.horizontal).toBe(true);
+
+ const paletteContrast=await root.locator('.mk-palette-switch button').evaluateAll(buttons=>{
+  const rgb=(value:string)=>value.match(/[\d.]+/g)!.map(Number);
+  const luminance=(color:number[])=>color.slice(0,3).map(value=>{const c=value/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;}).reduce((sum,c,i)=>sum+c*[.2126,.7152,.0722][i],0);
+  return buttons.map(button=>{const style=getComputedStyle(button),foreground=rgb(style.color),background=rgb(style.backgroundColor),a=luminance(foreground),b=luminance(background);return {label:button.textContent,color:style.color,background:style.backgroundColor,opaque:(foreground[3]??1)===1&&(background[3]??1)===1&&Number(style.opacity)===1,contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};});
+ });
+ expect(paletteContrast).toHaveLength(3);
+ for(const palette of paletteContrast){expect(palette.opaque,JSON.stringify(palette)).toBe(true);expect(palette.contrast,JSON.stringify(palette)).toBeGreaterThanOrEqual(4.5);}
  for(const control of await root.locator('.mk-heading button,.mk-primary button,.mk-heat button,.fullscreen-game__bar button').all()){
   const metrics=await control.evaluate(el=>{const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2),root=el.closest('.fullscreen-game')!,r=root.getBoundingClientRect(),style=getComputedStyle(root),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;let contained=b.x>=Math.max(-1,r.left+safe('left')-1)&&b.y>=Math.max(-1,r.top+safe('top')-1)&&b.right<=Math.min(innerWidth+1,r.right-safe('right')+1)&&b.bottom<=Math.min(innerHeight+1,r.bottom-safe('bottom')+1);for(let p=el.parentElement;p;p=p.parentElement){const style=getComputedStyle(p),r=p.getBoundingClientRect();if(style.display==='contents')continue;if(/hidden|auto|scroll|clip/.test(style.overflowX))contained&&=b.left>=r.left-1&&b.right<=r.right+1;if(/hidden|auto|scroll|clip/.test(style.overflowY))contained&&=b.top>=r.top-1&&b.bottom<=r.bottom+1;}return {width:b.width,height:b.height,contained,hit:hit===el||el.contains(hit)};});
   expect(metrics.width).toBeGreaterThanOrEqual(44);expect(metrics.height).toBeGreaterThanOrEqual(44);expect(metrics.contained).toBe(true);expect(metrics.hit).toBe(true);
@@ -1684,12 +1696,18 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await expect(back).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await classify(2);
-    // Both edges still wrap inside the fullscreen container.
+    // Both edges still wrap inside the fullscreen container. The renderer
+    // switch now follows the cash actions, and remains a real keyboard stop.
+    const renderer=page.getByRole('button',{name:'3D · 改用輕量插畫',exact:true});
     await page.keyboard.press('Shift+Tab');
     await crossViewportHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Shift+Tab');
+    await expect(renderer).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
     await expect(page.getByRole('button',{name:'收道具鈔 →',exact:true})).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(renderer).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Enter');
@@ -1737,15 +1755,15 @@ test('leaving fullscreen before starting is respected through a zero-photo retry
   await dialog.getByRole('button',{name:'退出全螢幕'}).click();
   await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
-  await page.getByRole('button',{name:'開始這一局'}).click();
+  await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button',{name:'下一位客人 →'}).click();
   await page.getByRole('button',{name:'下一位客人 →'}).click();
   await page.getByRole('button',{name:'挑選照片'}).click();
   await expect(page.getByText('這局還沒拍到照片。再開一次照相館，按快門留下怪事。')).toBeVisible();
-  await page.getByRole('button',{name:'開始這一局'}).click();
+  await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await expect(dialog).toHaveCount(0);
-  await page.getByRole('button',{name:'← 遊樂場'}).click();
+  await page.getByRole('button',{name:'回遊樂場',exact:true}).click();
   await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
   await expect(page.locator('[data-arcade-open="game:photo"]')).toBeFocused();
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
@@ -1799,7 +1817,7 @@ for (const outcome of ['resolve','reject'] as const) {
     await page.goto('/play');
     await page.locator('.fw-arcade-game-card').nth(2).getByRole('button').click();
     await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
-    await page.getByRole('button',{name:'開始這一局'}).click();
+    await page.getByRole('button',{name:'開始這一局',exact:true}).click();
     await expect(page.locator('.fw-arcade-board')).toBeFocused();
     await page.evaluate(() => (window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen());
     await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toBeVisible();
@@ -2149,12 +2167,13 @@ async function dailyPoster(page:Page){
 }
 for(const light of [false,true]){
   const mode=light?'light':'native';
-  test(`AD-scene ${mode}: photo completes three real clients, six distinct frames and a real poster`,async({page})=>{
+  test(`AD-scene ${mode}: photo completes three real clients, six distinct frames and a real poster`,async({page},testInfo)=>{
     await page.setViewportSize({width:390,height:844});await openDailyScene(page,'photo',light);
     const shutter=page.getByRole('button',{name:'拍照快門',exact:true});
     for(let client=0;client<3;client++){
       await expect(page.locator('.fw-arcade-counter')).toContainText(`${client+1}/3`);
       await shutter.click();await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(client*2+1);
+      if(client===0)await testInfo.attach(`daily-${mode}-photo-first-shot.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});
       await page.getByRole('button',{name:'鏡頭往上',exact:true}).click();await page.getByRole('slider',{name:'鏡頭廣角',exact:true}).press('End');await page.clock.runFor(160);
       await shutter.click();await expect(shutter).toBeDisabled();await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(client*2+2);
       const frames=await page.locator('.fw-arcade-contact-sheet img').evaluateAll(es=>es.map(e=>(e as HTMLImageElement).src));
@@ -2165,23 +2184,25 @@ for(const light of [false,true]){
     await page.locator('.fw-arcade-photo-choices button').last().click();await expect(page.locator('.fw-arcade-photo-choices button').last()).toHaveAttribute('aria-pressed','true');await dailyPoster(page);
     await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(0);
   });
-  test(`AD-scene ${mode}: pointer lands on practice and all twelve visible paper targets`,async({page})=>{
+  test(`AD-scene ${mode}: pointer lands on practice and all twelve visible paper targets`,async({page},testInfo)=>{
     await page.setViewportSize({width:390,height:844});await openDailyScene(page,'stamp',light);
     const practice=await dailyStampPoint(page,0);await page.mouse.click(practice.x,practice.y);await expect(page.locator('.fw-arcade-counter')).toHaveText('0/12');
     for(let index=0;index<12;index++){
       await page.clock.fastForward(230);const point=await dailyStampPoint(page,index);await page.mouse.click(point.x,point.y);
       if(index<11){await expect(page.locator('.fw-arcade-counter')).toHaveText(`${index+1}/12`);await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('多蓋 0 次');}
+      if(index===0)await testInfo.attach(`daily-${mode}-stamp-first-document.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});
     }
     await expect(page.locator('.fw-arcade-result-heading')).toContainText('完成 12 份文件');await dailyPoster(page);
     await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');await expect(page.locator('.fw-arcade-board')).toBeFocused();
   });
-  test(`AD-scene ${mode}: visible cash drag rejects wrong and short swipes then completes all thirty cards`,async({page})=>{
+  test(`AD-scene ${mode}: visible cash drag rejects wrong and short swipes then completes all thirty cards`,async({page},testInfo)=>{
     await openDailyScene(page,'cash',light);const deck=cashDeck(42),progress=page.locator('.fw-arcade-controls .fw-arcade-meta');
     await dailySortDrag(page,deck[0].valid,47);await expect(progress).toContainText('已分類 0 / 30 · 分錯 0 次');
     await dailySortDrag(page,!deck[0].valid);await expect(progress).toContainText('已分類 0 / 30 · 分錯 1 次');await page.clock.fastForward(180);
     for(const [index,card]of deck.entries()){
       await expect(page.locator('.fw-arcade-instruction')).toContainText(card.label);await dailySortDrag(page,card.valid);await page.clock.fastForward(180);
       if(index<29)await expect(progress).toContainText(`已分類 ${index+1} / 30 · 分錯 1 次`);
+      if(index===2)await testInfo.attach(`daily-${mode}-cash-three-cards.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});
     }
     await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');await dailyPoster(page);
     await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
@@ -2214,7 +2235,7 @@ for(const light of [false,true]){
   });
 }
 
-for(const game of ['photo','stamp','cash'] as const)for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])test(`AD-scene layout ${game} ${viewport.width}: bounded owner, 200% text, safe insets and modal focus`,async({page})=>{
+for(const game of ['photo','stamp','cash'] as const)for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])test(`AD-scene layout ${game} ${viewport.width}: bounded owner, 200% text, safe insets and modal focus`,async({page},testInfo)=>{
   await page.setViewportSize(viewport);await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false});});
   await openDailyScene(page,game,true);await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
   const fullscreen=page.getByRole('dialog',{name:'遊戲全螢幕',exact:true});await expect(fullscreen).toBeVisible();
@@ -2232,6 +2253,7 @@ for(const game of ['photo','stamp','cash'] as const)for(const viewport of [{widt
     expect(await control.evaluate(el=>{const r=el.getBoundingClientRect(),o=el.closest('[data-daily-stage]')!.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return r.width>=44&&r.height>=44&&r.left>=o.left-1&&r.right<=o.right+1&&r.top>=o.top-1&&r.bottom<=o.bottom+1&&!!hit&&(el===hit||el.contains(hit));})).toBe(true);
   }
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await testInfo.attach(`daily-light-${game}-${viewport.width}x${viewport.height}-200pct-insets.png`,{body:await fullscreen.screenshot(),contentType:'image/png'});
   const help=page.getByRole('button',{name:'玩法說明',exact:true});await help.click();const dialog=page.getByRole('dialog',{name:'玩法說明',exact:true});await expect(dialog).toBeVisible();
   for(const key of ['Tab','Shift+Tab','Tab']){await page.keyboard.press(key);expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(help).toBeFocused();await expect(fullscreen).toBeVisible();
