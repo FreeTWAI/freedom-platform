@@ -240,7 +240,12 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
   await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');
   await expect(page.locator('.ck-game-controls')).toHaveJSProperty('inert',true);
   await page.getByRole('button',{name:'繼續料理',exact:true}).focus();await page.keyboard.press('Tab');
-  await expect(page.locator('.ck-help summary')).not.toBeFocused();
+  await expect(page.locator('.ck-scene-overlay .ck-help summary')).toBeFocused();
+  expect(await page.locator('.ck-help summary').evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
+  await page.keyboard.press('Space');await expect(page.locator('.ck-help')).toHaveAttribute('open','');
+  await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');
+  await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-paused-help.png`);
   await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
   await page.getByRole('button',{name:'輕量插畫',exact:true}).click();await expect(page.locator('.ck-visual-light')).toBeVisible();
   await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`2 / ${step.goal}`);

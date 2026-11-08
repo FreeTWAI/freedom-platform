@@ -62,9 +62,9 @@ main 242dbd400a28c283fc684f5b6cbf11070769baae, and does not alter Ted's branches
 - Local browser execution: blocked before page execution. Installed Chromium
   fails its required local socket with EPERM, including the reviewed execution
   attempt. No security-flag or profile workaround was used. The separate cloud
-  browser cannot reach this checkout's loopback preview. No new native screenshot
-  or local browser pass is claimed.
-- Full DB/runtime suites, exact-head official CI, real phones/Safari, GPU/FPS,
+  browser cannot reach this checkout's loopback preview. Local browser execution is not a pass. Official CI screenshots are discussed
+  separately below.
+- Latest-head full CI, real phones/Safari, GPU/FPS,
   actual OS sharing and human art/playability acceptance remain pending.
 
 The first local combined test run exposed old scroll expectations after an
@@ -76,9 +76,9 @@ legacy-theme precedence and relative overlay positioning, fixed canvas sizing
 covering lower targets after fullscreen exit/help expansion, and a covered but
 focusable help summary while paused. The follow-up uses explicit scoped styles,
 ResizeObserver measurements of the real stage/HUD with safe-area spacing, and an
-inert non-playing tool dock. Existing browser cases now assert the windowed-help
-canvas boundary and paused focus exclusion. Local typecheck/build and all 230
-focused runtime cases were rerun; native browser verification is still pending.
+inert non-playing tool dock. The initial browser additions asserted the windowed-help canvas boundary and
+paused focus exclusion. CI later exposed that excluding the entire dock also
+removed the established paused recipe-help behavior; this is repaired below.
 
 The superseded first CI log exposed an actual JS-only StrictMode fixture build
 failure caused by importing CSS directly from CookingGame. The style import now
@@ -86,7 +86,30 @@ lives in the arcade entry and a regression runtime test bundles the real compone
 without a CSS output target. Exact-name fullscreen locators also failed: generated
 icon text contributed to the accessible button name. Explicit accessible labels
 now preserve the existing fullscreen/back/help names independently of visual icons.
-Those logs are failures, not a browser pass; the repaired head still needs its run.
+Those superseded logs remain failures.
+
+The complete official Verify run 42457211738 on head 702fa6d6 failed: UI shard 1
+had 762 passed and six failed; UI shards 2 and 3, all eight runtime partitions,
+the runtime aggregate, static/governance/source checks and CodeQL passed. All 12
+preparation/immersive cases passed without retries and retained 35 real PNGs in
+artifact 13609851969. The 320px, 667px and desktop stage PNGs, the 200% text failure
+and a native pumpkin-cut PNG were actually inspected. Ordinary-size controls are
+inside the stage and solids have depth and contact shadows. Food is still small
+and repetitive; these images are not human art or all-game playability acceptance.
+
+The six browser failures have three root causes. Four paused recipe-help cases
+were blocked by the whole dock's inert attribute. The single shared help element
+now moves into the visible pause overlay, while the covered cooking controls stay
+inert. The old unavailable-art test still expected a removed decorative cover and
+hidden FoodArt; it now retains the lobby/storage assertions and checks the live
+SVG fallback plus a real successful cut. Finally, 200% text made the share label
+push Exit under the renderer button. Presentation actions now reserve separate
+44px icon targets with full accessible labels, renderer text may wrap, and the
+actual top-row/toolbar heights position the mission and scene. Tests retain normal
+clicks, 200% text, both compact/landscape flows and keyboard help, with extra hit
+and non-overlap checks and PNG retention. No force-click, longer timeout or deleted
+case is used. These repairs need a new official run; the old failure is not fixed
+by Ted's earlier approval or by the 12 passing preparation cases.
 
 ## Remaining rollout work
 

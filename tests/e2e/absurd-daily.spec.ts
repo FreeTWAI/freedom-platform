@@ -1268,15 +1268,36 @@ test('CK-7: previewing another recipe preserves the unfinished dish and returnin
   const after=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),COOKING_RUN_KEY);expect(after.run.id).toBe(before.run.id);await page.getByRole('button',{name:'開始製作海苔飯糰',exact:true}).click();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeVisible();await expect(page.locator('.ck-meter-copy')).toContainText('1.0 / 2 圈');
 });
 test('CK-2/7: unavailable artwork and storage have usable fallbacks, while an unknown recipe returns the lobby',async({page})=>{
-  await page.addInitScript(()=>{Storage.prototype.setItem=function(){throw new DOMException('Synthetic quota','QuotaExceededError');};});await page.route('**/games/absurd-daily/cooking/3d/*.webp',route=>route.abort());await page.route('**/games/absurd-daily/illustrated/*.webp',route=>route.abort());await page.goto('/play?game=kitchen&practice=1&recipe=unknown&seed=42');await expect(page.getByRole('status').filter({hasText:'這道料理連結無法辨識'})).toBeVisible();const fallback=await page.locator('.ck-recipe-card').first().locator('.sg-cover-fallback').boundingBox(),owner=await page.locator('.ck-recipe-card').first().locator('.ck-recipe-visual').boundingBox();expect(fallback!.y+fallback!.height).toBeLessThanOrEqual(owner!.y+owner!.height);await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).click();await expect(page.getByRole('button',{name:'重試保存食譜本',exact:true})).toBeVisible();await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.sg-cover-fallback')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await expect(page.locator('.ck-art-fallback')).toBeVisible();await expect(page.getByRole('button',{name:'重試保存',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'沿線切一刀',exact:true})).toBeEnabled();
+  await page.addInitScript(()=>{Storage.prototype.setItem=function(){throw new DOMException('Synthetic quota','QuotaExceededError');};});
+  await page.route('**/games/absurd-daily/cooking/3d/*.webp',route=>route.abort());await page.route('**/games/absurd-daily/illustrated/*.webp',route=>route.abort());
+  await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());
+  await page.goto('/play?game=kitchen&practice=1&recipe=unknown&seed=42');await expect(page.getByRole('status').filter({hasText:'這道料理連結無法辨識'})).toBeVisible();
+  const fallback=await page.locator('.ck-recipe-card').first().locator('.sg-cover-fallback').boundingBox(),owner=await page.locator('.ck-recipe-card').first().locator('.ck-recipe-visual').boundingBox();expect(fallback!.y+fallback!.height).toBeLessThanOrEqual(owner!.y+owner!.height);
+  await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).click();await expect(page.getByRole('button',{name:'重試保存食譜本',exact:true})).toBeVisible();
+  await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');
+  // The guided ready screen is the live kitchen, no longer a decorative cover.
+  await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-scene')).toBeVisible();
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'重試保存',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'沿線切一刀',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');
 });
 
-test('CK-8: enlarged real recipe text keeps the start/resume action inside its owner on compact and landscape screens',async({page})=>{
+test('CK-8: enlarged real recipe text keeps the start/resume action inside its owner on compact and landscape screens',async({page},testInfo)=>{
   for(const viewport of [{width:320,height:568},{width:667,height:375}]){
     await page.setViewportSize(viewport);await page.goto('/play?game=kitchen&practice=1&recipe=strawberry-cake&seed=42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
     await page.evaluate(()=>{const styles=[...document.querySelectorAll('.fw-arcade-root,.fw-arcade-root *')].filter(e=>e instanceof HTMLElement).map(e=>({e:e as HTMLElement,font:parseFloat(getComputedStyle(e).fontSize),line:parseFloat(getComputedStyle(e).lineHeight)}));for(const {e,font,line}of styles){e.style.fontSize=`${font*2}px`;if(Number.isFinite(line))e.style.lineHeight=`${line*2}px`;}});
     const contained=()=>page.locator('.ck-scene-overlay').evaluate(e=>{const button=e.querySelector('button')!.getBoundingClientRect(),owner=e.getBoundingClientRect();return button.top>=owner.top&&button.bottom<=owner.bottom&&button.left>=owner.left&&button.right<=owner.right;});
-    expect(await contained()).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'開始料理',exact:true}).click();await exitStartedFullscreen(page);await page.getByRole('button',{name:'暫停',exact:true}).click();expect(await contained()).toBe(true);await page.getByRole('button',{name:'繼續料理',exact:true}).click();await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await page.evaluate(()=>sessionStorage.removeItem('freedom.cooking.run.v1'));
+    expect(await contained()).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'開始料理',exact:true}).click();
+    await expect.poll(()=>page.evaluate(()=>{const mode=document.querySelector('.ck-visual-tools button')!.getBoundingClientRect(),bar=document.querySelector('.fullscreen-game__bar')!.getBoundingClientRect(),toolbar=document.querySelector('.ck-console-toolbar')!.getBoundingClientRect(),mission=document.querySelector('.ck-stage-mission')!.getBoundingClientRect();return (mode.right<=bar.left||mode.top>=bar.bottom)&&toolbar.bottom<=mission.top;})).toBe(true);
+    await testInfo.attach(`immersive-${viewport.width}x${viewport.height}-double-text.png`,{body:await page.screenshot(),contentType:'image/png'});
+    await exitStartedFullscreen(page);await page.getByRole('button',{name:'暫停',exact:true}).click();
+    // Pause creates a fresh overlay; only those new nodes need the 200% style.
+    await page.locator('.ck-scene-overlay').evaluate(owner=>{const styles=[owner,...owner.querySelectorAll('*')].filter(e=>e instanceof HTMLElement).map(e=>({e:e as HTMLElement,font:parseFloat(getComputedStyle(e).fontSize),line:parseFloat(getComputedStyle(e).lineHeight)}));for(const {e,font,line}of styles){e.style.fontSize=`${font*2}px`;if(Number.isFinite(line))e.style.lineHeight=`${line*2}px`;}});
+    await expect.poll(contained).toBe(true);await page.locator('.ck-scene-overlay .ck-help summary').click();
+    await expect(page.locator('.ck-help')).toHaveAttribute('open','');await expect.poll(contained).toBe(true);
+    await testInfo.attach(`immersive-${viewport.width}x${viewport.height}-double-text-paused-help.png`,{body:await page.screenshot(),contentType:'image/png'});
+    await page.getByRole('button',{name:'繼續料理',exact:true}).click();await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await page.evaluate(()=>sessionStorage.removeItem('freedom.cooking.run.v1'));
   }
 });
 
