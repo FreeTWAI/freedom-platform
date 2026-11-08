@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_opportunity_partnership",
+  "name": "商機與夥伴公會",
+  "repository": "FreeTWAI/guild-opportunity-partnership",
+  "headline": "把模糊需求整理成合作起點",
+  "purpose": "理解需求並連結合作夥伴。",
+  "outcome": "一份需求訪談與合作提案",
+  "steps": [
+    {
+      "title": "閱讀訪談與提案範例",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "整理對象、問題與期待成果",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "留下範圍、分工與待確認事項",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}
