@@ -39,8 +39,12 @@ test('every registered guild has one matching independently publishable source p
   assert.equal(guildRepository('guild_does_not_exist'), null);
 });
 test('only the portal document admits guild frames, without remote script or API access', () => {
-  assert.ok(platformContentSecurityPolicy('/').includes('frame-src https://aisns.evitina.tw https://freetwai.github.io'));
-  for (const path of ['/admin', '/admin/github/callback', '/api/v1/auth/login']) assert.ok(!platformContentSecurityPolicy(path).includes('freetwai.github.io'));
-  assert.ok(platformContentSecurityPolicy('/').includes("script-src 'self';"));
-  assert.ok(platformContentSecurityPolicy('/').includes("connect-src 'self';"));
+  const directives = (path: string) => new Map(platformContentSecurityPolicy(path).split(';').map(part => {
+    const [name, ...sources] = part.trim().split(/\s+/);
+    return [name, sources] as const;
+  }));
+  assert.deepEqual(directives('/').get('frame-src'), ['https://aisns.evitina.tw', 'https://freetwai.github.io']);
+  for (const path of ['/admin', '/admin/github/callback', '/api/v1/auth/login']) assert.equal(directives(path).has('frame-src'), false);
+  assert.deepEqual(directives('/').get('script-src'), ["'self'"]);
+  assert.deepEqual(directives('/').get('connect-src'), ["'self'"]);
 });
