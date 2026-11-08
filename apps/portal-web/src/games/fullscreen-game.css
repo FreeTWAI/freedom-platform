@@ -16,20 +16,6 @@
 .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .fullscreen-game__bar{position:relative;padding-bottom:8px}
 .fullscreen-game [data-game-share]{scroll-margin-top:12px}
 .fullscreen-game [data-game-share]:focus-visible{outline:3px solid var(--ad-accent);outline-offset:3px}
-/* The live cooking surface and its tools share the viewport. Large text still
-   gets an outer scroll fallback; no controls or error messages are clipped. */
-.fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-heading{margin:0 0 8px;gap:8px}
-.fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-hud{padding:8px;gap:4px;grid-template-columns:repeat(4,minmax(0,1fr))}
-.fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-hud>div{padding:4px;overflow-wrap:anywhere}
-.fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-hud strong{font-size:20px}
-.fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-surface:not(:has(.mk-cover)){aspect-ratio:6/5;height:auto;width:min(100%,clamp(192px,45.6dvh,576px));margin-inline:auto}
-.fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-instruction{min-height:0;padding:8px 12px}
-.fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-heat{padding:0 8px 8px;gap:4px}
-@media(max-width:900px){
-  .fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-layout{gap:8px}
-  .fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-tray{max-height:32dvh;overflow:auto;overscroll-behavior:contain;padding:8px}
-  .fw-arcade-root.fw-arcade-toy-console .fullscreen-game:is(:fullscreen,.fullscreen-game--viewport) .mk-surface:not(:has(.mk-cover)){width:min(100%,clamp(192px,36dvh,432px))}
-}
 
 .fullscreen-game__mode-help{position:relative;font-size:14px;line-height:1.4}
 .fullscreen-game__mode-help summary{cursor:pointer;min-height:44px;display:flex;align-items:center}

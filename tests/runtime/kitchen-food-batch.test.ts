@@ -238,3 +238,54 @@ test('accepted domain cuts separate one hero segment; rejected cuts and time nev
  }
  assert.ok(covered.size>=5,'hero lifecycle must cover at least five actual recipe steps');assert.deepEqual([...covered].sort(),['baked-sweet-potato','cream-risotto','fish-and-chips','plant-burger','pumpkin-soup'].sort());
 });
+
+test('all five real preparations keep the connected remainder on the board and lower the knife with it',()=>{
+ const covered=new Set<string>();
+ for(const {recipe,step} of ingredientSteps){
+  const visual=ingredients.ingredientVisual(step.ingredient,step.shape);if(step.kind!=='slice'||!visual||!preparation.isVolumetricPreparation(visual.id))continue;
+  covered.add(recipe.id);const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
+  const planes=Array.from({length:step.goal},(_,i)=>9.3*(-.28+.56*(i+1)/(step.goal+1))),model=preparation.createPreparationModel(visual.id,planes,owned,materials);
+  try{
+   model.root.updateMatrixWorld(true);const originalBottoms=model.segments.map(g=>new T.Box3().setFromObject(g,true).min.y-.25),originalHeights=planes.map(x=>model.surfaceHeight(x)),initialDrop=model.segments[0].position.y,refs=resources(model.root);
+   for(const count of [...Array.from({length:step.goal+1},(_,i)=>i),0]){
+    model.update(count);model.root.updateMatrixWorld(true);
+    const remaining=new T.Box3();model.segments.slice(count).forEach(g=>remaining.union(new T.Box3().setFromObject(g,true)));
+    assert.ok(Math.abs(remaining.min.y-.25)<1e-6,`${recipe.id}/${count}: connected uncut remainder rests on the board`);
+    const expectedDrop=Math.min(...originalBottoms.slice(count));
+    model.segments.slice(count).forEach((g,j)=>{assert.ok(Math.abs(g.position.y-initialDrop+expectedDrop)<1e-6,'remaining sections translate together, without opening seams');assert.equal(g.position.x,g.userData.center,'knife x planes do not move');if(count+j<step.goal)assert.ok(Math.abs(model.surfaceHeight(planes[count+j])-(originalHeights[count+j]-expectedDrop))<1e-6,'knife follows the connected body height');});
+    for(let i=0;i<count;i++)assert.ok(Math.abs(new T.Box3().setFromObject(model.segments[i],true).min.y-.25)<1e-6,'previously cut pieces remain on the board');
+    const bounds=new T.Box3().setFromObject(model.root,true);assert.ok(bounds.min.x>=-3.05&&bounds.max.x<=3.05&&bounds.min.z>=-2&&bounds.max.z<=2.2,'all pieces remain within the board');
+    if(count>0){const cut=new T.Box3().setFromObject(model.segments[count-1],true);assert.ok(cut.max.x<remaining.min.x,'last separated piece stays clear of the lowered remaining body');}
+    assert.deepEqual(resources(model.root),refs,'settling and reset allocate no resources');
+   }
+  }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
+ }
+ assert.deepEqual([...covered].sort(),['baked-sweet-potato','cream-risotto','fish-and-chips','plant-burger','pumpkin-soup'].sort());
+});
+
+
+test('hero silhouettes have raised root tips, a tall lobed pumpkin and a camera-visible mushroom stalk',()=>{
+ for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
+  const owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>(),model=preparation.createPreparationModel(id,Array.from({length:7},(_,i)=>9.3*(-.28+.56*(i+1)/8)),owned,materials);
+  try{
+   model.root.updateMatrixWorld(true);const skinPoints:T.Vector3[]=[];
+   model.root.traverse(o=>{if(o instanceof T.Mesh&&o.name==='preparation/skin'){const p=o.geometry.attributes.position;for(let i=0;i<p.count;i++)skinPoints.push(new T.Vector3().fromBufferAttribute(p,i).applyMatrix4(o.matrixWorld));}});
+   if(id==='potato'||id==='sweet-potato'){
+    const tips=skinPoints.filter(p=>Math.abs(p.x)>2.5);assert.ok(tips.length>0);assert.ok(Math.min(...tips.map(p=>p.y))>.55,'rounded tips lift from the board rather than forming a flat loaf');
+   }
+   if(id==='pumpkin'){
+    const box=new T.Box3().setFromPoints(skinPoints);assert.ok(box.max.y-box.min.y>2.8,'pumpkin body has substantial vertical volume');assert.ok(box.max.z-box.min.z>2.6);
+    const front=skinPoints.filter(p=>p.z>1&&p.y>.9&&p.y<2.2);assert.ok(front.length>20,'lobes retain a broad front surface');
+   }
+   if(id==='mushroom'){
+    const meshes:T.Mesh[]=[];model.root.traverse(o=>{if(o instanceof T.Mesh&&o.visible)meshes.push(o);});
+    const direction=new T.Vector3(0,-1,-1).normalize();let visible=0;
+    for(const x of [-.15,0,.15])for(const y of [.4,.6,.8]){
+     const target=new T.Vector3(x,y,.40),ray=new T.Raycaster(target.clone().addScaledVector(direction,-20),direction);
+     if(ray.intersectObjects(meshes,false)[0]?.object.name==='preparation/stalk')visible++;
+    }
+    assert.ok(visible>=6,`stalk must occupy visible pixels from the actual camera direction, got ${visible}/9`);
+   }
+  }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
+ }
+});

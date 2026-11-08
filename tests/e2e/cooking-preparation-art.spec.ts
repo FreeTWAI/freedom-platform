@@ -14,6 +14,22 @@ export async function capturePreparationScreenshot(target:Pick<Locator,'screensh
   return body;
 }
 
+// The browser fixture cannot claim physical notch/home-indicator emulation.
+// Override production env-backed properties to stress actual CSS deterministically.
+const kitchenInsets={top:28,right:24,bottom:32,left:40};
+async function setKitchenInsets(root:Locator,enabled:boolean){await root.evaluate((el,values)=>{for(const [side,value] of Object.entries(values.insets)){if(values.enabled)(el as HTMLElement).style.setProperty(`--game-safe-${side}`,`${value}px`);else (el as HTMLElement).style.removeProperty(`--game-safe-${side}`);}},{insets:kitchenInsets,enabled});}
+async function kitchenInsetViolations(root:Locator,paused=false){return root.evaluate((el,settings)=>{
+ const r=el.getBoundingClientRect(),limits={left:r.left+settings.insets.left,right:r.right-settings.insets.right,top:r.top+settings.insets.top,bottom:r.bottom-settings.insets.bottom},issues:string[]=[];
+ const contains=(b:DOMRect)=>b.left>=limits.left-1&&b.right<=limits.right+1&&b.top>=limits.top-1&&b.bottom<=limits.bottom+1;
+ const overlap=(a:DOMRect,b:DOMRect)=>a.left<b.right-1&&a.right>b.left+1&&a.top<b.bottom-1&&a.bottom>b.top+1;
+ const controls=[...el.querySelectorAll<HTMLElement>('.fullscreen-game__button,.ck-console-toolbar button,.ck-visual-tools button,'+(settings.paused?'.ck-scene-overlay>button':'.ck-tool-action'))].filter(n=>n.getClientRects().length&&!n.closest('[inert]'));
+ for(const control of controls){const b=control.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(!contains(b)||b.width<44||b.height<44||!(hit===control||control.contains(hit)))issues.push(`control:${control.getAttribute('aria-label')||control.textContent}`);}
+ for(let i=0;i<controls.length;i++)for(let j=i+1;j<controls.length;j++)if(overlap(controls[i].getBoundingClientRect(),controls[j].getBoundingClientRect()))issues.push('controls overlap');
+ if(settings.paused){if(!contains(el.querySelector('.ck-scene-overlay')!.getBoundingClientRect()))issues.push('pause overlay');}
+ else{const scene=el.querySelector('.ck-live-scene')!.getBoundingClientRect(),dock=el.querySelector('.ck-game-controls')!.getBoundingClientRect(),mode=el.querySelector('.ck-visual-tools')!.getBoundingClientRect();if(!contains(scene)||scene.width<=0||scene.height<=0)issues.push('food');if(!contains(dock))issues.push('dock');if(overlap(scene,dock)||overlap(mode,dock))issues.push('scene/dock overlap');}
+ return issues;
+ },{insets:kitchenInsets,paused});}
+
 // Real production renderer and user controls. No injected run, replacement
 // server, skipped native rendering, screenshot baseline update or fake geometry.
 // Captures are review artifacts, not automatic human-art acceptance or FPS proof.
@@ -86,6 +102,15 @@ for(const fixture of [
   await expect(meter).toHaveText(`2 / ${step.goal}`);await expectFaces(2);
   await expectLayout();
   await capturePreparationScreenshot(page.locator('.ck-visual-light'),testInfo,`${recipe.id}-svg-two-cuts.png`);
+  // Return through the real renderer control and progress to the last intact
+  // piece. This exposes late-count support/knife errors hidden by a first cut.
+  await page.getByRole('button',{name:'立體料理台',exact:true}).click();
+  await expect(canvas).toHaveCount(1);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  for(let count=2;count<step.goal-1;count++){
+    await advance();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
+    await expect(meter).toHaveText(`${count+1} / ${step.goal}`);
+  }
+  await advance();await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-late-cut.png`);
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
   await expect(game).toHaveCount(0);await expect(canvas).toHaveCount(0);expect(errors).toEqual([]);
 });
@@ -228,6 +253,15 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
   await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
   await page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
   await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-cut.png`);
+  await setKitchenInsets(fullscreen,true);await page.clock.runFor(1000/30);
+  await expect.poll(()=>kitchenInsetViolations(fullscreen)).toEqual([]);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-insets-native.png`);
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect.poll(()=>kitchenInsetViolations(fullscreen,true)).toEqual([]);
+  const insetHelp=page.locator('.ck-scene-overlay .ck-help summary');await insetHelp.focus();await insetHelp.press('Space');await expect(page.locator('.ck-help')).toHaveAttribute('open','');
+  await expect.poll(()=>kitchenInsetViolations(fullscreen,true)).toEqual([]);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-insets-paused-help.png`);
+  await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await setKitchenInsets(fullscreen,false);await page.clock.runFor(1000/30);
   if(viewport.width===320){
     await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();
     await page.locator('.ck-help summary').click();await page.clock.runFor(1000/30);
@@ -251,6 +285,9 @@ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,
   await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`2 / ${step.goal}`);
   await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
   await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-fallback.png`);
+  await setKitchenInsets(fullscreen,true);await page.clock.runFor(1000/30);await expect.poll(()=>kitchenInsetViolations(fullscreen)).toEqual([]);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-insets-svg.png`);
+  await setKitchenInsets(fullscreen,false);
   await page.getByRole('button',{name:'重新做',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'重新做這盤料理',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'繼續這一盤',exact:true}).click();
