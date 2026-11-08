@@ -21,6 +21,7 @@ import './toy-theme.css';
 import './illustration-theme.css';
 import './toy-console.css';
 import './shotengai.css';
+import './cooking/immersive-kitchen.css';
 import { ArcadeLobby, type LobbyState } from './cooking/ArcadeLobby';
 import { RECIPES, recipeOf, type Recipe } from './cooking/catalog';
 import { emptyCookbook, readCookbook, readCookingRun, updateCookbook, COOKBOOK_KEY, type Cookbook, type CookingStorage } from './cooking/storage';

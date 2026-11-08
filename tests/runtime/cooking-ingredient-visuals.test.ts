@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {transformSync} from 'esbuild';
+import {buildSync,transformSync} from 'esbuild';
 import * as React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -152,4 +152,11 @@ test('preparation capture awaits attachment completion and propagates capture or
   const gate=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{entered=resolve;});
   const pending=capture({async screenshot(){return body;}},{async attach(){entered();await gate;}},'pending.png').then(()=>{resolved=true;});
   await started;assert.equal(resolved,false,'capture must not resolve before attach finishes');release();await pending;assert.equal(resolved,true);
+});
+
+// StrictMode/export probes bundle the real component directly without a CSS
+// output target. Presentation CSS belongs to the arcade entry, not this module.
+test('guided kitchen retains its JavaScript-only component bundle boundary',()=>{
+  const bundle=buildSync({entryPoints:['apps/portal-web/src/games/cooking/CookingGame.tsx'],bundle:true,write:false,platform:'browser',format:'iife'});
+  assert.equal(bundle.outputFiles.length,1);assert.ok(bundle.outputFiles[0].contents.length>0);
 });

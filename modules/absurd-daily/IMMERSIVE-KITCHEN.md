@@ -48,7 +48,7 @@ main 242dbd400a28c283fc684f5b6cbf11070769baae, and does not alter Ted's branches
 
 - Full `npm run typecheck` and `npm run build`: passed locally. The existing large
   chunk build warning remains.
-- Focused actual runtime tests: 229 passed, zero skipped across absurd-daily,
+- Focused actual runtime tests: 230 passed, zero skipped across absurd-daily,
   daily-game-focus, cooking-ingredient-visuals and kitchen-food-batch. Geometry
   tests use installed Three, with the existing renderer boundary stub. They are
   not native GPU or visual acceptance.
@@ -69,7 +69,7 @@ main 242dbd400a28c283fc684f5b6cbf11070769baae, and does not alter Ted's branches
 
 The first local combined test run exposed old scroll expectations after an
 unnecessary handler change; the original accepted-start/view-target behavior was
-restored and all 229 tests were rerun. The failure is not a passed run.
+restored and all 230 tests were rerun. The failure is not a passed run.
 
 A follow-up static review found three candidate layout/accessibility defects:
 legacy-theme precedence and relative overlay positioning, fixed canvas sizing
@@ -77,8 +77,16 @@ covering lower targets after fullscreen exit/help expansion, and a covered but
 focusable help summary while paused. The follow-up uses explicit scoped styles,
 ResizeObserver measurements of the real stage/HUD with safe-area spacing, and an
 inert non-playing tool dock. Existing browser cases now assert the windowed-help
-canvas boundary and paused focus exclusion. Local typecheck/build and all 229
+canvas boundary and paused focus exclusion. Local typecheck/build and all 230
 focused runtime cases were rerun; native browser verification is still pending.
+
+The superseded first CI log exposed an actual JS-only StrictMode fixture build
+failure caused by importing CSS directly from CookingGame. The style import now
+lives in the arcade entry and a regression runtime test bundles the real component
+without a CSS output target. Exact-name fullscreen locators also failed: generated
+icon text contributed to the accessible button name. Explicit accessible labels
+now preserve the existing fullscreen/back/help names independently of visual icons.
+Those logs are failures, not a browser pass; the repaired head still needs its run.
 
 ## Remaining rollout work
 
