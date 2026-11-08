@@ -14,7 +14,7 @@ export async function reconcileArchivedBackup({ floor, pool, database, role, dep
     && request.recoverRunId === pending.request.runId && request.runId !== pending.request.runId
     && evidence.runId === pending.request.runId && evidence.runAttempt === pending.request.runAttempt
     && evidence.target === request.target && evidence.configSha256 === request.configSha256
-    && ['sourceSha', 'sourceTree', 'controllerSha', 'operatorImage', 'configSha256']
+    && ['sourceSha', 'sourceTree', 'target', 'controllerSha', 'operatorImage', 'configSha256']
       .every(key => evidence[key] === pending.request[key])
     && evidence.sourceSha === state.sourceSha && evidence.sourceTree === state.sourceTree
     && state.sourceSha === state.deployedSourceSha && capture.database === database && capture.role === role

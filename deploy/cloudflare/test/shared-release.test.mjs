@@ -5056,6 +5056,9 @@ test('archive recovery admission binds terminal failed journal writes without cl
   };
   const f = setup(), proof = await requireFailedBackup(f.api, f.admission, installation);
   assert.equal(proof.failureBoundary, 'archive_unconfirmed'); assert.equal(proof.restore, undefined);
+  const backup = setup(); backup.admission.mode = 'backup';
+  assert.equal((await requireFailedBackup(backup.api, backup.admission, installation)).failureBoundary, undefined,
+    'legacy manual backup recovery retains its existing admission contract');
   for (const change of [x => { x.state.run.status = 'in_progress'; }, x => { x.state.receipt.configSha256 = 'f'.repeat(64); },
     x => { x.state.receipt.operatorProgress[1].failureCode = 'release_operation_failed'; },
     x => { x.state.receipt.operatorProgress[1].name = 'handoff'; }, x => { x.state.receipt.operatorProgress[0].reportedStatus = 'failed'; },
@@ -5110,6 +5113,7 @@ test('archived backup reconciliation checks live state twice and never uploads o
   for (const mutate of [x => { x.args.request.event = 'schedule'; }, x => { x.args.request.mode = 'backup'; },
     x => { x.args.request.legacyPredecessor = {}; }, x => { x.args.request.recoveryEvidence.runId++; },
     x => { x.args.request.recoveryEvidence.configSha256 = 'f'.repeat(64); },
+    x => { x.state.pending.request.target = 'next'; },
     x => { x.state.pending.intents['backup:archive'] = undefined; }, x => { x.state.pending.intents.extra = {}; },
     x => { x.observations.identity.role = 'other'; }, x => { x.observations.policy.enabled = true; },
     x => { x.observations.policy.revision = 'other'; }, x => { x.observations.fences = 1; },

@@ -86,7 +86,7 @@ export async function requireFailedBackup(api, admission, installation) {
   // A lost journal PUT may follow a fully uploaded archive. Admission only
   // permits inspection; the operator must bind the retained archive intent and
   // independently download, restore and clean up before settling anything.
-  const archived = Array.isArray(progress) && progress.length === 2
+  const archived = independentRelease && Array.isArray(progress) && progress.length === 2
     && progress[0].name === 'preflight' && progress[0].reportedStatus === 'passed'
     && progress[1].name === 'backup' && progress[1].reportedStatus === 'failed'
     && progress[1].failureCode === 'release_control_write_unknown';
