@@ -271,7 +271,7 @@ for (const secure of [true, false]) test(`${secure ? 'HTTPS' : 'HTTP loopback'} 
     assert.ok((await pool.query('SELECT revoked_at FROM sessions WHERE token_hash=$1', [tokenHash(old.cookie!.split('=')[1])])).rows[0].revoked_at);
   }
   const active = await api.request(at + '/api/v1/session', { headers: { Cookie: recovered.cookie } });
-  assert.equal(active.status, 200); assert.deepEqual(await active.json(), { user: recovered.raw.user, csrf_token: recovered.data.csrf_token });
+  assert.equal(active.status, 200); assert.deepEqual(await active.json(), { user: recovered.raw.user, csrf_token: recovered.data.csrf_token, admin_entry_visible: false });
 });
 
 for (const secure of [true, false]) test(`${secure ? 'HTTPS' : 'HTTP loopback'} reset revokes only the displaced browser session of another account`, async () => {

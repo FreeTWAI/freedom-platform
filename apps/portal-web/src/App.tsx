@@ -676,6 +676,8 @@ function Workspace({
   const {t}=useLanguage()
   const [headerMember,setHeaderMember]=useState<MemberCardData|null>(null)
   const [canManageGuild,setCanManageGuild]=useState(false)
+  const [adminEntrySession,setAdminEntrySession]=useState<SessionPayload|null>(null)
+  const canManagePlatform=adminEntrySession?.user.user_id===session.user.user_id&&adminEntrySession.csrf_token===session.csrf_token&&adminEntrySession.admin_entry_visible===true
   useEffect(()=>{
     let active=true,generation=0;
     const refresh=()=>{
@@ -688,19 +690,27 @@ function Workspace({
     return()=>{active=false;generation++;window.removeEventListener('focus',refresh);window.removeEventListener('freedom-profile-updated',refresh)};
   },[session.user.user_id])
   useEffect(()=>{let active=true,generation=0;const refresh=()=>{const current=++generation;void client.get<MemberCardData>(`/members/${session.user.user_id}`).then(value=>{if(active&&current===generation)setHeaderMember(value)}).catch(()=>{})};refresh();window.addEventListener('freedom-profile-updated',refresh);return()=>{active=false;generation++;window.removeEventListener('freedom-profile-updated',refresh)}},[session.user.user_id])
+  // Admin navigation follows only this workspace's latest confirmed member session.
   useEffect(()=>{
-    let active=true;
+    let active=true,sequence=0;
     const generation=client.sessionGeneration;
     const heartbeat=()=>{
+      const ticket=++sequence;
+      setAdminEntrySession(null);
       if(document.visibilityState!=='visible')return;
       void client.get<SessionPayload>('/session',{background:true}).then(next=>{
+        if(!active||ticket!==sequence||generation!==client.sessionGeneration)return;
         // Other tabs share the cookie, not this workspace's identity or CSRF.
-        if(active&&generation===client.sessionGeneration&&(next.user.user_id!==session.user.user_id||next.csrf_token!==session.csrf_token))onSessionExpired();
+        if(next.user.user_id!==session.user.user_id||next.csrf_token!==session.csrf_token){onSessionExpired();return;}
+        if(next.admin_entry_visible===true)setAdminEntrySession(next);
       }).catch(()=>{});
     };
+    heartbeat();
     const timer=window.setInterval(heartbeat,60_000);
     document.addEventListener('visibilitychange',heartbeat);
-    return()=>{active=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',heartbeat)};
+    window.addEventListener('focus',heartbeat);
+    window.addEventListener('freedom-profile-updated',heartbeat);
+    return()=>{active=false;sequence++;window.clearInterval(timer);document.removeEventListener('visibilitychange',heartbeat);window.removeEventListener('focus',heartbeat);window.removeEventListener('freedom-profile-updated',heartbeat)};
   },[session.user.user_id,session.csrf_token]);
   const [tab, setTab] = useState<TabId>(() => tabFromHash(site?.guild_launchpad_enabled === true))
   const [locationHash, setLocationHash] = useState(() => window.location.hash)
@@ -1026,7 +1036,7 @@ function Workspace({
             <button ref={menuToggle} type="button" className="btn btn-ghost mobile-menu-toggle" aria-label={t(mobileOpen?'nav.closeMenu':'nav.openMenu')} aria-expanded={mobileOpen} aria-controls="workspace-navigation" onClick={() => setMobileOpen(value => !value)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true" focusable="false"><path d={mobileOpen?'M6 6L18 18M18 6L6 18':'M4 6H20M4 12H20M4 18H20'}/></svg>
             </button></div>
-            <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen} onCloseMobile={returnFocus => { setMobileOpen(false); if (returnFocus) menuToggle.current?.focus(); }}/>
+            <Navigation current={tab} currentHash={locationHash} onSelect={selectTab} canManageGuild={canManageGuild} canManagePlatform={canManagePlatform} guildLaunchpadEnabled={site?.guild_launchpad_enabled === true} communitySearchEnabled={site?.community_search_enabled === true} personalContentEnabled={site?.personal_content_enabled === true} mobileOpen={mobileOpen} onCloseMobile={returnFocus => { setMobileOpen(false); if (returnFocus) menuToggle.current?.focus(); }}/>
           </aside>
           <div className="topbar-actions community-account-tools"><NotificationBell key={session.user.user_id+':'+session.csrf_token} client={client} preferencesEnabled={site?site.notification_preferences_enabled===true:null} onNavigate={navigateNotification}/><SettingsMenu seasonalPreference={seasonal.preference} onSeasonalPreference={seasonal.selectPreference} personalContentEnabled={site?.personal_content_enabled===true} current={tab} onSelect={selectTab} name={headerMember?.nickname??session.user.display_name} avatar={<MemberAvatar nickname={headerMember?.nickname??session.user.display_name} avatarUrl={headerMember?.avatar_url} className="topbar-avatar"/>} onLogout={() => void logout()} logoutDisabled={Boolean(pending)}/></div>
           </header>
