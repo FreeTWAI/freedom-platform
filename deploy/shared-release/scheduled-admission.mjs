@@ -83,10 +83,18 @@ export async function requireFailedBackup(api, admission, installation) {
     && progress[1].backupFailure?.snapshotDump === 'not_started';
   const preCapture = beforeDump && progress[1].backupFailure?.stage === 'preflight';
   const preDump = beforeDump && progress[1].backupFailure?.stage === 'capture';
-  check(!independentRelease || preCapture || preDump, 'release_backup_recovery_boundary_invalid');
+  // A lost journal PUT may follow a fully uploaded archive. Admission only
+  // permits inspection; the operator must bind the retained archive intent and
+  // independently download, restore and clean up before settling anything.
+  const archived = Array.isArray(progress) && progress.length === 2
+    && progress[0].name === 'preflight' && progress[0].reportedStatus === 'passed'
+    && progress[1].name === 'backup' && progress[1].reportedStatus === 'failed'
+    && progress[1].failureCode === 'release_control_write_unknown';
+  check(!independentRelease || preCapture || preDump || archived, 'release_backup_recovery_boundary_invalid');
   checkRun(await api(`${prefix}/actions/runs/${id}`));
   return Object.freeze({ format: 'freedom.verified-failed-backup/v1',
-    ...(preCapture ? { failureBoundary: 'before_capture' } : preDump ? { failureBoundary: 'before_dump' } : {}), runId: id, runAttempt: run.run_attempt,
+    ...(preCapture ? { failureBoundary: 'before_capture' } : preDump ? { failureBoundary: 'before_dump' }
+      : archived ? { failureBoundary: 'archive_unconfirmed' } : {}), runId: id, runAttempt: run.run_attempt,
     sourceSha: receipt.sourceSha, sourceTree: receipt.sourceTree, target: receipt.target, controllerSha: run.head_sha,
     operatorImage: receipt.operatorImage, configSha256: receipt.configSha256, artifactId: artifact.id, artifactDigest: artifact.digest,
     receiptSha256: createHash('sha256').update(JSON.stringify(receipt)).digest('hex'), completedAt: receipt.completedAt });

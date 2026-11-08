@@ -5,6 +5,7 @@ import { acquireReleaseLease } from '../../shared-release/portable/lease.mjs';
 import { runPortableMigration, preparePortableMigration, sourceMigrationProfile } from '../../shared-release/portable/migration.mjs';
 import { deriveDisabledMaterialPolicyAdditions, appendDisabledMaterialPolicies } from '../../shared-release/portable/material-policy.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from '../../shared-release/portable/backup-recovery.mjs';
+import { reconcileArchivedBackup } from '../../shared-release/portable/archived-backup-recovery.mjs';
 import { backupDiagnosticCode, isBackupDiagnosticCode } from '../../../packages/media-migration/backup-diagnostics.ts';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
@@ -5044,4 +5045,116 @@ test('image workflow keeps main controller separate from admitted source and pin
   assert.match(workflow, /git archive --format=tar "\$IMAGE_SOURCE" \| docker build --file deploy\/shared-release\/image\/Dockerfile/);
   assert.match(workflow, /IMAGE_TREE: \$\{\{ steps.admit.outputs.source_tree \}\}/);
   assert(!workflow.includes('run: node operator-source/'));
+});
+
+test('archive recovery admission binds terminal failed journal writes without claiming restore success', async () => {
+  const setup = () => {
+    const f = failedBackupFixture(); Object.assign(f.admission, { mode: 'deploy', releaseKind: 'independent' });
+    f.state.receipt.operatorProgress = [{ name: 'preflight', reportedStatus: 'passed' },
+      { name: 'backup', reportedStatus: 'failed', failureCode: 'release_control_write_unknown' }];
+    return f;
+  };
+  const f = setup(), proof = await requireFailedBackup(f.api, f.admission, installation);
+  assert.equal(proof.failureBoundary, 'archive_unconfirmed'); assert.equal(proof.restore, undefined);
+  for (const change of [x => { x.state.run.status = 'in_progress'; }, x => { x.state.receipt.configSha256 = 'f'.repeat(64); },
+    x => { x.state.receipt.operatorProgress[1].failureCode = 'release_operation_failed'; },
+    x => { x.state.receipt.operatorProgress[1].name = 'handoff'; }, x => { x.state.receipt.operatorProgress[0].reportedStatus = 'failed'; },
+    x => { x.state.receipt.operatorProgress.push({ name: 'handoff', reportedStatus: 'failed' }); }]) {
+    const bad = setup(); change(bad); await assert.rejects(requireFailedBackup(bad.api, bad.admission, installation));
+  }
+});
+
+test('retained archive readback uses only GET and rejects missing, oversized and changed bytes', async () => {
+  const bytes = Buffer.from('synthetic immutable archive'), calls = [];
+  let status = 200, body = bytes;
+  const transport = createCloudflareRecoveryTransport({ accountId: 'a'.repeat(32), target: 'staging-next',
+    mediaBucket: 'fixture-media', backupBucket: 'fixture-backups', token: 'synthetic-token',
+    signal: new AbortController().signal, fetchImpl: async (url, options) => {
+      calls.push({ url, method: options.method ?? 'GET' }); return new Response(body, { status });
+    } });
+  const intent = { setId: '11111111-1111-4111-8111-111111111111', archiveSha256: hash(bytes), bytes: bytes.length };
+  assert.deepEqual(await transport.readArchive(intent), bytes);
+  assert(calls.every(x => x.method === 'GET' && x.url.endsWith('/daily-v2/staging/' + intent.setId + '.tar')));
+  for (const code of [403, 404]) { status = code; await assert.rejects(transport.readArchive(intent)); }
+  status = 200; body = Buffer.from('wrong'); await assert.rejects(transport.readArchive(intent));
+  body = Buffer.alloc(bytes.length + 1); await assert.rejects(transport.readArchive(intent));
+  await assert.rejects(transport.readArchive({ ...intent, setId: '../foreign' }));
+  assert(calls.every(x => x.method === 'GET'));
+});
+
+function archivedBackupFixture() {
+  const f = backupRecoveryFixture(), old = f.state.pending.request;
+  old.target = 'staging-next';
+  const archive = { setId: '11111111-1111-4111-8111-111111111111', archiveSha256: '7'.repeat(64), bytes: 1234, automaticRetry: false };
+  const capture = { database: f.args.database, role: f.args.role, revision: 'shared-backup-' + archive.setId };
+  f.state.pending.intents = { 'backup:capture-policy': capture, 'backup:archive': archive };
+  Object.assign(f.args.request, { mode: 'deploy', releaseKind: 'independent', target: 'staging-next',
+    recoveryEvidence: { ...old, format: 'freedom.verified-failed-backup/v1', failureBoundary: 'archive_unconfirmed' } });
+  f.observations.policy.revision = capture.revision;
+  let restored = 0, proof;
+  f.args.floor.reconcileBackup = async value => { proof = value; };
+  f.args.restoreArchive = async value => {
+    restored++; assert.deepEqual(value.intent, archive); assert.equal(value.expected.sourceSha, main);
+    return { setId: archive.setId, archiveSha256: archive.archiveSha256, sourceSha: main,
+      remoteReadback: 'verified', restore: 'database_and_objects_restored', cleanupVerified: true, exposure: 'quarantine' };
+  };
+  return { ...f, proof: () => proof, restored: () => restored };
+}
+
+test('archived backup reconciliation checks live state twice and never uploads or writes the source database', async () => {
+  const f = archivedBackupFixture(), result = await reconcileArchivedBackup(f.args);
+  assert.equal(result.status, 'archive_restored_after_readback'); assert.equal(f.restored(), 1);
+  assert.equal(f.proof().archiveUpload, 'not_repeated'); assert.equal(f.proof().sourcePins, 'retained');
+  assert.equal(f.calls.filter(x => x === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY').length, 2);
+  assert(!f.calls.some(sql => /UPDATE|DELETE|pg_terminate_backend/.test(sql)));
+  for (const mutate of [x => { x.args.request.event = 'schedule'; }, x => { x.args.request.mode = 'backup'; },
+    x => { x.args.request.legacyPredecessor = {}; }, x => { x.args.request.recoveryEvidence.runId++; },
+    x => { x.args.request.recoveryEvidence.configSha256 = 'f'.repeat(64); },
+    x => { x.state.pending.intents['backup:archive'] = undefined; }, x => { x.state.pending.intents.extra = {}; },
+    x => { x.observations.identity.role = 'other'; }, x => { x.observations.policy.enabled = true; },
+    x => { x.observations.policy.revision = 'other'; }, x => { x.observations.fences = 1; },
+    x => { x.observations.backends.push({ pid: 123 }); }, x => { x.observations.material.push({ changed: true }); },
+    x => { x.args.deployer.inspect = async () => ({ sourceSha: sha }); },
+    x => { x.args.lease.assertHeld = () => { throw Error('lost lease'); }; }]) {
+    const bad = archivedBackupFixture(); mutate(bad);
+    await assert.rejects(reconcileArchivedBackup(bad.args)); assert.equal(bad.restored(), 0); assert.equal(bad.proof(), undefined);
+  }
+});
+
+test('archive restore failure, cleanup failure and state changes after restore cannot settle the journal', async () => {
+  for (const mutate of [x => { x.args.restoreArchive = async () => { throw Error('archive corrupt'); }; },
+    x => { const restore = x.args.restoreArchive; x.args.restoreArchive = async v => ({ ...await restore(v), cleanupVerified: false }); },
+    x => { const restore = x.args.restoreArchive; x.args.restoreArchive = async v => { const result = await restore(v); x.observations.policy.enabled = true; return result; }; },
+    x => { const restore = x.args.restoreArchive; x.args.restoreArchive = async v => { const result = await restore(v); x.args.lease.assertHeld = () => { throw Error('lost lease'); }; return result; }; }]) {
+    const bad = archivedBackupFixture(); mutate(bad); await assert.rejects(reconcileArchivedBackup(bad.args)); assert.equal(bad.proof(), undefined);
+  }
+});
+
+test('archive reconciliation appends its separate proof and preserves the retained floor and failed run history', () => {
+  const f = floorFixture(), old = { ...f.request, sourceSha: main, target: 'staging-next' };
+  f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+  const capture = { format: 'freedom.shared-capture-policy-intent/v1', pid: 123, application: 'fp-capture-' + f.id,
+    revision: 'shared-backup-' + f.id, before: '6'.repeat(64), automaticRetry: false };
+  const archive = { setId: f.id, archiveSha256: '7'.repeat(64), bytes: 1234, automaticRetry: false };
+  f.add(f.event('intent', 'backup', capture, { operation: 'capture-policy' }));
+  f.add(f.event('intent', 'backup', archive, { operation: 'archive' }));
+  const before = replayReleaseFloor(f.chain, f.options).state;
+  const proof = { format: 'freedom.reconciled-archived-backup/v1', recovery: { ...old,
+    format: 'freedom.verified-failed-backup/v1', failureBoundary: 'archive_unconfirmed', receiptSha256: '9'.repeat(64),
+    artifactId: 99, artifactDigest: 'sha256:' + '9'.repeat(64), completedAt: '2026-11-08T12:21:00Z' },
+    settledBy: { ...old, runId: 13 }, sourceSha: main, sourceTree: tree, bindingsSha256: before.bindingsSha256,
+    ledgerSha256: migrationLedgerDigest(before.schemaLedger), materialPolicySha256: before.materialPolicySha256,
+    setId: archive.setId, archiveSha256: archive.archiveSha256, remoteReadback: 'verified',
+    restore: 'database_and_objects_restored', cleanupVerified: true, exposure: 'quarantine',
+    captureRevision: capture.revision, maintenanceEnabled: false, domainMaintenanceEnabled: false,
+    deletionFences: 0, captureBackendAbsent: true, sourcePins: 'retained', archiveUpload: 'not_repeated', observedAt: '2026-11-08T14:00:00Z' };
+  for (const patch of [{ cleanupVerified: false }, { restore: 'not_run' }, { remoteReadback: 'not_verified' },
+    { archiveSha256: 'a'.repeat(64) }, { exposure: 'public' }, { sourcePins: 'released' }, { archiveUpload: 'repeated' },
+    { captureRevision: 'other' }, { sourceSha: sha }, { deletionFences: 1 }, { settledBy: old },
+    { recovery: { ...proof.recovery, target: 'next' } }, { observedAt: '2026-11-08T12:20:00Z' }]) {
+    assert.throws(() => replayReleaseFloor([...f.chain, f.event('backup-reconciled', 'backup', { ...proof, ...patch })], f.options));
+  }
+  const result = f.add(f.event('backup-reconciled', 'backup', proof));
+  assert.deepEqual(result, { ...before, pending: null });
+  assert.equal(f.chain[1].record.data.kind, 'backup-begin'); assert.equal(f.chain[3].record.data.kind, 'intent');
 });

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { Pool } from 'pg';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { runDailyBackup } from '../../../packages/media-migration/backup-daily.ts';
+import { readbackRecoverySet, restoreRecoverySet, restoredReferenceAuthorization } from '../../../packages/media-migration/backup-archive.ts';
 import { createFileArchiveStore } from '../../../packages/media-migration/backup-archive-fs.ts';
 import { observeMediaGcState } from '../../../packages/media-migration/backup-gc-precondition.ts';
 import { createAssetMaintenance } from '../../../modules/assets/maintenance.ts';
@@ -22,6 +23,78 @@ import { backupObjectStore, backupTar, bytesStream, privateBackupRoot, newBackup
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const POLICY_SQL = `SELECT purpose,mode,policy_lock,policy_revision,persistence_allowed,
   retained_byte_limit::text AS retained_byte_limit FROM domain_media_storage_policy ORDER BY purpose`;
+
+/** Restore only the bytes named by an authenticated, retained archive intent.
+ * No new capture, upload, source-object reads, GC change or source DB writes. */
+export async function restorePortableArchive({ intent, expected, database, environment, workRoot, binDirectory,
+  lease, transport, verifyRetainedFloor, execute = runPostgresProcess }) {
+  check(['staging', 'production'].includes(environment)
+    && transport?.target === (environment === 'production' ? 'next' : 'staging-next')
+    && /^[a-z][a-z0-9_]{0,62}$/.test(database ?? '') && isSha(expected?.sourceSha)
+    && isDigest(expected.bindingsSha256) && isDigest(expected.ledgerSha256) && isDigest(expected.materialPolicySha256)
+    && Number.isSafeInteger(expected.schemaVersion) && expected.schemaVersion > 0
+    && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(intent?.setId ?? '')
+    && isDigest(intent.archiveSha256) && Number.isSafeInteger(intent.bytes)
+    && intent.bytes > 0 && intent.bytes <= 128 * 1024 * 1024
+    && typeof verifyRetainedFloor === 'function', 'release_backup_input_invalid');
+  expected = Object.freeze(structuredClone(expected)); intent = Object.freeze(structuredClone(intent));
+  await privateBackupRoot(workRoot);
+  const held = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
+  let restored, mf, restoreRoot, outbound = 0, result;
+  try {
+    held(); const bytes = await transport.readArchive(intent); held();
+    check(bytes instanceof Uint8Array && bytes.length === intent.bytes && hash(bytes) === intent.archiveSha256,
+      'release_archive_readback_mismatch');
+    const remote = await mkdtemp(join(workRoot, 'archive-readback-'));
+    await backupTar('unpack', remote, bytes, lease.signal);
+    await mkdir(join(remote, 'objects'), { recursive: true, mode: 0o700 });
+    const control = JSON.parse(await readFile(join(remote, 'control.json'), 'utf8'));
+    const required = { format: 'freedom.shared-backup-control/v1', ...expected, setId: intent.setId,
+      environment, database, schema: 'public', exposure: 'quarantine' };
+    check(JSON.stringify(Object.keys(control).sort()) === JSON.stringify(Object.keys(required).sort())
+      && Object.entries(required).every(([key, value]) => control[key] === value), 'release_backup_control_mismatch');
+    const archive = await createFileArchiveStore(join(remote, 'sealed'));
+    const backupObjects = backupObjectStore(await createFileArchiveStore(join(remote, 'objects')), { assertObjectKey, validateMetadata });
+    const identity = { setId: intent.setId, environment, database, schema: 'public', sourceRelease: expected.sourceSha };
+    const readback = await readbackRecoverySet({ archive, backupObjects, setId: intent.setId,
+      verifiedAt: new Date().toISOString() });
+    check(readback.evidence.status === 'captured' && Object.entries(identity).every(([key, value]) => readback[key] === value),
+      'release_backup_control_mismatch'); held();
+    restoreRoot = await mkdtemp(join(workRoot, 'archive-r2-'));
+    mf = new Miniflare(convertV4MiniflareOptions({ modules: true,
+      script: 'export default {fetch(){return new Response(null,{status:503})}}',
+      compatibilityDate: '2026-09-21', r2Buckets: ['RECOVERY'], r2Persist: restoreRoot,
+      outboundService: () => { outbound++; return new Response(null, { status: 503 }); } }));
+    await mf.ready;
+    restored = await openIsolatedPostgres({ workRoot, binDirectory, Pool, execute, signal: lease.signal });
+    const verified = await restoreRecoverySet({ archive, backupObjects, setId: intent.setId,
+      expected: { ...identity, manifestSha256: readback.manifestSha256 },
+      destinationObjects: createR2ObjectStore(await mf.getR2Bucket('RECOVERY')),
+      restoredPool: restored.pool, restoredDatabase: restored.databaseName,
+      database: { async restore(input) {
+        await restored.database.restore(input);
+        const actual = await observeBackupControl(restored.pool);
+        check(['ledgerSha256', 'materialPolicySha256', 'schemaVersion'].every(key => actual[key] === expected[key]),
+          'release_backup_control_mismatch');
+        await verifyRetainedFloor(restored.pool, { restored: true }); held();
+      } },
+      objectAuthority: restoredReferenceAuthorization(restored.pool,
+        { database: restored.databaseName, schema: 'public', current: { mode: 'quarantine' } }) });
+    check(verified.status === 'database_and_objects_restored' && verified.evidence.status === 'matched'
+      && verified.manifestSha256 === readback.manifestSha256
+      && verified.exposure === 'quarantine_not_approved_for_exposure', 'release_backup_control_mismatch');
+    held(); result = { setId: intent.setId, archiveSha256: intent.archiveSha256, sourceSha: expected.sourceSha,
+      remoteReadback: 'verified', restore: 'database_and_objects_restored', exposure: 'quarantine' };
+  } finally {
+    const cleaned = await Promise.allSettled([
+      ...(restored ? [restored.dispose()] : []),
+      ...(mf ? [mf.dispose().then(async () => { await rm(restoreRoot, { recursive: true }); })]
+        : restoreRoot ? [rm(restoreRoot, { recursive: true })] : []),
+    ]);
+    check(cleaned.every(item => item.status === 'fulfilled') && outbound === 0, 'release_backup_cleanup_failed');
+  }
+  held(); return { ...result, cleanupVerified: true };
+}
 
 /** Read fixed SQL facts, never supplied success booleans. Expected digests must
  * come from the installed release's approved policy/floor inputs. This reader

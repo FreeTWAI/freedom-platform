@@ -93,6 +93,29 @@ export function replayReleaseFloor(chain, { isAncestor }) {
     const stages = pending?.kind === 'backup' ? ['backup'] : pending?.kind === 'code' ? ['migration', 'deploy', 'health', 'handoff'] : STAGES;
     check(pending && event.runId === pending.request.runId && event.runAttempt === pending.request.runAttempt
       && event.stage === stages[pending.stage], 'release_floor_stage_mismatch');
+    if (event.kind === 'backup-reconciled') {
+      const proof = event.proof, recovery = proof?.recovery, capture = pending.intents['backup:capture-policy'];
+      check(pending.kind === 'backup' && pending.stage === 0 && Object.keys(pending.intents).length === 2
+        && capture && proof?.format === 'freedom.reconciled-archived-backup/v1'
+        && recovery?.format === 'freedom.verified-failed-backup/v1' && recovery.failureBoundary === 'archive_unconfirmed'
+        && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'target', 'controllerSha', 'operatorImage', 'configSha256']
+          .every(key => recovery[key] === pending.request[key])
+        && isDigest(recovery.receiptSha256) && /^sha256:[a-f0-9]{64}$/.test(recovery.artifactDigest ?? '')
+        && Number.isSafeInteger(recovery.artifactId) && recovery.artifactId > 0
+        && Number.isFinite(Date.parse(recovery.completedAt)) && Number.isFinite(Date.parse(proof.observedAt))
+        && Date.parse(proof.observedAt) >= Date.parse(recovery.completedAt)
+        && proof.sourceSha === state.sourceSha && proof.sourceTree === state.sourceTree
+        && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
+        && proof.materialPolicySha256 === state.materialPolicySha256 && proof.captureRevision === capture.revision
+        && proof.maintenanceEnabled === false && proof.domainMaintenanceEnabled === false
+        && proof.deletionFences === 0 && proof.captureBackendAbsent === true
+        && proof.sourcePins === 'retained' && proof.archiveUpload === 'not_repeated', 'release_floor_backup_recovery_invalid');
+      request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
+      check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,
+        'release_floor_backup_recovery_invalid');
+      verifyBackup(proof, pending.intents['backup:archive'], capture, state.sourceSha);
+      state.pending = null; continue;
+    }
     if (event.kind === 'backup-abandoned') {
       const proof = event.proof, capture = pending.intents['backup:capture-policy'], recovery = proof?.recovery;
       const beginOnly = !capture && Object.keys(pending.intents).length === 0
@@ -404,6 +427,11 @@ export async function openReleaseFloor({ store, sourceRoot, intentDirectory }) {
       check(current.state.pending?.kind === 'backup', 'release_floor_not_started');
       const { runId, runAttempt } = current.state.pending.request;
       return append({ kind: 'backup-abandoned', runId, runAttempt, stage: 'backup', proof });
+    },
+    async reconcileBackup(proof) {
+      check(current.state.pending?.kind === 'backup', 'release_floor_not_started');
+      const { runId, runAttempt } = current.state.pending.request;
+      return append({ kind: 'backup-reconciled', runId, runAttempt, stage: 'backup', proof });
     },
     async abandonCommittedRelease(proof) {
       check(current.state.pending?.kind === 'code', 'release_floor_not_started');

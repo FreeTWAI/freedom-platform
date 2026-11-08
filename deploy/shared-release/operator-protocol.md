@@ -1,5 +1,18 @@
 # Portable operator integration contract
 
+Manual independent deploy may reconcile a terminal backup failure whose final
+journal write was unconfirmed. The controller authenticates the original failed
+run and hashed receipt; the operator requires exactly the retained capture-policy
+and archive intents. It downloads only the exact intended archive, validates its
+size/hash/control and complete recovery set, and runs the existing isolated
+PG18/native-R2 restore with outbound access denied. Live floor/Worker/DB/policy,
+GC OFF, zero fences and stopped capture are checked before and after restore.
+Only successful restore and cleanup permit an append-only `backup-reconciled`
+event with original failure evidence and the new operator identity. Source pins,
+archive bytes and retained authority stay unchanged; no capture/upload is repeated.
+This event requires the new reader and prevents downgrading to an older operator.
+The subsequent normal release remains separate from this backup reconciliation.
+
 The executable entry and image build source implement this contract; a local
 image test is not an installed hosted operator. Keep releases disabled until
 service credentials, independently checked authority and image/config pins are
