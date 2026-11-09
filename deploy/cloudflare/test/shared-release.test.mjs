@@ -5104,6 +5104,19 @@ function archivedBackupFixture() {
   return { ...f, proof: () => proof, restored: () => restored };
 }
 
+test('a parsed and admitted manual release can reconcile its retained backup archive', async () => {
+  const f = archivedBackupFixture(), previous = f.args.request;
+  const admitted = await admitRelease(requestFromEnvironment({ ...environment(), RELEASE_MODE: 'deploy',
+    RELEASE_RECOVER_BACKUP_RUN_ID: String(previous.recoverRunId) }), fixtureApi());
+  // Use the actual admission output and JSON boundary, without supplying an event in the fixture.
+  f.args.request = JSON.parse(JSON.stringify({ ...admitted, operatorImage: previous.operatorImage,
+    configSha256: previous.configSha256, recoveryEvidence: previous.recoveryEvidence }));
+  const result = await reconcileArchivedBackup(f.args);
+  assert.equal(result.status, 'archive_restored_after_readback');
+  assert.equal(f.restored(), 1); assert.equal(f.proof().settledBy.runId, admitted.runId);
+  assert.equal(f.calls.filter(sql => sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY').length, 2);
+});
+
 test('archived backup reconciliation checks live state twice and never uploads or writes the source database', async () => {
   const f = archivedBackupFixture(), result = await reconcileArchivedBackup(f.args);
   assert.equal(result.status, 'archive_restored_after_readback'); assert.equal(f.restored(), 1);
