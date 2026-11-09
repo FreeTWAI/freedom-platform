@@ -155,7 +155,9 @@ export async function verifyDailyResult(page:Page,testInfo:TestInfo,options:{gam
     await expect(page.locator('.fw-arcade-board')).toHaveAttribute('data-completed','true');await expect(page.locator('.fw-arcade-board')).toHaveAttribute('data-playing','false');
     expect(await result.evaluate(el=>!!el.closest('[data-daily-stage]'))).toBe(true);
     await expect(page.locator('.fw-arcade-controls')).toBeHidden();await expect(page.locator('.fw-arcade-controls')).toHaveAttribute('inert','');await expect(page.locator('[data-daily-overlay]')).toHaveCount(0);
-    await expect(result.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toHaveAttribute('href',/^blob:/);
+    // Chromium 153's idle PNG encoder can take its 1s + 5.7s fallback path.
+    // Real callback timings were 6756/6769ms; keep all content assertions below.
+    await expect(result.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toHaveAttribute('href',/^blob:/,{timeout:10_000});
     const summary=await result.locator('.daily-result-summary').innerText(),calls=await page.locator('.fw-arcade-stage').getAttribute('data-render-calls');
     const facts=page.locator('[data-photo-time],[data-stamp-time],[data-cash-progress],.fw-arcade-counter'),clockFacts=await facts.allTextContents();
     await page.locator('.fw-arcade-board').focus();for(const key of ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'])await page.keyboard.press(key);await page.clock.runFor(5000);

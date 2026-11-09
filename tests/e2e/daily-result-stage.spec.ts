@@ -340,7 +340,7 @@ for(const action of ['replay','next','back','history'] as const)test(`Daily earn
     await oldBoard!.dispose();await oldDialog!.dispose();
 });
 
-// Keep the original five-second PNG assertion and retain the actual stalled phase.
+// Retain the actual stalled phase when bounded PNG readiness fails.
 test.afterEach(async({page},testInfo)=>{
     const probe=await page.evaluate(()=>{
         const value=(window as unknown as {__exportTimingProbe?:{events:unknown[];dropped:number}}).__exportTimingProbe;
