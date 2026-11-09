@@ -45,6 +45,7 @@ import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
 import { requireFailedReleaseHandoff, requireFailedReleaseMigration } from '../../shared-release/handoff-admission.mjs';
 import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff, settleOwnHealth } from '../../shared-release/portable/handoff-recovery.mjs';
+import * as handoffRecovery from '../../shared-release/portable/handoff-recovery.mjs';
 import { reconcileCommittedRelease } from '../../shared-release/portable/migration-recovery.mjs';
 
 async function diskFixture(t, prefix) {
@@ -4714,6 +4715,157 @@ async function ownHandoffFixture(t, stop = 'health') {
     pause: async ms => assert.equal(ms, 2000) };
   return { ...f, own: args, loss, counts: () => ({ acquired, oldReleased, freshReleased, health, opened, renewed }) };
 }
+
+async function runEntryHandoff(f) {
+  const entry = await readFile(new URL('../../shared-release/portable/entry.mjs', import.meta.url), 'utf8');
+  const start = entry.lastIndexOf("    await phase('handoff', async () => {");
+  const source = entry.slice(start, entry.indexOf('\n    validateOperatorResult(result', start));
+  const ports = { ...f.own, floor: f.floor, independentRelease: true,
+    result: { phases: [...f.own.phases, { name: 'handoff', status: 'running' }] },
+    controller: new AbortController(), config: { target: 'staging-next' }, access: { clientId: 'fixture', clientSecret: 'fixture' },
+    waitForPublicRelease: async options => {
+      await f.own.verifyHealth();
+      return waitForPublicRelease({ ...options, fetchImpl: async () => new Response(JSON.stringify({
+        status: 'ok', release_sha: f.candidate.sourceSha }), { status: 200 }) });
+    }, save: async () => {}, join, WORK: '/synthetic',
+    settleOwnHandoff, settleOwnConfirmedHandoff: handoffRecovery.settleOwnConfirmedHandoff };
+  let proof; ports.phase = async (name, execute) => { assert.equal(name, 'handoff'); proof = await execute(); };
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  await new AsyncFunction(...Object.keys(ports), source)(...Object.values(ports));
+  return proof;
+}
+
+test('entry recovers confirmed handoff cleanup failure by readback without another append', async t => {
+  const f = await ownHandoffFixture(t), controller = new AbortController(), release = f.own.lease.release;
+  f.own.lease.signal = controller.signal; f.own.lease.assertHeld = () => assert(!controller.signal.aborted);
+  let destroyed = false;
+  f.own.lease.release = async () => {
+    if (destroyed) return;
+    destroyed = true; controller.abort(); await release();
+    throw Object.assign(Error('release_lease_cleanup_failed'), { code: 'release_lease_cleanup_failed' });
+  };
+  const proof = await runEntryHandoff(f);
+  assert.deepEqual(f.counts(), { acquired: 1, oldReleased: 1, freshReleased: 1, health: 1, opened: 1, renewed: 1 });
+  assert.equal(f.appends(), 1); assert.equal(f.chain.at(-1).record.data.stage, 'handoff');
+  assert.equal((await f.reopenFloor()).state().pending, null);
+  assert.equal(f.queries.filter(sql => sql === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY').length, 2);
+  assert.deepEqual(proof.leaseLoss, f.loss); assert.deepEqual(proof.leaseRecovered, { cause: f.loss.cause, attempts: 1 });
+  const result = codeResult(); result.admission.mode = 'deploy'; Object.assign(result.value.phases[4], proof);
+  assert(validateOperatorResult(result.value, result.admission, installation, 'e'.repeat(64)).every(p => p.status === 'passed'));
+});
+
+async function confirmedHandoffFixture(t) {
+  const f = await ownHandoffFixture(t);
+  await f.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+  f.own.expectedHead = f.floor.head();
+  f.own.error = Object.assign(Error('release_lease_cleanup_failed'), { code: 'release_lease_cleanup_failed' });
+  const verify = f.own.verifyHealth;
+  f.own.verifyHealth = async () => { const { sourceSha, statusCode } = await verify(); return { sourceSha, statusCode, attempts: 1 }; };
+  return f;
+}
+
+test('entry leaves an uncertain handoff append stopped and the missing-handoff helper refuses cleanup failure', async t => {
+  const f = await ownHandoffFixture(t), passed = f.floor.passed;
+  f.own.lease.assertHeld = () => {};
+  f.floor = { ...f.floor, passed: async (...args) => { await passed(...args); throw f.own.error; } };
+  await assert.rejects(runEntryHandoff(f), { code: 'release_lease_lost' });
+  assert.equal(f.appends(), 1); assert.equal(f.counts().health, 0);
+  const confirmed = await confirmedHandoffFixture(t);
+  await assert.rejects(settleOwnHandoff(confirmed.own), { code: 'release_lease_cleanup_failed' });
+  assert.equal(confirmed.counts().acquired, 0); assert.equal(confirmed.appends(), 1);
+});
+
+test('confirmed handoff cleanup requires the exact original request and final head with no pending work', async t => {
+  const changes = Object.entries({ runId: 999, runAttempt: 2, sourceSha: main, sourceTree: main,
+    target: 'next', controllerSha: '9'.repeat(40), operatorImage: 'ghcr.io/example/operator@sha256:' + '9'.repeat(64),
+    configSha256: '9'.repeat(64) }).map(([key, value]) => [key, f => { f.own.request = { ...f.own.request, [key]: value }; }]);
+  changes.push(['head', f => { f.chain.at(-1).sha256 = '9'.repeat(64); }]);
+  for (const [name, mutate] of changes) await t.test(name, async t => {
+    const f = await confirmedHandoffFixture(t); mutate(f);
+    await assert.rejects(handoffRecovery.settleOwnConfirmedHandoff(f.own), { code: 'release_lease_cleanup_failed' });
+    assert.equal(f.appends(), 1); assert.equal(f.counts().health, 0); assert.equal(f.counts().freshReleased, 1);
+  });
+  const missing = await ownHandoffFixture(t); missing.own.error.code = 'release_lease_cleanup_failed';
+  await assert.rejects(handoffRecovery.settleOwnConfirmedHandoff(missing.own), { code: 'release_lease_cleanup_failed' });
+  assert.equal(missing.appends(), 0); assert.equal(missing.counts().health, 0);
+});
+
+test('confirmed handoff cleanup refuses retained database and Worker drift before or during public health', async t => {
+  const changes = [
+    ['database', f => { f.rows.identity[0].database = 'other'; }],
+    ['role', f => { f.rows.identity[0].session_role = 'other'; }],
+    ['ledger', f => { f.rows.ledger[0].sha256 = '9'.repeat(64); }],
+    ['policy', f => { f.rows.policies[0].revision = 'changed'; }],
+    ['GC', f => { f.rows.gc[0].enabled = true; }],
+    ['domain GC', f => { f.rows.gc[0].domain_enabled = true; }],
+    ['fence', f => { f.rows.gc[0].fences = 1; }],
+    ['sessions', f => { f.rows.sessions[0].remaining = 1; }],
+    ['Worker source', f => { f.worker.sourceSha = main; }],
+    ['Worker bindings', f => { f.worker.bindingsSha256 = '9'.repeat(64); }],
+    ['Worker version', f => { f.worker.versionId = '22222222-2222-4222-8222-222222222222'; }],
+    ['head', f => { f.chain.at(-1).sha256 = '9'.repeat(64); }],
+    ['lease', f => f.loseLease()],
+  ];
+  for (const duringHealth of [false, true]) for (const [name, mutate] of changes) await t.test(
+    `${name} ${duringHealth ? 'during' : 'before'} health`, async t => {
+      const f = await confirmedHandoffFixture(t);
+      if (duringHealth) {
+        const verify = f.own.verifyHealth; f.own.verifyHealth = async () => { mutate(f); return verify(); };
+      } else mutate(f);
+      await assert.rejects(handoffRecovery.settleOwnConfirmedHandoff(f.own), { code: 'release_lease_cleanup_failed' });
+      assert.equal(f.appends(), 1); assert.equal(f.counts().acquired, 1); assert.equal(f.counts().freshReleased, 1);
+    });
+});
+
+test('confirmed handoff cleanup never retries readback, health, connection renewal or fresh release failures', async t => {
+  for (const [name, mutate] of [
+    ['connection renewal', f => { f.own.renewConnections = async () => { throw Error('cleanup failed'); }; }],
+    ['readback', f => { f.own.reopen = async () => { throw Error('readback failed'); }; }],
+    ['health failure', f => { f.own.verifyHealth = async () => { throw Error('health failed'); }; }],
+    ['health source', f => { f.own.verifyHealth = async () => ({ sourceSha: main, statusCode: 200, smokePassed: true }); }],
+    ['health status', f => { f.own.verifyHealth = async () => ({ sourceSha: f.candidate.sourceSha, statusCode: 503, smokePassed: true }); }],
+    ['missing health', f => { f.own.verifyHealth = async () => undefined; }],
+    ['fresh release', f => {
+      const acquire = f.own.acquire; f.own.acquire = async () => ({ ...await acquire(), release: async () => { throw Error('release failed'); } });
+    }],
+    ['cancellation during health', f => {
+      const controller = new AbortController(), verify = f.own.verifyHealth; f.own.signal = controller.signal;
+      f.own.verifyHealth = async () => { controller.abort(); return verify(); };
+    }],
+  ]) await t.test(name, async t => {
+    const f = await confirmedHandoffFixture(t); mutate(f);
+    await assert.rejects(handoffRecovery.settleOwnConfirmedHandoff(f.own), error => {
+      assert.equal(error.code, 'release_lease_cleanup_failed'); assert.deepEqual(error.leaseLoss, f.loss); return true;
+    });
+    assert.equal(f.appends(), 1); assert(f.counts().acquired <= 1);
+  });
+});
+
+test('confirmed handoff cleanup rejects incomplete admission without acquiring and bounds busy attempts at three', async t => {
+  for (const mutate of [
+    f => { f.own.expectedHead = undefined; }, f => { f.own.phases.pop(); }, f => { f.own.phases[3].status = 'failed'; },
+    f => { f.own.request = { ...f.own.request, mode: 'handoff' }; },
+    f => { f.own.request = { ...f.own.request, releaseKind: 'legacy' }; },
+    f => { f.own.signal = AbortSignal.abort(); }, f => { f.own.lease.signal = new AbortController().signal; },
+    f => { f.own.lease.loss = () => undefined; }, f => { f.own.lease.loss = () => ({ ...f.loss, cause: 'unknown' }); },
+    f => { f.own.error.code = 'release_lease_lost'; },
+  ]) {
+    const f = await confirmedHandoffFixture(t); mutate(f);
+    await assert.rejects(handoffRecovery.settleOwnConfirmedHandoff(f.own), error => error === f.own.error);
+    assert.equal(f.counts().acquired, 0); assert.equal(f.counts().renewed, 0); assert.equal(f.appends(), 1);
+  }
+  for (const eventuallyFree of [false, true]) {
+    const f = await confirmedHandoffFixture(t), acquire = f.own.acquire; let attempts = 0, waits = 0;
+    f.own.acquire = async () => {
+      if (++attempts < 3 || !eventuallyFree) throw Object.assign(Error('busy'), { code: 'release_lease_busy' });
+      return acquire();
+    };
+    f.own.pause = async ms => { assert.equal(ms, 2000); waits++; };
+    if (eventuallyFree) assert.equal((await handoffRecovery.settleOwnConfirmedHandoff(f.own)).leaseRecovered.attempts, 3);
+    else await assert.rejects(handoffRecovery.settleOwnConfirmedHandoff(f.own), { code: 'release_lease_cleanup_failed' });
+    assert.equal(attempts, 3); assert.equal(waits, 2); assert.equal(f.appends(), 1);
+  }
+});
 
 test('same-run handoff re-acquires a fresh lease and appends only its missing handoff with normal passed evidence', async t => {
   const f = await ownHandoffFixture(t), before = f.floor.head();

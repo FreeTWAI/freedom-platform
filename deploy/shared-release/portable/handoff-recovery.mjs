@@ -21,7 +21,7 @@ export async function inspectReleaseHandoff({ floor, pool, deployer, lease, requ
 }
 
 // Both hosted recovery and same-run settlement use these exact live checks.
-async function inspectHandoffState({ floor, pool, deployer, lease, evidence, database, role }) {
+async function inspectHandoffState({ floor, pool, deployer, lease, evidence, database, role, requireWorkerVersion = false }) {
   lease.assertHeld();
   const { alreadySettled, healthPending, sourceSha, workerVersionId } = floor.handoffRecoveryState(evidence), state = floor.state();
   const q = await pool.connect();
@@ -50,7 +50,7 @@ async function inspectHandoffState({ floor, pool, deployer, lease, evidence, dat
   const worker = await deployer.inspect();
   check(worker.sourceSha === sourceSha && worker.bindingsSha256 === state.bindingsSha256,
     'release_handoff_recovery_state_changed');
-  if (evidence.failureBoundary === 'health_lease_lost') check(worker.versionId === workerVersionId
+  if (requireWorkerVersion || evidence.failureBoundary === 'health_lease_lost') check(worker.versionId === workerVersionId
     && typeof workerVersionId === 'string', 'release_handoff_recovery_state_changed');
   await floor.assertCurrent(); lease.assertHeld();
   return { alreadySettled, healthPending, reconciledRunId: evidence.runId, reconciledRunAttempt: evidence.runAttempt,
@@ -125,6 +125,48 @@ export async function settleOwnHandoff({ request, phases, lease, expectedHead, e
       check(ports.floor.head() === expectedHead && !ports.floor.handoffRecoveryState(request).alreadySettled,
         'release_handoff_recovery_state_changed');
       await ports.floor.passed('handoff', { cleanupVerified: true, migrationVerified: true });
+      await fresh.release(); fresh = undefined;
+      return { cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true,
+        leaseLoss: loss, leaseRecovered: { cause: loss.cause, attempts } };
+    }
+  } catch { throw original; }
+  finally { if (fresh) await fresh.release().catch(() => {}); }
+}
+
+/** Only entry's confirmed handoff head permits this read-only cleanup recovery.
+ * An unknown append or changed request/head remains a hosted reconciliation. */
+export async function settleOwnConfirmedHandoff({ request, phases, lease, expectedHead, error, acquire, reopen, verifyHealth,
+  signal, renewConnections, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  const loss = publicLeaseLoss(lease?.loss());
+  if (releaseFailureCode(error) !== 'release_lease_cleanup_failed'
+    || !loss || !lease.signal.aborted || signal?.aborted || request.mode !== 'deploy' || request.releaseKind !== 'independent'
+    || !isDigest(expectedHead) || phases.length !== 4 || !['preflight', 'migration', 'deploy', 'health'].every((name, i) =>
+      phases[i].name === name && phases[i].status === 'passed')) throw error;
+  const original = Object.assign(new Error('release_lease_cleanup_failed'), { code: 'release_lease_cleanup_failed', leaseLoss: loss });
+  await lease.release().catch(() => {});
+  let fresh;
+  try {
+    await renewConnections();
+    for (let attempts = 1; attempts <= 3; attempts++) {
+      signal?.throwIfAborted();
+      try { fresh = await acquire(); }
+      catch (failure) {
+        if (failure.code !== 'release_lease_busy' || attempts === 3) throw failure;
+        await pause(2000); continue;
+      }
+      const ports = await reopen(fresh);
+      const inspect = async () => {
+        check(ports.floor.head() === expectedHead && ports.floor.state().pending === null,
+          'release_handoff_recovery_state_changed');
+        const observed = await inspectHandoffState({ ...ports, lease: fresh, evidence: request, requireWorkerVersion: true });
+        check(observed.alreadySettled === true && observed.healthPending === false,
+          'release_handoff_recovery_state_changed');
+      };
+      await inspect();
+      const health = await verifyHealth(fresh);
+      check(health?.sourceSha === request.sourceSha && health.statusCode === 200,
+        'release_floor_health_unverified');
+      await inspect(); signal?.throwIfAborted();
       await fresh.release(); fresh = undefined;
       return { cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true,
         leaseLoss: loss, leaseRecovered: { cause: loss.cause, attempts } };
