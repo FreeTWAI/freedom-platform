@@ -35,9 +35,10 @@ export function ChatSearch({client,resource,title,me,otherName=title,active,mess
   const [open,setOpen]=useState(false),[query,setQuery]=useState(''),[phase,setPhase]=useState<Phase>('idle'),[result,setResult]=useState<Results|null>(null);
   const [more,setMore]=useState(false),[error,setError]=useState('');
   const generation=useRef(0),request=useRef<AbortController|null>(null),retry=useRef<{query:string;cursor?:string}|null>(null);
+  const composing=useRef(false);
   function invalidate(){generation.current++;request.current?.abort();request.current=null;}
   function close(restore=true){
-    invalidate();dialog.current?.close();setOpen(false);onOpenChange(false);setQuery('');setResult(null);setPhase('idle');setMore(false);setError('');retry.current=null;
+    invalidate();composing.current=false;dialog.current?.close();setOpen(false);onOpenChange(false);setQuery('');setResult(null);setPhase('idle');setMore(false);setError('');retry.current=null;
     if(restore&&active&&trigger.current?.offsetParent!==null)trigger.current?.focus({preventScroll:true});
   }
   useEffect(()=>{if(open&&!dialog.current?.open){dialog.current?.showModal();input.current?.focus();}},[open]);
@@ -60,7 +61,7 @@ export function ChatSearch({client,resource,title,me,otherName=title,active,mess
     }}
     finally{if(current===generation.current){setMore(false);request.current=null;}}
   }
-  function submit(event:FormEvent){event.preventDefault();void search(query);}
+  function submit(event:FormEvent){event.preventDefault();if(!composing.current)void search(query);}
   return <>
     <button ref={trigger} className="btn btn-ghost chat-search-trigger" type="button" title="搜尋訊息" aria-label="搜尋訊息" aria-haspopup="dialog" aria-expanded={open} onClick={()=>{onOpenChange(true);setOpen(true);}}>
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
@@ -69,7 +70,10 @@ export function ChatSearch({client,resource,title,me,otherName=title,active,mess
       <header><h2 id={`${id}-title`}>搜尋訊息</h2><button className="btn btn-ghost" type="button" aria-label="關閉搜尋" onClick={()=>close()}>關閉</button></header>
       <p className="chat-search-scope">{title}</p>
       <form onSubmit={submit} className="chat-search-form">
-        <label className="field"><span className="chat-sr-only">搜尋這個對話的訊息</span><input ref={input} type="search" value={query} maxLength={100} placeholder="輸入關鍵字" onChange={event=>{invalidate();setQuery(event.target.value);setResult(null);setError('');setPhase('idle');setMore(false);retry.current=null;}}/></label>
+        <label className="field"><span className="chat-sr-only">搜尋這個對話的訊息</span><input ref={input} type="search" value={query} maxLength={100} placeholder="輸入關鍵字"
+          onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
+          onKeyDown={event=>{if(event.key==='Enter'&&(composing.current||event.nativeEvent.isComposing||event.nativeEvent.keyCode===229))event.preventDefault();}}
+          onChange={event=>{invalidate();setQuery(event.target.value);setResult(null);setError('');setPhase('idle');setMore(false);retry.current=null;}}/></label>
         <button className="btn btn-primary" type="submit" disabled={!query.trim()||phase==='loading'||more}>{phase==='loading'?'搜尋中…':'搜尋'}</button>
       </form>
       {phase==='idle'&&<p className="muted">找回這個對話裡的文字訊息。</p>}
