@@ -17,9 +17,10 @@ import { buildApplication, verifyApplicationSource } from './build.mjs';
 import { applyFlagDecisions, readFlagDecisions } from './flag-decisions.mjs';
 import { deriveCandidateContract } from './candidate-contract.mjs';
 import { preparePortableMigration, runPortableMigration, verifyUnchangedSchema, sourceMigrationProfile } from './migration.mjs';
-import { runPortableBackup } from './backup.mjs';
+import { runPortableBackup, restorePortableArchive } from './backup.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
+import { reconcileArchivedBackup } from './archived-backup-recovery.mjs';
 import { reconcileCommittedRelease } from './migration-recovery.mjs';
 import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff, settleOwnHealth } from './handoff-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
@@ -168,11 +169,23 @@ export async function main(args = process.argv.slice(2)) {
         decisions: readFlagDecisions({ sourceRoot: SOURCE, sourceSha: request.sourceSha }) });
       let recovery, migrationRecovery;
       if (request.recoverRunId) {
-        if (independentRelease) check(['before_capture', 'before_dump'].includes(request.recoveryEvidence?.failureBoundary), 'release_backup_recovery_boundary_invalid');
+        if (independentRelease) check(['before_capture', 'before_dump', 'archive_unconfirmed'].includes(request.recoveryEvidence?.failureBoundary), 'release_backup_recovery_boundary_invalid');
         const previous = floor.state();
-        recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, database: config.database.name, role: connections.migrator.role, deployer, lease,
-          request: independentRelease ? { ...request, mode: 'backup', event: 'workflow_dispatch',
-            sourceSha: previous.sourceSha, sourceTree: previous.sourceTree } : request });
+        if (request.recoveryEvidence?.failureBoundary === 'archive_unconfirmed') {
+          recovery = await reconcileArchivedBackup({ floor, pool: pools.migrator, database: config.database.name,
+            role: connections.migrator.role, deployer, lease, request,
+            restoreArchive: async ({ intent, expected }) => restorePortableArchive({ intent, expected,
+              database: config.database.name, environment: config.fixed.environment,
+              workRoot: await directory('reconcile-archive'), binDirectory: BIN, lease,
+              transport: createCloudflareRecoveryTransport({ accountId: config.accountId, target: config.target,
+                mediaBucket: config.mediaBucket, backupBucket: config.backupBucket,
+                token: credentials.cloudflareApiToken, signal: lease.signal }),
+              verifyRetainedFloor: (pool, options) => floor.verifyDatabase(pool, options) }) });
+        } else {
+          recovery = await reconcileFailedBackup({ floor, pool: pools.migrator, database: config.database.name, role: connections.migrator.role, deployer, lease,
+            request: independentRelease ? { ...request, mode: 'backup', event: 'workflow_dispatch',
+              sourceSha: previous.sourceSha, sourceTree: previous.sourceTree } : request });
+        }
       }
       // Close only the original run's stages; this run then verifies the
       // committed schema read-only and deploys through its own new journal entry.
@@ -206,7 +219,8 @@ export async function main(args = process.argv.slice(2)) {
       if (!independentRelease) await floor.begin(request, { sourceSha: request.sourceSha, sourceTree: request.sourceTree,
         schemaLedger: plan.afterLedger, bindingsSha256: built.bindingsSha256 });
       return { leaseHeld: true, sourceCompatible: true, retainedFloorVerified: true, flagsPreserved: true,
-        previousSourceSha: before.sourceSha, flagChanges: built.flagChanges, ...(migrationRecovery ? { migrationRecovery } : {}) };
+        previousSourceSha: before.sourceSha, flagChanges: built.flagChanges, ...(recovery ? { backupRecovery: recovery } : {}),
+        ...(migrationRecovery ? { migrationRecovery } : {}) };
     });
     if (isHandoff) {
       await phase('handoff', async () => {
