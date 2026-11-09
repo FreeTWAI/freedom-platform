@@ -1801,8 +1801,25 @@ test('leaving fullscreen before starting is respected through a zero-photo retry
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
 });
 
-test('fallback keeps keyboard focus inside game, result and replay', async ({page}) => {
+test('fallback keeps keyboard focus inside game, result and replay', async ({page},testInfo) => {
   test.setTimeout(120_000);
+  const focusObservations:unknown[]=[];let checkpoint='open-game',failed=false;
+  async function observeFocus(label:string){
+    checkpoint=label;
+    focusObservations.push({checkpoint,...await page.evaluate(()=>{
+      const share=document.querySelector('[data-daily-result-share]'),owner=document.querySelector('.fullscreen-game'),active=document.activeElement;
+      const describe=(el:Element|null)=>{
+        if(!el)return null;const style=getComputedStyle(el),r=el.getBoundingClientRect();
+        return {tag:el.tagName,name:el.getAttribute('aria-label')??el.textContent?.trim().slice(0,100),connected:el.isConnected,
+          tabIndex:el instanceof HTMLElement?el.tabIndex:null,disabled:el.matches(':disabled'),inert:!!el.closest('[inert]'),
+          display:style.display,visibility:style.visibility,bounds:{x:r.x,y:r.y,width:r.width,height:r.height}};
+      };
+      return {documentHasFocus:document.hasFocus(),active:describe(active),insideShare:!!share?.contains(active),insideOwner:!!owner?.contains(active),
+        shareOpen:share instanceof HTMLDialogElement&&share.open,modal:!!share?.matches(':modal'),
+        controls:[...share?.querySelectorAll('a[href],summary,button,input,select,textarea,[tabindex]')??[]].map(describe)};
+    })});
+  }
+  try{
   await page.addInitScript(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
   await openGame(page,'photo');
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
@@ -1821,27 +1838,37 @@ test('fallback keeps keyboard focus inside game, result and replay', async ({pag
   const share=page.getByRole('dialog',{name:'分享這局成果',exact:true});
   await expect(share).toBeHidden();
   await expect(dialog.getByRole('button',{name:'回遊樂場',exact:true})).toHaveCount(0);
-  await last.focus(); await page.keyboard.press('Tab');
+  await last.focus(); await page.keyboard.press('Tab');await observeFocus('outer-forward-wrap');
   await expect(dialog.getByRole('button',{name:'退出全螢幕'})).toBeFocused();
-  await page.keyboard.press('Shift+Tab'); await expect(last).toBeFocused();
+  await page.keyboard.press('Shift+Tab');await observeFocus('outer-reverse-wrap');await expect(last).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(share).toBeVisible();
   expect(await share.evaluate(el=>el.matches(':modal'))).toBe(true);
   const close=share.getByRole('button',{name:'關閉分享',exact:true});
   const back=share.getByRole('button',{name:'回遊樂場',exact:true});
-  await expect(close).toBeFocused();
-  await back.focus(); await page.keyboard.press('Tab'); await expect(close).toBeFocused();
-  await page.keyboard.press('Shift+Tab'); await expect(back).toBeFocused();
+  await observeFocus('inner-initial-focus');await expect(close).toBeFocused();
+  await back.focus();await observeFocus('before-inner-forward-wrap');
+  await page.keyboard.press('Tab');await observeFocus('after-inner-forward-wrap');await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');await observeFocus('after-inner-reverse-wrap');await expect(back).toBeFocused();
   await page.keyboard.press('Escape');
+  await observeFocus('inner-escape-return');
   await expect(share).toBeHidden(); await expect(last).toBeFocused();
   await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');await observeFocus('outer-escape');
   await expect(dialog).toHaveCount(0);
   await expect(result).toBeVisible();
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
   await page.getByRole('button',{name:'同一題再來一次'}).click();
+  await observeFocus('replay-focus');
   await expect(page.locator('.fw-arcade-board')).toBeFocused();
   expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  checkpoint='complete';
+  }catch(error){failed=true;throw error;}finally{
+    let observationError:string|undefined;
+    try{await observeFocus(`${checkpoint}:finally`);}catch(error){observationError=String(error);}
+    try{await testInfo.attach('fallback-result-focus.json',{body:JSON.stringify({checkpoint,focusObservations,observationError}),contentType:'application/json'});}
+    catch(error){if(!failed)throw error;}
+  }
 });
 
 
@@ -2389,14 +2416,25 @@ async function holidayControlHit(control:ReturnType<Page['locator']>){
 }
 // Range rectangles conservatively include font ascent/descent, unlike client
 // boxes or line-height alone. Inspect visible game labels and symbols, including
-// aria-hidden visual icons; the separate 1px accessibility-only HUD descriptions
-// are not painted labels and are deliberately outside this selector contract.
+// aria-hidden visual icons. Responsive HUD/live descriptions are checked when
+// painted; only their explicit non-painted/accessibility-only styles are excluded.
 function partyPaintedContentFailures(root:Element){
   const bad:string[]=[],safe=root.getBoundingClientRect();
   const contains=(a:DOMRect,b:DOMRect)=>b.left>=a.left-1&&b.top>=a.top-1&&b.right<=a.right+1&&b.bottom<=a.bottom+1;
   const selectors='.fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button,.pt-holiday-heading h1,.pt-scoreboard strong,.pt-scoreboard strong>span,.pt-target-label,.pt-hole-controls button,.pt-chair-controls button,.pt-tofu-controls button,.pt-tools button,.pt-feedback';
-  for(const el of root.querySelectorAll<HTMLElement>(selectors)){
-    const box=el.getBoundingClientRect(),name=el.getAttribute('aria-label')??el.textContent;
+  const responsiveLabels='.pt-scoreboard small,.pt-live-label';
+  for(const el of root.querySelectorAll<HTMLElement>(`${selectors},${responsiveLabels}`)){
+    const box=el.getBoundingClientRect(),name=el.getAttribute('aria-label')??el.textContent,responsiveLabel=el.matches(responsiveLabels);
+    if(responsiveLabel){
+      const css=getComputedStyle(el);
+      // These labels switch between visible text and a specific sr-only pattern.
+      // Do not use zero geometry or overflow clipping as a visibility exemption.
+      let notPainted=css.visibility==='hidden'||css.visibility==='collapse';
+      for(let parent:Element|null=el;parent&&root.contains(parent);parent=parent.parentElement)if(getComputedStyle(parent).display==='none')notPainted=true;
+      if(notPainted)continue;
+      if(css.position==='absolute'&&css.width==='1px'&&css.height==='1px'&&css.overflowX==='hidden'&&css.overflowY==='hidden'&&/^inset\(50%(?: 50%){0,3}\)$/.test(css.clipPath)&&css.whiteSpace==='nowrap')continue;
+      if(css.clipPath!=='none')bad.push(`painted label uses clipping: ${name}`);
+    }
     if(!el.checkVisibility()||box.width<=0||box.height<=0){bad.push(`unpainted required content: ${name}`);continue;}
     const ranges:DOMRect[]=[];
     const text=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
@@ -2412,6 +2450,7 @@ function partyPaintedContentFailures(root:Element){
       // nearest actual ancestor box rather than treating its 0x0 rect as paint.
       for(let parent=el.parentElement;parent&&root.contains(parent);parent=parent.parentElement){
         const css=getComputedStyle(parent);if(css.display==='contents')continue;
+        if(responsiveLabel&&css.clipPath!=='none')bad.push(`painted label clipped by ancestor shape: ${name}`);
         const b=parent.getBoundingClientRect(),clipX=/(hidden|clip|auto|scroll)/.test(css.overflowX),clipY=/(hidden|clip|auto|scroll)/.test(css.overflowY);
         if((clipX&&(ink.left<b.left-1||ink.right>b.right+1))||(clipY&&(ink.top<b.top-1||ink.bottom>b.bottom+1)))bad.push(`painted content clipped by ancestor: ${name}`);
       }
@@ -2446,7 +2485,7 @@ async function partyScrollPaintedStageIntoView(stage:ReturnType<Page['locator']>
   });
 }
 test('PT-BOUNDS: painted content detects glyph and ancestor clipping without treating contents wrappers as paint',async({page})=>{
-  await page.setContent(`<div data-game-stage style="width:320px;height:160px"><section class="pt-holiday-stage" style="display:contents"><div class="pt-tools"><button style="display:grid;place-items:center;width:80px;height:64px;padding:0;font:40px/1.4 system-ui"><span aria-hidden="true">動</span></button></div><div class="pt-scoreboard"><small style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">本局得分</small><strong style="display:block;font:18px/1.4 system-ui">0<span>分</span></strong></div></section></div>`);
+  await page.setContent(`<div data-game-stage style="width:320px;height:160px"><section class="pt-holiday-stage" style="display:contents"><div class="pt-tools"><button style="display:grid;place-items:center;width:80px;height:64px;padding:0;font:40px/1.4 system-ui"><span aria-hidden="true">動</span></button></div><div class="pt-scoreboard"><small style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">本局得分</small><strong style="display:block;font:18px/1.4 system-ui">0<span>分</span></strong></div></section></div>`);
   const stage=page.locator('[data-game-stage]'),button=stage.locator('button');
   expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
   await button.evaluate(el=>{el.style.height='16px';el.style.overflow='hidden';});
@@ -2456,6 +2495,97 @@ test('PT-BOUNDS: painted content detects glyph and ancestor clipping without tre
   await button.evaluate(el=>{el.style.width='80px';});
   await stage.locator('.pt-tools').evaluate(el=>{el.style.height='16px';el.style.overflow='hidden';});
   expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content clipped by ancestor:'))).toBe(true);
+});
+for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS: ${selector} checks visible text without mistaking responsive hidden labels for clipping`,async({page})=>{
+  const label=selector.endsWith('small')?'<div class="pt-scoreboard"><small>本局得分</small></div>':'<p class="pt-live-label">假日 3</p>';
+  await page.setContent(`<style>small,.pt-live-label{display:block;width:160px;height:40px;padding:0;margin:0;font:20px/1.4 system-ui}</style><div data-game-stage style="width:320px;height:240px"><section style="display:contents"><div data-label-clip style="width:240px;height:180px">${label}</div></section></div>`);
+  const stage=page.locator('[data-game-stage]'),text=stage.locator(selector),parent=stage.locator('[data-label-clip]');
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+  await text.evaluate(el=>{el.style.height='8px';el.style.overflow='hidden';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content outside owner:'))).toBe(true);
+  await text.evaluate(el=>{el.style.height='40px';el.style.width='8px';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content outside owner:'))).toBe(true);
+  await text.evaluate(el=>{el.style.width='160px';el.style.height='0';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('unpainted required content:'))).toBe(true);
+  await text.evaluate(el=>{el.style.height='40px';el.style.overflow='visible';});
+  await parent.evaluate(el=>{el.style.height='8px';el.style.overflow='hidden';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content clipped by ancestor:'))).toBe(true);
+  await parent.evaluate(el=>{el.style.height='180px';el.style.overflow='visible';});
+  await text.evaluate(el=>{el.style.display='none';});
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+  await text.evaluate(el=>{el.style.display='block';});
+  await parent.evaluate(el=>{el.style.display='none';});
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+  await parent.evaluate(el=>{el.style.display='block';el.style.visibility='hidden';});
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+  // A visible descendant can override inherited visibility:hidden and must be checked.
+  await text.evaluate(el=>{el.style.visibility='visible';el.style.width='8px';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content outside owner:'))).toBe(true);
+  await text.evaluate(el=>{el.style.width='160px';el.style.clipPath='inset(25%)';});
+  await parent.evaluate(el=>{el.style.visibility='visible';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted label uses clipping:'))).toBe(true);
+  await text.evaluate(el=>{el.style.clipPath='none';});
+  await parent.evaluate(el=>{el.style.clipPath='inset(25%)';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted label clipped by ancestor shape:'))).toBe(true);
+  await parent.evaluate(el=>{el.style.clipPath='none';});
+  await text.evaluate(el=>{el.style.cssText='position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap';});
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+  await text.evaluate(el=>{el.style.clipPath='inset(25%)';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted label uses clipping:'))).toBe(true);
+});
+test('PT-HOLIDAY-SCENE: compact enlarged HUD and two-line feedback retain every reachable value and target',async({page})=>{
+  // Layout-only fixture with the real shell/theme/Party CSS, not a renderer or
+  // controller acceptance claim. Existing native/light journeys remain intact.
+  const css=['arcade.css','fullscreen-game.css','toy-theme.css','illustration-theme.css','toy-console.css','shotengai.css','party/party.css'].map(path=>readFileSync(new URL(`../../apps/portal-web/src/games/${path}`,import.meta.url),'utf8')).join('\n');
+  let earned=startParty(newParty('holiday',42));const samples=[[0,24,0]];
+  for(let round=0;round<20;round++){const at=round*PT.holidayRoundMs+250;while(earned.elapsed<at)earned=advanceParty(earned,at-earned.elapsed);earned=actParty(earned,{kind:'pick',round,hole:holidayTargets(42,round).good});samples.push([earned.score,Math.ceil((PT.holidayMs-earned.elapsed)/1000),earned.bestCombo]);}
+  expect(earned.score).toBe(5100);expect(earned.bestCombo).toBe(20);expect(samples).toContainEqual([2100,13,10]);expect(samples).toContainEqual([3000,10,13]);
+  const score=(label:string,value:number,unit:string)=>`<div><small>${label}</small><strong>${value}<span>${unit}</span></strong></div>`;
+  const controls=Array.from({length:6},(_,i)=>`<button class="${i===0?'pt-good':i===1?'pt-boss':''}"><b>${i+1}</b><span class="pt-target-label">${i===0?'休':i===1?'會':'空'}</span></button>`).join('');
+  const tools=['Ⅱ','↻','?',null,'動'].map((text,i)=>`<button class="fw-arcade-secondary" aria-label="fixture tool ${i}"${i>=3?' aria-pressed="true"':''}>${text===null?'<svg aria-hidden="true" viewBox="0 0 24 24" width="1em" height="1em"><path d="M4 9h4l5-4v14l-5-4H4z"/></svg>':`<span aria-hidden="true">${text}</span>`}</button>`).join('');
+  await page.setViewportSize({width:320,height:568});
+  for(const scale of [1,2]){
+    await page.setContent(`<style>body{margin:0}:root{text-autospace:normal}${css}</style><div class="fw-arcade-root fw-arcade-toy-console fw-arcade-shotengai"><div data-game-stage class="fullscreen-game fullscreen-game--holiday fullscreen-game--viewport" style="--holiday-safe-top:12px;--holiday-safe-right:16px;--holiday-safe-bottom:18px;--holiday-safe-left:14px"><div class="fullscreen-game__bar"><button class="fullscreen-game__button" aria-label="fixture fullscreen"><span>↙</span></button><button class="fullscreen-game__button"><span>↗</span></button></div><section class="pt-root pt-holiday pt-holiday-stage pt-holiday-composition" data-party-state="playing"><header class="pt-holiday-heading"><h1>假日保衛戰</h1><button class="fw-arcade-secondary">↩</button></header><div class="pt-scoreboard">${score('本局得分',0,'分')}${score('剩餘時間',24,'秒')}${score('最長連擊',0,'連')}</div><div class="pt-holiday-field pt-play-area" data-light="false"><div class="pt-holiday-world"><div class="pt-canvas" tabindex="0"></div></div><div class="pt-controls"><div class="pt-hole-controls">${controls}</div></div><div class="pt-holiday-footer"><div class="pt-holiday-feedback"><p class="pt-live-label">已守住 20 個假日 · 20 / 20 波</p><p class="pt-feedback">假日搶救成功！20 連擊！</p></div><div class="pt-holiday-tools-viewport"><div class="pt-tools">${tools}</div></div></div></div></section></div></div>`);
+    const stage=page.locator('[data-game-stage]'),hud=stage.locator('.pt-scoreboard');
+    await stage.evaluate((root,factor)=>{
+      const styles=[root,...root.querySelectorAll('*')].filter((n):n is HTMLElement=>n instanceof HTMLElement).map(n=>({n,font:parseFloat(getComputedStyle(n).fontSize),line:parseFloat(getComputedStyle(n).lineHeight)}));
+      for(const {n,font,line} of styles){n.style.fontSize=`${font*factor}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*factor}px`;}
+    },scale);
+    const values=async(numbers:number[])=>hud.locator('strong').evaluateAll((els,values)=>els.forEach((el,i)=>{el.firstChild!.textContent=String(values[i]);}),numbers);
+    for(const mode of ['native','viewport','normal']){
+      await stage.evaluate((el,mode)=>el.classList.toggle('fullscreen-game--viewport',mode==='viewport'),mode);
+      if(mode==='native'){
+        await stage.locator('[aria-label="fixture fullscreen"]').evaluate(button=>button.addEventListener('click',()=>void button.closest<HTMLElement>('[data-game-stage]')!.requestFullscreen(),{once:true}));
+        await stage.locator('[aria-label="fixture fullscreen"]').click();await expect.poll(()=>stage.evaluate(el=>document.fullscreenElement===el)).toBe(true);
+      }
+      let initialHeight=0;
+      for(const numbers of samples){
+        await values(numbers);
+        const bounds=await hud.evaluate(el=>{const row=el.getBoundingClientRect(),boxes=[...el.querySelectorAll<HTMLElement>('strong')].map(value=>({width:value.clientWidth,scrollWidth:value.scrollWidth,height:value.clientHeight,scrollHeight:value.scrollHeight,rect:value.getBoundingClientRect().toJSON()}));return {height:row.height,inside:boxes.every(({rect})=>rect.left>=row.left-1&&rect.right<=row.right+1),boxes};});
+        expect(bounds.inside).toBe(true);for(const b of bounds.boxes){expect(b.scrollWidth).toBeLessThanOrEqual(b.width+1);expect(b.scrollHeight).toBeLessThanOrEqual(b.height+1);}
+        expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+        if(initialHeight)expect(bounds.height).toBeCloseTo(initialHeight,2);else initialHeight=bounds.height;
+      }
+      const world=(await stage.locator('.pt-canvas').boundingBox())!;expect(world.width).toBeGreaterThanOrEqual(128);expect(world.height).toBeGreaterThanOrEqual(96);expect(world.width/world.height).toBeCloseTo(4/3,2);
+      const feedback=await stage.locator('.pt-feedback').evaluate(el=>({height:el.clientHeight,line:parseFloat(getComputedStyle(el).lineHeight)}));if(scale===2)expect(feedback.height).toBeGreaterThanOrEqual(2*feedback.line-1);
+      for(const button of await stage.locator('.pt-hole-controls button,.pt-tools button').all())await holidayControlHit(button);
+      // Covered states keep full notices in their panels and tools outside them.
+      for(const [state,notice] of [['ready','葉子是休假，領帶是開會。'],['paused','看完玩法後，按繼續回到這一局。'],['paused','場景暫時沒有回應，已幫你暫停。請重建場景或改用輕量玩法，這局進度會保留。'],['done','這局已完成，圖片還沒產生。可以重試查看成果。']]){
+        await stage.evaluate((root,{state,notice,scale})=>{root.querySelector<HTMLElement>('.pt-holiday-stage')!.dataset.partyState=state;root.querySelector('.pt-feedback')!.textContent=notice;const overlay=document.createElement('div');overlay.className='pt-holiday-overlay';const panel=document.createElement('div');panel.className='pt-panel';const text=document.createElement('p');text.textContent=notice;panel.append(text);overlay.append(panel);root.querySelector('.pt-holiday-field')!.append(overlay);const css=getComputedStyle(text);text.style.fontSize=`${parseFloat(css.fontSize)*scale}px`;text.style.lineHeight=`${parseFloat(css.lineHeight)*scale}px`;},{state,notice,scale});
+        await partyCoveredToolsBounds(page);expect((await stage.locator('.pt-canvas').boundingBox())!.height).toBeGreaterThanOrEqual(96);
+        await stage.locator('.pt-holiday-overlay').evaluate(el=>el.remove());
+      }
+      await stage.evaluate(root=>{root.querySelector<HTMLElement>('.pt-holiday-stage')!.dataset.partyState='playing';root.querySelector('.pt-feedback')!.textContent='假日搶救成功！20 連擊！';});
+      if(scale===2){
+        // Restore the exact former allocation/inline units: this must overflow.
+        await values([0,24,0]);await hud.evaluate(el=>{el.style.gridTemplateColumns='minmax(0,1fr) minmax(0,.75fr) minmax(0,1.25fr)';for(const value of el.querySelectorAll<HTMLElement>('strong'))value.style.display='block';for(const unit of el.querySelectorAll<HTMLElement>('strong>span'))unit.style.marginLeft='3px';});
+        expect(await hud.locator('strong').nth(1).evaluate(el=>el.scrollWidth>el.clientWidth+1)).toBe(true);
+        await hud.evaluate(el=>{el.style.removeProperty('grid-template-columns');for(const value of el.querySelectorAll<HTMLElement>('strong'))value.style.removeProperty('display');for(const unit of el.querySelectorAll<HTMLElement>('strong>span'))unit.style.removeProperty('margin-left');});
+        expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+      }
+      if(mode==='native')await page.evaluate(()=>document.exitFullscreen());
+    }
+  }
 });
 async function holidayStageBounds(page:Page,scale=1){
   const stage=page.locator('.fullscreen-game--holiday[data-game-stage]');

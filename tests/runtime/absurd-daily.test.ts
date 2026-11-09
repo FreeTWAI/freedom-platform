@@ -1744,3 +1744,33 @@ test('PT-BOUNDS: native and light world CSS fits exact 4:3 without a truncated w
  assert.equal((built.match(/height:min\(100cqh,75cqw\)/g)??[]).length,5,'minification retains exact height percentages');
  assert.doesNotMatch(built,/133\.333/);
 });
+
+for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS: ${selector} visibility exemptions retain clipping sensitivity (CPU geometry)`,()=>{
+ const source=readFileSync(new URL('../e2e/absurd-daily.spec.ts',import.meta.url),'utf8'),start=source.indexOf('function partyPaintedContentFailures('),end=source.indexOf('async function partyCoveredToolsBounds(',start);
+ assert.ok(start>=0&&end>start);
+ const rect=(left:number,top:number,width:number,height:number)=>({left,top,right:left+width,bottom:top+height,width,height,toJSON:()=>({left,top,width,height})});
+ const defaults={display:'block',position:'static',width:'160px',height:'40px',overflowX:'visible',overflowY:'visible',clipPath:'none',whiteSpace:'normal'};
+ const root:any={parentElement:null,style:{},box:rect(0,0,320,240)},parent:any={parentElement:root,style:{},box:rect(0,0,240,180)},label:any={parentElement:parent,style:{},box:rect(8,8,160,40),textContent:'visible label'};
+ const nodes=[root,parent,label];for(const node of nodes)node.getBoundingClientRect=()=>node.box;
+ root.contains=(node:any)=>nodes.includes(node);root.querySelectorAll=(query:string)=>query.split(',').includes(selector)?[label]:[];
+ label.matches=(query:string)=>query.split(',').includes(selector);label.getAttribute=()=>null;label.querySelectorAll=()=>[];label.checkVisibility=()=>!nodes.some(node=>node.style.display==='none');
+ const computed=(node:any)=>{let visibility='visible';for(let p=node;p;p=p.parentElement)if(p.style.visibility){visibility=p.style.visibility;break;}return {...defaults,...node.style,visibility};};
+ const document={createTreeWalker:()=>{let visited=false;return {currentNode:label,nextNode:()=>visited?false:(visited=true)};},createRange:()=>({selectNodeContents(){},getClientRects:()=>[rect(10,10,100,24)]})};
+ const inspect=runInNewContext(`(${stripTypeScriptTypes(source.slice(start,end))})`,{document,NodeFilter:{SHOW_TEXT:4},getComputedStyle:computed}) as (root:unknown)=>string[];
+ assert.equal(inspect(root).length,0);
+ label.box=rect(8,8,8,40);assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+ label.box=rect(8,8,160,8);assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+ label.box=rect(8,8,160,0);assert.ok(inspect(root).some(x=>x.startsWith('unpainted required content:')));
+ label.box=rect(8,8,160,40);parent.box=rect(0,0,240,8);parent.style.overflowY='hidden';assert.ok(inspect(root).some(x=>x.startsWith('painted content clipped by ancestor:')));
+ parent.box=rect(0,0,240,180);parent.style={};
+ label.style.display='none';assert.equal(inspect(root).length,0);label.style={};
+ parent.style.display='none';assert.equal(inspect(root).length,0);parent.style={visibility:'hidden'};
+ assert.equal(inspect(root).length,0);
+ label.style.visibility='visible';label.box=rect(8,8,8,40);assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+ label.box=rect(8,8,160,40);parent.style={};label.style={clipPath:'inset(25%)'};assert.ok(inspect(root).some(x=>x.startsWith('painted label uses clipping:')));
+ label.style={};parent.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted label clipped by ancestor shape:')));
+ parent.style={};label.box=rect(8,8,1,1);label.style={position:'absolute',width:'1px',height:'1px',overflowX:'hidden',overflowY:'hidden',clipPath:'inset(50%)',whiteSpace:'nowrap'};
+ assert.equal(inspect(root).length,0);
+ label.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted label uses clipping:')));
+ label.style.clipPath='inset(50%)';label.style.position='static';assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+});

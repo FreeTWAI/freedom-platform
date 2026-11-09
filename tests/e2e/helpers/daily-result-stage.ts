@@ -44,9 +44,8 @@ async function presentationIs(page:Page,mode:'normal'|'native'|'rejected'){
     }
 }
 
-// Snapshot-only paint suppression must not change the result's inline style,
-// accessibility visibility, focus, or layout. These observations describe the
-// real restored UI, not the temporary pixel reference.
+// Paint suppression must restore the exact inline style and preserve layout,
+// focus and accessibility visibility. Observe the real UI and temporary probe.
 function resultPresentation(el:Element){
     const nodes=[{node:el,kind:'result'},...[...el.querySelectorAll('.daily-result-summary,.daily-result-dock,.daily-result-actions > *')].map(node=>({node,kind:'paint'}))];
     for(let node=el.parentElement;node;node=node.parentElement)nodes.push({node,kind:'ancestor'});
@@ -54,38 +53,30 @@ function resultPresentation(el:Element){
         const style=getComputedStyle(node),rect=node.getBoundingClientRect();
         return {kind,tag:node.tagName,className:node.className,name:node.getAttribute('aria-label'),inlineStyle:node.getAttribute('style'),connected:node.isConnected,
             display:style.display,visibility:style.visibility,opacity:style.opacity,fontSize:style.fontSize,checkVisibility:node.checkVisibility(),
-            bounds:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},hidden:node.hasAttribute('hidden'),inert:!!node.closest('[inert]')};
+            bounds:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},hidden:node.hasAttribute('hidden'),inert:!!node.closest('[inert]'),disabled:node.matches(':disabled'),focused:node===document.activeElement};
     });
 }
 
-// Use an existing same-origin sheet: the product's style-src 'self' correctly
-// blocks screenshot({style}) because Playwright inserts an inline <style>.
-// Retain the exact CSSRule so cleanup cannot delete a neighboring rule.
-async function captureUncoveredStage(page:Page,host:Locator,result:Locator){
-    const suppression=await page.evaluateHandle(()=>{
-        const sheet=[...document.styleSheets].find(sheet=>sheet.href&&new URL(sheet.href).origin===location.origin&&!sheet.disabled);
-        if(!sheet)throw Error('No same-origin stylesheet for the paint reference');
-        const index=sheet.insertRule('[data-daily-result] { opacity: 0 !important; }',sheet.cssRules.length);
-        return {sheet,rule:sheet.cssRules[index]};
-    });
-    try{
-        await expect(result).toHaveCSS('opacity','0');
-        return await host.screenshot({animations:'disabled'});
-    }finally{
-        try{await suppression.evaluate(({sheet,rule})=>{
-            const index=[...sheet.cssRules].indexOf(rule);
-            if(index<0)throw Error('The owned paint-reference rule disappeared');
-            sheet.deleteRule(index);
-        });}finally{await suppression.dispose();}
-    }
+// The site's style-src 'self' blocks Playwright's injected screenshot <style>.
+// CSSOM property writes (also used for 200% text) do not create a stylesheet or
+// replace the style attribute string. Restore only the property's value/priority, never
+// setAttribute('style', ...). The reference is temporary and is not delivered.
+function suppressResultPaint(el:HTMLElement){
+    const original={value:el.style.getPropertyValue('opacity'),priority:el.style.getPropertyPriority('opacity'),hadStyle:el.hasAttribute('style')};
+    el.style.setProperty('opacity','0','important');return original;
 }
-
-// Delivered screenshots retain the earned result. Only the temporary reference
-// suppresses paint; the result's inline styles, layout and focus stay intact.
+function restoreResultPaint(el:HTMLElement,original:ReturnType<typeof suppressResultPaint>){
+    if(original.value)el.style.setProperty('opacity',original.value,original.priority);
+    else el.style.removeProperty('opacity');
+    if(!original.hadStyle&&el.style.length===0)el.removeAttribute('style');
+}
+// Every delivered PNG contains the unmodified earned result. The same frozen
+// stage supplies the reference; opacity leaves layout and visibility intact.
 async function stagePixels(page:Page,testInfo:TestInfo,game:DailyResultGame,prefix:string){
     const result=page.locator('[data-daily-result]'),host=page.locator('.fw-arcade-stage');
     const preCompleted=await result.evaluate(resultPresentation);
-    let before=preCompleted,after:typeof before|undefined,checkpoint='completed-capture',failed=false;
+    let before=preCompleted,after:typeof before|undefined,suppressedBefore:typeof before|undefined,suppressedAfter:typeof before|undefined,checkpoint='completed-capture',failed=false;
+    let restorationError:string|undefined,originalDeclaration:ReturnType<typeof suppressResultPaint>|undefined,restoredDeclaration:typeof originalDeclaration;
     try{
         await expect(result).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(result).toHaveCSS('background-image','none');
         const completed=await host.screenshot({animations:'disabled'});
@@ -103,8 +94,26 @@ async function stagePixels(page:Page,testInfo:TestInfo,game:DailyResultGame,pref
             expect(node.connected).toBe(true);expect(node.opacity).toBe('1');expect(node.visibility).toBe('visible');expect(node.checkVisibility).toBe(true);
             expect(node.bounds.width).toBeGreaterThan(0);expect(node.bounds.height).toBeGreaterThan(0);
         }
-        checkpoint='reference-capture';
-        const reference=await captureUncoveredStage(page,host,result);
+        checkpoint='reference-suppression';
+        const original=originalDeclaration=await result.evaluate(suppressResultPaint);
+        let reference:Buffer,referenceFailed=false;
+        try{
+            suppressedBefore=await result.evaluate(resultPresentation);
+            // Reject a CSP-blocked/no-op probe before capture. Only root paint
+            // and its inline opacity declaration may differ from the baseline.
+            expect(suppressedBefore[0].opacity).toBe('0');
+            expect(suppressedBefore.map((node,i)=>i?node:{...node,opacity:before[0].opacity,inlineStyle:before[0].inlineStyle})).toEqual(before);
+            checkpoint='reference-capture';reference=await host.screenshot({animations:'disabled'});
+            checkpoint='reference-presentation';suppressedAfter=await result.evaluate(resultPresentation);
+            expect(suppressedAfter).toEqual(suppressedBefore);
+        }catch(error){referenceFailed=true;throw error;}finally{
+            try{
+                await result.evaluate(restoreResultPaint,original);
+                restoredDeclaration=await result.evaluate(el=>{const node=el as HTMLElement;return {value:node.style.getPropertyValue('opacity'),priority:node.style.getPropertyPriority('opacity'),hadStyle:node.hasAttribute('style')};});
+                expect(restoredDeclaration).toEqual(original);
+            }
+            catch(error){restorationError=String(error);if(!referenceFailed)throw error;}
+        }
         checkpoint='restored-presentation';after=await result.evaluate(resultPresentation);
         expect(await result.getAttribute('style')).toBe(before[0].inlineStyle);expect(after).toEqual(before);
         await expect(result).toHaveCSS('opacity','1');await expect(result).toHaveCSS('visibility','visible');await expect(result).toBeVisible();
@@ -121,14 +130,14 @@ async function stagePixels(page:Page,testInfo:TestInfo,game:DailyResultGame,pref
         const changed=pixels-unchanged,fraction=unchanged/pixels;
         expect(changed,'the reference must actually remove painted result pixels').toBeGreaterThan(0);
         expect(fraction).toBeGreaterThanOrEqual(.5);
-        await testInfo.attach(`${prefix}-stage-exposure.json`,{body:JSON.stringify({unchangedPixels:unchanged,changedPixels:changed,totalPixels:pixels,exposedFraction:fraction,tolerance:2,minimumFraction:.5,reference:'same frozen stage; snapshot-only opacity stylesheet removed; original inline styles, computed paint and actual controls checked'}),contentType:'application/json'});
+        await testInfo.attach(`${prefix}-stage-exposure.json`,{body:JSON.stringify({unchangedPixels:unchanged,changedPixels:changed,totalPixels:pixels,exposedFraction:fraction,tolerance:2,minimumFraction:.5,reference:'same frozen stage; CSSOM opacity property restored; suppression verified; original inline styles, computed paint and actual controls checked'}),contentType:'application/json'});
         checkpoint='complete';
     }catch(error){failed=true;throw error;}finally{
         // Keep this small record embedded even when the bounded CI archive has
         // no room for a later trace or failure screenshot. Never mask a failure.
         let observationError:string|undefined;
         try{after=await result.evaluate(resultPresentation);}catch(error){observationError=String(error);}
-        try{await testInfo.attach(`${prefix}-result-restoration.json`,{body:JSON.stringify({checkpoint,preCompleted,before,after,observationError}),contentType:'application/json'});}
+        try{await testInfo.attach(`${prefix}-result-restoration.json`,{body:JSON.stringify({checkpoint,preCompleted,before,suppressedBefore,suppressedAfter,after,originalDeclaration,restoredDeclaration,restorationError,observationError}),contentType:'application/json'});}
         catch(error){if(!failed)throw error;}
     }
 }
