@@ -243,7 +243,17 @@ Worker version ID／source／bindings，並核對完整 ledger／政策、GC OFF
 成功仍是正常五階段 `passed`，handoff 另保留 `leaseLoss` 與 `leaseRecovered: { cause, attempts }`，
 可沿既有 staging 收據准入正式發布。任一差異、鎖持續 busy 或 migration／deploy 失去租約都不自動收尾；
 不重做 migration、部署、備份或旗標變更，保留 `release_lease_lost` 並沿下列 hosted 入口對帳。
-若 handoff 已寫入才失去回覆／清理失敗，也留給 hosted 入口確認，不在同 run 重送。
+若 handoff 是否寫入仍未知，仍留給 hosted 入口確認，不在同 run 重送。
+
+若本 run 的 `floor.passed('handoff')` 已成功返回並記住 final head，只有最後
+`lease.release()` 以 `release_lease_cleanup_failed` 失敗，另走獨立的同 run 唯讀復原。
+先銷毀失聯連線並更新連線池，最多三次取得新 lease（僅 busy 間隔兩秒）；讀回完全相同的
+原 request／final head、pending null、完整 DB／ledger／政策、GC OFF／零 fences／零其他
+發布或備份 session，以及已確認 Worker version／source／bindings。指定版本公開 health
+通過後再次核對完整狀態，正常釋放新 lease 才回傳正常 handoff `passed` 與上述租約診斷。
+此分支不追加 journal、不重做 SQL、部署或備份；未知 append、head 或 run 改變、鎖仍 busy、
+任何讀回／health／清理不符，都保留原 cleanup failure 供 hosted 對帳。heartbeat timeout 不變。
+此新增分支目前僅經本機 fixtures 驗證，尚未由 hosted 實際發布驗收；也未定位歷史 heartbeat timeout 根因。
 
 租約每 20 秒以單一查詢核對 DB／pid／登入角色及實際持有的 advisory lock，heartbeat 的
 client timeout 為 30 秒，容忍多秒同步工作；連線 error／end、身分改變或缺少鎖仍立即中止。

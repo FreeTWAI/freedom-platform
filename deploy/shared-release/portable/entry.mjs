@@ -22,7 +22,7 @@ import { backupExpectation } from './backup-expectation.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from './backup-recovery.mjs';
 import { reconcileArchivedBackup } from './archived-backup-recovery.mjs';
 import { reconcileCommittedRelease } from './migration-recovery.mjs';
-import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff, settleOwnHealth } from './handoff-recovery.mjs';
+import { inspectReleaseHandoff, completeReleaseHandoff, settleOwnHandoff, settleOwnConfirmedHandoff, settleOwnHealth } from './handoff-recovery.mjs';
 import { verifyPublicSmoke } from './smoke.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -289,13 +289,16 @@ export async function main(args = process.argv.slice(2)) {
     if (!independentRelease) await phase('backup-after', async () => (await backup('backup-after', request.sourceSha)).proof);
     await phase('handoff', async () => {
       const expectedHead = floor.head();
+      let confirmedHead;
       try {
         await floor.assertCurrent(); lease.assertHeld();
         await floor.passed('handoff', { cleanupVerified: true, ...(independentRelease ? { migrationVerified: true } : { schedule: request.scheduleEvidence }) });
+        confirmedHead = floor.head();
         await lease.release(); lease = null;
         return { ...(independentRelease ? {} : { scheduledBackupsVerified: true }), cleanupVerified: true, leaseReleased: true, retainedFloorAdvanced: true };
       } catch (error) {
-        return settleOwnHandoff({ request, phases: result.phases.slice(0, -1), lease, expectedHead, error,
+        const settle = confirmedHead === undefined ? settleOwnHandoff : settleOwnConfirmedHandoff;
+        return settle({ request, phases: result.phases.slice(0, -1), lease, expectedHead: confirmedHead ?? expectedHead, error,
           signal: controller.signal, acquire, renewConnections, reopen: held => reopen(held, 'handoff-control-intents'),
           verifyHealth: held => waitForPublicRelease({ target: config.target, sourceSha: request.sourceSha, access, signal: held.signal,
             record: value => save(join(WORK, `handoff-health-${value.attempt}.json`), value) }) });
