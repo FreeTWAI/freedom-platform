@@ -1,5 +1,9 @@
 # 實際檔案對照與共享修改責任
 
+## 2026-11-08 架構調整
+
+依本次維護者要求，各有效公會採獨立 Repo、啟動台建置與發布；[目前邊界與移轉方式](../../../../modules/guild-workspace/repositories/README.md)承接本輪設計。中央保留會員、授權、資料與領域工具；新的公會 Repo 不建立重複 DB／會員／應用目錄。下方原 repository map 保留歷史規劃，與獨立公會呈現相關的單倉發布限制由本次設計取代。
+
 盤點 source：`567ae8d3849cfaa319b79c42d9c6c0a48d76f4a9`。KEEP/MODIFY 指**未來實作計畫**，本 PR 不改 runtime。NEW 路徑是提案，必須在實作時註冊 owner/deps/surfaces；GENERATED 只由 canonical generator 產生，不手改。
 
 | 責任 / SP | 已存在且已讀入口 | 未來修改/擴充；禁止事項 |

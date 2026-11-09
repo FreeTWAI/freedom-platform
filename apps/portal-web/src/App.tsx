@@ -48,7 +48,7 @@ import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './mo
 import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from './modules/public-post-return'
 import { CommunitySearch } from './modules/CommunitySearch'
-import { guildKeyFromHash } from './modules/guild-launchpad-route'
+import { guildKeyFromHash, guildActionFromHash } from './modules/guild-launchpad-route'
 import {ShareLauncher,SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
 import { setSharingDraftAccount } from './modules/authoring-drafts'
 import type { SessionPayload, TabId } from './types'
@@ -326,7 +326,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#tester-map'&&!testerLoginRequested)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#tester-map" onClick={event=>{event.preventDefault();beginTesterLogin();}}>{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap reportClient={client} onLogin={beginTesterLogin}/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>eventLogin()} onJoin={site?.registration_enabled?()=>eventLogin('register'):undefined}/>;
     const launchpadKey=guildKeyFromHash(locationHash);
-    if(!googleCallback&&!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
+    if(!googleCallback&&!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} entryAction={guildActionFromHash(locationHash)} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
     if(!resetToken&&launchpadKey&&!siteLoaded)return <div className="app-frame"><div className="centered"><p className="muted" role="status">正在確認公開頁面…</p></div></div>;
     return (
       <div className="app-frame">
