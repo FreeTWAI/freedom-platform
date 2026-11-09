@@ -28,3 +28,40 @@ for(const width of [320,1280])test(`offline ${width}px has one announcement at t
   }finally{await context.setOffline(false);}
   await expect(page.locator('.app-connection-status')).toHaveCount(0);await expect(page.locator('.request-feedback')).toHaveCount(0);
 });
+
+// Deliberately omit online/offline notifications to model restoration after a
+// missed event. These synthetic signals are not physical iOS/PWA suspension.
+for(const width of [320,1280])for(const event of ['focus','pageshow','visibilitychange'] as const)test(`connection status reconciles simulated missed events on ${event} at ${width}px`,async({page},info)=>{
+  await page.setViewportSize({width,height:844});
+  await page.addInitScript(()=>{
+    const state={online:true,visible:true};
+    Object.assign(window,{__connectionResume:state});
+    Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>state.online});
+    Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>state.visible?'visible':'hidden'});
+  });
+  const writes:string[]=[];page.on('request',request=>{if(!['GET','HEAD','OPTIONS'].includes(request.method()))writes.push(request.method()+' '+new URL(request.url()).pathname);});
+  await page.goto('/');const email=page.getByLabel('電子郵件',{exact:true}),password=page.getByLabel('密碼',{exact:true});
+  await email.fill('resume-draft@example.test');await password.fill('synthetic-unsent-draft');
+  const banner=page.locator('.app-connection-status');await expect(banner).toHaveCount(0);
+  async function resume(online:boolean,visible=true){
+    await page.evaluate(({event,online,visible})=>{
+      const state=(window as typeof window&{__connectionResume:{online:boolean;visible:boolean}}).__connectionResume;
+      state.online=online;state.visible=visible;
+      (event==='visibilitychange'?document:window).dispatchEvent(new Event(event));
+    },{event,online,visible});
+  }
+  for(const theme of ['light','dark','versefolk']){
+    await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+    await resume(false,false);await expect(banner).toHaveCount(0);
+    await resume(false);await expect(banner).toBeVisible();await resume(false);await expect(banner).toHaveCount(1);
+    await expect(banner).toHaveAttribute('aria-live','polite');await expect(banner).toHaveAttribute('aria-atomic','true');
+    await expect.poll(()=>page.evaluate(()=>Number.parseFloat(document.documentElement.style.getPropertyValue('--connection-status-height')))).toBeGreaterThan(0);
+    await expect(page.locator('html')).toHaveAttribute('data-device-offline','true');
+    expect(await banner.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:info.outputPath(`connection-resume-${event}-${theme}-${width}.png`)});
+    await resume(true);await expect(banner).toHaveCount(0);await resume(true);await expect(banner).toHaveCount(0);
+    await expect.poll(()=>page.evaluate(()=>({height:document.documentElement.style.getPropertyValue('--connection-status-height'),offline:document.documentElement.dataset.deviceOffline??null}))).toEqual({height:'',offline:null});
+    await expect(email).toHaveValue('resume-draft@example.test');await expect(password).toHaveValue('synthetic-unsent-draft');expect(writes).toEqual([]);
+  }
+});
