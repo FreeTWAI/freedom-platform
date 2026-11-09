@@ -108,6 +108,10 @@ export function validateOperatorResult(value, admission, installation, requestDi
       && preflight.retainedFloorVerified === true && preflight.flagsPreserved === true
       && isSha(preflight.previousSourceSha), 'release_operator_preflight_incomplete');
     const recovered = preflight.migrationRecovery;
+    const backupRecovered = preflight.backupRecovery;
+    if (admission.recoverRunId) requireRelease(backupRecovered?.previousRunId === admission.recoverRunId
+      && ['abandoned_after_readback', 'archive_restored_after_readback'].includes(backupRecovered.status),
+    'release_backup_recovery_binding_invalid');
     if (admission.recoverMigrationRunId) requireRelease(recovered?.previousRunId === admission.recoverMigrationRunId
       && Number.isSafeInteger(recovered.previousRunAttempt) && recovered.previousRunAttempt > 0
       && recovered.status === 'abandoned_after_readback' && schema.outcome === 'unchanged', 'release_migration_recovery_incomplete');
@@ -120,6 +124,8 @@ export function validateOperatorResult(value, admission, installation, requestDi
     requireRelease(handoff.cleanupVerified === true && handoff.leaseReleased === true
       && handoff.retainedFloorAdvanced === true, 'release_handoff_incomplete');
     return value.phases.map(phase => ({ name: phase.name, status: 'passed', ...publicLeaseDiagnostics(phase, admission),
+      ...(phase.name === 'preflight' && admission.recoverRunId ? { backupRecovery: {
+        previousRunId: backupRecovered.previousRunId, status: backupRecovered.status } } : {}),
       ...(phase.name === 'preflight' && admission.recoverMigrationRunId ? { migrationRecovery: { previousRunId: recovered.previousRunId,
         previousRunAttempt: recovered.previousRunAttempt, status: recovered.status } } : {}),
       ...(phase.name === 'deploy' && phase.flagChanges !== undefined ? { flagChanges: publicFlagChanges(phase.flagChanges) } : {}),

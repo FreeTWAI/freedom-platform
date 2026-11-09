@@ -12,7 +12,7 @@ import { withMemberScope } from '../../../packages/resource-scopes/index.ts';
 import { objectKey, writeVerifiedObject } from '../../../packages/asset-storage/index.ts';
 import { createR2ObjectStore } from '../../../packages/asset-storage/r2.ts';
 import { observeMediaGcState } from '../../../packages/media-migration/backup-gc-precondition.ts';
-import { runPortableBackup, observeBackupControl } from '../portable/backup.mjs';
+import { runPortableBackup, observeBackupControl, restorePortableArchive } from '../portable/backup.mjs';
 import { acquireReleaseLease } from '../portable/lease.mjs';
 import { createCloudflareRecoveryTransport } from '../portable/cloudflare.mjs';
 import { reconcileFailedBackup, adoptLegacyPredecessor } from '../portable/backup-recovery.mjs';
@@ -75,7 +75,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
     await asset(); await asset(true);
     lease = await acquireReleaseLease(pool, { database: source.databaseName, role: 'fp_fixture_migrator', heartbeatMs: 50 });
     const remote = join(root, 'synthetic-cloudflare'); await mkdir(remote, { mode: 0o700 });
-    let uploads = 0, restores = 0, late, mode = 'normal';
+    let uploads = 0, restores = 0, late, firstArchive, mode = 'normal';
     const fetchImpl = async (address, options) => {
       const url = new URL(address); assert.equal(url.origin, 'https://api.cloudflare.com');
       assert.equal(options.redirect, 'error');
@@ -117,6 +117,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
       // Fixture-only control ports. The installed entry supplies the R2 floor.
       async retainIntent(operation, value) {
         assert(['capture-policy', 'archive'].includes(operation)); assert.equal(value.automaticRetry, false);
+        if (operation === 'archive' && !firstArchive) firstArchive = structuredClone(value);
       },
       async verifyRetainedFloor(target) { assert.equal((await observeBackupControl(target)).ledgerSha256, expected.ledgerSha256); },
       execute: async (program, args, options) => {
@@ -265,7 +266,27 @@ export async function verifyBackup({ root, openCluster, execute }) {
     await adoptLegacyPredecessor({ ...recovery, request: { ...recovery.request, releaseKind: 'independent', mode: 'deploy' } });
     assert.equal(adopted, 1);
     assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, pinCount);
-    const remaining = (await readdir(root)).filter(name => /^(pg-|r2-)/.test(name));
+    const uploadsBeforeRecovery = uploads, restoresBeforeRecovery = restores;
+    const recoveryInput = { intent: firstArchive, expected, database: source.databaseName, environment: 'staging',
+      workRoot: root, binDirectory: '/usr/local/bin', lease, transport,
+      async verifyRetainedFloor(target) {
+        assert.equal((await observeBackupControl(target)).ledgerSha256, expected.ledgerSha256);
+      }, execute: async (program, args, options) => {
+        assert(!program.endsWith('/pg_dump'), 'archive recovery must not capture a new snapshot');
+        if (program.endsWith('/pg_restore')) restores++;
+        return execute(program, args, options);
+      } };
+    const recoveredArchive = await restorePortableArchive(recoveryInput);
+    assert.equal(recoveredArchive.setId, good.setId); assert.equal(recoveredArchive.archiveSha256, good.archiveSha256);
+    assert.equal(recoveredArchive.restore, 'database_and_objects_restored'); assert.equal(recoveredArchive.cleanupVerified, true);
+    assert.equal(recoveredArchive.exposure, 'quarantine'); assert.equal(uploads, uploadsBeforeRecovery);
+    assert.equal(restores, restoresBeforeRecovery + 1);
+    await assert.rejects(restorePortableArchive({ ...recoveryInput, expected: { ...expected, sourceSha: 'f'.repeat(40) } }),
+      { code: 'release_backup_control_mismatch' });
+    mode = 'corrupt'; await assert.rejects(restorePortableArchive(recoveryInput)); mode = 'normal';
+    assert.equal(restores, restoresBeforeRecovery + 1); assert.equal(uploads, uploadsBeforeRecovery);
+    assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, pinCount);
+    const remaining = (await readdir(root)).filter(name => /^(pg-|r2-|archive-r2-)/.test(name));
     assert.deepEqual(remaining, []); lease.assertHeld();
     await assertBackupReadOnly();
     return { backupRoleRemainsSelectOnly: true, maintenanceUsesNonSuperuserOwner: true, databaseAndNativeR2Restored: true, sameSnapshotExcludesLateMedia: true,
@@ -273,6 +294,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
       wrongPolicyRefused: true, committedPolicyResponseLossCleaned: true, sourcePinsRetained: true,
       failedBackupReadbackBeforeAbandon: true, beginOnlyReadbackBeforeAbandon: true, legacyHandoffReadOnly: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
       crossEnvironmentTransportRefused: true,
+      retainedArchiveIndependentlyRestored: true, archiveRecoveryDoesNotCaptureOrUpload: true,
       ownedRecoveryResourcesRemoved: true, releaseLeaseRetained: true };
   } finally {
     const cleanup = await Promise.allSettled([lease?.release(), sourceObjects.dispose(), pool.end(), backupPool.end()]);

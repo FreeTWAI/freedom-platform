@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_ai_project",
+  "name": "AI 專案公會",
+  "repository": "FreeTWAI/guild-ai-project",
+  "headline": "讓需求、範圍與交付對得上",
+  "purpose": "協調需求、範圍、交付與合作。",
+  "outcome": "一份專案範圍與交付紀錄",
+  "steps": [
+    {
+      "title": "閱讀專案交付與 Sprint",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "拆出這一輪要完成的工作",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "保存成果版本與驗收待辦",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

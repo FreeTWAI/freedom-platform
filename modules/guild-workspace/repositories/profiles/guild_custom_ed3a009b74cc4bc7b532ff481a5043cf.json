@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_custom_ed3a009b74cc4bc7b532ff481a5043cf",
+  "name": "自動化懶人公會",
+  "repository": "FreeTWAI/guild-automation",
+  "headline": "先把一件重複工作交給工具",
+  "purpose": "當一個廢物：躺著讓 AI 寫程式、讓自動化程式代勞，用程式核對投資資訊來反詐騙，把重複工作自動化，慢慢累積被動收入。",
+  "outcome": "一份自動化流程與驗證紀錄",
+  "steps": [
+    {
+      "title": "選一本符合情境的技能書",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "用可核對的輸入跑一次流程",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "記下結果、失敗情況與調整",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}
