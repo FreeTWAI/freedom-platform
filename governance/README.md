@@ -113,7 +113,7 @@ The fixed registry in `runtime-suites.mjs` maps these existing IDs:
 
 
 The full pinned browser plan keeps its six mode passes. In CI its default mode
-runs exactly three native Playwright shards on independent runners and disposable
+runs exactly four native Playwright shards on independent runners and disposable
 PostgreSQL services, each still `workers: 1` / `fullyParallel: false` / `retries: 0`.
 Shard 1 also enumerates all cases without sharding. Every shard retains the
 75-minute execution cap (including discovery, whose own cap remains 60 seconds).
@@ -123,21 +123,21 @@ is disabled so one failed host does not discard the other hosts' diagnostics.
 The `ui-e2e` job requires every selected shard job to succeed and downloads only
 this workflow run's current attempt. Each bounded, regular-file fragment binds
 base/head/candidate, pinned workflow SHA, run ID and attempt. A fragment explicitly
-is not a passing browser receipt. The collector requires exactly three fragments,
+is not a passing browser receipt. The collector requires exactly four fragments,
 checks raw report hashes, and uses the existing full evaluator to prove the
 unsharded inventory equals the disjoint case union. Only then does it run the five
 fixture passes and produce the full receipt. Its full-plan job budget is 25 minutes
 including setup; narrow plans keep their existing 95-minute bound and do not use
 the matrix. Missing, stale, partial, duplicated or failed evidence cannot fall back
-to a passing subset. Per-case limits and all six mode obligations are unchanged.
+to a passing subset. The runner retains all six mode obligations.
 
 The host assigns generated `fp_e2e_*` schemas and localhost ports
-14311/14312/14313. The local single-host full plan remains available: shard 1
+14311/14312/14313/14314. The local single-host full plan remains available: shard 1
 reserves CPU for native games, then a pinned progress reporter releases peers;
-all three share one 75-minute deadline there. That signal schedules work only.
+all four share one 75-minute deadline there. That signal schedules work only.
 Run only one such local plan per host. Narrow guide/guild plans remain unsharded.
 No candidate file list, shard count or timeout override is accepted; the matrix
-CLI accepts only one of the three fixed shard indices and requires host binding.
+CLI accepts only one of the four fixed shard indices and requires host binding.
 
 Cancellation interrupts the Playwright CLI with SIGINT so its configured SIGTERM
 webServer teardown runs; escalation to SIGKILL remains bounded at 20 seconds.
@@ -145,7 +145,7 @@ The local plan also cancels peer processes after a failure. Real-Playwright
 cancellation regressions require every started HTTP server to exit before the
 runner returns. Timeout or cancellation remains failed even if interrupted
 children exit zero; interrupted shards never publish a successful fragment.
-Default evidence requires all three ordered `partitions` with host-bound current/total,
+Default evidence requires all four ordered `partitions` with host-bound current/total,
 actual exit status and raw-report SHA-256. Their disjoint case union must equal
 the unsharded inventory; a successful subset, duplicate, invented or omitted case
 cannot pass. Receipts retain inventory/case fingerprints without raw test titles.
@@ -154,7 +154,7 @@ scratch can be discarded or the next fixture pass can start. Ordered-prefix
 validation defers only the whole-plan skipped-to-passed/file coverage obligations;
 it does not invent future pass results or admit an incomplete plan. Aggregation
 errors retain their original reason, including `case_listing_mismatch` even when
-all shards exited zero. Failure artifacts prioritize the inventory and all three raw
+all shards exited zero. Failure artifacts prioritize the inventory and all four raw
 shard reports before optional traces under the existing 128 MiB / 512-entry,
 regular-file/no-symlink diagnostic-copy policy; they are not admission evidence.
 Reviewed central-pin adoption remains a separate maintainer action. Local or

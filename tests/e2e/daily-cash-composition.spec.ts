@@ -71,6 +71,9 @@ async function inspect(page:Page){
  return geometry;
 }
 for(const light of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])for(const scale of [1,2])test(`CASH world ${light?'light':'native'} ${viewport.width} ${scale*100}%: whole card, floating controls, actual sorting and interruption`,async({page},testInfo)=>{
+ // These native landscape journeys include 30 real sorts and multiple full-scene captures.
+ // Both take 38–39s locally and exceeded the 45s case budget on the hosted renderer.
+ if(!light&&viewport.width===667)test.setTimeout(90_000);
  await page.setViewportSize(viewport);await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=async()=>{throw new DOMException('Controlled fullscreen rejection','NotAllowedError');};});
  await page.clock.install({time:new Date('2026-11-09T12:00:00Z')});await page.goto('/play?game=cash&seed=42');await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15000});await page.clock.pauseAt(new Date('2026-11-09T12:01:00Z'));
  await overlayContrast(page);await page.getByRole('button',{name:'開始這一局',exact:true}).click();

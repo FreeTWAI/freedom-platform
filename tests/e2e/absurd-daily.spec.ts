@@ -50,7 +50,8 @@ function installExportTimingProbe(){
 }
 
 test.afterEach(async({page},testInfo)=>{
-  if(testInfo.title!=='UX-15c: completed guided export survives development StrictMode replay and production cold reload')return;
+  if(testInfo.title!=='UX-15c: completed guided export survives development StrictMode replay and production cold reload'
+    &&testInfo.title!=='CK-5: egg-fried-rice completes through real scene gestures and keyboard cooking controls')return;
   const probe=await page.evaluate(()=>{
     const value=(window as unknown as {__exportTimingProbe?:{events:unknown[];dropped:number}}).__exportTimingProbe;
     return value?{events:value.events,dropped:value.dropped,scope:'current production document only; DOM times are observer delivery, not exact mutation time'}:null;
@@ -1248,6 +1249,8 @@ test('UX-7: a real-clock 3D cooking journey completes mixing, timed kneading and
 });
 
 for(const id of ['egg-fried-rice','rice-balls','chocolate-brownie','pearl-milk-tea'])test(`CK-5: ${id} completes through real scene gestures and keyboard cooking controls`,async({page})=>{
+  // Keep the original export assertion deadline; retain causal timings for the hosted PNG failure.
+  if(id==='egg-fried-rice')await page.addInitScript(installExportTimingProbe);
   test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openKitchen(page,id);await playRecipe(page,recipeOf(id)!);
   await socialEntries(page,'kitchen');
   const book=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),COOKBOOK_KEY);expect(book.best[id].score).toBeGreaterThanOrEqual(60);expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

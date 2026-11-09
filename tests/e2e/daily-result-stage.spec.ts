@@ -248,6 +248,10 @@ for(const light of [false,true])test(`Daily PHOTO ${light?'light':'native'} sele
     await page.keyboard.press('Escape');await expect(opener(page)).toBeFocused();await presentationIs(page,'rejected');
     await page.evaluate(()=>{const probe=(window as unknown as {dailyExports:{jobs:(()=>void)[];held:boolean}}).dailyExports;probe.held=false;for(const finish of probe.jobs.splice(0))finish();});
     await opener(page).click();await expect(share(page).getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await page.keyboard.press('Escape');
+    // Releasing the held site JPEG starts the selected shot's portrait JPEG.
+    // Once both settle, reopening/dismissing the dialog must not encode again.
+    const settledCalls=await page.evaluate(()=>(window as unknown as {dailyExports:{calls:number}}).dailyExports.calls);
+    expect(settledCalls).toBe(calls+1);
     const downloaded=page.waitForEvent('download');await png.click();
     const bytes=readFileSync((await(await downloaded).path())!),meta=await sharp(bytes).metadata();
     expect([meta.format,meta.width,meta.height]).toEqual(['png',960,1200]);
@@ -260,7 +264,7 @@ for(const light of [false,true])test(`Daily PHOTO ${light?'light':'native'} sele
         expect(await dialogNode!.evaluate(el=>el===document.querySelector('[data-daily-result-share]'))).toBe(true);
         await expect(page.locator('[data-daily-result-image]')).toHaveAttribute('src',first!);
         await expect(choices.nth(0)).toHaveAttribute('aria-pressed','true');expect(await png.getAttribute('href')).toBe(url);
-        expect(await page.evaluate(()=>(window as unknown as {dailyExports:{calls:number}}).dailyExports.calls)).toBe(calls);
+        expect(await page.evaluate(()=>(window as unknown as {dailyExports:{calls:number}}).dailyExports.calls)).toBe(settledCalls);
         await presentationIs(page,'rejected');
     }
     // Real browser touch protocol input, not dispatchEvent or a desktop click.
