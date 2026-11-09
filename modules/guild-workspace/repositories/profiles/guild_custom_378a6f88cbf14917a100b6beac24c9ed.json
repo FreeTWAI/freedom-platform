@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_custom_378a6f88cbf14917a100b6beac24c9ed",
+  "name": "斜槓公會",
+  "repository": "FreeTWAI/guild-multipotential",
+  "headline": "把跨領域的點子做成一個小作品",
+  "purpose": "無法歸類，因為我們什麼都不會，也什麼都會",
+  "outcome": "一份實驗紀錄與作品連結",
+  "steps": [
+    {
+      "title": "挑選這次想練的技能書",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "界定一個可以完成的小實驗",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "留下成果與下一步想法",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

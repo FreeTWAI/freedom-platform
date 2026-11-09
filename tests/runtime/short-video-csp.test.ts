@@ -44,8 +44,8 @@ test('source binding observes every document before login and keeps policy asser
   assert.match(helper, /mainFrame: source\.frame === page\.mainFrame\(\)/);
   assert.match(helper, /document\.addEventListener\('securitypolicyviolation'/);
   assert.ok(spec.indexOf('await collectShortVideoCsp(page, baseURL!)') < spec.indexOf('await login(page);'));
-  assert.ok(spec.includes("['frame-src https://aisns.evitina.tw https://www.youtube-nocookie.com']"));
-  assert.ok(spec.includes("['frame-src https://aisns.evitina.tw']"));
+  assert.ok(spec.includes("['frame-src https://aisns.evitina.tw https://freetwai.github.io https://www.youtube-nocookie.com']"));
+  assert.ok(spec.includes("['frame-src https://aisns.evitina.tw https://freetwai.github.io']"));
   assert.ok(spec.includes('expect(csp).toContain("frame-ancestors \'none\'")'));
   assert.ok(spec.includes('expect(violations).toEqual([])'));
   assert.ok(spec.includes('await drain();\n    expect(violations).toEqual([])'));

@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_human_design",
+  "name": "人類圖研究所",
+  "repository": "FreeTWAI/guild-human-design",
+  "headline": "帶著來源一起共讀與討論",
+  "purpose": "以共讀、來源查核與不同觀點研究人類圖詮釋框架，不作診斷或能力定論。",
+  "outcome": "一份共讀筆記與反思提問",
+  "steps": [
+    {
+      "title": "閱讀共讀與研究手冊",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "整理來源與不同解讀",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "記下討論與自己的反思",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

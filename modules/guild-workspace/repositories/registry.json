@@ -1,0 +1,132 @@
+[
+  {
+    "guild_key": "guild_ai_field",
+    "name": "AI 導入與驗證公會",
+    "repository": "guild-ai-field"
+  },
+  {
+    "guild_key": "guild_ai_project",
+    "name": "AI 專案公會",
+    "repository": "guild-ai-project"
+  },
+  {
+    "guild_key": "guild_ai_vibe",
+    "name": "AI 開發公會",
+    "repository": "guild-ai-vibe"
+  },
+  {
+    "guild_key": "guild_commerce_sales",
+    "name": "電商與銷售公會",
+    "repository": "guild-commerce-sales"
+  },
+  {
+    "guild_key": "guild_commerce_settlement",
+    "name": "交易整合與對帳公會",
+    "repository": "guild-commerce-settlement"
+  },
+  {
+    "guild_key": "guild_commercial_production",
+    "name": "廣告攝影與影片公會",
+    "repository": "guild-commercial-production"
+  },
+  {
+    "guild_key": "guild_custom_02146425d4f443d9bad9b2dd11acadff",
+    "name": "音樂創作公會",
+    "repository": "guild-music-creators"
+  },
+  {
+    "guild_key": "guild_custom_032fd02e754549e9b1e056e2b95b8d50",
+    "name": "AI 體驗回饋公會",
+    "repository": "guild-ai-feedback"
+  },
+  {
+    "guild_key": "guild_custom_378a6f88cbf14917a100b6beac24c9ed",
+    "name": "斜槓公會",
+    "repository": "guild-multipotential"
+  },
+  {
+    "guild_key": "guild_custom_ca18863bc6114e938c34d6d4e38b2202",
+    "name": "中小企業AI救星公會",
+    "repository": "guild-sme-ai"
+  },
+  {
+    "guild_key": "guild_custom_cdcff0281ec14c619858414a2eb37896",
+    "name": "教師公會",
+    "repository": "guild-teachers"
+  },
+  {
+    "guild_key": "guild_custom_d72ffce232424578b3ac85d511996cfd",
+    "name": "AI 公益共創公會",
+    "repository": "guild-ai-for-good"
+  },
+  {
+    "guild_key": "guild_custom_e3ab38b68bcd43058b79686477bdabf5",
+    "name": "語言學習與AI協作公會",
+    "repository": "guild-language-ai"
+  },
+  {
+    "guild_key": "guild_custom_ed3a009b74cc4bc7b532ff481a5043cf",
+    "name": "自動化懶人公會",
+    "repository": "guild-automation"
+  },
+  {
+    "guild_key": "guild_event_space",
+    "name": "活動與空間公會",
+    "repository": "guild-event-space"
+  },
+  {
+    "guild_key": "guild_human_design",
+    "name": "人類圖研究所",
+    "repository": "guild-human-design"
+  },
+  {
+    "guild_key": "guild_marketing",
+    "name": "成長與行銷公會",
+    "repository": "guild-marketing"
+  },
+  {
+    "guild_key": "guild_media_automation",
+    "name": "媒體自動化公會",
+    "repository": "guild-media-automation"
+  },
+  {
+    "guild_key": "guild_member_operations",
+    "name": "會員與社群營運公會",
+    "repository": "guild-member-operations"
+  },
+  {
+    "guild_key": "guild_music_mv",
+    "name": "音樂創作與MV公會",
+    "repository": "guild-music-mv"
+  },
+  {
+    "guild_key": "guild_opportunity_partnership",
+    "name": "商機與夥伴公會",
+    "repository": "guild-opportunity-partnership"
+  },
+  {
+    "guild_key": "guild_platform_engineering",
+    "name": "平台工程公會",
+    "repository": "guild-platform-engineering"
+  },
+  {
+    "guild_key": "guild_product_quality_supply",
+    "name": "商品品質與供應公會",
+    "repository": "guild-product-quality-supply"
+  },
+  {
+    "guild_key": "guild_projection_mapping",
+    "name": "光影光雕公會",
+    "repository": "guild-projection-mapping"
+  },
+  {
+    "guild_key": "guild_security",
+    "name": "資安公會",
+    "repository": "guild-security"
+  },
+  {
+    "guild_key": "guild_talent_direction",
+    "name": "人才與方向公會",
+    "repository": "guild-talent-direction"
+  }
+]

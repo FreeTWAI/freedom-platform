@@ -351,6 +351,8 @@ test('a non-primary guild leader edits, publishes, and reverts the launchpad', a
     await session.page.setViewportSize({width: 1280, height: 900});
     await open.click();
     await expect(session.page.getByRole('heading', {level: 1, name: fixture.editedName})).toBeVisible();
+    // Directory entry opens the independent launchpad; the existing work guide belongs to native work.
+    await openGuildSection(session.page, '我的工作');
     const guide = session.page.getByRole('region', {name: '公會工作區導覽', exact: true});
     await expect(guide).toBeVisible();
     const launchpadResponse = await session.page.request.get(`/api/v1/guilds/${edited}/launchpad`);

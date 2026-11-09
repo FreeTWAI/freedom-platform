@@ -341,6 +341,11 @@ test('talent entry focuses the existing workspace, then saves and reopens the sa
   await work.getByRole('button', {name: '建立', exact: true}).click();
   const card = work.getByRole('form', {name: '我的方向卡', exact: true}); await expect(card).toBeVisible();
   await card.getByLabel('目前的情境', {exact: true}).fill('從公會入口選一個小活動');
+  await page.route('https://freetwai.github.io/**', route => route.abort());
+  await openGuildSection(page, '啟動台');
+  await expect(card).toBeHidden();
+  await openGuildSection(page, '我的工作');
+  await expect(card.getByLabel('目前的情境', {exact: true})).toHaveValue('從公會入口選一個小活動');
   await card.getByRole('button', {name: '儲存方向卡', exact: true}).click();
   await expect(work.locator('.my-work-stage')).toContainText('已儲存・第 1 版');
   await expect(card.getByRole('button', {name: '儲存方向卡', exact: true})).toBeEnabled();

@@ -65,7 +65,12 @@
     "tests/runtime/positioning-action-card.test.ts",
     "tests/runtime/launchpad-profile-defaults.test.ts",
     "contracts/guild-launchpad/v2/**",
-    "tests/e2e/guild-block-composition.spec.ts"
+    "tests/e2e/guild-block-composition.spec.ts",
+    "modules/guild-workspace/repositories/**",
+    "apps/portal-web/src/guild-repositories/**",
+    "scripts/guild-repositories/**",
+    "tests/runtime/guild-repository.test.ts",
+    "tests/e2e/guild-repository.spec.ts"
   ],
   "public_exports": [
     "modules/guild-workspace/launchpad-config.ts",
@@ -88,7 +93,8 @@
   "instructions": [
     "AGENTS.md",
     "DESIGN.md",
-    "docs/platform-plan/execution/unified-foundation/02-principal-command.md"
+    "docs/platform-plan/execution/unified-foundation/02-principal-command.md",
+    "modules/guild-workspace/repositories/README.md"
   ],
   "invariants": [
     "current-authority-before-replay",
