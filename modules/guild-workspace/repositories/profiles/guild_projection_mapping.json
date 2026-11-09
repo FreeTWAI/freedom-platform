@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_projection_mapping",
+  "name": "光影光雕公會",
+  "repository": "FreeTWAI/guild-projection-mapping",
+  "headline": "讓光影構想接上現場條件",
+  "purpose": "協作光影、投影光雕、動態視覺與展演播放設計。",
+  "outcome": "一份場勘與播放設計紀錄",
+  "steps": [
+    {
+      "title": "閱讀光影與光雕製作手冊",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "整理尺寸、環境光與設備",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "記錄播放設計與現場驗證",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

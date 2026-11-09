@@ -403,3 +403,26 @@
   .pt-tools{width:max-content}
  }
 }
+
+/* Holiday's visible units need their full intrinsic width at enlarged text.
+   The shared compact .75fr timer track is too narrow at 320px with safe insets.
+   Reserve each value's content width before sharing the remaining HUD space;
+   keep complete values within their own columns without changing their fonts. */
+@media(max-width:440px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
+  .pt-holiday-composition[data-party-state] .pt-scoreboard{grid-template-columns:repeat(3,minmax(max-content,1fr))}
+ }
+}
+/* At the narrow-phone size, reachable four-digit score + two-digit timer and
+   combo values need a separate unit line. Recover decoration, not font size,
+   targets or world height, so a full two-line feedback message still fits. */
+@media(max-width:360px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
+  .pt-scoreboard strong{display:flex;flex-direction:column;align-items:center}
+  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0}
+  .fullscreen-game__bar,.pt-holiday-heading,.pt-holiday-composition[data-party-state] .pt-scoreboard,.pt-holiday-composition[data-party-state] .pt-controls,.pt-holiday-feedback,.pt-tools{padding-block:0}
+  .pt-hole-controls:not(.pt-light-grid){gap:2px}
+  .pt-hole-controls:not(.pt-light-grid) button{padding-block:0}
+  .pt-tools button[aria-pressed=true]{border-width:1px;box-shadow:inset 0 0 0 1px var(--ad-accent)}
+ }
+}

@@ -364,3 +364,95 @@ Safari, browser zoom, OS sharing and human art/fun acceptance are not_run.
 No browser/server/socket, installation, GitHub write, merge or deployment was
 performed. Full database suites require an explicitly provisioned isolated
 TEST_DATABASE_URL; none was used.
+
+### Party visible-label bounds follow-up (2026-11-09)
+
+Source review of `df23678701d55975a3b5fdc78132d6df4224a15f` found a test
+coverage gap, not a newly observed rendering failure. The three scoreboard
+`small` labels and the changing `.pt-live-label` are normally visible text in
+all three Party games, in native and light modes. At widths up to 440px, or
+widths from 560px with height up to 500px, the existing CSS instead gives them
+an absolute 1px box, hidden overflow, `inset(50%)` clip and nowrap for assistive
+reading. Their markup and product CSS are unchanged.
+
+The shared Range check now includes both selectors. Only these responsive
+labels may be excluded when their computed visibility is hidden/collapse,
+they or an ancestor have display:none, or they match the complete existing
+accessibility-only style. A zero-size box, overflow clipping, or partial clip
+alone is not an exemption. Visible labels retain the original owner, stage and
+clipping-ancestor checks. Non-exempt label clip paths fail conservatively rather
+than being assumed safe. Required controls keep their original visibility
+contract. The older helper fixture now includes the product's nowrap property
+in its accessibility-only label; its original assertions are unchanged.
+
+Two new browser fixtures exercise visible text, height/width/zero-size failures,
+ancestor overflow and clip-path failures, display:none, inherited hidden
+visibility with a visible descendant override, and the complete accessibility
+style versus partial clipping. Two CPU tests execute the actual E2E helper with
+synthetic geometry. The old helper misses both negative probes; deleting the
+new selector coverage, skipping zero-size labels, or removing ancestor/shape
+checks also fails both probes. These are helper-sensitivity results, not real
+browser geometry or pixels.
+
+Offline runtime checks pass 227 cases with no skips, retaining the prior 225.
+Browser discovery lists 362 cases, retaining the prior 360 plus the two fixtures.
+The existing assertion lines, case titles, timeouts, selection, text scales,
+44px targets and world constraints remain. No product, renderer, domain, preview
+pin, manifest, workflow, dependency or package change is included. New browser
+execution remains not_run; no old e90 screenshot is acceptance for this source,
+and the three prior native throughput timeouts remain separate pending evidence.
+
+### Holiday compact timer follow-up (2026-11-09)
+
+Verify 42561115306, UI1 job 128977694085, published head `df236787` and
+hosted candidate `d4f485d7`, retained four Holiday failures: native/light times
+native/rejected fullscreen at 320×568 with 200% text. All stopped at the original
+`clipped text: 24秒` assertion. Four original PNGs and traces were inspected
+without replaying a browser. Their retained JSON places the native world at
+183.96875×137.984375px and the light world at 290×244.390625px. The trace records
+36px/50.4px number text and 28px/39.2px units. Timer client/scroll rectangles were
+not retained, so they are not claimed as measured evidence.
+
+The shared compact HUD gives time only .75 of three fractional tracks. At 320px
+with 14/16px horizontal safe insets and two 4px gaps, that allocates 70.5px.
+The four PNGs each contain at least 82px of dark timer ink. The glyphs remain
+visible beyond their assigned column; this is genuine ownership overflow, not
+an accessibility-only label or display:contents measurement.
+
+All twenty perfect-wave states are calculated with the unchanged Party domain.
+The maximum is 5,100 points and 20 combo. The widest digit-count states are not
+the final state: 2100/13/10, 2400/12/11, 2700/11/12 and 3000/10/13 each contain
+eight digits across score/time/combo. Merely widening the initial timer column
+would leave these states at risk.
+
+Holiday HUD columns at <=440px now reserve each value's intrinsic width before
+sharing remaining space. Only the narrow-phone band <=360px puts the unchanged
+units below the unchanged numbers. The 390px and wide/landscape compositions
+retain their single-line or previously defined landscape arrangements. No text
+is hidden, shortened or reduced. At <=360px, decorative vertical padding is
+removed from bar, heading, HUD, primary controls, feedback and tools. Native
+six-cell buttons retain their 44px minimum with zero vertical padding and a 2px
+gap. Selected tools retain a 1px physical border plus a 1px inset stroke, so
+selection preserves the two-stroke appearance without adding 2px of row height.
+
+The conservative 200% source budget starts from the original 137.984375px native
+world. A unit line adds 39.2px. Bar/heading/HUD/feedback/tool padding returns
+4+4+8+6+4=26px. The original initial six-cell rows occupy 49.2+47.2+6+4=106.4px;
+two 44px rows plus a 2px gap occupy 90px, returning 16.4px. Keeping the selected
+tool row at its original unselected height avoids another 2px cost. Reserving
+an additional 39.2px feedback line and the normal shell's 4px border leaves
+137.984375-39.2+42.4-39.2-4=97.984375px. This is a source budget, not measured
+candidate geometry. CSS still enforces the unchanged 96px world floor and exact
+4:3 host. Native/light ready, playing, paused, help-closed, renderer-error and
+done ownership, overlay rows, inert/focus handlers and recovery actions remain
+unchanged. Full non-playing notices still live in their scrollable panels.
+
+One additional layout fixture uses the real shell/theme/Party CSS, all twenty
+domain-derived values, 100%/200% text, native fullscreen, viewport-fallback and
+normal shell geometry. It retains two-line playing feedback, selected tools,
+44px hit checks, Range/scroll checks, world floors and covered-state tool access.
+Restoring the original inline units and fractional columns must reproduce the
+timer overflow. It is a layout fixture, not renderer/controller acceptance.
+All existing cases, assertions, text-scale checks, timeouts and selections remain;
+new browser execution is not_run. Original native throughput timeouts are not
+addressed, and no old screenshot proves this candidate passes.

@@ -111,6 +111,17 @@ export function createCloudflareRecoveryTransport({ accountId, target, mediaBuck
       }, async putImmutable() { throw fail('release_source_media_readonly'); },
       async delete() { throw fail('release_source_media_readonly'); } });
     },
+    async readArchive({ setId, archiveSha256, bytes }) {
+      check(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(setId ?? '')
+        && /^[a-f0-9]{64}$/.test(archiveSha256 ?? '') && Number.isSafeInteger(bytes)
+        && bytes > 0 && bytes <= MAX_ARCHIVE, 'release_archive_input_invalid');
+      const key = `daily-v2/${target === 'next' ? 'next' : 'staging'}/${setId}.tar`;
+      const response = await request(objectPath(backupBucket, key));
+      await expectStatus(response, 200, 'release_archive_readback_failed');
+      const readback = await boundedResponseBytes(response, bytes);
+      check(readback.length === bytes && hash(readback) === archiveSha256, 'release_archive_readback_mismatch');
+      return readback;
+    },
     async publishArchive({ setId, bytes, intentDirectory }) {
       check(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(setId ?? '') && bytes instanceof Uint8Array
         && bytes.length > 0 && bytes.length <= MAX_ARCHIVE, 'release_archive_input_invalid');

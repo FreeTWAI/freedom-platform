@@ -1,5 +1,9 @@
 # Guild workspace
 
+## 獨立公會 Repo
+
+各公會的獨立啟動台、隔離邊界、範本與發布方式見 [repositories/README.md](repositories/README.md)。原 launchpad 配置與私人工作權威維持在本模組；外部程式只有限定導覽 bridge。
+
 The launchpad reads published guild configuration and computes a platform default when no usable revision exists. Leaders and delegates save immutable drafts, preview them, publish with pointer CAS, and revert by creating a new revision. Public configuration passes through `publicSafeConfig`; guild content authority grants no access to tenant Work.
 
 `launchpad-profiles.ts` defines purpose profiles for `guild_commerce_sales`, `guild_commercial_production`, `guild_talent_direction` and `guild_product_quality_supply`; every other guild keeps the existing block order and empty recommendations. Default `application_refs` come from offered releases in the viewer's scope. `PLATFORM_DEFAULT_REVISION` pins default content at `5`, while `DEFAULT_POINTER_VERSION` keeps the initial pointer CAS at `1`. The primary application is the first application returned by `recommendedApplications` for the rendered configuration.

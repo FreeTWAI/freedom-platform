@@ -540,7 +540,18 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
         <button className="fw-arcade-secondary" aria-label="更多分享方式" onClick={event=>openShare(event.currentTarget)}>更多</button>
       </div>
       <p className="daily-result-status" role="status" aria-live="polite" title={status}>{exportPhase==='error'?'成果圖未產生，可重試':sharing?'分享中…':manualLink?'更多內可複製連結':status.includes('取消')?'已取消分享':exportPhase==='pending'?'正在整理成果圖…':'成果圖已就緒'}<span className="daily-sr">{status}</span></p></div>
-      <dialog ref={shareDialog} data-daily-result-share data-game-share className="daily-result-share" aria-labelledby="daily-result-share-title" onCancel={event=>{event.preventDefault();closeShare();}} onClose={()=>{clipboardOwner.current++;panelCloseGeneration.current++;setPanelOpen(false);}} onKeyDown={event=>{if(event.key==='Tab')event.stopPropagation();}}>
+      <dialog ref={shareDialog} data-daily-result-share data-game-share className="daily-result-share" aria-labelledby="daily-result-share-title" onCancel={event=>{event.preventDefault();closeShare();}} onClose={()=>{clipboardOwner.current++;panelCloseGeneration.current++;setPanelOpen(false);}} onKeyDown={event=>{
+        if(event.key!=='Tab')return;
+        event.stopPropagation();
+        if(event.ctrlKey||event.altKey||event.metaKey)return;
+        // The nested modal owns its boundaries; do not hand them to the
+        // fullscreen loop. Query live targets, including manual-copy inputs.
+        const controls=Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href], summary, button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+            .filter(element=>element.tabIndex>=0&&!element.matches(':disabled')&&element.getClientRects().length>0&&!element.closest('[inert]')&&getComputedStyle(element).visibility==='visible');
+        const first=controls[0],last=controls.at(-1);
+        if(first&&last&&event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+        else if(first&&last&&!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+      }}>
         <header><h2 id="daily-result-share-title">分享這局成果</h2><button className="fw-arcade-secondary" onClick={closeShare}>關閉分享</button></header>
         <div className="daily-result-share-content">
           <h3>{selected.caption}</h3><p>{selected.details}</p>

@@ -383,6 +383,28 @@ service token、image 與 config 尚未安裝，發布未啟用。
 目前沒有未結案 floor 的自動重做功能。缺漏或未知副作用先讀回對帳，不靠重跑取得成功。
 舊七階段契約的自然備份證據檢查只保留作歷史相容；不適用於一般 `independent` 發布。
 
+### 已上傳封存，但完成紀錄的寫入結果不明
+
+備份在 `backup` 階段以 `release_control_write_unknown` 結束，且保留原 capture-policy
+與 archive 兩筆 intent 時，可由四位操作者在 **Shared release** 選 `mode=deploy`、
+相同環境與已驗證 main SHA，將原備份 run ID 填入 `recover_backup_run_id`。
+這條路徑須先完成新 operator 的獨立審查、main CI、映像建置／獨立下載驗證及安裝；
+不是重跑舊備份，也不支援自動排程或 Shared backup 的新備份模式。
+
+Controller 核對原 run／attempt、失敗 job、artifact digest、來源及設定；operator
+持有共用 lease，先核對原 floor、DB ledger／政策／座標、Worker、GC OFF、零 deletion
+fences 及沒有原維護角色的 capture backend。只 GET 原 intent 指定的封存檔，逐 byte
+驗證大小與 SHA-256，再用既有封存驗證器核對 manifest、dump、snapshot evidence
+及每個物件，於無外部網路的 PG18／本機 R2 執行隔離還原及清理。
+還原後再核對 live 狀態與 journal head，全部相符才追加 `backup-reconciled`，並接續
+本次原有五階段發布。公開收據以 `backupRecovery.status=archive_restored_after_readback`
+區分這次補驗證；原失敗 workflow、run ID 與兩筆 intent 保留。
+
+封存不存在、內容不同、還原／清理失敗、租約中斷或來源狀態改變都停止。
+不重新 pg_dump、不重送 archive PUT、不刪除／覆寫封存或 journal、不改 GC／pins、
+不從 live 狀態重建 seed，也不把還原結果接回正式應用。新 journal event 需要新版
+reader，寫入後不可把 operator 降回不認識它的版本。
+
 ### 備份在上傳前失敗時的手動接續
 
 四位操作人可在 `Shared backup` 選同一環境，於 `recover_run_id` 填入原失敗 run ID，

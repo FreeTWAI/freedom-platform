@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_custom_ca18863bc6114e938c34d6d4e38b2202",
+  "name": "中小企業AI救星公會",
+  "repository": "FreeTWAI/guild-sme-ai",
+  "headline": "從一個現場問題開始改善",
+  "purpose": "協助中小企業延長舊型機台的使用壽命：從嵌入式、工業控制與 PLC 著手，用 AI 把舊設備接上現代化的資訊系統，並把這些服務做成收入。",
+  "outcome": "一份設備現況與改善提案",
+  "steps": [
+    {
+      "title": "閱讀需求訪談與專案手冊",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "整理設備、流程與使用限制",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "記錄改善範圍與驗證方式",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

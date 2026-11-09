@@ -13,6 +13,10 @@ import {MyWorkPanel, rememberActing} from './GuildLaunchpadMyWork';
 import {GuildLaunchpadApplications, startable, type LaunchRequest} from './GuildLaunchpadApplications';
 import {LegacyLaunchpadPrimary, legacyPrimaryLabel, legacyPrimaryVisible, legacyStorePath, legacyWorkNavigationGuard} from '../../../../modules/guild-workspace/LegacyLaunchpadPrimary';
 import './GuildLaunchpad.css';
+import {GuildRepositoryFrame} from '../guild-repositories/GuildRepositoryFrame';
+import {guildRepository} from '../../../../modules/guild-workspace/repositories/registry';
+import type {GuildAction} from '../../../../modules/guild-workspace/repositories/bridge';
+import type {GuildEntryAction} from './guild-launchpad-route';
 
 const CONTROL = /[\u0000-\u001F\u007F\u0080-\u009F]/;
 const EMPTY_BLOCK_LOADERS: GuildBlockLoaders = Object.freeze({});
@@ -346,18 +350,19 @@ function GuildPublicEntry({guildKey, publicMode, onReadBooks, contactUrl}: {
   </section>;
 }
 
-export function PublicGuildLaunchpad({client, guildKey, onLogin, pageTools, blockLoaders = EMPTY_BLOCK_LOADERS}: {client: PortalClient; guildKey: string; onLogin: () => void; pageTools?: ReactNode; blockLoaders?: GuildBlockLoaders}) {
+export function PublicGuildLaunchpad({client, guildKey, onLogin, pageTools, entryAction, blockLoaders = EMPTY_BLOCK_LOADERS}: {client: PortalClient; guildKey: string; onLogin: () => void; pageTools?: ReactNode; entryAction?: GuildEntryAction; blockLoaders?: GuildBlockLoaders}) {
   return <div className="guild-launchpad-public">
     <header><img src="/brand/freedom-workshop.webp" alt="自由工坊" width={1280} height={720}/><div className="guild-launchpad-public-tools">{pageTools}<button type="button" className="btn btn-ghost" onClick={onLogin}>會員登入</button></div></header>
-    <main><GuildLaunchpad key={guildKey} client={client} guildKey={guildKey} mode="public" onLogin={onLogin} blockLoaders={blockLoaders}/></main>
+    <main><GuildLaunchpad key={guildKey} client={client} guildKey={guildKey} mode="public" onLogin={onLogin} entryAction={entryAction} blockLoaders={blockLoaders}/></main>
   </div>;
 }
 
-export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId, registerPendingLeave, supplierConsoleEnabled, blockLoaders = EMPTY_BLOCK_LOADERS}: {
+export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId, registerPendingLeave, supplierConsoleEnabled, entryAction, blockLoaders = EMPTY_BLOCK_LOADERS}: {
   client: PortalClient; guildKey: string; mode: 'public' | 'member'; onBack?: () => void; onLogin?: () => void; userId?: string;
   registerPendingLeave?: (guard: (() => boolean) | null) => void;
   blockLoaders?: GuildBlockLoaders;
   supplierConsoleEnabled?: boolean;
+  entryAction?: GuildEntryAction;
 }) {
   const [editorPanel, setEditorPanel] = useState<EditorPanel>('layout');
   const editorRoot = useRef<HTMLFormElement>(null);
@@ -663,9 +668,30 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
   const titleId = mode === 'member' ? 'workspace-page-title' : headingId;
   const readingConfig = draft;
   const sections = readingConfig ? launchpadSections(guildKey, readingConfig, applications, !visitor && mode === 'member' && Boolean(userId), showEditor) : [];
+  const repository = guildRepository(guildKey);
+  if (repository && readingConfig) sections.unshift({id: 'start', label: '啟動台', group: '工作'});
   const groups = (['工作', '公會資源', '管理'] as const).map(group => ({label: group, items: sections.filter(section => section.group === group)})).filter(group => group.items.length);
-  const defaultSection = visitor ? sections.find(section => section.id === 'information') : sections.find(section => section.group === '工作');
+  const defaultSection = visitor ? sections.find(section => section.id === 'information') : sections.find(section => section.group === '工作' && section.id !== 'start') ?? sections.find(section => section.id === 'information') ?? sections.find(section => section.id !== 'start');
   const activeSection = sections.find(section => section.id === selectedSection)?.id ?? defaultSection?.id ?? sections[0]?.id ?? '';
+  const destinations: Partial<Record<GuildEntryAction, string>> = {start: repository ? 'start' : undefined};
+  for (const [action, kind] of [['work', 'my_work'], ['skills', 'skill_books'], ['tools', 'applications'], ['information', 'mission']] as const) {
+    const block = readingConfig?.blocks.find(item => item.kind === kind && item.enabled);
+    if (block) destinations[action] = blockSection(block);
+  }
+  if (sections.some(section => section.id === 'primary')) destinations.work = 'primary';
+  const entryDestination = entryAction ? destinations[entryAction] : undefined;
+  useEffect(() => {if (!loading && entryDestination) selectSection(entryDestination);}, [loading, entryDestination, selectSection]);
+  const repositoryActions = (['work', 'skills', 'tools', 'information'] as const).filter(action => destinations[action]);
+  function navigateRepository(action: GuildAction) {
+    if (action === 'work' && mode === 'public') {onLogin?.(); return;}
+    const destination = destinations[action];
+    if (!destination) return;
+    selectSection(destination);
+    requestAnimationFrame(() => {
+      const heading = readingRoot.current?.querySelector<HTMLElement>('[data-launchpad-kind]:not([hidden]) h2, section:not([hidden]) > h2');
+      heading?.focus();
+    });
+  }
   const entryBookBlock = readingConfig?.blocks.find(block => block.kind === 'skill_books' && block.enabled);
   const entryAnnouncementBlock = readingConfig?.blocks.find(block => block.kind === 'announcements' && block.enabled);
   const entryInformationBlock = readingConfig?.blocks.filter(block => INFO_KINDS.has(block.kind) && block.enabled).sort((a,b)=>a.order-b.order)[0];
@@ -719,7 +745,10 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         if (activeSection === section) skillBooksHeading.current?.focus();
         else {focusSkillBooks.current = true; selectSection(section);}
       } : undefined}/>}
-    {!loading && guild && readingConfig && mode === 'member' && <section className="guild-launchpad-welcome" aria-label="公會工作區導覽">
+    {!loading && repository && readingConfig && activeSection !== 'start' && <div className="actions">
+      <button type="button" className="btn btn-ghost btn-small" onClick={() => selectSection('start')}>開啟公會啟動台</button>
+    </div>}
+    {!loading && guild && readingConfig && mode === 'member' && activeSection !== 'start' && <section className="guild-launchpad-welcome" aria-label="公會工作區導覽">
       <div className="guild-launchpad-purpose"><p className="guild-launchpad-kicker">公會工作區</p><p>{readingConfig.mission_override ?? guild.purpose}</p><p className="muted">{visitor?'先閱讀公會資源；加入後可到公會聊天室交流。':memberTier==='intern'?'先閱讀技能書、到聊天室交流。發布或編輯需由會長調整為正式成員。':'閱讀資源，或從下方工作區接續你的工作。私人工作仍依原業務空間權限存取。'}</p></div>
       <div className="guild-launchpad-resource-preview">
         {entryBookBlock && <button type="button" disabled={!skillBooks.length&&!entryInformationBlock} onClick={() => {const destination=skillBooks.length?entryBookBlock:entryInformationBlock;if(destination)openResource(blockSection(destination),destination.kind);}}><span>入門技能書 <span aria-hidden="true">→</span></span><strong>{skillBooks[0]?.title ?? '尚無可顯示的技能書'}</strong><small>{skillBooks.length?'閱讀介紹與原始專案':entryInformationBlock?'先閱讀公會資訊，了解這個公會。':'這個工作區目前沒有可顯示的入門資源。'}</small></button>}
@@ -738,6 +767,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
       </select></label>
     </>}
     <div className="guild-launchpad-content" ref={readingRoot}>
+    {!loading && guild && repository && activeSection === 'start' && <GuildRepositoryFrame key={`${guildKey}:${client.sessionGeneration}:${mode}`} repository={repository} actions={repositoryActions} onNavigate={navigateRepository}/>}
     {readingConfig && guild && <Reading guild={guild} config={readingConfig} announcements={visitor ? [] : announcements} skillBooks={skillBooks} applications={applications} visitor={visitor} memberTier={visitor ? undefined : memberTier} mode={mode} client={client} guildKey={guildKey} userId={userId} registerLeave={registerLeave} registerPendingLeave={registerLaunchLeave} canLeave={canLeave} canNavigate={canNavigate} onLogin={onLogin} blockLoaders={blockLoaders} supplierConsoleEnabled={supplierConsoleEnabled} activeSection={activeSection} selectSection={selectSection} skillBooksHeading={skillBooksHeading}/>}
     {showEditor && draft && <form ref={editorRoot} hidden={activeSection !== 'management'} className="card guild-launchpad-editor" onSubmit={event => event.preventDefault()}>
       <h2>調整版面</h2>
