@@ -322,3 +322,73 @@ After this evidence was supplied, one re-review of the same `npm run build` with
 `npm_config_offline=true` and a writable cache succeeded, exit 0. No installation
 or alternate execution route was used. Final exact-head local check counts and
 source-context binding belong in the handoff; local checks are not whole CI.
+
+## CASH shadow reuse candidate (2026-11-09, local only)
+
+This isolated candidate starts from published `e90b0b339baa7c53293084f7ffd99119fa0fec2d`.
+Only the CASH key light uses Three's per-light `autoUpdate=false`. Every normal
+color frame, resize render and explicit capture still executes. The shared
+renderer shadow scheduler stays automatic, and STAMP/PHOTO retain automatic
+per-light updates. No geometry, texture, material, transform, DPR, resolution,
+shadow type, animation, gameplay, cooldown, clock, input or result fact changes.
+
+The first world render, any game/client/seed rebuild, accepted-stack count
+changes (including same-seed replay), and the retained lamp caster's visibility
+changes request a new depth pass before color rendering. The lamp matters even
+in CASH because the shared stamp-state branch can toggle it. Wrong decisions,
+rejected vouchers, feedback and drags move/retexture only the non-casting current
+card. An unconsumed request survives a failed render or a temporarily absent
+light. Context restoration explicitly invalidates depth contents; disposing a
+stage removes both context listeners and all its existing owned resources. A
+replacement stage begins dirty independently.
+
+Resize does not invalidate this fixed directional shadow. In installed Three
+0.186.1, `DirectionalLightShadow` inherits `LightShadow.updateMatrices(light)`,
+which uses the light/target and its fixed orthographic projection, not the view
+camera's position, FOV or aspect. `WebGLShadowMap.renderObject` uses the main
+camera's layers (unchanged here) and the light's frustum, not the view frustum.
+The 1024×1024 depth target is independent of renderer `setSize`. The light,
+target, shadow-camera projection, caster layers and depth materials remain
+private/static in this factory. Future changes to these dependencies require
+revisiting invalidation. These are source and executed math/dispatch contracts,
+not assumptions that all Three shadow types are camera-independent.
+
+`daily-cash-shadow.test.ts` executes the production factory and installed
+`WebGLShadowMap`, using controlled renderer/Canvas ports instead of a GPU.
+The reference factory is reconstructed by removing only the scheduling additions;
+its complete bytes must match the SHA-256 of published e90's `stage.ts`. Complete
+scene/camera/material/texture-command fingerprints and each retained depth-pass
+input are compared to fresh reference passes. Four seed/size journeys each run
+721 updates across all thirty real classifications, intentional mistakes,
+cooldown/stale inputs, feedback times and drags. Each retains 721 color updates
+and requests 25 depth passes instead of 721. This is 800 instead of 23,072
+`renderBufferDirect` depth dispatches per journey; zero-count instances may still
+be dispatched before the real renderer declines their draw, so these are not GPU
+draw-call measurements.
+
+Additional cases cover lamp visibility, motion on/off, normal/fullscreen-sized
+resizes, same-seed replay, seed changes, earned-result capture failure/retry,
+failed draws, updates during context loss, restoration, renderer replacement,
+idempotent disposal, temporarily invisible lights and CASH↔STAMP/PHOTO switches.
+Existing production-controller and composition regressions remain unchanged.
+No browser/server/socket/user-computer/CUA/install/publication was attempted.
+This does not establish pixel equivalence, GPU/SwiftShader performance, native
+667px completion under the existing 45-second deadline, phone/Safari playability,
+full CI or approval. Exact-candidate hosted browser results and original-pixel
+review remain required; Party and Cooking renderer/source-bound inputs are
+unchanged.
+
+### Independent-review regression follow-up (2026-11-09)
+
+The original local `fa098170a` candidate and its nine shadow tests are retained
+as history. Independent review found no P1/P2 defect, but its restoration case
+already had a pending stack update when context returned. That case did not
+independently prove that restoration invalidates an otherwise clean cache.
+
+An additional regression now starts from a clean cached map, loses the context
+without any geometry change, clears only the controlled depth contents while
+retaining the JavaScript render target, then restores and captures directly
+without an intervening update. It requires a fresh depth pass for that capture
+and reuse on the next clean capture. The original cases remain unchanged and
+production `stage.ts` is byte-identical to `fa098170a`. This strengthens controlled
+CPU lifecycle coverage; it is still not real browser/WebGL recovery or pixels.

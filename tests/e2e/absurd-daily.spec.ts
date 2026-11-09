@@ -1815,10 +1815,26 @@ test('fallback keeps keyboard focus inside game, result and replay', async ({pag
   await expect(result).toBeFocused();
   await page.keyboard.press('Tab');
   expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
-  const last=dialog.getByRole('button',{name:'回遊樂場'});
+  // The compact result ends at More. Back belongs to its closed secondary
+  // dialog and must not participate in the outer fullscreen focus loop.
+  const last=result.getByRole('button',{name:'更多分享方式',exact:true});
+  const share=page.getByRole('dialog',{name:'分享這局成果',exact:true});
+  await expect(share).toBeHidden();
+  await expect(dialog.getByRole('button',{name:'回遊樂場',exact:true})).toHaveCount(0);
   await last.focus(); await page.keyboard.press('Tab');
   await expect(dialog.getByRole('button',{name:'退出全螢幕'})).toBeFocused();
   await page.keyboard.press('Shift+Tab'); await expect(last).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(share).toBeVisible();
+  expect(await share.evaluate(el=>el.matches(':modal'))).toBe(true);
+  const close=share.getByRole('button',{name:'關閉分享',exact:true});
+  const back=share.getByRole('button',{name:'回遊樂場',exact:true});
+  await expect(close).toBeFocused();
+  await back.focus(); await page.keyboard.press('Tab'); await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab'); await expect(back).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(share).toBeHidden(); await expect(last).toBeFocused();
+  await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(result).toBeVisible();
@@ -2371,6 +2387,76 @@ async function holidayControlHit(control:ReturnType<Page['locator']>){
   const geometry=await control.evaluate(el=>{const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return {width:b.width,height:b.height,inside:b.left>=0&&b.top>=0&&b.right<=innerWidth&&b.bottom<=innerHeight,hit:!!hit&&(el===hit||el.contains(hit)),childrenInside:[...el.children].every(child=>{const c=child.getBoundingClientRect();return c.left>=b.left-1&&c.top>=b.top-1&&c.right<=b.right+1&&c.bottom<=b.bottom+1;})};});
   expect(geometry.width).toBeGreaterThanOrEqual(44);expect(geometry.height).toBeGreaterThanOrEqual(44);expect(geometry.inside).toBe(true);expect(geometry.hit).toBe(true);expect(geometry.childrenInside).toBe(true);
 }
+// Range rectangles conservatively include font ascent/descent, unlike client
+// boxes or line-height alone. Inspect visible game labels and symbols, including
+// aria-hidden visual icons; the separate 1px accessibility-only HUD descriptions
+// are not painted labels and are deliberately outside this selector contract.
+function partyPaintedContentFailures(root:Element){
+  const bad:string[]=[],safe=root.getBoundingClientRect();
+  const contains=(a:DOMRect,b:DOMRect)=>b.left>=a.left-1&&b.top>=a.top-1&&b.right<=a.right+1&&b.bottom<=a.bottom+1;
+  const selectors='.fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button,.pt-holiday-heading h1,.pt-scoreboard strong,.pt-scoreboard strong>span,.pt-target-label,.pt-hole-controls button,.pt-chair-controls button,.pt-tofu-controls button,.pt-tools button,.pt-feedback';
+  for(const el of root.querySelectorAll<HTMLElement>(selectors)){
+    const box=el.getBoundingClientRect(),name=el.getAttribute('aria-label')??el.textContent;
+    if(!el.checkVisibility()||box.width<=0||box.height<=0){bad.push(`unpainted required content: ${name}`);continue;}
+    const ranges:DOMRect[]=[];
+    const text=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+    while(text.nextNode()){
+      if(!text.currentNode.textContent?.trim())continue;
+      const range=document.createRange();range.selectNodeContents(text.currentNode);ranges.push(...range.getClientRects());
+    }
+    for(const svg of el.querySelectorAll('svg'))ranges.push(svg.getBoundingClientRect());
+    for(const ink of ranges){
+      if(!contains(box,ink)||!contains(safe,ink))bad.push(`painted content outside owner: ${name}; owner=${JSON.stringify(box.toJSON())}; ink=${JSON.stringify(ink.toJSON())}`);
+      // A fitting button is still wrong when a clipping ancestor hides its ink.
+      // display:contents contributes no painted clip box, so continue to the
+      // nearest actual ancestor box rather than treating its 0x0 rect as paint.
+      for(let parent=el.parentElement;parent&&root.contains(parent);parent=parent.parentElement){
+        const css=getComputedStyle(parent);if(css.display==='contents')continue;
+        const b=parent.getBoundingClientRect(),clipX=/(hidden|clip|auto|scroll)/.test(css.overflowX),clipY=/(hidden|clip|auto|scroll)/.test(css.overflowY);
+        if((clipX&&(ink.left<b.left-1||ink.right>b.right+1))||(clipY&&(ink.top<b.top-1||ink.bottom>b.bottom+1)))bad.push(`painted content clipped by ancestor: ${name}`);
+      }
+    }
+  }
+  return bad;
+}
+async function partyCoveredToolsBounds(page:Page){
+  // Check the whole direct tool row before any per-control scroll. Long paused,
+  // recovery or capture-failure notices must not allocate space over these tools.
+  expect(await page.locator('.fullscreen-game[data-game-stage]').evaluate(root=>{
+    const bad:string[]=[],outer=root.getBoundingClientRect(),css=getComputedStyle(root),overlay=root.querySelector('.pt-holiday-overlay')!.getBoundingClientRect();
+    const safe={left:outer.left+parseFloat(css.paddingLeft),right:outer.right-parseFloat(css.paddingRight),top:outer.top+parseFloat(css.paddingTop),bottom:outer.bottom-parseFloat(css.paddingBottom)};
+    for(const button of root.querySelectorAll<HTMLElement>('.pt-tools button')){
+      const b=button.getBoundingClientRect(),name=button.getAttribute('aria-label');
+      if(!button.checkVisibility()||b.left<safe.left-1||b.right>safe.right+1||b.top<safe.top-1||b.bottom>safe.bottom+1)bad.push(`covered-state tool outside safe surface: ${name}`);
+      if(b.width<44||b.height<44)bad.push(`small covered-state tool: ${name}`);
+      if(Math.min(b.right,overlay.right)-Math.max(b.left,overlay.left)>1&&Math.min(b.bottom,overlay.bottom)-Math.max(b.top,overlay.top)>1)bad.push(`overlay overlaps tool: ${name}`);
+      const hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(!hit||!button.contains(hit))bad.push(`covered-state tool is not hit-testable: ${name}`);
+    }
+    return bad;
+  })).toEqual([]);
+}
+async function partyScrollPaintedStageIntoView(stage:ReturnType<Page['locator']>){
+  // Playwright's Chromium scrollIntoViewIfNeeded delegates to CDP's content
+  // rectangle. A viewport-height normal stage also has a 2px painted border.
+  // Scroll the actual border box, then keep fractional document-scroll rounding
+  // on the nonnegative side. The strict viewport/world assertions stay intact.
+  await stage.evaluate(root=>{
+    root.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'});
+    window.scrollBy({top:Math.floor(root.getBoundingClientRect().top),behavior:'instant'});
+  });
+}
+test('PT-BOUNDS: painted content detects glyph and ancestor clipping without treating contents wrappers as paint',async({page})=>{
+  await page.setContent(`<div data-game-stage style="width:320px;height:160px"><section class="pt-holiday-stage" style="display:contents"><div class="pt-tools"><button style="display:grid;place-items:center;width:80px;height:64px;padding:0;font:40px/1.4 system-ui"><span aria-hidden="true">動</span></button></div><div class="pt-scoreboard"><small style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">本局得分</small><strong style="display:block;font:18px/1.4 system-ui">0<span>分</span></strong></div></section></div>`);
+  const stage=page.locator('[data-game-stage]'),button=stage.locator('button');
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
+  await button.evaluate(el=>{el.style.height='16px';el.style.overflow='hidden';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content outside owner:'))).toBe(true);
+  await button.evaluate(el=>{el.style.height='64px';el.style.width='8px';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content outside owner:'))).toBe(true);
+  await button.evaluate(el=>{el.style.width='80px';});
+  await stage.locator('.pt-tools').evaluate(el=>{el.style.height='16px';el.style.overflow='hidden';});
+  expect((await stage.evaluate(partyPaintedContentFailures)).some(x=>x.startsWith('painted content clipped by ancestor:'))).toBe(true);
+});
 async function holidayStageBounds(page:Page,scale=1){
   const stage=page.locator('.fullscreen-game--holiday[data-game-stage]');
   const failures=await stage.evaluate(root=>{
@@ -2423,6 +2509,7 @@ async function holidayStageBounds(page:Page,scale=1){
     for(const selector of ['.pt-holiday-tools-viewport','.pt-tools']){const el=root.querySelector<HTMLElement>(selector)!;if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`scrolling tool strip: ${selector}`);}
     return bad;
   },scale);expect(composition).toEqual([]);
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
   if(await page.locator('.pt-canvas canvas').count()){
     const box=(await page.locator('.pt-canvas').boundingBox())!,diagnostic=`Holiday world actual rect: ${JSON.stringify(box)}`;
     expect(box.width,`${diagnostic}; minimum width is 128 CSS px`).toBeGreaterThanOrEqual(128);expect(box.height,`${diagnostic}; minimum height is 96 CSS px`).toBeGreaterThanOrEqual(96);expect(box.width/box.height).toBeCloseTo(4/3,2);
@@ -2452,7 +2539,7 @@ for(const light of [false,true])for(const rejected of [false,true])test(`PT-HOLI
   else {
     // Fail the real canvas export once; no saved-result or scoring injection.
     await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(...args){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Synthetic holiday capture failure');};});
-    await page.getByRole('button',{name:'查看這局成果',exact:true}).click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','5100');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);
+    await page.getByRole('button',{name:'查看這局成果',exact:true}).click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','5100');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);await partyCoveredToolsBounds(page);
   }
   // Both actual holiday result sources exercise the shared encoder's retries.
   await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob,failed=new Set<string>();HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const kind=type??'image/png';if(!failed.has(kind)){failed.add(kind);callback(null);return;}return original.call(this,callback,type,quality);};});
@@ -2542,7 +2629,7 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   const modal=page.locator('.pt-holiday-overlay').filter({has:close});await expect(modal).toBeVisible();
   const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
   for(let i=0;i<12;i++){await page.keyboard.press(i<6?'Tab':'Shift+Tab');expect(await modal.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
-  await close.click();await expect(help).toBeFocused();await holidayFullscreen(page,rejected);
+  await close.click();await expect(help).toBeFocused();await holidayFullscreen(page,rejected);await partyCoveredToolsBounds(page);
   const sound=page.getByRole('button',{name:'音效關',exact:true});await holidayControlHit(sound);await sound.click();await expect(page.getByRole('button',{name:'音效開',exact:true})).toHaveAttribute('aria-pressed','true');
   const motion=page.getByRole('button',{name:'減少動態關',exact:true});await holidayControlHit(motion);await motion.click();await expect(page.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
   const restart=page.getByRole('button',{name:'重新開始',exact:true});await holidayControlHit(restart);await restart.click();await holidayModalTextScale(page,scale);const group=page.getByRole('group',{name:'確認重新開始'});await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();
@@ -2552,7 +2639,7 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   await page.locator('.pt-canvas').focus();
   for(let i=0;i<16;i++){await page.keyboard.press('Tab');expect(await stage.evaluate(el=>el.contains(document.activeElement)&&!document.activeElement?.closest('[inert]'))).toBe(true);}
   await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(stage).not.toHaveAttribute('role','dialog');
-  await stage.scrollIntoViewIfNeeded();await attachWorldEvidence('normal');await holidayStageBounds(page,scale);
+  await partyScrollPaintedStageIntoView(stage);await attachWorldEvidence('normal');await holidayStageBounds(page,scale);
 });
 
 for(const rejected of [false,true])test(`PT-HOLIDAY-SCENE: explicit light selection rejects a late native module in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
@@ -2657,6 +2744,7 @@ async function chairStageBounds(page:Page,scale=1){
     for(const selector of ['.pt-holiday-tools-viewport','.pt-tools']){const el=root.querySelector<HTMLElement>(selector)!;if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`scrolling tool strip: ${selector}`);}
     return bad;
   },scale);expect(composition).toEqual([]);
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
   const box=await page.locator('.pt-canvas').boundingBox(),diagnostic=`Chair world actual rect: ${JSON.stringify(box)}`;
   expect(box,diagnostic).not.toBeNull();
   // A 4:3 sliver is not a usable world. This floor prevents near-disappearance,
@@ -2705,7 +2793,7 @@ for(const light of [false,true])for(const rejected of [false,true])test(`PT-CHAI
   if(light){const downloading=page.waitForEvent('download');const svgLink=page.getByRole('link',{name:'下載本局成果 SVG',exact:true});await holidayControlHit(svgLink);await svgLink.click();const svg=readFileSync((await(await downloading).path())!,'utf8');for(const text of ['4280 分','22 張假日票','剩餘 3 顆心','同題 #42'])expect(svg).toContain(text);}
   else{
     await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(...args){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Synthetic chair capture failure');};});
-    await result.click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','4280');
+    await result.click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','4280');await partyCoveredToolsBounds(page);
   }
   await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob,failed=new Set<string>();HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const kind=type??'image/png';if(!failed.has(kind)){failed.add(kind);callback(null);return;}return original.call(this,callback,type,quality);};});
   await result.click();await expect(page.locator('.fw-arcade-result-heading')).toContainText('4280 分');await chairFullscreen(page,rejected);
@@ -2783,13 +2871,13 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);const overlay=page.locator('.pt-holiday-overlay').filter({has:close});
   const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
   for(let i=0;i<8;i++){await page.keyboard.press(i<4?'Tab':'Shift+Tab');expect(await overlay.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
-  await page.keyboard.press('Escape');await expect(help).toBeFocused();await chairFullscreen(page,rejected);
+  await page.keyboard.press('Escape');await expect(help).toBeFocused();await chairFullscreen(page,rejected);await partyCoveredToolsBounds(page);
   // Keep original first/last reachability after the stricter no-scroll checks.
   const restart=page.getByRole('button',{name:'重新開始',exact:true}),last=page.getByRole('button',{name:light?'重試 3D，保留這局':'減少動態關',exact:true});await holidayControlHit(last);await holidayControlHit(restart);await restart.click();await holidayModalTextScale(page,scale);
   const confirm=page.getByRole('button',{name:'確定重來',exact:true}),keep=page.getByRole('button',{name:'保留這局',exact:true});await expect(confirm).toBeFocused();await holidayControlHit(confirm);await holidayControlHit(keep);await keep.press('Enter');await expect(restart).toBeFocused();await chairFullscreen(page,rejected);
   await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await attachWorldEvidence('resumed');await chairStageBounds(page,scale);await expect(page.locator('.pt-canvas')).toBeFocused();
   for(let i=0;i<16;i++){await page.keyboard.press(i<8?'Tab':'Shift+Tab');expect(await stage.evaluate(el=>el.contains(document.activeElement)&&!document.activeElement?.closest('[inert]'))).toBe(true);}
-  await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(stage).not.toHaveAttribute('role','dialog');await stage.scrollIntoViewIfNeeded();await attachWorldEvidence('normal');await chairStageBounds(page,scale);
+  await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(stage).not.toHaveAttribute('role','dialog');await partyScrollPaintedStageIntoView(stage);await attachWorldEvidence('normal');await chairStageBounds(page,scale);
 });
 
 // PT-TOFU-SCENE: the same real domain runs inside the bounded party shell.
@@ -2876,6 +2964,7 @@ async function tofuStageBounds(page:Page,scale=1){
     for(const selector of ['.pt-holiday-tools-viewport','.pt-tools']){const el=root.querySelector<HTMLElement>(selector)!;if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`scrolling tool strip: ${selector}`);}
     return bad;
   },scale);expect(composition).toEqual([]);
+  expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
   const box=await page.locator('.pt-canvas').boundingBox(),diagnostic=`Tofu world actual rect: ${JSON.stringify(box)}`;
   expect(box,diagnostic).not.toBeNull();
   // A 4:3 sliver is not a usable world. This floor prevents near-disappearance,
@@ -2934,7 +3023,7 @@ for(const light of [false,true])for(const rejected of [false,true])test(`PT-TOFU
   if(light){const downloading=page.waitForEvent('download');const svgLink=page.getByRole('link',{name:'下載本局成果 SVG',exact:true});await holidayControlHit(svgLink);await svgLink.click();const svg=readFileSync((await(await downloading).path())!,'utf8');for(const text of ['2925 分','疊了 12 層','12 次完美貼齊','同題 #42'])expect(svg).toContain(text);}
   else{
     await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(...args){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Synthetic tofu capture failure');};});
-    await result.click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','2925');await evidence('capture-failure-200-percent');
+    await result.click();await expect(page.locator('.pt-feedback')).toContainText('圖片還沒產生');await expect(page.locator('.fw-arcade-result')).toHaveCount(0);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','2925');await evidence('capture-failure-200-percent');await partyCoveredToolsBounds(page);
   }
   await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toBlob,failed=new Set<string>();HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const kind=type??'image/png';if(!failed.has(kind)){failed.add(kind);callback(null);return;}return original.call(this,callback,type,quality);};});
   await result.click();await expect(page.locator('.fw-arcade-result-heading')).toContainText('2925 分');await tofuFullscreen(page,rejected);
@@ -2991,13 +3080,13 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);const overlay=page.locator('.pt-holiday-overlay').filter({has:close});
   const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
   for(let i=0;i<8;i++){await page.keyboard.press(i<4?'Tab':'Shift+Tab');expect(await overlay.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
-  await page.keyboard.press('Escape');await expect(help).toBeFocused();await tofuFullscreen(page,rejected);
+  await page.keyboard.press('Escape');await expect(help).toBeFocused();await tofuFullscreen(page,rejected);await partyCoveredToolsBounds(page);
   // Keep the original first/last reachability journey after the stricter no-scroll checks.
   const restart=page.getByRole('button',{name:'重新開始',exact:true}),last=page.getByRole('button',{name:light?'重試 3D，保留這局':'減少動態關',exact:true});await holidayControlHit(last);await holidayControlHit(restart);await restart.click();await holidayModalTextScale(page,scale);
   const confirm=page.getByRole('button',{name:'確定重來',exact:true}),keep=page.getByRole('button',{name:'保留這局',exact:true});await expect(confirm).toBeFocused();await holidayControlHit(confirm);await holidayControlHit(keep);await keep.press('Enter');await expect(restart).toBeFocused();await tofuFullscreen(page,rejected);
   await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await attachWorldEvidence('resumed');await tofuStageBounds(page,scale);await expect(page.locator('.pt-canvas')).toBeFocused();
   for(let i=0;i<16;i++){await page.keyboard.press(i<8?'Tab':'Shift+Tab');expect(await stage.evaluate(el=>el.contains(document.activeElement)&&!document.activeElement?.closest('[inert]'))).toBe(true);}
-  await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(stage).not.toHaveAttribute('role','dialog');await stage.scrollIntoViewIfNeeded();await attachWorldEvidence('normal');await tofuStageBounds(page,scale);
+  await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(stage).not.toHaveAttribute('role','dialog');await partyScrollPaintedStageIntoView(stage);await attachWorldEvidence('normal');await tofuStageBounds(page,scale);
 });
 
 for(const rejected of [false,true])test(`PT-TOFU-SCENE: explicit light choice owns late native import in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{

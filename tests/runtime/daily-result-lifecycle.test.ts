@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {transformSync} from 'esbuild';
+import {GAME_SHARE_PLATFORMS,gameSocialLink} from '../../apps/portal-web/src/games/result-share.js';
 
 // Executes the production Result closure without rewriting its handlers/effects.
 // Controlled hook/DOM ports test ownership and races, not browser layout, focus,
@@ -21,7 +22,7 @@ class Port {
 const photos=[{image:'data:image/png;base64,photo-A',caption:'A caption',details:'A details',stars:1},{image:'data:image/png;base64,photo-B',caption:'B caption',details:'B details',stars:3}];
 const result={game:'photo',seed:42,title:'Saved photo',...photos[0],photos};
 function harness(extra:Record<string,unknown>={}){
-  let cursor=0,dirty=false,mounted=true,tree:Node,renderCount=0,replayCount=0;
+  let cursor=0,dirty=false,mounted=true,tree:Node,renderCount=0,replayCount=0,stateWrites=0;
   const slots:any[]=[],pending:{index:number;effect:()=>any;deps:any[]}[]=[],ports=new Map<string,Port>();
   const exportsCalls:{selected:any;signal:AbortSignal;task:ReturnType<typeof deferred>}[]=[],jpegCalls:{signal:AbortSignal;task:ReturnType<typeof deferred>}[]=[],created:unknown[]=[],revoked:string[]=[],redirects:string[]=[],drafts:any[]=[],shares:any[]=[],copies:string[]=[];
   let saveFailure=false,clipboardFailure=false;
@@ -29,7 +30,7 @@ function harness(extra:Record<string,unknown>={}){
   const navigator:any={canShare:()=>true,share:(payload:any)=>{shares.push(payload);return native.promise;},clipboard:{writeText:async(text:string)=>{copies.push(text);if(clipboardFailure)throw new Error('clipboard unavailable');}}};
   const document={activeElement:new Port(),querySelector:()=>null,addEventListener(){},removeEventListener(){}};
   const hooks={
-    useState(initial:any){const i=cursor++;if(!(i in slots))slots[i]={value:typeof initial==='function'?initial():initial};return [slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;if(mounted)dirty=true;}}];},
+    useState(initial:any){const i=cursor++;if(!(i in slots))slots[i]={value:typeof initial==='function'?initial():initial};return [slots[i].value,(next:any)=>{stateWrites++;const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;if(mounted)dirty=true;}}];},
     useRef(initial:any){const i=cursor++;return (slots[i]??={current:initial});},
     useEffect(effect:()=>any,deps:any[]){const i=cursor++;if(!slots[i]||deps.some((v,j)=>!Object.is(v,slots[i].deps[j])))pending.push({index:i,effect,deps});},
   };
@@ -37,7 +38,7 @@ function harness(extra:Record<string,unknown>={}){
     HTMLElement:Port,document,window:{addEventListener(){},removeEventListener(){}},ResizeObserver:class {observe(){}disconnect(){}},getComputedStyle:()=>({getPropertyValue:()=>''}),
     AbortController,Error,Date,URLSearchParams,URL:class extends URL {static createObjectURL(blob:unknown){created.push(blob);return `blob:result-${created.length}`;}static revokeObjectURL(url:string){revoked.push(url);}},
     location:{origin:'https://example.test',assign:(url:string)=>redirects.push(url)},sessionStorage:{},navigator,
-    partyOf:()=>null,gameOf:(game:string)=>game,challengeUrl:(origin:string,game:string,seed:number)=>`${origin}/play?game=${game}&seed=${seed}`,
+    partyOf:()=>null,recipeOf:()=>null,gameOf:(game:string)=>game,challengeUrl:(origin:string,game:string,seed:number)=>`${origin}/play?game=${game}&seed=${seed}`,
     gameShareText:(selected:any,link:string)=>`${selected.caption}\n${selected.details}\n${link}`,ResultShare:'ResultShare',
     saveGameDraft:(_storage:unknown,draft:unknown)=>{drafts.push(draft);if(saveFailure)throw new Error('quota');},
     resultExports:(selected:any,_logo:unknown,signal:AbortSignal)=>{const task=deferred();exportsCalls.push({selected,signal,task});return task.promise;},
@@ -61,7 +62,7 @@ function harness(extra:Record<string,unknown>={}){
   function unmount(){mounted=false;for(const slot of slots)slot?.cleanup?.();for(const port of ports.values())port.isConnected=false;}
   flush();
   return {nodes,find,click,settle,flush,completePng,unmount,exportsCalls,jpegCalls,created,revoked,redirects,drafts,shares,copies,native,navigator,ports,
-    content:()=>content(tree),get renderCount(){return renderCount;},get replayCount(){return replayCount;},
+    content:()=>content(tree),get renderCount(){return renderCount;},get replayCount(){return replayCount;},get stateWrites(){return stateWrites;},
     update(next:Record<string,unknown>){props={...props,...next};flush();},failSave(){saveFailure=true;},failClipboard(){clipboardFailure=true;}};
 }
 
@@ -104,6 +105,83 @@ test('native sharing is singleflight, cancellation preserves output and stale sh
   const cancelled=new Error('cancel');cancelled.name='AbortError';h.native.reject(cancelled);await h.settle();assert.ok(h.content().includes('已取消分享'));assert.equal(h.find('系統分享圖片／連結').props.disabled,false);assert.equal(h.created.length,1);assert.deepEqual(h.revoked,[]);h.unmount();
   const stale=harness();stale.completePng();await stale.settle();stale.click('系統分享圖片／連結');stale.click('更多分享方式');stale.click('底片 2 · 委託 3/3');stale.native.reject(new Error('old share failed'));await stale.settle();assert.ok(!stale.content().includes('系統分享未完成'));assert.equal(stale.nodes().filter(n=>n.type==='input').length,0);stale.unmount();
 });
+
+const nativeOutcomes=['success','failure','abort'] as const;
+function finishNative(task:ReturnType<typeof deferred>,outcome:typeof nativeOutcomes[number]){
+  if(outcome==='success')task.resolve(undefined);
+  else {const error=new Error('controlled native share outcome');if(outcome==='abort')error.name='AbortError';task.reject(error);}
+}
+function resultStatus(h:ReturnType<typeof harness>){return h.nodes().find(n=>n.type==='p'&&n.props.className==='fw-arcade-notice')!.children[0];}
+function resultShare(h:ReturnType<typeof harness>){return h.nodes().find(n=>n.type==='ResultShare')!.props;}
+
+// These use the unchanged production callbacks with a controlled share Promise.
+// They do not claim that an OS share sheet permits interacting with the page below it.
+for(const close of ['button','escape','native'] as const)for(const reopen of [false,true])for(const outcome of nativeOutcomes){
+  test(`native share ${outcome} after ${close} close${reopen?' and reopen':''} cannot own the panel, but releases singleflight`,async()=>{
+    const h=harness();h.completePng();await h.settle();const url=h.find('下載完整成果 PNG').props.href;
+    h.click('更多分享方式');const dialog=h.nodes().find(n=>n.type==='dialog')!,opener=h.find('更多分享方式').dom!;
+    const share=resultShare(h).onNative;share();share();h.flush();assert.equal(h.shares.length,1);
+    if(close==='button')h.click('關閉分享');
+    else if(close==='escape'){let prevented=false;dialog.props.onCancel({preventDefault(){prevented=true;}});h.flush();assert.equal(prevented,true);}
+    else {dialog.dom!.close();dialog.props.onClose();h.flush();}
+    // Explicit close/cancel must fence Promise continuations even before the DOM close event.
+    assert.equal(dialog.dom!.open,false);
+    if(reopen){h.click('更多分享方式');h.click('複製同題挑戰連結');await h.settle();assert.ok(resultStatus(h).includes('同題連結已複製'));}
+    const status=resultStatus(h),focuses=opener.focuses;
+    share();h.flush();assert.equal(h.shares.length,1,'dismissal does not release the pending native request');
+    assert.equal(h.find('系統分享圖片／連結').props.disabled,true);assert.equal(resultShare(h).sharing,true);
+    finishNative(h.native,outcome);await h.settle();
+    assert.equal(dialog.dom!.open,reopen,'late completion must not reopen a dismissed panel');
+    assert.equal(resultStatus(h),status,'late completion must not replace the current status');
+    assert.equal(h.nodes().filter(n=>n.type==='input').length,0,'late failure must not publish a manual link');
+    assert.equal(opener.focuses,focuses);assert.equal(h.find('系統分享圖片／連結').props.disabled,false);assert.equal(resultShare(h).sharing,false);
+    assert.equal(h.find('下載完整成果 PNG').props.href,url);assert.equal(h.exportsCalls.length,1);assert.equal(h.jpegCalls.length,1);
+    assert.equal(h.exportsCalls[0].signal.aborted,false);assert.equal(h.jpegCalls[0].signal.aborted,false);assert.deepEqual(h.revoked,[]);
+    const next=deferred();h.navigator.share=(payload:any)=>{h.shares.push(payload);return next.promise;};
+    resultShare(h).onNative();resultShare(h).onNative();h.flush();assert.equal(h.shares.length,2,'a deliberate later share is possible and singleflight');
+    next.resolve(undefined);await h.settle();assert.ok(resultStatus(h).includes('已交給系統分享選單'));assert.equal(resultShare(h).sharing,false);h.unmount();
+  });
+}
+
+for(const surface of ['stage-dock','stage-panel','standalone non-Daily'] as const)for(const outcome of nativeOutcomes){
+  test(`${surface} current native share ${outcome} retains status and fallback behavior`,async()=>{
+    const inStage=surface!=='standalone non-Daily';
+    const h=harness(inStage?{}:{inStage:false,result:{...result,game:'chair',photos:undefined}});const png=h.completePng();await h.settle();
+    if(surface==='stage-panel'){h.click('更多分享方式');resultShare(h).onNative();h.flush();}else h.click('系統分享圖片／連結');
+    assert.equal(h.shares.length,1);assert.equal(h.shares[0].files[0],png.file);
+    finishNative(h.native,outcome);await h.settle();assert.equal(h.find('系統分享圖片／連結').props.disabled,false);
+    const expected=outcome==='success'?'已交給系統分享選單':outcome==='abort'?'已取消分享':'系統分享未完成';assert.ok(resultStatus(h).includes(expected));
+    const manual=h.nodes().filter(n=>n.type==='input');assert.equal(manual.length,outcome==='failure'?1:0);
+    if(outcome==='failure'){assert.equal(manual[0].props.value,'https://example.test/play?game='+ (inStage?'photo':'chair') +'&seed=42');assert.equal(manual[0].dom!.selects,1);}
+    const dialog=h.nodes().find(n=>n.type==='dialog');if(inStage)assert.equal(dialog!.dom!.open,surface==='stage-panel'||outcome==='failure');else assert.equal(dialog,undefined);
+    h.unmount();
+  });
+}
+
+test('standalone non-Daily result retains its no-native-share manual fallback',async()=>{
+  const h=harness({inStage:false,result:{...result,game:'chair',photos:undefined}});h.completePng();await h.settle();delete h.navigator.share;
+  h.click('系統分享圖片／連結');await h.settle();assert.equal(h.nodes().filter(n=>n.type==='dialog').length,0);assert.equal(h.nodes().filter(n=>n.type==='input').length,1);
+  assert.ok(resultStatus(h).includes('沒有系統分享選單'));assert.equal(h.find('系統分享圖片／連結').props.disabled,false);h.unmount();
+});
+
+for(const outcome of nativeOutcomes){
+  test(`old photo native share ${outcome} cannot update or release a newer photo request`,async()=>{
+    const h=harness(),first=deferred(),second=deferred();h.navigator.share=(payload:any)=>{h.shares.push(payload);return h.shares.length===1?first.promise:second.promise;};
+    h.completePng();await h.settle();h.click('更多分享方式');resultShare(h).onNative();h.flush();
+    h.click('底片 2 · 委託 3/3');h.completePng();await h.settle();resultShare(h).onNative();h.flush();assert.equal(h.shares.length,2);assert.ok(h.shares[1].text.includes('B caption'));
+    const status=resultStatus(h);finishNative(first,outcome);await h.settle();assert.equal(resultStatus(h),status);assert.equal(h.nodes().filter(n=>n.type==='input').length,0);
+    assert.equal(resultShare(h).sharing,true);assert.equal(h.find('系統分享圖片／連結').props.disabled,true);resultShare(h).onNative();h.flush();assert.equal(h.shares.length,2);
+    second.resolve(undefined);await h.settle();assert.equal(resultShare(h).sharing,false);assert.ok(resultStatus(h).includes('已交給系統分享選單'));h.unmount();
+  });
+
+  test(`unmounted native share ${outcome} has no state updates or dialog effects`,async()=>{
+    const h=harness();h.completePng();await h.settle();h.click('更多分享方式');resultShare(h).onNative();h.flush();h.click('關閉分享');h.unmount();
+    const writes=h.stateWrites,renders=h.renderCount,dialog=h.nodes().find(n=>n.type==='dialog')!.dom!,focuses=h.find('更多分享方式').dom!.focuses;
+    finishNative(h.native,outcome);await new Promise<void>(resolve=>setImmediate(resolve));
+    assert.equal(h.stateWrites,writes);assert.equal(h.renderCount,renders);assert.equal(dialog.open,false);assert.equal(h.find('更多分享方式').dom!.focuses,focuses);
+    assert.equal(h.nodes().filter(n=>n.type==='input').length,0);
+  });
+}
 
 test('clipboard failure and unavailable native share expose selectable manual link in persistent panel',async()=>{
   const h=harness();h.failClipboard();h.click('更多分享方式');h.click('複製同題挑戰連結');await h.settle();const input=h.nodes().find(n=>n.type==='input')!;assert.equal(input.props.value,'https://example.test/play?game=photo&seed=42');assert.equal(input.dom!.selects,1);assert.equal(input.props.readOnly,true);
@@ -206,3 +284,115 @@ test('Daily result accessible names contain each complete visible primary action
   h.exportsCalls[0].task.reject(new Error('PNG unavailable'));await h.settle();const retry=h.find('重試產生成果圖');assert.ok(retry.props['aria-label'].includes(text(retry.children)));h.click('重試產生成果圖');h.completePng();await h.settle();
   const download=h.find('下載完整成果 PNG');assert.ok(download.props['aria-label'].includes(text(download.children)));inspect();h.unmount();
 });
+
+// Mount the actual chooser closure against Result's production props. The parent
+// harness above intentionally leaves other child components as element ports.
+const captionSource=readFileSync(process.env.RESULT_SHARE_SOURCE??new URL('../../apps/portal-web/src/games/ResultShare.tsx',import.meta.url),'utf8');
+const captionStart=captionSource.indexOf('function ResultShare(');assert.ok(captionStart>=0);
+const captionCode=transformSync(captionSource.slice(captionStart),{loader:'tsx',jsxFactory:'element',target:'es2022'}).code;
+function captionHarness(parent:ReturnType<typeof harness>){
+  let slots:any[]=[],cursor=0,dirty=false,mounted=true,tree:Node,key=resultShare(parent).key,mounts=1,stateWrites=0;
+  const pending:{index:number;effect:()=>any;deps:any[]}[]=[],ports=new Map<string,Port>(),focusCalls:{open:boolean}[]=[],selectCalls:{open:boolean}[]=[];
+  const isOpen=()=>parent.nodes().find(n=>n.type==='dialog')?.dom?.open??true;
+  const hooks={
+    useState(initial:any){const i=cursor++;if(!(i in slots))slots[i]={value:typeof initial==='function'?initial():initial};const slot=slots[i];return [slot.value,(next:any)=>{stateWrites++;const value=typeof next==='function'?next(slot.value):next;if(!Object.is(value,slot.value)){slot.value=value;if(mounted)dirty=true;}}];},
+    useRef(initial:any){const i=cursor++;return slots[i]??={current:initial};},
+    useEffect(effect:()=>any,deps:any[]){const i=cursor++;if(!slots[i]||deps.some((v,j)=>!Object.is(v,slots[i].deps[j])))pending.push({index:i,effect,deps});},
+  };
+  const Share=runInNewContext(`${captionCode};ResultShare`,{...hooks,GAME_SHARE_PLATFORMS,gameSocialLink,PlatformLogo:'PlatformLogo',navigator:parent.navigator,element:(type:unknown,props:any,...children:any[])=>({type,props:props??{},children})});
+  function unmount(){mounted=false;for(const slot of slots)slot?.cleanup?.();}
+  function bind(node:any,path='caption'){
+    if(!node||typeof node!=='object')return;
+    if(Array.isArray(node)){node.forEach((child,i)=>bind(child,`${path}.${i}`));return;}
+    let port=ports.get(path);
+    if(!port){port=new Port();port.focus=()=>{focusCalls.push({open:isOpen()});};port.select=()=>{selectCalls.push({open:isOpen()});};ports.set(path,port);}
+    node.dom=port;if(node.props.ref)node.props.ref.current=port;
+    node.children.forEach((child:any,i:number)=>bind(child,`${path}.${i}`));
+  }
+  function commitEffects(){for(const item of pending.splice(0)){slots[item.index]?.cleanup?.();slots[item.index]={deps:item.deps,cleanup:item.effect()};}}
+  function flush(effects=true){
+    if(!mounted)return;const props=resultShare(parent);
+    if(props.key!==key){unmount();slots=[];pending.splice(0);ports.clear();key=props.key;mounted=true;mounts++;}
+    let rounds=0;do{assert.ok(rounds++<30,'caption hooks settle');dirty=false;cursor=0;tree=Share(props);bind(tree);if(effects)commitEffects();}while(dirty);
+  }
+  function nodes(node:any=tree):Node[]{if(!node||typeof node!=='object')return [];if(Array.isArray(node))return node.flatMap(nodes);return [node,...node.children.flatMap(nodes)];}
+  function text(node:any):string{if(node==null||typeof node==='boolean')return '';if(Array.isArray(node))return node.map(text).join('');if(typeof node==='object')return text(node.children);return String(node);}
+  function find(label:string){const node=nodes().find(n=>n.props['aria-label']===label||n.type==='button'&&text(n)===label);assert.ok(node,`caption control ${label}`);return node;}
+  function click(label:string){const node=find(label);assert.ok(!node.props.disabled);node.props.onClick();flush();parent.flush();}
+  async function settle(){await parent.settle();flush();parent.flush();}
+  flush();return {flush,commitEffects,click,find,nodes,settle,unmount,focusCalls,selectCalls,get mounts(){return mounts;},get stateWrites(){return stateWrites;}};
+}
+function dismissCaption(parent:ReturnType<typeof harness>,close:'button'|'escape'|'native'){
+  const dialog=parent.nodes().find(n=>n.type==='dialog')!;
+  if(close==='button')parent.click('關閉分享');
+  else if(close==='escape'){let prevented=false;dialog.props.onCancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);parent.flush();}
+  else {dialog.dom!.close();dialog.props.onClose();parent.flush();}
+  assert.equal(dialog.dom!.open,false);
+}
+async function readyCaption(extra:Record<string,unknown>={}){
+  const h=harness(extra);h.completePng();await h.settle();if(extra.inStage!==false)h.click('更多分享方式');
+  const c=captionHarness(h);c.click('分享到 Facebook');return {h,c};
+}
+for(const close of ['button','escape','native'] as const)for(const reopen of [false,true])for(const outcome of ['success','failure'] as const){
+  test(`caption copy ${outcome} after ${close} close${reopen?' and reopen':''} cannot mutate status, manual UI or focus and releases singleflight`,async()=>{
+    const {h,c}=await readyCaption(),old=deferred();let copies=0;
+    h.navigator.clipboard.writeText=()=>++copies===1?old.promise:Promise.resolve();
+    const url=h.find('下載完整成果 PNG').props.href;
+    c.click('複製分享文案');c.click('複製分享文案');assert.equal(copies,1);
+    dismissCaption(h,close);c.flush();assert.equal(c.mounts,1);
+    if(reopen){h.click('更多分享方式');c.flush();h.click('複製同題挑戰連結');await c.settle();assert.match(resultStatus(h),/同題連結已複製/);c.click('複製分享文案');assert.equal(copies,2,'pending caption copy remains singleflight after reopen');}
+    const status=resultStatus(h),writes=c.stateWrites;
+    if(outcome==='success')old.resolve(undefined);else old.reject(new Error('delayed caption failure'));
+    await c.settle();assert.equal(resultStatus(h),status);assert.equal(c.stateWrites,writes);
+    assert.equal(h.nodes().find(n=>n.type==='dialog')!.dom!.open,reopen);
+    assert.equal(c.nodes().filter(n=>n.type==='textarea').length,0);assert.deepEqual(c.focusCalls,[]);assert.deepEqual(c.selectCalls,[]);
+    assert.equal(c.find('分享到 Facebook').props['aria-pressed'],true);assert.equal(c.mounts,1);
+    assert.equal(h.find('下載完整成果 PNG').props.href,url);assert.equal(h.exportsCalls.length,1);assert.equal(h.jpegCalls.length,1);
+    assert.equal(h.exportsCalls[0].signal.aborted,false);assert.equal(h.jpegCalls[0].signal.aborted,false);assert.deepEqual(h.revoked,[]);
+    if(!reopen)h.click('更多分享方式');c.flush();c.click('複製分享文案');await c.settle();assert.equal(copies,reopen?3:2);assert.match(resultStatus(h),/文案與挑戰連結已複製/);
+    c.unmount();h.unmount();
+  });
+}
+for(const reopen of [false,true])test(`caption failure settled before dismissal cannot focus during the later effect${reopen?' after reopen':''}`,async()=>{
+  const {h,c}=await readyCaption(),copy=deferred();h.navigator.clipboard.writeText=()=>copy.promise;c.click('複製分享文案');
+  copy.reject(new Error('failure while still open'));await new Promise<void>(resolve=>setImmediate(resolve));h.flush();c.flush(false);
+  assert.match(resultStatus(h),/請長按或選取下方文案/);assert.equal(c.nodes().filter(n=>n.type==='textarea').length,1);assert.deepEqual(c.focusCalls,[]);
+  dismissCaption(h,'button');if(reopen)h.click('更多分享方式');
+  c.commitEffects();assert.deepEqual(c.focusCalls,[]);assert.deepEqual(c.selectCalls,[]);c.unmount();h.unmount();
+});
+for(const boundary of ['selection','unmount'] as const)for(const outcome of ['success','failure'] as const){
+  test(`caption copy ${outcome} cannot publish after ${boundary}`,async()=>{
+    const {h,c}=await readyCaption(),copy=deferred();h.navigator.clipboard.writeText=()=>copy.promise;c.click('複製分享文案');
+    if(boundary==='selection'){h.click('底片 2 · 委託 3/3');c.flush();assert.equal(c.mounts,2);}else {c.unmount();h.unmount();}
+    const status=resultStatus(h),writes=c.stateWrites;
+    if(outcome==='success')copy.resolve(undefined);else copy.reject(new Error('old caption'));
+    await new Promise<void>(resolve=>setImmediate(resolve));assert.equal(resultStatus(h),status);assert.equal(c.stateWrites,writes);assert.deepEqual(c.focusCalls,[]);assert.deepEqual(c.selectCalls,[]);
+    c.unmount();h.unmount();
+  });
+}
+for(const surface of ['Daily','legacy Party','legacy Cooking'] as const)for(const outcome of ['success','failure'] as const){
+  test(`${surface} current caption ${outcome} preserves original clipboard/manual behavior`,async()=>{
+    const {h,c}=await readyCaption(surface==='Daily'?{}:{inStage:false,result:{...result,game:surface==='legacy Cooking'?'kitchen':'chair',photos:undefined}});
+    if(surface!=='Daily')assert.equal(resultShare(h).captureCopyGuard,undefined);
+    const copy=deferred();h.navigator.clipboard.writeText=()=>copy.promise;c.click('複製分享文案');
+    if(outcome==='success')copy.resolve(undefined);else copy.reject(new Error('current copy failure'));
+    await c.settle();assert.match(resultStatus(h),outcome==='success'?/文案與挑戰連結已複製/:/請長按或選取下方文案/);
+    const manual=c.nodes().filter(n=>n.type==='textarea');assert.equal(manual.length,outcome==='failure'?1:0);
+    if(outcome==='failure'){assert.equal(manual[0].props.value,resultShare(h).text);assert.equal(manual[0].props.readOnly,true);assert.deepEqual(c.focusCalls,[{open:true}]);assert.deepEqual(c.selectCalls,[{open:true}]);}
+    c.unmount();h.unmount();
+  });
+}
+
+for(const boundary of ['dismissal','selection'] as const)for(const outcome of ['success','failure'] as const){
+  test(`caption ${outcome} observes synchronous ${boundary} before either component renders`,async()=>{
+    const {h,c}=await readyCaption(),copy=deferred();h.navigator.clipboard.writeText=()=>copy.promise;c.click('複製分享文案');
+    const writes=c.stateWrites,status=resultStatus(h);
+    // Invoke the actual handler but deliberately defer both parent and child
+    // rendering. Ownership refs must invalidate the Promise continuation now.
+    h.find(boundary==='dismissal'?'關閉分享':'底片 2 · 委託 3/3').props.onClick();
+    if(outcome==='success')copy.resolve(undefined);else copy.reject(new Error('settles before render'));
+    await new Promise<void>(resolve=>setImmediate(resolve));assert.equal(c.stateWrites,writes);assert.deepEqual(c.focusCalls,[]);assert.deepEqual(c.selectCalls,[]);
+    h.flush();if(boundary==='dismissal')assert.equal(resultStatus(h),status);else assert.match(resultStatus(h),/正在整理成果圖/);
+    c.flush();c.unmount();h.unmount();
+  });
+}

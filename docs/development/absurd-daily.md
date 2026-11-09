@@ -273,3 +273,94 @@ STAMP／CASH／PHOTO 真正完成後保留同一個 GameBoard 與 renderer owner
 本次從 CASH 修正候選 `37999a36bcbd99c82c2d7a6542fe03f5d7773b1c` 隔離接續，不修改 CASH 樣式／stage renderer、遊戲 domain、Party／Cooking renderer、預覽圖或來源 pins。原 d141 的 STAMP 成果原圖 353／369／396／402 僅用來確認舊問題，不能當本候選的成功像素。
 
 本機只執行既有依賴的離線型別／build／runtime 與瀏覽器案例 collection；沒有啟動瀏覽器、server、socket、安裝套件或發布。新的 browser cases 必須在授權的最終 exact head CI 執行，分別核對 native／light renderer 與 normal／原生 fullscreen／拒絕後全視窗，不混稱兩種 native。320／390／667、100／200% 文字、安全區、原 canvas 身分／矩形、實際完成／分享截圖與背景可見性、選片、焦點與下載等仍屬待跑驗收。本候選不宣稱全部 72 入口已驗完，亦不恢復尚未獲准的 Cooking full-stage 或缺少來源綁定擷取的 Party renderer 工作。
+
+### 2026-11-09：關閉成果分享後的文案複製回呼（隔離修正，未發布）
+
+針對保留掛載的 Daily 分享對話框，`ResultShare` 現在可由父層在開始複製時提供本次面板／選片 ownership。關閉按鈕同步撤銷、Escape、原生 close 或換片之後，舊 clipboard Promise 的成功／失敗都不能改寫狀態、建立手動文案欄，或要求聚焦／選取。失敗在仍開啟時已回來、但 focus effect 尚未執行就關閉的邊界，也用同一份 ownership 再核對。原請求仍在 finally 釋放單次複製保護，之後可明確再複製；不因關閉重掛平台選擇、不取消或重建已取得的 PNG／JPEG。選項只由 in-stage Daily 傳入，Party／Cooking 的原分享結果頁不傳入，保留原文案成功、手動備援與焦點行為。
+
+同一份 production-handler 測試套用修正前 `c7ff73898982cc93a15fa05e666da53b04993582` 的兩個原始元件，75 項中 57 通過、18 失敗；失敗包含延遲成功／拒絕、三種關閉／重開、settlement 到 effect 之間關閉，以及元件重畫前的同步關閉／換片。修正後 75／75 通過，零失敗／略過。這是實際 handler／effect 加上受控 hooks／DOM／clipboard ports，不是瀏覽器焦點、React reconciliation 或 OS 剪貼簿實測。
+
+本機既有依賴離線 typecheck、標準 production build 與 12 檔 515 項相關 runtime 通過。既有 earned PHOTO 原生旅程只延伸一次，控制 clipboard Promise 後核對原生 dialog、焦點、較新狀態、平台選擇與下載身分，未另建長遊戲流程；45 項 browser cases 僅完成 collection，沒有執行瀏覽器。最終來源、完整 context、獨立審查與其他檢查交由本次交接記錄，不以這段本機結果代替正式 CI、實機、合併或部署。
+
+## 2026-11-09 Party e90 painted-layout repair candidate
+
+This local follow-up starts at `c7ff73898982cc93a15fa05e666da53b04993582`
+against main `3586c1a7f0bdbfb0980297e9a996ad95fa8607bd`. It changes only
+Party markup/CSS, the Party sections of the existing browser spec, and this
+record. Daily result/share, renderer/domain/batching, source-bound previews,
+workflow/config/package files and Cooking are unchanged.
+
+Original Verify 42549614980 UI shard 1 evidence binds published head
+`e90b0b339baa7c53293084f7ffd99119fa0fec2d` and candidate
+`a36205a3d33840025186e440646520a78cd9e51b`. The retained diagnostic ZIP is
+115,394,822 bytes, SHA-256
+`51a61654ce682e737a1503b8d496e934c4ff21776d7d2b5f14adcd53a552d5c0`.
+Its original reports, PNGs and available traces remain unmodified. Some failure
+attachments were omitted by the diagnostic archive and were not reconstructed.
+The 207 Party cases include 52 passed, 152 failed and three native timeouts.
+Of the assertion failures, 96 occur only at the final normal-mode viewport
+check after exiting fullscreen; 56 report control/text content overflow at
+200% or earned late states. These are not display:contents root failures.
+
+Original native Holiday/Chair/Tofu 320x568/200% PNGs and native Holiday/Tofu
+667x375/200% PNGs were directly inspected before edits. The symbols crowd or
+extend outside the 44px circles. The available Chair 320x568/100% final normal
+screenshot shows the bordered stage's last pixels outside the viewport; its
+trace confirms the final normal-mode scroll, not failed fullscreen containment.
+The native 667x375/200% original world JSON records Holiday/Chair height
+168.59375px and Tofu height 157.390625px. These are historical measurements,
+not measurements of this candidate.
+
+The compact symbols and visible HUD units now reserve 1.4 line-height rather
+than a 1.0 glyph box. Header controls can grow beyond their 44px minimum; font
+sizes, labels, actions and all direct tools are unchanged. A single flow-owned
+footer puts feedback beside tools in landscape, recovering the space needed
+for full font metrics without overlaying or cropping the world. Portrait keeps
+its own rows. Normal mobile stages use the viewport width rather than double
+page gutters, preserving room for six real 44px controls and the safe insets.
+Native/light 4:3 fitting, world floors and all gameplay/lifecycle code remain.
+Only active playing feedback is uncapped. Non-playing duplicate status retains
+its existing two-line scroll limit while the complete notice and recovery/result
+actions stay in the scrollable panel. Bar/tool vertical padding is 2px rather
+than 4px to preserve room for two full feedback lines at enlarged mobile sizes;
+font sizes, button height and safe insets are unchanged.
+The pause/recovery overlay is bounded by the actual grid lines before the tool
+row (before the combined footer in landscape), so tools remain reachable while
+paused. Open native help/restart dialogs retain their inert and focus ownership.
+Explicit heading/HUD/field rows defensively bind structural ownership. The
+current stronger Party display:grid rule overrides the legacy ready-HUD hide
+selector; this is not evidence that the current ready HUD disappears.
+
+The existing normal-mode checks explicitly scroll the painted stage border
+box, with fractional scrolling rounded toward a nonnegative top. This avoids
+relying on Chromium's CDP scrollIntoViewIfNeeded content rectangle to align
+that border. Strict viewport and safe-area assertions are retained, not widened.
+The source diagnosis still requires browser confirmation. Existing scroll-size
+checks remain and a conservative Range-based check additionally requires text
+font bounds and SVG symbols to fit their visible owners and clipping ancestors.
+Visible aria-hidden symbols are included; separate accessibility-only HUD
+labels are not misclassified as painted labels. One small browser regression
+checks valid display:contents wrappers and deliberately clipped glyph width,
+height and ancestors. Existing matrix help-close and native capture-failure
+journeys now also check all tools together, before any control scroll, for safe
+bounds, hit targets and overlay exclusion. The prior 359 cases remain, plus
+this one case.
+
+Offline TypeScript checking, the standard build and all 225 existing runtime
+cases passed with zero skips; browser discovery lists 360 cases. Discovery is
+not browser execution. No assertion, world threshold, text scale, touch minimum,
+case, timeout, skip, selection or gameplay condition was relaxed. Original late
+states, native/light input, modal/focus, safe-inset, recovery, full completion,
+capture/replay and posting-boundary requirements remain. The three native
+throughput timeouts are separate unresolved evidence, not addressed here.
+
+Own full context retains all 94 modules, 264 baseline/candidate source records,
+132 unique byte-identical rule texts and 134 compact chunks. All chunks and
+bindings are retrieved and reconstructed; prior semantic reading is reused
+only after matching the source/reader-receipt hashes. Final clean-commit context
+is repeated separately. Completeness is local integrity, not trusted CI or
+permission to merge/deploy. New-source browser/DOM/GPU pixels, real touch,
+Safari, browser zoom, OS sharing and human art/fun acceptance are not_run.
+No browser/server/socket, installation, GitHub write, merge or deployment was
+performed. Full database suites require an explicitly provisioned isolated
+TEST_DATABASE_URL; none was used.

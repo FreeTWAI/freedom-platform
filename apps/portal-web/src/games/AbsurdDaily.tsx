@@ -387,7 +387,7 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
 }) {
     const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), [exportPhase, setExportPhase] = useState<'pending'|'ready'|'error'>('pending'), linkRef = useRef<HTMLInputElement>(null);
     const resultRoot = useRef<HTMLElement>(null), shareDialog = useRef<HTMLDialogElement>(null), shareReturn = useRef<HTMLElement|null>(null);
-    const [panelOpen, setPanelOpen] = useState(false), placeShare = useRef<()=>void>(()=>{}), clipboardOwner = useRef(0);
+    const [panelOpen, setPanelOpen] = useState(false), placeShare = useRef<()=>void>(()=>{}), clipboardOwner = useRef(0), panelCloseGeneration = useRef(0);
     useEffect(()=>()=>{clipboardOwner.current++;},[]);
     function openShare(target?: HTMLElement | null) {
         if (!inStage) return;
@@ -396,6 +396,7 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
     }
     function closeShare() {
         clipboardOwner.current++;
+        panelCloseGeneration.current++;
         shareDialog.current?.close();
         setPanelOpen(false);
         const target = shareReturn.current;
@@ -479,7 +480,10 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
         linkRef.current?.select();
     } }, [manualLink,panelOpen]);
     async function share() { if (!exports || exportOwner.current!==selected || exportSelection.current!==selected || sharingRef.current)
-        return; const owner=shareOwner.current;sharingRef.current=true;setSharing(true); try {
+        return; const owner=shareOwner.current,panelGeneration=panelCloseGeneration.current;
+        // Dismissal revokes UI updates, but the request still owns singleflight cleanup.
+        const current=()=>owner===shareOwner.current&&(!inStage||panelGeneration===panelCloseGeneration.current);
+        sharingRef.current=true;setSharing(true); try {
         const payload = navigator.canShare?.({ files: [exports.file] }) ? { files: [exports.file], title: selected.title, text } : { title: selected.title, text: `${selected.caption}\n${selected.details}`, url: link };
         if (!navigator.share) {
             openShare();setManualLink(true);
@@ -487,10 +491,10 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
             return;
         }
         await navigator.share(payload);
-        if(owner===shareOwner.current)setStatus('已交給系統分享選單。');
+        if(current())setStatus('已交給系統分享選單。');
     }
     catch (cause) {
-        if(owner!==shareOwner.current)return;
+        if(!current())return;
         if (cause instanceof Error && cause.name === 'AbortError')
             setStatus('已取消分享，成果仍在這裡。');
         else {
@@ -501,6 +505,10 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
     finally {
         if(owner===shareOwner.current){sharingRef.current=false;setSharing(false);}
     } }
+    function captureCaptionCopy() {
+        const panelGeneration=panelCloseGeneration.current,selection=selected;
+        return ()=>panelGeneration===panelCloseGeneration.current&&exportSelection.current===selection&&!!shareDialog.current?.open;
+    }
     async function copy() {
         const owner=++clipboardOwner.current,selection=selected;
         const current=()=>!inStage||(owner===clipboardOwner.current&&exportSelection.current===selection&&!!shareDialog.current?.open);
@@ -532,7 +540,7 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
         <button className="fw-arcade-secondary" aria-label="更多分享方式" onClick={event=>openShare(event.currentTarget)}>更多</button>
       </div>
       <p className="daily-result-status" role="status" aria-live="polite" title={status}>{exportPhase==='error'?'成果圖未產生，可重試':sharing?'分享中…':manualLink?'更多內可複製連結':status.includes('取消')?'已取消分享':exportPhase==='pending'?'正在整理成果圖…':'成果圖已就緒'}<span className="daily-sr">{status}</span></p></div>
-      <dialog ref={shareDialog} data-daily-result-share data-game-share className="daily-result-share" aria-labelledby="daily-result-share-title" onCancel={event=>{event.preventDefault();closeShare();}} onClose={()=>{clipboardOwner.current++;setPanelOpen(false);}} onKeyDown={event=>{if(event.key==='Tab')event.stopPropagation();}}>
+      <dialog ref={shareDialog} data-daily-result-share data-game-share className="daily-result-share" aria-labelledby="daily-result-share-title" onCancel={event=>{event.preventDefault();closeShare();}} onClose={()=>{clipboardOwner.current++;panelCloseGeneration.current++;setPanelOpen(false);}} onKeyDown={event=>{if(event.key==='Tab')event.stopPropagation();}}>
         <header><h2 id="daily-result-share-title">分享這局成果</h2><button className="fw-arcade-secondary" onClick={closeShare}>關閉分享</button></header>
         <div className="daily-result-share-content">
           <h3>{selected.caption}</h3><p>{selected.details}</p>
@@ -543,7 +551,7 @@ function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sce
           {jpegPhase==='pending'&&<p role="status">正在準備工坊圖片，PNG 已可下載或分享。</p>}
           {jpegPhase==='error'&&<><p role="status">工坊圖片未能產生，PNG 仍可下載或分享。</p><button className="fw-arcade-secondary" onClick={()=>{if(!jpegRetryAllowed.current||exportSelection.current!==selected)return;jpegRetryAllowed.current=false;setJpegPhase('pending');setJpegGeneration(n=>n+1);}}>重試準備工坊圖片</button></>}
           <button className="fw-arcade-secondary" onClick={()=>void copy()}>複製同題挑戰連結</button>
-          <ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/>
+          <ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus} captureCopyGuard={captureCaptionCopy}/>
           <p className="fw-arcade-notice" role="status">{status}</p>
           {manualLink&&<label className="fw-arcade-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={event=>event.currentTarget.select()}/></label>}
           <div className="fw-arcade-result-again"><button className="fw-arcade-secondary" onClick={onNext}>換個玩法 →</button><button className="fw-arcade-secondary" onClick={onBack}>回遊樂場</button></div>

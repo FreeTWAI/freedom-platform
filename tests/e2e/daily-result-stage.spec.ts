@@ -101,6 +101,105 @@ async function holdExports(page:Page){
         };
     });
 }
+type NativeShareOutcome='success'|'failure'|'abort';
+type NativeShareProbe={requests:{finish:(outcome:NativeShareOutcome)=>void}[];restore:()=>void};
+async function verifyNativeShareDismissal(page:Page){
+    // Only replace navigator.share. React, native <dialog> events, real controls,
+    // clipboard handling and the earned result/exports remain the production path.
+    // This exercises deferred callbacks, not an OS sheet or controls beneath it.
+    await page.evaluate(()=>{
+        const original=Object.getOwnPropertyDescriptor(navigator,'share');
+        const probe:NativeShareProbe={requests:[],restore:()=>{if(original)Object.defineProperty(navigator,'share',original);else Reflect.deleteProperty(navigator,'share');}};
+        (window as unknown as {dailyNativeShare:NativeShareProbe}).dailyNativeShare=probe;
+        Object.defineProperty(navigator,'share',{configurable:true,value:()=>new Promise<void>((resolve,reject)=>{
+            let settled=false;
+            probe.requests.push({finish(outcome){
+                if(settled)throw Error('Native-share probe already settled');settled=true;
+                if(outcome==='success')resolve();else{const cause=new Error('Controlled native-share outcome');if(outcome==='abort')cause.name='AbortError';reject(cause);}
+            }});
+        })});
+    });
+    const dialog=share(page),close=dialog.getByRole('button',{name:'關閉分享',exact:true});
+    const native=dialog.getByRole('button',{name:'用系統選單選 Instagram',exact:true});
+    const dock=result(page).locator('.daily-result-actions button[aria-label="系統分享圖片／連結"]'),status=dialog.locator('p.fw-arcade-notice');
+    const copyStatus=/^(文案與挑戰連結已複製。成果圖片請下載後附上。|請長按或選取下方文案複製，成果仍在這裡。)$/;
+    const count=()=>page.evaluate(()=>(window as unknown as {dailyNativeShare:NativeShareProbe}).dailyNativeShare.requests.length);
+    const finish=(index:number,outcome:NativeShareOutcome)=>page.evaluate(({index,outcome})=>(window as unknown as {dailyNativeShare:NativeShareProbe}).dailyNativeShare.requests[index].finish(outcome),{index,outcome});
+    let requests=0;
+    try{
+        await opener(page).click();await dialog.getByRole('button',{name:'分享到 Instagram',exact:true}).click();
+        for(const {outcome,closed} of [{outcome:'failure',closed:true},{outcome:'failure',closed:false},{outcome:'success',closed:false},{outcome:'abort',closed:false}] as const){
+            await test.step(`controlled native share ${outcome} after ${closed?'dismissal':'close and reopen'}`,async()=>{
+                await expect(status).not.toHaveText(copyStatus);
+                await native.click();const pending=requests++;await expect.poll(count).toBe(requests);await expect(native).toBeDisabled();
+                await close.click();await expect(dialog).not.toBeVisible();await expect(opener(page)).toBeFocused();
+                await opener(page).click();await expect(dialog).toBeVisible();expect(await dialog.evaluate(el=>el.matches(':modal'))).toBe(true);
+                await expect(native).toBeDisabled();expect(await count()).toBe(requests);
+                // Accept either real clipboard outcome, but require this new action
+                // to publish a fresh, distinguishable status before settling share.
+                await dialog.getByRole('button',{name:'複製分享文案',exact:true}).click();await expect(status).toHaveText(copyStatus);
+                const newerStatus=await status.textContent();
+                if(closed){await close.click();await expect(dialog).not.toBeVisible();await expect(opener(page)).toBeFocused();}
+                await finish(pending,outcome);await expect(dock).toBeEnabled();
+                await expect(dialog).toHaveJSProperty('open',!closed);expect(await dialog.evaluate(el=>el.matches(':modal'))).toBe(!closed);
+                if(closed){await expect(dialog).not.toBeVisible();await expect(opener(page)).toBeFocused();}else await expect(dialog).toBeVisible();
+                await expect(status).toHaveText(newerStatus!);await expect(dialog.locator('input')).toHaveCount(0);expect(await count()).toBe(requests);
+                if(closed)await opener(page).click();
+                await expect(native).toBeEnabled();await native.click();const next=requests++;await expect.poll(count).toBe(requests);await expect(native).toBeDisabled();
+                await finish(next,'success');await expect(native).toBeEnabled();await expect(status).toHaveText('已交給系統分享選單。');
+            });
+        }
+        await close.click();await expect(dialog).not.toBeVisible();await expect(opener(page)).toBeFocused();
+    }finally{await page.evaluate(()=>(window as unknown as {dailyNativeShare:NativeShareProbe}).dailyNativeShare.restore());}
+}
+
+type CaptionCopyProbe={requests:{text:string;finish:(success:boolean)=>void}[];restore:()=>void};
+async function verifyCaptionCopyDismissal(page:Page){
+    // Only control the clipboard Promise. Use the retained React chooser, real
+    // dialog controls/events and an already-earned PHOTO result, not a new run.
+    await page.evaluate(()=>{
+        const original=Object.getOwnPropertyDescriptor(navigator,'clipboard');
+        const probe:CaptionCopyProbe={requests:[],restore:()=>{if(original)Object.defineProperty(navigator,'clipboard',original);else Reflect.deleteProperty(navigator,'clipboard');}};
+        (window as unknown as {dailyCaptionCopy:CaptionCopyProbe}).dailyCaptionCopy=probe;
+        Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:(text:string)=>new Promise<void>((resolve,reject)=>{
+            let settled=false;probe.requests.push({text,finish(success){if(settled)throw Error('Caption probe already settled');settled=true;if(success)resolve();else reject(new Error('Controlled clipboard failure'));}});
+        })}});
+    });
+    const dialog=share(page),copy=dialog.getByRole('button',{name:'複製分享文案',exact:true}),close=dialog.getByRole('button',{name:'關閉分享',exact:true});
+    const status=dialog.locator('p.fw-arcade-notice'),manual=dialog.getByRole('textbox',{name:'分享文案',exact:true}),platform=dialog.getByRole('button',{name:'分享到 Facebook',exact:true});
+    const count=()=>page.evaluate(()=>(window as unknown as {dailyCaptionCopy:CaptionCopyProbe}).dailyCaptionCopy.requests.length);
+    const finish=(index:number,success:boolean)=>page.evaluate(({index,success})=>(window as unknown as {dailyCaptionCopy:CaptionCopyProbe}).dailyCaptionCopy.requests[index].finish(success),{index,success});
+    let requests=0;
+    try{
+        await opener(page).click();await platform.click();
+        // Clear any legitimate manual field retained by the preceding native-share check.
+        await copy.click();await expect.poll(count).toBe(++requests);await finish(requests-1,true);
+        await expect(status).toHaveText('文案與挑戰連結已複製。成果圖片請下載後附上。');await expect(manual).toHaveCount(0);
+        for(const {success,closed,method} of [{success:true,closed:true,method:'button'},{success:false,closed:true,method:'escape'},{success:true,closed:false,method:'native'},{success:false,closed:false,method:'button'}] as const){
+            await test.step(`caption ${success?'success':'failure'} after ${method} close${closed?'':' and reopen'}`,async()=>{
+                await copy.click();const pending=requests++;await expect.poll(count).toBe(requests);await copy.click();expect(await count()).toBe(requests);
+                if(method==='button')await close.click();else if(method==='escape')await page.keyboard.press('Escape');else await dialog.evaluate((el:HTMLDialogElement)=>el.close());
+                await expect(dialog).not.toBeVisible();await expect(opener(page)).toBeFocused();
+                await opener(page).click();await expect(platform).toHaveAttribute('aria-pressed','true');
+                const link=dialog.getByRole('button',{name:'複製同題挑戰連結',exact:true});await link.click();const newer=requests++;await expect.poll(count).toBe(requests);await finish(newer,true);
+                await expect(status).toHaveText('同題連結已複製。這個連結分享題目，成果圖請另外附上。');const newerStatus=await status.textContent();
+                await expect(link).toBeFocused();if(closed){await close.click();await expect(opener(page)).toBeFocused();}
+                await finish(pending,success);await page.clock.runFor(50);
+                await expect(status).toHaveText(newerStatus!);await expect(manual).toHaveCount(0);await expect(dialog).toHaveJSProperty('open',!closed);
+                if(closed){await expect(dialog).not.toBeVisible();await expect(opener(page)).toBeFocused();await opener(page).click();}else await expect(link).toBeFocused();
+                await expect(platform).toHaveAttribute('aria-pressed','true');
+                // Settling the old operation still releases singleflight ownership.
+                await copy.click();const fresh=requests++;await expect.poll(count).toBe(requests);await finish(fresh,true);
+                await expect(status).toHaveText('文案與挑戰連結已複製。成果圖片請下載後附上。');await expect(manual).toHaveCount(0);
+            });
+        }
+        await copy.click();await expect.poll(count).toBe(++requests);await finish(requests-1,false);
+        await expect(manual).toBeVisible();await expect(manual).toBeFocused();
+        expect(await manual.evaluate((el:HTMLTextAreaElement)=>el.selectionStart===0&&el.selectionEnd===el.value.length)).toBe(true);
+        await close.click();await expect(opener(page)).toBeFocused();
+    }finally{await page.evaluate(()=>(window as unknown as {dailyCaptionCopy:CaptionCopyProbe}).dailyCaptionCopy.restore());}
+}
+
 test.describe('Daily saved-photo touchscreen result controls',()=>{
     test.use({hasTouch:true});
 for(const light of [false,true])test(`Daily PHOTO ${light?'light':'native'} selected saved shot and pending exports survive dialog close`,async({page},testInfo)=>{
@@ -153,6 +252,17 @@ for(const light of [false,true])test(`Daily PHOTO ${light?'light':'native'} sele
     const bytes=readFileSync((await(await downloaded).path())!),meta=await sharp(bytes).metadata();
     expect([meta.format,meta.width,meta.height]).toEqual(['png',960,1200]);
     expect((await sharp(bytes).stats()).channels.some(c=>c.stdev>10)).toBe(true);
+    // Cover mounted React/native-dialog scheduling once in this already-earned
+    // native PHOTO journey, without multiplying the long renderer/viewport matrix.
+    if(!light){
+        await verifyNativeShareDismissal(page);
+        await verifyCaptionCopyDismissal(page);
+        expect(await dialogNode!.evaluate(el=>el===document.querySelector('[data-daily-result-share]'))).toBe(true);
+        await expect(page.locator('[data-daily-result-image]')).toHaveAttribute('src',first!);
+        await expect(choices.nth(0)).toHaveAttribute('aria-pressed','true');expect(await png.getAttribute('href')).toBe(url);
+        expect(await page.evaluate(()=>(window as unknown as {dailyExports:{calls:number}}).dailyExports.calls)).toBe(calls);
+        await presentationIs(page,'rejected');
+    }
     // Real browser touch protocol input, not dispatchEvent or a desktop click.
     // This is emulated touchscreen coverage, not physical-device validation.
     expect(await page.evaluate(()=>navigator.maxTouchPoints)).toBeGreaterThan(0);

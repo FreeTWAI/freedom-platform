@@ -51,12 +51,16 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<Texture>(), shadows = new Set<DirectionalLight['shadow']>();
     let disposed = false, observer: ResizeObserver | undefined;
     const lost = (event: Event) => { event.preventDefault(); if (!disposed) onLost(); };
+    // A restored WebGL context has no usable depth contents, even if Three
+    // retains the light's render-target object and renderer shadow settings.
+    const restored = () => { if (!disposed) shadows.forEach(shadow => { shadow.needsUpdate = true; }); };
     // AD-6: initialization can fail before the caller receives a Stage to dispose.
     function dispose() {
         if (disposed) return;
         disposed = true;
         observer?.disconnect();
         renderer.domElement.removeEventListener('webglcontextlost', lost);
+        renderer.domElement.removeEventListener('webglcontextrestored', restored);
         instances.forEach(mesh => mesh.dispose());
         geometries.forEach(g => g.dispose());
         materials.forEach(m => m.dispose());
@@ -479,8 +483,12 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         if (disposed)
             return;
         lastView = view;
+        // CASH casters are stationary apart from the accepted stack and lamp
+        // visibility below. Keep all color frames and other games automatic.
+        key.shadow.autoUpdate = view.game !== 'cash';
         const nextId = `${view.game}/${view.game === 'photo' ? view.client : 0}/${view.seed}`;
         if (nextId !== keyId) {
+            key.shadow.needsUpdate = true;
             scene.remove(world);
             world = new Group();
             scene.add(world);
@@ -536,6 +544,8 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
                     crab.position.x = 1.98 + (view.motion ? Math.sin(view.seconds * .8) * .12 : 0);
                     crab.rotation.y = view.motion ? Math.sin(view.seconds * 2) * .05 : 0;
                 }
+                if (view.game === 'cash' && lamp && lamp.children[lamp.children.length - 1].visible !== (view.stamp.endedAt === null))
+                    key.shadow.needsUpdate = true;
                 if (lamp)
                     lamp.children[lamp.children.length - 1].visible = view.stamp.endedAt === null;
             }
@@ -546,6 +556,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
                     // The card's parent sits at y=.08; shared pose is world-space.
                     cashMesh.position.set(pose.x,pose.y-.08,pose.z);
                 }
+                if (cashTower && cashTower.count !== view.cash.index - view.cash.rejected) key.shadow.needsUpdate = true;
                 if (cashTower) cashTower.count = view.cash.index - view.cash.rejected;
             }
         }
@@ -566,6 +577,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     observer.observe(host);
     resize();
     renderer.domElement.addEventListener('webglcontextlost', lost);
+    renderer.domElement.addEventListener('webglcontextrestored', restored);
     return {
         update,
         capture() { if(!ready||disposed)throw Error('場景尚未準備好，請稍後再拍。');renderer.render(scene,camera);return captureDailyFrame(renderer.domElement); },

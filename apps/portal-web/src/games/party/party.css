@@ -347,3 +347,59 @@
   .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0;line-height:1}
  }
 }
+
+
+/* Painted content owns its full font line box, including enlarged CJK and
+   symbol fallback glyphs. A 44px hit target is a floor, not a clipping height. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage) {
+ .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{height:auto;min-height:44px;line-height:1.4}
+ /* Recover spacing, never text or hit area, for two-line mobile feedback. */
+ .fullscreen-game__bar,.pt-tools{padding-block:2px}
+ .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span,.pt-tools button,.pt-tools button>span{line-height:1.4}
+ .pt-scoreboard strong,.pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){line-height:1.4}
+ .pt-holiday-stage{grid-template-rows:auto auto minmax(0,1fr)}
+ /* Bind structural rows explicitly, independently of HUD visibility. */
+ .pt-holiday-heading{grid-row:1}
+ .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-row:2}
+ .pt-holiday-field.pt-play-area{grid-row:3}
+ .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto auto}
+ .pt-holiday-world{grid-row:1}
+ .pt-holiday-stage[data-party-state] .pt-controls{grid-row:2}
+ .pt-holiday-footer{display:contents}
+ /* Grid lines, not guessed heights, keep paused/recovery tools outside the
+    overlay. Native modal dialogs still own focus and inert tools while open. */
+ .pt-holiday-overlay{grid-column:1/-1;grid-row:1/4}
+ .pt-holiday-feedback{grid-row:3}
+ /* Full notices live in the scrollable pause/recovery/completion panel.
+    Preserve the existing bounded duplicate status outside active gameplay. */
+ .pt-holiday-stage[data-party-state=playing] .pt-holiday-feedback .pt-feedback{max-height:none;overflow:visible}
+ .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:4}
+ .pt-tofu-stage .pt-holiday-field{grid-template-rows:minmax(96px,1fr) auto auto}
+ .pt-tofu-stage .pt-holiday-feedback{grid-row:2}
+ .pt-tofu-stage .pt-holiday-tools-viewport{grid-row:3}
+ .pt-tofu-stage .pt-holiday-overlay{grid-row:1/3}
+}
+/* The normal mobile stage keeps the same usable width as fullscreen. Otherwise
+   page gutters force six 44px tools onto a second row at 200% text, needlessly
+   taking space from the intact world. Safe insets and the border remain. */
+@media(max-width:440px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):not(:fullscreen):not(.fullscreen-game--viewport){width:100vw;margin-inline:calc(50% - 50vw);border-radius:0}
+}
+/* Share a measured footer row in landscape instead of stacking two chrome
+   bands. Full-sized text and tools reclaim space together; neither overlays or
+   resizes the renderer, and the native/light world's original floors remain. */
+@media(min-width:760px),(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage) {
+  grid-template-rows:auto minmax(0,1fr);
+  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-row:1}
+  .pt-holiday-field.pt-play-area{grid-row:2}
+  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto}
+  .pt-chair-stage .pt-holiday-field.pt-play-area,.pt-chair-stage .pt-holiday-field[data-light=true]{grid-template-rows:minmax(156px,1fr) auto}
+  .pt-holiday-stage[data-party-state] .pt-controls{grid-row:1}
+  .pt-holiday-overlay,.pt-tofu-stage .pt-holiday-overlay{grid-row:1/2}
+  .pt-holiday-footer{display:grid;grid-column:1/-1;grid-row:2;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px;min-width:0}
+  .pt-holiday-feedback,.pt-tofu-stage .pt-holiday-feedback{display:block;grid-column:1;grid-row:1}
+  .pt-holiday-tools-viewport,.pt-tofu-stage .pt-holiday-tools-viewport{grid-column:2;grid-row:1}
+  .pt-tools{width:max-content}
+ }
+}

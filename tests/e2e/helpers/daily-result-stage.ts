@@ -44,32 +44,73 @@ async function presentationIs(page:Page,mode:'normal'|'native'|'rejected'){
     }
 }
 
-// These future screenshot assertions operate on real earned state. Temporarily
-// hiding only the result is a pixel reference, never the delivered evidence or
-// an input workaround. Restore the exact style before any other assertion.
+// Snapshot-only paint suppression must not change the result's inline style,
+// accessibility visibility, focus, or layout. These observations describe the
+// real restored UI, not the temporary pixel reference.
+function resultPresentation(el:Element){
+    const nodes=[{node:el,kind:'result'},...[...el.querySelectorAll('.daily-result-summary,.daily-result-dock,.daily-result-actions > *')].map(node=>({node,kind:'paint'}))];
+    for(let node=el.parentElement;node;node=node.parentElement)nodes.push({node,kind:'ancestor'});
+    return nodes.map(({node,kind})=>{
+        const style=getComputedStyle(node),rect=node.getBoundingClientRect();
+        return {kind,tag:node.tagName,className:node.className,name:node.getAttribute('aria-label'),inlineStyle:node.getAttribute('style'),connected:node.isConnected,
+            display:style.display,visibility:style.visibility,opacity:style.opacity,fontSize:style.fontSize,checkVisibility:node.checkVisibility(),
+            bounds:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},hidden:node.hasAttribute('hidden'),inert:!!node.closest('[inert]')};
+    });
+}
+
+// Every delivered screenshot contains the unmodified earned result. The
+// screenshot API owns/removes its temporary stylesheet, even on capture error.
+// Opacity suppresses paint only; unlike visibility:hidden it does not hide the
+// result from focus/visibility queries while capturing the frozen scene.
 async function stagePixels(page:Page,testInfo:TestInfo,game:DailyResultGame,prefix:string){
     const result=page.locator('[data-daily-result]'),host=page.locator('.fw-arcade-stage');
-    await expect(result).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(result).toHaveCSS('background-image','none');
-    const completed=await host.screenshot({animations:'disabled'});
-    await testInfo.attach(`${prefix}-completed-stage.png`,{body:completed,contentType:'image/png'});
-    if(game==='photo'){
-        const image=page.locator('[data-daily-result-image]'),selected=result.locator('.fw-arcade-photo-choices [aria-pressed="true"] img');
-        await expect(selected).toHaveCount(1);const src=await selected.getAttribute('src');
-        await expect(image).toHaveAttribute('src',src!);await expect(image).toHaveJSProperty('naturalWidth',960);await expect(image).toHaveJSProperty('naturalHeight',720);
-        expect(src).toMatch(/^data:image\/jpeg;base64,/);
-        await testInfo.attach(`${prefix}-selected-saved-photo.jpg`,{body:Buffer.from(src!.split(',')[1],'base64'),contentType:'image/jpeg'});
-        return;
+    const preCompleted=await result.evaluate(resultPresentation);
+    let before=preCompleted,after:typeof before|undefined,checkpoint='completed-capture',failed=false;
+    try{
+        await expect(result).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(result).toHaveCSS('background-image','none');
+        const completed=await host.screenshot({animations:'disabled'});
+        await testInfo.attach(`${prefix}-completed-stage.png`,{body:completed,contentType:'image/png'});
+        checkpoint='completed-presentation';before=await result.evaluate(resultPresentation);
+        if(game==='photo'){
+            const image=page.locator('[data-daily-result-image]'),selected=result.locator('.fw-arcade-photo-choices [aria-pressed="true"] img');
+            await expect(selected).toHaveCount(1);const src=await selected.getAttribute('src');
+            await expect(image).toHaveAttribute('src',src!);await expect(image).toHaveJSProperty('naturalWidth',960);await expect(image).toHaveJSProperty('naturalHeight',720);
+            expect(src).toMatch(/^data:image\/jpeg;base64,/);
+            await testInfo.attach(`${prefix}-selected-saved-photo.jpg`,{body:Buffer.from(src!.split(',')[1],'base64'),contentType:'image/jpeg'});
+            checkpoint='complete';return;
+        }
+        for(const node of before.filter(node=>node.kind!=='ancestor')){
+            expect(node.connected).toBe(true);expect(node.opacity).toBe('1');expect(node.visibility).toBe('visible');expect(node.checkVisibility).toBe(true);
+            expect(node.bounds.width).toBeGreaterThan(0);expect(node.bounds.height).toBeGreaterThan(0);
+        }
+        checkpoint='reference-capture';
+        const reference=await host.screenshot({animations:'disabled',style:'[data-daily-result] { opacity: 0 !important; }'});
+        checkpoint='restored-presentation';after=await result.evaluate(resultPresentation);
+        expect(await result.getAttribute('style')).toBe(before[0].inlineStyle);expect(after).toEqual(before);
+        await expect(result).toHaveCSS('opacity','1');await expect(result).toHaveCSS('visibility','visible');await expect(result).toBeVisible();
+        checkpoint='restored-controls';
+        // toBeVisible does not reject opacity:0. Check restored paint explicitly
+        // and recheck the actual four targets, their label bounds and hit tests.
+        for(const name of ['系統分享圖片／連結','更多分享方式','同一題再來一次'])await exposed(result.getByRole('button',{name,exact:true}));
+        await exposed(result.getByRole('link',{name:'下載完整成果 PNG',exact:true}));
+        checkpoint='pixel-coverage';
+        const actual=await sharp(completed).removeAlpha().raw().toBuffer({resolveWithObject:true}),base=await sharp(reference).removeAlpha().raw().toBuffer({resolveWithObject:true});
+        expect(actual.info).toEqual(base.info);expect((await sharp(reference).stats()).channels.some(c=>c.stdev>20)).toBe(true);
+        let unchanged=0;const pixels=actual.info.width*actual.info.height,channels=actual.info.channels;
+        for(let i=0;i<pixels;i++){let same=true;for(let c=0;c<channels;c++)if(Math.abs(actual.data[i*channels+c]-base.data[i*channels+c])>2)same=false;if(same)unchanged++;}
+        const changed=pixels-unchanged,fraction=unchanged/pixels;
+        expect(changed,'the reference must actually remove painted result pixels').toBeGreaterThan(0);
+        expect(fraction).toBeGreaterThanOrEqual(.5);
+        await testInfo.attach(`${prefix}-stage-exposure.json`,{body:JSON.stringify({unchangedPixels:unchanged,changedPixels:changed,totalPixels:pixels,exposedFraction:fraction,tolerance:2,minimumFraction:.5,reference:'same frozen stage; snapshot-only opacity stylesheet removed; original inline styles, computed paint and actual controls checked'}),contentType:'application/json'});
+        checkpoint='complete';
+    }catch(error){failed=true;throw error;}finally{
+        // Keep this small record embedded even when the bounded CI archive has
+        // no room for a later trace or failure screenshot. Never mask a failure.
+        let observationError:string|undefined;
+        try{after=await result.evaluate(resultPresentation);}catch(error){observationError=String(error);}
+        try{await testInfo.attach(`${prefix}-result-restoration.json`,{body:JSON.stringify({checkpoint,preCompleted,before,after,observationError}),contentType:'application/json'});}
+        catch(error){if(!failed)throw error;}
     }
-    const oldStyle=await result.getAttribute('style');let reference:Buffer;
-    try{await result.evaluate(el=>(el as HTMLElement).style.setProperty('visibility','hidden','important'));reference=await host.screenshot({animations:'disabled'});}
-    finally{await result.evaluate((el,style)=>{if(style===null)el.removeAttribute('style');else el.setAttribute('style',style);},oldStyle);}
-    expect(await result.getAttribute('style')).toBe(oldStyle);await expect(result).toBeVisible();
-    const actual=await sharp(completed).removeAlpha().raw().toBuffer({resolveWithObject:true}),base=await sharp(reference!).removeAlpha().raw().toBuffer({resolveWithObject:true});
-    expect(actual.info).toEqual(base.info);expect((await sharp(reference!).stats()).channels.some(c=>c.stdev>20)).toBe(true);
-    let unchanged=0;const pixels=actual.info.width*actual.info.height,channels=actual.info.channels;
-    for(let i=0;i<pixels;i++){let same=true;for(let c=0;c<channels;c++)if(Math.abs(actual.data[i*channels+c]-base.data[i*channels+c])>2)same=false;if(same)unchanged++;}
-    const fraction=unchanged/pixels;expect(fraction).toBeGreaterThanOrEqual(.5);
-    await testInfo.attach(`${prefix}-stage-exposure.json`,{body:JSON.stringify({unchangedPixels:unchanged,totalPixels:pixels,exposedFraction:fraction,tolerance:2,minimumFraction:.5,reference:'same frozen stage; only result visibility temporarily hidden and exact style restored'}),contentType:'application/json'});
 }
 
 export async function verifyDailyResult(page:Page,testInfo:TestInfo,options:{game:DailyResultGame;scale:number;prefix:string;mode:'native'|'rejected';checkpoint:Awaited<ReturnType<typeof captureDailyStage>>;scaleText?:(owner:Locator,scale:number)=>Promise<void>}){
