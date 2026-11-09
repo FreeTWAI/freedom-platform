@@ -89,7 +89,7 @@ export function requestFromEnvironment(env) {
     ...(migration ? { recoverMigrationRunId: Number(migration) } : {}),
     ...(handoff ? { recoverReleaseRunId: Number(handoff) } : {}), format: 'freedom.shared-release-request/v1', repository: REPOSITORY,
     repositoryId: REPOSITORY_ID, sourceSha: env.RELEASE_SHA, target: env.RELEASE_TARGET,
-    mode: env.RELEASE_MODE, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,
+    mode: env.RELEASE_MODE, event: env.GITHUB_EVENT_NAME, releaseKind: 'independent', controllerSha: env.CONTROLLER_SHA,
     actor: env.GITHUB_ACTOR, actorId: Number(env.GITHUB_ACTOR_ID),
     triggeringActor: env.GITHUB_TRIGGERING_ACTOR,
     runId: Number(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT) };
