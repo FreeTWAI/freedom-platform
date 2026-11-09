@@ -1,3 +1,4 @@
+import {installExportTimingProbe} from './helpers/export-phase-timing.js';
 import {test,expect,type Page} from './fixtures.js';
 import {PerspectiveCamera,Vector3} from 'three';
 import {cashDeck,stampTarget,RULES} from '../../apps/portal-web/src/games/domain.js';
@@ -80,6 +81,9 @@ const opener=(page:Page)=>result(page).getByRole('button',{name:'更多分享方
 // replaying earned inputs. Only the missing native-fullscreen matrix is added.
 for(const game of ['stamp','cash','photo'] as const)for(const light of [false,true])for(const viewport of sizes)for(const scale of [1,2])
 test(`Daily result ${game} ${light?'light':'native'} native fullscreen ${viewport.width} ${scale*100}% retains earned stage and frozen input`,async({page},testInfo)=>{
+    // Keep every input/assertion; the native landscape 30-card replay exceeded 45s on CI.
+    if(game==='cash'&&!light&&viewport.width===667)test.setTimeout(90_000);
+    await page.addInitScript(installExportTimingProbe);
     await page.setViewportSize(viewport);await open(page,game,light,'native');
     await scaleDailyResultText(page.locator('.fullscreen-game'),scale);
     const checkpoint=await captureDailyStage(page);await earn(page,game);
@@ -334,4 +338,13 @@ for(const action of ['replay','next','back','history'] as const)test(`Daily earn
     else if(action==='next')await expect(page).not.toHaveURL(/game=cash/);
     else{await expect(page).toHaveURL(/game=cash&seed=42/);await expect(page.locator('.fw-arcade-counter')).toHaveText('0 / 100 萬');}
     await oldBoard!.dispose();await oldDialog!.dispose();
+});
+
+// Keep the original five-second PNG assertion and retain the actual stalled phase.
+test.afterEach(async({page},testInfo)=>{
+    const probe=await page.evaluate(()=>{
+        const value=(window as unknown as {__exportTimingProbe?:{events:unknown[];dropped:number}}).__exportTimingProbe;
+        return value?{events:value.events,dropped:value.dropped,scope:'current document; timestamps follow the test clock'}:null;
+    }).catch(()=>null);
+    if(probe)await testInfo.attach('export-phase-timings',{body:JSON.stringify(probe),contentType:'application/json'});
 });

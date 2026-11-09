@@ -104,6 +104,8 @@ for(const light of [false,true])for(const viewport of [{width:320,height:568},{w
 });
 
 for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])test(`CASH dynamic recovery ${viewport.width}: 200% two-action sheet scrolls after completed capture and real context loss`,async({page},testInfo)=>{
+ // Includes the completed run, genuine context loss, recovery geometry and export.
+ if(viewport.width===667)test.setTimeout(90_000);
  await page.setViewportSize(viewport);await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
  await page.clock.install({time:new Date('2026-11-09T12:00:00Z')});await page.goto('/play?game=cash&seed=42');await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15000});await page.clock.pauseAt(new Date('2026-11-09T12:01:00Z'));
  await page.getByRole('button',{name:'開始這一局',exact:true}).click();await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();

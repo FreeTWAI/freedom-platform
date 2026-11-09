@@ -1746,7 +1746,7 @@ test('PT-BOUNDS: native and light world CSS fits exact 4:3 without a truncated w
 });
 
 for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS: ${selector} visibility exemptions retain clipping sensitivity (CPU geometry)`,()=>{
- const source=readFileSync(new URL('../e2e/absurd-daily.spec.ts',import.meta.url),'utf8'),start=source.indexOf('function partyPaintedContentFailures('),end=source.indexOf('async function partyCoveredToolsBounds(',start);
+ const source=readFileSync(new URL('../e2e/helpers/party-scene.ts',import.meta.url),'utf8'),start=source.indexOf('function partyPaintedContentFailures('),end=source.indexOf('async function partyCoveredToolsBounds(',start);
  assert.ok(start>=0&&end>start);
  const rect=(left:number,top:number,width:number,height:number)=>({left,top,right:left+width,bottom:top+height,width,height,toJSON:()=>({left,top,width,height})});
  const defaults={display:'block',position:'static',width:'160px',height:'40px',overflowX:'visible',overflowY:'visible',clipPath:'none',whiteSpace:'normal'};
