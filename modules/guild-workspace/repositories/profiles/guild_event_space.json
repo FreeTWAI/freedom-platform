@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_event_space",
+  "name": "活動與空間公會",
+  "repository": "FreeTWAI/guild-event-space",
+  "headline": "讓活動安排和現場執行接得起來",
+  "purpose": "策劃場地、空間動線、讀書會、聚會與實體活動的現場合作。",
+  "outcome": "一份活動流程與場地清單",
+  "steps": [
+    {
+      "title": "閱讀活動與空間實作手冊",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "整理場地、動線與人員分工",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "留下流程表與現場待辦",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

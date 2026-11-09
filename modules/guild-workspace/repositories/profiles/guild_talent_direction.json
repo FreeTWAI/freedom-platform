@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_talent_direction",
+  "name": "人才與方向公會",
+  "repository": "FreeTWAI/guild-talent-direction",
+  "headline": "把想嘗試的方向變成一次行動",
+  "purpose": "協助會員探索方向、學習與陪跑。",
+  "outcome": "一張方向卡與下一個小實驗",
+  "steps": [
+    {
+      "title": "閱讀方向探索方法",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "挑一件可以先試的小事",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "保存方向卡與實作回顧",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

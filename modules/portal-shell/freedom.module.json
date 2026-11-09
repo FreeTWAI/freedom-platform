@@ -96,7 +96,8 @@
     "absurd-daily",
     "google-identity",
     "google-identity-ui",
-    "platform-helper"
+    "platform-helper",
+    "guild-workspace"
   ],
   "contract_families": [],
   "client_profiles": [

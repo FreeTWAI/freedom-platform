@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_custom_d72ffce232424578b3ac85d511996cfd",
+  "name": "AI 公益共創公會",
+  "repository": "FreeTWAI/guild-ai-for-good",
+  "headline": "把公益現場的需要變成小專案",
+  "purpose": "用 AI 協助公益組織減少繁瑣工作、改善資訊傳遞，從小專案開始一起做工具。",
+  "outcome": "一份需求紀錄與工具提案",
+  "steps": [
+    {
+      "title": "閱讀需求訪談與交付手冊",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "確認組織最想減少的重複工作",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "留下合作範圍與試做成果",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}

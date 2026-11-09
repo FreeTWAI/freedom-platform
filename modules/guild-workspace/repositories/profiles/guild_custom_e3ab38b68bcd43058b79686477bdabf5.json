@@ -1,0 +1,26 @@
+{
+  "schema_version": "freedom.guild-workspace/v1",
+  "guild_key": "guild_custom_e3ab38b68bcd43058b79686477bdabf5",
+  "name": "語言學習與AI協作公會",
+  "repository": "FreeTWAI/guild-language-ai",
+  "headline": "把每次練習累積成自己的語言筆記",
+  "purpose": "交流各種語言的學習資源與 AI 工具，一起練習閱讀、寫作、口說與溝通。",
+  "outcome": "一份閱讀、寫作或口說練習紀錄",
+  "steps": [
+    {
+      "title": "挑選翻譯或語言練習技能書",
+      "detail": "從公會技能書找到方法與原始工具。",
+      "action": "skills"
+    },
+    {
+      "title": "選一段內容與 AI 一起練習",
+      "detail": "選擇適合的工具，接續已有的設定與操作。",
+      "action": "tools"
+    },
+    {
+      "title": "記下修正、例句與下一次練習",
+      "detail": "在你的工作區保存筆記與成果，之後可以繼續。",
+      "action": "work"
+    }
+  ]
+}
