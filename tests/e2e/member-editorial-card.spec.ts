@@ -22,6 +22,26 @@ async function signup(page:Page){
   await quickJoin(page);await navigate(page,'我的名片');await openAccountSettings(page,'更換頭像','分享名片設定（免登入）','查看目前的會員名片');
 }
 
+test('a dense public QR stays decodable and contained at phone and desktop widths',async({page})=>{
+  const token='wrElEDlgHqLipHAn7e_0ckLhHVK6iN-oMUHfmoE8tzA';
+  await page.route(`**/api/v1/public/member-cards/${token}`,route=>route.fulfill({json:{
+    nickname:'QR 測試夥伴',primary_guild:null,capabilities:['開源共創'],avatar_url:null,design:'editorial',links:[],profile_links:[],
+  }}));
+  await page.goto(`/member-cards/${token}`);
+  const url=page.url(),card=page.locator('.ecard'),qr=card.locator('.ecard-qr svg');
+  for(const width of [320,390,1280]){
+    await page.setViewportSize({width,height:900});await expect(qr).toBeVisible();
+    expect(await scanQr(qr)).toBe(url);
+    const fit=await card.evaluate(element=>{
+      const card=element.getBoundingClientRect(),qr=element.querySelector('.ecard-qr')!.getBoundingClientRect();
+      const text=element.querySelector('.editorial-connect')!,range=document.createRange();range.selectNodeContents(text);
+      return {qrInside:qr.left>=card.left&&qr.right<=card.right,textInside:[...range.getClientRects()].every(r=>r.left>=card.left&&r.right<=card.right),pageFits:document.documentElement.scrollWidth<=innerWidth};
+    });
+    expect(fit).toEqual({qrInside:true,textInside:true,pageFits:true});
+    await card.screenshot({path:`${SHOTS}/dense-qr-${width}.png`});
+  }
+});
+
 test('real profile fills the template, opt-in QR and downloaded image follow rotation and revocation',async({page,browser,e2eAuthPool})=>{
   test.setTimeout(150000);await signup(page);
   const account=await (await page.request.get('/api/v1/me/account')).json();

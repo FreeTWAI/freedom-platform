@@ -368,7 +368,14 @@ test('unfinished structured page saves privately, reloads intact and requires co
  await expect(page.getByRole('textbox',{name:/^效益主標/})).toHaveValue('先留下尚未完成的想法');
  await page.getByRole('button',{name:'預覽投稿',exact:true}).click();await expect(page.getByRole('heading',{name:'確認這樣分享，好嗎？'})).toHaveCount(0);
  await fillSkillPageContent(page);await page.getByLabel('如何開始使用',{exact:true}).fill('');
- await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'未完成的介紹已保存'})).toBeVisible();
+ // The saved notice remains visible from the first save; await this revision's
+ // response before reading the persisted draft, even when the POST is delayed.
+ const [savedRevision]=await Promise.all([
+  page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1/me/skill-submissions/${draft.submission_id}/manual`),
+  page.getByRole('button',{name:'儲存私人草稿',exact:true}).click(),
+ ]);
+ expect(savedRevision.status()).toBe(200);
+ await expect(page.getByRole('status').filter({hasText:'未完成的介紹已保存'})).toBeVisible();
  const missingNotes=await(await page.request.get('/api/v1/me/skill-submissions/'+draft.submission_id)).json();
  expect(missingNotes.payload.use_notes).toBe('');expect(missingNotes.payload.page_content_draft.mechanism).toBe(syntheticSkillPage.mechanism);expect(missingNotes.payload.page_content).toBeUndefined();
  await page.getByLabel('如何開始使用',{exact:true}).fill('開啟範例並輸入會議筆記，再執行整理並閱讀輸出摘要。');
