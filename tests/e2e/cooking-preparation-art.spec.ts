@@ -100,7 +100,12 @@ export function observePreparationGuide(path:SVGPathElement,probe?:{target:'owne
     const rect=svg.getBoundingClientRect();
     return {paintIssues,clips,centerline:{width:box.width,height:box.height},dash,stroke:style.stroke,strokeWidth:parseFloat(style.strokeWidth),strokeOpacity:Number(style.strokeOpacity),opacity,visible,length,bounds:{left,right,top,bottom,width:right-left,height:bottom-top},owner:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height},viewport:{width:document.documentElement.clientWidth,height:innerHeight},samples};
   }finally{
-    if(probeTarget){if(previous===null)probeTarget.removeAttribute('style');else probeTarget.setAttribute('style',previous);}
+    if(probeTarget){
+      // Flush SVG's lazily serialized CSSOM mutation before removing the
+      // attribute, otherwise Chromium can recreate an empty style attribute.
+      probeTarget.getAttribute('style');
+      if(previous===null)probeTarget.removeAttribute('style');else probeTarget.setAttribute('style',previous);
+    }
   }
 }
 

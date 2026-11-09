@@ -58,10 +58,30 @@ function resultPresentation(el:Element){
     });
 }
 
-// Every delivered screenshot contains the unmodified earned result. The
-// screenshot API owns/removes its temporary stylesheet, even on capture error.
-// Opacity suppresses paint only; unlike visibility:hidden it does not hide the
-// result from focus/visibility queries while capturing the frozen scene.
+// Use an existing same-origin sheet: the product's style-src 'self' correctly
+// blocks screenshot({style}) because Playwright inserts an inline <style>.
+// Retain the exact CSSRule so cleanup cannot delete a neighboring rule.
+async function captureUncoveredStage(page:Page,host:Locator,result:Locator){
+    const suppression=await page.evaluateHandle(()=>{
+        const sheet=[...document.styleSheets].find(sheet=>sheet.href&&new URL(sheet.href).origin===location.origin&&!sheet.disabled);
+        if(!sheet)throw Error('No same-origin stylesheet for the paint reference');
+        const index=sheet.insertRule('[data-daily-result] { opacity: 0 !important; }',sheet.cssRules.length);
+        return {sheet,rule:sheet.cssRules[index]};
+    });
+    try{
+        await expect(result).toHaveCSS('opacity','0');
+        return await host.screenshot({animations:'disabled'});
+    }finally{
+        try{await suppression.evaluate(({sheet,rule})=>{
+            const index=[...sheet.cssRules].indexOf(rule);
+            if(index<0)throw Error('The owned paint-reference rule disappeared');
+            sheet.deleteRule(index);
+        });}finally{await suppression.dispose();}
+    }
+}
+
+// Delivered screenshots retain the earned result. Only the temporary reference
+// suppresses paint; the result's inline styles, layout and focus stay intact.
 async function stagePixels(page:Page,testInfo:TestInfo,game:DailyResultGame,prefix:string){
     const result=page.locator('[data-daily-result]'),host=page.locator('.fw-arcade-stage');
     const preCompleted=await result.evaluate(resultPresentation);
@@ -84,7 +104,7 @@ async function stagePixels(page:Page,testInfo:TestInfo,game:DailyResultGame,pref
             expect(node.bounds.width).toBeGreaterThan(0);expect(node.bounds.height).toBeGreaterThan(0);
         }
         checkpoint='reference-capture';
-        const reference=await host.screenshot({animations:'disabled',style:'[data-daily-result] { opacity: 0 !important; }'});
+        const reference=await captureUncoveredStage(page,host,result);
         checkpoint='restored-presentation';after=await result.evaluate(resultPresentation);
         expect(await result.getAttribute('style')).toBe(before[0].inlineStyle);expect(after).toEqual(before);
         await expect(result).toHaveCSS('opacity','1');await expect(result).toHaveCSS('visibility','visible');await expect(result).toBeVisible();

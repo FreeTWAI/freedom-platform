@@ -1,5 +1,9 @@
 /* The kitchen is one bounded play surface. HUD and actions belong to the
    scene, never a second column or a document section beneath the canvas. */
+.fw-arcade-root.fw-arcade-toy-console .ck-toy-guides,
+.fw-arcade-root.fw-arcade-toy-console .ck-live-scene > .ck-scene {
+  overflow-clip-margin: 0px;
+}
 .fw-arcade-root.fw-arcade-toy-console .fullscreen-game.fullscreen-game--integrated {
   /* Shared production insets also permit deterministic nonzero-inset tests. */
   --game-safe-top: env(safe-area-inset-top, 0px);
