@@ -419,6 +419,7 @@ export const interfaceMessages = {
   "home.explore": ["探索學習與公會", "Explore learning and guilds", "学びとギルドを探す", "학습과 길드 둘러보기", "Explorar aprendizaje y gremios"],
   "home.expand": ["展開", "Expand", "開く", "펼치기", "Expandir"],
   "home.collapse": ["收合", "Collapse", "閉じる", "접기", "Contraer"],
+  "home.workToResume": ["有工作待續", "Work to resume", "続きの作業あり", "이어갈 작업 있음", "Trabajo por retomar"],
   "home.readBook": ["閱讀技能書", "Read a skill book", "スキルブックを読む", "스킬북 읽기", "Leer un libro de habilidades"],
   'testerMap.eyebrow': ['人才與方向公會・社群測試週', 'Talent & Direction Guild · community test week', '人材と方向ギルド・コミュニティテスト週間', '인재와 방향 길드 · 커뮤니티 테스트 주간', 'Gremio de Talento y Rumbo · semana de pruebas'],
   'testerMap.intro': ['{start} 至 {end}，由人才與方向公會（公會長：{leader}）協調。每個測試區至少有一組負責；先測標示「改版優先」的項目。', 'From {start} to {end}, coordinated by the Talent & Direction Guild (guild leader: {leader}). Every test area has at least one owner group. Start with items marked “Redesign priority”.', '{start}〜{end}、人材と方向ギルド（ギルド長：{leader}）が調整します。各テスト領域には担当グループが最低1つあります。「改版優先」の項目から始めてください。', '{start}~{end}, 인재와 방향 길드(길드장: {leader})가 조율합니다. 모든 테스트 영역에 담당 그룹이 하나 이상 있습니다. “개편 우선” 항목부터 시작하세요.', 'Del {start} al {end}, coordinado por el Gremio de Talento y Rumbo (líder: {leader}). Cada área tiene al menos un grupo responsable. Empieza por lo marcado «Prioridad del rediseño».'],

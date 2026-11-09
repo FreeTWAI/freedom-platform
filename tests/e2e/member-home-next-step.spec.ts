@@ -408,6 +408,7 @@ test('the task hint appears only when the board has open tasks and keeps the ski
   await expect(prompt.getByText(skillsMessage, { exact: true })).toBeVisible();
   await expect(prompt).not.toContainText('不應顯示的任務標題');
   await expect(prompt.getByRole('button', { name: '查看社群任務', exact: true })).toHaveAccessibleDescription(`${skillsMessage} ${taskHint}`);
+  await expect(page.locator('.home-participation-disclosure > summary .home-explore-work')).toHaveCount(0);
   await checkGuidance(page, skillsMessage, 'skills');
 });
 
@@ -467,6 +468,7 @@ test('a failed work dashboard read keeps the open-task hint', async ({ page }) =
   await expect(prompt.getByText(taskHint, { exact: true })).toBeVisible();
   await expect(prompt.getByRole('button', { name: '查看社群任務', exact: true })).toBeVisible();
   await expect(prompt.getByText(workHint, { exact: true })).toHaveCount(0);
+  await expect(page.locator('.home-participation-disclosure > summary .home-explore-work')).toHaveCount(0);
 });
 
 for (const width of [320, 390]) test(`phone ${width}px keeps the composer in view and opens participation before the optional workshop`, async ({ page }) => {
@@ -484,6 +486,11 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   const toggle = disclosure.locator('summary');
   await expect(disclosure).toHaveJSProperty('open', false);
   await expect(toggle).toContainText('探索學習與公會');
+  // The collapsed summary carries the unfinished-claim fact as a description; its name stays stable.
+  await expect(toggle.locator('.home-explore-work')).toHaveText('有工作待續');
+  await expect(toggle).toHaveAccessibleName('探索學習與公會');
+  await expect(toggle).toHaveAccessibleDescription('有工作待續');
+  await expect(toggle).not.toContainText('不應顯示的');
   await expect(toggle).toBeInViewport();
   expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await expect(disclosure.locator('.home-participation')).toBeHidden();

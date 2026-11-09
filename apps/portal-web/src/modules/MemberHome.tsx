@@ -223,7 +223,9 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
       // pending/error state or fetch again. A new login needs its own opening.
       if (event.target === event.currentTarget && event.currentTarget.open) setOpenedParticipation(scope);
     }}>
-    <summary><span>{t('home.explore')}</span><span className="home-explore-indicator" aria-hidden="true"><span className="home-explore-open">{t('home.expand')} ＋</span><span className="home-explore-close">{t('home.collapse')} −</span></span></summary>
+    {/* Collapsed by default, so surface the same unfinished-claim fact (dashboard `now`) without a count or titles.
+        The tag is a description, keeping the summary's accessible name stable. */}
+    <summary aria-describedby={primaryGuild && taskAction === 'resume' ? 'home-explore-work' : undefined}><span>{t('home.explore')}</span>{primaryGuild && taskAction === 'resume' && <span id="home-explore-work" className="pill home-explore-work" aria-hidden="true">{t('home.workToResume')}</span>}<span className="home-explore-indicator" aria-hidden="true"><span className="home-explore-open">{t('home.expand')} ＋</span><span className="home-explore-close">{t('home.collapse')} −</span></span></summary>
     <div className="home-exploration-content">
     {nextStep && <section className="home-next-step" aria-label="公會與技能書建議">
       <div className="home-next-copy">
