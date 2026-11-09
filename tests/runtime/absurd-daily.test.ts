@@ -873,7 +873,7 @@ test('PT-light: actual controller handlers retain live progress, missing release
   const hooks={useRef:(value:any)=>{const i=index++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=index++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return [slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=index++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
   const host={dataset:{} as Record<string,string|number>,focus:()=>{focused='host';},closest:()=>({scrollIntoView(){}})};
   const label=(value:any):string=>Array.isArray(value)?value.map(label).join(''):value&&typeof value==='object'?(value.props?.['aria-hidden']?'':label(value.props?.children)):typeof value==='string'?value:'';
-  const jsx=(type:any,props:any)=>{if(type==='section')section=props;if(type==='div'&&props.ref)props.ref.current=host;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focused=label(props.children);}};}return {type,props};};
+  const jsx=(type:any,props:any)=>{if(type==='section')section=props;if(type==='div'&&props.ref)props.ref.current=host;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focused=props['aria-label']??label(props.children);}};}return {type,props};};
   const module={exports:{} as any};class Button{}class Anchor{}
   runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,matchMedia:()=>({matches:true}),requestAnimationFrame:(callback:(at:number)=>void)=>{const id=++sequence;frames.set(id,callback);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),document:{hidden:false,addEventListener(){},removeEventListener(){}},window:{addEventListener:(name:string,listener:(event:any)=>void,capture?:boolean)=>{if(name==='keydown'&&capture)escapeListeners.add(listener);},removeEventListener:(name:string,listener:(event:any)=>void)=>{if(name==='keydown')escapeListeners.delete(listener);}},require:(path:string)=>{
     if(path==='react')return {...hooks,useLayoutEffect:hooks.useEffect};if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
@@ -888,11 +888,20 @@ test('PT-light: actual controller handlers retain live progress, missing release
   }});
   const render=()=>{index=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'holiday',seed:42,onBack(){},onResult:(result:any)=>results.push(result)});while(effects.length)effects.shift()!();};
   const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
-  const button=(text:string)=>{const found=buttons.find(b=>label(b.children).trim()===text);assert.ok(found,`button ${text}`);return found;};
+  const button=(text:string)=>{const found=buttons.find(b=>(b['aria-label']??label(b.children)).trim()===text);assert.ok(found,`button ${text}`);return found;};
   const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:new Button(),preventDefault(){},stopPropagation(){}});
   let time=0;const tick=(ms:number)=>{time+=ms;const callbacks=[...frames.values()];frames.clear();for(const callback of callbacks)callback(time);if(dirty)render();};
   const advance=(target:number)=>{for(let i=0;i<1000&&Number(host.dataset.elapsed??0)<target;i++)tick(50);assert.ok(Number(host.dataset.elapsed)>=target);};
-  render();await settle();assert.equal(created,1);button('改用輕量玩法').onClick();await settle();assert.equal(section['data-party-mode'],'light');button('開始派對！').onClick();await settle();tick(0);advance(300);
+  render();await settle();assert.equal(created,1);button('改用輕量玩法').onClick();await settle();assert.equal(section['data-party-mode'],'light');
+  assert.match(section.className,/pt-holiday-composition/);
+  // Compact visible controls retain their complete accessible names and state.
+  for(const name of ['暫停','重新開始','玩法與設定','音效關','減少動態開','重試 3D，保留這局']){
+    assert.equal(button(name)['aria-label'],name);assert.equal(button(name).title,name);
+    assert.equal(buttons.filter(b=>b['aria-label']===name).length,1);
+  }
+  assert.equal(button('音效關')['aria-pressed'],false);assert.equal(button('減少動態開')['aria-pressed'],true);
+  button('減少動態開').onClick();await settle();assert.equal(button('減少動態關')['aria-pressed'],false);assert.equal(section['data-party-score'],0);
+  button('開始派對！').onClick();await settle();tick(0);advance(300);
   const good=()=>{const found=buttons.find(b=>/第 [1-6] 格：休假/.test(b['aria-label']??''));assert.ok(found);return found;};
   const held=good();held.onKeyDown(key(' '));for(const listener of escapeListeners)listener(key('Escape'));held.onKeyUp(key(' '));await settle();assert.equal(section['data-party-score'],0,'native capture cancels even when an outer React capture swallows Escape');held.onKeyDown(key(' '));advance(1450); // No keyup/onBlur: simulate a disabled node swallowing release.
   const current=good();current.onKeyDown(key(' '));current.onKeyUp(key(' '));await settle();assert.equal(section['data-party-score'],120);
@@ -1544,10 +1553,10 @@ test('PT-HOLIDAY-SCENE: help Escape cancels held input and returns to paused con
 });
 
 for(const holiday of [false,true])test(`PT-HOLIDAY-SCENE: actual share navigation ${holiday?'scrolls only the holiday result':'preserves other-game navigation'} (non-native)`,()=>{
- const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare()'),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare('),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
  const result={scrollTop:40,getBoundingClientRect:()=>({top:70}),scrollTo:(value:unknown)=>calls.push(value)};
  const panel={closest:()=>result,getBoundingClientRect:()=>({top:410}),scrollIntoView:(value:unknown)=>calls.push(value),focus:(value:unknown)=>calls.push(['focus',value])};
- const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{holiday,chair:false,tofu:false,resultReady:true,container:{current:{querySelector:()=>panel}}});run();
+ const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{onResultShare:undefined,holiday,chair:false,tofu:false,resultReady:true,container:{current:{querySelector:()=>panel}}});run();
  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[holiday?{top:380,behavior:'instant'}:{block:'start',behavior:'instant'},['focus',{preventScroll:true}]]);
 });
 
@@ -1573,7 +1582,7 @@ async function chairControllerHarness(mode:'native'|'light'){
  }});
  const render=()=>{cursor=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'chair',seed:42,onBack(){},onStart(){},onResult:(value:any)=>results.push(value)});while(effects.length)effects.shift()!();};
  const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
- const button=(label:string)=>{const found=buttons.find(b=>(b['aria-label']??text(b.children).trim())===label);assert.ok(found,`chair button ${label}`);return found;};
+ const button=(label:string)=>{const found=buttons.filter(b=>(b['aria-label']??text(b.children).trim())===label);assert.equal(found.length,1,`one chair button named ${label}`);return found[0];};
  const click=async(label:string)=>{button(label).onClick({detail:0});await settle();};
  const tick=(ms:number)=>{now+=ms;const callbacks=[...frames.values()];frames.clear();for(const fn of callbacks)fn(now);if(dirty)render();};
  const run=()=>slots[0].current as ChairRun;
@@ -1585,8 +1594,10 @@ async function chairControllerHarness(mode:'native'|'light'){
 }
 
 for(const mode of ['native','light'] as const)test(`PT-CHAIR-SCENE: actual ${mode} controller earns all 22 waves, settles once and restarts same seed (CPU ports)`,async()=>{
- const h=await chairControllerHarness(mode);assert.equal(h.run().status,'ready');assert.equal(h.run().score,0);assert.match(h.section().className,/pt-chair-stage/);
- await h.click('開始派對！');h.tick(0);
+ const h=await chairControllerHarness(mode);assert.equal(h.run().status,'ready');assert.equal(h.run().score,0);assert.match(h.section().className,/pt-chair-stage/);assert.match(h.section().className,/pt-chair-composition/);
+ for(const label of ['暫停','重新開始','玩法與設定','音效關','減少動態開',...(mode==='light'?['重試 3D，保留這局']:[])]){assert.equal(h.button(label)['aria-label'],label);assert.equal(h.button(label).title,label);}
+ assert.equal(h.button('暫停').disabled,true);assert.equal(h.button('音效關')['aria-pressed'],false);assert.equal(h.button('減少動態開')['aria-pressed'],true);
+ await h.click('開始派對！');h.tick(0);assert.equal(h.button('暫停').disabled,false);const beforeMotion=JSON.stringify(h.run());await h.click('減少動態開');assert.equal(h.button('減少動態關')['aria-pressed'],false);assert.equal(JSON.stringify(h.run()),beforeMotion);
  for(let i=0;i<PT.chairWaves;i++){const w=chairWave(42,i);await h.move(w.ticketLane);h.advance(w.at);assert.equal(h.run().tickets,i+1);assert.equal(h.run().lives,3);}
  h.advance(PT.chairMs);assert.equal(h.run().status,'done');assert.equal(h.run().score,4280);assert.equal(h.frames(),0);
  if(mode==='native'){h.failCapture(true);await h.click('查看這局成果');assert.equal(h.results.length,0);assert.equal(h.run().score,4280);h.failCapture(false);}
@@ -1613,9 +1624,9 @@ test('PT-CHAIR-SCENE: actual pause/help/restart, focus and recovery retain one r
 });
 
 test('PT-CHAIR-SCENE: actual share shortcut scrolls only its bounded result (non-native)',()=>{
- const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare()'),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare('),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
  const result={scrollTop:20,getBoundingClientRect:()=>({top:50}),scrollTo:(value:unknown)=>calls.push(value)},panel={closest:()=>result,getBoundingClientRect:()=>({top:330}),scrollIntoView:()=>assert.fail('must not scroll the whole stage'),focus:(value:unknown)=>calls.push(['focus',value])};
- const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{holiday:false,chair:true,tofu:false,resultReady:true,container:{current:{querySelector:()=>panel}}});run();assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{top:300,behavior:'instant'},['focus',{preventScroll:true}]]);
+ const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{onResultShare:undefined,holiday:false,chair:true,tofu:false,resultReady:true,container:{current:{querySelector:()=>panel}}});run();assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{top:300,behavior:'instant'},['focus',{preventScroll:true}]]);
 });
 
 async function tofuControllerHarness(mode:'native'|'light'){
@@ -1639,7 +1650,7 @@ async function tofuControllerHarness(mode:'native'|'light'){
  }});
  const render=()=>{cursor=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'tofu',seed:42,onBack(){},onStart(){},onResult:(value:any)=>results.push(value)});while(effects.length)effects.shift()!();};
  const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
- const button=(label:string)=>{const found=buttons.find(b=>(b['aria-label']??text(b.children).trim())===label);assert.ok(found,`tofu button ${label}`);return found;};
+ const button=(label:string)=>{const found=buttons.filter(b=>(b['aria-label']??text(b.children).trim())===label);assert.equal(found.length,1,`unique tofu button ${label}`);return found[0];};
  const click=async(label:string)=>{button(label).onClick({detail:0});await settle();};
  const tick=(ms:number)=>{now+=ms;const callbacks=[...frames.values()];frames.clear();for(const fn of callbacks)fn(now);if(dirty)render();};
  const run=()=>slots[0].current as TofuRun;
@@ -1651,7 +1662,10 @@ async function tofuControllerHarness(mode:'native'|'light'){
 }
 
 for(const mode of ['native','light'] as const)test(`PT-TOFU-SCENE: actual ${mode} controller earns twelve perfect layers, capture retry and same-seed restart (CPU ports)`,async()=>{
- const h=await tofuControllerHarness(mode);assert.match(h.section().className,/pt-tofu-stage/);await h.click('開始派對！');h.tick(0);
+ const h=await tofuControllerHarness(mode);assert.match(h.section().className,/pt-tofu-stage/);assert.match(h.section().className,/pt-tofu-composition/);
+ for(const label of ['暫停','重新開始','玩法與設定','音效關','減少動態開',...(mode==='light'?['重試 3D，保留這局']:[])]){assert.equal(h.button(label)['aria-label'],label);assert.equal(h.button(label).title,label);}
+ assert.equal(h.button('暫停').disabled,true);assert.equal(h.button('音效關')['aria-pressed'],false);assert.equal(h.button('減少動態開')['aria-pressed'],true);
+ await h.click('開始派對！');h.tick(0);assert.equal(h.button('暫停').disabled,false);const beforeMotion=JSON.stringify(h.run());await h.click('減少動態開');assert.equal(h.button('減少動態關')['aria-pressed'],false);assert.equal(JSON.stringify(h.run()),beforeMotion);
  for(let i=0;i<PT.tofuGoal;i++){
   h.seek(s=>Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers.at(-1)![tofuAxis(s)])<.04);const before=h.run(),axis=tofuAxis(before);assert.equal(axis,i%2?'z':'x');
   const button=h.button('豆腐落下！');button.onKeyDown(h.key(' '));button.onKeyUp(h.key(' '));await h.settle();assert.equal(h.run().fall?.perfect,true);assert.equal(h.run().layers.length,i+1);assert.equal(h.run().score,before.score);
@@ -1681,9 +1695,9 @@ for(const mode of ['native','light'] as const)test(`PT-TOFU-SCENE: actual ${mode
  const h=await tofuControllerHarness(mode);await h.click('開始派對！');h.tick(0);h.advance(PT.tofuMs);assert.equal(h.run().status,'done');assert.equal(h.run().score,0);assert.equal(h.run().layers.length,1);assert.equal(h.frames(),0);h.cleanup();
 });
 test('PT-TOFU-SCENE: actual share shortcut scrolls only its bounded result (non-native)',()=>{
- const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare()'),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare('),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
  const result={scrollTop:20,getBoundingClientRect:()=>({top:50}),scrollTo:(value:unknown)=>calls.push(value)},panel={closest:()=>result,getBoundingClientRect:()=>({top:330}),scrollIntoView:()=>assert.fail('must not scroll the whole stage'),focus:(value:unknown)=>calls.push(['focus',value])};
- const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{holiday:false,chair:false,tofu:true,resultReady:true,container:{current:{querySelector:()=>panel}}});run();assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{top:300,behavior:'instant'},['focus',{preventScroll:true}]]);
+ const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{onResultShare:undefined,holiday:false,chair:false,tofu:true,resultReady:true,container:{current:{querySelector:()=>panel}}});run();assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{top:300,behavior:'instant'},['focus',{preventScroll:true}]]);
 });
 
 

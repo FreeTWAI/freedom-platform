@@ -150,3 +150,72 @@ names. Scrollable control grids start at a nonnegative origin. Browser hit
 checks additionally require each visible control child to fit its button;
 no existing size, containment, focus, clock or score assertion was removed.
 The follow-up still requires actual new-head browser and screenshot validation.
+
+
+## Bounded Chair control composition (2026-11-09 source candidate)
+
+This increment only changes Chair presentation in PartyGame.tsx and party.css,
+plus Chair sections of the existing tests and this document. It follows the
+separately reviewed Holiday and Tofu control slices. The actual game remains
+辦公椅逃亡: a 30-second runner with 22 seeded waves, lateral/jump collisions,
+tickets and three lives. It is not a musical-chair game.
+
+Title, HUD and tools now share the green game surface without opaque full-width
+bands. Score/time units remain visible. All direct tools use compact visible
+symbols with the complete accessible name, title, pressed/disabled state and
+original action/ref. Tools wrap instead of clipping a horizontal strip. The
+three 48px primary targets form a centered pad below the world in portrait and
+a narrow, separate game-edge lane on wide/short screens. Wide/short title and
+HUD share a measured flow row. The light scene's decorative outer rectangle is
+transparent; its real road, obstacles, tickets and character are unchanged.
+
+The complete native/light world remains unobscured in its exact 4:3 rectangle.
+No renderer pixels are stretched, covered, cropped or zoomed. The 640×480
+buffer, cameras, native input mapping, light projection and source-bound art
+inputs are unchanged. Every gameplay/controller line before the composition
+branch is unchanged. Original held-wave input, cancellation, modal/focus,
+pause/resume, recovery, capture retry and single settlement remain authoritative.
+Holiday, Tofu, Daily, parent Result and Cooking are outside this increment.
+
+Seven original d141d902 / run 42533847998 Chair PNGs were directly inspected
+and SHA-256 checked. At 667×375 with 200% text, the original native/light JSON
+measures 173.84375×130.390625 CSS px, with opaque bands and clipped tools. These
+are historical diagnosis artifacts, not new-source acceptance evidence.
+
+The existing 48-case viewport/text/native-light/fullscreen matrix now checks
+all controls before scrolling, >=44px targets, complete text/content and safe
+area containment, transparent bands, no HUD/control collisions, the complete
+unobscured world, actual hit testing, native canvas alignment, light SVG equality
+and an empty light host. It also returns to normal mode and attaches original
+normal-mode PNG/JSON at 200% text. The original 128×96 floor and exact 4:3 checks
+remain. The exact 667×375 fullscreen/200% state must have >=25% more height than
+the historical 130.390625px (>=56% more area). This is an unexecuted acceptance
+requirement, not an observed improvement or a minimum added to fake a pass.
+
+Existing full 22-wave journeys retain all real 4280-point, 30-second, capture,
+PNG/JPEG retry and same-seed replay assertions. They add early and earned late
+wave 11/21 pixels and world clearance, with 200% text and real jumps. Existing
+three-collision journeys add clearance at two/one lives. Controller tests add
+unique tool names/titles, disabled/pressed states and a no-score-mutation motion
+toggle. No case, score, duration, skip, timeout, selection or sharding is relaxed.
+Extra geometry and screenshot cost is unmeasured until formal browser execution.
+
+Browser/GPU execution, new-source PNGs, actual CSS geometry, full platform CI,
+physical touch/phones, Safari, browser zoom, OS sharing and human art/fun
+acceptance remain not_run here. Text enlargement and synthetic safe insets are
+not real-device evidence. The fixed renderer cannot fill every viewport edge;
+Party still unmounts for the separate parent Result, so continuous live-world
+results are not solved. Fresh source-bound preview capture is unavailable
+through the supported historical #1061-restricted workflow. Preview pins,
+source lists, capture tooling, workflows, dependencies and performance code are
+untouched. This bounded candidate does not complete the all-game redesign.
+
+Local source checks passed: direct Node TypeScript typecheck, the standard build
+with npm offline/update-notifier/audit/fund restrictions, all 225 cases in
+absurd-daily.test.ts with zero skips, all ten declared Party preview source
+hashes, and git diff --check. Browser collection still lists 359 cases; none
+was executed here. Dependencies came from the existing offline ignored
+node_modules directory, without an installation or a root symlink. Full
+DB-backed runtime/contract suites were not run; no isolated TEST_DATABASE_URL
+was supplied. Exact commit, tree, context receipts and command logs accompany
+the handoff. These checks are source/CPU evidence, not rendered acceptance.

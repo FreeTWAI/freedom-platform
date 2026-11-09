@@ -209,3 +209,141 @@
  .pt-hole-controls:not(.pt-light-grid) b{width:1.15em;height:1.15em}
  .pt-holiday-light-board{align-self:stretch;min-height:96px}
 }
+
+/* Holiday composition only: the same intact world, with floating edge controls.
+   Keep every tool directly available. Their real flow height, including 200%
+   text, bounds the world; neither the render host nor its camera is resized. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
+ background:var(--pt-world-bg);
+ .fullscreen-game__bar{background:transparent;border:0;padding:4px 0;max-width:none}
+ .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding:0;line-height:1}
+ .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span{font:inherit;line-height:1}
+ .pt-holiday-heading{gap:4px;padding:2px 4px}
+ .pt-holiday-composition[data-party-state] .pt-scoreboard{background:transparent;border:0;padding:4px 0;gap:4px}
+ .pt-scoreboard>div+div{border:0}
+ .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:nowrap;margin-left:3px}
+ .pt-holiday-field.pt-play-area{grid-template-rows:minmax(96px,1fr) auto auto}
+ .pt-holiday-composition[data-party-state] .pt-controls{padding:2px 4px}
+ .pt-hole-controls:not(.pt-light-grid) button{padding:3px 2px}
+ .pt-holiday-feedback{padding:3px 4px}
+ .pt-holiday-tools-viewport{border:0;background:transparent;overflow:visible}
+ .pt-tools{width:100%;min-width:0;min-height:44px;max-width:100%;padding:4px 0;gap:4px;flex-wrap:wrap;justify-content:center;background:transparent}
+ .pt-tools button{display:grid;place-items:center;flex:0 0 auto;min-width:44px;min-height:44px;max-width:100%;padding:0;font-size:20px;line-height:1;white-space:normal;overflow-wrap:anywhere;border-radius:50%;background:color-mix(in srgb,var(--ad-surface) 88%,transparent)}
+ .pt-tools button>span{display:block;font:inherit;line-height:1}
+ .pt-tools button[aria-pressed=true]{border:2px solid var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
+}
+/* On wide/short screens the HUD shares the title lane. This reclaims an entire
+   status band without guessing a HUD inset or covering any rendered pixel. */
+@media(min-width:760px),(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
+  grid-template-columns:max-content minmax(0,1fr) max-content;grid-template-rows:auto minmax(0,1fr) auto;column-gap:4px;
+  .fullscreen-game__bar{grid-column:1;grid-row:1}
+  .pt-holiday-heading{grid-column:2;grid-row:1}
+  .pt-holiday-composition[data-party-state] .pt-scoreboard{grid-column:3;grid-row:1;grid-template-columns:repeat(3,max-content);align-self:center}
+  .pt-holiday-field.pt-play-area{grid-column:1/-1;grid-row:2;grid-template-rows:minmax(96px,1fr) auto}
+  .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:3}
+ }
+}
+/* Keep late four-digit scores from forcing the enlarged title into two lines.
+   Units stay visible at the same font size, with their own measured line. */
+@media(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
+  .pt-scoreboard strong{display:flex;flex-direction:column;align-items:center}
+  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0;line-height:1}
+ }
+}
+
+/* Tofu composition only. The intact 4:3 world and every control share one
+   surface. Measured flow, not overlays or camera/CSS cropping, reserves the
+   whole moving tower rectangle, including late layers and falling misses. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
+ background:var(--pt-world-bg);
+ .fullscreen-game__bar{background:transparent;border:0;padding:4px 0;max-width:none}
+ .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding:0;line-height:1}
+ .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span{font:inherit;line-height:1}
+ .pt-holiday-heading{gap:4px;padding:2px 4px}
+ .pt-tofu-composition[data-party-state] .pt-scoreboard{background:transparent;border:0;padding:4px 0;gap:4px}
+ .pt-scoreboard>div+div{border:0}
+ .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:nowrap;margin-left:3px}
+ .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr) 56px;grid-template-rows:minmax(96px,1fr) auto}
+ .pt-holiday-world{grid-column:1/-1;grid-row:1}
+ .pt-tofu-composition[data-party-state] .pt-tofu-controls{grid-column:2;grid-row:2;align-content:center;padding:2px 4px;overflow:visible}
+ .pt-tofu-controls>.pt-drop{border-radius:50%;padding:0}
+ .pt-holiday-feedback{grid-column:1;grid-row:2;align-self:center;padding:3px 4px}
+ .pt-tofu-light-board [data-light-world=tofu]>rect:first-child{fill:transparent}
+ .pt-holiday-tools-viewport{border:0;background:transparent;overflow:visible}
+ .pt-tools{width:100%;min-width:0;min-height:44px;max-width:100%;padding:4px 0;gap:4px;flex-wrap:wrap;justify-content:center;background:transparent}
+ .pt-tools button{display:grid;place-items:center;flex:0 0 auto;min-width:44px;min-height:44px;max-width:100%;padding:0;font-size:20px;line-height:1;white-space:normal;overflow-wrap:anywhere;border-radius:50%;background:color-mix(in srgb,var(--ad-surface) 88%,transparent)}
+ .pt-tools button>span{display:block;font:inherit;line-height:1}
+ .pt-tools button[aria-pressed=true]{border:2px solid var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
+}
+/* A short landscape loses the independent HUD row, not the tower. The drop
+   control occupies its own narrow edge lane beside the full native/light host. */
+@media(min-width:760px),(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
+  grid-template-columns:max-content minmax(0,1fr) max-content;grid-template-rows:auto minmax(0,1fr) auto;column-gap:4px;
+  .fullscreen-game__bar{grid-column:1;grid-row:1}
+  .pt-holiday-heading{grid-column:2;grid-row:1}
+  .pt-tofu-composition[data-party-state] .pt-scoreboard{grid-column:3;grid-row:1;grid-template-columns:repeat(3,max-content);align-self:center}
+  .pt-holiday-field.pt-play-area{grid-column:1/-1;grid-row:2}
+  .pt-holiday-world{grid-column:1;grid-row:1}
+  .pt-tofu-composition[data-party-state] .pt-tofu-controls{grid-column:2;grid-row:1}
+  .pt-holiday-feedback{grid-column:1/-1;grid-row:2}
+  .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:3}
+ }
+}
+/* Keep the score/time units visible without competing with a late four-digit
+   score or the enlarged title. Remaining misses retain their own visible line. */
+@media(max-width:440px),(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
+  .pt-scoreboard>div:nth-child(-n+2) strong{display:flex;flex-direction:column;align-items:center}
+  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0;line-height:1}
+ }
+}
+
+/* Chair composition only: the runner, HUD and direct controls share the same
+   surface. The complete 4:3 world stays outside every flow-owned control lane;
+   camera, collision coordinates and input normalization remain unchanged. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
+ background:var(--pt-world-bg);
+ .fullscreen-game__bar{background:transparent;border:0;padding:4px 0;max-width:none}
+ .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding:0;line-height:1}
+ .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span{font:inherit;line-height:1}
+ .pt-holiday-heading{gap:4px;padding:2px 4px}
+ .pt-chair-composition[data-party-state] .pt-scoreboard{background:transparent;border:0;padding:4px 0;gap:4px}
+ .pt-scoreboard>div+div{border:0}
+ .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:nowrap;margin-left:3px}
+ .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
+ .pt-chair-composition[data-party-state] .pt-chair-controls{grid-template-columns:repeat(3,48px);justify-content:center;align-content:center;gap:4px;padding:2px 4px;overflow:visible}
+ .pt-chair-controls>button{width:48px;min-height:48px;padding:0;border-radius:50%}
+ .pt-holiday-feedback{padding:3px 4px}
+ .pt-chair-light-board [data-light-world=chair]>rect:first-child{fill:transparent}
+ .pt-holiday-tools-viewport{border:0;background:transparent;overflow:visible}
+ .pt-tools{width:100%;min-width:0;min-height:44px;max-width:100%;padding:4px 0;gap:4px;flex-wrap:wrap;justify-content:center;background:transparent}
+ .pt-tools button{display:grid;place-items:center;flex:0 0 auto;min-width:44px;min-height:44px;max-width:100%;padding:0;font-size:20px;line-height:1;white-space:normal;overflow-wrap:anywhere;border-radius:50%;background:color-mix(in srgb,var(--ad-surface) 88%,transparent)}
+ .pt-tools button>span{display:block;font:inherit;line-height:1}
+ .pt-tools button[aria-pressed=true]{border:2px solid var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
+}
+/* A narrow game-edge pad replaces the old wide sidebar. Its three real targets
+   and the shared title/HUD row reclaim room for the intact runner in landscape. */
+@media(min-width:760px),(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
+  grid-template-columns:max-content minmax(0,1fr) max-content;grid-template-rows:auto minmax(0,1fr) auto;column-gap:4px;
+  .fullscreen-game__bar{grid-column:1;grid-row:1}
+  .pt-holiday-heading{grid-column:2;grid-row:1}
+  .pt-chair-composition[data-party-state] .pt-scoreboard{grid-column:3;grid-row:1;grid-template-columns:repeat(3,max-content);align-self:center}
+  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-column:1/-1;grid-row:2;grid-template-columns:minmax(128px,1fr) 56px;grid-template-rows:minmax(156px,1fr) auto}
+  .pt-holiday-world{grid-column:1;grid-row:1}
+  .pt-chair-composition[data-party-state] .pt-chair-controls{grid-column:2;grid-row:1;grid-template-columns:48px;grid-template-rows:repeat(3,48px)}
+  .pt-holiday-feedback{grid-column:1/-1;grid-row:2}
+  .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:3}
+ }
+}
+/* Units remain visible with their own measured line; four-digit earned scores
+   must not crowd the enlarged title or push the three-life HUD off the stage. */
+@media(max-width:440px),(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
+  .pt-scoreboard>div:nth-child(-n+2) strong{display:flex;flex-direction:column;align-items:center}
+  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0;line-height:1}
+ }
+}

@@ -263,3 +263,13 @@ UX-14最終受影響瀏覽器子集 **5 passed／0 skipped（2.4分鐘）**：�
 實際新圖：[桌面大廳](../../modules/absurd-daily/review/illustrated-lobby-desktop-20261026.png)／[手機料理目錄](../../modules/absurd-daily/review/illustrated-kitchen-phone-20261026.png)／[炸熱狗開場](../../modules/absurd-daily/review/corn-dog-illustrated-ready-20261026.png)。PNG為production頁面，生成的完整mockup另存E槽；兩種證據分開。真人畫風接受、真人趣味與實體Safari／Android效能仍是外部待驗，不以本機軟體WebGL或像素檢查代簽。
 
 最後在`b267f472f`合入及版面修正後，**13 passed／0 skipped（4.4分鐘）**：包含原三個失敗、四項審查回歸、真正下載PNG、跨回合native輸入、主線AD-6重建等待、會員登入／既有草稿不覆寫／確認才發文、外部分享與clipboard失敗、派對200%及引導料理大字。這是受影響子集，不說完整56條已在同一最後版本全數重跑。兩輪隔離schema皆清到0連線／0剩餘schema，沒有使用正式資料。標準typecheck／production build通過、Three>500kB提示仍保留；descriptor source ownership為81模組、0issues／0unknown，本機context完整且0blockers，均不代替遠端CI、review、merge或deploy。
+
+## 2026-11-09：Daily 三款成果留在原遊戲現場（候選，未發布）
+
+STAMP／CASH／PHOTO 真正完成後保留同一個 GameBoard 與 renderer owner，不再卸載場景換成整頁奶油色成果頁。完成事實、系統分享、PNG、同題再來與更多分享放在原場景內；PHOTO 顯示本人實際選取的已保存照片，不重拍最後一位客人替代作品。完成後停止時鐘、RAF、鍵盤、指標、移鏡／縮放與內部重開入口；同題再來仍由父層清成果、更新 run key 並保留 seed。
+
+更多分享使用有關閉、Escape、焦點返回的場景內對話框。Result 與平台選擇內容持續掛載，關閉不取消 PNG／JPEG 工作、不重設照片或產生第二份成果。FullscreenGame 只為 Daily 接入開啟分享的 callback，其他遊戲保留既有捲動／聚焦行為。PNG 和工坊 JPEG 的獨立產生／重試、舊選片的 abort 與 ownership、Blob 清理、系統取消／單次分享、手動複製及工坊保存失敗不導頁仍沿用原責任。完成後 context loss 不重算或隱藏成果，改顯示該局已保存畫面與可用下載；再次遊玩才建立新場景。
+
+本次從 CASH 修正候選 `37999a36bcbd99c82c2d7a6542fe03f5d7773b1c` 隔離接續，不修改 CASH 樣式／stage renderer、遊戲 domain、Party／Cooking renderer、預覽圖或來源 pins。原 d141 的 STAMP 成果原圖 353／369／396／402 僅用來確認舊問題，不能當本候選的成功像素。
+
+本機只執行既有依賴的離線型別／build／runtime 與瀏覽器案例 collection；沒有啟動瀏覽器、server、socket、安裝套件或發布。新的 browser cases 必須在授權的最終 exact head CI 執行，分別核對 native／light renderer 與 normal／原生 fullscreen／拒絕後全視窗，不混稱兩種 native。320／390／667、100／200% 文字、安全區、原 canvas 身分／矩形、實際完成／分享截圖與背景可見性、選片、焦點與下載等仍屬待跑驗收。本候選不宣稱全部 72 入口已驗完，亦不恢復尚未獲准的 Cooking full-stage 或缺少來源綁定擷取的 Party renderer 工作。

@@ -1,4 +1,5 @@
 import {test,expect,type Page,type Locator} from './fixtures.js';
+import {captureDailyStage,verifyDailyResult} from './helpers/daily-result-stage.js';
 import {PerspectiveCamera,Vector3} from 'three';
 import {cashDeck} from '../../apps/portal-web/src/games/domain.js';
 // Authored browser regression: --list is discovery only, not execution or art acceptance.
@@ -70,7 +71,7 @@ async function inspect(page:Page){
  return geometry;
 }
 for(const light of [false,true])for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])for(const scale of [1,2])test(`CASH world ${light?'light':'native'} ${viewport.width} ${scale*100}%: whole card, floating controls, actual sorting and interruption`,async({page},testInfo)=>{
- await page.setViewportSize(viewport);await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+ await page.setViewportSize(viewport);await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=async()=>{throw new DOMException('Controlled fullscreen rejection','NotAllowedError');};});
  await page.clock.install({time:new Date('2026-11-09T12:00:00Z')});await page.goto('/play?game=cash&seed=42');await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15000});await page.clock.pauseAt(new Date('2026-11-09T12:01:00Z'));
  await overlayContrast(page);await page.getByRole('button',{name:'開始這一局',exact:true}).click();
  if(light){await page.getByRole('button',{name:'3D · 改用輕量插畫',exact:true}).click();await expect(page.locator('[data-game-stage="ready"]')).toHaveAttribute('data-daily-renderer','light');await page.getByRole('button',{name:'繼續這一局',exact:true}).click();}
@@ -80,6 +81,7 @@ for(const light of [false,true])for(const viewport of [{width:320,height:568},{w
  const start=(await card(page)).center,deck=cashDeck(42);await page.mouse.move(start.x,start.y);await page.mouse.down();await page.mouse.move(start.x+20,start.y);await page.mouse.up();await expect(page.locator('[data-cash-progress]')).toHaveText('0/30');
  await board.press(deck[0].valid?'ArrowLeft':'ArrowRight');await expect(page.locator('[data-cash-mistakes]')).toHaveText('錯1');await page.clock.runFor(200);
  const help=page.getByRole('button',{name:'玩法說明',exact:true});await help.click();const dialog=page.getByRole('dialog',{name:'玩法說明',exact:true});await expect(dialog).toContainText('目前這張');await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);await page.keyboard.press('Escape');await expect(help).toBeFocused();await overlayContrast(page);await visibleControl(page.getByRole('button',{name:'繼續這一局',exact:true}));await page.getByRole('button',{name:'繼續這一局',exact:true}).click();
+ const resultCheckpoint=await captureDailyStage(page);
  for(const [index,item]of deck.entries()){
   await page.clock.runFor(200);
   if(index%3===0){const p=(await card(page)).center;await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(p.x+(item.valid?60:-60),p.y,{steps:4});await page.mouse.up();}
@@ -94,7 +96,8 @@ for(const light of [false,true])for(const viewport of [{width:320,height:568},{w
    await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await inspect(page);
   }
  }
- await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.locator('.fw-arcade-result')).toContainText('100 萬道具鈔');await expect(page.locator('.fw-arcade-result')).toContainText('退回 6 張票券');
+ await expect(page.locator('[data-daily-result]')).toBeVisible();await expect(page.locator('[data-daily-result]')).toContainText('100 萬道具鈔');await expect(page.locator('[data-daily-result]')).toContainText('退回 6 張票券');
+ await verifyDailyResult(page,testInfo,{game:'cash',scale,checkpoint:resultCheckpoint,mode:'rejected',prefix,scaleText});
 });
 
 for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])test(`CASH dynamic recovery ${viewport.width}: 200% two-action sheet scrolls after completed capture and real context loss`,async({page},testInfo)=>{

@@ -1,0 +1,37 @@
+/* An earned Daily result belongs to its still-mounted world. Only compact
+   actions float over it; platform instructions have their own closable panel. */
+.fw-arcade-root.fw-arcade-toy-console .daily-scene[data-completed=true] [hidden]{display:none!important}
+.fw-arcade-root.fw-arcade-toy-console .daily-result{position:absolute;inset:0;z-index:4;margin:0;padding:0;background:none;pointer-events:none;outline:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border:0;border-radius:0;pointer-events:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-summary{position:absolute;left:max(10px,var(--game-safe-left));top:calc(max(10px,var(--game-safe-top)) + 54px);max-width:calc(100% - max(10px,var(--game-safe-left)) - max(10px,var(--game-safe-right)));padding:6px 10px;border:1px solid var(--ad-line);border-radius:12px;background:var(--ad-surface);color:var(--ad-ink);box-shadow:0 2px 7px #49362f25}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-summary h1{font-size:1rem;line-height:1.3;letter-spacing:normal;margin:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-summary p{font-size:.875rem;line-height:1.4;margin:2px 0 0;color:var(--ad-ink)}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-dock{position:absolute;left:max(10px,var(--game-safe-left));right:max(10px,var(--game-safe-right));bottom:max(12px,var(--game-safe-bottom));display:flex;flex-direction:column;gap:8px}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;pointer-events:auto}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-actions :is(button,a){display:flex;align-items:center;justify-content:center;min-width:44px;min-height:48px;padding:6px 4px;border-radius:12px;font-size:.875rem;line-height:1.35;white-space:normal;text-align:center;text-decoration:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-status{order:-1;align-self:flex-start;max-width:100%;padding:3px 6px;border-radius:8px;background:var(--ad-surface);color:var(--ad-ink);font-size:.875rem;line-height:1.4;margin:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-result:focus-visible .daily-result-summary{outline:3px solid var(--ad-accent);outline-offset:3px}
+/* Fixed bounds are measured from this retained stage, not the whole page.
+   The dialog itself never unmounts when closed, so exports and sharing survive. */
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share{position:fixed;inset:auto;margin:0;padding:0;border:2px solid var(--ad-line);border-radius:16px;background:var(--ad-surface);color:var(--ad-ink);overflow:hidden;pointer-events:auto;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share[open]{display:flex;flex-direction:column}
+.daily-result-share::backdrop{background:#241c1866}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share>header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:0 0 auto;padding:8px;border-bottom:1px solid var(--ad-line)}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share>header h2{font-size:1rem;line-height:1.35;margin:0;min-width:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share>header button{flex:0 0 auto;min-height:44px;padding:6px 8px;font-size:.875rem;line-height:1.4}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content{display:flex;flex-direction:column;gap:12px;min-height:0;padding:12px;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content>*{flex-shrink:0;min-width:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content :is(h3,p,small){font-size:.875rem;line-height:1.5;color:var(--ad-ink);margin:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content :is(button,a){min-width:44px;min-height:44px;font-size:.875rem;line-height:1.4}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content .fw-arcade-photo-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content .fw-arcade-photo-choices button{min-width:0;white-space:normal}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content .fw-arcade-photo-choices img{width:100%;height:auto;object-fit:contain}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content .fw-arcade-result-again{display:flex;flex-wrap:wrap;gap:8px}
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content .fw-arcade-link-field :is(input,textarea){width:100%;min-width:0;font-size:1rem}
+@media(max-width:360px){
+ .fw-arcade-root.fw-arcade-toy-console .daily-result-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content .fw-arcade-result-photo>img{display:block;width:100%;height:auto;max-height:240px;object-fit:contain;border-radius:10px}
+
+.fw-arcade-root.fw-arcade-toy-console .daily-result-share-content .fw-arcade-photo-choices span{font-size:inherit}

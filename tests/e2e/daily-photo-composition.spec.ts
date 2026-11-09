@@ -1,4 +1,5 @@
 import {test,expect,type Page,type Locator} from './fixtures.js';
+import {captureDailyStage,verifyDailyResult} from './helpers/daily-result-stage.js';
 import sharp from 'sharp';
 import {photoModelBounds} from './helpers/photo-model-bounds.js';
 import {RULES} from '../../apps/portal-web/src/games/domain.js';
@@ -6,8 +7,8 @@ import {RULES} from '../../apps/portal-web/src/games/domain.js';
 // These are future real-browser observations, not visual acceptance from DOM
 // bounds. Keep the full-stage PNGs for human composition/subject review.
 const sizes=[{width:320,height:568},{width:390,height:844},{width:667,height:375}];
-async function openPhoto(page:Page,light:boolean){
-  await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+async function openPhoto(page:Page,light:boolean,rejected=false){
+  await page.addInitScript(rejected=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:rejected});if(rejected)Element.prototype.requestFullscreen=async()=>{throw new DOMException('Controlled fullscreen rejection','NotAllowedError');};},rejected);
   await page.clock.install({time:new Date('2026-11-08T12:00:00Z')});
   await page.goto('/play?game=photo&seed=42');
   await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15000});
@@ -155,7 +156,7 @@ async function inspectActualClient(page:Page,light:boolean,client=0,time=.2){
 }
 for(const light of [false,true])for(const viewport of sizes)for(const scale of [1,2]){
   test(`PHOTO world ${light?'light':'native'} ${viewport.width} ${scale*100}%: full canvas, unclipped HUD, real actions and modal return`,async({page},testInfo)=>{
-    await page.setViewportSize(viewport);await openPhoto(page,light);
+    await page.setViewportSize(viewport);await openPhoto(page,light,true);
     const owner=page.locator('.fullscreen-game'),board=page.locator('.fw-arcade-board'),shutter=page.getByRole('button',{name:'拍照快門',exact:true});
     await scaleText(owner,scale);
     await shutter.click();await page.clock.runFor(200);
@@ -209,6 +210,10 @@ for(const light of [false,true])for(const viewport of sizes)for(const scale of [
     // asking the player to open Help while those twelve seconds run out.
     await page.clock.fastForward(12016);await expect(page.locator('[data-photo-client]')).toHaveText('3/3');await expect(page.locator('[data-photo-goal]')).toHaveText('三鴿同框');await expect(page.locator('[data-photo-goal]')).toBeVisible();await expect(board).toHaveAttribute('data-playing','true');await expect(page.locator('[data-daily-overlay]')).toHaveCount(0);await textBounds(owner);
     await testInfo.attach(`${prefix}-third-client-goal.png`,{body:await owner.screenshot({animations:'disabled'}),contentType:'image/png'});
+    const resultCheckpoint=await captureDailyStage(page),saved=await page.locator('.fw-arcade-contact-sheet img').count();
+    await shutter.click();await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(saved+1);
+    await page.getByRole('button',{name:'挑選照片',exact:true}).click();
+    await verifyDailyResult(page,testInfo,{game:'photo',scale,checkpoint:resultCheckpoint,mode:'rejected',prefix,scaleText});
 
   });
 }

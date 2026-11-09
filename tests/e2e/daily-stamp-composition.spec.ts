@@ -1,4 +1,5 @@
 import {test,expect,type Page,type Locator} from './fixtures.js';
+import {captureDailyStage,verifyDailyResult} from './helpers/daily-result-stage.js';
 import {PerspectiveCamera,Vector3} from 'three';
 import sharp from 'sharp';
 import {readFileSync} from 'node:fs';
@@ -7,8 +8,8 @@ import {stampTarget,RULES} from '../../apps/portal-web/src/games/domain.js';
 // Future full-page browser observations. Collection/source math is not a run,
 // pixel review, physical touch or human playability acceptance.
 const sizes=[{width:320,height:568},{width:390,height:844},{width:667,height:375}];
-async function openStamp(page:Page,light:boolean){
-    await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+async function openStamp(page:Page,light:boolean,rejected=false){
+    await page.addInitScript(rejected=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:rejected});if(rejected)Element.prototype.requestFullscreen=async()=>{throw new DOMException('Controlled fullscreen rejection','NotAllowedError');};},rejected);
     await page.clock.install({time:new Date('2026-11-09T12:00:00Z')});await page.goto('/play?game=stamp&seed=42');
     await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15000});await page.clock.pauseAt(new Date('2026-11-09T12:01:00Z'));
     await overlayContrast(page);await page.getByRole('button',{name:'先蓋一張練習紙',exact:true}).click();
@@ -96,7 +97,7 @@ async function inspect(page:Page){
     return {box,paper,effectiveFov:camera.fov,canvas};
 }
 for(const light of [false,true])for(const viewport of sizes)for(const scale of [1,2])test(`STAMP world ${light?'light':'native'} ${viewport.width} ${scale*100}%: paper contacts, floating controls, safe text and interruption`,async({page},testInfo)=>{
-    await page.setViewportSize(viewport);await openStamp(page,light);const owner=page.locator('.fullscreen-game'),board=page.locator('.fw-arcade-board');await scaleText(owner,scale);
+    await page.setViewportSize(viewport);await openStamp(page,light,true);const owner=page.locator('.fullscreen-game'),board=page.locator('.fw-arcade-board');await scaleText(owner,scale);
     await expect(page.locator('[data-stamp-time]')).toHaveText('不計時');await contact(page,0);await expect(page.locator('.fw-arcade-counter')).toHaveText('0/12');await page.clock.runFor(220);await contact(page,0);await page.clock.runFor(220);
     await expect(page.locator('.fw-arcade-counter')).toHaveText('1/12');await expect(page.locator('[data-stamp-misses]')).toHaveText('歪0');
     const prefix=`stamp-world-${light?'light':'native'}-${viewport.width}x${viewport.height}-${scale*100}pct`,geometry=await inspect(page);
@@ -116,9 +117,11 @@ for(const light of [false,true])for(const viewport of sizes)for(const scale of [
     for(const name of ['回遊樂場','玩法說明','重新開始這一局','暫停','啪！蓋章']){await page.keyboard.press('Tab');await expect(page.getByRole('button',{name,exact:true})).toBeFocused();}
     await page.keyboard.press('Enter');await expect(page.locator('.fw-arcade-counter')).toHaveText('3/12');await expect(page.locator('[data-stamp-misses]')).toHaveText('歪0');
     expect(await page.evaluate(()=>({x:scrollX,y:scrollY,owners:[...document.querySelectorAll('.fullscreen-game,[data-daily-stage],.fw-arcade-controls')].map(e=>[e.scrollLeft,e.scrollTop])}))).toEqual(before);
+    const resultCheckpoint=await captureDailyStage(page);
     // Every remaining document is consumed at the actual projected target.
     for(let index=3;index<12;index++){await page.clock.runFor(RULES.stampCooldown);await contact(page,index);if(index<11)await expect(page.locator('.fw-arcade-counter')).toHaveText(`${index+1}/12`);}
     const result=page.getByRole('region',{name:'遊戲成果'});await expect(result).toBeVisible();await expect(result).toContainText('完成 12 份文件');await expect(result).toContainText('多蓋 0 次');await testInfo.attach(`${prefix}-earned-result.png`,{body:await owner.screenshot(),contentType:'image/png'});
+    await verifyDailyResult(page,testInfo,{game:'stamp',scale,checkpoint:resultCheckpoint,mode:'rejected',prefix,scaleText});
 });
 
 for(const viewport of sizes)test(`STAMP native recovery ${viewport.width}: real context loss preserves paper then explicit light play earns a downloadable result`,async({page},testInfo)=>{
@@ -131,7 +134,7 @@ for(const viewport of sizes)test(`STAMP native recovery ${viewport.width}: real 
     await contact(page,11);await expect(page.getByRole('alert')).toContainText('成果畫面還沒保存');await overlayContrast(page);await scaleText(owner,2);await visibleControl(page.getByRole('button',{name:'重試產生成果圖片',exact:true}));await expect(page.locator('.fw-arcade-counter')).toHaveText('12/12');await testInfo.attach(`stamp-recovery-${viewport.width}-200pct-completed-capture.png`,{body:await owner.screenshot(),contentType:'image/png'});
     await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();await expect(page.getByRole('region',{name:'遊戲成果'})).toContainText('多蓋 0 次');
     const event=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();const bytes=readFileSync((await(await event).path())!),meta=await sharp(bytes).metadata();expect([meta.format,meta.width,meta.height]).toEqual(['png',960,1200]);expect((await sharp(bytes).stats()).channels.some(c=>c.stdev>10)).toBe(true);
-    await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await testInfo.attach(`stamp-recovery-${viewport.width}-earned-result.png`,{body:await owner.screenshot(),contentType:'image/png'});
+    await page.getByRole('button',{name:'更多分享方式',exact:true}).click();await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await page.getByRole('button',{name:'關閉分享',exact:true}).click();await testInfo.attach(`stamp-recovery-${viewport.width}-earned-result.png`,{body:await owner.screenshot(),contentType:'image/png'});
 });
 
 

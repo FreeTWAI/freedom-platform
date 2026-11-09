@@ -12,7 +12,7 @@ import * as feedback from '../../apps/portal-web/src/games/daily-feedback.js';
 function board(game:domain.GameId){
  const text=readFileSync(new URL('../../apps/portal-web/src/games/AbsurdDaily.tsx',import.meta.url),'utf8');
  const body=text.slice(text.indexOf('function GameBoard('),text.indexOf('\nfunction Result('));
- const instrumented=body.replace('    const l = live.current, remaining', '    expose({live,stage,pendingResult,shoot,photosDone,nextClient,start,setPaused,pointerDown,pointerMove,pointerUp,keyboard,applyCash,applyStamp,changeRenderer,stop});\n    const l = live.current, remaining');
+ const instrumented=body.replace('    const l = live.current, remaining', '    expose({live,stage,pendingResult,shoot,photosDone,nextClient,start,setPaused,pointerDown,pointerMove,pointerUp,keyboard,applyCash,applyStamp,changeRenderer,stop,pan,restart});\n    const l = live.current, remaining');
  const code=transformSync(instrumented+'\nexports.GameBoard=GameBoard;', {loader:'tsx',format:'cjs',jsx:'automatic',target:'es2023'}).code.replaceAll('import("./stage")','controlledImport("native")').replaceAll('import("./daily-scene")','controlledImport("light")');
  const slots:any[]=[],effects:(()=>void)[]=[],nodes:any[]=[],timers=new Map<number,()=>void>(),frames=new Map<number,(now:number)=>void>(),listeners=new Map<string,()=>void>();
  let index=0,dirty=false,now=0,id=0,api:any,disposed=0,captures=0,created=0,lost:()=>void=()=>{},failCapture=false,failUpdate=false;
@@ -25,7 +25,7 @@ function board(game:domain.GameId){
  const create=(_host:unknown,onLost:()=>void)=>{lost=onLost;created++;return {update(){if(failUpdate)throw Error('controlled update failure');},framing:()=>({visible:['head','feet'],blocked:false,lift:0}),point:()=>domain.stampTarget(42,api.live.current.stamps.index),capture(){captures++;if(failCapture)throw Error('capture unavailable');return 'controlled-image';},stats:()=>({calls:1,triangles:2,geometries:3,textures:0}),dispose(){disposed++;}};};
  const module={exports:{} as any};
  runInNewContext(code,{...domain,...feedback,...hooks,holidayInput,module,exports:module.exports,Error,GameCover:()=>null,expose:(value:any)=>{api=value;},hints:{photo:'photo',stamp:'stamp',cash:'cash'},syncDiagnostics(){},performance:{now:()=>now},matchMedia:()=>({matches:false,addEventListener:(name:string,fn:()=>void)=>listeners.set(`media:${name}`,fn),removeEventListener:(name:string)=>listeners.delete(`media:${name}`)}),document:{hidden:false,addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)},window:{setTimeout:(fn:()=>void)=>{timers.set(++id,fn);return id;},addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)},clearTimeout:(id:number)=>timers.delete(id),requestAnimationFrame:(fn:(n:number)=>void)=>{frames.set(++id,fn);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),controlledImport:(mode:string)=>new Promise((resolve,reject)=>loads.push({mode,resolve,reject})),require:(name:string)=>{assert.equal(name,'react/jsx-runtime');return {jsx,jsxs:jsx,Fragment:'fragment'};}});
- const render=()=>{index=0;dirty=false;nodes.length=0;module.exports.GameBoard({game,seed:42,onBack(){},onStart(){},onResult:(result:any)=>results.push(result)});while(effects.length)effects.shift()!();};
+ const render=()=>{index=0;dirty=false;nodes.length=0;module.exports.GameBoard({game,seed:42,onBack(){},onStart(){},onResult:(result:any)=>results.push(result),resultView:(unavailable:boolean)=>({type:'earned-result',props:{unavailable}})});while(effects.length)effects.shift()!();};
  const flush=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
  const pointer=(extra:Record<string,unknown>={})=>({pointerId:1,button:0,isPrimary:true,clientX:150,clientY:150,currentTarget:target,preventDefault(){},...extra});
  render();
@@ -466,4 +466,41 @@ test('PHOTO real controller homes the full client below the HUD, preserves zoom/
  zoom().onChange({target:{value:'38'}});h.button('鏡頭往左').onClick({detail:0});
  h.advance(12016);const [id,frame]=[...h.frames.entries()][0];h.frames.delete(id);frame(12016);await h.flush();
  assert.equal(l.client,2);assertHome();h.unmount();
+});
+
+
+for(const game of ['photo','stamp','cash'] as const)test(`Daily retained ${game} completion freezes every gameplay input and keeps one scene until unmount`,async()=>{
+ const h=board(game);await h.resolve();await h.start();const l=h.api.live.current,owner=h.api.stage.current;
+ const zoom=h.nodes.find(n=>n.props['aria-label']==='鏡頭廣角')?.props;
+ const staleAction=h.button(game==='photo'?'拍照快門':game==='stamp'?'啪！蓋章':'收鈔→（收取道具鈔）');
+ if(game==='photo'){h.api.shoot();h.api.nextClient();h.api.shoot();h.api.nextClient();h.api.shoot();h.api.nextClient();}
+ else if(game==='stamp'){h.api.applyStamp(domain.stampTarget(42,0));for(let index=0;index<12;index++){h.advance(220);h.api.applyStamp(domain.stampTarget(42,index));}}
+ else for(const card of domain.cashDeck(42)){h.api.applyCash(card.valid);h.advance(160);}
+ await h.flush();assert.equal(h.results.length,1);assert.equal(l.done,true);assert.equal(l.clock.running,false);assert.equal(h.frames.size,0);assert.equal(h.api.stage.current,owner);assert.equal(h.stats().created,1);assert.equal(h.stats().disposed,0);
+ const result=h.results[0],before=JSON.stringify(l),captures=h.stats().captures;
+ const section=h.nodes.find(n=>n.type==='section');assert.equal(section.props['data-completed'],true);assert.equal(section.props['data-playing'],false);assert.equal(section.props.tabIndex,-1);
+ for(const className of ['daily-scene-top','fw-arcade-controls','daily-scene-mode']){const node=h.nodes.find(n=>n.props.className===className);assert.equal(node.props.hidden,true);assert.equal(node.props.inert,true);}
+ assert.equal(h.nodes.find(n=>n.props.className==='fw-arcade-action-area').props.inert,true);
+ assert.equal(h.nodes.some(n=>Object.hasOwn(n.props,'data-daily-overlay')),false);
+ const stage=h.nodes.find(n=>Object.hasOwn(n.props,'data-daily-stage'));assert.ok(JSON.stringify(stage).includes('earned-result'),'earned UI is nested inside the same stage owner');
+ h.advance(60000);h.api.start();h.api.restart();h.api.changeRenderer('light');h.api.pan(2,2);zoom?.onChange({target:{value:'38'}});
+ for(const key of ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown',' ','Enter','Escape'])h.api.keyboard({key,repeat:false,target:{closest:()=>null},preventDefault(){throw Error('completed game consumed a key');}});
+ h.api.pointerDown(h.pointer());h.api.pointerMove(h.pointer());h.api.pointerUp(h.pointer());staleAction.onClick({detail:0});h.api.applyCash(true);h.api.applyStamp({x:0,y:0});h.api.shoot();h.api.nextClient();
+ await h.flush();assert.equal(JSON.stringify(l),before);assert.equal(h.results[0],result);assert.equal(h.results.length,1);assert.equal(h.stats().captures,captures);assert.equal(h.frames.size,0);assert.equal(h.loads.length,0);assert.equal(h.api.stage.current,owner);
+ h.lose();await h.flush();assert.equal(h.results[0],result);assert.equal(l.clock.running,false);assert.equal(h.frames.size,0);assert.equal(h.stats().captures,captures);assert.equal(h.stats().disposed,0);assert.equal(h.api.stage.current,owner);
+ assert.equal(h.nodes.some(n=>Object.hasOwn(n.props,'data-daily-overlay')),false,'renderer recovery must never cover an accepted result');
+ assert.ok(JSON.stringify(h.nodes.find(n=>Object.hasOwn(n.props,'data-daily-stage'))).includes('"unavailable":true'),'fallback uses the earned result, without a new capture');
+ h.unmount();assert.equal(h.stats().disposed,1);assert.equal(h.frames.size,0);
+});
+
+for(const game of ['stamp','cash'] as const)test(`Daily ${game} capture retry clears stale recovery cover only after the genuine result is saved`,async()=>{
+ const h=board(game);await h.resolve();await h.start();const l=h.api.live.current;
+ h.failCapture(true);
+ if(game==='stamp'){h.api.applyStamp(domain.stampTarget(42,0));for(let index=0;index<12;index++){h.advance(220);h.api.applyStamp(domain.stampTarget(42,index));}}
+ else for(const card of domain.cashDeck(42)){h.api.applyCash(card.valid);h.advance(160);}
+ await h.flush();const summary=h.api.pendingResult.current,score=game==='stamp'?l.stamps:l.cash;assert.equal(h.results.length,0);assert.equal(l.done,false);assert.equal(l.clock.running,false);
+ assert.ok(h.nodes.some(n=>Object.hasOwn(n.props,'data-daily-overlay')));h.lose();await h.flush();assert.equal(l.paused,true);
+ h.api.changeRenderer('light');await h.flush();await h.resolve();h.failCapture(false);h.button('重試產生成果圖片').onClick();await h.flush();
+ assert.equal(h.results.length,1);assert.equal(h.results[0].details,summary.details);assert.equal(game==='stamp'?l.stamps:l.cash,score);assert.equal(l.done,true);assert.equal(l.clock.running,false);assert.equal(h.frames.size,0);assert.equal(h.nodes.some(n=>Object.hasOwn(n.props,'data-daily-overlay')),false);
+ assert.equal(h.nodes.find(n=>n.type==='section').props['data-playing'],false);h.unmount();
 });
