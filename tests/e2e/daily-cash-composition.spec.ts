@@ -48,7 +48,15 @@ async function inspect(page:Page){
   expect(p.x).toBeGreaterThan(frame.x+7);expect(p.x).toBeLessThan(frame.x+frame.width-7);expect(p.y).toBeGreaterThan(frame.y+7);expect(p.y).toBeLessThan(frame.y+frame.height-7);
   expect(await host.evaluate((el,p)=>{const hit=document.elementFromPoint(p.x,p.y);return !!hit&&el.contains(hit);},p)).toBe(true);
  }
- for(const name of ['回遊樂場','玩法說明','重新開始這一局','暫停','← 退票券','收道具鈔 →'])await visibleControl(page.getByRole('button',{name,exact:true}));await visibleControl(owner.locator('.daily-scene-mode button'));
+ // Locate by painted text, independently of aria-label. Playwright checks
+ // the computed accessible name, not just the attribute or a new-name locator.
+ const sortButtons=owner.locator('.fw-arcade-sort-buttons button');await expect(sortButtons).toHaveCount(2);
+ for(const label of ['←退券','收鈔→']){
+  const control=sortButtons.filter({hasText:label});await expect(control).toHaveText(label);await expect(control).toBeVisible();
+  const visible=(await control.innerText()).trim();
+  await expect(control).toHaveAccessibleName(new RegExp(visible));
+ }
+ for(const name of ['回遊樂場','玩法說明','重新開始這一局','暫停','←退券（退回票券）','收鈔→（收取道具鈔）'])await visibleControl(page.getByRole('button',{name,exact:true}));await visibleControl(owner.locator('.daily-scene-mode button'));
  const violations=await owner.evaluate(el=>{
   const fields=[...el.querySelectorAll<HTMLElement>('.fw-arcade-toolbar button,.fw-arcade-counter,.daily-cash-facts,.fw-arcade-sort-buttons button,.daily-scene-mode button')],bad:string[]=[],o=el.getBoundingClientRect();
   for(const [i,node]of fields.entries()){
@@ -75,9 +83,16 @@ for(const light of [false,true])for(const viewport of [{width:320,height:568},{w
  for(const [index,item]of deck.entries()){
   await page.clock.runFor(200);
   if(index%3===0){const p=(await card(page)).center;await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(p.x+(item.valid?60:-60),p.y,{steps:4});await page.mouse.up();}
-  else if(index%3===1)await page.getByRole('button',{name:item.valid?'收道具鈔 →':'← 退票券',exact:true}).click();
+  else if(index%3===1)await page.getByRole('button',{name:item.valid?'收鈔→（收取道具鈔）':'←退券（退回票券）',exact:true}).click();
   else await board.press(item.valid?'ArrowRight':'ArrowLeft');
   if(index<29)await expect(page.locator('[data-cash-progress]')).toHaveText(`${index+1}/30`);
+  // The two-digit facts must remain clear after real sorting, including the
+  // shorter normal owner that exposed the original enlarged-text collision.
+  if(index===28&&scale===2&&viewport.width===667){
+   await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();await owner.scrollIntoViewIfNeeded();await inspect(page);
+   await testInfo.attach(`${prefix}-normal-29-cards.png`,{body:await owner.screenshot(),contentType:'image/png'});
+   await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await inspect(page);
+  }
  }
  await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.locator('.fw-arcade-result')).toContainText('100 萬道具鈔');await expect(page.locator('.fw-arcade-result')).toContainText('退回 6 張票券');
 });

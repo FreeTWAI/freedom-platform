@@ -32,6 +32,20 @@ function board(game:domain.GameId){
  return {lose:()=>lost(),get api(){return api;},loads,nodes,results,frames,timers,listeners,target,pointer,render,flush,advance:(ms:number)=>{now+=ms;},resolve:async()=>{loads.shift()!.resolve({createStage:create,createDailyLightStage:create});await flush();},start:async()=>{api.start();await flush();},failCapture:(value:boolean)=>{failCapture=value;},failUpdate:(value:boolean)=>{failUpdate=value;},stats:()=>({disposed,captures,created}),unmount:()=>{for(const slot of slots)slot?.cleanup?.();},button:(label:string)=>{const node=nodes.find(n=>n.type==='button'&&(n.props['aria-label']===label||n.props.children===label));assert.ok(node,`button ${label}`);return node.props;}};
 }
 
+// Read visible text and the overriding name from the actual production JSX.
+// This controlled-hook test is not a computed browser accessibility tree.
+for(const [visible,meaning] of [['←退券','票券'],['收鈔→','道具鈔']] as const)test(`daily actual CASH ${visible} accessible name contains its full visible label`,async()=>{
+ const h=board('cash');await h.resolve();await h.start();
+ try{
+  const buttons=h.nodes.filter(node=>node.type==='button'&&node.props.children===visible);
+  assert.equal(buttons.length,1,`one production button visibly labelled ${visible}`);
+  const button=buttons[0].props;
+  assert.equal(typeof button['aria-label'],'string');
+  assert.ok(button['aria-label'].includes(button.children),`${JSON.stringify(button['aria-label'])} must contain the complete visible label ${JSON.stringify(button.children)}`);
+  assert.ok(button['aria-label'].includes(meaning),'retain the voucher / prop-money meaning');
+ }finally{h.unmount();}
+});
+
 test('daily stamp rule keeps the inclusive radius, exact cooldown, stale subject and bounds',()=>{
  const initial=domain.newStamps(42,false),p=domain.stampTarget(42,0);
  assert.equal(domain.stamp(initial,0,{x:p.x,y:p.y+.24},0).kind,'hit');
@@ -93,7 +107,7 @@ test('daily actual import timeout rejects late construction and explicit retry r
 
 for(const game of ['photo','stamp','cash'] as const)test(`daily actual ${game} button holds reject other owners, cancellation and changed subjects`,async()=>{
  const h=board(game);await h.resolve();await h.start();const l=h.api.live.current;
- const label=game==='photo'?'拍照快門':game==='stamp'?'啪！蓋章':domain.cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券';
+ const label=game==='photo'?'拍照快門':game==='stamp'?'啪！蓋章':domain.cashDeck(42)[0].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）';
  const progress=()=>game==='photo'?l.film:game==='stamp'?Number(!l.stamps.practice):l.cash.index;
  const event=(extra:any={})=>h.pointer(extra),key=(extra:any={})=>({key:' ',repeat:false,preventDefault(){},...extra});
  let b=h.button(label);
@@ -208,7 +222,7 @@ test('daily actual Canvas2D initialization failure releases its owned canvas and
 
 for(const game of ['photo','stamp','cash'] as const)test(`daily actual ${game} control primary release commits once and repeated keydown never replaces a hold`,async()=>{
  const h=board(game);await h.resolve();await h.start();const l=h.api.live.current;
- const label=game==='photo'?'拍照快門':game==='stamp'?'啪！蓋章':domain.cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券',b=h.button(label);
+ const label=game==='photo'?'拍照快門':game==='stamp'?'啪！蓋章':domain.cashDeck(42)[0].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）',b=h.button(label);
  const facts=()=>JSON.stringify(game==='photo'?l.photos:game==='stamp'?l.stamps:l.cash),before=facts();
  b.onPointerDown(h.pointer());b.onPointerUp(h.pointer());b.onLostPointerCapture(h.pointer());b.onClick({detail:1});assert.notEqual(facts(),before);const accepted=facts();h.advance(500);b.onClick({detail:1});assert.equal(facts(),accepted);
  const key={key:' ',repeat:true,preventDefault(){}};b.onKeyDown(key);b.onKeyUp(key);assert.equal(facts(),accepted);

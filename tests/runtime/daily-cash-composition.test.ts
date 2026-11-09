@@ -14,7 +14,7 @@ for(const [width,height] of sizes)test(`CASH ${width}x${height}: full active car
  // Landscape card remains exposed beside controls. At 667 the lower corners
  // can extend left of 198 only BELOW the top counter (y=120), so check each
  // actual control zone rather than a misleading single shrunken rectangle.
- const zones=aspect<1?[{left:0,right:width,top:0,bottom:172},{left:0,right:width,top:height-140,bottom:height}]:[{left:0,right:198,top:0,bottom:120},{left:0,right:174,top:120,bottom:height},{left:width-164,right:width,top:height-80,bottom:height}];
+ const zones=aspect<1?[{left:0,right:width,top:0,bottom:172},{left:0,right:width,top:height-140,bottom:height}]:[{left:0,right:198,top:0,bottom:120},{left:width-190,right:width,top:0,bottom:120},{left:0,right:174,top:120,bottom:height},{left:width-164,right:width,top:height-80,bottom:height}];
  let observations=0;
  for(const [index,card] of cashDeck(42).entries()){
   for(const feedback of ['none','wrong','correct'] as const)for(const dt of [0,20,180]){

@@ -1594,7 +1594,7 @@ for (const {game,width,height} of [
     const counter = page.locator('.fw-arcade-counter');
     if (game === 'photo') await page.getByRole('button',{name:'拍照快門'}).click();
     if (game === 'stamp') await page.getByRole('button',{name:'啪！蓋章'}).click();
-    if (game === 'cash') await page.getByRole('button',{name:cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券'}).click();
+    if (game === 'cash') await page.getByRole('button',{name:cashDeck(42)[0].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）'}).click();
     const before = await counter.textContent();
     const progress = game === 'photo' ? page.locator('[data-photo-film]') : game === 'stamp' ? counter : page.locator('.fw-arcade-controls .fw-arcade-meta');
     const progressBefore = await progress.textContent();
@@ -1721,7 +1721,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await page.keyboard.press('Shift+Tab');
     await expect(renderer).toBeFocused();
     await page.keyboard.press('Shift+Tab');
-    await expect(page.getByRole('button',{name:'收道具鈔 →',exact:true})).toBeFocused();
+    await expect(page.getByRole('button',{name:'收鈔→（收取道具鈔）',exact:true})).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(renderer).toBeFocused();
     await page.keyboard.press('Tab');
@@ -2255,7 +2255,7 @@ for(const light of [false,true]){
     const center=await dailyWorldPoint(page,'cash',[0,.33,0]),deck=cashDeck(42),progress=page.locator('.fw-arcade-controls .fw-arcade-meta');
     await page.mouse.move(center.x,center.y);await page.mouse.down();await page.locator('.fw-arcade-board').press(deck[0].valid?'ArrowRight':'ArrowLeft');await expect(progress).toContainText('已分類 1 / 30');
     await page.clock.fastForward(180);await page.mouse.move(center.x+(deck[1].valid?80:-80),center.y);await page.mouse.up();await expect(progress).toContainText('已分類 1 / 30 · 分錯 0 次');
-    const sort=page.getByRole('button',{name:deck[1].valid?'收道具鈔 →':'← 退票券',exact:true});await sort.focus();await page.keyboard.down('Enter');await page.clock.fastForward(500);await page.keyboard.down('Enter');await page.keyboard.up('Enter');
+    const sort=page.getByRole('button',{name:deck[1].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）',exact:true});await sort.focus();await page.keyboard.down('Enter');await page.clock.fastForward(500);await page.keyboard.down('Enter');await page.keyboard.up('Enter');
     await expect(progress).toContainText('已分類 2 / 30 · 分錯 0 次');
     await page.clock.fastForward(180);await sort.focus();await page.keyboard.down('Space');await page.keyboard.press('Escape');await page.keyboard.up('Space');await expect(progress).toContainText('已分類 2 / 30 · 分錯 0 次');
     await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await expect(page.locator('.fw-arcade-board')).toBeFocused();

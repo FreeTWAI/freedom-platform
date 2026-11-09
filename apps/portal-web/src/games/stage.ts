@@ -1,4 +1,4 @@
-import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, PlaneGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
+import { InstancedMesh, Matrix4, NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, PlaneGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup} from './stage-batch';
@@ -47,6 +47,7 @@ const INK = '#49362f', LIME = '#e8bd68', BLUE = '#608b85', PAPER = '#fff1d5';
 /** AD-6: all geometry/material/texture ownership is per mounted stage. */
 export function createStage(host: HTMLElement, onLost: () => void): Stage {
     const renderer = new WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
+    const instances = new Set<InstancedMesh>();
     const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<Texture>(), shadows = new Set<DirectionalLight['shadow']>();
     let disposed = false, observer: ResizeObserver | undefined;
     const lost = (event: Event) => { event.preventDefault(); if (!disposed) onLost(); };
@@ -56,6 +57,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         disposed = true;
         observer?.disconnect();
         renderer.domElement.removeEventListener('webglcontextlost', lost);
+        instances.forEach(mesh => mesh.dispose());
         geometries.forEach(g => g.dispose());
         materials.forEach(m => m.dispose());
         textures.forEach(t => t.dispose());
@@ -110,6 +112,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     function shadow(parent: Group, x: number, z: number, sx: number, sz: number) { const m = mesh(parent, cylinder, '#c0c9b1', x, .012, z, sx, .014, sz); return m; }
     let world = new Group();
     scene.add(world);
+    let cashTower: InstancedMesh | null = null;
     let keyId = '', lastView: StageView | null = null, ready = false;
     let clientRoot: Group | null = null, board: Group | null = null, birds: Group[] = [], anchors: Anchor[] = [], stampRoot: Group | null = null, paperMesh: Mesh | null = null, paperMat: MeshBasicMaterial | null = null, paperKey = '', paperTexture: CanvasTexture | null = null, cashMesh: Mesh | null = null, cashKey = '', tower: Group | null = null, crab: Group | null = null, lamp: Group | null = null;
     function rod(p: Group, c: string, a: Vector3, b: Vector3, r = .04) { const m = mesh(p, cylinder, c, 0, 0, 0, r, a.distanceTo(b), r); m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), b.clone().sub(a).normalize()); return m; }
@@ -373,10 +376,25 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         // combining its rigid descendants instead of submitting each limb.
         bakeRigidGroup(crab,geometries);
     }
-    function buildCash() { desk(); const cardGroup = group(world, 0, .08, 0); cashMesh = new Mesh(plane, new MeshBasicMaterial({ color: PAPER, toneMapped: false })); materials.add(cashMesh.material as Material); cashMesh.scale.set(3.2, 2.15, 1); cashMesh.rotation.x = -Math.PI / 2; cashMesh.position.y = .25; cardGroup.add(cashMesh); tower = group(world, 2.6, .04, -.15); for (let i = 0; i < 24; i++) {
-        const m = rb(tower, LIME, Math.sin(i) * .03, i * .025, 0, 1.3, .022, 1.85);
-        m.name = `bill${i}`;
-    } rb(world, '#e9ad9e', -2.7, .04, 0, 1.6, .1, 2.3); rb(world, INK, -2.7, .13, -1.1, 1.6, .2, .12); label(world, '退票券', '非現金，不用感動', -2.7, .45, -1.15, 1.5, .45); ball(world, '#d6a36d', -2.7, .27, .6, .48, .15, .4); for (let i = -2; i <= 2; i++) {
+    function buildCash() { desk(); const cardGroup = group(world, 0, .08, 0); cashMesh = new Mesh(plane, new MeshBasicMaterial({ color: PAPER, toneMapped: false })); materials.add(cashMesh.material as Material); cashMesh.scale.set(3.2, 2.15, 1); cashMesh.rotation.x = -Math.PI / 2; cashMesh.position.y = .25; cardGroup.add(cashMesh);
+        // Identical accepted bills share geometry, material and shadow passes.
+        // Instance count is the real accepted-card count, never a synthetic win.
+        cashTower = new InstancedMesh(round, mat(LIME), 24);
+        instances.add(cashTower);
+        cashTower.name = 'cash-accepted-stack';
+        cashTower.position.set(2.6, .04, -.15);
+        cashTower.castShadow = true; cashTower.receiveShadow = true;
+        for (let i = 0; i < 24; i++) {
+            const matrix = new Matrix4().makeScale(1.3, .022, 1.85);
+            matrix.setPosition(Math.sin(i) * .03, i * .025, 0);
+            cashTower.setMatrixAt(i, matrix);
+        }
+        cashTower.instanceMatrix.needsUpdate = true;
+        // Bound all possible instances before count becomes zero; the static
+        // bound remains valid through sorting, replay, resize and capture.
+        cashTower.computeBoundingBox(); cashTower.computeBoundingSphere();
+        cashTower.count = 0; world.add(cashTower);
+        rb(world, '#e9ad9e', -2.7, .04, 0, 1.6, .1, 2.3); rb(world, INK, -2.7, .13, -1.1, 1.6, .2, .12); label(world, '退票券', '非現金，不用感動', -2.7, .45, -1.15, 1.5, .45); ball(world, '#d6a36d', -2.7, .27, .6, .48, .15, .4); for (let i = -2; i <= 2; i++) {
         const cut = rb(world, '#9c693e', -2.7 + i * .16, .39, .6, .035, .012, .5);
         cut.rotation.y = .4;
     } for (let i = 0; i < 8; i++)
@@ -476,6 +494,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             paperKey = '';
             cashMesh = null;
             cashKey = '';
+            cashTower = null;
             tower = null;
             crab = null;
             lamp = null;
@@ -527,7 +546,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
                     // The card's parent sits at y=.08; shared pose is world-space.
                     cashMesh.position.set(pose.x,pose.y-.08,pose.z);
                 }
-                tower?.children.forEach((m, i) => { m.visible = i < view.cash!.index - view.cash!.rejected; });
+                if (cashTower) cashTower.count = view.cash.index - view.cash.rejected;
             }
         }
         dailyCamera(view,host.clientWidth/Math.max(1,host.clientHeight),camera);

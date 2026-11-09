@@ -8,7 +8,8 @@ Its former bordered viewport and cream controls dock are removed. Sorting
 controls occupy opposite table edges; amount, classified-card count and mistakes
 float over the scene. The same owner retains share/fullscreen, pause, help,
 restart, explicit renderer choice, completed-run capture and export recovery.
-Short visible labels have the original complete accessible action names.
+Short visible labels remain compact. Their accessible names begin with the
+complete visible label, followed by the voucher / prop-money explanation.
 The full current-card description and last outcome remain in help and the live
 accessible status. Start/recovery copy scrolls independently of its actions.
 
@@ -60,3 +61,39 @@ The dynamic regression now uses ordinary Tab/Shift+Tab from the retained board
 focus, checks each focused target's hit visibility, enters presentation by Space
 and verifies both wrap directions of its focus trap. No direct focus jump to
 fallback stands in for traversal. This remains authored browser coverage.
+
+
+## Exact d141 landscape follow-up
+
+UI shard 1 of run 42533847998 tested published d141d90243f0f23162383567d071bfb791d500d2.
+The two 667×375 / 200% failures happened in the shorter **normal** owner,
+after fullscreen geometry inspection passed: facts overlapped the lower-left
+renderer/Pause cluster. CASH-only landscape facts now occupy the upper-right
+edge opposite the amount. Text, 44px targets, camera and full-owner scene stay
+unchanged. The existing browser geometry/overlap checks remain intact and gain
+an additional normal/fullscreen check after 29 real cards at 200% text.
+
+The native 667×375 / 100% failure is separate. Its failure PNG sampled 28/30,
+85/100 萬; the later error-context DOM sampled 29/30, 90/100 萬 and the last
+10 萬 card. The browser trace recorded 29 completed 200ms clock advances costing
+30.33 seconds of wall time; individual completed keyboard presses took 16–247ms.
+This supports cumulative native execution cost, not a proven frozen key or
+precise GPU bottleneck. The original 45-second test limit and gameplay clocks
+are unchanged.
+
+Only CASH's 24 identical accepted-stack meshes become native instances of the
+same geometry/material, with the original per-bill transform and shadow flags.
+Actual accepted count drives visibility; no card, scoring, shader, raster size,
+animation frame or active-card contact is skipped. CPU tests execute production
+construction against the verbatim old CASH construction for three thirty-card
+runs, compare every triangle attribute and material/shadow behavior, and cover
+mistakes, same-seed replay, seed changes and once-only disposal. At 24 bills the
+stack needs 2 rather than 48 color-plus-shadow submissions. These are CPU scene
+submission counts, not measured GPU timings or pixel equivalence.
+
+Existing source-bound Party/Cooking previews do not include the daily stage;
+shared stage-batch, preview manifests and preview workflows remain unchanged.
+This local candidate has no new browser execution or native screenshot evidence.
+Whether it resolves the hosted timeout and preserves actual instanced-shader
+pixels requires an authorized exact-candidate browser run. The old screenshots
+and failure records remain unchanged, and do not count as candidate acceptance.

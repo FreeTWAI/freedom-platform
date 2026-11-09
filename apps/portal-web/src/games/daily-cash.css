@@ -30,9 +30,12 @@
 .fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-overlay-copy p{color:var(--ad-ink);font-size:1rem;line-height:1.5;margin:8px 0;max-width:none}
 .fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-overlay-copy strong{color:var(--ad-ink);font-size:1.125rem;line-height:1.4}
 .fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-cover>button{flex:0 0 auto;min-height:44px;margin:0}
+/* In short landscape, facts share the upper row with the amount, across the
+   desk. This leaves the lower-left mode/Pause cluster clear at 200% text even
+   in the shorter normal owner, without reducing text or moving the card. */
 @media(orientation:landscape) and (max-height:540px){
  .fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-game-title{top:calc(max(10px,var(--game-safe-top)) + 58px);left:max(8px,var(--game-safe-left));right:auto}
- .fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-facts{top:calc(max(10px,var(--game-safe-top)) + 108px);left:max(8px,var(--game-safe-left));right:auto}
+ .fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-facts{top:calc(max(10px,var(--game-safe-top)) + 58px);left:auto;right:max(12px,var(--game-safe-right))}
  .fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-sort-buttons>button{max-width:144px}
  .fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-cover{inset:calc(max(10px,var(--game-safe-top)) + 54px) calc(max(12px,var(--game-safe-right)) + 152px) max(16px,var(--game-safe-bottom)) calc(max(8px,var(--game-safe-left)) + 190px)}
 }

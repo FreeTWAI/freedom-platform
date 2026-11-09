@@ -12,7 +12,7 @@ for(const game of ['photo','stamp','cash'] as const)test(`${game}: clicking the 
   const board=page.locator('.fw-arcade-board'),scene=page.locator('.fw-arcade-stage');
   const exit=page.getByRole('button',{name:'退出全螢幕',exact:true});
   await expect(exit).toHaveAttribute('aria-disabled','false');
-  const control=game==='photo'?page.getByRole('button',{name:'鏡頭往右',exact:true}):game==='stamp'?page.getByRole('button',{name:'啪！蓋章',exact:true}):page.getByRole('button',{name:cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券',exact:true});
+  const control=game==='photo'?page.getByRole('button',{name:'鏡頭往右',exact:true}):game==='stamp'?page.getByRole('button',{name:'啪！蓋章',exact:true}):page.getByRole('button',{name:cashDeck(42)[0].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）',exact:true});
   await control.click();await expect(control).toBeFocused();
   const progress=page.locator('.fw-arcade-controls .fw-arcade-meta');
   if(game==='cash')await expect(progress).toContainText('已分類 1 / 30 · 分錯 0 次');
