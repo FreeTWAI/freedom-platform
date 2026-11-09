@@ -1847,12 +1847,14 @@ test('fallback keeps keyboard focus inside game, result and replay', async ({pag
   const close=share.getByRole('button',{name:'關閉分享',exact:true});
   const back=share.getByRole('button',{name:'回遊樂場',exact:true});
   await observeFocus('inner-initial-focus');await expect(close).toBeFocused();
+  await testInfo.attach('fallback-result-share-focused.png',{body:await page.screenshot(),contentType:'image/png'});
   await back.focus();await observeFocus('before-inner-forward-wrap');
   await page.keyboard.press('Tab');await observeFocus('after-inner-forward-wrap');await expect(close).toBeFocused();
   await page.keyboard.press('Shift+Tab');await observeFocus('after-inner-reverse-wrap');await expect(back).toBeFocused();
   await page.keyboard.press('Escape');
   await observeFocus('inner-escape-return');
   await expect(share).toBeHidden(); await expect(last).toBeFocused();
+  await testInfo.attach('fallback-result-share-returned.png',{body:await page.screenshot(),contentType:'image/png'});
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');await observeFocus('outer-escape');
   await expect(dialog).toHaveCount(0);
@@ -2568,7 +2570,11 @@ test('PT-HOLIDAY-SCENE: compact enlarged HUD and two-line feedback retain every 
       }
       const world=(await stage.locator('.pt-canvas').boundingBox())!;expect(world.width).toBeGreaterThanOrEqual(128);expect(world.height).toBeGreaterThanOrEqual(96);expect(world.width/world.height).toBeCloseTo(4/3,2);
       const feedback=await stage.locator('.pt-feedback').evaluate(el=>({height:el.clientHeight,line:parseFloat(getComputedStyle(el).lineHeight)}));if(scale===2)expect(feedback.height).toBeGreaterThanOrEqual(2*feedback.line-1);
-      for(const button of await stage.locator('.pt-hole-controls button,.pt-tools button').all())await holidayControlHit(button);
+      for(const button of await stage.locator('.pt-hole-controls button,.pt-tools button').all()){
+        const content=await button.evaluate(el=>({label:el.textContent,width:el.clientWidth,height:el.clientHeight,scrollWidth:el.scrollWidth,scrollHeight:el.scrollHeight}));
+        expect(content.scrollWidth,JSON.stringify(content)).toBeLessThanOrEqual(content.width+1);expect(content.scrollHeight,JSON.stringify(content)).toBeLessThanOrEqual(content.height+1);
+        await holidayControlHit(button);
+      }
       // Covered states keep full notices in their panels and tools outside them.
       for(const [state,notice] of [['ready','葉子是休假，領帶是開會。'],['paused','看完玩法後，按繼續回到這一局。'],['paused','場景暫時沒有回應，已幫你暫停。請重建場景或改用輕量玩法，這局進度會保留。'],['done','這局已完成，圖片還沒產生。可以重試查看成果。']]){
         await stage.evaluate((root,{state,notice,scale})=>{root.querySelector<HTMLElement>('.pt-holiday-stage')!.dataset.partyState=state;root.querySelector('.pt-feedback')!.textContent=notice;const overlay=document.createElement('div');overlay.className='pt-holiday-overlay';const panel=document.createElement('div');panel.className='pt-panel';const text=document.createElement('p');text.textContent=notice;panel.append(text);overlay.append(panel);root.querySelector('.pt-holiday-field')!.append(overlay);const css=getComputedStyle(text);text.style.fontSize=`${parseFloat(css.fontSize)*scale}px`;text.style.lineHeight=`${parseFloat(css.lineHeight)*scale}px`;},{state,notice,scale});
