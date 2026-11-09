@@ -2657,6 +2657,9 @@ async function holidayStageBounds(page:Page,scale=1){
   }
 }
 for(const light of [false,true])for(const rejected of [false,true])test(`PT-HOLIDAY-SCENE: ${light?'light':'native'} twenty waves retain ${rejected?'rejected':'native'} fullscreen through real results and same-seed replay`,async({page})=>{
+  // Native RAFs plus capture/replay take ~49–50s under SwiftShader. Match the
+  // existing finite native Party journey budget; light keeps the 45s default.
+  if(!light)test.setTimeout(150_000);
   const errors:string[]=[],writes:string[]=[],social:string[]=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')writes.push(r.url());if(/^https:\/\/(x\.com|www\.(threads\.com|facebook\.com|instagram\.com))\//.test(r.url()))social.push(r.url());});
   await page.setViewportSize({width:390,height:844});await openHolidayScene(page,light,rejected);await holidayStageBounds(page);
@@ -2901,6 +2904,8 @@ async function chairStageBounds(page:Page,scale=1){
   expect(await page.locator('.pt-canvas').evaluate(host=>host.querySelectorAll('button,a,svg').length)).toBe(0);
 }
 for(const light of [false,true])for(const rejected of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} complete thirty seconds in ${rejected?'rejected':'native'} fullscreen, retry real capture and replay same seed`,async({page},testInfo)=>{
+  // Full native RAF/input/capture/replay measured ~58–59s; keep light unchanged.
+  if(!light)test.setTimeout(150_000);
   const errors:string[]=[],writes:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')writes.push(r.url());});
   await page.setViewportSize({width:390,height:844});await openChairScene(page,light,rejected);
   let scale=1;
@@ -3132,6 +3137,8 @@ async function tofuDrop(page:Page,method:'pointer'|'keyboard'|'host'='pointer'){
  await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();
 }
 for(const light of [false,true])for(const rejected of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} complete twelve earned layers in ${rejected?'rejected':'native'} fullscreen, retry real capture and replay same seed`,async({page},testInfo)=>{
+  // Full native RAF/input/capture/replay measured ~54–56s; keep light unchanged.
+  if(!light)test.setTimeout(150_000);
   const errors:string[]=[],writes:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')writes.push(r.url());});
   await page.setViewportSize({width:390,height:844});await openTofuScene(page,light,rejected);
   const evidence=async(phase:string)=>{
@@ -3235,5 +3242,9 @@ for(const rejected of [false,true])test(`PT-TOFU-SCENE: explicit light choice ow
  await page.getByRole('button',{name:'豆腐落下！',exact:true}).press('Enter');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.clock.runFor(550);await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-turn','1');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
 });
 for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} sixty-second idle expiry keeps zero score and no invented tower`,async({page})=>{
+ // Every native RAF for the real 60s round took ~106s locally; hosted traces
+ // spent ~2.23s per simulated second (~134s before setup). Match the existing
+ // native Tofu 180s allowance without changing game, draw or light budgets.
+ if(!light)test.setTimeout(180_000);
  await openTofuScene(page,light,true);await partyAdvance(page,PT.tofuMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();expect(await partyElapsed(page)).toBe(PT.tofuMs);await tofuFullscreen(page,true);
 });
