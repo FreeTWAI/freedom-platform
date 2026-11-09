@@ -26,14 +26,15 @@
 
 ## Developer Usage
 
-開發與執行這個 repository 的主要方式如下：
+需要 Node.js 24 與 Docker Compose。以下指令只用於本專案的隔離本機 PostgreSQL；先確認 `127.0.0.1:54339` 是 [compose.yaml](compose.yaml) 的開發資料庫，沒有轉送到 staging、production 或其他環境。`NODE_ENV` 不是資料庫隔離保護，不要藉由改成 `development` 對其他環境執行這些指令。
 
 ```sh
 # 1. 安裝套件相依性
 npm ci
 
-# 2. 啟動資料庫與測試資料 (或使用 npm run demo 包含 build 和 start)
+# 2. 啟動本機資料庫，明確覆寫終端可能繼承的連線，再建立測試資料
 npm run db:up
+export DATABASE_URL='postgresql://freedom_local:local-development-only@127.0.0.1:54339/freedom_local'
 npm run db:migrate
 npm run db:seed
 
@@ -43,6 +44,8 @@ npm run build
 # 4. 啟動伺服器
 npm run start
 ```
+
+`npm run demo` 也會執行 migration 與 seed，必須先完成相同的本機資料庫確認與 `DATABASE_URL` 設定；完整流程見[啟動本機版本](#啟動本機版本)。
 
 測試指令包含 `npm run test:e2e` (使用 Playwright 測試)，也可以參考 package.json 了解更多如 `npm test` 或是 `npm run test:contracts` 的測試腳本。
 
@@ -163,10 +166,11 @@ API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最�
 
 ## 啟動本機版本
 
-需要 Node.js 24 與 Docker Compose：
+需要 Node.js 24 與 Docker Compose。先確認 `127.0.0.1:54339` 由本專案 [compose.yaml](compose.yaml) 的隔離開發 PostgreSQL 使用，沒有轉送到其他環境。`demo` 會執行 migration 與 seed，請在同一個終端明確覆寫 `DATABASE_URL`；`NODE_ENV` 不是隔離保護，不要改成 `development` 來操作 staging／production。
 
 ```sh
 npm ci
+export DATABASE_URL='postgresql://freedom_local:local-development-only@127.0.0.1:54339/freedom_local'
 npm run demo
 ```
 
