@@ -175,12 +175,14 @@ test('link session expiry while final state lock waits rejects and rolls back ma
  const member=await login(pool,DEMO_USERS[0].email,DEMO_PASSWORD),subject=randomUUID(),f=await flow(subject,'final-lock@example.test',{},member.actor);
  let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(r=>release=r),waiting=new Promise<void>(r=>entered=r);
  const slow={...options,transport:async(...args:Parameters<typeof fetch>)=>{if(String(args[0]).includes('/token')){entered();await gate;}return transport(...args);}};
- const completion=completeGoogleLogin(pool,slow,origin,f,registration(),member.actor);await waiting;
+ const completion=completeGoogleLogin(pool,slow,origin,f,registration(),member.actor);
+ // Observe expiry immediately, including rejection before the final state lock is reached.
+ const rejected=assert.rejects(completion,{code:'session_expired'});await waiting;
  const blocker=await pool.connect();try{
  await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM google_login_states WHERE state_hash=$1 FOR UPDATE',[tokenHash(f.state)]);
  await pool.query("UPDATE sessions SET expires_at=clock_timestamp()+interval '300 milliseconds' WHERE token_hash=$1",[member.actor.session_hash]);release();
  await blocker.query('SELECT pg_sleep(0.4)');await blocker.query('COMMIT');
- await assert.rejects(completion,{code:'session_expired'});
+ await rejected;
  assert.equal((await pool.query('SELECT 1 FROM member_login_identities WHERE subject=$1 AND revoked_at IS NULL',[subject])).rowCount,0);
  }finally{await blocker.query('ROLLBACK');blocker.release();}
 });
