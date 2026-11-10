@@ -1341,6 +1341,10 @@ test('SC-E2E-71 the report page shows the period, links to the lists and downloa
     const taipeiDate = (ms: number) =>
       new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Taipei'}).format(new Date(ms));
     const nowMs = Date.now();
+    // Re-entering the report recalculates its default period. Keep browser Date
+    // aligned with these expectations even if the journey crosses Taipei midnight.
+    // setFixedTime leaves timers running and does not change the server clock.
+    await pageA.clock.setFixedTime(nowMs);
     const expectedFrom = taipeiDate(nowMs - 29 * 86_400_000);
     const expectedTo = taipeiDate(nowMs);
 
