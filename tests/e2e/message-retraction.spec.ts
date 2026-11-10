@@ -136,6 +136,9 @@ for(const width of [390,1280])for(const failRefresh of [false,true])test(`a conf
   const page=await member(browser,baseURL!,0,width);
   await page.getByRole('tab',{name:/^世界聊天/}).click();
   const panel=page.locator('#messages-panel-world'),body=`合成：不得復原的內容 ${randomUUID()}`;
+  // On phones the category opens a room list; enter the room before composing.
+  if(width===390)await panel.getByRole('button',{name:'世界聊天',exact:true}).click();
+  await expect(panel.locator('.messages-compose')).toBeVisible();
   await panel.getByRole('textbox',{name:'世界聊天訊息',exact:true}).fill(body);
   await panel.getByRole('button',{name:'傳送',exact:true}).click();
   const row=panel.locator('.messages-bubbles li',{hasText:body});await expect(row).toBeVisible();
