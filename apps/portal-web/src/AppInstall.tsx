@@ -77,7 +77,19 @@ export const useAppInstall=()=>useContext(Context);
 
 function ConnectionStatus(){
   const {t}=useLanguage();const [offline,setOffline]=useState(()=>!navigator.onLine),banner=useRef<HTMLDivElement>(null);
-  useEffect(()=>{const sync=()=>setOffline(!navigator.onLine);window.addEventListener('online',sync);window.addEventListener('offline',sync);return()=>{window.removeEventListener('online',sync);window.removeEventListener('offline',sync);};},[]);
+  useEffect(()=>{
+    const sync=()=>setOffline(!navigator.onLine);
+    // A restored page may have missed the network event while suspended.
+    // Resample local status only; reconnect never sends or retries a request.
+    const resume=()=>{if(document.visibilityState==='visible')sync();};
+    window.addEventListener('online',sync);window.addEventListener('offline',sync);
+    window.addEventListener('focus',resume);window.addEventListener('pageshow',resume);document.addEventListener('visibilitychange',resume);
+    sync();
+    return()=>{
+      window.removeEventListener('online',sync);window.removeEventListener('offline',sync);
+      window.removeEventListener('focus',resume);window.removeEventListener('pageshow',resume);document.removeEventListener('visibilitychange',resume);
+    };
+  },[]);
   useEffect(()=>{
     const root=document.documentElement;
     if(!offline){root.style.removeProperty('--connection-status-height');delete root.dataset.deviceOffline;return;}
