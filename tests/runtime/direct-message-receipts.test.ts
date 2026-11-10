@@ -1,3 +1,10 @@
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {randomUUID} from 'node:crypto';
+import {transformSync} from 'esbuild';
+import {refreshLoadedMessages} from '../../apps/portal-web/src/modules/message-refresh.js';
+import {chatPollDue,idleChatPoll,resetChatPoll} from '../../apps/portal-web/src/modules/adaptive-chat-poll.js';
+import {ApiError} from '../../apps/portal-web/src/api.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Message, MessagePage } from '../../modules/member-communications/types.js';
@@ -228,4 +235,114 @@ test('bounded receipts do not apply a partial batch or fall back after a lookup 
     return {items: ids.map(message_id => ({message_id, read_at: readAt}))};
   }), error => error === failure);
   assert.equal(calls, 2); assert.deepEqual(loaded, before);
+});
+
+const source=readFileSync(new URL('../../apps/portal-web/src/modules/MemberMessages.tsx',import.meta.url),'utf8');
+const stamp='2026-11-10T10:00:00.000Z',self='synthetic-self',peer='synthetic-peer',target='original',replyId='reply';
+// Production closures and helpers, controlled transport and state. These are not
+// React scheduling, browser, API authorization or database acceptance tests.
+function directClosure(start:string,end:string,name:string,host:any){
+  const from=source.indexOf(start),to=source.indexOf(end,from+start.length);assert.ok(from>=0&&to>from,name);
+  return runInNewContext(transformSync(source.slice(from,to).replace(`const ${name}=`,`globalThis.${name}=`)+`;globalThis.result=${name};`,{loader:'tsx',target:'es2023',format:'esm'}).code,host);
+}
+function privateRetractionHost(){
+ const original={message_id:target,sender_ref:self,recipient_ref:peer,created_at:stamp,read_at:stamp,retracted_at:null,body:'withdrawn private text',image:{content_type:'image/webp',byte_size:80}};
+ const reply={message_id:replyId,sender_ref:peer,recipient_ref:self,created_at:'2026-11-10T10:01:00.000Z',read_at:stamp,retracted_at:null,body:'keep this reply',reply_to:{message_id:target,sender_ref:self,sender_name:'Synthetic',body:original.body}};
+ const initial={participant:{user_id:peer,display_name:'Synthetic',avatar_url:null,is_online:false,last_seen_at:null},can_send:true,items:[reply,original],next_offset:20,unread_count:0,retraction_count:'0'};
+ type Call={method:string;path:string;resolve:(value:any)=>void;reject:(error:Error)=>void};
+ const calls:Call[]=[],reloads:Promise<unknown>[]=[],pages:Promise<unknown>[]=[],lists:Promise<unknown>[]=[],noop=()=>{};
+ const state:any={peer,me:self,thread:structuredClone(initial),conversations:[{participant:initial.participant,last_message:original,can_send:true,unread_count:0}],threadMore:{loading:false,error:''},snapshot:{current:{}},alive:{current:true},currentPeer:{current:peer},
+  convGeneration:{current:0},convInFlight:{current:null},listCheckedAt:{current:Date.now()},threadGeneration:{current:0},threadInFlight:{current:null},olderInFlight:{current:null},olderQueued:{current:null},quietInFlight:{current:new Map()},historyRevision:{current:0},
+  receiptRefresh:{current:new Map()},receiptCheckedAt:{current:new Map([[peer,Date.now()]])},readIssues:{current:new Map()},idlePoll:{current:resetChatPoll()},polling:{current:false},retryAt:{current:0},failures:{current:0},moreState:{current:{loading:false,error:''}},
+  retractTarget:{message_id:target},retractTrigger:{current:null},retracting:false,retractError:'',threadRefresh:{loading:false,error:''},convRefresh:{loading:false,error:''},threadStatus:'ready',threadError:'',liveError:'',
+  scroll:{current:null},anchor:{current:null},stick:{current:true},document:{visibilityState:'visible'},navigator:{onLine:true},PAGE:20,Error,Date,URLSearchParams,ApiError,crypto:{randomUUID},useCallback:(fn:any)=>fn,
+  refreshLoadedMessages,compareDirectMessages,directMessageReceiptRefreshDue,hasDirectMessageChanges,mergeDirectMessagePage,readLoadedDirectMessageReceipts,chatPollDue,idleChatPoll,resetChatPoll,
+  newestMessages:(items:any[])=>[...items].sort((a,b)=>compareDirectMessages(b,a)),merge:(a:any[],b:any[],id:(v:any)=>string)=>[...a,...b.filter(v=>!a.some(x=>id(x)===id(v)))],fail:(e:Error)=>e.message,
+  setReadError:noop,setHasNew:noop,onUnread:noop,announceInboxChange:noop,setConvNext:noop,setConvStatus:noop,setConvError:noop,setConvMore:noop,
+  client:{sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>calls.push({method:'GET',path,resolve,reject})),post:(path:string)=>new Promise((resolve,reject)=>calls.push({method:'POST',path,resolve,reject}))},
+ };
+ for(const key of ['retractTarget','retracting','retractError','threadRefresh','convRefresh','threadStatus','threadError','liveError'])state['set'+key[0].toUpperCase()+key.slice(1)]=(value:any)=>state[key]=value;
+ state.setThread=(update:any)=>{state.thread=typeof update==='function'?update(state.thread):update;state.snapshot.current.thread=state.thread;};
+ state.setThreadMore=(update:any)=>{state.threadMore=typeof update==='function'?update(state.threadMore):update;state.moreState.current=state.threadMore;};
+ state.setConversations=(update:any)=>state.conversations=typeof update==='function'?update(state.conversations):update;
+ state.snapshot.current={thread:state.thread,threadStatus:'ready',reading:false,active:true,sending:false,readingThread:true};
+ const get=(a:string,b:string,n:string)=>{directClosure(a,b,n,state);return state.result;};
+ const load=get('  const loadThread=useCallback(', '  useEffect(()=>{\n    const update=()=>{if(currentPeer.current)', 'loadThread');
+ state.loadThread=(...args:any[])=>{const p=load(...args);reloads.push(p);return p;};
+ const list=get('  const loadConversations=useCallback(', '  useEffect(()=>{void loadConversations();}', 'loadConversations');
+ state.loadConversations=(...args:any[])=>{const p=list(...args);lists.push(p);return p;};
+ const retract=get('  async function retract(){','  useLayoutEffect(()=>{const node=scroll.current','retract');
+ const earlier=get('  async function earlier(queued=false){','  useEffect(()=>{\n    const queued=olderQueued.current','earlier');
+ state.earlier=(...args:any[])=>{const p=earlier(...args);pages.push(p);return p;};
+ state.useEffect=(effect:()=>void)=>state.flushQueued=effect;
+ get('  useEffect(()=>{\n    const queued=olderQueued.current;', '  async function markRead(', 'earlier');
+ const poll=get('  async function pullLatest(){','  useEffect(()=>{\n    if(!active)return','pullLatest');
+ const fresh=()=>({...structuredClone(initial),retraction_count:'1',items:[{...reply,reply_to:undefined,reply_to_message_id:target},{message_id:target,sender_ref:self,recipient_ref:peer,created_at:stamp,read_at:stamp,body:'',retracted_at:stamp}]});
+ const histories=()=>calls.filter(c=>c.path.includes('/messages?'));
+ const confirm=async()=>{const write=retract();calls.at(-1)!.resolve({message_id:target,retracted_at:stamp});await write;};
+ const assertRedacted=()=>{assert.equal(state.thread.items.find((v:any)=>v.message_id===target)?.retracted_at,stamp);assert.ok(!JSON.stringify(state.thread.items).includes('withdrawn'),'neither body, image nor quoted original may reappear');assert.ok(!state.thread.items.find((v:any)=>v.message_id===target).image);};
+ return {state,calls,reloads,pages,lists,flushQueued:()=>state.flushQueued(),load:state.loadThread,earlier,poll,retract,confirm,initial,fresh,histories,assertRedacted};
+}
+for(const oldLast of [false,true])test(`private retraction fences a prior quiet history; old last=${oldLast}`,async()=>{
+ const h=privateRetractionHost(),old=h.load(peer,true);await h.confirm();
+ const fresh=h.histories()[1];assert.ok(fresh,'confirmation immediately starts a replacement history read');h.assertRedacted();
+ if(!oldLast){h.histories()[0].resolve(h.initial);await old;h.assertRedacted();assert.equal(h.state.threadRefresh.loading,true);}
+ fresh.resolve(h.fresh());await h.reloads.at(-1);h.assertRedacted();assert.equal(h.state.threadRefresh.loading,false);
+ if(oldLast){h.histories()[0].resolve(h.initial);await old;h.assertRedacted();assert.equal(h.state.thread.retraction_count,'1');}
+});
+test('private retraction keeps content hidden when refresh fails, and manual retry recovers without another POST',async()=>{
+ const h=privateRetractionHost(),old=h.load(peer,true);await h.confirm();assert.equal(h.histories().length,2);
+ h.histories()[1].reject(new Error('synthetic offline'));await h.reloads.at(-1);h.histories()[0].resolve(h.initial);await old;h.assertRedacted();assert.equal(h.state.threadRefresh.error,'synthetic offline');
+ const retry=h.load(peer,true);h.histories()[2].resolve(h.fresh());await retry;h.assertRedacted();assert.equal(h.state.threadRefresh.error,'');assert.equal(h.calls.filter(c=>c.method==='POST').length,1);
+});
+test('private retraction supersedes an in-flight older page instead of waiting for it',async()=>{
+ const h=privateRetractionHost(),old=h.earlier();await h.confirm();assert.equal(h.histories().length,2,'must bypass ordinary older-page refresh deferral');h.assertRedacted();
+ h.histories()[1].resolve(h.fresh());await h.reloads.at(-1);assert.equal(h.state.threadMore.loading,true);h.flushQueued();
+ assert.equal(h.histories().length,3,'original click resumes once without waiting for stale request');h.histories()[2].resolve({...h.fresh(),next_offset:null});await h.pages.at(-1);
+ h.histories()[0].resolve({...h.initial,items:[{...h.initial.items[0],message_id:'stale-new-quote'}],next_offset:40});await old;h.assertRedacted();assert.equal(h.state.thread.next_offset,null);assert.ok(!h.state.thread.items.some((v:any)=>v.message_id==='stale-new-quote'));
+});
+test('private retraction releases stale quiet reads so queued older paging can continue',async()=>{
+ const h=privateRetractionHost(),old=h.load(peer,true);await h.earlier();assert.ok(h.state.olderQueued.current);await h.confirm();assert.equal(h.histories().length,2);
+ h.histories()[1].resolve(h.fresh());await h.reloads.at(-1);assert.ok(h.state.olderQueued.current);assert.equal(h.state.quietInFlight.current.size,0);h.flushQueued();
+ assert.equal(h.state.olderQueued.current,null);assert.equal(h.histories().length,3);h.histories()[2].resolve({...h.fresh(),next_offset:null});await h.pages.at(-1);
+ h.histories()[0].resolve(h.initial);await old;h.assertRedacted();
+});
+for(const error of [false,true])test(`private retraction fences pending activity completion; error=${error}`,async()=>{
+ const h=privateRetractionHost(),old=h.poll();assert.ok(h.calls[0].path.endsWith('/activity'));await h.confirm();assert.equal(h.histories().length,1);
+ const refresh=h.histories()[0];refresh.resolve(h.fresh());await h.reloads.at(-1);
+ if(error)h.calls[0].reject(new ApiError({message:'stale forbidden',status:403}));else h.calls[0].resolve({last_message_id:replyId,unread_count:0,can_send:true,retraction_count:'0'});await old;
+ h.assertRedacted();assert.equal(h.state.threadStatus,'ready');assert.equal(h.histories().length,1);
+});
+for(const boundary of ['peer','session','unmount'])test(`private retraction respects changed ${boundary}`,async()=>{
+ const h=privateRetractionHost(),write=h.retract();
+ if(boundary==='peer'){h.state.currentPeer.current='other';h.state.thread={...h.initial,participant:{...h.initial.participant,user_id:'other'},items:[]};h.state.snapshot.current.thread=h.state.thread;}
+ if(boundary==='session')h.state.client.sessionGeneration++;if(boundary==='unmount')h.state.alive.current=false;
+ const before=JSON.stringify(h.state.thread),list=JSON.stringify(h.state.conversations);h.calls[0].resolve({message_id:target,retracted_at:stamp});await write;
+ assert.equal(h.histories().length,0);assert.equal(JSON.stringify(h.state.thread),before);if(boundary!=='peer'){assert.equal(JSON.stringify(h.state.conversations),list);assert.equal(h.calls.length,1);}
+});
+test('a rejected private retraction preserves the pending history and does not resend',async()=>{
+ const h=privateRetractionHost(),old=h.load(peer,true),gen=h.state.threadGeneration.current,write=h.retract();h.calls[1].reject(new Error('synthetic rejection'));await write;
+ assert.equal(h.state.threadGeneration.current,gen);assert.equal(h.calls.length,2);assert.equal(h.state.retractError,'synthetic rejection');assert.equal(h.state.thread.items[1].body,'withdrawn private text');
+ h.histories()[0].resolve(h.initial);await old;assert.equal(h.state.threadRefresh.loading,false);
+});
+test('a pre-write history response cannot restore a confirmed private tombstone',async()=>{
+ const h=privateRetractionHost(),old=h.load(peer,true);await h.confirm();h.histories()[0].resolve(h.initial);await old;
+ assert.equal(h.state.thread.items.find((v:any)=>v.message_id===target).body,'','old GET must not restore withdrawn body');
+ assert.equal(h.state.thread.items.find((v:any)=>v.message_id===target).retracted_at,stamp);
+});
+const settleRetraction=async()=>{for(let i=0;i<10;i++)await Promise.resolve();};
+for(const lateError of [false,true])test(`private retraction fences a pending bounded receipt lookup; error=${lateError}`,async()=>{
+ const h=privateRetractionHost();h.state.thread.items[1].read_at=null;
+ const old=h.load(peer,true);h.histories()[0].resolve({...h.initial,receipt_lookup:'ids-v1',items:[h.initial.items[0]]});await settleRetraction();
+ const receipt=h.calls.find(c=>c.path.includes('/receipts?'));assert.ok(receipt);await h.confirm();assert.equal(h.histories().length,2);
+ h.histories()[1].resolve(h.fresh());await h.reloads.at(-1);
+ if(lateError)receipt.reject(new ApiError({message:'stale forbidden',status:403}));else receipt.resolve({items:[{message_id:target,read_at:stamp}]});await old;
+ h.assertRedacted();assert.equal(h.state.threadStatus,'ready');assert.equal(h.state.threadRefresh.error,'');
+});
+for(const lateError of [false,true])test(`private retraction retries the original older-page intent after refresh ${lateError?'failure':'success'}`,async()=>{
+ const h=privateRetractionHost(),old=h.earlier();await h.confirm();assert.equal(h.histories().length,2);
+ if(lateError)h.histories()[1].reject(new Error('replacement unavailable'));else h.histories()[1].resolve(h.fresh());await h.reloads.at(-1);
+ h.flushQueued();assert.equal(h.histories().length,3);assert.match(h.histories()[2].path,/offset=20$/);
+ h.histories()[2].resolve({...h.fresh(),next_offset:null});await h.pages.at(-1);h.histories()[0].resolve({...h.initial,next_offset:40});await old;
+ h.assertRedacted();assert.equal(h.state.thread.next_offset,null);assert.equal(h.state.threadMore.loading,false);assert.equal(h.state.olderQueued.current,null);
 });
