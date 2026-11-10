@@ -1,5 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {randomUUID} from 'node:crypto';
+import {transformSync} from 'esbuild';
+import {refreshLoadedMessages} from '../../apps/portal-web/src/modules/message-refresh.js';
 import type {Pool} from 'pg';
 import type {DirectMessageContentInput} from '../../modules/member-communications/content-types.js';
 import {messageContents} from '../../modules/member-communications/content.js';
@@ -101,4 +106,79 @@ test('late ACK quote reconciliation requires exact target evidence and retains k
   }
   assert.equal(reconcileMessageAck(live,[]),live);
   assert.equal(JSON.stringify([live,redacted]),original,'inputs remain unchanged');
+});
+
+// Execute the production closures with deferred transports. This proves request
+// ordering, not React scheduling, browser layout, HTTP or database behavior.
+function channelSourceFunction(name:string){
+  const source=transformSync(readFileSync(new URL('../../apps/portal-web/src/modules/MemberChannels.tsx',import.meta.url),'utf8'),{loader:'tsx',target:'es2023',format:'esm'}).code;
+  const start=new RegExp(`^( *)(?:async )?function ${name}\\(`,'m').exec(source);assert.ok(start,name);
+  const tail=source.slice(start.index),end=new RegExp(`^${start[1]}}`,'m').exec(tail);assert.ok(end,`${name} end`);
+  return tail.slice(0,end.index+end[0].length);
+}
+function channelRetractionHost(kind:'guild'|'squad'|'world'){
+  const key=kind==='world'?'world':'synthetic-room';
+  const original={message_id:id,kind,channel_key:key,sequence:'2',sender_ref:sender,sender_name:'Synthetic',created_at:now,body:'withdrawn private text',retracted_at:null,sticker:{id:'workshop-v1-hello'},reply_to:{message_id:quoteId,body:'withdrawn quote'}};
+  const reply={...original,message_id:quoteId,sequence:'3',body:'keep this reply',sticker:undefined,reply_to:{message_id:id,body:original.body}};
+  const initial={channel:{kind,channel_key:key,name:'Synthetic'},items:[reply,original],unread_count:0,next_offset:20,retraction_count:'0'};
+  const calls:Array<{method:string;path:string;resolve:(value:any)=>void;reject:(cause:Error)=>void}>=[],reloads:Promise<unknown>[]=[];
+  const noop=()=>{};
+  const state:any={kind,selected:{key},current:{current:key},epoch:{current:1},alive:{current:true},history:structuredClone(initial),more:{loading:false},snapshot:{current:{}},
+    threadGeneration:{current:0},threadInFlight:{current:null},idlePoll:{current:{}},readIssues:{current:new Map()},gone:{current:new Set()},listInFlight:{current:null},listState:{current:'ready'},
+    retractTarget:{message_id:id},retractTrigger:{current:null},retracting:false,retractError:'',refresh:{loading:false,error:''},scroll:{current:null},anchor:{current:null},
+    PAGE:20,Error,crypto:{randomUUID},resetChatPoll:()=>({}),refreshLoadedMessages,
+    newestFirst:(items:any[])=>[...items].sort((a,b)=>Number(b.sequence)-Number(a.sequence)),
+    merge:(a:any[],b:any[],identity:(x:any)=>string)=>[...a,...b.filter(item=>!a.some(prior=>identity(prior)===identity(item)))],
+    path:(room:string,suffix:string)=>`/me/channels/${kind}/${room}/${suffix}`,fail:(cause:Error)=>cause.message,revoked:()=>false,
+    setMore:(value:any)=>state.more=value,setReadError:noop,setRefresh:(value:any)=>state.refresh=value,setStatus:noop,setError:noop,setNewerUnseen:noop,setCountUnconfirmed:noop,setLiveError:noop,
+    onUnread:noop,loadList:noop,announceInboxChange:noop,setRetractTarget:(value:any)=>state.retractTarget=value,setRetracting:(value:boolean)=>state.retracting=value,setRetractError:(value:string)=>state.retractError=value,
+    setHistory:(update:any)=>{state.history=typeof update==='function'?update(state.history):update;state.snapshot.current.history=state.history;},
+    client:{sessionGeneration:1,get:(path:string)=>new Promise((resolve,reject)=>calls.push({method:'GET',path,resolve,reject})),post:(path:string)=>new Promise((resolve,reject)=>calls.push({method:'POST',path,resolve,reject}))},
+  };
+  state.snapshot.current.history=state.history;
+  const load=runInNewContext(`${channelSourceFunction('loadThread')};loadThread`,state);
+  state.loadThread=(...args:any[])=>{const promise=load(...args);reloads.push(promise);return promise;};
+  const retract=runInNewContext(`${channelSourceFunction('retract')};retract`,state),earlier=runInNewContext(`${channelSourceFunction('earlier')};earlier`,state);
+  const fresh=()=>({...structuredClone(initial),retraction_count:'1',items:[{...reply,reply_to:undefined,reply_to_message_id:id},{message_id:id,kind,channel_key:key,sequence:'2',sender_ref:sender,sender_name:'Synthetic',created_at:now,body:'',retracted_at:now}]});
+  const assertRedacted=()=>{assert.equal(state.history.items.find((item:any)=>item.message_id===id).retracted_at,now);assert.ok(!JSON.stringify(state.history.items).includes('withdrawn'),'neither message content nor its quote may reappear');};
+  return {state,key,calls,reloads,load:state.loadThread,retract,earlier,initial,fresh,assertRedacted};
+}
+for(const kind of ['guild','squad','world'] as const){
+  for(const oldLast of [false,true])test(`${kind}: confirmed retraction supersedes a quiet history response, old last=${oldLast}`,async()=>{
+    const h=channelRetractionHost(kind),old=h.load(h.key,true),write=h.retract();
+    h.calls[1].resolve({message_id:id,retracted_at:now});await write;h.assertRedacted();
+    assert.equal(h.calls.length,3,'confirmation starts exactly one fresh history read');
+    assert.equal(h.calls[2].method,'GET');assert.equal(h.state.refresh.loading,true);
+    if(!oldLast){h.calls[0].resolve(h.initial);await old;h.assertRedacted();assert.equal(h.state.refresh.loading,true,'stale completion cannot release the replacement read');}
+    h.calls[2].resolve(h.fresh());await h.reloads.at(-1);h.assertRedacted();assert.equal(h.state.refresh.loading,false);assert.equal(h.state.history.next_offset,20);
+    if(oldLast){h.calls[0].resolve(h.initial);await old;h.assertRedacted();assert.equal(h.state.history.retraction_count,'1');}
+  });
+  test(`${kind}: failed post-retraction refresh preserves redaction and manual retry recovers`,async()=>{
+    const h=channelRetractionHost(kind),old=h.load(h.key,true),write=h.retract();h.calls[1].resolve({message_id:id,retracted_at:now});await write;
+    assert.equal(h.calls.length,3);h.calls[2].reject(new Error('synthetic offline'));await h.reloads.at(-1);
+    h.calls[0].resolve(h.initial);await old;h.assertRedacted();assert.equal(h.state.refresh.loading,false);assert.equal(h.state.refresh.error,'synthetic offline');assert.equal(h.state.history.retraction_count,'0','failed refresh cannot consume the new revision');
+    const retry=h.load(h.key,true);h.calls[3].resolve(h.fresh());await retry;h.assertRedacted();assert.equal(h.state.refresh.error,'');assert.equal(h.state.history.retraction_count,'1');
+    assert.equal(h.calls.filter(call=>call.method==='POST').length,1,'never resend the confirmed mutation');
+  });
+  test(`${kind}: retraction fences an older page and retains its cursor for a later retry`,async()=>{
+    const h=channelRetractionHost(kind),old=h.earlier(),write=h.retract();h.calls[1].resolve({message_id:id,retracted_at:now});await write;
+    assert.equal(h.calls.length,3);h.calls[0].resolve({...h.initial,next_offset:null});await old;h.assertRedacted();assert.equal(h.state.history.next_offset,20);
+    h.calls[2].resolve(h.fresh());await h.reloads.at(-1);assert.equal(h.state.more.loading,false);
+    const retry=h.earlier();assert.match(h.calls[3].path,/offset=20$/);h.calls[3].resolve({...h.fresh(),next_offset:null});await retry;assert.equal(h.state.history.next_offset,null);h.assertRedacted();
+  });
+}
+for(const boundary of ['selection','session','unmount'] as const)test(`channel retraction does not start a history read after ${boundary} changes`,async()=>{
+  const h=channelRetractionHost('guild'),write=h.retract();
+  if(boundary==='selection'){h.state.current.current='other-room';h.state.history={...h.state.history,channel:{channel_key:'other-room'},items:[]};h.state.snapshot.current.history=h.state.history;}
+  else if(boundary==='session')h.state.client.sessionGeneration++;
+  else h.state.alive.current=false;
+  const before=JSON.stringify(h.state.history);h.calls[0].resolve({message_id:id,retracted_at:now});await write;
+  assert.equal(h.calls.length,1);assert.equal(JSON.stringify(h.state.history),before);
+});
+for(const kind of ['guild','squad','world'] as const)test(`${kind}: failed retraction leaves the pending history read and original content intact`,async()=>{
+  const h=channelRetractionHost(kind),old=h.load(h.key,true),write=h.retract(),generation=h.state.threadGeneration.current;
+  h.calls[1].reject(new Error('synthetic rejected retract'));await write;
+  assert.equal(h.calls.length,2);assert.equal(h.state.threadGeneration.current,generation);assert.equal(h.state.retractError,'synthetic rejected retract');
+  assert.equal(h.state.history.items.find((item:any)=>item.message_id===id).body,'withdrawn private text');
+  h.calls[0].resolve(h.initial);await old;assert.equal(h.state.refresh.loading,false);assert.equal(h.state.history.retraction_count,'0');
 });

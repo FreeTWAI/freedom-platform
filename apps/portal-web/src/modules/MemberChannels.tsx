@@ -92,10 +92,18 @@ export function MemberChannels({client,session,kind,onUnread,onNavigate,active=t
   function closeRetract(){setRetractTarget(null);setRetractError('');retractTrigger.current?.focus();retractTrigger.current=null;}
   async function retract(){
     if(!retractTarget||!selected)return;
-    const key=selected.key,messageId=retractTarget.message_id;setRetracting(true);setRetractError('');
+    const key=selected.key,messageId=retractTarget.message_id,sessionGeneration=client.sessionGeneration;setRetracting(true);setRetractError('');
     try{
       const result=await client.post<{message_id:string;retracted_at:string}>(`/me/channels/${kind}/${encodeURIComponent(key)}/messages/${encodeURIComponent(messageId)}/retract`,{},{idempotencyKey:crypto.randomUUID()});
-      setHistory(value=>value&&value.channel.channel_key===key?{...value,items:value.items.map(message=>message.message_id===messageId?{message_id:message.message_id,kind:message.kind,channel_key:message.channel_key,sequence:message.sequence,sender_ref:message.sender_ref,sender_name:message.sender_name,created_at:message.created_at,body:'',retracted_at:result.retracted_at}:message)}:value);
+      if(!alive.current||client.sessionGeneration!==sessionGeneration)return;
+      setHistory(value=>value&&value.channel.channel_key===key?{...value,items:value.items.map(message=>{
+        if(message.message_id===messageId)return {message_id:message.message_id,kind:message.kind,channel_key:message.channel_key,sequence:message.sequence,sender_ref:message.sender_ref,sender_name:message.sender_name,created_at:message.created_at,body:'',retracted_at:result.retracted_at};
+        if(message.reply_to?.message_id!==messageId)return message;
+        const {reply_to:_,...redacted}=message;return {...redacted,reply_to_message_id:messageId};
+      })}:value);
+      // Supersede every pre-write history/pagination read before it can restore
+      // withdrawn content. Keep the tombstone if the authoritative refresh fails.
+      if(current.current===key)void loadThread(key,true);
       setRetractTarget(null);retractTrigger.current?.focus();retractTrigger.current=null;
     }catch(cause){setRetractError(cause instanceof Error?cause.message:'訊息尚未收回，請稍後再試。');}
     finally{setRetracting(false);}
