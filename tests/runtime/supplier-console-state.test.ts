@@ -1,3 +1,6 @@
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {transformSync} from 'esbuild';
 import {MerchantInventorySummary,InventoryDefinition} from '../../modules/agent-commerce/hosted-ui/CommerceTools';
 import {MerchantInventorySchema,MerchantProductViewSchema as ProductViewSchema,ProductViewSchema as FrozenProductViewSchema} from '../../contracts/guild-launchpad/v1/storefront';
 import {SupplyProductViewSchema} from '../../contracts/guild-launchpad/v1/hosted-supply-catalog';
@@ -328,6 +331,43 @@ test('SC-UI-S3-03 Taipei today and the inclusive thirty-day default ignore proce
   ]){assert.equal(taipeiToday(Date.parse(instant)),today,zone);assert.deepEqual(defaultReportPeriod(Date.parse(instant)),{from,to:today},zone);}
  }}finally{if(before===undefined)delete process.env.TZ;else process.env.TZ=before;}
 });
+// Execute the journey's real date setup, with a controlled clock port rather than
+// a browser. This catches regressions in fixture ordering; it is not E2E evidence.
+for(const instant of ['2026-11-09T15:59:59.999Z','2024-02-29T15:59:59.999Z','2024-12-31T15:59:59.999Z']){
+ test(`SC-E2E-71 date setup stays aligned across Taipei midnight at ${instant}`,async()=>{
+  const source=readFileSync(new URL('../e2e/supplier-console-materials.spec.ts',import.meta.url),'utf8');
+  const journey=source.indexOf("test('SC-E2E-71 ");
+  const start=source.indexOf('// Compute expected last 30 Taipei days',journey);
+  const end=source.indexOf('const fromInput =',start);
+  assert.ok(journey>=0&&start>journey&&end>start,'the report journey date setup must exist');
+  const sampled=Date.parse(instant),afterMidnight=sampled+1;
+  let fixed:number|undefined;
+  const visits:ReturnType<typeof defaultReportPeriod>[]=[];
+  const pageA={clock:{async setFixedTime(value:number){
+   // A delayed clock installation also detects a missing await before navigation.
+   await new Promise<void>(resolve=>setImmediate(resolve));
+   fixed=value;
+  }}};
+  class SampledDate extends Date {static now(){return sampled;}}
+  const visit=()=>{visits.push(defaultReportPeriod(fixed??afterMidnight));};
+  const compiled=transformSync(`(async()=>{${source.slice(start,end)}
+   return {from:expectedFrom,to:expectedTo};
+  })()`,{loader:'ts',target:'es2022'}).code;
+  const expected=await runInNewContext(compiled,{
+   Date:SampledDate,Intl,pageA,sup:{store:{hash:'stores/test/report'}},
+   openSupplyPage:async()=>{visit();},
+  }) as {from:string;to:string};
+  const period={from:expected.from,to:expected.to};
+  assert.deepEqual(period,defaultReportPeriod(sampled),'expected dates use the sampled instant');
+  assert.notDeepEqual(defaultReportPeriod(afterMidnight),period,'the fixture actually crosses a Taipei day');
+  // The first entry and subsequent returns must use the same dates as the exact
+  // response predicate, invalid-period checks and CSV assertions in the journey.
+  visit();visit();visit();
+  assert.equal(visits.length,4);
+  for(const actual of visits)assert.deepEqual(actual,period);
+  assert.equal(fixed,sampled,'only the browser Date is fixed to the sampled instant');
+ });
+}
 const reportPeriod={from:'2026-10-01',to:'2026-10-15'},reportKey='report:2026-10-01:2026-10-15';
 const reportFixture=():SupplierReport=>SupplierReportSchema.parse({profile:'freedom.supplier-console.report/v1',tenant_id:t,instance_id:i,as_of:asOf,
  business:{name:'供貨事業',currency:'TWD'},period:{...reportPeriod,time_zone:'Asia/Taipei',start:'2026-09-30T16:00:00.000Z',end:'2026-10-15T16:00:00.000Z'},
