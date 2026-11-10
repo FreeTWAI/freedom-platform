@@ -1,5 +1,21 @@
 # Foundation Complete 收尾
 
+## 2026-11-09：26 公會獨立啟動台發布，正式站收尾已核對
+
+06:26 UTC 完成本次觀察時，兩環境發布來源為 `bb6c34e6a5dc580a2e37a1768025d3ae245007f7`，包含 #1313 管理入口、#1311 公會獨立 Repo／啟動台、#1314 封存備份復原與 #1316 發布事件傳遞修正。18 個內建與 8 個已核准自訂公會各有自己的 Repo、CI 與 Pages 發布；會員身分、權限、私人資料和業務寫入仍由中央平台管理。
+
+[staging 42570289981](https://github.com/FreeTWAI/freedom-platform/actions/runs/42570289981) 五階段通過，Deployment `7648096003` 為 success。Preflight 讀回原失敗備份 `42478984577` 已上傳的封存，完成內容驗證、PG18／R2 隔離還原及清理，收據為 `archive_restored_after_readback`。沒有重新擷取或重送封存；原備份 failure 保留。
+
+[正式發布 42571667515](https://github.com/FreeTWAI/freedom-platform/actions/runs/42571667515) 的部署與指定版本 health 回報通過，handoff 在租約清理時回報 `release_lease_cleanup_failed`／`heartbeat_timeout`。接續 [hosted handoff 42572538017](https://github.com/FreeTWAI/freedom-platform/actions/runs/42572538017) 已通過，`alreadySettled=true` 確認原 handoff 已寫入，僅重新讀回核對，沒有重跑 migration、部署或備份。原 workflow 與 Deployment `7648272460` 仍是 failure；這不是一次不中斷的正式發布成功紀錄。
+
+06:25–06:26 UTC 以匿名 Chromium、繁體中文、390×844 實際走完正式站 26 個公會入口：各自載入正確的獨立啟動台、bridge 就緒、平台與 iframe 無水平溢出，點「技能書」返回平台原生面板，26／26 通過且沒有 page error。另檢視了 AI 工具實作、商店銷售、語言 AI、音樂 MV 四張截圖；登入後私人寫入與其餘 22 張的逐張視覺檢查不在本次驗收內。
+
+兩環境使用經 main CI、原生驗證及獨立下載確認的同一 operator image `35e00dfc…bca6`（[建置 42569944199](https://github.com/FreeTWAI/freedom-platform/actions/runs/42569944199)）。與前版 `242dbd40` 的 migration catalog 相同；設定摘要與既有旗標保留。本次租約逾時的底層原因、自然備份排程、真人使用、第二操作者還原及 Foundation 原未驗項仍各自追蹤。
+
+版本、映像完整 digest、三份 artifact 雜湊及 26 倉發布來源見[本次收據](rollout-main-bb6c34e6-2026-11-09.json)。下方保留具日期的歷史觀察；舊段落的「現為」限於該次紀錄時間。
+
+#1312 本機開發文件隨後已合併為 `42bef764`；06:30 UTC 的 main CI／自動發布尚待完成，本段的 live 驗收仍綁定 `bb6c34e6`。
+
 ## 2026-11-03 兩環境已部署 schema197，正式站備份紀錄已對帳
 
 兩環境現為 `0d470404`／schema197。schema197 先以 `1cbd4066` 發布：[staging 41646567554](https://github.com/FreeTWAI/freedom-platform/actions/runs/41646567554) 與[正式站 41661769908](https://github.com/FreeTWAI/freedom-platform/actions/runs/41661769908) 的 workflow 都成功，migration、部署、health 通過；正式站 journal 唯讀讀回 generation85 為該 run 的 handoff，pending=null。
