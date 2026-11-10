@@ -14,6 +14,57 @@ import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/por
 import {marketGrade,MARKET_SAVE_KEY,type MarketRun,type MarketId} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
 
+// Isolated playable proposal, not a deployed portal route or a generated image.
+// Bundle the real preview and existing scoring domain, then exercise native input.
+for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD atelier real build ${width}x${height}: native stamp preview, pause, input and screenshot`,async({page},info)=>{
+ const logo='data:image/png;base64,'+readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url)).toString('base64');
+ const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountStampAtelier} from './apps/portal-web/src/games/stamp-atelier';const game=mountStampAtelier(document.body,${JSON.stringify(logo)});window.addEventListener('pagehide',()=>game.dispose(),{once:true});`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022',minify:true}).outputFiles[0].text;
+ const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>下班蓋章室 · 可操作預覽</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`;
+ await page.setViewportSize({width,height});
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.setContent(html);
+ const root=page.locator('.stamp-atelier'),canvas=root.getByRole('application');
+ await expect(root).toHaveAttribute('data-native','true');await expect(canvas).toBeVisible();
+ await expect(root).toHaveAttribute('data-practice','true');
+ await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
+ await page.keyboard.press('Tab');await expect(page.getByRole('button',{name:'繼續蓋章'})).toBeFocused();
+ await page.keyboard.press('Enter');await expect(page.getByRole('dialog')).toBeHidden();await expect(canvas).toBeFocused();
+ const {OrthographicCamera}=createRequire(import.meta.url)('three');
+ const aspect=width/height,extent=Math.max(6.5,4.1/aspect),camera=new OrthographicCamera(-extent*aspect/2,extent*aspect/2,extent/2,-extent/2,.1,40);
+ camera.position.set(0,8,5);camera.lookAt(0,0,0);camera.updateProjectionMatrix();camera.updateMatrixWorld();
+ const target=stampTarget(42,0),point=new Vector3(target.x*1.2,.178,target.y*1.5).project(camera),x=(point.x+1)*width/2,y=(1-point.y)*height/2;
+ // A cancelled real drag cannot consume the practice sheet.
+ await page.mouse.move(x,y);await page.mouse.down();await page.keyboard.press('Escape');await page.mouse.up();await expect(root).toHaveAttribute('data-practice','true');
+ await page.getByRole('button',{name:'繼續蓋章'}).click();
+ await page.mouse.move(x+4,y+4);await page.mouse.down();await page.mouse.move(x,y,{steps:4});await page.mouse.up();
+ await expect(root).toHaveAttribute('data-practice','false');await expect(root).toHaveAttribute('data-completed','0');
+ await expect(page.getByRole('status')).toContainText('練習完成');
+ await canvas.press('ArrowRight');await canvas.press('ArrowLeft');
+ const dimensions=await canvas.evaluate(el=>{const c=el as HTMLCanvasElement;return {width:c.width,height:c.height,cssWidth:c.clientWidth,cssHeight:c.clientHeight};});
+ expect(dimensions.width).toBeGreaterThan(300);expect(dimensions.height).toBeGreaterThan(300);
+ const metrics=await root.evaluate(el=>({drawCalls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles),renderSubmitMs:Number((el as HTMLElement).dataset.renderMs)}));
+ expect(metrics.drawCalls).toBeGreaterThan(0);expect(metrics.drawCalls).toBeLessThan(160);expect(metrics.triangles).toBeGreaterThan(1000);
+ // Attach actual originals without CSS replacement or image overlays. The
+ // current pinned CI retains these bodies only when the whole shard fails;
+ // successful-run delivery needs a separately authorized capture route.
+ const png=await page.screenshot();const image=await sharp(png).stats();expect(image.channels.slice(0,3).some(c=>c.stdev>20)).toBe(true);
+ await info.attach(`stamp-atelier-native-${width}x${height}.png`,{body:png,contentType:'image/png'});
+ await info.attach(`stamp-atelier-native-${width}x${height}.json`,{body:Buffer.from(JSON.stringify({viewport:{width,height},dimensions,metrics,note:'Real Three.js preview after successful native practice input. renderSubmitMs is CPU submission time, not GPU time or FPS.'})),contentType:'application/json'});
+ if(width===1440)await info.attach('stamp-atelier-playable-preview.html',{body:Buffer.from(html),contentType:'text/html'});
+ await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(root).toHaveAttribute('data-practice','true');await expect(root).toHaveAttribute('data-completed','0');
+ expect(errors).toEqual([]);
+ // The unchanged pinned reporter inherits stdout on both success and failure.
+ // Public, synthetic artwork only: preserve bounded original PNG bytes in job
+ // logs, not a modified check receipt or a deliberately failing test. Consumers
+ // must verify the complete sequence, byte count and digest before viewing.
+ expect(png.byteLength).toBeLessThanOrEqual(512*1024);
+ const {createHash}=createRequire(import.meta.url)('node:crypto');
+ const captureId=`${width}x${height}`,encoded=png.toString('base64'),parts=Math.ceil(encoded.length/3072);
+ console.log('STAMP_ATELIER_CAPTURE '+JSON.stringify({format:'stamp-atelier-preview/v1',candidate:process.env.GITHUB_SHA??'local-uncommitted',id:captureId,bytes:png.byteLength,sha256:createHash('sha256').update(png).digest('hex'),parts,viewport:{width,height},dimensions,metrics}));
+ for(let i=0;i<parts;i++)console.log(`STAMP_ATELIER_PNG ${captureId} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
+ console.log(`STAMP_ATELIER_CAPTURE_END ${captureId}`);
+});
+
 // Proposed E2E-only injection; no product module imports or production telemetry.
 // Records timing/category/dimensions only, never image contents or user strings.
 function installExportTimingProbe(){
