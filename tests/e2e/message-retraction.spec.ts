@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
-import {test,expect,type Browser,type BrowserContext,type Page} from './fixtures.js';
+import {test,expect,type Browser,type BrowserContext,type Page,type Route,type APIResponse} from './fixtures.js';
 import {LOCAL_DATABASE_URL} from '../../packages/db/index.js';
 import {e2eSchema} from '../../packages/testing/e2e-auth-isolation.js';
 import {DEMO_USERS,DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
@@ -130,4 +130,46 @@ test('an open recipient refreshes a loaded older page and its quote when the lat
   await expect(other.locator(`[data-message-id="${reply}"]`)).toContainText('合成：保留這則回覆');
   await expect(other.locator('.messages-bubbles')).not.toContainText(body);
   await expect(other.locator('.messages-bubbles li')).toHaveCount(27);
+});
+
+for(const width of [390,1280])for(const failRefresh of [false,true])test(`a confirmed channel retraction survives a stale history response at ${width}px, refresh failure=${failRefresh}`,async({browser,baseURL})=>{
+  const page=await member(browser,baseURL!,0,width);
+  await page.getByRole('tab',{name:/^世界聊天/}).click();
+  const panel=page.locator('#messages-panel-world'),body=`合成：不得復原的內容 ${randomUUID()}`;
+  await panel.getByRole('textbox',{name:'世界聊天訊息',exact:true}).fill(body);
+  await panel.getByRole('button',{name:'傳送',exact:true}).click();
+  const row=panel.locator('.messages-bubbles li',{hasText:body});await expect(row).toBeVisible();
+  const messageId=await row.getAttribute('data-message-id');expect(messageId).toBeTruthy();
+  let old:{route:Route;response:APIResponse}|undefined,fresh:{route:Route;response:APIResponse}|undefined,reads=0;
+  await page.route(url=>url.pathname==='/api/v1/me/channels/world/world/messages'&&url.searchParams.get('offset')==='0',async route=>{
+    const response=await route.fetch();expect(response.status()).toBe(200);
+    reads++;
+    if(reads===1){expect((await response.json()).items.find((item:any)=>item.message_id===messageId).body).toBe(body);old={route,response};return;}
+    if(reads===2){fresh={route,response};return;}
+    await route.fulfill({response});
+  });
+  try{
+    await panel.getByRole('button',{name:'重新讀取訊息',exact:true}).click();await expect.poll(()=>Boolean(old)).toBe(true);
+    await row.getByRole('button',{name:'收回你的訊息'}).click();
+    const dialog=page.getByRole('dialog',{name:'收回這則訊息？'});
+    await dialog.getByRole('button',{name:'確定收回'}).click();await expect(dialog).toBeHidden();
+    const tombstone=panel.locator(`[data-message-id="${messageId}"] .chat-retracted`);
+    await expect(tombstone).toHaveText('你已收回這則訊息。');await expect.poll(()=>Boolean(fresh)).toBe(true);
+    const oldResponse=page.waitForResponse(response=>response.url()===old!.route.request().url());
+    const prior=old!;await prior.route.fulfill({response:prior.response});await (await oldResponse).finished();old=undefined;
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    await expect(tombstone).toHaveText('你已收回這則訊息。');await expect(panel.locator('.messages-bubbles')).not.toContainText(body);
+    const replacement=fresh!;fresh=undefined;
+    if(failRefresh){
+      await replacement.route.abort();await expect(panel).toContainText('訊息重新讀取失敗：');
+      await expect(tombstone).toHaveText('你已收回這則訊息。');
+      await panel.getByRole('button',{name:'重新讀取訊息',exact:true}).click();
+    }else await replacement.route.fulfill({response:replacement.response});
+    await expect(panel.getByRole('button',{name:'重新讀取訊息',exact:true})).toHaveText('重新讀取訊息');
+    await expect(tombstone).toHaveText('你已收回這則訊息。');await expect(panel.locator('.messages-bubbles')).not.toContainText(body);
+    expect((await db.query('SELECT retracted_at FROM member_channel_messages WHERE message_id=$1',[messageId])).rows[0].retracted_at).not.toBeNull();
+    const next=`合成：收回後繼續聊天 ${randomUUID()}`;
+    await panel.getByRole('textbox',{name:'世界聊天訊息',exact:true}).fill(next);await panel.getByRole('button',{name:'傳送',exact:true}).click();
+    await expect(panel.locator('.messages-bubbles')).toContainText(next);await expect(tombstone).toHaveText('你已收回這則訊息。');
+  }finally{if(old)await old.route.abort().catch(()=>{});if(fresh)await fresh.route.abort().catch(()=>{});}
 });
