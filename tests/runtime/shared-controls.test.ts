@@ -109,3 +109,80 @@ test('actual native control evaluator composites alpha layers and rejects unread
   assert.ok(regressed(element('rgba(255, 255, 255, 0.0431373)',undefined,dialog)).contrast<4.5);
   assert.ok(contrast('#f4f6ef','#ffffff')<4.5);assert.ok(hover.contrast>contrast('#f4f6ef','#ffffff'));
 });
+
+// Execute the production ConnectionStatus component with controlled
+// hooks and EventTargets. This models missed network notifications on resume,
+// not React scheduling, browser layout, or a physical PWA suspension.
+function connectionStatusFixture(initialOnline=true){
+  class Events extends EventTarget{
+    listeners=new Map<string,Set<EventListenerOrEventListenerObject>>();
+    override addEventListener(type:string,callback:EventListenerOrEventListenerObject|null,options?:AddEventListenerOptions|boolean){
+      if(callback){const values=this.listeners.get(type)??new Set();values.add(callback);this.listeners.set(type,values);}super.addEventListener(type,callback,options);
+    }
+    override removeEventListener(type:string,callback:EventListenerOrEventListenerObject|null,options?:EventListenerOptions|boolean){
+      if(callback)this.listeners.get(type)?.delete(callback);super.removeEventListener(type,callback,options);
+    }
+    count(){return [...this.listeners.values()].reduce((sum,values)=>sum+values.size,0);}
+  }
+  const window=new Events(),properties=new Map<string,string>();
+  const root={dataset:{} as Record<string,string>,style:{setProperty:(key:string,value:string)=>properties.set(key,value),removeProperty:(key:string)=>properties.delete(key)}};
+  const document=Object.assign(new Events(),{visibilityState:'visible',documentElement:root});
+  const navigator={onLine:initialOnline},effects:Array<()=>void|(()=>void)>=[];
+  let initialized=false,offline=false,sets=0,disconnected=0;
+  const banner={current:{getBoundingClientRect:()=>({height:48})}},t=(key:string)=>key;
+  const host:any={window,document,navigator,useLanguage:()=>({t}),useRef:()=>banner,
+    useState:(initial:()=>boolean)=>{if(!initialized){offline=initial();initialized=true;}return [offline,(next:boolean)=>{sets++;offline=next;}];},
+    useEffect:(effect:()=>void|(()=>void))=>effects.push(effect),
+    ResizeObserver:class{observe(){}disconnect(){disconnected++;}},
+    require:(name:string)=>{assert.equal(name,'react/jsx-runtime');return {jsx:(type:unknown,props:unknown)=>({type,props}),jsxs:(type:unknown,props:unknown)=>({type,props})};},
+  };
+  const source=read('AppInstall.tsx'),start=source.indexOf('function ConnectionStatus()');assert.notEqual(start,-1);
+  runInNewContext(transformSync(source.slice(start)+'\nglobalThis.statusComponent=ConnectionStatus;',{loader:'tsx',format:'cjs',jsx:'automatic'}).code,host);
+  const render=()=>{effects.length=0;return host.statusComponent();};render();
+  return {window,document,navigator,root,properties,render,banner,
+    subscribe:()=>effects[0]() as ()=>void,measure:()=>effects[1]() as (()=>void)|undefined,
+    emit:(type:string)=>(type==='visibilitychange'?document:window).dispatchEvent(new Event(type)),
+    get offline(){return offline;},get sets(){return sets;},get disconnected(){return disconnected;}};
+}
+for(const event of ['focus','pageshow','visibilitychange'])for(const initialOnline of [true,false])test(`connection status ${event} reconciles missed transitions from ${initialOnline?'online':'offline'}`,()=>{
+  const h=connectionStatusFixture(initialOnline),cleanup=h.subscribe();
+  try{
+    for(const online of [!initialOnline,initialOnline,!initialOnline]){
+      h.navigator.onLine=online;h.emit(event);assert.equal(h.offline,!online);
+      h.emit(event);assert.equal(h.offline,!online,'repeated resume keeps the same status');
+    }
+  }finally{cleanup();}
+});
+for(const event of ['focus','pageshow','visibilitychange'])test(`connection status ${event} defers hidden-page resume until visible`,()=>{
+  const h=connectionStatusFixture(),cleanup=h.subscribe();
+  try{
+    h.document.visibilityState='hidden';h.navigator.onLine=false;const before=h.sets;h.emit(event);assert.equal(h.offline,false);assert.equal(h.sets,before);
+    h.document.visibilityState='visible';h.emit(event);assert.equal(h.offline,true);
+  }finally{cleanup();}
+});
+for(const initialOnline of [true,false])test(`connection status closes the render-to-subscribe gap from ${initialOnline?'online':'offline'}`,()=>{
+  const h=connectionStatusFixture(initialOnline);h.navigator.onLine=!initialOnline;const cleanup=h.subscribe();
+  try{assert.equal(h.offline,initialOnline);}finally{cleanup();}
+});
+test('connection status preserves online/offline notifications, including while hidden',()=>{
+  const h=connectionStatusFixture(),cleanup=h.subscribe();
+  try{h.document.visibilityState='hidden';h.navigator.onLine=false;h.emit('offline');assert.equal(h.offline,true);h.navigator.onLine=true;h.emit('online');assert.equal(h.offline,false);}finally{cleanup();}
+});
+test('connection status subscription replay and unmount remove every listener',()=>{
+  const h=connectionStatusFixture();let cleanup=h.subscribe();
+  assert.equal(h.window.count(),4);assert.equal(h.document.count(),1);cleanup();
+  assert.equal(h.window.count()+h.document.count(),0);h.render();cleanup=h.subscribe();
+  assert.equal(h.window.count(),4);assert.equal(h.document.count(),1);cleanup();
+  const before=h.sets;h.navigator.onLine=false;
+  for(const event of ['online','offline','focus','pageshow','visibilitychange'])h.emit(event);
+  assert.equal(h.sets,before);assert.equal(h.window.count()+h.document.count(),0);
+});
+test('connection status resume keeps banner semantics and releases chat clearance on reconnect or unmount',()=>{
+  const h=connectionStatusFixture(),cleanup=h.subscribe();
+  try{
+    h.navigator.onLine=false;h.emit('pageshow');const banner=h.render();assert(banner);assert.equal(banner.props.role,'status');assert.equal(banner.props['aria-live'],'polite');assert.equal(banner.props['aria-atomic'],'true');
+    const release=h.measure();assert.equal(h.root.dataset.deviceOffline,'true');assert.equal(h.properties.get('--connection-status-height'),'48px');assert(release);release();
+    assert.equal(h.root.dataset.deviceOffline,undefined);assert.equal(h.properties.size,0);assert.equal(h.disconnected,1);
+    h.navigator.onLine=true;h.emit('focus');assert.equal(h.render(),null);h.measure();assert.equal(h.root.dataset.deviceOffline,undefined);assert.equal(h.properties.size,0);
+  }finally{cleanup();}
+});
