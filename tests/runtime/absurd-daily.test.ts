@@ -1520,3 +1520,25 @@ for(const reason of ['unavailable','confirmation','step-result','rejected-comman
  h.begin();assert.equal(h.live.current,before);assert.equal(h.calls(),0);assert.deepEqual(h.view.scrolls,[]);assert.deepEqual(h.layout.scrolls,[]);assert.deepEqual(h.target.focuses,[]);
 });
 // FULLSCREEN-START-PURE-END
+
+
+test('stamp atelier actual animation source settles reduced motion and preserves guards and normal curve',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/stamp-atelier.ts',import.meta.url),'utf8');
+ const start=source.indexOf('function render()'),end=source.indexOf('function refresh()',start);
+ assert.ok(start>=0&&end>start);
+ const poses:number[]=[],pending=new Map<number,()=>void>();let time=0,reduced=true,next=0;
+ const position={y:-1,set(_x:number,y:number,_z:number){this.y=y;}};
+ const scope:any={disposed:false,paused:false,lost:false,frame:0,strokeAt:0,cursor:{x:.2,y:.3},tool:{position},footprint:{position:{set(){}}},scene:{},camera:{},root:{dataset:{}},performance:{now:()=>time},matchMedia:()=>({matches:reduced}),renderer:{info:{render:{calls:1,triangles:1}},render:()=>poses.push(position.y)},cancelAnimationFrame:(id:number)=>pending.delete(id),requestAnimationFrame:(fn:()=>void)=>{pending.set(++next,fn);return next;}};
+ runInNewContext(source.slice(start,end),scope);
+ // Execute the real render/animate bodies, not a copied motion implementation.
+ for(const age of [130,0,32,65,259,260,400]){time=age;scope.animate();assert.equal(position.y,.48);assert.equal(pending.size,0);}
+ assert.ok(poses.every(y=>y===.48));
+ reduced=false;
+ for(const [age,y] of [[0,.48],[32,.20+.28*(1-32/65)],[65,.20],[130,.20+.28/3],[259,.20+.28*194/195],[260,.48]]){
+  time=age;scope.animate();assert.ok(Math.abs(position.y-y)<1e-12);assert.equal(pending.size,age<260?1:0);
+ }
+ time=130;scope.animate();assert.equal(pending.size,1);reduced=true;
+ [...pending.values()][0]();assert.equal(position.y,.48);assert.equal(pending.size,0);
+ for(let i=0;i<3;i++){scope.strokeAt=time;scope.animate();assert.equal(position.y,.48);assert.equal(pending.size,0);}
+ for(const guard of ['disposed','paused','lost']){scope[guard]=true;const count:number=poses.length;scope.animate();assert.equal(poses.length,count);assert.equal(pending.size,0);scope[guard]=false;}
+});

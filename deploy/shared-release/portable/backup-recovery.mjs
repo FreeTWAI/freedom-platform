@@ -1,4 +1,5 @@
 import { requireRelease as check } from '../admission.mjs';
+import { publicLeaseLoss } from './lease.mjs';
 import { createHash } from 'node:crypto';
 import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 
@@ -8,14 +9,17 @@ import { migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 export async function reconcileFailedBackup({ floor, pool, database, role, deployer, lease, request }) {
   const state = floor.state(), pending = state.pending, evidence = request.recoveryEvidence;
   const capture = pending?.intents?.['backup:capture-policy'];
+  const leaseLost = evidence?.failureBoundary === 'backup_lease_lost' && publicLeaseLoss(evidence.leaseLoss);
+  const noIntents = leaseLost && !capture && pending?.intents && Object.keys(pending.intents).length === 0;
   const unstarted = !capture && pending?.intents && Object.keys(pending.intents).length === 0
     && evidence?.failureBoundary === 'before_dump';
   const beginOnly = !capture && pending?.intents && Object.keys(pending.intents).length === 0
     && evidence?.failureBoundary === 'before_capture';
   check(request.mode === 'backup' && request.event === 'workflow_dispatch' && pending?.kind === 'backup'
-    && pending.stage === 0 && (beginOnly || unstarted || (capture && Object.keys(pending.intents).length === 1))
+    && pending.stage === 0 && (beginOnly || unstarted || noIntents || (capture && Object.keys(pending.intents).length === 1))
     && request.recoverRunId === pending.request.runId && request.runId !== pending.request.runId
     && evidence?.format === 'freedom.verified-failed-backup/v1'
+    && (evidence.failureBoundary !== 'backup_lease_lost' || (leaseLost && evidence.target === pending.request.target))
     && request.sourceSha === state.sourceSha && request.sourceTree === state.sourceTree
     && evidence.runId === pending.request.runId && evidence.runAttempt === pending.request.runAttempt
     && evidence.target === request.target && evidence.configSha256 === request.configSha256
@@ -24,7 +28,7 @@ export async function reconcileFailedBackup({ floor, pool, database, role, deplo
     && evidence.sourceSha === state.sourceSha && evidence.sourceTree === state.sourceTree,
   'release_backup_recovery_binding_invalid');
   const held = () => { lease.signal.throwIfAborted(); lease.assertHeld(); };
-  check(!request.legacyPredecessor || evidence.failureBoundary !== 'before_dump', 'release_backup_recovery_worker_changed');
+  check(!request.legacyPredecessor || (!leaseLost && evidence.failureBoundary !== 'before_dump'), 'release_backup_recovery_worker_changed');
   held(); await floor.assertCurrent();
   const worker = await deployer.inspect();
   const legacy = request.legacyPredecessor;
@@ -41,17 +45,17 @@ export async function reconcileFailedBackup({ floor, pool, database, role, deplo
     await q.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await q.query("SET LOCAL statement_timeout='30000'; SET LOCAL lock_timeout='3000'");
     const identity = (await q.query('SELECT current_database() database,current_user role')).rows[0];
-    check(identity?.database === (beginOnly || unstarted ? database : capture.database)
-      && identity.role === (beginOnly || unstarted ? role : capture.role), 'release_backup_recovery_database_changed');
+    check(identity?.database === (beginOnly || unstarted || noIntents ? database : capture.database)
+      && identity.role === (beginOnly || unstarted || noIntents ? role : capture.role), 'release_backup_recovery_database_changed');
     await floor.verifyDatabase(q);
     const policy = (await q.query(`SELECT enabled,domain_media_enabled,revision,
       encode(pg_catalog.sha256(convert_to((to_jsonb(p)-'generation')::text,'UTF8')),'hex') AS policy_sha256
       FROM asset_maintenance_policy p WHERE singleton`)).rows;
-    const unmutated = evidence.failureBoundary === 'before_dump' && capture && policy.length === 1
+    const unmutated = (evidence.failureBoundary === 'before_dump' || leaseLost) && capture && policy.length === 1
       && policy[0].revision !== capture.revision && policy[0].policy_sha256 === capture.before;
     check(policy.length === 1 && policy[0].enabled === false && policy[0].domain_media_enabled === false
-      && (beginOnly || unstarted || unmutated || policy[0].revision === capture.revision), 'release_backup_recovery_cleanup_unconfirmed');
-    const backend = beginOnly || unstarted ? (await q.query(`SELECT pid FROM pg_stat_activity
+      && (beginOnly || unstarted || noIntents || unmutated || policy[0].revision === capture.revision), 'release_backup_recovery_cleanup_unconfirmed');
+    const backend = beginOnly || unstarted || leaseLost ? (await q.query(`SELECT pid FROM pg_stat_activity
       WHERE datname=current_database() AND usename=current_user AND left(application_name,11)='fp-capture-'`)).rows
       : (await q.query(`SELECT pid FROM pg_stat_activity
       WHERE pid=$1 AND datname=$2 AND usename=$3 AND application_name=$4`,
@@ -63,9 +67,10 @@ export async function reconcileFailedBackup({ floor, pool, database, role, deplo
     check(createHash('sha256').update(JSON.stringify(material)).digest('hex') === state.materialPolicySha256,
       'release_backup_recovery_policy_changed');
     observations = { maintenanceEnabled: false, domainMaintenanceEnabled: false, deletionFences: 0,
-      captureBackendAbsent: true, ...(beginOnly ? { failureBoundary: 'before_capture' }
+      captureBackendAbsent: true, ...(noIntents ? { failureBoundary: 'backup_lease_lost', capturePolicyIntent: 'absent' }
+        : beginOnly ? { failureBoundary: 'before_capture' }
         : unstarted ? { failureBoundary: 'before_dump', capturePolicyIntent: 'absent' }
-        : unmutated ? { failureBoundary: 'before_dump', capturePolicy: 'not_committed', policySha256: policy[0].policy_sha256 }
+        : unmutated ? { failureBoundary: leaseLost ? 'backup_lease_lost' : 'before_dump', capturePolicy: 'not_committed', policySha256: policy[0].policy_sha256 }
         : { captureRevision: policy[0].revision }) };
     await q.query('COMMIT');
   } catch (error) { await q.query('ROLLBACK').catch(() => {}); throw error; }

@@ -5327,3 +5327,114 @@ test('archive reconciliation appends its separate proof and preserves the retain
   assert.deepEqual(result, { ...before, pending: null });
   assert.equal(f.chain[1].record.data.kind, 'backup-begin'); assert.equal(f.chain[3].record.data.kind, 'intent');
 });
+
+const backupLeaseLoss = () => ({ cause: 'heartbeat_timeout', heldMs: 690049, sinceHeartbeatMs: 49843, heartbeats: 32 });
+function leaseLostBackupFixture(shape = 'empty') {
+  const f = shape === 'archive' ? archivedBackupFixture() : beforeDumpFixture(shape !== 'empty');
+  f.state.pending.request.target = f.args.request.target = 'staging-next';
+  Object.assign(f.args.request.recoveryEvidence, { target: 'staging-next', failureBoundary: 'backup_lease_lost', leaseLoss: backupLeaseLoss() });
+  if (shape === 'capture') f.observations.policy.revision = f.state.pending.intents['backup:capture-policy'].revision;
+  return f;
+}
+
+test('backup lease loss authenticates terminal evidence without inventing a capture or archive outcome', async () => {
+  const setup = () => {
+    const f = failedBackupFixture(); Object.assign(f.admission, { mode: 'deploy', releaseKind: 'independent', sourceSha: main });
+    f.state.receipt.operatorProgress = [{ name: 'preflight', reportedStatus: 'passed' },
+      { name: 'backup', reportedStatus: 'failed', failureCode: 'release_lease_lost', leaseLoss: backupLeaseLoss(),
+        controlReadFailure: { operation: 'chain_record' } }];
+    return f;
+  };
+  const f = setup(), proof = await requireFailedBackup(f.api, f.admission, installation);
+  assert.equal(proof.failureBoundary, 'backup_lease_lost'); assert.deepEqual(proof.leaseLoss, backupLeaseLoss());
+  assert.equal(proof.restore, undefined); assert.equal(proof.capturePolicyIntent, undefined);
+  const backup = setup(); Object.assign(backup.admission, { mode: 'backup', sourceSha: backup.state.receipt.sourceSha });
+  assert.equal((await requireFailedBackup(backup.api, backup.admission, installation)).failureBoundary, undefined);
+  for (const mutate of [x => { x.state.run.status = 'in_progress'; }, x => { x.state.run.conclusion = 'cancelled'; },
+    x => { x.state.receipt.operatorProgress[1].failureCode = 'release_operation_failed'; },
+    x => { delete x.state.receipt.operatorProgress[1].leaseLoss; },
+    x => { x.state.receipt.operatorProgress[1].leaseLoss.heldMs = -1; },
+    x => { x.state.receipt.operatorProgress[1].leaseLoss.cause = 'unknown'; },
+    x => { x.state.receipt.operatorProgress[1].leaseLoss.sinceHeartbeatMs = 700000; },
+    x => { x.state.receipt.operatorProgress[0].reportedStatus = 'failed'; },
+    x => { x.state.receipt.operatorProgress.push({ name: 'handoff', reportedStatus: 'passed' }); },
+    x => { x.state.receipt.configSha256 = 'f'.repeat(64); }]) {
+    const bad = setup(); mutate(bad); await assert.rejects(requireFailedBackup(bad.api, bad.admission, installation));
+  }
+});
+
+test('lease-loss readback distinguishes absent, uncommitted and completed capture intents without database writes', async () => {
+  for (const shape of ['empty', 'uncommitted', 'capture']) {
+    const f = leaseLostBackupFixture(shape); await reconcileFailedBackup(f.args); const proof = f.proof();
+    assert.equal(proof.recovery.failureBoundary, 'backup_lease_lost'); assert.equal(proof.archiveIntent, 'absent');
+    assert.equal(proof.sourcePins, 'retained');
+    if (shape === 'empty') { assert.equal(proof.capturePolicyIntent, 'absent'); assert.equal(proof.captureRevision, undefined); }
+    if (shape === 'uncommitted') { assert.equal(proof.capturePolicy, 'not_committed'); assert.equal(proof.captureRevision, undefined); }
+    if (shape === 'capture') assert.equal(proof.captureRevision, f.state.pending.intents['backup:capture-policy'].revision);
+    assert(f.calls.includes('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'));
+    assert(f.calls.some(sql => sql.includes("left(application_name,11)='fp-capture-'")));
+    assert(!f.calls.some(sql => /UPDATE|DELETE|pg_terminate_backend/.test(sql)));
+    for (const mutate of [x => { x.args.request.recoveryEvidence.leaseLoss.cause = 'unknown'; },
+      x => { x.args.request.recoveryEvidence.target = 'next'; }, x => { x.state.pending.request.runId++; },
+      x => { x.state.pending.intents['backup:archive'] = {}; }, x => { x.state.pending.intents.other = {}; },
+      x => { x.observations.backends.push({ pid: 123 }); }, x => { x.observations.fences = 1; },
+      x => { x.observations.policy.enabled = true; }, x => { x.observations.policy.domain_media_enabled = true; },
+      x => { x.observations.material.push({ changed: true }); },
+      x => { x.args.deployer.inspect = async () => ({ sourceSha: sha }); },
+      x => { x.args.lease.assertHeld = () => { throw Error('lost lease'); }; },
+      x => { x.args.floor.assertCurrent = async () => { throw Error('changed journal'); }; }]) {
+      const bad = leaseLostBackupFixture(shape); mutate(bad);
+      await assert.rejects(reconcileFailedBackup(bad.args)); assert.equal(bad.proof(), undefined);
+    }
+  }
+});
+
+test('lease-loss archive recovery requires successful readback, isolated restore and a second live check', async () => {
+  const f = leaseLostBackupFixture('archive'); await reconcileArchivedBackup(f.args);
+  assert.equal(f.restored(), 1); assert.equal(f.proof().archiveUpload, 'not_repeated');
+  assert.equal(f.proof().recovery.failureBoundary, 'backup_lease_lost');
+  for (const mutate of [x => { delete x.args.request.recoveryEvidence.leaseLoss; },
+    x => { delete x.state.pending.intents['backup:capture-policy']; },
+    x => { x.args.restoreArchive = async () => { throw Error('archive absent'); }; },
+    x => { const restore = x.args.restoreArchive; x.args.restoreArchive = async v => ({ ...await restore(v), cleanupVerified: false }); },
+    x => { const restore = x.args.restoreArchive; x.args.restoreArchive = async v => { const result = await restore(v); x.observations.backends.push({ pid: 123 }); return result; }; }]) {
+    const bad = leaseLostBackupFixture('archive'); mutate(bad);
+    await assert.rejects(reconcileArchivedBackup(bad.args)); assert.equal(bad.proof(), undefined);
+  }
+});
+
+test('lease-loss floor replay preserves every original intent and rejects incomplete settlement evidence', () => {
+  for (const shape of ['empty', 'uncommitted', 'capture', 'archive']) {
+    const f = floorFixture(), old = { ...f.request, sourceSha: main, target: 'staging-next' };
+    f.add(f.event('backup-begin', undefined, undefined, { request: old }));
+    const capture = { format: 'freedom.shared-capture-policy-intent/v1', pid: 123, application: 'fp-capture-' + f.id,
+      revision: 'shared-backup-' + f.id, before: '6'.repeat(64), automaticRetry: false };
+    const archive = { setId: f.id, archiveSha256: '7'.repeat(64), bytes: 1234, automaticRetry: false };
+    if (shape !== 'empty') f.add(f.event('intent', 'backup', capture, { operation: 'capture-policy' }));
+    if (shape === 'archive') f.add(f.event('intent', 'backup', archive, { operation: 'archive' }));
+    const before = replayReleaseFloor(f.chain, f.options).state, original = JSON.stringify(f.chain);
+    const proof = { format: shape === 'archive' ? 'freedom.reconciled-archived-backup/v1' : 'freedom.abandoned-backup/v1',
+      recovery: { ...old, format: 'freedom.verified-failed-backup/v1', failureBoundary: 'backup_lease_lost', leaseLoss: backupLeaseLoss(),
+        receiptSha256: '9'.repeat(64), artifactId: 99, artifactDigest: 'sha256:' + '9'.repeat(64), completedAt: '2026-11-09T14:31:05Z' },
+      settledBy: { ...old, runId: 13 }, sourceSha: main, sourceTree: tree, bindingsSha256: before.bindingsSha256,
+      ledgerSha256: migrationLedgerDigest(before.schemaLedger), materialPolicySha256: before.materialPolicySha256,
+      maintenanceEnabled: false, domainMaintenanceEnabled: false, deletionFences: 0, captureBackendAbsent: true,
+      sourcePins: 'retained', observedAt: '2026-11-10T00:30:00Z',
+      ...(shape === 'archive' ? { setId: archive.setId, archiveSha256: archive.archiveSha256, remoteReadback: 'verified',
+        restore: 'database_and_objects_restored', cleanupVerified: true, exposure: 'quarantine', archiveUpload: 'not_repeated', captureRevision: capture.revision }
+        : { archiveIntent: 'absent', ...(shape === 'empty' ? { failureBoundary: 'backup_lease_lost', capturePolicyIntent: 'absent' }
+          : shape === 'uncommitted' ? { failureBoundary: 'backup_lease_lost', capturePolicy: 'not_committed', policySha256: capture.before }
+            : { captureRevision: capture.revision }) }) };
+    const kind = shape === 'archive' ? 'backup-reconciled' : 'backup-abandoned';
+    const apply = value => replayReleaseFloor([...f.chain, f.event(kind, 'backup', value)], f.options).state;
+    assert.deepEqual(apply(proof), { ...before, pending: null }); assert.equal(JSON.stringify(f.chain), original);
+    for (const change of [p => { p.recovery.leaseLoss.cause = 'unknown'; }, p => { delete p.recovery.leaseLoss; },
+      p => { p.recovery.target = 'next'; }, p => { p.recovery.runAttempt++; }, p => { p.ledgerSha256 = 'f'.repeat(64); },
+      p => { p.captureBackendAbsent = false; }, p => { p.deletionFences = 1; }, p => { p.settledBy = old; }]) {
+      const bad = structuredClone(proof); change(bad); assert.throws(() => apply(bad));
+    }
+    if (shape === 'archive') assert.throws(() => apply({ ...proof, cleanupVerified: false }));
+    if (shape === 'empty') assert.throws(() => apply({ ...proof, capturePolicyIntent: 'present' }));
+    if (shape === 'uncommitted') assert.throws(() => apply({ ...proof, policySha256: 'f'.repeat(64) }));
+  }
+});

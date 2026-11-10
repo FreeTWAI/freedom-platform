@@ -20,7 +20,7 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
  try {
  const logo='data:image/png;base64,'+readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url)).toString('base64');
- const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountStampAtelier} from './apps/portal-web/src/games/stamp-atelier';const game=mountStampAtelier(document.body,${JSON.stringify(logo)});window.addEventListener('pagehide',()=>game.dispose(),{once:true});`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022',minify:true}).outputFiles[0].text;
+ const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {Group} from 'three';const update=Group.prototype.updateMatrixWorld;Group.prototype.updateMatrixWorld=function(force){document.body.dataset.stampY=String(this.position.y);return update.call(this,force);};import {mountStampAtelier} from './apps/portal-web/src/games/stamp-atelier';const game=mountStampAtelier(document.body,${JSON.stringify(logo)});window.addEventListener('pagehide',()=>game.dispose(),{once:true});`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022',minify:true}).outputFiles[0].text;
  const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>下班蓋章室 · 可操作預覽</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`;
  await page.setViewportSize({width,height});
  const touch=width<1000?await context.newCDPSession(page):null;
@@ -70,6 +70,19 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  await info.attach(`stamp-atelier-native-${width}x${height}.png`,{body:png,contentType:'image/png'});
  await info.attach(`stamp-atelier-native-${width}x${height}.json`,{body:Buffer.from(JSON.stringify({viewport:{width,height},dimensions,metrics,note:'Real Three.js preview after successful native practice input. renderSubmitMs is CPU submission time, not GPU time or FPS.'})),contentType:'application/json'});
  if(width===1440)await info.attach('stamp-atelier-playable-preview.html',{body:Buffer.from(html),contentType:'text/html'});
+ // Observe the real stamp Group during native renderer traversal. This probe
+ // records a transform only and never substitutes geometry or rendering.
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.getByRole('button',{name:'輔助瞄準',exact:true}).click();
+ for(const completed of [3,4]){
+  await root.locator('.atelier-stamp').click();await expect(root).toHaveAttribute('data-completed',String(completed));
+  await expect(page.locator('body')).toHaveAttribute('data-stamp-y','0.48');
+  await page.waitForTimeout(300);await expect(page.locator('body')).toHaveAttribute('data-stamp-y','0.48');
+ }
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await root.locator('.atelier-stamp').click();await expect(root).toHaveAttribute('data-completed','5');
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await expect.poll(async()=>Number(await page.locator('body').getAttribute('data-stamp-y'))).toBeCloseTo(.48,10);
  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(root).toHaveAttribute('data-practice','true');await expect(root).toHaveAttribute('data-completed','0');
  expect(errors).toEqual([]);
  // The unchanged pinned reporter inherits stdout on both success and failure.

@@ -1,4 +1,5 @@
-import { LEASE_LOSS_CAUSES, isLeaseErrorClass } from './portable/lease.mjs';
+import { publicLeaseLoss } from './portable/lease.mjs';
+export { publicLeaseLoss } from './portable/lease.mjs';
 import { isReleaseFailureCode, releasePhases } from './admission.mjs';
 import { isBackupDiagnosticCode } from '../../packages/media-migration/backup-diagnostics.ts';
 import { spawn } from 'node:child_process';
@@ -191,14 +192,7 @@ export function publicControlReadFailure(value) {
   return { operation: value.operation, ...(value.httpStatus !== undefined ? { httpStatus: value.httpStatus } : {}) };
 }
 
-export function publicLeaseLoss(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || !LEASE_LOSS_CAUSES.includes(value.cause)
-    || !['heldMs', 'sinceHeartbeatMs', 'heartbeats'].every(key => Number.isSafeInteger(value[key]) && value[key] >= 0)
-    || value.sinceHeartbeatMs > value.heldMs
-    || (value.errorClass !== undefined && !isLeaseErrorClass(value.errorClass))) return undefined;
-  return { cause: value.cause, heldMs: value.heldMs, sinceHeartbeatMs: value.sinceHeartbeatMs, heartbeats: value.heartbeats,
-    ...(value.errorClass !== undefined ? { errorClass: value.errorClass } : {}) };
-}
+
 function publicLeaseDiagnostics(phase, admission) {
   const leaseLoss = publicLeaseLoss(phase.leaseLoss), recovery = phase.leaseRecovered;
   if (recovery !== undefined) requireRelease(['health', 'handoff'].includes(phase.name) && phase.status === 'passed'
