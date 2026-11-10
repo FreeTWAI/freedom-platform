@@ -17,6 +17,16 @@ export const isLeaseErrorClass = value => typeof value === 'string' &&
       'EAI_AGAIN', 'ENOTFOUND', 'ECONNABORTED'].includes(value));
 const fail = code => Object.assign(new Error(code), { code });
 
+// Closed projection shared by admission, operator receipts and journal replay.
+export function publicLeaseLoss(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !LEASE_LOSS_CAUSES.includes(value.cause)
+    || !['heldMs', 'sinceHeartbeatMs', 'heartbeats'].every(key => Number.isSafeInteger(value[key]) && value[key] >= 0)
+    || value.sinceHeartbeatMs > value.heldMs
+    || (value.errorClass !== undefined && !isLeaseErrorClass(value.errorClass))) return undefined;
+  return { cause: value.cause, heldMs: value.heldMs, sinceHeartbeatMs: value.sinceHeartbeatMs, heartbeats: value.heartbeats,
+    ...(value.errorClass !== undefined ? { errorClass: value.errorClass } : {}) };
+}
+
 /** A dedicated database session spans backup, migration, deployment and cleanup. */
 export async function acquireReleaseLease(pool, { database, role, signal, heartbeatMs = 20_000 }) {
   check([database, role].every(value => typeof value === 'string' && /^[a-z][a-z0-9_]{0,62}$/.test(value))
