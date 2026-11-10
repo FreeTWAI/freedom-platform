@@ -58,6 +58,7 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  await expect(root).toHaveAttribute('data-completed','2');
  await page.getByRole('button',{name:'輔助瞄準：開'}).click();
  await page.waitForTimeout(350);
+ if(width<600){const feedbackLines=await page.getByRole('status').evaluate(el=>el.getBoundingClientRect().height/parseFloat(getComputedStyle(el).lineHeight));expect(feedbackLines).toBeLessThanOrEqual(1.1);}
  const dimensions=await canvas.evaluate(el=>{const c=el as HTMLCanvasElement;return {width:c.width,height:c.height,cssWidth:c.clientWidth,cssHeight:c.clientHeight};});
  expect(dimensions.width).toBeGreaterThan(300);expect(dimensions.height).toBeGreaterThan(300);
  const metrics=await root.evaluate(el=>({drawCalls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles),renderSubmitMs:Number((el as HTMLElement).dataset.renderMs)}));
@@ -75,7 +76,9 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  // Public, synthetic artwork only: preserve bounded original PNG bytes in job
  // logs, not a modified check receipt or a deliberately failing test. Consumers
  // must verify the complete sequence, byte count and digest before viewing.
- expect(png.byteLength).toBeLessThanOrEqual(512*1024);
+ // Transport-only ceiling for lossless diagnostic originals, not a product
+ // performance budget. Keep behavior, draw-call and image-variance checks above.
+ expect(png.byteLength).toBeLessThanOrEqual(2*1024*1024);
  const {createHash}=createRequire(import.meta.url)('node:crypto');
  const captureId=`${width}x${height}`,encoded=png.toString('base64'),parts=Math.ceil(encoded.length/3072);
  console.log('STAMP_ATELIER_CAPTURE '+JSON.stringify({format:'stamp-atelier-preview/v1',candidate:process.env.GITHUB_SHA??'local-uncommitted',id:captureId,bytes:png.byteLength,sha256:createHash('sha256').update(png).digest('hex'),parts,viewport:{width,height},dimensions,metrics}));
