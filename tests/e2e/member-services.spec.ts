@@ -1259,3 +1259,46 @@ for (const lostResponse of [false, true]) {
     expect(posts).toHaveLength(lostResponse ? 2 : 1);
   });
 }
+
+
+test('a confirmed create can open an editable next draft while its list refresh is held', async ({ page, e2eAuthPool }) => {
+  const owner = '20000000-0000-4000-8000-000000000002';
+  await e2eAuthPool.query('DELETE FROM member_services WHERE owner_user_id=$1', [owner]);
+  await login(page, 'reviewer@local.test');
+  await navigate(page, '社員服務');
+  const mine = page.getByRole('region', { name: '我的服務', exact: true });
+  const form = await fillService(page, 'E2E 已確認建立', '設計', '第一項已儲存');
+  let release!: () => void, captured!: () => void, held = false;
+  const gate = new Promise<void>(resolve => release = resolve);
+  const snapshot = new Promise<void>(resolve => captured = resolve);
+  await page.route(/\/api\/v1\/member-services(?:\?.*)?$/, async route => {
+    if (route.request().method() !== 'GET' || held) return route.continue();
+    held = true;
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    captured(); await gate; await route.fulfill({ response });
+  });
+  try {
+    await form.getByRole('button', { name: '建立服務', exact: true }).click();
+    await snapshot;
+    await expect(form).toHaveCount(0);
+    await expect(mine.locator('li.service-mine-row').filter({ hasText: 'E2E 已確認建立' })).toBeVisible();
+    await mine.getByRole('button', { name: '新增服務', exact: true }).click();
+    const title = form.getByLabel('標題', { exact: true });
+    await expect(title).toBeEditable();
+    await expect(title).toHaveValue('');
+    await title.fill('E2E 更新期間的新草稿');
+    await form.locator('select').selectOption({ label: '設計' });
+    await form.getByLabel('簡介', { exact: true }).fill('新意圖不重送舊請求');
+    await form.getByLabel('聯絡名稱', { exact: true }).fill('官方網站');
+    await form.getByLabel('https 連結', { exact: true }).fill('https://example.com/next');
+    release();
+    await expect(form.getByRole('button', { name: '建立服務', exact: true })).toBeEnabled();
+    await expect(title).toHaveValue('E2E 更新期間的新草稿');
+    await form.getByRole('button', { name: '建立服務', exact: true }).click();
+    await expect(form).toHaveCount(0);
+    await expect(mine.locator('li.service-mine-row')).toHaveCount(2);
+    expect((await e2eAuthPool.query('SELECT title FROM member_services WHERE owner_user_id=$1 ORDER BY title', [owner])).rows.map(row => row.title).sort())
+      .toEqual(['E2E 已確認建立', 'E2E 更新期間的新草稿'].sort());
+  } finally { release(); }
+});

@@ -146,6 +146,8 @@ export function MemberServices({client}: {client: PortalClient}) {
     return generation.current === identity.generation || boundOperation.current === identity
   }
   async function finish(created: boolean, identity: FormIdentity, target: string) {
+    // The write is confirmed; list refreshes must not let a new draft rejoin it.
+    if (inFlight.current?.identity === identity) inFlight.current = null
     dropSavedDraft(identity); dropSavedDraft(identity, target)
     // A response belongs to the form that submitted it, even if another draft is now open.
     if (ownsOperation(identity)) {
