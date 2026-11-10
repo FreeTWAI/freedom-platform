@@ -1,6 +1,25 @@
 # 共用發布入口
 
-2026-10-30 08:25 UTC：兩環境已部署 d026ba76／schema196，staging 舊 handoff 已結清
+2026-11-09 06:23 UTC：兩環境發布 `bb6c34e6`，正式站 handoff 已讀回確認
+
+本版包含 26 個公會獨立 Repo／啟動台、管理入口修正及封存備份復原。兩環境使用
+`ghcr.io/freetwai/freedom-release-operator@sha256:35e00dfc8825aae30401dfe8ccafba4497656ba0f5b7d0d2ec366aba79cebca6`；
+[映像建置與獨立下載](https://github.com/FreeTWAI/freedom-platform/actions/runs/42569944199)及相同 main 的 Verify／CodeQL 均通過。
+[staging 42570289981](https://github.com/FreeTWAI/freedom-platform/actions/runs/42570289981) 五階段成功，並以
+`archive_restored_after_readback` 結清原備份 `42478984577` 的未確認封存；沒有重新擷取或上傳備份。
+
+[正式發布 42571667515](https://github.com/FreeTWAI/freedom-platform/actions/runs/42571667515) 部署與 health 回報通過，
+最後租約清理以 `release_lease_cleanup_failed`／`heartbeat_timeout` 失敗。
+[handoff 42572538017](https://github.com/FreeTWAI/freedom-platform/actions/runs/42572538017) 已核對相同來源、映像及設定，
+以 `alreadySettled=true` 確認原 handoff 已存在，沒有重做 migration、部署或備份，也沒有建立新 Deployment。
+原 workflow／Deployment `7648272460` 保留 failure，不改寫成完整發布成功。
+06:25–06:26 UTC 的正式站匿名 Chromium（390×844）實測已通過 26／26 公會啟動台與返回原生技能書面板；
+四張代表截圖另有實際檢視，登入後私人操作未在這輪驗收。
+完整 SHA、設定摘要、artifact 雜湊與驗收範圍見[11/09 收據](../../docs/platform-plan/execution/unified-foundation/rollout-main-bb6c34e6-2026-11-09.json)。
+#1312 隨後合併為 `42bef764`，06:30 UTC 的 main CI／自動發布仍待完成；上面的 live 觀察綁定 `bb6c34e6`。
+以下日期段落保留當時觀察；日常操作仍使用下方既有自動與手動入口。
+
+2026-10-30 08:25 UTC 歷史：兩環境已部署 d026ba76／schema196，staging 舊 handoff 已結清
 
 兩環境現為 `d026ba76a4fb2c289cfb456dea68676f03f7bd30`／schema196；[staging 41023423825](https://github.com/FreeTWAI/freedom-platform/actions/runs/41023423825) 與[正式站 41025042462](https://github.com/FreeTWAI/freedom-platform/actions/runs/41025042462) 的 preflight、migration、deploy、health、handoff 五階段均通過，皆為 `release_confirmed`，Deployment 7433524819／7433758011 均為 success。正式站 handoff 沒有失鎖；08:24 UTC 公開 health 為 `ok`、同 SHA。
 
@@ -114,7 +133,7 @@ Verify 與 CodeQL；controller 尚在排隊、執行中或失敗時，即使舊 
 revision/source/digest → 獨立 pull 尚待實際驗收，synthetic 准入測試不替代這項證據。
 本次整合發布採相同的已驗 main SHA 作 source/controller，不依賴跨版本建置。
 
-## 目前安裝狀態
+## 2026-10-27 安裝紀錄（歷史）
 
 2026-10-27 05:06 UTC：兩環境已透過共用 Actions 完成真實發布，版本均為
 `1db283839296e284602217140a21921072d86629`，五階段全部成功：
