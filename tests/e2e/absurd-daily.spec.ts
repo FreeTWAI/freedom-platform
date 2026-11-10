@@ -16,11 +16,15 @@ const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/p
 
 // Isolated playable proposal, not a deployed portal route or a generated image.
 // Bundle the real preview and existing scoring domain, then exercise native input.
-for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD atelier real build ${width}x${height}: native stamp preview, pause, input and screenshot`,async({page},info)=>{
+for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD atelier real build ${width}x${height}: native stamp preview, pause, input and screenshot`,async({browser},info)=>{
+ const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
+ try {
  const logo='data:image/png;base64,'+readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url)).toString('base64');
  const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountStampAtelier} from './apps/portal-web/src/games/stamp-atelier';const game=mountStampAtelier(document.body,${JSON.stringify(logo)});window.addEventListener('pagehide',()=>game.dispose(),{once:true});`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022',minify:true}).outputFiles[0].text;
  const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>下班蓋章室 · 可操作預覽</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`;
  await page.setViewportSize({width,height});
+ const touch=width<1000?await context.newCDPSession(page):null;
+ const finger=async(type:'touchStart'|'touchMove'|'touchEnd',px=x,py=y)=>{await touch!.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x:px,y:py,id:1}]});};
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.setContent(html);
  const root=page.locator('.stamp-atelier'),canvas=root.getByRole('application');
@@ -34,12 +38,26 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  camera.position.set(0,8,5);camera.lookAt(0,0,0);camera.updateProjectionMatrix();camera.updateMatrixWorld();
  const target=stampTarget(42,0),point=new Vector3(target.x*1.2,.178,target.y*1.5).project(camera),x=(point.x+1)*width/2,y=(1-point.y)*height/2;
  // A cancelled real drag cannot consume the practice sheet.
- await page.mouse.move(x,y);await page.mouse.down();await page.keyboard.press('Escape');await page.mouse.up();await expect(root).toHaveAttribute('data-practice','true');
+ if(touch)await finger('touchStart');else {await page.mouse.move(x,y);await page.mouse.down();}await page.keyboard.press('Escape');if(touch)await finger('touchEnd');else await page.mouse.up();await expect(root).toHaveAttribute('data-practice','true');
  await page.getByRole('button',{name:'繼續蓋章'}).click();
- await page.mouse.move(x+4,y+4);await page.mouse.down();await page.mouse.move(x,y,{steps:4});await page.mouse.up();
+ if(touch){await finger('touchStart',x+4,y+4);await finger('touchMove');await finger('touchEnd');}else {await page.mouse.move(x+4,y+4);await page.mouse.down();await page.mouse.move(x,y,{steps:4});await page.mouse.up();}
  await expect(root).toHaveAttribute('data-practice','false');await expect(root).toHaveAttribute('data-completed','0');
  await expect(page.getByRole('status')).toContainText('練習完成');
- await canvas.press('ArrowRight');await canvas.press('ArrowLeft');
+ // No directional controls or instructions remain. Arrow keys do not change aim.
+ await expect(root.locator('[data-aim]')).toHaveCount(0);
+ await expect(canvas).not.toHaveAttribute('aria-label',/方向鍵/);
+ const beforeArrows=await root.evaluate(el=>({x:(el as HTMLElement).dataset.aimX,y:(el as HTMLElement).dataset.aimY}));await canvas.press('ArrowRight');await canvas.press('ArrowDown');await expect(root).toHaveAttribute('data-aim-x',beforeArrows.x!);await expect(root).toHaveAttribute('data-aim-y',beforeArrows.y!);
+ // Native touch input on both mobile viewports, native mouse on desktop.
+ await page.waitForTimeout(300);
+ if(width<1000)await page.touchscreen.tap(x,y);else await page.mouse.click(x,y);
+ await expect(root).toHaveAttribute('data-completed','1');
+ // Keyboard-only path is explicit assistance rather than a replacement D-pad.
+ await page.getByRole('button',{name:'輔助瞄準',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(page.getByRole('button',{name:'輔助瞄準：開'})).toHaveAttribute('aria-pressed','true');
+ await page.waitForTimeout(300);await root.locator('.atelier-stamp').focus();await page.keyboard.press('Enter');
+ await expect(root).toHaveAttribute('data-completed','2');
+ await page.getByRole('button',{name:'輔助瞄準：開'}).click();
+ await page.waitForTimeout(350);
  const dimensions=await canvas.evaluate(el=>{const c=el as HTMLCanvasElement;return {width:c.width,height:c.height,cssWidth:c.clientWidth,cssHeight:c.clientHeight};});
  expect(dimensions.width).toBeGreaterThan(300);expect(dimensions.height).toBeGreaterThan(300);
  const metrics=await root.evaluate(el=>({drawCalls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles),renderSubmitMs:Number((el as HTMLElement).dataset.renderMs)}));
@@ -63,6 +81,7 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  console.log('STAMP_ATELIER_CAPTURE '+JSON.stringify({format:'stamp-atelier-preview/v1',candidate:process.env.GITHUB_SHA??'local-uncommitted',id:captureId,bytes:png.byteLength,sha256:createHash('sha256').update(png).digest('hex'),parts,viewport:{width,height},dimensions,metrics}));
  for(let i=0;i<parts;i++)console.log(`STAMP_ATELIER_PNG ${captureId} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
  console.log(`STAMP_ATELIER_CAPTURE_END ${captureId}`);
+ } finally {await context.close();}
 });
 
 // Proposed E2E-only injection; no product module imports or production telemetry.
