@@ -415,6 +415,29 @@ fences 及沒有原維護角色的 capture backend。只 GET 原 intent 指定�
 不從 live 狀態重建 seed，也不把還原結果接回正式應用。新 journal event 需要新版
 reader，寫入後不可把 operator 降回不認識它的版本。
 
+### 備份失去租約、沒有 dump 邊界收據時
+
+2026-11-09 的 staging 備份 [42633444532](https://github.com/FreeTWAI/freedom-platform/actions/runs/42633444532)
+在讀取控制鏈時以 `release_lease_lost` 結束；後續發布
+[42722381689](https://github.com/FreeTWAI/freedom-platform/actions/runs/42722381689)
+在 preflight 以 `release_floor_unsettled` 停止。這兩份失敗收據不能證明目前 pending
+有哪些 intent，也不證明封存存在。本段支援需經獨立審查、main CI、映像建置／獨立下載
+與兩環境安裝後才可使用；程式測試不代表上述 live 紀錄已結清。
+
+手動 Shared release 使用原備份 `recover_backup_run_id`，仍選已驗證的完整 main SHA。
+Controller 僅接受已驗證的 terminal failure、preflight passed／backup failed、
+`release_lease_lost` 與有界 leaseLoss；保留 `backup_lease_lost`，不推定 before_dump。
+Operator 重新持有租約後依完整紀錄鏈選擇：
+
+- 沒有 intent：讀回 DB／Worker／政策、GC OFF、零 fence、沒有任何該維護角色的 capture session，追加 abandonment。
+- 只有 capture-policy intent：另核對相同 capture revision，或未提交政策的完整 before digest；保留來源 pins，追加 abandonment。
+- 同時有 capture-policy 與 archive intent：沿上方封存 GET、驗證、隔離還原、清理及第二次 live 核對，才追加 reconciliation。
+
+新增邊界不接受 legacy predecessor、其他 intent、缺少或不同封存、未知政策、
+活躍 capture session 或再次失鎖。不擷取新備份、不重送 PUT、不重設 floor，原 failure 保留。
+後續 release 與 daily backup 都必須使用可讀 `backup_lease_lost` 的已安裝版本；寫入後
+不可降回舊 reader。正式環境仍需自己的相符證據與同來源成功 staging 收據。
+
 ### 備份在上傳前失敗時的手動接續
 
 四位操作人可在 `Shared backup` 選同一環境，於 `recover_run_id` 填入原失敗 run ID，

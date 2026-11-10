@@ -169,9 +169,11 @@ export async function main(args = process.argv.slice(2)) {
         decisions: readFlagDecisions({ sourceRoot: SOURCE, sourceSha: request.sourceSha }) });
       let recovery, migrationRecovery;
       if (request.recoverRunId) {
-        if (independentRelease) check(['before_capture', 'before_dump', 'archive_unconfirmed'].includes(request.recoveryEvidence?.failureBoundary), 'release_backup_recovery_boundary_invalid');
+        if (independentRelease) check(['before_capture', 'before_dump', 'archive_unconfirmed', 'backup_lease_lost'].includes(request.recoveryEvidence?.failureBoundary), 'release_backup_recovery_boundary_invalid');
         const previous = floor.state();
-        if (request.recoveryEvidence?.failureBoundary === 'archive_unconfirmed') {
+        if (request.recoveryEvidence?.failureBoundary === 'archive_unconfirmed'
+          || (request.recoveryEvidence?.failureBoundary === 'backup_lease_lost'
+            && Object.hasOwn(previous.pending?.intents ?? {}, 'backup:archive'))) {
           recovery = await reconcileArchivedBackup({ floor, pool: pools.migrator, database: config.database.name,
             role: connections.migrator.role, deployer, lease, request,
             restoreArchive: async ({ intent, expected }) => restorePortableArchive({ intent, expected,
