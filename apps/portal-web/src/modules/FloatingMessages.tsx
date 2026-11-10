@@ -15,7 +15,7 @@ export function FloatingMessages({client,open,onToggle,onClose,children,preferen
   const mobile=useChatViewport();
   const trigger=useRef<HTMLButtonElement>(null),heading=useRef<HTMLHeadingElement>(null),panel=useRef<HTMLElement>(null);
   const wasOpen=useRef(false);
-  const [sizeOpen,setSizeOpen]=useState(false),[width,setWidth]=useState(560),[height,setHeight]=useState(540);
+  const [sizeOpen,setSizeOpen]=useState(false),[width,setWidth]=useState(760),[height,setHeight]=useState(760);
   const [positionOpen,setPositionOpen]=useState(false);
   const [placement,setPlacement]=useState(()=>{try{return parseLauncherPlacement(localStorage.getItem(LAUNCHER_PLACEMENT_KEY));}catch{return {...DEFAULT_LAUNCHER_PLACEMENT};}});
   const [bounds,setBounds]=useState<LauncherBounds|null>(null),[moving,setMoving]=useState<{x:number;y:number}|null>(null);
@@ -92,7 +92,7 @@ export function FloatingMessages({client,open,onToggle,onClose,children,preferen
       <div id="floating-message-size" className="floating-message-size" hidden={!sizeOpen}>
         <label className="floating-message-width">{t('chat.width')} <input type="range" min={440} max={1000} step={20} value={width} onChange={event=>setWidth(Number(event.target.value))}/></label>
         <label>{t('chat.height')} <input type="range" min={360} max={800} step={20} value={height} onChange={event=>setHeight(Number(event.target.value))}/></label>
-        <button type="button" className="btn btn-ghost" onClick={()=>{setWidth(560);setHeight(540);}}>{t('chat.sizeReset')}</button>
+        <button type="button" className="btn btn-ghost" onClick={()=>{setWidth(760);setHeight(760);}}>{t('chat.sizeReset')}</button>
       </div>
       <div id="floating-message-position" className="floating-message-position" hidden={!positionOpen}>
         <p>{t('chat.launcherHint')}</p>
