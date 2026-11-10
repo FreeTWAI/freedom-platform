@@ -193,3 +193,67 @@ test('desktop: native keyCode 229 Enter never sends', () => {
 test('mobile: Enter remains a native newline', () => {
   assert.deepEqual(fixture(true).key('Enter'), untouched());
 });
+
+// Chat search uses the same source-bound handler fixture as the panel cases.
+// Synthetic composition flags cover browser event variants, not an OS IME.
+const searchCode=transformSync(source('apps/portal-web/src/modules/ChatSearch.tsx'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code;
+function searchFixture(resource='/me/conversations/synthetic-peer/messages'){
+  const slots:any[]=[],effects:(()=>void)[]=[],requests:{path:string;signal:AbortSignal;resolve:(value:any)=>void}[]=[];
+  let index=0,tree:any,focused=0;
+  const hooks={
+    useId:()=>':synthetic-search:',
+    useRef:(initial:unknown)=>{const i=index++;return slots[i]??(slots[i]={current:initial});},
+    useState:(initial:any)=>{const i=index++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return [slots[i],(value:any)=>{slots[i]=typeof value==='function'?value(slots[i]):value;}];},
+    useEffect:(run:()=>unknown,deps:unknown[])=>{const i=index++;if(!slots[i]||deps.some((value,n)=>value!==slots[i].deps[n])){slots[i]?.cleanup?.();slots[i]={deps};effects.push(()=>{slots[i].cleanup=run();});}},
+  };
+  const module={exports:{} as any};
+  runInNewContext(searchCode,{module,exports:module.exports,AbortController,URLSearchParams,require:(name:string)=>{
+    if(name==='react')return hooks;
+    if(name==='react/jsx-runtime')return {jsx,jsxs:jsx};
+    if(name==='../api')return {ApiError:class extends Error{status=0;}};
+    if(name==='./ChatContent')return {ChatBody:'ChatBody',ChatQuote:'ChatQuote'};
+    if(name==='./ChatWorkspace')return {ChatTime:'ChatTime'};
+    if(name==='./MemberReporting')return {ReportButton:'ReportButton'};
+    throw Error(`Unexpected search import: ${name}`);
+  }});
+  const dialog={open:false,showModal(){this.open=true;},close(){this.open=false;}},control={offsetParent:{},focus(){focused++;}};
+  const props={client:{get:(path:string,options:{signal:AbortSignal})=>new Promise(resolve=>requests.push({path,signal:options.signal,resolve}))},resource,title:'合成對話',me:'synthetic-me',active:true,onOpenChange(){}};
+  function render(){index=0;tree=module.exports.ChatSearch(props);find(tree,n=>n.type==='dialog')!.props.ref.current=dialog;find(tree,n=>n.type==='input')!.props.ref.current=control;find(tree,n=>n.props?.['aria-label']==='搜尋訊息')!.props.ref.current=control;while(effects.length)effects.shift()!();return tree;}
+  const view=()=>{render();return render();};
+  const input=()=>find(view(),n=>n.type==='input')!;
+  const form=()=>find(view(),n=>n.type==='form')!;
+  function submit(){form().props.onSubmit({preventDefault(){}});view();}
+  function open(){find(view(),n=>n.props?.['aria-label']==='搜尋訊息')!.props.onClick();view();}
+  function change(value:string){input().props.onChange({target:{value}});view();}
+  function composition(active:boolean){input().props[active?'onCompositionStart':'onCompositionEnd']?.({});view();}
+  function enter(native:{isComposing?:boolean;keyCode?:number}={}){
+    const event={key:'Enter',nativeEvent:{isComposing:false,keyCode:13,...native},defaultPrevented:false,preventDefault(){this.defaultPrevented=true;}};
+    input().props.onKeyDown?.(event);
+    // Model implicit form submission only when keydown did not prevent it.
+    if(!event.defaultPrevented)submit();
+    return event.defaultPrevented;
+  }
+  function close(){find(view(),n=>n.props?.['aria-label']==='關閉搜尋')!.props.onClick();view();}
+  open();
+  return {requests,view,input,submit,open,change,composition,enter,close,dialog,get focused(){return focused;}};
+}
+for(const resource of ['/me/conversations/synthetic-peer/messages','/me/channels/guild/synthetic-guild/messages','/me/channels/squad/synthetic-squad/messages','/me/channels/world/world/messages']){
+  test(`chat search ${resource}: composing Enter does not submit a partial query`,()=>{
+    const f=searchFixture(resource);f.change('共');assert.equal(f.enter({isComposing:true}),true);assert.equal(f.requests.length,0);assert.equal(f.input().props.value,'共');
+  });
+  test(`chat search ${resource}: keyCode 229 confirmation is not ordinary Enter after compositionend`,()=>{
+    const f=searchFixture(resource);f.change('共創');f.composition(true);f.composition(false);assert.equal(f.enter({keyCode:229}),true);assert.equal(f.requests.length,0);
+    assert.equal(f.enter(),false);assert.equal(f.requests.length,1);assert.equal(f.requests[0].path,`${resource}/search?q=${encodeURIComponent('共創')}&limit=20`);
+  });
+}
+test('chat search tracks composition when native key flags are absent, including submit-button delivery',()=>{
+  const f=searchFixture();f.change('選字');f.composition(true);assert.equal(f.enter(),true);f.submit();assert.equal(f.requests.length,0);
+  f.composition(false);f.change(' 選字完成 ');f.submit();assert.equal(f.requests.length,1);assert.equal(new URL(f.requests[0].path,'https://fixture.invalid').searchParams.get('q'),'選字完成');
+});
+test('chat search close/reopen clears unfinished composition and aborts late search results',async()=>{
+  const f=searchFixture();f.change('舊查詢');f.enter();assert.equal(f.requests.length,1);const old=f.requests[0];f.change('未完成');f.composition(true);f.close();assert.equal(old.signal.aborted,true);assert.equal(f.dialog.open,false);
+  f.open();assert.equal(f.input().props.value,'');f.change('新查詢');assert.equal(f.enter(),false);assert.equal(f.requests.length,2);
+  old.resolve({items:[{message_id:'old',body:'舊結果'}],next_cursor:null});await new Promise<void>(resolve=>setImmediate(resolve));
+  assert.equal(find(f.view(),n=>n.props?.className==='chat-search-results'),undefined);
+  f.requests[1].resolve({items:[],next_cursor:null});await new Promise<void>(resolve=>setImmediate(resolve));assert.ok(find(f.view(),n=>n.props?.className==='chat-search-results'));
+});
