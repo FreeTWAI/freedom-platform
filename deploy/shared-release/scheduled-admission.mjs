@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { publicLeaseLoss } from './portable/lease.mjs';
 import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest } from './admission.mjs';
 
 export const BACKUP_PHASES = Object.freeze(['preflight', 'backup', 'handoff']);
@@ -90,10 +91,17 @@ export async function requireFailedBackup(api, admission, installation) {
     && progress[0].name === 'preflight' && progress[0].reportedStatus === 'passed'
     && progress[1].name === 'backup' && progress[1].reportedStatus === 'failed'
     && progress[1].failureCode === 'release_control_write_unknown';
-  check(!independentRelease || preCapture || preDump || archived, 'release_backup_recovery_boundary_invalid');
+  // Lease loss can interrupt a control read after any backup intent. This is
+  // authority to inspect the retained journal, not a guessed capture boundary.
+  const leaseLost = independentRelease && Array.isArray(progress) && progress.length === 2
+    && progress[0]?.name === 'preflight' && progress[0].reportedStatus === 'passed'
+    && progress[1]?.name === 'backup' && progress[1].reportedStatus === 'failed'
+    && progress[1].failureCode === 'release_lease_lost' && publicLeaseLoss(progress[1].leaseLoss);
+  check(!independentRelease || preCapture || preDump || archived || leaseLost, 'release_backup_recovery_boundary_invalid');
   checkRun(await api(`${prefix}/actions/runs/${id}`));
   return Object.freeze({ format: 'freedom.verified-failed-backup/v1',
-    ...(preCapture ? { failureBoundary: 'before_capture' } : preDump ? { failureBoundary: 'before_dump' }
+    ...(leaseLost ? { failureBoundary: 'backup_lease_lost', leaseLoss: leaseLost }
+      : preCapture ? { failureBoundary: 'before_capture' } : preDump ? { failureBoundary: 'before_dump' }
       : archived ? { failureBoundary: 'archive_unconfirmed' } : {}), runId: id, runAttempt: run.run_attempt,
     sourceSha: receipt.sourceSha, sourceTree: receipt.sourceTree, target: receipt.target, controllerSha: run.head_sha,
     operatorImage: receipt.operatorImage, configSha256: receipt.configSha256, artifactId: artifact.id, artifactDigest: artifact.digest,

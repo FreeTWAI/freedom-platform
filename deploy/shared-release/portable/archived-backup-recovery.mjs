@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { requireRelease as check } from '../admission.mjs';
+import { publicLeaseLoss } from './lease.mjs';
 import { backupExpectation } from './backup-expectation.mjs';
 
 /** Manual recovery of a terminal failed run, under a newly held lease. The
@@ -10,7 +11,8 @@ export async function reconcileArchivedBackup({ floor, pool, database, role, dep
   check(request.mode === 'deploy' && request.releaseKind === 'independent' && request.event === 'workflow_dispatch'
     && !request.legacyPredecessor && pending?.kind === 'backup' && pending.stage === 0
     && capture && archive && Object.keys(pending.intents).length === 2
-    && evidence?.format === 'freedom.verified-failed-backup/v1' && evidence.failureBoundary === 'archive_unconfirmed'
+    && evidence?.format === 'freedom.verified-failed-backup/v1' && (evidence.failureBoundary === 'archive_unconfirmed'
+      || (evidence.failureBoundary === 'backup_lease_lost' && publicLeaseLoss(evidence.leaseLoss)))
     && request.recoverRunId === pending.request.runId && request.runId !== pending.request.runId
     && evidence.runId === pending.request.runId && evidence.runAttempt === pending.request.runAttempt
     && evidence.target === request.target && evidence.configSha256 === request.configSha256
