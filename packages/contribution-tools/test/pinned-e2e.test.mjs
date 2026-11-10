@@ -1250,8 +1250,8 @@ test('exact PR 1160 bytes select and list all eight cases with the fixed evaluat
 
 const fragmentEnv = { PINNED_SHA: 'b'.repeat(40), GITHUB_RUN_ID: '12345', GITHUB_RUN_ATTEMPT: '2' };
 const fragmentInput = { base: 'c'.repeat(40), head: 'd'.repeat(40), candidate: 'e'.repeat(40) };
-async function fixtureFragments(directory) {
-  const pass = cleanPasses()[0], binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+async function fixtureFragments(directory, pass = cleanPasses()[0]) {
+  const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
   await mkdir(directory, { recursive: true });
   for (const shard of E2E_DEFAULT_SHARDS) {
     await writeFile(join(directory, 'raw.json'), JSON.stringify(pass.partitions[shard.current - 1].report));
@@ -1274,6 +1274,83 @@ test('default fragments carry run identity but cannot replace the five fixture p
     await assert.rejects(publishDefaultFragment(root, f), { code: 'EEXIST' });
   });
 });
+
+const fragmentByteLimit = 64 * 1024 * 1024;
+for (const field of ['report', 'listing']) {
+  test(`default fragment byte budget preserves a ${field} larger than half the envelope`, async () => {
+    await withFixture(async root => {
+      const original = cleanPasses()[0];
+      const evidence = field === 'report' ? original.partitions[0].report : original.listing;
+      evidence.metadata = { synthetic_attachment: 'a'.repeat(33 * 1024 * 1024) };
+      const raw = JSON.stringify(evidence);
+      assert.ok(Buffer.byteLength(raw) > fragmentByteLimit / 2);
+      const binding = await fixtureFragments(root, original);
+      const bytes = await readFile(join(root, 'default-shard-1.json'));
+      assert.ok(bytes.length < fragmentByteLimit);
+      const fragment = JSON.parse(bytes);
+      assert.equal(fragment[field], raw);
+      assert.equal(fragment[field === 'report' ? 'evidence_sha256' : 'listing_evidence_sha256'],
+        createHash('sha256').update(raw).digest('hex'));
+      const pass = await readDefaultFragments(root, binding);
+      assert.equal(JSON.stringify(field === 'report' ? pass.partitions[0].report : pass.listing), raw);
+      assert.equal(evaluate([pass]).reason, 'invalid_pass_plan');
+      assert.equal(evaluate([pass, ...cleanPasses().slice(1)]).status, 'passed');
+    });
+  });
+}
+
+test('default fragment byte budget bounds the combined raw inputs before publication', async () => {
+  await withFixture(async root => {
+    const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+    const raw = JSON.stringify({ padding: 'a'.repeat(33 * 1024 * 1024) });
+    await writeFile(join(root, 'raw.json'), raw);
+    await writeFile(join(root, 'inventory.json'), raw);
+    await assert.rejects(writeDefaultFragment(root, binding, E2E_DEFAULT_SHARDS[0], 'raw.json', 'inventory.json'),
+      /artifact_size_limit/);
+    await assert.rejects(stat(join(root, 'default-shard-1.json')), { code: 'ENOENT' });
+  });
+});
+
+test('default fragment byte budget rejects combined evidence plus JSON escaping overhead', async () => {
+  await withFixture(async root => {
+    const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+    const raw = JSON.stringify({ padding: 'a'.repeat(fragmentByteLimit / 2 - 40) });
+    assert.ok(Buffer.byteLength(raw) * 2 < fragmentByteLimit);
+    await writeFile(join(root, 'raw.json'), raw);
+    await writeFile(join(root, 'inventory.json'), raw);
+    const fragment = await writeDefaultFragment(root, binding, E2E_DEFAULT_SHARDS[0], 'raw.json', 'inventory.json');
+    assert.ok(Buffer.byteLength(JSON.stringify(fragment) + '\n') > fragmentByteLimit);
+    await assert.rejects(publishDefaultFragment(root, fragment), /default_fragment_too_large/);
+    await assert.rejects(stat(join(root, 'default-shard-1.json')), { code: 'ENOENT' });
+  });
+});
+
+test('default fragment byte budget includes the final newline at the exact 64 MiB boundary', async () => {
+  await withFixture(async root => {
+    const fragment = { current: 1, report: '' };
+    const overhead = Buffer.byteLength(JSON.stringify(fragment) + '\n');
+    fragment.report = 'a'.repeat(fragmentByteLimit - overhead);
+    await publishDefaultFragment(root, fragment);
+    assert.equal((await stat(join(root, 'default-shard-1.json'))).size, fragmentByteLimit);
+    await assert.rejects(publishDefaultFragment(root, { ...fragment, current: 2, report: fragment.report + 'a' }),
+      /default_fragment_too_large/);
+    await assert.rejects(stat(join(root, 'default-shard-2.json')), { code: 'ENOENT' });
+  });
+});
+
+for (const path of ['raw.json', 'inventory.json']) {
+  test(`default fragment byte budget refuses oversized input ${path}`, async () => {
+    await withFixture(async root => {
+      await writeFile(join(root, 'raw.json'), '{}');
+      await writeFile(join(root, 'inventory.json'), '{}');
+      await truncate(join(root, path), fragmentByteLimit + 1);
+      const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+      await assert.rejects(writeDefaultFragment(root, binding, E2E_DEFAULT_SHARDS[0], 'raw.json', 'inventory.json'),
+        /artifact_size_limit/);
+      await assert.rejects(stat(join(root, 'default-shard-1.json')), { code: 'ENOENT' });
+    });
+  });
+}
 
 for (const mutation of ['missing', 'extra', 'duplicate-shard', 'stale-head', 'stale-attempt', 'other-workflow', 'failed', 'tampered', 'listing', 'symlink', 'oversize', 'duplicate-key']) {
   test(`default fragment transport refuses ${mutation}`, async () => {
