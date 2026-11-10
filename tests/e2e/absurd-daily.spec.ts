@@ -28,8 +28,8 @@ for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1
   await page.setContent(html);const root=page.locator('.night-atelier'),canvas=root.getByRole('application');await expect(root).toHaveAttribute('data-native','true');await expect(canvas).toBeVisible();
   // Actual originals captured before the time-limited client leaves. No hidden
   // overlays, screenshot CSS, viewport resizing, image editing or image mocks.
-  const png=await page.screenshot();const stats=await sharp(png).stats();expect(stats.channels.slice(0,3).some(c=>c.stdev>20)).toBe(true);
-  await info.attach(`${mode}-atelier-${width}x${height}.png`,{body:png,contentType:'image/png'});
+  let capture=await page.screenshot({type:'jpeg',quality:92});
+  await info.attach(`${mode}-atelier-intro-${width}x${height}.jpg`,{body:capture,contentType:'image/jpeg'});
   const metrics=await root.evaluate(el=>({calls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles)}));expect(metrics.calls).toBeGreaterThan(0);expect(metrics.calls).toBeLessThan(160);expect(metrics.triangles).toBeGreaterThan(1000);
   await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();const elapsed=await root.getAttribute('data-elapsed');await page.waitForTimeout(120);expect(await root.getAttribute('data-elapsed')).toBe(elapsed);await page.keyboard.press('Tab');await expect(page.getByRole('button',{name:'繼續遊戲',exact:true})).toBeFocused();await page.keyboard.press('Enter');await expect(page.getByRole('dialog')).toBeHidden();await expect(canvas).toBeFocused();
   const pan=await root.getAttribute('data-pan-x');await canvas.press('ArrowRight');expect(await root.getAttribute('data-pan-x')).toBe(pan);await expect(root.getByRole('button',{name:/往左|往右|往上|往下/})).toHaveCount(0);
@@ -41,7 +41,7 @@ for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1
   if(mode==='photo'){
    await begin();if(touch)await finger('touchMove',width/2+35,height/2+20);else await page.mouse.move(width/2+35,height/2+20,{steps:4});await finish();expect(Number(await root.getAttribute('data-pan-x'))).toBeLessThan(0);
    await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-film','1');await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-index','1');await expect(root).toHaveAttribute('data-film','0');
-   const previousStars=Number(await root.getAttribute('data-stars'));await begin();if(touch)await finger('touchMove',width/2-width*.12,height/2+height*.0484);else await page.mouse.move(width/2-width*.12,height/2+height*.0484,{steps:4});await finish();for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-stars',String(previousStars+3));await expect(root).toHaveAttribute('data-index','2');
+   await page.clock.runFor(120);await expect(root).toHaveAttribute('data-flash','false');const previousStars=Number(await root.getAttribute('data-stars'));await begin();if(touch)await finger('touchMove',width/2-width*.12,height/2+height*.0484);else await page.mouse.move(width/2-width*.12,height/2+height*.0484,{steps:4});await finish();capture=await page.screenshot({type:'jpeg',quality:92});for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-stars',String(previousStars+3));await expect(root).toHaveAttribute('data-index','2');
    for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-ended','true');await expect(root).toHaveAttribute('data-flash','false');await expect(page.getByRole('status')).toContainText('三位客人已拍完');await expect(page.getByRole('button',{name:'按下快門',exact:true})).toBeDisabled();
   }else{
    const deck=cashDeck(42),first=deck[0];await page.getByRole('button',{name:first.valid?'退回大餅':'收下鈔票',exact:true}).dblclick();await expect(root).toHaveAttribute('data-index','0');await expect(root).toHaveAttribute('data-mistakes','1');await page.waitForTimeout(180);
@@ -51,6 +51,7 @@ for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1
    for(let i=1;i<deck.length;i++){await page.waitForTimeout(180);await page.getByRole('button',{name:deck[i].valid?'收下鈔票':'退回大餅',exact:true}).click();await expect(root).toHaveAttribute('data-index',String(i+1));}
    await expect(root).toHaveAttribute('data-ended','true');await expect(page.getByRole('status')).toContainText('100 萬盤點完成');await expect(page.getByRole('button',{name:'收下鈔票',exact:true})).toBeDisabled();
   }
+  const stats=await sharp(capture).stats();expect(stats.channels.slice(0,3).some(c=>c.stdev>20)).toBe(true);await info.attach(`${mode}-atelier-gameplay-${width}x${height}.jpg`,{body:capture,contentType:'image/jpeg'});
   // Controls remain in-bounds and physically clickable, including the smallest
   // landscape screen. Actual hit targets, not only CSS declarations.
   const bounds=await root.getByRole('button').evaluateAll(buttons=>buttons.filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};}));for(const b of bounds){expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44);expect(b.x).toBeGreaterThanOrEqual(0);expect(b.y).toBeGreaterThanOrEqual(0);expect(b.right).toBeLessThanOrEqual(width);expect(b.bottom).toBeLessThanOrEqual(height);}
@@ -58,8 +59,9 @@ for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1
   if(mode==='photo'){await begin();await page.clock.fastForward(12001);await expect(root).toHaveAttribute('data-index','1');if(touch)await finger('touchMove',width/2+30,height/2+20);else await page.mouse.move(width/2+30,height/2+20);await finish();await expect(root).toHaveAttribute('data-pan-x','0');await expect(root).toHaveAttribute('data-pan-y','0');}
   await page.evaluate(()=>window.dispatchEvent(new Event('atelier-dispose')));await expect(root).toHaveCount(0);await expect(page.locator('canvas')).toHaveCount(0);expect(errors).toEqual([]);
   // Existing reporter stdout retains bounded public synthetic originals on pass
-  // and failure. Transport limit is not a graphics/performance acceptance budget.
-  expect(png.byteLength).toBeLessThanOrEqual(2*1024*1024);const {createHash}=createRequire(import.meta.url)('node:crypto');const id=`${mode}-${width}x${height}`,encoded=png.toString('base64'),parts=Math.ceil(encoded.length/3072);console.log('PHOTO_CASH_ATELIER_CAPTURE '+JSON.stringify({format:'photo-cash-atelier-preview/v1',candidate:process.env.GITHUB_SHA??'local-uncommitted',id,bytes:png.byteLength,sha256:createHash('sha256').update(png).digest('hex'),parts,viewport:{width,height},metrics}));for(let i=0;i<parts;i++)console.log(`PHOTO_CASH_ATELIER_PNG ${id} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
+  // and failure. Native full-resolution JPEG output, never resized or postprocessed.
+  // Transport limit is not a graphics/performance acceptance budget.
+  expect(capture.byteLength).toBeLessThanOrEqual(2*1024*1024);const {createHash}=createRequire(import.meta.url)('node:crypto');const id=`${mode}-${width}x${height}`,encoded=capture.toString('base64'),parts=Math.ceil(encoded.length/3072);console.log('PHOTO_CASH_ATELIER_CAPTURE '+JSON.stringify({format:'photo-cash-atelier-preview/v2',mimeType:'image/jpeg',nativeQuality:92,candidate:process.env.GITHUB_SHA??'local-uncommitted',id,bytes:capture.byteLength,sha256:createHash('sha256').update(capture).digest('hex'),parts,viewport:{width,height},metrics}));for(let i=0;i<parts;i++)console.log(`PHOTO_CASH_ATELIER_JPEG ${id} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
  }finally{await context.close();}
 });
 
