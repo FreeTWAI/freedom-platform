@@ -19,7 +19,7 @@ async function login(page:Page){
 test('chat size controls preserve drafts and fit resized desktop and mobile viewports',async({page})=>{
   await page.setViewportSize({width:1440,height:900});await login(page);
   const panel=page.locator('.floating-message-panel'),bubble=page.locator('.floating-messages');
-  await bubble.click();expect((await panel.boundingBox())!.width).toBe(560);
+  await bubble.click();expect((await panel.boundingBox())!.width).toBe(760);expect((await panel.boundingBox())!.height).toBe(760);
   await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員',{exact:true}).fill('示範需求者');
   await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
@@ -47,8 +47,55 @@ test('chat size controls preserve drafts and fit resized desktop and mobile view
   await page.screenshot({path:'test-results/chat-size-controls-phone.png'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.setViewportSize({width:1440,height:900});await expect(width).toHaveValue('780');await expect(height).toHaveValue('700');
-  await panel.getByRole('button',{name:'恢復預設大小'}).click();expect((await panel.boundingBox())!.width).toBe(560);
+  await panel.getByRole('button',{name:'恢復預設大小'}).click();expect((await panel.boundingBox())!.width).toBe(760);expect((await panel.boundingBox())!.height).toBe(760);
   await page.screenshot({path:'test-results/chat-size-controls-desktop.png'});
+});
+
+for(const viewport of [{width:390,height:844},{width:768,height:650},{width:1440,height:900}])test(`guild sticker history has reading room at ${viewport.width}×${viewport.height}`,async({page})=>{
+  await page.setViewportSize(viewport);
+  const channel={kind:'guild',channel_key:'guild_ai_vibe',name:'合成 AI 專案公會'},root='/api/v1/me/channels/guild/guild_ai_vibe';
+  const sender='20000000-0000-4000-8000-000000000099',latestId='30000000-0000-4000-8000-000000000003';
+  const items=[3,2,1].map(sequence=>({message_id:`30000000-0000-4000-8000-${String(sequence).padStart(12,'0')}`,
+    ...channel,sender_ref:sender,sender_name:'合成夥伴',sequence:String(sequence),created_at:`2026-10-01T00:00:0${sequence}Z`,
+    body:sequence===2?'貼圖前的文字仍可閱讀':'[貼圖] 你好',...(sequence===2?{}:{sticker:{id:'workshop-v1-hello',label:'你好'}})}));
+  let sends=0;
+  await page.route(url=>url.pathname==='/api/v1/me/channels'&&url.searchParams.get('kind')==='guild',route=>route.fulfill({json:{items:[{...channel,unread_count:0,last_message_at:items[0].created_at}],unread_count:0,next_offset:null}}));
+  await page.route(url=>url.pathname===root+'/messages',route=>{
+    if(route.request().method()!=='GET'){sends++;return route.fulfill({status:500,json:{code:'unexpected_test_send'}});}
+    return route.fulfill({json:{channel,items,unread_count:0,next_offset:null,retraction_count:'0'}});
+  });
+  await page.route(url=>url.pathname===root+'/activity',route=>route.fulfill({json:{latest_sequence:'3',unread_count:0,retraction_count:'0'}}));
+  await login(page);const panel=page.locator('.floating-message-panel'),launcher=page.locator('.floating-messages');
+  await launcher.click();await panel.getByRole('tab',{name:/^公會閒聊/}).click();
+  await panel.locator('[data-channel-key="guild_ai_vibe"]').click();
+  const log=panel.getByRole('log'),latest=log.locator(`[data-message-id="${latestId}"]`),sticker=latest.getByRole('img',{name:'貼圖：你好',exact:true});
+  const draft=panel.getByRole('textbox',{name:'在 合成 AI 專案公會 發言'}),send=panel.getByRole('button',{name:'送出',exact:true});
+  await expect(sticker).toBeVisible();await expect.poll(()=>sticker.locator('img').evaluate(node=>node instanceof HTMLImageElement&&node.complete&&node.naturalWidth>0)).toBe(true);
+  await expect(sticker).toBeInViewport({ratio:1});
+  const logBox=(await log.boundingBox())!,stickerBox=(await sticker.boundingBox())!,panelBox=(await panel.boundingBox())!;
+  expect(logBox.height).toBeGreaterThan(stickerBox.height*1.5);
+  expect(panelBox.x).toBeGreaterThanOrEqual(0);expect(panelBox.y).toBeGreaterThanOrEqual(0);
+  expect(panelBox.x+panelBox.width).toBeLessThanOrEqual(viewport.width);expect(panelBox.y+panelBox.height).toBeLessThanOrEqual(viewport.height);
+  if(viewport.width>760){
+    expect(panelBox.width).toBe(Math.min(760,viewport.width-32));expect(panelBox.height).toBe(Math.min(760,viewport.height-32));
+  }
+  // Short screens retain the full sticker; tall screens also show its metadata,
+  // reply action and preceding text without asking the member to scroll first.
+  if(viewport.height>=844){await expect(latest).toBeInViewport({ratio:1});await expect(log.getByText('貼圖前的文字仍可閱讀',{exact:true})).toBeInViewport({ratio:1});}
+  await expect(draft).toBeInViewport({ratio:1});await expect(send).toBeInViewport({ratio:1});
+  await panel.screenshot({path:test.info().outputPath('guild-sticker-reading-room.png')});
+  await draft.fill('加大後保留的草稿');
+  await panel.getByRole('button',{name:'選擇貼圖',exact:true}).click();
+  await panel.getByRole('button',{name:'工坊夥伴',exact:true}).click();
+  await panel.getByRole('button',{name:'預覽貼圖：你好',exact:true}).click();
+  await panel.getByRole('button',{name:'取消預覽',exact:true}).click();
+  await panel.getByRole('button',{name:'關閉貼圖',exact:true}).click();
+  await expect(draft).toHaveValue('加大後保留的草稿');await expect(send).toBeInViewport({ratio:1});expect(sends).toBe(0);
+  await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(launcher).toBeFocused();
+  await launcher.click();await expect(draft).toHaveValue('加大後保留的草稿');await expect(send).toBeInViewport({ratio:1});
+  await panel.getByRole('button',{name:'收合聊天室',exact:true}).click();await expect(panel).toBeHidden();
+  await page.goForward();await expect(panel).toBeVisible();await expect(draft).toHaveValue('加大後保留的草稿');
+  await page.goBack();await expect(panel).toBeHidden();expect(sends).toBe(0);
 });
 
 test('chat launcher counts chat sources only, does not open history or mark anything read, and refreshes after confirmed inbox changes',async({page})=>{

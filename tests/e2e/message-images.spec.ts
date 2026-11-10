@@ -456,7 +456,8 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
     expect((await e2eAuthPool.query('SELECT body FROM member_direct_messages WHERE body=ANY($1::text[])',[[draft,changed]])).rows).toEqual([{body:changed}]);
   });
 
-  for(const mode of ['page-navigation','dock-logout'] as const)test(`${mode} and unload are guarded synchronously inside the initial send event`,async({page,e2eAuthPool})=>{
+  for(const {mode,height} of [{mode:'page-navigation',height:720},{mode:'dock-logout',height:720},{mode:'dock-logout',height:650}] as const)test(`${mode} and unload are guarded synchronously inside the initial send event${height===650?' at 1280×650':''}`,async({page,e2eAuthPool})=>{
+    await page.setViewportSize({width:1280,height});
     // Earlier cases share maker's real 20-per-minute send budget; each guard case owns a fresh sender.
     const sender=await isolatedGuardSender(e2eAuthPool);let thread=await openDirect(page,true,sender.email);
     expect((await (await page.request.get('/api/v1/session')).json()).user.user_id).toBe(sender.id);
@@ -466,7 +467,22 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
       await dock.getByRole('button',{name:'搜尋會員',exact:true}).click();await dock.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();thread=dock.locator('#messages-panel-direct .messages-thread');
     }
     await thread.locator('input[type=file]').setInputFiles(image);const caption=`Synchronous guard ${crypto.randomUUID()}`;await thread.getByRole('textbox').fill(caption);
-    if(mode==='dock-logout')await page.getByRole('button',{name:'設定',exact:true}).click();
+    if(mode==='dock-logout'){
+      // The enlarged desktop dock can cover Settings at short viewport heights.
+      // Ordinary logout uses collapse (covered above); this same-event probe
+      // needs both the mounted form and logout menu, so use the real size control.
+      const dock=page.locator('.floating-message-panel'),settings=page.getByRole('button',{name:'設定',exact:true});
+      const size=dock.getByRole('button',{name:'調整大小',exact:true}),slider=dock.getByRole('slider',{name:'聊天室高度'});
+      const panelHeight=height===650?'360':'440';
+      await size.click();await slider.fill(panelHeight);await expect(slider).toHaveValue(panelHeight);await size.click();
+      await expect.poll(async()=>{
+        const panel=await dock.boundingBox(),button=await settings.boundingBox();
+        return !!panel&&!!button&&panel.y>=button.y+button.height;
+      }).toBe(true);
+      await expect(thread.getByRole('textbox')).toHaveValue(caption);await expect(thread.getByLabel('待送出的圖片')).toBeVisible();
+      await settings.click();await expect(page.getByRole('menu',{name:'個人檔案'}).getByRole('menuitem',{name:'登出',exact:true})).toBeVisible();
+      await expect(dock).toBeVisible();
+    }
     let notices=0,logouts=0;page.on('dialog',async dialog=>{notices++;await dialog.accept();});
     page.on('request',request=>{if(request.method()==='POST'&&request.url().endsWith('/api/v1/auth/logout'))logouts++;});
     let sends=0;const keys:string[]=[],payloads:string[]=[];await page.route(/\/api\/v1\/me\/conversations\/[^/]+\/messages$/,async route=>{
