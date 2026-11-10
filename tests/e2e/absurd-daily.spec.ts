@@ -37,15 +37,18 @@ for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1
   const finger=async(type:'touchStart'|'touchMove'|'touchEnd',x=width/2,y=height/2)=>touch!.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x,y,id:1}]});
   const begin=async()=>{if(touch)await finger('touchStart');else{await page.mouse.move(width/2,height/2);await page.mouse.down();}};
   const finish=async()=>{if(touch)await finger('touchEnd');else await page.mouse.up();};
+  // Inject cancellation for an ignored second pointer while the owner uses
+  // actual mouse/touch input. It must not release or consume the owner gesture.
+  const cancelOther=async()=>{for(const type of ['pointercancel','lostpointercapture'])await canvas.dispatchEvent(type,{pointerId:9999,isPrimary:false,pointerType:'touch'});};
   await begin();await page.keyboard.press('Escape');await finish();await expect(root).toHaveAttribute('data-index','0');await page.getByRole('button',{name:'繼續遊戲',exact:true}).click();
   if(mode==='photo'){
-   await begin();if(touch)await finger('touchMove',width/2+35,height/2+20);else await page.mouse.move(width/2+35,height/2+20,{steps:4});await finish();expect(Number(await root.getAttribute('data-pan-x'))).toBeLessThan(0);
+   await begin();await cancelOther();if(touch)await finger('touchMove',width/2+35,height/2+20);else await page.mouse.move(width/2+35,height/2+20,{steps:4});await finish();expect(Number(await root.getAttribute('data-pan-x'))).toBeLessThan(0);
    await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-film','1');await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-index','1');await expect(root).toHaveAttribute('data-film','0');
    await page.clock.runFor(120);await expect(root).toHaveAttribute('data-flash','false');const previousStars=Number(await root.getAttribute('data-stars'));await begin();if(touch)await finger('touchMove',width/2-width*.12,height/2+height*.0484);else await page.mouse.move(width/2-width*.12,height/2+height*.0484,{steps:4});await finish();capture=await page.screenshot({type:'jpeg',quality:92});for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-stars',String(previousStars+3));await expect(root).toHaveAttribute('data-index','2');
    for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-ended','true');await expect(root).toHaveAttribute('data-flash','false');await expect(page.getByRole('status')).toContainText('三位客人已拍完');await expect(page.getByRole('button',{name:'按下快門',exact:true})).toBeDisabled();
   }else{
    const deck=cashDeck(42),first=deck[0];await page.getByRole('button',{name:first.valid?'退回大餅':'收下鈔票',exact:true}).dblclick();await expect(root).toHaveAttribute('data-index','0');await expect(root).toHaveAttribute('data-mistakes','1');await page.waitForTimeout(180);
-   await begin();const dx=first.valid?70:-70;if(touch)await finger('touchMove',width/2+dx,height/2);else await page.mouse.move(width/2+dx,height/2,{steps:4});await finish();await expect(root).toHaveAttribute('data-index','1');
+   await begin();await cancelOther();const dx=first.valid?70:-70;if(touch)await finger('touchMove',width/2+dx,height/2);else await page.mouse.move(width/2+dx,height/2,{steps:4});await finish();await expect(root).toHaveAttribute('data-index','1');
    // A predominantly vertical gesture does not sort a card.
    await begin();if(touch)await finger('touchMove',width/2+5,height/2+60);else await page.mouse.move(width/2+5,height/2+60,{steps:4});await finish();await expect(root).toHaveAttribute('data-index','1');
    for(let i=1;i<deck.length;i++){await page.waitForTimeout(180);await page.getByRole('button',{name:deck[i].valid?'收下鈔票':'退回大餅',exact:true}).click();await expect(root).toHaveAttribute('data-index',String(i+1));}

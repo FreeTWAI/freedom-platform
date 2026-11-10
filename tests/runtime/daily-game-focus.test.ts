@@ -65,3 +65,36 @@ test('restored keyboard ownership still respects modifiers, repeated action keys
     h.live.current.paused=false;h.key();assert.equal(h.stats().actions,1);
   }
 });
+
+// Execute the exact standalone atelier gesture closures. This verifies pointer
+// ownership, not native event delivery, WebGL, screenshot or device behavior.
+const atelierSource=readFileSync(new URL('../../apps/portal-web/src/games/photo-cash-atelier.ts',import.meta.url),'utf8');
+function atelierClosure(start:string,end:string){const a=atelierSource.indexOf(start),b=atelierSource.indexOf(end,a);assert.ok(a>=0&&b>a,'atelier source closure exists');return atelierSource.slice(a,b);}
+const atelierHandlers=stripTypeScriptTypes(atelierClosure('function cancelPointer(){','function nextClient(')+atelierClosure('const down=(e:PointerEvent)',"canvas.addEventListener('pointerdown'"));
+function atelierGesture(photo:boolean){
+ const held=new Set<number>(),released:number[]=[],sorted:boolean[]=[];let renders=0;
+ const context={photo,paused:false,lost:false,ended:false,clientIndex:0,cash:{index:0},root:{clientWidth:390,clientHeight:844},RULES:{swipePx:48},cardGroup:{position:{x:0},rotation:{z:0}},clamp:(n:number,a:number,b:number)=>Math.max(a,Math.min(b,n)),updateCamera(){},render(){renders++;},sort(accept:boolean){sorted.push(accept);},canvas:{focus(){},setPointerCapture(id:number){held.add(id);},hasPointerCapture(id:number){return held.has(id);},releasePointerCapture(id:number){held.delete(id);released.push(id);}}};
+ const api=runInNewContext(`let pointer=null,startX=0,startY=0,dragX=0,dragY=0,panX=0,panY=0,dragIndex=0;${atelierHandlers};({down,move,up,cancel,cancelPointer,read:()=>({pointer,panX,panY})})`,context) as {down:(e:unknown)=>void;move:(e:unknown)=>void;up:(e:unknown)=>void;cancel:(e:unknown)=>void;cancelPointer:()=>void;read:()=>{pointer:number|null;panX:number;panY:number}};
+ const event=(pointerId:number,x=100,y=200,isPrimary=pointerId===1)=>({pointerId,clientX:x,clientY:y,isPrimary,button:0,preventDefault(){}});
+ return {api,event,context,held,released,sorted,renders:()=>renders};
+}
+for(const mode of ['photo','cash'] as const){
+ test(`${mode} atelier: ignored pointer cancellation preserves the owned drag`,()=>{
+  for(const cancelled of ['pointercancel','lostpointercapture']){
+   const h=atelierGesture(mode==='photo');h.api.down(h.event(1));h.api.down(h.event(2,100,200,false));
+   h.api.cancel({...h.event(2,100,200,false),type:cancelled});assert.equal(h.api.read().pointer,1,cancelled);assert.ok(h.held.has(1));assert.equal(h.released.length,0);assert.equal(h.renders(),0);
+   h.api.move(h.event(1,170));h.api.up(h.event(1,170));assert.equal(h.api.read().pointer,null);assert.deepEqual(h.released,[1]);
+   if(mode==='photo'){assert.ok(h.api.read().panX<0);assert.deepEqual(h.sorted,[]);}else assert.deepEqual(h.sorted,[true]);
+  }
+ });
+ test(`${mode} atelier: owner cancellation aborts without scoring or stale movement`,()=>{
+  for(const cancelled of ['pointercancel','lostpointercapture']){
+   const h=atelierGesture(mode==='photo');h.api.down(h.event(1));h.api.move(h.event(1,120));h.api.cancel({...h.event(1),type:cancelled});const pan=h.api.read().panX;
+   h.api.move(h.event(1,170));h.api.up(h.event(1,170));assert.equal(h.api.read().pointer,null);assert.equal(h.api.read().panX,pan);assert.deepEqual(h.sorted,[]);assert.deepEqual(h.released,[1]);assert.equal(h.context.cardGroup.position.x,0);
+  }
+ });
+ test(`${mode} atelier: internal pause/reset/expiry cancellation remains unconditional`,()=>{
+  const h=atelierGesture(mode==='photo');h.api.down(h.event(1));h.api.cancelPointer();assert.equal(h.api.read().pointer,null);assert.deepEqual(h.released,[1]);h.api.up(h.event(1,170));assert.deepEqual(h.sorted,[]);
+  h.api.cancel({...h.event(2),type:'lostpointercapture'});assert.equal(h.api.read().pointer,null);assert.deepEqual(h.released,[1]);
+ });
+}
