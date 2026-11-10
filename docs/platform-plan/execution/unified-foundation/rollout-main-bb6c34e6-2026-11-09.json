@@ -1,0 +1,408 @@
+{
+  "format": "freedom.shared-actions-rollout-observation/v1",
+  "recorded_at": "2026-11-09T06:30:41.581206+00:00",
+  "status": "staging_passed_production_handoff_reconciled",
+  "source": "bb6c34e6a5dc580a2e37a1768025d3ae245007f7",
+  "source_tree": "10b9537d1beb555c061c09a186c3dc3cb76528a2",
+  "controller_source": "bb6c34e6a5dc580a2e37a1768025d3ae245007f7",
+  "included_prs": [
+    1313,
+    1311,
+    1314,
+    1316
+  ],
+  "previous_application_source": "242dbd400a28c283fc684f5b6cbf11070769baae",
+  "migration_catalog_changed": false,
+  "flag_changes": {
+    "staging-next": [],
+    "next": []
+  },
+  "operator_image": "ghcr.io/freetwai/freedom-release-operator@sha256:35e00dfc8825aae30401dfe8ccafba4497656ba0f5b7d0d2ec366aba79cebca6",
+  "operator_image_build": {
+    "run_id": 42569944199,
+    "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42569944199",
+    "source": "bb6c34e6a5dc580a2e37a1768025d3ae245007f7",
+    "native_test": "passed",
+    "separate_packages_read_pull": "passed"
+  },
+  "selected_release_ci": [
+    {
+      "run_id": 42568532959,
+      "workflow": ".github/workflows/verify.yml",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42568532959/attempts/1",
+      "conclusion": "success"
+    },
+    {
+      "run_id": 42568532909,
+      "workflow": ".github/workflows/codeql.yml",
+      "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42568532909/attempts/1",
+      "conclusion": "success"
+    }
+  ],
+  "staging": {
+    "run_id": 42570289981,
+    "run_attempt": 1,
+    "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42570289981",
+    "artifact_id": 13652918058,
+    "artifact_zip_sha256": "c2ebc82630c0186c11eebbb558bcd1361d4345f2a9d01fcd564f8c72d5d0f201",
+    "receipt_sha256": "22ba5fd6aee0540f320f95452fd3c9710a77d6c03ab03c347f66c40bc2fdd4d2",
+    "receipt_status": "passed",
+    "provider_outcome": "release_confirmed",
+    "completed_at": "2026-11-09T06:12:08.480Z",
+    "workflow_conclusion": "success",
+    "deployment_id": 7648096003,
+    "deployment_state": "success",
+    "config_sha256": "4816eacdea3fd4e89288036553e84361625f7d82025ee7c7163bc56082d99639",
+    "phases": [
+      {
+        "name": "preflight",
+        "status": "passed",
+        "backupRecovery": {
+          "previousRunId": 42478984577,
+          "status": "archive_restored_after_readback"
+        }
+      },
+      {
+        "name": "migration",
+        "status": "passed"
+      },
+      {
+        "name": "deploy",
+        "status": "passed"
+      },
+      {
+        "name": "health",
+        "status": "passed"
+      },
+      {
+        "name": "handoff",
+        "status": "passed"
+      }
+    ]
+  },
+  "production": {
+    "run_id": 42571667515,
+    "run_attempt": 1,
+    "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42571667515",
+    "artifact_id": 13653214854,
+    "artifact_zip_sha256": "ae4e5447501f17d7ca817d1f938295bed27b3d8a3e3293a247304c98425b6f60",
+    "receipt_sha256": "356070ab2c2536f17b5d6a6f16281148b8fd2ca15a43c4b6171e09ec8af1532e",
+    "receipt_status": "failed",
+    "provider_outcome": "unknown_until_confirmed",
+    "completed_at": "2026-11-09T06:20:11.345Z",
+    "workflow_conclusion": "failure",
+    "deployment_id": 7648272460,
+    "deployment_state": "failure",
+    "config_sha256": "6b7a8c78b032ef71c70f29fdf3307ab6e36afc25daa764bcdeffdebf8596f3e8",
+    "operator_progress": [
+      {
+        "name": "preflight",
+        "reportedStatus": "passed",
+        "flagChanges": []
+      },
+      {
+        "name": "migration",
+        "reportedStatus": "passed"
+      },
+      {
+        "name": "deploy",
+        "reportedStatus": "passed",
+        "flagChanges": []
+      },
+      {
+        "name": "health",
+        "reportedStatus": "passed"
+      },
+      {
+        "name": "handoff",
+        "reportedStatus": "failed",
+        "leaseLoss": {
+          "cause": "heartbeat_timeout",
+          "heldMs": 370006,
+          "sinceHeartbeatMs": 49855,
+          "heartbeats": 16
+        },
+        "failureCode": "release_lease_cleanup_failed"
+      }
+    ],
+    "original_failure_retained": true
+  },
+  "production_handoff": {
+    "run_id": 42572538017,
+    "run_attempt": 1,
+    "url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42572538017",
+    "artifact_id": 13654146004,
+    "artifact_zip_sha256": "e7d6b07fc95f3d3daec841dd81ca4f61cad23e03982accf0a76297fdaabee56f",
+    "receipt_sha256": "f9d12f46f4f82a76bad7030ffb3ea7ef508a54a21836b9498a43d638a66dfbcb",
+    "receipt_status": "reconciled",
+    "provider_outcome": "handoff_reconciled",
+    "completed_at": "2026-11-09T06:23:12.989Z",
+    "workflow_conclusion": "success",
+    "recover_release_run_id": 42571667515,
+    "phases": [
+      {
+        "name": "preflight",
+        "status": "passed"
+      },
+      {
+        "name": "handoff",
+        "status": "passed",
+        "reconciledRunId": 42571667515,
+        "reconciledRunAttempt": 1,
+        "alreadySettled": true
+      }
+    ],
+    "repeated_migration": false,
+    "repeated_deployment": false,
+    "new_backup": false,
+    "new_github_deployment": false
+  },
+  "archived_backup_recovery": {
+    "original_run_id": 42478984577,
+    "original_workflow_conclusion": "failure",
+    "original_failure_retained": true,
+    "recovered_by_run_id": 42570289981,
+    "status": "archive_restored_after_readback",
+    "repeated_capture": false,
+    "repeated_archive_upload": false,
+    "new_journal_event": "backup-reconciled"
+  },
+  "guild_repositories": {
+    "observed_at": "2026-11-09T04:39:29.596532+00:00",
+    "total": 26,
+    "built_in": 18,
+    "approved_custom": 8,
+    "public_release_source_matches": 26,
+    "all_observed_publication_runs_successful": true,
+    "fleet_observation_sha256": "870add1ff86c448fad0018e8e23ba77952af5fd736531d96ecdace1a9d18c6ad",
+    "integration_browser": {
+      "status": "passed",
+      "assurance": "operator_local_public_browser",
+      "started_at": "2026-11-09T06:25:39.471Z",
+      "completed_at": "2026-11-09T06:26:47.761Z",
+      "browser": "Chromium",
+      "locale": "zh-TW",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "authenticated": false,
+      "guilds_passed": 26,
+      "page_errors": 0,
+      "checks": [
+        "exact registered iframe source and allow-scripts-only sandbox",
+        "bridge ready",
+        "no horizontal overflow in platform or iframe",
+        "actual skills action returns to the native platform skill-book panel"
+      ],
+      "deployment_before_and_after": {
+        "id": 7648272460,
+        "sha": "bb6c34e6a5dc580a2e37a1768025d3ae245007f7",
+        "state": "failure"
+      },
+      "verified_handoff_run_id": 42572538017,
+      "report_sha256": "bb2a809cdf401e1a29407d0507e2d18d91caa01a93c4622e1217d24dd438996d",
+      "screenshots_count": 26,
+      "screenshots_manifest_sha256": "ebc34da8bd500238f36b8a3e61aecc117bd44459e32ddde48f42d067201a6c11",
+      "visually_inspected_repositories": [
+        "guild-ai-field",
+        "guild-commerce-sales",
+        "guild-language-ai",
+        "guild-music-mv"
+      ],
+      "authenticated_member_or_private_write_acceptance": "not_run"
+    },
+    "architecture": "Independent guild UI repositories and Pages releases; identity, authorization, private data and domain writes remain in the central platform.",
+    "releases": [
+      {
+        "repository": "FreeTWAI/guild-ai-feedback",
+        "source": "8d0300c0b06d827ca216e75b22bd7673b295b48e",
+        "publication_run": "https://github.com/FreeTWAI/guild-ai-feedback/actions/runs/42469254832",
+        "public_release": "https://freetwai.github.io/guild-ai-feedback/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-ai-field",
+        "source": "1a292cd8110956c202f18ec7b3a9f20d04594f89",
+        "publication_run": "https://github.com/FreeTWAI/guild-ai-field/actions/runs/42469189990",
+        "public_release": "https://freetwai.github.io/guild-ai-field/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-ai-for-good",
+        "source": "1c9c01de899a0c84fa5420d12128ca019e04f3a4",
+        "publication_run": "https://github.com/FreeTWAI/guild-ai-for-good/actions/runs/42469290348",
+        "public_release": "https://freetwai.github.io/guild-ai-for-good/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-ai-project",
+        "source": "b08ff34814ad1c1303cadbdd2dbf71b288cc6a92",
+        "publication_run": "https://github.com/FreeTWAI/guild-ai-project/actions/runs/42469201446",
+        "public_release": "https://freetwai.github.io/guild-ai-project/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-ai-vibe",
+        "source": "bc8ceebe885f5340f85be72b51ae641b7aaf55ce",
+        "publication_run": "https://github.com/FreeTWAI/guild-ai-vibe/actions/runs/42469208809",
+        "public_release": "https://freetwai.github.io/guild-ai-vibe/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-automation",
+        "source": "1891dda62fd5ced495fa1907a8ac48a647594a94",
+        "publication_run": "https://github.com/FreeTWAI/guild-automation/actions/runs/42469308258",
+        "public_release": "https://freetwai.github.io/guild-automation/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-commerce-sales",
+        "source": "6f1ef6fa5084861839133ab91ea8d959c57fb330",
+        "publication_run": "https://github.com/FreeTWAI/guild-commerce-sales/actions/runs/42469217930",
+        "public_release": "https://freetwai.github.io/guild-commerce-sales/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-commerce-settlement",
+        "source": "7bd1fc2ac29a35b461a4e50bbb726cb4bf4e3744",
+        "publication_run": "https://github.com/FreeTWAI/guild-commerce-settlement/actions/runs/42469226501",
+        "public_release": "https://freetwai.github.io/guild-commerce-settlement/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-commercial-production",
+        "source": "cb9c71edbe725453b40bddd05c66d4dbe6bb8d15",
+        "publication_run": "https://github.com/FreeTWAI/guild-commercial-production/actions/runs/42469235945",
+        "public_release": "https://freetwai.github.io/guild-commercial-production/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-event-space",
+        "source": "066f3c4ddec0cd032157f02c8e83437544f4496f",
+        "publication_run": "https://github.com/FreeTWAI/guild-event-space/actions/runs/42469317764",
+        "public_release": "https://freetwai.github.io/guild-event-space/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-human-design",
+        "source": "6c3b913c65e892e83ea9e535547acb43ee84cb33",
+        "publication_run": "https://github.com/FreeTWAI/guild-human-design/actions/runs/42469325894",
+        "public_release": "https://freetwai.github.io/guild-human-design/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-language-ai",
+        "source": "54c7a5cb682735d3a9afe73a5e9ded3a58b8b4ea",
+        "publication_run": "https://github.com/FreeTWAI/guild-language-ai/actions/runs/42469298638",
+        "public_release": "https://freetwai.github.io/guild-language-ai/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-marketing",
+        "source": "8ffad067d8c1a979e7d8aeceb02296f93b9ce0da",
+        "publication_run": "https://github.com/FreeTWAI/guild-marketing/actions/runs/42469335922",
+        "public_release": "https://freetwai.github.io/guild-marketing/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-media-automation",
+        "source": "86d913c6d1127e5ceb9ca47e118a692c87b4140f",
+        "publication_run": "https://github.com/FreeTWAI/guild-media-automation/actions/runs/42469344294",
+        "public_release": "https://freetwai.github.io/guild-media-automation/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-member-operations",
+        "source": "ade819f66ce83797fba8e2a1bfecfce0810d61f5",
+        "publication_run": "https://github.com/FreeTWAI/guild-member-operations/actions/runs/42469352058",
+        "public_release": "https://freetwai.github.io/guild-member-operations/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-multipotential",
+        "source": "03371b158d5848eb44a087d1532a33b9cbaa77f8",
+        "publication_run": "https://github.com/FreeTWAI/guild-multipotential/actions/runs/42469264683",
+        "public_release": "https://freetwai.github.io/guild-multipotential/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-music-creators",
+        "source": "5a93b6cd6ce836e971df792893d53761b609ea12",
+        "publication_run": "https://github.com/FreeTWAI/guild-music-creators/actions/runs/42469244950",
+        "public_release": "https://freetwai.github.io/guild-music-creators/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-music-mv",
+        "source": "3c8ce6a17f7970d2e354a569f2ab3c6c2cf499ac",
+        "publication_run": "https://github.com/FreeTWAI/guild-music-mv/actions/runs/42468987872",
+        "public_release": "https://freetwai.github.io/guild-music-mv/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-opportunity-partnership",
+        "source": "39e0639d7924907161d900486ddf55a5740dbb19",
+        "publication_run": "https://github.com/FreeTWAI/guild-opportunity-partnership/actions/runs/42469360232",
+        "public_release": "https://freetwai.github.io/guild-opportunity-partnership/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-platform-engineering",
+        "source": "4377c9e4b3989832da93f77feb7d883b958ba50e",
+        "publication_run": "https://github.com/FreeTWAI/guild-platform-engineering/actions/runs/42469370100",
+        "public_release": "https://freetwai.github.io/guild-platform-engineering/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-product-quality-supply",
+        "source": "f8e15aecd8a000491a34572eb671850644865595",
+        "publication_run": "https://github.com/FreeTWAI/guild-product-quality-supply/actions/runs/42469380242",
+        "public_release": "https://freetwai.github.io/guild-product-quality-supply/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-projection-mapping",
+        "source": "4905244e126bb7c206f2c4b2cc77c481697f19f1",
+        "publication_run": "https://github.com/FreeTWAI/guild-projection-mapping/actions/runs/42469389994",
+        "public_release": "https://freetwai.github.io/guild-projection-mapping/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-security",
+        "source": "9588b1d3584de23781a35b080dd9ddb75d622662",
+        "publication_run": "https://github.com/FreeTWAI/guild-security/actions/runs/42469399491",
+        "public_release": "https://freetwai.github.io/guild-security/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-sme-ai",
+        "source": "b69b0dc26bc8aa3ac084b90d2f9a81d61cb658fd",
+        "publication_run": "https://github.com/FreeTWAI/guild-sme-ai/actions/runs/42469273195",
+        "public_release": "https://freetwai.github.io/guild-sme-ai/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-talent-direction",
+        "source": "35500349d8df35ca953c1c98ce828786b23792fc",
+        "publication_run": "https://github.com/FreeTWAI/guild-talent-direction/actions/runs/42469407730",
+        "public_release": "https://freetwai.github.io/guild-talent-direction/release.json"
+      },
+      {
+        "repository": "FreeTWAI/guild-teachers",
+        "source": "61bcb9ecc9eff5e50dfa7958d37a4fae38400986",
+        "publication_run": "https://github.com/FreeTWAI/guild-teachers/actions/runs/42469281216",
+        "public_release": "https://freetwai.github.io/guild-teachers/release.json"
+      }
+    ]
+  },
+  "limitations": [
+    "The original production workflow and Deployment remain failed after handoff reconciliation; this is not an uninterrupted successful production release.",
+    "The heartbeat timeout is observed; its underlying cause is not established.",
+    "Natural scheduled backup acceptance for this operator, actual member adoption, second-operator restore and the original Foundation requirements retain their separate evidence requirements."
+  ],
+  "subsequent_main_observation": {
+    "observed_at": "2026-11-09T06:30:41.581206+00:00",
+    "source": "42bef764421c85b5f62eaa3bc796c70df39ec50e",
+    "included_pr": 1312,
+    "merged_at": "2026-11-09T06:27:53Z",
+    "ci": [
+      {
+        "id": 42573182784,
+        "name": "Verify local milestone",
+        "head_sha": "42bef764421c85b5f62eaa3bc796c70df39ec50e",
+        "event": "push",
+        "status": "in_progress",
+        "conclusion": null,
+        "html_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42573182784"
+      },
+      {
+        "id": 42573182800,
+        "name": "CodeQL advanced setup",
+        "head_sha": "42bef764421c85b5f62eaa3bc796c70df39ec50e",
+        "event": "push",
+        "status": "in_progress",
+        "conclusion": null,
+        "html_url": "https://github.com/FreeTWAI/freedom-platform/actions/runs/42573182800"
+      }
+    ],
+    "deployment": "awaiting_automatic_release_evidence",
+    "live_observation_source_unchanged": "bb6c34e6a5dc580a2e37a1768025d3ae245007f7"
+  }
+}
