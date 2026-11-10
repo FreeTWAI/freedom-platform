@@ -237,6 +237,34 @@ export async function verifyBackup({ root, openCluster, execute }) {
     };
     assert.equal((await reconcileFailedBackup(recovery)).status, 'abandoned_after_readback');
     assert.equal(abandoned, 4);
+    // Lease loss proves no capture boundary. Read all three possible retained
+    // intent states through actual PG18 READ ONLY transactions under the lease.
+    recovery.request.recoveryEvidence.failureBoundary = 'backup_lease_lost';
+    recovery.request.recoveryEvidence.leaseLoss = { cause: 'heartbeat_timeout', heldMs: 690049, sinceHeartbeatMs: 49843, heartbeats: 32 };
+    state.pending.request.target = 'staging-next';
+    for (const shape of ['empty', 'uncommitted', 'capture']) {
+      state.pending.intents = shape === 'empty' ? {} : { 'backup:capture-policy': failedCapture };
+      await restorePolicy(shape === 'capture' ? committedPolicy : preCapturePolicy);
+      const before = (await pool.query('SELECT to_jsonb(p) value FROM asset_maintenance_policy p WHERE singleton')).rows[0].value;
+      let settled = 0;
+      floor.abandonBackup = async proof => {
+        assert.equal(proof.recovery.failureBoundary, 'backup_lease_lost');
+        assert.equal(proof.captureBackendAbsent, true); assert.equal(proof.sourcePins, 'retained');
+        if (shape === 'empty') assert.equal(proof.capturePolicyIntent, 'absent');
+        if (shape === 'uncommitted') assert.equal(proof.capturePolicy, 'not_committed');
+        if (shape === 'capture') assert.equal(proof.captureRevision, failedCapture.revision);
+        settled++;
+      };
+      assert.equal((await reconcileFailedBackup(recovery)).status, 'abandoned_after_readback'); assert.equal(settled, 1);
+      assert.deepEqual((await pool.query('SELECT to_jsonb(p) value FROM asset_maintenance_policy p WHERE singleton')).rows[0].value, before);
+      assert.equal((await pool.query('SELECT count(*)::int count FROM asset_backup_pins')).rows[0].count, pinCount);
+      const otherCapture = await pool.connect();
+      try {
+        await otherCapture.query("SELECT set_config('application_name','fp-capture-other',false)");
+        await assert.rejects(reconcileFailedBackup(recovery), /release_backup_recovery_cleanup_unconfirmed/);
+        assert.equal(settled, 1);
+      } finally { otherCapture.release(true); }
+    }
     floor.abandonBackup = originalAbandon;
     await restorePolicy(committedPolicy);
     state.pending.intents = { 'backup:capture-policy': failedCapture };
@@ -292,7 +320,7 @@ export async function verifyBackup({ root, openCluster, execute }) {
     return { backupRoleRemainsSelectOnly: true, maintenanceUsesNonSuperuserOwner: true, databaseAndNativeR2Restored: true, sameSnapshotExcludesLateMedia: true,
       remoteTarReadback: 'synthetic-provider', corruptionStopsBeforeRestore: true, lostPutIsNotRetried: true,
       wrongPolicyRefused: true, committedPolicyResponseLossCleaned: true, sourcePinsRetained: true,
-      failedBackupReadbackBeforeAbandon: true, beginOnlyReadbackBeforeAbandon: true, legacyHandoffReadOnly: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
+      failedBackupReadbackBeforeAbandon: true, beginOnlyReadbackBeforeAbandon: true, leaseLossIntentStatesReadBack: true, legacyHandoffReadOnly: true, activeCaptureAndEnabledPolicyRefuseRecovery: true,
       crossEnvironmentTransportRefused: true,
       retainedArchiveIndependentlyRestored: true, archiveRecoveryDoesNotCaptureOrUpload: true,
       ownedRecoveryResourcesRemoved: true, releaseLeaseRetained: true };

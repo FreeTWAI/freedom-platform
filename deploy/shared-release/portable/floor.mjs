@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/migration-plan.mjs';
 import { requireRelease as check, isSha, isDigest } from '../admission.mjs';
+import { publicLeaseLoss } from './lease.mjs';
 import { validateCoordinateAuthority, verifyCoordinateFence } from './coordinate-fence.mjs';
 
 const STAGES = ['backup-before', 'migration', 'deploy', 'health', 'backup-after', 'handoff'];
@@ -97,7 +98,8 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       const proof = event.proof, recovery = proof?.recovery, capture = pending.intents['backup:capture-policy'];
       check(pending.kind === 'backup' && pending.stage === 0 && Object.keys(pending.intents).length === 2
         && capture && proof?.format === 'freedom.reconciled-archived-backup/v1'
-        && recovery?.format === 'freedom.verified-failed-backup/v1' && recovery.failureBoundary === 'archive_unconfirmed'
+        && recovery?.format === 'freedom.verified-failed-backup/v1' && (recovery.failureBoundary === 'archive_unconfirmed'
+          || (recovery.failureBoundary === 'backup_lease_lost' && publicLeaseLoss(recovery.leaseLoss)))
         && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'target', 'controllerSha', 'operatorImage', 'configSha256']
           .every(key => recovery[key] === pending.request[key])
         && isDigest(recovery.receiptSha256) && /^sha256:[a-f0-9]{64}$/.test(recovery.artifactDigest ?? '')
@@ -120,11 +122,15 @@ export function replayReleaseFloor(chain, { isAncestor }) {
       const proof = event.proof, capture = pending.intents['backup:capture-policy'], recovery = proof?.recovery;
       const beginOnly = !capture && Object.keys(pending.intents).length === 0
         && recovery?.failureBoundary === 'before_capture' && proof?.failureBoundary === 'before_capture';
+      const leaseLost = recovery?.failureBoundary === 'backup_lease_lost' && publicLeaseLoss(recovery.leaseLoss);
+      const noIntents = leaseLost && proof?.failureBoundary === 'backup_lease_lost'
+        && !capture && Object.keys(pending.intents).length === 0 && proof.capturePolicyIntent === 'absent'
+        && !Object.hasOwn(proof, 'captureRevision') && !Object.hasOwn(proof, 'capturePolicy') && !Object.hasOwn(proof, 'policySha256');
       const beforeDump = recovery?.failureBoundary === 'before_dump' && proof?.failureBoundary === 'before_dump';
       const unstarted = beforeDump && !capture && Object.keys(pending.intents).length === 0
         && proof.capturePolicyIntent === 'absent' && !Object.hasOwn(proof, 'captureRevision')
         && !Object.hasOwn(proof, 'capturePolicy') && !Object.hasOwn(proof, 'policySha256');
-      const unmutated = beforeDump && capture && Object.keys(pending.intents).length === 1
+      const unmutated = (beforeDump || (leaseLost && proof?.failureBoundary === 'backup_lease_lost')) && capture && Object.keys(pending.intents).length === 1
         && proof.capturePolicy === 'not_committed' && proof.policySha256 === capture.before
         && !Object.hasOwn(proof, 'captureRevision') && !Object.hasOwn(proof, 'capturePolicyIntent');
       const captured = capture && Object.keys(pending.intents).length === 1 && proof?.captureRevision === capture.revision
@@ -137,8 +143,9 @@ export function replayReleaseFloor(chain, { isAncestor }) {
           && proof.legacyPredecessor.admittedRunAttempt === proof.settledBy?.runAttempt,
         'release_floor_legacy_recovery_invalid');
       }
-      check(pending.kind === 'backup' && pending.stage === 0 && (beginOnly || unstarted || unmutated || captured)
+      check(pending.kind === 'backup' && pending.stage === 0 && (beginOnly || unstarted || noIntents || unmutated || captured)
         && proof?.format === 'freedom.abandoned-backup/v1' && recovery?.format === 'freedom.verified-failed-backup/v1'
+        && (recovery.failureBoundary !== 'backup_lease_lost' || (leaseLost && recovery.target === pending.request.target))
         && ['runId', 'runAttempt', 'sourceSha', 'sourceTree', 'controllerSha', 'operatorImage', 'configSha256']
           .every(key => recovery[key] === pending.request[key])
         && isDigest(recovery.receiptSha256) && /^sha256:[a-f0-9]{64}$/.test(recovery.artifactDigest ?? '')
@@ -149,7 +156,7 @@ export function replayReleaseFloor(chain, { isAncestor }) {
         && proof.bindingsSha256 === state.bindingsSha256 && proof.ledgerSha256 === migrationLedgerDigest(state.schemaLedger)
         && proof.materialPolicySha256 === state.materialPolicySha256
         && proof.maintenanceEnabled === false && proof.domainMaintenanceEnabled === false && proof.deletionFences === 0
-        && proof.captureBackendAbsent === true && (beginOnly || unstarted || unmutated || captured)
+        && proof.captureBackendAbsent === true && (beginOnly || unstarted || noIntents || unmutated || captured)
         && proof.sourcePins === 'retained' && proof.archiveIntent === 'absent', 'release_floor_backup_recovery_invalid');
       request({ ...proof.settledBy, sourceSha: state.sourceSha, sourceTree: state.sourceTree });
       check(proof.settledBy.runId !== pending.request.runId && proof.settledBy.configSha256 === pending.request.configSha256,
