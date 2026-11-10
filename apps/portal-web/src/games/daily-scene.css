@@ -1,0 +1,91 @@
+/* Daily games own a single bounded scene. The middle is exclusively a hit
+   surface; controls are sibling HTML, so buttons never bubble into a drag. */
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game.fullscreen-game--integrated:has(.daily-scene,.daily-scene-result){min-height:0;height:min(860px,calc(100dvh - 86px));background:var(--ad-raised)}
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game.fullscreen-game--integrated:is(:fullscreen,.fullscreen-game--viewport):has(.daily-scene,.daily-scene-result){height:100dvh}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene{height:100%;max-width:none!important;padding:0;position:relative;outline:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-play-layout{display:block;height:100%;padding:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-wrap{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;gap:8px;padding:max(10px,var(--game-safe-top)) max(12px,var(--game-safe-right)) max(8px,var(--game-safe-bottom)) max(12px,var(--game-safe-left));border:2px solid var(--ad-line);border-radius:18px;background:linear-gradient(160deg,#ebc996,#f8ead0 60%,#d2ab79);overflow:hidden}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-top{min-width:0;max-height:26dvh;overflow:auto;scrollbar-width:thin}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-toolbar{height:44px;gap:6px;flex-wrap:nowrap;padding-right:154px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene button.daily-icon{padding:4px;min-width:44px;min-height:44px;width:44px;flex:0 0 44px;font-size:20px;line-height:1;border-radius:12px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-game-title{margin:8px 0 0;gap:8px;align-items:center}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-game-title>div{min-width:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-game-title h1{font-size:1.125rem;line-height:1.35}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-game-title p{font-size:.875rem;line-height:1.4;margin:3px 0 0}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-counter{font-size:1rem;color:var(--ad-ink);background:var(--ad-surface);border:1px solid var(--ad-line);border-radius:10px;padding:6px;white-space:normal;flex:0 0 auto;max-width:36%;text-align:center}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-viewport{position:relative;min-height:0;min-width:0;overflow:hidden;border:2px solid var(--ad-line);border-radius:16px;background:#c7ab88;isolation:isolate}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage{position:absolute;inset:0;height:100%;width:100%;aspect-ratio:auto}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .sg-initial-cover{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;pointer-events:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .sg-initial-cover img{object-fit:cover}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-viewfinder{inset:4%;font-size:.875rem}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-viewfinder span{font-size:11px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-controls{position:relative;min-height:0;max-height:38dvh;overflow:auto;overscroll-behavior:contain;gap:6px;padding:8px 10px;border:1px solid var(--ad-line);border-radius:14px;background:var(--ad-surface);box-shadow:0 3px 0 #b9996b;scrollbar-width:thin}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-instruction{font-size:.875rem;line-height:1.45;color:var(--ad-ink)}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-action-area{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;align-items:center}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-action-area>button,.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-sort-buttons>button{font-size:.875rem;padding:6px 8px;min-height:44px;border-radius:10px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-pan-pad{grid-column:1;grid-template-columns:repeat(4,minmax(44px,1fr));gap:4px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-pan-pad button{min-height:44px;padding:2px;background:var(--ad-surface);color:var(--ad-ink)}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-zoom{display:flex;grid-column:2;gap:6px;font-size:.875rem}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-zoom input{min-width:0;height:44px;min-height:44px;width:100%}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-shutter{min-height:44px;flex-direction:row;gap:6px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-shutter>span{font-size:26px;line-height:1}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-shutter small{font-size:inherit}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stamp-button{min-height:44px!important}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-sort-buttons{grid-column:1/-1;gap:8px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-meta{font-size:.875rem;line-height:1.5}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene[data-daily-game=cash] .fw-arcade-meta{grid-column:1/-1}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-notice{font-size:.875rem;line-height:1.5;min-height:0;padding-left:8px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-contact-sheet{display:flex;gap:4px;overflow-x:auto;flex-shrink:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-contact-sheet img{width:44px;height:33px;flex:0 0 44px;object-fit:contain}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-mode{position:relative;z-index:4;display:flex;align-items:center;min-width:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-mode button{font-size:.875rem;line-height:1.3;min-height:44px;padding:4px 10px;box-shadow:none}
+.daily-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-cover{z-index:3;inset:calc(max(10px,var(--game-safe-top)) + 54px) max(12px,var(--game-safe-right)) calc(max(8px,var(--game-safe-bottom)) + 52px) max(12px,var(--game-safe-left));padding:20px;border:2px solid var(--ad-line);border-radius:16px;background:#fff9edf5;color:var(--ad-ink);overflow:auto;justify-content:safe center;gap:12px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-cover>strong{font-size:1.125rem;line-height:1.4;flex-shrink:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-cover>p{font-size:1rem;flex-shrink:0;max-width:36ch}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-cover>button{min-height:44px;flex-shrink:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-dialog{color:var(--ad-ink);background:var(--ad-surface);border:2px solid var(--ad-line);border-radius:18px;padding:20px;width:min(480px,calc(100% - 32px));max-height:calc(100dvh - max(16px,var(--game-safe-top)) - max(16px,var(--game-safe-bottom)));overflow:auto}
+.daily-scene-dialog::backdrop{background:#241c18a6}
+.daily-scene-dialog h2{font-size:1.25rem;line-height:1.4;margin-bottom:12px!important}.daily-scene-dialog p{margin-bottom:12px!important}.daily-scene-dialog>div{display:flex;flex-wrap:wrap;gap:8px}.daily-scene-dialog button{min-height:44px}
+/* Results and export recovery stay in the same bounded game, including normal
+   presentation. Only the internal result surface scrolls. */
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-result{position:absolute;inset:0;max-width:none!important;overflow:auto;overscroll-behavior:contain;padding:calc(max(10px,var(--game-safe-top)) + 60px) max(12px,var(--game-safe-right)) max(12px,var(--game-safe-bottom)) max(12px,var(--game-safe-left));background:var(--ad-bg)}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-result-heading h1{font-size:1.35rem;margin:4px 0;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-result-heading>p:last-child{margin-bottom:12px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-result-layout{gap:16px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-result-photo>img{max-height:36dvh;object-fit:contain;background:var(--ad-surface)}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-share-panel{padding:12px;gap:10px}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-share-panel h2{font-size:1.125rem}
+@media(max-width:560px){
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-pan-pad{grid-column:1/-1;grid-template-columns:repeat(4,minmax(44px,1fr))}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-zoom{grid-column:1/-1}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-controls{max-height:42dvh;padding:6px 8px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-toolbar{padding-right:98px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-toolbar>button:nth-child(3){position:absolute;bottom:max(8px,var(--game-safe-bottom));right:max(12px,var(--game-safe-right));z-index:4}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-toolbar>button:nth-child(4){position:absolute;bottom:max(8px,var(--game-safe-bottom));right:calc(max(12px,var(--game-safe-right)) + 50px);z-index:4}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-mode{max-width:calc(100% - 100px)}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-mode button{font-size:.75rem}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-result-again{flex-direction:column}
+}
+@media(orientation:landscape) and (max-height:540px){
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-wrap{grid-template-columns:minmax(0,1.4fr) minmax(210px,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:6px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-top{grid-column:1/-1;display:flex;align-items:center;gap:12px;max-height:28dvh;padding-right:150px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-toolbar{padding-right:0}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-game-title{margin:0;flex:1;min-width:0}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-game-title h1{font-size:1rem}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-game-title p{display:none}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-viewport{grid-column:1;grid-row:2/4}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-controls{grid-column:2;grid-row:2;max-height:none;height:100%;padding:6px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-pan-pad,.fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-zoom{grid-column:1/-1}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-mode{grid-column:2;grid-row:3}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-cover{inset:calc(max(8px,var(--game-safe-top)) + 54px) max(12px,var(--game-safe-right)) max(8px,var(--game-safe-bottom)) max(12px,var(--game-safe-left));padding:12px;gap:8px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-result .fw-arcade-result-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+@media(prefers-reduced-motion:reduce){.daily-scene *{animation:none!important;transition:none!important}}
+/* Allocate explicit lanes rather than allowing enlarged copy to squeeze the
+   playable middle to zero. Each text/control lane can scroll on its own. */
+@media(orientation:portrait),(min-height:541px){
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-stage-wrap{grid-template-rows:minmax(104px,.3fr) minmax(96px,1fr) minmax(112px,.7fr) 44px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene-top{height:100%;max-height:none}
+ .fw-arcade-root.fw-arcade-toy-console .daily-scene .fw-arcade-controls{height:100%;max-height:none}
+}

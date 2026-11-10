@@ -1960,7 +1960,7 @@ test('browser capacity follows the proven browser profile and fails closed on un
 
 test('browser collector requires successful independent jobs and attempt-bound complete fragments', async () => {
   const workflow = await readFile(workflowPath, 'utf8'), shards = jobBlock(workflow, 'ui-default'), collector = jobBlock(workflow, 'ui-e2e');
-  assert.match(shards, /shard: \[1, 2, 3\]/);
+  assert.match(shards, /shard: \[1, 2, 3, 4\]/);
   assert.match(shards, /fail-fast: false/);
   assert.match(shards, /--default-shard "\$DEFAULT_SHARD"/);
   assert.match(shards, /PINNED_SHA: \$\{\{ job.workflow_sha \}\}/);

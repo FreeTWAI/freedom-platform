@@ -37,8 +37,8 @@ async function history(start=1,count=25,peer=1){
     FROM generate_series($4::int,$5::int) n RETURNING message_id`,[DEMO_COMMUNITY,accounts[0].id,accounts[peer].id,start,start+count-1]);
   return result.rows.map(row=>row.message_id as string);
 }
-async function member(browser:Browser,baseURL:string,installClock=false){
-  const context=await browser.newContext({baseURL,viewport:{width:1280,height:900}});contexts.push(context);
+async function member(browser:Browser,baseURL:string,installClock=false,width=1280){
+  const context=await browser.newContext({baseURL,viewport:{width,height:900}});contexts.push(context);
   await context.route(url=>!['localhost','127.0.0.1'].includes(url.hostname),route=>route.abort());
   const page=await context.newPage();
   // Install before navigation so the mounted polling interval uses the controllable clock.
@@ -254,4 +254,67 @@ test('retraction during a receipt lookup still refreshes older content and its q
   await expect(panel.locator(`[data-message-id="${original}"] .chat-retracted`)).toHaveText('你已收回這則訊息。');
   await expect(panel.locator(`[data-message-id="${reply}"]`)).toContainText('合成：引用仍保留');
   await expect(panel.locator('.messages-bubbles')).not.toContainText(privateBody);await allMessages(page,ids);
+});
+
+for(const width of [390,1280])for(const staleRead of ['latest','older'] as const)test(`confirmed private retraction fences ${staleRead} history at ${width}px even when its refresh fails`,async({browser,baseURL},info)=>{
+  const ids=await history(),ordered=await orderedMessages(),original=ordered.at(-1)!,reply=ordered[0],privateBody='合成：收回後不可重新顯示的內容';
+  await db.query('UPDATE member_direct_messages SET body=$2 WHERE message_id=$1',[original,privateBody]);
+  await db.query('UPDATE member_direct_messages SET body=$2,reply_to_message_id=$3 WHERE message_id=$1',[reply,'合成：保留這則引用回覆',original]);
+  const page=await member(browser,baseURL!,true,width),panel=await openDirect(page);
+  await page.clock.pauseAt(new Date(Date.now()+1000));
+  if(staleRead==='latest'){await older(page).click();await allMessages(page,ids);await expect(panel.locator(`[data-message-id="${reply}"]`)).toContainText(privateBody);}
+  const entered=signal(),released=signal(),finished=signal();releaseHeld.push(released.resolve);
+  let holdNext=true,failRefresh=true,retractPosts=0;const offsets:number[]=[];
+  await page.evaluate(()=>{
+    const read=Response.prototype.text;let consumed=false;
+    Object.assign(window,{privateRetractionConsumed:()=>consumed});
+    Response.prototype.text=async function(){
+      const body=await read.call(this);
+      if(this.headers.get('x-synthetic-private-retraction')==='stale'){
+        // The next browser task follows the real response reader and all its
+        // promise continuations, without altering the body or client code.
+        const channel=new MessageChannel();channel.port1.onmessage=()=>{consumed=true;channel.port1.close();channel.port2.close();};channel.port2.postMessage(null);
+      }
+      return body;
+    };
+  });
+  const path=`/api/v1/me/conversations/${accounts[1].id}/messages`;
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname===`${path}/${original}/retract`)retractPosts++;});
+  await page.route(url=>url.pathname===path,async route=>{
+    if(route.request().method()!=='GET'){await route.continue();return;}
+    offsets.push(Number(new URL(route.request().url()).searchParams.get('offset')));
+    if(holdNext){
+      holdNext=false;
+      // Capture the actual pre-write GET bytes, then delay only their delivery.
+      const response=await route.fetch();entered.resolve();await released.promise;
+      try{await route.fulfill({response,headers:{...response.headers(),'x-synthetic-private-retraction':'stale'}});}finally{finished.resolve();}
+    }else if(failRefresh){failRefresh=false;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({code:'unavailable',message:'合成：收回後重讀暫停'})});}
+    else await route.continue();
+  });
+  await (staleRead==='latest'?reread(page):older(page)).click();await entered.promise;
+  await panel.locator(`[data-message-id="${original}"]`).getByRole('button',{name:'收回你的訊息',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'收回這則訊息？'});await dialog.getByRole('button',{name:'確定收回',exact:true}).click();await expect(dialog).toBeHidden();
+  await expect(panel.locator(`[data-message-id="${original}"] .chat-retracted`)).toHaveText('你已收回這則訊息。');
+  await expect(panel.locator('.messages-bubbles')).not.toContainText(privateBody);
+  await expect(panel.locator('.messages-thread')).toContainText('服務暫時無法回應（503）');
+  // The older-page click survives the failed replacement and uses a fresh read.
+  await allMessages(page,ids);
+  await expect.poll(()=>offsets).toEqual(staleRead==='older'?[20,0,20]:[0,0]);
+  const completed=page.waitForResponse(response=>new URL(response.url()).pathname===path&&response.request().method()==='GET');
+  released.resolve();await finished.promise;await (await completed).finished();
+  await expect.poll(()=>page.evaluate(()=>(window as any).privateRetractionConsumed())).toBe(true);
+  // Render frames only after the actual stale response's consumer has settled.
+  await page.clock.runFor(32);
+  await expect(panel.locator('.messages-bubbles')).not.toContainText(privateBody);
+  await expect(panel.locator(`[data-message-id="${original}"] .chat-retracted`)).toHaveText('你已收回這則訊息。');
+  await expect(panel.locator('.messages-thread')).toContainText('服務暫時無法回應（503）');
+  await reread(page).click();await expect(reread(page)).toHaveAttribute('aria-disabled','false');
+  await allMessages(page,ids);await expect(panel.locator(`[data-message-id="${reply}"]`)).toContainText('合成：保留這則引用回覆');
+  await expect(panel.locator('.messages-bubbles')).not.toContainText(privateBody);
+  expect((await db.query('SELECT retracted_at IS NOT NULL AS done FROM member_direct_messages WHERE message_id=$1',[original])).rows[0].done).toBe(true);
+  expect(retractPosts).toBe(1);
+  await page.screenshot({path:info.outputPath(`private-retraction-${staleRead}-${width}.png`)});
+  await panel.locator('.messages-compose textarea').fill('合成：收回後仍可傳送');await panel.getByRole('button',{name:'送出',exact:true}).click();
+  await expect(panel.locator('.messages-bubbles')).toContainText('合成：收回後仍可傳送');await expect(panel.locator('.messages-compose textarea')).toHaveValue('');
+  expect(retractPosts).toBe(1);
 });

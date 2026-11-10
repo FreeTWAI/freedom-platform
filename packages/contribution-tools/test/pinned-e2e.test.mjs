@@ -56,7 +56,7 @@ function report(suites, shard = null) {
 }
 function cleanPasses() {
   const suites = [
-    [suite('other.spec.ts', [['ordinary', 'expected']]), suite('private-work-ai.spec.ts', [['off', 'expected'], ['on', 'skipped']]), suite('hosted-store-photo.spec.ts', [['photo', 'skipped']])],
+    [suite('other.spec.ts', [['ordinary', 'expected']]), suite('private-work-ai.spec.ts', [['off', 'expected'], ['on', 'skipped']]), suite('hosted-store-photo.spec.ts', [['photo', 'skipped']]), suite('member-avatar-asset.spec.ts', [['asset', 'skipped']])],
     [suite('private-work-ai.spec.ts', [['off', 'skipped'], ['on', 'expected']])],
     [suite('member-avatar-asset.spec.ts', [['asset', 'expected']])],
     [suite('message-images.spec.ts', [['image', 'expected']])],
@@ -79,11 +79,12 @@ function reject(mutator, reason) {
   if (reason) assert.equal(result.reason, reason);
 }
 
-test('default shards own three distinct ports and immutable ordered host bindings', () => {
+test('default shards own four distinct ports and immutable ordered host bindings', () => {
   assert.deepEqual(E2E_DEFAULT_SHARDS, [
-    { current: 1, total: 3, port: 14311 },
-    { current: 2, total: 3, port: 14312 },
-    { current: 3, total: 3, port: 14313 },
+    { current: 1, total: 4, port: 14311 },
+    { current: 2, total: 4, port: 14312 },
+    { current: 3, total: 4, port: 14313 },
+    { current: 4, total: 4, port: 14314 },
   ]);
   assert.ok(Object.isFrozen(E2E_DEFAULT_SHARDS));
   assert.ok(E2E_DEFAULT_SHARDS.every(Object.isFrozen));
@@ -647,7 +648,7 @@ test('CLI trusted selection requires the chromium project', async () => {
 });
 
 test('CLI argument errors exit 2; missing Playwright writes not_run evidence', async () => {
-  for (const args of [['--unknown'], [], ['--root', ''], ['--root', '/tmp', '--output'], ['--root', '/tmp', '--extra', '/tmp/result.json']]) {
+  for (const args of [['--unknown'], ...['0','5','04','-1','1/4'].map(value=>['--root','/tmp','--default-shard',value]), [], ['--root', ''], ['--root', '/tmp', '--output'], ['--root', '/tmp', '--extra', '/tmp/result.json']]) {
     assert.equal(invoke(args).status, 2);
   }
   await withFixture(async root => {
@@ -733,7 +734,7 @@ for (const { failing, released } of [{ failing: E2E_DEFAULT_SHARDS[0], released:
       const fs=require('node:fs'),part=process.argv[process.argv.indexOf('--shard')+1];
       fs.appendFileSync(${JSON.stringify(starts)},part+'\\n');
       const result=()=>fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE,JSON.stringify({}));
-      if(part==='1/3'&&${released})process.send({type:'freedom.e2e.native-complete'});
+      if(part==='1/4'&&${released})process.send({type:'freedom.e2e.native-complete'});
       if(part===${JSON.stringify(`${failing.current}/${failing.total}`)}){
         const timer=setInterval(()=>{if(!${JSON.stringify(peers.map(({current})=>join(root,`ready-${current}`)))}.every(path=>fs.existsSync(path)))return;clearInterval(timer);result();process.exit(1);},10);
       }else{
@@ -797,7 +798,7 @@ test('CLI cancellation interrupts Playwright and retains test_cancelled with a z
       assert.equal(result.status, 'failed');
       assert.equal(result.reason, 'test_cancelled');
       assert.equal(result.passes[0].exit_code, null);
-      assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),[0,null,null]);
+      assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),E2E_DEFAULT_SHARDS.map((_, index)=>index===0?0:null));
     } finally { child.kill('SIGTERM'); }
   });
 });
@@ -892,7 +893,7 @@ test('host pass budgets are finite and only the default capacity increases', asy
   const matrix = workflow.slice(workflow.indexOf('  ui-default:'), workflow.indexOf('  ui-e2e:'));
   assert.match(matrix, /timeout-minutes: 80\b/);
   assert.match(matrix, /fail-fast: false/);
-  assert.match(matrix, /shard: \[1, 2, 3\]/);
+  assert.match(matrix, /shard: \[1, 2, 3, 4\]/);
 });
 
 for(const wave of [1,2,'isolated'])test(`CLI shared default deadline in wave ${wave} remains failure after graceful zero exit and stops later passes`, async () => {
@@ -908,7 +909,7 @@ for(const wave of [1,2,'isolated'])test(`CLI shared default deadline in wave ${w
       ${lifecycleListing(root)}
       const fs = require('node:fs');
       fs.appendFileSync(${JSON.stringify(starts)}, process.pid+'\\n');
-      if(${JSON.stringify(wave)}===2&&process.argv[process.argv.indexOf('--shard')+1]==='1/3'){
+      if(${JSON.stringify(wave)}===2&&process.argv[process.argv.indexOf('--shard')+1]==='1/4'){
         setTimeout(()=>process.send({type:'freedom.e2e.native-complete'}),80);
       }
       process.on('SIGINT', () => {
@@ -957,7 +958,7 @@ for(const wave of [1,2,'isolated'])test(`CLI shared default deadline in wave ${w
     assert.equal(result.status, 'failed');
     assert.equal(result.reason, 'test_timeout');
     assert.deepEqual(result.passes.map(({ id, exit_code }) => ({ id, exit_code })), isolated?[]:[{ id: 'default', exit_code: wave===1?null:0 }]);
-    if (!isolated) assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),wave===1?[0,null,null]:[0,0,0]);
+    if (!isolated) assert.deepEqual(result.passes[0].partitions.map(part=>part.exit_code),E2E_DEFAULT_SHARDS.map((_, index)=>wave===1&&index>0?null:0));
     else await assert.rejects(stat(join(destination,'default-shard-2.json')),{code:'ENOENT'});
   });
 });
@@ -1249,8 +1250,8 @@ test('exact PR 1160 bytes select and list all eight cases with the fixed evaluat
 
 const fragmentEnv = { PINNED_SHA: 'b'.repeat(40), GITHUB_RUN_ID: '12345', GITHUB_RUN_ATTEMPT: '2' };
 const fragmentInput = { base: 'c'.repeat(40), head: 'd'.repeat(40), candidate: 'e'.repeat(40) };
-async function fixtureFragments(directory) {
-  const pass = cleanPasses()[0], binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+async function fixtureFragments(directory, pass = cleanPasses()[0]) {
+  const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
   await mkdir(directory, { recursive: true });
   for (const shard of E2E_DEFAULT_SHARDS) {
     await writeFile(join(directory, 'raw.json'), JSON.stringify(pass.partitions[shard.current - 1].report));
@@ -1273,6 +1274,83 @@ test('default fragments carry run identity but cannot replace the five fixture p
     await assert.rejects(publishDefaultFragment(root, f), { code: 'EEXIST' });
   });
 });
+
+const fragmentByteLimit = 64 * 1024 * 1024;
+for (const field of ['report', 'listing']) {
+  test(`default fragment byte budget preserves a ${field} larger than half the envelope`, async () => {
+    await withFixture(async root => {
+      const original = cleanPasses()[0];
+      const evidence = field === 'report' ? original.partitions[0].report : original.listing;
+      evidence.metadata = { synthetic_attachment: 'a'.repeat(33 * 1024 * 1024) };
+      const raw = JSON.stringify(evidence);
+      assert.ok(Buffer.byteLength(raw) > fragmentByteLimit / 2);
+      const binding = await fixtureFragments(root, original);
+      const bytes = await readFile(join(root, 'default-shard-1.json'));
+      assert.ok(bytes.length < fragmentByteLimit);
+      const fragment = JSON.parse(bytes);
+      assert.equal(fragment[field], raw);
+      assert.equal(fragment[field === 'report' ? 'evidence_sha256' : 'listing_evidence_sha256'],
+        createHash('sha256').update(raw).digest('hex'));
+      const pass = await readDefaultFragments(root, binding);
+      assert.equal(JSON.stringify(field === 'report' ? pass.partitions[0].report : pass.listing), raw);
+      assert.equal(evaluate([pass]).reason, 'invalid_pass_plan');
+      assert.equal(evaluate([pass, ...cleanPasses().slice(1)]).status, 'passed');
+    });
+  });
+}
+
+test('default fragment byte budget bounds the combined raw inputs before publication', async () => {
+  await withFixture(async root => {
+    const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+    const raw = JSON.stringify({ padding: 'a'.repeat(33 * 1024 * 1024) });
+    await writeFile(join(root, 'raw.json'), raw);
+    await writeFile(join(root, 'inventory.json'), raw);
+    await assert.rejects(writeDefaultFragment(root, binding, E2E_DEFAULT_SHARDS[0], 'raw.json', 'inventory.json'),
+      /artifact_size_limit/);
+    await assert.rejects(stat(join(root, 'default-shard-1.json')), { code: 'ENOENT' });
+  });
+});
+
+test('default fragment byte budget rejects combined evidence plus JSON escaping overhead', async () => {
+  await withFixture(async root => {
+    const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+    const raw = JSON.stringify({ padding: 'a'.repeat(fragmentByteLimit / 2 - 40) });
+    assert.ok(Buffer.byteLength(raw) * 2 < fragmentByteLimit);
+    await writeFile(join(root, 'raw.json'), raw);
+    await writeFile(join(root, 'inventory.json'), raw);
+    const fragment = await writeDefaultFragment(root, binding, E2E_DEFAULT_SHARDS[0], 'raw.json', 'inventory.json');
+    assert.ok(Buffer.byteLength(JSON.stringify(fragment) + '\n') > fragmentByteLimit);
+    await assert.rejects(publishDefaultFragment(root, fragment), /default_fragment_too_large/);
+    await assert.rejects(stat(join(root, 'default-shard-1.json')), { code: 'ENOENT' });
+  });
+});
+
+test('default fragment byte budget includes the final newline at the exact 64 MiB boundary', async () => {
+  await withFixture(async root => {
+    const fragment = { current: 1, report: '' };
+    const overhead = Buffer.byteLength(JSON.stringify(fragment) + '\n');
+    fragment.report = 'a'.repeat(fragmentByteLimit - overhead);
+    await publishDefaultFragment(root, fragment);
+    assert.equal((await stat(join(root, 'default-shard-1.json'))).size, fragmentByteLimit);
+    await assert.rejects(publishDefaultFragment(root, { ...fragment, current: 2, report: fragment.report + 'a' }),
+      /default_fragment_too_large/);
+    await assert.rejects(stat(join(root, 'default-shard-2.json')), { code: 'ENOENT' });
+  });
+});
+
+for (const path of ['raw.json', 'inventory.json']) {
+  test(`default fragment byte budget refuses oversized input ${path}`, async () => {
+    await withFixture(async root => {
+      await writeFile(join(root, 'raw.json'), '{}');
+      await writeFile(join(root, 'inventory.json'), '{}');
+      await truncate(join(root, path), fragmentByteLimit + 1);
+      const binding = defaultFragmentBinding(fragmentInput, fragmentEnv);
+      await assert.rejects(writeDefaultFragment(root, binding, E2E_DEFAULT_SHARDS[0], 'raw.json', 'inventory.json'),
+        /artifact_size_limit/);
+      await assert.rejects(stat(join(root, 'default-shard-1.json')), { code: 'ENOENT' });
+    });
+  });
+}
 
 for (const mutation of ['missing', 'extra', 'duplicate-shard', 'stale-head', 'stale-attempt', 'other-workflow', 'failed', 'tampered', 'listing', 'symlink', 'oversize', 'duplicate-key']) {
   test(`default fragment transport refuses ${mutation}`, async () => {

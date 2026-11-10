@@ -14,6 +14,117 @@ export async function capturePreparationScreenshot(target:Pick<Locator,'screensh
   return body;
 }
 
+type GuideBox={left:number;right:number;top:number;bottom:number;width:number;height:number};
+type GuidePaint={paintIssues:string[];stroke:string;strokeWidth:number;strokeOpacity:number;opacity:number;visible:boolean;length:number;bounds:GuideBox;owner:GuideBox;viewport:{width:number;height:number};samples:{painted:boolean;inputOwned:boolean}[]};
+// SVG geometry boxes exclude stroke. A vertical Mx yVh path has zero geometric
+// width even when its dashes are visibly painted. Check the actual paint contract
+// instead, including inherited visibility, transformed stroke and hit ownership.
+export function preparationGuideProblems(paint:GuidePaint):string[]{
+  const issues:string[]=[...paint.paintIssues];
+  const numbers=[paint.strokeWidth,paint.strokeOpacity,paint.opacity,paint.length,...Object.values(paint.bounds),...Object.values(paint.owner),...Object.values(paint.viewport)];
+  if(!numbers.every(Number.isFinite))return ['non-finite guide geometry'];
+  if(!paint.visible||paint.opacity<.99||paint.strokeOpacity<.99||paint.stroke==='none'||paint.stroke==='transparent'||paint.strokeWidth<=0)issues.push('unpainted guide');
+  if(Math.abs(paint.length-189)>.01)issues.push('guide length');
+  const b=paint.bounds,o=paint.owner;
+  if(b.width<1||b.height<1||o.width<=0||o.height<=0)issues.push('empty painted bounds');
+  if(b.left<o.left-1||b.right>o.right+1||b.top<o.top-1||b.bottom>o.bottom+1)issues.push('outside owner');
+  if(b.left<0||b.right>paint.viewport.width||b.top<0||b.bottom>paint.viewport.height)issues.push('outside viewport');
+  if(paint.samples.length!==3||paint.samples.some(sample=>!sample.painted||!sample.inputOwned))issues.push('unpainted dash or wrong input owner');
+  return issues;
+}
+
+// This function is serialized unchanged into the browser and invoked directly by
+// CPU boundary fixtures. Input ownership is not a compositing/occlusion proof.
+export function observePreparationGuide(path:SVGPathElement,probe?:{target:'owner'|'ancestor';styles:Record<string,string>}){
+  // A negative fixture must measure and restore in one JS task. In particular,
+  // ResizeObserver must never consume the temporary one-pixel stage geometry.
+  const probeTarget=probe?(probe.target==='ancestor'?path.closest('.ck-scene-wrap'):path.ownerSVGElement):null;
+  if(probe&&!probeTarget)throw Error('Missing guide probe target');
+  const previous=probeTarget?.getAttribute('style')??null;
+  try{
+    if(probe&&probeTarget)for(const [property,value] of Object.entries(probe.styles))(probeTarget as HTMLElement|SVGElement).style.setProperty(property,value);
+    const svg=path.ownerSVGElement!,scene=path.closest('.ck-live-scene')!.querySelector('.ck-scene')!;
+    const style=getComputedStyle(path),matrix=path.getScreenCTM()!,box=path.getBBox(),half=parseFloat(style.strokeWidth)/2;
+    const corners=[[box.x-half,box.y-half],[box.x+box.width+half,box.y-half],[box.x-half,box.y+box.height+half],[box.x+box.width+half,box.y+box.height+half]].map(([x,y])=>new DOMPoint(x,y).matrixTransform(matrix));
+    const left=Math.min(...corners.map(p=>p.x)),right=Math.max(...corners.map(p=>p.x)),top=Math.min(...corners.map(p=>p.y)),bottom=Math.max(...corners.map(p=>p.y));
+    const paintIssues:string[]=[],clips:{owner:string;left:number;right:number;top:number;bottom:number;clipX:boolean;clipY:boolean}[]=[];
+    let visible=true,opacity=1;
+    if(matrix.b!==0||matrix.c!==0||matrix.a<=0||matrix.d<=0)paintIssues.push('unsupported stroke transform');
+    for(let ancestor:Element|null=path;ancestor;ancestor=ancestor.parentElement){
+      const css=getComputedStyle(ancestor),owner=`${ancestor.tagName}.${ancestor.getAttribute('class')??''}`;
+      visible&&=css.display!=='none'&&css.visibility==='visible'&&css.contentVisibility!=='hidden';opacity*=Number(css.opacity);
+      // Current guide ancestry has no filters or masks. The existing viewfinder
+      // drop-shadow is unrelated; do not erase its source or broadly allow filters.
+      for(const property of ['clip-path','mask-image','-webkit-mask-image','mask-border-source','-webkit-mask-box-image-source','filter','backdrop-filter','-webkit-backdrop-filter','perspective','vector-effect']){
+        const value=css.getPropertyValue(property).trim();
+        if(value&&value!=='none')paintIssues.push(`unsupported ${property} on ${owner}`);
+      }
+      if(css.clip&&css.clip!=='auto')paintIssues.push(`unsupported clip on ${owner}`);
+      if(css.mixBlendMode&&css.mixBlendMode!=='normal')paintIssues.push(`unsupported mix-blend-mode on ${owner}`);
+      // Client clip rectangles below support unscaled CSS boxes, including the
+      // production translate(-50%,-50%). SVG viewBox scaling is handled by CTM.
+      if(css.transform&&css.transform!=='none'){
+        const parts=/^matrix\(([^)]+)\)$/.exec(css.transform)?.[1].split(',').map(Number);
+        if(!parts||parts.length!==6||!parts.every(Number.isFinite)||parts[0]!==1||parts[1]!==0||parts[2]!==0||parts[3]!==1)paintIssues.push(`unsupported CSS transform on ${owner}`);
+      }
+      for(const property of ['rotate','scale','zoom']){
+        const value=css.getPropertyValue(property).trim(),allowed=property==='rotate'?['','none','0deg']:property==='scale'?['','none','1','1 1']:['','normal','1'];
+        if(!allowed.includes(value))paintIssues.push(`unsupported ${property} on ${owner}`);
+      }
+      const contained=/(^|\s)(paint|strict|content)(\s|$)/.test(css.contain),clipsAxis=(value:string)=>['hidden','clip','auto','scroll'].includes(value);
+      const clipX=contained||clipsAxis(css.overflowX),clipY=contained||clipsAxis(css.overflowY);
+      if(!clipX&&!clipY)continue;
+      const margin=css.getPropertyValue('overflow-clip-margin').trim();
+      if(margin&&margin!=='0px')paintIssues.push(`unsupported overflow-clip-margin on ${owner}`);
+      const rect=ancestor.getBoundingClientRect(),root=ancestor===document.documentElement;
+      const width=root?document.documentElement.clientWidth:ancestor.clientWidth,height=root?innerHeight:ancestor.clientHeight;
+      const clipLeft=root?0:rect.left+ancestor.clientLeft,clipTop=root?0:rect.top+ancestor.clientTop;
+      // A central rectangle inset by the largest corner radii is conservative:
+      // it never treats a rounded-off corner as visible. Unknown radii fail closed.
+      const radius=(value:string)=>{
+        const values=value.trim().split(/\s+/);if(values.length<1||values.length>2)return [NaN,NaN];
+        return [values[0],values[1]??values[0]].map((part,index)=>/^\d*\.?\d+(px|%)$/.test(part)?parseFloat(part)*(part.endsWith('%')?(index?height:width)/100:1):NaN);
+      };
+      const [tl,tr,br,bl]=[css.borderTopLeftRadius,css.borderTopRightRadius,css.borderBottomRightRadius,css.borderBottomLeftRadius].map(radius);
+      const clip={owner,left:clipLeft+Math.max(tl[0],bl[0]),right:clipLeft+width-Math.max(tr[0],br[0]),top:clipTop+Math.max(tl[1],tr[1]),bottom:clipTop+height-Math.max(bl[1],br[1]),clipX,clipY};
+      clips.push(clip);
+      if(![width,height,clip.left,clip.right,clip.top,clip.bottom].every(Number.isFinite)||width<=0||height<=0)paintIssues.push(`invalid ancestor clip on ${owner}`);
+      else if((clipX&&(left<clip.left-1||right>clip.right+1))||(clipY&&(top<clip.top-1||bottom>clip.bottom+1)))paintIssues.push(`clipped by ancestor ${owner}`);
+    }
+    const dash=style.strokeDasharray.split(/[ ,]+/).map(value=>parseFloat(value)),period=dash[0]+dash[1],length=path.getTotalLength();
+    if(dash.length!==2||!dash.every(value=>Number.isFinite(value)&&value>0))paintIssues.push('unsupported dash pattern');
+    const last=Math.floor((length-dash[0])/period),samples=[0,Math.floor(last/2),last].map(index=>{
+      const point=path.getPointAtLength(index*period+dash[0]/2),screen=new DOMPoint(point.x,point.y).matrixTransform(matrix),hit=document.elementFromPoint(screen.x,screen.y);
+      return {local:{x:point.x,y:point.y},screen:{x:screen.x,y:screen.y},hit:hit?`${hit.tagName}.${hit.getAttribute('class')??''}`:null,painted:path.isPointInStroke(point),inputOwned:hit!==null&&(hit===scene||scene.contains(hit))};
+    });
+    const rect=svg.getBoundingClientRect();
+    return {paintIssues,clips,centerline:{width:box.width,height:box.height},dash,stroke:style.stroke,strokeWidth:parseFloat(style.strokeWidth),strokeOpacity:Number(style.strokeOpacity),opacity,visible,length,bounds:{left,right,top,bottom,width:right-left,height:bottom-top},owner:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height},viewport:{width:document.documentElement.clientWidth,height:innerHeight},samples};
+  }finally{
+    if(probeTarget){
+      // Flush SVG's lazily serialized CSSOM mutation before removing the
+      // attribute, otherwise Chromium can recreate an empty style attribute.
+      probeTarget.getAttribute('style');
+      if(previous===null)probeTarget.removeAttribute('style');else probeTarget.setAttribute('style',previous);
+    }
+  }
+}
+
+// The browser fixture cannot claim physical notch/home-indicator emulation.
+// Override production env-backed properties to stress actual CSS deterministically.
+const kitchenInsets={top:28,right:24,bottom:32,left:40};
+async function setKitchenInsets(root:Locator,enabled:boolean){await root.evaluate((el,values)=>{for(const [side,value] of Object.entries(values.insets)){if(values.enabled)(el as HTMLElement).style.setProperty(`--game-safe-${side}`,`${value}px`);else (el as HTMLElement).style.removeProperty(`--game-safe-${side}`);}},{insets:kitchenInsets,enabled});}
+async function kitchenInsetViolations(root:Locator,paused=false){return root.evaluate((el,settings)=>{
+ const r=el.getBoundingClientRect(),limits={left:r.left+settings.insets.left,right:r.right-settings.insets.right,top:r.top+settings.insets.top,bottom:r.bottom-settings.insets.bottom},issues:string[]=[];
+ const contains=(b:DOMRect)=>b.left>=limits.left-1&&b.right<=limits.right+1&&b.top>=limits.top-1&&b.bottom<=limits.bottom+1;
+ const overlap=(a:DOMRect,b:DOMRect)=>a.left<b.right-1&&a.right>b.left+1&&a.top<b.bottom-1&&a.bottom>b.top+1;
+ const controls=[...el.querySelectorAll<HTMLElement>('.fullscreen-game__button,.ck-console-toolbar button,.ck-visual-tools button,'+(settings.paused?'.ck-scene-overlay>button':'.ck-tool-action'))].filter(n=>n.getClientRects().length&&!n.closest('[inert]'));
+ for(const control of controls){const b=control.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(!contains(b)||b.width<44||b.height<44||!(hit===control||control.contains(hit)))issues.push(`control:${control.getAttribute('aria-label')||control.textContent}`);}
+ for(let i=0;i<controls.length;i++)for(let j=i+1;j<controls.length;j++)if(overlap(controls[i].getBoundingClientRect(),controls[j].getBoundingClientRect()))issues.push('controls overlap');
+ if(settings.paused){if(!contains(el.querySelector('.ck-scene-overlay')!.getBoundingClientRect()))issues.push('pause overlay');}
+ else{const scene=el.querySelector('.ck-live-scene')!.getBoundingClientRect(),dock=el.querySelector('.ck-game-controls')!.getBoundingClientRect(),mode=el.querySelector('.ck-visual-tools')!.getBoundingClientRect();if(!contains(scene)||scene.width<=0||scene.height<=0)issues.push('food');if(!contains(dock))issues.push('dock');if(overlap(scene,dock)||overlap(mode,dock))issues.push('scene/dock overlap');}
+ return issues;
+ },{insets:kitchenInsets,paused});}
+
 // Real production renderer and user controls. No injected run, replacement
 // server, skipped native rendering, screenshot baseline update or fake geometry.
 // Captures are review artifacts, not automatic human-art acceptance or FPS proof.
@@ -58,10 +169,68 @@ for(const fixture of [
   // rather than sleeping and hoping that React or the GPU has caught up.
   const advance=()=>page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
   await advance();await expect(host).toHaveAttribute('data-render-calls',/^[1-9]\d*$/);
+  const mushroom=visual.id==='mushroom';
+  async function mushroomGuide(mode:'native'|'svg',count:number){
+    // Independent expected span, not the implementation helper under test.
+    const x=.30+.40*(count+1)/(step.goal+1),path=page.locator(mode==='native'?'.ck-toy-guides path[stroke-dasharray="15 12"]':'.ck-visual-light path[stroke-dasharray="12 9"]');
+    const owner=page.locator(mode==='native'?'.ck-toy-guides':'.ck-visual-light .ck-scene');
+    await expect(owner).toBeVisible();
+    await expect(path).toHaveAttribute('d',`M${x*800} 175V364`);
+    await expect(path).toHaveCSS('visibility','visible');
+    await expect(path).toHaveCSS('stroke',mode==='native'?'rgb(255, 240, 196)':'rgb(156, 77, 54)');
+    await expect(path).toHaveCSS('stroke-width',mode==='native'?'6px':'4px');
+    const paint=await path.evaluate(observePreparationGuide);
+    expect(paint.centerline).toEqual({width:0,height:189});
+    expect(preparationGuideProblems(paint)).toEqual([]);
+    await testInfo.attach(`${recipe.id}-${mode}-guide-${count}-paint`,{body:JSON.stringify(paint),contentType:'application/json'});
+    if(mode==='native'&&count===0||mode==='svg'&&count===1){
+      // Formal CI exercises this same observer against mutations on the actual
+      // production guide/ancestor, then restores them before any real gesture.
+      const fixtures:{label:string;target:'owner'|'ancestor';styles:Record<string,string>;failure:string}[]=[
+        {label:'clip-path',target:'owner',styles:{'clip-path':'inset(100%)'},failure:'unsupported clip-path'},
+        {label:'mask-image',target:'owner',styles:{'mask-image':'linear-gradient(transparent, transparent)'},failure:'unsupported mask-image'},
+        {label:'filter',target:'owner',styles:{filter:'opacity(0)'},failure:'unsupported filter'},
+        {label:'ancestor-overflow',target:'ancestor',styles:{height:'1px','min-height':'0px','max-height':'1px',overflow:'hidden'},failure:'clipped by ancestor'},
+      ];
+      for(const fixture of fixtures)await test.step(`${mode} guide rejects ${fixture.label}`,async()=>{
+        const target=fixture.target==='owner'?owner:page.locator('.ck-scene-wrap'),previous=await target.getAttribute('style');
+        const rejected=await path.evaluate(observePreparationGuide,{target:fixture.target,styles:fixture.styles}),issues=preparationGuideProblems(rejected);
+        expect(issues.some(issue=>issue.startsWith(fixture.failure))).toBe(true);
+        expect(await target.getAttribute('style')).toBe(previous);
+        expect(preparationGuideProblems(await path.evaluate(observePreparationGuide))).toEqual([]);
+        await testInfo.attach(`${recipe.id}-${mode}-${fixture.label}-rejected`,{body:JSON.stringify({issues,observation:rejected}),contentType:'application/json'});
+      });
+    }
+    if(mode==='svg'){
+      const geometry=await page.locator('.ck-visual-light .ck-scene').evaluate((node,input)=>{
+        const svg=node as SVGSVGElement,screen=svg.getScreenCTM()!;
+        const groups=[...svg.querySelectorAll<SVGGElement>('[data-ingredient="mushroom"]')];
+        const boxes=groups.map(group=>{const b=group.getBBox(),matrix=screen.inverse().multiply(group.getScreenCTM()!),corners=[[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]].map(([x,y])=>new DOMPoint(x,y).matrixTransform(matrix));return {left:Math.min(...corners.map(p=>p.x)),right:Math.max(...corners.map(p=>p.x)),top:Math.min(...corners.map(p=>p.y)),bottom:Math.max(...corners.map(p=>p.y))};});
+        const target=new DOMPoint(input.x*800,276).matrixTransform(screen),whole=groups[input.count];
+        const intersects=whole.getAttribute('data-preparation')==='whole'&&[...whole.querySelectorAll('polygon')].some(p=>p.isPointInFill(target.matrixTransform(p.getScreenCTM()!.inverse())));
+        return {boxes,intersects};
+      },{x,count});
+      expect(geometry.intersects).toBe(true);expect(geometry.boxes).toHaveLength(step.goal);
+      geometry.boxes.forEach(box=>{expect(box.left).toBeGreaterThanOrEqual(240);expect(box.right).toBeLessThanOrEqual(560);});
+      for(let i=0;i<geometry.boxes.length;i++)for(let j=i+1;j<geometry.boxes.length;j++){
+        const a=geometry.boxes[i],b=geometry.boxes[j];expect(b.left-a.right>=2||b.top-a.bottom>=2||a.top-b.bottom>=2).toBe(true);
+      }
+      await testInfo.attach(`${recipe.id}-svg-guide-${count}-geometry`,{body:JSON.stringify(geometry),contentType:'application/json'});
+    }
+    return x;
+  }
+  async function mushroomStroke(mode:'native'|'svg',count:number){
+    const x=await mushroomGuide(mode,count),box=await page.locator('.ck-scene').boundingBox();expect(box).not.toBeNull();
+    await page.mouse.move(box!.x+x*box!.width,box!.y+.23*box!.height);await page.mouse.down();
+    await page.mouse.move(box!.x+x*box!.width,box!.y+.78*box!.height,{steps:5});await page.mouse.up();
+  }
   const whole=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-whole.png`);
-  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await advance();
+  if(mushroom){await capturePreparationScreenshot(game,testInfo,`${recipe.id}-native-whole-stage.png`);await mushroomStroke('native',0);}
+  else await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
+  await advance();
   await expect(meter).toHaveText(`1 / ${step.goal}`);
   const cut=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-cut.png`);
+  if(mushroom)await capturePreparationScreenshot(game,testInfo,`${recipe.id}-native-cut-stage.png`);
   expect(createHash('sha256').update(cut).digest('hex')).not.toBe(createHash('sha256').update(whole).digest('hex'));
   const stats=await host.evaluate(element=>({calls:Number((element as HTMLElement).dataset.renderCalls),geometries:Number((element as HTMLElement).dataset.renderGeometries),textures:Number((element as HTMLElement).dataset.renderTextures)}));
   expect(stats.calls).toBeGreaterThan(0);expect(stats.calls).toBeLessThanOrEqual(100);
@@ -69,11 +238,13 @@ for(const fixture of [
   await testInfo.attach('native-preparation-diagnostics',{body:JSON.stringify({recipe:recipe.id,step:0,scope:'observed draw/resource counts, not FPS or human visual acceptance',...stats}),contentType:'application/json'});
 
   await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(game).toHaveAttribute('data-cooking-state','paused');
+  if(mushroom)await expect(page.locator('.ck-toy-guides')).toHaveCount(0);
   const saved=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run as CookingRun,COOKING_RUN_KEY);
   expect(saved.active.count).toBe(1);expect(saved.step).toBe(0);expect(saved.reports).toEqual([]);
   await advance();await expect(meter).toHaveText(`1 / ${step.goal}`);
   await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(game).toHaveAttribute('data-cooking-state','playing');
   await expect(meter).toHaveText(`1 / ${step.goal}`);
+  if(mushroom)await mushroomGuide('native',1);
   await page.getByRole('button',{name:'輕量插畫',exact:true}).click();
   await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(canvas).toHaveCount(0);
   const food=page.locator('.ck-visual-light [data-ingredient]');
@@ -82,10 +253,34 @@ for(const fixture of [
     expect(actual).toEqual(Array.from({length:step.goal},(_,i)=>({id:visual.id,state:i<count?'cut':'whole',layers:ingredientLayers(visual,i<count).map(layer=>({points:ingredientPolygonPoints(layer.points),color:layer.color}))})));
   }
   await expectFaces(1);await expect(meter).toHaveText(`1 / ${step.goal}`);
-  await advance();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
+  await advance();
+  if(mushroom)await mushroomStroke('svg',1);else await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
   await expect(meter).toHaveText(`2 / ${step.goal}`);await expectFaces(2);
+  if(mushroom)await mushroomGuide('svg',2);
   await expectLayout();
   await capturePreparationScreenshot(page.locator('.ck-visual-light'),testInfo,`${recipe.id}-svg-two-cuts.png`);
+  // Return through the real renderer control and progress to the last intact
+  // piece. This exposes late-count support/knife errors hidden by a first cut.
+  await page.getByRole('button',{name:'立體料理台',exact:true}).click();
+  await expect(canvas).toHaveCount(1);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  for(let count=2;count<step.goal-1;count++){
+    await advance();await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();
+    await expect(meter).toHaveText(`${count+1} / ${step.goal}`);
+  }
+  await advance();
+  if(mushroom){await mushroomGuide('native',step.goal-1);await capturePreparationScreenshot(game,testInfo,`${recipe.id}-native-late-cut-stage.png`);}
+  const late=await capturePreparationScreenshot(canvas,testInfo,`${recipe.id}-native-late-cut.png`);
+  expect(createHash('sha256').update(late).digest('hex')).not.toBe(createHash('sha256').update(whole).digest('hex'));
+  expect(createHash('sha256').update(late).digest('hex')).not.toBe(createHash('sha256').update(cut).digest('hex'));
+  if(mushroom){
+    await page.getByRole('button',{name:'輕量插畫',exact:true}).click();
+    await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(canvas).toHaveCount(0);
+    await expectFaces(step.goal-1);await mushroomGuide('svg',step.goal-1);
+    await capturePreparationScreenshot(game,testInfo,`${recipe.id}-svg-late-cut-stage.png`);
+    await page.getByRole('button',{name:'立體料理台',exact:true}).click();
+    await expect(page.locator('.ck-visual-3d')).toBeVisible();await expect(canvas).toHaveCount(1);
+    await advance();await expect(meter).toHaveText(`${step.goal-1} / ${step.goal}`);
+  }
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
   await expect(game).toHaveCount(0);await expect(canvas).toHaveCount(0);expect(errors).toEqual([]);
 });
@@ -182,4 +377,108 @@ for(const mode of ['native','rejected'] as const)test(`preparation art fullscree
   expect(restored.id).toBe(paused.id);expect(restored.step).toBe(0);expect(restored.active.count).toBe(2);expect(restored.reports).toEqual([]);
   await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await expect(game).toHaveCount(0);await expect(canvas).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>document.fullscreenElement===null)).toBe(true);expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');expect(errors).toEqual([]);
+});
+
+// A fullscreen viewport is the stage itself, not a taller document containing
+// an illustration followed by an unrelated controls card. Keep every normal
+// gameplay action in this one screen. Enlarged text may scroll the tool dock.
+for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1440,height:900}])test(`immersive kitchen: canvas and controls share ${viewport.width}x${viewport.height} stage`,async({page},testInfo)=>{
+  const step=recipeOf('fish-and-chips')!.steps[0];
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.setViewportSize(viewport);
+  const started=new Date('2026-11-08T12:00:00Z');await page.clock.install({time:started});
+  await page.goto('/play?game=kitchen&practice=1&recipe=fish-and-chips&seed=42');
+  await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await page.clock.pauseAt(new Date(started.getTime()+60_000));
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  const fullscreen=page.locator('.fullscreen-game'),stage=page.locator('[data-game-stage]');
+  await expect(fullscreen).toHaveAttribute('role','dialog');
+  await expect(page.getByRole('button',{name:'退出全螢幕',exact:true})).toHaveAttribute('aria-disabled','false');
+  await expect(stage.getByRole('button',{name:'沿線切一刀',exact:true})).toBeVisible();
+  const geometry=await fullscreen.evaluate(element=>{
+    const area=element.querySelector('[data-game-stage]')!.getBoundingClientRect();
+    const rect=(node:Element)=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
+    return {viewport:{width:innerWidth,height:innerHeight},stage:rect(element.querySelector('[data-game-stage]')!),scroll:element.scrollHeight,height:element.clientHeight,
+      controls:[...element.querySelectorAll('.fullscreen-game__button,.ck-console-toolbar button,.ck-tool-action,.ck-visual-tools button')].map(node=>({text:node.textContent,...rect(node)})),
+      canvas:rect(element.querySelector('.ck-live-scene')!),inside:!!element.querySelector('[data-game-stage] .ck-game-controls'),area:area.width*area.height};
+  });
+  expect(geometry.inside).toBe(true);expect(geometry.area).toBeGreaterThan(0);
+  expect(geometry.scroll).toBeLessThanOrEqual(geometry.height+1);
+  expect(geometry.stage.width).toBeCloseTo(geometry.viewport.width,0);expect(geometry.stage.height).toBeCloseTo(geometry.viewport.height,0);
+  for(const control of geometry.controls){expect(control.width,control.text??'').toBeGreaterThanOrEqual(44);expect(control.height,control.text??'').toBeGreaterThanOrEqual(44);expect(control.left).toBeGreaterThanOrEqual(-1);expect(control.top).toBeGreaterThanOrEqual(-1);expect(control.right).toBeLessThanOrEqual(geometry.viewport.width+1);expect(control.bottom).toBeLessThanOrEqual(geometry.viewport.height+1);}
+  expect(geometry.canvas.left).toBeGreaterThanOrEqual(-1);expect(geometry.canvas.right).toBeLessThanOrEqual(geometry.viewport.width+1);expect(geometry.canvas.top).toBeGreaterThanOrEqual(-1);expect(geometry.canvas.bottom).toBeLessThanOrEqual(geometry.viewport.height+1);
+  await testInfo.attach('immersive-stage-geometry',{body:JSON.stringify(geometry),contentType:'application/json'});
+  if(viewport.height<520){
+    await page.locator('.ck-help summary').click();
+    const panels=await page.evaluate(()=>{const a=document.querySelector('.ck-visual-tools')!.getBoundingClientRect(),b=document.querySelector('.ck-game-controls')!.getBoundingClientRect();return {modeBottom:a.bottom,dockTop:b.top};});
+    expect(panels.modeBottom).toBeLessThanOrEqual(panels.dockTop);
+    await page.locator('.ck-help summary').click();
+  }
+  await page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
+  // Use the real pointer path across the guide, rather than an injected run.
+  const surface=page.locator('.ck-scene'),box=(await surface.boundingBox())!;
+  const path=page.locator('.ck-toy-guides path').first(),guide=await path.getAttribute('d'),x=Number(guide!.match(/^M([\d.]+)/)![1])/800;
+  await page.mouse.move(box.x+box.width*x,box.y+box.height*.2);await page.mouse.down();
+  await page.mouse.move(box.x+box.width*x,box.y+box.height*.8,{steps:8});await page.mouse.up();
+  await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await page.clock.runFor(COOKING_RULES.actionCooldownMs+1000/30);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-cut.png`);
+  await setKitchenInsets(fullscreen,true);await page.clock.runFor(1000/30);
+  await expect.poll(()=>kitchenInsetViolations(fullscreen)).toEqual([]);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-insets-native.png`);
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect.poll(()=>kitchenInsetViolations(fullscreen,true)).toEqual([]);
+  const insetHelp=page.locator('.ck-scene-overlay .ck-help summary');await insetHelp.focus();await insetHelp.press('Space');await expect(page.locator('.ck-help')).toHaveAttribute('open','');
+  await expect.poll(()=>kitchenInsetViolations(fullscreen,true)).toEqual([]);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-insets-paused-help.png`);
+  await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await setKitchenInsets(fullscreen,false);await page.clock.runFor(1000/30);
+  if(viewport.width===320){
+    await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();
+    await page.locator('.ck-help summary').click();await page.clock.runFor(1000/30);
+    await expect.poll(()=>page.evaluate(()=>{const canvas=document.querySelector('.ck-live-scene')!.getBoundingClientRect(),dock=document.querySelector('.ck-game-controls')!.getBoundingClientRect();return canvas.bottom<=dock.top;})).toBe(true);
+    await capturePreparationScreenshot(fullscreen,testInfo,'immersive-320x568-windowed-help.png');
+    await page.locator('.ck-help summary').click();
+    await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+    await expect(fullscreen).toHaveAttribute('role','dialog');
+  }
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');
+  await expect(page.locator('.ck-game-controls')).toHaveJSProperty('inert',true);
+  await page.getByRole('button',{name:'繼續料理',exact:true}).focus();await page.keyboard.press('Tab');
+  await expect(page.locator('.ck-scene-overlay .ck-help summary')).toBeFocused();
+  expect(await page.locator('.ck-help summary').evaluate(node=>{const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBe(true);
+  await page.keyboard.press('Space');await expect(page.locator('.ck-help')).toHaveAttribute('open','');
+  await expect(page.locator('.ck-game')).toHaveAttribute('data-cooking-state','paused');
+  await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-paused-help.png`);
+  await page.getByRole('button',{name:'繼續料理',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await page.getByRole('button',{name:'輕量插畫',exact:true}).click();await expect(page.locator('.ck-visual-light')).toBeVisible();
+  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`2 / ${step.goal}`);
+  await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-fallback.png`);
+  await setKitchenInsets(fullscreen,true);await page.clock.runFor(1000/30);await expect.poll(()=>kitchenInsetViolations(fullscreen)).toEqual([]);
+  await capturePreparationScreenshot(fullscreen,testInfo,`immersive-${viewport.width}x${viewport.height}-insets-svg.png`);
+  await setKitchenInsets(fullscreen,false);
+  await page.getByRole('button',{name:'重新做',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'重新做這盤料理',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'繼續這一盤',exact:true}).click();
+  await expect(page.locator('.ck-meter-copy')).toHaveText(`2 / ${step.goal}`);
+  await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();
+  await expect(fullscreen).toHaveCount(0);expect(errors).toEqual([]);
+});
+
+
+test('immersive kitchen: 320x568 viewport fallback keeps controls separate',async({page},testInfo)=>{
+  const step=recipeOf('fish-and-chips')!.steps[0];
+  await page.setViewportSize({width:320,height:568});
+  await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:true});Element.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+  await page.goto('/play?game=kitchen&practice=1&recipe=fish-and-chips&seed=42');
+  await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  await expect(page.locator('.fullscreen-game--viewport')).toBeVisible();
+  const geometry=await page.evaluate(()=>{const a=document.querySelector('.ck-visual-tools button')!.getBoundingClientRect(),b=document.querySelector('.fullscreen-game__bar')!.getBoundingClientRect();return {modeRight:a.right,barLeft:b.left,barRight:b.right,width:innerWidth};});
+  expect(geometry.modeRight).toBeLessThanOrEqual(geometry.barLeft);expect(geometry.barRight).toBeLessThanOrEqual(geometry.width);
+  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText(`1 / ${step.goal}`);
+  await capturePreparationScreenshot(page.locator('.fullscreen-game'),testInfo,'immersive-320x568-viewport.png');
+  await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();
+  await expect(page.locator('.fullscreen-game--viewport')).toHaveCount(0);
 });

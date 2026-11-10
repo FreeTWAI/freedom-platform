@@ -176,3 +176,36 @@ for(const failure of [
  await name.fill('恢復後的新修改');await save.click();await expect(page.getByText('個人頁與可見範圍已儲存。',{exact:true})).toBeVisible();
  expect(writes).toHaveLength(2);expect(writes[1].version).toBe('"2"');expect(writes[1].body.display_name).toBe('恢復後的新修改');
 });
+
+for(const width of [320,390,768,1280,1440])test(`profile studio keeps real preview, theme distinction and unobscured actions at ${width}px`,async({page})=>{
+ const {defaultProfileLayout}=await import('../../packages/shared/member-profile.js');
+ const stored={...settings,display_name:'真實頁面名稱',layout:{...structuredClone(defaultProfileLayout),accent:'berry',cover_style:'grid'},include_cover:false,cover_version:null,cover:null,aggregate_version:'1'};
+ let writes=0;
+ await page.setViewportSize({width,height:900});
+ await page.route('**/api/v1/me/profile-publication',route=>{if(route.request().method()!=='GET')writes++;return route.fulfill({json:stored});});
+ await page.route('**/api/v1/me/profile-cover',route=>route.fulfill({json:{version:'1',present:false,upload_available:true,reason:null,draft_versions:[]}}));
+ await login(page);await page.goto('/#profile?view=settings');
+ const preview=page.locator('.profile-preview'),rendered=preview.locator('.profile-design');
+ await expect(rendered.getByRole('heading',{name:'真實頁面名稱'})).toBeVisible();
+ await expect(preview.locator('.profile-preview-guidance')).toBeVisible();
+ await expect(rendered.locator('img')).toHaveCount(0);
+ const backgrounds:string[]=[];
+ for(const [theme,name] of [['paper','明亮紙頁'],['night','深夜星空'],['sage','森林手帳'],['rose','暖粉相簿']]){
+  await page.getByRole('radio',{name,exact:true}).check();
+  await expect(rendered).toHaveAttribute('data-profile-theme',theme);
+  await expect(rendered).toHaveAttribute('data-profile-accent','berry');
+  await expect(rendered.locator('.profile-design-cover')).toHaveAttribute('data-profile-cover','grid');
+  const actual=await rendered.locator('.profile-design-cover').evaluate(element=>{const s=getComputedStyle(element);return s.backgroundImage+'|'+s.backgroundColor;});
+  const swatch=await page.locator(`.profile-theme-swatch[data-profile-theme="${theme}"] .profile-design-cover`).evaluate(element=>{const s=getComputedStyle(element);return s.backgroundImage+'|'+s.backgroundColor;});
+  expect(swatch).toBe(actual);backgrounds.push(actual);
+ }
+ expect(new Set(backgrounds).size).toBe(4);
+ await page.getByLabel('一句話介紹',{exact:true}).fill('本人填寫的介紹');
+ await expect(rendered.getByText('本人填寫的介紹',{exact:true})).toBeVisible();
+ await expect(preview.locator('.profile-preview-guidance')).toHaveCount(0);
+ const save=page.getByRole('button',{name:'儲存',exact:true});await save.scrollIntoViewIfNeeded();
+ expect(await save.evaluate(element=>{const r=element.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&(hit===element||element.contains(hit));})).toBe(true);
+ const geometry=await page.locator('.profile-editor-form').evaluate(form=>{const bar=form.querySelector('.profile-editor-savebar')!,work=form.querySelector('.profile-editor-workbench')!;return {bar:bar.getBoundingClientRect().top,work:work.getBoundingClientRect().bottom,position:getComputedStyle(bar).position,overflow:document.documentElement.scrollWidth>innerWidth};});
+ expect(geometry.bar).toBeGreaterThanOrEqual(geometry.work);expect(geometry.position).toBe('static');expect(geometry.overflow).toBe(false);expect(writes).toBe(0);
+ await page.screenshot({path:test.info().outputPath(`profile-studio-${width}.png`),fullPage:true});
+});

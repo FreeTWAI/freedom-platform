@@ -99,3 +99,18 @@ for(const theme of ['paper','night','sage','rose'] as const)for(const disabled o
  assert.equal(html.startsWith('<fieldset class="fieldset stack" disabled=""'),disabled);
  assert.equal(JSON.stringify(value),before);assert.equal(writes,0);
 });
+
+test('theme thumbnails retain selected accent and cover pattern across all four real-renderer presets',()=>{
+ const value={...layout(),accent:'berry' as const,cover_style:'grid' as const};
+ const before=structuredClone(value);
+ const html=renderToStaticMarkup(createElement(ProfileLayoutEditor,{value,disabled:false,onChange:()=>{throw new Error('render must not write');}}));
+ for(const theme of ['paper','night','sage','rose']){
+  assert(html.includes(`data-profile-theme="${theme}" data-profile-accent="berry"`));
+  const actual=renderToStaticMarkup(createElement(ProfileDesign,{profile:VisitorProfile.parse({display_name:'真實名稱',bio:'',links:[],avatar_url:null,cover:null,layout:{...value,theme}})}));
+  assert(actual.includes(`data-profile-theme="${theme}" data-profile-accent="berry"`));
+  assert(actual.includes('data-profile-cover="grid"'));
+  assert(!actual.includes('<img'));assert(!actual.includes('精選作品'));
+ }
+ assert.equal((html.match(/data-profile-cover="grid"/g)||[]).length,4);
+ assert.deepEqual(value,before);
+});

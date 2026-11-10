@@ -49,11 +49,12 @@ export const E2E_PASS_TIMEOUT_MS = Object.freeze({
   'notification-preferences': 30 * 60 * 1000,
 });
 
-// One default mode, three isolated single-worker processes under its original bound.
+// One default mode, four isolated single-worker processes under its original bound.
 export const E2E_DEFAULT_SHARDS = Object.freeze([
-  Object.freeze({ current: 1, total: 3, port: 14311 }),
-  Object.freeze({ current: 2, total: 3, port: 14312 }),
-  Object.freeze({ current: 3, total: 3, port: 14313 }),
+  Object.freeze({ current: 1, total: 4, port: 14311 }),
+  Object.freeze({ current: 2, total: 4, port: 14312 }),
+  Object.freeze({ current: 3, total: 4, port: 14313 }),
+  Object.freeze({ current: 4, total: 4, port: 14314 }),
 ]);
 
 export const E2E_PLAN = Object.freeze([

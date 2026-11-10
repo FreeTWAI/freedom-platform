@@ -1,0 +1,49 @@
+/* CASH: one edge-to-edge desk. Money, table, HUD and sorting actions share this world;
+   the pointer host has no HTML control descendants and transparent HUD gaps
+   continue to hit the renderer. No cream controls card or scrolling dock. */
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game.fullscreen-game--integrated:has(>.daily-cash){width:100%;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene.daily-cash,
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-play-layout{width:100%;height:100%;margin:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-wrap{position:relative;display:block;width:100%;max-width:none;height:100%;padding:0;gap:0;border:0;border-radius:0;box-shadow:none;background:var(--ad-bg)}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-scene-viewport{position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage{inset:0;width:100%;height:100%}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-scene-top{position:absolute;inset:0;z-index:4;display:block;height:100%;max-height:none;padding:0;overflow:visible;pointer-events:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash button.daily-icon{position:static;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;font-size:1rem;line-height:1;border-radius:12px;background:var(--ad-surface);pointer-events:auto}
+/* Keep Pause in this owner's lower-left tool cluster, including normal mode. */
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-toolbar{position:static;display:block;width:0;height:0;padding:0;pointer-events:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-toolbar>button{position:absolute;top:max(10px,var(--game-safe-top));left:max(8px,var(--game-safe-left))}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-toolbar>button:nth-child(2){left:calc(max(8px,var(--game-safe-left)) + 50px)}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-toolbar>button:nth-child(3){position:absolute;top:max(10px,var(--game-safe-top));left:calc(max(8px,var(--game-safe-left)) + 100px);right:auto;bottom:auto}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-toolbar>button:nth-child(4){position:absolute;top:auto;left:calc(max(8px,var(--game-safe-left)) + 86px);right:auto;bottom:calc(max(16px,var(--game-safe-bottom)) + 72px)}
+
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-game-title{position:absolute;top:calc(max(10px,var(--game-safe-top)) + 58px);right:max(12px,var(--game-safe-right));display:block;margin:0;max-width:none;padding:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-counter,.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-facts{display:block;width:max-content;max-width:none;padding:4px 6px;border:1px solid var(--ad-line);border-radius:10px;background:var(--ad-surface);color:var(--ad-ink);font-size:.875rem;font-weight:800;line-height:1.4;white-space:nowrap;font-variant-numeric:tabular-nums;box-shadow:0 2px 7px #49362f25}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-facts{position:absolute;top:calc(max(10px,var(--game-safe-top)) + 108px);right:max(12px,var(--game-safe-right));font-weight:600}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-controls,.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-action-area,.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-sort-buttons{position:absolute;inset:0;z-index:2;display:block;width:100%;height:100%;max-height:none;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:none;overflow:visible;pointer-events:none}
+/* Two tactile sorting trays sit on the table edges, leaving the card exposed.
+   Short labels reserve room for enlarged text; full names stay accessible. */
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-sort-buttons>button{position:absolute;left:max(8px,var(--game-safe-left));bottom:max(16px,var(--game-safe-bottom));width:calc((100% - max(8px,var(--game-safe-left)) - max(12px,var(--game-safe-right)) - 12px)/2);max-width:180px;min-width:44px;min-height:60px;padding:6px;font-size:.875rem;line-height:1.4;white-space:nowrap;border:2px solid var(--ad-line);border-radius:14px;box-shadow:0 4px 0 #49362f66;pointer-events:auto}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-sort-buttons>button:last-child{left:auto;right:max(12px,var(--game-safe-right))}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-scene-mode{position:absolute;z-index:4;left:max(8px,var(--game-safe-left));bottom:calc(max(16px,var(--game-safe-bottom)) + 72px);width:80px;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-scene-mode button{width:100%;min-height:48px;padding:4px;font-size:.875rem;line-height:1.3;background:var(--ad-surface)}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-cover{z-index:5;inset:calc(max(10px,var(--game-safe-top)) + 54px) max(12px,var(--game-safe-right)) calc(max(16px,var(--game-safe-bottom)) + 134px) max(8px,var(--game-safe-left));padding:12px;gap:8px;background:#fff9edf5;color:var(--ad-ink);overflow:hidden;justify-content:center;display:flex;flex-direction:column;align-items:stretch}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-overlay-copy p{color:var(--ad-ink);font-size:1rem;line-height:1.5;margin:8px 0;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-overlay-copy strong{color:var(--ad-ink);font-size:1.125rem;line-height:1.4}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-cover>button{flex:0 0 auto;min-height:44px;margin:0}
+/* In short landscape, facts share the upper row with the amount, across the
+   desk. This leaves the lower-left mode/Pause cluster clear at 200% text even
+   in the shorter normal owner, without reducing text or moving the card. */
+@media(orientation:landscape) and (max-height:540px){
+ .fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-game-title{top:calc(max(10px,var(--game-safe-top)) + 58px);left:max(8px,var(--game-safe-left));right:auto}
+ .fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-facts{top:calc(max(10px,var(--game-safe-top)) + 58px);left:auto;right:max(12px,var(--game-safe-right))}
+ .fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-sort-buttons>button{max-width:144px}
+ .fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-cover{inset:calc(max(10px,var(--game-safe-top)) + 54px) calc(max(12px,var(--game-safe-right)) + 152px) max(16px,var(--game-safe-bottom)) calc(max(8px,var(--game-safe-left)) + 190px)}
+}
+
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .daily-cash-overlay-copy{min-height:0;flex:0 1 auto;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+/* A failed completed capture plus an unavailable renderer creates two actions
+   after play. Give that recovery state the full space below navigation. One
+   start-aligned scrolling sheet owns copy AND actions, so enlarged labels can
+   never overflow an unscrollable centered flex lane. Ordinary play is unchanged. */
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-cover:has(>button:nth-of-type(2)){inset:calc(max(10px,var(--game-safe-top)) + 54px) max(12px,var(--game-safe-right)) max(16px,var(--game-safe-bottom)) max(8px,var(--game-safe-left));overflow:auto;justify-content:flex-start;overscroll-behavior:contain;scrollbar-width:thin}
+.fw-arcade-root.fw-arcade-toy-console .daily-cash .fw-arcade-stage-cover:has(>button:nth-of-type(2)) .daily-cash-overlay-copy{flex:0 0 auto;overflow:visible}
