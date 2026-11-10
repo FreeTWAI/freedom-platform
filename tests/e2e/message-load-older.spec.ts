@@ -314,7 +314,7 @@ for(const width of [390,1280])for(const staleRead of ['latest','older'] as const
   expect((await db.query('SELECT retracted_at IS NOT NULL AS done FROM member_direct_messages WHERE message_id=$1',[original])).rows[0].done).toBe(true);
   expect(retractPosts).toBe(1);
   await page.screenshot({path:info.outputPath(`private-retraction-${staleRead}-${width}.png`)});
-  await panel.locator('.messages-compose textarea').fill('合成：收回後仍可傳送');await panel.getByRole('button',{name:'傳送',exact:true}).click();
+  await panel.locator('.messages-compose textarea').fill('合成：收回後仍可傳送');await panel.getByRole('button',{name:'送出',exact:true}).click();
   await expect(panel.locator('.messages-bubbles')).toContainText('合成：收回後仍可傳送');await expect(panel.locator('.messages-compose textarea')).toHaveValue('');
   expect(retractPosts).toBe(1);
 });
