@@ -119,3 +119,30 @@ test('failed and late searches recover without replacing the new query, and Esca
   await search(page,'共創');await expect(dialog.getByRole('list',{name:'訊息搜尋結果'})).toContainText('共創的新查詢');release();await expect.poll(()=>settled).toBe(true);
   await expect(dialog.getByRole('list',{name:'訊息搜尋結果'})).not.toContainText('慢速的舊查詢');await dialog.press('Escape');await expect(panel.getByRole('button',{name:'搜尋訊息',exact:true})).toBeFocused();
 });
+
+for(const [theme,width] of [['light',1280],['dark',390],['versefolk',320]] as const){
+  test(`chat search waits for IME confirmation and keeps ordinary search after reopening (${theme}, ${width}px)`,async({browser,baseURL})=>{
+    await directHistory(['共創選字完成']);const page=await member(browser,baseURL!,width),panel=await direct(page);
+    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+    await panel.getByRole('button',{name:'搜尋訊息',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'搜尋訊息',exact:true}),input=dialog.getByLabel('搜尋這個對話的訊息');
+    const queries:string[]=[];page.on('request',request=>{const url=new URL(request.url());if(/\/me\/conversations\/[^/]+\/messages\/search$/.test(url.pathname))queries.push(url.searchParams.get('q')??'');});
+    await input.dispatchEvent('compositionstart');await input.fill('共');
+    // Synthetic KeyboardEvents check the real React handler's cancellation.
+    // They do not claim to emulate an operating-system IME or its default action.
+    const composingPrevented=await input.evaluate(element=>!element.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,isComposing:true,bubbles:true,cancelable:true})));
+    expect(composingPrevented).toBe(true);
+    await dialog.locator('form').evaluate(form=>(form as HTMLFormElement).requestSubmit());
+    expect(queries).toEqual([]);await expect(input).toHaveValue('共');await expect(dialog.getByText('找回這個對話裡的文字訊息。')).toBeVisible();
+    await input.fill('共創');await input.dispatchEvent('compositionend',{data:'共創'});
+    const safariPrevented=await input.evaluate(element=>!element.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:229,isComposing:false,bubbles:true,cancelable:true})));
+    expect(safariPrevented).toBe(true);expect(queries).toEqual([]);
+    await input.press('Enter');await expect(dialog.getByRole('list',{name:'訊息搜尋結果'})).toContainText('共創選字完成');expect(queries).toEqual(['共創']);
+    await input.dispatchEvent('compositionstart');await input.fill('未完成');await dialog.getByRole('button',{name:'關閉搜尋',exact:true}).click();
+    await expect(dialog).toBeHidden();await expect(panel.getByRole('button',{name:'搜尋訊息',exact:true})).toBeFocused();
+    await panel.getByRole('button',{name:'搜尋訊息',exact:true}).click();await expect(input).toHaveValue('');
+    await input.fill('選字完成');await dialog.getByRole('button',{name:'搜尋',exact:true}).click();
+    await expect(dialog.getByRole('list',{name:'訊息搜尋結果'})).toContainText('共創選字完成');expect(queries).toEqual(['共創','選字完成']);
+    await dialog.press('Escape');await expect(dialog).toBeHidden();await expect(panel.getByRole('button',{name:'搜尋訊息',exact:true})).toBeFocused();
+  });
+}
