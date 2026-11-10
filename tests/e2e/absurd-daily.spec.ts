@@ -1214,7 +1214,8 @@ async function playRecipe(page:Page,recipe:Recipe){
   }
   // UX-T3: only after persisted settlement, let native WebP decoding/toBlob run on real frames.
   expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.status,COOKING_RUN_KEY)).toBe('done');await page.clock.resume();
-  await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await expect(page.locator('.fw-arcade-result-heading')).toContainText(recipe.name);
+  // Chromium PNG idle encoding may use its 1s + 5.7s fallback before the download becomes ready.
+  await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible({timeout:10000});await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await expect(page.locator('.fw-arcade-result-heading')).toContainText(recipe.name);
   await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+100));
 }
 test('UX-7: a real-clock 3D cooking journey completes mixing, timed kneading and folding into a shareable result',async({page})=>{
