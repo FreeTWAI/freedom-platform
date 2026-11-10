@@ -4,7 +4,8 @@
 .floating-messages-label{font-size:12px;font-weight:700;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .floating-messages-badge{position:absolute;top:-3px;inset-inline-end:-3px;min-width:22px;min-height:22px;display:grid;place-items:center;padding:2px 4px;border-radius:99px;background:var(--green);color:#10140a;font-size:12px;font-weight:800;border:2px solid var(--bg-elev)}
 
-.floating-message-panel{position:fixed;z-index:79;inset-inline-end:16px;bottom:calc(88px + var(--app-safe-bottom,env(safe-area-inset-bottom,0px)));width:min(var(--chat-panel-width,560px),calc(100vw - 32px));height:min(var(--chat-panel-height,540px),calc(100dvh - 110px - var(--app-safe-bottom,0px)));display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev);color:var(--ink);box-shadow:var(--shadow);overflow:hidden}
+/* The launcher is hidden while open; give that space back to message history. */
+.floating-message-panel{position:fixed;z-index:79;inset-inline-end:16px;bottom:calc(16px + var(--app-safe-bottom,env(safe-area-inset-bottom,0px)));width:min(var(--chat-panel-width,760px),calc(100vw - 32px));height:min(var(--chat-panel-height,760px),calc(100dvh - 32px - var(--app-safe-top,0px) - var(--app-safe-bottom,0px) - var(--connection-status-height,0px)));display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev);color:var(--ink);box-shadow:var(--shadow);overflow:hidden}
 .floating-message-panel[hidden]{display:none}
 .floating-message-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);flex:none}
 .floating-message-header h2{margin:0;font-size:18px}
