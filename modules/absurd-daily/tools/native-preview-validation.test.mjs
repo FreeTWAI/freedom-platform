@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
 import {validateRequest,validateApprovedRequestBytes,verifySourceBytes,admitTransition,boundEvidence,preserveFailedRegression} from './capture-ci.mjs';
-import {validateCapture} from './native-party-previews.mjs';
+import {validateCapture,withPreservedNodeEnv} from './native-party-previews.mjs';
+import {e2eSchema} from '../../../packages/testing/e2e-auth-isolation.ts';
 const request=JSON.parse(await readFile(new URL('./capture-request.json',import.meta.url)));
 test('explicit request pins unique bounded sources',()=>{assert.equal(validateRequest(request),request);for(const mutate of [r=>r.request_id='cooking66-party3-20261028-02-cooking-recovery',r=>r.source_base_sha='ec362111707a0b0122aa532fac725a924615f73e',r=>r.source_inputs.pop(),r=>r.source_inputs[0].path='../../secret',r=>r.source_inputs.push(r.source_inputs[0]),r=>r.families=['party']]){const r=structuredClone(request);mutate(r);assert.throws(()=>validateRequest(r));}});
 const h='a'.repeat(64),factory='apps/portal-web/src/games/party/stage.ts';
@@ -26,4 +27,31 @@ test('artifact budget rejects missing trees, symlinks and sparse overflow; count
 test('failed regression preservation only creates a fresh bounded evidence root',async()=>{
  const {mkdtemp,mkdir,rm,symlink,writeFile,readFile,open,readdir}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const dir=await mkdtemp(join(tmpdir(),'capture-regression-receipt-'));
  try{const source=join(dir,'result.json'),out=join(dir,'out');await writeFile(source,'{}');assert.equal(await preserveFailedRegression(out,source),true);assert.equal(await readFile(join(out,'bundle-regression.json'),'utf8'),'{}');assert.equal(await preserveFailedRegression(out,source),false);await symlink(source,join(dir,'link'));await assert.rejects(preserveFailedRegression(join(dir,'bad-link'),join(dir,'link')));const f=await open(join(dir,'large'),'w');try{await f.truncate(8388609);}finally{await f.close();}await assert.rejects(preserveFailedRegression(join(dir,'bad-large'),join(dir,'large')));assert.equal((await readdir(dir)).includes('bad-large'),false);assert.equal(await preserveFailedRegression(join(dir,'missing'),join(dir,'absent')),false);}finally{await rm(dir,{recursive:true,force:true});}
+});
+
+// These are process-environment isolation regressions, not native captures.
+// Sequential cases deliberately model Vite's mutation without starting a host.
+test('capture build restores NODE_ENV and preserves the real auth guard on every exit',async t=>{
+ const originalPresent=Object.hasOwn(process.env,'NODE_ENV'),original=process.env.NODE_ENV;
+ const schema='fp_e2e_'+'a'.repeat(32);
+ try{
+  for(const initial of [undefined,'','development','production'])for(const exit of ['success','sync throw','async rejection'])await t.test(`${String(initial)} / ${exit}`,async()=>{
+   if(initial===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=initial;
+   const failure=new Error('synthetic build failure'),result={compiled:true};
+   const operation=()=>{
+    process.env.NODE_ENV='production';
+    if(exit==='sync throw')throw failure;
+    return Promise.resolve().then(()=>{if(exit==='async rejection')throw failure;return result;});
+   };
+   if(exit==='success')assert.equal(await withPreservedNodeEnv(operation),result);
+   else await assert.rejects(withPreservedNodeEnv(operation),error=>error===failure);
+   assert.equal(Object.hasOwn(process.env,'NODE_ENV'),initial!==undefined);
+   assert.equal(process.env.NODE_ENV,initial);
+   // Only a synthetic environment is passed to the actual guard. No DB or
+   // platform environment is modified, and production must still be rejected.
+   const nextFixtureEnv={NODE_ENV:process.env.NODE_ENV,FREEDOM_ENV:'local'};
+   if(initial==='production')assert.throws(()=>e2eSchema(schema,nextFixtureEnv),/local-only/);
+   else assert.equal(e2eSchema(schema,nextFixtureEnv),schema);
+  });
+ }finally{if(originalPresent)process.env.NODE_ENV=original;else delete process.env.NODE_ENV;}
 });
