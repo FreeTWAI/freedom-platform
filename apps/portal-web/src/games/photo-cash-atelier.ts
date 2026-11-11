@@ -123,7 +123,7 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
  const root=document.createElement('section');root.className='night-atelier';root.dataset.game=mode;root.setAttribute('aria-label',photo?'午夜照相館：可操作 3D 預覽':'百萬盤點室：可操作 3D 預覽');
  root.innerHTML=`<header class="night-heading"><img alt="自由工坊"><div class="night-kicker">${photo?'STUDIO 01 / AFTER DARK':'THE LAST COUNT / 23:47'}</div><h1>${photo?'午夜照相館':'百萬盤點室'}</h1><p>${photo?'替不太正常的客人，留一張好照片。':'最後一班，留下真鈔，退回空話。'}</p></header><nav class="night-controls" aria-label="遊戲控制"><button data-pause aria-label="暫停">Ⅱ</button><button data-reset aria-label="重新開始">↻</button><button data-full aria-label="切換全螢幕">⛶</button></nav><div class="night-counter"><strong data-progress></strong><span>${photo?'CLIENTS / 03':'遊戲道具 · 非真實金錢'}</span></div><div class="night-note" data-note></div>${photo?'<div class="night-frame"><i class="night-reticle"></i></div>':''}<footer class="night-footer"><div class="night-guide"><span class="night-step">${photo?'01 / FRAME THE MOMENT':'03 / READ BEFORE YOU KEEP'}</span><p class="night-instruction">${photo?'拖曳畫面取景，按快門拍下。':'左退大餅，右收鈔票。滑動或按左右兩邊。'}</p></div><div class="night-primary"><p class="night-feedback" role="status"></p><div class="night-buttons">${photo?'':'<button data-reject aria-label="退回大餅">退回大餅</button>'}<button data-action aria-label="${photo?'按下快門':'收下鈔票'}">${photo?'按下快門':'收下鈔票'}</button></div></div></footer><div class="night-panel" hidden><div class="night-dialog" role="dialog" aria-modal="true" aria-labelledby="night-title"><h2 id="night-title">休息一下</h2><p data-panel-copy>進度留在這裡。準備好再繼續。</p><button data-resume>繼續遊戲</button></div></div>`;
  root.querySelector('img')!.src=logoUrl;host.append(root);
- const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'low-power'});renderer.setPixelRatio(Math.min(devicePixelRatio||1,RULES.maxDpr));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=photo?1.15:1.05;
+ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'low-power',preserveDrawingBuffer:!photo});renderer.setPixelRatio(Math.min(devicePixelRatio||1,RULES.maxDpr));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=photo?1.15:1.05;
  const canvas=renderer.domElement;canvas.tabIndex=0;canvas.setAttribute('role','application');canvas.setAttribute('aria-label',photo?'照相館。拖曳畫面取景，再按快門。':'盤點桌面。向右滑收下，向左滑退回，或使用具名按鈕。');root.prepend(canvas);
  const scene=new THREE.Scene();scene.background=new THREE.Color(photo?'#071423':'#111816');
  const camera=new THREE.OrthographicCamera(-6,6,4,-4,.1,50);
@@ -224,7 +224,37 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
  function paintBill(){if(!bill)return;const card=cashDeck(42)[cash.index];if(!card){cardGroup.visible=false;return;}const t=texture(1024,560,c=>paintAtelierBanknote(c,card.label,card.valid,card.id));const old=billTexture??(bill.material as THREE.MeshStandardMaterial).map;if(old){old.dispose();textures.delete(old);}billTexture=t;(bill.material as THREE.MeshStandardMaterial).map=t;cardGroup.visible=true;}
  function updatePose(){if(!photo)return;const client=CLIENTS[clientIndex];if(!client)return;const pose=photoPose(client.id,elapsed/1000,42);subject.position.y=pose.lift*.55;subject.rotation.z=pose.sway;board.visible=client.id==='backdrop';board.position.x=pose.boardX+1.65;umbrella.visible=client.id==='umbrella';birds.forEach((b,i)=>{b.visible=client.id==='pigeons'&&pose.birds[i]>0;b.position.y=2.9+pose.birds[i];});humanFace.visible=client.id!=='pigeons';const head=anchors.get('head')!;head.visible=humanFace.visible;}
  function refresh(){root.dataset.index=String(photo?clientIndex:cash.index);root.dataset.ended=String(ended);root.dataset.mistakes=String(cash.mistakes);root.dataset.film=String(film);root.dataset.stars=String(totalStars);root.dataset.elapsed=String(Math.floor(elapsed));progress.textContent=photo?`${Math.min(clientIndex+1,3)} / 03`:`${(cash.amount/10000).toFixed(0)} / 100 萬`;note.textContent=ended?'本局完成 · 尚未上線':photo?`${CLIENTS[clientIndex].title} · 底片 ${RULES.film-film} 張`:`${String(cash.index+1).padStart(2,'0')} / 30 · ${cashDeck(42)[cash.index]?.label??'已完成'}`;action.disabled=ended;if(reject)reject.disabled=ended;receipts.forEach((r,i)=>r.visible=i<cash.index/3);updatePose();}
- function render(){if(disposed||lost)return;updatePose();const started=performance.now();renderer.render(scene,camera);root.dataset.native='true';root.dataset.drawCalls=String(renderer.info.render.calls);root.dataset.triangles=String(renderer.info.render.triangles);root.dataset.renderMs=(performance.now()-started).toFixed(2);root.dataset.panX=String(panX);root.dataset.panY=String(panY);}
+ // Cash has a fixed camera/set. Retain unchanged framebuffer pixels and redraw
+ // the union of old/new paper, receipt and directional-shadow bounds. This
+ // keeps native resolution, AA, lighting and materials, not a reduced-quality LOD.
+ let cashDamage:THREE.Vector4|null=null;
+ function cashBounds(){
+  scene.updateMatrixWorld(true);
+  const bounds=new THREE.Box3().setFromObject(cardGroup);
+  for(const receipt of receipts)bounds.union(new THREE.Box3().setFromObject(receipt));
+  let left=Infinity,bottom=Infinity,right=-Infinity,top=-Infinity;
+  for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
+   // The only shadow-casting light is key (-3,8,5), aimed at origin.
+   // Project to the lowest receiving desk surface as well as the geometry.
+   const distance=Math.max(0,y+.08);
+   for(const p of [new THREE.Vector3(x,y,z),new THREE.Vector3(x+distance*3/8,-.08,z-distance*5/8)]){
+    p.project(camera);const px=(p.x+1)*root.clientWidth/2,py=(p.y+1)*root.clientHeight/2;
+    left=Math.min(left,px);bottom=Math.min(bottom,py);right=Math.max(right,px);top=Math.max(top,py);
+   }
+  }
+  // Conservative PCF/normal-bias and multisample edge padding in CSS pixels.
+  return new THREE.Vector4(Math.floor(left)-24,Math.floor(bottom)-24,Math.ceil(right)+24,Math.ceil(top)+24);
+ }
+ function render(){if(disposed||lost)return;updatePose();const started=performance.now();
+  const next=photo?null:cashBounds();
+  if(next&&cashDamage){
+   const x=Math.max(0,Math.min(next.x,cashDamage.x)),y=Math.max(0,Math.min(next.y,cashDamage.y));
+   const right=Math.min(root.clientWidth,Math.max(next.z,cashDamage.z)),top=Math.min(root.clientHeight,Math.max(next.w,cashDamage.w));
+   renderer.setScissor(x,y,Math.max(0,right-x),Math.max(0,top-y));renderer.setScissorTest(true);
+  }
+  try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}
+  cashDamage=next;
+root.dataset.native='true';root.dataset.drawCalls=String(renderer.info.render.calls);root.dataset.triangles=String(renderer.info.render.triangles);root.dataset.renderMs=(performance.now()-started).toFixed(2);root.dataset.panX=String(panX);root.dataset.panY=String(panY);}
  function updateCamera(){const layout=atelierLayout(root.clientWidth,root.clientHeight,photo),{extent,viewWidth}=layout;for(const part of fullSet){if(part.kind==='bench'){part.mesh.scale.x=layout.benchWidth;if(part.mesh.geometry.type==='PlaneGeometry')part.mesh.scale.y=layout.benchDepth;else part.mesh.scale.z=layout.benchDepth;}else if(part.kind==='lane')part.mesh.scale.z=layout.benchDepth;else{part.mesh.scale.x=layout.backdropWidth;if(part.kind==='backdrop'){part.mesh.scale.y=layout.backdropHeight;part.mesh.position.y=layout.backdropHeight/2-2;}}}root.dataset.sceneCoverage='full-viewport';camera.left=-viewWidth/2;camera.right=viewWidth/2;camera.top=extent/2;camera.bottom=-extent/2;if(photo){camera.position.set(panX,4.2+panY,10);camera.lookAt(panX,2+panY,0);}else{camera.position.set(0,8,5);camera.lookAt(0,0,0);}camera.updateProjectionMatrix();camera.updateMatrixWorld();}
  function cancelPointer(){const id=pointer;pointer=null;if(id!==null&&canvas.hasPointerCapture(id))canvas.releasePointerCapture(id);cardGroup.position.x=0;cardGroup.rotation.z=0;}
  function nextClient(grade:PhotoGrade){cancelPointer();totalStars+=grade.stars;feedback.textContent=grade.caption;clientIndex++;film=0;bestPhoto=null;elapsed=0;panX=0;panY=0;if(clientIndex===CLIENTS.length){ended=true;root.dataset.flash='false';feedback.textContent=`三位客人已拍完 · ${totalStars} / 9 星`;stop();}updateCamera();refresh();render();}
@@ -253,7 +283,7 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
  const cancel=(e:PointerEvent)=>{if(e.pointerId!==pointer)return;cancelPointer();render();};canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',cancel);canvas.addEventListener('lostpointercapture',cancel);
  root.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();paused?unpause():pause();}else if(paused&&e.key==='Tab'){e.preventDefault();resume.focus();}else if(e.target===canvas&&photo&&(e.key==='Enter'||e.key===' ')&&!e.repeat){e.preventDefault();capture();}});
  action.addEventListener('click',()=>photo?capture():sort(true));reject?.addEventListener('click',()=>sort(false));root.querySelector('[data-pause]')!.addEventListener('click',pause);root.querySelector('[data-reset]')!.addEventListener('click',reset);resume.addEventListener('click',unpause);root.querySelector('[data-full]')!.addEventListener('click',()=>{const p=document.fullscreenElement===root?document.exitFullscreen():root.requestFullscreen?.();void p?.catch(()=>feedback.textContent='瀏覽器未允許全螢幕，目前仍可繼續遊戲。');});
- function resize(){if(disposed)return;updateCamera();renderer.setSize(Math.max(1,root.clientWidth),Math.max(1,root.clientHeight),false);render();}
+ function resize(){if(disposed)return;cashDamage=null;updateCamera();renderer.setSize(Math.max(1,root.clientWidth),Math.max(1,root.clientHeight),false);render();}
  const observer=new ResizeObserver(resize);observer.observe(root);const visibility=()=>{if(document.hidden)pause();};const blur=()=>pause();document.addEventListener('visibilitychange',visibility);window.addEventListener('blur',blur);
  const contextLost=(e:Event)=>{e.preventDefault();pause();lost=true;root.dataset.native='lost';root.querySelector('[data-panel-copy]')!.textContent='3D 畫面中斷，進度保留。等待瀏覽器恢復。';resume.disabled=true;};const restore=()=>{lost=false;root.querySelector('[data-panel-copy]')!.textContent='畫面已恢復，進度仍在。';resume.disabled=false;resize();};canvas.addEventListener('webglcontextlost',contextLost);canvas.addEventListener('webglcontextrestored',restore);
  reset();resize();

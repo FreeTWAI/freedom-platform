@@ -10,7 +10,7 @@ import {fileURLToPath} from 'node:url';
 import type {RunResult} from '../../apps/portal-web/src/games/result-card.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
-import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
+import {cashDeck,stampTarget,RULES} from '../../apps/portal-web/src/games/domain.js';
 import {chairWave,holidayTargets,actParty,advanceParty,newParty,startParty,tofuAxis,tofuPosition,type TofuRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {PARTY_GAMES,PARTY_RULES as PT,type PartyGameId} from '../../apps/portal-web/src/games/party/catalog.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
@@ -72,6 +72,36 @@ for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1
   // and failure. Native full-resolution JPEG output, never resized or postprocessed.
   // Transport limit is not a graphics/performance acceptance budget.
   expect(capture.byteLength).toBeLessThanOrEqual(2*1024*1024);const {createHash}=createRequire(import.meta.url)('node:crypto');const id=`${mode}-${width}x${height}`,encoded=capture.toString('base64'),parts=Math.ceil(encoded.length/3072);console.log('PHOTO_CASH_ATELIER_CAPTURE '+JSON.stringify({format:'photo-cash-atelier-preview/v2',mimeType:'image/jpeg',nativeQuality:92,candidate:process.env.GITHUB_SHA??'local-uncommitted',id,bytes:capture.byteLength,sha256:createHash('sha256').update(capture).digest('hex'),parts,viewport:{width,height},metrics}));for(let i=0;i<parts;i++)console.log(`PHOTO_CASH_ATELIER_JPEG ${id} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
+ }finally{await context.close();}
+});
+
+// Separate from the unchanged 45-second 30-card acceptance case: compare the
+// retained framebuffer to a complete native redraw at the identical viewport.
+for(const [width,height,dpr] of [[1440,1000,1],[390,844,2],[667,375,1]] as const)test(`AD cash damage rendering ${width}x${height}@${dpr} matches full redraw`,async({browser})=>{
+ const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:dpr});
+ try{
+  const page=await context.newPage();
+  const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountPhotoCashAtelier} from './apps/portal-web/src/games/photo-cash-atelier';mountPhotoCashAtelier(document.body,'','cash');`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022'}).outputFiles[0].text;
+  await page.setContent(`<html><head><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`);
+  const root=page.locator('.night-atelier'),canvas=root.getByRole('application');
+  await expect(root).toHaveAttribute('data-native','true');
+  const compareFullRedraw=async()=>{
+   const retained=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());
+   // ResizeObserver invalidates the retained buffer. Restore original viewport
+   // before comparison, so this does not substitute a smaller acceptance image.
+   await page.setViewportSize({width:width+1,height});
+   await expect.poll(()=>canvas.evaluate(el=>(el as HTMLCanvasElement).width)).toBe(Math.floor((width+1)*Math.min(dpr,RULES.maxDpr)));
+   await page.setViewportSize({width,height});
+   await expect.poll(()=>canvas.evaluate(el=>(el as HTMLCanvasElement).width)).toBe(Math.floor(width*Math.min(dpr,RULES.maxDpr)));
+   const full=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());
+   expect(retained).toBe(full);
+  };
+  await page.mouse.move(width/2,height/2);await page.mouse.down();
+  await page.mouse.move(width/2+(cashDeck(42)[0].valid?70:-70),height/2,{steps:4});
+  await compareFullRedraw(); // tilted/moved paper and its live shadow
+  await page.mouse.up();await expect(root).toHaveAttribute('data-index','1');
+  await page.waitForTimeout(250);await compareFullRedraw(); // old shadow erased
+
  }finally{await context.close();}
 });
 

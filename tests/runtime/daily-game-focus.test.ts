@@ -155,3 +155,15 @@ test('cash flight copies the outgoing note, follows the chosen side and respects
  context.cardGroup.position.x=1;context.cardGroup.rotation.z=.035;fly(false);assert.equal(context.flight.style.left,'260px','continues at released paper position');assert.match(animations[1].frames[0].transform,/rotate\(-2/);assert.equal(context.flight.dataset.direction,'reject');assert.match(animations[1].frames[1].transform,/-117px/);
  reduced=true;fly(true);assert.equal(animations.length,2,'no animation under reduced motion');assert.equal(context.flightAnimation,null);assert.equal(cancelled,3);
 });
+
+const damageRenderSource=stripTypeScriptTypes(atelierClosure('function render(){','function updateCamera(){'));
+test('cash damage redraw covers old and new bounds, restores scissor and fully redraws invalidated frames',()=>{
+ const calls:unknown[][]=[];let next={x:100,y:200,z:500,w:600};
+ const context={disposed:false,lost:false,photo:false,cashDamage:null as unknown,panX:0,panY:0,updatePose(){},performance:{now:()=>0},cashBounds:()=>next,scene:{},camera:{},root:{clientWidth:1440,clientHeight:1000,dataset:{}},renderer:{info:{render:{calls:67,triangles:31618}},setScissor(...args:number[]){calls.push(['rect',...args]);},setScissorTest(on:boolean){calls.push(['enabled',on]);},render(){calls.push(['render']);}}};
+ const render=runInNewContext(`${damageRenderSource};render`,context) as ()=>void;
+ render();assert.deepEqual(calls,[['render'],['enabled',false]],'first frame is complete');
+ calls.length=0;next={x:-50,y:300,z:700,w:1200};render();assert.deepEqual(calls,[['rect',0,200,700,800],['enabled',true],['render'],['enabled',false]],'union erases old paper and clips to viewport');
+ calls.length=0;context.cashDamage=null;render();assert.deepEqual(calls,[['render'],['enabled',false]],'resize/context restore must invalidate retained pixels');
+ calls.length=0;context.photo=true;render();assert.deepEqual(calls,[['render'],['enabled',false]],'moving photo scene never uses retained pixels');
+ calls.length=0;context.lost=true;render();assert.equal(calls.length,0);
+});
