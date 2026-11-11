@@ -2352,7 +2352,7 @@ test('PT-art: native catalog capture binds real pixels to compiled sources and r
   const {tmpdir}=require('node:os');
   const {chromium}=require('playwright');
   const root=fileURLToPath(new URL('../../',import.meta.url));
-  const {capture}=require('../../modules/absurd-daily/tools/native-party-previews.mjs');
+  const {capture}=await import(new URL('../../modules/absurd-daily/tools/native-party-previews.mjs',import.meta.url).href);
   const parent=await mkdtemp(join(tmpdir(),'party-native-evidence-')),out=join(parent,'capture');
   // Keep emitted chunks as well as images, so validateFiles can independently
   // recheck exact compiled bytes instead of trusting a manifest-only claim.
@@ -2374,9 +2374,10 @@ test('PT-art: native catalog capture binds real pixels to compiled sources and r
   }
 });
 
-for(const game of ['chair','tofu','holiday'] as const)for(const light of [false,true])test(`PT-art: ${game} ${light?'light':'native'} composition owns its palette and whole-screen evidence`,async({page},testInfo)=>{
+for(const game of ['chair','tofu','holiday'] as const)for(const light of [false,true])for(const viewport of [{name:'phone',width:390,height:844},{name:'desktop',width:1440,height:900}] as const)test(`PT-art: ${game} ${light?'light':'native'} ${viewport.name} composition owns its palette and whole-screen evidence`,async({page},testInfo)=>{
   const expected={chair:{world:'rgb(20, 32, 57)',hud:'rgb(25, 41, 66)',feedback:'rgb(36, 52, 80)',ink:'rgb(245, 232, 201)'},tofu:{world:'rgb(219, 227, 216)',hud:'rgb(243, 239, 226)',feedback:'rgb(225, 232, 220)',ink:'rgb(53, 79, 70)'},holiday:{world:'rgb(244, 223, 177)',hud:'rgb(255, 240, 202)',feedback:'rgb(249, 229, 181)',ink:'rgb(103, 69, 37)'}}[game];
-  await page.setViewportSize({width:390,height:844});
+  // Set the window size before entering native fullscreen; browsers reject resizing it there.
+  await page.setViewportSize({width:viewport.width,height:viewport.height});
   if(light){if(game==='holiday')await openLightHoliday(page);else await openLightAction(page,game);}else await openParty(page,game);
   await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
   const owner=page.locator(`.fullscreen-game--${game}`);
@@ -2385,6 +2386,7 @@ for(const game of ['chair','tofu','holiday'] as const)for(const light of [false,
   await expect(owner.locator('.pt-scoreboard strong').first()).toHaveCSS('color',expected.ink);
   await expect(owner.locator('.pt-feedback')).toHaveCSS('background-color',expected.feedback);
   await expect(owner.locator('.pt-feedback')).toHaveCSS('color',expected.ink);
+  if(viewport.name==='phone'){
   const spacing=await owner.evaluate(el=>{
     const world=el.querySelector('.pt-canvas')!.getBoundingClientRect(),hud=el.querySelector('.pt-scoreboard')!.getBoundingClientRect();
     const below=[...el.querySelectorAll<HTMLElement>('.pt-controls,.pt-holiday-feedback')].filter(node=>node.checkVisibility()).map(node=>node.getBoundingClientRect().top);
@@ -2393,7 +2395,6 @@ for(const game of ['chair','tofu','holiday'] as const)for(const light of [false,
   expect(spacing.above).toBeGreaterThanOrEqual(-1);expect(spacing.above).toBeLessThanOrEqual(4);
   expect(spacing.below).toBeGreaterThanOrEqual(-1);expect(spacing.below).toBeLessThanOrEqual(8);
   expect(spacing.width).toBeGreaterThanOrEqual(128);expect(spacing.height).toBeGreaterThanOrEqual(96);expect(spacing.width/spacing.height).toBeCloseTo(4/3,2);
-  await testInfo.attach(`${game}-${light?'light':'native'}-fullscreen-phone.png`,{body:await owner.screenshot(),contentType:'image/png'});
-  await page.setViewportSize({width:1440,height:900});
-  await testInfo.attach(`${game}-${light?'light':'native'}-fullscreen-desktop.png`,{body:await owner.screenshot(),contentType:'image/png'});
+  }
+  await testInfo.attach(`${game}-${light?'light':'native'}-fullscreen-${viewport.name}.png`,{body:await owner.screenshot(),contentType:'image/png'});
 });
