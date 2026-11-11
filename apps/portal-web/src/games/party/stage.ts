@@ -169,7 +169,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     resize=()=>{
       if(disposed||capturing)return;
       if(liveViewport){const rect=host.getBoundingClientRect(),style=getComputedStyle(host);
-        viewport=rect.width>0&&rect.height>0?partyViewport(rect.width,rect.height,parseFloat(style.getPropertyValue('--pt-scene-top'))||0,parseFloat(style.getPropertyValue('--pt-scene-bottom'))||0):partyViewport(640,480);
+        viewport=rect.width>0&&rect.height>0?partyViewport(rect.width,rect.height,parseFloat(style.getPropertyValue('--pt-scene-top'))||0,parseFloat(style.getPropertyValue('--pt-scene-bottom'))||0,parseFloat(style.getPropertyValue('--pt-scene-left'))||0,parseFloat(style.getPropertyValue('--pt-scene-right'))||0):partyViewport(640,480);
         const pixels=partyBufferSize(viewport.width,viewport.height,devicePixelRatio||1);renderer.setPixelRatio(1);renderer.setSize(pixels.width,pixels.height,false);
       }
       project();

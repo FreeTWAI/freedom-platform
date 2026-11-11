@@ -1783,7 +1783,7 @@ for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS:
  const defaults={display:'block',position:'static',width:'160px',height:'40px',overflowX:'visible',overflowY:'visible',clipPath:'none',whiteSpace:'normal'};
  const root:any={parentElement:null,style:{},box:rect(0,0,320,240)},parent:any={parentElement:root,style:{},box:rect(0,0,240,180)},label:any={parentElement:parent,style:{},box:rect(8,8,160,40),textContent:'visible label'};
  const nodes=[root,parent,label];for(const node of nodes)node.getBoundingClientRect=()=>node.box;
- root.contains=(node:any)=>nodes.includes(node);root.querySelectorAll=(query:string)=>query.split(',').includes(selector)?[label]:[];
+ root.contains=(node:any)=>nodes.includes(node);root.querySelectorAll=(query:string)=>query==='.pt-holiday-heading h1'?[{textContent:'Game title',closest:()=>null,checkVisibility:()=>true}]:query.split(',').includes(selector)?[label]:[];
  label.matches=(query:string)=>query.split(',').includes(selector);label.getAttribute=()=>null;label.querySelectorAll=()=>[];label.checkVisibility=()=>!nodes.some(node=>node.style.display==='none');
  const computed=(node:any)=>{let visibility='visible';for(let p=node;p;p=p.parentElement)if(p.style.visibility){visibility=p.style.visibility;break;}return {...defaults,...node.style,visibility};};
  const document={createTreeWalker:()=>{let visited=false;return {currentNode:label,nextNode:()=>visited?false:(visited=true)};},createRange:()=>({selectNodeContents(){},getClientRects:()=>[rect(10,10,100,24)]})};
@@ -1810,8 +1810,8 @@ import {partyViewport,partyBufferSize,PARTY_MAX_PIXELS,withPartyCaptureView} fro
 test('PT-fullview: extended camera exactly preserves safe-core points and native ray picks',()=>{
  const {OrthographicCamera,PerspectiveCamera,Vector3,Vector2,Raycaster,Mesh,CylinderGeometry,MeshBasicMaterial}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
  const sizes=[[320,568],[390,844],[667,375],[1440,900],[296,814]];
- for(const [w,h] of sizes)for(const [top,bottom] of [[0,0],[80,100]]){
-  const f=partyViewport(w,h,top,bottom);assert.ok(f.core.x>=0&&f.core.y>=top);assert.ok(f.core.x+f.core.width<=w+1e-9&&f.core.y+f.core.height<=h-bottom+1e-9);
+ for(const [w,h] of sizes)for(const [top,bottom] of [[0,0],[80,100]])for(const [left,right] of [[0,0],[22,8],[8,38]]){
+  const f=partyViewport(w,h,top,bottom,left,right);assert.ok(f.core.x>=left&&f.core.y>=top);assert.ok(f.core.x+f.core.width<=w-right+1e-9&&f.core.y+f.core.height<=h-bottom+1e-9);
   assert.ok(Math.abs(f.core.width/f.core.height-4/3)<1e-10);
   for(const perspective of [false,true]){
    const camera=perspective?new PerspectiveCamera(43,4/3,.1,80):new OrthographicCamera(-6,6,4.5,-4.5,.1,80);
@@ -1840,11 +1840,52 @@ test('PT-fullview: backing buffer is bounded without forcing a 4:3 live canvas',
  for(const values of [[NaN,Infinity,NaN,Infinity],[-1,-3,-50,Infinity],[1,1,999,999]]){const f=partyViewport(...values as [number,number,number,number]);assert.ok(Object.values(f.view).every(Number.isFinite));assert.ok(f.core.width>0&&f.core.height>0);}
 });
 test('PT-fullview: canonical capture restores live view after success, render and encoding failures',()=>{
- const live=partyViewport(390,844,100,130),livePixels=partyBufferSize(390,844,2);
+ const live=partyViewport(390,844,100,130,22,8),livePixels=partyBufferSize(390,844,2);
  for(const failure of ['none','enter','encode']){
   let current=live,pixels=livePixels,restores=0;const error=new Error(failure);
   const capture=()=>withPartyCaptureView(()=>{current=partyViewport(640,480);pixels={width:960,height:720};if(failure==='enter')throw error;},()=>{assert.deepEqual(current.viewBox,{x:-0,y:-0,width:640,height:480});assert.equal(pixels.width*pixels.height,PARTY_MAX_PIXELS);if(failure==='encode')throw error;return 'real-encoded-result';},()=>{restores++;current=live;pixels=livePixels;});
   if(failure==='none')assert.equal(capture(),'real-encoded-result');else assert.throws(capture,e=>e===error);
   assert.equal(restores,1);assert.equal(current,live);assert.equal(pixels,livePixels);
  }
+});
+
+test('PT-fullview: four-edge safe insets preserve defaults and clamp hostile geometry',()=>{
+ assert.deepEqual(partyViewport(640,480),partyViewport(640,480,0,0,0,0));
+ for(const [w,h,top,bottom,left,right] of [[320,568,80,100,22,8],[667,375,80,100,38,8],[390,844,100,130,8,38]]){
+  const f=partyViewport(w,h,top,bottom,left,right);
+  assert.ok(f.core.width>=128&&f.core.height>=96);
+  assert.ok(f.core.x>=left&&f.core.x+f.core.width<=w-right+1e-9);
+  assert.ok(f.core.y>=top&&f.core.y+f.core.height<=h-bottom+1e-9);
+  assert.ok(Math.abs(f.core.width/f.core.height-4/3)<1e-12);
+  assert.ok(Math.abs(f.viewBox.width*f.core.width/640-w)<1e-9);
+  assert.ok(Math.abs(f.viewBox.height*f.core.height/480-h)<1e-9);
+ }
+ for(const values of [[1,1,999,999,999,999],[NaN,Infinity,NaN,Infinity,NaN,Infinity],[-1,-3,-5,-8,-9,-10]]){
+  const f=partyViewport(...values as [number,number,number,number,number,number]);
+  assert.ok(Object.values(f.view).every(Number.isFinite));assert.ok(f.core.width>0&&f.core.height>0);
+  assert.ok(f.core.x>=0&&f.core.x+f.core.width<=f.width+1e-9);
+ }
+ const ui=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+ const stage=readFileSync(new URL('../../apps/portal-web/src/games/party/stage.ts',import.meta.url),'utf8');
+ assert.match(ui,/getComputedStyle\(root\)/);assert.match(ui,/rootStyle\.paddingLeft/);assert.match(ui,/rootStyle\.paddingRight/);
+ for(const variable of ['--pt-scene-left','--pt-scene-right']){assert.ok(ui.includes(variable));assert.ok(stage.includes(variable));}
+});
+
+
+test('PT-BOUNDS: only the semantic compact playing title can use the exact sr-only pattern (CPU geometry)',()=>{
+ const source=readFileSync(new URL('../e2e/helpers/party-scene.ts',import.meta.url),'utf8'),start=source.indexOf('function partyPaintedContentFailures('),end=source.indexOf('async function partyCoveredToolsBounds(',start);
+ const rect=(width:number,height:number)=>({left:0,top:0,right:width,bottom:height,width,height,toJSON:()=>({width,height})});
+ let compact=true,state='playing',hidden=false,present=true;
+ const root:any={parentElement:null,getBoundingClientRect:()=>rect(320,568),getAttribute:()=>state};
+ const title:any={parentElement:root,textContent:'Game title',style:{position:'absolute',width:'1px',height:'1px',overflowX:'hidden',overflowY:'hidden',clipPath:'inset(50%)',whiteSpace:'nowrap'},getBoundingClientRect:()=>rect(1,1),getAttribute:()=>null,matches:(query:string)=>query.split(',').includes('.pt-holiday-heading h1'),closest:(query:string)=>query==='.pt-root'?root:hidden?root:null,querySelectorAll:()=>[],checkVisibility:()=>true};
+ root.contains=(node:any)=>node===root||node===title;root.querySelectorAll=(query:string)=>present&&query.split(',').includes('.pt-holiday-heading h1')?[title]:[];
+ const computed=(node:any)=>({display:'block',visibility:'visible',position:'static',overflowX:'visible',overflowY:'visible',clipPath:'none',...node.style});
+ const document={createTreeWalker:()=>{let done=false;return {currentNode:title,nextNode:()=>done?false:(done=true)};},createRange:()=>({selectNodeContents(){},getClientRects:()=>[rect(100,24)]})};
+ const inspect=runInNewContext(`(${stripTypeScriptTypes(source.slice(start,end))})`,{document,NodeFilter:{SHOW_TEXT:4},getComputedStyle:computed,matchMedia:()=>({matches:compact})}) as (root:unknown)=>string[];
+ assert.deepEqual(Array.from(inspect(root)),[]);
+ compact=false;assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));compact=true;
+ state='paused';assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));state='playing';
+ hidden=true;assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));hidden=false;
+ title.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));title.style.clipPath='inset(50%)';
+ present=false;assert.ok(inspect(root).includes('missing semantic game heading'));
 });

@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import sharp from 'sharp';
 import {actParty,advanceParty,newParty,startParty,tofuAxis,tofuPosition,type TofuRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {PARTY_RULES as PT} from '../../apps/portal-web/src/games/party/catalog.js';
-import {partyElapsed,partyAdvance,blockPartyWebGL,socialEntries,holidayControlHit,partyPaintedContentFailures,partyCoveredToolsBounds,partyScrollPaintedStageIntoView,holidayModalTextScale} from './helpers/party-scene.js';
+import {partyElapsed,partyAdvance,blockPartyWebGL,socialEntries,holidayControlHit,partyPaintedContentFailures,partyFullViewportComposition,partyCoveredToolsBounds,partyScrollPaintedStageIntoView,holidayModalTextScale} from './helpers/party-scene.js';
 
 // PT-TOFU-SCENE: the same real domain runs inside the bounded party shell.
 async function tofuFullscreen(page:Page,rejected:boolean){
@@ -48,55 +48,17 @@ async function tofuStageBounds(page:Page,scale=1){
       if(b.left<outer.left-1||b.top<outer.top-1||b.right>outer.right+1||b.bottom>outer.bottom+1)bad.push(selector);
     }return bad;
   })).toEqual([]);
-  // Measure before any scrollIntoView: no partly clipped tool strip may pass by
-  // scrolling one button at a time. Whole native pixels remain outside all HUD
-  // and control rectangles, with the same exact light/native input rectangle.
-  const composition=await stage.evaluate((root,textScale)=>{
-    const outer=root.getBoundingClientRect(),style=getComputedStyle(root),bad:string[]=[];
-    const safe={left:outer.left+parseFloat(style.paddingLeft),top:outer.top+parseFloat(style.paddingTop),right:outer.right-parseFloat(style.paddingRight),bottom:outer.bottom-parseFloat(style.paddingBottom)};
-    const contains=(a:typeof safe,b:DOMRect)=>b.left>=a.left-1&&b.top>=a.top-1&&b.right<=a.right+1&&b.bottom<=a.bottom+1;
-    const overlap=(a:DOMRect,b:DOMRect)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
-    for(const selector of ['.fullscreen-game__bar','.pt-scoreboard','.pt-holiday-tools-viewport','.pt-tools']){
-      const el=root.querySelector<HTMLElement>(selector)!;if(getComputedStyle(el).backgroundColor!=='rgba(0, 0, 0, 0)')bad.push(`opaque chrome band: ${selector}`);
-    }
-    if(getComputedStyle(root.querySelector('.pt-holiday-field')!).backgroundColor!==style.backgroundColor)bad.push('disconnected game surface');
-    const controls=[...root.querySelectorAll<HTMLElement>('.fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button,.pt-tofu-controls button,.pt-tools button')];
-    const boxes=controls.map(el=>({el,b:el.getBoundingClientRect()}));
-    for(const {el,b} of boxes){
-      const name=el.getAttribute('aria-label')??el.textContent;
-      if(!el.checkVisibility()||!contains(safe,b))bad.push(`control outside safe surface: ${name}`);
-      if(b.width<44||b.height<44)bad.push(`small control: ${name}`);
-      if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`clipped control content: ${name}`);
-      const hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(!hit||!el.contains(hit))bad.push(`covered control: ${name}`);
-    }
-    const chrome=[...boxes.map(item=>item.b),...Array.from(root.querySelectorAll('.pt-scoreboard,.pt-holiday-heading h1,.pt-holiday-feedback')).map(el=>el.getBoundingClientRect())];
-    for(let i=0;i<chrome.length;i++)for(let j=i+1;j<chrome.length;j++)if(overlap(chrome[i],chrome[j]))bad.push(`overlapping chrome: ${i}/${j}`);
-    for(const el of root.querySelectorAll<HTMLElement>('.pt-holiday-heading h1,.pt-scoreboard strong,.pt-scoreboard strong>span,.pt-tools button')){
-      const b=el.getBoundingClientRect();if(!contains(safe,b))bad.push(`text outside safe surface: ${el.textContent}`);
-      if(parseFloat(getComputedStyle(el).fontSize)<14*textScale-.1)bad.push(`small text: ${el.textContent}`);
-      if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`clipped text: ${el.textContent}`);
-    }
-    const host=root.querySelector<HTMLElement>('.pt-canvas')!,world=root.querySelector<HTMLElement>('.pt-holiday-world')!,canvas=host.querySelector('canvas');
-    if(host.querySelector('button,a,svg'))bad.push('controls inside renderer host');
-    const b=host.getBoundingClientRect();
-    if(!contains(safe,b)||!contains(world.getBoundingClientRect(),b))bad.push('world clipped');
-    if(chrome.some(rect=>overlap(b,rect)))bad.push('world obscured by HUD or controls');
-    for(const x of [b.left+1,b.right-1])for(const y of [b.top+1,b.bottom-1])if(!host.contains(document.elementFromPoint(x,y)))bad.push('world corner not hit-testable');
-    if(canvas){
-      const pixels=canvas.getBoundingClientRect();
-      for(const key of ['x','y','width','height'] as const)if(Math.abs(b[key]-pixels[key])>1)bad.push(`unaligned native pixels: ${key}`);
-    }else if(host.children.length)bad.push('light hit host is not empty');
-    for(const selector of ['.pt-holiday-tools-viewport','.pt-tools']){const el=root.querySelector<HTMLElement>(selector)!;if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`scrolling tool strip: ${selector}`);}
-    return bad;
-  },scale);expect(composition).toEqual([]);
+  // Before scrolling, prove full-owner render coverage and an independently
+  // unobscured canonical gameplay core; retain real safe-area control hit tests.
+  expect(await stage.evaluate(partyFullViewportComposition,scale)).toEqual([]);
   expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
-  const box=await page.locator('.pt-canvas').boundingBox(),diagnostic=`Tofu world actual rect: ${JSON.stringify(box)}`;
+  const box=await page.locator('.pt-gameplay-core').boundingBox(),diagnostic=`Tofu gameplay core actual rect: ${JSON.stringify(box)}`;
   expect(box,diagnostic).not.toBeNull();
   // A 4:3 sliver is not a usable world. This floor prevents near-disappearance,
   // but does not establish art quality or human playability acceptance.
   expect(box!.width,`${diagnostic}; minimum width is 128 CSS px`).toBeGreaterThanOrEqual(128);
   expect(box!.height,`${diagnostic}; minimum height is 96 CSS px`).toBeGreaterThanOrEqual(96);
-  expect(box!.width/box!.height,`${diagnostic}; world must remain 4:3`).toBeCloseTo(4/3,2);
+  expect(box!.width/box!.height,`${diagnostic}; gameplay core must remain 4:3`).toBeCloseTo(4/3,2);
   if(scale===2&&page.viewportSize()?.width===667&&page.viewportSize()?.height===375&&await stage.getAttribute('role')==='dialog'){
     // d141 / run 42533847998 original Tofu JSON: 128×96 CSS px in both modes.
     // Require >=50% more height (>=125% more area), not the old token-size floor.
@@ -106,7 +68,7 @@ async function tofuStageBounds(page:Page,scale=1){
     const bounds=(await owner.boundingBox())!;expect(box!.x,diagnostic).toBeGreaterThanOrEqual(bounds.x-1);expect(box!.y,diagnostic).toBeGreaterThanOrEqual(bounds.y-1);expect(box!.x+box!.width,diagnostic).toBeLessThanOrEqual(bounds.x+bounds.width+1);expect(box!.y+box!.height,diagnostic).toBeLessThanOrEqual(bounds.y+bounds.height+1);
   }
   const lightWorld=page.locator('[data-light-world=tofu]');
-  if(await lightWorld.count()){const svg=(await lightWorld.boundingBox())!;for(const key of ['x','y','width','height'] as const)expect(svg[key],`light world ${key} must map to the empty pointer host`).toBeCloseTo(box![key],1);}
+  if(await lightWorld.count()){const svg=(await lightWorld.boundingBox())!,host=(await page.locator('.pt-canvas').boundingBox())!;for(const key of ['x','y','width','height'] as const)expect(svg[key],`light world ${key} must map to the empty pointer host`).toBeCloseTo(host[key],1);}
   expect(await page.locator('.pt-canvas').evaluate(host=>host.querySelectorAll('button,a,svg').length)).toBe(0);
 }
 async function tofuWaitOffset(page:Page,accept:(offset:number)=>boolean){
@@ -116,7 +78,7 @@ async function tofuWaitOffset(page:Page,accept:(offset:number)=>boolean){
 }
 async function tofuDrop(page:Page,method:'pointer'|'keyboard'|'host'='pointer'){
  const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});
- if(method==='host'){const b=(await page.locator('.pt-canvas').boundingBox())!;await page.mouse.click(b.x+b.width/2,b.y+b.height/2);}else if(method==='keyboard')await drop.press('Space');else await drop.click();
+ if(method==='host'){const b=(await page.locator('.pt-gameplay-core').boundingBox())!;await page.mouse.click(b.x+b.width/2,b.y+b.height/2);}else if(method==='keyboard')await drop.press('Space');else await drop.click();
  const clock=tofuClocks.get(page)!;clock.state=actParty(clock.state,{kind:'drop'}) as TofuRun;expect(clock.state.fall).not.toBeNull();
  await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();
 }
@@ -127,7 +89,7 @@ for(const light of [false,true])for(const rejected of [false,true])test(`PT-TOFU
   await page.setViewportSize({width:390,height:844});await openTofuScene(page,light,rejected);
   const evidence=async(phase:string)=>{
     const name=`tofu-${light?'light':'native'}-${rejected?'rejected':'fullscreen'}-${phase}`;
-    await testInfo.attach(`${name}.json`,{body:JSON.stringify({phase,world:await page.locator('.pt-canvas').boundingBox(),score:await page.locator('.pt-root').getAttribute('data-party-score'),elapsed:await partyElapsed(page)},null,2),contentType:'application/json'});
+    await testInfo.attach(`${name}.json`,{body:JSON.stringify({ciSourceSha:process.env.GITHUB_SHA??null,phase,world:await page.locator('.pt-canvas').boundingBox(),gameplayCore:await page.locator('.pt-gameplay-core').boundingBox(),score:await page.locator('.pt-root').getAttribute('data-party-score'),elapsed:await partyElapsed(page)},null,2),contentType:'application/json'});
     await testInfo.attach(`${name}.png`,{body:await page.screenshot(),contentType:'image/png'});
   };
   await evidence('early');await tofuStageBounds(page);
@@ -177,7 +139,7 @@ for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} c
  await openTofuScene(page,light,true);const host=page.locator('.pt-canvas'),drop=page.getByRole('button',{name:'豆腐落下！',exact:true});await partyAdvance(page,250);
  await drop.click({button:'right'});await drop.dispatchEvent('pointerdown',{pointerId:91,isPrimary:false,button:0});await drop.dispatchEvent('pointerup',{pointerId:91,isPrimary:false,button:0});await drop.dispatchEvent('click',{detail:1});await expect(drop).toBeEnabled();
  await drop.dispatchEvent('pointerdown',{pointerId:92,isPrimary:true,button:0});await drop.dispatchEvent('pointercancel',{pointerId:92,isPrimary:true});await drop.dispatchEvent('pointerup',{pointerId:92,isPrimary:true,button:0});await drop.dispatchEvent('click',{detail:1});await expect(drop).toBeEnabled();
- await tofuWaitOffset(page,o=>o<.055);await tofuDrop(page);const box=(await host.boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.clock.runFor(550);await page.mouse.up();await expect(drop).toBeEnabled();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');
+ await tofuWaitOffset(page,o=>o<.055);await tofuDrop(page);const box=(await page.locator('.pt-gameplay-core').boundingBox())!;await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.clock.runFor(550);await page.mouse.up();await expect(drop).toBeEnabled();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');
  // Tab from the host reaches the actual sibling drop button. Holding it while
  // opening help must never replay that old press after the explicit resume.
  await host.press('Tab');await expect(drop).toBeFocused();await page.keyboard.down('Space');const help=page.getByRole('button',{name:'玩法與設定',exact:true});await help.click();await page.keyboard.up('Space');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);await page.keyboard.press('Escape');await expect(help).toBeFocused();await tofuFullscreen(page,true);
@@ -197,11 +159,11 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
     const name=`tofu-${light?'light':'native'}-${rejected?'rejected':'fullscreen'}-${viewport.width}x${viewport.height}-200-percent-${phase}`;
     // Capture before bounds assertions so a failing world retains its real
     // dimensions and viewport pixels. These are browser artifacts, not mocks.
-    await testInfo.attach(`${name}.json`,{body:JSON.stringify({viewport:page.viewportSize(),textScale:scale,phase,mode:light?'light':'native',fullscreen:phase==='normal'?'normal':rejected?'rejected':'native',minimumWorldCssPx:{width:128,height:96},world:await page.locator('.pt-canvas').boundingBox(),stage:await stage.boundingBox()},null,2),contentType:'application/json'});
+    await testInfo.attach(`${name}.json`,{body:JSON.stringify({ciSourceSha:process.env.GITHUB_SHA??null,viewport:page.viewportSize(),textScale:scale,phase,mode:light?'light':'native',fullscreen:phase==='normal'?'normal':rejected?'rejected':'native',minimumWorldCssPx:{width:128,height:96},world:await page.locator('.pt-canvas').boundingBox(),gameplayCore:await page.locator('.pt-gameplay-core').boundingBox(),stage:await stage.boundingBox()},null,2),contentType:'application/json'});
     await testInfo.attach(`${name}.png`,{body:await page.screenshot(),contentType:'image/png'});
   };
   await tofuTextScale(page,scale);
-  await partyAdvance(page,250);await attachWorldEvidence('playing');await tofuStageBounds(page,scale);expect(await stage.evaluate(root=>{const style=getComputedStyle(root);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([12,16,18,14]);
+  await partyAdvance(page,250);await attachWorldEvidence('playing');await tofuStageBounds(page,scale);expect(await stage.evaluate(root=>{const style=getComputedStyle(root.querySelector('.pt-root')!);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([20,24,26,22]);
   const buttons=page.locator('.pt-tofu-controls button');await expect(buttons).toHaveCount(1);for(const button of await buttons.all())await holidayControlHit(button);
   await tofuWaitOffset(page,offset=>offset<.055);await tofuDrop(page,'pointer');await page.clock.runFor(550);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');
   const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);const overlay=page.locator('.pt-holiday-overlay').filter({has:close});

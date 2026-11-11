@@ -3,8 +3,9 @@ import {test,expect,type Page,type Route} from './fixtures.js';
 import {readFileSync} from 'node:fs';
 import sharp from 'sharp';
 import {holidayTargets,actParty,advanceParty,newParty,startParty} from '../../apps/portal-web/src/games/party/domain.js';
+import {partyViewport} from '../../apps/portal-web/src/games/party/viewport.js';
 import {PARTY_RULES as PT} from '../../apps/portal-web/src/games/party/catalog.js';
-import {partyElapsed,partyAdvance,blockPartyWebGL,socialEntries,holidayControlHit,partyPaintedContentFailures,partyCoveredToolsBounds,partyScrollPaintedStageIntoView,holidayModalTextScale} from './helpers/party-scene.js';
+import {partyElapsed,partyAdvance,blockPartyWebGL,socialEntries,holidayControlHit,partyPaintedContentFailures,partyFullViewportComposition,partyCoveredToolsBounds,partyScrollPaintedStageIntoView,holidayModalTextScale} from './helpers/party-scene.js';
 
 // PT-HOLIDAY-SCENE: sustained fullscreen journeys, separate from openParty's
 // intentional exit coverage. Browser execution is required to validate these cases.
@@ -34,7 +35,7 @@ async function holidayHitPoint(page:Page,hole:number){
   return point;
 }
 test('PT-BOUNDS: painted content detects glyph and ancestor clipping without treating contents wrappers as paint',async({page})=>{
-  await page.setContent(`<div data-game-stage style="width:320px;height:160px"><section class="pt-holiday-stage" style="display:contents"><div class="pt-tools"><button style="display:grid;place-items:center;width:80px;height:64px;padding:0;font:40px/1.4 system-ui"><span aria-hidden="true">動</span></button></div><div class="pt-scoreboard"><small style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">本局得分</small><strong style="display:block;font:18px/1.4 system-ui">0<span>分</span></strong></div></section></div>`);
+  await page.setContent(`<div data-game-stage style="position:relative;width:320px;height:160px"><header class="pt-holiday-heading"><h1 style="position:absolute;left:8px;bottom:8px;margin:0;font:14px/20px system-ui">測試遊戲</h1></header><section class="pt-holiday-stage" style="display:contents"><div class="pt-tools"><button style="display:grid;place-items:center;width:80px;height:64px;padding:0;font:40px/1.4 system-ui"><span aria-hidden="true">動</span></button></div><div class="pt-scoreboard"><small style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap">本局得分</small><strong style="display:block;font:18px/1.4 system-ui">0<span>分</span></strong></div></section></div>`);
   const stage=page.locator('[data-game-stage]'),button=stage.locator('button');
   expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
   await button.evaluate(el=>{el.style.height='16px';el.style.overflow='hidden';});
@@ -47,7 +48,7 @@ test('PT-BOUNDS: painted content detects glyph and ancestor clipping without tre
 });
 for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS: ${selector} checks visible text without mistaking responsive hidden labels for clipping`,async({page})=>{
   const label=selector.endsWith('small')?'<div class="pt-scoreboard"><small>本局得分</small></div>':'<p class="pt-live-label">假日 3</p>';
-  await page.setContent(`<style>small,.pt-live-label{display:block;width:160px;height:40px;padding:0;margin:0;font:20px/1.4 system-ui}</style><div data-game-stage style="width:320px;height:240px"><section style="display:contents"><div data-label-clip style="width:240px;height:180px">${label}</div></section></div>`);
+  await page.setContent(`<style>small,.pt-live-label{display:block;width:160px;height:40px;padding:0;margin:0;font:20px/1.4 system-ui}</style><div data-game-stage style="position:relative;width:320px;height:240px"><header class="pt-holiday-heading"><h1 style="position:absolute;left:8px;bottom:8px;margin:0;font:14px/20px system-ui">測試遊戲</h1></header><section style="display:contents"><div data-label-clip style="width:240px;height:180px">${label}</div></section></div>`);
   const stage=page.locator('[data-game-stage]'),text=stage.locator(selector),parent=stage.locator('[data-label-clip]');
   expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
   await text.evaluate(el=>{el.style.height='8px';el.style.overflow='hidden';});
@@ -115,7 +116,18 @@ test('PT-HOLIDAY-SCENE: compact enlarged HUD and two-line feedback retain every 
         expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
         if(initialHeight)expect(bounds.height).toBeCloseTo(initialHeight,2);else initialHeight=bounds.height;
       }
-      const world=(await stage.locator('.pt-canvas').boundingBox())!;expect(world.width).toBeGreaterThanOrEqual(128);expect(world.height).toBeGreaterThanOrEqual(96);expect(world.width/world.height).toBeCloseTo(4/3,2);
+      // This isolated CSS/HUD fixture has no React observer. Measure its real
+      // chrome and feed the same projection contract; live journeys below must
+      // instead expose the renderer's actual .pt-gameplay-core.
+      const geometry=await stage.evaluate(root=>{
+        const host=root.querySelector('.pt-canvas')!.getBoundingClientRect(),owner=root.getBoundingClientRect(),css=getComputedStyle(root.querySelector('.pt-root')!);
+        const top=Math.max(...['.pt-holiday-heading','.pt-scoreboard','.fullscreen-game__bar'].map(selector=>root.querySelector(selector)!.getBoundingClientRect().bottom-host.top),0)+8;
+        const bottom=Math.max(0,...['.pt-controls','.pt-holiday-footer'].map(selector=>host.bottom-root.querySelector(selector)!.getBoundingClientRect().top))+8;
+        return {host:host.toJSON(),owner:owner.toJSON(),top,bottom,left:parseFloat(css.paddingLeft),right:parseFloat(css.paddingRight)};
+      });
+      for(const key of ['x','y','width','height']as const)expect(geometry.host[key]).toBeCloseTo(geometry.owner[key],1);
+      const world=partyViewport(geometry.host.width,geometry.host.height,geometry.top,geometry.bottom,geometry.left,geometry.right).core;
+      expect(world.width).toBeGreaterThanOrEqual(128);expect(world.height).toBeGreaterThanOrEqual(96);expect(world.width/world.height).toBeCloseTo(4/3,2);
       const feedback=await stage.locator('.pt-feedback').evaluate(el=>({height:el.clientHeight,line:parseFloat(getComputedStyle(el).lineHeight)}));if(scale===2)expect(feedback.height).toBeGreaterThanOrEqual(2*feedback.line-1);
       for(const button of await stage.locator('.pt-hole-controls button,.pt-tools button').all()){
         const content=await button.evaluate(el=>({label:el.textContent,width:el.clientWidth,height:el.clientHeight,scrollWidth:el.scrollWidth,scrollHeight:el.scrollHeight}));
@@ -151,50 +163,12 @@ async function holidayStageBounds(page:Page,scale=1){
     }
     return bad;
   });expect(failures).toEqual([]);
-  // Measure before any scrollIntoView: no partly clipped tool strip may pass by
-  // scrolling one button at a time. Whole native pixels remain outside all HUD
-  // and control rectangles; the light board's six buttons are its actual world.
-  const composition=await stage.evaluate((root,textScale)=>{
-    const outer=root.getBoundingClientRect(),style=getComputedStyle(root),bad:string[]=[];
-    const safe={left:outer.left+parseFloat(style.paddingLeft),top:outer.top+parseFloat(style.paddingTop),right:outer.right-parseFloat(style.paddingRight),bottom:outer.bottom-parseFloat(style.paddingBottom)};
-    const contains=(a:typeof safe,b:DOMRect)=>b.left>=a.left-1&&b.top>=a.top-1&&b.right<=a.right+1&&b.bottom<=a.bottom+1;
-    const overlap=(a:DOMRect,b:DOMRect)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
-    for(const selector of ['.fullscreen-game__bar','.pt-scoreboard','.pt-holiday-tools-viewport','.pt-tools']){
-      const el=root.querySelector<HTMLElement>(selector)!;if(getComputedStyle(el).backgroundColor!=='rgba(0, 0, 0, 0)')bad.push(`opaque chrome band: ${selector}`);
-    }
-    if(getComputedStyle(root.querySelector('.pt-holiday-field')!).backgroundColor!==style.backgroundColor)bad.push('disconnected game surface');
-    const controls=[...root.querySelectorAll<HTMLElement>('.fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button,.pt-hole-controls button,.pt-tools button')];
-    const boxes=controls.map(el=>({el,b:el.getBoundingClientRect()}));
-    for(const {el,b} of boxes){
-      const name=el.getAttribute('aria-label')??el.textContent;
-      if(!el.checkVisibility()||!contains(safe,b))bad.push(`control outside safe surface: ${name}`);
-      if(b.width<44||b.height<44)bad.push(`small control: ${name}`);
-      if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`clipped control content: ${name}`);
-      const hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(!hit||!el.contains(hit))bad.push(`covered control: ${name}`);
-    }
-    const chrome=[...boxes.map(item=>item.b),...Array.from(root.querySelectorAll('.pt-scoreboard,.pt-holiday-heading h1,.pt-holiday-feedback')).map(el=>el.getBoundingClientRect())];
-    for(let i=0;i<chrome.length;i++)for(let j=i+1;j<chrome.length;j++)if(overlap(chrome[i],chrome[j]))bad.push(`overlapping chrome: ${i}/${j}`);
-    for(const el of root.querySelectorAll<HTMLElement>('.pt-holiday-heading h1,.pt-scoreboard strong,.pt-scoreboard strong>span,.pt-target-label,.pt-tools button')){
-      const b=el.getBoundingClientRect();if(!contains(safe,b))bad.push(`text outside safe surface: ${el.textContent}`);
-      if(parseFloat(getComputedStyle(el).fontSize)<14*textScale-.1)bad.push(`small text: ${el.textContent}`);
-      if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`clipped text: ${el.textContent}`);
-    }
-    const host=root.querySelector<HTMLElement>('.pt-canvas')!,world=root.querySelector<HTMLElement>('.pt-holiday-world')!,canvas=host.querySelector('canvas');
-    if(host.querySelector('button,a,svg'))bad.push('controls inside renderer host');
-    if(canvas){
-      const b=host.getBoundingClientRect(),pixels=canvas.getBoundingClientRect();
-      if(!contains(safe,b)||!contains(world.getBoundingClientRect(),b))bad.push('native world clipped');
-      for(const key of ['x','y','width','height'] as const)if(Math.abs(b[key]-pixels[key])>1)bad.push(`unaligned native pixels: ${key}`);
-      const obstacles=[...boxes.map(item=>item.b),...Array.from(root.querySelectorAll('.pt-scoreboard,.pt-holiday-heading h1,.pt-holiday-feedback')).map(el=>el.getBoundingClientRect())];
-      if(obstacles.some(rect=>overlap(b,rect)))bad.push('native world obscured by HUD or controls');
-      for(const x of [b.left+1,b.right-1])for(const y of [b.top+1,b.bottom-1])if(!host.contains(document.elementFromPoint(x,y)))bad.push('native corner not hit-testable');
-    }else if(host.children.length)bad.push('light hit host is not empty');
-    for(const selector of ['.pt-holiday-tools-viewport','.pt-tools']){const el=root.querySelector<HTMLElement>(selector)!;if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`scrolling tool strip: ${selector}`);}
-    return bad;
-  },scale);expect(composition).toEqual([]);
+  // Before scrolling, prove full-owner render coverage and an independently
+  // unobscured canonical gameplay core; retain real safe-area control hit tests.
+  expect(await stage.evaluate(partyFullViewportComposition,scale)).toEqual([]);
   expect(await stage.evaluate(partyPaintedContentFailures)).toEqual([]);
-  if(await page.locator('.pt-canvas canvas').count()){
-    const box=(await page.locator('.pt-canvas').boundingBox())!,diagnostic=`Holiday world actual rect: ${JSON.stringify(box)}`;
+  { // The light scene must preserve the same minimum playable core as native.
+    const box=(await page.locator('.pt-gameplay-core').boundingBox())!,diagnostic=`Holiday gameplay core actual rect: ${JSON.stringify(box)}`;
     expect(box.width,`${diagnostic}; minimum width is 128 CSS px`).toBeGreaterThanOrEqual(128);expect(box.height,`${diagnostic}; minimum height is 96 CSS px`).toBeGreaterThanOrEqual(96);expect(box.width/box.height).toBeCloseTo(4/3,2);
     if(scale===2&&page.viewportSize()?.width===667&&page.viewportSize()?.height===375&&await stage.getAttribute('role')==='dialog'){
       // d141 / run 42533847998 original Holiday JSON: 173.84375×130.390625.
@@ -284,7 +258,7 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   const attachWorldEvidence=async(phase:'playing'|'resumed'|'normal')=>{
     if(scale!==2||viewport.width===1440)return;
     const name=`holiday-${light?'light':'native'}-${rejected?'rejected':'fullscreen'}-${viewport.width}x${viewport.height}-200-percent-${phase}`;
-    await testInfo.attach(`${name}.json`,{body:JSON.stringify({viewport:page.viewportSize(),textScale:scale,phase,world:await page.locator('.pt-canvas').boundingBox(),stage:await stage.boundingBox()},null,2),contentType:'application/json'});
+    await testInfo.attach(`${name}.json`,{body:JSON.stringify({ciSourceSha:process.env.GITHUB_SHA??null,viewport:page.viewportSize(),textScale:scale,phase,world:await page.locator('.pt-canvas').boundingBox(),gameplayCore:await page.locator('.pt-gameplay-core').boundingBox(),stage:await stage.boundingBox()},null,2),contentType:'application/json'});
     await testInfo.attach(`${name}.png`,{body:await page.screenshot(),contentType:'image/png'});
   };
   await stage.evaluate((root,factor)=>{
@@ -294,7 +268,7 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
     for(const {n,font,line} of styles){n.style.fontSize=`${font*factor}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*factor}px`;}
   },scale);
   await partyAdvance(page,250);await attachWorldEvidence('playing');await holidayStageBounds(page,scale);
-  expect(await stage.evaluate(root=>{const style=getComputedStyle(root);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([12,16,18,14]);
+  expect(await stage.evaluate(root=>{const style=getComputedStyle(root.querySelector('.pt-root')!);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([20,24,26,22]);
   const cells=page.locator('.pt-hole-controls button');for(let i=0;i<6;i++)await holidayControlHit(cells.nth(i));
   // Reverse traversal catches controls stranded before a centered scroll origin.
   await cells.last().focus();await holidayControlHit(cells.last());await cells.first().focus();await holidayControlHit(cells.first());await expect(cells.first()).toBeFocused();
