@@ -344,3 +344,35 @@ test('mushroom cap, flesh border and tapered stalk have explicit real dimensions
   }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
  }
 });
+
+test('preparation pigments are deterministic, seam-continuous and reveal layered real cut flesh',()=>{
+ for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
+  const planes=[-1.2,-.4,.4,1.2],owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
+  const model=preparation.createPreparationModel(id,planes,owned,materials);
+  try{
+   const skins=model.segments.map(g=>g.getObjectByName('preparation/skin') as T.Mesh);
+   for(const skin of skins){
+    const colors=skin.geometry.getAttribute('color'),distinct=new Set<string>();
+    for(let i=0;i<colors.count;i++){
+     const channels=[colors.getX(i),colors.getY(i),colors.getZ(i)];
+     channels.forEach(v=>assert.ok(Number.isFinite(v)&&v>=0&&v<=1.2));
+     distinct.add(channels.map(v=>v.toFixed(4)).join('/'));
+    }
+    assert.ok(distinct.size>80,`${id}: real pigment variation must survive beyond a flat colour swap`);
+   }
+   for(let seam=0;seam<planes.length;seam++){
+    const at=(mesh:T.Mesh)=>{const p=mesh.geometry.getAttribute('position'),c=mesh.geometry.getAttribute('color'),result=new Map<string,number[]>();for(let i=0;i<p.count;i++)if(Math.abs(p.getX(i)+mesh.parent!.position.x-planes[seam])<1e-6)result.set(`${p.getY(i).toFixed(5)}/${p.getZ(i).toFixed(5)}`,[c.getX(i),c.getY(i),c.getZ(i)]);return result;};
+    const left=at(skins[seam]),right=at(skins[seam+1]);assert.ok(left.size>=39);
+    for(const [point,color] of left){const other=right.get(point);assert.ok(other,`${id}: both sides share the same skin seam`);color.forEach((value,i)=>assert.ok(Math.abs(value-other![i])<1e-6));}
+   }
+   if(id!=='mushroom'){
+    const face=model.faces[2].right.geometry,c=face.getAttribute('color'),p=face.getAttribute('position');
+    assert.ok(p.count>=1200,'flesh has multiple actual radial bands rather than a single colour fan');
+    const tones=new Set(Array.from({length:c.count},(_,i)=>[c.getX(i),c.getY(i),c.getZ(i)].map(v=>v.toFixed(4)).join('/')));
+    assert.ok(tones.size>50,'thin rind, flesh and core retain distinct pigments');
+   }
+   const before=snapshot(model.root as unknown as T.Scene);
+   model.update(2);model.update(0);assert.deepEqual(snapshot(model.root as unknown as T.Scene),before,'cuts do not rerandomize surface appearance');
+  }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
+ }
+});
