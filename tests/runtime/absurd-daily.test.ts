@@ -1,3 +1,4 @@
+import * as kitchenPresentation from '../../apps/portal-web/src/games/cooking/kitchen-presentation.js';
 import {createCoatingHold,coatingKeyOwner} from '../../apps/portal-web/src/games/cooking/coating-hold.js';
 import * as jsxRuntime from 'react/jsx-runtime';
 import {validateGameUploadSource,GAME_UPLOAD_SOURCE_MAX_BYTES,GameUploadSourceError} from '../../modules/absurd-daily/game-upload-source.js';
@@ -22,6 +23,7 @@ test('UX-15g restored completed guided run skips kitchen startup while restart a
  runInNewContext(code,{module,exports:module.exports,performance:{now:()=>1},matchMedia:()=>({matches:true,addEventListener(){},removeEventListener(){}}),requestAnimationFrame:()=>1,cancelAnimationFrame(){},setTimeout:()=>1,clearTimeout(){},require:(path:string)=>{
   if(path==='react')return hooks;if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
   if(path==='./kitchen-stage'){imports++;return {createKitchenStage:()=>{creates++;return stage;}};}
+  if(path==='./kitchen-presentation')return kitchenPresentation;
   if(path==='./domain')return {currentStep:()=>({kind:'mix',directions:[]}),plateTarget:()=>({x:.5,y:.5}),cutGuide:()=>.5};
   if(path==='./catalog')return {KITCHEN_VIEW:{loaderMs:15000}};if(path==='../diagnostics')return {syncDiagnostics(){}};return {CookingScene:()=>null};
  }});

@@ -3,6 +3,7 @@ import {CookingScene as Illustration} from './CookingIllustration';
 import {currentStep,cutGuide,plateTarget} from './domain';
 import type {KitchenStage} from './kitchen-stage';
 import {KITCHEN_VIEW} from './catalog';
+import {kitchenWorkZoom,kitchenGuideViewBox} from './kitchen-presentation';
 import {syncDiagnostics} from '../diagnostics';
 type Props=ComponentProps<typeof Illustration>&{onModeChange?:(mode:'loading'|'3d'|'light')=>void;onSettled:(ready:boolean)=>void;readRun:()=>ComponentProps<typeof Illustration>['run'];captureRef:{current:((run:ComponentProps<typeof Illustration>['run'])=>string)|null}};
 
@@ -44,7 +45,7 @@ export function CookingScene(props:Props){
  const step=currentStep(run),target=plateTarget(run),guide=mode==='3d'&&run.status==='playing';
  return <><div ref={host} className="ck-kitchen-canvas ck-kitchen-panorama" aria-hidden="true"/><div className={`ck-live-scene ck-visual-${mode}`}>
   <Illustration {...props}/>
-  {guide&&<svg className="ck-toy-guides" viewBox="0 0 800 560" aria-hidden="true">
+  {guide&&<svg className="ck-toy-guides" viewBox={kitchenGuideViewBox(kitchenWorkZoom(step.kind,run.status==='done'))} aria-hidden="true">
     {step.kind==='slice'&&<><path d={`M${cutGuide(run)*800} 175V364`} stroke="#453c33" strokeWidth="11" strokeLinecap="round"/><path d={`M${cutGuide(run)*800} 175V364`} stroke="#fff0c4" strokeWidth="6" strokeDasharray="15 12" strokeLinecap="round"/><path d={`M${cutGuide(run)*800-15} 342l15 22 15-22`} stroke="#fff0c4" strokeWidth="6" fill="none"/></>}
     {step.kind==='mix'&&<><ellipse cx="400" cy="291" rx="159" ry="105" fill="none" stroke="#fff0c4" strokeWidth="5" strokeDasharray="14 14"/><path d="m540 226 26 21-31 9" stroke="#fff0c4" strokeWidth="7" fill="none"/></>}
     {step.kind==='fold'&&<text x="400" y="430" textAnchor="middle" fontSize="80" fill="#fff5d6" stroke="#705037" strokeWidth="2">{({left:'←',right:'→',up:'↑',down:'↓'} as const)[step.directions[run.active.count]??'up']}</text>}

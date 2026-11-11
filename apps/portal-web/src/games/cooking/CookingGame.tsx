@@ -5,12 +5,13 @@ import { actCooking, advanceCooking, cookingProgress, cookingScore, currentStep,
 import { clearCookingRun, readCookingRun, saveCookingRun, type CookingStorage } from './storage';
 import { FoodArt, foodPreview } from './FoodArt';
 import { CookingScene } from './CookingScene';
+import {kitchenWorkZoom,kitchenInputPoint} from './kitchen-presentation';
 import {cookingCue} from './cues';
 
 export const storagePort=(kind:'localStorage'|'sessionStorage'):CookingStorage=>({getItem:key=>window[kind].getItem(key),setItem:(key,value)=>window[kind].setItem(key,value),removeItem:key=>window[kind].removeItem(key)});
 type Command=CookingAction extends infer A?A extends {step:number}?Omit<A,'step'>:never:never;
 type HoldOwner={kind:'pointer';id:number}|{kind:'key';key:string};
-type Gesture={id:number;x:number;y:number;index:number;step:number};
+type Gesture={zoom:number;id:number;x:number;y:number;index:number;step:number};
 function initial(recipe:Recipe,seed:number,fresh:boolean){const saved=readCookingRun(storagePort('sessionStorage')),other=saved.run&&saved.run.recipeId!==recipe.id&&saved.run.elapsed>0&&saved.run.status!=='done';return {run:!fresh&&saved.run?.recipeId===recipe.id&&saved.run.seed===seed?saved.run:newCookingRun(recipe,seed,crypto.randomUUID()),notice:saved.notice||(other?`上一盤「${recipeOf(saved.run!.recipeId)!.name}」尚未完成。開始這道料理後，會替換本分頁的操作進度。`:'')};}
 
 /** UX-8: actual 3D completion capture and real score; a model preview is the bounded fallback. */
@@ -58,10 +59,11 @@ export function CookingGame({recipe,seed,fresh=false,onBack,onResult,onComplete,
   // Reveal the live scene on resume without relying on another fullscreen transition.
   const begin=()=>{if(!visualReady||confirmRestart||!['ready','paused'].includes(live.current.status))return;const before=live.current;command({kind:before.status==='paused'?'resume':'start'});if(live.current===before||live.current.status!=='playing')return;onStart?.(section.current,section.current?.querySelector<HTMLElement>('.ck-live-scene')??null);setNotice(`開煮！先把${currentStep(live.current).ingredient}照顧好。`);section.current?.focus({preventScroll:true});if(before.status==='paused')section.current?.querySelector('.ck-live-scene')?.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});else section.current?.querySelector('.ck-game-layout')?.scrollIntoView({block:'start',behavior:'instant'});};
   const restart=()=>{clearGesture();generation.current++;exportOwner.current=null;resultStarted.current='';clearCookingRun(savedSession.current,live.current.id);commit(newCookingRun(recipe,seed,crypto.randomUUID()));setConfirmRestart(false);setNotice('新的一盤，準備好了。');setExporting(false);setExportError(false);};
-  const xy=(event:PointerEvent<SVGSVGElement>)=>{const rect=event.currentTarget.getBoundingClientRect();return {x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height};};
-  const down=(event:PointerEvent<SVGSVGElement>)=>{if(live.current.status!=='playing'||gesture.current||holdOwner.current||event.button!==0||!event.isPrimary)return;event.preventDefault();const p=xy(event),run=live.current;gesture.current={id:event.pointerId,...p,index:run.active.count,step:run.step};event.currentTarget.setPointerCapture(event.pointerId);setPoint(p);const kind=currentStep(run).kind;if(kind==='knead'||kind==='pour')command({kind:'hold-start'});if(kind==='mix')command({kind:'stir',...p});};
+  const currentZoom=()=>visualMode==='3d'?kitchenWorkZoom(currentStep(live.current).kind,live.current.status==='done'):1;
+  const xy=(event:PointerEvent<SVGSVGElement>,zoom=gesture.current?.zoom??currentZoom())=>{const rect=event.currentTarget.getBoundingClientRect();return kitchenInputPoint((event.clientX-rect.left)/rect.width,(event.clientY-rect.top)/rect.height,zoom);};
+  const down=(event:PointerEvent<SVGSVGElement>)=>{if(live.current.status!=='playing'||gesture.current||holdOwner.current||event.button!==0||!event.isPrimary)return;event.preventDefault();const p=xy(event),run=live.current;gesture.current={zoom:currentZoom(),id:event.pointerId,...p,index:run.active.count,step:run.step};event.currentTarget.setPointerCapture(event.pointerId);setPoint(p);const kind=currentStep(run).kind;if(kind==='knead'||kind==='pour')command({kind:'hold-start'});if(kind==='mix')command({kind:'stir',...p});};
   const move=(event:PointerEvent<SVGSVGElement>)=>{if(gesture.current?.id!==event.pointerId)return;const p=xy(event);if(currentStep(live.current).kind==='mix')command({kind:'stir',...p},gesture.current.step,false);paintPoint(p);};
-  const up=(event:PointerEvent<SVGSVGElement>)=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;gesture.current=null;cancelAnimationFrame(pointFrame.current);pointFrame.current=0;pendingPoint.current=null;const p=xy(event),kind=currentStep(live.current).kind;setPoint(null);
+  const up=(event:PointerEvent<SVGSVGElement>)=>{const g=gesture.current;if(!g||g.id!==event.pointerId)return;gesture.current=null;cancelAnimationFrame(pointFrame.current);pointFrame.current=0;pendingPoint.current=null;const p=xy(event,g.zoom),kind=currentStep(live.current).kind;setPoint(null);
     if(kind==='slice')command({kind:'cut',x1:g.x,y1:g.y,x2:p.x,y2:p.y},g.step);
     if(kind==='mix')command({kind:'cancel'},g.step);
     if(kind==='knead'||kind==='pour')command({kind:'hold-end'},g.step);
