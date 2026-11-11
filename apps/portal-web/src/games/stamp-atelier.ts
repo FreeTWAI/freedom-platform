@@ -29,7 +29,7 @@ export function mountStampAtelier(host:HTMLElement, logoUrl:string) {
  `;
  host.append(style);
  const root=document.createElement('section');root.className='stamp-atelier';root.setAttribute('aria-label','下班蓋章室：可操作 3D 預覽');
- root.innerHTML=`<header class="atelier-top"><div class="atelier-identity"><img alt="自由工坊"><div class="atelier-eyebrow">THE NIGHT SHIFT · 02</div><h1>下班蓋章室</h1><p>今夜，替荒謬蓋一個章。</p></div><nav class="atelier-actions" aria-label="遊戲控制"><button type="button" data-pause aria-label="暫停">Ⅱ</button><button type="button" data-reset aria-label="重新開始">↻</button><button type="button" data-full aria-label="切換全螢幕">⛶</button></nav></header><div class="atelier-progress"><strong data-progress>練習</strong><span>DOCUMENTS / 12</span></div><div class="atelier-status" data-status>實際可操作預覽 · 尚未上線</div><footer class="atelier-bottom"><div class="atelier-instruction"><span class="atelier-step">01 / TOUCH THE PAPER</span><p class="atelier-help">點一下蓋章，或拖曳後放開</p><button type="button" data-assist aria-pressed="false">輔助瞄準</button></div><div class="atelier-primary"><p class="atelier-feedback" role="status">先蓋中虛線圈，練習不計分。</p><button type="button" class="atelier-stamp">蓋章<span>點紙面也可以</span></button></div></footer><div class="atelier-caption">下班事務所  /  EST. 00:01</div><div class="atelier-panel" hidden><div class="atelier-card" role="dialog" aria-modal="true" aria-labelledby="atelier-dialog-title"><h2 id="atelier-dialog-title">休息一下</h2><p data-panel-copy>這張公文和進度都替你留著。</p><button type="button" data-resume>繼續蓋章</button></div></div>`;
+ root.innerHTML=`<header class="atelier-top"><div class="atelier-identity"><img alt="自由工坊"><div class="atelier-eyebrow">夜 班 文 書  /  VOL. 02</div><h1>下班蓋章室</h1><p>今夜，替荒謬蓋一個章。</p></div><nav class="atelier-actions" aria-label="遊戲控制"><button type="button" data-pause aria-label="暫停">Ⅱ</button><button type="button" data-reset aria-label="重新開始">↻</button><button type="button" data-full aria-label="切換全螢幕">⛶</button></nav></header><div class="atelier-progress"><strong data-progress>練習</strong><span>DOCUMENTS / 12</span></div><div class="atelier-status" data-status>實際可操作預覽 · 尚未上線</div><footer class="atelier-bottom"><div class="atelier-instruction"><span class="atelier-step">01 / TOUCH THE PAPER</span><p class="atelier-help">點一下蓋章，或拖曳後放開</p><button type="button" data-assist aria-pressed="false">輔助瞄準</button></div><div class="atelier-primary"><p class="atelier-feedback" role="status">先蓋中虛線圈，練習不計分。</p><button type="button" class="atelier-stamp">蓋章<span>點紙面也可以</span></button></div></footer><div class="atelier-caption">文書有終，夜色未央  /  00:01</div><div class="atelier-panel" hidden><div class="atelier-card" role="dialog" aria-modal="true" aria-labelledby="atelier-dialog-title"><h2 id="atelier-dialog-title">休息一下</h2><p data-panel-copy>這張公文和進度都替你留著。</p><button type="button" data-resume>繼續蓋章</button></div></div>`;
  root.querySelector('img')!.src=logoUrl;host.append(root);
  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power'});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.02;
@@ -46,15 +46,23 @@ export function mountStampAtelier(host:HTMLElement, logoUrl:string) {
  const part=(g:THREE.BufferGeometry,color:string,x:number,y:number,z:number,sx:number,sy:number,sz:number,parent:THREE.Object3D=scene,metalness=0)=>{const m=new THREE.Mesh(g,material(color,metalness));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;};
  const box=(color:string,x:number,y:number,z:number,w:number,h:number,d:number,parent:THREE.Object3D=scene)=>part(rounded,color,x,y,z,w,h,d,parent);
  const desktop=box('#49362f',0,-.26,0,18,.5,18); // A continuous work surface, never a backdrop card.
- const woodCanvas=document.createElement('canvas');woodCanvas.width=512;woodCanvas.height=512;const wc=woodCanvas.getContext('2d')!;wc.fillStyle='#48332b';wc.fillRect(0,0,512,512);let grainSeed=71;const noise=()=>{grainSeed=(grainSeed*1664525+1013904223)>>>0;return grainSeed/4294967296;};for(let i=0;i<1200;i++){const y=noise()*512;wc.strokeStyle=`rgba(${noise()>.5?'193,140,91':'24,17,17'},${.03+noise()*.12})`;wc.lineWidth=.3+noise()*1.3;wc.beginPath();for(let x=0;x<=512;x+=16){const gy=y+Math.sin(x/90+y)*2.5;x?wc.lineTo(x,gy):wc.moveTo(x,gy);}wc.stroke();}const woodTexture=new THREE.CanvasTexture(woodCanvas);woodTexture.colorSpace=THREE.SRGBColorSpace;woodTexture.wrapS=woodTexture.wrapT=THREE.RepeatWrapping;woodTexture.repeat.set(3,3);textures.add(woodTexture);const desktopMaterial=new THREE.MeshStandardMaterial({map:woodTexture,color:'#bba18c',roughness:.7});materials.add(desktopMaterial);desktop.material=desktopMaterial;
+ const woodCanvas=document.createElement('canvas');woodCanvas.width=512;woodCanvas.height=512;const wc=woodCanvas.getContext('2d')!;wc.fillStyle='#48332b';wc.fillRect(0,0,512,512);let grainSeed=71;const noise=()=>{grainSeed=(grainSeed*1664525+1013904223)>>>0;return grainSeed/4294967296;};for(let i=0;i<1200;i++){const y=noise()*512;wc.strokeStyle=`rgba(${noise()>.5?'193,140,91':'24,17,17'},${.03+noise()*.12})`;wc.lineWidth=.3+noise()*1.3;wc.beginPath();for(let x=0;x<=512;x+=16){const gy=y+Math.sin(x/90+y)*2.5;x?wc.lineTo(x,gy):wc.moveTo(x,gy);}wc.stroke();}const woodTexture=new THREE.CanvasTexture(woodCanvas);woodTexture.colorSpace=THREE.SRGBColorSpace;woodTexture.wrapS=woodTexture.wrapT=THREE.RepeatWrapping;woodTexture.repeat.set(3,3);textures.add(woodTexture);const desktopMaterial=new THREE.MeshStandardMaterial({map:woodTexture,bumpMap:woodTexture,bumpScale:.035,color:'#c4a588',roughness:.58});materials.add(desktopMaterial);desktop.material=desktopMaterial;
  // Fine seam around the leather writing pad, built as one geometry.
  const seamPoints:THREE.Vector3[]=[];for(const [x,z] of [[-1.96,-2.28],[1.96,-2.28],[1.96,2.38],[-1.96,2.38],[-1.96,-2.28]])seamPoints.push(new THREE.Vector3(x,.043,z));const seamMaterial=new THREE.LineDashedMaterial({color:'#af9872',dashSize:.035,gapSize:.025,transparent:true,opacity:.5});materials.add(seamMaterial);const seam=new THREE.Line(geometry(new THREE.BufferGeometry().setFromPoints(seamPoints)),seamMaterial);seam.computeLineDistances();scene.add(seam);
  const mat=box('#243f3b',0,.01,.05,4.05,.055,4.8);mat.receiveShadow=true;
+ // One deterministic relief atlas gives the leather, paper and ink physical tooth.
+ // Reused GPU texture is owned and disposed alongside the other scene resources.
+ const toothCanvas=document.createElement('canvas');toothCanvas.width=256;toothCanvas.height=256;
+ const tc=toothCanvas.getContext('2d')!;tc.fillStyle='#808080';tc.fillRect(0,0,256,256);
+ for(let i=0;i<9000;i++){const x=noise()*256,y=noise()*256;tc.fillStyle=noise()>.5?'#b4b4b4':'#555555';tc.fillRect(x,y,.6+noise(),.5+noise()*2);}
+ const tooth=new THREE.CanvasTexture(toothCanvas);tooth.wrapS=tooth.wrapT=THREE.RepeatWrapping;textures.add(tooth);
+ const leather=new THREE.MeshStandardMaterial({color:'#263e35',roughness:.76,bumpMap:tooth,bumpScale:.018});materials.add(leather);mat.material=leather;
+
  box('#49362f',0,.065,0,3.34,.08,4.02);
  for(let i=0;i<4;i++)box(i%2?'#e9dcc3':'#fff1d5',Math.sin(i)*.018,.12+i*.012,0,3.03,.012,3.72);
  const paperCanvas=document.createElement('canvas');paperCanvas.width=900;paperCanvas.height=1110;const ctx=paperCanvas.getContext('2d');if(!ctx)throw Error('無法建立公文圖像');
  const paperTexture=new THREE.CanvasTexture(paperCanvas);paperTexture.colorSpace=THREE.SRGBColorSpace;paperTexture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());textures.add(paperTexture);
- const paperMaterial=new THREE.MeshStandardMaterial({map:paperTexture,roughness:.92});materials.add(paperMaterial);
+ const paperMaterial=new THREE.MeshStandardMaterial({map:paperTexture,roughness:.96,bumpMap:tooth,bumpScale:.009});materials.add(paperMaterial);
  const paper=new THREE.Mesh(geometry(new THREE.PlaneGeometry(3,3.7)),paperMaterial);paper.rotation.x=-Math.PI/2;paper.position.y=.178;paper.receiveShadow=true;scene.add(paper);
  // Rolled brass clip, enamel seal and cedar handle are separate physical forms.
  box('#49362f',0,.23,-1.83,.58,.1,.18);part(cylinder,'#e8bd68',0,.32,-1.83,.22,.12,.12,scene,.65).rotation.z=Math.PI/2;
@@ -62,9 +70,29 @@ export function mountStampAtelier(host:HTMLElement, logoUrl:string) {
  box('#49362f',0,.05,0,.52,.1,.52,tool);box('#b34d36',0,.12,0,.48,.07,.48,tool);
  part(cylinder,'#e8bd68',0,.2,0,.22,.11,.22,tool,.65);
  const profile=[[0,.24],[.14,.24],[.13,.32],[.10,.47],[.12,.63],[.23,.76],[.25,.88],[.18,.99],[0,1.03]].map(([x,y])=>new THREE.Vector2(x,y));
- part(geometry(new THREE.LatheGeometry(profile,32)),'#49362f',0,0,0,1,1,1,tool);
+ const cedar=part(geometry(new THREE.LatheGeometry(profile,48)),'#49362f',0,0,0,1,1,1,tool);const cedarMaterial=new THREE.MeshStandardMaterial({map:woodTexture,color:'#a46f45',roughness:.32,bumpMap:woodTexture,bumpScale:.018});materials.add(cedarMaterial);cedar.material=cedarMaterial;
+ for(const y of [.72,.91])part(geometry(new THREE.TorusGeometry(y===.72?.205:.228,.009,6,40)),'#c9a25c',0,y,0,1,1,1,tool,.65).rotation.x=Math.PI/2;
+ // A recessed red seal face and polished collar remain real geometry.
+ part(cylinder,'#8f372c',0,1.023,0,.103,.015,.103,tool);
  part(cylinder,'#e8bd68',0,.31,0,.137,.025,.137,tool,.65);
- const cradle=box('#49362f',2.16,.16,1.15,.82,.22,.86);cradle.rotation.y=-.12;box('#b34d36',2.16,.278,1.15,.67,.018,.71);
+ const cradle=part(cylinder,'#2c2926',2.16,.14,1.15,.51,.22,.51);cradle.material=material('#2c2926',.15);
+ const ink=part(cylinder,'#a53224',2.16,.258,1.15,.422,.018,.422);const inkMaterial=new THREE.MeshStandardMaterial({color:'#a53224',roughness:.55,bumpMap:tooth,bumpScale:.045});materials.add(inkMaterial);ink.material=inkMaterial;
+ part(geometry(new THREE.TorusGeometry(.46,.037,12,48)),'#39352d',2.16,.26,1.15,1,1,1,scene,.25).rotation.x=Math.PI/2;
+ // The lid rests behind the cinnabar inkstone, never on the touch target.
+ const lid=part(cylinder,'#454a38',2.71,.08,1.87,.48,.09,.48);lid.rotation.z=.08;
+ part(geometry(new THREE.TorusGeometry(.37,.008,6,40)),'#c9a25c',2.71,.13,1.87,1,1,1,scene,.5).rotation.x=Math.PI/2;
+ // Cloth-bound archive ledger with exposed paper block and a vermilion bookmark.
+ box('#273b37',-2.63,.08,-.42,.91,.10,1.35);
+ const ledger=box('#dfcfab',-2.6,.18,-.42,.84,.13,1.26);
+ box('#304b43',-2.63,.267,-.42,.94,.055,1.38);
+ box('#192b27',-3.04,.19,-.42,.09,.23,1.38);
+ box('#9b382a',-2.40,.302,.18,.10,.014,.52);
+ // Gold tooling uses a single plane rather than dozens of ornament meshes.
+ const coverCanvas=document.createElement('canvas');coverCanvas.width=256;coverCanvas.height=384;
+ const cc=coverCanvas.getContext('2d')!;cc.fillStyle='#304b43';cc.fillRect(0,0,256,384);cc.strokeStyle='#ba9b62';cc.lineWidth=2;cc.strokeRect(24,22,208,340);cc.strokeRect(31,29,194,326);cc.fillStyle='#d6b97b';cc.font='28px serif';cc.textAlign='center';for(const [i,ch] of [...'夜班簿'].entries())cc.fillText(ch,128,130+i*45);cc.font='12px serif';cc.fillText('ARCHIVE  /  002',128,320);
+ const coverTexture=new THREE.CanvasTexture(coverCanvas);coverTexture.colorSpace=THREE.SRGBColorSpace;textures.add(coverTexture);
+ const coverMaterial=new THREE.MeshStandardMaterial({map:coverTexture,bumpMap:tooth,bumpScale:.01,roughness:.82});materials.add(coverMaterial);
+ const cover=new THREE.Mesh(geometry(new THREE.PlaneGeometry(.88,1.32)),coverMaterial);cover.rotation.x=-Math.PI/2;cover.position.set(-2.63,.297,-.42);cover.receiveShadow=true;scene.add(cover);
  // Trays and understated desk props stay outside the playable paper.
  box('#3f6c64',2.55,.14,-.72,1.65,.16,2.1);box('#e8bd68',2.55,.24,-1.72,1.65,.18,.07);
  const finished:THREE.Mesh[]=[];for(let i=0;i<12;i++){const sheet=box('#fff1d5',2.55+Math.sin(i)*.02,.25+i*.018,-.7,1.48,.013,1.83);sheet.rotation.y=Math.sin(i)*.025;sheet.visible=false;finished.push(sheet);}
@@ -79,12 +107,17 @@ export function mountStampAtelier(host:HTMLElement, logoUrl:string) {
  const feedback=root.querySelector<HTMLElement>('.atelier-feedback')!,panel=root.querySelector<HTMLElement>('.atelier-panel')!,controls=root.querySelector<HTMLElement>('.atelier-bottom')!,top=root.querySelector<HTMLElement>('.atelier-top')!;
  const progress=root.querySelector<HTMLElement>('[data-progress]')!,resume=root.querySelector<HTMLButtonElement>('[data-resume]')!,stampButton=root.querySelector<HTMLButtonElement>('.atelier-stamp')!;
  function paintPaper(){
-  const c=ctx!;c.fillStyle='#f8f2e8';c.fillRect(0,0,900,1110);for(let i=0;i<12000;i++){const x=(i*137.508)%900,y=(i*83.713)%1110;c.fillStyle=i%2?'#49362f06':'#ffffff30';c.fillRect(x,y,1,1);}c.strokeStyle='#dbc9b3';c.lineWidth=2;c.strokeRect(42,42,816,1026);
+  const c=ctx!;c.fillStyle='#f8f2e8';c.fillRect(0,0,900,1110);for(let i=0;i<12000;i++){const x=(i*137.508)%900,y=(i*83.713)%1110;c.fillStyle=i%2?'#49362f06':'#ffffff30';c.fillRect(x,y,1,1);}// A laid-paper edge and engraved frame are baked once per document, not animated.
+  const edge=c.createLinearGradient(0,0,900,0);edge.addColorStop(0,'#b9955c38');edge.addColorStop(.08,'#ffffff00');edge.addColorStop(.92,'#ffffff00');edge.addColorStop(1,'#b9955c25');c.fillStyle=edge;c.fillRect(0,0,900,1110);
+  c.strokeStyle='#8d503c';c.lineWidth=2;c.strokeRect(42,42,816,1026);c.strokeStyle='#b8986d';c.lineWidth=1;c.strokeRect(51,51,798,1008);
+  for(const x of [42,858])for(const y of [42,1068]){c.fillStyle='#8d503c';c.fillRect(x-4,y-4,8,8);}
+
   c.fillStyle='#251b17';c.font='600 24px system-ui';c.textAlign='left';c.fillText('下班事務所  /  收發室',78,105);c.textAlign='right';c.fillText('OD–'+String(state.index+1).padStart(3,'0'),822,105);
-  c.strokeStyle='#251b17';c.lineWidth=4;c.beginPath();c.moveTo(78,135);c.lineTo(822,135);c.stroke();c.fillStyle='#251b17';c.textAlign='left';c.font='800 48px system-ui';
+  c.strokeStyle='#251b17';c.lineWidth=4;c.beginPath();c.moveTo(78,135);c.lineTo(822,135);c.stroke();c.fillStyle='#251b17';c.textAlign='left';c.font='600 48px Georgia, serif';
   const title=documentTitle(state.index,state.practice);c.fillText(title.slice(0,13),78,213,744);if(title.length>13)c.fillText(title.slice(13),78,269,744);
   c.font='26px system-ui';c.fillStyle='#251b17';c.fillText(state.practice?'練習件  /  不計入正式公文':'一般件  /  請蓋章後準時下班',78,315);
-  c.strokeStyle='#bcae97';c.lineWidth=2;for(let i=0;i<4;i++){c.beginPath();c.moveTo(78,369+i*38);c.lineTo(650-i*43,369+i*38);c.stroke();}
+  c.strokeStyle='#bcae97';c.lineWidth=1;for(let i=0;i<4;i++){c.beginPath();c.moveTo(78,369+i*38);c.lineTo(650-i*43,369+i*38);c.stroke();}
+  c.save();c.translate(765,420);c.rotate(.06);c.strokeStyle='#9b382a80';c.lineWidth=3;c.strokeRect(-29,-57,58,114);c.fillStyle='#9b382a';c.font='24px serif';c.textAlign='center';c.fillText('夜',0,-18);c.fillText('班',0,15);c.fillText('件',0,48);c.restore();
   const target=stampTarget(state.seed,state.index),x=450+target.x*360,y=555+target.y*450;
   c.strokeStyle='#284839';c.lineWidth=5;c.setLineDash([10,10]);c.beginPath();c.ellipse(x,y,RULES.stampRadius*360,RULES.stampRadius*450,0,0,Math.PI*2);c.stroke();c.setLineDash([]);
   c.fillStyle='#284839';c.font='700 28px system-ui';c.textAlign='center';c.fillText('核章處',x,y+RULES.stampRadius*450+37);c.strokeStyle='#bcae97';c.lineWidth=1;c.strokeRect(78,790,744,150);c.font='24px system-ui';c.fillStyle='#251b17';c.textAlign='left';c.fillText('承辦  /  夜班同仁',98,830);c.fillText('保存年限  /  直到下班',98,878);c.textAlign='right';c.fillText('附件  〇  份',802,878);
