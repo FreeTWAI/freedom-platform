@@ -3,9 +3,10 @@ import { flushSync } from 'react-dom';
 import { FullscreenGame, type FullscreenGameHandle } from './FullscreenGame';
 import {GameCover} from './GameCover';
 import {CommunityGameSubmission} from './CommunityGameSubmission';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type MouseEvent, type ReactNode } from 'react';
 import { beginStamps, cashDeck, challengeUrl, clamp, CLIENTS, documentTitle, gameOf, GAMES, gradePhoto, newCash, newStamps, pause, resume, RULES, seconds, seedOf, sortCash, stamp, stampTarget, tick, type CashState, type GameId, type Point, type RunClock, type StampState } from './domain';
 import { cashNotice, photoNotice, stampNotice } from './daily-feedback';
+import {holidayInput} from './party/light-holiday';
 import { saveGameDraft } from './result-bridge';
 import { resultExports, type RunResult, type ArcadeGameId } from './result-card';
 import { ResultShare } from './ResultShare';
@@ -21,6 +22,13 @@ import './toy-theme.css';
 import './illustration-theme.css';
 import './toy-console.css';
 import './shotengai.css';
+import './daily-scene.css';
+import './cooking/immersive-kitchen.css';
+import './cooking/market.css';
+import './daily-photo.css';
+import './daily-stamp.css';
+import './daily-cash.css';
+import './daily-result.css';
 import { ArcadeLobby, type LobbyState } from './cooking/ArcadeLobby';
 import { RECIPES, recipeOf, type Recipe } from './cooking/catalog';
 import { emptyCookbook, readCookbook, readCookingRun, updateCookbook, COOKBOOK_KEY, type Cookbook, type CookingStorage } from './cooking/storage';
@@ -37,7 +45,7 @@ type MarketComponent=typeof import('./cooking/MarketGame')['MarketGame'];
 function MarketLoader(props:Parameters<MarketComponent>[0]) {
  const [Game,setGame]=useState<MarketComponent|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  useEffect(()=>{let current=true;setError('');const timeout=setTimeout(()=>{if(current){current=false;setError('料理入口載入較久，請重試。');}},15000);void import('./cooking/MarketGame').then(m=>{if(current){clearTimeout(timeout);setGame(()=>m.MarketGame);}}).catch(()=>{if(current){clearTimeout(timeout);setError('料理入口未能載入。');}});return()=>{current=false;clearTimeout(timeout);};},[attempt]);
- return Game?<Game {...props}/>:<div className="ck-empty"><p role={error?'alert':'status'}>{error||'正在開攤…'}</p>{error&&<button onClick={()=>setAttempt(n=>n+1)}>重試開攤</button>}<button className="fw-arcade-secondary" onClick={props.onBack}>回遊戲大廳</button></div>;
+ return Game?<Game {...props}/>:<div className="ck-empty">{props.bookNotice}<p role={error?'alert':'status'}>{error||'正在開攤…'}</p>{error&&<button onClick={()=>setAttempt(n=>n+1)}>重試開攤</button>}<button className="fw-arcade-secondary" onClick={props.onBack}>回遊戲大廳</button></div>;
 }
 function CookingLoader(props:Parameters<CookingComponent>[0]) {
     const [Game,setGame]=useState<CookingComponent|null>(null),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
@@ -53,6 +61,7 @@ type Pointer = {
     y: number;
     pan: Point;
     index: number;
+    owner?: Element;
 };
 type Live = {
     game: GameId;
@@ -70,6 +79,8 @@ type Live = {
     stampPoint: Point;
     raised: boolean;
     pointer: Pointer | null;
+    cashDrag: Point;
+    stampFeedback?: { point: Point; hit: boolean; at: number };
     done: boolean;
     started: boolean;
     paused: boolean;
@@ -77,25 +88,35 @@ type Live = {
 const hints = { photo: '拖曳取景，抓到怪事再按快門。方向鍵也能移鏡。', stamp: '按住拖到藍圈，放手蓋章。也可以直接點藍圈。', cash: '道具鈔往右滑，怪票券往左滑。左右方向鍵也可以。' };
 function freshSeed() { const value = new Uint32Array(1); crypto.getRandomValues(value); return seedOf(value[0]); }
 function initialGame():ArcadeGameId|null { const q=new URLSearchParams(location.search); return q.get('game')==='kitchen'&&recipeOf(q.get('recipe'))?'kitchen':partyOf(q.get('game'))??gameOf(q.get('game')); }
-function GameBoard({ game, seed, onBack, onResult, onStart }: {
+function GameBoard({ game, seed, onBack, onResult, onStart, resultView }: {
     game: GameId;
     seed: number;
     onBack: () => void;
     onResult: (result: RunResult) => void;
     onStart: (focusTarget: HTMLElement | null) => void;
+    resultView?: (sceneUnavailable: boolean) => ReactNode;
 }) {
     const host = useRef<HTMLDivElement>(null), section = useRef<HTMLElement>(null), stage = useRef<Stage | null>(null), frame = useRef(0), generation = useRef(0), loop = useRef<(time: number) => void>(() => { }), audio = useRef<AudioContext | null>(null), soundRef = useRef(false), motionRef = useRef(!matchMedia('(prefers-reduced-motion: reduce)').matches);
-    const live = useRef<Live>({ game, seed, clock: { elapsed: 0, last: null, running: false }, client: 0, roundAt: 0, film: 0, photos: [], pan: { x: 0, y: 0 }, targetPan: { x: 0, y: 0 }, fov: 44, stamps: newStamps(seed), cash: newCash(seed), stampPoint: stampTarget(seed, 0), raised: false, pointer: null, done: false, started: false, paused: false });
+    // Start with a complete client below the HUD, including the short normal
+    // owner. Keep the real 38–60 zoom and pan controls available for framing.
+    const initialLive = (): Live => ({ game, seed, clock: { elapsed: 0, last: null, running: false }, client: 0, roundAt: 0, film: 0, photos: [], pan: { x: 0, y: game === 'photo' ? .35 : 0 }, targetPan: { x: 0, y: game === 'photo' ? .35 : 0 }, fov: game === 'photo' ? 60 : 44, stamps: newStamps(seed), cash: newCash(seed), stampPoint: stampTarget(seed, 0), raised: false, pointer: null, cashDrag: {x:0,y:0}, done: false, started: false, paused: false });
+    const live = useRef<Live>(initialLive());
     const [, repaint] = useState(0), [ready, setReady] = useState(false), [error, setError] = useState(''), [retry, setRetry] = useState(0), [notice, setNotice] = useState(''), [sound, setSound] = useState(false), [flash, setFlash] = useState(0);
     const pendingResult = useRef<Omit<RunResult, 'image'> | null>(null), [captureError, setCaptureError] = useState(false);
     const captureFailures = useRef(0);
+    const [renderer, setRenderer] = useState<'native'|'light'>('native'), [rendererNotice, setRendererNotice] = useState('');
+    const rendererRef = useRef(renderer); rendererRef.current = renderer;
+    const sceneFailure = () => `${rendererRef.current === 'light' ? '輕量' : '3D '}畫面暫時中斷。按重試恢復這一局。`;
+    const [dialog, setDialog] = useState<'help'|'restart'|'photos'|null>(null), dialogRef = useRef<HTMLDialogElement>(null), dialogReturn = useRef<HTMLElement|null>(null), focusAfterCommit = useRef(false);
+    const controls=useRef(holidayInput()), escapeCapture=useRef<()=>void>(()=>{});
+    escapeCapture.current=()=>{controls.current.cancel();const p=live.current.pointer;live.current.pointer=null;live.current.raised=false;live.current.cashDrag={x:0,y:0};if(p?.owner?.hasPointerCapture(p.id))p.owner.releasePointerCapture(p.id);};
     const updateUi = () => repaint(n => n + 1), lastUi = useRef(0);
-    const view = (): StageView => { const l = live.current; return { game, seed, seconds: game === 'photo' ? (l.clock.elapsed - l.roundAt) / 1000 : l.clock.elapsed / 1000, client: l.client, pan: l.pan, fov: l.fov, stamp: l.stamps, stampPoint: l.stampPoint, raised: l.raised, cash: l.cash, motion: motionRef.current }; };
+    const view = (): StageView => { const l = live.current; return { game, seed, seconds: game === 'photo' ? (l.clock.elapsed - l.roundAt) / 1000 : l.clock.elapsed / 1000, client: l.client, pan: l.pan, fov: l.fov, stamp: l.stamps, stampPoint: l.stampPoint, raised: l.raised, cash: l.cash, cashDrag: l.cashDrag, stampFeedback: l.stampFeedback, motion: motionRef.current }; };
     function draw() { stage.current?.update(view()); if (stage.current && host.current) {
         const stats = stage.current.stats();
         syncDiagnostics(host.current,{renderCalls:stats.calls,renderTriangles:stats.triangles,renderTextures:stats.textures});
     } }
-    function render(){try{draw();return true;}catch{stop();live.current.paused=true;setReady(false);setError('3D 畫面暫時中斷。按重試恢復這一局。');void audio.current?.suspend().catch(()=>{});updateUi();return false;}}
+    function render(){try{draw();return true;}catch{stop();live.current.paused=true;setReady(false);setError(sceneFailure());void audio.current?.suspend().catch(()=>{});updateUi();return false;}}
     function sfx(kind: 'photo' | 'stamp' | 'cash' | 'wrong') {
         if (!soundRef.current)
             return;
@@ -115,9 +136,9 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         }
         catch { /* Sound is optional; it never blocks an accepted action. */ }
     }
-    function stop() { cancelAnimationFrame(frame.current); frame.current = 0; live.current.clock = pause(live.current.clock); live.current.pointer = null; live.current.raised = false; }
+    function stop() { controls.current.cancel(); cancelAnimationFrame(frame.current); frame.current = 0; live.current.clock = pause(live.current.clock); const pointer=live.current.pointer; live.current.pointer = null; live.current.raised = false; live.current.cashDrag={x:0,y:0}; if(pointer?.owner?.hasPointerCapture(pointer.id))pointer.owner.releasePointerCapture(pointer.id); }
     function finish(result: RunResult) { if (live.current.done)
-        return; live.current.done = true; stop(); onResult(result); }
+        return; live.current.done = true; stop(); setCaptureError(false); onResult(result); updateUi(); }
     function settle(summary: Omit<RunResult, 'image'>) { stop(); pendingResult.current = summary; try {
         if(!render())throw Error('Scene unavailable');
         if (!stage.current)
@@ -130,26 +151,29 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         updateUi();
     } }
     function photosDone() { const l = live.current; if (!l.photos.length) {
+        stop();l.pan={x:0,y:.35};l.targetPan={x:0,y:.35};l.fov=60;l.film=0;l.paused=false;
         l.started = false;
         l.clock = { elapsed: 0, last: null, running: false };
         l.client = 0;
         l.roundAt = 0;
         captureFailures.current = 0;
         setNotice('這局還沒拍到照片。再開一次照相館，按快門留下怪事。');
-        updateUi();
+        render();updateUi();
         return;
     } const best = l.photos.reduce((a, b) => a.stars >= b.stars ? a : b); finish({ game, seed, title: GAMES[0].title, caption: best.caption, details: best.details, image: best.image, photos: l.photos }); }
     function syncClock() { live.current.clock = tick(live.current.clock, performance.now()); }
-    function nextClient() { syncClock(); const l = live.current; if (l.done)
+    function nextClient() { syncClock(); const l = live.current; if (l.done || !l.started || l.paused || pendingResult.current)
         return; if (l.client === 2) {
         photosDone();
         return;
-    } l.client++; l.roundAt = l.clock.elapsed; l.film = 0; l.pointer = null; l.pan = { x: 0, y: 0 }; l.targetPan = { x: 0, y: 0 }; l.fov = 44; setNotice(CLIENTS[l.client].title); render(); updateUi(); }
-    function shoot() {
+    } const pointer = l.pointer; l.pointer = null; controls.current.cancel(); if (pointer?.owner?.hasPointerCapture(pointer.id)) pointer.owner.releasePointerCapture(pointer.id);
+    l.client++; l.roundAt = l.clock.elapsed; l.film = 0; l.pan = { x: 0, y: .35 }; l.targetPan = { x: 0, y: .35 }; l.fov = 60; setNotice(CLIENTS[l.client].title); render(); updateUi(); }
+    function shoot(client = live.current.client) {
         syncClock();
         const l = live.current;
-        if (!ready || !l.started || l.paused || l.done || l.film >= RULES.film || !stage.current)
+        if (!ready || !l.started || l.paused || l.done || client!==l.client || pendingResult.current || l.film >= RULES.film || !stage.current)
             return;
+        if(l.clock.elapsed-l.roundAt>=RULES.photoMs){nextClient();return;}
         try {
             if(!render())return;
             const { visible, blocked, lift } = stage.current.framing(), grade = gradePhoto(CLIENTS[l.client].id, visible, (l.clock.elapsed - l.roundAt) / 1000, blocked, lift), image = stage.current.capture();
@@ -165,15 +189,15 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
             setNotice(photoNotice(`本局第 ${++captureFailures.current} 次拍照未保存。${cause instanceof Error ? cause.message : '這張未能保存，請重試。'}`, l.client, l.film));
         }
     }
-    function applyStamp(point: Point, index = live.current.stamps.practice ? -1 : live.current.stamps.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done)
+    function applyStamp(point: Point, index = live.current.stamps.practice ? -1 : live.current.stamps.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done || pendingResult.current)
         return; const outcome = stamp(l.stamps, index, point, l.clock.elapsed); if (outcome.kind === 'ignored')
-        return; l.stamps = outcome.state; l.raised = false; l.stampPoint = point; sfx(outcome.kind === 'miss' ? 'wrong' : 'stamp'); setNotice(stampNotice(l.stamps, outcome.kind)); render(); updateUi(); if (l.stamps.endedAt !== null) {
+        return; l.stamps = outcome.state; l.stampFeedback={point:{...point},hit:outcome.kind!=='miss',at:l.clock.elapsed}; l.raised = false; l.stampPoint = point; sfx(outcome.kind === 'miss' ? 'wrong' : 'stamp'); setNotice(stampNotice(l.stamps, outcome.kind)); render(); updateUi(); if (l.stamps.endedAt !== null) {
         const elapsed = l.stamps.endedAt - (l.stamps.startedAt ?? l.stamps.endedAt);
         settle({ game, seed, title: GAMES[1].title, caption: l.stamps.misses ? '主管：印象深刻，文件也是。' : '主管：下班可以，先批准你的下班。', details: `完成 12 份文件 · ${seconds(elapsed)} 秒 · 多蓋 ${l.stamps.misses} 次` });
     } }
-    function applyCash(accept: boolean, index = live.current.cash.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done)
+    function applyCash(accept: boolean, index = live.current.cash.index) { syncClock(); const l = live.current; if (!l.started || l.paused || l.done || pendingResult.current)
         return; const outcome = sortCash(l.cash, index, accept, l.clock.elapsed); if (outcome.kind === 'ignored')
-        return; l.cash = outcome.state; sfx(outcome.kind === 'wrong' ? 'wrong' : 'cash'); setNotice(cashNotice(l.cash, outcome.kind, accept));
+        return; l.cash = outcome.state; l.cashDrag={x:0,y:0}; sfx(outcome.kind === 'wrong' ? 'wrong' : 'cash'); setNotice(cashNotice(l.cash, outcome.kind, accept));
         // Settlement stops the clock and refreshes the final scene before capture.
         // Only ongoing actions need this immediate feedback draw.
         if (l.cash.endedAt === null) render();
@@ -190,7 +214,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         l.paused = true;
         void audio.current?.suspend().catch(() => { });
         setReady(false);
-        setError('3D 畫面暫時中斷。按重試恢復這一局。');
+        setError(sceneFailure());
         return;
     } if (game === 'photo' && l.clock.elapsed - l.roundAt >= RULES.photoMs)
         nextClient(); if (now - lastUi.current > 100) {
@@ -198,44 +222,54 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         updateUi();
     } if (!l.done && l.clock.running)
         frame.current = requestAnimationFrame(loop.current); };
-    function start() { if (!ready)
-        return; const l = live.current; if (!l.started) onStart(section.current); l.started = true; l.paused = false; l.clock = { ...resume(l.clock), last: performance.now() }; cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(loop.current); section.current?.focus({ preventScroll: true });section.current?.querySelector('.fw-arcade-play-layout')?.scrollIntoView({block:'start',behavior:'instant'}); setNotice(game === 'photo' ? '底片只有兩張。漂亮的、離譜的，都能留下。' : hints[game]); updateUi(); }
+    function start() { if (live.current.done || !ready || pendingResult.current || dialog)
+        return; const l = live.current; if (!l.started) onStart(section.current); l.started = true; l.paused = false; l.clock = { ...resume(l.clock), last: performance.now() }; cancelAnimationFrame(frame.current); frame.current = requestAnimationFrame(loop.current); focusAfterCommit.current=true; setNotice(game === 'photo' ? '底片只有兩張。漂亮的、離譜的，都能留下。' : hints[game]); updateUi(); }
+    useLayoutEffect(()=>{if(focusAfterCommit.current){focusAfterCommit.current=false;if(live.current.started&&!live.current.paused&&!live.current.done&&!dialog)section.current?.focus({preventScroll:true});}});
+    useLayoutEffect(()=>{if(dialog&&!dialogRef.current?.open)dialogRef.current?.showModal();},[dialog]);
+    function openDialog(kind:'help'|'restart'|'photos',target:HTMLElement){if(live.current.done)return;dialogReturn.current=target;setPaused();setDialog(kind);}
+    function closeDialog(){dialogRef.current?.close();setDialog(null);dialogReturn.current?.focus({preventScroll:true});}
+    function restart(){if(live.current.done)return;stop();live.current=initialLive();pendingResult.current=null;captureFailures.current=0;setCaptureError(false);setNotice('同一題已重新準備。');closeDialog();render();updateUi();}
+    function changeRenderer(next:'native'|'light'){if(live.current.done)return;stop();if(live.current.started)live.current.paused=true;setReady(false);setRenderer(next);setRetry(n=>n+1);setRendererNotice(next==='light'?'輕量插畫：相同規則、鏡頭與成績，沒有使用 WebGL。':'正在重新準備 3D 場景，保留這局進度。');}
+
     function setPaused() { const l = live.current; if (!l.started || l.done)
-        return; stop(); l.paused = true; void audio.current?.suspend().catch(() => { }); updateUi(); }
+        return; syncClock(); stop(); l.paused = true; void audio.current?.suspend().catch(() => { }); render(); updateUi(); }
     useEffect(() => { const change = () => { motionRef.current = !matchMedia('(prefers-reduced-motion: reduce)').matches; render(); }; const media = matchMedia('(prefers-reduced-motion: reduce)'); media.addEventListener('change', change); const hidden = () => { if (document.hidden)
         setPaused(); }; const blur = () => setPaused(); document.addEventListener('visibilitychange', hidden); window.addEventListener('blur', blur); return () => { media.removeEventListener('change', change); document.removeEventListener('visibilitychange', hidden); window.removeEventListener('blur', blur); }; }, []);
     useEffect(() => {
         const current = ++generation.current;
         let mounted = true, owned: Stage | null = null;
-        setReady(false);
-        setError('');
-        const timeout = window.setTimeout(() => { if (mounted && generation.current === current) {
-            generation.current++;
-            setError('遊戲場景載入較久。請重試，或回遊樂場。');
-        } }, 15000);
-        void import('./stage').then(module => { if (!mounted || generation.current !== current)
-            return; try {
-            owned = module.createStage(host.current!, () => { if (!mounted)
-                return; stop(); live.current.paused = true; setReady(false); setError('3D 畫面暫時中斷。按重試恢復這一局。'); });
-            stage.current = owned;
-            owned.update(view());
-            clearTimeout(timeout);
-            setReady(true);
-        }
-        catch {
-            owned?.dispose();
-            stage.current = null;
-            clearTimeout(timeout);
-            setError('此瀏覽器暫時無法開啟 3D 場景。可重試，或改用支援 WebGL 2 的瀏覽器。');
-        } }).catch(() => { if (mounted && generation.current === current) {
-            clearTimeout(timeout);
-            setError('遊戲素材未能載入。請重試。');
-        } });
-        return () => { mounted = false; generation.current++; clearTimeout(timeout); stop(); owned?.dispose(); stage.current = null; };
-    }, [retry]);
+        const currentOwner=()=>mounted&&generation.current===current;
+        setReady(false);setError('');
+        // Context loss can arrive between RAF ticks; retain that active interval.
+        const fail=(message:string)=>{if(!currentOwner())return;syncClock();stop();if(live.current.started)live.current.paused=true;setReady(false);setError(message);updateUi();};
+        const timeout=window.setTimeout(()=>{if(currentOwner()){generation.current++;setError('遊戲場景載入較久。請重試，或回遊樂場。');}},15000);
+        const load=renderer==='light'?import('./daily-scene').then(m=>()=>m.createDailyLightStage(host.current!,()=>fail('輕量畫面暫時中斷。請重試場景，這局進度仍保留。'))):import('./stage').then(m=>()=>m.createStage(host.current!,()=>fail('3D 畫面暫時中斷。按重試恢復這一局。')));
+        void load.then(create=>{if(!currentOwner())return;try{
+            owned=create();stage.current=owned;owned.update(view());clearTimeout(timeout);setReady(true);
+        }catch{owned?.dispose();owned=null;stage.current=null;clearTimeout(timeout);
+            if(renderer==='native')fail('此瀏覽器暫時無法開啟 3D 場景。可重試，或用輕量畫面繼續。');
+            else fail('輕量畫面也未能建立。請重試場景，或回遊樂場。');
+        }}).catch(()=>{if(!currentOwner())return;clearTimeout(timeout);fail('遊戲素材未能載入。請重試。');});
+        return()=>{mounted=false;generation.current++;clearTimeout(timeout);stop();owned?.dispose();if(stage.current===owned)stage.current=null;};
+    },[retry,renderer]);
     useEffect(() => () => { void audio.current?.close().catch(() => { }); }, []);
-    function pan(dx: number, dy: number) { const l = live.current; l.targetPan = { x: clamp(l.targetPan.x + dx, -1.8, 1.8), y: clamp(l.targetPan.y + dy, -2.8, 2.8) }; }
-    function keyboard(event: KeyboardEvent) { if ((event.target as HTMLElement).closest('input,textarea,select,button,a') || event.altKey || event.metaKey || event.ctrlKey || !live.current.started || live.current.paused)
+    useEffect(()=>{const cancel=(event:globalThis.KeyboardEvent)=>{if(event.key==='Escape')escapeCapture.current();};window.addEventListener('keydown',cancel,true);return()=>window.removeEventListener('keydown',cancel,true);},[]);
+    function pan(dx: number, dy: number) { const l = live.current; if(l.done || l.paused || pendingResult.current)return; l.targetPan = { x: clamp(l.targetPan.x + dx, -1.8, 1.8), y: clamp(l.targetPan.y + dy, -2.8, 2.8) }; }
+    function inputSubject(){const l=live.current;return game==='photo'?l.client*10+l.film:game==='stamp'?l.stamps.practice?-1:l.stamps.index:l.cash.index;}
+    function actionControls(id:number,action:()=>void){
+        const commit=(subject:number|null)=>{const l=live.current;if(subject!==null&&subject===inputSubject()&&ready&&l.started&&!l.paused&&!l.done&&!pendingResult.current&&!dialog)action();};
+        return {
+            onPointerDown:(e:PointerEvent<HTMLButtonElement>)=>{if(e.button===0&&e.isPrimary)controls.current.down(id,`pointer:${e.pointerId}`,inputSubject());},
+            onPointerUp:(e:PointerEvent<HTMLButtonElement>)=>controls.current.up(id,`pointer:${e.pointerId}`),
+            onPointerCancel:(e:PointerEvent<HTMLButtonElement>)=>controls.current.cancel(id,`pointer:${e.pointerId}`),
+            onLostPointerCapture:(e:PointerEvent<HTMLButtonElement>)=>controls.current.lost(id,`pointer:${e.pointerId}`),
+            onBlur:()=>controls.current.cancel(id),
+            onKeyDown:(e:KeyboardEvent<HTMLButtonElement>)=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();if(!e.repeat&&!e.altKey&&!e.ctrlKey&&!e.metaKey)controls.current.down(id,`key:${e.key}`,inputSubject());}},
+            onKeyUp:(e:KeyboardEvent<HTMLButtonElement>)=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();if(e.altKey||e.ctrlKey||e.metaKey){controls.current.cancel(id);return;}commit(controls.current.click(id,inputSubject(),`key:${e.key}`));}},
+            onClick:(e:MouseEvent<HTMLButtonElement>)=>commit(e.detail===0?controls.current.assistive(id,inputSubject()):controls.current.pointerClick(id)),
+        };
+    }
+    function keyboard(event: KeyboardEvent) { if (live.current.done || pendingResult.current) return; if (event.key==='Escape' && live.current.started && !live.current.paused){event.preventDefault();setPaused();return;} if ((event.target as HTMLElement).closest('input,textarea,select,button,a,dialog') || event.altKey || event.metaKey || event.ctrlKey || !live.current.started || live.current.paused)
         return; const l = live.current, key = event.key; if (key === 'Escape') {
         event.preventDefault();
         setPaused();
@@ -247,7 +281,7 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         }
         if ((key === ' ' || key === 'Enter') && !event.repeat) {
             event.preventDefault();
-            shoot();
+            shoot(l.client);
         }
     }
     else if (game === 'cash' && (key === 'ArrowLeft' || key === 'ArrowRight') && !event.repeat) {
@@ -266,15 +300,15 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         }
     } }
     function pointerDown(event: PointerEvent) { syncClock(); const l = live.current; if (!ready || !l.started || l.paused || l.done || l.pointer || pendingResult.current || event.button!==0 || !event.isPrimary)
-        return; event.preventDefault(); section.current?.focus({ preventScroll: true }); l.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: { ...l.targetPan }, index: game === 'cash' ? l.cash.index : l.stamps.practice ? -1 : l.stamps.index }; event.currentTarget.setPointerCapture(event.pointerId); if (game === 'stamp') {
-        l.stamps = beginStamps(l.stamps, l.clock.elapsed);
+        return; if(game==='cash'&&stage.current?.cashContains?.(event.clientX,event.clientY)===false)return;event.preventDefault(); section.current?.focus({ preventScroll: true }); l.pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: { ...l.targetPan }, index: game === 'cash' ? l.cash.index : l.stamps.practice ? -1 : l.stamps.index, owner: event.currentTarget }; event.currentTarget.setPointerCapture(event.pointerId); if (game === 'stamp') {
         const p = stage.current?.point(event.clientX, event.clientY);
-        if (p)
-            l.stampPoint = p;
+        if (!p) {l.pointer=null;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);return;}
+        l.stamps = beginStamps(l.stamps, l.clock.elapsed);
+        l.stampPoint = p;
         l.raised = true;
         render();
     } }
-    function pointerMove(event: PointerEvent) { const l = live.current, p = l.pointer; if (!p || p.id !== event.pointerId)
+    function pointerMove(event: PointerEvent) { const l = live.current, p = l.pointer; if (!p || p.id !== event.pointerId || l.done || l.paused || pendingResult.current)
         return; if (game === 'photo') {
         const rect = event.currentTarget.getBoundingClientRect();
         l.targetPan = { x: clamp(p.pan.x - (event.clientX - p.x) / rect.width * 4.8, -1.8, 1.8), y: clamp(p.pan.y + (event.clientY - p.y) / rect.height * 4.8, -2.8, 2.8) };
@@ -284,9 +318,10 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         if (point)
             l.stampPoint = point;
         render();
-    } }
+    } else if(game==='cash'){const rect=event.currentTarget.getBoundingClientRect();l.cashDrag={x:clamp((event.clientX-p.x)/Math.max(1,rect.width),-.5,.5),y:clamp((event.clientY-p.y)/Math.max(1,rect.height),-.3,.3)};render();}
+    }
     function pointerUp(event: PointerEvent) { const l = live.current, p = l.pointer; if (!p || p.id !== event.pointerId)
-        return; l.pointer = null; l.raised = false; if (event.currentTarget.hasPointerCapture(event.pointerId))
+        return; l.pointer = null; l.raised = false; l.cashDrag={x:0,y:0}; if (event.currentTarget.hasPointerCapture(event.pointerId))
         event.currentTarget.releasePointerCapture(event.pointerId); if (game === 'stamp') {
         const point = stage.current?.point(event.clientX, event.clientY);
         if (point)
@@ -297,33 +332,103 @@ function GameBoard({ game, seed, onBack, onResult, onStart }: {
         if (Math.abs(dx) >= RULES.swipePx)
             applyCash(dx > 0, p.index);
         else
-            setNotice('往右滑收鈔，往左滑退票券。也能用下方按鈕。');
+            setNotice('往右滑收鈔，往左滑退票券。也能用畫面內的按鈕。');
+        render();
     } }
     const l = live.current, remaining = Math.max(0, RULES.photoMs - (l.clock.elapsed - l.roundAt)), cashCard = cashDeck(seed)[Math.min(l.cash.index, 29)];
-    return <section ref={section} data-game-content className="fw-arcade-board" data-playing={l.started&&!l.paused} tabIndex={0} onKeyDown={keyboard} aria-label={GAMES.find(g => g.id === game)!.title}>
-    <div className="fw-arcade-toolbar"><button className="fw-arcade-secondary" onClick={onBack}>← 遊樂場</button><span className="fw-arcade-seed">同題 #{seed}</span><button className="fw-arcade-secondary" aria-pressed={sound} onClick={() => { soundRef.current = !sound; setSound(!sound); if (!sound)
-        sfx(game); }}>聲音 {sound ? '開' : '關'}</button>{l.started && !l.paused && <button className="fw-arcade-secondary" onClick={setPaused}>暫停</button>}</div>
-    <div className="fw-arcade-game-title"><div><h1>{GAMES.find(g => g.id === game)!.title}</h1><p>{game === 'photo' ? CLIENTS[l.client].title : game === 'stamp' ? documentTitle(Math.min(l.stamps.index, 11), l.stamps.practice) : '收鈔往右，票券往左'}</p></div><output className="fw-arcade-counter" aria-live="off">{game === 'photo' ? `${l.client + 1}/3 · ${Math.ceil(remaining / 1000)} 秒` : game === 'stamp' ? l.stamps.practice ? '練習中' : `${Math.min(l.stamps.index, 12)}/12` : `${l.cash.amount / 10000} / 100 萬`}</output></div>
-    <div className="fw-arcade-play-layout"><div className="fw-arcade-stage-wrap">{!l.started&&<GameCover id={game} eager className="sg-initial-cover"/>}<div className="fw-arcade-stage" ref={host} data-game-stage={ready ? 'ready' : 'loading'} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={e => {if(l.pointer?.id===e.pointerId){l.pointer = null;l.raised = false;render();}}} onLostPointerCapture={e => {if(l.pointer?.id===e.pointerId){l.pointer = null;l.raised = false;}}}/>
-      {game === 'photo' && ready && l.started && <div className="fw-arcade-viewfinder" aria-hidden="true"><i /><i /><i /><i /><span>FREE TWAI　●　LIVE</span></div>}
-      {flash > 0 && motionRef.current && <div key={flash} className="fw-arcade-flash" aria-hidden="true"/>}
-      {(!ready || !l.started || l.paused) && <div className="fw-arcade-stage-cover">{error ? <><p role="alert">{error}</p><button onClick={() => setRetry(n => n + 1)}>重試場景</button></> : !ready ? <p role="status">正在佈置現場…</p> : <><strong>{l.paused ? '休息一下，怪事等你。' : GAMES.find(g => g.id === game)!.subtitle}</strong><p>{hints[game]}</p><button onClick={start}>{l.paused ? '繼續這一局' : game === 'stamp' ? '先蓋一張練習紙' : '開始這一局'}</button></>}</div>}
-    </div><div className="fw-arcade-controls"><p className="fw-arcade-instruction">{game === 'photo' ? CLIENTS[l.client].request : game === 'cash' ? `目前這張：${cashCard.label}。僅供遊戲使用。` : l.stamps.practice ? '先蓋中藍圈一次，不計時。' : '蓋中藍圈才算。印章歪了可以重蓋。'}</p>
-      {captureError && <button disabled={!ready} onClick={() => { if (pendingResult.current)
-        settle(pendingResult.current); }}>重試產生成果圖片</button>}
-      <div className="fw-arcade-action-area" inert={!ready || !l.started || l.paused || captureError}>
-      {game === 'photo' ? <><div className="fw-arcade-pan-pad" aria-label="移動鏡頭"><button aria-label="鏡頭往左" onClick={() => pan(-.35, 0)}>←</button><button aria-label="鏡頭往上" onClick={() => pan(0, .35)}>↑</button><button aria-label="鏡頭往下" onClick={() => pan(0, -.35)}>↓</button><button aria-label="鏡頭往右" onClick={() => pan(.35, 0)}>→</button></div><label className="fw-arcade-zoom"><span>廣角</span><input aria-label="鏡頭廣角" type="range" min="38" max="60" value={l.fov} onChange={e => { l.fov = Number(e.target.value); updateUi(); }}/><span>更廣</span></label><button className="fw-arcade-shutter" disabled={l.film >= RULES.film} onClick={shoot} aria-label="拍照快門"><span aria-hidden="true">◎</span><small>快門 · {2 - l.film} 張</small></button><button className="fw-arcade-secondary" onClick={nextClient}>{l.client === 2 ? '挑選照片' : '下一位客人 →'}</button></> : game === 'stamp' ? <><button className="fw-arcade-stamp-button" onPointerDown={() => { l.stamps = beginStamps(l.stamps, l.clock.elapsed); }} onClick={() => applyStamp(l.stampPoint)}>啪！蓋章</button><p className="fw-arcade-meta">方向鍵微調印章 · 空白鍵落印<br />多蓋 {l.stamps.misses} 次</p></> : <><div className="fw-arcade-sort-buttons"><button className="fw-arcade-secondary" onClick={() => applyCash(false)}>← 退票券</button><button onClick={() => applyCash(true)}>收道具鈔 →</button></div><p className="fw-arcade-meta">已分類 {l.cash.index} / 30 · 分錯 {l.cash.mistakes} 次<br />最後一張剛好湊滿一百萬。</p></>}
-      </div><p className="fw-arcade-notice" role="status" aria-atomic="true">{notice || hints[game]}</p>{game === 'photo' && l.photos.length > 0 && <div className="fw-arcade-contact-sheet" aria-label="這局拍到的照片">{l.photos.map((p, i) => <img key={i} src={p.image} alt={`底片 ${i + 1}：${p.caption}`} width="96" height="72"/>)}</div>}
-    </div></div>
-  </section>;
+    const stampSeconds=Math.floor(Math.max(0,(l.stamps.endedAt??l.clock.elapsed)-(l.stamps.startedAt??l.clock.elapsed))/1000),stampTime=`${Math.floor(stampSeconds/60)}:${String(stampSeconds%60).padStart(2,'0')}`;
+    return <section ref={section} data-game-content className={`fw-arcade-board daily-scene${game==='photo'?' daily-photo':game==='stamp'?' daily-stamp':' daily-cash'}`} data-daily-game={game} data-playing={l.started&&!l.paused&&!l.done} data-completed={l.done} tabIndex={l.done?-1:0} onKeyDown={keyboard} aria-label={GAMES.find(g => g.id === game)!.title}>
+      <div className="fw-arcade-play-layout"><div className="fw-arcade-stage-wrap" data-daily-stage>
+        <div className="daily-scene-top" hidden={l.done} inert={l.done}>
+          <div className="fw-arcade-toolbar"><button className="fw-arcade-secondary daily-icon" aria-label="回遊樂場" title="回遊樂場" onClick={onBack}>←</button><button className="fw-arcade-secondary daily-icon" aria-label="玩法說明" title="玩法說明" onClick={e=>openDialog('help',e.currentTarget)}>?</button><button className="fw-arcade-secondary daily-icon" aria-label="重新開始這一局" title="重新開始這一局" onClick={e=>openDialog('restart',e.currentTarget)}>↻</button>{l.started&&!l.paused&&!l.done&&<button className="fw-arcade-secondary daily-icon" aria-label="暫停" title="暫停" onClick={setPaused}>Ⅱ</button>}</div>
+          <div className="fw-arcade-game-title"><div className="daily-sr"><h1>{GAMES.find(g=>g.id===game)!.title}</h1><p>{game==='photo'?CLIENTS[l.client].title:game==='stamp'?documentTitle(Math.min(l.stamps.index,11),l.stamps.practice):'收鈔往右，票券往左'}</p></div><output className="fw-arcade-counter" aria-live="off">{game==='photo'?<><span data-photo-client aria-label={`第 ${l.client+1} 位客人，共 3 位`}>{l.client+1}/3</span><span aria-hidden="true"> · </span><span data-photo-time>{Math.ceil(remaining/1000)} 秒</span></>:game==='stamp'?l.stamps.practice?'練習中':`${Math.min(l.stamps.index,12)}/12`:`${l.cash.amount/10000} / 100 萬`}</output>{game==='photo'&&<output className="daily-photo-film" data-photo-film aria-label={`剩餘 ${RULES.film-l.film} 張底片`}>{RULES.film-l.film} 張</output>}</div>
+          {game==='photo'&&<><output className="daily-photo-goal" data-photo-goal aria-live="polite" aria-label={CLIENTS[l.client].request} title={CLIENTS[l.client].request}>{['臉和雙腳','全身全傘','三鴿同框'][l.client]}</output>{!notice.includes('拍照未保存')&&<output className="daily-photo-feedback" data-photo-feedback aria-live="off" title={notice}>{l.film>0?`已存${l.photos[l.photos.length-1].stars}★`:'等時機'}</output>}</>}
+          {game==='stamp'&&<><output className="daily-stamp-goal" data-stamp-goal aria-label="按住拖到藍圈，放手蓋章。也可以直接點藍圈。">蓋藍圈</output><output className="daily-stamp-facts" aria-live="off"><span data-stamp-time aria-label={l.stamps.practice?'練習不計時':`本局已用時間 ${stampTime}`}>{l.stamps.practice?'不計時':stampTime}</span><span aria-hidden="true"> · </span><span data-stamp-misses aria-label={`多蓋 ${l.stamps.misses} 次`}>歪{l.stamps.misses}</span></output></>}
+          {game==='cash'&&<output className="daily-cash-facts" aria-live="off"><span data-cash-progress aria-label={`已分類 ${l.cash.index} 張，共 30 張`}>{l.cash.index}/30</span><span aria-hidden="true"> · </span><span data-cash-mistakes aria-label={`分錯 ${l.cash.mistakes} 次`}>錯{l.cash.mistakes}</span></output>}
+        </div>
+        <div className="daily-scene-viewport">
+          {!l.started&&<GameCover id={game} eager className="sg-initial-cover"/>}
+          <div className="fw-arcade-stage" ref={host} data-game-stage={ready?'ready':'loading'} data-daily-renderer={renderer} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={e=>{if(l.pointer?.id===e.pointerId){l.pointer=null;l.raised=false;l.cashDrag={x:0,y:0};render();}}} onLostPointerCapture={e=>{if(l.pointer?.id===e.pointerId){l.pointer=null;l.raised=false;l.cashDrag={x:0,y:0};render();}}}/>
+          {game==='photo'&&ready&&l.started&&!l.done&&<div className="fw-arcade-viewfinder" aria-hidden="true"><i/><i/><i/><i/></div>}
+          {flash>0&&motionRef.current&&<div key={flash} className="fw-arcade-flash" aria-hidden="true"/>}
+        </div>
+        <div className="fw-arcade-controls" hidden={l.done} inert={l.done}>
+          <p className="fw-arcade-instruction daily-sr">{game==='photo'?CLIENTS[l.client].request:game==='cash'?`目前這張：${cashCard.label}。僅供遊戲使用。`:l.stamps.practice?'先蓋中藍圈一次，不計時。':'蓋中藍圈才算。印章歪了可以重蓋。'}</p>
+          <div className="fw-arcade-action-area" inert={!ready||!l.started||l.paused||l.done||captureError||!!dialog}>
+            {game==='photo'?<><div className="fw-arcade-pan-pad" aria-label="移動鏡頭"><button aria-label="鏡頭往左" {...actionControls(1,()=>pan(-.35,0))}>←</button><button aria-label="鏡頭往上" {...actionControls(2,()=>pan(0,.35))}>↑</button><button aria-label="鏡頭往下" {...actionControls(3,()=>pan(0,-.35))}>↓</button><button aria-label="鏡頭往右" {...actionControls(4,()=>pan(.35,0))}>→</button></div><label className="fw-arcade-zoom"><span>廣角</span><input aria-label="鏡頭廣角" type="range" min="38" max="60" value={l.fov} onChange={e=>{if(l.done||l.paused||pendingResult.current)return;l.fov=Number(e.target.value);render();updateUi();}}/></label><button className="fw-arcade-shutter" disabled={l.film>=RULES.film} {...actionControls(5,()=>shoot(live.current.client))} aria-label="拍照快門"><svg aria-hidden="true" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13"/><circle cx="16" cy="16" r="8"/></svg><small>快門</small></button><button className="fw-arcade-secondary daily-photo-next" aria-label={l.client===2?'挑選照片':'下一位客人 →'} {...actionControls(6,nextClient)}>{l.client===2?'選照片':'下一位'}</button></>:game==='stamp'?<><button className="fw-arcade-stamp-button" aria-label="啪！蓋章" {...actionControls(7,()=>applyStamp(live.current.stampPoint))}><svg aria-hidden="true" viewBox="0 0 32 32"><path d="M7 20h18v7H7zM11 20v-3h10v3M13 16V9a3 3 0 0 1 6 0v7M5 29h22"/></svg><span>蓋章</span></button><p className="fw-arcade-meta daily-sr">方向鍵微調印章 · 空白鍵落印<br/>多蓋 {l.stamps.misses} 次</p></>:<><div className="fw-arcade-sort-buttons"><button className="fw-arcade-secondary" aria-label="←退券（退回票券）" {...actionControls(8,()=>applyCash(false))}>←退券</button><button aria-label="收鈔→（收取道具鈔）" {...actionControls(9,()=>applyCash(true))}>收鈔→</button></div><p className="fw-arcade-meta daily-sr">已分類 {l.cash.index} / 30 · 分錯 {l.cash.mistakes} 次<br/>最後一張剛好湊滿一百萬。</p></>}
+          </div>
+          {(game!=='photo'||l.started)&&<p className="fw-arcade-notice daily-sr" role="status" aria-atomic="true">{notice||hints[game]}</p>}
+          {game==='photo'&&notice.includes('拍照未保存')&&<p className="daily-photo-failure" role="alert" aria-label="照片未保存，請再按快門。完整錯誤可在玩法說明檢視。" title={notice}>未存重拍</p>}
+          {game==='photo'&&l.photos.length>0&&<div className="fw-arcade-contact-sheet daily-sr" aria-label="這局拍到的照片">{l.photos.map((p,i)=><img key={i} src={p.image} alt={`底片 ${i+1}：${p.caption}`} width="96" height="72"/>)}</div>}
+        </div>
+          {game==='photo'&&!l.done&&<button className="fw-arcade-secondary daily-photo-album" aria-label="檢視本局照片與評語" disabled={!l.photos.length} onClick={e=>openDialog('photos',e.currentTarget)}>相簿</button>}
+        <div className="daily-scene-mode" hidden={l.done} inert={l.done||game==='cash'&&!ready&&(captureError||!!error)}><button className="fw-arcade-secondary" onClick={()=>changeRenderer(renderer==='native'?'light':'native')} aria-label={renderer==='light'?'輕量插畫 · 試用 3D':'3D · 改用輕量插畫'} title={rendererNotice||(renderer==='light'?'輕量插畫 · 試用 3D':'3D · 改用輕量插畫')}>{renderer==='light'?'插畫':'3D'}</button><span className="daily-sr" role="status">{rendererNotice}</span></div>
+        {!l.done&&(!ready||!l.started||l.paused||captureError)&&<div className="fw-arcade-stage-cover" data-daily-overlay>
+          <>
+            <div className={game==='photo'?'daily-photo-overlay-copy':game==='stamp'?'daily-stamp-overlay-copy':'daily-cash-overlay-copy'}>{!l.started&&notice&&<p className="fw-arcade-notice" role="status">{notice}</p>}{captureError?<><strong>這局已完成，先保存成果。</strong><p role="alert">{notice}</p></>:error?<p role="alert">{error}</p>:!ready?<p role="status">正在佈置現場…</p>:<><strong>{l.paused?'休息一下，怪事等你。':GAMES.find(g=>g.id===game)!.subtitle}</strong>{game==='photo'&&<p>{CLIENTS[l.client].request}</p>}<p>{hints[game]}</p></>}</div>
+            {captureError?<><button disabled={!ready} onClick={()=>{if(pendingResult.current)settle(pendingResult.current);}}>重試產生成果圖片</button>{!ready&&<button onClick={()=>changeRenderer('light')}>用輕量畫面恢復</button>}</>:error?<><button onClick={()=>setRetry(n=>n+1)}>重試場景</button><button className="fw-arcade-secondary" aria-label="用輕量畫面繼續" onClick={()=>changeRenderer('light')}>用插畫繼續</button></>:ready&&<button onClick={start}>{l.paused?'繼續這一局':game==='stamp'?'先蓋一張練習紙':'開始這一局'}</button>}
+          </>
+        </div>}
+        {l.done&&resultView?.(!ready)}
+        {dialog&&!l.done&&<dialog ref={dialogRef} className="daily-scene-dialog" aria-labelledby="daily-dialog-title" onCancel={e=>{e.preventDefault();closeDialog();}} onClose={()=>setDialog(null)} onKeyDown={e=>{if(e.key==='Tab')e.stopPropagation();}}><h2 id="daily-dialog-title">{dialog==='help'?'玩法說明':dialog==='photos'?'本局照片與評語':'重新開始同一題？'}</h2>{dialog==='photos'?<><p>{notice}</p><div className="daily-photo-gallery">{l.photos.map((p,i)=><figure key={i}><img src={p.image} alt={`底片 ${i+1}：${p.caption}`} width="960" height="720"/><figcaption>{p.caption}<br/>{p.details}</figcaption></figure>)}</div></>:dialog==='help'?<>{game==='photo'&&<><p>{GAMES[0].title} · {CLIENTS[l.client].title}</p><p>{CLIENTS[l.client].request}</p>{notice&&<p>{notice}</p>}</>}{game==='cash'&&<><p>目前這張：{cashCard.label}。僅供遊戲使用。</p>{notice&&<p>{notice}</p>}</>}{game==='stamp'&&<><p>{documentTitle(Math.min(l.stamps.index,11),l.stamps.practice)}</p><p>方向鍵微調印章，空白鍵落印。蓋中藍圈才換下一張。</p>{notice&&<p>{notice}</p>}</>}<p>{hints[game]}</p><p>{game==='photo'?'三位客人各有 12 秒、兩張底片。入鏡與時機決定成果；移鏡與廣角也會改變實際照片。':game==='stamp'?'藍圈半徑 0.24，蓋中才換下一張；滑出紙張、取消手勢都不蓋章。先練習一張，再處理 12 份。':'30 張卡片中有 6 張非現金票券。分錯留在原張，正確分類才累積到一百萬道具鈔。'}</p><p>Escape 暫停。切換畫面或離開視窗會保留並暫停這局，按繼續才恢復。</p><button className="fw-arcade-secondary" aria-pressed={sound} onClick={()=>{soundRef.current=!sound;setSound(!sound);if(!sound)sfx(game);}}>聲音 {sound?'開':'關'}</button><p className="fw-arcade-meta">同題 #{seed} · {renderer==='light'?'輕量插畫，不使用 WebGL':'原生 3D 場景'}</p></>:<p>這局照片與進度會清除，題目不變。</p>}<div><button className="fw-arcade-secondary" onClick={closeDialog}>{dialog==='help'?'關閉說明':dialog==='photos'?'關閉相簿':'保留這一局'}</button>{dialog==='restart'&&<button onClick={restart}>確認重新開始</button>}</div></dialog>}
+      </div></div>
+    </section>;
+
 }
-function Result({ result, onBack, onReplay, onNext }: {
+function Result({ result, onBack, onReplay, onNext, notice, inStage = false, sceneUnavailable = false, shareRequest }: {
+    notice?: ReactNode;
+    inStage?: boolean;
+    sceneUnavailable?: boolean;
+    shareRequest?: { serial: number; target: HTMLElement };
     result: RunResult;
     onBack: () => void;
     onReplay: () => void;
     onNext: () => void;
 }) {
     const [photoIndex, setPhotoIndex] = useState(() => result.photos?.findIndex(p => p.image === result.image) ?? -1), [selected, setSelected] = useState(result), [exports, setExports] = useState<Awaited<ReturnType<typeof resultExports>> | null>(null), [objectUrl, setObjectUrl] = useState(''), [status, setStatus] = useState(''), [manualLink, setManualLink] = useState(false), [generation, setGeneration] = useState(0), [sharing, setSharing] = useState(false), [exportPhase, setExportPhase] = useState<'pending'|'ready'|'error'>('pending'), linkRef = useRef<HTMLInputElement>(null);
+    const resultRoot = useRef<HTMLElement>(null), shareDialog = useRef<HTMLDialogElement>(null), shareReturn = useRef<HTMLElement|null>(null);
+    const [panelOpen, setPanelOpen] = useState(false), placeShare = useRef<()=>void>(()=>{}), clipboardOwner = useRef(0), panelCloseGeneration = useRef(0);
+    useEffect(()=>()=>{clipboardOwner.current++;},[]);
+    function openShare(target?: HTMLElement | null) {
+        if (!inStage) return;
+        if (!shareDialog.current?.open) shareReturn.current = target ?? (document.activeElement instanceof HTMLElement ? document.activeElement : resultRoot.current);
+        setPanelOpen(true);
+    }
+    function closeShare() {
+        clipboardOwner.current++;
+        panelCloseGeneration.current++;
+        shareDialog.current?.close();
+        setPanelOpen(false);
+        const target = shareReturn.current;
+        (target?.isConnected ? target : resultRoot.current)?.focus({preventScroll:true});
+    }
+    useLayoutEffect(() => {
+        if (!inStage || !resultRoot.current || !shareDialog.current) return;
+        const root = resultRoot.current, panel = shareDialog.current;
+        const place = () => {
+            const rect = root.getBoundingClientRect(), style = getComputedStyle(root), viewport = window.visualViewport;
+            const viewportLeft=viewport?.offsetLeft??0, viewportTop=viewport?.offsetTop??0;
+            const x=Math.max(rect.left,viewportLeft), y=Math.max(rect.top,viewportTop);
+            const availableWidth=Math.max(0,Math.min(rect.left+rect.width,viewportLeft+(viewport?.width??window.innerWidth??rect.width))-x);
+            const availableHeight=Math.max(0,Math.min(rect.top+rect.height,viewportTop+(viewport?.height??window.innerHeight??rect.height))-y);
+            const safe = (edge:string) => Number.parseFloat(style.getPropertyValue(`--game-safe-${edge}`)) || 0;
+            const left = Math.max(8,safe('left')), right = Math.max(8,safe('right'));
+            const top = Math.max(8,safe('top')), bottom = Math.max(8,safe('bottom'));
+            const width = Math.min(480, Math.max(0,availableWidth-left-right));
+            panel.style.left = `${x+left+(availableWidth-left-right-width)/2}px`;
+            panel.style.top = `${y+top}px`;
+            panel.style.width = `${width}px`;
+            panel.style.maxHeight = `${Math.max(0,availableHeight-top-bottom)}px`;
+        };
+        placeShare.current = place;place();
+        const observer = new ResizeObserver(place); observer.observe(root);
+        window.addEventListener('resize',place); window.addEventListener('scroll',place,true); document.addEventListener('fullscreenchange',place);window.visualViewport?.addEventListener('resize',place);window.visualViewport?.addEventListener('scroll',place);
+        return () => {placeShare.current=()=>{};observer.disconnect();window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);document.removeEventListener('fullscreenchange',place);window.visualViewport?.removeEventListener('resize',place);window.visualViewport?.removeEventListener('scroll',place);};
+    },[inStage]);
+    useLayoutEffect(() => {
+        if (panelOpen) {placeShare.current();if(!shareDialog.current?.open)shareDialog.current?.showModal();}
+    },[panelOpen]);
+    useEffect(() => {if(shareRequest)openShare(shareRequest.target);},[shareRequest]);
     const link = result.game === 'kitchen' || partyOf(result.game) ? new URL(`/play?${new URLSearchParams({game:result.game,...(result.recipe?{recipe:result.recipe}:{}),...(result.cookingMode==='guided'?{practice:'1'}:{}),seed:String(result.seed)})}`,location.origin).toString() : challengeUrl(location.origin, gameOf(result.game)!, result.seed);
     const exportRetryAllowed=useRef(false),exportSelection=useRef(selected),exportOwner=useRef<RunResult|null>(null);
     const exportAbort=useRef<AbortController|null>(null),jpegAbort=useRef<AbortController|null>(null),jpegRetryAllowed=useRef(false);
@@ -363,45 +468,58 @@ function Result({ result, onBack, onReplay, onNext }: {
         return()=>{current=false;controller.abort();jpegRetryAllowed.current=false;};
     },[exports,selected,jpegGeneration]);
     function choosePhoto(index:number){
-        const photo=result.photos?.[index];if(!photo)return;
+        const photo=result.photos?.[index];if(!photo||index===photoIndex)return;
         const next={...result,...photo};exportSelection.current=next;exportOwner.current=null;
         exportAbort.current?.abort();jpegAbort.current?.abort();shareOwner.current++;
         exportRetryAllowed.current=false;jpegRetryAllowed.current=false;
         setExports(null);setJpegs(null);setObjectUrl('');setExportPhase('pending');setJpegPhase('idle');setPhotoIndex(index);setSelected(next);
     }
     useEffect(() => { if (manualLink) {
+        if(inStage&&!shareDialog.current?.open)return;
         linkRef.current?.focus();
         linkRef.current?.select();
-    } }, [manualLink]);
+    } }, [manualLink,panelOpen]);
     async function share() { if (!exports || exportOwner.current!==selected || exportSelection.current!==selected || sharingRef.current)
-        return; const owner=shareOwner.current;sharingRef.current=true;setSharing(true); try {
+        return; const owner=shareOwner.current,panelGeneration=panelCloseGeneration.current;
+        // Dismissal revokes UI updates, but the request still owns singleflight cleanup.
+        const current=()=>owner===shareOwner.current&&(!inStage||panelGeneration===panelCloseGeneration.current);
+        sharingRef.current=true;setSharing(true); try {
         const payload = navigator.canShare?.({ files: [exports.file] }) ? { files: [exports.file], title: selected.title, text } : { title: selected.title, text: `${selected.caption}\n${selected.details}`, url: link };
         if (!navigator.share) {
-            setManualLink(true);
+            openShare();setManualLink(true);
             setStatus('這個瀏覽器沒有系統分享選單。可下載圖片，或複製同題連結。');
             return;
         }
         await navigator.share(payload);
-        if(owner===shareOwner.current)setStatus('已交給系統分享選單。');
+        if(current())setStatus('已交給系統分享選單。');
     }
     catch (cause) {
-        if(owner!==shareOwner.current)return;
+        if(!current())return;
         if (cause instanceof Error && cause.name === 'AbortError')
             setStatus('已取消分享，成果仍在這裡。');
         else {
             setStatus('系統分享未完成。可下載圖片，或複製同題連結。');
-            setManualLink(true);
+            openShare();setManualLink(true);
         }
     }
     finally {
         if(owner===shareOwner.current){sharingRef.current=false;setSharing(false);}
     } }
-    async function copy() { try {
+    function captureCaptionCopy() {
+        const panelGeneration=panelCloseGeneration.current,selection=selected;
+        return ()=>panelGeneration===panelCloseGeneration.current&&exportSelection.current===selection&&!!shareDialog.current?.open;
+    }
+    async function copy() {
+        const owner=++clipboardOwner.current,selection=selected;
+        const current=()=>!inStage||(owner===clipboardOwner.current&&exportSelection.current===selection&&!!shareDialog.current?.open);
+        try {
         await navigator.clipboard.writeText(link);
+        if(!current())return;
         setStatus('同題連結已複製。這個連結分享題目，成果圖請另外附上。');
     }
     catch {
-        setManualLink(true);
+        if(!current())return;
+        openShare();setManualLink(true);
         setStatus('請長按或選取下方連結複製。');
     } }
     function workshop() { if (!jpegs||exportSelection.current!==selected)
@@ -412,16 +530,57 @@ function Result({ result, onBack, onReplay, onNext }: {
     catch {
         setStatus('成果還沒保存，請重試「發到自由工坊」，或先下載圖片。');
     } }
-    return <section data-game-content tabIndex={-1} aria-label="遊戲成果" className={`fw-arcade-result ${result.market?'fw-arcade-market-result':''}`}><div className="fw-arcade-result-heading"><p className="fw-arcade-eyebrow">{result.game === 'kitchen' ? '本日料理手帳' : '本日離譜成果'}</p><h1>{result.game==='kitchen'?selected.title:selected.caption}</h1>{result.game==='kitchen'?!result.market&&<p aria-label="料理分數">{selected.caption}</p>:<p>{selected.details}</p>}</div><div className="fw-arcade-result-layout"><div className="fw-arcade-result-photo">{result.game==='kitchen'&&recipeOf(result.recipe)&&<DishShowcase recipe={recipeOf(result.recipe)!} market={result.market} preview={selected.image} exportSettled={!!objectUrl||exportPhase==='error'}/>}{result.game==='kitchen'?<details className="ck-export-preview"><summary>查看分享成果圖</summary><img src={jpegs?.preview??selected.image} alt={`${selected.title}・完整分享成果圖`} width="960" height="1200"/></details>:<img src={selected.image} alt={`${selected.title}・本局遊戲畫面與成績`} width="960" height="720"/>}{!!result.photos?.length && <div className="fw-arcade-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => choosePhoto(i)}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="fw-arcade-share-panel" data-game-share tabIndex={-1} role="region" aria-label="分享這局成果">{result.market&&<MarketScore run={result.market}/>}<h2>{result.game === 'kitchen' ? '把你的拿手菜，端給大家看。' : '這次怪事，值得留一張。'}</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!jpegs} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small>{jpegPhase==='pending'&&<p role="status">正在準備工坊圖片，PNG 已可下載或分享。</p>}{jpegPhase==='error'&&<><p role="status">工坊圖片未能產生，PNG 仍可下載或分享。</p><button className="fw-arcade-secondary" onClick={()=>{if(!jpegRetryAllowed.current||exportSelection.current!==selected)return;jpegRetryAllowed.current=false;setJpegPhase('pending');setJpegGeneration(n=>n+1);}}>重試準備工坊圖片</button></>}<button className="fw-arcade-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="fw-arcade-button fw-arcade-secondary" href={objectUrl} download={`${result.game==='kitchen'?'料理手帳':'離譜日常'}-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="fw-arcade-secondary" disabled={exportPhase!=='error'} onClick={() => {if(!exportRetryAllowed.current||exportSelection.current!==selected)return;exportRetryAllowed.current=false;setExportPhase('pending');setGeneration(n => n + 1);}}>重試產生成果圖</button>}<button className="fw-arcade-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/><p className="fw-arcade-notice" role="status">{status}</p>{manualLink && <label className="fw-arcade-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="fw-arcade-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="fw-arcade-secondary" onClick={onNext}>{result.game==='kitchen'?'換一道料理 →':'換個玩法 →'}</button><button className="fw-arcade-secondary" onClick={onBack}>回遊樂場</button></div><p className="fw-arcade-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
+    if (inStage) return <section ref={resultRoot} data-daily-result data-game-content tabIndex={-1} aria-label="遊戲成果" className="daily-result">
+      {(result.game==='photo'||sceneUnavailable)&&<img className="daily-result-image" data-daily-result-image src={selected.image} alt={`${selected.title}・本局已保存的${result.game==='photo'?'成果照片':'完成畫面'}`} width="960" height="720"/>}
+      <div className="daily-result-summary"><h1>{result.game==='stamp'?'12 份完成':result.game==='cash'?'100 萬道具鈔':'照片已留下'}</h1><p>{result.game==='photo'?`底片 ${photoIndex+1} · 委託 ${result.photos?.[photoIndex]?.stars??0}/3`:'本局已保存'}</p></div>
+      <div className="daily-result-dock"><div className="daily-result-actions" aria-label="成果操作">
+        <button aria-label="系統分享圖片／連結" disabled={!exports||sharing} onClick={()=>void share()}>分享</button>
+        {objectUrl?<a className="fw-arcade-button fw-arcade-secondary" aria-label="下載完整成果 PNG" href={objectUrl} download={`離譜日常-${result.game}-${result.seed}.png`}>下載</a>:<button className="fw-arcade-secondary" aria-label={exportPhase==='error'?'重試產生成果圖':'成果圖整理中'} disabled={exportPhase!=='error'} onClick={()=>{if(!exportRetryAllowed.current||exportSelection.current!==selected)return;exportRetryAllowed.current=false;setExportPhase('pending');setGeneration(n=>n+1);}}>{exportPhase==='error'?'重試':'整理中'}</button>}
+        <button className="fw-arcade-secondary" aria-label="同一題再來一次" onClick={onReplay}>再來</button>
+        <button className="fw-arcade-secondary" aria-label="更多分享方式" onClick={event=>openShare(event.currentTarget)}>更多</button>
+      </div>
+      <p className="daily-result-status" role="status" aria-live="polite" title={status}>{exportPhase==='error'?'成果圖未產生，可重試':sharing?'分享中…':manualLink?'更多內可複製連結':status.includes('取消')?'已取消分享':exportPhase==='pending'?'正在整理成果圖…':'成果圖已就緒'}<span className="daily-sr">{status}</span></p></div>
+      <dialog ref={shareDialog} data-daily-result-share data-game-share className="daily-result-share" aria-labelledby="daily-result-share-title" onCancel={event=>{event.preventDefault();closeShare();}} onClose={()=>{clipboardOwner.current++;panelCloseGeneration.current++;setPanelOpen(false);}} onKeyDown={event=>{
+        if(event.key!=='Tab')return;
+        event.stopPropagation();
+        if(event.ctrlKey||event.altKey||event.metaKey)return;
+        // The nested modal owns its boundaries; do not hand them to the
+        // fullscreen loop. Query live targets, including manual-copy inputs.
+        const controls=Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href], summary, button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+            .filter(element=>element.tabIndex>=0&&!element.matches(':disabled')&&element.getClientRects().length>0&&!element.closest('[inert]')&&getComputedStyle(element).visibility==='visible');
+        const first=controls[0],last=controls.at(-1);
+        if(first&&last&&event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+        else if(first&&last&&!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+      }}>
+        <header><h2 id="daily-result-share-title">分享這局成果</h2><button className="fw-arcade-secondary" onClick={closeShare}>關閉分享</button></header>
+        <div className="daily-result-share-content">
+          <h3>{selected.caption}</h3><p>{selected.details}</p>
+          <div className="fw-arcade-result-photo"><img src={selected.image} alt={`${selected.title}・本局已保存的完成畫面`} width="960" height="720"/></div>
+          {sceneUnavailable&&<p role="status">現場畫面暫時中斷，已保存的本局成果和下載仍保留。</p>}
+          {!!result.photos?.length&&<div className="fw-arcade-photo-choices" aria-label="選一張成果照片">{result.photos.map((photo,index)=><button key={index} className={photoIndex===index?'is-selected':''} aria-pressed={photoIndex===index} onClick={()=>choosePhoto(index)}><img src={photo.image} alt=""/><span>底片 {index+1} · 委託 {photo.stars}/3</span></button>)}</div>}
+          <button disabled={!jpegs} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small>
+          {jpegPhase==='pending'&&<p role="status">正在準備工坊圖片，PNG 已可下載或分享。</p>}
+          {jpegPhase==='error'&&<><p role="status">工坊圖片未能產生，PNG 仍可下載或分享。</p><button className="fw-arcade-secondary" onClick={()=>{if(!jpegRetryAllowed.current||exportSelection.current!==selected)return;jpegRetryAllowed.current=false;setJpegPhase('pending');setJpegGeneration(n=>n+1);}}>重試準備工坊圖片</button></>}
+          <button className="fw-arcade-secondary" onClick={()=>void copy()}>複製同題挑戰連結</button>
+          <ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus} captureCopyGuard={captureCaptionCopy}/>
+          <p className="fw-arcade-notice" role="status">{status}</p>
+          {manualLink&&<label className="fw-arcade-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={event=>event.currentTarget.select()}/></label>}
+          <div className="fw-arcade-result-again"><button className="fw-arcade-secondary" onClick={onNext}>換個玩法 →</button><button className="fw-arcade-secondary" onClick={onBack}>回遊樂場</button></div>
+          <p className="fw-arcade-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p>
+        </div>
+      </dialog>
+    </section>;
+    return <section data-game-content tabIndex={-1} aria-label="遊戲成果" className={`fw-arcade-result ${gameOf(result.game)?'daily-scene-result':''} ${result.market?'fw-arcade-market-result':''}`}>{notice}<div className="fw-arcade-result-heading"><p className="fw-arcade-eyebrow">{result.game === 'kitchen' ? '本日料理手帳' : '本日離譜成果'}</p><h1>{result.game==='kitchen'?selected.title:selected.caption}</h1>{result.game==='kitchen'?!result.market&&<p aria-label="料理分數">{selected.caption}</p>:<p>{selected.details}</p>}</div><div className="fw-arcade-result-layout"><div className="fw-arcade-result-photo">{result.game==='kitchen'&&recipeOf(result.recipe)&&<DishShowcase recipe={recipeOf(result.recipe)!} market={result.market} preview={selected.image} exportSettled={!!objectUrl||exportPhase==='error'}/>}{result.game==='kitchen'?<details className="ck-export-preview"><summary>查看分享成果圖</summary><img src={jpegs?.preview??selected.image} alt={`${selected.title}・完整分享成果圖`} width="960" height="1200"/></details>:<img src={selected.image} alt={`${selected.title}・${(result.game==='holiday'||result.game==='chair'||result.game==='tofu')&&selected.image.startsWith('data:image/svg')?'本局紀錄成果卡（不是3D截圖）':'本局遊戲畫面與成績'}`}  width="960" height="720"/>}{!!result.photos?.length && <div className="fw-arcade-photo-choices" aria-label="選一張成果照片">{result.photos.map((p, i) => <button key={i} className={photoIndex === i ? 'is-selected' : ''} aria-pressed={photoIndex === i} onClick={() => choosePhoto(i)}><img src={p.image} alt=""/><span>底片 {i + 1} · 委託 {p.stars}/3</span></button>)}</div>}</div><div className="fw-arcade-share-panel" data-game-share tabIndex={-1} role="region" aria-label="分享這局成果">{result.market&&<MarketScore run={result.market}/>}<h2>{result.game === 'kitchen' ? '把你的拿手菜，端給大家看。' : '這次怪事，值得留一張。'}</h2><p>可以直接發到工坊，也能把圖片和同題挑戰傳給朋友。</p><button disabled={!jpegs} onClick={workshop}>發到自由工坊</button><small>圖片與文案帶進預覽，由你確認發布。登入後會接回這張。</small>{jpegPhase==='pending'&&<p role="status">正在準備工坊圖片，PNG 已可下載或分享。</p>}{jpegPhase==='error'&&<><p role="status">工坊圖片未能產生，PNG 仍可下載或分享。</p><button className="fw-arcade-secondary" onClick={()=>{if(!jpegRetryAllowed.current||exportSelection.current!==selected)return;jpegRetryAllowed.current=false;setJpegPhase('pending');setJpegGeneration(n=>n+1);}}>重試準備工坊圖片</button></>}<button className="fw-arcade-secondary" disabled={!exports || sharing} onClick={() => void share()}>系統分享圖片／連結</button>{objectUrl ? <a className="fw-arcade-button fw-arcade-secondary" href={objectUrl} download={`${result.game==='kitchen'?'料理手帳':'離譜日常'}-${result.game}-${result.seed}.png`}>下載完整成果 PNG</a> : <button className="fw-arcade-secondary" disabled={exportPhase!=='error'} onClick={() => {if(!exportRetryAllowed.current||exportSelection.current!==selected)return;exportRetryAllowed.current=false;setExportPhase('pending');setGeneration(n => n + 1);}}>重試產生成果圖</button>}<button className="fw-arcade-secondary" onClick={() => void copy()}>複製同題挑戰連結</button><ResultShare key={photoIndex} link={link} text={text} ready={!!exports} sharing={sharing} onNative={()=>void share()} onStatus={setStatus}/><p className="fw-arcade-notice" role="status">{status}</p>{manualLink && <label className="fw-arcade-link-field">同題連結<input ref={linkRef} readOnly value={link} onFocus={e => e.currentTarget.select()}/></label>}<div className="fw-arcade-result-again"><button onClick={onReplay}>同一題再來一次</button><button className="fw-arcade-secondary" onClick={onNext}>{result.game==='kitchen'?'換一道料理 →':'換個玩法 →'}</button><button className="fw-arcade-secondary" onClick={onBack}>回遊樂場</button></div><p className="fw-arcade-meta">這是個人遊戲成果，不是貢獻值、信任分數或現金收益。</p></div></div></section>;
 }
 export function AbsurdDaily() {
     const [game,setGame]=useState<ArcadeGameId|null>(initialGame),[recipe,setRecipe]=useState(()=>recipeOf(new URLSearchParams(location.search).get('recipe'))),[seed,setSeed]=useState(()=>seedOf(new URLSearchParams(location.search).get('seed'))),[result,setResult]=useState<RunResult|null>(null),[run,setRun]=useState(0),[fresh,setFresh]=useState(false);
     const [book,setBook]=useState<Cookbook>(()=>readCookbook(localBook).book??emptyCookbook()),[saveNotice,setSaveNotice]=useState(()=>readCookbook(localBook).notice),[bookFailed,setBookFailed]=useState(()=>!readCookbook(localBook).available);
+    const [shareRequest,setShareRequest]=useState<{serial:number;target:HTMLElement}>();
     const fullscreen=useRef<FullscreenGameHandle>(null),main=useRef<HTMLElement>(null),returnPoint=useRef<{top:number;key:string}|null>(null),restoreLobby=useRef(false);
     const bookRef=useRef(book), bookDirty=useRef(bookFailed);bookRef.current=book;
     const [lobby,setLobby]=useState<LobbyState>({category:'all',query:'',filter:'all',limit:8,collection:'all'});
     const changeBook=(change:Parameters<typeof updateCookbook>[2])=>{const saved=updateCookbook(localBook,bookRef.current,change,Date.now(),bookDirty.current);bookRef.current=saved.book;bookDirty.current=!saved.available;setBook(saved.book);setSaveNotice(saved.notice);setBookFailed(!saved.available);};
-    const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null,origin='')=>{if(game===null&&next)returnPoint.current={top:window.scrollY,key:origin};restoreLobby.current=next===null;const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,marketCheckpoint=dish&&!keepSeed?readMarket(tabBook):null,nextSeed=keepSeed?seed:marketCheckpoint&&dish&&marketCheckpoint.recipe===dish.id?marketCheckpoint.seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();const update=()=>{setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setRun(n=>n+1);};const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed),...(keepSeed&&new URLSearchParams(location.search).get('practice')==='1'?{practice:'1'}:{})}).toString():'';url.hash='';history.pushState(null,'',url);if(next){flushSync(update);fullscreen.current?.enter();}else update();},[game,seed]);
+    const choose=useCallback((next:ArcadeGameId|null,keepSeed=false,dish:Recipe|null=null,origin='')=>{if(game===null&&next)returnPoint.current={top:window.scrollY,key:origin};restoreLobby.current=next===null;const checkpoint=dish&&!keepSeed?readCookingRun(tabBook).run:null,marketCheckpoint=dish&&!keepSeed?readMarket(tabBook):null,nextSeed=keepSeed?seed:marketCheckpoint&&dish&&marketCheckpoint.recipe===dish.id?marketCheckpoint.seed:checkpoint&&dish&&checkpoint.recipeId===dish.id?checkpoint.seed:freshSeed();const update=()=>{setGame(next);setRecipe(dish);setSeed(nextSeed);setFresh(keepSeed);setResult(null);setShareRequest(undefined);setRun(n=>n+1);};const url=new URL(location.href);url.pathname='/play';url.search=next?new URLSearchParams({game:next,...(dish?{recipe:dish.id}:{}),seed:String(nextSeed),...(keepSeed&&new URLSearchParams(location.search).get('practice')==='1'?{practice:'1'}:{})}).toString():'';url.hash='';history.pushState(null,'',url);if(next){flushSync(update);fullscreen.current?.enter();}else update();},[game,seed]);
     useLayoutEffect(()=>{
         if(!game&&restoreLobby.current){
             restoreLobby.current=false;
@@ -437,17 +596,19 @@ export function AbsurdDaily() {
             document.addEventListener('fullscreenchange',restore);
             return()=>document.removeEventListener('fullscreenchange',restore);
         }
-        (main.current?.querySelector<HTMLElement>('[data-game-content]')??main.current)?.focus({preventScroll:true});
-        window.scrollTo({top:0,behavior:'instant'});
+        (main.current?.querySelector<HTMLElement>(result&&gameOf(game)?'[data-daily-result]':'[data-game-content]')??main.current)?.focus({preventScroll:true});
+        if(!result||!gameOf(game))window.scrollTo({top:0,behavior:'instant'});
     },[game,run,result]);
     const nextGame=()=>{if(game==='kitchen'&&recipe){const next=RECIPES[(RECIPES.findIndex(r=>r.id===recipe.id)+1)%RECIPES.length];choose('kitchen',false,next);}else{const choices=[...GAMES,...PARTY_GAMES];choose(choices[(choices.findIndex(g=>g.id===game)+1)%choices.length].id);}};
-    useEffect(()=>{document.title='遊戲大廳 · 自由工坊';const previousScroll=history.scrollRestoration;history.scrollRestoration='manual';const back=()=>{restoreLobby.current=initialGame()===null;setGame(initialGame());setRecipe(recipeOf(new URLSearchParams(location.search).get('recipe')));setSeed(seedOf(new URLSearchParams(location.search).get('seed')));setFresh(false);setResult(null);setRun(n=>n+1);};const changed=(event:StorageEvent)=>{if(event.key===COOKBOOK_KEY&&!bookDirty.current){const saved=readCookbook(localBook);bookRef.current=saved.book;setBook(saved.book);setSaveNotice(saved.notice);}};window.addEventListener('popstate',back);window.addEventListener('storage',changed);return()=>{history.scrollRestoration=previousScroll;window.removeEventListener('popstate',back);window.removeEventListener('storage',changed);};},[]);
+    useEffect(()=>{document.title='遊戲大廳 · 自由工坊';const previousScroll=history.scrollRestoration;history.scrollRestoration='manual';const back=()=>{restoreLobby.current=initialGame()===null;setGame(initialGame());setRecipe(recipeOf(new URLSearchParams(location.search).get('recipe')));setSeed(seedOf(new URLSearchParams(location.search).get('seed')));setFresh(false);setResult(null);setShareRequest(undefined);setRun(n=>n+1);};const changed=(event:StorageEvent)=>{if(event.key===COOKBOOK_KEY&&!bookDirty.current){const saved=readCookbook(localBook);bookRef.current=saved.book;setBook(saved.book);setSaveNotice(saved.notice);}};window.addEventListener('popstate',back);window.addEventListener('storage',changed);return()=>{history.scrollRestoration=previousScroll;window.removeEventListener('popstate',back);window.removeEventListener('storage',changed);};},[]);
     const invalid=new URLSearchParams(location.search).get('game')==='kitchen'&&!game;
     const partyGame:PartyGameId|null=partyOf(game);
+    const isMarket=game==='kitchen'&&!!recipe&&!!marketOf(recipe.id)&&new URLSearchParams(location.search).get('practice')!=='1';
+    const bookNotice=saveNotice?<div className="ck-save-warning" role="status"><p>{saveNotice}</p>{bookFailed&&<button className="fw-arcade-secondary" onClick={()=>changeBook({kind:'retry'})}>重試保存食譜本</button>}</div>:null;
     return <div className="fw-arcade-root fw-arcade-toy-console fw-arcade-shotengai"><a className="fw-arcade-skip" href="#fw-arcade-main">跳到遊戲內容</a><header className="fw-arcade-header" style={{flexWrap:'wrap'}}><a className="fw-arcade-brand" href="/"><img src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="396" height="132" style={{width:132,height:44,maxWidth:'none',flexShrink:0}}/><span>遊戲大廳</span></a><a className="fw-arcade-home-link" href="/">回自由工坊 ↗</a></header><main id="fw-arcade-main" ref={main} tabIndex={-1}>
       <MemberGameUpload hidden={Boolean(game)}/>
       <CommunityGameSubmission hidden={Boolean(game)}/>
-      {saveNotice&&<div className="ck-save-warning" role="status"><p>{saveNotice}</p>{bookFailed&&<button className="fw-arcade-secondary" onClick={()=>changeBook({kind:'retry'})}>重試保存食譜本</button>}</div>}
-      {game?<FullscreenGame ref={fullscreen} resultReady={result !== null}>{result?<Result result={result} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)} onNext={nextGame}/>:game==='kitchen'&&recipe&&marketOf(recipe.id)&&new URLSearchParams(location.search).get('practice')!=='1'?<MarketLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onStart={target=>fullscreen.current?.enter(target)} onComplete={(completed:MarketRun)=>changeBook({kind:'market-complete',run:completed})}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onStart={(target,viewTarget)=>fullscreen.current?.enter(target,viewTarget)} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:partyGame?<PartyLoader key={`${partyGame}/${run}`} game={partyGame} seed={seed} onBack={()=>choose(null)} onResult={setResult} onStart={target=>fullscreen.current?.enter(target)}/>:game&&game!=='kitchen'?<GameBoard key={`${game}/${run}`} game={gameOf(game)!} seed={seed} onBack={()=>choose(null)} onResult={setResult} onStart={target=>fullscreen.current?.enter(target)}/>:null}</FullscreenGame>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={(g,key)=>choose(g,false,null,key)} onRecipe={(r,key)=>choose('kitchen',false,r,key)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
+      {!isMarket&&bookNotice}
+      {game?<FullscreenGame ref={fullscreen} onResultShare={gameOf(game)?target=>setShareRequest(previous=>({serial:(previous?.serial??0)+1,target})):undefined} resultReady={result !== null} integrated={(game==='kitchen'&&!!recipe)||!!gameOf(game)} market={isMarket} holiday={partyGame==='holiday'} chair={partyGame==='chair'} tofu={partyGame==='tofu'}>{gameOf(game)?<GameBoard key={`${game}/${run}`} game={gameOf(game)!} seed={seed} onBack={()=>choose(null)} onResult={setResult} onStart={target=>fullscreen.current?.enter(target)} resultView={sceneUnavailable=>result?<Result result={result} inStage sceneUnavailable={sceneUnavailable} shareRequest={shareRequest} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)} onNext={nextGame}/>:null}/>:result?<Result result={result} notice={isMarket?bookNotice:null} onBack={()=>choose(null)} onReplay={()=>choose(game,true,recipe)} onNext={nextGame}/>:game==='kitchen'&&recipe&&marketOf(recipe.id)&&new URLSearchParams(location.search).get('practice')!=='1'?<MarketLoader key={`${recipe.id}/${run}`} bookNotice={bookNotice} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onStart={target=>fullscreen.current?.enter(target)} onComplete={(completed:MarketRun)=>changeBook({kind:'market-complete',run:completed})}/>:game==='kitchen'&&recipe?<CookingLoader key={`${recipe.id}/${run}`} recipe={recipe} seed={seed} fresh={fresh} onBack={()=>choose(null)} onResult={setResult} onStart={(target,viewTarget)=>fullscreen.current?.enter(target,viewTarget)} onComplete={(completed:CookingRun)=>changeBook({kind:'complete',run:completed})}/>:partyGame?<PartyLoader key={`${partyGame}/${run}`} game={partyGame} seed={seed} onBack={()=>choose(null)} onResult={setResult} onStart={target=>fullscreen.current?.enter(target)}/>:null}</FullscreenGame>:<ArcadeLobby state={lobby} onState={setLobby} book={book} onFavorite={id=>changeBook({kind:'favorite',id})} onGame={(g,key)=>choose(g,false,null,key)} onRecipe={(r,key)=>choose('kitchen',false,r,key)} notice={invalid?'這道料理連結無法辨識，請從食譜本選一道。':''}/>}
     </main><footer className="fw-arcade-footer">自由工坊原創遊戲 · 作品由你確認後分享</footer></div>;
 }

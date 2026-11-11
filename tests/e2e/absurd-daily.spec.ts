@@ -1,3 +1,6 @@
+import {installExportTimingProbe} from './helpers/export-phase-timing.js';
+import {partyElapsed,partyAdvance,blockPartyWebGL,openDailyResultShare,socialEntries} from './helpers/party-scene.js';
+import {cutGuideAt} from '../../apps/portal-web/src/games/cooking/domain.js';
 import {withBoundedCpuProfile} from './helpers/bounded-cpu-profile.js';
 import {readFileSync} from 'node:fs';
 import sharp from 'sharp';
@@ -100,42 +103,10 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  } finally {await context.close();}
 });
 
-// Proposed E2E-only injection; no product module imports or production telemetry.
-// Records timing/category/dimensions only, never image contents or user strings.
-function installExportTimingProbe(){
-  type Event={phase:string;at:number;id?:number;width?:number;height?:number;kind?:string};
-  const events:Event[]=[];let dropped=0,sequence=0;
-  const record=(event:Omit<Event,'at'>)=>{if(events.length<128)events.push({...event,at:performance.now()});else dropped++;};
-  Object.defineProperty(window,'__exportTimingProbe',{value:{events,get dropped(){return dropped;}}});
-  const imageSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src')!;
-  Object.defineProperty(HTMLImageElement.prototype,'src',{...imageSrc,set(value:string){
-    const id=++sequence,kind=value.startsWith('data:image/')?'data-image':value.startsWith('blob:')?'blob-image':'other-image';
-    record({phase:'image-src',id,kind});
-    const finish=(phase:string)=>{this.removeEventListener('load',loaded);this.removeEventListener('error',failed);record({phase,id,width:this.naturalWidth,height:this.naturalHeight,kind});};
-    const loaded=()=>finish('image-load'),failed=()=>finish('image-error');
-    this.addEventListener('load',loaded);this.addEventListener('error',failed);imageSrc.set!.call(this,value);
-  }});
-  const toBlob=HTMLCanvasElement.prototype.toBlob,toDataURL=HTMLCanvasElement.prototype.toDataURL;
-  HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){
-    const id=++sequence;record({phase:'blob-start',id,width:this.width,height:this.height,kind:type??'image/png'});
-    return toBlob.call(this,function(blob){record({phase:blob?'blob-done':'blob-null',id});callback(blob);},type,quality);
-  };
-  HTMLCanvasElement.prototype.toDataURL=function(type,quality){
-    const id=++sequence;record({phase:'data-url-start',id,width:this.width,height:this.height,kind:type??'image/png'});
-    try{return toDataURL.call(this,type,quality);}finally{record({phase:'data-url-end',id});}
-  };
-  let dish='',download=false;
-  const observer=new MutationObserver(()=>{
-    const next=document.querySelector('[data-dish-view]')?.getAttribute('data-dish-view')??'';
-    if(next!==dish){dish=next;record({phase:`dish-${next||'absent'}`});}
-    const available=!!document.querySelector('.fw-arcade-result a[download][href^="blob:"]');
-    if(available!==download){download=available;record({phase:available?'download-published':'download-removed'});}
-  });
-  observer.observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['data-dish-view','href']});
-}
 
 test.afterEach(async({page},testInfo)=>{
-  if(testInfo.title!=='UX-15c: completed guided export survives development StrictMode replay and production cold reload')return;
+  if(testInfo.title!=='UX-15c: completed guided export survives development StrictMode replay and production cold reload'
+    &&testInfo.title!=='CK-5: egg-fried-rice completes through real scene gestures and keyboard cooking controls')return;
   const probe=await page.evaluate(()=>{
     const value=(window as unknown as {__exportTimingProbe?:{events:unknown[];dropped:number}}).__exportTimingProbe;
     return value?{events:value.events,dropped:value.dropped,scope:'current production document only; DOM times are observer delivery, not exact mutation time'}:null;
@@ -500,10 +471,6 @@ async function openParty(page:Page,game:PartyGameId){
   await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));
   await page.getByRole('button',{name:'開始派對！',exact:true}).click();await exitStartedFullscreen(page);
 }
-async function partyElapsed(page:Page){return Number(await page.locator('.pt-canvas').getAttribute('data-elapsed'));}
-async function partyAdvance(page:Page,target:number){
-  for(let i=0;i<80;i++){const at=await partyElapsed(page);if(at>=target||await page.locator('.pt-root').getAttribute('data-party-state')==='done')return;await page.clock.runFor(Math.min(1000,target-at+17));}throw Error('party clock did not advance');
-}
 async function partyResult(page:Page,game:PartyGameId){
   await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');const score=Number(await page.locator('.pt-root').getAttribute('data-party-score'));expect(score).toBeGreaterThan(0);
   await page.getByRole('button',{name:'查看這局成果',exact:true}).click();await expect(page.locator('.fw-arcade-result-heading')).toContainText(`${score} 分`);await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await socialEntries(page,game);return score;
@@ -523,7 +490,7 @@ test('PT-4: tofu uses actual moving-block timing, rejects an in-flight second dr
     let aligned=false;for(let t=0;t<180;t++){const offset=Math.abs(Number(await page.locator('.pt-canvas').getAttribute('data-tofu-offset')));if(offset<.105){aligned=true;break;}await page.clock.runFor(offset>.7?90:10);}expect(aligned).toBe(true);
     const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer===0)await page.locator('.pt-canvas').press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.locator('.pt-canvas').press('Space');await page.clock.runFor(510);
   }
-  await expect(page.locator('.pt-scoreboard')).toContainText('12 / 12');expect(await partyResult(page,'tofu')).toBe(2925);
+  await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 12 / 12 層，"]')).toBeVisible();expect(await partyResult(page,'tofu')).toBe(2925);
 });
 
 test('PT-5/7: holiday raycasts a real 3D character, accepts keyboard targets, and carries the result to confirmed site sharing',async({page})=>{
@@ -576,16 +543,6 @@ test.describe('PT-6 touchscreen input',()=>{
     await page.setViewportSize({width:390,height:844});await openParty(page,'holiday');await partyAdvance(page,250);const label=(await page.getByRole('button',{name:/第 [1-6] 格：休假/}).getAttribute('aria-label'))!,hole=Number(label.match(/第 (\d)/)![1])-1;const anchor=JSON.parse((await page.locator('.pt-canvas').getAttribute('data-anchors'))!)[hole],b=(await page.locator('.pt-canvas').boundingBox())!;await page.touchscreen.tap(b.x+anchor.x*b.width,b.y+anchor.y*b.height);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-live-label')).toContainText('已守住 1 個假日');
   });
 });
-
-async function blockPartyWebGL(page:Page){
-  await page.addInitScript(()=>{
-    const get=HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext=function(this:HTMLCanvasElement,kind:string,...args:any[]){
-      if(kind==='webgl'||kind==='webgl2'||kind==='experimental-webgl')return null;
-      return Reflect.apply(get,this,[kind,...args]);
-    } as typeof get;
-  });
-}
 async function openLightHoliday(page:Page){
   await blockPartyWebGL(page);await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});
   await page.goto('/play?game=holiday&seed=42');await expect(page.getByRole('alert')).toContainText('無法開啟 3D 場景');
@@ -633,7 +590,7 @@ test('PT-action-light: tofu uses the actual RAF clock, twelve timed drops, one l
     while(model.fall)await frame();
     // Let the bounded 30fps presentation publish the real landing. The model
     // keeps advancing with the same frame timestamps, never a timeout/retry.
-    if(model.status==='playing'){await frame();await frame();}await assertProjection();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));await expect(page.locator('.pt-scoreboard')).toContainText(`${layer+1} / 12`);
+    if(model.status==='playing'){await frame();await frame();}await assertProjection();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));await expect(page.locator(`.pt-scoreboard strong[aria-label^="完成 ${layer+1} / 12 層，"]`)).toBeVisible();
   }
   await probe.evaluate(r=>cancelAnimationFrame(r.frame));await probe.dispose();expect(model.score).toBe(2925);await expect(page.locator('[data-tofu-layer]')).toHaveCount(13);
   const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).click();const svg=readFileSync((await(await download).path())!,'utf8');expect(svg).toContain('2925 分');expect(svg).toContain('疊了 12 層');expect((svg.match(/<polygon /g)??[]).length).toBe(39);expect(await partyResult(page,'tofu')).toBe(2925);
@@ -761,7 +718,7 @@ for(const [width,height] of [[320,900],[1440,900],[1920,1080]])for(const [game,a
     await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toBeVisible();
     await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();
+    await page.getByRole('button',{name:'回遊樂場',exact:true}).click();
     await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
     await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
     await expect(page.locator(`[data-arcade-open="game:${game}"]`)).toBeFocused();
@@ -825,12 +782,16 @@ async function enterNativeFullscreen(page:Page){
   await page.locator('.fw-arcade-board').focus();
   await expect(page.locator('.fw-arcade-board')).toBeFocused();
 }
+async function closeDailyResultShare(page:Page){
+  const dialog=page.locator('[data-daily-result-share]');
+  if(await dialog.isVisible())await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
+}
 async function expectResultInNativeFullscreen(page:Page){
-  for (const name of ['系統分享圖片／連結','複製同題挑戰連結']) {
-    const control=page.getByRole('button',{name,exact:true});
-    await expect(control).toBeVisible();
-    expect(await control.evaluate(el => !!document.fullscreenElement?.contains(el))).toBe(true);
-  }
+  await closeDailyResultShare(page);
+  const primary=page.getByRole('button',{name:'系統分享圖片／連結',exact:true});
+  await expect(primary).toBeVisible();expect(await primary.evaluate(el=>!!document.fullscreenElement?.contains(el))).toBe(true);
+  const dialog=await openDailyResultShare(page),copy=dialog.getByRole('button',{name:'複製同題挑戰連結',exact:true});
+  await expect(copy).toBeVisible();expect(await copy.evaluate(el=>!!document.fullscreenElement?.contains(el))).toBe(true);
 }
 async function login(page:Page){
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
@@ -845,17 +806,6 @@ async function artifact():Promise<GameDraft>{
 async function putArtifact(page:Page,draft:GameDraft){
   await page.evaluate(({key,event,draft})=>{sessionStorage.setItem(key,JSON.stringify(draft));window.dispatchEvent(new Event(event));},{key:GAME_HANDOFF_KEY,event:GAME_HANDOFF_EVENT,draft});
 }
-async function socialEntries(page:Page,game:string){
-  const requests:string[]=[];const record=(r:{url:()=>string})=>{if(/^https:\/\/(x\.com|www\.(threads\.com|facebook\.com|instagram\.com))\//.test(r.url()))requests.push(r.url());};page.on('request',record);
-  for(const label of ['X','Threads','Facebook','Instagram']){
-    const button=page.getByRole('button',{name:`分享到 ${label}`,exact:true});await button.click();await expect(button).toHaveAttribute('aria-pressed','true');await expect(page.locator('.fw-arcade-social-targets [aria-pressed=true]')).toHaveCount(1);
-    const entry=page.getByRole('link',{name:new RegExp(`^開啟 ${label}`)}),url=new URL((await entry.getAttribute('href'))!);expect(url.protocol).toBe('https:');expect(await entry.getAttribute('rel')).toContain('noopener');
-    if(label==='X'||label==='Threads')expect(url.searchParams.get('text')).toContain(`game=${game}`);
-    if(label==='Facebook')expect(url.searchParams.get('u')).toContain(`game=${game}`);
-    if(label==='Instagram')expect(url.href).toBe('https://www.instagram.com/');
-  }
-  expect(requests).toEqual([]);page.off('request',record);
-}
 
 test('AD-3 photo action status distinguishes repeated capture failures and saved film without frame announcements',async({page})=>{
   await openGame(page,'photo');const notice=page.locator('.fw-arcade-notice'),shutter=page.getByRole('button',{name:'拍照快門',exact:true});
@@ -865,7 +815,7 @@ test('AD-3 photo action status distinguishes repeated capture failures and saved
   try{
     for(let attempt=1;attempt<=2;attempt++){
       await shutter.click();await expect(notice).toHaveText(`本局第 ${attempt} 次拍照未保存。Synthetic repeated capture failure 第 1 / 3 位客人，已保存 0 / 2 張，還可拍 2 張。`);
-      await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(shutter).toBeEnabled();await expect(shutter).toHaveText('◎快門 · 2 張');
+      await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(shutter).toBeEnabled();await expect(page.locator('[data-photo-film]')).toBeVisible();await expect(page.locator('[data-photo-film]')).toHaveText('2 張');
     }
   }finally{await page.evaluate(fn=>{HTMLCanvasElement.prototype.toDataURL=fn;},original);await original.dispose();}
   await shutter.click();await expect(notice).toContainText('第 1 / 3 位客人，已保存 1 / 2 張，還可拍 1 張。');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);
@@ -894,20 +844,22 @@ test('AD-3 public photo studio captures real frames, enforces film, and exports 
   await socialEntries(page,'photo');
   await page.locator('.fw-arcade-photo-choices button').first().click();
   await expect(page.locator('.fw-arcade-photo-choices [aria-pressed="true"]')).toHaveCount(1);
-  await page.getByRole('button',{name:'退出全螢幕'}).click();
+  await closeDailyResultShare(page);await page.getByRole('button',{name:'退出全螢幕'}).click();
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
   await page.evaluate(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
   const viewportResult=page.getByRole('dialog',{name:'遊戲全螢幕'});
   await expect(viewportResult.getByRole('button',{name:'系統分享圖片／連結'})).toBeVisible();
-  await expect(viewportResult.getByRole('button',{name:'複製同題挑戰連結'})).toBeVisible();
   await viewportResult.getByRole('button',{name:'分享成果',exact:true}).click();
-  await expect(viewportResult.getByRole('region',{name:'分享這局成果',exact:true})).toBeFocused();
+  await expect(viewportResult.getByRole('button',{name:'複製同題挑戰連結'})).toBeVisible();
+  await expect(viewportResult.locator('[data-daily-result-share]')).toBeVisible();
+  await expect(viewportResult.locator('[data-daily-result-share]').getByRole('button',{name:'關閉分享',exact:true})).toBeFocused();
   await expect(viewportResult.getByRole('button',{name:'發到自由工坊',exact:true})).toBeInViewport();
-  await viewportResult.getByRole('button',{name:'退出全螢幕'}).click();
+  await closeDailyResultShare(page);await viewportResult.getByRole('button',{name:'退出全螢幕'}).click();
+  await openDailyResultShare(page);
   await expect(page.locator('.fw-arcade-photo-choices [aria-pressed="true"]')).toHaveCount(1);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
-  const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG'}).click();
+  await closeDailyResultShare(page);const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG'}).click();
   const file=await download,path=await file.path();expect(path).toBeTruthy();
   const info=await sharp(path!).metadata();expect([info.width,info.height]).toEqual([960,1200]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
@@ -928,13 +880,16 @@ test('AD-4 twelve real documents finish once after practice; blur pauses until e
     point={x:point.x+x*.06,y:point.y+y*.06};await page.clock.fastForward(230);await page.keyboard.press('Space');
     if(i<11){await expect(page.locator('.fw-arcade-counter')).toHaveText(`${i+1}/12`);await expect(page.locator('.fw-arcade-notice')).toHaveText(`啪！已閱，但看不懂。 已完成 ${i+1} / 12 份 · 多蓋 0 次。`);}
   }
-  await expect(page.locator('.fw-arcade-result-heading')).toContainText('完成 12 份文件');
+  await expect(page.locator('[data-daily-result-share]')).toContainText('完成 12 份文件');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await socialEntries(page,'stamp');
   await expectResultInNativeFullscreen(page);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
   await page.keyboard.press('Tab');
   expect(await page.evaluate(() => !!document.fullscreenElement?.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-daily-result-share]')).not.toBeVisible();
+  await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
   await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
   await expect(page.getByRole('button',{name:'系統分享圖片／連結'})).toBeVisible();
@@ -977,7 +932,7 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
   const deck=cashDeck(42);await page.keyboard.press(deck[0].valid?'ArrowLeft':'ArrowRight');
   await expect(page.getByText('這張分錯了，退回來重新看看。 已分類 0 / 30 張 · 分錯 1 次。',{exact:true})).toBeVisible();await page.clock.fastForward(180);
   for(const card of deck){await page.keyboard.press(card.valid?'ArrowRight':'ArrowLeft');await page.clock.fastForward(175);}
-  await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  await expect(page.locator('[data-daily-result-share]')).toContainText('100 萬道具鈔 · 退回 6 張票券');
   await expect(page.getByRole('region',{name:'遊戲成果'})).toBeFocused();
   await socialEntries(page,'cash');
   await expectResultInNativeFullscreen(page);
@@ -987,8 +942,9 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
     Object.defineProperty(navigator,'share',{configurable:true,value:async(payload:ShareData)=>{(window as unknown as {sharePayload:unknown}).sharePayload={text:payload.text,type:payload.files?.[0]?.type};throw new DOMException('cancel','AbortError');}});
     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied');}}});
   });
-  await page.getByRole('button',{name:'系統分享圖片／連結',exact:true}).click();
-  await expect(page.getByText('已取消分享，成果仍在這裡。',{exact:true})).toBeVisible();
+  await closeDailyResultShare(page);await page.getByRole('button',{name:'系統分享圖片／連結',exact:true}).click();
+  await openDailyResultShare(page);
+  await expect(page.locator('[data-daily-result-share]').getByText('已取消分享，成果仍在這裡。',{exact:true})).toBeVisible();
   await expectResultInNativeFullscreen(page);
   expect(await page.evaluate(()=>(window as unknown as {sharePayload:{text:string;type:string}}).sharePayload)).toEqual({text:expect.stringContaining('/play?game=cash&seed=42'),type:'image/png'});
   await page.getByRole('button',{name:'複製同題挑戰連結',exact:true}).click();
@@ -999,7 +955,7 @@ test('AD-5 sort exact million, recover denied storage, cancel system share, and 
     Storage.prototype.setItem=function(k,v){if(k===key)throw new DOMException('quota','QuotaExceededError');return original.call(this,k,v);};
   },GAME_HANDOFF_KEY);
   await page.getByRole('button',{name:'發到自由工坊',exact:true}).click();
-  await expect(page.getByText('成果還沒保存，請重試「發到自由工坊」，或先下載圖片。',{exact:true})).toBeVisible();
+  await expect(page.locator('[data-daily-result-share]').getByText('成果還沒保存，請重試「發到自由工坊」，或先下載圖片。',{exact:true})).toBeVisible();
   await page.evaluate(()=>(window as unknown as {restoreStorage:()=>void}).restoreStorage());
   await page.getByRole('button',{name:'發到自由工坊',exact:true}).click();
   await page.waitForURL('**/?game-share=1#home');
@@ -1029,14 +985,14 @@ test('AD-5 final cash capture failure retries the completed scene without replay
   await page.keyboard.press(deck[29].valid?'ArrowRight':'ArrowLeft');
   await expect(page.locator('.fw-arcade-notice')).toContainText('完成次數不會重算');
   await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');
-  await expect(page.locator('.fw-arcade-result-heading')).toHaveCount(0);
+  await expect(page.locator('[data-daily-result-share]')).toHaveCount(0);
   await expect(page.locator('.fw-arcade-notice')).toContainText('第 1 次產生成果圖片失敗。');
   await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
   await expect(page.locator('.fw-arcade-notice')).toContainText('第 2 次產生成果圖片失敗。');
-  await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');await expect(page.locator('.fw-arcade-result-heading')).toHaveCount(0);
+  await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('已分類 30 / 30');await expect(page.locator('[data-daily-result-share]')).toHaveCount(0);
   await page.getByRole('button',{name:'重試產生成果圖片',exact:true}).click();
-  await expect(page.locator('.fw-arcade-result-heading')).toContainText('100 萬道具鈔 · 退回 6 張票券');
-  const image=page.locator('.fw-arcade-result-photo > img');
+  await expect(page.locator('[data-daily-result-share]')).toContainText('100 萬道具鈔 · 退回 6 張票券');
+  await openDailyResultShare(page);const image=page.locator('.fw-arcade-result-photo > img');
   await expect(image).toHaveJSProperty('naturalWidth',960);
   await expect(image).toHaveJSProperty('naturalHeight',720);
   await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
@@ -1196,7 +1152,7 @@ test('AD-6 WebGL loss has a recoverable boundary and public layouts fit narrow, 
   await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(1);
   await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'繼續這一局',exact:true}).click();
-  await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(0);
+  await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(0);
   await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
 });
 
@@ -1286,7 +1242,7 @@ async function playRecipe(page:Page,recipe:Recipe){
   for(let index=0;index<recipe.steps.length;index++){
     const s=recipe.steps[index];await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);
     if(['knead','pan','boil','bake','pour'].includes(s.kind)){await expect(page.getByRole('meter')).toBeVisible();await expect(page.getByRole('meter')).toHaveAttribute('aria-valuetext',/目標/);}
-    if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);const x=.22+.56*(i+1)/(s.goal+1),from=await scenePoint(page,x,.23),to=await scenePoint(page,x,.78);await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:5});await page.mouse.up();}
+    if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);const x=cutGuideAt(s,i),from=await scenePoint(page,x,.23),to=await scenePoint(page,x,.78);await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:5});await page.mouse.up();}
     if(s.kind==='mix'){const first=await scenePoint(page,.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16,p=await scenePoint(page,.5+.3*Math.cos(angle),.52+.3*Math.sin(angle));await page.mouse.move(p.x,p.y);}await page.mouse.up();}
     if(s.kind==='knead')for(let i=0;i<s.goal;i++){await page.locator('.ck-game').focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs);await page.keyboard.up('Space');await page.clock.runFor(160);}
     if(s.kind==='pan'||s.kind==='boil'||s.kind==='bake'){const slider=page.getByRole('slider'),box=await slider.boundingBox();await slider.click({position:{x:8+(box!.width-16)*s.heat/100,y:box!.height/2}});
@@ -1300,7 +1256,8 @@ async function playRecipe(page:Page,recipe:Recipe){
   }
   // UX-T3: only after persisted settlement, let native WebP decoding/toBlob run on real frames.
   expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.status,COOKING_RUN_KEY)).toBe('done');await page.clock.resume();
-  await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await expect(page.locator('.fw-arcade-result-heading')).toContainText(recipe.name);
+  // Native PNG encoding has a 6.7s idle fallback in Chromium 153; wait only for that artifact.
+  await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible({timeout:10_000});await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();await expect(page.locator('.fw-arcade-result-heading')).toContainText(recipe.name);
   await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+100));
 }
 test('UX-7: a real-clock 3D cooking journey completes mixing, timed kneading and folding into a shareable result',async({page})=>{
@@ -1317,6 +1274,8 @@ test('UX-7: a real-clock 3D cooking journey completes mixing, timed kneading and
 });
 
 for(const id of ['egg-fried-rice','rice-balls','chocolate-brownie','pearl-milk-tea'])test(`CK-5: ${id} completes through real scene gestures and keyboard cooking controls`,async({page})=>{
+  // Retain encoder-phase observations for the hosted PNG failure.
+  if(id==='egg-fried-rice')await page.addInitScript(installExportTimingProbe);
   test.setTimeout(120_000);await page.setViewportSize({width:390,height:844});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openKitchen(page,id);await playRecipe(page,recipeOf(id)!);
   await socialEntries(page,'kitchen');
   const book=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)!),COOKBOOK_KEY);expect(book.best[id].score).toBeGreaterThanOrEqual(60);expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -1354,15 +1313,36 @@ test('CK-7: previewing another recipe preserves the unfinished dish and returnin
   const after=await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!),COOKING_RUN_KEY);expect(after.run.id).toBe(before.run.id);await page.getByRole('button',{name:'開始製作海苔飯糰',exact:true}).click();await expect(page.getByRole('button',{name:'繼續料理',exact:true})).toBeVisible();await expect(page.locator('.ck-meter-copy')).toContainText('1.0 / 2 圈');
 });
 test('CK-2/7: unavailable artwork and storage have usable fallbacks, while an unknown recipe returns the lobby',async({page})=>{
-  await page.addInitScript(()=>{Storage.prototype.setItem=function(){throw new DOMException('Synthetic quota','QuotaExceededError');};});await page.route('**/games/absurd-daily/cooking/3d/*.webp',route=>route.abort());await page.route('**/games/absurd-daily/illustrated/*.webp',route=>route.abort());await page.goto('/play?game=kitchen&practice=1&recipe=unknown&seed=42');await expect(page.getByRole('status').filter({hasText:'這道料理連結無法辨識'})).toBeVisible();const fallback=await page.locator('.ck-recipe-card').first().locator('.sg-cover-fallback').boundingBox(),owner=await page.locator('.ck-recipe-card').first().locator('.ck-recipe-visual').boundingBox();expect(fallback!.y+fallback!.height).toBeLessThanOrEqual(owner!.y+owner!.height);await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).click();await expect(page.getByRole('button',{name:'重試保存食譜本',exact:true})).toBeVisible();await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');await expect(page.locator('.sg-cover-fallback')).toBeVisible();await page.getByRole('button',{name:'開始料理',exact:true}).click();await expect(page.locator('.ck-art-fallback')).toBeVisible();await expect(page.getByRole('button',{name:'重試保存',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'沿線切一刀',exact:true})).toBeEnabled();
+  await page.addInitScript(()=>{Storage.prototype.setItem=function(){throw new DOMException('Synthetic quota','QuotaExceededError');};});
+  await page.route('**/games/absurd-daily/cooking/3d/*.webp',route=>route.abort());await page.route('**/games/absurd-daily/illustrated/*.webp',route=>route.abort());
+  await page.route('**/assets/kitchen-stage-*.js',route=>route.abort());
+  await page.goto('/play?game=kitchen&practice=1&recipe=unknown&seed=42');await expect(page.getByRole('status').filter({hasText:'這道料理連結無法辨識'})).toBeVisible();
+  const fallback=await page.locator('.ck-recipe-card').first().locator('.sg-cover-fallback').boundingBox(),owner=await page.locator('.ck-recipe-card').first().locator('.ck-recipe-visual').boundingBox();expect(fallback!.y+fallback!.height).toBeLessThanOrEqual(owner!.y+owner!.height);
+  await page.getByRole('button',{name:'收藏黃金蛋炒飯',exact:true}).click();await expect(page.getByRole('button',{name:'重試保存食譜本',exact:true})).toBeVisible();
+  await page.goto('/play?game=kitchen&practice=1&recipe=egg-fried-rice&seed=42');
+  // The guided ready screen is the live kitchen, no longer a decorative cover.
+  await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-scene')).toBeVisible();
+  await page.getByRole('button',{name:'開始料理',exact:true}).click();
+  await expect(page.locator('.ck-visual-light')).toBeVisible();await expect(page.locator('.ck-kitchen-canvas canvas')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'重試保存',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'沿線切一刀',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();await expect(page.locator('.ck-meter-copy')).toHaveText('1 / 6');
 });
 
-test('CK-8: enlarged real recipe text keeps the start/resume action inside its owner on compact and landscape screens',async({page})=>{
+test('CK-8: enlarged real recipe text keeps the start/resume action inside its owner on compact and landscape screens',async({page},testInfo)=>{
   for(const viewport of [{width:320,height:568},{width:667,height:375}]){
     await page.setViewportSize(viewport);await page.goto('/play?game=kitchen&practice=1&recipe=strawberry-cake&seed=42');await expect(page.getByRole('button',{name:'開始料理',exact:true})).toBeVisible();
     await page.evaluate(()=>{const styles=[...document.querySelectorAll('.fw-arcade-root,.fw-arcade-root *')].filter(e=>e instanceof HTMLElement).map(e=>({e:e as HTMLElement,font:parseFloat(getComputedStyle(e).fontSize),line:parseFloat(getComputedStyle(e).lineHeight)}));for(const {e,font,line}of styles){e.style.fontSize=`${font*2}px`;if(Number.isFinite(line))e.style.lineHeight=`${line*2}px`;}});
     const contained=()=>page.locator('.ck-scene-overlay').evaluate(e=>{const button=e.querySelector('button')!.getBoundingClientRect(),owner=e.getBoundingClientRect();return button.top>=owner.top&&button.bottom<=owner.bottom&&button.left>=owner.left&&button.right<=owner.right;});
-    expect(await contained()).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'開始料理',exact:true}).click();await exitStartedFullscreen(page);await page.getByRole('button',{name:'暫停',exact:true}).click();expect(await contained()).toBe(true);await page.getByRole('button',{name:'繼續料理',exact:true}).click();await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await page.evaluate(()=>sessionStorage.removeItem('freedom.cooking.run.v1'));
+    expect(await contained()).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'開始料理',exact:true}).click();
+    await expect.poll(()=>page.evaluate(()=>{const mode=document.querySelector('.ck-visual-tools button')!.getBoundingClientRect(),bar=document.querySelector('.fullscreen-game__bar')!.getBoundingClientRect(),toolbar=document.querySelector('.ck-console-toolbar')!.getBoundingClientRect(),mission=document.querySelector('.ck-stage-mission')!.getBoundingClientRect();return (mode.right<=bar.left||mode.top>=bar.bottom)&&toolbar.bottom<=mission.top;})).toBe(true);
+    await testInfo.attach(`immersive-${viewport.width}x${viewport.height}-double-text.png`,{body:await page.screenshot(),contentType:'image/png'});
+    await exitStartedFullscreen(page);await page.getByRole('button',{name:'暫停',exact:true}).click();
+    // Pause creates a fresh overlay; only those new nodes need the 200% style.
+    await page.locator('.ck-scene-overlay').evaluate(owner=>{const styles=[owner,...owner.querySelectorAll('*')].filter(e=>e instanceof HTMLElement).map(e=>({e:e as HTMLElement,font:parseFloat(getComputedStyle(e).fontSize),line:parseFloat(getComputedStyle(e).lineHeight)}));for(const {e,font,line}of styles){e.style.fontSize=`${font*2}px`;if(Number.isFinite(line))e.style.lineHeight=`${line*2}px`;}});
+    await expect.poll(contained).toBe(true);await page.locator('.ck-scene-overlay .ck-help summary').click();
+    await expect(page.locator('.ck-help')).toHaveAttribute('open','');await expect.poll(contained).toBe(true);
+    await testInfo.attach(`immersive-${viewport.width}x${viewport.height}-double-text-paused-help.png`,{body:await page.screenshot(),contentType:'image/png'});
+    await page.getByRole('button',{name:'繼續料理',exact:true}).click();await page.getByRole('button',{name:'← 遊戲大廳',exact:true}).click();await page.evaluate(()=>sessionStorage.removeItem('freedom.cooking.run.v1'));
   }
 });
 
@@ -1397,9 +1377,50 @@ async function expectNativeMarketReady(page:Page,name:'開火，開始做！'|'�
   await expect(game.locator('.mk-canvas canvas')).toHaveCount(1);
   await expect(game.getByRole('status').filter({hasText:'正在準備料理台…'})).toHaveCount(0);
 }
-async function marketOpen(page:Page,id:MarketId){await page.clock.install();await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);await expectNativeMarketReady(page);await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await exitStartedFullscreen(page);await page.clock.runFor(20);}
-async function marketButton(page:Page,name:string){await marketTime(page,400);await page.getByRole('button',{name,exact:true}).click();}
-async function marketAdd(page:Page,name:string){await marketTime(page,400);await page.locator('.mk-ingredients').getByRole('button',{name:new RegExp(`^${name} `)}).click();}
+async function marketOpen(page:Page,id:MarketId){await page.clock.install();await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);await expectNativeMarketReady(page);await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await expect(page.locator('.mk-surface')).toBeFocused();await exitStartedFullscreen(page);await page.clock.runFor(20);}
+async function marketPanel(page:Page,panel:'ingredients'|'tools'|'sauces'){await page.locator('.mk-palette-switch').getByRole('button',{name:panel==='ingredients'?/^食材/:panel==='tools'?'工具':'調味醬線'}).click();}
+// Exercise the production env-backed inset values; this is not device-notch emulation.
+async function marketInsets(page:Page,enabled:boolean){await page.locator('.fullscreen-game').evaluate((el,on)=>{for(const [side,value] of Object.entries({top:28,right:24,bottom:32,left:40})){if(on)(el as HTMLElement).style.setProperty(`--game-safe-${side}`,`${value}px`);else (el as HTMLElement).style.removeProperty(`--game-safe-${side}`);}},enabled);}
+// Read geometry and real hit targets before clicking. A 44px box that is clipped
+// by a scroll container or covered by another row is not an accessible control.
+async function marketSceneBounds(page:Page,fullscreen=true){
+ const root=page.locator('.fullscreen-game');// Normal mode is a full-height document-flow stage. Align its border box,
+ // before checking whole-stage viewport bounds. Nearest scrolling left the
+ // stage partially outside at 195px in CI. This only positions the page;
+ // all game controls still use ordinary clicks and the unchanged hit checks.
+ if(!fullscreen)await root.evaluate(el=>el.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'}));
+ const geometry=await root.evaluate(el=>{const r=el.getBoundingClientRect(),s=el.querySelector('.mk-surface')!.getBoundingClientRect(),d=el.querySelector('.mk-tray')!.getBoundingClientRect(),style=getComputedStyle(el),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;return {rects:{root:r.toJSON(),surface:s.toJSON(),tray:d.toJSON()},viewport:{width:innerWidth,height:innerHeight},insets:Object.fromEntries(['top','right','bottom','left'].map(side=>[side,safe(side)])),columns:['.mk-game','.mk-workbench','.mk-play-space','.mk-tray'].map(selector=>({selector,value:getComputedStyle(el.querySelector(selector)!).gridTemplateColumns})),within:r.x>=-1&&r.y>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,contained:s.x>=r.x+safe('left')-1&&s.y>=r.y+safe('top')-1&&s.right<=r.right-safe('right')+1&&s.bottom<=r.bottom-safe('bottom')+1&&d.x>=r.x+safe('left')-1&&d.right<=r.right-safe('right')+1&&d.bottom<=r.bottom-safe('bottom')+1,overlap:s.x<d.right&&s.right>d.x&&s.y<d.bottom&&s.bottom>d.y,ratio:s.width/s.height,height:s.height,horizontal:el.scrollWidth<=el.clientWidth};});
+ expect(geometry.within,JSON.stringify(geometry)).toBe(true);expect(geometry.contained,JSON.stringify(geometry)).toBe(true);expect(geometry.overlap).toBe(false);expect(geometry.ratio).toBeCloseTo(6/5,2);expect(geometry.height).toBeGreaterThan(44);expect(geometry.horizontal).toBe(true);
+
+ const paletteContrast=await root.locator('.mk-palette-switch button').evaluateAll(buttons=>{
+  const rgb=(value:string)=>value.match(/[\d.]+/g)!.map(Number);
+  const luminance=(color:number[])=>color.slice(0,3).map(value=>{const c=value/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;}).reduce((sum,c,i)=>sum+c*[.2126,.7152,.0722][i],0);
+  return buttons.map(button=>{const style=getComputedStyle(button),foreground=rgb(style.color),background=rgb(style.backgroundColor),a=luminance(foreground),b=luminance(background);return {label:button.textContent,color:style.color,background:style.backgroundColor,opaque:(foreground[3]??1)===1&&(background[3]??1)===1&&Number(style.opacity)===1,contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};});
+ });
+ expect(paletteContrast).toHaveLength(3);
+ for(const palette of paletteContrast){expect(palette.opaque,JSON.stringify(palette)).toBe(true);expect(palette.contrast,JSON.stringify(palette)).toBeGreaterThanOrEqual(4.5);}
+ for(const control of await root.locator('.mk-heading button,.mk-primary button,.mk-heat button,.fullscreen-game__bar button').all()){
+  const metrics=await control.evaluate(el=>{
+   const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2),root=el.closest('.fullscreen-game')!,r=root.getBoundingClientRect(),style=getComputedStyle(root),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;
+   const name=(node:Element)=>node.getAttribute('aria-label')||node.textContent?.trim()||node.tagName;
+   const viewportContained=b.x>=Math.max(-1,r.left+safe('left')-1)&&b.y>=Math.max(-1,r.top+safe('top')-1)&&b.right<=Math.min(innerWidth+1,r.right-safe('right')+1)&&b.bottom<=Math.min(innerHeight+1,r.bottom-safe('bottom')+1);
+   const clippingAncestors=[];let contained=viewportContained;
+   for(let p=el.parentElement;p;p=p.parentElement){
+    const style=getComputedStyle(p),r=p.getBoundingClientRect();if(style.display==='contents')continue;
+    const clipX=/hidden|auto|scroll|clip/.test(style.overflowX),clipY=/hidden|auto|scroll|clip/.test(style.overflowY);
+    const withinX=!clipX||(b.left>=r.left-1&&b.right<=r.right+1),withinY=!clipY||(b.top>=r.top-1&&b.bottom<=r.bottom+1);
+    contained&&=withinX&&withinY;
+    if(clipX||clipY)clippingAncestors.push({tag:p.tagName,className:p.className,rect:r.toJSON(),overflowX:style.overflowX,overflowY:style.overflowY,rows:style.gridTemplateRows,withinX,withinY});
+   }
+   const controlStyle=getComputedStyle(el);
+   return {control:name(el),rect:b.toJSON(),rootRect:r.toJSON(),viewport:{width:innerWidth,height:innerHeight},insets:Object.fromEntries(['top','right','bottom','left'].map(side=>[side,safe(side)])),mode:root.matches(':fullscreen')?'native':root.classList.contains('fullscreen-game--viewport')?'viewport':'normal',fontSize:controlStyle.fontSize,lineHeight:controlStyle.lineHeight,viewportContained,clippingAncestors,width:b.width,height:b.height,contained,hit:hit===el||el.contains(hit),hitTarget:hit?{tag:hit.tagName,className:hit.getAttribute('class'),name:name(hit).slice(0,120)}:null};
+  });
+  const diagnostic=JSON.stringify({expectedMode:fullscreen?'presentation':'normal',...metrics});
+  expect(metrics.width,diagnostic).toBeGreaterThanOrEqual(44);expect(metrics.height,diagnostic).toBeGreaterThanOrEqual(44);expect(metrics.contained,diagnostic).toBe(true);expect(metrics.hit,diagnostic).toBe(true);
+ }
+}
+async function marketButton(page:Page,name:string){await marketTime(page,400);const button=page.getByRole('button',{name,exact:true});if(!await button.isVisible())await marketPanel(page,/醬/.test(name)?'sauces':'tools');await button.click();}
+async function marketAdd(page:Page,name:string){await marketTime(page,400);await marketPanel(page,'ingredients');await page.locator('.mk-ingredients').getByRole('button',{name:new RegExp(`^${name} `)}).click();await marketPanel(page,'tools');}
 // These gesture-ownership tests sample real RAF callbacks at the hold boundaries;
 // do not spend the whole test rendering every software-WebGL frame in virtual time.
 for(const [first,second] of [['Space','Enter'],['Enter','Space']])test(`UX-9: coating hold keeps ${first} ownership after ${second} releases`,async({page})=>{
@@ -1437,7 +1458,7 @@ test('UX-9: corn dog coating cancels native animation frames on touch release an
  await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);
  expect(await native.evaluate(gl=>gl.isContextLost())).toBe(true);await native.dispose();
  await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await exitStartedFullscreen(page);
- await page.locator('.mk-ingredients').getByRole('button',{name:/^熱狗 /}).click();
+ await page.locator('.mk-ingredients').getByRole('button',{name:/^熱狗 /}).click();await marketPanel(page,'tools');
  const hold=page.getByRole('button',{name:'按住裹麵糊',exact:true});
  const progress=page.getByRole('progressbar',{name:'這次裹糊進度'});
  const coated=()=>page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.portions.map((p:{coated:boolean})=>p.coated),MARKET_SAVE_KEY);
@@ -1468,19 +1489,19 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
  if(id==='steak-dinner'){await marketAdd(page,'牛排');await marketAdd(page,'薯條');await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('0');await marketTime(page,23000);await marketButton(page,'翻這一面');await marketTime(page,23000);}
  if(id==='shawarma'){await marketAdd(page,'餅皮');await marketTime(page,6000);for(let i=0;i<4;i++)await marketButton(page,'削一刀');await marketAdd(page,'生菜');await marketAdd(page,'番茄');for(let i=0;i<3;i++)await marketButton(page,`包一折 · ${i}/3`);}
  if(id==='egg-fried-rice'){await marketAdd(page,'白飯');await marketAdd(page,'雞蛋');await marketAdd(page,'蝦仁');for(let i=0;i<10;i++){await marketTime(page,2000);await marketButton(page,'拋鍋！');}}
- await marketButton(page,'一撮鹽 · 0');await page.getByRole('button',{name:'蒜味醬',exact:true}).click();const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!;await page.mouse.move(b.x+b.width*.35,b.y+b.height*.5);await page.mouse.down();await page.mouse.move(b.x+b.width*.6,b.y+b.height*.6,{steps:10});await page.mouse.up();await marketTime(page,400);const before=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(before.sauces).toHaveLength(1);await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await page.clock.resume();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});const completed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(completed.status).toBe('done');await expect(page.locator('.mk-score>div>strong')).toHaveText(`${marketGrade(completed).score}分`);await expect(page.getByRole('region',{name:'料理分數',exact:true})).toHaveText(`${marketGrade(completed).score}分`);await expect(page.locator('.fw-arcade-result-heading h1')).toHaveText(recipeOf(id)!.name);await expect(page.locator('.fw-arcade-result')).not.toContainText(marketGrade(completed).title);await expect(page.locator('.mk-score svg,.mk-score dl,.mk-score blockquote')).toHaveCount(0);expect(completed.portions).toHaveLength(before.portions.length);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();const canvas=page.locator('.ck-dish-canvas canvas'),original=await canvas.screenshot();await page.getByRole('button',{name:'放大料理',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(false);await page.getByRole('button',{name:'回正',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(true);await page.screenshot({path:testInfo.outputPath(`${id}-result.png`),fullPage:true});const downloading=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();await (await downloading).saveAs(testInfo.outputPath(`${id}-share.png`));
- if(id==='steak-dinner'){await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath('steak-dinner-phone.png'),fullPage:true});await page.setViewportSize({width:667,height:375});await page.screenshot({path:testInfo.outputPath('steak-dinner-landscape.png'),fullPage:true});}
+ await marketButton(page,'一撮鹽 · 0');await marketPanel(page,'sauces');await page.getByRole('button',{name:'蒜味醬',exact:true}).click();const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!;await page.mouse.move(b.x+b.width*.35,b.y+b.height*.5);await page.mouse.down();await page.mouse.move(b.x+b.width*.6,b.y+b.height*.6,{steps:10});await page.mouse.up();await marketTime(page,400);const before=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(before.sauces).toHaveLength(1);if(id==='steak-dinner')await page.evaluate(key=>{const original=Storage.prototype.setItem;(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook=()=>{Storage.prototype.setItem=original;};Storage.prototype.setItem=function(k,v){if(k===key)throw new DOMException('Synthetic cookbook quota','QuotaExceededError');return original.call(this,k,v);};},COOKBOOK_KEY);await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await page.clock.resume();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});const completed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(completed.status).toBe('done');if(id==='steak-dinner'){const warning=page.locator('.fullscreen-game .ck-save-warning');await expect(warning).toBeVisible();expect(await warning.evaluate(el=>!!el.closest('[data-game-stage]'))).toBe(true);await page.evaluate(()=>(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook());await warning.getByRole('button',{name:'重試保存食譜本',exact:true}).click();await expect(warning).toHaveCount(0);}await expect(page.locator('.mk-score>div>strong')).toHaveText(`${marketGrade(completed).score}分`);await expect(page.getByRole('region',{name:'料理分數',exact:true})).toHaveText(`${marketGrade(completed).score}分`);await expect(page.locator('.fw-arcade-result-heading h1')).toHaveText(recipeOf(id)!.name);await expect(page.locator('.fw-arcade-result')).not.toContainText(marketGrade(completed).title);await expect(page.locator('.mk-score svg,.mk-score dl,.mk-score blockquote')).toHaveCount(0);expect(completed.portions).toHaveLength(before.portions.length);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();const canvas=page.locator('.ck-dish-canvas canvas'),original=await canvas.screenshot();await page.getByRole('button',{name:'放大料理',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(false);await page.getByRole('button',{name:'回正',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(true);await testInfo.attach(`${id}-result.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});await page.getByRole('button',{name:'分享成果',exact:true}).click();await expect(page.locator('[data-game-share]')).toBeFocused();const downloading=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();await (await downloading).saveAs(testInfo.outputPath(`${id}-share.png`));
+ if(id==='steak-dinner'){await page.setViewportSize({width:390,height:844});await testInfo.attach('steak-dinner-phone.png',{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});await page.setViewportSize({width:667,height:375});await testInfo.attach('steak-dinner-landscape.png',{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});}
  await page.evaluate(()=>Object.defineProperty(navigator,'share',{configurable:true,value:undefined}));await page.getByRole('button',{name:'系統分享圖片／連結',exact:true}).click();const link=await page.getByRole('textbox',{name:'同題連結',exact:true}).inputValue();expect(new URL(link).searchParams.get('practice')).toBeNull();expect(new URL(link).searchParams.get('recipe')).toBe(id);expect(posts).toBe(0);expect(errors).toEqual([]);
 });
 
 test('UX-9: WebGL loss, reload and restart confirmation preserve the exact unfinished corn dog and pause its clock',async({page})=>{
- test.setTimeout(90000);await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,8000);const gl=await page.locator('.mk-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await gl.evaluate(g=>g.getExtension('WEBGL_lose_context')!.loseContext());await page.clock.runFor(40);await expect(page.locator('[data-market-status="paused"]')).toBeVisible();const saved=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);await marketTime(page,10000);expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.elapsed,MARKET_SAVE_KEY)).toBe(saved.elapsed);await page.getByRole('button',{name:'重試3D料理台',exact:true}).click();await expectNativeMarketReady(page,'繼續這一盤');expect(await gl.evaluate(g=>g.isContextLost())).toBe(true);await gl.dispose();await page.reload();await expectNativeMarketReady(page,'繼續這一盤');const restored=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(restored.portions).toEqual(saved.portions);await page.locator('.mk-help summary').click();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await expect(page.getByRole('dialog',{name:'重新做這道料理'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'重新做這一道'})).toBeFocused();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await page.getByRole('button',{name:'重新開攤',exact:true}).click();const reset=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(reset.status).toBe('ready');expect(reset.portions).toEqual([]);await page.reload();await expectNativeMarketReady(page);
+ test.setTimeout(90000);await marketOpen(page,'corn-dog');await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');await marketTime(page,8000);const gl=await page.locator('.mk-canvas canvas').evaluateHandle(c=>(c as HTMLCanvasElement).getContext('webgl2')!);await gl.evaluate(g=>g.getExtension('WEBGL_lose_context')!.loseContext());await page.clock.runFor(40);await expect(page.locator('[data-market-status="paused"]')).toBeVisible();const saved=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);await marketTime(page,10000);expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.elapsed,MARKET_SAVE_KEY)).toBe(saved.elapsed);await page.getByRole('button',{name:'重試3D料理台',exact:true}).click();await expectNativeMarketReady(page,'繼續這一盤');expect(await gl.evaluate(g=>g.isContextLost())).toBe(true);await gl.dispose();await page.reload();await expectNativeMarketReady(page,'繼續這一盤');const restored=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(restored.portions).toEqual(saved.portions);await page.getByRole('button',{name:'食譜與操作提示',exact:true}).click();await page.getByRole('button',{name:'關閉操作提示',exact:true}).click();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await expect(page.getByRole('dialog',{name:'重新做這道料理'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'重新做這一道'})).toBeFocused();await page.getByRole('button',{name:'重新做這一道',exact:true}).click();await page.getByRole('button',{name:'重新開攤',exact:true}).click();const reset=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(reset.status).toBe('ready');expect(reset.portions).toEqual([]);await page.reload();await expectNativeMarketReady(page);await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await expect(page.locator('.mk-surface')).toBeFocused();
 });
 
 test('UX-9: delayed native cooking module falls back after 15 seconds and rejects its late scene before explicit retry',async({page})=>{
  // Resume real frames for the explicit native retry, then require the same
  // complete readiness contract as cold-open/context-loss recovery (15 seconds).
- test.setTimeout(60000);await page.clock.install();let take!:(r:Route)=>void;const request=new Promise<Route>(resolve=>{take=resolve;});await page.route('**/assets/market-stage-*.js',r=>take(r));await page.goto('/play?game=kitchen&recipe=corn-dog&seed=42',{waitUntil:'domcontentloaded'});const route=await request,response=await route.fetch(),url=route.request().url();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+100));await page.clock.fastForward(15000);await expect(page.locator('.mk-fallback')).toBeVisible();await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await page.clock.runFor(20);await marketAdd(page,'熱狗');await route.fulfill({response});await page.evaluate(async u=>{await import(u);},url);await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);await page.clock.resume();await page.getByRole('button',{name:'重試3D料理台',exact:true}).click();await expectNativeMarketReady(page,'繼續這一盤');const saved=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(saved.portions).toHaveLength(1);await expect(page.getByRole('button',{name:'繼續這一盤',exact:true})).toBeVisible();
+ test.setTimeout(60000);await page.clock.install();let take!:(r:Route)=>void;const request=new Promise<Route>(resolve=>{take=resolve;});await page.route('**/assets/market-stage-*.js',r=>take(r));await page.goto('/play?game=kitchen&recipe=corn-dog&seed=42',{waitUntil:'domcontentloaded'});const route=await request,response=await route.fetch(),url=route.request().url();await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+100));await page.clock.fastForward(15000);await expect(page.locator('.mk-fallback')).toBeVisible();await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await page.clock.runFor(20);await marketAdd(page,'熱狗');await route.fulfill({response});await page.evaluate(async u=>{await import(u);},url);await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);await page.clock.resume();await page.getByRole('button',{name:'畫面與保存狀態',exact:true}).click();await page.getByRole('button',{name:'重試3D料理台',exact:true}).click();await expectNativeMarketReady(page,'繼續這一盤');const saved=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(saved.portions).toHaveLength(1);await expect(page.getByRole('button',{name:'繼續這一盤',exact:true})).toBeVisible();
 });
 
 test('UX-1/9: lobby can cold-open both a legacy game and a free kitchen without a cooking checkpoint',async({page})=>{
@@ -1499,7 +1520,7 @@ test('UX-11: touching a real corn dog selects and flips that piece; lifted food 
  await expect(page.getByRole('combobox',{name:'目前操作的食材'})).toHaveValue('0');const touched=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(touched.portions[0].side).toBe(1);expect(touched.portions[1].side).toBe(0);
  await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('1');await marketButton(page,'翻這一面');await marketTime(page,22000);
  for(const i of ['0','1']){await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption(i);await marketButton(page,'起鍋瀝油');}
- await expect(page.locator('[data-market-view="dressing"]')).toBeVisible();await expect(page.locator('.mk-surface-hint')).toContainText('起鍋了');await marketTime(page,4000);await page.getByRole('button',{name:'番茄醬',exact:true}).click();await surface.scrollIntoViewIfNeeded();const tray=(await surface.boundingBox())!;
+ await expect(page.locator('[data-market-view="dressing"]')).toBeVisible();await expect(page.locator('.mk-surface-hint')).toContainText('起鍋了');await marketTime(page,4000);await marketPanel(page,'sauces');await page.getByRole('button',{name:'番茄醬',exact:true}).click();await surface.scrollIntoViewIfNeeded();const tray=(await surface.boundingBox())!;
  await page.mouse.move(tray.x+tray.width*.35,tray.y+tray.height*.46);await page.mouse.down();await page.mouse.move(tray.x+tray.width*.47,tray.y+tray.height*.56,{steps:12});await page.mouse.up();await marketTime(page,400);
  const dressed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(dressed.portions.every(p=>p.lifted&&p.coated&&p.drain>=3000)).toBe(true);expect(dressed.sauces).toHaveLength(1);expect(dressed.sauces[0].points.length).toBeGreaterThan(2);await page.screenshot({path:testInfo.outputPath('corn-dog-dressing.png'),fullPage:true});
  await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await page.clock.resume();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});expect(errors).toEqual([]);
@@ -1617,9 +1638,9 @@ for (const {game,width,height} of [
     const counter = page.locator('.fw-arcade-counter');
     if (game === 'photo') await page.getByRole('button',{name:'拍照快門'}).click();
     if (game === 'stamp') await page.getByRole('button',{name:'啪！蓋章'}).click();
-    if (game === 'cash') await page.getByRole('button',{name:cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券'}).click();
+    if (game === 'cash') await page.getByRole('button',{name:cashDeck(42)[0].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）'}).click();
     const before = await counter.textContent();
-    const progress = game === 'photo' ? page.getByRole('button',{name:'拍照快門'}) : game === 'stamp' ? counter : page.locator('.fw-arcade-controls .fw-arcade-meta');
+    const progress = game === 'photo' ? page.locator('[data-photo-film]') : game === 'stamp' ? counter : page.locator('.fw-arcade-controls .fw-arcade-meta');
     const progressBefore = await progress.textContent();
     const canvas = page.locator('[data-game-stage] canvas');
     await expect(canvas).toHaveCount(1);
@@ -1676,7 +1697,7 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     const board=page.locator('.fw-arcade-board'),dialog=page.getByRole('dialog',{name:'遊戲全螢幕'});
     const exit=page.getByRole('button',{name:'退出全螢幕',exact:true});
     const enter=page.getByRole('button',{name:'⛶ 全螢幕',exact:true});
-    const back=page.getByRole('button',{name:'← 遊樂場',exact:true});
+    const back=page.getByRole('button',{name:'回遊樂場',exact:true});
     const progress=page.locator('.fw-arcade-controls .fw-arcade-meta'),deck=cashDeck(42);
     const canvas=page.locator('[data-game-stage] canvas');
     await canvas.evaluate(el=>{(el as HTMLCanvasElement & {testIdentity?:boolean}).testIdentity=true;});
@@ -1735,12 +1756,18 @@ for (const mode of ['native','unsupported','rejected'] as const) {
     await expect(back).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await classify(2);
-    // Both edges still wrap inside the fullscreen container.
+    // Both edges still wrap inside the fullscreen container. The renderer
+    // switch now follows the cash actions, and remains a real keyboard stop.
+    const renderer=page.getByRole('button',{name:'3D · 改用輕量插畫',exact:true});
     await page.keyboard.press('Shift+Tab');
     await crossViewportHelp('Shift+Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Shift+Tab');
-    await expect(page.getByRole('button',{name:'收道具鈔 →',exact:true})).toBeFocused();
+    await expect(renderer).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('button',{name:'收鈔→（收取道具鈔）',exact:true})).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(renderer).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(exit).toBeFocused();
     await page.keyboard.press('Enter');
@@ -1788,22 +1815,39 @@ test('leaving fullscreen before starting is respected through a zero-photo retry
   await dialog.getByRole('button',{name:'退出全螢幕'}).click();
   await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
   await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));
-  await page.getByRole('button',{name:'開始這一局'}).click();
+  await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole('button',{name:'下一位客人 →'}).click();
   await page.getByRole('button',{name:'下一位客人 →'}).click();
   await page.getByRole('button',{name:'挑選照片'}).click();
   await expect(page.getByText('這局還沒拍到照片。再開一次照相館，按快門留下怪事。')).toBeVisible();
-  await page.getByRole('button',{name:'開始這一局'}).click();
+  await page.getByRole('button',{name:'開始這一局',exact:true}).click();
   await expect(dialog).toHaveCount(0);
-  await page.getByRole('button',{name:'← 遊樂場'}).click();
+  await page.getByRole('button',{name:'回遊樂場',exact:true}).click();
   await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
   await expect(page.locator('[data-arcade-open="game:photo"]')).toBeFocused();
   expect(await page.evaluate(() => document.body.style.overflow)).not.toBe('hidden');
 });
 
-test('fallback keeps keyboard focus inside game, result and replay', async ({page}) => {
+test('fallback keeps keyboard focus inside game, result and replay', async ({page},testInfo) => {
   test.setTimeout(120_000);
+  const focusObservations:unknown[]=[];let checkpoint='open-game',failed=false;
+  async function observeFocus(label:string){
+    checkpoint=label;
+    focusObservations.push({checkpoint,...await page.evaluate(()=>{
+      const share=document.querySelector('[data-daily-result-share]'),owner=document.querySelector('.fullscreen-game'),active=document.activeElement;
+      const describe=(el:Element|null)=>{
+        if(!el)return null;const style=getComputedStyle(el),r=el.getBoundingClientRect();
+        return {tag:el.tagName,name:el.getAttribute('aria-label')??el.textContent?.trim().slice(0,100),connected:el.isConnected,
+          tabIndex:el instanceof HTMLElement?el.tabIndex:null,disabled:el.matches(':disabled'),inert:!!el.closest('[inert]'),
+          display:style.display,visibility:style.visibility,bounds:{x:r.x,y:r.y,width:r.width,height:r.height}};
+      };
+      return {documentHasFocus:document.hasFocus(),active:describe(active),insideShare:!!share?.contains(active),insideOwner:!!owner?.contains(active),
+        shareOpen:share instanceof HTMLDialogElement&&share.open,modal:!!share?.matches(':modal'),
+        controls:[...share?.querySelectorAll('a[href],summary,button,input,select,textarea,[tabindex]')??[]].map(describe)};
+    })});
+  }
+  try{
   await page.addInitScript(() => Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
   await openGame(page,'photo');
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
@@ -1816,17 +1860,45 @@ test('fallback keeps keyboard focus inside game, result and replay', async ({pag
   await expect(result).toBeFocused();
   await page.keyboard.press('Tab');
   expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
-  const last=dialog.getByRole('button',{name:'回遊樂場'});
-  await last.focus(); await page.keyboard.press('Tab');
+  // The compact result ends at More. Back belongs to its closed secondary
+  // dialog and must not participate in the outer fullscreen focus loop.
+  const last=result.getByRole('button',{name:'更多分享方式',exact:true});
+  const share=page.getByRole('dialog',{name:'分享這局成果',exact:true});
+  await expect(share).toBeHidden();
+  await expect(dialog.getByRole('button',{name:'回遊樂場',exact:true})).toHaveCount(0);
+  await last.focus(); await page.keyboard.press('Tab');await observeFocus('outer-forward-wrap');
   await expect(dialog.getByRole('button',{name:'退出全螢幕'})).toBeFocused();
-  await page.keyboard.press('Shift+Tab'); await expect(last).toBeFocused();
+  await page.keyboard.press('Shift+Tab');await observeFocus('outer-reverse-wrap');await expect(last).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(share).toBeVisible();
+  expect(await share.evaluate(el=>el.matches(':modal'))).toBe(true);
+  const close=share.getByRole('button',{name:'關閉分享',exact:true});
+  const back=share.getByRole('button',{name:'回遊樂場',exact:true});
+  await observeFocus('inner-initial-focus');await expect(close).toBeFocused();
+  await testInfo.attach('fallback-result-share-focused.png',{body:await page.screenshot(),contentType:'image/png'});
+  await back.focus();await observeFocus('before-inner-forward-wrap');
+  await page.keyboard.press('Tab');await observeFocus('after-inner-forward-wrap');await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');await observeFocus('after-inner-reverse-wrap');await expect(back).toBeFocused();
   await page.keyboard.press('Escape');
+  await observeFocus('inner-escape-return');
+  await expect(share).toBeHidden(); await expect(last).toBeFocused();
+  await testInfo.attach('fallback-result-share-returned.png',{body:await page.screenshot(),contentType:'image/png'});
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');await observeFocus('outer-escape');
   await expect(dialog).toHaveCount(0);
   await expect(result).toBeVisible();
   await page.getByRole('button',{name:'⛶ 全螢幕'}).click();
   await page.getByRole('button',{name:'同一題再來一次'}).click();
+  await observeFocus('replay-focus');
   await expect(page.locator('.fw-arcade-board')).toBeFocused();
   expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  checkpoint='complete';
+  }catch(error){failed=true;throw error;}finally{
+    let observationError:string|undefined;
+    try{await observeFocus(`${checkpoint}:finally`);}catch(error){observationError=String(error);}
+    try{await testInfo.attach('fallback-result-focus.json',{body:JSON.stringify({checkpoint,focusObservations,observationError}),contentType:'application/json'});}
+    catch(error){if(!failed)throw error;}
+  }
 });
 
 
@@ -1850,7 +1922,7 @@ for (const outcome of ['resolve','reject'] as const) {
     await page.goto('/play');
     await page.locator('.fw-arcade-game-card').nth(2).getByRole('button').click();
     await expect(page.locator('[data-game-stage="ready"]')).toBeVisible({timeout:15_000});
-    await page.getByRole('button',{name:'開始這一局'}).click();
+    await page.getByRole('button',{name:'開始這一局',exact:true}).click();
     await expect(page.locator('.fw-arcade-board')).toBeFocused();
     await page.evaluate(() => (window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen());
     await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toBeVisible();
@@ -1883,7 +1955,7 @@ for (const outcome of ['resolve','reject'] as const) {
     await page.goto('/play');
     await page.locator('.fw-arcade-game-card').nth(2).getByRole('button').click();
     await expect(page.getByRole('button',{name:'⛶ 全螢幕'})).toHaveAttribute('aria-disabled','true');
-    await page.getByRole('button',{name:'← 遊樂場',exact:true}).click();
+    await page.getByRole('button',{name:'回遊樂場',exact:true}).click();
     await expect(page.locator('.fw-arcade-game-card')).toHaveCount(3);
     await page.evaluate(()=>(window as unknown as {releaseFullscreen:()=>void}).releaseFullscreen());
     await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
@@ -1896,7 +1968,7 @@ for (const outcome of ['resolve','reject'] as const) {
 
 
 for (const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[]) {
-  test(`UX-16: ${id} viewport controls keep the cooking surface usable without sharing an unfinished run`,async({page})=>{
+  test(`UX-16: ${id} viewport controls keep the cooking surface usable without sharing an unfinished run`,async({page},testInfo)=>{
     await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
     await marketOpen(page,id);
     await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
@@ -1910,17 +1982,24 @@ for (const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Mark
     expect(await game.locator('.fullscreen-game__bar').evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(72);
     const canvas=await game.locator('.mk-canvas canvas').elementHandle();
     const surface=game.locator('.mk-surface');
-    expect(await surface.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(300);
+    expect(await surface.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(120);
     expect(await surface.evaluate(el=>{const b=el.getBoundingClientRect();return Math.abs(b.width/b.height-6/5);})).toBeLessThan(.01);
     for(const button of await game.locator('.fullscreen-game__bar button').all()){
       const metrics=await button.evaluate(el=>({height:el.getBoundingClientRect().height,font:parseFloat(getComputedStyle(el).fontSize)}));
       expect(metrics.height).toBeGreaterThanOrEqual(44);expect(metrics.font).toBeGreaterThanOrEqual(14);
     }
     const tray=game.getByRole('complementary',{name:'食材與工具',exact:true});
-    expect(await tray.evaluate(el=>el.scrollHeight>el.clientHeight&&getComputedStyle(el).overflowY==='auto')).toBe(true);
-    await tray.locator('.mk-help summary').scrollIntoViewIfNeeded();
-    await tray.locator('.mk-help summary').click();
-    await expect(tray.getByRole('button',{name:'重新做這一道',exact:true})).toBeVisible();
+    expect(await tray.evaluate(el=>!!el.closest('[data-game-stage]')&&getComputedStyle(el).overflowY==='hidden')).toBe(true);
+    await marketAdd(page,({'egg-fried-rice':'白飯','steak-dinner':'牛排',shawarma:'餅皮','corn-dog':'熱狗'} as const)[id]);
+    for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1280,height:800}]){await page.setViewportSize(viewport);await marketSceneBounds(page);await marketPanel(page,'tools');await testInfo.attach(`market-native-${id}-${viewport.width}x${viewport.height}-tools.png`,{body:await game.screenshot(),contentType:'image/png'});if(viewport.width===390||viewport.width===667){await marketInsets(page,true);await marketSceneBounds(page);await marketButton(page,'小');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(1);await marketButton(page,'中');await testInfo.attach(`market-native-${id}-${viewport.width}x${viewport.height}-insets.png`,{body:await game.screenshot(),contentType:'image/png'});await marketInsets(page,false);}}
+    await game.getByRole('button',{name:'食譜與操作提示',exact:true}).click();
+    await expect(game.getByRole('dialog',{name:'食譜與操作提示',exact:true})).toBeVisible();
+    await testInfo.attach(`market-native-${id}-help.png`,{body:await game.screenshot(),contentType:'image/png'});
+    await page.keyboard.press('Escape');
+    await testInfo.attach(`market-native-${id}-paused.png`,{body:await game.screenshot(),contentType:'image/png'});
+    await expect(game.getByRole('button',{name:'食譜與操作提示',exact:true})).toBeFocused();
+    await expect(game.getByRole('button',{name:'重新做這一道',exact:true})).toBeVisible();
+    await game.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(surface).toBeFocused();
     await game.getByRole('button',{name:'退出全螢幕',exact:true}).click();
     expect(await page.evaluate(()=>document.body.style.overflow)).not.toBe('hidden');
     expect(await canvas!.evaluate(el=>el.isConnected)).toBe(true);
@@ -2071,7 +2150,6 @@ for(const mode of ['native','rejected','unsupported'] as const)for(const family 
     expect(await page.evaluate(family=>family==='party'?document.querySelector('.pt-canvas')?.getAttribute('data-elapsed'):sessionStorage.getItem(family==='guided'?'freedom.cooking.run.v1':'freedom.cooking.market.v1'),family)).toBe(snapshot);
     await root.getByRole('button',{name:resume,exact:true}).click();await expect(root).toHaveAttribute(attribute,'playing');
     await expect(page.getByRole('button',{name:'⛶ 全螢幕',exact:true})).toBeVisible();
-    if(family==='market')await root.locator('.mk-help summary').click();
     await root.getByRole('button',{name:family==='party'?'重新開始':family==='guided'?'重新做':'重新做這一道',exact:true}).click();
     await page.getByRole('button',{name:family==='party'?'確定重來':family==='guided'?'確定重新做':'重新開攤',exact:true}).click();
     await expect(root).toHaveAttribute(attribute,'ready');await root.getByRole('button',{name:start,exact:true}).click();await expect(root).toHaveAttribute(attribute,'playing');
@@ -2080,3 +2158,258 @@ for(const mode of ['native','rejected','unsupported'] as const)for(const family 
     expect(await page.evaluate(()=>(window as any).__startFullscreenRequests)).toBe(mode==='unsupported'?0:1);
   });
 }
+
+// Market-family integration acceptance is separate from native art acceptance.
+// These cases deliberately exercise the supported SVG fallback; UX-9/UX-16 above
+// continue to exercise the production WebGL renderer and its original budgets.
+for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as MarketId[])test(`MK-1: ${id} bounded scene, enlarged text, palettes and modal isolation`,async({page},testInfo)=>{
+ await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+ await blockPartyWebGL(page);await page.clock.install();await page.setViewportSize({width:320,height:568});
+ await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);
+ await expect(page.locator('.mk-fallback svg.mk-illustration')).toBeVisible();
+ await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+ await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();
+ const root=page.locator('.fullscreen-game'),game=page.locator('.mk-game'),surface=page.locator('.mk-surface'),tray=page.locator('.mk-tray');
+ await expect(root).toHaveClass(/fullscreen-game--market/);await expect(root).toHaveClass(/fullscreen-game--viewport/);
+ await expect(game).toHaveAttribute('data-market-status','playing');await expect(surface).toBeFocused();
+ await marketAdd(page,({'egg-fried-rice':'白飯','steak-dinner':'牛排',shawarma:'餅皮','corn-dog':'熱狗'} as const)[id]);
+ await marketTime(page,6000);
+ const primary=({'egg-fried-rice':'拋鍋！','steak-dinner':'翻這一面',shawarma:'削一刀','corn-dog':'翻這一面'} as const)[id];
+ await marketButton(page,primary);const progress=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);
+ expect(id==='egg-fried-rice'?progress.tosses:id==='shawarma'?progress.shaves:progress.portions[0].flips).toBe(1);
+ await marketTime(page,400);await page.locator('.mk-illustration [data-market-portion="0"]').click();
+ const touched=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(id==='egg-fried-rice'?touched.stirs-progress.stirs:id==='shawarma'?touched.shaves-progress.shaves:touched.portions[0].flips-progress.portions[0].flips).toBe(1);
+ for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375},{width:1280,height:800}]){
+  await page.setViewportSize(viewport);
+  await expect.poll(()=>surface.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(44);
+  await marketSceneBounds(page);
+  await marketPanel(page,'ingredients');await expect(tray.locator('.mk-ingredients')).toBeVisible();
+  await marketPanel(page,'sauces');await page.getByRole('button',{name:'蒜味醬',exact:true}).click();
+  await testInfo.attach(`market-${id}-${viewport.width}x${viewport.height}.png`,{body:await root.screenshot(),contentType:'image/png'});
+  if(viewport.width===390||viewport.width===667){
+   await marketInsets(page,true);await marketSceneBounds(page);await marketButton(page,'小');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(1);await marketButton(page,'中');
+   await game.getByRole('button',{name:'食譜與操作提示',exact:true}).click();const insetDialog=game.getByRole('dialog',{name:'食譜與操作提示',exact:true});
+   expect(await insetDialog.evaluate(el=>{const b=el.getBoundingClientRect();return b.left>=40&&b.top>=28&&b.right<=innerWidth-24&&b.bottom<=innerHeight-32;})).toBe(true);
+   await expect(insetDialog.getByRole('button',{name:'關閉操作提示',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(game.getByRole('button',{name:'食譜與操作提示',exact:true})).toBeFocused();
+   await testInfo.attach(`market-${id}-${viewport.width}x${viewport.height}-insets-paused.png`,{body:await root.screenshot(),contentType:'image/png'});
+   await game.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(surface).toBeFocused();await marketSceneBounds(page);await marketInsets(page,false);
+  }
+ }
+ // 195x422 is the CSS-layout size of a 390x844 viewport at 200% page zoom.
+ // This is a reflow proxy, not a claim that browser zoom was automated.
+ await page.setViewportSize({width:195,height:422});await marketSceneBounds(page);
+ await testInfo.attach(`market-${id}-zoom-reflow.png`,{body:await root.screenshot(),contentType:'image/png'});
+ await root.getByRole('button',{name:'退出全螢幕',exact:true}).click();await marketSceneBounds(page,false);
+ await page.setViewportSize({width:667,height:375});await marketInsets(page,true);await marketSceneBounds(page,false);await marketInsets(page,false);
+ await root.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+ await page.setViewportSize({width:320,height:568});
+ await root.evaluate(el=>{const styles=[el,...el.querySelectorAll('*')].filter(n=>n instanceof HTMLElement).map(n=>({n:n as HTMLElement,font:parseFloat(getComputedStyle(n).fontSize),line:parseFloat(getComputedStyle(n).lineHeight)}));for(const {n,font,line} of styles){n.style.fontSize=`${font*2}px`;if(Number.isFinite(line))n.style.lineHeight=`${line*2}px`;}});
+ await expect(root.getByRole('button',{name:'退出全螢幕',exact:true})).toHaveCSS('font-size','28px');
+ await expect.poll(()=>surface.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(44);
+ await marketPanel(page,'tools');await marketButton(page,primary);await marketSceneBounds(page);
+ await testInfo.attach(`market-${id}-200-percent-tools.png`,{body:await root.screenshot(),contentType:'image/png'});
+ await page.getByRole('button',{name:'暫停',exact:true}).click();
+ const paused=await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY);await marketTime(page,5000);expect(await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY)).toBe(paused);
+ await expect(game.locator('.mk-play-space')).toHaveAttribute('inert','');
+ const help=game.getByRole('button',{name:'食譜與操作提示',exact:true});await help.focus();await page.keyboard.press('Space');
+ const dialog=game.getByRole('dialog',{name:'食譜與操作提示',exact:true});await expect(dialog).toBeVisible();
+ const close=dialog.getByRole('button',{name:'關閉操作提示',exact:true});await expect(close).toBeFocused();await page.keyboard.press('Tab');await expect(close).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(close).toBeFocused();
+ await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(help).toBeFocused();await expect(root).toHaveClass(/fullscreen-game--viewport/);
+ await help.press('Enter');await close.click();await expect(help).toBeFocused();
+ await testInfo.attach(`market-${id}-200-percent-paused.png`,{body:await root.screenshot(),contentType:'image/png'});
+ await game.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(game).toHaveAttribute('data-market-status','playing');await expect(surface).toBeFocused();
+ await root.getByRole('button',{name:'退出全螢幕',exact:true}).click();await expect(root).not.toHaveClass(/fullscreen-game--viewport/);
+ await page.setViewportSize({width:667,height:375});
+ // Insets were cleared above. This combines 200% text with landscape, not a nonzero-inset stress.
+ await test.step('200% landscape: normal-stage controls remain fully inside their rows',async()=>{
+  await marketSceneBounds(page,false);
+  await marketButton(page,'關');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(0);
+  await marketButton(page,'中');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(2);
+  await testInfo.attach(`market-${id}-200-percent-landscape-normal.png`,{body:await root.screenshot(),contentType:'image/png'});
+ });
+ await root.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+ await test.step('200% landscape: presentation controls remain fully inside their rows',async()=>{
+  await marketSceneBounds(page);
+  await marketButton(page,'關');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(0);
+  await marketButton(page,'中');expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.heat,MARKET_SAVE_KEY)).toBe(2);
+  await testInfo.attach(`market-${id}-200-percent-landscape.png`,{body:await root.screenshot(),contentType:'image/png'});
+ });
+ await expect.poll(()=>surface.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(44);
+ await root.getByRole('button',{name:'退出全螢幕',exact:true}).focus();await page.keyboard.press('Escape');
+ await expect(root).not.toHaveClass(/fullscreen-game--viewport/);await expect(game).toHaveAttribute('data-market-status','playing');
+ await game.getByRole('button',{name:'重新做這一道',exact:true}).click();const restart=game.getByRole('dialog',{name:'重新做這道料理',exact:true});
+ await expect(restart.getByRole('button',{name:'保留這一盤',exact:true})).toBeFocused();await page.keyboard.press('Escape');await expect(game.getByRole('button',{name:'重新做這一道',exact:true})).toBeFocused();
+ const kept=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(kept.portions.length).toBeGreaterThan(0);expect(kept.status).toBe('paused');
+ await game.getByRole('button',{name:'重新做這一道',exact:true}).click();await restart.getByRole('button',{name:'重新開攤',exact:true}).click();await expect(game).toHaveAttribute('data-market-status','ready');
+ await game.getByRole('button',{name:'開火，開始做！',exact:true}).click();await expect(surface).toBeFocused();await expect(game).toHaveAttribute('data-market-status','playing');
+});
+
+// Daily scene integration: authored browser journeys, not evidence of a browser run.
+// Real input/domain transitions only. No injected scores, saved completed runs or forced clicks.
+async function openDailyScene(page:Page,game:'photo'|'stamp'|'cash',light:boolean){
+  await openGame(page,game);
+  await expect(page.locator('.fw-arcade-stage')).toHaveAttribute('data-daily-renderer','native');
+  if(light){
+    await page.getByRole('button',{name:'3D · 改用輕量插畫',exact:true}).click();
+    await expect(page.locator('.fw-arcade-stage')).toHaveAttribute('data-daily-renderer','light');
+    await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+    await page.getByRole('button',{name:'繼續這一局',exact:true}).click();
+  }
+  await expect(page.locator('.fw-arcade-board')).toBeFocused();
+}
+async function dailyWorldPoint(page:Page,game:'stamp'|'cash',world:number[]){
+  const host=page.locator('.fw-arcade-stage');await host.scrollIntoViewIfNeeded();
+  const box=(await host.boundingBox())!;
+  const aspect=box.width/box.height;
+  // Full-height STAMP keeps the original pose and paper, but fits its
+  // portrait FOV; independently construct the actual projection for clicks.
+  const stampFov=2*Math.atan(Math.tan(20*Math.PI/180)*(aspect<1?Math.max(1.7,.90/aspect):1))*180/Math.PI;
+  const cashFov=2*Math.atan(Math.tan(21*Math.PI/180)*(aspect<1?Math.max(2.2,.95/aspect):1))*180/Math.PI;
+  const camera=new PerspectiveCamera(game==='stamp'?stampFov:cashFov,aspect,.1,60);
+  camera.position.set(0,5.3,2.7);camera.lookAt(0,0,.23);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
+  const p=new Vector3(...world).project(camera),point={x:box.x+(p.x+1)*box.width/2,y:box.y+(1-p.y)*box.height/2};
+  // Check the exact contact pixel, not just visibility of a broad parent box.
+  expect(await host.evaluate((el,p)=>{const hit=document.elementFromPoint(p.x,p.y);return !!hit&&el.contains(hit);},point)).toBe(true);
+  return point;
+}
+async function dailyStampPoint(page:Page,index:number){
+  const t=stampTarget(42,index);return dailyWorldPoint(page,'stamp',[t.x*1.2,.086,t.y*1.5]);
+}
+async function dailySortDrag(page:Page,right:boolean,distance=72){
+  const p=await dailyWorldPoint(page,'cash',[0,.33,0]);
+  await page.mouse.move(p.x,p.y);await page.mouse.down();await page.mouse.move(p.x+(right?distance:-distance),p.y,{steps:6});await page.mouse.up();
+}
+async function dailyPoster(page:Page){
+  await openDailyResultShare(page);const image=page.locator('.fw-arcade-result-photo > img');
+  await expect(image).toHaveJSProperty('naturalWidth',960);await expect(image).toHaveJSProperty('naturalHeight',720);
+  await closeDailyResultShare(page);const event=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();
+  const bytes=readFileSync((await(await event).path())!),metadata=await sharp(bytes).metadata();
+  expect([metadata.format,metadata.width,metadata.height]).toEqual(['png',960,1200]);
+  expect((await sharp(bytes).stats()).channels.some(c=>c.stdev>10)).toBe(true);
+  await openDailyResultShare(page);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();
+  await closeDailyResultShare(page);
+}
+for(const light of [false,true]){
+  const mode=light?'light':'native';
+  test(`AD-scene ${mode}: photo completes three real clients, six distinct frames and a real poster`,async({page},testInfo)=>{
+    await page.setViewportSize({width:390,height:844});await openDailyScene(page,'photo',light);
+    const shutter=page.getByRole('button',{name:'拍照快門',exact:true});
+    for(let client=0;client<3;client++){
+      await expect(page.locator('.fw-arcade-counter')).toContainText(`${client+1}/3`);
+      await shutter.click();await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(client*2+1);
+      if(client===0)await testInfo.attach(`daily-${mode}-photo-first-shot.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});
+      await page.getByRole('button',{name:'鏡頭往上',exact:true}).click();await page.getByRole('slider',{name:'鏡頭廣角',exact:true}).press('End');await page.clock.runFor(160);
+      await shutter.click();await expect(shutter).toBeDisabled();await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(client*2+2);
+      const frames=await page.locator('.fw-arcade-contact-sheet img').evaluateAll(es=>es.map(e=>(e as HTMLImageElement).src));
+      expect(frames[client*2]).not.toBe(frames[client*2+1]);
+      if(client<2)await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();
+    }
+    await page.getByRole('button',{name:'挑選照片',exact:true}).click();await openDailyResultShare(page);await expect(page.locator('.fw-arcade-photo-choices button')).toHaveCount(6);
+    await page.locator('.fw-arcade-photo-choices button').last().click();await expect(page.locator('.fw-arcade-photo-choices button').last()).toHaveAttribute('aria-pressed','true');await dailyPoster(page);
+    await openDailyResultShare(page);await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(0);
+  });
+  test(`AD-scene ${mode}: pointer lands on practice and all twelve visible paper targets`,async({page},testInfo)=>{
+    await page.setViewportSize({width:390,height:844});await openDailyScene(page,'stamp',light);
+    const practice=await dailyStampPoint(page,0);await page.mouse.click(practice.x,practice.y);await expect(page.locator('.fw-arcade-counter')).toHaveText('0/12');
+    for(let index=0;index<12;index++){
+      await page.clock.fastForward(230);const point=await dailyStampPoint(page,index);await page.mouse.click(point.x,point.y);
+      if(index<11){await expect(page.locator('.fw-arcade-counter')).toHaveText(`${index+1}/12`);await expect(page.locator('.fw-arcade-controls .fw-arcade-meta')).toContainText('多蓋 0 次');}
+      if(index===0)await testInfo.attach(`daily-${mode}-stamp-first-document.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});
+    }
+    await expect(page.locator('[data-daily-result-share]')).toContainText('完成 12 份文件');await dailyPoster(page);
+    await page.getByRole('button',{name:'同一題再來一次',exact:true}).click();await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');await expect(page.locator('.fw-arcade-board')).toBeFocused();
+  });
+  test(`AD-scene ${mode}: visible cash drag rejects wrong and short swipes then completes all thirty cards`,async({page},testInfo)=>{
+    // The hosted software renderer exceeded 45s while replaying the 30 real drags.
+    if(!light)test.setTimeout(90_000);
+    await openDailyScene(page,'cash',light);const deck=cashDeck(42),progress=page.locator('.fw-arcade-controls .fw-arcade-meta');
+    await dailySortDrag(page,deck[0].valid,47);await expect(progress).toContainText('已分類 0 / 30 · 分錯 0 次');
+    await dailySortDrag(page,!deck[0].valid);await expect(progress).toContainText('已分類 0 / 30 · 分錯 1 次');await page.clock.fastForward(180);
+    for(const [index,card]of deck.entries()){
+      await expect(page.locator('.fw-arcade-instruction')).toContainText(card.label);await dailySortDrag(page,card.valid);await page.clock.fastForward(180);
+      if(index<29)await expect(progress).toContainText(`已分類 ${index+1} / 30 · 分錯 1 次`);
+      if(index===2)await testInfo.attach(`daily-${mode}-cash-three-cards.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});
+    }
+    await expect(page.locator('[data-daily-result-share]')).toContainText('100 萬道具鈔 · 退回 6 張票券');await dailyPoster(page);
+    await openDailyResultShare(page);await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
+  });
+  test(`AD-scene ${mode}: cancelled paper contacts, secondary input and stale cash subjects never consume the next item`,async({page})=>{
+    await openDailyScene(page,'stamp',light);const point=await dailyStampPoint(page,0),host=page.locator('.fw-arcade-stage');
+    await page.mouse.click(point.x,point.y,{button:'right'});await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');
+    await page.mouse.move(point.x,point.y);await page.mouse.down();
+    await host.evaluate(el=>el.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:1,isPrimary:true})));await page.mouse.up();await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');
+    await page.mouse.move(point.x,point.y);await page.mouse.down();const box=(await host.boundingBox())!;await page.mouse.move(box.x+2,box.y+2);await page.mouse.up();await expect(page.locator('.fw-arcade-counter')).toHaveText('練習中');
+    await page.getByRole('button',{name:'回遊樂場',exact:true}).click();
+    // Reuse the same installed clock while starting a different real game.
+    await page.goto('/play?game=cash&seed=42');await expect(page.locator('[data-game-stage="ready"]')).toBeVisible();
+    if(light){await page.getByRole('button',{name:'3D · 改用輕量插畫',exact:true}).click();await expect(page.locator('[data-game-stage="ready"]')).toHaveAttribute('data-daily-renderer','light');}
+    await page.getByRole('button',{name:'開始這一局',exact:true}).click();await exitStartedFullscreen(page);
+    const center=await dailyWorldPoint(page,'cash',[0,.33,0]),deck=cashDeck(42),progress=page.locator('.fw-arcade-controls .fw-arcade-meta');
+    await page.mouse.move(center.x,center.y);await page.mouse.down();await page.locator('.fw-arcade-board').press(deck[0].valid?'ArrowRight':'ArrowLeft');await expect(progress).toContainText('已分類 1 / 30');
+    await page.clock.fastForward(180);await page.mouse.move(center.x+(deck[1].valid?80:-80),center.y);await page.mouse.up();await expect(progress).toContainText('已分類 1 / 30 · 分錯 0 次');
+    const sort=page.getByRole('button',{name:deck[1].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）',exact:true});await sort.focus();await page.keyboard.down('Enter');await page.clock.fastForward(500);await page.keyboard.down('Enter');await page.keyboard.up('Enter');
+    await expect(progress).toContainText('已分類 2 / 30 · 分錯 0 次');
+    await page.clock.fastForward(180);await sort.focus();await page.keyboard.down('Space');await page.keyboard.press('Escape');await page.keyboard.up('Space');await expect(progress).toContainText('已分類 2 / 30 · 分錯 0 次');
+    await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await expect(page.locator('.fw-arcade-board')).toBeFocused();
+    await page.getByRole('button',{name:'重新開始這一局',exact:true}).click();await page.getByRole('button',{name:'確認重新開始',exact:true}).click();await expect(progress).toContainText('已分類 0 / 30 · 分錯 0 次');await expect(page.getByRole('button',{name:'開始這一局',exact:true})).toBeVisible();
+  });
+  test(`AD-scene ${mode}: held shutter across the actual twelve-second client boundary cannot spend the next film`,async({page})=>{
+    await openDailyScene(page,'photo',light);const shutter=page.getByRole('button',{name:'拍照快門',exact:true});
+    await shutter.focus();await page.keyboard.down('Enter');await page.clock.fastForward(12016);await page.keyboard.up('Enter');
+    await expect(page.locator('.fw-arcade-counter')).toContainText('2/3');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);await expect(page.locator('[data-photo-film]')).toBeVisible();await expect(page.locator('[data-photo-film]')).toHaveText('2 張');
+    await shutter.press('Enter');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);await expect(page.locator('.fw-arcade-notice')).toContainText('第 2 / 3 位客人，已保存 1 / 2 張');
+  });
+}
+
+for(const game of ['photo','stamp','cash'] as const)for(const viewport of [{width:320,height:568},{width:390,height:844},{width:667,height:375}])test(`AD-scene layout ${game} ${viewport.width}: bounded owner, 200% text, safe insets and modal focus`,async({page},testInfo)=>{
+  await page.setViewportSize(viewport);await page.addInitScript(()=>{Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false});});
+  await openDailyScene(page,game,true);await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+  const fullscreen=page.getByRole('dialog',{name:'遊戲全螢幕',exact:true});await expect(fullscreen).toBeVisible();
+  // Simulate text scaling (not CSS zoom) and nonzero safe-inset padding on the
+  // real owner. The test does not shrink, remove, scroll-hide or force controls.
+  await page.locator('[data-daily-stage]').evaluate(el=>{
+    const nodes=[el,...el.querySelectorAll('*')].filter(e=>e instanceof HTMLElement).map(e=>({el:e as HTMLElement,font:parseFloat(getComputedStyle(e).fontSize)}));
+    for(const {el,font}of nodes)el.style.fontSize=`${font*2}px`;
+    for(const [side,value]of Object.entries({top:12,right:8,bottom:16,left:8}))(el as HTMLElement).style.setProperty(`--game-safe-${side}`,`${value}px`);
+  });
+  const stage=page.locator('[data-daily-stage]');
+  const controls=stage.locator('button:visible,input:visible');
+  for(let i=0;i<await controls.count();i++){
+    const control=controls.nth(i);await control.scrollIntoViewIfNeeded();
+    expect(await control.evaluate(el=>{const r=el.getBoundingClientRect(),o=el.closest('[data-daily-stage]')!.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return r.width>=44&&r.height>=44&&r.left>=o.left-1&&r.right<=o.right+1&&r.top>=o.top-1&&r.bottom<=o.bottom+1&&!!hit&&(el===hit||el.contains(hit));})).toBe(true);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await testInfo.attach(`daily-light-${game}-${viewport.width}x${viewport.height}-200pct-insets.png`,{body:await fullscreen.screenshot(),contentType:'image/png'});
+  const help=page.getByRole('button',{name:'玩法說明',exact:true});await help.click();const dialog=page.getByRole('dialog',{name:'玩法說明',exact:true});await expect(dialog).toBeVisible();
+  for(const key of ['Tab','Shift+Tab','Tab']){await page.keyboard.press(key);expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
+  await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(help).toBeFocused();await expect(fullscreen).toBeVisible();
+  const resume=page.getByRole('button',{name:'繼續這一局',exact:true});await resume.click();await expect(page.locator('.fw-arcade-board')).toBeFocused();await expect(page.locator('.fw-arcade-action-area')).not.toHaveAttribute('inert','');
+  const restart=page.getByRole('button',{name:'重新開始這一局',exact:true});await restart.click();await expect(page.getByRole('dialog',{name:'重新開始同一題？',exact:true})).toBeVisible();await page.keyboard.press('Escape');await expect(restart).toBeFocused();
+  await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await page.keyboard.press('Escape');await expect(fullscreen).toHaveCount(0);
+  await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
+});
+
+test('AD-scene light: no WebGL requires explicit fallback, failed capture preserves film and real PNG/JPEG retries recover',async({page})=>{
+  await blockPartyWebGL(page);await page.clock.install({time:new Date('2026-10-23T00:00:00Z')});await page.goto('/play?game=photo&seed=42');
+  await expect(page.getByRole('alert')).toContainText('此瀏覽器暫時無法開啟 3D 場景');await expect(page.locator('.fw-arcade-stage canvas')).toHaveCount(0);
+  await page.getByRole('button',{name:'用輕量畫面繼續',exact:true}).click();await expect(page.locator('[data-game-stage="ready"]')).toHaveAttribute('data-daily-renderer','light');
+  await page.clock.pauseAt(new Date('2026-10-23T00:01:00Z'));await page.getByRole('button',{name:'開始這一局',exact:true}).click();await exitStartedFullscreen(page);
+  await page.evaluate(()=>{
+    const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(...args){HTMLCanvasElement.prototype.toDataURL=original;throw Error('Synthetic light capture failure');};
+  });
+  const shutter=page.getByRole('button',{name:'拍照快門',exact:true});await shutter.click();await expect(page.locator('.fw-arcade-notice')).toContainText('已保存 0 / 2 張');await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(0);
+  await shutter.click();await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(1);
+  // Fail encoding, not the game model. Each format fails once and then the
+  // user's actual retry invokes the original native encoder.
+  await page.evaluate(()=>{
+    const original=HTMLCanvasElement.prototype.toBlob,failed=new Set<string>();
+    HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const kind=type??'image/png';if(!failed.has(kind)){failed.add(kind);callback(null);return;}return original.call(this,callback,type,quality);};
+  });
+  await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();await shutter.click();await page.getByRole('button',{name:'下一位客人 →',exact:true}).click();await shutter.click();await page.getByRole('button',{name:'挑選照片',exact:true}).click();
+  await expect(page.getByRole('button',{name:'重試產生成果圖',exact:true})).toBeEnabled();await page.getByRole('button',{name:'重試產生成果圖',exact:true}).click();
+  await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await openDailyResultShare(page);await expect(page.getByRole('button',{name:'重試準備工坊圖片',exact:true})).toBeEnabled();await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'重試準備工坊圖片',exact:true}).click();await dailyPoster(page);
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await page.getByRole('button',{name:'分享成果',exact:true}).click();const share=page.locator('[data-daily-result-share]');await expect(share).toBeVisible();await expect(share.getByRole('button',{name:'關閉分享',exact:true})).toBeFocused();
+  expect(await share.evaluate(el=>{const owner=el.closest('.fullscreen-game');return !!owner&&owner.contains(el)&&getComputedStyle(owner).overflowY!=='visible';})).toBe(true);
+  await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
+});

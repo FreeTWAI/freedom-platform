@@ -346,7 +346,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     needs: select
     if: ${{ !cancelled() && (needs.select.result != 'success' || (needs.select.outputs.ui_e2e == 'true' && needs.select.outputs.ui_default_shards != 'false')) }}
     services:
@@ -454,7 +454,7 @@ jobs:
           if-no-files-found: warn
   ui-e2e:
     runs-on: ubuntu-24.04
-    # Full plan: validate three fragments, then five fixture passes; narrow plans retain their existing bound.
+    # Full plan: validate four fragments, then five fixture passes; narrow plans retain their existing bound.
     timeout-minutes: ${{ needs.select.outputs.ui_default_shards == 'false' && 95 || 25 }}
     needs: [select, ui-default]
     if: ${{ !cancelled() && (needs.select.result != 'success' || needs.select.outputs.ui_e2e == 'true') }}
@@ -536,7 +536,7 @@ jobs:
         working-directory: .freedom/trusted
         run: npm ci --ignore-scripts --no-audit --no-fund
       # Only this workflow run and attempt; stale or partial artifacts cannot pass.
-      - name: Download this attempt's three default fragments
+      - name: Download this attempt's four default fragments
         if: ${{ needs.select.outputs.ui_default_shards != 'false' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -570,7 +570,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: browser-selection-${{ github.sha }}
-          # The recursive failure directory includes listing and all three shards.
+          # The recursive failure directory includes listing and all four shards.
           path: |
             .freedom/reports/pinned-e2e.json
             .freedom/reports/pinned-e2e.json.failure-artifacts/

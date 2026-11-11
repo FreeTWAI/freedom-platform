@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {transformSync} from 'esbuild';
+import {buildSync,transformSync} from 'esbuild';
 import * as React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -119,21 +119,21 @@ test('production SVG reveals only actual cut progress, including pause, resume a
   }
 });
 
-function preparationCapture(){
+function preparationContract(environment:Record<string,unknown>={}){
   type Capture=(target:{screenshot(options:{type:'png'}):Promise<Buffer>},info:{attach(name:string,options:{body:Buffer;contentType:string}):Promise<void>},name:string)=>Promise<Buffer>;
-  const module={exports:{} as {capturePreparationScreenshot:Capture}};
+  const module={exports:{} as {capturePreparationScreenshot:Capture;preparationGuideProblems:(paint:any)=>string[];observePreparationGuide:(path:any,probe?:any)=>any}};
   const source=readFileSync(new URL('../e2e/cooking-preparation-art.spec.ts',import.meta.url),'utf8'),registered:string[]=[];
   runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{module,exports:module.exports,require:(id:string)=>{
     if(id==='./fixtures.js')return {test(name:string){registered.push(name);}};
     if(['node:crypto','../../apps/portal-web/src/games/cooking/catalog.js','../../apps/portal-web/src/games/cooking/ingredient-visuals.js','../../apps/portal-web/src/games/cooking/storage.js'].includes(id))return {};
     throw Error(id);
-  }});
+  },...environment});
   assert.equal(registered.filter(name=>name.startsWith('preparation art:')).length,5,'preserve the five original real cases; do not run a fake browser');
-  assert.deepEqual(registered.filter(name=>!name.startsWith('preparation art:')),['native','rejected'].map(mode=>`preparation art fullscreen: pumpkin-soup keeps native cuts through ${mode} presentation at 667x375`));
-  return module.exports.capturePreparationScreenshot;
+  assert.deepEqual(registered.filter(name=>!name.startsWith('preparation art:')),[...['native','rejected'].map(mode=>`preparation art fullscreen: pumpkin-soup keeps native cuts through ${mode} presentation at 667x375`),...['320x568','390x844','667x375','1440x900'].map(size=>`immersive kitchen: canvas and controls share ${size} stage`),'immersive kitchen: 320x568 viewport fallback keeps controls separate']);
+  return module.exports;
 }
 test('preparation capture attaches each exact PNG buffer instead of a temporary path',async()=>{
-  const capture=preparationCapture(),body=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4P9P4PwAHMQLLfnZo0AAAAABJRU5ErkJggg==','base64');
+  const capture=preparationContract().capturePreparationScreenshot,body=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4P9P4PwAHMQLLfnZo0AAAAABJRU5ErkJggg==','base64');
   const names:string[]=[];
   for(const recipe of ['fish-and-chips','pumpkin-soup','baked-sweet-potato','cream-risotto','plant-burger'])for(const state of ['native-whole','native-cut','svg-two-cuts']){
     const name=`${recipe}-${state}.png`;let screenshots=0,attachments=0;
@@ -145,11 +145,177 @@ test('preparation capture attaches each exact PNG buffer instead of a temporary 
   assert.equal(new Set(names).size,15);
 });
 test('preparation capture awaits attachment completion and propagates capture or attachment failures',async()=>{
-  const capture=preparationCapture(),body=Buffer.from('synthetic transport fixture'),failure=Error('capture_or_attach_failed');let attached=false;
+  const capture=preparationContract().capturePreparationScreenshot,body=Buffer.from('synthetic transport fixture'),failure=Error('capture_or_attach_failed');let attached=false;
   await assert.rejects(capture({async screenshot(){throw failure;}},{async attach(){attached=true;}},'failed-capture.png'),error=>error===failure);assert.equal(attached,false);
   await assert.rejects(capture({async screenshot(){return body;}},{async attach(){throw failure;}},'failed-attach.png'),error=>error===failure);
   let release!:()=>void,entered!:()=>void,resolved=false;
   const gate=new Promise<void>(resolve=>{release=resolve;}),started=new Promise<void>(resolve=>{entered=resolve;});
   const pending=capture({async screenshot(){return body;}},{async attach(){entered();await gate;}},'pending.png').then(()=>{resolved=true;});
   await started;assert.equal(resolved,false,'capture must not resolve before attach finishes');release();await pending;assert.equal(resolved,true);
+});
+
+// StrictMode/export probes bundle the real component directly without a CSS
+// output target. Presentation CSS belongs to the arcade entry, not this module.
+test('guided kitchen retains its JavaScript-only component bundle boundary',()=>{
+  const bundle=buildSync({entryPoints:['apps/portal-web/src/games/cooking/CookingGame.tsx'],bundle:true,write:false,platform:'browser',format:'iife'});
+  assert.equal(bundle.outputFiles.length,1);assert.ok(bundle.outputFiles[0].contents.length>0);
+});
+
+test('only explicit mushroom slice guides move, with independent coordinates and unchanged cut scoring',()=>{
+ for(const recipe of RECIPES)for(let index=0;index<recipe.steps.length;index++){
+  const step=recipe.steps[index],mushroom=step.kind==='slice'&&step.ingredient==='蘑菇'&&step.shape==='dough';
+  let run=domain.actCooking({...domain.newCookingRun(recipe,42,'mushroom-scale'),step:index},{kind:'start',step:index},1000);
+  for(let count=0;count<step.goal;count++){
+   const expected=mushroom?.30+.40*(count+1)/(step.goal+1):.22+.56*(count+1)/(step.goal+1);
+   assert.equal(domain.cutGuide({...run,active:{...run.active,count}}),expected,`${recipe.id}/${index}/${count}`);
+   if(mushroom){
+    const now=1500+count*500;
+    const missed=domain.actCooking(run,{kind:'cut',step:index,x1:0,y1:.23,x2:0,y2:.78},now);assert.equal(missed.active.count,count);
+    run=domain.actCooking(run,{kind:'cut',step:index,x1:expected,y1:.23,x2:expected,y2:.78},now);assert.equal(run.active.count,count+1);
+   }
+  }
+  if(mushroom){assert.equal(run.status,'step-result');assert.equal(run.reports.length,1);assert.equal(run.reports[0].score,100);assert.equal(run.active.mistakes,0);}
+ }
+});
+
+
+test('lightweight mushroom glyph bounds remain separate and each real guide intersects its own whole polygon',()=>{
+ const render=svgScene(),contains=(points:readonly (readonly number[])[],x:number,y:number)=>{
+  let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){
+   const a=points[i],b=points[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+  }return inside;
+ };
+ for(const recipe of RECIPES)for(let stepIndex=0;stepIndex<recipe.steps.length;stepIndex++){
+  const step=recipe.steps[stepIndex],visual=ingredientVisual(step.ingredient,step.shape);if(step.kind!=='slice'||!visual)continue;
+  const run={...domain.newCookingRun(recipe,42,'svg-mushroom-guides'),step:stepIndex,status:'playing' as const};
+  for(let count=0;count<=step.goal;count++){
+   const html=render({...run,active:{...run.active,count}});
+   const groups=[...html.matchAll(/<g transform="translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\) scale\(([-\d.]+)\)" data-ingredient="([^"]+)" data-preparation="(whole|cut)"/g)];
+   if(!visual.cutLayers)continue;
+   assert.equal(groups.length,Math.min(step.goal,8));
+   type GlyphBox={minX:number;maxX:number;minY:number;maxY:number};
+   const boxes:GlyphBox[]=groups.map((g,i):GlyphBox=>{
+    const [x,y,angle,scale]=g.slice(1,5).map(Number);const mushroom:boolean=visual.id==='mushroom';
+    assert.equal(x,mushroom?(.30+.40*(i+1)/(step.goal+1))*800:235+i*330/(step.goal-1));
+    assert.equal(scale,i<count?42/70:(mushroom?Math.min(65,(320/(step.goal+1)-4)*70/52):65)/70);
+    const radians=angle*Math.PI/180;const points:number[][]=ingredientLayers(visual,i<count).flatMap(l=>l.points.map(([px,py])=>[x+26*scale*(px*Math.cos(radians)-py*Math.sin(radians)),y+26*scale*(px*Math.sin(radians)+py*Math.cos(radians))]));
+    const box={minX:Math.min(...points.map(p=>p[0])),maxX:Math.max(...points.map(p=>p[0])),minY:Math.min(...points.map(p=>p[1])),maxY:Math.max(...points.map(p=>p[1]))};
+    if(mushroom){
+     assert.ok(box.minX>=240&&box.maxX<=560,'all actual polygon vertices stay within the new span');
+     if(i>=count){assert.equal(angle,0);assert.equal(y,276);assert.ok(contains(ingredientLayers(visual)[0].points,0,0),'guide at the glyph centre intersects filled whole food, not air');}
+    }
+    return box;
+   });
+   if(visual.id==='mushroom')for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
+    const a=boxes[i],b=boxes[j];assert.ok(b.minX-a.maxX>=4||b.minY-a.maxY>=4||a.minY-b.maxY>=4,'whole and cut glyphs leave an independently measured visible gap');
+   }
+  }
+ }
+});
+
+test('painted vertical guide accepts a zero-width geometric path only through its real stroke contract',()=>{
+  const check=preparationContract().preparationGuideProblems;
+  // Browser measurement expands the zero-width centerline by its visible stroke.
+  // This fixture validates the diagnostic contract, not browser rendering.
+  const paint={paintIssues:[],stroke:'rgb(255, 240, 196)',strokeWidth:6,strokeOpacity:1,opacity:1,visible:true,length:189,bounds:{left:107,right:113,top:172,bottom:367,width:6,height:195},owner:{left:0,right:800,top:0,bottom:560,width:800,height:560},viewport:{width:800,height:560},samples:Array.from({length:3},()=>({painted:true,inputOwned:true}))};
+  assert.deepEqual([...check(paint)],[]);
+  for(const patch of [{visible:false},{opacity:0},{strokeOpacity:0},{stroke:'none'},{stroke:'transparent'},{strokeWidth:0}])assert.ok(check({...paint,...patch}).includes('unpainted guide'));
+  assert.ok(check({...paint,length:0}).includes('guide length'));
+  assert.ok(check({...paint,bounds:{...paint.bounds,width:0}}).includes('empty painted bounds'));
+  assert.ok(check({...paint,bounds:{...paint.bounds,right:802}}).includes('outside owner'));
+  assert.ok(check({...paint,viewport:{width:112,height:560}}).includes('outside viewport'));
+  for(const samples of [[],[{painted:true,inputOwned:true}],paint.samples.map((sample,i)=>({...sample,painted:i!==1})),paint.samples.map((sample,i)=>({...sample,inputOwned:i!==1}))])assert.ok(check({...paint,samples}).includes('unpainted dash or wrong input owner'));
+  for(const value of [NaN,Infinity,-Infinity])assert.deepEqual([...check({...paint,length:value})],['non-finite guide geometry']);
+});
+
+test('mushroom browser journeys retain real pointer cuts and measure both native and SVG paint at early and late counts',()=>{
+  const source=readFileSync(new URL('../e2e/cooking-preparation-art.spec.ts',import.meta.url),'utf8');
+  assert.ok(source.includes('await expect(owner).toBeVisible()'));
+  assert.ok(source.includes("await expect(path).toHaveCSS('visibility','visible')"));
+  assert.ok(source.includes('path.isPointInStroke(point)')&&source.includes('document.elementFromPoint(screen.x,screen.y)'));
+  assert.ok(source.includes('getScreenCTM()')&&source.includes('getTotalLength()')&&source.includes('preparationGuideProblems(paint)'));
+  assert.ok(source.includes("await mushroomStroke('native',0)")&&source.includes("await mushroomStroke('svg',1)"));
+  assert.ok(source.includes("await mushroomGuide('native',step.goal-1)")&&source.includes("await mushroomGuide('svg',step.goal-1)"));
+  assert.ok(source.includes('await page.mouse.down()')&&source.includes('await page.mouse.up()'));
+  assert.ok(source.includes("await path.evaluate(observePreparationGuide)"));
+  for(const label of ['clip-path','mask-image','filter','ancestor-overflow'])assert.ok(source.includes(`label:'${label}'`));
+  assert.ok(source.includes("probeTarget.setAttribute('style',previous)"));
+  for(const state of ['native-whole-stage','native-cut-stage','native-late-cut-stage','svg-late-cut-stage'])assert.ok(source.includes(`\${recipe.id}-${state}.png`),state);
+});
+
+function guideObserverFixture(){
+  type Style=Record<string,string>;
+  const defaults:Style={stroke:'rgb(255, 240, 196)',strokeWidth:'6px',strokeOpacity:'1',opacity:'1',display:'block',visibility:'visible',contentVisibility:'visible',strokeDasharray:'15px, 12px',clipPath:'none',maskImage:'none',webkitMaskImage:'none',filter:'none',backdropFilter:'none',perspective:'none',vectorEffect:'none',clip:'auto',mixBlendMode:'normal',transform:'none',rotate:'none',scale:'none',zoom:'1',contain:'none',overflowX:'visible',overflowY:'visible',overflowClipMargin:'0px',borderTopLeftRadius:'0px',borderTopRightRadius:'0px',borderBottomRightRadius:'0px',borderBottomLeftRadius:'0px'};
+  const box=(left:number,top:number,width:number,height:number)=>({left,top,width,height,right:left+width,bottom:top+height});
+  const propertyName=(property:string)=>property.replace(/^-webkit-/,'webkit-').replace(/-([a-z])/g,(_,letter:string)=>letter.toUpperCase());
+  const make=(name:string,rect:ReturnType<typeof box>,initial:Style={})=>{
+    const style={...defaults,...initial};
+    Object.defineProperty(style,'setProperty',{value:(property:string,value:string)=>{style[propertyName(property)]=value;}});
+    return {tagName:name.startsWith('svg')?'svg':'DIV',style,parentElement:null as any,clientLeft:0,clientTop:0,clientWidth:rect.width,clientHeight:rect.height,getAttribute:(attribute:string)=>attribute==='style'?JSON.stringify(style):name,setAttribute:(_attribute:string,value:string)=>{for(const key of Object.keys(style))delete style[key];Object.assign(style,JSON.parse(value));},removeAttribute:()=>{for(const key of Object.keys(style))delete style[key];Object.assign(style,defaults,initial);},getBoundingClientRect:()=>rect};
+  };
+  const root=make('fullscreen-game',box(0,0,600,420),{overflowX:'hidden',overflowY:'hidden',borderTopLeftRadius:'20px',borderTopRightRadius:'20px',borderBottomRightRadius:'20px',borderBottomLeftRadius:'20px'});
+  const host=make('ck-live-scene',box(20,50,440,320),{overflowX:'hidden',overflowY:'hidden',transform:'matrix(1, 0, 0, 1, -220, -160)'});host.parentElement=root;
+  const svg=make('svg.ck-toy-guides',box(40,70,400,280),{overflowX:'hidden',overflowY:'hidden'});svg.parentElement=host;
+  const scene={tagName:'svg',getAttribute:()=> 'ck-scene',contains:(node:unknown)=>node===path};
+  const matrix={a:.5,b:0,c:0,d:.5,e:40,f:70};
+  const path={...make('guide',box(95,157.5,0,94.5)),parentElement:svg,ownerSVGElement:svg,closest:(selector:string)=>selector==='.ck-scene-wrap'?host:({querySelector:()=>scene}),getScreenCTM:()=>matrix,getBBox:()=>({x:110,y:175,width:0,height:189}),getTotalLength:()=>189,getPointAtLength:(s:number)=>({x:110,y:175+s}),isPointInStroke:(p:{x:number;y:number})=>{const [dash,gap]=path.style.strokeDasharray.split(/[, ]+/).map(parseFloat);return p.x===110&&(p.y-175)%(dash+gap)<dash;}};
+  let hit:unknown=scene;
+  const environment={DOMPoint:class {constructor(public x:number,public y:number){}matrixTransform(m:typeof matrix){return {x:this.x*m.a+this.y*m.c+m.e,y:this.x*m.b+this.y*m.d+m.f};}},document:{documentElement:root,elementFromPoint:()=>hit},innerHeight:420,getComputedStyle:(element:typeof root)=>({...element.style,getPropertyValue:(property:string)=>element.style[propertyName(property)]??''})};
+  const contract=preparationContract(environment);
+  return {path,svg,host,root,matrix,setHit:(value:unknown)=>{hit=value;},observe:()=>contract.observePreparationGuide(path),probe:(probe:any)=>contract.observePreparationGuide(path,probe),problems:()=>contract.preparationGuideProblems(contract.observePreparationGuide(path))};
+}
+
+test('actual guide observer accepts current clipping ancestry and transforms native/SVG dash samples',()=>{
+  // These source checks bind the fixture's allowed effects to actual production
+  // rules. This CPU fixture is not a DOM layout or browser-rendering substitute.
+  const immersive=readFileSync(new URL('../../apps/portal-web/src/games/cooking/immersive-kitchen.css',import.meta.url),'utf8');
+  assert.match(immersive,/\.fullscreen-game\.fullscreen-game--integrated\s*\{[^}]*overflow: hidden;[^}]*border-radius: 20px;/s);
+  assert.match(immersive,/\.ck-live-scene\s*\{[^}]*transform: translate\(-50%, -50%\);[^}]*border-radius: 0;[^}]*overflow: hidden;/s);
+  const toy=readFileSync(new URL('../../apps/portal-web/src/games/toy-console.css',import.meta.url),'utf8');
+  assert.match(toy,/\.ck-toy-guides\{[^}]*pointer-events:none/);
+  const source=readFileSync(new URL('../../apps/portal-web/src/games/toy-theme.css',import.meta.url),'utf8');
+  assert.match(source,/\.fw-arcade-viewfinder i\{[^}]*filter:drop-shadow\(/,'the existing unrelated viewfinder shadow is preserved');
+  for(const [strokeDasharray,expected] of [['15px, 12px',[182.5,263.5,344.5]],['12px, 9px',[181,265,349]]] as const){
+    const f=guideObserverFixture();f.path.style.strokeDasharray=strokeDasharray;
+    const observed=f.observe();assert.deepEqual([...f.problems()],[]);assert.equal(observed.clips.length,3);
+    assert.deepEqual(Array.from(observed.samples,(sample:any)=>sample.local.y),[...expected]);
+    for(const sample of observed.samples){assert.equal(sample.screen.x,95);assert.equal(sample.screen.y,sample.local.y*.5+70);assert.equal(sample.painted,true);assert.equal(sample.inputOwned,true);}
+  }
+});
+
+test('actual guide observer fails closed for masks, filters, clip effects and unsupported transforms',()=>{
+  for(const location of ['path','svg','host','root'] as const)for(const patch of [{clipPath:'inset(100%)'},{maskImage:'linear-gradient(transparent, transparent)'},{webkitMaskImage:'url(#transparent)'},{maskBorderSource:'url(#transparent)'},{webkitMaskBoxImageSource:'url(#transparent)'},{filter:'opacity(0)'},{filter:'drop-shadow(0px 1px 2px black)'},{filter:'url(#empty)'},{backdropFilter:'blur(5px)'},{clip:'rect(0px, 0px, 0px, 0px)'},{mixBlendMode:'multiply'},{vectorEffect:'non-scaling-stroke'},{transform:'matrix(0, 1, -1, 0, 0, 0)'},{perspective:'100px'},{scale:'0.5'},{rotate:'90deg'},{zoom:'2'}]){
+    const f=guideObserverFixture();Object.assign(f[location].style,patch);
+    assert.ok(f.problems().some((issue:string)=>issue.startsWith('unsupported ')),`${location}: ${JSON.stringify(patch)}`);
+  }
+  const f=guideObserverFixture();f.matrix.c=1;assert.ok(f.problems().includes('unsupported stroke transform'));
+});
+
+test('actual guide observer rejects ancestor clipping, rounded corners and invalid geometry without pretending hit ownership proves occlusion',()=>{
+  for(const overflow of ['hidden','clip','auto','scroll']){
+    const f=guideObserverFixture();f.host.style.overflowY=overflow;f.host.clientHeight=1;
+    assert.ok(f.problems().some((issue:string)=>issue.startsWith('clipped by ancestor')));
+  }
+  for(const contain of ['paint','strict','content','layout paint']){
+    const f=guideObserverFixture();f.host.style.overflowX='visible';f.host.style.overflowY='visible';f.host.style.contain=contain;f.host.clientHeight=1;
+    assert.ok(f.problems().some((issue:string)=>issue.startsWith('clipped by ancestor')));
+  }
+  const rounded=guideObserverFixture();rounded.svg.style.borderTopLeftRadius='50%';assert.ok(rounded.problems().some((issue:string)=>issue.startsWith('clipped by ancestor')));
+  const asymmetric=guideObserverFixture();asymmetric.svg.style.borderTopLeftRadius='9999px';assert.ok(asymmetric.problems().some((issue:string)=>issue.startsWith('clipped by ancestor')));
+  const invalid=guideObserverFixture();invalid.svg.style.borderTopLeftRadius='calc(20% + 1px)';assert.ok(invalid.problems().some((issue:string)=>issue.startsWith('invalid ancestor clip')));
+  const margin=guideObserverFixture();margin.host.style.overflowClipMargin='2px';assert.ok(margin.problems().some((issue:string)=>issue.includes('overflow-clip-margin')));
+  const hidden=guideObserverFixture();hidden.svg.style.opacity='0';assert.ok(hidden.problems().includes('unpainted guide'));
+  const obstructed=guideObserverFixture();obstructed.setHit({tagName:'BUTTON',getAttribute:()=> 'blocking-control'});assert.ok(obstructed.problems().includes('unpainted dash or wrong input owner'));
+});
+
+test('actual guide negative probe restores styles synchronously on success and measurement errors',()=>{
+  for(const target of ['owner','ancestor'] as const){
+    const f=guideObserverFixture(),element=target==='owner'?f.svg:f.host,before=element.getAttribute('style');
+    const rejected=f.probe({target,styles:{'clip-path':'inset(100%)'}});
+    assert.ok(rejected.paintIssues.some((issue:string)=>issue.startsWith('unsupported clip-path')));
+    assert.equal(element.getAttribute('style'),before);assert.deepEqual([...f.problems()],[]);
+    f.path.getBBox=()=>{throw Error('measurement failed');};
+    assert.throws(()=>f.probe({target,styles:{filter:'opacity(0)'}}),/measurement failed/);
+    assert.equal(element.getAttribute('style'),before);
+  }
 });

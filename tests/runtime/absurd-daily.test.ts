@@ -233,7 +233,7 @@ function dailyFeedbackBoard(game:'photo'|'stamp'){
   const stage={current:{framing:()=>({visible:['head','feet'],blocked:false,lift:0}),capture:()=>{if(failure!==null)throw failure;return 'controlled-frame';}}};
   const api=runInNewContext(`${functions};({shoot,applyStamp,photosDone})`,{
     live,stage,ready:true,RULES,CLIENTS,GAMES,gradePhoto,stamp,photoNotice,stampNotice,seconds,Error,captureFailures,
-    motionRef:{current:false},syncClock(){},render:()=>true,sfx(){},setFlash(){},updateUi(){},settle:()=>assert.fail('not a terminal fixture'),
+    pendingResult:{current:null},stop(){},nextClient(){assert.fail('unexpired feedback fixture');},motionRef:{current:false},syncClock(){},render:()=>true,sfx(){},setFlash(){},updateUi(){},settle:()=>assert.fail('not a terminal fixture'),
     setNotice:(text:string)=>notices.push(text),game,seed:42,
   }) as {shoot:()=>void;applyStamp:(point:{x:number;y:number},index?:number)=>void;photosDone:()=>void};
   return {...api,live,notices,captureFailures,fail:(cause:unknown)=>{failure=cause;}};
@@ -625,7 +625,7 @@ function cashBoard(completedCards:number, failure?:'update'|'capture') {
   }};
   const pendingResult={current:null as any};
   const api=runInNewContext(`${functions};({applyCash,settle})`,{
-    live,stage,pendingResult,view:()=>({cash:live.current.cash}),host:{current:{dataset:{}}},frame:{current:7},motionRef:{current:true},game:'cash',seed:42,
+    live,stage,pendingResult,controls:{current:{cancel(){}}},view:()=>({cash:live.current.cash}),host:{current:{dataset:{}}},frame:{current:7},motionRef:{current:true},game:'cash',seed:42,
     performance:{now:()=>now},tick,pause,sortCash,cashNotice,seconds,GAMES,captureFailures,cancelAnimationFrame:()=>record('stop'),
     syncDiagnostics,audio:{current:null},setReady:()=>{},setError:()=>{},
     sfx:()=>{},setNotice:(text:string)=>notices.push(text),updateUi:()=>{},onResult:(result:any)=>results.push(result),setCaptureError:(value:boolean)=>{captureError=value;},
@@ -764,7 +764,7 @@ test('PT-action-light: actual stop/retry/fallback retains the same paused run an
 test('PT-action-light: the production RAF advances essential motion in light mode with reduced motion',()=>{
   for(const game of ['chair','tofu'] as const){
     const live={current:startParty(newParty(game,42))},loop={current:undefined as any},mode={current:'light'},last={current:null as number|null},lastDraw={current:null as number|null};let kicked=0,stopped=0;
-    runInNewContext(partyClosure('  loop.current=t=>{','\n  useEffect('),{loop,live,mode,last,lastDraw,lastUi:{current:0},frame:{current:0},motionRef:{current:false},R:PT,advanceParty,pauseRun(){throw Error('unexpected stall');},soundEffect(){},safeDraw:()=>true,refresh(){},kick:()=>kicked++,stop:()=>stopped++});
+    runInNewContext(partyClosure('  loop.current=t=>{','\n  useEffect('),{loop,live,mode,last,lastDraw,lastUi:{current:0},frame:{current:0},motionRef:{current:false},R:PT,advanceParty,partyInputStamp,pauseRun(){throw Error('unexpected stall');},soundEffect(){},safeDraw:()=>true,refresh(){},kick:()=>kicked++,stop:()=>stopped++});
     loop.current(100);const before=live.current;loop.current(200);assert.equal(live.current.elapsed,100);assert.equal(kicked,2);assert.equal(stopped,0);if(game==='tofu')assert.notDeepEqual(tofuView(before as TofuRun).active,tofuView(live.current as TofuRun).active);
     live.current=pauseParty(live.current);loop.current(700);assert.equal(live.current.elapsed,100);assert.equal(kicked,2);
   }
@@ -847,7 +847,7 @@ test('PT-light: only an open restart confirmation consumes Escape before the ful
   const start=source.indexOf('  escapeCapture.current='),end=source.indexOf('\n  useEffect(',start);assert.ok(start>=0&&end>start);
   const input=holidayInput(),controls=holidayInput(),gesture={current:{id:1}},calls:string[]=[];
   const live=pauseParty(actParty(partyTime(startParty(newParty('holiday',42)) as HolidayRun,300),{kind:'pick',hole:holidayTargets(42,0).good,round:0}));
-  const context:any={escapeCapture:{current:undefined},input:{current:input},controls:{current:controls},gesture,restart:false,live,keepRun:()=>{context.restart=false;calls.push('focus-restart');}};
+  const context:any={escapeCapture:{current:undefined},input:{current:input},controls:{current:controls},gesture,restart:false,help:false,live,keepRun:()=>{context.restart=false;calls.push('focus-restart');}};
   const escape=runInNewContext(source.slice(start,end)+'\nescapeCapture.current',context);
   const event=()=>({preventDefault:()=>calls.push('prevent'),stopPropagation:()=>calls.push('stop')});
   controls.down(1,'key: ',0);input.down(0,'key: ',0);escape(event());assert.equal(controls.click(1,0,'key: '),null);assert.deepEqual(calls,[],'ordinary Escape must reach fullscreen');assert.equal(input.click(0,0,'key: '),null);assert.equal(gesture.current,null);
@@ -873,10 +873,10 @@ test('PT-light: actual controller handlers retain live progress, missing release
   const hooks={useRef:(value:any)=>{const i=index++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=index++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return [slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=index++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
   const host={dataset:{} as Record<string,string|number>,focus:()=>{focused='host';},closest:()=>({scrollIntoView(){}})};
   const label=(value:any):string=>Array.isArray(value)?value.map(label).join(''):value&&typeof value==='object'?(value.props?.['aria-hidden']?'':label(value.props?.children)):typeof value==='string'?value:'';
-  const jsx=(type:any,props:any)=>{if(type==='section')section=props;if(type==='div'&&props.ref)props.ref.current=host;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focused=label(props.children);}};}return {type,props};};
+  const jsx=(type:any,props:any)=>{if(type==='section')section=props;if(type==='div'&&props.ref)props.ref.current=host;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focused=props['aria-label']??label(props.children);}};}return {type,props};};
   const module={exports:{} as any};class Button{}class Anchor{}
   runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,matchMedia:()=>({matches:true}),requestAnimationFrame:(callback:(at:number)=>void)=>{const id=++sequence;frames.set(id,callback);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),document:{hidden:false,addEventListener(){},removeEventListener(){}},window:{addEventListener:(name:string,listener:(event:any)=>void,capture?:boolean)=>{if(name==='keydown'&&capture)escapeListeners.add(listener);},removeEventListener:(name:string,listener:(event:any)=>void)=>{if(name==='keydown')escapeListeners.delete(listener);}},require:(path:string)=>{
-    if(path==='react')return hooks;if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
+    if(path==='react')return {...hooks,useLayoutEffect:hooks.useEffect};if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
     if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
     if(path==='./stage')return {createPartyStage:()=>{created++;throw Error('WebGL unavailable');}};
     if(path==='./light-party')return {partyInputStamp,acceptsPartyInput,partyResultImage};
@@ -888,11 +888,20 @@ test('PT-light: actual controller handlers retain live progress, missing release
   }});
   const render=()=>{index=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'holiday',seed:42,onBack(){},onResult:(result:any)=>results.push(result)});while(effects.length)effects.shift()!();};
   const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
-  const button=(text:string)=>{const found=buttons.find(b=>label(b.children).trim()===text);assert.ok(found,`button ${text}`);return found;};
+  const button=(text:string)=>{const found=buttons.find(b=>(b['aria-label']??label(b.children)).trim()===text);assert.ok(found,`button ${text}`);return found;};
   const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:new Button(),preventDefault(){},stopPropagation(){}});
   let time=0;const tick=(ms:number)=>{time+=ms;const callbacks=[...frames.values()];frames.clear();for(const callback of callbacks)callback(time);if(dirty)render();};
   const advance=(target:number)=>{for(let i=0;i<1000&&Number(host.dataset.elapsed??0)<target;i++)tick(50);assert.ok(Number(host.dataset.elapsed)>=target);};
-  render();await settle();assert.equal(created,1);button('改用輕量玩法').onClick();await settle();assert.equal(section['data-party-mode'],'light');button('開始派對！').onClick();await settle();tick(0);advance(300);
+  render();await settle();assert.equal(created,1);button('改用輕量玩法').onClick();await settle();assert.equal(section['data-party-mode'],'light');
+  assert.match(section.className,/pt-holiday-composition/);
+  // Compact visible controls retain their complete accessible names and state.
+  for(const name of ['暫停','重新開始','玩法與設定','音效關','減少動態開','重試 3D，保留這局']){
+    assert.equal(button(name)['aria-label'],name);assert.equal(button(name).title,name);
+    assert.equal(buttons.filter(b=>b['aria-label']===name).length,1);
+  }
+  assert.equal(button('音效關')['aria-pressed'],false);assert.equal(button('減少動態開')['aria-pressed'],true);
+  button('減少動態開').onClick();await settle();assert.equal(button('減少動態關')['aria-pressed'],false);assert.equal(section['data-party-score'],0);
+  button('開始派對！').onClick();await settle();tick(0);advance(300);
   const good=()=>{const found=buttons.find(b=>/第 [1-6] 格：休假/.test(b['aria-label']??''));assert.ok(found);return found;};
   const held=good();held.onKeyDown(key(' '));for(const listener of escapeListeners)listener(key('Escape'));held.onKeyUp(key(' '));await settle();assert.equal(section['data-party-score'],0,'native capture cancels even when an outer React capture swallows Escape');held.onKeyDown(key(' '));advance(1450); // No keyup/onBlur: simulate a disabled node swallowing release.
   const current=good();current.onKeyDown(key(' '));current.onKeyUp(key(' '));await settle();assert.equal(section['data-party-score'],120);
@@ -1390,12 +1399,13 @@ function fullscreenStartHarness(kind:'legacy'|'guided'|'market'|'party',status='
  const recipe=recipeOf('rice-balls')!;
  const initial=kind==='party'?newParty('chair',42):kind==='market'?newMarket('corn-dog',42):kind==='guided'?newCookingRun(recipe,42,'fullscreen-start'): {started:false,paused:false,clock:{elapsed:0,last:null,running:false}};
  const live={current:{...initial,status} as any};
- const context:any={game:'photo',hints:{},live,ready:true,visualReady:true,confirm:false,confirmRestart:false,restart:false,mode:kind==='party'?{current:'light'}:'ready',onStart:(node:unknown)=>{assert.equal(node,target);calls++;},section:{current:target},surface:{current:target},host:{current:target},last:{current:null},frame:{current:0},loop:{current(){}},step:{current(){}},checkpointOwned:{current:false},performance:{now:()=>100},requestAnimationFrame:()=>++frames,cancelAnimationFrame(){},setNotice(){},refresh(){},updateUi(){},kick(){frames++;},stop(){},finish(){},safeDraw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},draw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},startParty,resumeParty,currentStep,applyMarket,commit:(run:unknown)=>{live.current=run;},resume:(clock:any)=>({...clock,running:true}),command:(action:any)=>{live.current=actCooking(live.current,{...action,step:live.current.step},100);}};
+ const context:any={pendingResult:{current:null},dialog:null,focusAfterCommit:{current:false},useLayoutEffect(){},game:'photo',hints:{},live,ready:true,visualReady:true,confirm:false,confirmRestart:false,restart:false,mode:kind==='party'?{current:'light'}:'ready',onStart:(node:unknown)=>{assert.equal(node,target);calls++;},section:{current:target},surface:{current:target},host:{current:target},last:{current:null},frame:{current:0},loop:{current(){}},step:{current(){}},checkpointOwned:{current:false},focusHandoff:{current:null},document:{activeElement:target},performance:{now:()=>100},requestAnimationFrame:()=>++frames,cancelAnimationFrame(){},setNotice(){},refresh(){},updateUi(){},kick(){frames++;},stop(){},finish(){},safeDraw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},draw:()=>{if(!drawn)live.current={...live.current,status:'paused'};return drawn;},startParty,resumeParty,currentStep,applyMarket,commit:(run:unknown)=>{live.current=run;},resume:(clock:any)=>({...clock,running:true}),command:(action:any)=>{live.current=actCooking(live.current,{...action,step:live.current.step},100);}};
  const begin=kind==='legacy'?fullscreenStartHandler('AbsurdDaily.tsx','    function start()','    function setPaused()','start',context):kind==='party'?fullscreenStartHandler('party/PartyGame.tsx','  function begin()','  function action(','begin',context):kind==='market'?fullscreenStartHandler('cooking/MarketGame.tsx',' function action(',' step.current=','action',context):fullscreenStartHandler('cooking/CookingGame.tsx','  const begin=','  const restart=','begin',context);
  return {context,live,target,view,layout,begin:()=>kind==='market'?begin({kind:'start'}):begin(),calls:()=>calls,frames:()=>frames,draw:(ok:boolean)=>{drawn=ok;}};
 }
 for(const kind of ['legacy','guided','market','party'] as const)test(`fullscreen start: actual ${kind} cold-start handler invokes its presentation owner synchronously`,()=>{
  const h=fullscreenStartHarness(kind);h.begin();assert.equal(h.calls(),1);assert.equal(kind==='legacy'?h.live.current.started:h.live.current.status,kind==='legacy'?true:'playing');
+ if(kind==='market'){assert.equal(h.context.focusHandoff.current.target,h.target);assert.equal(h.target.focuses.length,0,'market focus waits for its actual post-commit layout effect');}
 });
 for(const kind of ['guided','market','party'] as const)test(`fullscreen start: actual ${kind} rejects unavailable, invalid and failed starts without consuming its first start`,()=>{
  const h=fullscreenStartHarness(kind);
@@ -1521,6 +1531,249 @@ for(const reason of ['unavailable','confirmation','step-result','rejected-comman
 });
 // FULLSCREEN-START-PURE-END
 
+for(const game of ['holiday','chair','tofu'] as const)for(const panel of ['restart','help'] as const)test(`PT-${game.toUpperCase()}-SCENE: actual ${panel} modal owns its in-stage rectangle, focus, inert bar and cleanup (non-native)`,()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+ const start=source.indexOf('  useLayoutEffect(()=>{'),end=source.indexOf('  // begin() runs',start);assert.ok(start>=0&&end>start);
+ const calls:string[]=[],listeners=new Map<string,()=>void>(),bar={inert:false},style:Record<string,string>={};let effect:(()=>void)|undefined,observed:unknown,disconnected=false;
+ const dialog={open:false,style,showModal(){this.open=true;calls.push('show');},close(){this.open=false;calls.push('close');}};
+ const overlay={getBoundingClientRect:()=>({left:14,top:110,width:290,height:340}),contains:()=>true};
+ const context={game,restart:panel==='restart',help:panel==='help',restoreHolidayFocus:{current:null},holidayRoot:{current:{closest:()=>({querySelector:()=>bar})}},holidayOverlay:{current:overlay},holidayModal:{current:dialog},confirmRestart:{current:{focus:()=>calls.push('focus-restart')}},helpClose:{current:{focus:()=>calls.push('focus-help')}},helpButton:{current:null},restartButton:{current:null},document:{addEventListener:(name:string)=>calls.push(`add-${name}`),removeEventListener:(name:string)=>calls.push(`remove-${name}`)},window:{addEventListener:(name:string,fn:()=>void)=>listeners.set(name,fn),removeEventListener:(name:string)=>listeners.delete(name)},ResizeObserver:class{constructor(public callback:()=>void){}observe(value:unknown){observed=value;}disconnect(){disconnected=true;}},useLayoutEffect:(fn:()=>()=>void)=>{effect=fn();}};
+ runInNewContext(stripTypeScriptTypes(source.slice(start,end)),context);
+ assert.equal(dialog.open,true);assert.equal(bar.inert,true);assert.deepEqual(style,{left:'14px',top:'110px',width:'290px',height:'340px'});assert.equal(observed,overlay);assert.ok(calls.includes(`focus-${panel}`));
+ overlay.getBoundingClientRect=()=>({left:20,top:80,width:600,height:220});listeners.get('resize')!();assert.deepEqual(style,{left:'20px',top:'80px',width:'600px',height:'220px'});
+ effect!();assert.equal(dialog.open,false);assert.equal(bar.inert,false);assert.equal(disconnected,true);assert.equal(listeners.size,0);assert.equal(calls.filter(c=>c==='close').length,1);
+});
+
+test('PT-HOLIDAY-SCENE: help Escape cancels held input and returns to paused controls before fullscreen',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  escapeCapture.current='),end=source.indexOf('\n  useEffect(',start);
+ const input=holidayInput(),controls=holidayInput(),calls:string[]=[];const context:any={escapeCapture:{current:null},input:{current:input},controls:{current:controls},gesture:{current:{id:1}},restart:false,help:true,keepRun:()=>assert.fail('not restart'),closeHelp:()=>{context.help=false;calls.push('help-close');}};
+ const escape=runInNewContext(source.slice(start,end)+'\nescapeCapture.current',context);input.down(0,'key: ',4);controls.down(1,'pointer:3',4);
+ escape({preventDefault:()=>calls.push('prevent'),stopPropagation:()=>calls.push('stop')});assert.deepEqual(calls,['prevent','stop','help-close']);assert.equal(input.click(0,4,'key: '),null);assert.equal(controls.click(1,4,'pointer:3'),null);assert.equal(context.gesture.current,null);
+ calls.length=0;escape({preventDefault:()=>calls.push('prevent'),stopPropagation:()=>calls.push('stop')});assert.deepEqual(calls,[],'next Escape reaches fullscreen');
+});
+
+for(const holiday of [false,true])test(`PT-HOLIDAY-SCENE: actual share navigation ${holiday?'scrolls only the holiday result':'preserves other-game navigation'} (non-native)`,()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare('),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
+ const result={scrollTop:40,getBoundingClientRect:()=>({top:70}),scrollTo:(value:unknown)=>calls.push(value)};
+ const panel={closest:()=>result,getBoundingClientRect:()=>({top:410}),scrollIntoView:(value:unknown)=>calls.push(value),focus:(value:unknown)=>calls.push(['focus',value])};
+ const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{onResultShare:undefined,holiday,chair:false,tofu:false,resultReady:true,container:{current:{querySelector:()=>panel}}});run();
+ assert.deepEqual(JSON.parse(JSON.stringify(calls)),[holiday?{top:380,behavior:'instant'}:{block:'start',behavior:'instant'},['focus',{preventScroll:true}]]);
+});
+
+/** Actual PartyGame hooks/handlers with deterministic renderer ports, not a DOM or GPU. */
+async function chairControllerHarness(mode:'native'|'light'){
+ const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code.replace('import("./stage")','Promise.resolve().then(()=>require("./stage"))');
+ const slots:any[]=[],effects:Array<()=>void>=[],buttons:any[]=[],results:any[]=[],frames=new Map<number,(time:number)=>void>(),listeners=new Map<string,Set<(event:any)=>void>>();
+ let cursor=0,dirty=false,sequence=0,section:any,created=0,disposed=0,captures=0,captureFailure=false,now=0,lost=()=>{},focus='';
+ const same=(a:any[],b:any[])=>a?.length===b?.length&&a.every((value,i)=>Object.is(value,b[i]));
+ const hooks={useRef:(value:any)=>{const i=cursor++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=cursor++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return[slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=cursor++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
+ const bar={inert:false},host={dataset:{} as Record<string,string|number>,focus:()=>{focus='host';},closest:()=>({scrollIntoView(){throw Error('bounded chair cannot scroll the outer page');}})},overlay={contains:()=>true,getBoundingClientRect:()=>({left:10,top:90,width:300,height:400}),querySelectorAll:()=>[]},dialog={open:false,style:{},showModal(){this.open=true;},close(){this.open=false;}};
+ const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):value&&typeof value==='object'?(value.props?.['aria-hidden']?'':text(value.props?.children)):typeof value==='string'?value:'';
+ const jsx=(type:any,props:any)=>{if(type==='section'){section=props;if(props.ref)props.ref.current={closest:()=>({querySelector:()=>bar})};}if(type==='div'&&props.ref)props.ref.current=props.className?.includes('pt-canvas')?host:overlay;if(type==='dialog'&&props.ref)props.ref.current=dialog;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focus=props['aria-label']??text(props.children).trim();}};}return {type,props};};
+ const listen=(name:string,fn:(event:any)=>void)=>{const set=listeners.get(name)??new Set();set.add(fn);listeners.set(name,set);},unlisten=(name:string,fn:(event:any)=>void)=>listeners.get(name)?.delete(fn);
+ const document={hidden:false,activeElement:null,addEventListener:listen,removeEventListener:unlisten};
+ const module={exports:{} as any};class Button{}class Anchor{}class Node{}
+ runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,Node,ResizeObserver:class{observe(){}disconnect(){}},matchMedia:()=>({matches:true}),document,window:{addEventListener:listen,removeEventListener:unlisten},requestAnimationFrame:(fn:(time:number)=>void)=>{const id=++sequence;frames.set(id,fn);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),require:(path:string)=>{
+  if(path==='react')return {...hooks,useLayoutEffect:hooks.useEffect};if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
+  if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
+  if(path==='./stage')return {createPartyStage:(_host:unknown,_game:unknown,onLost:()=>void)=>{created++;lost=onLost;if(mode==='light')throw Error('native unavailable');return {update(){},stats:()=>({calls:1,triangles:1,geometries:1,textures:0}),anchors:()=>[],dispose:()=>disposed++,capture:()=>{captures++;if(captureFailure)throw Error('capture unavailable');return 'native-renderer-port-capture';}};}};
+  if(path==='./light-party')return {partyInputStamp,acceptsPartyInput,partyResultImage,chairView};if(path==='./light-holiday')return {holidayCells,holidayInput};if(path==='./catalog')return {PARTY_GAMES,PARTY_RULES:PT};
+  if(path==='./domain')return {actParty,advanceParty,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition};if(path==='../diagnostics')return {syncDiagnostics:(node:any,values:any)=>Object.assign(node.dataset,values)};return {GameCover:()=>null,LightPartyScene:()=>null};
+ }});
+ const render=()=>{cursor=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'chair',seed:42,onBack(){},onStart(){},onResult:(value:any)=>results.push(value)});while(effects.length)effects.shift()!();};
+ const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
+ const button=(label:string)=>{const found=buttons.filter(b=>(b['aria-label']??text(b.children).trim())===label);assert.equal(found.length,1,`one chair button named ${label}`);return found[0];};
+ const click=async(label:string)=>{button(label).onClick({detail:0});await settle();};
+ const tick=(ms:number)=>{now+=ms;const callbacks=[...frames.values()];frames.clear();for(const fn of callbacks)fn(now);if(dirty)render();};
+ const run=()=>slots[0].current as ChairRun;
+ const advance=(target:number)=>{let guard=0;while(run().elapsed<target&&run().status==='playing'&&guard++<4000)tick(Math.min(50,target-run().elapsed));assert.equal(run().elapsed,target);};
+ const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:host,preventDefault(){},stopPropagation(){}});
+ const move=async(lane:number)=>{while(run().lane!==lane){await click(lane>run().lane?'往右換路':'往左換路');advance(run().elapsed+140);}};
+ render();await settle();if(mode==='light')await click('改用輕量玩法');
+ return {run,host,bar,dialog,section:()=>section,button,click,tick,advance,move,key,settle,results,created:()=>created,disposed:()=>disposed,captures:()=>captures,focus:()=>focus,failCapture:(value:boolean)=>{captureFailure=value;},lose:()=>lost(),emit:(name:string,event:any={})=>listeners.get(name)?.forEach(fn=>fn(event)),hide:(value:boolean)=>{document.hidden=value;},frames:()=>frames.size,cleanup:()=>{for(const slot of slots)slot?.cleanup?.();}};
+}
+
+for(const mode of ['native','light'] as const)test(`PT-CHAIR-SCENE: actual ${mode} controller earns all 22 waves, settles once and restarts same seed (CPU ports)`,async()=>{
+ const h=await chairControllerHarness(mode);assert.equal(h.run().status,'ready');assert.equal(h.run().score,0);assert.match(h.section().className,/pt-chair-stage/);assert.match(h.section().className,/pt-chair-composition/);
+ for(const label of ['暫停','重新開始','玩法與設定','音效關','減少動態開',...(mode==='light'?['重試 3D，保留這局']:[])]){assert.equal(h.button(label)['aria-label'],label);assert.equal(h.button(label).title,label);}
+ assert.equal(h.button('暫停').disabled,true);assert.equal(h.button('音效關')['aria-pressed'],false);assert.equal(h.button('減少動態開')['aria-pressed'],true);
+ await h.click('開始派對！');h.tick(0);assert.equal(h.button('暫停').disabled,false);const beforeMotion=JSON.stringify(h.run());await h.click('減少動態開');assert.equal(h.button('減少動態關')['aria-pressed'],false);assert.equal(JSON.stringify(h.run()),beforeMotion);
+ for(let i=0;i<PT.chairWaves;i++){const w=chairWave(42,i);await h.move(w.ticketLane);h.advance(w.at);assert.equal(h.run().tickets,i+1);assert.equal(h.run().lives,3);}
+ h.advance(PT.chairMs);assert.equal(h.run().status,'done');assert.equal(h.run().score,4280);assert.equal(h.frames(),0);
+ if(mode==='native'){h.failCapture(true);await h.click('查看這局成果');assert.equal(h.results.length,0);assert.equal(h.run().score,4280);h.failCapture(false);}
+ await h.click('查看這局成果');await h.click('查看這局成果');assert.equal(h.results.length,1);assert.equal(h.results[0].details,'4280 分 · 22 張假日票 · 0 次被攔截');
+ if(mode==='native'){assert.equal(h.captures(),2);assert.equal(h.results[0].image,'native-renderer-port-capture');}
+ else{const svg=decodeURIComponent(h.results[0].image.split(',')[1]);assert.match(svg,/4280 分/);assert.match(svg,/僅記錄本局總計，沒有保存逐波路線/);}
+ await h.click('重新開始');assert.equal(h.dialog.open,true);assert.equal(h.bar.inert,true);await h.click('確定重來');assert.equal(h.run().status,'ready');assert.equal(h.run().seed,42);assert.equal(h.run().score,0);assert.equal(h.run().resolved,0);assert.equal(h.run().lives,3);assert.equal(h.dialog.open,false);assert.equal(h.bar.inert,false);h.cleanup();assert.equal(h.frames(),0);
+});
+
+for(const mode of ['native','light'] as const)test(`PT-CHAIR-SCENE: actual ${mode} controls lose three lives, never invent a win (CPU ports)`,async()=>{
+ const h=await chairControllerHarness(mode);await h.click('開始派對！');h.tick(0);
+ for(let i=0;i<3;i++){const wave=chairWave(42,i);await h.move(wave.lane);h.advance(wave.at);assert.equal(h.run().hits,i+1);assert.equal(h.run().lives,2-i);}
+ assert.equal(h.run().status,'done');assert.equal(h.run().resolved,3);assert.equal(h.run().tickets,0);assert.equal(h.run().score,0);assert.ok(h.run().elapsed<PT.chairMs);await h.click('查看這局成果');assert.equal(h.results.length,1);assert.equal(h.results[0].details,'0 分 · 0 張假日票 · 3 次被攔截');h.cleanup();
+});
+
+test('PT-CHAIR-SCENE: actual pause/help/restart, focus and recovery retain one run without implicit resume (CPU ports)',async()=>{
+ const h=await chairControllerHarness('native');await h.click('開始派對！');h.tick(0);h.advance(700);const before=JSON.stringify(h.run());
+ await h.click('玩法與設定');assert.equal(h.run().status,'paused');assert.equal(h.run().elapsed,700);assert.equal(h.dialog.open,true);assert.equal(h.bar.inert,true);assert.equal(h.focus(),'回到遊戲');h.tick(1000);assert.equal(h.run().elapsed,700);
+ h.emit('keydown',h.key('Escape'));await h.settle();assert.equal(h.dialog.open,false);assert.equal(h.bar.inert,false);assert.equal(h.focus(),'玩法與設定');assert.equal(h.run().status,'paused');
+ await h.click('繼續這一局');h.tick(0);assert.equal(h.run().elapsed,700);h.lose();await h.settle();assert.equal(h.run().status,'paused');assert.equal(h.disposed(),1);await h.click('改用輕量玩法');assert.equal(h.run().elapsed,700);assert.equal(h.run().status,'paused');h.tick(1000);assert.equal(h.run().elapsed,700);
+ await h.click('重新開始');await h.click('保留這局');assert.equal(h.focus(),'重新開始');assert.equal(h.run().status,'paused');await h.click('繼續這一局');h.tick(0);assert.equal(JSON.stringify(h.run()),before);
+ for(const event of ['blur','visibilitychange','stall']){if(event==='visibilitychange')h.hide(true);if(event==='stall')h.tick(1501);else h.emit(event);await h.settle();assert.equal(h.run().status,'paused');assert.equal(h.run().elapsed,700);h.hide(false);await h.click('繼續這一局');h.tick(0);}
+ h.cleanup();assert.equal(h.frames(),0);
+});
+
+test('PT-CHAIR-SCENE: actual share shortcut scrolls only its bounded result (non-native)',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare('),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
+ const result={scrollTop:20,getBoundingClientRect:()=>({top:50}),scrollTo:(value:unknown)=>calls.push(value)},panel={closest:()=>result,getBoundingClientRect:()=>({top:330}),scrollIntoView:()=>assert.fail('must not scroll the whole stage'),focus:(value:unknown)=>calls.push(['focus',value])};
+ const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{onResultShare:undefined,holiday:false,chair:true,tofu:false,resultReady:true,container:{current:{querySelector:()=>panel}}});run();assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{top:300,behavior:'instant'},['focus',{preventScroll:true}]]);
+});
+
+async function tofuControllerHarness(mode:'native'|'light'){
+ const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code.replace('import("./stage")','Promise.resolve().then(()=>require("./stage"))');
+ const slots:any[]=[],effects:Array<()=>void>=[],buttons:any[]=[],results:any[]=[],frames=new Map<number,(time:number)=>void>(),listeners=new Map<string,Set<(event:any)=>void>>();
+ let cursor=0,dirty=false,sequence=0,section:any,created=0,disposed=0,captures=0,captureFailure=false,now=0,lost=()=>{},focus='';
+ const same=(a:any[],b:any[])=>a?.length===b?.length&&a.every((value,i)=>Object.is(value,b[i]));
+ const hooks={useRef:(value:any)=>{const i=cursor++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=cursor++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return[slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=cursor++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
+ const bar={inert:false},host={dataset:{} as Record<string,string|number>,focus:()=>{focus='host';},closest:()=>({scrollIntoView(){throw Error('bounded tofu cannot scroll the outer page');}})},overlay={contains:()=>true,getBoundingClientRect:()=>({left:10,top:90,width:300,height:400}),querySelectorAll:()=>[]},dialog={open:false,style:{},showModal(){this.open=true;},close(){this.open=false;}};
+ const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):value&&typeof value==='object'?(value.props?.['aria-hidden']?'':text(value.props?.children)):typeof value==='string'?value:'';
+ const jsx=(type:any,props:any)=>{if(type==='section'){section=props;if(props.ref)props.ref.current={closest:()=>({querySelector:()=>bar})};}if(type==='div'&&props.ref)props.ref.current=props.className?.includes('pt-canvas')?host:overlay;if(type==='dialog'&&props.ref)props.ref.current=dialog;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focus=props['aria-label']??text(props.children).trim();}};}return {type,props};};
+ const listen=(name:string,fn:(event:any)=>void)=>{const set=listeners.get(name)??new Set();set.add(fn);listeners.set(name,set);},unlisten=(name:string,fn:(event:any)=>void)=>listeners.get(name)?.delete(fn);
+ const document={hidden:false,activeElement:null,addEventListener:listen,removeEventListener:unlisten};
+ const module={exports:{} as any};class Button{}class Anchor{}class Node{}
+ runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,Node,ResizeObserver:class{observe(){}disconnect(){}},matchMedia:()=>({matches:true}),document,window:{addEventListener:listen,removeEventListener:unlisten},requestAnimationFrame:(fn:(time:number)=>void)=>{const id=++sequence;frames.set(id,fn);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),require:(path:string)=>{
+  if(path==='react')return {...hooks,useLayoutEffect:hooks.useEffect};if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
+  if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
+  if(path==='./stage')return {createPartyStage:(_host:unknown,_game:unknown,onLost:()=>void)=>{created++;lost=onLost;if(mode==='light')throw Error('native unavailable');return {update(){},stats:()=>({calls:1,triangles:1,geometries:1,textures:0}),anchors:()=>[],dispose:()=>disposed++,capture:()=>{captures++;if(captureFailure)throw Error('capture unavailable');return 'native-renderer-port-capture';}};}};
+  if(path==='./light-party')return {partyInputStamp,acceptsPartyInput,partyResultImage,chairView};if(path==='./light-holiday')return {holidayCells,holidayInput};if(path==='./catalog')return {PARTY_GAMES,PARTY_RULES:PT};
+  if(path==='./domain')return {actParty,advanceParty,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition};if(path==='../diagnostics')return {syncDiagnostics:(node:any,values:any)=>Object.assign(node.dataset,values)};return {GameCover:()=>null,LightPartyScene:()=>null};
+ }});
+ const render=()=>{cursor=0;dirty=false;buttons.length=0;module.exports.PartyGame({game:'tofu',seed:42,onBack(){},onStart(){},onResult:(value:any)=>results.push(value)});while(effects.length)effects.shift()!();};
+ const settle=async()=>{for(let i=0;i<12;i++){if(dirty)render();await Promise.resolve();}};
+ const button=(label:string)=>{const found=buttons.filter(b=>(b['aria-label']??text(b.children).trim())===label);assert.equal(found.length,1,`unique tofu button ${label}`);return found[0];};
+ const click=async(label:string)=>{button(label).onClick({detail:0});await settle();};
+ const tick=(ms:number)=>{now+=ms;const callbacks=[...frames.values()];frames.clear();for(const fn of callbacks)fn(now);if(dirty)render();};
+ const run=()=>slots[0].current as TofuRun;
+ const advance=(target:number)=>{let guard=0;while(run().elapsed<target&&run().status==='playing'&&guard++<4000)tick(Math.min(50,target-run().elapsed));assert.equal(run().elapsed,target);};
+ const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:host,preventDefault(){},stopPropagation(){}});
+ const seek=(match:(s:TofuRun)=>boolean)=>{let guard=0;while(!match(run())&&guard++<4000)advance(run().elapsed+5);assert.ok(match(run()),'real tofu position reached');};
+ render();await settle();if(mode==='light')await click('改用輕量玩法');
+ return {run,host,bar,dialog,section:()=>section,button,click,tick,advance,seek,key,settle,results,created:()=>created,disposed:()=>disposed,captures:()=>captures,focus:()=>focus,failCapture:(value:boolean)=>{captureFailure=value;},lose:()=>lost(),emit:(name:string,event:any={})=>listeners.get(name)?.forEach(fn=>fn(event)),hide:(value:boolean)=>{document.hidden=value;},frames:()=>frames.size,cleanup:()=>{for(const slot of slots)slot?.cleanup?.();}};
+}
+
+for(const mode of ['native','light'] as const)test(`PT-TOFU-SCENE: actual ${mode} controller earns twelve perfect layers, capture retry and same-seed restart (CPU ports)`,async()=>{
+ const h=await tofuControllerHarness(mode);assert.match(h.section().className,/pt-tofu-stage/);assert.match(h.section().className,/pt-tofu-composition/);
+ for(const label of ['暫停','重新開始','玩法與設定','音效關','減少動態開',...(mode==='light'?['重試 3D，保留這局']:[])]){assert.equal(h.button(label)['aria-label'],label);assert.equal(h.button(label).title,label);}
+ assert.equal(h.button('暫停').disabled,true);assert.equal(h.button('音效關')['aria-pressed'],false);assert.equal(h.button('減少動態開')['aria-pressed'],true);
+ await h.click('開始派對！');h.tick(0);assert.equal(h.button('暫停').disabled,false);const beforeMotion=JSON.stringify(h.run());await h.click('減少動態開');assert.equal(h.button('減少動態關')['aria-pressed'],false);assert.equal(JSON.stringify(h.run()),beforeMotion);
+ for(let i=0;i<PT.tofuGoal;i++){
+  h.seek(s=>Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers.at(-1)![tofuAxis(s)])<.04);const before=h.run(),axis=tofuAxis(before);assert.equal(axis,i%2?'z':'x');
+  const button=h.button('豆腐落下！');button.onKeyDown(h.key(' '));button.onKeyUp(h.key(' '));await h.settle();assert.equal(h.run().fall?.perfect,true);assert.equal(h.run().layers.length,i+1);assert.equal(h.run().score,before.score);
+  h.section().onKeyDown(h.key(' '));assert.equal(h.run().fall?.at,before.elapsed);h.advance(before.elapsed+459);assert.equal(h.run().layers.length,i+1);assert.equal(h.run().score,before.score);h.advance(before.elapsed+460);assert.equal(h.run().layers.length,i+2);assert.equal(h.run().perfects,i+1);assert.equal(h.run().turn,i+1);if(h.run().status==='playing')h.advance(h.run().elapsed+100);
+ }
+ assert.equal(h.run().score,2925);assert.equal(h.run().status,'done');assert.equal(h.frames(),0);
+ if(mode==='native'){h.failCapture(true);await h.click('查看這局成果');assert.equal(h.results.length,0);assert.equal(h.run().score,2925);h.failCapture(false);}
+ await h.click('查看這局成果');await h.click('查看這局成果');assert.equal(h.results.length,1);assert.equal(h.results[0].details,'2925 分 · 疊了 12 層 · 12 次完美貼齊');
+ if(mode==='light'){const svg=decodeURIComponent(h.results[0].image.split(',')[1]);assert.equal((svg.match(/<polygon /g)??[]).length,39);assert.match(svg,/2925 分/);}
+ await h.click('重新開始');assert.equal(h.dialog.open,true);await h.click('確定重來');assert.equal(h.run().seed,42);assert.equal(h.run().score,0);assert.equal(h.run().layers.length,1);assert.equal(h.run().turn,0);assert.equal(h.run().status,'ready');h.cleanup();assert.equal(h.frames(),0);
+});
+for(const mode of ['native','light'] as const)test(`PT-TOFU-SCENE: actual ${mode} controller clips both axes then earns three misses without fabricated layers (CPU ports)`,async()=>{
+ const h=await tofuControllerHarness(mode);await h.click('開始派對！');h.tick(0);
+ for(let i=0;i<2;i++){
+  h.seek(s=>{const a=tofuAxis(s),offset=Math.abs(tofuPosition(s)[a]-s.layers.at(-1)![a]);return offset>2.3&&offset<2.4;});const before=h.run(),axis=tofuAxis(before),size=axis==='x'?'width':'depth';await h.click('豆腐落下！');const kept=h.run().fall!.kept!;assert.ok(kept);assert.equal(h.run().fall!.perfect,false);assert.ok(kept[size]>.6&&kept[size]<.7);h.advance(before.elapsed+460);assert.deepEqual(h.run().layers.at(-1),kept);assert.equal(h.run().score,before.score+Math.floor(100*kept[size]/before.layers.at(-1)![size]));h.advance(h.run().elapsed+100);
+ }
+ const layers=JSON.stringify(h.run().layers),score=h.run().score;
+ for(let i=0;i<3;i++){h.seek(s=>Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers.at(-1)![tofuAxis(s)])>1.3);const at=h.run().elapsed;await h.click('豆腐落下！');assert.equal(h.run().fall!.kept,null);h.advance(at+459);assert.equal(h.run().misses,i);h.advance(at+460);assert.equal(h.run().misses,i+1);assert.equal(JSON.stringify(h.run().layers),layers);assert.equal(h.run().score,score);if(h.run().status==='playing')h.advance(h.run().elapsed+100);}
+ assert.equal(h.run().status,'done');assert.equal(h.run().perfects,0);assert.equal(h.frames(),0);await h.click('重新開始');await h.click('確定重來');assert.equal(h.run().misses,0);assert.equal(h.run().status,'ready');h.cleanup();
+});
+test('PT-TOFU-SCENE: actual pause/help/recovery preserves a partially landed block and explicitly restores focus (CPU ports)',async()=>{
+ const h=await tofuControllerHarness('native');await h.click('開始派對！');h.tick(0);h.seek(s=>Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers.at(-1)![tofuAxis(s)])<.04);await h.click('豆腐落下！');h.advance(h.run().elapsed+200);const saved=JSON.stringify(h.run()),at=h.run().elapsed;
+ await h.click('玩法與設定');assert.equal(h.run().status,'paused');assert.equal(h.dialog.open,true);assert.equal(h.focus(),'回到遊戲');h.tick(1000);assert.equal(h.run().elapsed,at);h.emit('keydown',h.key('Escape'));await h.settle();assert.equal(h.focus(),'玩法與設定');assert.equal(h.dialog.open,false);
+ await h.click('繼續這一局');assert.equal(h.focus(),'host');h.tick(0);assert.equal(JSON.stringify(h.run()),saved);h.lose();await h.settle();assert.equal(h.run().status,'paused');await h.click('改用輕量玩法');h.tick(1000);assert.equal(h.run().elapsed,at);assert.equal(h.run().status,'paused');await h.click('重試 3D，保留這局');assert.equal(h.run().status,'paused');assert.equal(h.run().elapsed,at);await h.click('繼續這一局');assert.equal(h.focus(),'host');h.tick(0);h.advance(h.run().fall!.at+460);assert.equal(h.run().layers.length,2);assert.equal(h.run().score,165);h.cleanup();
+});
+for(const mode of ['native','light'] as const)test(`PT-TOFU-SCENE: actual ${mode} idle run ends at sixty seconds and preserves zero earned score (CPU ports)`,async()=>{
+ const h=await tofuControllerHarness(mode);await h.click('開始派對！');h.tick(0);h.advance(PT.tofuMs);assert.equal(h.run().status,'done');assert.equal(h.run().score,0);assert.equal(h.run().layers.length,1);assert.equal(h.frames(),0);h.cleanup();
+});
+test('PT-TOFU-SCENE: actual share shortcut scrolls only its bounded result (non-native)',()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/FullscreenGame.tsx',import.meta.url),'utf8'),start=source.indexOf('  function showResultShare('),end=source.indexOf('  function keys(',start),calls:unknown[]=[];
+ const result={scrollTop:20,getBoundingClientRect:()=>({top:50}),scrollTo:(value:unknown)=>calls.push(value)},panel={closest:()=>result,getBoundingClientRect:()=>({top:330}),scrollIntoView:()=>assert.fail('must not scroll the whole stage'),focus:(value:unknown)=>calls.push(['focus',value])};
+ const run=runInNewContext(stripTypeScriptTypes(source.slice(start,end))+'\nshowResultShare',{onResultShare:undefined,holiday:false,chair:false,tofu:true,resultReady:true,container:{current:{querySelector:()=>panel}}});run();assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{top:300,behavior:'instant'},['focus',{preventScroll:true}]]);
+});
+
+
+// Reproduce the precise 7f CI failures with the real controller. Renderer ports
+// make these lifecycle/state assertions, not browser timing or pixel evidence.
+for(const game of ['chair','tofu'] as const)test(`PT-REPAIR: ${game} context loss publishes the last undrawn simulation frame without resuming`,async()=>{
+ const h=game==='chair'?await chairControllerHarness('native'):await tofuControllerHarness('native');
+ await h.click('開始派對！');h.tick(0);h.tick(16);
+ assert.equal(h.run().elapsed,16);assert.equal(Number(h.host.dataset.elapsed),0,'frame is deliberately between native draws');
+ h.lose();await h.settle();assert.equal(h.run().status,'paused');assert.equal(Number(h.host.dataset.elapsed),16);
+ await h.click('改用輕量玩法');h.tick(1000);assert.equal(h.run().elapsed,16);assert.equal(Number(h.host.dataset.elapsed),16);
+ await h.click('重試 3D，保留這局');assert.equal(h.run().status,'paused');assert.equal(Number(h.host.dataset.elapsed),16);h.cleanup();
+});
+for(const mode of ['native','light'] as const)test(`PT-REPAIR: ${mode} tofu landing publishes earned score and enabled drop in the exact landing frame`,async()=>{
+ const h=await tofuControllerHarness(mode);await h.click('開始派對！');h.tick(0);
+ h.seek(s=>Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers.at(-1)![tofuAxis(s)])<.04);
+ await h.click('豆腐落下！');const at=h.run().elapsed;
+ h.advance(at+459);assert.equal(h.run().layers.length,1);assert.equal(h.section()['data-party-score'],0);assert.equal(h.button('豆腐降落中…').disabled,true);
+ h.tick(1);assert.equal(h.run().layers.length,2);assert.equal(h.run().score,165);assert.equal(h.section()['data-party-score'],165);assert.equal(h.button('豆腐落下！').disabled,false);h.cleanup();
+});
+for(const mode of ['native','light'] as const)test(`PT-REPAIR: ${mode} clicked pause hands focus to enabled resume inside the stage`,async()=>{
+ const h=await chairControllerHarness(mode);await h.click('開始派對！');h.tick(0);h.advance(250);
+ await h.click('暫停');assert.equal(h.run().status,'paused');assert.equal(h.button('暫停').disabled,true);assert.equal(h.focus(),'繼續這一局');
+ assert.equal(h.button('繼續這一局').disabled,undefined);const at=h.run().elapsed;h.tick(1000);assert.equal(h.run().elapsed,at);h.cleanup();
+});
+
+
+test('PT-BOUNDS: native and light world CSS fits exact 4:3 without a truncated width multiplier (source only)',()=>{
+ const css=readFileSync(new URL('../../apps/portal-web/src/games/party/party.css',import.meta.url),'utf8');
+ // Native host, both light hosts and both sibling SVG boards must use the
+ // same height-first fit. This is a source guard, not a browser layout result.
+ const rectangles=[...css.matchAll(/\.(?:pt-canvas|pt-light-stage|pt-chair-light-board|pt-tofu-light-board)\{[^{}]*width:auto;height:min\((\d+)cqh,(\d+)cqw\);aspect-ratio:(\d+)\/(\d+);/g)];
+ assert.equal(rectangles.length,5);
+ assert.doesNotMatch(css,/133\.333/);
+ for(const [,vertical,horizontal,numerator,denominator] of rectangles){
+  const heightFactor=Number(vertical)/100,widthFactor=Number(horizontal)/100,ratio=Number(numerator)/Number(denominator);
+  assert.equal(heightFactor,1);assert.equal(widthFactor,.75);assert.equal(ratio,4/3);
+  for(const [availableWidth,availableHeight] of [[128,96],[535,96],[288,216],[1200,700],[320,568]]){
+   const height=Math.min(availableHeight*heightFactor,availableWidth*widthFactor),width=height*ratio;
+   assert.ok(width>=128);assert.ok(height>=96);assert.ok(width<=availableWidth);assert.ok(height<=availableHeight);
+  }
+ }
+ const built=transformSync(css,{loader:'css',minify:true,target:'es2023'}).code;
+ assert.equal((built.match(/height:min\(100cqh,75cqw\)/g)??[]).length,5,'minification retains exact height percentages');
+ assert.doesNotMatch(built,/133\.333/);
+});
+
+for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS: ${selector} visibility exemptions retain clipping sensitivity (CPU geometry)`,()=>{
+ const source=readFileSync(new URL('../e2e/helpers/party-scene.ts',import.meta.url),'utf8'),start=source.indexOf('function partyPaintedContentFailures('),end=source.indexOf('async function partyCoveredToolsBounds(',start);
+ assert.ok(start>=0&&end>start);
+ const rect=(left:number,top:number,width:number,height:number)=>({left,top,right:left+width,bottom:top+height,width,height,toJSON:()=>({left,top,width,height})});
+ const defaults={display:'block',position:'static',width:'160px',height:'40px',overflowX:'visible',overflowY:'visible',clipPath:'none',whiteSpace:'normal'};
+ const root:any={parentElement:null,style:{},box:rect(0,0,320,240)},parent:any={parentElement:root,style:{},box:rect(0,0,240,180)},label:any={parentElement:parent,style:{},box:rect(8,8,160,40),textContent:'visible label'};
+ const nodes=[root,parent,label];for(const node of nodes)node.getBoundingClientRect=()=>node.box;
+ root.contains=(node:any)=>nodes.includes(node);root.querySelectorAll=(query:string)=>query.split(',').includes(selector)?[label]:[];
+ label.matches=(query:string)=>query.split(',').includes(selector);label.getAttribute=()=>null;label.querySelectorAll=()=>[];label.checkVisibility=()=>!nodes.some(node=>node.style.display==='none');
+ const computed=(node:any)=>{let visibility='visible';for(let p=node;p;p=p.parentElement)if(p.style.visibility){visibility=p.style.visibility;break;}return {...defaults,...node.style,visibility};};
+ const document={createTreeWalker:()=>{let visited=false;return {currentNode:label,nextNode:()=>visited?false:(visited=true)};},createRange:()=>({selectNodeContents(){},getClientRects:()=>[rect(10,10,100,24)]})};
+ const inspect=runInNewContext(`(${stripTypeScriptTypes(source.slice(start,end))})`,{document,NodeFilter:{SHOW_TEXT:4},getComputedStyle:computed}) as (root:unknown)=>string[];
+ assert.equal(inspect(root).length,0);
+ label.box=rect(8,8,8,40);assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+ label.box=rect(8,8,160,8);assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+ label.box=rect(8,8,160,0);assert.ok(inspect(root).some(x=>x.startsWith('unpainted required content:')));
+ label.box=rect(8,8,160,40);parent.box=rect(0,0,240,8);parent.style.overflowY='hidden';assert.ok(inspect(root).some(x=>x.startsWith('painted content clipped by ancestor:')));
+ parent.box=rect(0,0,240,180);parent.style={};
+ label.style.display='none';assert.equal(inspect(root).length,0);label.style={};
+ parent.style.display='none';assert.equal(inspect(root).length,0);parent.style={visibility:'hidden'};
+ assert.equal(inspect(root).length,0);
+ label.style.visibility='visible';label.box=rect(8,8,8,40);assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+ label.box=rect(8,8,160,40);parent.style={};label.style={clipPath:'inset(25%)'};assert.ok(inspect(root).some(x=>x.startsWith('painted label uses clipping:')));
+ label.style={};parent.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted label clipped by ancestor shape:')));
+ parent.style={};label.box=rect(8,8,1,1);label.style={position:'absolute',width:'1px',height:'1px',overflowX:'hidden',overflowY:'hidden',clipPath:'inset(50%)',whiteSpace:'nowrap'};
+ assert.equal(inspect(root).length,0);
+ label.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted label uses clipping:')));
+ label.style.clipPath='inset(50%)';label.style.position='static';assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+});
 
 test('stamp atelier actual animation source settles reduced motion and preserves guards and normal curve',()=>{
  const source=readFileSync(new URL('../../apps/portal-web/src/games/stamp-atelier.ts',import.meta.url),'utf8');

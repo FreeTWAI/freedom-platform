@@ -367,7 +367,9 @@ for (const {action, target} of [{action: 'edit', target: 1}, {action: 'delete', 
       // Editing replaces the original body. Locate the one active editor, not its old text.
       await post.getByLabel('編輯留言', {exact: true}).fill('已確認的新版留言');
       await post.getByRole('button', {name: '儲存留言', exact: true}).click();
-      await expect(post.getByText('已確認的新版留言', {exact: true})).toBeVisible();
+      // Text in the still-open editor is a draft, not a confirmed edit ACK.
+      await expect(post.getByLabel('編輯留言', {exact: true})).toHaveCount(0);
+      await expect(post.locator('.social-comment-bubble').getByText('已確認的新版留言', {exact: true})).toBeVisible();
     } else {
       await comment.getByRole('button', {name: '刪除留言', exact: true}).click();
       await comment.getByRole('button', {name: '確定刪除留言', exact: true}).click();

@@ -3,17 +3,23 @@ import { PlatformLogo } from '../modules/PlatformLogo';
 import { GAME_SHARE_PLATFORMS, gameSocialLink, type GameSharePlatform } from './result-share';
 
 /** CK-6: every result shares this chooser; selecting a logo performs no network action. */
-export function ResultShare({link,text,ready,sharing,onNative,onStatus}:{
+export function ResultShare({link,text,ready,sharing,onNative,onStatus,captureCopyGuard}:{
   link:string;text:string;ready:boolean;sharing:boolean;onNative:()=>void;onStatus:(message:string)=>void;
+  // A retained Daily dialog may close without unmounting this shared chooser.
+  captureCopyGuard?:()=>()=>boolean;
 }) {
   const [platform,setPlatform]=useState<GameSharePlatform|null>(null),[manual,setManual]=useState(false),field=useRef<HTMLTextAreaElement>(null),active=useRef(true),copying=useRef(false);
+  // Dismissal may occur after clipboard settlement but before the focus effect.
+  const manualCurrent=useRef<()=>boolean>(()=>true);
   useEffect(()=>{active.current=true;return()=>{active.current=false;};},[]);
-  useEffect(()=>{if(manual){field.current?.focus();field.current?.select();}},[manual]);
+  useEffect(()=>{if(manual&&active.current&&manualCurrent.current()){field.current?.focus();field.current?.select();}},[manual]);
   const label=GAME_SHARE_PLATFORMS.find(p=>p.id===platform)?.label;
   async function copyText(){
-    if(copying.current)return;copying.current=true;
-    try{await navigator.clipboard.writeText(text);if(active.current){setManual(false);onStatus('文案與挑戰連結已複製。成果圖片請下載後附上。');}}
-    catch{if(active.current){setManual(true);onStatus('請長按或選取下方文案複製，成果仍在這裡。');}}
+    if(copying.current)return;
+    const ownsPanel=captureCopyGuard?.()??(()=>true),current=()=>active.current&&ownsPanel();
+    if(!current())return;copying.current=true;
+    try{await navigator.clipboard.writeText(text);if(current()){setManual(false);onStatus('文案與挑戰連結已複製。成果圖片請下載後附上。');}}
+    catch{if(current()){manualCurrent.current=current;setManual(true);onStatus('請長按或選取下方文案複製，成果仍在這裡。');}}
     finally{copying.current=false;}
   }
   return <div className="fw-arcade-external-share">

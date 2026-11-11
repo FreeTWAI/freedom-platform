@@ -1,0 +1,37 @@
+/* STAMP: one edge-to-edge desk. Paper, tool, HUD and actions share this world;
+   the pointer host has no HTML control descendants and transparent HUD gaps
+   continue to hit the renderer. No cream controls card or scrolling dock. */
+.fw-arcade-root.fw-arcade-toy-console .fullscreen-game.fullscreen-game--integrated:has(>.daily-stamp){width:100%;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-scene.daily-stamp,
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-play-layout{width:100%;height:100%;margin:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-stage-wrap{position:relative;display:block;width:100%;max-width:none;height:100%;padding:0;gap:0;border:0;border-radius:0;box-shadow:none;background:var(--ad-bg)}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-scene-viewport{position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-stage{inset:0;width:100%;height:100%}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-scene-top{position:absolute;inset:0;z-index:4;display:block;height:100%;max-height:none;padding:0;overflow:visible;pointer-events:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp button.daily-icon{position:static;width:44px;min-width:44px;height:44px;min-height:44px;padding:0;font-size:1rem;line-height:1;border-radius:12px;background:var(--ad-surface);pointer-events:auto}
+/* Keep Pause in this owner's lower-left tool cluster, including normal mode. */
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-toolbar{position:static;display:block;width:0;height:0;padding:0;pointer-events:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-toolbar>button{position:absolute;top:max(10px,var(--game-safe-top));left:max(8px,var(--game-safe-left))}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-toolbar>button:nth-child(2){left:calc(max(8px,var(--game-safe-left)) + 50px)}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-toolbar>button:nth-child(3){position:absolute;top:max(10px,var(--game-safe-top));left:calc(max(8px,var(--game-safe-left)) + 100px);right:auto;bottom:auto}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-toolbar>button:nth-child(4){position:absolute;top:auto;left:calc(max(8px,var(--game-safe-left)) + 86px);right:auto;bottom:max(16px,var(--game-safe-bottom))}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-game-title{position:absolute;top:calc(max(10px,var(--game-safe-top)) + 58px);right:max(12px,var(--game-safe-right));display:block;margin:0;max-width:none;padding:0}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-counter,
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-stamp-goal,
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-stamp-facts{display:block;width:max-content;max-width:none;padding:4px 6px;border:1px solid var(--ad-line);border-radius:10px;background:var(--ad-surface);color:var(--ad-ink);font-size:.875rem;font-weight:800;line-height:1.4;white-space:nowrap;font-variant-numeric:tabular-nums;box-shadow:0 2px 7px #49362f25}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-stamp-goal{position:absolute;top:calc(max(10px,var(--game-safe-top)) + 58px);left:max(8px,var(--game-safe-left))}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-stamp-facts{position:absolute;bottom:calc(max(16px,var(--game-safe-bottom)) + 58px);left:max(8px,var(--game-safe-left));font-weight:600}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-controls,
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-action-area{position:absolute;inset:0;z-index:2;display:block;width:100%;height:100%;max-height:none;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:none;overflow:visible;pointer-events:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-action-area>.fw-arcade-stamp-button{position:absolute;right:max(12px,var(--game-safe-right));bottom:max(16px,var(--game-safe-bottom));display:flex;flex-direction:column;align-items:center;gap:4px;width:104px;min-width:104px;min-height:76px;padding:6px;font-size:.875rem;line-height:1.3;border-radius:22px;background:var(--ad-accent);color:#fff9ed;border:2px solid var(--ad-line);box-shadow:0 4px 0 #49362f66;pointer-events:auto}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-stamp-button svg{width:26px;height:26px;flex:0 0 26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-scene-mode{position:absolute;z-index:4;left:max(8px,var(--game-safe-left));bottom:max(16px,var(--game-safe-bottom));width:80px;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-scene-mode button{width:100%;min-height:48px;padding:4px;font-size:.875rem;line-height:1.3;background:var(--ad-surface)}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-stage-cover{z-index:3;inset:calc(max(10px,var(--game-safe-top)) + 112px) max(12px,var(--game-safe-right)) calc(max(16px,var(--game-safe-bottom)) + 100px) max(8px,var(--game-safe-left));display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:8px;padding:12px;overflow:hidden;background:#fff9edf5}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-stamp-overlay-copy{min-height:0;flex:0 1 auto;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-stamp-overlay-copy strong{display:block;font-size:1.125rem;line-height:1.4;color:var(--ad-ink)}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .daily-stamp-overlay-copy p{color:var(--ad-ink);font-size:1rem;line-height:1.5;margin:8px 0;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-stage-cover>button{flex:0 0 auto;min-height:44px;margin:0}
+@media(orientation:landscape) and (max-height:540px){
+ .fw-arcade-root.fw-arcade-toy-console .daily-stamp .fw-arcade-stage-cover{inset:calc(max(10px,var(--game-safe-top)) + 54px) calc(max(12px,var(--game-safe-right)) + 112px) max(16px,var(--game-safe-bottom)) calc(max(8px,var(--game-safe-left)) + 176px)}
+}

@@ -209,3 +209,84 @@ the exact previous source and pass against the candidate, without simulating
 browser geometry. The same seven official browser cases and 25 expected PNGs
 must still execute and be inspected on the next exact candidate; SVG and reentry
 were not reached in this failed run, and local process tests do not verify them.
+
+## Exact-head mushroom guide regression, 2026-11-08 UTC
+
+Draft #1310 head `7f25d1e99c26a9e068ccfc52e4b1038e28184406` was tested by
+[Verify 42508072805](https://github.com/FreeTWAI/freedom-platform/actions/runs/42508072805),
+base `242dbd400a28c283fc684f5b6cbf11070769baae`, integration candidate
+`eb52519bd4e7cb34c58f62baa69d651d717cbfc6`. UI shard 1 failed with
+774 passed, 57 failed and 5 timed out (62 nonpasses), zero skipped/flaky. Two failures were these mushroom art
+journeys; the other 60 were Party cases and are outside this repair.
+Artifact `13630154941` (118684647 bytes, SHA-256
+`e28bd4b3e475ffc16a787ade7c0e9c83cc16a4871107a8de2a214a5c5c988ae6`)
+contains the real browser PNGs and traces, not renderer-only previews.
+
+Both mushroom cases failed before the first gesture at the vertical guide's
+`toBeVisible()`. Their traces resolve the correct `M… 175V364` dashed path,
+with stroke widths 6 and no hiding CSS on its guide owner. Actual whole-stage
+PNGs show the guide. SVG's path geometry rectangle excludes stroke, so a vertical
+line has zero geometric width even while painted. This was an invalid visibility
+measurement; it does not establish a missing product guide or a cut-model defect.
+
+The repair preserves the exact guide coordinates and original journeys. It checks
+the SVG owner's visibility, exact stroke color/width, inherited paint visibility
+and opacity, 189-unit path length, transformed painted bounds within both owner
+and viewport, and three actual dash-center stroke/input-owner samples. Real
+mouse-down, move and mouse-up still have to advance the real recipe count.
+Hidden, transparent, empty and non-finite observations fail the diagnostic contract.
+
+An independent review of the initial `c800e384` candidate found that its observer
+ignored masking and ancestor clips. The replacement observer fails closed for
+clip-path, masks, filters (including SVG filter URLs), legacy clip, blending and
+unsupported transforms. Current guide ancestry uses no filter; the existing
+viewfinder's unrelated drop-shadow remains unchanged. Overflow/paint-containment
+ancestors are checked using their client clip rectangles and conservative corner
+radius insets. Unknown clip margins or radius expressions fail closed rather than
+being guessed. The original `c800e384` candidate is not the final repair.
+
+CPU fixtures invoke the actual exported observer, including negative effects and
+ancestor clipping. They inspect current production styles to bind their allowed
+translation, overflow and corner-radius cases; the DOM/geometry boundary remains
+mocked and is not browser evidence. Both original mushroom browser journeys also
+apply clip-path, transparent mask, opacity filter and a one-pixel clipping ancestor
+to the actual native/SVG elements and require rejection. Measurement and original
+style restoration run synchronously in one browser evaluation, including its error
+path, so ResizeObserver cannot consume temporary probe geometry. The restored
+guide is rechecked before real cuts. These new negative probes are authored for
+formal CI, not locally executed.
+
+Hit samples establish that the underlying cooking scene receives input, not that
+all composited guide pixels are unobscured. In particular, a pointer-events:none
+sibling, same-scene overlay or pseudo-element can cover paint without changing
+those hits. The guard is not universal occlusion, contrast or visual-acceptance
+proof. Actual PNGs and human pixel review remain required for that boundary.
+Pause/resume, SVG polygon intersections/gaps, native resource limits and native
+late-cut checkpoints remain. Both mushrooms add first-cut and late-SVG full-stage
+PNG buffers for the next official run. No production geometry, scoring, recipes,
+input region, 44px bounds, timeout, skip, workflow or test selection is changed.
+
+Visual inspection of this exact failing head is **not acceptance**. The native
+whole mushroom has a smooth, broad dome with very little visible stalk and dark
+wedges at its side edges. At 320px, the food is small, with large empty bands above
+and below the board and a separately boxed bottom control panel. Both tests stop
+before any cut, so this artifact has no mushroom first/late-cut or SVG images;
+those views cannot be judged from the older head's results or CPU geometry tests.
+
+All four `MK-1` Market cases passed on this head with retry 0. They deliberately
+use the supported SVG fallback, not native Three rendering. The new 667×375,
+200%-text normal-mode PNGs show contained heat/action rows, but the tool tab's
+text is clipped at the right edge and some instructions are ellipsized. The
+320×568 200%-text rice image has a small food area and cropped status/reaction
+text. Passing bounds and real heat-change checks do not establish readable
+composition or native-model/art acceptance. The 200% landscape phase uses zero
+synthetic insets, not 200% text combined with nonzero insets.
+
+The repaired browser journeys and their new PNGs remain pending formal CI.
+Local pure tests, typecheck, build and collection cannot replace that run.
+Separately inspected native `UX-16` Market PNGs show real Three food and cookware,
+but retain a blue HUD and a separate cream dock. The narrow rice/corn-dog views
+crop parts of the tool content; those images do not establish a continuous
+full-scene composition or human playability acceptance.
+No local browser/socket retry, alternate browser route, dependency installation,
+publication, merge or deployment is part of this isolated repair.

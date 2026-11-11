@@ -1,12 +1,141 @@
-.fw-arcade-toy-console .mk-game{color:#3b2c22;max-width:1240px;margin:auto}.fw-arcade-toy-console .mk-heading{display:flex;align-items:center;gap:14px;margin:8px 0 18px}.fw-arcade-toy-console .mk-heading>div{flex:1;min-width:0}.fw-arcade-toy-console .mk-heading h1{font-size:clamp(23px,3vw,34px);margin:0;line-height:1.3}.fw-arcade-toy-console .mk-heading p{margin:0;color:#715844;font-size:14px}.fw-arcade-toy-console .mk-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}.fw-arcade-toy-console .mk-main{min-width:0;background:#2d221b;border-radius:22px;overflow:hidden;color:#fff0d0;box-shadow:0 12px 30px #49332120}.fw-arcade-toy-console .mk-hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:15px 15px 8px}.fw-arcade-toy-console .mk-hud>div{min-width:0;border:1px solid #ffffff25;border-radius:12px;padding:8px 10px;background:#4b3b2a}.fw-arcade-toy-console .mk-hud span{display:block;font-size:14px;color:#ecdbc2}.fw-arcade-toy-console .mk-hud strong{font-size:22px;line-height:1.3;display:block;font-variant-numeric:tabular-nums}.fw-arcade-toy-console .mk-hud small{font-size:14px}.fw-arcade-toy-console .mk-hud meter{width:100%;height:7px;display:block;margin-top:4px}.fw-arcade-toy-console .mk-surface{position:relative;aspect-ratio:6/5;touch-action:none;outline-offset:-4px;scroll-margin-top:10px;isolation:isolate;background:#af7d4a}.fw-arcade-toy-console .mk-canvas{position:absolute;inset:0}.fw-arcade-toy-console .mk-canvas canvas{display:block;width:100%;height:100%;object-fit:contain}.fw-arcade-toy-console .mk-cover{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px;background:#241c15bf;backdrop-filter:blur(3px);color:#fff3d7;gap:12px;overflow:auto}.fw-arcade-toy-console .mk-cover>span{font-size:14px;color:#e8c37b}.fw-arcade-toy-console .mk-cover h2{font-size:clamp(24px,4vw,40px);line-height:1.25;margin:0}.fw-arcade-toy-console .mk-cover p{margin:0;max-width:30ch;line-height:1.65;font-size:16px}.fw-arcade-toy-console .mk-cover button{margin-top:10px;background:#f1c66f;color:#392b1c;border-color:#f6d68e;padding:14px 24px}.fw-arcade-toy-console .mk-surface-hint{position:absolute;bottom:12px;left:12px;right:12px;width:fit-content;margin:auto;border:1px solid #fff2c640;border-radius:20px;padding:4px 12px;color:#fff1d4;background:#34251dd9;font-size:14px;pointer-events:none}.fw-arcade-toy-console .mk-instruction{font-size:16px;padding:12px 16px;margin:0;min-height:72px;line-height:1.6;background:#32251b;color:#fff0cf}.fw-arcade-toy-console .mk-heat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 16px 16px}.fw-arcade-toy-console .mk-heat button{min-width:44px;background:#f7e4bb;color:#412f1e;border-color:#b19664;border-radius:11px;padding:7px 12px}.fw-arcade-toy-console .mk-heat button[aria-pressed=true]{background:#f0b75a;box-shadow:inset 0 0 0 2px #693c20}.fw-arcade-toy-console .mk-heat>span{font-size:14px;color:#f3dfbb}.fw-arcade-toy-console .mk-heat>span:last-child{flex:1;min-width:130px;text-align:right}.fw-arcade-toy-console .mk-tray{background:#fff9ea;border:1px solid #d7c6a4;padding:16px;border-radius:20px;min-width:0}.fw-arcade-toy-console .mk-tray-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.fw-arcade-toy-console .mk-tray h2{font-size:16px;line-height:1.5;margin:0 0 10px}.fw-arcade-toy-console .mk-tray-heading>span{font-size:14px;white-space:nowrap}.fw-arcade-toy-console .mk-ingredients{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.fw-arcade-toy-console .mk-ingredients button{padding:6px 4px;display:flex;flex-direction:column;align-items:center;background:#f2e6cc;color:#432f20;border:1px solid #d7c298;border-radius:12px;gap:1px;min-width:0;box-shadow:0 3px 0 #bca77b40}.fw-arcade-toy-console .mk-ingredients svg{width:56px;height:42px;max-width:100%}.fw-arcade-toy-console .mk-ingredients strong,.fw-arcade-toy-console .mk-ingredients small{font-size:14px}.fw-arcade-toy-console .mk-piece{display:block;margin-top:16px;font-size:14px}.fw-arcade-toy-console .mk-piece select{display:block;width:100%;min-height:44px;font-size:16px;margin-top:5px;background:#fff8e8;color:#483321;border:1px solid #ae9670;border-radius:10px;padding:6px}.fw-arcade-toy-console .mk-tools,.fw-arcade-toy-console .mk-sauces{border-top:1px solid #ddcfb2;margin-top:18px;padding-top:16px}.fw-arcade-toy-console .mk-tools>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.fw-arcade-toy-console .mk-tools button{border-radius:10px;font-size:14px;padding:10px 8px;background:#d5a156;color:#392615;border-color:#9c6c32}.fw-arcade-toy-console .mk-tools button.fw-arcade-secondary{background:#f8efdb}.fw-arcade-toy-console .mk-sauces>div{display:flex;gap:6px;flex-wrap:wrap}.fw-arcade-toy-console .mk-sauces button{border-radius:10px;padding:8px;font-size:14px;background:#fbf4e3;color:#43301e;border:1px solid #c7ad7f}.fw-arcade-toy-console .mk-sauces button[aria-pressed=true]{outline:2px solid #8b4b28;outline-offset:1px;background:#eed4a4}.fw-arcade-toy-console .mk-sauces i{display:inline-block;width:12px;height:18px;border-radius:4px;margin-right:5px;vertical-align:middle}.fw-arcade-toy-console .mk-sauces p{font-size:14px;margin:10px 0}.fw-arcade-toy-console button.mk-serve{margin-top:18px;width:100%;background:#b84a29;color:#fff4d6;border-color:#873d23;border-radius:12px;padding:13px;font-size:16px;box-shadow:0 4px 0 #7d351c}.fw-arcade-toy-console .mk-help{font-size:14px;margin-top:18px}.fw-arcade-toy-console .mk-help summary{cursor:pointer;min-height:44px;display:flex;align-items:center;list-style:revert}.fw-arcade-toy-console .mk-help p{font-size:14px;line-height:1.7}.fw-arcade-toy-console .mk-error{background:#fff0d6;color:#583819;padding:16px;border:1px solid #caab78;border-radius:12px;margin:12px 0}.fw-arcade-toy-console .mk-error p{font-size:14px;margin:0 0 8px}.fw-arcade-toy-console .mk-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;color:#3b291a}.fw-arcade-toy-console .mk-fallback p{font-size:14px}.fw-arcade-toy-console .mk-fallback>div{display:flex;flex-wrap:wrap;gap:6px}.fw-arcade-toy-console .mk-fallback span{border-radius:18px;padding:8px 12px;color:#241c14;font-size:14px;border:1px solid #4b322640}.fw-arcade-toy-console .mk-confirm{position:fixed;inset:0;background:#fff6e8;z-index:20;margin:auto;width:min(90vw,420px);height:fit-content;max-height:90dvh;overflow:auto;border:3px solid #65482e;box-shadow:0 0 0 100vmax #261c15b8;padding:24px;border-radius:18px;display:grid;gap:12px}.fw-arcade-toy-console .mk-live-score{display:block;font-size:14px;color:#715842;text-align:center;padding:16px}.fw-arcade-toy-console .mk-game button:disabled{opacity:.5;cursor:default}.fw-arcade-toy-console .mk-game :focus-visible{outline:3px solid #be4827;outline-offset:3px}
-@media(max-width:900px){.fw-arcade-toy-console .mk-layout{grid-template-columns:minmax(0,1fr)}.fw-arcade-toy-console .mk-tray{padding:16px}.fw-arcade-toy-console .mk-ingredients{grid-template-columns:repeat(5,minmax(0,1fr))}.fw-arcade-toy-console .mk-surface{aspect-ratio:6/5;max-height:none}.fw-arcade-toy-console .mk-tools>div{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:480px){.fw-arcade-toy-console .mk-heading{gap:8px}.fw-arcade-toy-console .mk-heading button{padding:8px 10px;font-size:14px}.fw-arcade-toy-console .mk-hud{padding:10px 8px 6px;gap:5px}.fw-arcade-toy-console .mk-hud>div{padding:6px}.fw-arcade-toy-console .mk-hud strong{font-size:20px}.fw-arcade-toy-console .mk-ingredients{grid-template-columns:repeat(3,minmax(0,1fr))}.fw-arcade-toy-console .mk-tools>div{grid-template-columns:repeat(2,minmax(0,1fr))}.fw-arcade-toy-console .mk-tray{padding:12px}.fw-arcade-toy-console .mk-heading p{max-width:16ch}.fw-arcade-toy-console .mk-heat{gap:6px;padding:0 10px 12px}.fw-arcade-toy-console .mk-cover{padding:15px}.fw-arcade-toy-console .mk-cover p{font-size:14px}.fw-arcade-toy-console .mk-main{border-radius:15px}}
-@media(max-width:360px){.fw-arcade-toy-console .mk-hud{grid-template-columns:repeat(2,minmax(0,1fr))}.fw-arcade-toy-console .mk-heading{flex-wrap:wrap}.fw-arcade-toy-console .mk-heading>div{order:-1;flex-basis:100%}.fw-arcade-toy-console .mk-heat>span:last-child{text-align:left}.fw-arcade-toy-console .mk-surface{aspect-ratio:1/1}}
-@media(prefers-reduced-motion:reduce){.fw-arcade-toy-console .mk-game *{scroll-behavior:auto;transition:none}}
-.fw-arcade-toy-console .mk-surface:has(.mk-cover){aspect-ratio:auto}.fw-arcade-toy-console .mk-cover{position:relative;inset:auto;min-height:400px;height:auto}.fw-arcade-toy-console .mk-hud{grid-template-columns:repeat(auto-fit,minmax(min(100%,5.5em),1fr))}.fw-arcade-toy-console .mk-hud strong{display:flex;align-items:baseline;gap:2px;flex-wrap:wrap}.fw-arcade-toy-console .mk-confirm::backdrop{background:#261c15b8}
-
-.fw-arcade-root.fw-arcade-toy-console .mk-coating{grid-column:1/-1;display:grid;gap:6px;min-width:0}
-.fw-arcade-root.fw-arcade-toy-console .mk-coating button{min-height:44px;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-.fw-arcade-root.fw-arcade-toy-console .mk-coating small{font-size:14px;line-height:1.6}
-.fw-arcade-root.fw-arcade-toy-console .mk-coating-progress{height:8px;border-radius:6px;background:#ddcfb2;overflow:hidden}
-.fw-arcade-root.fw-arcade-toy-console .mk-coating-progress span{display:block;height:100%;background:#b84a29}
+/* One workbench, including the presentation controls owned by FullscreenGame.
+   Grid tracks reserve actual HUD/dock height. Explicit zero-minimum columns
+   keep palette min-content widths from widening the portrait workbench. No absolute control overlays the
+   live 6:5 hit-test rectangle; only paused/ready overlays cover inert content. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market {
+ display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:0;position:relative;
+ height:min(900px,100dvh);min-height:0;box-sizing:border-box;overflow:hidden;padding:var(--game-safe-top) var(--game-safe-right) var(--game-safe-bottom) var(--game-safe-left);
+ background:#b58354;border:2px solid #7f634d;border-radius:18px;
+}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market:is(:fullscreen,.fullscreen-game--viewport){position:fixed;inset:0;width:100%;height:100dvh;min-height:0;border:0;border-radius:0;padding:var(--game-safe-top) var(--game-safe-right) var(--game-safe-bottom) var(--game-safe-left)}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__bar{position:relative;inset:auto;max-width:none;min-height:44px;padding:4px 8px;gap:4px;background:#29476a;flex-wrap:wrap;border:0;z-index:2}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__button{min-width:44px;min-height:44px;padding:6px 10px;margin:0;flex:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__button span{font-size:20px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help summary{min-width:44px;justify-content:center;color:#fff9eb}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help[open]{flex:1 1 100%}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help p{position:static;width:auto;margin:0;padding:6px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);width:100%;height:100%;max-width:none;min-height:0;margin:0;overflow:hidden;background:#b58354;color:#392f2c}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading{display:flex;flex-wrap:nowrap;gap:4px;margin:0;padding:4px 8px;border:0;border-radius:0;box-shadow:none;background:#29476a}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading:after{display:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading h1{flex:1;min-width:0;margin:0;font-size:16px;line-height:1.4;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive button{min-height:44px;min-width:44px;line-height:1.4;font-size:14px;flex-shrink:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading button{padding:6px 8px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-workbench{position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);min-width:0;min-height:0;overflow:hidden}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-play-space{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(44px,1fr) auto;min-width:0;min-height:0;overflow:hidden}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{display:flex;gap:6px;overflow:auto;overscroll-behavior:contain;padding:4px 8px;border:0;border-radius:0;background:#29476a}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud>div{display:flex;align-items:baseline;gap:4px;min-width:max-content;padding:0 6px 0 0;border:0;background:transparent}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud span,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud strong,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud small{font-size:14px;line-height:1.6;white-space:nowrap}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud meter{display:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-view{container-type:size;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;overflow:hidden;background:#b58354}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-surface{position:relative;width:min(100cqw,120cqh);height:auto;min-height:0;max-height:none;aspect-ratio:6/5;margin:0;border:0;background:#b58354;scroll-margin:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-surface-hint{bottom:4px;left:4px;right:4px;max-width:calc(100% - 8px);padding:2px 8px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{min-height:0;max-height:none;min-width:0;overflow:hidden;overscroll-behavior:contain;padding:6px 8px;margin:0;border:0;border-top:2px solid #7f634d;border-radius:0;background:#e7b97e;box-shadow:none;scroll-padding:6px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch{display:flex;gap:6px;align-items:center;overflow:auto;margin-bottom:4px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch button{color:#574135;background:#fffbed;border-color:#7f634d;padding:6px 10px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch [aria-pressed=true]{background:#f4cf70;box-shadow:inset 0 -3px 0 #b58b45}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette[hidden]{display:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-ingredients{display:flex;gap:6px;overflow:auto;padding:2px 2px 6px;overscroll-behavior:contain}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-ingredients button{flex-direction:row;gap:4px;min-width:112px;padding:4px 6px;box-shadow:none;border-width:1px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-ingredients svg{width:36px;height:32px;flex-shrink:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-ingredients strong{font-size:14px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-ingredients small{font-size:14px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tools,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-sauces{margin:0;padding:4px 0;border:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tools h2,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-sauces h2{font-size:14px;margin:0 0 4px;line-height:1.6}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tools>div,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-sauces>div{display:flex;flex-wrap:nowrap;align-items:start;gap:6px;overflow:auto;padding:2px 2px 5px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-coating{flex:none;max-width:160px;display:grid;gap:3px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-coating small{font-size:14px;line-height:1.6}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-piece{margin:4px 0;font-size:14px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-piece select{margin:2px 0;width:100%;max-width:100%;font-size:16px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat{display:flex;flex-wrap:nowrap;overflow:auto;align-items:center;gap:4px;padding:2px 0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span{flex-shrink:0;color:#392f2c;font-size:14px;min-width:0;white-space:nowrap}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span:last-child{min-width:max-content}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-serve{margin:4px 0;padding:8px;min-width:0;box-shadow:none;white-space:normal;overflow-wrap:anywhere}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-instruction,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-live-score{min-height:0;margin:0;padding:6px 0;font-size:14px;line-height:1.6;background:transparent;color:#392f2c;text-align:left}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover{position:absolute;inset:0;z-index:3;display:block;min-height:0;height:auto;padding:12px;overflow:auto;overscroll-behavior:contain;background:#241c1566;backdrop-filter:blur(2px)}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover .sg-intro-copy{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:10px;width:min(100%,480px);min-width:0;margin:auto;padding:16px;border:1px solid #7f634d;border-radius:16px;overflow:hidden;box-sizing:border-box}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover h2{font-size:22px;line-height:1.4;overflow-wrap:anywhere}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover p{font-size:14px;line-height:1.6;max-width:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover button{align-self:stretch;flex-shrink:0;min-width:0;width:100%;margin:0;padding:10px;white-space:normal;overflow-wrap:anywhere;box-shadow:none;font-size:16px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-notices{max-height:32cqh;overflow:auto;min-height:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-error{padding:8px;margin:4px 0;border-radius:8px;font-size:14px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-error button{max-width:100%;white-space:normal}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-fallback{position:absolute;inset:0;display:block;padding:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-illustration{display:block;width:100%;height:100%}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-confirm{width:min(440px,calc(100vw - max(12px,var(--game-safe-left)) - max(12px,var(--game-safe-right))));max-height:calc(100dvh - max(12px,var(--game-safe-top)) - max(12px,var(--game-safe-bottom)));inset:var(--game-safe-top) var(--game-safe-right) var(--game-safe-bottom) var(--game-safe-left);padding:16px;box-sizing:border-box;overflow:auto;display:block}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-confirm button{display:block;width:100%;margin:8px 0;white-space:normal}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive[data-market-status=ready] .mk-hud{display:flex}
+/* Keep fire, the primary gesture equivalent and serving available while browsing
+   any palette. Max-content action rows cannot compress a scrollable heat/palette
+   row below its buttons. Only the secondary palette scrolls vertically; it never
+   overlays the food. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:max-content minmax(44px,1fr) max-content max-content;gap:3px;overflow:hidden}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-scroll{height:clamp(44px,12dvh,120px);min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;scroll-padding:4px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch{margin:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch button{padding:5px 8px;white-space:nowrap}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-primary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;min-width:0}
+/* This shared row spacing must also override the older .mk-immersive .mk-serve rule. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-primary button{min-width:44px;white-space:normal;overflow-wrap:anywhere;margin:0;padding:6px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span:last-child{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-live-score{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive[data-market-status=ready] .mk-tray{display:grid}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__button::before,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help summary::before{display:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help summary{font-size:20px;background:#fff9ea;color:#49362f}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market>.fw-arcade-result{padding:12px;min-height:0;height:100%;overflow:auto}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-canvas{position:absolute;inset:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-canvas canvas{display:block;width:100%;height:100%;object-fit:contain}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-surface{touch-action:none;outline-offset:-4px;isolation:isolate}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-surface-hint{position:absolute;pointer-events:none;margin:auto;width:fit-content;color:#fff1d4;background:#34251de8;border-radius:14px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-confirm{position:fixed;inset:0;margin:auto;background:#fff6e8;color:#392f2c;border:2px solid #7f634d;border-radius:16px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-confirm::backdrop{background:#261c15b8}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-confirm p{font-size:14px;line-height:1.6}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-coating button{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-coating-progress{height:8px;background:#ddcfb2;border-radius:6px;overflow:hidden}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-coating-progress span{display:block;height:100%;background:#b84a29}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive button:disabled{opacity:.55;cursor:default}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive :focus-visible{outline:3px solid #be4827;outline-offset:-3px}
+@media(prefers-reduced-motion:reduce){.mk-immersive *{scroll-behavior:auto;transition:none}}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-status-copy{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market .fullscreen-game__button:nth-child(n){font-size:14px;width:44px;flex:0 0 44px;padding:6px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market .fullscreen-game__mode-help[open]{width:auto}
+/* Feedback lives in the scrollable palette, not in a track that can squeeze the
+   cooking rectangle. The fire and primary-action tracks size to enlarged text and never scroll away.
+   Portrait palette height is bounded; the dock row takes its actual natural height. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-instruction{position:static;width:auto;height:auto;min-width:0;overflow:visible;clip-path:none;line-height:1.6;padding:2px 4px;margin:0 0 4px;background:#fff6e8;color:#392f2c}
+@media(min-width:760px),(min-width:560px) and (max-height:500px){
+ /* Share the real top row at wide/short sizes. display:contents preserves the
+    section's DOM/modal ownership, while the parent grid reserves both toolbars. */
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market{grid-template-columns:auto minmax(0,1fr)}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__bar{grid-column:1;grid-row:1;max-width:156px;align-content:center}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive{display:contents}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading{grid-column:2;grid-row:1;align-items:center}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-workbench{grid-column:1/-1;grid-row:2}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-scroll{height:auto}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market>.fw-arcade-result{grid-column:1/-1;grid-row:2}
+ /* Keep the ordinary 240px dock, but let its minimum grow with enlarged text.
+    Otherwise the compact Serve label wraps and steals height from the heat row. */
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-play-space{grid-template-columns:minmax(0,1fr) minmax(max(240px,9em),30%);grid-template-rows:auto minmax(44px,1fr)}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{grid-column:1/-1}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{grid-column:2;grid-row:2;border-top:0;border-left:2px solid #7f634d}
+}
+/* A narrow CSS viewport also occurs under browser zoom. Keep the action rows
+   intact; only secondary content scrolls. The HUD remains in the accessibility
+   tree and the current fire selection remains visible. */
+@media(max-width:260px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading{display:grid;grid-template-columns:repeat(4,minmax(44px,1fr));gap:2px;padding:2px}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading h1{grid-column:2/-1;grid-row:1}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading button:first-child{grid-column:1;grid-row:1}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading button:not(:first-child){grid-row:2}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-play-space{grid-template-rows:minmax(44px,1fr) auto}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{padding:2px;gap:2px}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-scroll{height:44px}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat{gap:2px}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__bar>span:empty{display:none}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat button{padding:4px;min-width:44px;flex:1 0 44px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span:first-child{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+@media(max-width:759px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market:not(:fullscreen):not(.fullscreen-game--viewport){width:100vw;margin-inline:calc(50% - 50vw);border-radius:0}
+}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market>.ck-empty{grid-column:1/-1;grid-row:2;min-height:0;overflow:auto;margin:0}
