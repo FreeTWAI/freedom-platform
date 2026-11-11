@@ -258,8 +258,17 @@ test('abort while waiting to poll leaves enrollment unconsumed and sends no retr
 
 for (const kind of ['unknown', 'extra', 'duplicate', 'redirect', 'bytes', 'chunks', 'length', 'utf8', 'hang', 'encoding', 'content_coding'] as const)
 test('response boundary rejects '+kind+' without retaining secret output', async () => {
-  let headerBodyReads = 0;
-  const f = await machine(async (_request, send) => {
+  let headerBodyReads = 0, hangingBodyReads = 0;
+  let value: Record<string, unknown> = {};
+  if (['extra', 'duplicate', 'length', 'encoding'].includes(kind)) {
+    // Capture and validate a genuine begin DTO with the default-deadline client
+    // before starting the separate 250ms response-boundary request.
+    const fixture = await machine(async (_request, send) => {
+      const response = await send(); value = await response.clone().json(); return response;
+    });
+    try { await fixture.client.begin(); } finally { fixture.client.close(); }
+  }
+  const f = await machine(async () => {
     // This synthetic chunk boundary does not use the server response. Keep
     // unrelated HTTP/SQL work outside the unchanged 250ms response deadline.
     if (kind === 'chunks') return new Response(new ReadableStream({ start(controller) {
@@ -273,7 +282,6 @@ test('response boundary rejects '+kind+' without retaining secret output', async
       Object.defineProperty(response, 'body', { get() { headerBodyReads++; return body; } });
       return response;
     }
-    const response = await send(), value = await response.json();
     if (kind === 'unknown') return json({ status: 'invented', operational_authority: false }, 201);
     if (kind === 'extra') return json({ ...value, unexpected: 'secret diagnostic' }, 201);
     if (kind === 'duplicate') return new Response(JSON.stringify(value).replace('"operational_authority":false', '"operational_authority":true,"operational_authority":false'), { status: 201, headers: { 'Content-Type': 'application/json' } });
@@ -282,11 +290,12 @@ test('response boundary rejects '+kind+' without retaining secret output', async
     if (kind === 'length') return new Response(JSON.stringify(value), { status: 201, headers: { 'Content-Type':'application/json', 'Content-Length':'1' } });
     if (kind === 'utf8') return new Response(new Uint8Array([0xff]), { status: 201, headers: { 'Content-Type':'application/json' } });
     if (kind === 'encoding') return new Response(JSON.stringify(value), { status: 201, headers: { 'Content-Type':'text/html' } });
-    if (kind === 'hang') return new Response(new ReadableStream({ start() {} }), { status: 201, headers: { 'Content-Type':'application/json' } });
+    if (kind === 'hang') return new Response(new ReadableStream({ pull() { hangingBodyReads++; } }, { highWaterMark: 0 }), { status: 201, headers: { 'Content-Type':'application/json' } });
     assert.fail('Unhandled response boundary fixture');
   }, { requestTimeoutMs: 250 });
   await rejects(f.client.begin(), kind === 'hang' ? 'aborted' : 'response_invalid');
   if (kind === 'content_coding') assert.equal(headerBodyReads, 0, 'Unsupported content coding must fail before reading the body');
+  if (kind === 'hang') assert.equal(hangingBodyReads, 1, 'Abort must interrupt the pending body read');
   const calls = f.calls(); await rejects(f.client.begin(), 'client_unavailable'); assert.equal(f.calls(), calls);
 });
 
