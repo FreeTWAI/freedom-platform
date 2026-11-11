@@ -1889,3 +1889,33 @@ test('PT-BOUNDS: only the semantic compact playing title can use the exact sr-on
  title.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));title.style.clipPath='inset(50%)';
  present=false;assert.ok(inspect(root).includes('missing semantic game heading'));
 });
+
+test('PT-fullview: toolbar clears nonmodal heading while modal retains isolation (source regression)',()=>{
+ const css=readFileSync(new URL('../../apps/portal-web/src/games/party/party.css',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+ const z=(selector:string)=>{
+  const start=css.indexOf(`${selector}{`);assert.ok(start>=0,`missing stacking owner: ${selector}`);
+  const body=css.slice(start+selector.length+1,css.indexOf('}',start));
+  const value=body.match(/(?:^|;)\s*z-index\s*:\s*(\d+)\s*(?:;|$)/);assert.ok(value,`missing explicit stacking order: ${selector}`);
+  return Number(value[1]);
+ };
+ const toolbar=z('.fullscreen-game__bar'),heading=z('.pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-footer,.pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-heading');
+ assert.ok(toolbar>heading,'fullscreen controls must paint above the nonmodal heading hit box');
+ assert.ok(z('.pt-holiday-overlay:has(.pt-holiday-modal)')>toolbar,'modal overlay must remain above fullscreen controls');
+ assert.ok(heading>z('.pt-holiday-overlay'),'nonmodal tools and heading remain reachable above the cover');
+ // Stacking is not modal isolation: the actual toolbar is still made inert,
+ // restored on cleanup, and the dialog retains native top-layer modality.
+ assert.match(ui,/const prior=bar\?\.inert;if\(bar\)bar\.inert=true/);
+ assert.match(ui,/bar\.inert=prior\?\?false/);
+ assert.match(ui,/dialog\.showModal\(\)/);
+});
+
+test('PT-fullview: enlarged chair controls reserve intrinsic height and keep the named jump action (source regression)',()=>{
+ const css=readFileSync(new URL('../../apps/portal-web/src/games/party/party.css',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+ assert.match(css,/\.pt-holiday-stage\[data-party-state\] \.pt-controls\{[^}]*min-height:min-content(?:;|\})/);
+ assert.match(ui,/<button className="pt-primary-control" aria-label="跳一下！"[^>]*>跳<\/button>/);
+ // A compact painted word is not a smaller target or a different input action.
+ assert.match(ui,/className="pt-primary-control"[^>]*controlHandlers\(1,\{kind:'jump'\}\)/);
+ assert.match(css,/\.pt-chair-controls>\.pt-primary-control[^}]*min-width:44px;min-height:48px/);
+});

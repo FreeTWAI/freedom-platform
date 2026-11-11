@@ -49,7 +49,7 @@
  --holiday-safe-top:env(safe-area-inset-top,0px);--holiday-safe-right:env(safe-area-inset-right,0px);--holiday-safe-bottom:env(safe-area-inset-bottom,0px);--holiday-safe-left:env(safe-area-inset-left,0px);
  display:block;position:relative;isolation:isolate;width:100%;height:100dvh;min-height:0;max-width:none;margin:0;padding:0;border:0;border-radius:0;overflow:hidden;background:var(--pt-world-bg);color:var(--ad-ink);container-type:inline-size;
  &.fullscreen-game--viewport,&:fullscreen{position:fixed;inset:0;width:100%;height:100dvh;padding:0}
- .fullscreen-game__bar{position:absolute;left:calc(var(--holiday-safe-left) + 8px);top:calc(var(--holiday-safe-top) + 8px);z-index:5;display:flex;gap:4px;width:max-content;max-width:100%;min-height:44px;margin:0;padding:0;border:0;background:transparent;flex-wrap:nowrap}
+ .fullscreen-game__bar{position:absolute;left:calc(var(--holiday-safe-left) + 8px);top:calc(var(--holiday-safe-top) + 8px);z-index:6;display:flex;gap:4px;width:max-content;max-width:100%;min-height:44px;margin:0;padding:0;border:0;background:transparent;flex-wrap:nowrap}
  .fullscreen-game__bar>span:empty{display:none}
  .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{display:grid;place-items:center;width:44px;min-width:44px;min-height:44px;height:auto;padding:2px;flex:0 0 auto;font-size:20px;line-height:1.4;border:1px solid var(--ad-line);border-radius:12px;background:var(--ad-surface);color:var(--ad-ink);box-shadow:none}
  .fullscreen-game__button::before,.fullscreen-game__mode-help summary::before{display:none}
@@ -68,7 +68,7 @@
  .pt-holiday-world .pt-canvas canvas{display:block;width:100%;height:100%;position:relative;z-index:0}
  .pt-holiday-world .pt-canvas:focus-visible{outline:3px solid var(--ad-accent);outline-offset:-4px;box-shadow:none}
  .pt-gameplay-core{position:absolute;pointer-events:none;z-index:1}
- .pt-holiday-stage[data-party-state] .pt-controls{grid-row:4;z-index:2;display:flex;justify-content:center;align-items:center;gap:8px;min-width:0;min-height:0;padding:0;margin:0;border:0;background:transparent}
+ .pt-holiday-stage[data-party-state] .pt-controls{grid-row:4;z-index:2;display:flex;justify-content:center;align-items:center;gap:8px;min-width:0;min-height:min-content;padding:0;margin:0;border:0;background:transparent}
  .pt-lane-selector{display:grid;grid-template-columns:repeat(3,minmax(44px,1fr));gap:4px;min-width:0}
  .pt-lane-selector>button,.pt-chair-controls>.pt-primary-control,.pt-tofu-controls>.pt-drop{display:grid;place-items:center;width:auto;min-width:44px;min-height:48px;height:auto;padding:6px 10px;margin:0;border:1px solid var(--ad-line);border-radius:12px;background:var(--ad-surface);color:var(--ad-ink);box-shadow:0 4px 16px #00000012;font-size:.875rem;line-height:1.4;white-space:normal}
  .pt-lane-selector>button[aria-pressed=true]{border-color:var(--ad-accent);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.2em;box-shadow:inset 0 0 0 1px var(--ad-accent)}
@@ -159,7 +159,7 @@
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
  .pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-footer,.pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-heading{z-index:5}
  .pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-overlay{padding-bottom:calc(var(--pt-footer-height,100px) + var(--game-safe-bottom,var(--holiday-safe-bottom)) + 20px)}
- .pt-holiday-overlay:has(.pt-holiday-modal){z-index:6}
+ .pt-holiday-overlay:has(.pt-holiday-modal){z-index:7}
 }
 /* Symbol tools keep their complete enlarged glyphs in a real 44px-wide target;
    removing decorative side padding avoids an unnecessary second phone row. */

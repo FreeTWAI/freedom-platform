@@ -26,7 +26,7 @@ async function openChairScene(page:Page,light:boolean,rejected:boolean){
   expect(await page.locator('.pt-chair-controls').evaluate(el=>!el.closest('.pt-canvas')&&!!el.closest('.pt-chair-stage'))).toBe(true);
   await expect(page.getByRole('button',{name:/往左換路|往右換路/})).toHaveCount(0);
   await expect(page.locator('.pt-chair-controls')).not.toContainText(/[←↑→↓]/);
-  await expect(page.locator('.pt-chair-controls button')).toHaveText(['1道','2道','3道','跳一下']);
+  await expect(page.locator('.pt-chair-controls button')).toHaveText(['1道','2道','3道','跳']);
   await expect(page.getByRole('group',{name:'選擇跑道，每次換一條相鄰跑道',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'第 2 道',exact:true})).toHaveAttribute('aria-pressed','true');
 }

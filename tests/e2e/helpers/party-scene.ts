@@ -49,6 +49,12 @@ function partyFullViewportComposition(root:Element,textScale:number){
   const safe={left:outer.left+parseFloat(style.paddingLeft),top:outer.top+parseFloat(style.paddingTop),right:outer.right-parseFloat(style.paddingRight),bottom:outer.bottom-parseFloat(style.paddingBottom)};
   const contains=(a:{left:number;top:number;right:number;bottom:number},b:DOMRect)=>b.left>=a.left-1&&b.top>=a.top-1&&b.right<=a.right+1&&b.bottom<=a.bottom+1;
   const overlap=(a:DOMRect,b:DOMRect)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
+  // Failure-only evidence: preserve the exact measured rectangle and real hit
+  // owner, including its stacking ancestors; never substitute these for checks.
+  const describe=(el:Element|null):unknown=>el?{
+    tag:el.tagName,class:el.getAttribute('class'),label:el.getAttribute('aria-label'),rect:el.getBoundingClientRect().toJSON(),
+    layers:[el,el.parentElement,el.parentElement?.parentElement,el.parentElement?.parentElement?.parentElement].filter((node):node is Element=>!!node).map(node=>{const css=getComputedStyle(node);return {tag:node.tagName,class:node.getAttribute('class'),position:css.position,zIndex:css.zIndex,pointerEvents:css.pointerEvents,overflowX:css.overflowX,overflowY:css.overflowY};})
+  }:null;
   const compactTitle=(el:Element)=>{
     const css=getComputedStyle(el);
     return el.matches('.pt-holiday-heading h1')&&stage.dataset.partyState==='playing'&&matchMedia('(max-width:440px),(max-height:500px)').matches&&!!el.textContent?.trim()&&!el.closest('[aria-hidden="true"],[hidden]')&&el.checkVisibility()&&css.position==='absolute'&&css.width==='1px'&&css.height==='1px'&&css.overflowX==='hidden'&&css.overflowY==='hidden'&&/^inset\(50%(?: 50%){0,3}\)$/.test(css.clipPath)&&css.whiteSpace==='nowrap';
@@ -71,7 +77,7 @@ function partyFullViewportComposition(root:Element,textScale:number){
     if(!el.checkVisibility()||!contains(safe,b))bad.push(`control outside safe surface: ${name}`);
     if(b.width<44||b.height<44)bad.push(`small control: ${name}`);
     if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`clipped control content: ${name}`);
-    const hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(!hit||!el.contains(hit))bad.push(`covered control: ${name}`);
+    const hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(!hit||!el.contains(hit))bad.push(`covered control: ${name}; point=${JSON.stringify({x:b.x+b.width/2,y:b.y+b.height/2})}; expected=${JSON.stringify(describe(el))}; actual=${JSON.stringify(describe(hit))}`);
   }
   const chrome=[...boxes.map(item=>item.b),...Array.from(root.querySelectorAll('.pt-scoreboard,.pt-holiday-heading h1,.pt-holiday-feedback')).filter(el=>!compactTitle(el)).map(el=>el.getBoundingClientRect())];
   for(let i=0;i<chrome.length;i++)for(let j=i+1;j<chrome.length;j++)if(overlap(chrome[i],chrome[j]))bad.push(`overlapping chrome: ${i}/${j}`);
@@ -92,7 +98,7 @@ function partyFullViewportComposition(root:Element,textScale:number){
     // The light Holiday grid is the playable scene, not an obstructing HUD.
     const obstacles=[...boxes.filter(item=>!world.contains(item.el)).map(item=>item.b),...Array.from(root.querySelectorAll('.pt-scoreboard,.pt-holiday-heading h1,.pt-holiday-feedback')).filter(el=>!compactTitle(el)).map(el=>el.getBoundingClientRect())];
     if(obstacles.some(rect=>overlap(c,rect)))bad.push('gameplay core obscured by HUD or controls');
-    for(const x of [c.left+1,c.right-1])for(const y of [c.top+1,c.bottom-1]){const hit=document.elementFromPoint(x,y);if(!hit||!world.contains(hit))bad.push('gameplay corner not hit-testable');}
+    for(const x of [c.left+1,c.right-1])for(const y of [c.top+1,c.bottom-1]){const hit=document.elementFromPoint(x,y);if(!hit||!world.contains(hit))bad.push(`gameplay corner not hit-testable; point=${JSON.stringify({x,y})}; actual=${JSON.stringify(describe(hit))}`);}
   }
   if(canvas){
     const pixels=canvas.getBoundingClientRect();for(const key of ['x','y','width','height']as const)if(Math.abs(b[key]-pixels[key])>1)bad.push(`unaligned native pixels: ${key}`);
@@ -106,6 +112,12 @@ function partyFullViewportComposition(root:Element,textScale:number){
     }
   }
   for(const selector of ['.pt-holiday-tools-viewport','.pt-tools']){const el=root.querySelector<HTMLElement>(selector)!;if(el.scrollWidth>el.clientWidth+1||el.scrollHeight>el.clientHeight+1)bad.push(`scrolling tool strip: ${selector}`);}
+  if(bad.length)bad.push(`layout diagnostic: ${JSON.stringify({
+    viewport:{width:innerWidth,height:innerHeight},textScale,mode:stage.dataset.partyMode,state:stage.dataset.partyState,
+    owner:outer.toJSON(),safe,host:b.toJSON(),core:core?.getBoundingClientRect().toJSON()??null,
+    sceneInsets:Object.fromEntries(['top','bottom','left','right'].map(side=>[side,getComputedStyle(host).getPropertyValue(`--pt-scene-${side}`)])),
+    obstacles:[...boxes.filter(item=>!world.contains(item.el)).map(item=>item.el),...root.querySelectorAll('.pt-scoreboard,.pt-holiday-heading,.pt-holiday-feedback,.pt-controls,.pt-holiday-footer')].map(describe)
+  })}`);
   return bad;
 }
 
