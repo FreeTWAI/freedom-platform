@@ -428,3 +428,16 @@
   .pt-tools button[aria-pressed=true]{border-width:1px;box-shadow:inset 0 0 0 1px var(--ad-accent)}
  }
 }
+
+/* Distinct stage finishes; shared brand, flow, targets and contrast stay intact. */
+.pt-chair .pt-scoreboard{background:#192942;border-color:#45617a;color:#f5e8c9;border-radius:5px 5px 0 0}
+.pt-chair .pt-scoreboard small,.pt-chair .pt-scoreboard strong>span{color:#bddcdd}
+.pt-chair .pt-scoreboard>div+div{border-color:#45617a}
+.pt-chair .pt-scene-frame{background:#142039;border-color:#45617a}
+.pt-chair .pt-feedback{background:#243450;border-color:#45617a;color:#f4dc8b;border-radius:0 0 5px 5px}
+.pt-tofu .pt-scoreboard{background:#f3efe2;border-color:#9cac98;border-radius:3px 3px 0 0}
+.pt-tofu .pt-scene-frame{background:#dbe3d8;border-color:#9cac98}
+.pt-tofu .pt-feedback{background:#e1e8dc;border-color:#9cac98;color:#354f46;border-radius:0 0 3px 3px}
+.pt-holiday .pt-scoreboard{background:#fff0ca;border-color:#c99969;border-radius:24px 24px 0 0}
+.pt-holiday .pt-scene-frame{background:#f4dfb1;border-color:#c99969}
+.pt-holiday .pt-feedback{background:#f9e5b5;border-color:#c99969;color:#674525;border-radius:0 0 24px 24px}

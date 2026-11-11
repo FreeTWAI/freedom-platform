@@ -2326,3 +2326,18 @@ test('AD-scene light: no WebGL requires explicit fallback, failed capture preser
   expect(await share.evaluate(el=>{const owner=el.closest('.fullscreen-game');return !!owner&&owner.contains(el)&&getComputedStyle(owner).overflowY!=='visible';})).toBe(true);
   await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
 });
+
+// Actual production WebGL captures, never illustration/mockup substitutes.
+for(const game of ['chair','tofu','holiday'] as const)test(`PT-art: ${game} authored scene preserves native budgets and records real pixels`,async({page},testInfo)=>{
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.setViewportSize({width:390,height:844});await openParty(page,game);
+  await partyAdvance(page,game==='chair'?1800:game==='holiday'?300:700);
+  const host=page.locator('.pt-canvas');await expect(host.locator('canvas')).toBeVisible();
+  const stats=await host.evaluate(el=>({calls:Number(el.getAttribute('data-render-calls')),triangles:Number(el.getAttribute('data-render-triangles')),geometries:Number(el.getAttribute('data-render-geometries')),textures:Number(el.getAttribute('data-render-textures'))}));
+  expect(stats.calls).toBeGreaterThan(0);expect(stats.calls).toBeLessThan(400);expect(stats.triangles).toBeGreaterThan(0);expect(stats.triangles).toBeLessThan(150000);
+  await testInfo.attach(`${game}-native-stats`,{body:JSON.stringify(stats),contentType:'application/json'});
+  await testInfo.attach(`${game}-native-scene.png`,{body:await host.screenshot(),contentType:'image/png'});
+  await testInfo.attach(`${game}-phone-page.png`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+  await page.setViewportSize({width:1440,height:900});await testInfo.attach(`${game}-desktop-page.png`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+  expect(errors).toEqual([]);
+});

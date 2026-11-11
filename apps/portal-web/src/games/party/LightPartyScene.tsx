@@ -7,8 +7,12 @@ export function LightPartyScene({run}:{run:ChairRun|TofuRun}){
   if(run.game==='chair'){
     const view=chairView(run),next=view.waves[0];
     return <><svg className="pt-light-world" viewBox="0 0 640 480" aria-hidden="true" focusable="false" data-light-world="chair" data-view-elapsed={run.elapsed} data-actual-x={run.x} data-jump={view.jump}>
-      <rect x="30" y="20" width="580" height="440" rx="23" fill="#e4eadd"/><path d="M90 40 L84 445 H556 L550 40Z" fill="#efe7d9" stroke="#443b37" strokeWidth="3"/>
-      {[243,397].map(x=><path key={x} d={`M${x} 45 V435`} stroke="#bda78b" strokeWidth="3" strokeDasharray="10 14"/>)}
+      <rect x="30" y="20" width="580" height="440" rx="23" fill="#142039"/>
+      <circle cx="535" cy="69" r="23" fill="#edc883"/>
+      {[0,1,2,3,4,5,6,7].map(i=><g key={i}><rect x={44+i*71} y={90-(i*13)%42} width="48" height="70" fill="#334a67"/><path d={`M${54+i*71} 83v18m13-18v18m13-18v18`} stroke="#d4b36e" strokeWidth="4"/></g>)}
+      <path d="M140 130 L84 445 H556 L500 130Z" fill="#293c58" stroke="#65d4cf" strokeWidth="3"/>
+      <path d="M55 442 L105 120 H535 L585 442 M72 442 L125 138 H515 L568 442" fill="none" stroke="#456b80" strokeWidth="5"/>
+      {[243,397].map(x=><path key={x} d={`M${x} 45 V435`} stroke="#8795a9" strokeWidth="3" strokeDasharray="10 14"/>)}
       <path d="M93 374 H547" stroke="#7d9973" strokeWidth="4" strokeDasharray="8 7"/>
       {view.waves.map(w=><g key={w.index} data-wave={w.index} data-remaining={w.remaining}>
         <g transform={`translate(${320+w.lane*154} ${w.y})`} stroke="#443b37" strokeWidth="3" strokeLinejoin="round">
@@ -29,8 +33,14 @@ export function LightPartyScene({run}:{run:ChairRun|TofuRun}){
   const view=tofuView(run);
   const block=(layer:Parameters<typeof tofuFaces>[0],bottom:number,key:string,active=false)=><g key={key} data-tofu-layer={key} data-x={layer.x} data-z={layer.z} data-width={layer.width} data-depth={layer.depth}>{tofuFaces(layer,bottom).map((points,i)=><polygon key={i} points={points} fill={active&&i===2?'#e5bd68':TOFU_FACE_COLORS[i]} stroke="#443b37" strokeWidth="2.5" strokeLinejoin="round"/>)}</g>;
   return <><svg className="pt-light-world" viewBox="0 0 640 480" aria-hidden="true" focusable="false" data-light-world="tofu" data-view-elapsed={run.elapsed} data-turn={run.turn} data-axis={view.axis} data-offset={view.offset} data-fall-progress={view.progress}>
-    <rect x="20" y="20" width="600" height="440" rx="26" fill="#e4eadd"/>
-    <ellipse cx="320" cy="426" rx="146" ry="41" fill="#efe7d9" stroke="#443b37" strokeWidth="3"/><ellipse cx="320" cy="422" rx="128" ry="31" fill="none" stroke="#bda78b" strokeWidth="3"/>
+    <rect x="20" y="20" width="600" height="440" rx="26" fill="#dbe3d8"/>
+    <circle cx="488" cy="85" r="30" fill="#d8b675"/>
+    <path d="M24 208 Q100 60 204 180 T400 145 T616 175 V310 H24Z" fill="#a8bbae"/>
+    <path d="M24 256 Q120 145 220 225 T440 202 T616 236 V310 H24Z" fill="#809e91"/>
+    <path d="M22 300H618M22 155H618M115 20V300M320 20V300M525 20V300" fill="none" stroke="#81674c" strokeWidth="7"/>
+    <path d="M20 310H620V434Q620 460 594 460H46Q20 460 20 434Z" fill="#b9a486"/>
+    {[330,355,380,405,430].map(y=><path key={y} d={`M24 ${y}H616`} stroke="#9f8869"/>)}
+    <ellipse cx="320" cy="426" rx="146" ry="41" fill="#7aaba1" stroke="#405b60" strokeWidth="3"/><ellipse cx="320" cy="422" rx="128" ry="31" fill="none" stroke="#bda78b" strokeWidth="3"/>
     {view.layers.map((layer,i)=>block(layer,i*R.tofuHeight,String(i)))}
     {view.kept&&<polygon points={tofuFaces(view.kept,run.layers.length*R.tofuHeight)[2]} fill="none" stroke="#416851" strokeWidth="4" strokeDasharray="8 5"/>}
     {view.active&&block(view.active,view.bottom,'moving',true)}
