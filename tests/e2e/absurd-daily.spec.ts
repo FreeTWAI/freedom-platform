@@ -401,7 +401,7 @@ test('PT-4: tofu uses actual moving-block timing, rejects an in-flight second dr
   test.setTimeout(180000);await openParty(page,'tofu');
   for(let layer=0;layer<PT.tofuGoal;layer++){
     let aligned=false;for(let t=0;t<180;t++){const offset=Math.abs(Number(await page.locator('.pt-canvas').getAttribute('data-tofu-offset')));if(offset<.105){aligned=true;break;}await page.clock.runFor(offset>.7?90:10);}expect(aligned).toBe(true);
-    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer===0)await page.locator('.pt-canvas').press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.locator('.pt-canvas').press('Space');await page.clock.runFor(510);
+    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});await expect(drop).toHaveText('落下');if(layer===0)await page.locator('.pt-canvas').click();else if(layer===1)await page.locator('.pt-canvas').press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toHaveText('降落中');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.locator('.pt-canvas').press('Space');await page.clock.runFor(510);
   }
   await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 12 / 12 層，"]')).toBeVisible();expect(await partyResult(page,'tofu')).toBe(2925);
 });
@@ -476,7 +476,7 @@ test('PT-action-light: chair without WebGL completes all real ticket waves under
   test.setTimeout(150000);await page.setViewportSize({width:320,height:568});await page.emulateMedia({reducedMotion:'reduce'});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openLightAction(page,'chair');
   await expect(page.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
   const controls=await page.locator('.pt-controls button').evaluateAll(bs=>bs.map(b=>({w:b.getBoundingClientRect().width,h:b.getBoundingClientRect().height,font:parseFloat(getComputedStyle(b).fontSize)})));for(const b of controls){expect(b.w).toBeGreaterThanOrEqual(44);expect(b.h).toBeGreaterThanOrEqual(44);expect(b.font).toBeGreaterThanOrEqual(14);}
-  let lane=0;for(let i=0;i<PT.chairWaves;i++){const wave=chairWave(42,i);while(lane!==wave.ticketLane){const direction=lane<wave.ticketLane?1:-1;if(i%2)await page.getByRole('button',{name:direction===1?'往右換路':'往左換路',exact:true}).press('Enter');else await page.locator('.pt-canvas').press(direction===1?'ArrowRight':'ArrowLeft');lane+=direction;await partyAdvance(page,await partyElapsed(page)+160);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x',String(lane));}await partyAdvance(page,wave.at+20);}
+  let lane=0;for(let i=0;i<PT.chairWaves;i++){const wave=chairWave(42,i);while(lane!==wave.ticketLane){const direction=lane<wave.ticketLane?1:-1;if(i%2)await page.getByRole('button',{name:`第 ${lane+direction+2} 道`,exact:true}).press('Enter');else await page.locator('.pt-canvas').press(direction===1?'ArrowRight':'ArrowLeft');lane+=direction;await partyAdvance(page,await partyElapsed(page)+160);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x',String(lane));}await partyAdvance(page,wave.at+20);}
   await partyAdvance(page,PT.chairMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','4280');
   const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).press('Enter');const svg=readFileSync((await(await download).path())!,'utf8');expect(svg).toContain('4280 分');expect(svg).toContain('22 張假日票');expect(svg).toContain('沒有保存逐波路線');expect(await partyResult(page,'chair')).toBe(4280);expect(errors).toEqual([]);
 });
@@ -496,7 +496,7 @@ test('PT-action-light: tofu uses the actual RAF clock, twelve timed drops, one l
   await frame();
   for(let layer=0;layer<PT.tofuGoal;layer++){
     let aligned=false;for(let i=0;i<400;i++){const axis=tofuAxis(model);if(Math.abs(tofuPosition(model)[axis]-model.layers.at(-1)![axis])<.06){aligned=true;break;}await frame();}expect(aligned).toBe(true);await assertProjection();
-    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer%2)await drop.press('Space');else await drop.click();
+    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});await expect(drop).toHaveText('落下');if(layer===0)await page.locator('.pt-canvas').click();else if(layer%2)await drop.press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toHaveText('降落中');
     model=actParty(model,{kind:'drop'}) as TofuRun;history.set(model.elapsed,model);expect(model.fall?.perfect).toBe(true);expect(await partyElapsed(page)).toBe(model.elapsed);await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();
     await page.locator('.pt-canvas').press('Space');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));
     for(let i=0;i<16;i++)await frame();const middle=await assertProjection();expect(middle.progress).toBeGreaterThan(.4);expect(middle.progress).toBeLessThan(.7);await expect(page.locator('[data-tofu-layer]')).toHaveCount(layer+2);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));
@@ -2340,4 +2340,60 @@ for(const game of ['chair','tofu','holiday'] as const)test(`PT-art: ${game} auth
   await testInfo.attach(`${game}-phone-page.png`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
   await page.setViewportSize({width:1440,height:900});await testInfo.attach(`${game}-desktop-page.png`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
   expect(errors).toEqual([]);
+});
+
+// Exercise the existing source-bound operator on the normal browser runner.
+// Body attachments survive the pinned JSON report without a new CI/upload lane.
+// Nothing here updates product previews or changes capture admission/budgets.
+test('PT-art: native catalog capture binds real pixels to compiled sources and releases WebGL',async({},testInfo)=>{
+  const require=createRequire(import.meta.url);
+  const {mkdtemp,readFile,readdir,rm}=require('node:fs/promises');
+  const {join}=require('node:path');
+  const {tmpdir}=require('node:os');
+  const {chromium}=require('playwright');
+  const root=fileURLToPath(new URL('../../',import.meta.url));
+  const {capture}=require('../../modules/absurd-daily/tools/native-party-previews.mjs');
+  const parent=await mkdtemp(join(tmpdir(),'party-native-evidence-')),out=join(parent,'capture');
+  // Keep emitted chunks as well as images, so validateFiles can independently
+  // recheck exact compiled bytes instead of trusting a manifest-only claim.
+  const attach=async(dir:string,prefix='')=>{
+    const entries=await readdir(dir,{withFileTypes:true}).catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return [];throw error;});
+    for(const entry of entries){
+      const name=prefix+entry.name,path=join(dir,entry.name);
+      if(entry.isDirectory())await attach(path,name+'/');
+      else if(entry.isFile())await testInfo.attach('party-capture/'+name,{body:await readFile(path),contentType:name.endsWith('.png')?'image/png':name.endsWith('.webp')?'image/webp':name.endsWith('.json')?'application/json':'text/javascript'});
+    }
+  };
+  try{
+    const receipt=await capture(root,out,chromium.executablePath());
+    expect(receipt.status).toBe('captured_pending_visual_review');
+    expect(receipt.errors).toEqual([]);
+    expect(receipt.previews.map((p:{game:string})=>p.game).sort()).toEqual(['chair','holiday','tofu']);
+  }finally{
+    try{await attach(out);}finally{await rm(parent,{recursive:true,force:true});}
+  }
+});
+
+for(const game of ['chair','tofu','holiday'] as const)for(const light of [false,true])test(`PT-art: ${game} ${light?'light':'native'} composition owns its palette and whole-screen evidence`,async({page},testInfo)=>{
+  const expected={chair:{world:'rgb(20, 32, 57)',hud:'rgb(25, 41, 66)',feedback:'rgb(36, 52, 80)',ink:'rgb(245, 232, 201)'},tofu:{world:'rgb(219, 227, 216)',hud:'rgb(243, 239, 226)',feedback:'rgb(225, 232, 220)',ink:'rgb(53, 79, 70)'},holiday:{world:'rgb(244, 223, 177)',hud:'rgb(255, 240, 202)',feedback:'rgb(249, 229, 181)',ink:'rgb(103, 69, 37)'}}[game];
+  await page.setViewportSize({width:390,height:844});
+  if(light){if(game==='holiday')await openLightHoliday(page);else await openLightAction(page,game);}else await openParty(page,game);
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+  const owner=page.locator(`.fullscreen-game--${game}`);
+  await expect(owner).toHaveCSS('background-color',expected.world);
+  await expect(owner.locator('.pt-scoreboard')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+  await expect(owner.locator('.pt-scoreboard strong').first()).toHaveCSS('color',expected.ink);
+  await expect(owner.locator('.pt-feedback')).toHaveCSS('background-color',expected.feedback);
+  await expect(owner.locator('.pt-feedback')).toHaveCSS('color',expected.ink);
+  const spacing=await owner.evaluate(el=>{
+    const world=el.querySelector('.pt-canvas')!.getBoundingClientRect(),hud=el.querySelector('.pt-scoreboard')!.getBoundingClientRect();
+    const below=[...el.querySelectorAll<HTMLElement>('.pt-controls,.pt-holiday-feedback')].filter(node=>node.checkVisibility()).map(node=>node.getBoundingClientRect().top);
+    return {above:world.top-hud.bottom,below:Math.min(...below)-world.bottom,width:world.width,height:world.height};
+  });
+  expect(spacing.above).toBeGreaterThanOrEqual(-1);expect(spacing.above).toBeLessThanOrEqual(4);
+  expect(spacing.below).toBeGreaterThanOrEqual(-1);expect(spacing.below).toBeLessThanOrEqual(8);
+  expect(spacing.width).toBeGreaterThanOrEqual(128);expect(spacing.height).toBeGreaterThanOrEqual(96);expect(spacing.width/spacing.height).toBeCloseTo(4/3,2);
+  await testInfo.attach(`${game}-${light?'light':'native'}-fullscreen-phone.png`,{body:await owner.screenshot(),contentType:'image/png'});
+  await page.setViewportSize({width:1440,height:900});
+  await testInfo.attach(`${game}-${light?'light':'native'}-fullscreen-desktop.png`,{body:await owner.screenshot(),contentType:'image/png'});
 });

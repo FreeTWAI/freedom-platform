@@ -742,6 +742,30 @@ test('PT-action-light: actual button handlers reject stale/repeated/cancelled ho
   }
 });
 
+test('PT-direct-touch: numbered lane targets preserve adjacency, cooldown, focus-safe inactivity and stale hold ownership',()=>{
+  const fixture=()=>{
+    const live={current:startParty(newParty('chair',42)) as ChairRun},controls={current:holidayInput()};let actions=0;
+    const make=runInNewContext(partyClosure('  function controlHandlers(', '\n  const s=live.current')+'\nlaneHandlers',{live,controls,restart:false,partyInputStamp,acceptsPartyInput,action:(a:any)=>{actions++;live.current=actParty(live.current,a) as ChairRun;}});
+    return {live,left:make(-1),middle:make(0),right:make(1),actions:()=>actions,advance:()=>{live.current=advanceParty(live.current,160) as ChairRun;}};
+  };
+  const key=(key:string)=>({key,repeat:false,preventDefault(){}}),pointer={button:0,isPrimary:true,pointerId:1},click={detail:0};
+  const f=fixture();f.middle.onClick(click);assert.equal(f.actions(),0,'the selected lane is not a relative move');
+  f.right.onClick(click);assert.equal(f.live.current.lane,1);assert.equal(f.actions(),1);
+  f.left.onClick(click);assert.equal(f.live.current.lane,1);assert.equal(f.actions(),1,'a distant destination cannot teleport or queue moves');
+  const before=f.live.current;f.middle.onClick(click);assert.equal(f.live.current,before,'the domain still enforces its 130ms cooldown');
+  f.advance();f.middle.onClick(click);assert.equal(f.live.current.lane,0);f.advance();f.left.onClick(click);assert.equal(f.live.current.lane,-1);
+  for(const owner of ['pointer',' ','Enter']){
+    const held=fixture();
+    if(owner==='pointer')held.middle.onPointerDown(pointer);else held.middle.onKeyDown(key(owner));
+    held.live.current=actParty(held.live.current,{kind:'lane',direction:1}) as ChairRun;held.advance();
+    if(owner==='pointer'){held.middle.onPointerUp(pointer);held.middle.onClick({detail:1});}else held.middle.onKeyUp(key(owner));
+    assert.equal(held.live.current.lane,1);assert.equal(held.actions(),0,'an aria-disabled destination cannot arm a deferred action');
+  }
+  const held=fixture();held.left.onKeyDown(key(' '));held.live.current=actParty(held.live.current,{kind:'lane',direction:1}) as ChairRun;held.advance();held.left.onKeyUp(key(' '));assert.equal(held.actions(),0,'the destination is rechecked against the live lane at release');
+  held.middle.onKeyDown(key('Enter'));held.live.current={...held.live.current,resolved:1};held.middle.onKeyUp(key('Enter'));assert.equal(held.actions(),0,'a fresh lane choice cannot reuse a previous wave');
+  held.middle.onClick(click);assert.equal(held.live.current.lane,0);assert.equal(held.actions(),1,'a fresh assistive click still chooses the adjacent destination');
+});
+
 test('PT-action-light: actual scene release cannot jump or drop into the next wave or turn',()=>{
   for(const game of ['chair','tofu'] as const){
     const live={current:startParty(newParty(game,42))},gesture={current:null as any};let actions=0;
@@ -1588,7 +1612,7 @@ async function chairControllerHarness(mode:'native'|'light'){
  const run=()=>slots[0].current as ChairRun;
  const advance=(target:number)=>{let guard=0;while(run().elapsed<target&&run().status==='playing'&&guard++<4000)tick(Math.min(50,target-run().elapsed));assert.equal(run().elapsed,target);};
  const key=(value:string)=>({key:value,repeat:false,altKey:false,ctrlKey:false,metaKey:false,target:host,preventDefault(){},stopPropagation(){}});
- const move=async(lane:number)=>{while(run().lane!==lane){await click(lane>run().lane?'往右換路':'往左換路');advance(run().elapsed+140);}};
+ const move=async(lane:number)=>{while(run().lane!==lane){const adjacent=run().lane+(lane>run().lane?1:-1);await click(`第 ${adjacent+2} 道`);assert.equal(run().lane,adjacent);assert.equal(button(`第 ${adjacent+2} 道`)['aria-pressed'],true);advance(run().elapsed+140);}};
  render();await settle();if(mode==='light')await click('改用輕量玩法');
  return {run,host,bar,dialog,section:()=>section,button,click,tick,advance,move,key,settle,results,created:()=>created,disposed:()=>disposed,captures:()=>captures,focus:()=>focus,failCapture:(value:boolean)=>{captureFailure=value;},lose:()=>lost(),emit:(name:string,event:any={})=>listeners.get(name)?.forEach(fn=>fn(event)),hide:(value:boolean)=>{document.hidden=value;},frames:()=>frames.size,cleanup:()=>{for(const slot of slots)slot?.cleanup?.();}};
 }

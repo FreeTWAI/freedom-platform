@@ -20,7 +20,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
   try {
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);renderer.toneMapping=NoToneMapping;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;
     renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
-    const scene=new Scene();scene.background=new Color(game==='holiday'?'#f4dfb1':game==='chair'?'#142039':'#e8e6d8');
+    const scene=new Scene();scene.background=new Color(game==='holiday'?'#f4dfb1':game==='chair'?'#142039':'#dbe3d8');
     const camera=game==='chair'?new PerspectiveCamera(43,4/3,.1,80):new OrthographicCamera(-6,6,4.5,-4.5,.1,80);
     const ray=new Raycaster(),world=new Group();ray.layers.set(1);scene.add(world);
     scene.add(new HemisphereLight(game==='chair'?'#c9edff':'#fff9ed',game==='chair'?'#273759':'#a7a28e',1.1));key.position.set(-5,10,7);key.castShadow=true;key.shadow.mapSize.set(512,512);Object.assign(key.shadow.camera,{left:-8,right:8,top:9,bottom:-15,near:.5,far:30});key.shadow.normalBias=.04;scene.add(key);
@@ -32,6 +32,8 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     function mesh(p:Group,g:BufferGeometry,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx){const m=new Mesh(g,mat(c));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;m.receiveShadow=true;p.add(m);return m;}
     const rb=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy:number,sz:number)=>mesh(p,round,c,x,y,z,sx,sy,sz);
     const ball=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx)=>mesh(p,sphere,c,x,y,z,sx,sy,sz);
+    // Architectural beams are hard-edged set pieces, not rounded toy bodies.
+    const beam=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy:number,sz:number)=>mesh(p,box,c,x,y,z,sx,sy,sz);
     const group=(p:Group,x=0,y=0,z=0)=>{const g=new Group();g.position.set(x,y,z);p.add(g);return g;};
     function canvasTexture(draw:(c:CanvasRenderingContext2D)=>void,w=256,h=256){const el=document.createElement('canvas');el.width=w;el.height=h;const ctx=el.getContext('2d');if(!ctx)throw Error('無法建立派對場景。');draw(ctx);const t=new CanvasTexture(el);t.colorSpace=SRGBColorSpace;textures.add(t);return t;}
     function decal(p:Group,t:Texture,x:number,y:number,z:number,w:number,h:number){const m=new MeshBasicMaterial({map:t,transparent:true,toneMapped:false});materials.add(m);const o=new Mesh(plane,m);o.position.set(x,y,z);o.scale.set(w,h,1);p.add(o);return o;}
@@ -79,11 +81,11 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     function tofu(p:Group){const g=group(p);rb(g,C.cream,0,0,0,1,.94,1);rb(g,'#e5d5b5',0,-.3,0,1.01,.12,1.01);const stamp=decal(g,face,-.04,.482,.02,.48,.48);stamp.rotation.x=-Math.PI/2;leaf(g,.31,.54,-.22,.55);return g;}
     if(game==='chair'){
       camera.position.set(0,5.5,8.8);camera.lookAt(0,.75,-2.7);
-      rb(scenery,C.ink,0,2.5,-13,12,5,.3);decal(scenery,backdrop('chair'),0,2.6,-12.8,11.5,5);
-      for(const x of [-5.7,-2.85,0,2.85,5.7])rb(scenery,C.wood,x,2.5,-12.65,.09,5,.08);
-      for(const z of [-9,-5,-1])for(const side of [-1,1]){rb(scenery,C.wood,side*4.6,1.6,z,.18,3.2,.18);rb(scenery,C.sage,side*4.48,1.6,z,.025,2.6,.035);rb(scenery,C.wood,side*4.6,.75,z+1,.15,.1,2.2);}
+      beam(scenery,C.ink,0,2.5,-13,12,5,.3);decal(scenery,backdrop('chair'),0,2.6,-12.8,11.5,5);
+      for(const x of [-5.7,-2.85,0,2.85,5.7])beam(scenery,C.wood,x,2.5,-12.65,.09,5,.08);
+      for(const z of [-9,-5,-1])for(const side of [-1,1]){beam(scenery,C.wood,side*4.6,1.6,z,.18,3.2,.18);beam(scenery,C.sage,side*4.48,1.6,z,.025,2.6,.035);beam(scenery,C.wood,side*4.6,.75,z+1,.15,.1,2.2);}
       sign(scenery,'今天準時下班','AFTER HOURS / 18:00',0,3.8,-12.5,4.2);
-      for(const side of [-1,1]){rb(scenery,C.sage,side*3.6,.06,-4.5,.045,.035,19);rb(scenery,C.gold,side*3.8,.06,-4.5,.025,.025,19);}
+      for(const side of [-1,1]){beam(scenery,C.sage,side*3.6,.06,-4.5,.045,.035,19);beam(scenery,C.gold,side*3.8,.06,-4.5,.025,.025,19);}
       bakeRigidGroup(scenery,geometries);
       for(const x of [-1.5,1.5])rb(world,'#61708a',x,.028,-4.5,.035,.015,19);
       for(const x of [-5,5]){plant(world,x,-6);plant(world,x,-1);}
@@ -111,9 +113,9 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         return {hazard,cart,meeting,ticket};
       });
     }else if(game==='tofu'){
-      rb(scenery,C.wood,0,2.3,-5.1,11,4.6,.18);decal(scenery,backdrop('tofu'),0,2.3,-4.98,10.6,4.3);
-      for(const x of [-5.2,-2.6,0,2.6,5.2])rb(scenery,C.wood,x,2.3,-4.85,.08,4.5,.1);
-      for(const y of [.2,2.3,4.4])rb(scenery,C.wood,0,y,-4.85,10.6,.07,.1);
+      beam(scenery,C.wood,0,2.3,-5.1,11,4.6,.18);decal(scenery,backdrop('tofu'),0,2.3,-4.98,10.6,4.3);
+      for(const x of [-5.2,-2.6,0,2.6,5.2])beam(scenery,C.wood,x,2.3,-4.85,.08,4.5,.1);
+      for(const y of [.2,2.3,4.4])beam(scenery,C.wood,0,y,-4.85,10.6,.07,.1);
       for(const side of [-1,1]){const stone=ball(scenery,'#888e80',side*4.3,.18,-2.3,.65,.3,.5);stone.rotation.y=side*.4;plant(scenery,side*4.3,-3.2);}
       sign(scenery,'豆腐建築事務所','一層一心 · SOFT TOFU',0,3.7,-4.65,3.1);bakeRigidGroup(scenery,geometries);
       mesh(world,cylinder,C.sage,0,.08,0,2.65,.17,2.65);mesh(world,cylinder,C.cream,0,.2,0,2.4,.17,2.4);mesh(world,torus,C.gold,0,.29,0,2.2,2.2,2.2).rotation.x=-Math.PI/2;
@@ -122,15 +124,18 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       tofus=Array.from({length:R.tofuGoal+1},()=>tofu(world));activeTofu=tofu(world);crumb=tofu(world);tofuBatch=createTofuOpaqueBatch(world,[...tofus,activeTofu,crumb]);
     }else{
       camera.position.set(3.8,8.6,9.5);camera.lookAt(0,.4,0);
+      // Folded six-sided paper petals keep a readable silhouette without the
+      // dense rounded-box tessellation being repeated in every shadow pass.
+      const paperPetal=geo(new CylinderGeometry(1,1,1,6));
       decal(scenery,backdrop('holiday'),0,2.2,-5.1,12,5);
-      for(const side of [-1,1]){rb(scenery,C.wood,side*4.5,1.7,-4.5,.12,3.4,.12);for(let i=0;i<3;i++){const petal=ball(scenery,i%2?C.peach:C.gold,side*(4.25+i*.2),.55+i*.45,-3.7,.5,.7,.09);petal.rotation.z=side*(.3+i*.3);}}
+      for(const side of [-1,1]){beam(scenery,C.wood,side*4.5,1.7,-4.5,.12,3.4,.12);for(let i=0;i<3;i++){const petal=ball(scenery,i%2?C.peach:C.gold,side*(4.25+i*.2),.55+i*.45,-3.7,.5,.7,.09);petal.rotation.z=side*(.3+i*.3);}}
       for(let i=0;i<9;i++){const flag=mesh(scenery,plane,[C.peach,C.leaf,C.navy][i%3],-4+i,2.9+Math.abs(4-i)*.09,-4.4,.65,.48,1);flag.rotation.z=(i%2?1:-1)*.12;}
       sign(scenery,'今日公休委員會','WEEKEND GARDEN CLUB',0,2,-4.5,3.8);bakeRigidGroup(scenery,geometries);
       const badgeTextures=([C.leaf,C.navy] as const).map((color,i)=>canvasTexture(ctx=>{ctx.fillStyle=C.cream;ctx.fillRect(0,0,256,128);ctx.fillStyle=color;ctx.font='900 64px "Microsoft JhengHei",sans-serif';ctx.textAlign='center';ctx.fillText(i?'開會':'休假',128,88);},256,128));
       for(let i=0;i<6;i++){
         const x=(i%3-1)*2.5,z=Math.floor(i/3)*2.6-1.35,hole=group(world,x,0,z);holes.push(hole);
         const rim=group(hole);mesh(rim,cylinder,C.wood,0,.2,0,.95,.4,.95);mesh(rim,cylinder,C.ink,0,.42,0,.79,.06,.79);mesh(rim,torus,C.gold,0,.47,0,.85,.85,.85).rotation.x=-Math.PI/2;
-        for(let k=0;k<8;k++){const a=k*Math.PI/4;const petal=mesh(rim,round,i%2?C.peach:C.gold,Math.cos(a)*.91,.19,Math.sin(a)*.91,.45,.12,.63);petal.rotation.y=-a+Math.PI/2;}bakeRigidGroup(rim,geometries);
+        for(let k=0;k<8;k++){const a=k*Math.PI/4;const petal=mesh(rim,paperPetal,i%2?C.peach:C.gold,Math.cos(a)*.91,.19,Math.sin(a)*.91,.24,.12,.33);petal.rotation.y=-a+Math.PI/2;}bakeRigidGroup(rim,geometries);
         const body=group(hole,0,.15,0);ball(body,C.cream,0,.52,0,.61,.54,.58);decal(body,face,0,.55,.55,.86,.76);
         const leaves=group(body);leaf(leaves,.07,1.15,0,1.35);leaf(leaves,-.14,1.13,0,.8);
         const tie=group(body);rb(tie,C.navy,0,1.06,0,.88,.13,.73);rb(tie,C.navy,0,1.21,-.04,.64,.25,.6);const t=rb(tie,C.peach,0,.16,.56,.18,.36,.06);t.rotation.z=.2;

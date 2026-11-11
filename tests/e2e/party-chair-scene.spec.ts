@@ -24,13 +24,20 @@ async function openChairScene(page:Page,light:boolean,rejected:boolean){
   await expect(page.locator('.pt-canvas canvas')).toHaveCount(light?0:1);
   if(!light)expect(Number(await page.locator('.pt-canvas').getAttribute('data-render-triangles'))).toBeGreaterThan(0);
   expect(await page.locator('.pt-chair-controls').evaluate(el=>!el.closest('.pt-canvas')&&!!el.closest('.pt-chair-stage'))).toBe(true);
+  await expect(page.getByRole('button',{name:/往左換路|往右換路/})).toHaveCount(0);
+  await expect(page.locator('.pt-chair-controls')).not.toContainText(/[←↑→↓]/);
+  await expect(page.locator('.pt-chair-controls button')).toHaveText(['1道','2道','3道','跳一下']);
+  await expect(page.getByRole('group',{name:'選擇跑道，每次換一條相鄰跑道',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'第 2 道',exact:true})).toHaveAttribute('aria-pressed','true');
 }
-async function chairLane(page:Page,target:number,method:'pointer'|'keyboard'|'assistive'='keyboard'){
+async function chairLane(page:Page,target:number,method:'pointer'|'keyboard'|'assistive'|'swipe'='keyboard'){
   const host=page.locator('.pt-canvas');let lane=Number(await host.getAttribute('data-lane'));
   while(lane!==target){
-    const direction=lane<target?1:-1,button=page.getByRole('button',{name:direction===1?'往右換路':'往左換路',exact:true});
-    if(method==='pointer')await button.click();else if(method==='assistive')await button.evaluate(el=>(el as HTMLButtonElement).click());else await host.press(direction===1?'ArrowRight':'ArrowLeft');
-    lane+=direction;await expect(host).toHaveAttribute('data-lane',String(lane));await partyAdvance(page,await partyElapsed(page)+160);
+    const direction=lane<target?1:-1,button=page.getByRole('button',{name:`第 ${lane+direction+2} 道`,exact:true});
+    if(method==='pointer')await button.click();else if(method==='assistive')await button.evaluate(el=>(el as HTMLButtonElement).click());
+    else if(method==='swipe'){const b=(await host.boundingBox())!;await page.mouse.move(b.x+b.width*.5,b.y+b.height*.5);await page.mouse.down();await page.mouse.move(b.x+b.width*(.5+direction*.3),b.y+b.height*.5);await page.mouse.up();}
+    else await host.press(direction===1?'ArrowRight':'ArrowLeft');
+    lane+=direction;await expect(host).toHaveAttribute('data-lane',String(lane));await expect(button).toHaveAttribute('aria-pressed','true');await partyAdvance(page,await partyElapsed(page)+160);
   }
 }
 async function chairTextScale(page:Page,scale:number){
@@ -126,7 +133,7 @@ for(const light of [false,true])for(const rejected of [false,true])test(`PT-CHAI
   };
   await inspectRun('early');
   for(let index=0;index<PT.chairWaves;index++){
-    const wave=chairWave(42,index);await chairLane(page,wave.ticketLane,index%3===0?'pointer':index%3===1?'keyboard':'assistive');
+    const wave=chairWave(42,index);await chairLane(page,wave.ticketLane,index%4===0?'pointer':index%4===1?'keyboard':index%4===2?'assistive':'swipe');
     if(index===10||index===20){
       if(index===10){scale=2;await chairTextScale(page,scale);}
       // Earned later scores and a real jump, without changing the wave schedule
@@ -162,7 +169,7 @@ for(const light of [false,true])for(const rejected of [false,true])test(`PT-CHAI
 });
 
 for(const light of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} secondary cancelled duplicate and stale holds cannot move a later wave`,async({page})=>{
-  await openChairScene(page,light,true);await partyAdvance(page,300);const host=page.locator('.pt-canvas'),right=page.getByRole('button',{name:'往右換路',exact:true});
+  await openChairScene(page,light,true);await partyAdvance(page,300);const host=page.locator('.pt-canvas'),right=page.getByRole('button',{name:'第 3 道',exact:true});
   await right.click({button:'right'});await expect(host).toHaveAttribute('data-lane','0');
   await right.dispatchEvent('pointerdown',{pointerId:91,isPrimary:false,button:0});await right.dispatchEvent('pointerup',{pointerId:91,isPrimary:false,button:0});await right.dispatchEvent('click',{detail:1});await expect(host).toHaveAttribute('data-lane','0');
   await right.dispatchEvent('pointerdown',{pointerId:92,isPrimary:true,button:0});await right.dispatchEvent('pointercancel',{pointerId:92,isPrimary:true});await right.dispatchEvent('pointerup',{pointerId:92,isPrimary:true,button:0});await right.dispatchEvent('click',{detail:1});await expect(host).toHaveAttribute('data-lane','0');
@@ -183,6 +190,35 @@ for(const light of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} 
   // explicitly, then prove exiting presentation preserves that frozen run.
   await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');const exitAt=await partyElapsed(page);await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeFocused();
   await page.keyboard.press('Escape');await expect(page.locator('.fullscreen-game')).not.toHaveClass(/fullscreen-game--viewport/);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(exitAt);
+});
+
+test.describe('PT-CHAIR-SCENE direct touchscreen',()=>{
+  test.use({hasTouch:true});
+  for(const light of [false,true])for(const rejected of [false,true])test(`PT-CHAIR-SCENE: ${light?'light':'native'} real touch swipes and tap jump replace the pad in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
+    await page.setViewportSize({width:390,height:844});await openChairScene(page,light,rejected);await partyAdvance(page,300);
+    const host=page.locator('.pt-canvas'),b=(await host.boundingBox())!,x=b.x+b.width*.4,y=b.y+b.height*.5,cdp=await page.context().newCDPSession(page);
+    const start=()=>cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1}]});
+    const move=()=>cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+b.width*.3,y,id:1}]});
+    const end=()=>cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    try{
+      await start();await move();await end();await expect(host).toHaveAttribute('data-lane','1');
+      const far=page.getByRole('button',{name:'第 1 道',exact:true}),middle=page.getByRole('button',{name:'第 2 道',exact:true}),current=page.getByRole('button',{name:'第 3 道',exact:true});
+      await expect(current).toHaveAttribute('aria-pressed','true');await expect(current).toHaveAttribute('aria-disabled','true');await expect(far).toHaveAttribute('aria-disabled','true');
+      for(const button of [far,current])await button.evaluate(el=>(el as HTMLButtonElement).click());await expect(host).toHaveAttribute('data-lane','1');
+      await partyAdvance(page,460);await middle.press('Enter');await expect(host).toHaveAttribute('data-lane','0');await expect(middle).toBeFocused();
+      await far.click();await expect(host).toHaveAttribute('data-lane','0'); // The original 130ms cooldown still owns the move.
+      await partyAdvance(page,620);await far.click();await expect(host).toHaveAttribute('data-lane','-1');await expect(far).toBeFocused();
+      // Seed 42's first obstacle is a cart in lane 1. Only the real scene tap
+      // can clear it here: no jump button, keyboard action or run injection.
+      const cart=chairWave(42,0);expect(cart.kind).toBe('cart');expect(cart.lane).toBe(-1);await partyAdvance(page,cart.at-425);
+      await page.touchscreen.tap(x,y);await partyAdvance(page,cart.at-200);
+      if(light)expect(Number(await page.locator('[data-light-world=chair]').getAttribute('data-jump'))).toBeGreaterThan(0);
+      await partyAdvance(page,cart.at+20);await expect(page.locator('.pt-scoreboard strong[aria-label="剩餘 3 顆心"]')).toBeVisible();await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','15');
+      await start();await move();await cdp.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});await expect(host).toHaveAttribute('data-lane','-1');
+      const wave=chairWave(42,1);await partyAdvance(page,wave.at-200);await start();await move();await partyAdvance(page,wave.at+20);await end();await expect(host).toHaveAttribute('data-lane','-1');
+      await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','140');await chairFullscreen(page,rejected);
+    }finally{await cdp.detach();}
+  });
 });
 
 for(const rejected of [false,true])test(`PT-CHAIR-SCENE: real context loss preserves position, score and clock through light and native recovery in ${rejected?'rejected':'native'} fullscreen`,async({page})=>{
@@ -216,7 +252,7 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   };
   await chairTextScale(page,scale);
   await partyAdvance(page,250);await attachWorldEvidence('playing');await chairStageBounds(page,scale);expect(await stage.evaluate(root=>{const style=getComputedStyle(root);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([12,16,18,14]);
-  const buttons=page.locator('.pt-chair-controls button');await expect(buttons).toHaveCount(3);for(const button of await buttons.all())await holidayControlHit(button);
+  const buttons=page.locator('.pt-chair-controls button');await expect(buttons).toHaveCount(4);for(const button of await buttons.all())await holidayControlHit(button);
   await chairLane(page,1,'pointer');await chairLane(page,0,'keyboard');await page.getByRole('button',{name:'跳一下！',exact:true}).press('Enter');await partyAdvance(page,await partyElapsed(page)+200);
   if(light)expect(Number(await page.locator('[data-light-world=chair]').getAttribute('data-jump'))).toBeGreaterThan(0);
   const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);const overlay=page.locator('.pt-holiday-overlay').filter({has:close});

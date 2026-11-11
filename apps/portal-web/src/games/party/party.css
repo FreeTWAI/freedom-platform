@@ -45,7 +45,7 @@
 /* Party slices: one bounded stage, never a raycast host with controls
    inside it. Reuse arcade tokens; the Three camera and its 4:3 rect stay intact. */
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) {
- --pt-world-bg:#e6dcef;--holiday-safe-top:env(safe-area-inset-top,0px);--holiday-safe-right:env(safe-area-inset-right,0px);--holiday-safe-bottom:env(safe-area-inset-bottom,0px);--holiday-safe-left:env(safe-area-inset-left,0px);
+ --pt-world-bg:#f4dfb1;--pt-feedback-bg:#f9e5b5;--ad-bg:#fff0ca;--ad-surface:#fff7e4;--ad-ink:#674525;--ad-muted:#775b3b;--ad-line:#c99969;--ad-accent:#9b4a28;--holiday-safe-top:env(safe-area-inset-top,0px);--holiday-safe-right:env(safe-area-inset-right,0px);--holiday-safe-bottom:env(safe-area-inset-bottom,0px);--holiday-safe-left:env(safe-area-inset-left,0px);
  display:grid;grid-template-rows:auto minmax(0,1fr);position:relative;gap:0;
  height:min(860px,100dvh);min-height:0;width:100%;overflow:hidden;isolation:isolate;
  padding:var(--holiday-safe-top) var(--holiday-safe-right) var(--holiday-safe-bottom) var(--holiday-safe-left);
@@ -85,7 +85,7 @@
  .pt-light-grid svg{width:100%;height:100%;min-height:0;max-height:120px;max-width:140px}
  .pt-light-grid b{position:absolute;left:4px;top:4px;font-size:.875rem}
  .pt-holiday-feedback{min-width:0;padding:3px 8px;background:transparent;border:0}
- .pt-live-label,.pt-feedback{display:block;position:static;inset:auto;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--ad-ink);font-size:.875rem;line-height:1.4;text-align:center;overflow-wrap:anywhere}
+ .pt-live-label,.pt-feedback{display:block;position:static;inset:auto;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:var(--pt-feedback-bg);color:var(--ad-ink);font-size:.875rem;line-height:1.4;text-align:center;overflow-wrap:anywhere}
  .pt-live-label{color:var(--ad-muted)}
  .pt-holiday-tools-viewport{min-height:0;min-width:0;max-width:100%;overflow:auto;overscroll-behavior:contain;scroll-padding:8px;border-top:1px solid var(--ad-line);background:var(--ad-surface)}
  .pt-tools{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-height:52px;width:max-content;min-width:100%;max-width:none;overflow:visible;margin:0;padding:4px 8px;background:var(--ad-surface)}
@@ -149,7 +149,7 @@
 /* Chair keeps its actual 4:3 world and gesture rectangle in both render modes.
    Only the primary three-button pad differs from the holiday shell. */
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair {
- --pt-world-bg:#d4e8d6;--chair-safe-top:env(safe-area-inset-top,0px);--chair-safe-right:env(safe-area-inset-right,0px);--chair-safe-bottom:env(safe-area-inset-bottom,0px);--chair-safe-left:env(safe-area-inset-left,0px);
+ --pt-world-bg:#142039;--pt-feedback-bg:#243450;--ad-bg:#192942;--ad-surface:#243450;--ad-ink:#f5e8c9;--ad-muted:#bddcdd;--ad-line:#45617a;--ad-accent:#f4dc8b;--chair-safe-top:env(safe-area-inset-top,0px);--chair-safe-right:env(safe-area-inset-right,0px);--chair-safe-bottom:env(safe-area-inset-bottom,0px);--chair-safe-left:env(safe-area-inset-left,0px);
  --holiday-safe-top:var(--chair-safe-top);--holiday-safe-right:var(--chair-safe-right);--holiday-safe-bottom:var(--chair-safe-bottom);--holiday-safe-left:var(--chair-safe-left);
  .pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
  .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;touch-action:none}
@@ -177,7 +177,7 @@
 
 /* Tofu retains its real 4:3 scene and a separate turn-owned timing control. */
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu {
- --pt-world-bg:#f5dcb3;--tofu-safe-top:env(safe-area-inset-top,0px);--tofu-safe-right:env(safe-area-inset-right,0px);--tofu-safe-bottom:env(safe-area-inset-bottom,0px);--tofu-safe-left:env(safe-area-inset-left,0px);
+ --pt-world-bg:#dbe3d8;--pt-feedback-bg:#e1e8dc;--ad-bg:#f3efe2;--ad-surface:#f8f5e9;--ad-ink:#354f46;--ad-muted:#526653;--ad-line:#9cac98;--ad-accent:#427568;--tofu-safe-top:env(safe-area-inset-top,0px);--tofu-safe-right:env(safe-area-inset-right,0px);--tofu-safe-bottom:env(safe-area-inset-bottom,0px);--tofu-safe-left:env(safe-area-inset-left,0px);
  --holiday-safe-top:var(--tofu-safe-top);--holiday-safe-right:var(--tofu-safe-right);--holiday-safe-bottom:var(--tofu-safe-bottom);--holiday-safe-left:var(--tofu-safe-left);
  .pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
  .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;touch-action:none}
@@ -429,15 +429,60 @@
  }
 }
 
-/* Distinct stage finishes; shared brand, flow, targets and contrast stay intact. */
-.pt-chair .pt-scoreboard{background:#192942;border-color:#45617a;color:#f5e8c9;border-radius:5px 5px 0 0}
-.pt-chair .pt-scoreboard small,.pt-chair .pt-scoreboard strong>span{color:#bddcdd}
-.pt-chair .pt-scoreboard>div+div{border-color:#45617a}
-.pt-chair .pt-scene-frame{background:#142039;border-color:#45617a}
-.pt-chair .pt-feedback{background:#243450;border-color:#45617a;color:#f4dc8b;border-radius:0 0 5px 5px}
-.pt-tofu .pt-scoreboard{background:#f3efe2;border-color:#9cac98;border-radius:3px 3px 0 0}
-.pt-tofu .pt-scene-frame{background:#dbe3d8;border-color:#9cac98}
-.pt-tofu .pt-feedback{background:#e1e8dc;border-color:#9cac98;color:#354f46;border-radius:0 0 3px 3px}
-.pt-holiday .pt-scoreboard{background:#fff0ca;border-color:#c99969;border-radius:24px 24px 0 0}
-.pt-holiday .pt-scene-frame{background:#f4dfb1;border-color:#c99969}
-.pt-holiday .pt-feedback{background:#f9e5b5;border-color:#c99969;color:#674525;border-radius:0 0 24px 24px}
+/* A portrait screen has spare height, not a taller 4:3 game. Give the contained
+   world its real preferred height and center the complete composition together.
+   The last max-content track can shrink when text grows; the field's existing
+   96px world floor and separate control/feedback/tool rows remain authoritative.
+   No camera, canvas, hit rectangle or overlay boundary is cropped or guessed. */
+@media(max-width:559px),(max-width:759px) and (min-height:501px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage) {
+  container-type:inline-size;
+  grid-template-columns:max-content minmax(0,1fr);grid-template-rows:auto auto minmax(0,max-content);align-content:center;column-gap:4px;
+  .fullscreen-game__bar{grid-column:1;grid-row:1;max-width:none;align-self:center}
+  .fullscreen-game__bar>span:empty{display:none}
+  .pt-holiday-stage{display:contents}
+  .pt-holiday-heading{grid-column:2;grid-row:1}
+  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-column:1/-1;grid-row:2}
+  .pt-holiday-field.pt-play-area{grid-column:1/-1;grid-row:3}
+  .pt-holiday-world{contain-intrinsic-block-size:75cqw}
+ }
+}
+/* Rejected fullscreen adds a third 44px presentation control. At the narrowest
+   phone width, two natural header rows use less height than a three-line title.
+   Keep all three controls, the full 18px title and its enlarged line boxes. */
+@media(max-width:360px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage):has(.fullscreen-game__mode-help) {
+  grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,max-content);
+  .fullscreen-game__bar{grid-column:1;grid-row:1}
+  .pt-holiday-heading{grid-column:1;grid-row:2}
+  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-column:1;grid-row:3}
+  .pt-holiday-field.pt-play-area{grid-column:1;grid-row:4}
+ }
+}
+
+/* Direct lane selection is a small numbered rail, not directional arrows.
+   The selected lane has an underline as well as color; unavailable neighbours
+   remain real, focusable and hit-testable buttons. Text owns its full line box. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
+ .pt-chair-composition[data-party-state] .pt-chair-controls{grid-template-columns:max-content max-content;grid-template-rows:auto;gap:8px}
+ .pt-lane-selector{display:grid;grid-template-columns:repeat(3,minmax(48px,1fr));gap:4px;min-width:0}
+ .pt-lane-selector>button{display:grid;place-items:center;min-width:48px;min-height:48px;margin:0;padding:4px 3px;border:1px solid var(--ad-line);border-radius:9px;background:var(--ad-surface);color:var(--ad-ink);box-shadow:none;font-size:.875rem;line-height:1.4;white-space:nowrap}
+ .pt-lane-selector>button[aria-pressed=true]{border-color:var(--ad-accent);background:var(--ad-bg);color:var(--ad-ink);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.18em;box-shadow:inset 0 0 0 1px var(--ad-accent)}
+ .pt-lane-selector>button[aria-disabled=true]:not([aria-pressed=true]){color:var(--ad-muted);border-style:dashed}
+ .pt-chair-controls>.pt-primary-control{width:auto;min-width:44px;min-height:48px;padding:4px 6px;border-radius:12px;font-size:.875rem;line-height:1.4}
+ .pt-chair-controls button span{font:inherit;line-height:inherit}
+}
+/* The drop button is now a readable action. Reserve the longer falling label
+   intrinsically so feedback does not jump between states, including 200% text. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
+ .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr) max-content}
+ .pt-tofu-controls>.pt-drop{width:auto;min-width:calc(3em + 18px);min-height:52px;padding:4px 8px;border-radius:12px;line-height:1.4}
+}
+/* Keep the established landscape flow. Four real actions fit in a two-row
+   side rail rather than squeezing four enlarged labels into the old 56px pad. */
+@media(min-width:760px),(min-width:560px) and (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
+  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(128px,1fr) max-content}
+  .pt-chair-composition[data-party-state] .pt-chair-controls{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;justify-items:center;gap:4px}
+ }
+}
