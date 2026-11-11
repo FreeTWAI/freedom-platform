@@ -1795,3 +1795,19 @@ test('stamp atelier actual animation source settles reduced motion and preserves
  for(let i=0;i<3;i++){scope.strokeAt=time;scope.animate();assert.equal(position.y,.48);assert.equal(pending.size,0);}
  for(const guard of ['disposed','paused','lost']){scope[guard]=true;const count:number=poses.length;scope.animate();assert.equal(poses.length,count);assert.equal(pending.size,0);scope[guard]=false;}
 });
+
+for(const eventType of ['pointercancel','lostpointercapture'] as const)for(const owner of [false,true])test(`stamp atelier actual ${eventType} handler ${owner?'cancels owner':'ignores foreign pointer'} (source closures)`,()=>{
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/stamp-atelier.ts',import.meta.url),'utf8');
+ const cancelStart=source.indexOf('function cancelPointer()'),cancelEnd=source.indexOf('function strike()',cancelStart);
+ const start=source.indexOf('const down='),end=source.indexOf('const assistButton=',start);
+ assert.ok(cancelStart>=0&&cancelEnd>cancelStart&&start>=0&&end>start);
+ const listeners=new Map<string,(event:any)=>void>(),captured=new Set<number>();let stamps=0;
+ const scope:any={paused:false,lost:false,pointer:null,subject:-1,state:{practice:true,index:0},aim:()=>true,strike:()=>stamps++,canvas:{focus(){},hasPointerCapture:(id:number)=>captured.has(id),setPointerCapture:(id:number)=>captured.add(id),releasePointerCapture:(id:number)=>captured.delete(id),addEventListener:(type:string,fn:(event:any)=>void)=>listeners.set(type,fn)}};
+ runInNewContext(stripTypeScriptTypes(source.slice(cancelStart,cancelEnd)+source.slice(start,end)),scope);
+ const event=(pointerId:number)=>({pointerId,isPrimary:pointerId===1,button:0,clientX:0,clientY:0,preventDefault(){}});
+ listeners.get('pointerdown')!(event(1));listeners.get('pointerdown')!(event(2));
+ assert.deepEqual([...captured],[1]);listeners.get(eventType)!(event(owner?1:2));
+ assert.deepEqual([...captured],owner?[]:[1]);listeners.get('pointerup')!(event(1));assert.equal(stamps,owner?0:1);assert.equal(captured.size,0);
+ // Pause/reset/disposal use this unconditional internal helper, not an input event.
+ listeners.get('pointerdown')!(event(1));scope.cancelPointer();assert.equal(captured.size,0);listeners.get('pointerup')!(event(1));assert.equal(stamps,owner?0:1);
+});

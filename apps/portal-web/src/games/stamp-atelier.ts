@@ -137,7 +137,7 @@ export function mountStampAtelier(host:HTMLElement, logoUrl:string) {
  const down=(e:PointerEvent)=>{if(paused||lost||pointer!==null||!e.isPrimary||e.button!==0||!aim(e.clientX,e.clientY))return;e.preventDefault();canvas.focus();pointer=e.pointerId;subject=state.practice?-1:state.index;canvas.setPointerCapture(pointer);};
  const move=(e:PointerEvent)=>{if(paused||lost)return;if(pointer===null&&e.pointerType==='mouse'){aim(e.clientX,e.clientY);return;}if(pointer!==e.pointerId)return;e.preventDefault();aim(e.clientX,e.clientY);};
  const up=(e:PointerEvent)=>{if(pointer!==e.pointerId)return;const accepted=aim(e.clientX,e.clientY);cancelPointer();if(accepted&&subject===(state.practice?-1:state.index))strike();};
- const cancel=()=>cancelPointer();canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',cancel);canvas.addEventListener('lostpointercapture',cancel);
+ const cancel=(e:PointerEvent)=>{if(pointer===e.pointerId)cancelPointer();};canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',cancel);canvas.addEventListener('lostpointercapture',cancel);
  const assistButton=root.querySelector<HTMLButtonElement>('[data-assist]')!;
  let assisted=false;
  function assistAim(){if(assisted){cursor={...stampTarget(state.seed,state.index)};render();}}
