@@ -66,9 +66,8 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  expect(dimensions.width).toBeGreaterThan(300);expect(dimensions.height).toBeGreaterThan(300);
  const metrics=await root.evaluate(el=>({drawCalls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles),renderSubmitMs:Number((el as HTMLElement).dataset.renderMs)}));
  expect(metrics.drawCalls).toBeGreaterThan(0);expect(metrics.drawCalls).toBeLessThan(160);expect(metrics.triangles).toBeGreaterThan(1000);
- // Attach actual originals without CSS replacement or image overlays. The
- // current pinned CI retains these bodies only when the whole shard fails;
- // successful-run delivery needs a separately authorized capture route.
+ // Preserve original PNG bytes in the standard Playwright attachment body.
+ // The unchanged hosted shard artifact transports this report on success or failure.
  const png=await page.screenshot();const image=await sharp(png).stats();expect(image.channels.slice(0,3).some(c=>c.stdev>20)).toBe(true);
  await info.attach(`stamp-atelier-native-${width}x${height}.png`,{body:png,contentType:'image/png'});
  await info.attach(`stamp-atelier-native-${width}x${height}.json`,{body:Buffer.from(JSON.stringify({viewport:{width,height},dimensions,metrics,note:'Real Three.js preview after successful native practice input. renderSubmitMs is CPU submission time, not GPU time or FPS.'})),contentType:'application/json'});
@@ -88,18 +87,13 @@ for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD 
  await expect.poll(async()=>Number(await page.locator('body').getAttribute('data-stamp-y'))).toBeCloseTo(.48,10);
  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(root).toHaveAttribute('data-practice','true');await expect(root).toHaveAttribute('data-completed','0');
  expect(errors).toEqual([]);
- // The unchanged pinned reporter inherits stdout on both success and failure.
- // Public, synthetic artwork only: preserve bounded original PNG bytes in job
- // logs, not a modified check receipt or a deliberately failing test. Consumers
- // must verify the complete sequence, byte count and digest before viewing.
- // Transport-only ceiling for lossless diagnostic originals, not a product
- // performance budget. Keep behavior, draw-call and image-variance checks above.
+ // Keep the original transport ceiling and digest, but never duplicate the PNG
+ // in stdout: its lossless attachment already lives in the same JSON report.
+ // Duplicating large base64 bodies can exceed the unchanged 64 MiB evidence cap.
  expect(png.byteLength).toBeLessThanOrEqual(2*1024*1024);
  const {createHash}=createRequire(import.meta.url)('node:crypto');
- const captureId=`${width}x${height}`,encoded=png.toString('base64'),parts=Math.ceil(encoded.length/3072);
- console.log('STAMP_ATELIER_CAPTURE '+JSON.stringify({format:'stamp-atelier-preview/v1',candidate:process.env.GITHUB_SHA??'local-uncommitted',id:captureId,bytes:png.byteLength,sha256:createHash('sha256').update(png).digest('hex'),parts,viewport:{width,height},dimensions,metrics}));
- for(let i=0;i<parts;i++)console.log(`STAMP_ATELIER_PNG ${captureId} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
- console.log(`STAMP_ATELIER_CAPTURE_END ${captureId}`);
+ const captureId=`${width}x${height}`;
+ console.log('STAMP_ATELIER_CAPTURE '+JSON.stringify({format:'stamp-atelier-preview/v2',transport:'playwright-attachment',attachment:`stamp-atelier-native-${width}x${height}.png`,candidate:process.env.GITHUB_SHA??'local-uncommitted',id:captureId,bytes:png.byteLength,sha256:createHash('sha256').update(png).digest('hex'),viewport:{width,height},dimensions,metrics}));
  } finally {await context.close();}
 });
 
