@@ -205,7 +205,7 @@ test('single volumetric foods partition exactly at guide planes with bounded res
    model.root.traverse(o=>{if(o instanceof T.Mesh){assert.ok(owned.has(o.geometry));for(const v of o.geometry.getAttribute('position').array)assert.ok(Number.isFinite(v));assert.equal((o.material as T.MeshStandardMaterial).map,null);}});
    for(let i=0;i<7;i++){
     const a=model.faces[i].right.geometry.getAttribute('position'),b=model.faces[i+1].left.geometry.getAttribute('position');
-    for(const [mesh,position] of [[model.faces[i].right,a],[model.faces[i+1].left,b]] as const)for(let n=0;n<position.count;n++)assert.ok(Math.abs(position.getX(n)+mesh.parent!.position.x-planes[i])<(id==='pumpkin'&&n>=120?.00601:1e-6),'the flesh lies on the knife plane; only raised seeds stand .006 above it');
+    for(const [mesh,position] of [[model.faces[i].right,a],[model.faces[i+1].left,b]] as const)for(let n=0;n<position.count;n++)assert.ok(Math.abs(position.getX(n)+mesh.parent!.position.x-planes[i])<(id==='pumpkin'&&n>=1320?.00601:1e-6),'the flesh lies on the knife plane; only raised seeds stand .006 above it');
    }
    const refs=resources(model.root);for(const count of [...Array.from({length:8},(_,i)=>i),0]){model.update(count);model.faces.forEach((f,i)=>{assert.equal(f.left.visible,i>0&&i<=count);assert.equal(f.right.visible,i<count);assert.equal(model.segments[i].position.z,i<count?.65:0);});assert.deepEqual(resources(model.root),refs);
     model.root.updateMatrixWorld(true);const world=new T.Box3().setFromObject(model.root,true);assert.ok(world.min.x>=-3.05&&world.max.x<=3.05,`${id}/${count}: slices remain across the board`);assert.ok(world.min.z>=-2&&world.max.z<=2.2,`${id}/${count}: slices remain within board depth`);assert.ok(world.min.y>=.249);
@@ -367,7 +367,7 @@ test('preparation pigments are deterministic, seam-continuous and reveal layered
    }
    if(id!=='mushroom'){
     const face=model.faces[2].right.geometry,c=face.getAttribute('color'),p=face.getAttribute('position');
-    assert.ok(p.count>=1200,'flesh has multiple actual radial bands rather than a single colour fan');
+    assert.ok(p.count>=1320&&p.count<=1500,'six flesh bands and at most five 12-triangle seeds have a fixed vertex budget');
     const tones=new Set(Array.from({length:c.count},(_,i)=>[c.getX(i),c.getY(i),c.getZ(i)].map(v=>v.toFixed(4)).join('/')));
     assert.ok(tones.size>50,'thin rind, flesh and core retain distinct pigments');
    }
