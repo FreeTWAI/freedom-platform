@@ -98,3 +98,18 @@ for(const mode of ['photo','cash'] as const){
   h.api.cancel({...h.event(2),type:'lostpointercapture'});assert.equal(h.api.read().pointer,null);assert.deepEqual(h.released,[1]);
  });
 }
+
+// Execute the production layout arithmetic, including narrow/tall viewports.
+const layoutSource=stripTypeScriptTypes(atelierClosure('export function atelierLayout(', 'export function mountPhotoCashAtelier').replace('export ',''));
+const layout=runInNewContext(`${layoutSource};atelierLayout`) as (w:number,h:number,photo:boolean)=>{extent:number;viewWidth:number;benchWidth:number;benchDepth:number;backdropWidth:number};
+test('atelier set covers the viewport without fitting a miniature cabinet in portrait',()=>{
+ for(const [w,h] of [[1440,1000],[390,844],[667,375],[320,960],[195,422]]){
+  const cash=layout(w,h,false),photo=layout(w,h,true);
+  assert.ok(cash.benchWidth>cash.viewWidth);
+  assert.ok(cash.benchDepth*8/Math.sqrt(89)>cash.extent,'projected depth covers the complete camera');
+  assert.ok(photo.backdropWidth>photo.viewWidth);
+  assert.ok(cash.viewWidth>=5.4,'both classification lanes remain inside the scene');
+ }
+ const portrait=layout(390,844,false),landscape=layout(844,390,false);
+ assert.ok(portrait.benchDepth>landscape.benchDepth,'portrait set expands instead of shrinking the cash');
+});

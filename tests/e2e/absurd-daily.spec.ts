@@ -29,6 +29,8 @@ for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1
   const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${mode} · 可操作預覽</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`;
   if(mode==='photo'){await page.clock.install({time:new Date('2026-11-11T00:00:00Z')});await page.clock.pauseAt(new Date('2026-11-11T00:00:01Z'));}
   await page.setContent(html);const root=page.locator('.night-atelier'),canvas=root.getByRole('application');await expect(root).toHaveAttribute('data-native','true');await expect(canvas).toBeVisible();
+  await expect(root).toHaveAttribute('data-scene-coverage','full-viewport');
+  const canvasBounds=await canvas.boundingBox();expect(canvasBounds).not.toBeNull();expect(canvasBounds!.x).toBe(0);expect(canvasBounds!.y).toBe(0);expect(canvasBounds!.width).toBe(width);expect(canvasBounds!.height).toBe(height);
   // Actual originals captured before the time-limited client leaves. No hidden
   // overlays, screenshot CSS, viewport resizing, image editing or image mocks.
   let capture=await page.screenshot({type:'jpeg',quality:92});
