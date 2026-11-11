@@ -159,11 +159,31 @@ test('cash flight copies the outgoing note, follows the chosen side and respects
 const damageRenderSource=stripTypeScriptTypes(atelierClosure('function render(){','function updateCamera(){'));
 test('cash damage redraw covers old and new bounds, restores scissor and fully redraws invalidated frames',()=>{
  const calls:unknown[][]=[];let next={x:100,y:200,z:500,w:600};
- const context={disposed:false,lost:false,photo:false,cashDamage:null as unknown,panX:0,panY:0,updatePose(){},performance:{now:()=>0},cashBounds:()=>next,scene:{},camera:{},root:{clientWidth:1440,clientHeight:1000,dataset:{}},renderer:{info:{render:{calls:67,triangles:31618}},setScissor(...args:number[]){calls.push(['rect',...args]);},setScissorTest(on:boolean){calls.push(['enabled',on]);},render(){calls.push(['render']);}}};
+ const context={disposed:false,lost:false,photo:false,cashDamage:null as unknown,panX:0,panY:0,updatePose(){},performance:{now:()=>0},cashBounds:()=>next,scene:{},camera:{},root:{clientWidth:1440,clientHeight:1000,dataset:{}},renderer:{info:{render:{calls:67,triangles:31618}},getPixelRatio:()=>1.5,setScissor(...args:number[]){calls.push(['rect',...args]);},setScissorTest(on:boolean){calls.push(['enabled',on]);},render(){calls.push(['render']);}}};
  const render=runInNewContext(`${damageRenderSource};render`,context) as ()=>void;
  render();assert.deepEqual(calls,[['render'],['enabled',false]],'first frame is complete');
- calls.length=0;next={x:-50,y:300,z:700,w:1200};render();assert.deepEqual(calls,[['rect',0,200,700,800],['enabled',true],['render'],['enabled',false]],'union erases old paper and clips to viewport');
+ calls.length=0;next={x:-50,y:300,z:700,w:1200};render();assert.deepEqual(calls,[['rect',0,200,701,801],['enabled',true],['render'],['enabled',false]],'union erases old paper with an outward pixel margin clipped by the framebuffer');
  calls.length=0;context.cashDamage=null;render();assert.deepEqual(calls,[['render'],['enabled',false]],'resize/context restore must invalidate retained pixels');
  calls.length=0;context.photo=true;render();assert.deepEqual(calls,[['render'],['enabled',false]],'moving photo scene never uses retained pixels');
  calls.length=0;context.lost=true;render();assert.equal(calls.length,0);
+});
+
+test('cash scissor covers the last framebuffer column and row after fractional-DPR shadow restoration',()=>{
+ // Three uses round() in setScissor but floor() when a shadow pass restores
+ // the default target. Execute production render and check BOTH conversions.
+ for(const ratio of [.5,.75,1,1.25,1.5])for(const [width,height] of [[390,844],[667,375]]){
+  let rect:number[]=[];
+  const context={disposed:false,lost:false,photo:false,cashDamage:{x:1,y:1,z:width,w:height},panX:0,panY:0,updatePose(){},performance:{now:()=>0},cashBounds:()=>context.cashDamage,scene:{},camera:{},root:{clientWidth:width,clientHeight:height,dataset:{}},renderer:{info:{render:{calls:67,triangles:31618}},getPixelRatio:()=>ratio,setScissor(...args:number[]){rect=args;},setScissorTest(){},render(){}}};
+  const render=runInNewContext(`${damageRenderSource};render`,context) as ()=>void;
+  for(let start=0;start<width;start++){
+   context.cashDamage={x:start,y:start%height,z:width,w:height};render();
+   for(const convert of [Math.floor,Math.round]){
+    const [x,y,w,h]=rect.map(value=>convert(value*ratio));
+    assert.ok(x+w>=Math.floor(width*ratio),`DPR ${ratio}, origin ${start}: right edge is retained`);
+    assert.ok(y+h>=Math.floor(height*ratio),`DPR ${ratio}, origin ${start}: top edge is retained`);
+    assert.ok(x<=Math.ceil(start*ratio)&&y<=Math.ceil((start%height)*ratio));
+   }
+   assert.ok(rect[2]<=width-start+2&&rect[3]<=height-start%height+2,'only a bounded edge margin is redrawn');
+  }
+ }
 });

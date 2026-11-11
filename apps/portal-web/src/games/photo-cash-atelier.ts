@@ -250,7 +250,10 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
   if(next&&cashDamage){
    const x=Math.max(0,Math.min(next.x,cashDamage.x)),y=Math.max(0,Math.min(next.y,cashDamage.y));
    const right=Math.min(root.clientWidth,Math.max(next.z,cashDamage.z)),top=Math.min(root.clientHeight,Math.max(next.w,cashDamage.w));
-   renderer.setScissor(x,y,Math.max(0,right-x),Math.max(0,top-y));renderer.setScissorTest(true);
+   // Three floors origin and size independently after restoring the shadow target.
+   // Cover the fractional-DPR edge pixel too; the framebuffer clips any overhang.
+   const edge=1/Math.min(1,renderer.getPixelRatio());
+   renderer.setScissor(x,y,Math.max(0,right-x)+edge,Math.max(0,top-y)+edge);renderer.setScissorTest(true);
   }
   try{renderer.render(scene,camera);}finally{renderer.setScissorTest(false);}
   cashDamage=next;
