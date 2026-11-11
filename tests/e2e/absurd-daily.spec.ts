@@ -2461,6 +2461,12 @@ for(const game of ['chair','tofu','holiday'] as const)test(`PT-fullview: ${game}
   await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'no-preference'});
   await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});
   await page.goto(`/play?game=${game}&seed=42`);await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();
+  // The ready screen is already full-viewport, even before a user gesture can
+  // request native fullscreen. Its footer must not fall below site navigation.
+  const readyBounds=await page.locator('.fullscreen-game').boundingBox();
+  expect(readyBounds).not.toBeNull();
+  expect(readyBounds!.x).toBeCloseTo(0,0);expect(readyBounds!.y).toBeCloseTo(0,0);
+  expect(readyBounds!.width).toBeCloseTo(390,0);expect(readyBounds!.height).toBeCloseTo(844,0);
   const tools=page.locator('.pt-tools');
   const hit=async(label:string)=>{
     const button=tools.getByRole('button',{name:label,exact:true});

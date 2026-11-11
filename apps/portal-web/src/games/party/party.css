@@ -47,7 +47,7 @@
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) {
  --pt-world-bg:#f4dfb1;--pt-feedback-bg:#f9e5b5;--ad-bg:#fff0ca;--ad-surface:#fff7e4;--ad-ink:#674525;--ad-muted:#775b3b;--ad-line:#c99969;--ad-accent:#9b4a28;
  --holiday-safe-top:env(safe-area-inset-top,0px);--holiday-safe-right:env(safe-area-inset-right,0px);--holiday-safe-bottom:env(safe-area-inset-bottom,0px);--holiday-safe-left:env(safe-area-inset-left,0px);
- display:block;position:relative;isolation:isolate;width:100%;height:100dvh;min-height:0;max-width:none;margin:0;padding:0;border:0;border-radius:0;overflow:hidden;background:var(--pt-world-bg);color:var(--ad-ink);container-type:inline-size;
+ display:block;position:fixed;inset:0;z-index:20;isolation:isolate;width:100%;height:100dvh;min-height:0;max-width:none;margin:0;padding:0;border:0;border-radius:0;overflow:hidden;background:var(--pt-world-bg);color:var(--ad-ink);container-type:inline-size;
  &.fullscreen-game--viewport,&:fullscreen{position:fixed;inset:0;width:100%;height:100dvh;padding:0}
  .fullscreen-game__bar{position:absolute;left:calc(var(--holiday-safe-left) + 8px);top:calc(var(--holiday-safe-top) + 8px);z-index:6;display:flex;gap:4px;width:max-content;max-width:100%;min-height:44px;margin:0;padding:0;border:0;background:transparent;flex-wrap:nowrap}
  .fullscreen-game__bar>span:empty{display:none}
@@ -198,5 +198,26 @@
 @media(max-width:559px){
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
   .pt-tools .pt-retry-stage{position:absolute;top:calc(var(--game-safe-top,var(--holiday-safe-top)) + 8px);right:calc(var(--game-safe-right,var(--holiday-safe-right)) + 60px);z-index:6}
+ }
+}
+
+/* Full-viewport ownership starts at the ready screen, not after the native
+   fullscreen gesture. A 100dvh block below site navigation loses its tools.
+   Absolute grid children must drop their old cell placement: otherwise 50%
+   is resolved against half a grid, doubling safe offsets and squeezing tools. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+ .pt-holiday-heading{align-self:start}
+ .pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-overlay{inset:calc(var(--game-safe-top,var(--holiday-safe-top)) + 64px) 12px calc(var(--pt-footer-height,100px) + var(--game-safe-bottom,var(--holiday-safe-bottom)) + 20px);padding:0}
+ .pt-holiday-overlay:not(:has(.pt-holiday-modal)) .pt-panel{max-height:100%;min-height:0;overflow:auto;flex-shrink:1}
+}
+@media(min-width:560px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-holiday-stage[data-party-state] .pt-controls,.pt-holiday-footer{grid-area:auto}
+ }
+}
+@media(max-width:559px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-holiday-stage{gap:4px}
+  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.4fr)}
  }
 }
