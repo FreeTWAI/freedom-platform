@@ -260,6 +260,11 @@ for (const kind of ['unknown', 'extra', 'duplicate', 'redirect', 'bytes', 'chunk
 test('response boundary rejects '+kind+' without retaining secret output', async () => {
   let headerBodyReads = 0;
   const f = await machine(async (_request, send) => {
+    // This synthetic chunk boundary does not use the server response. Keep
+    // unrelated HTTP/SQL work outside the unchanged 250ms response deadline.
+    if (kind === 'chunks') return new Response(new ReadableStream({ start(controller) {
+      for (let i=0;i<129;i++) controller.enqueue(new Uint8Array([32])); controller.close();
+    } }), { status: 201, headers: { 'Content-Type':'application/json' } });
     // Header rejection must not depend on an unrelated SQL round trip within
     // the unchanged 250ms deadline. Prove rejection precedes body decoding.
     if (kind === 'content_coding') {
@@ -278,8 +283,7 @@ test('response boundary rejects '+kind+' without retaining secret output', async
     if (kind === 'utf8') return new Response(new Uint8Array([0xff]), { status: 201, headers: { 'Content-Type':'application/json' } });
     if (kind === 'encoding') return new Response(JSON.stringify(value), { status: 201, headers: { 'Content-Type':'text/html' } });
     if (kind === 'hang') return new Response(new ReadableStream({ start() {} }), { status: 201, headers: { 'Content-Type':'application/json' } });
-    return new Response(new ReadableStream({ start(controller) { for (let i=0;i<129;i++) controller.enqueue(new Uint8Array([32])); controller.close(); } }),
-      { status: 201, headers: { 'Content-Type':'application/json' } });
+    assert.fail('Unhandled response boundary fixture');
   }, { requestTimeoutMs: 250 });
   await rejects(f.client.begin(), kind === 'hang' ? 'aborted' : 'response_invalid');
   if (kind === 'content_coding') assert.equal(headerBodyReads, 0, 'Unsupported content coding must fail before reading the body');
