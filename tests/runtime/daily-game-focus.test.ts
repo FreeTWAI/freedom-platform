@@ -136,12 +136,13 @@ test('engraved prop banknotes preserve the exact classification label and explic
 // evidence only, not a frame-rate, native-animation or visual-quality claim.
 const settleSource=stripTypeScriptTypes(atelierClosure('function stop(){','function pause(){')+atelierClosure('function unpause(){','function reset(){'));
 test('cash paper animation terminates and pause recovery never strands a floating card',()=>{
- let queued=0,cancelled=0;
- const context={photo:false,paused:false,lost:false,disposed:false,ended:false,elapsed:0,last:1000,cashMotionUntil:1180,flashUntil:0,frame:0,performance:{now:()=>1000},cardGroup:{position:{y:0}},root:{dataset:{} as Record<string,string>},panel:{hidden:false},controls:{inert:true},footer:{inert:true},canvas:{inert:true,focus(){}},refresh(){},render(){},requestAnimationFrame(){queued++;return queued;},cancelAnimationFrame(){cancelled++;}};
+ let queued=0,cancelled=0,renders=0,refreshes=0;
+ const context={photo:false,paused:false,lost:false,disposed:false,ended:false,elapsed:0,last:1000,cashMotionUntil:1180,lastCashRender:-Infinity,flashUntil:0,frame:0,performance:{now:()=>1000},cardGroup:{position:{y:0}},root:{dataset:{} as Record<string,string>},panel:{hidden:false},controls:{inert:true},footer:{inert:true},canvas:{inert:true,focus(){}},refresh(){refreshes++;},render(){renders++;},requestAnimationFrame(){queued++;return queued;},cancelAnimationFrame(){cancelled++;}};
  const api=runInNewContext(`${settleSource};({animate,start,stop,unpause})`,context) as {animate:(t:number)=>void;start:()=>void;stop:()=>void;unpause:()=>void};
  api.animate(1000);assert.equal(context.cardGroup.position.y,.18);assert.equal(queued,1);
- api.animate(1181);assert.equal(context.cardGroup.position.y,0);assert.equal(context.root.dataset.cashSettled,'true');assert.equal(queued,1,'no idle cash RAF');
+ api.animate(1016);assert.equal(renders,1,'intermediate high-refresh frame skips expensive render');assert.equal(refreshes,0,'cash animation does not rewrite unchanged HUD');
+ api.animate(1170);assert.equal(renders,2);api.animate(1181);assert.equal(renders,3,'final frame renders even within the 33ms throttle interval');assert.equal(context.cardGroup.position.y,0);assert.equal(context.root.dataset.cashSettled,'true');assert.equal(queued,3,'no idle cash RAF');
  context.paused=true;context.cardGroup.position.y=.12;api.stop();api.animate(1100);assert.equal(context.cardGroup.position.y,.12);assert.equal(cancelled,1);
- api.unpause();assert.equal(context.cashMotionUntil,0);assert.equal(context.cardGroup.position.y,0);assert.equal(context.root.dataset.cashSettled,'true');assert.equal(queued,1);
+ api.unpause();assert.equal(context.cashMotionUntil,0);assert.equal(context.cardGroup.position.y,0);assert.equal(context.root.dataset.cashSettled,'true');assert.equal(queued,3);
  context.lost=true;context.paused=true;api.unpause();assert.equal(context.paused,true,'context loss cannot resume');
 });
