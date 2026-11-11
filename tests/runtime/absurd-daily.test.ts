@@ -1961,3 +1961,24 @@ test('PT-fullview: compact light holiday left column preserves playable core (CP
  assert.ok(viewport.core.x+viewport.core.width<=327);
  assert.ok(viewport.core.y>=90.4);assert.ok(viewport.core.y+viewport.core.height<=349);
 });
+
+test('PT-fullview orthographic floor remains ahead of near plane without moving gameplay projections',async()=>{
+  const {createPartyFloorFit}=await import('../../apps/portal-web/src/games/party/stage.js');
+  const {OrthographicCamera,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+  const fit=createPartyFloorFit();
+  for(const game of ['tofu','holiday'])for(const [w,h,top,bottom] of [[390,844,104,168],[320,568,203,265],[667,375,90,26],[1440,900,100,130],[640,480,0,0]]){
+    const camera=new OrthographicCamera(-5.72,5.72,4.29,-4.29,.1,80);
+    const v=partyViewport(w,h,top,bottom).view;
+    camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);
+    const pose=()=>{camera.position.set(...(game==='tofu'?[6,6.2,8]:[3.8,8.6,9.5]));camera.lookAt(0,game==='tofu'?1.25:.4,0);camera.updateMatrixWorld(true);};
+    pose();const before=new Vector3(1,1,1).project(camera);fit(camera);const after=new Vector3(1,1,1).project(camera);
+    assert.ok(Math.abs(before.x-after.x)<1e-10&&Math.abs(before.y-after.y)<1e-10,'authored XY framing is unchanged');
+    const position=camera.position.clone();pose();fit(camera);assert.ok(position.distanceTo(camera.position)<1e-9,'fitting cannot accumulate across frames');
+    const direction=camera.getWorldDirection(new Vector3());
+    for(const x of [-1,1])for(const y of [-1,1]){
+      const near=new Vector3(x,y,-1).unproject(camera),distance=(.012-near.y)/direction.y;
+      assert.ok(distance>=0&&distance<camera.far-camera.near,'floor is inside depth range');
+      near.addScaledVector(direction,distance);assert.ok(Math.abs(near.x)<128&&Math.abs(near.z+1.4)<128,'floor covers viewport corner');
+    }
+  }
+});

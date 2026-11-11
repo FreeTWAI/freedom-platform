@@ -166,6 +166,12 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   await partyAdvance(page,250);await attachWorldEvidence('playing');await tofuStageBounds(page,scale);expect(await stage.evaluate(root=>{const style=getComputedStyle(root.querySelector('.pt-root')!);return ['top','right','bottom','left'].map(side=>parseFloat(style.getPropertyValue(`padding-${side}`)));})).toEqual([20,24,26,22]);
   const buttons=page.locator('.pt-tofu-controls button');await expect(buttons).toHaveCount(1);for(const button of await buttons.all())await holidayControlHit(button);
   await tofuWaitOffset(page,offset=>offset<.055);await tofuDrop(page,'pointer');await page.clock.runFor(550);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','165');
+  if(light&&viewport.width<560){
+    const retry=page.getByRole('button',{name:'重試 3D，保留這局',exact:true});await holidayControlHit(retry);
+    const retryBox=(await retry.boundingBox())!,header=(await stage.locator('.pt-holiday-heading').boundingBox())!;
+    expect(retryBox.y).toBeGreaterThanOrEqual(header.y-1);expect(retryBox.y+retryBox.height).toBeLessThanOrEqual(header.y+header.height+1);
+    for(const button of await stage.locator('.fullscreen-game__bar button,.fullscreen-game__bar summary,.pt-holiday-heading button').all())await holidayControlHit(button);
+  }
   const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);const overlay=page.locator('.pt-holiday-overlay').filter({has:close});
   const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
   for(let i=0;i<8;i++){await page.keyboard.press(i<4?'Tab':'Shift+Tab');expect(await overlay.evaluate(el=>el.contains(document.activeElement))).toBe(true);}

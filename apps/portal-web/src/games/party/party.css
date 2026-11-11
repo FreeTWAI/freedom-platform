@@ -168,12 +168,35 @@
  .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding-inline:0}
  .pt-lane-selector>button{padding-inline:3px}
 }
-/* In active play on a phone/short window, the game name is already announced
+/* On a phone/short window, the game name is already announced
    by the application and help. Keep the semantic h1, remove only its duplicate
    painted title; scores, lives, feedback and every control remain visible. */
 @media(max-width:440px),(max-height:500px){
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
-  .pt-holiday-stage[data-party-state=playing] .pt-holiday-heading{justify-content:flex-end}
-  .pt-holiday-stage[data-party-state=playing] .pt-holiday-heading h1{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .pt-holiday-stage[data-party-state] .pt-holiday-heading{justify-content:flex-end}
+  .pt-holiday-stage[data-party-state] .pt-holiday-heading h1{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ }
+}
+
+/* The two columns have independent bottom chrome. Sharing an intrinsic grid
+   row made a wrapped right footer lift the left controls over the scene. */
+@media(min-width:560px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-holiday-stage[data-party-state] .pt-controls{position:absolute;left:calc(var(--game-safe-left,var(--holiday-safe-left)) + 8px);bottom:calc(var(--game-safe-bottom,var(--holiday-safe-bottom)) + 8px);width:calc((100% - var(--game-safe-left,var(--holiday-safe-left)) - var(--game-safe-right,var(--holiday-safe-right)) - 28px)/2)}
+  .pt-holiday-footer{position:absolute;right:calc(var(--game-safe-right,var(--holiday-safe-right)) + 8px);bottom:calc(var(--game-safe-bottom,var(--holiday-safe-bottom)) + 8px);width:calc((100% - var(--game-safe-left,var(--holiday-safe-left)) - var(--game-safe-right,var(--holiday-safe-right)) - 28px)/2)}
+ }
+}
+@media(max-width:559px), (max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-tools button,.fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{line-height:1.1}
+  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-template-columns:minmax(0,1.5fr) minmax(0,.75fr) minmax(0,1.4fr)}
+  .pt-scoreboard strong{display:flex;flex-direction:column;align-items:center;white-space:nowrap}
+  .pt-scoreboard strong>span:not(.pt-life-icon){margin-left:0}
+  .pt-scoreboard strong:has(.pt-life-icon){flex-direction:row;justify-content:center}
+ }
+}
+@media(max-width:559px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-tools .pt-retry-stage{position:absolute;top:calc(var(--game-safe-top,var(--holiday-safe-top)) + 8px);right:calc(var(--game-safe-right,var(--holiday-safe-right)) + 60px);z-index:6}
  }
 }

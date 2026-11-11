@@ -9,6 +9,27 @@ import {chairJump,chairWave,holidayOpen,holidayTargets,tofuAxis,tofuPosition,typ
 export type PartyStage={update:(s:PartyRun,motion:boolean)=>void;capture:()=>string;pick:(x:number,y:number)=>number|null;anchors:()=>{hole:number;x:number;y:number}[];stats:()=>{calls:number;triangles:number;geometries:number;textures:number};dispose:()=>void};
 const ORIGINAL_PALETTE={ink:'#45433b',cream:'#fff0c9',sage:'#74ae98',leaf:'#397c5e',peach:'#e99773',gold:'#f0bb53',lilac:'#b6a0c8',navy:'#627799',wood:'#c59663'};
 
+/** Extend depth, not the authored XY composition, when a full-viewport
+ * orthographic window reaches below the original near plane. Scratch vectors
+ * are owned once per stage; callers restore the authored pose before fitting. */
+export function createPartyFloorFit(){
+  const point=new Vector3(),direction=new Vector3(),edges=[-1,1];
+  return (camera:OrthographicCamera)=>{
+    camera.updateMatrixWorld(true);camera.getWorldDirection(direction);
+    if(direction.y>=-.001)return;
+    let lowest=Infinity;
+    for(const x of edges)for(const y of edges)lowest=Math.min(lowest,point.set(x,y,-1).unproject(camera).y);
+    const retreat=Math.max(0,(.062-lowest)/-direction.y);
+    camera.position.addScaledVector(direction,-retreat);camera.updateMatrixWorld(true);
+    let depth=80;
+    for(const x of edges)for(const y of edges){
+      point.set(x,y,-1).unproject(camera);
+      depth=Math.max(depth,camera.near+(.012-point.y)/direction.y+2);
+    }
+    camera.far=depth;camera.updateProjectionMatrix();
+  };
+}
+
 /** PT-6: one bounded, original miniature set per mount. No network assets. */
 export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>void):PartyStage {
   const C=game==='chair'?{...ORIGINAL_PALETTE,ink:'#17233e',sage:'#65d4cf',leaf:'#21b9b2',peach:'#f58eab',gold:'#f5d96a',navy:'#384766',wood:'#26354d'}:game==='tofu'?{...ORIGINAL_PALETTE,ink:'#363c36',sage:'#7aaba1',leaf:'#3d6b5e',peach:'#c17e5d',gold:'#c8a266',navy:'#405b60',wood:'#81674c'}:{...ORIGINAL_PALETTE,ink:'#463957',sage:'#98bc58',leaf:'#407944',peach:'#ee835c',gold:'#f6ca64',navy:'#65609a',wood:'#b16f4a'};
@@ -59,11 +80,11 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       }
     },512,512);
     // Continuous set floor extends beyond the safe gameplay core in every aspect.
-    floor.wrapS=floor.wrapT=RepeatWrapping;floor.repeat.set(4,game==='chair'?3:4);
-    rb(world,game==='chair'?'#17233e':game==='tofu'?'#81674c':'#bf9062',0,-.25,-1.4,64,.5,64);
+    floor.wrapS=floor.wrapT=RepeatWrapping;floor.repeat.set(game==='chair'?4:16,game==='chair'?3:16);
+    rb(world,game==='chair'?'#17233e':game==='tofu'?'#81674c':'#bf9062',0,-.25,-1.4,game==='chair'?64:256,.5,game==='chair'?64:256);
     // Construct the lit floor with its intended material, not a basic decal.
     const floorSurface=new MeshStandardMaterial({map:floor,roughness:game==='chair'?.58:.96,metalness:game==='chair'?.18:0});materials.add(floorSurface);
-    const ground=new Mesh(plane,floorSurface);ground.position.set(0,.012,-1.4);ground.scale.set(64,64,1);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;world.add(ground);
+    const ground=new Mesh(plane,floorSurface);ground.position.set(0,.012,-1.4);ground.scale.set(game==='chair'?64:256,game==='chair'?64:256,1);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;world.add(ground);
     const scenery=group(world);
     function backdrop(kind:PartyGameId){return canvasTexture(ctx=>{
       const grad=ctx.createLinearGradient(0,0,0,512);grad.addColorStop(0,kind==='chair'?'#12203c':kind==='tofu'?'#e9ede3':'#f9e9b8');grad.addColorStop(1,kind==='chair'?'#52647e':kind==='tofu'?'#c0d1c6':'#e7c68d');ctx.fillStyle=grad;ctx.fillRect(0,0,1024,512);
@@ -167,6 +188,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       }
       bakeRigidGroup(gardenRims,geometries);
     }
+    const fitFloor=createPartyFloorFit();
     const liveViewport=host.hasAttribute('data-party-live-viewport');
     let viewport=partyViewport(640,480);
     function project(){const v=viewport.view;camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);camera.updateProjectionMatrix();}
@@ -202,12 +224,13 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         if(crumb.visible){const top=s.layers[s.layers.length-1];setTofu(crumb,{...top,x:top.x+1.6+age/400,width:.35},topY-age/220);crumb.rotation.z=age/170;}
         const focus=(n-1)*R.tofuHeight*.46,cam=camera as OrthographicCamera,size=4.2+n*.09;cam.left=-size*4/3;cam.right=size*4/3;cam.top=size;cam.bottom=-size;cam.position.set(6,focus+6.2,8);cam.lookAt(0,focus+1.25,0);cam.updateProjectionMatrix();
       }else if(s.game==='holiday'){
+        camera.position.set(3.8,8.6,9.5);camera.lookAt(0,.4,0);
         const targets=holidayTargets(s.seed,s.round),phase=s.elapsed%R.holidayRoundMs,visible=s.status==='ready'||s.status==='done'||(phase>=R.holidayOpenMs&&phase<R.holidayCloseMs);
         sprites.forEach((p,i)=>{const kind=i===targets.good?'good':i===targets.boss?'boss':'empty',pressed=!!(s.pressed&(1<<i));p.body.visible=visible&&kind!=='empty'&&!pressed;p.leaf.visible=kind==='good';p.tie.visible=kind==='boss';p.body.position.y=.25+(motion?Math.min(1,Math.max(0,(phase-R.holidayOpenMs)/120))*.14:.14);p.body.rotation.z=motion?Math.sin(t*5+i)*.055:0;});
       }
       const burst=s.game==='holiday'?s.pick&&s.elapsed-s.pick.at<500:s.game==='chair'?s.elapsed-s.hitAt<600:feedbackAge<600;
       papers.forEach((p,i)=>{p.visible=motion&&!!burst&&s.status!=='ready';if(!p.visible)return;const age=s.game==='holiday'?s.elapsed-(s.pick?.at??0):s.game==='chair'?s.elapsed-s.hitAt:feedbackAge,a=i*2.4,origin=s.game==='holiday'&&s.pick?anchorPositions[s.pick.hole]:new Vector3(s.game==='chair'?s.x*1.5:0,1,s.game==='chair'?2.4:0);p.position.set(origin.x+Math.sin(a)*age/280,origin.y+1.3+age/350-age*age/200000,origin.z+Math.cos(a)*age/400);p.rotation.set(t*3+i,t*2,age/150+i);});
-      tofuBatch?.update();project();renderer.render(scene,camera);
+      tofuBatch?.update();project();if(camera instanceof OrthographicCamera)fitFloor(camera);renderer.render(scene,camera);
     }
     resize();
     if(liveViewport){
