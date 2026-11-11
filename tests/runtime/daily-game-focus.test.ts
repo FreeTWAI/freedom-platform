@@ -100,7 +100,7 @@ for(const mode of ['photo','cash'] as const){
 }
 
 // Execute the production layout arithmetic, including narrow/tall viewports.
-const layoutSource=stripTypeScriptTypes(atelierClosure('export function atelierLayout(', 'export function mountPhotoCashAtelier').replace('export ',''));
+const layoutSource=stripTypeScriptTypes(atelierClosure('export function atelierLayout(', 'export function paintAtelierBanknote').replace('export ',''));
 const layout=runInNewContext(`${layoutSource};atelierLayout`) as (w:number,h:number,photo:boolean)=>{extent:number;viewWidth:number;benchWidth:number;benchDepth:number;backdropWidth:number;backdropHeight:number};
 test('atelier set covers the viewport without fitting a miniature cabinet in portrait',()=>{
  for(const [w,h] of [[1440,1000],[390,844],[667,375],[320,960],[195,422]]){
@@ -116,4 +116,18 @@ test('atelier set covers the viewport without fitting a miniature cabinet in por
  }
  const portrait=layout(390,844,false),landscape=layout(844,390,false);
  assert.ok(portrait.benchDepth>landscape.benchDepth,'portrait set expands instead of shrinking the cash');
+});
+
+const paintSource=stripTypeScriptTypes(atelierClosure('export function paintAtelierBanknote(', 'export function mountPhotoCashAtelier').replace('export ',''));
+const paint=runInNewContext(`${paintSource};paintAtelierBanknote`) as (c:unknown,label:string,valid:boolean,id:number)=>void;
+test('engraved prop banknotes preserve the exact classification label and explicit fictional-money disclaimer',()=>{
+ for(const [label,valid,id] of [['5 萬',true,14],['下個月幫你加薪',false,7]] as const){
+  const text:string[]=[],coordinates:number[]=[];
+  const ctx=new Proxy({},{get:(_target,key)=>key==='fillText'?(value:string,...args:number[])=>{text.push(value);coordinates.push(...args);}:(...args:number[])=>coordinates.push(...args),set:()=>true});
+  paint(ctx,label,valid,id);
+  assert.ok(text.includes(label));assert.ok(text.includes('遊戲道具 · NOT LEGAL TENDER'));
+  assert.ok(text.includes('NO. '+String(id+1).padStart(4,'0')));
+  assert.ok(text.includes(valid?'COUNT WHAT IS REAL':'A PROMISE IS NOT CASH'));
+  assert.ok(coordinates.every(Number.isFinite));
+ }
 });

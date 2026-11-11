@@ -17,6 +17,28 @@ export function atelierLayout(width:number,height:number,photo:boolean){
  return {extent,viewWidth,benchWidth:Math.max(6.4,viewWidth+2),benchDepth:Math.max(4.9,extent*Math.sqrt(89)/8+3),backdropWidth:Math.max(6.8,viewWidth+6),backdropHeight:Math.max(12,extent*1.4+4)};
 }
 
+// Original engraved-paper drawing, not currency imagery or a downloaded asset.
+export function paintAtelierBanknote(c:CanvasRenderingContext2D,label:string,valid:boolean,id:number){
+ const ink='#192247',paper=valid?'#edf0d8':'#ffe1dc',accent=valid?'#376a62':'#a14065';
+ c.fillStyle=paper;c.fillRect(0,0,1024,560);
+ c.fillStyle=ink;c.fillRect(24,24,976,64);c.fillRect(24,478,976,58);
+ c.strokeStyle=ink;c.lineWidth=3;c.strokeRect(16,16,992,528);c.strokeRect(32,102,960,360);
+ // Interlaced, deterministic guilloche rings around the left medallion.
+ c.strokeStyle=accent;c.lineWidth=1.2;
+ for(let ring=0;ring<24;ring++){c.beginPath();for(let i=0;i<=240;i++){const a=i*Math.PI/120,r=92+ring*2+Math.sin(a*12+ring*.18)*7;const x=207+Math.cos(a)*r,y=280+Math.sin(a)*r;if(i)c.lineTo(x,y);else c.moveTo(x,y);}c.stroke();}
+ for(const x of [42,968])for(let y=112;y<454;y+=14){c.beginPath();c.moveTo(x,y);c.lineTo(x+14,y+7);c.lineTo(x,y+14);c.stroke();}
+ c.fillStyle=paper;c.beginPath();c.arc(207,280,72,0,Math.PI*2);c.fill();c.strokeStyle=accent;c.lineWidth=3;c.stroke();
+ c.fillStyle=accent;c.textAlign='center';c.font='900 60px Georgia,serif';c.fillText(valid?'P':'?',207,298);
+ c.font='600 17px system-ui';c.fillText('PLAY MONEY',207,325);
+ c.fillStyle=paper;c.textAlign='left';c.font='700 25px system-ui';c.fillText('PAPER PARADE',48,66);c.textAlign='right';c.font='600 22px system-ui';c.fillText('NO. '+String(id+1).padStart(4,'0'),970,65);
+ c.fillStyle=accent;c.textAlign='left';c.font='600 22px system-ui';c.fillText(valid?'COUNT WHAT IS REAL':'A PROMISE IS NOT CASH',395,158);
+ c.fillStyle=ink;c.font=valid?'900 126px Georgia,serif':'900 72px system-ui';c.fillText(label,395,307,540);
+ c.strokeStyle=accent;c.lineWidth=2;c.beginPath();c.moveTo(395,337);c.lineTo(940,337);c.stroke();
+ c.fillStyle=accent;c.font='600 24px system-ui';c.fillText(valid?'純屬遊戲道具':'承諾很多，現金沒有。',395,385);
+ c.font='18px monospace';c.fillText('PP / 042  —  '+String(id+1).padStart(4,'0'),395,427);
+ c.fillStyle=paper;c.textAlign='center';c.font='600 24px system-ui';c.fillText('遊戲道具 · NOT LEGAL TENDER',512,516);
+}
+
 export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: Mode) {
  const photo=mode==='photo';
  const style=document.createElement('style');
@@ -107,13 +129,21 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
   const vintage=new THREE.Group();vintage.position.set(-2.3,1.16,2.4);vintage.rotation.y=.25;scene.add(vintage);box('#222e2c',0,0,0,.9,.65,.45,vintage);box(C.gold,0,.32,0,.92,.07,.48,vintage);box(C.ink,0,.44,0,.35,.2,.3,vintage);const lens=mesh(cylinder,C.gold,0,0,.3,.24,.3,.24,vintage,.7);lens.rotation.x=Math.PI/2;const glass=mesh(cylinder,'#102c34',0,0,.48,.18,.025,.18,vintage,.5);glass.rotation.x=Math.PI/2;
   scene.add(subject);subject.position.z=.35;subject.add(humanFace);
   const head=mesh(sphere,'#d3a57f',0,2.8,0,.36,.42,.34,humanFace);anchors.set('head',head);
-  box('#b68b58',0,1.65,0,.94,1.55,.6,subject);mesh(sphere,'#b68b58',0,2.25,0,.55,.4,.36,subject);
+  box('#b68b58',0,1.65,0,.94,1.55,.6,subject);mesh(sphere,'#b68b58',0,2.25,0,.48,.2,.3,subject);
   for(const x of [-.24,.24]){box('#39443d',x,.58,0,.25,.7,.3,subject);box(C.ink,x,.24,.14,.3,.2,.55,subject);mesh(sphere,C.ink,x*.5,2.87,.31,.032,.032,.026,humanFace);}
   mesh(sphere,'#c08f68',0,2.77,.335,.065,.085,.06,humanFace);for(const x of [-.095,.095]){const brow=box(C.ink,x,2.96,.31,.12,.025,.035,humanFace);brow.rotation.z=x<0?-.12:.12;mesh(sphere,C.ink,x*.5,2.67,.33,.07,.022,.026,humanFace);}for(const x of [-.39,.39])mesh(sphere,'#d3a57f',x,2.8,0,.065,.13,.095,humanFace);
   const feet=new THREE.Object3D();feet.position.set(0,.17,.2);subject.add(feet);anchors.set('feet',feet);
   mesh(cylinder,C.ink,0,3.12,0,.45,.06,.38,humanFace);mesh(cylinder,C.ink,0,3.25,0,.31,.25,.29,humanFace);
   for(const x of [-.62,.62]){const arm=box('#b68b58',x,1.95,0,.24,.95,.3,subject);arm.rotation.z=x<0?-.18:.18;mesh(sphere,'#d3a57f',x,1.43,0,.13,.17,.13,subject);}
-  for(let i=0;i<4;i++)mesh(sphere,C.gold,0,1.3+i*.26,.32,.035,.035,.025,subject,.7);
+  // Tailored silhouette: ivory shirt, angular lapels, belt and welt pockets.
+  box('#ece0c1',0,2.29,.305,.25,.38,.035,subject).castShadow=false;
+  for(const side of [-1,1]){const lapel=new THREE.Shape();lapel.moveTo(side*.11,2.47);lapel.lineTo(side*.42,2.29);lapel.lineTo(side*.2,1.96);lapel.lineTo(side*.04,2.19);lapel.closePath();const piece=mesh(geom(new THREE.ShapeGeometry(lapel)),'#947047',0,0,.325,1,1,1,subject);piece.castShadow=false;const pocket=box('#947047',side*.29,1.35,.315,.25,.035,.045,subject);pocket.rotation.z=side*.12;pocket.castShadow=false;}
+  box('#947047',0,1.65,.32,.85,.07,.04,subject).castShadow=false;box(C.gold,0,1.65,.35,.14,.12,.035,subject).castShadow=false;
+  for(let i=0;i<3;i++)mesh(sphere,C.gold,0,1.18+i*.23,.35,.027,.027,.02,subject,.7).castShadow=false;
+  // Fine spectacles and a grosgrain hat band add character without new controls.
+  for(const x of [-.12,.12]){mesh(geom(new THREE.TorusGeometry(.082,.009,6,24)),C.gold,x,2.87,.337,1,1,1,humanFace,.7).castShadow=false;box('#3d332f',Math.sign(x)*.31,3.01,.04,.07,.21,.19,humanFace);}
+  box(C.gold,0,2.87,.341,.08,.012,.013,humanFace).castShadow=false;mesh(cylinder,'#947047',0,3.17,0,.315,.055,.295,humanFace);
+
   umbrella=new THREE.Group();subject.add(umbrella);mesh(cylinder,C.gold,.6,3.13,0,.025,2,.025,umbrella,.7);const canopy=mesh(geom(new THREE.SphereGeometry(1,32,12,0,Math.PI*2,0,Math.PI/2)),C.red,.6,3.85,0,1.1,.55,1.1,umbrella);anchors.set('umbrella',canopy);
   const boardTex=texture(600,1040,c=>{c.fillStyle='#c4b497';c.fillRect(0,0,600,1040);c.strokeStyle='#f8f2e8';c.lineWidth=3;c.strokeRect(24,24,552,992);c.textAlign='center';c.fillStyle=C.ink;c.font='700 58px system-ui';c.fillText('背景也要上鏡',300,470);c.font='24px system-ui';c.fillText('PLEASE PHOTOGRAPH ME',300,530);});
   scene.add(board);const boardMesh=mapped(geom(new THREE.PlaneGeometry(1.5,2.6)),boardTex,board);boardMesh.position.y=1.75;board.position.z=1;anchors.set('board',boardMesh);for(const x of [-.55,.55])box(C.ink,x,.4,0,.05,.8,.3,board);
@@ -140,7 +170,7 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
   box('#192247',0,.15,-1.55,2.5,.2,.55);box('#f9d947',0,.27,-1.55,2.4,.04,.45);
 
  }
- function paintBill(){if(!bill)return;const card=cashDeck(42)[cash.index];if(!card){cardGroup.visible=false;return;}const t=texture(1024,560,c=>{c.fillStyle=card.valid?'#e6f4df':'#ffcadc';c.fillRect(0,0,1024,560);c.strokeStyle='#192247';c.lineWidth=8;c.strokeRect(24,24,976,512);c.strokeRect(38,38,948,484);for(let i=0;i<18;i++){c.beginPath();c.ellipse(512,280,130+i*8,85+i*5,0,0,Math.PI*2);c.strokeStyle=card.valid?'#527c541c':'#985a3d22';c.stroke();}c.fillStyle='#192247';c.font='800 31px system-ui';c.textAlign='left';c.fillText('PAPER PARADE / 遊戲道具',65,99);c.textAlign='right';c.fillText('NO. '+String(card.id+1).padStart(4,'0'),959,99);c.textAlign='center';c.font=card.valid?'900 116px system-ui':'900 66px system-ui';c.fillText(card.label,512,316,880);c.font='30px system-ui';c.fillText(card.valid?'純屬遊戲道具  ·  NOT LEGAL TENDER':'承諾很多，現金沒有。',512,435);});const old=billTexture??(bill.material as THREE.MeshStandardMaterial).map;if(old){old.dispose();textures.delete(old);}billTexture=t;(bill.material as THREE.MeshStandardMaterial).map=t;cardGroup.visible=true;}
+ function paintBill(){if(!bill)return;const card=cashDeck(42)[cash.index];if(!card){cardGroup.visible=false;return;}const t=texture(1024,560,c=>paintAtelierBanknote(c,card.label,card.valid,card.id));const old=billTexture??(bill.material as THREE.MeshStandardMaterial).map;if(old){old.dispose();textures.delete(old);}billTexture=t;(bill.material as THREE.MeshStandardMaterial).map=t;cardGroup.visible=true;}
  function updatePose(){if(!photo)return;const client=CLIENTS[clientIndex];if(!client)return;const pose=photoPose(client.id,elapsed/1000,42);subject.position.y=pose.lift*.55;subject.rotation.z=pose.sway;board.visible=client.id==='backdrop';board.position.x=pose.boardX+1.65;umbrella.visible=client.id==='umbrella';birds.forEach((b,i)=>{b.visible=client.id==='pigeons'&&pose.birds[i]>0;b.position.y=2.9+pose.birds[i];});humanFace.visible=client.id!=='pigeons';const head=anchors.get('head')!;head.visible=humanFace.visible;}
  function refresh(){root.dataset.index=String(photo?clientIndex:cash.index);root.dataset.ended=String(ended);root.dataset.mistakes=String(cash.mistakes);root.dataset.film=String(film);root.dataset.stars=String(totalStars);root.dataset.elapsed=String(Math.floor(elapsed));progress.textContent=photo?`${Math.min(clientIndex+1,3)} / 03`:`${(cash.amount/10000).toFixed(0)} 萬`;note.textContent=ended?'本局完成 · 尚未上線':photo?`${CLIENTS[clientIndex].title} · 底片 ${RULES.film-film} 張`:`${String(cash.index+1).padStart(2,'0')} / 30 · ${cashDeck(42)[cash.index]?.label??'已完成'}`;action.disabled=ended;if(reject)reject.disabled=ended;receipts.forEach((r,i)=>r.visible=i<cash.index/3);updatePose();}
  function render(){if(disposed||lost)return;updatePose();const started=performance.now();renderer.render(scene,camera);root.dataset.native='true';root.dataset.drawCalls=String(renderer.info.render.calls);root.dataset.triangles=String(renderer.info.render.triangles);root.dataset.renderMs=(performance.now()-started).toFixed(2);root.dataset.panX=String(panX);root.dataset.panY=String(panY);}
