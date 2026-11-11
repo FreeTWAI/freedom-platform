@@ -101,14 +101,18 @@ for(const mode of ['photo','cash'] as const){
 
 // Execute the production layout arithmetic, including narrow/tall viewports.
 const layoutSource=stripTypeScriptTypes(atelierClosure('export function atelierLayout(', 'export function mountPhotoCashAtelier').replace('export ',''));
-const layout=runInNewContext(`${layoutSource};atelierLayout`) as (w:number,h:number,photo:boolean)=>{extent:number;viewWidth:number;benchWidth:number;benchDepth:number;backdropWidth:number};
+const layout=runInNewContext(`${layoutSource};atelierLayout`) as (w:number,h:number,photo:boolean)=>{extent:number;viewWidth:number;benchWidth:number;benchDepth:number;backdropWidth:number;backdropHeight:number};
 test('atelier set covers the viewport without fitting a miniature cabinet in portrait',()=>{
  for(const [w,h] of [[1440,1000],[390,844],[667,375],[320,960],[195,422]]){
   const cash=layout(w,h,false),photo=layout(w,h,true);
   assert.ok(cash.benchWidth>cash.viewWidth);
   assert.ok(cash.benchDepth*8/Math.sqrt(89)>cash.extent,'projected depth covers the complete camera');
-  assert.ok(photo.backdropWidth>photo.viewWidth);
-  assert.ok(cash.viewWidth>=5.4,'both classification lanes remain inside the scene');
+  // At z=-1.8, cover all horizontal panning and the highest ray at
+  // panY=2. Camera pitch is atan(2.2/10); lower rays land on the floor.
+  for(const panX of [-2,0,2])assert.ok(Math.abs(panX)+photo.viewWidth/2<photo.backdropWidth/2);
+  const highestWallRay=2+2+photo.extent/2*Math.sqrt(104.84)/10+1.8*.22;
+  assert.ok(highestWallRay<photo.backdropHeight-2,'top edge stays outside the complete framing range');
+  assert.ok(cash.viewWidth>=5.4,'classification centers remain available; colored gutters intentionally bleed past the viewport');
  }
  const portrait=layout(390,844,false),landscape=layout(844,390,false);
  assert.ok(portrait.benchDepth>landscape.benchDepth,'portrait set expands instead of shrinking the cash');
