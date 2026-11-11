@@ -42,447 +42,138 @@
   .pt-play-area:not(.pt-holiday-field):not(:has(.pt-panel)) .pt-light-world{max-height:calc(100dvh - 160px);object-fit:contain}
 }
 
-/* Party slices: one bounded stage, never a raycast host with controls
-   inside it. Reuse arcade tokens; the Three camera and its 4:3 rect stay intact. */
+/* A full-bleed scene with measured HTML chrome. The camera, SVG and hit tests
+   share an unobscured gameplay core, not a fixed-aspect canvas postcard. */
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) {
- --pt-world-bg:#f4dfb1;--pt-feedback-bg:#f9e5b5;--ad-bg:#fff0ca;--ad-surface:#fff7e4;--ad-ink:#674525;--ad-muted:#775b3b;--ad-line:#c99969;--ad-accent:#9b4a28;--holiday-safe-top:env(safe-area-inset-top,0px);--holiday-safe-right:env(safe-area-inset-right,0px);--holiday-safe-bottom:env(safe-area-inset-bottom,0px);--holiday-safe-left:env(safe-area-inset-left,0px);
- display:grid;grid-template-rows:auto minmax(0,1fr);position:relative;gap:0;
- height:min(860px,100dvh);min-height:0;width:100%;overflow:hidden;isolation:isolate;
- padding:var(--holiday-safe-top) var(--holiday-safe-right) var(--holiday-safe-bottom) var(--holiday-safe-left);
- border:2px solid var(--ad-line);border-radius:16px;background:var(--ad-surface);color:var(--ad-ink);
- &.fullscreen-game--viewport,&:fullscreen{position:fixed;inset:0;width:100%;height:100dvh;max-width:none;border:0;border-radius:0;padding:var(--holiday-safe-top) var(--holiday-safe-right) var(--holiday-safe-bottom) var(--holiday-safe-left)}
- .fullscreen-game__bar{position:relative;inset:auto;min-height:44px;gap:4px;margin:0;padding:4px 8px;flex-wrap:nowrap;background:var(--ad-surface);border-bottom:1px solid var(--ad-line);z-index:2}
- .fullscreen-game__button,.fullscreen-game__mode-help summary{width:44px;min-width:44px;min-height:44px;padding:6px;flex:0 0 44px;box-shadow:none;font-size:20px;line-height:1.25;display:grid;place-items:center;background:var(--ad-surface);color:var(--ad-ink);border:1px solid var(--ad-line);border-radius:10px}
+ --pt-world-bg:#f4dfb1;--pt-feedback-bg:#f9e5b5;--ad-bg:#fff0ca;--ad-surface:#fff7e4;--ad-ink:#674525;--ad-muted:#775b3b;--ad-line:#c99969;--ad-accent:#9b4a28;
+ --holiday-safe-top:env(safe-area-inset-top,0px);--holiday-safe-right:env(safe-area-inset-right,0px);--holiday-safe-bottom:env(safe-area-inset-bottom,0px);--holiday-safe-left:env(safe-area-inset-left,0px);
+ display:block;position:relative;isolation:isolate;width:100%;height:100dvh;min-height:0;max-width:none;margin:0;padding:0;border:0;border-radius:0;overflow:hidden;background:var(--pt-world-bg);color:var(--ad-ink);container-type:inline-size;
+ &.fullscreen-game--viewport,&:fullscreen{position:fixed;inset:0;width:100%;height:100dvh;padding:0}
+ .fullscreen-game__bar{position:absolute;left:calc(var(--holiday-safe-left) + 8px);top:calc(var(--holiday-safe-top) + 8px);z-index:5;display:flex;gap:4px;width:max-content;max-width:100%;min-height:44px;margin:0;padding:0;border:0;background:transparent;flex-wrap:nowrap}
+ .fullscreen-game__bar>span:empty{display:none}
+ .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{display:grid;place-items:center;width:44px;min-width:44px;min-height:44px;height:auto;padding:2px;flex:0 0 auto;font-size:20px;line-height:1.4;border:1px solid var(--ad-line);border-radius:12px;background:var(--ad-surface);color:var(--ad-ink);box-shadow:none}
  .fullscreen-game__button::before,.fullscreen-game__mode-help summary::before{display:none}
- .fullscreen-game__mode-help p{right:auto;left:0;max-width:calc(100vw - 32px);background:var(--ad-surface)}
- .pt-holiday-stage{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;width:100%;max-width:none;height:100%;min-height:0;min-width:0;margin:0;padding:0;color:var(--ad-ink);position:relative}
- .pt-holiday-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 8px;min-width:0}
- .pt-holiday-heading h1{font-size:1.125rem;line-height:1.4;margin:0;letter-spacing:0;overflow-wrap:anywhere}
- .pt-holiday-heading button{min-width:44px;width:44px;min-height:44px;padding:4px;flex-shrink:0;font-size:20px;box-shadow:none}
- .pt-holiday-stage[data-party-state] .pt-scoreboard{display:grid;padding:4px 6px;margin:0;border:0;border-block:1px solid var(--ad-line);border-radius:0;background:var(--ad-bg);gap:4px}
+ .fullscreen-game__mode-help p{left:0;right:auto;max-width:calc(100vw - 32px);background:var(--ad-surface)}
+ .pt-holiday-stage{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(96px,1fr) auto auto;gap:6px;width:100%;height:100%;min-width:0;min-height:0;max-width:none;margin:0;padding:calc(var(--game-safe-top,var(--holiday-safe-top)) + 8px) calc(var(--game-safe-right,var(--holiday-safe-right)) + 8px) calc(var(--game-safe-bottom,var(--holiday-safe-bottom)) + 8px) calc(var(--game-safe-left,var(--holiday-safe-left)) + 8px);box-sizing:border-box;color:var(--ad-ink)}
+ .pt-holiday-heading{grid-row:1;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:0 0 0 var(--pt-toolbar-width,96px);margin:0}
+ .pt-holiday-heading h1{font-size:1.125rem;line-height:1.4;letter-spacing:0;margin:0;overflow-wrap:anywhere;text-shadow:0 1px 12px var(--pt-world-bg)}
+ .pt-holiday-heading button{flex-shrink:0}
+ .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-row:2;z-index:2;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:6px 8px;margin:0;border:1px solid color-mix(in srgb,var(--ad-line) 60%,transparent);border-radius:14px;background:color-mix(in srgb,var(--ad-surface) 92%,transparent);box-shadow:0 8px 24px #0000000a;min-width:0}
+ .pt-scoreboard>div{min-width:0;text-align:center}.pt-scoreboard>div+div{border-color:var(--ad-line)}
  .pt-scoreboard small,.pt-scoreboard strong>span{font-size:.875rem;line-height:1.4;color:var(--ad-muted)}
- .pt-scoreboard strong{font-size:1.125rem;line-height:1.4;color:var(--ad-ink)}
- .pt-scoreboard>div+div{border-color:var(--ad-line)}
- .pt-holiday-field.pt-play-area{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(96px,1fr) auto auto;gap:0;align-items:stretch;position:relative;min-height:0;min-width:0;overflow:hidden;background:var(--pt-world-bg)}
- .pt-holiday-world{display:flex;align-self:stretch;align-items:center;justify-content:center;position:relative;container-type:size;min-width:0;min-height:0;overflow:hidden}
- /* Fit from the exact 3/4 height, not a truncated 4/3 width multiplier.
-    At the 96px world floor this preserves the full 128px scene width. */
- .pt-holiday-world .pt-canvas{position:relative;flex:none;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;min-height:0;margin:0;padding:0;background:transparent;isolation:isolate}
- .pt-holiday-world .pt-canvas canvas{position:relative;z-index:0;width:100%;height:100%;display:block}
- .pt-holiday-world .pt-canvas:focus-visible{outline:3px solid var(--ad-accent);outline-offset:-3px;box-shadow:none}
- .pt-holiday-stage[data-party-state] .pt-controls{display:block;margin:0;padding:6px 8px;border:0;background:transparent;min-width:0}
- .pt-hole-controls{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+ .pt-scoreboard strong{font-size:1.125rem;line-height:1.4;color:var(--ad-ink);font-variant-numeric:tabular-nums}
+ .pt-holiday-field.pt-play-area{display:contents}
+ .pt-holiday-world{position:absolute;inset:0;z-index:0;display:block;min-height:0;min-width:0;overflow:hidden;background:var(--pt-world-bg)}
+ .pt-holiday-world .pt-canvas,.pt-holiday-world .pt-light-stage{position:absolute;inset:0;width:100%;height:100%;min-height:0;aspect-ratio:auto;margin:0;padding:0;background:transparent;touch-action:none;isolation:isolate}
+ .pt-holiday-world .pt-canvas canvas{display:block;width:100%;height:100%;position:relative;z-index:0}
+ .pt-holiday-world .pt-canvas:focus-visible{outline:3px solid var(--ad-accent);outline-offset:-4px;box-shadow:none}
+ .pt-gameplay-core{position:absolute;pointer-events:none;z-index:1}
+ .pt-holiday-stage[data-party-state] .pt-controls{grid-row:4;z-index:2;display:flex;justify-content:center;align-items:center;gap:8px;min-width:0;min-height:0;padding:0;margin:0;border:0;background:transparent}
+ .pt-lane-selector{display:grid;grid-template-columns:repeat(3,minmax(44px,1fr));gap:4px;min-width:0}
+ .pt-lane-selector>button,.pt-chair-controls>.pt-primary-control,.pt-tofu-controls>.pt-drop{display:grid;place-items:center;width:auto;min-width:44px;min-height:48px;height:auto;padding:6px 10px;margin:0;border:1px solid var(--ad-line);border-radius:12px;background:var(--ad-surface);color:var(--ad-ink);box-shadow:0 4px 16px #00000012;font-size:.875rem;line-height:1.4;white-space:normal}
+ .pt-lane-selector>button[aria-pressed=true]{border-color:var(--ad-accent);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.2em;box-shadow:inset 0 0 0 1px var(--ad-accent)}
+ .pt-lane-selector>button[aria-disabled=true]:not([aria-pressed=true]){border-style:dashed;color:var(--ad-muted)}
+ .pt-tofu-controls>.pt-drop{min-width:calc(3em + 24px);min-height:52px;background:var(--ad-accent);color:var(--ad-surface)}
+ .pt-hole-controls{display:grid;grid-template-columns:repeat(6,minmax(44px,1fr));gap:4px;min-width:0;width:100%}
  .pt-hole-controls button{min-height:44px;min-width:44px;display:flex;align-items:center;justify-content:center;gap:4px;padding:5px 3px;margin:0;border:1px solid var(--ad-line);border-radius:10px;box-shadow:none;font-size:.875rem;line-height:1.4;white-space:normal;background:var(--ad-surface);color:var(--ad-ink)}
  .pt-hole-controls button:disabled{opacity:1;box-shadow:none;background:var(--ad-bg);color:var(--ad-muted);transform:none}
- .pt-hole-controls b{font-size:.875rem;line-height:1.4;width:1.5em;height:1.5em;flex-shrink:0;border-radius:50%;background:var(--ad-bg);color:var(--ad-ink)}
- .pt-hole-controls .pt-good{border-width:2px;border-color:var(--green);background:var(--green-soft);color:var(--ink)}
- .pt-hole-controls .pt-boss{border-width:2px;border-style:dashed;border-color:var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
- .pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto}
- .pt-holiday-world .pt-light-stage{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;touch-action:pan-y}
- .pt-holiday-light-board{position:relative;width:100%;height:100%;min-height:0;min-width:0;padding:6px 8px;pointer-events:none}
- .pt-light-grid{height:100%;grid-template-rows:repeat(2,minmax(44px,1fr));pointer-events:auto}
- .pt-light-grid button{display:grid;grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;position:relative;align-items:center;justify-items:center;min-height:44px;gap:0;padding:4px}
- .pt-light-grid svg{width:100%;height:100%;min-height:0;max-height:120px;max-width:140px}
- .pt-light-grid b{position:absolute;left:4px;top:4px;font-size:.875rem}
- .pt-holiday-feedback{min-width:0;padding:3px 8px;background:transparent;border:0}
- .pt-live-label,.pt-feedback{display:block;position:static;inset:auto;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:var(--pt-feedback-bg);color:var(--ad-ink);font-size:.875rem;line-height:1.4;text-align:center;overflow-wrap:anywhere}
+ .pt-hole-controls b{display:grid;place-items:center;font-size:.875rem;line-height:1.4;min-width:1.4em;min-height:1.4em;flex-shrink:0;border-radius:50%;background:var(--ad-bg);color:var(--ad-ink)}
+ .pt-hole-controls .pt-good{border:2px solid var(--green);background:var(--green-soft);color:var(--ink)}
+ .pt-hole-controls .pt-boss{border:2px dashed var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
+ .pt-holiday-footer{grid-row:5;z-index:2;display:grid;gap:4px;min-width:0;align-self:end}
+ .pt-holiday-feedback{min-width:0;margin:0;padding:4px 8px;border:0;border-radius:12px;background:color-mix(in srgb,var(--ad-surface) 94%,transparent)}
+ .pt-live-label,.pt-feedback{display:block;position:static;inset:auto;width:auto;height:auto;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--ad-ink);font-size:.875rem;line-height:1.4;text-align:center;overflow-wrap:anywhere}
  .pt-live-label{color:var(--ad-muted)}
- .pt-holiday-tools-viewport{min-height:0;min-width:0;max-width:100%;overflow:auto;overscroll-behavior:contain;scroll-padding:8px;border-top:1px solid var(--ad-line);background:var(--ad-surface)}
- .pt-tools{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-height:52px;width:max-content;min-width:100%;max-width:none;overflow:visible;margin:0;padding:4px 8px;background:var(--ad-surface)}
- .pt-tools button{flex:none;min-width:44px;min-height:44px;font-size:.875rem;line-height:1.4;white-space:nowrap;padding:6px 10px;margin:0;background:var(--ad-surface);color:var(--ad-ink);border-color:var(--ad-line);box-shadow:none}
- .pt-holiday-overlay{position:absolute;inset:0;z-index:3;display:flex;align-items:flex-start;overflow:auto;overscroll-behavior:contain;padding:8px;background:color-mix(in srgb,var(--ad-bg) 82%,transparent)}
- .pt-holiday-overlay .pt-panel{display:flex;flex-flow:column nowrap;align-items:stretch;gap:8px;margin:auto;width:min(100%,460px);min-width:0;padding:12px;border:1px solid var(--ad-line);border-radius:14px;background:var(--ad-surface);color:var(--ad-ink);box-sizing:border-box}
- .pt-holiday-overlay h2{font-size:1.25rem;line-height:1.4;letter-spacing:0;margin:0;overflow-wrap:anywhere}
+ .pt-feedback{min-block-size:2.8em}
+ .pt-holiday-tools-viewport{min-width:0;min-height:0;overflow:visible;background:transparent;border:0}
+ .pt-tools{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;width:100%;min-width:0;max-width:100%;min-height:44px;margin:0;padding:0;background:transparent}
+ .pt-tools button{display:grid;place-items:center;flex:0 0 auto;min-width:44px;min-height:44px;height:auto;max-width:100%;margin:0;padding:2px 6px;border:1px solid var(--ad-line);border-radius:12px;font-size:20px;line-height:1.4;white-space:normal;box-shadow:none;background:var(--ad-surface);color:var(--ad-ink)}
+ .pt-tools button>span,.pt-chair-controls button span{font:inherit;line-height:inherit}
+ .pt-tools button[aria-pressed=true]{border-color:var(--ad-accent);box-shadow:inset 0 0 0 1px var(--ad-accent)}
+ .pt-holiday-overlay{position:absolute;inset:0;z-index:4;display:flex;align-items:flex-start;overflow:auto;overscroll-behavior:contain;padding:calc(var(--holiday-safe-top) + 64px) 12px calc(var(--holiday-safe-bottom) + 12px);background:color-mix(in srgb,var(--pt-world-bg) 42%,transparent);backdrop-filter:blur(4px)}
+ .pt-holiday-overlay .pt-panel{display:flex;flex-flow:column nowrap;align-items:stretch;gap:12px;margin:auto;width:min(100%,460px);min-width:0;padding:24px;border:1px solid var(--ad-line);border-radius:18px;background:color-mix(in srgb,var(--ad-surface) 97%,transparent);color:var(--ad-ink);box-shadow:0 20px 70px #00000025;box-sizing:border-box}
+ .pt-holiday-overlay h2{font-size:1.375rem;line-height:1.4;letter-spacing:0;margin:0;overflow-wrap:anywhere}
  .pt-holiday-overlay .pt-panel p,.pt-holiday-overlay .pt-kicker{font-size:.875rem;line-height:1.6;color:var(--ad-ink);margin:0;width:100%}
  .pt-holiday-overlay button,.pt-holiday-overlay .pt-download{width:100%;min-height:44px;min-width:0;flex-shrink:0;font-size:1rem;line-height:1.4;white-space:normal;padding:8px 10px;box-shadow:none;border:1px solid var(--ad-line);background:var(--ad-accent);color:var(--ad-surface);border-radius:10px}
  .pt-holiday-overlay .fw-arcade-secondary,.pt-holiday-overlay .pt-download{background:var(--ad-bg);color:var(--ad-ink)}
+ .pt-holiday-modal{position:fixed;inset:auto;max-width:none;max-height:none;min-width:0;min-height:0;margin:0;padding:12px;border:0;background:transparent;overflow:auto;overscroll-behavior:contain;color:var(--ad-ink)}
+ .pt-holiday-modal::backdrop{background:transparent}
+ .pt-chair-light-board,.pt-tofu-light-board,.pt-holiday-light-board{position:absolute;inset:0;width:100%;height:100%;padding:0;pointer-events:none;overflow:hidden}
+ .pt-light-world,.pt-paper-scenery{position:absolute;inset:0;display:block;width:100%;height:100%;aspect-ratio:auto;max-height:none;pointer-events:none}
+ .pt-light-readout{position:absolute;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ .pt-light-grid{position:absolute;grid-template-columns:repeat(3,minmax(44px,1fr));grid-template-rows:repeat(2,minmax(44px,1fr));width:auto;height:auto;gap:8px;pointer-events:auto;padding:8px}
+ .pt-light-grid button{display:grid;grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;position:relative;align-items:center;justify-items:center;min-height:44px;gap:0;padding:4px;border-radius:18px;background:#fff7e4e8}
+ .pt-light-grid svg{width:100%;height:100%;min-height:0;max-height:140px;max-width:160px}
+ .pt-light-grid b{position:absolute;left:4px;top:4px}
  :focus-visible{outline:3px solid var(--ad-accent);outline-offset:-3px}
- >.fw-arcade-result{height:100%;min-height:0;min-width:0;max-width:none;overflow:auto;overscroll-behavior:contain;padding:12px;margin:0;scroll-padding:12px}
+ >.fw-arcade-result{position:absolute;inset:0;z-index:4;height:100%;min-height:0;min-width:0;max-width:none;overflow:auto;overscroll-behavior:contain;padding:12px;margin:0;scroll-padding:12px;background:var(--ad-bg)}
 }
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) {
-  grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);
-  .fullscreen-game__bar{grid-column:1;grid-row:1;border:0;max-width:156px}
-  .pt-holiday-stage{display:contents}
-  .pt-holiday-heading{grid-column:2;grid-row:1}
-  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-column:1/-1;grid-row:2;align-self:start;z-index:1}
-  /* HUD stays in its own row, so its real text height is never guessed. */
-  grid-template-rows:auto auto minmax(0,1fr) auto;
-  .pt-holiday-field.pt-play-area{grid-column:1/-1;grid-row:3;grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:minmax(96px,1fr) auto}
-  .pt-holiday-world{grid-column:1;grid-row:1}
-  .pt-holiday-stage[data-party-state] .pt-controls{grid-column:2;grid-row:1;border:0;display:flex;align-items:flex-start;min-height:0;overflow:auto}
-  .pt-hole-controls:not(.pt-light-grid){grid-template-columns:repeat(2,minmax(0,1fr));margin-block:auto}
-  .pt-holiday-feedback{grid-column:1/-1;grid-row:2;display:flex;justify-content:center;gap:12px}
-  .pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr)}
-  .pt-light-grid{grid-template-columns:repeat(6,minmax(44px,1fr));grid-template-rows:minmax(44px,1fr)}
-  .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:4}
-  >.fw-arcade-result{grid-column:1/-1;grid-row:2/-1}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair{--pt-world-bg:#142039;--pt-feedback-bg:#243450;--ad-bg:#192942;--ad-surface:#243450;--ad-ink:#f5e8c9;--ad-muted:#bddcdd;--ad-line:#45617a;--ad-accent:#f4dc8b;--chair-safe-top:env(safe-area-inset-top,0px);--chair-safe-right:env(safe-area-inset-right,0px);--chair-safe-bottom:env(safe-area-inset-bottom,0px);--chair-safe-left:env(safe-area-inset-left,0px);--holiday-safe-top:var(--chair-safe-top);--holiday-safe-right:var(--chair-safe-right);--holiday-safe-bottom:var(--chair-safe-bottom);--holiday-safe-left:var(--chair-safe-left)}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu{--pt-world-bg:#dbe3d8;--pt-feedback-bg:#e1e8dc;--ad-bg:#f3efe2;--ad-surface:#fbf7ea;--ad-ink:#354f46;--ad-muted:#52665a;--ad-line:#a4aa91;--ad-accent:#496f61;--tofu-safe-top:env(safe-area-inset-top,0px);--tofu-safe-right:env(safe-area-inset-right,0px);--tofu-safe-bottom:env(safe-area-inset-bottom,0px);--tofu-safe-left:env(safe-area-inset-left,0px);--holiday-safe-top:var(--tofu-safe-top);--holiday-safe-right:var(--tofu-safe-right);--holiday-safe-bottom:var(--tofu-safe-bottom);--holiday-safe-left:var(--tofu-safe-left)}
+@media(max-width:559px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-scoreboard small,.pt-holiday-feedback .pt-live-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .pt-hole-controls:not(.pt-light-grid){grid-template-columns:repeat(3,minmax(44px,1fr))}
+  .pt-holiday-heading h1{font-size:1.125rem}
+  .pt-scoreboard strong>span:not(.pt-life-icon){display:inline-block;margin-left:3px}
+ }
+}
+@media(min-width:560px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-holiday-stage{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(96px,1fr) auto;column-gap:12px}
+  .pt-holiday-heading{grid-column:1;grid-row:1}
+  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-column:2;grid-row:1;align-self:start}
+  .pt-holiday-stage[data-party-state] .pt-controls{grid-column:1;grid-row:3;align-self:end}
+  .pt-holiday-footer{grid-column:2;grid-row:3}
+  .pt-hole-controls:not(.pt-light-grid){grid-template-columns:repeat(3,minmax(44px,1fr))}
+ }
+}
+@media(max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-scoreboard small,.pt-holiday-feedback .pt-live-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .pt-holiday-stage{gap:4px}
+  .pt-holiday-overlay .pt-panel{padding:16px}
  }
 }
 @media(prefers-reduced-motion:reduce){:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) *{scroll-behavior:auto;transition:none}}
-/* Small screens keep the full HUD in accessibility text, with concise visible
-   values. These real-height rows preserve room for both the world and targets. */
-@media(max-width:440px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) {
-  .pt-scoreboard small,.pt-holiday-feedback .pt-live-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-template-columns:minmax(0,1fr) minmax(0,.75fr) minmax(0,1.25fr)}
-  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0}
-  .pt-scoreboard strong{line-height:1.2}
-  .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{height:44px;padding:0;line-height:1}
-  .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span{font:inherit;line-height:1}
-  .pt-controls .pt-hole-controls button{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px}
-  .pt-controls .pt-hole-controls button span{min-width:0;overflow-wrap:anywhere}
- }
-}
-@media(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) {
-  .pt-holiday-field.pt-play-area{grid-template-columns:minmax(0,1fr) 240px}
-  .pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr)}
-  .pt-hole-controls:not(.pt-light-grid){grid-template-columns:repeat(3,minmax(0,1fr))}
- }
-}
-
-/* A top-layer dialog stays exactly within its measured in-stage panel. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai :is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) .pt-holiday-modal{position:fixed;inset:auto;max-width:none;max-height:none;min-width:0;min-height:0;margin:0;padding:8px;border:0;background:transparent;overflow:auto;overscroll-behavior:contain;color:var(--ad-ink)}
-:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) .pt-holiday-modal::backdrop{background:transparent}
-
-/* Chair keeps its actual 4:3 world and gesture rectangle in both render modes.
-   Only the primary three-button pad differs from the holiday shell. */
+/* Each scene keeps its own graphic language as well as its own set. */
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair {
- --pt-world-bg:#142039;--pt-feedback-bg:#243450;--ad-bg:#192942;--ad-surface:#243450;--ad-ink:#f5e8c9;--ad-muted:#bddcdd;--ad-line:#45617a;--ad-accent:#f4dc8b;--chair-safe-top:env(safe-area-inset-top,0px);--chair-safe-right:env(safe-area-inset-right,0px);--chair-safe-bottom:env(safe-area-inset-bottom,0px);--chair-safe-left:env(safe-area-inset-left,0px);
- --holiday-safe-top:var(--chair-safe-top);--holiday-safe-right:var(--chair-safe-right);--holiday-safe-bottom:var(--chair-safe-bottom);--holiday-safe-left:var(--chair-safe-left);
- .pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
- .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;touch-action:none}
- .pt-chair-light-board{position:absolute;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;pointer-events:none}
- .pt-chair-light-board .pt-light-world{display:block;width:100%;height:100%;max-height:none;aspect-ratio:4/3}
- .pt-chair-light-board .pt-light-readout{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;padding:0;margin:0}
- .pt-chair-stage[data-party-state] .pt-chair-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;align-content:start;gap:6px;min-height:0;overflow:auto;overscroll-behavior:contain;scroll-padding:6px}
- .pt-chair-controls>button{min-width:44px;min-height:44px;max-width:100%;padding:8px 5px;border:1px solid var(--ad-line);border-radius:10px;box-shadow:none;font-size:.875rem;line-height:1.4;white-space:normal;overflow-wrap:anywhere;background:var(--ad-surface);color:var(--ad-ink)}
- .pt-chair-controls>.pt-primary-control{background:var(--ad-accent);color:var(--ad-surface)}
- .pt-chair-controls>button span{font:inherit;color:inherit}
+ .pt-scoreboard strong{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.025em}
+ .pt-holiday-stage[data-party-state] .pt-scoreboard,.pt-holiday-feedback,.pt-lane-selector>button,.pt-chair-controls>.pt-primary-control,.pt-tools button{border-radius:5px}
+ .pt-holiday-overlay .pt-panel{border-radius:6px;border-top:3px solid var(--ad-accent)}
 }
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair {
-  .pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:minmax(96px,1fr) auto}
-  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(128px,1fr) 104px}
-  .pt-chair-stage[data-party-state] .pt-chair-controls{grid-template-columns:1fr}
- }
-}
-@media(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair {
-  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(128px,1fr) 176px}
-  .pt-chair-stage[data-party-state] .pt-chair-controls{grid-template-columns:repeat(3,minmax(44px,1fr))}
- }
-}
-
-/* Tofu retains its real 4:3 scene and a separate turn-owned timing control. */
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu {
- --pt-world-bg:#dbe3d8;--pt-feedback-bg:#e1e8dc;--ad-bg:#f3efe2;--ad-surface:#f8f5e9;--ad-ink:#354f46;--ad-muted:#526653;--ad-line:#9cac98;--ad-accent:#427568;--tofu-safe-top:env(safe-area-inset-top,0px);--tofu-safe-right:env(safe-area-inset-right,0px);--tofu-safe-bottom:env(safe-area-inset-bottom,0px);--tofu-safe-left:env(safe-area-inset-left,0px);
- --holiday-safe-top:var(--tofu-safe-top);--holiday-safe-right:var(--tofu-safe-right);--holiday-safe-bottom:var(--tofu-safe-bottom);--holiday-safe-left:var(--tofu-safe-left);
- .pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
- .pt-holiday-world .pt-light-stage{position:relative;inset:auto;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;touch-action:none}
- .pt-tofu-light-board{position:absolute;width:auto;height:min(100cqh,75cqw);aspect-ratio:4/3;pointer-events:none}
- .pt-tofu-light-board .pt-light-world{display:block;width:100%;height:100%;max-height:none;aspect-ratio:4/3}
- .pt-tofu-light-board .pt-light-readout{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;padding:0;margin:0}
- .pt-tofu-stage[data-party-state] .pt-tofu-controls{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;align-content:start;min-height:0;overflow:auto;overscroll-behavior:contain;scroll-padding:6px}
- .pt-tofu-controls>.pt-drop{width:100%;min-width:44px;min-height:44px;max-width:100%;padding:8px 6px;border:1px solid var(--ad-line);border-radius:10px;box-shadow:none;font-size:1rem;line-height:1.4;white-space:normal;overflow-wrap:anywhere;background:var(--ad-accent);color:var(--ad-surface)}
- .pt-tofu-controls>.pt-drop span{font:inherit;color:inherit}
+ .pt-holiday-heading h1,.pt-holiday-overlay h2{font-family:ui-serif,'Noto Serif TC',serif;letter-spacing:.06em}
+ .pt-holiday-stage[data-party-state] .pt-scoreboard{border-width:0 0 1px;border-radius:0;box-shadow:none}
+ .pt-tofu-controls>.pt-drop{border-radius:24px 24px 12px 12px;box-shadow:0 5px 0 #304e42}
+ .pt-holiday-overlay .pt-panel{border-radius:3px 3px 24px 3px}
 }
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu {
-  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr) 104px;grid-template-rows:minmax(96px,1fr) auto}
- }
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday {
+ .pt-holiday-stage[data-party-state] .pt-scoreboard{border-radius:18px 5px 18px 5px;box-shadow:0 3px 0 #b7905a33}
+ .pt-holiday-feedback{border-radius:5px 16px 5px 16px}
+ .pt-holiday-overlay .pt-panel{border-radius:22px 7px 22px 7px;box-shadow:8px 10px 0 #67452526}
 }
 
-/* Compact controls are edge controls, not full-height cards. Their accessible
-   names retain the complete action and the HUD retains real lives/misses. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu) {
- .pt-scoreboard strong{white-space:nowrap;overflow-wrap:normal}
- .pt-scoreboard .pt-life-icon{font:inherit;margin:0}
- .pt-scoreboard .pt-hud-detail{display:block;margin:0;white-space:nowrap}
- .pt-chair-controls>button,.pt-tofu-controls>.pt-drop{display:grid;place-items:center;align-self:center;min-height:52px;line-height:1.25;white-space:nowrap;overflow-wrap:normal}
- .pt-chair-controls>button span,.pt-tofu-controls>.pt-drop span{white-space:nowrap}
- .pt-chair-stage[data-party-state] .pt-chair-controls{align-content:start}
- .pt-holiday-feedback .pt-feedback{max-height:2.8em;overflow:auto;overscroll-behavior:contain}
- .pt-hole-controls:not(.pt-light-grid){min-height:0}
- .pt-hole-controls:not(.pt-light-grid) button{min-height:44px;white-space:nowrap}
- .pt-hole-controls:not(.pt-light-grid) b{width:1.15em;height:1.15em}
- .pt-holiday-light-board{align-self:stretch;min-height:96px}
+/* Recovery tools remain real pointer targets, not focusable controls hidden
+   beneath a pause/loading panel. Only modal confirmation owns the whole layer. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+ .pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-footer,.pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-heading{z-index:5}
+ .pt-holiday-stage:not(:has(.pt-holiday-modal)) .pt-holiday-overlay{padding-bottom:calc(var(--pt-footer-height,100px) + var(--game-safe-bottom,var(--holiday-safe-bottom)) + 20px)}
+ .pt-holiday-overlay:has(.pt-holiday-modal){z-index:6}
 }
-
-/* Holiday composition only: the same intact world, with floating edge controls.
-   Keep every tool directly available. Their real flow height, including 200%
-   text, bounds the world; neither the render host nor its camera is resized. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
- background:var(--pt-world-bg);
- .fullscreen-game__bar{background:transparent;border:0;padding:4px 0;max-width:none}
- .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding:0;line-height:1}
- .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span{font:inherit;line-height:1}
- .pt-holiday-heading{gap:4px;padding:2px 4px}
- .pt-holiday-composition[data-party-state] .pt-scoreboard{background:transparent;border:0;padding:4px 0;gap:4px}
- .pt-scoreboard>div+div{border:0}
- .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:nowrap;margin-left:3px}
- .pt-holiday-field.pt-play-area{grid-template-rows:minmax(96px,1fr) auto auto}
- .pt-holiday-composition[data-party-state] .pt-controls{padding:2px 4px}
- .pt-hole-controls:not(.pt-light-grid) button{padding:3px 2px}
- .pt-holiday-feedback{padding:3px 4px}
- .pt-holiday-tools-viewport{border:0;background:transparent;overflow:visible}
- .pt-tools{width:100%;min-width:0;min-height:44px;max-width:100%;padding:4px 0;gap:4px;flex-wrap:wrap;justify-content:center;background:transparent}
- .pt-tools button{display:grid;place-items:center;flex:0 0 auto;min-width:44px;min-height:44px;max-width:100%;padding:0;font-size:20px;line-height:1;white-space:normal;overflow-wrap:anywhere;border-radius:50%;background:color-mix(in srgb,var(--ad-surface) 88%,transparent)}
- .pt-tools button>span{display:block;font:inherit;line-height:1}
- .pt-tools button[aria-pressed=true]{border:2px solid var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
+/* Symbol tools keep their complete enlarged glyphs in a real 44px-wide target;
+   removing decorative side padding avoids an unnecessary second phone row. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+ .pt-tools button{width:44px;flex-basis:44px;padding-inline:0}
+ .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding-inline:0}
+ .pt-lane-selector>button{padding-inline:3px}
 }
-/* On wide/short screens the HUD shares the title lane. This reclaims an entire
-   status band without guessing a HUD inset or covering any rendered pixel. */
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
-  grid-template-columns:max-content minmax(0,1fr) max-content;grid-template-rows:auto minmax(0,1fr) auto;column-gap:4px;
-  .fullscreen-game__bar{grid-column:1;grid-row:1}
-  .pt-holiday-heading{grid-column:2;grid-row:1}
-  .pt-holiday-composition[data-party-state] .pt-scoreboard{grid-column:3;grid-row:1;grid-template-columns:repeat(3,max-content);align-self:center}
-  .pt-holiday-field.pt-play-area{grid-column:1/-1;grid-row:2;grid-template-rows:minmax(96px,1fr) auto}
-  .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:3}
- }
-}
-/* Keep late four-digit scores from forcing the enlarged title into two lines.
-   Units stay visible at the same font size, with their own measured line. */
-@media(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
-  .pt-scoreboard strong{display:flex;flex-direction:column;align-items:center}
-  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0;line-height:1}
- }
-}
-
-/* Tofu composition only. The intact 4:3 world and every control share one
-   surface. Measured flow, not overlays or camera/CSS cropping, reserves the
-   whole moving tower rectangle, including late layers and falling misses. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
- background:var(--pt-world-bg);
- .fullscreen-game__bar{background:transparent;border:0;padding:4px 0;max-width:none}
- .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding:0;line-height:1}
- .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span{font:inherit;line-height:1}
- .pt-holiday-heading{gap:4px;padding:2px 4px}
- .pt-tofu-composition[data-party-state] .pt-scoreboard{background:transparent;border:0;padding:4px 0;gap:4px}
- .pt-scoreboard>div+div{border:0}
- .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:nowrap;margin-left:3px}
- .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr) 56px;grid-template-rows:minmax(96px,1fr) auto}
- .pt-holiday-world{grid-column:1/-1;grid-row:1}
- .pt-tofu-composition[data-party-state] .pt-tofu-controls{grid-column:2;grid-row:2;align-content:center;padding:2px 4px;overflow:visible}
- .pt-tofu-controls>.pt-drop{border-radius:50%;padding:0}
- .pt-holiday-feedback{grid-column:1;grid-row:2;align-self:center;padding:3px 4px}
- .pt-tofu-light-board [data-light-world=tofu]>rect:first-child{fill:transparent}
- .pt-holiday-tools-viewport{border:0;background:transparent;overflow:visible}
- .pt-tools{width:100%;min-width:0;min-height:44px;max-width:100%;padding:4px 0;gap:4px;flex-wrap:wrap;justify-content:center;background:transparent}
- .pt-tools button{display:grid;place-items:center;flex:0 0 auto;min-width:44px;min-height:44px;max-width:100%;padding:0;font-size:20px;line-height:1;white-space:normal;overflow-wrap:anywhere;border-radius:50%;background:color-mix(in srgb,var(--ad-surface) 88%,transparent)}
- .pt-tools button>span{display:block;font:inherit;line-height:1}
- .pt-tools button[aria-pressed=true]{border:2px solid var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
-}
-/* A short landscape loses the independent HUD row, not the tower. The drop
-   control occupies its own narrow edge lane beside the full native/light host. */
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
-  grid-template-columns:max-content minmax(0,1fr) max-content;grid-template-rows:auto minmax(0,1fr) auto;column-gap:4px;
-  .fullscreen-game__bar{grid-column:1;grid-row:1}
-  .pt-holiday-heading{grid-column:2;grid-row:1}
-  .pt-tofu-composition[data-party-state] .pt-scoreboard{grid-column:3;grid-row:1;grid-template-columns:repeat(3,max-content);align-self:center}
-  .pt-holiday-field.pt-play-area{grid-column:1/-1;grid-row:2}
-  .pt-holiday-world{grid-column:1;grid-row:1}
-  .pt-tofu-composition[data-party-state] .pt-tofu-controls{grid-column:2;grid-row:1}
-  .pt-holiday-feedback{grid-column:1/-1;grid-row:2}
-  .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:3}
- }
-}
-/* Keep the score/time units visible without competing with a late four-digit
-   score or the enlarged title. Remaining misses retain their own visible line. */
-@media(max-width:440px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
-  .pt-scoreboard>div:nth-child(-n+2) strong{display:flex;flex-direction:column;align-items:center}
-  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0;line-height:1}
- }
-}
-
-/* Chair composition only: the runner, HUD and direct controls share the same
-   surface. The complete 4:3 world stays outside every flow-owned control lane;
-   camera, collision coordinates and input normalization remain unchanged. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
- background:var(--pt-world-bg);
- .fullscreen-game__bar{background:transparent;border:0;padding:4px 0;max-width:none}
- .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{padding:0;line-height:1}
- .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span{font:inherit;line-height:1}
- .pt-holiday-heading{gap:4px;padding:2px 4px}
- .pt-chair-composition[data-party-state] .pt-scoreboard{background:transparent;border:0;padding:4px 0;gap:4px}
- .pt-scoreboard>div+div{border:0}
- .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:nowrap;margin-left:3px}
- .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto}
- .pt-chair-composition[data-party-state] .pt-chair-controls{grid-template-columns:repeat(3,48px);justify-content:center;align-content:center;gap:4px;padding:2px 4px;overflow:visible}
- .pt-chair-controls>button{width:48px;min-height:48px;padding:0;border-radius:50%}
- .pt-holiday-feedback{padding:3px 4px}
- .pt-chair-light-board [data-light-world=chair]>rect:first-child{fill:transparent}
- .pt-holiday-tools-viewport{border:0;background:transparent;overflow:visible}
- .pt-tools{width:100%;min-width:0;min-height:44px;max-width:100%;padding:4px 0;gap:4px;flex-wrap:wrap;justify-content:center;background:transparent}
- .pt-tools button{display:grid;place-items:center;flex:0 0 auto;min-width:44px;min-height:44px;max-width:100%;padding:0;font-size:20px;line-height:1;white-space:normal;overflow-wrap:anywhere;border-radius:50%;background:color-mix(in srgb,var(--ad-surface) 88%,transparent)}
- .pt-tools button>span{display:block;font:inherit;line-height:1}
- .pt-tools button[aria-pressed=true]{border:2px solid var(--ad-accent);background:var(--ad-surface);color:var(--ad-ink)}
-}
-/* A narrow game-edge pad replaces the old wide sidebar. Its three real targets
-   and the shared title/HUD row reclaim room for the intact runner in landscape. */
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
-  grid-template-columns:max-content minmax(0,1fr) max-content;grid-template-rows:auto minmax(0,1fr) auto;column-gap:4px;
-  .fullscreen-game__bar{grid-column:1;grid-row:1}
-  .pt-holiday-heading{grid-column:2;grid-row:1}
-  .pt-chair-composition[data-party-state] .pt-scoreboard{grid-column:3;grid-row:1;grid-template-columns:repeat(3,max-content);align-self:center}
-  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-column:1/-1;grid-row:2;grid-template-columns:minmax(128px,1fr) 56px;grid-template-rows:minmax(156px,1fr) auto}
-  .pt-holiday-world{grid-column:1;grid-row:1}
-  .pt-chair-composition[data-party-state] .pt-chair-controls{grid-column:2;grid-row:1;grid-template-columns:48px;grid-template-rows:repeat(3,48px)}
-  .pt-holiday-feedback{grid-column:1/-1;grid-row:2}
-  .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:3}
- }
-}
-/* Units remain visible with their own measured line; four-digit earned scores
-   must not crowd the enlarged title or push the three-life HUD off the stage. */
-@media(max-width:440px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
-  .pt-scoreboard>div:nth-child(-n+2) strong{display:flex;flex-direction:column;align-items:center}
-  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0;line-height:1}
- }
-}
-
-
-/* Painted content owns its full font line box, including enlarged CJK and
-   symbol fallback glyphs. A 44px hit target is a floor, not a clipping height. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage) {
- .fullscreen-game__button,.fullscreen-game__mode-help summary,.pt-holiday-heading button{height:auto;min-height:44px;line-height:1.4}
- /* Recover spacing, never text or hit area, for two-line mobile feedback. */
- .fullscreen-game__bar,.pt-tools{padding-block:2px}
- .fullscreen-game__button>span,.fullscreen-game__mode-help summary>span,.pt-tools button,.pt-tools button>span{line-height:1.4}
- .pt-scoreboard strong,.pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){line-height:1.4}
- .pt-holiday-stage{grid-template-rows:auto auto minmax(0,1fr)}
- /* Bind structural rows explicitly, independently of HUD visibility. */
- .pt-holiday-heading{grid-row:1}
- .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-row:2}
- .pt-holiday-field.pt-play-area{grid-row:3}
- .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto auto auto}
- .pt-holiday-world{grid-row:1}
- .pt-holiday-stage[data-party-state] .pt-controls{grid-row:2}
- .pt-holiday-footer{display:contents}
- /* Grid lines, not guessed heights, keep paused/recovery tools outside the
-    overlay. Native modal dialogs still own focus and inert tools while open. */
- .pt-holiday-overlay{grid-column:1/-1;grid-row:1/4}
- .pt-holiday-feedback{grid-row:3}
- /* Full notices live in the scrollable pause/recovery/completion panel.
-    Preserve the existing bounded duplicate status outside active gameplay. */
- .pt-holiday-stage[data-party-state=playing] .pt-holiday-feedback .pt-feedback{max-height:none;overflow:visible}
- .pt-holiday-tools-viewport{grid-column:1/-1;grid-row:4}
- .pt-tofu-stage .pt-holiday-field{grid-template-rows:minmax(96px,1fr) auto auto}
- .pt-tofu-stage .pt-holiday-feedback{grid-row:2}
- .pt-tofu-stage .pt-holiday-tools-viewport{grid-row:3}
- .pt-tofu-stage .pt-holiday-overlay{grid-row:1/3}
-}
-/* The normal mobile stage keeps the same usable width as fullscreen. Otherwise
-   page gutters force six 44px tools onto a second row at 200% text, needlessly
-   taking space from the intact world. Safe insets and the border remain. */
-@media(max-width:440px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):not(:fullscreen):not(.fullscreen-game--viewport){width:100vw;margin-inline:calc(50% - 50vw);border-radius:0}
-}
-/* Share a measured footer row in landscape instead of stacking two chrome
-   bands. Full-sized text and tools reclaim space together; neither overlays or
-   resizes the renderer, and the native/light world's original floors remain. */
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage) {
-  grid-template-rows:auto minmax(0,1fr);
-  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-row:1}
-  .pt-holiday-field.pt-play-area{grid-row:2}
-  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-rows:minmax(96px,1fr) auto}
-  .pt-chair-stage .pt-holiday-field.pt-play-area,.pt-chair-stage .pt-holiday-field[data-light=true]{grid-template-rows:minmax(156px,1fr) auto}
-  .pt-holiday-stage[data-party-state] .pt-controls{grid-row:1}
-  .pt-holiday-overlay,.pt-tofu-stage .pt-holiday-overlay{grid-row:1/2}
-  .pt-holiday-footer{display:grid;grid-column:1/-1;grid-row:2;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px;min-width:0}
-  .pt-holiday-feedback,.pt-tofu-stage .pt-holiday-feedback{display:block;grid-column:1;grid-row:1}
-  .pt-holiday-tools-viewport,.pt-tofu-stage .pt-holiday-tools-viewport{grid-column:2;grid-row:1}
-  .pt-tools{width:max-content}
- }
-}
-
-/* Holiday's visible units need their full intrinsic width at enlarged text.
-   The shared compact .75fr timer track is too narrow at 320px with safe insets.
-   Reserve each value's content width before sharing the remaining HUD space;
-   keep complete values within their own columns without changing their fonts. */
-@media(max-width:440px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
-  .pt-holiday-composition[data-party-state] .pt-scoreboard{grid-template-columns:repeat(3,minmax(max-content,1fr))}
- }
-}
-/* At the narrow-phone size, reachable four-digit score + two-digit timer and
-   combo values need a separate unit line. Recover decoration, not font size,
-   targets or world height, so a full two-line feedback message still fits. */
-@media(max-width:360px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday:has(.pt-holiday-composition) {
-  .pt-scoreboard strong{display:flex;flex-direction:column;align-items:center}
-  .pt-scoreboard strong>span:not(.pt-life-icon):not(.pt-hud-detail){margin:0}
-  .fullscreen-game__bar,.pt-holiday-heading,.pt-holiday-composition[data-party-state] .pt-scoreboard,.pt-holiday-composition[data-party-state] .pt-controls,.pt-holiday-feedback,.pt-tools{padding-block:0}
-  .pt-hole-controls:not(.pt-light-grid){gap:2px}
-  .pt-hole-controls:not(.pt-light-grid) button{padding-block:0}
-  /* The number's line box must fit its badge even without vertical padding. */
-  .pt-hole-controls:not(.pt-light-grid) b{width:1.4em;height:1.4em}
-  .pt-tools button[aria-pressed=true]{border-width:1px;box-shadow:inset 0 0 0 1px var(--ad-accent)}
- }
-}
-
-/* A portrait screen has spare height, not a taller 4:3 game. Give the contained
-   world its real preferred height and center the complete composition together.
-   The last max-content track can shrink when text grows; the field's existing
-   96px world floor and separate control/feedback/tool rows remain authoritative.
-   No camera, canvas, hit rectangle or overlay boundary is cropped or guessed. */
-@media(max-width:559px),(max-width:759px) and (min-height:501px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage) {
-  container-type:inline-size;
-  grid-template-columns:max-content minmax(0,1fr);grid-template-rows:auto auto minmax(0,max-content);align-content:center;column-gap:4px;
-  .fullscreen-game__bar{grid-column:1;grid-row:1;max-width:none;align-self:center}
-  .fullscreen-game__bar>span:empty{display:none}
-  .pt-holiday-stage{display:contents}
-  .pt-holiday-heading{grid-column:2;grid-row:1}
-  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-column:1/-1;grid-row:2}
-  .pt-holiday-field.pt-play-area{grid-column:1/-1;grid-row:3}
-  .pt-holiday-world{contain-intrinsic-block-size:75cqw}
- }
-}
-/* Rejected fullscreen adds a third 44px presentation control. At the narrowest
-   phone width, two natural header rows use less height than a three-line title.
-   Keep all three controls, the full 18px title and its enlarged line boxes. */
-@media(max-width:360px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu):has(.pt-holiday-stage):has(.fullscreen-game__mode-help) {
-  grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto minmax(0,max-content);
-  .fullscreen-game__bar{grid-column:1;grid-row:1}
-  .pt-holiday-heading{grid-column:1;grid-row:2}
-  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-column:1;grid-row:3}
-  .pt-holiday-field.pt-play-area{grid-column:1;grid-row:4}
- }
-}
-
-/* Direct lane selection is a small numbered rail, not directional arrows.
-   The selected lane has an underline as well as color; unavailable neighbours
-   remain real, focusable and hit-testable buttons. Text owns its full line box. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
- .pt-chair-composition[data-party-state] .pt-chair-controls{grid-template-columns:max-content max-content;grid-template-rows:auto;gap:8px}
- .pt-lane-selector{display:grid;grid-template-columns:repeat(3,minmax(48px,1fr));gap:4px;min-width:0}
- .pt-lane-selector>button{display:grid;place-items:center;min-width:48px;min-height:48px;margin:0;padding:4px 3px;border:1px solid var(--ad-line);border-radius:9px;background:var(--ad-surface);color:var(--ad-ink);box-shadow:none;font-size:.875rem;line-height:1.4;white-space:nowrap}
- .pt-lane-selector>button[aria-pressed=true]{border-color:var(--ad-accent);background:var(--ad-bg);color:var(--ad-ink);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.18em;box-shadow:inset 0 0 0 1px var(--ad-accent)}
- .pt-lane-selector>button[aria-disabled=true]:not([aria-pressed=true]){color:var(--ad-muted);border-style:dashed}
- .pt-chair-controls>.pt-primary-control{width:auto;min-width:44px;min-height:48px;padding:4px 6px;border-radius:12px;font-size:.875rem;line-height:1.4}
- .pt-chair-controls button span{font:inherit;line-height:inherit}
-}
-/* The drop button is now a readable action. Reserve the longer falling label
-   intrinsically so feedback does not jump between states, including 200% text. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--tofu:has(.pt-tofu-composition) {
- .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(0,1fr) max-content}
- .pt-tofu-controls>.pt-drop{width:auto;min-width:calc(3em + 18px);min-height:52px;padding:4px 8px;border-radius:12px;line-height:1.4}
-}
-/* Keep the established landscape flow. Four real actions fit in a two-row
-   side rail rather than squeezing four enlarged labels into the old 56px pad. */
-@media(min-width:760px),(min-width:560px) and (max-height:500px){
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--chair:has(.pt-chair-composition) {
-  .pt-holiday-field.pt-play-area,.pt-holiday-field[data-light=true]{grid-template-columns:minmax(128px,1fr) max-content}
-  .pt-chair-composition[data-party-state] .pt-chair-controls{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;justify-items:center;gap:4px}
+/* In active play on a phone/short window, the game name is already announced
+   by the application and help. Keep the semantic h1, remove only its duplicate
+   painted title; scores, lives, feedback and every control remain visible. */
+@media(max-width:440px),(max-height:500px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+  .pt-holiday-stage[data-party-state=playing] .pt-holiday-heading{justify-content:flex-end}
+  .pt-holiday-stage[data-party-state=playing] .pt-holiday-heading h1{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
  }
 }

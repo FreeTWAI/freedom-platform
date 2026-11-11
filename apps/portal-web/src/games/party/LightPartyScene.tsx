@@ -1,13 +1,19 @@
+import {partyViewport} from './viewport';
 import {PARTY_RULES as R} from './catalog';
 import type {ChairRun,TofuRun} from './domain';
 import {chairView,tofuView,tofuFaces,TOFU_FACE_COLORS} from './light-party';
 
 /** Essential motion follows elapsed even with reduced motion; no CSS animation. */
-export function LightPartyScene({run}:{run:ChairRun|TofuRun}){
+export function LightPartyScene({run,viewport=partyViewport(640,480)}:{run:ChairRun|TofuRun;viewport?:ReturnType<typeof partyViewport>}){
+  const viewBox=`${viewport.viewBox.x} ${viewport.viewBox.y} ${viewport.viewBox.width} ${viewport.viewBox.height}`;
   if(run.game==='chair'){
     const view=chairView(run),next=view.waves[0];
-    return <><svg className="pt-light-world" viewBox="0 0 640 480" aria-hidden="true" focusable="false" data-light-world="chair" data-view-elapsed={run.elapsed} data-actual-x={run.x} data-jump={view.jump}>
-      <rect x="30" y="20" width="580" height="440" rx="23" fill="#142039"/>
+    return <><svg className="pt-light-world" viewBox={viewBox} aria-hidden="true" focusable="false" data-light-world="chair" data-view-elapsed={run.elapsed} data-actual-x={run.x} data-jump={view.jump}>
+      <rect x="-5000" y="-5000" width="10000" height="10000" fill="#142039"/>
+      <path d="M-2400 130H3040L5000 5000H-5000Z" fill="#1c2c45"/>
+      {Array.from({length:29},(_,i)=><g key={i} transform={`translate(${-1600+i*132} 0)`}><path d="M0 -3000V130" stroke="#405571" strokeWidth="5"/><rect x="18" y={-160-(i%4)*70} width="90" height={290+(i%4)*70} fill={i%2?'#263e5a':'#304b66'}/><path d="M34 -60V-40M64 -60V-40M34 -25V-5M64 -25V-5" stroke="#e8c37a" strokeWidth="5"/></g>)}
+      <path d="M-2500 -120H3100M-2500 130H3100M-2500 420H3100M-2500 800H3100M-2500 1300H3100" stroke="#52647e" strokeWidth="4"/>
+      <path d="M140 130L-1500 5000M500 130L2140 5000" stroke="#65d4cf" strokeWidth="5" opacity=".6"/>
       <circle cx="535" cy="69" r="23" fill="#edc883"/>
       {[0,1,2,3,4,5,6,7].map(i=><g key={i}><rect x={44+i*71} y={90-(i*13)%42} width="48" height="70" fill="#334a67"/><path d={`M${54+i*71} 83v18m13-18v18m13-18v18`} stroke="#d4b36e" strokeWidth="4"/></g>)}
       <path d="M140 130 L84 445 H556 L500 130Z" fill="#293c58" stroke="#65d4cf" strokeWidth="3"/>
@@ -32,8 +38,14 @@ export function LightPartyScene({run}:{run:ChairRun|TofuRun}){
   }
   const view=tofuView(run);
   const block=(layer:Parameters<typeof tofuFaces>[0],bottom:number,key:string,active=false)=><g key={key} data-tofu-layer={key} data-x={layer.x} data-z={layer.z} data-width={layer.width} data-depth={layer.depth}>{tofuFaces(layer,bottom).map((points,i)=><polygon key={i} points={points} fill={active&&i===2?'#e5bd68':TOFU_FACE_COLORS[i]} stroke="#443b37" strokeWidth="2.5" strokeLinejoin="round"/>)}</g>;
-  return <><svg className="pt-light-world" viewBox="0 0 640 480" aria-hidden="true" focusable="false" data-light-world="tofu" data-view-elapsed={run.elapsed} data-turn={run.turn} data-axis={view.axis} data-offset={view.offset} data-fall-progress={view.progress}>
-    <rect x="20" y="20" width="600" height="440" rx="26" fill="#dbe3d8"/>
+  return <><svg className="pt-light-world" viewBox={viewBox} aria-hidden="true" focusable="false" data-light-world="tofu" data-view-elapsed={run.elapsed} data-turn={run.turn} data-axis={view.axis} data-offset={view.offset} data-fall-progress={view.progress}>
+    <rect x="-5000" y="-5000" width="10000" height="10000" fill="#e7ede3"/>
+    <path d="M-3000 250Q-1400 -900 -700 -200T500 -220T2100 -450T4000 100V4000H-3000Z" fill="#c8d5c8"/>
+    <path d="M-3000 300Q-1200 -260 -300 120T1300 -70T4000 200V4000H-3000Z" fill="#9bb4a2"/>
+    <path d="M-3000 310H4000V5000H-3000Z" fill="#b9a486"/>
+    {Array.from({length:21},(_,i)=><path key={i} d={`M-3000 ${310+i*80}H4000`} stroke="#927a5d" strokeWidth="2"/>)}
+    {Array.from({length:19},(_,i)=><path key={i} d={`M${-1600+i*210} -3000V310`} stroke="#81674c" strokeWidth="9"/>)}
+    <path d="M-3000 -380H4000M-3000 0H4000M-3000 310H4000" stroke="#81674c" strokeWidth="10"/>
     <circle cx="488" cy="85" r="30" fill="#d8b675"/>
     <path d="M24 208 Q100 60 204 180 T400 145 T616 175 V310 H24Z" fill="#a8bbae"/>
     <path d="M24 256 Q120 145 220 225 T440 202 T616 236 V310 H24Z" fill="#809e91"/>

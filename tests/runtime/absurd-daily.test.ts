@@ -901,6 +901,7 @@ test('PT-light: actual controller handlers retain live progress, missing release
   const module={exports:{} as any};class Button{}class Anchor{}
   runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,matchMedia:()=>({matches:true}),requestAnimationFrame:(callback:(at:number)=>void)=>{const id=++sequence;frames.set(id,callback);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),document:{hidden:false,addEventListener(){},removeEventListener(){}},window:{addEventListener:(name:string,listener:(event:any)=>void,capture?:boolean)=>{if(name==='keydown'&&capture)escapeListeners.add(listener);},removeEventListener:(name:string,listener:(event:any)=>void)=>{if(name==='keydown')escapeListeners.delete(listener);}},require:(path:string)=>{
     if(path==='react')return {...hooks,useLayoutEffect:hooks.useEffect};if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
+    if(path==='./viewport')return {partyViewport};
     if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
     if(path==='./stage')return {createPartyStage:()=>{created++;throw Error('WebGL unavailable');}};
     if(path==='./light-party')return {partyInputStamp,acceptsPartyInput,partyResultImage};
@@ -1557,7 +1558,7 @@ for(const reason of ['unavailable','confirmation','step-result','rejected-comman
 
 for(const game of ['holiday','chair','tofu'] as const)for(const panel of ['restart','help'] as const)test(`PT-${game.toUpperCase()}-SCENE: actual ${panel} modal owns its in-stage rectangle, focus, inert bar and cleanup (non-native)`,()=>{
  const source=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
- const start=source.indexOf('  useLayoutEffect(()=>{'),end=source.indexOf('  // begin() runs',start);assert.ok(start>=0&&end>start);
+ const start=source.indexOf('  useLayoutEffect(()=>{',source.indexOf('const [help,setHelp]')),end=source.indexOf('  // begin() runs',start);assert.ok(start>=0&&end>start);
  const calls:string[]=[],listeners=new Map<string,()=>void>(),bar={inert:false},style:Record<string,string>={};let effect:(()=>void)|undefined,observed:unknown,disconnected=false;
  const dialog={open:false,style,showModal(){this.open=true;calls.push('show');},close(){this.open=false;calls.push('close');}};
  const overlay={getBoundingClientRect:()=>({left:14,top:110,width:290,height:340}),contains:()=>true};
@@ -1591,15 +1592,16 @@ async function chairControllerHarness(mode:'native'|'light'){
  let cursor=0,dirty=false,sequence=0,section:any,created=0,disposed=0,captures=0,captureFailure=false,now=0,lost=()=>{},focus='';
  const same=(a:any[],b:any[])=>a?.length===b?.length&&a.every((value,i)=>Object.is(value,b[i]));
  const hooks={useRef:(value:any)=>{const i=cursor++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=cursor++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return[slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=cursor++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
- const bar={inert:false},host={dataset:{} as Record<string,string|number>,focus:()=>{focus='host';},closest:()=>({scrollIntoView(){throw Error('bounded chair cannot scroll the outer page');}})},overlay={contains:()=>true,getBoundingClientRect:()=>({left:10,top:90,width:300,height:400}),querySelectorAll:()=>[]},dialog={open:false,style:{},showModal(){this.open=true;},close(){this.open=false;}};
+ const bar={inert:false},host={dataset:{} as Record<string,string|number>,getBoundingClientRect:()=>({left:0,top:0,width:0,height:0}),focus:()=>{focus='host';},closest:()=>({scrollIntoView(){throw Error('bounded chair cannot scroll the outer page');}})},overlay={contains:()=>true,getBoundingClientRect:()=>({left:10,top:90,width:300,height:400}),querySelectorAll:()=>[]},dialog={open:false,style:{},showModal(){this.open=true;},close(){this.open=false;}};
  const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):value&&typeof value==='object'?(value.props?.['aria-hidden']?'':text(value.props?.children)):typeof value==='string'?value:'';
- const jsx=(type:any,props:any)=>{if(type==='section'){section=props;if(props.ref)props.ref.current={closest:()=>({querySelector:()=>bar})};}if(type==='div'&&props.ref)props.ref.current=props.className?.includes('pt-canvas')?host:overlay;if(type==='dialog'&&props.ref)props.ref.current=dialog;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focus=props['aria-label']??text(props.children).trim();}};}return {type,props};};
+ const jsx=(type:any,props:any)=>{if(type==='section'){section=props;if(props.ref)props.ref.current={closest:()=>({querySelector:()=>bar}),querySelector:()=>null};}if(type==='div'&&props.ref)props.ref.current=props.className?.includes('pt-canvas')?host:overlay;if(type==='dialog'&&props.ref)props.ref.current=dialog;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focus=props['aria-label']??text(props.children).trim();}};}return {type,props};};
  const listen=(name:string,fn:(event:any)=>void)=>{const set=listeners.get(name)??new Set();set.add(fn);listeners.set(name,set);},unlisten=(name:string,fn:(event:any)=>void)=>listeners.get(name)?.delete(fn);
  const document={hidden:false,activeElement:null,addEventListener:listen,removeEventListener:unlisten};
  const module={exports:{} as any};class Button{}class Anchor{}class Node{}
  runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,Node,ResizeObserver:class{observe(){}disconnect(){}},matchMedia:()=>({matches:true}),document,window:{addEventListener:listen,removeEventListener:unlisten},requestAnimationFrame:(fn:(time:number)=>void)=>{const id=++sequence;frames.set(id,fn);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),require:(path:string)=>{
   if(path==='react')return {...hooks,useLayoutEffect:hooks.useEffect};if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
-  if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
+  if(path==='./viewport')return {partyViewport};
+    if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
   if(path==='./stage')return {createPartyStage:(_host:unknown,_game:unknown,onLost:()=>void)=>{created++;lost=onLost;if(mode==='light')throw Error('native unavailable');return {update(){},stats:()=>({calls:1,triangles:1,geometries:1,textures:0}),anchors:()=>[],dispose:()=>disposed++,capture:()=>{captures++;if(captureFailure)throw Error('capture unavailable');return 'native-renderer-port-capture';}};}};
   if(path==='./light-party')return {partyInputStamp,acceptsPartyInput,partyResultImage,chairView};if(path==='./light-holiday')return {holidayCells,holidayInput};if(path==='./catalog')return {PARTY_GAMES,PARTY_RULES:PT};
   if(path==='./domain')return {actParty,advanceParty,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition};if(path==='../diagnostics')return {syncDiagnostics:(node:any,values:any)=>Object.assign(node.dataset,values)};return {GameCover:()=>null,LightPartyScene:()=>null};
@@ -1659,15 +1661,16 @@ async function tofuControllerHarness(mode:'native'|'light'){
  let cursor=0,dirty=false,sequence=0,section:any,created=0,disposed=0,captures=0,captureFailure=false,now=0,lost=()=>{},focus='';
  const same=(a:any[],b:any[])=>a?.length===b?.length&&a.every((value,i)=>Object.is(value,b[i]));
  const hooks={useRef:(value:any)=>{const i=cursor++;return slots[i]??(slots[i]={current:value});},useState:(value:any)=>{const i=cursor++;if(!slots[i])slots[i]={value:typeof value==='function'?value():value};return[slots[i].value,(next:any)=>{const value=typeof next==='function'?next(slots[i].value):next;if(!Object.is(value,slots[i].value)){slots[i].value=value;dirty=true;}}];},useEffect:(fn:()=>any,deps:any[])=>{const i=cursor++,old=slots[i];if(!old||!same(old.deps,deps)){slots[i]={deps,cleanup:old?.cleanup};effects.push(()=>{slots[i].cleanup?.();slots[i].cleanup=fn();});}}};
- const bar={inert:false},host={dataset:{} as Record<string,string|number>,focus:()=>{focus='host';},closest:()=>({scrollIntoView(){throw Error('bounded tofu cannot scroll the outer page');}})},overlay={contains:()=>true,getBoundingClientRect:()=>({left:10,top:90,width:300,height:400}),querySelectorAll:()=>[]},dialog={open:false,style:{},showModal(){this.open=true;},close(){this.open=false;}};
+ const bar={inert:false},host={dataset:{} as Record<string,string|number>,getBoundingClientRect:()=>({left:0,top:0,width:0,height:0}),focus:()=>{focus='host';},closest:()=>({scrollIntoView(){throw Error('bounded tofu cannot scroll the outer page');}})},overlay={contains:()=>true,getBoundingClientRect:()=>({left:10,top:90,width:300,height:400}),querySelectorAll:()=>[]},dialog={open:false,style:{},showModal(){this.open=true;},close(){this.open=false;}};
  const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):value&&typeof value==='object'?(value.props?.['aria-hidden']?'':text(value.props?.children)):typeof value==='string'?value:'';
- const jsx=(type:any,props:any)=>{if(type==='section'){section=props;if(props.ref)props.ref.current={closest:()=>({querySelector:()=>bar})};}if(type==='div'&&props.ref)props.ref.current=props.className?.includes('pt-canvas')?host:overlay;if(type==='dialog'&&props.ref)props.ref.current=dialog;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focus=props['aria-label']??text(props.children).trim();}};}return {type,props};};
+ const jsx=(type:any,props:any)=>{if(type==='section'){section=props;if(props.ref)props.ref.current={closest:()=>({querySelector:()=>bar}),querySelector:()=>null};}if(type==='div'&&props.ref)props.ref.current=props.className?.includes('pt-canvas')?host:overlay;if(type==='dialog'&&props.ref)props.ref.current=dialog;if(type==='button'){buttons.push(props);if(props.ref)props.ref.current={focus:()=>{focus=props['aria-label']??text(props.children).trim();}};}return {type,props};};
  const listen=(name:string,fn:(event:any)=>void)=>{const set=listeners.get(name)??new Set();set.add(fn);listeners.set(name,set);},unlisten=(name:string,fn:(event:any)=>void)=>listeners.get(name)?.delete(fn);
  const document={hidden:false,activeElement:null,addEventListener:listen,removeEventListener:unlisten};
  const module={exports:{} as any};class Button{}class Anchor{}class Node{}
  runInNewContext(code,{module,exports:module.exports,HTMLButtonElement:Button,HTMLAnchorElement:Anchor,Node,ResizeObserver:class{observe(){}disconnect(){}},matchMedia:()=>({matches:true}),document,window:{addEventListener:listen,removeEventListener:unlisten},requestAnimationFrame:(fn:(time:number)=>void)=>{const id=++sequence;frames.set(id,fn);return id;},cancelAnimationFrame:(id:number)=>frames.delete(id),require:(path:string)=>{
   if(path==='react')return {...hooks,useLayoutEffect:hooks.useEffect};if(path==='react/jsx-runtime')return {jsx,jsxs:jsx,Fragment:'fragment'};
-  if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
+  if(path==='./viewport')return {partyViewport};
+    if(path==='./stage-loader')return {loadPartyStage:(options:any)=>loadPartyStage({...options,schedule:()=>1,clear:()=>{}})};
   if(path==='./stage')return {createPartyStage:(_host:unknown,_game:unknown,onLost:()=>void)=>{created++;lost=onLost;if(mode==='light')throw Error('native unavailable');return {update(){},stats:()=>({calls:1,triangles:1,geometries:1,textures:0}),anchors:()=>[],dispose:()=>disposed++,capture:()=>{captures++;if(captureFailure)throw Error('capture unavailable');return 'native-renderer-port-capture';}};}};
   if(path==='./light-party')return {partyInputStamp,acceptsPartyInput,partyResultImage,chairView};if(path==='./light-holiday')return {holidayCells,holidayInput};if(path==='./catalog')return {PARTY_GAMES,PARTY_RULES:PT};
   if(path==='./domain')return {actParty,advanceParty,newParty,partySummary,pauseParty,resumeParty,startParty,tofuAxis,tofuPosition};if(path==='../diagnostics')return {syncDiagnostics:(node:any,values:any)=>Object.assign(node.dataset,values)};return {GameCover:()=>null,LightPartyScene:()=>null};
@@ -1749,24 +1752,28 @@ for(const mode of ['native','light'] as const)test(`PT-REPAIR: ${mode} clicked p
 });
 
 
-test('PT-BOUNDS: native and light world CSS fits exact 4:3 without a truncated width multiplier (source only)',()=>{
+test('PT-BOUNDS: native and light fill the owner while their unobscured gameplay core keeps exact projection (source only)',()=>{
  const css=readFileSync(new URL('../../apps/portal-web/src/games/party/party.css',import.meta.url),'utf8');
- // Native host, both light hosts and both sibling SVG boards must use the
- // same height-first fit. This is a source guard, not a browser layout result.
- const rectangles=[...css.matchAll(/\.(?:pt-canvas|pt-light-stage|pt-chair-light-board|pt-tofu-light-board)\{[^{}]*width:auto;height:min\((\d+)cqh,(\d+)cqw\);aspect-ratio:(\d+)\/(\d+);/g)];
- assert.equal(rectangles.length,5);
- assert.doesNotMatch(css,/133\.333/);
- for(const [,vertical,horizontal,numerator,denominator] of rectangles){
-  const heightFactor=Number(vertical)/100,widthFactor=Number(horizontal)/100,ratio=Number(numerator)/Number(denominator);
-  assert.equal(heightFactor,1);assert.equal(widthFactor,.75);assert.equal(ratio,4/3);
-  for(const [availableWidth,availableHeight] of [[128,96],[535,96],[288,216],[1200,700],[320,568]]){
-   const height=Math.min(availableHeight*heightFactor,availableWidth*widthFactor),width=height*ratio;
-   assert.ok(width>=128);assert.ok(height>=96);assert.ok(width<=availableWidth);assert.ok(height<=availableHeight);
-  }
+ // Full-bleed pixels are independent of the measured safe interaction core.
+ // This checks the authored contract, not browser geometry or visual quality.
+ assert.match(css,/\.pt-holiday-world\{position:absolute;inset:0;[^}]*overflow:hidden/);
+ assert.match(css,/\.pt-holiday-world \.pt-canvas,\.pt-holiday-world \.pt-light-stage\{position:absolute;inset:0;width:100%;height:100%;[^}]*aspect-ratio:auto/);
+ assert.match(css,/\.pt-holiday-world \.pt-canvas canvas\{display:block;width:100%;height:100%/);
+ assert.match(css,/\.pt-chair-light-board,\.pt-tofu-light-board,\.pt-holiday-light-board\{position:absolute;inset:0;width:100%;height:100%/);
+ assert.match(css,/\.pt-light-world,\.pt-paper-scenery\{position:absolute;inset:0;display:block;width:100%;height:100%;aspect-ratio:auto/);
+ assert.match(css,/grid-template-rows:auto auto minmax\(96px,1fr\) auto auto/);
+ assert.doesNotMatch(css,/height:min\(100cqh,75cqw\)|133\.333/);
+ for(const [availableWidth,availableHeight] of [[128,96],[535,96],[288,216],[1200,700],[320,568]]){
+  const f=partyViewport(availableWidth,availableHeight+180,80,100),c=f.core;
+  assert.ok(c.width>=128&&c.height>=96);assert.ok(c.x>=0&&c.y>=80);
+  assert.ok(c.x+c.width<=availableWidth+1e-9&&c.y+c.height<=availableHeight+80+1e-9);
+  assert.ok(Math.abs(c.width/c.height-4/3)<1e-10);
+  assert.equal(f.viewBox.width* c.width/640,availableWidth);
+  assert.equal(f.viewBox.height*c.height/480,availableHeight+180);
  }
  const built=transformSync(css,{loader:'css',minify:true,target:'es2023'}).code;
- assert.equal((built.match(/height:min\(100cqh,75cqw\)/g)??[]).length,5,'minification retains exact height percentages');
- assert.doesNotMatch(built,/133\.333/);
+ assert.match(built,/aspect-ratio:auto/);assert.match(built,/minmax\(96px,1fr\)/);
+ assert.doesNotMatch(built,/height:min\(100cqh,75cqw\)|133\.333/);
 });
 
 for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS: ${selector} visibility exemptions retain clipping sensitivity (CPU geometry)`,()=>{
@@ -1797,4 +1804,47 @@ for(const selector of ['.pt-scoreboard small','.pt-live-label'])test(`PT-BOUNDS:
  assert.equal(inspect(root).length,0);
  label.style.clipPath='inset(25%)';assert.ok(inspect(root).some(x=>x.startsWith('painted label uses clipping:')));
  label.style.clipPath='inset(50%)';label.style.position='static';assert.ok(inspect(root).some(x=>x.startsWith('painted content outside owner:')));
+});
+
+import {partyViewport,partyBufferSize,PARTY_MAX_PIXELS,withPartyCaptureView} from '../../apps/portal-web/src/games/party/viewport.js';
+test('PT-fullview: extended camera exactly preserves safe-core points and native ray picks',()=>{
+ const {OrthographicCamera,PerspectiveCamera,Vector3,Vector2,Raycaster,Mesh,CylinderGeometry,MeshBasicMaterial}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+ const sizes=[[320,568],[390,844],[667,375],[1440,900],[296,814]];
+ for(const [w,h] of sizes)for(const [top,bottom] of [[0,0],[80,100]]){
+  const f=partyViewport(w,h,top,bottom);assert.ok(f.core.x>=0&&f.core.y>=top);assert.ok(f.core.x+f.core.width<=w+1e-9&&f.core.y+f.core.height<=h-bottom+1e-9);
+  assert.ok(Math.abs(f.core.width/f.core.height-4/3)<1e-10);
+  for(const perspective of [false,true]){
+   const camera=perspective?new PerspectiveCamera(43,4/3,.1,80):new OrthographicCamera(-6,6,4.5,-4.5,.1,80);
+   camera.position.set(3.8,8.6,9.5);camera.lookAt(0,.4,0);camera.updateMatrixWorld(true);const original=camera.clone();
+   const v=f.view;camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);camera.updateProjectionMatrix();
+   for(let x=-4;x<=4;x+=2)for(let z=-3;z<=3;z+=1.5){
+    const point=new Vector3(x,.85,z),a=point.clone().project(original),b=point.clone().project(camera);
+    assert.ok(Math.abs((b.x+1)*w/2-(f.core.x+(a.x+1)*f.core.width/2))<1e-7);
+    assert.ok(Math.abs((1-b.y)*h/2-(f.core.y+(1-a.y)*f.core.height/2))<1e-7);
+   }
+   if(!perspective){
+    const geometry=new CylinderGeometry(1,1,1,24),material=new MeshBasicMaterial();
+    const holes=Array.from({length:6},(_,i)=>{const m=new Mesh(geometry,material);m.position.set((i%3-1)*2.5,.85,Math.floor(i/3)*2.6-1.35);m.scale.set(1,.95,1);m.userData.hole=i;m.updateMatrixWorld(true);return m;});
+    for(const [i,hole] of holes.entries()){const p=hole.position.clone().project(camera),ray=new Raycaster();ray.setFromCamera(new Vector2(p.x,p.y),camera);assert.equal(ray.intersectObjects(holes,false)[0]?.object.userData.hole,i);}
+    geometry.dispose();material.dispose();
+   }
+  }
+ }
+});
+test('PT-fullview: backing buffer is bounded without forcing a 4:3 live canvas',()=>{
+ for(const [w,h] of [[320,568],[390,844],[667,375],[1440,900],[296,814],[4096,4096]])for(const dpr of [1,1.5,3]){
+  const b=partyBufferSize(w,h,dpr);assert.ok(b.width*b.height<=PARTY_MAX_PIXELS);assert.ok(Math.abs(b.width/b.height-w/h)<.006);assert.ok(b.width>0&&b.height>0);
+ }
+ for(const [w,h] of [[1e9,1],[1,1e9]]){const b=partyBufferSize(w,h,3);assert.ok(b.width*b.height<=PARTY_MAX_PIXELS);}
+ assert.deepEqual(partyViewport(640,480).viewBox,{x:-0,y:-0,width:640,height:480});
+ for(const values of [[NaN,Infinity,NaN,Infinity],[-1,-3,-50,Infinity],[1,1,999,999]]){const f=partyViewport(...values as [number,number,number,number]);assert.ok(Object.values(f.view).every(Number.isFinite));assert.ok(f.core.width>0&&f.core.height>0);}
+});
+test('PT-fullview: canonical capture restores live view after success, render and encoding failures',()=>{
+ const live=partyViewport(390,844,100,130),livePixels=partyBufferSize(390,844,2);
+ for(const failure of ['none','enter','encode']){
+  let current=live,pixels=livePixels,restores=0;const error=new Error(failure);
+  const capture=()=>withPartyCaptureView(()=>{current=partyViewport(640,480);pixels={width:960,height:720};if(failure==='enter')throw error;},()=>{assert.deepEqual(current.viewBox,{x:-0,y:-0,width:640,height:480});assert.equal(pixels.width*pixels.height,PARTY_MAX_PIXELS);if(failure==='encode')throw error;return 'real-encoded-result';},()=>{restores++;current=live;pixels=livePixels;});
+  if(failure==='none')assert.equal(capture(),'real-encoded-result');else assert.throws(capture,e=>e===error);
+  assert.equal(restores,1);assert.equal(current,live);assert.equal(pixels,livePixels);
+ }
 });

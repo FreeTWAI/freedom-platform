@@ -16,6 +16,48 @@ function beginValue() {
   };
 }
 
+// A valid DTO isolates the chunk limit: whitespace-only input would still fail
+// JSON parsing if the chunk guard disappeared. Both bodies stay below 32 KiB.
+for (const chunkCount of [128, 129]) {
+  test(`native SDK ${chunkCount === 128 ? 'accepts' : 'rejects'} a valid DTO in ${chunkCount} chunks`, async () => {
+    const value = beginValue(), bytes = new TextEncoder().encode(JSON.stringify(value));
+    assert.ok(bytes.byteLength > chunkCount && bytes.byteLength <= 32768);
+    let calls = 0;
+    const client = await createMachineDeviceClient({ origin, environment: 'local',
+      clientId: 'chunk-boundary', requestTimeoutMs: 250,
+      fetch: async () => {
+        calls++;
+        return new Response(new ReadableStream({ start(controller) {
+          for (let i = 0; i < chunkCount - 1; i++) controller.enqueue(bytes.subarray(i, i + 1));
+          controller.enqueue(bytes.subarray(chunkCount - 1)); controller.close();
+        } }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      },
+    });
+    try {
+      if (chunkCount === 128) {
+        const result = await client.begin();
+        assert.equal(result.userCode, value.userCode);
+        assert.equal(result.operational_authority, false);
+      } else {
+        await assert.rejects(client.begin(), (error: unknown) => {
+          assert.ok(error instanceof MachineDeviceError);
+          assert.equal((error as Error & { code: string }).code, 'response_invalid');
+          const rendered = String(error) + JSON.stringify(error);
+          for (const secret of [value.deviceCode, value.userCode, value.nonce, value.requestDigest])
+            assert.equal(rendered.includes(secret), false, 'Error must not retain synthetic secrets');
+          return true;
+        });
+        await assert.rejects(client.begin(), (error: unknown) => {
+          assert.ok(error instanceof MachineDeviceError);
+          assert.equal((error as Error & { code: string }).code, 'client_unavailable');
+          return true;
+        });
+      }
+      assert.equal(calls, 1, 'No automatic or subsequent transport retry');
+    } finally { client.close(); }
+  });
+}
+
 // These tests exercise the actual native SDK, not the HTTP/SQL authorization
 // fixture. The valid DTO control prevents malformed JSON from masking a lost
 // Content-Encoding guard. No network, database or operational grant is used.

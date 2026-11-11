@@ -1,7 +1,8 @@
-import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,DirectionalLight,Group,HemisphereLight,Mesh,MeshBasicMaterial,MeshToonMaterial,NearestFilter,NoToneMapping,OrthographicCamera,PCFShadowMap,PerspectiveCamera,PlaneGeometry,Raycaster,RedFormat,Scene,SphereGeometry,SRGBColorSpace,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
+import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,DirectionalLight,Group,HemisphereLight,Mesh,MeshBasicMaterial,MeshToonMaterial,MeshStandardMaterial,NearestFilter,NoToneMapping,ACESFilmicToneMapping,RepeatWrapping,OrthographicCamera,PCFShadowMap,PerspectiveCamera,PlaneGeometry,Raycaster,RedFormat,Scene,SphereGeometry,SRGBColorSpace,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup} from '../stage-batch';
 import {createTofuOpaqueBatch} from './tofu-batch';
+import {partyViewport,partyBufferSize,withPartyCaptureView} from './viewport';
 import {PARTY_RULES as R,type PartyGameId} from './catalog';
 import {chairJump,chairWave,holidayOpen,holidayTargets,tofuAxis,tofuPosition,type PartyRun,type TofuLayer} from './domain';
 
@@ -13,12 +14,14 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
   const C=game==='chair'?{...ORIGINAL_PALETTE,ink:'#17233e',sage:'#65d4cf',leaf:'#21b9b2',peach:'#f58eab',gold:'#f5d96a',navy:'#384766',wood:'#26354d'}:game==='tofu'?{...ORIGINAL_PALETTE,ink:'#363c36',sage:'#7aaba1',leaf:'#3d6b5e',peach:'#c17e5d',gold:'#c8a266',navy:'#405b60',wood:'#81674c'}:{...ORIGINAL_PALETTE,ink:'#463957',sage:'#98bc58',leaf:'#407944',peach:'#ee835c',gold:'#f6ca64',navy:'#65609a',wood:'#b16f4a'};
   const renderer=new WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power',preserveDrawingBuffer:true});
   const geometries=new Set<BufferGeometry>(),materials=new Set<Material>(),textures=new Set<Texture>();
-  let disposed=false,last:PartyRun|null=null,tofuBatch:ReturnType<typeof createTofuOpaqueBatch>|null=null;
-  const key=new DirectionalLight('#fff3dc',1.4);
+  let resizeObserver:ResizeObserver|undefined,styleObserver:MutationObserver|undefined;
+  let disposed=false,lastMotion=false,capturing=false,last:PartyRun|null=null,tofuBatch:ReturnType<typeof createTofuOpaqueBatch>|null=null;
+  const key=new DirectionalLight(game==='chair'?'#ffd6a0':'#fff3dc',game==='chair'?2.1:1.4);
+  let resize=()=>{},resizeSafely=()=>{};
   const lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
-  const dispose=()=>{if(disposed)return;disposed=true;renderer.domElement.removeEventListener('webglcontextlost',lost);tofuBatch?.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());key.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
+  const dispose=()=>{if(disposed)return;disposed=true;resizeObserver?.disconnect();styleObserver?.disconnect();window.removeEventListener('resize',resizeSafely);renderer.domElement.removeEventListener('webglcontextlost',lost);tofuBatch?.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());key.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
   try {
-    renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);renderer.toneMapping=NoToneMapping;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);renderer.toneMapping=game==='holiday'?NoToneMapping:ACESFilmicToneMapping;renderer.toneMappingExposure=game==='chair'?1.2:1.05;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;
     renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
     const scene=new Scene();scene.background=new Color(game==='holiday'?'#f4dfb1':game==='chair'?'#142039':'#dbe3d8');
     const camera=game==='chair'?new PerspectiveCamera(43,4/3,.1,80):new OrthographicCamera(-6,6,4.5,-4.5,.1,80);
@@ -27,8 +30,8 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     const gradient=new DataTexture(new Uint8Array([105,190,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
     const geo=<T extends BufferGeometry>(g:T):T=>{geometries.add(g);return g;};
     const round=geo(new RoundedBoxGeometry(1,1,1,3,.16)),box=geo(new BoxGeometry(1,1,1)),sphere=geo(new SphereGeometry(1,20,14)),cylinder=geo(new CylinderGeometry(1,1,1,24)),torus=geo(new TorusGeometry(1,.075,8,32)),plane=geo(new PlaneGeometry(1,1));
-    const palette=new Map<string,MeshToonMaterial>();
-    function mat(color:string){let m=palette.get(color);if(!m){m=new MeshToonMaterial({color,gradientMap:gradient});materials.add(m);palette.set(color,m);}return m;}
+    const palette=new Map<string,MeshToonMaterial|MeshStandardMaterial>();
+    function mat(color:string){let m=palette.get(color);if(!m){m=game==='holiday'?new MeshToonMaterial({color,gradientMap:gradient}):new MeshStandardMaterial({color,roughness:game==='chair'?.48:.94,metalness:game==='chair'?.22:0});materials.add(m);palette.set(color,m);}return m;}
     function mesh(p:Group,g:BufferGeometry,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx){const m=new Mesh(g,mat(c));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;m.receiveShadow=true;p.add(m);return m;}
     const rb=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy:number,sz:number)=>mesh(p,round,c,x,y,z,sx,sy,sz);
     const ball=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx)=>mesh(p,sphere,c,x,y,z,sx,sy,sz);
@@ -55,8 +58,12 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         ctx.fillStyle='#dcbf85';for(let i=0;i<50;i++){const x=(i*97)%512,y=(i*137)%512;ctx.fillRect(x,y,2,2);}
       }
     },512,512);
-    rb(world,game==='chair'?'#17233e':game==='tofu'?'#81674c':'#bf9062',0,-.25,-1.4,12,.5,game==='chair'?26:11);
-    const ground=decal(world,floor,0,.012,-1.4,12,game==='chair'?26:11);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;
+    // Continuous set floor extends beyond the safe gameplay core in every aspect.
+    floor.wrapS=floor.wrapT=RepeatWrapping;floor.repeat.set(4,game==='chair'?3:4);
+    rb(world,game==='chair'?'#17233e':game==='tofu'?'#81674c':'#bf9062',0,-.25,-1.4,64,.5,64);
+    // Construct the lit floor with its intended material, not a basic decal.
+    const floorSurface=new MeshStandardMaterial({map:floor,roughness:game==='chair'?.58:.96,metalness:game==='chair'?.18:0});materials.add(floorSurface);
+    const ground=new Mesh(plane,floorSurface);ground.position.set(0,.012,-1.4);ground.scale.set(64,64,1);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;world.add(ground);
     const scenery=group(world);
     function backdrop(kind:PartyGameId){return canvasTexture(ctx=>{
       const grad=ctx.createLinearGradient(0,0,0,512);grad.addColorStop(0,kind==='chair'?'#12203c':kind==='tofu'?'#e9ede3':'#f9e9b8');grad.addColorStop(1,kind==='chair'?'#52647e':kind==='tofu'?'#c0d1c6':'#e7c68d');ctx.fillStyle=grad;ctx.fillRect(0,0,1024,512);
@@ -71,6 +78,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         ctx.fillStyle='#fff5d6';for(let i=0;i<4;i++){ctx.beginPath();ctx.ellipse(120+i*250,105+i%2*45,80,22,0,0,Math.PI*2);ctx.fill();}
       }
     },1024,512);}
+    const panorama=backdrop(game);scene.background=panorama;
     const papers=Array.from({length:12},(_,i)=>{const p=mesh(world,box,[C.cream,C.gold,C.peach][i%3],0,0,0,.12,.025,.19);p.visible=false;return p;});
     let chair:Group|null=null,wheels:Mesh[]=[],runnerProps:{hazard:Group;cart:Group;meeting:Group;ticket:Group}[]=[],tofus:Group[]=[],activeTofu:Group|null=null,crumb:Group|null=null;
     const landing=new Group(),landingMaterial=new MeshBasicMaterial({color:C.gold,transparent:true,opacity:.65,depthWrite:false});materials.add(landingMaterial);world.add(landing);landing.visible=false;
@@ -81,7 +89,10 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     function tofu(p:Group){const g=group(p);rb(g,C.cream,0,0,0,1,.94,1);rb(g,'#e5d5b5',0,-.3,0,1.01,.12,1.01);const stamp=decal(g,face,-.04,.482,.02,.48,.48);stamp.rotation.x=-Math.PI/2;leaf(g,.31,.54,-.22,.55);return g;}
     if(game==='chair'){
       camera.position.set(0,5.5,8.8);camera.lookAt(0,.75,-2.7);
-      beam(scenery,C.ink,0,2.5,-13,12,5,.3);decal(scenery,backdrop('chair'),0,2.6,-12.8,11.5,5);
+      beam(scenery,C.ink,0,2.5,-13,12,5,.3);decal(scenery,panorama,0,8,-12.8,64,24);
+      // Tall window architecture and a continuous floor, not a coloured letterbox.
+      for(const side of [-1,1])for(const z of [-12,-4,4]){beam(scenery,C.wood,side*7,5,z,.22,10,.22);beam(scenery,C.sage,side*6.85,5,z,.035,8,.035);}
+      for(const y of [5,9])beam(scenery,C.wood,0,y,-12.65,48,.12,.12);
       for(const x of [-5.7,-2.85,0,2.85,5.7])beam(scenery,C.wood,x,2.5,-12.65,.09,5,.08);
       for(const z of [-9,-5,-1])for(const side of [-1,1]){beam(scenery,C.wood,side*4.6,1.6,z,.18,3.2,.18);beam(scenery,C.sage,side*4.48,1.6,z,.025,2.6,.035);beam(scenery,C.wood,side*4.6,.75,z+1,.15,.1,2.2);}
       sign(scenery,'今天準時下班','AFTER HOURS / 18:00',0,3.8,-12.5,4.2);
@@ -113,7 +124,11 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         return {hazard,cart,meeting,ticket};
       });
     }else if(game==='tofu'){
-      beam(scenery,C.wood,0,2.3,-5.1,11,4.6,.18);decal(scenery,backdrop('tofu'),0,2.3,-4.98,10.6,4.3);
+      beam(scenery,C.wood,0,2.3,-5.1,11,4.6,.18);decal(scenery,panorama,0,7,-4.98,64,20);
+      // Shoji posts continue upward into the portrait frame; layered mountains
+      // remain visible behind the actual ceramic/wood set.
+      for(const side of [-1,1]){beam(scenery,C.wood,side*6.8,5,-5.05,.14,10,.14);beam(scenery,C.wood,side*11,5,-5.05,.14,10,.14);}
+      for(const y of [5.5,8.5])beam(scenery,C.wood,0,y,-5.05,28,.1,.1);
       for(const x of [-5.2,-2.6,0,2.6,5.2])beam(scenery,C.wood,x,2.3,-4.85,.08,4.5,.1);
       for(const y of [.2,2.3,4.4])beam(scenery,C.wood,0,y,-4.85,10.6,.07,.1);
       for(const side of [-1,1]){const stone=ball(scenery,'#888e80',side*4.3,.18,-2.3,.65,.3,.5);stone.rotation.y=side*.4;plant(scenery,side*4.3,-3.2);}
@@ -127,7 +142,9 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       // Folded six-sided paper petals keep a readable silhouette without the
       // dense rounded-box tessellation being repeated in every shadow pass.
       const paperPetal=geo(new CylinderGeometry(1,1,1,6));
-      decal(scenery,backdrop('holiday'),0,2.2,-5.1,12,5);
+      decal(scenery,panorama,0,6,-5.3,64,20);
+      const sun=mesh(scenery,cylinder,C.gold,-5.8,6.6,-5.05,1.4,.08,1.4);sun.rotation.x=Math.PI/2;
+      for(const side of [-1,1]){const leaf=mesh(scenery,paperPetal,C.leaf,side*5.8,.9,3.7,1,2.3,.12);leaf.rotation.z=side*.4;}
       for(const side of [-1,1]){beam(scenery,C.wood,side*4.5,1.7,-4.5,.12,3.4,.12);for(let i=0;i<3;i++){const petal=ball(scenery,i%2?C.peach:C.gold,side*(4.25+i*.2),.55+i*.45,-3.7,.5,.7,.09);petal.rotation.z=side*(.3+i*.3);}}
       for(let i=0;i<9;i++){const flag=mesh(scenery,plane,[C.peach,C.leaf,C.navy][i%3],-4+i,2.9+Math.abs(4-i)*.09,-4.4,.65,.48,1);flag.rotation.z=(i%2?1:-1)*.12;}
       sign(scenery,'今日公休委員會','WEEKEND GARDEN CLUB',0,2,-4.5,3.8);bakeRigidGroup(scenery,geometries);
@@ -146,9 +163,21 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         const proxy=new Mesh(cylinder,ghostMaterials);proxy.layers.set(1);proxy.scale.set(1,.95,1);proxy.position.set(x,.85,z);proxy.userData.hole=i;world.add(proxy);proxies.push(proxy);anchorPositions.push(new Vector3(x,.85,z));
       }
     }
+    const liveViewport=host.hasAttribute('data-party-live-viewport');
+    let viewport=partyViewport(640,480);
+    function project(){const v=viewport.view;camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);camera.updateProjectionMatrix();}
+    resize=()=>{
+      if(disposed||capturing)return;
+      if(liveViewport){const rect=host.getBoundingClientRect(),style=getComputedStyle(host);
+        viewport=rect.width>0&&rect.height>0?partyViewport(rect.width,rect.height,parseFloat(style.getPropertyValue('--pt-scene-top'))||0,parseFloat(style.getPropertyValue('--pt-scene-bottom'))||0):partyViewport(640,480);
+        const pixels=partyBufferSize(viewport.width,viewport.height,devicePixelRatio||1);renderer.setPixelRatio(1);renderer.setSize(pixels.width,pixels.height,false);
+      }
+      project();
+      if(last)update(last,lastMotion);
+    };
     function setTofu(g:Group,l:TofuLayer,y:number){g.visible=true;g.position.set(l.x,y,l.z);g.scale.set(l.width,R.tofuHeight,l.depth);}
     function update(s:PartyRun,motion:boolean){
-      if(disposed)return;last=s;const t=s.elapsed/1000,feedbackAge=s.elapsed-s.feedbackAt;
+      if(disposed)return;last=s;lastMotion=motion;const t=s.elapsed/1000,feedbackAge=s.elapsed-s.feedbackAt;
       if(s.game==='chair'&&chair){
         chair.position.set(s.x*1.5,chairJump(s),2.4);chair.rotation.z=motion?(s.lane-s.x)*-.12+(s.elapsed-s.hitAt<400?Math.sin(t*50)*.1:0):0;
         wheels.forEach(w=>{w.rotation.y=t*8;});
@@ -174,13 +203,23 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       }
       const burst=s.game==='holiday'?s.pick&&s.elapsed-s.pick.at<500:s.game==='chair'?s.elapsed-s.hitAt<600:feedbackAge<600;
       papers.forEach((p,i)=>{p.visible=motion&&!!burst&&s.status!=='ready';if(!p.visible)return;const age=s.game==='holiday'?s.elapsed-(s.pick?.at??0):s.game==='chair'?s.elapsed-s.hitAt:feedbackAge,a=i*2.4,origin=s.game==='holiday'&&s.pick?anchorPositions[s.pick.hole]:new Vector3(s.game==='chair'?s.x*1.5:0,1,s.game==='chair'?2.4:0);p.position.set(origin.x+Math.sin(a)*age/280,origin.y+1.3+age/350-age*age/200000,origin.z+Math.cos(a)*age/400);p.rotation.set(t*3+i,t*2,age/150+i);});
-      tofuBatch?.update();renderer.render(scene,camera);
+      tofuBatch?.update();project();renderer.render(scene,camera);
+    }
+    resize();
+    if(liveViewport){
+      resizeSafely=()=>{try{resize();}catch{if(!disposed)onLost();}};
+      resizeObserver=new ResizeObserver(resizeSafely);resizeObserver.observe(host);
+      styleObserver=new MutationObserver(resizeSafely);styleObserver.observe(host,{attributes:true,attributeFilter:['style']});
+      window.addEventListener('resize',resizeSafely);
     }
     return {
       update,
       pick:(x,y)=>{if(!last||last.game!=='holiday'||!holidayOpen(last))return null;const rect=host.getBoundingClientRect();if(x<rect.left||x>rect.right||y<rect.top||y>rect.bottom)return null;ray.setFromCamera(new Vector2((x-rect.left)/rect.width*2-1,-(y-rect.top)/rect.height*2+1),camera);return ray.intersectObjects(proxies,false)[0]?.object.userData.hole??null;},
       anchors:()=>anchorPositions.map((p,hole)=>{const v=p.clone().project(camera);return {hole,x:(v.x+1)/2,y:(1-v.y)/2};}),
-      capture:()=>{if(disposed||!last)throw Error('場景已離開。');renderer.render(scene,camera);const c=document.createElement('canvas');c.width=960;c.height=720;const ctx=c.getContext('2d');if(!ctx)throw Error('圖片未能建立。');ctx.drawImage(renderer.domElement,0,0,960,720);return c.toDataURL('image/jpeg',.9);},
+      capture:()=>{if(disposed||!last)throw Error('場景已離開。');return withPartyCaptureView(
+        ()=>{capturing=true;viewport=partyViewport(640,480);renderer.setPixelRatio(1);renderer.setSize(960,720,false);update(last!,lastMotion);},
+        ()=>{const c=document.createElement('canvas');c.width=960;c.height=720;const ctx=c.getContext('2d');if(!ctx)throw Error('圖片未能建立。');ctx.drawImage(renderer.domElement,0,0,960,720);return c.toDataURL('image/jpeg',.9);},
+        ()=>{capturing=false;if(!liveViewport){renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);}resize();});},
       stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose,
     };
   }catch(error){dispose();throw error;}

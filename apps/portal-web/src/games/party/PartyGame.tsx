@@ -7,6 +7,7 @@ import {syncDiagnostics} from '../diagnostics';
 import {holidayCells,holidayInput} from './light-holiday';
 import {loadPartyStage} from './stage-loader';
 import {LightPartyScene} from './LightPartyScene';
+import {partyViewport} from './viewport';
 import {partyInputStamp,acceptsPartyInput,partyResultImage,chairView} from './light-party';
 import './party.css';
 
@@ -21,6 +22,33 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
   const restartButton=useRef<HTMLButtonElement>(null),confirmRestart=useRef<HTMLButtonElement>(null),resumeButton=useRef<HTMLButtonElement>(null);
   const [light,setLight]=useState(false);
   const holidayRoot=useRef<HTMLElement>(null),holidayOverlay=useRef<HTMLDivElement>(null),holidayModal=useRef<HTMLDialogElement>(null),helpButton=useRef<HTMLButtonElement>(null),helpClose=useRef<HTMLButtonElement>(null);
+  const [viewport,setViewport]=useState(()=>partyViewport(640,480));
+  // Measure real chrome, including 200% text and safe insets. Scene pixels fill
+  // the whole owner; only scoring targets stay inside the unobscured core.
+  useLayoutEffect(()=>{
+    const root=holidayRoot.current,canvas=host.current;if(!root||!canvas)return;
+    const bar=root.closest('.fullscreen-game')?.querySelector<HTMLElement>('.fullscreen-game__bar');
+    const heading=root.querySelector<HTMLElement>('.pt-holiday-heading'),hud=root.querySelector<HTMLElement>('.pt-scoreboard');
+    const elements=[root,heading,hud,root.querySelector<HTMLElement>('.pt-controls'),root.querySelector<HTMLElement>('.pt-holiday-footer'),bar].filter((el):el is HTMLElement=>!!el);
+    let redraw=0;
+    const measure=()=>{
+      const bounds=canvas.getBoundingClientRect();if(bounds.width<=0||bounds.height<=0)return;
+      const toolbar=bar?Math.ceil(bar.getBoundingClientRect().width+8):0;
+      if(root.style.getPropertyValue('--pt-toolbar-width')!==`${toolbar}px`)root.style.setProperty('--pt-toolbar-width',`${toolbar}px`);
+      const top=Math.max(...[heading,hud,bar].filter((el):el is HTMLElement=>!!el).map(el=>el.getBoundingClientRect().bottom-bounds.top),0)+8;
+      const foot=[root.querySelector<HTMLElement>('.pt-controls'),root.querySelector<HTMLElement>('.pt-holiday-footer')].filter((el):el is HTMLElement=>!!el&&el.getBoundingClientRect().height>0);
+      const bottom=Math.max(0,...foot.map(el=>bounds.bottom-el.getBoundingClientRect().top))+8;
+      const footerHeight=root.querySelector<HTMLElement>('.pt-holiday-footer')?.getBoundingClientRect().height??0;
+      if(root.style.getPropertyValue('--pt-footer-height')!==`${footerHeight}px`)root.style.setProperty('--pt-footer-height',`${footerHeight}px`);
+      const next=partyViewport(bounds.width,bounds.height,top,bottom);
+      for(const [key,value] of [['--pt-scene-top',top],['--pt-scene-bottom',bottom]] as const)if(canvas.style.getPropertyValue(key)!==`${value}px`)canvas.style.setProperty(key,`${value}px`);
+      setViewport(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);
+      cancelAnimationFrame(redraw);redraw=requestAnimationFrame(()=>{redraw=0;safeDraw();});
+    };
+    const observer=new ResizeObserver(measure);elements.forEach(el=>observer.observe(el));
+    window.addEventListener('resize',measure);measure();
+    return()=>{observer.disconnect();cancelAnimationFrame(redraw);window.removeEventListener('resize',measure);};
+  },[game,light,ready]);
   const restoreHolidayFocus=useRef<'restart'|'help'|null>(null);
   const [help,setHelp]=useState(false);
   useLayoutEffect(()=>{
@@ -177,7 +205,7 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
   const s=live.current,playing=s.status==='playing',done=s.status==='done',duration=game==='chair'?R.chairMs:game==='tofu'?R.tofuMs:R.holidayMs;
   const aligned=s.game==='tofu'&&!s.fall&&Math.abs(tofuPosition(s)[tofuAxis(s)]-s.layers[s.layers.length-1][tofuAxis(s)])<=R.tofuPerfect;
   const summary=partySummary(s);
-  function holeControls(){if(s.game!=='holiday')return null;return <div className={`pt-hole-controls${light?' pt-light-grid':''}`} aria-label="六格假日蒸籠">{holidayCells(s).map(cell=><button key={cell.hole} className={cell.kind==='good'?'pt-good':cell.kind==='boss'?'pt-boss':''} aria-label={`第 ${cell.hole+1} 格：${cell.label}`} disabled={!ready||!!error||!cell.enabled}
+  function holeControls(){if(s.game!=='holiday')return null;return <div className={`pt-hole-controls${light?' pt-light-grid':''}`} style={light?{left:viewport.core.x,top:viewport.core.y,width:viewport.core.width,height:viewport.core.height}:undefined} aria-label="六格假日蒸籠">{holidayCells(s).map(cell=><button key={cell.hole} className={cell.kind==='good'?'pt-good':cell.kind==='boss'?'pt-boss':''} aria-label={`第 ${cell.hole+1} 格：${cell.label}`} disabled={!ready||!!error||!cell.enabled}
     onPointerDown={e=>{if(e.button===0&&e.isPrimary)input.current.down(cell.hole,`pointer:${e.pointerId}`,s.round);}}
     onPointerUp={e=>input.current.up(cell.hole,`pointer:${e.pointerId}`)}
     onPointerCancel={e=>input.current.cancel(cell.hole,`pointer:${e.pointerId}`)}
@@ -196,9 +224,10 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
       <div className="pt-scoreboard" aria-label="本局狀態"><div><small>本局得分</small><strong>{s.score}<span>分</span></strong></div><div><small>剩餘時間</small><strong>{Math.ceil((duration-s.elapsed)/1000)}<span>秒</span></strong></div><div><small>{s.game==='chair'?'下班意志':s.game==='tofu'?'豆腐樓層':'最長連擊'}</small>{s.game==='chair'?<strong aria-label={`剩餘 ${s.lives} 顆心`}><span className="pt-life-icon" aria-hidden="true">♥</span> {s.lives}</strong>:s.game==='tofu'?<strong aria-label={`完成 ${s.layers.length-1} / ${R.tofuGoal} 層，還能失手 ${R.tofuMisses-s.misses} 次`}>{s.layers.length-1}/{R.tofuGoal}<span className="pt-hud-detail">餘 {R.tofuMisses-s.misses} 次</span></strong>:<strong aria-label={`最長連擊 ${s.bestCombo} 次`}>{s.bestCombo}<span>連</span></strong>}</div></div>
       <div className="pt-holiday-field pt-play-area" data-light={light?'true':'false'}>
         <div className="pt-holiday-world" inert={covered}>
-          <div ref={host} className={`pt-canvas${light?' pt-light-stage':''}`} tabIndex={0} role="application" aria-label={`${spec.title} ${light?'輕量玩法':'3D 場景'}。${s.game==='chair'?'左右滑換路，輕點場景跳躍；也可選相鄰跑道或用 A / D、空白鍵。':s.game==='tofu'?spec.keys:'按 1–6 或點休假，避開開會。'}`} data-party-stage={error?'failed':ready?'ready':'loading'} onPointerDown={light&&s.game==='holiday'?undefined:down} onPointerUp={light&&s.game==='holiday'?undefined:up} onBlur={()=>{gesture.current=null;}} onLostPointerCapture={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}} onPointerCancel={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}}/>
-          {light&&(s.game==='holiday'?<div className="pt-holiday-light-board">{holeControls()}</div>:<div className={s.game==='chair'?'pt-chair-light-board':'pt-tofu-light-board'}><LightPartyScene run={s}/></div>)}
+          <div ref={host} className={`pt-canvas${light?' pt-light-stage':''}`} tabIndex={0} role="application" aria-label={`${spec.title} ${light?'輕量玩法':'3D 場景'}。${s.game==='chair'?'左右滑換路，輕點場景跳躍；也可選相鄰跑道或用 A / D、空白鍵。':s.game==='tofu'?spec.keys:'按 1–6 或點休假，避開開會。'}`} data-party-live-viewport="" data-party-stage={error?'failed':ready?'ready':'loading'} onPointerDown={light&&s.game==='holiday'?undefined:down} onPointerUp={light&&s.game==='holiday'?undefined:up} onBlur={()=>{gesture.current=null;}} onLostPointerCapture={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}} onPointerCancel={e=>{if(gesture.current?.id===e.pointerId)gesture.current=null;}}/>
+          {light&&(s.game==='holiday'?<div className="pt-holiday-light-board"><svg className="pt-paper-scenery" viewBox={`${viewport.viewBox.x} ${viewport.viewBox.y} ${viewport.viewBox.width} ${viewport.viewBox.height}`} aria-hidden="true" focusable="false"><rect x="-5000" y="-5000" width="10000" height="10000" fill="#f4dfb1"/><circle cx="550" cy="-140" r="90" fill="#fff4cf"/><path d="M-3000 200 Q-800 -300 0 120 T1300 60 T4000 150 V4000 H-3000Z" fill="#b7ba78"/><path d="M-3000 380 Q-400 -20 300 280 T1600 190 T4000 350 V4000 H-3000Z" fill="#72966b"/><path d="M-3000 570 Q0 200 450 510 T4000 500 V4000 H-3000Z" fill="#426e54"/>{Array.from({length:25},(_,i)=><g key={i} transform={`translate(${-1200+i*130} ${-250+Math.sin(i)*30})`}><path d="M0 0L130 0" stroke="#8a6951" strokeWidth="3"/><path d="M12 0L62 70L112 0Z" fill={i%2?'#d5825f':'#f7df9b'}/></g>)}</svg>{holeControls()}</div>:<div className={s.game==='chair'?'pt-chair-light-board':'pt-tofu-light-board'}><LightPartyScene run={s} viewport={viewport}/></div>)}
         </div>
+        <div className="pt-gameplay-core" aria-hidden="true" style={{left:viewport.core.x,top:viewport.core.y,width:viewport.core.width,height:viewport.core.height}}/>
         {s.game==='chair'?<div className="pt-controls pt-chair-controls" aria-label="遊戲操作" inert={covered}><div className="pt-lane-selector" role="group" aria-label="選擇跑道，每次換一條相鄰跑道">{([-1,0,1] as const).map(lane=><button key={lane} data-chair-lane={lane} aria-label={`第 ${lane+2} 道`} aria-pressed={lane===s.lane} aria-disabled={Math.abs(lane-s.lane)!==1} title={lane===s.lane?'目前跑道':Math.abs(lane-s.lane)>1?'先選第 2 道':'切換跑道'} disabled={!playing||!ready||!!error} {...laneHandlers(lane)}>{lane+2}道</button>)}</div><button className="pt-primary-control" aria-label="跳一下！" disabled={!playing||!ready||!!error} {...controlHandlers(1,{kind:'jump'})}>跳一下</button></div>:s.game==='tofu'?<div className="pt-controls pt-tofu-controls" aria-label="遊戲操作" inert={covered}><button className="pt-drop pt-primary-control" aria-label={s.fall?'豆腐降落中…':'豆腐落下！'} disabled={!playing||!ready||!!error||!!s.fall} {...controlHandlers(3,{kind:'drop'})}><span aria-hidden="true">{s.fall?'降落中':'落下'}</span></button></div>:!light&&<div className="pt-controls" aria-label="遊戲操作" inert={covered}>{holeControls()}</div>}
         <div className="pt-holiday-footer">
         <div className="pt-holiday-feedback" inert={modal}><p className="pt-live-label">{light?'輕量玩法 · ':''}{s.game==='chair'?`假日票 ${s.tickets} 張 · ${s.resolved} / ${R.chairWaves} 波`:s.game==='tofu'?`還能失手 ${R.tofuMisses-s.misses} 次 · 完美貼齊 ${s.perfects} 次`:`已守住 ${s.saved} 個假日 · ${Math.min(20,s.round+1)} / 20 波`}</p><p className="pt-feedback" role="status">{playing&&s.elapsed-s.feedbackAt<1100?s.feedback:playing?s.game==='chair'?next?`第 ${next.index+1} 波 · ${next.kind==='meeting'?'會議桌要換路':'推車可以跳'}`:'前方暫時沒有障礙':s.game==='tofu'?s.fall?'豆腐穩穩落下…':aligned?'對齊了！現在落下':`${tofuAxis(s).toUpperCase()} 軸移動 · 等對齊再落下`:'點休假，避開開會。':notice||(s.game==='chair'?'左右滑換路，輕點跳躍。':s.game==='tofu'?'點場景、落下按鈕或空白鍵。':'葉子是休假，領帶是開會。')}</p></div>

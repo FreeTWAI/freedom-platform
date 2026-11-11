@@ -41,7 +41,7 @@ export async function plan(root=defaultRoot){
  const historical=JSON.parse(await regularFile(root,manifestPath));
  const games=historical.previews.map(p=>p.game);
  if([...games].sort().join(',')!=='chair,holiday,tofu'||games.length!==3||new Set(games).size!==3||games.some(id=>!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)))throw Error('game_set');
- const paths=[...new Set([...historical.source_inputs.map(s=>s.path),factoryPath,'apps/portal-web/src/games/party/catalog.ts','apps/portal-web/src/games/party/domain.ts','apps/portal-web/src/games/party/tofu-batch.ts','apps/portal-web/vite.config.ts','modules/absurd-daily/tools/native-party-previews.mjs','package.json','package-lock.json'])];
+ const paths=[...new Set([...historical.source_inputs.map(s=>s.path),factoryPath,'apps/portal-web/src/games/party/catalog.ts','apps/portal-web/src/games/party/domain.ts','apps/portal-web/src/games/party/tofu-batch.ts','apps/portal-web/src/games/party/viewport.ts','apps/portal-web/vite.config.ts','modules/absurd-daily/tools/native-party-previews.mjs','package.json','package-lock.json'])];
  const source_inputs=await Promise.all(paths.map(async path=>({path,sha256:digest(await regularFile(root,path))})));
  return {format:'freedom.native-preview-plan/v1',mode:'dry-plan',root,games,source_inputs,
   scope:'3 catalog previews; not full build, gameplay, native performance acceptance or deployment',

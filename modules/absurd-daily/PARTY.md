@@ -22,7 +22,7 @@ UI 使用 RAF 前景時鐘；第一幀不計時，blur／hidden／超過 1,500ms
 
 30,000ms，3 條路線（−1／0／1），橫移速度 8 lanes/s，左右輸入冷卻 130ms；跳躍 850ms、最高 1.7 單位，落地前不能再跳。22 個 seeded 波次，第一個在 2,200ms，間隔 1,250ms。每波一個會議桌／推車、一個不同路線的假日票。場景速度 6.4 units/s、顯示未來 2,800ms，碰撞採波次穿越時刻的實際橫向位置，不只比目標路線；容差 .46 lane。推車可在跳高 ≥.8 時越過，會議桌須換路。
 
-撞到扣一顆心、減 30 分（下限0）、combo 清零；3 心用盡立即結束。每個避過的障礙 +15；同路假日票 +100＋10×min(combo,10)。波次只結算一次，數量有界22。手指左右滑 ≥28px 換路、點場景跳；另有左右／跳躍44px以上按鈕，方向鍵／A D／Space。
+撞到扣一顆心、減 30 分（下限0）、combo 清零；3 心用盡立即結束。每個避過的障礙 +15；同路假日票 +100＋10×min(combo,10)。波次只結算一次，數量有界22。手指左右滑 ≥28px 換路、點場景跳；另有 44px 以上的相鄰跑道號碼選擇與「跳一下」按鈕，不顯示方向箭頭 pad；鍵盤方向鍵／A D／Space 保留等價操作。
 
 角色為長耳豆豆乘坐有扶手、五爪輪腳的辦公椅；會議桌帶文件、推車帶杯子，假日票為葉片印記。撞擊歪頭／紙張飛散、收票跳字；分數取決於玩家輸入，無假排行榜。
 
@@ -44,11 +44,15 @@ UI 使用 RAF 前景時鐘；第一幀不計時，blur／hidden／超過 1,500ms
 
 入口加入現有 Playroom，全部70款／料理64／觀察1／派對手速5；桌面和手機仍4個分類。新3D卡片使用實際renderer截圖，不把概念圖當遊戲畫面。大廳只載入目錄和靜態WebP，進場才載入PartyGame與Three。
 
-獨立標題／狀態列／4:3場景／操作列／說明，各自有owner；開始、暫停、完成覆層的文案與CTA在正常文件流，文字變大時可增加高度，不裁字或縮小到不可讀。觸控目標≥44px，focus-visible，200%文字時重排。scene touch-action:none僅限遊戲場景，外層照常捲動。
+即時場景填滿整個全視窗 owner，不以 4:3 小畫布加同色邊界冒充全版。標題／狀態 HUD 與操作／工具列有自己的覆層 owner；原生相機依 host 比例擴展可見世界，輕量 SVG 使用相同擴展 viewBox。640×480 保留為規則投影基準與目錄 capture 尺寸，不限制即時場景的螢幕比例。
 
-模組／renderer載入上限15秒，失敗顯示重試和回大廳；WebGL失敗／contextlost會停止並暫停本局，重建後本人繼續。卸載取消RAF、timeout、listener、ResizeObserver、音效節點，dispose所有自有geometry/material/texture與context。最多DPR1.5／邏輯640×480；池化有限波次與粒子，不隨遊玩無限新增mesh。目標每場<400 draw calls／150k triangles（實測後記錄）；不把此預算宣稱為實機FPS。
+HUD 底部與控制／工具列頂部的實際位置決定安全 gameplay core；角色、跑道、落塊與假日洞口在此核心內，世界背景仍延展至四邊。Canvas 可以位於 HUD 下方，但核心不得被 chrome 遮住；假日 anchors 與 raycast 都以完整 host 正反投影，旋轉與暫停 resize 後仍需一致。`.pt-gameplay-core` 是 aria-hidden／pointer-events:none 的幾何診斷，不是替代遊戲的可點透明按鈕。
 
-暖奶油背景、墨褐輪廓、鼠尾草綠／陶土紅／蜂蜜黃，與既有插畫廚房同一情緒。幾何細節用輪腳、衣摺、餐盤邊、植物、招牌呈現，禁止亮面環境、密集飯粒、隨機白色亮點。自由工坊原Logo完整保留。
+開始、暫停、完成覆層的文案與 CTA 保留正常文件流，文字變大時不裁字或縮小到不可讀。觸控目標≥44px，focus-visible，200% 文字與非零 safe insets 時重排，必要工具可捲動操作但不吞掉遊戲輸入。scene touch-action:none 僅限遊戲場景。
+
+模組／renderer載入上限15秒，失敗顯示重試和回大廳；WebGL失敗／contextlost會停止並暫停本局，重建後本人繼續。卸載取消RAF、timeout、listener、ResizeObserver、音效節點，dispose所有自有geometry/material/texture與context。最多 DPR1.5；即時 framebuffer 依 host 比例配置，但總像素不超過原 640×480×1.5² 預算，capture 保留 640×480 契約並在成功／失敗後還原即時投影。池化有限波次與粒子，不隨遊玩無限新增 mesh。目標每場<400 draw calls／150k triangles（實測後記錄）；不把此預算宣稱為實機FPS。
+
+三款各有自己的場景語言，不共用換色玩具房間：辦公椅是冷夜城市／建築走廊，豆腐是晨霧山景／木作茶屋，假日是層疊紙藝花園／舞台。幾何細節與有方向的光影服務真實玩法，禁止用過量亮點、密集微粒或模糊濾鏡冒充品質；自由工坊原 Logo 完整保留。構圖／電影感與趣味是否符合使用者要求仍需實際運行圖和本人驗收，不能由測試通過推定。
 
 ## PT-7 結算與分享
 
@@ -115,3 +119,12 @@ Verify 42182160341／job127774498252 的真實trace、error-context與截圖顯�
 此新 main worktree 重新執行 production pure／controller 區塊：22/22 通過、0失敗／skip，不以先前候選結果代替。Node內建TS stripping僅確認三個非TSX變更檔語法，不是型別檢查。`module-check`、`git diff --check` 通過；module-check 保留 main 三項 surface_unmapped 警告。根與精確7 paths context 已重新取得，變更規則全文讀取，未變內容與先前實讀原文完整比對；完成檢查只代表本機規則齊備。aggregate verify exit 2／unavailable：descriptors與producer preview bytes通過，runtime因無測試DB、UI因adapter unavailable、surface coverage因registration behavior audit required而not_run，沒有縮小原gate。
 
 依賴不存在且禁止安裝／借用；typecheck、build、完整runtime、React與瀏覽器仍not_run，待本次 draft 的自然CI。舊章節的未發布、未合main及測試紀錄保留為當時歷史，不代表目前 main 或新候選已通過完整驗收。真人美術／趣味、實機與Safari仍未驗，沒有 merge或部署。
+
+
+### PT-FULLVIEW 響應式候選（2026-11-11，未宣稱驗收）
+
+取代即時固定 4:3 合約，保留目錄 capture 的 640×480、既有 domain／分數／持有輸入與資源上限。瀏覽器來源新增整個 owner 的幾何與 hit-test 檢查：場景／原生 framebuffer 或輕量 SVG 投影比例對齊視窗，安全核心不受 HUD／操作列遮擋，六個 native 目標可命中；暫停時 resize 不花時間或改成績，恢復後仍能以新投影命中。
+
+三款原生／輕量的 320×568、390×844、667×375、1440×900 共 24 組整頁實圖案例；原 phone／desktop PNG 與 catalog PNG 保留，新增尺寸使用直接瀏覽器 JPEG（quality85）控制報告體積。另保留 200% 文字原案例並加入非零安全邊界及全畫面證據、三尺寸實際 touch raycast、旋轉後命中與暫停不變斷言。沒有變更 timeout、retry、分數、CI 或 auth guard。
+
+此節記錄候選契約與測試來源，不是執行收據。新 exact-head 瀏覽器結果／實圖、美術品質與實機 Safari 驗收尚待正常 runner 與使用者檢視；不得預填 PASS。
