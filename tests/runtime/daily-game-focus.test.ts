@@ -132,17 +132,26 @@ test('engraved prop banknotes preserve the exact classification label and explic
  }
 });
 
-// Run the production settling loop without a renderer. This is lifecycle
-// evidence only, not a frame-rate, native-animation or visual-quality claim.
+// Execute the real scheduler/lifecycle without a renderer. Native visual
+// flight and full 30-card input remain covered in the unchanged browser cases.
 const settleSource=stripTypeScriptTypes(atelierClosure('function stop(){','function pause(){')+atelierClosure('function unpause(){','function reset(){'));
-test('cash paper animation terminates and pause recovery never strands a floating card',()=>{
- let queued=0,cancelled=0,renders=0,refreshes=0;
- const context={photo:false,paused:false,lost:false,disposed:false,ended:false,elapsed:0,last:1000,cashMotionUntil:1180,lastCashRender:-Infinity,flashUntil:0,frame:0,performance:{now:()=>1000},cardGroup:{position:{y:0}},root:{dataset:{} as Record<string,string>},panel:{hidden:false},controls:{inert:true},footer:{inert:true},canvas:{inert:true,focus(){}},refresh(){refreshes++;},render(){renders++;},requestAnimationFrame(){queued++;return queued;},cancelAnimationFrame(){cancelled++;}};
+test('cash scene stays event-driven and pause cancels the compositor paper flight',()=>{
+ let queued=0,cancelled=0,renders=0,flightCancelled=0;
+ const context={photo:false,paused:false,lost:false,disposed:false,ended:false,elapsed:0,last:1000,flashUntil:0,frame:0,performance:{now:()=>1000},flightAnimation:{cancel(){flightCancelled++;}},cardGroup:{position:{y:0}},root:{dataset:{} as Record<string,string>},panel:{hidden:false},controls:{inert:true},footer:{inert:true},canvas:{inert:true,focus(){}},refresh(){},render(){renders++;},requestAnimationFrame(){queued++;return queued;},cancelAnimationFrame(){cancelled++;}};
  const api=runInNewContext(`${settleSource};({animate,start,stop,unpause})`,context) as {animate:(t:number)=>void;start:()=>void;stop:()=>void;unpause:()=>void};
- api.animate(1000);assert.equal(context.cardGroup.position.y,.18);assert.equal(queued,1);
- api.animate(1016);assert.equal(renders,1,'intermediate high-refresh frame skips expensive render');assert.equal(refreshes,0,'cash animation does not rewrite unchanged HUD');
- api.animate(1170);assert.equal(renders,2);api.animate(1181);assert.equal(renders,3,'final frame renders even within the 33ms throttle interval');assert.equal(context.cardGroup.position.y,0);assert.equal(context.root.dataset.cashSettled,'true');assert.equal(queued,3,'no idle cash RAF');
- context.paused=true;context.cardGroup.position.y=.12;api.stop();api.animate(1100);assert.equal(context.cardGroup.position.y,.12);assert.equal(cancelled,1);
- api.unpause();assert.equal(context.cashMotionUntil,0);assert.equal(context.cardGroup.position.y,0);assert.equal(context.root.dataset.cashSettled,'true');assert.equal(queued,3);
+ api.start();api.animate(1000);api.animate(1200);assert.equal(queued,0,'no cash animation or idle RAF');assert.equal(renders,0);
+ context.paused=true;api.stop();assert.equal(flightCancelled,1);assert.equal(cancelled,1);assert.equal(context.flightAnimation,null);
+ api.unpause();assert.equal(context.root.dataset.cashSettled,'true');assert.equal(queued,0);assert.equal(renders,1,'resume redraws once');
  context.lost=true;context.paused=true;api.unpause();assert.equal(context.paused,true,'context loss cannot resume');
+});
+
+const flightSource=stripTypeScriptTypes(atelierClosure('function flyBill(', 'function sort('));
+test('cash flight copies the outgoing note, follows the chosen side and respects reduced motion',()=>{
+ const painted:unknown[]=[],animations:any[]=[],image={note:'outgoing'};let cancelled=0,reduced=false;
+ const context={flightAnimation:{cancel(){cancelled++;}},bill:{material:{map:{image}}},flightContext:{clearRect(){},drawImage(...args:unknown[]){painted.push(args[0]);}},matchMedia:()=>({matches:reduced}),THREE:{Vector3:class{x:number;constructor(x:number){this.x=x;}project(){return {x:this.x/3,y:0};}}},cardGroup:{position:{x:0},rotation:{z:0}},camera:{left:-3,right:3,top:6,bottom:-6},root:{clientWidth:390,clientHeight:844},flight:{dataset:{} as Record<string,string>,style:{} as Record<string,string>,animate(frames:unknown,options:unknown){animations.push({frames,options});return {cancel(){cancelled++;}};}}};
+ const fly=runInNewContext(`${flightSource};flyBill`,context) as (accept:boolean)=>void;
+ fly(true);assert.equal(painted[0],image);assert.equal(context.flight.dataset.direction,'keep');assert.match(animations[0].frames[1].transform,/117px/);assert.equal(animations[0].options.duration,220);
+ assert.equal(context.flight.style.width,'195px');assert.equal(context.flight.style.left,'195px');
+ context.cardGroup.position.x=1;context.cardGroup.rotation.z=.035;fly(false);assert.equal(context.flight.style.left,'260px','continues at released paper position');assert.match(animations[1].frames[0].transform,/rotate\(-2/);assert.equal(context.flight.dataset.direction,'reject');assert.match(animations[1].frames[1].transform,/-117px/);
+ reduced=true;fly(true);assert.equal(animations.length,2,'no animation under reduced motion');assert.equal(context.flightAnimation,null);assert.equal(cancelled,3);
 });
