@@ -12,15 +12,15 @@ for(const game of ['photo','stamp','cash'] as const)test(`${game}: clicking the 
   const board=page.locator('.fw-arcade-board'),scene=page.locator('.fw-arcade-stage');
   const exit=page.getByRole('button',{name:'退出全螢幕',exact:true});
   await expect(exit).toHaveAttribute('aria-disabled','false');
-  const control=game==='photo'?page.getByRole('button',{name:'鏡頭往右',exact:true}):game==='stamp'?page.getByRole('button',{name:'啪！蓋章',exact:true}):page.getByRole('button',{name:cashDeck(42)[0].valid?'收道具鈔 →':'← 退票券',exact:true});
+  const control=game==='photo'?page.getByRole('button',{name:'鏡頭往右',exact:true}):game==='stamp'?page.getByRole('button',{name:'啪！蓋章',exact:true}):page.getByRole('button',{name:cashDeck(42)[0].valid?'收鈔→（收取道具鈔）':'←退券（退回票券）',exact:true});
   await control.click();await expect(control).toBeFocused();
   const progress=page.locator('.fw-arcade-controls .fw-arcade-meta');
   if(game==='cash')await expect(progress).toContainText('已分類 1 / 30 · 分錯 0 次');
   if(game==='stamp')await expect(page.locator('.fw-arcade-counter')).toHaveText('0/12');
-  const before=game==='photo'?await page.getByRole('button',{name:'拍照快門',exact:true}).textContent():await progress.textContent();
+  const before=game==='photo'?await page.locator('[data-photo-film]').textContent():await progress.textContent();
   // Native controls retain their own arrow-key behavior before the scene is clicked.
   await page.keyboard.press(game==='cash'?(cashDeck(42)[1].valid?'ArrowRight':'ArrowLeft'):'ArrowDown');
-  expect(game==='photo'?await page.getByRole('button',{name:'拍照快門',exact:true}).textContent():await progress.textContent()).toBe(before);
+  expect(game==='photo'?await page.locator('[data-photo-film]').textContent():await progress.textContent()).toBe(before);
   for(const mode of ['fullscreen','normal'] as const){
     if(mode==='normal'){
       await exit.click();await expect(page.getByRole('dialog',{name:'遊戲全螢幕'})).toHaveCount(0);
@@ -32,7 +32,8 @@ for(const game of ['photo','stamp','cash'] as const)test(`${game}: clicking the 
     await scene.click();await expect(board).toBeFocused();
     if(game==='photo'){
       await page.keyboard.press(mode==='fullscreen'?'Space':'Enter');
-      await expect(page.getByRole('button',{name:'拍照快門',exact:true})).toContainText(`快門 · ${mode==='fullscreen'?1:0} 張`);
+      await expect(page.locator('[data-photo-film]')).toBeVisible();
+      await expect(page.locator('[data-photo-film]')).toHaveText(`${mode==='fullscreen'?1:0} 張`);
       await expect(page.locator('.fw-arcade-contact-sheet img')).toHaveCount(mode==='fullscreen'?1:2);
     }else if(game==='cash'){
       const index=mode==='fullscreen'?1:2;

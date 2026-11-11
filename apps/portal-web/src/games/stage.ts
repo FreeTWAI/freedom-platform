@@ -1,7 +1,9 @@
-import { NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, Plane, PlaneGeometry, Raycaster, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
+import { InstancedMesh, Matrix4, NoToneMapping, HemisphereLight, PCFShadowMap, BoxGeometry, CanvasTexture, DataTexture, RedFormat, NearestFilter, Color, CylinderGeometry, DirectionalLight, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PerspectiveCamera, PlaneGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, WebGLRenderer, type BufferGeometry, type Material, type Texture } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup} from './stage-batch';
+import {createStampHandleGeometry} from './stamp-tool';
+import {dailyCamera,paperPoint,cashCardPose,cashContains,captureDailyFrame,PAPER as PAPER_GEOMETRY} from './daily-scene-model';
 import { cashDeck, CLIENTS, documentTitle, photoPose, RULES, stampTarget, type CashState, type GameId, type Point, type StampState } from './domain';
 export type StageView = {
     game: GameId;
@@ -14,6 +16,8 @@ export type StageView = {
     stampPoint: Point;
     raised: boolean;
     cash?: CashState;
+    cashDrag?: Point;
+    stampFeedback?: { point: Point; hit: boolean; at: number };
     motion: boolean;
 };
 export type Stage = {
@@ -25,6 +29,7 @@ export type Stage = {
         lift: number;
     };
     point: (clientX: number, clientY: number) => Point | null;
+    cashContains?: (clientX:number,clientY:number)=>boolean;
     dispose: () => void;
     stats: () => {
         calls: number;
@@ -42,15 +47,21 @@ const INK = '#49362f', LIME = '#e8bd68', BLUE = '#608b85', PAPER = '#fff1d5';
 /** AD-6: all geometry/material/texture ownership is per mounted stage. */
 export function createStage(host: HTMLElement, onLost: () => void): Stage {
     const renderer = new WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'low-power' });
+    const instances = new Set<InstancedMesh>();
     const geometries = new Set<BufferGeometry>(), materials = new Set<Material>(), textures = new Set<Texture>(), shadows = new Set<DirectionalLight['shadow']>();
     let disposed = false, observer: ResizeObserver | undefined;
     const lost = (event: Event) => { event.preventDefault(); if (!disposed) onLost(); };
+    // A restored WebGL context has no usable depth contents, even if Three
+    // retains the light's render-target object and renderer shadow settings.
+    const restored = () => { if (!disposed) shadows.forEach(shadow => { shadow.needsUpdate = true; }); };
     // AD-6: initialization can fail before the caller receives a Stage to dispose.
     function dispose() {
         if (disposed) return;
         disposed = true;
         observer?.disconnect();
         renderer.domElement.removeEventListener('webglcontextlost', lost);
+        renderer.domElement.removeEventListener('webglcontextrestored', restored);
+        instances.forEach(mesh => mesh.dispose());
         geometries.forEach(g => g.dispose());
         materials.forEach(m => m.dispose());
         textures.forEach(t => t.dispose());
@@ -68,7 +79,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     host.append(renderer.domElement);
     const scene = new Scene();
     scene.background = new Color('#f0dfc5');
-    const camera = new PerspectiveCamera(44, 4 / 3, .1, 60), ray = new Raycaster(), ground = new Plane(new Vector3(0, 1, 0), 0), intersection = new Vector3();
+    const camera = new PerspectiveCamera(44, 4 / 3, .1, 60);
     scene.add(new HemisphereLight('#fff6df', '#9c8266', .9));
     // CK-2: three matte ink-wash bands; no reflective environment or specular highlights.
     const gradient=new DataTexture(new Uint8Array([95,180,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
@@ -105,6 +116,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     function shadow(parent: Group, x: number, z: number, sx: number, sz: number) { const m = mesh(parent, cylinder, '#c0c9b1', x, .012, z, sx, .014, sz); return m; }
     let world = new Group();
     scene.add(world);
+    let cashTower: InstancedMesh | null = null;
     let keyId = '', lastView: StageView | null = null, ready = false;
     let clientRoot: Group | null = null, board: Group | null = null, birds: Group[] = [], anchors: Anchor[] = [], stampRoot: Group | null = null, paperMesh: Mesh | null = null, paperMat: MeshBasicMaterial | null = null, paperKey = '', paperTexture: CanvasTexture | null = null, cashMesh: Mesh | null = null, cashKey = '', tower: Group | null = null, crab: Group | null = null, lamp: Group | null = null;
     function rod(p: Group, c: string, a: Vector3, b: Vector3, r = .04) { const m = mesh(p, cylinder, c, 0, 0, 0, r, a.distanceTo(b), r); m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), b.clone().sub(a).normalize()); return m; }
@@ -326,7 +338,31 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         rb(world, LIME, -2.25, .055, 1.6, .08, .08, 1.0).rotation.y = -.4;
         bakeRigidGroup(world,geometries,new Set([lamp.children[lamp.children.length-1]]));
     }
-    function buildStamp() { desk(); paperMat = new MeshBasicMaterial({ color: PAPER, toneMapped: false }); materials.add(paperMat); paperMesh = new Mesh(plane, paperMat); paperMesh.scale.set(3, 3.7, 1); paperMesh.rotation.x = -Math.PI / 2; paperMesh.position.y = .086; world.add(paperMesh); stampRoot = group(world, 0, .4, 0); rb(stampRoot, '#ec6549', 0, .09, 0, .46, .18, .43); rb(stampRoot, INK, 0, .005, 0, .49, .025, .47); mesh(stampRoot, cylinder, BLUE, 0, .44, 0, .11, .6, .11); ball(stampRoot, BLUE, 0, .8, 0, .23, .18, .20); rb(stampRoot, LIME, 0, .81, .18, .22, .06, .05); tower = group(world, 2.5, .03, -.6); for (let i = 0; i < 12; i++) {
+    function buildStamp() {
+        desk();
+        // Actual layered stock and a small sprung clip sit below/behind the
+        // unchanged y=.086 contact plane. No decoration covers a target.
+        for (const y of [.064, .075]) rb(world, PAPER, 0, y, 0, 3, .009, 3.7);
+        const clip=group(world,0,.10,-1.91);
+        rb(clip,INK,0,0,0,.52,.12,.24);
+        rb(clip,LIME,0,.075,.03,.44,.035,.16);
+        for(const side of [-1,1]){
+            mesh(clip,torus,'#d8d9be',side*.15,.14,-.03,.085,.12,.085).rotation.x=-.45;
+        }
+        // The idle stamp has a physical ink-pad cradle rather than hovering
+        // beside the sheet. Its existing resting pose stays unchanged.
+        rb(world,INK,1.88,.155,1.2,.70,.17,.68);
+        rb(world,'#a34232',1.88,.238,1.2,.59,.012,.57);
+        rb(world,LIME,1.88,.13,1.55,.30,.09,.025);
+        paperMat = new MeshBasicMaterial({ color: PAPER, toneMapped: false }); materials.add(paperMat);
+        paperMesh = new Mesh(plane, paperMat); paperMesh.scale.set(3, 3.7, 1); paperMesh.rotation.x = -Math.PI / 2; paperMesh.position.y = .086; world.add(paperMesh);
+        stampRoot = group(world, 0, .4, 0);
+        rb(stampRoot, '#ec6549', 0, .09, 0, .46, .18, .43);
+        rb(stampRoot, INK, 0, .005, 0, .49, .025, .47);
+        const handle=mesh(stampRoot,geo(createStampHandleGeometry()),BLUE,0,0,0,1);handle.name='stamp-turned-handle';
+        for(const y of [.27,.58])mesh(stampRoot,torus,LIME,0,y,0,.12,.12,.12).rotation.x=Math.PI/2;
+        for(const side of [-1,1])ball(stampRoot,LIME,side*.15,.184,.12,.025,.012,.025);
+ tower = group(world, 2.5, .03, -.6); for (let i = 0; i < 12; i++) {
         const page = rb(tower, PAPER, Math.sin(i) * .04, i * .065, 0, 1.35, .055, 1.7);
         page.name = `sheet${i}`;
         page.rotation.y = Math.sin(i) * .025;
@@ -339,11 +375,30 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         ball(crab, PAPER, side * .15, .58, .07, .07);
         ball(crab, INK, side * .15, .59, .13, .03);
         ball(crab, '#ec785a', side * .48, .2, .18, .18, .15, .09);
-    } }
-    function buildCash() { desk(); const cardGroup = group(world, 0, .08, 0); cashMesh = new Mesh(plane, new MeshBasicMaterial({ color: PAPER, toneMapped: false })); materials.add(cashMesh.material as Material); cashMesh.scale.set(3.2, 2.15, 1); cashMesh.rotation.x = -Math.PI / 2; cashMesh.position.y = .25; cardGroup.add(cashMesh); tower = group(world, 2.6, .04, -.15); for (let i = 0; i < 24; i++) {
-        const m = rb(tower, LIME, Math.sin(i) * .03, i * .025, 0, 1.3, .022, 1.85);
-        m.name = `bill${i}`;
-    } rb(world, '#e9ad9e', -2.7, .04, 0, 1.6, .1, 2.3); rb(world, INK, -2.7, .13, -1.1, 1.6, .2, .12); label(world, '退票券', '非現金，不用感動', -2.7, .45, -1.15, 1.5, .45); ball(world, '#d6a36d', -2.7, .27, .6, .48, .15, .4); for (let i = -2; i <= 2; i++) {
+    }
+        // Only the crab root moves. Preserve all triangles/materials/shadows,
+        // combining its rigid descendants instead of submitting each limb.
+        bakeRigidGroup(crab,geometries);
+    }
+    function buildCash() { desk(); const cardGroup = group(world, 0, .08, 0); cashMesh = new Mesh(plane, new MeshBasicMaterial({ color: PAPER, toneMapped: false })); materials.add(cashMesh.material as Material); cashMesh.scale.set(3.2, 2.15, 1); cashMesh.rotation.x = -Math.PI / 2; cashMesh.position.y = .25; cardGroup.add(cashMesh);
+        // Identical accepted bills share geometry, material and shadow passes.
+        // Instance count is the real accepted-card count, never a synthetic win.
+        cashTower = new InstancedMesh(round, mat(LIME), 24);
+        instances.add(cashTower);
+        cashTower.name = 'cash-accepted-stack';
+        cashTower.position.set(2.6, .04, -.15);
+        cashTower.castShadow = true; cashTower.receiveShadow = true;
+        for (let i = 0; i < 24; i++) {
+            const matrix = new Matrix4().makeScale(1.3, .022, 1.85);
+            matrix.setPosition(Math.sin(i) * .03, i * .025, 0);
+            cashTower.setMatrixAt(i, matrix);
+        }
+        cashTower.instanceMatrix.needsUpdate = true;
+        // Bound all possible instances before count becomes zero; the static
+        // bound remains valid through sorting, replay, resize and capture.
+        cashTower.computeBoundingBox(); cashTower.computeBoundingSphere();
+        cashTower.count = 0; world.add(cashTower);
+        rb(world, '#e9ad9e', -2.7, .04, 0, 1.6, .1, 2.3); rb(world, INK, -2.7, .13, -1.1, 1.6, .2, .12); label(world, '退票券', '非現金，不用感動', -2.7, .45, -1.15, 1.5, .45); ball(world, '#d6a36d', -2.7, .27, .6, .48, .15, .4); for (let i = -2; i <= 2; i++) {
         const cut = rb(world, '#9c693e', -2.7 + i * .16, .39, .6, .035, .012, .5);
         cut.rotation.y = .4;
     } for (let i = 0; i < 8; i++)
@@ -352,11 +407,11 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         textures.delete(target.map as CanvasTexture);
         target.map.dispose();
     } target.map = t; target.needsUpdate = true; }
-    function updatePaper(s: StampState) { const id = `${s.index}/${s.practice}/${s.marks.map(m => `${m.x.toFixed(2)},${m.y.toFixed(2)},${m.hit}`).join(';')}`; if (id === paperKey || !paperMat)
+    function updatePaper(s: StampState, feedback:StageView['stampFeedback'], elapsed:number) { const recent=feedback?.hit&&s.endedAt===null&&elapsed-feedback.at<420?feedback:null; const id = `${s.index}/${s.practice}/${s.marks.map(m => `${m.x.toFixed(2)},${m.y.toFixed(2)},${m.hit}`).join(';')}/${recent?.at??''}`; if (id === paperKey || !paperMat)
         return; paperKey = id; paperTexture = texture((ctx, c) => { ctx.fillStyle = PAPER; ctx.fillRect(0, 0, c.width, c.height); ctx.strokeStyle = '#aeb5c2'; ctx.lineWidth = 3; ctx.strokeRect(35, 35, 698, 954); ctx.fillStyle = INK; ctx.font = 'bold 45px sans-serif'; ctx.textAlign = 'left'; const title = documentTitle(Math.min(s.index, 11), s.practice); ctx.fillText(title.slice(0, 11), 65, 120); if (title.length > 11)
         ctx.fillText(title.slice(11), 65, 180); ctx.font = '28px sans-serif'; ctx.fillText(s.practice ? '先蓋中一次，再正式上班' : `公文 ${Math.min(s.index + 1, 12)} / 12　 收發室：螃蟹`, 65, 230); ctx.fillStyle = '#d8c3ab'; for (let i = 0; i < 4; i++)
-        ctx.fillRect(70, 290 + i * 45, 500 - i * 40, 7); const target = stampTarget(s.seed, Math.min(s.index, 11)), x = 384 + target.x * 307, y = 512 + target.y * 415; ctx.strokeStyle = BLUE; ctx.lineWidth = 6; ctx.setLineDash([12, 9]); ctx.beginPath(); ctx.arc(x, y, RULES.stampRadius * 307, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.font = '26px sans-serif'; ctx.fillStyle = BLUE; ctx.textAlign = 'center'; ctx.fillText('蓋這裡', x, y + 100); for (const m of s.marks) {
-        const mx = 384 + m.x * 307, my = 512 + m.y * 415;
+        ctx.fillRect(70, 290 + i * 45, 500 - i * 40, 7); const target = stampTarget(s.seed, Math.min(s.index, 11)), x = 384 + target.x * (768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width), y = 512 + target.y * (1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height); ctx.strokeStyle = BLUE; ctx.lineWidth = 6; ctx.setLineDash([12, 9]); ctx.beginPath(); ctx.ellipse(x, y, RULES.stampRadius*(768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width), RULES.stampRadius*(1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height), 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.font = '26px sans-serif'; ctx.fillStyle = BLUE; ctx.textAlign = 'center'; ctx.fillText('蓋這裡', x, y + 100); for (const m of s.marks) {
+        const mx = 384 + m.x * (768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width), my = 512 + m.y * (1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height);
         ctx.save();
         ctx.translate(mx, my);
         ctx.rotate(m.x * .2);
@@ -367,7 +422,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         ctx.font = 'bold 46px sans-serif';
         ctx.fillText('已閱', 0, 17);
         ctx.restore();
-    } ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.font = '26px sans-serif'; ctx.fillText('備註：已閱，但看不懂。', 65, 937); }); replaceTexture(paperMat, paperTexture); }
+    } if(recent){const x=384+recent.point.x*(768*PAPER_GEOMETRY.xScale/PAPER_GEOMETRY.width),y=512+recent.point.y*(1024*PAPER_GEOMETRY.yScale/PAPER_GEOMETRY.height);ctx.save();ctx.translate(x,y);ctx.strokeStyle='#487300';ctx.fillStyle='#487300';ctx.lineWidth=7;ctx.strokeRect(-75,-48,150,96);ctx.font='bold 26px sans-serif';ctx.textAlign='center';ctx.fillText('上張已閱 ✓',0,10);ctx.restore();} ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.font = '26px sans-serif'; ctx.fillText('備註：已閱，但看不懂。', 65, 937); }); replaceTexture(paperMat, paperTexture); }
     function updateCash(s: CashState) {
         const card = cashDeck(s.seed)[Math.min(s.index, 29)], id = String(card.id);
         if (id === cashKey || !cashMesh)
@@ -428,8 +483,12 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
         if (disposed)
             return;
         lastView = view;
+        // CASH casters are stationary apart from the accepted stack and lamp
+        // visibility below. Keep all color frames and other games automatic.
+        key.shadow.autoUpdate = view.game !== 'cash';
         const nextId = `${view.game}/${view.game === 'photo' ? view.client : 0}/${view.seed}`;
         if (nextId !== keyId) {
+            key.shadow.needsUpdate = true;
             scene.remove(world);
             world = new Group();
             scene.add(world);
@@ -443,6 +502,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             paperKey = '';
             cashMesh = null;
             cashKey = '';
+            cashTower = null;
             tower = null;
             crab = null;
             lamp = null;
@@ -473,7 +533,7 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
             camera.fov = view.game === 'stamp' ? 40 : 42;
             camera.lookAt(0, 0, .23);
             if (view.stamp) {
-                updatePaper(view.stamp);
+                updatePaper(view.stamp,view.stampFeedback,view.seconds*1000);
                 if (stampRoot) {
                     const pulse = 1 - Math.min(1, Math.max(0, view.seconds * 1000 - view.stamp.lastAt) / 180);
                     stampRoot.position.set(view.raised || pulse > 0 || view.stamp.endedAt !== null ? view.stampPoint.x * 1.2 : 1.88, view.raised ? 1.15 : .10 + (1 - Math.max(0, pulse)) * .15, view.raised || pulse > 0 || view.stamp.endedAt !== null ? view.stampPoint.y * 1.5 : 1.20);
@@ -484,21 +544,23 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
                     crab.position.x = 1.98 + (view.motion ? Math.sin(view.seconds * .8) * .12 : 0);
                     crab.rotation.y = view.motion ? Math.sin(view.seconds * 2) * .05 : 0;
                 }
+                if (view.game === 'cash' && lamp && lamp.children[lamp.children.length - 1].visible !== (view.stamp.endedAt === null))
+                    key.shadow.needsUpdate = true;
                 if (lamp)
                     lamp.children[lamp.children.length - 1].visible = view.stamp.endedAt === null;
             }
             if (view.cash) {
                 updateCash(view.cash);
                 if (cashMesh) {
-                    const dt = Math.max(0, view.seconds * 1000 - view.cash.lastAt);
-                    cashMesh.position.x = view.motion && view.cash.feedback === 'wrong' ? Math.sin(dt * .045) * Math.exp(-dt / 85) * .18 : 0;
-                    cashMesh.position.y = .25 + (view.motion && view.cash.feedback === 'correct' ? Math.exp(-dt / 80) * .12 : 0);
+                    const pose=cashCardPose(view,host.clientWidth/Math.max(1,host.clientHeight));
+                    // The card's parent sits at y=.08; shared pose is world-space.
+                    cashMesh.position.set(pose.x,pose.y-.08,pose.z);
                 }
-                tower?.children.forEach((m, i) => { m.visible = i < view.cash!.index - view.cash!.rejected; });
+                if (cashTower && cashTower.count !== view.cash.index - view.cash.rejected) key.shadow.needsUpdate = true;
+                if (cashTower) cashTower.count = view.cash.index - view.cash.rejected;
             }
         }
-        camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
-        camera.updateProjectionMatrix();
+        dailyCamera(view,host.clientWidth/Math.max(1,host.clientHeight),camera);
         scene.updateMatrixWorld(true);
         renderer.render(scene, camera);
         ready = true;
@@ -515,13 +577,13 @@ export function createStage(host: HTMLElement, onLost: () => void): Stage {
     observer.observe(host);
     resize();
     renderer.domElement.addEventListener('webglcontextlost', lost);
+    renderer.domElement.addEventListener('webglcontextrestored', restored);
     return {
         update,
-        capture() { if (!ready || disposed)
-            throw Error('場景尚未準備好，請稍後再拍。'); renderer.render(scene, camera); const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 720; const ctx = canvas.getContext('2d'); if (!ctx)
-            throw Error('圖片無法產生。'); ctx.drawImage(renderer.domElement, 0, 0, 960, 720); return canvas.toDataURL('image/jpeg', .9); },
+        capture() { if(!ready||disposed)throw Error('場景尚未準備好，請稍後再拍。');renderer.render(scene,camera);return captureDailyFrame(renderer.domElement); },
         framing() { scene.updateMatrixWorld(true); const visible = anchors.filter(a => a.object.visible && a.points.every(p => { const v = a.object.localToWorld(p.clone()).project(camera); return v.z >= -1 && v.z <= 1 && Math.abs(v.x) <= .97 && Math.abs(v.y) <= .97; })).map(a => a.id); return { visible, blocked: !!board && Math.abs(board.position.x) < .85, lift: clientRoot?.position.y ?? 0 }; },
-        point(x, y) { const r = host.getBoundingClientRect(); ray.setFromCamera(new Vector2((x - r.left) / r.width * 2 - 1, -(y - r.top) / r.height * 2 + 1), camera); return ray.ray.intersectPlane(ground, intersection) ? { x: intersection.x / 1.2, y: intersection.z / 1.5 } : null; },
+        point(x,y) {return lastView?paperPoint(lastView,host.getBoundingClientRect(),x,y):null;},
+        cashContains(x,y) {return !!lastView&&cashContains(lastView,host.getBoundingClientRect(),x,y);},
         stats() { return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }; },
         dispose,
     };

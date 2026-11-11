@@ -24,13 +24,38 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
  @media(max-width:600px){.night-heading{top:16px;left:16px;padding-left:10px}.night-heading img{width:72px;height:24px}.night-kicker{font-size:9px;margin-top:12px}.night-heading h1{font-size:25px}.night-heading p{display:none}.night-controls{right:16px;top:16px;gap:5px}.night-counter{right:16px;top:77px}.night-counter strong{font-size:25px}.night-note{top:153px;font-size:14px;max-width:94%;white-space:normal;text-align:center}.night-frame{width:70%;height:50%}.night-footer{left:16px;right:16px;bottom:max(24px,env(safe-area-inset-bottom));display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px}.night-primary{display:contents}.night-feedback{grid-column:1/-1;grid-row:1;max-width:none;text-align:left;margin:0}.night-guide{grid-row:2;grid-column:1}.night-buttons{grid-row:2;grid-column:2;flex-direction:column;gap:8px}.night-instruction{max-width:17ch}.night-atelier [data-action],.night-atelier [data-reject]{font-size:14px;min-height:44px;padding:8px 14px}}
  @media(orientation:landscape) and (max-height:600px){.night-heading{top:14px;left:16px}.night-heading img,.night-kicker,.night-heading p,.night-step{display:none}.night-heading h1{font-size:22px}.night-controls{top:14px;right:16px}.night-counter{top:70px;right:16px}.night-note{top:16px;font-size:14px}.night-footer{bottom:16px;left:16px;right:16px}.night-feedback{max-width:27ch;margin-bottom:6px}.night-instruction{max-width:24ch}.night-atelier [data-action],.night-atelier [data-reject]{min-height:44px;padding:8px 14px;font-size:14px}}
  `;
+ // Separate art direction, scoped to the isolated prototype only.
+ style.textContent+=`
+ .night-atelier[data-game=photo]{background:#071423;color:#eef7ff}
+ [data-game=photo] .night-heading{border-color:#71d7ed}
+ [data-game=photo] .night-heading h1{font-family:system-ui,sans-serif;font-weight:800;letter-spacing:-.04em}
+ [data-game=photo] .night-kicker,[data-game=photo] .night-step,[data-game=photo] .night-counter span{color:#8fdbed;font-size:14px;letter-spacing:.08em}
+ [data-game=photo] .night-note{border-radius:3px;border-color:#8fdbed66;background:#071423de}
+ [data-game=photo] button{background:#102638;border-color:#78cfe766;border-radius:3px}
+ [data-game=photo] [data-action]{background:#eec783;color:#15273c;border-color:#fff1c2;box-shadow:0 3px 0 #987b48}
+ [data-game=photo] .night-frame{border:0;box-shadow:none;background:linear-gradient(#8fdbed22,#8fdbed22) 33.33% 0/1px 100% no-repeat,linear-gradient(#8fdbed22,#8fdbed22) 66.66% 0/1px 100% no-repeat,linear-gradient(#8fdbed22,#8fdbed22) 0 33.33%/100% 1px no-repeat,linear-gradient(#8fdbed22,#8fdbed22) 0 66.66%/100% 1px no-repeat}
+ .night-atelier[data-game=cash]{background:#f6d93d;color:#182044}
+ .night-atelier[data-game=cash]:after{background:linear-gradient(180deg,#fff9e9b0,transparent 24%,transparent 72%,#fff9e9d9)}
+ [data-game=cash] .night-heading{border-left:5px solid #192247;padding-left:14px}
+ [data-game=cash] .night-heading h1{font:900 36px/1.2 system-ui,sans-serif;letter-spacing:-.06em}
+ [data-game=cash] .night-heading p,[data-game=cash] .night-counter span,[data-game=cash] .night-kicker,[data-game=cash] .night-step{color:#182044;font-size:14px}
+ [data-game=cash] .night-counter strong{font:900 36px/1.2 system-ui,sans-serif}
+ [data-game=cash] button{border:2px solid #192247;border-radius:4px;background:#fff9e9;color:#192247;box-shadow:3px 3px 0 #192247}
+ [data-game=cash] .night-note{border:2px solid #192247;border-radius:0;background:#fff9e9;box-shadow:4px 4px 0 #192247;font-weight:800}
+ [data-game=cash] .night-feedback{text-shadow:none;font-weight:700;background:#fff9e9;padding:5px 10px;border-left:4px solid #192247}
+ [data-game=cash] [data-action]{background:#225fe5;border-color:#192247;box-shadow:4px 4px 0 #192247;color:white}
+ [data-game=cash] [data-reject]{background:#ff719e;color:#192247}
+ [data-game=cash] :focus-visible{outline-color:#192247}
+ @media(max-width:600px){[data-game=cash] .night-heading h1{font-size:27px}[data-game=cash] .night-counter strong{font-size:27px}[data-game=cash] .night-heading{padding-left:9px}[data-game=cash] .night-kicker,[data-game=photo] .night-kicker{font-size:14px;letter-spacing:0}[data-game=cash] .night-counter span{max-width:10ch;display:block;margin-left:auto}}
+ @media(orientation:landscape) and (max-height:600px){[data-game=cash] .night-heading h1{font-size:22px}[data-game=cash] .night-counter strong{font-size:25px}}
+ `;
  host.append(style);
  const root=document.createElement('section');root.className='night-atelier';root.dataset.game=mode;root.setAttribute('aria-label',photo?'午夜照相館：可操作 3D 預覽':'百萬盤點室：可操作 3D 預覽');
- root.innerHTML=`<header class="night-heading"><img alt="自由工坊"><div class="night-kicker">THE NIGHT SHIFT · ${photo?'01':'03'}</div><h1>${photo?'午夜照相館':'百萬盤點室'}</h1><p>${photo?'替不太正常的客人，留一張好照片。':'盤點的不只是鈔票，還有老闆的承諾。'}</p></header><nav class="night-controls" aria-label="遊戲控制"><button data-pause aria-label="暫停">Ⅱ</button><button data-reset aria-label="重新開始">↻</button><button data-full aria-label="切換全螢幕">⛶</button></nav><div class="night-counter"><strong data-progress></strong><span>${photo?'CLIENTS / 03':'遊戲道具 · 非真實金錢'}</span></div><div class="night-note" data-note></div>${photo?'<div class="night-frame"><i class="night-reticle"></i></div>':''}<footer class="night-footer"><div class="night-guide"><span class="night-step">${photo?'01 / FRAME THE MOMENT':'03 / READ BEFORE YOU KEEP'}</span><p class="night-instruction">${photo?'拖曳畫面取景，按快門拍下。':'讀一張、滑一張。收鈔票，退大餅。'}</p></div><div class="night-primary"><p class="night-feedback" role="status"></p><div class="night-buttons">${photo?'':'<button data-reject>退回大餅</button>'}<button data-action>${photo?'按下快門':'收下鈔票'}</button></div></div></footer><div class="night-panel" hidden><div class="night-dialog" role="dialog" aria-modal="true" aria-labelledby="night-title"><h2 id="night-title">休息一下</h2><p data-panel-copy>進度留在這裡。準備好再繼續。</p><button data-resume>繼續遊戲</button></div></div>`;
+ root.innerHTML=`<header class="night-heading"><img alt="自由工坊"><div class="night-kicker">${photo?'STUDIO 01 / AFTER DARK':'CASH! / PAPER PARADE'}</div><h1>${photo?'午夜照相館':'百萬盤點室'}</h1><p>${photo?'替不太正常的客人，留一張好照片。':'盤點的不只是鈔票，還有老闆的承諾。'}</p></header><nav class="night-controls" aria-label="遊戲控制"><button data-pause aria-label="暫停">Ⅱ</button><button data-reset aria-label="重新開始">↻</button><button data-full aria-label="切換全螢幕">⛶</button></nav><div class="night-counter"><strong data-progress></strong><span>${photo?'CLIENTS / 03':'遊戲道具 · 非真實金錢'}</span></div><div class="night-note" data-note></div>${photo?'<div class="night-frame"><i class="night-reticle"></i></div>':''}<footer class="night-footer"><div class="night-guide"><span class="night-step">${photo?'01 / FRAME THE MOMENT':'03 / READ BEFORE YOU KEEP'}</span><p class="night-instruction">${photo?'拖曳畫面取景，按快門拍下。':'讀一張、滑一張。收鈔票，退大餅。'}</p></div><div class="night-primary"><p class="night-feedback" role="status"></p><div class="night-buttons">${photo?'':'<button data-reject>退回大餅</button>'}<button data-action>${photo?'按下快門':'收下鈔票'}</button></div></div></footer><div class="night-panel" hidden><div class="night-dialog" role="dialog" aria-modal="true" aria-labelledby="night-title"><h2 id="night-title">休息一下</h2><p data-panel-copy>進度留在這裡。準備好再繼續。</p><button data-resume>繼續遊戲</button></div></div>`;
  root.querySelector('img')!.src=logoUrl;host.append(root);
  const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'low-power'});renderer.setPixelRatio(Math.min(devicePixelRatio||1,RULES.maxDpr));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
  const canvas=renderer.domElement;canvas.tabIndex=0;canvas.setAttribute('role','application');canvas.setAttribute('aria-label',photo?'照相館。拖曳畫面取景，再按快門。':'盤點桌面。向右滑收下，向左滑退回，或使用具名按鈕。');root.prepend(canvas);
- const scene=new THREE.Scene();scene.background=new THREE.Color('#172c2a');
+ const scene=new THREE.Scene();scene.background=new THREE.Color(photo?'#071423':'#f5d94a');
  const camera=new THREE.OrthographicCamera(-6,6,4,-4,.1,50);
  const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>(),textures=new Set<THREE.Texture>();
  const geom=<T extends THREE.BufferGeometry>(g:T)=>{geometries.add(g);return g;};
@@ -41,9 +66,9 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
  const box=(color:string,x:number,y:number,z:number,w:number,h:number,d:number,parent:THREE.Object3D=scene)=>mesh(rounded,color,x,y,z,w,h,d,parent);
  function texture(w:number,h:number,paint:(c:CanvasRenderingContext2D)=>void){const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');if(!ctx)throw Error('無法建立原創材質');paint(ctx);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());textures.add(t);return t;}
  function mapped(g:THREE.BufferGeometry,t:THREE.Texture,parent:THREE.Object3D=scene){const m=new THREE.MeshStandardMaterial({map:t,roughness:.85});materials.add(m);const p=new THREE.Mesh(g,m);p.receiveShadow=true;parent.add(p);return p;}
- scene.add(new THREE.HemisphereLight('#efe3c5','#233b3c',2.1));const key=new THREE.DirectionalLight('#ffe3b5',4.2);key.position.set(-3,8,5);key.castShadow=true;key.shadow.mapSize.set(1024,1024);Object.assign(key.shadow.camera,{left:-7,right:7,top:7,bottom:-7,near:.1,far:25});key.shadow.bias=-.001;key.shadow.normalBias=.025;scene.add(key);const fill=new THREE.DirectionalLight('#8bc8d0',1.1);fill.position.set(5,3,-3);scene.add(fill);
+ scene.add(new THREE.HemisphereLight(photo?'#c5eaff':'#fff9ed',photo?'#10182c':'#8476bf',photo?1.5:2.8));const key=new THREE.DirectionalLight(photo?'#ffd39b':'#fff1d2',photo?3.8:3.2);key.position.set(-3,8,5);key.castShadow=true;key.shadow.mapSize.set(1024,1024);Object.assign(key.shadow.camera,{left:-7,right:7,top:7,bottom:-7,near:.1,far:25});key.shadow.bias=-.001;key.shadow.normalBias=.025;scene.add(key);const fill=new THREE.DirectionalLight(photo?'#49c9ff':'#b7c9ff',photo?3.2:1.3);fill.position.set(5,3,-3);scene.add(fill);
  const wood=texture(512,512,c=>{c.fillStyle='#49362f';c.fillRect(0,0,512,512);for(let i=0;i<420;i++){c.strokeStyle=i%3?'#a1795622':'#20161044';c.lineWidth=1;c.beginPath();c.moveTo(0,i*1.3);for(let x=0;x<=512;x+=16)c.lineTo(x,i*1.3+Math.sin(x/65+i)*2);c.stroke();}});wood.wrapS=wood.wrapT=THREE.RepeatWrapping;wood.repeat.set(3,3);
- const floor=mapped(geom(new THREE.PlaneGeometry(30,30)),wood);floor.rotation.x=-Math.PI/2;floor.position.y=-.08;
+ const floor=photo?mesh(geom(new THREE.PlaneGeometry(30,30)),'#101f31',0,0,0,1,1,1):mapped(geom(new THREE.PlaneGeometry(30,30)),texture(512,512,c=>{c.fillStyle='#f4da4c';c.fillRect(0,0,512,512);c.fillStyle='#e9c82e';for(let y=0;y<8;y++)for(let x=0;x<8;x++){c.beginPath();c.arc(x*64+32,y*64+32,5,0,Math.PI*2);c.fill();}}));floor.rotation.x=-Math.PI/2;floor.position.y=-.08;
  // An actual tabletop / studio stage, with brass hardware and original textures.
  let bestPhoto:PhotoGrade|null=null;
  let cash=newCash(42),clientIndex=0,film=0,elapsed=0,totalStars=0,ended=false,paused=false,lost=false,disposed=false,frame=0,last=performance.now(),flashUntil=0;
@@ -54,13 +79,19 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
  const anchors=new Map<string,THREE.Object3D>();let bill:THREE.Mesh|undefined;let billTexture:THREE.Texture|undefined;
  const receipts:THREE.Mesh[]=[];
  if(photo){
-  // Seamless paper sweep and fluted curtain: dimensional studio, not a flat image.
-  box(C.green,0,0,0,7,.12,5.4);box('#34554d',0,2.6,-1.8,6.3,5.2,.16);
-  for(let i=0;i<18;i++)mesh(cylinder,i%2?'#476359':'#3b594f',-3.1+i*.365,2.5,-1.65,.23,5,.12);
-  box(C.gold,0,5.04,-1.5,6.7,.06,.12);
-  // Physical backdrop pedestal and elliptical carpet.
-  mesh(cylinder,'#bd9c74',0,.06,.3,2.1,.12,1.55);mesh(cylinder,'#c4aa87',0,.13,.3,1.96,.04,1.42);
-  for(const x of [-2.65,2.65]){mesh(cylinder,C.ink,x,.08,.7,.38,.1,.38);mesh(cylinder,C.gold,x,1.5,.7,.035,2.9,.035,scene,.7);const light=mesh(geom(new THREE.CylinderGeometry(.42,.7,.45,32)),C.ink,x,2.9,.7,1,1,1);light.rotation.z=x<0?-.5:.5;mesh(sphere,C.paper,x,2.67,.85,.44,.06,.44);}
+  // Cold soundstage: seamless cyclorama, overhead rig and luminous practicals.
+  box('#152c43',0,0,0,7,.12,5.4);box('#183c58',0,2.6,-1.8,6.8,5.2,.16);
+  for(const x of [-3.15,3.15]){box('#0b1828',x,2.5,-1.55,.2,5,.3);box('#73d5ee',x,2.5,-1.36,.045,4.6,.035);}
+  box('#07131f',0,4.95,-1.3,6.8,.18,.22);
+  for(let i=0;i<7;i++){const rig=box('#47657a',-3+i,4.95,-1.1,.035,.45,.035);rig.rotation.z=.65;}
+  mesh(cylinder,'#0c1c2b',0,.06,.3,2.1,.12,1.55);mesh(cylinder,'#294e65',0,.13,.3,1.96,.04,1.42);
+  const stageMark=box('#d3ad6b',0,.158,.8,.5,.008,.035);stageMark.rotation.y=.45;
+  for(const x of [-2.65,2.65]){
+   mesh(cylinder,'#08121c',x,.08,.7,.38,.1,.38);mesh(cylinder,'#50677c',x,1.5,.7,.035,2.9,.035,scene,.7);
+   const softbox=new THREE.Group();softbox.position.set(x,2.9,.7);softbox.rotation.y=x<0?.55:-.55;scene.add(softbox);
+   box('#091522',0,0,0,.85,1.05,.18,softbox);box(x<0?'#ffe2ad':'#8fe9ff',0,0,.105,.72,.92,.025,softbox);
+   for(const z of [-1,1]){const flap=box('#142a3d',z*.47,0,.17,.18,1.05,.04,softbox);flap.rotation.y=z*.5;}
+  }
   // Foreground camera on its table, not part of the framing target.
   box(C.ink,-2.3,.7,2.4,1.3,.12,.9);for(const x of [-2.8,-1.8])box(C.ink,x,.32,2.4,.07,.7,.65);
   const vintage=new THREE.Group();vintage.position.set(-2.3,1.16,2.4);vintage.rotation.y=.25;scene.add(vintage);box('#222e2c',0,0,0,.9,.65,.45,vintage);box(C.gold,0,.32,0,.92,.07,.48,vintage);box(C.ink,0,.44,0,.35,.2,.3,vintage);const lens=mesh(cylinder,C.gold,0,0,.3,.24,.3,.24,vintage,.7);lens.rotation.x=Math.PI/2;const glass=mesh(cylinder,'#102c34',0,0,.48,.18,.025,.18,vintage,.5);glass.rotation.x=Math.PI/2;
@@ -78,19 +109,23 @@ export function mountPhotoCashAtelier(host: HTMLElement, logoUrl: string, mode: 
   scene.add(board);const boardMesh=mapped(geom(new THREE.PlaneGeometry(1.5,2.6)),boardTex,board);boardMesh.position.y=1.75;board.position.z=1;anchors.set('board',boardMesh);for(const x of [-.55,.55])box(C.ink,x,.4,0,.05,.8,.3,board);
   for(let i=0;i<3;i++){const bird=new THREE.Group();subject.add(bird);bird.position.set((i-1)*.34,2.95,.25);mesh(sphere,i===1?'#a8b2ac':'#7f9994',0,0,0,.16,.24,.17,bird);mesh(sphere,'#b9c5bc',0,.17,.01,.14,.14,.14,bird);mesh(sphere,C.ink,.05,.2,.135,.025,.025,.02,bird);const beak=mesh(geom(new THREE.ConeGeometry(.06,.16,12)),C.gold,0,.14,.19,1,1,1,bird);beak.rotation.x=Math.PI/2;birds.push(bird);anchors.set('bird'+i,bird);}
  }else{
-  box(C.green,0,0,0,6,.06,4.8);
-  for(const x of [-2.05,2.05]){box('#49362f',x,.12,0,1.55,.18,2.5);box(x<0?'#6b4438':'#3c6556',x,.23,0,1.4,.07,2.3);for(const z of [-1.2,1.2])box(C.gold,x,.26,z,1.55,.14,.045);}
+  // Pop-art counting arcade: floating enamel cabinet, split-color lanes and tokens.
+  box('#192247',0,-.17,0,6.4,.38,4.9);box('#faf3df',0,.02,0,6.2,.12,4.7);
+  box('#f86f9a',-2.05,.13,0,1.65,.1,3.4);box('#3774ec',2.05,.13,0,1.65,.1,3.4);
+  for(const x of [-2.05,2.05]){box('#192247',x,.2,0,1.5,.12,2.5);box(x<0?'#ffafc7':'#a9dfe9',x,.29,0,1.35,.07,2.3);for(const z of [-1.2,1.2])box('#fff9e9',x,.35,z,1.5,.12,.06);}
+  for(let i=0;i<6;i++){const token=mesh(cylinder,i%2?'#ff769e':'#2758d8',-2.5+i,.18,-2,.12,.08,.12);token.rotation.x=.12;}
   const label=(title:string,x:number)=>{const t=texture(512,160,c=>{c.fillStyle=C.paper;c.fillRect(0,0,512,160);c.fillStyle=C.ink;c.font='600 54px system-ui';c.textAlign='center';c.fillText(title,256,100);});const p=mapped(geom(new THREE.PlaneGeometry(1.35,.42)),t);p.rotation.x=-Math.PI/2;p.position.set(x,.34,1.03);};label('退回大餅',-2.05);label('收下鈔票',2.05);
   scene.add(cardGroup);for(let i=0;i<7;i++){const sheet=box(i%2?'#c5bda0':'#e3dcc5',Math.sin(i)*.025,.15+i*.015,0,2.42,.013,1.33,cardGroup);sheet.rotation.y=Math.sin(i)*.025;}
   bill=mapped(geom(new THREE.PlaneGeometry(2.42,1.33)),texture(1024,560,()=>{}),cardGroup);bill.rotation.x=-Math.PI/2;bill.position.y=.27;
   for(let i=0;i<10;i++){const r=box('#d8dfc6',2.05,.32+i*.025,-.2,1.24,.016,.67);r.rotation.y=Math.sin(i)*.04;r.visible=false;receipts.push(r);}
-  // Brass counting weight, ceramic dish, hand-bound ledger and reading lamp.
-  mesh(cylinder,C.gold,1.7,.18,-1.8,.28,.28,.28,scene,.75);mesh(sphere,C.gold,1.7,.38,-1.8,.15,.12,.15,scene,.75);
-  box(C.red,-1.35,.1,-2.0,1.3,.17,.85).rotation.y=-.15;box(C.paper,-1.35,.2,-2.0,1.2,.04,.75).rotation.y=-.15;
-  mesh(cylinder,C.ink,2.95,.08,-2,.4,.12,.4);mesh(cylinder,C.gold,2.95,1,-2,.035,1.8,.035,scene,.7);const shade=mesh(geom(new THREE.CylinderGeometry(.2,.58,.45,32,1,true)),C.green,2.8,1.94,-1.95,1,1,1);shade.rotation.z=.2;
-  mesh(cylinder,C.paper,-2.9,.1,1.7,.4,.09,.4);mesh(cylinder,C.red,-2.9,.36,1.7,.27,.45,.27);mesh(cylinder,C.ink,-2.9,.59,1.7,.23,.015,.23);
+  // Sculptural receipt printer and oversized enamel paperclip, not vintage props.
+  box('#192247',-2.75,.4,1.75,.7,.65,.75);box('#ff769e',-2.75,.72,1.75,.62,.06,.65);
+  box('#fff9e9',-2.75,.77,1.7,.4,.035,.65);for(let i=0;i<4;i++)box('#192247',-2.75,.79,1.5+i*.1,.28,.008,.02);
+  mesh(geom(new THREE.TorusGeometry(.24,.045,8,24)),'#225fe5',2.65,.3,1.8,1,1.5,1).rotation.x=-Math.PI/2;
+  box('#192247',0,.15,-1.55,2.5,.2,.55);box('#f9d947',0,.27,-1.55,2.4,.04,.45);
+
  }
- function paintBill(){if(!bill)return;const card=cashDeck(42)[cash.index];if(!card){cardGroup.visible=false;return;}const t=texture(1024,560,c=>{c.fillStyle=card.valid?'#d6ddc4':'#f0d2af';c.fillRect(0,0,1024,560);c.strokeStyle=card.valid?'#4e705d':'#98674c';c.lineWidth=4;c.strokeRect(24,24,976,512);c.strokeRect(38,38,948,484);for(let i=0;i<18;i++){c.beginPath();c.ellipse(512,280,130+i*8,85+i*5,0,0,Math.PI*2);c.strokeStyle=card.valid?'#527c541c':'#985a3d22';c.stroke();}c.fillStyle=C.ink;c.font='600 31px system-ui';c.textAlign='left';c.fillText('下班事務所  /  盤點用',65,99);c.textAlign='right';c.fillText('NO. '+String(card.id+1).padStart(4,'0'),959,99);c.textAlign='center';c.font=card.valid?'500 116px Georgia':'700 66px system-ui';c.fillText(card.label,512,316,880);c.font='30px system-ui';c.fillText(card.valid?'純屬遊戲道具  ·  NOT LEGAL TENDER':'承諾很多，現金沒有。',512,435);});const old=billTexture??(bill.material as THREE.MeshStandardMaterial).map;if(old){old.dispose();textures.delete(old);}billTexture=t;(bill.material as THREE.MeshStandardMaterial).map=t;cardGroup.visible=true;}
+ function paintBill(){if(!bill)return;const card=cashDeck(42)[cash.index];if(!card){cardGroup.visible=false;return;}const t=texture(1024,560,c=>{c.fillStyle=card.valid?'#e6f4df':'#ffcadc';c.fillRect(0,0,1024,560);c.strokeStyle='#192247';c.lineWidth=8;c.strokeRect(24,24,976,512);c.strokeRect(38,38,948,484);for(let i=0;i<18;i++){c.beginPath();c.ellipse(512,280,130+i*8,85+i*5,0,0,Math.PI*2);c.strokeStyle=card.valid?'#527c541c':'#985a3d22';c.stroke();}c.fillStyle='#192247';c.font='800 31px system-ui';c.textAlign='left';c.fillText('PAPER PARADE / 遊戲道具',65,99);c.textAlign='right';c.fillText('NO. '+String(card.id+1).padStart(4,'0'),959,99);c.textAlign='center';c.font=card.valid?'900 116px system-ui':'900 66px system-ui';c.fillText(card.label,512,316,880);c.font='30px system-ui';c.fillText(card.valid?'純屬遊戲道具  ·  NOT LEGAL TENDER':'承諾很多，現金沒有。',512,435);});const old=billTexture??(bill.material as THREE.MeshStandardMaterial).map;if(old){old.dispose();textures.delete(old);}billTexture=t;(bill.material as THREE.MeshStandardMaterial).map=t;cardGroup.visible=true;}
  function updatePose(){if(!photo)return;const client=CLIENTS[clientIndex];if(!client)return;const pose=photoPose(client.id,elapsed/1000,42);subject.position.y=pose.lift*.55;subject.rotation.z=pose.sway;board.visible=client.id==='backdrop';board.position.x=pose.boardX+1.65;umbrella.visible=client.id==='umbrella';birds.forEach((b,i)=>{b.visible=client.id==='pigeons'&&pose.birds[i]>0;b.position.y=2.9+pose.birds[i];});humanFace.visible=client.id!=='pigeons';const head=anchors.get('head')!;head.visible=humanFace.visible;}
  function refresh(){root.dataset.index=String(photo?clientIndex:cash.index);root.dataset.ended=String(ended);root.dataset.mistakes=String(cash.mistakes);root.dataset.film=String(film);root.dataset.stars=String(totalStars);root.dataset.elapsed=String(Math.floor(elapsed));progress.textContent=photo?`${Math.min(clientIndex+1,3)} / 03`:`${(cash.amount/10000).toFixed(0)} 萬`;note.textContent=ended?'本局完成 · 尚未上線':photo?`${CLIENTS[clientIndex].title} · 底片 ${RULES.film-film} 張`:`${String(cash.index+1).padStart(2,'0')} / 30 · ${cashDeck(42)[cash.index]?.label??'已完成'}`;action.disabled=ended;if(reject)reject.disabled=ended;receipts.forEach((r,i)=>r.visible=i<cash.index/3);updatePose();}
  function render(){if(disposed||lost)return;updatePose();const started=performance.now();renderer.render(scene,camera);root.dataset.native='true';root.dataset.drawCalls=String(renderer.info.render.calls);root.dataset.triangles=String(renderer.info.render.triangles);root.dataset.renderMs=(performance.now()-started).toFixed(2);root.dataset.panX=String(panX);root.dataset.panY=String(panY);}

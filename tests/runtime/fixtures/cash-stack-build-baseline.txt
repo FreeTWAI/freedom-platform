@@ -1,0 +1,8 @@
+    function buildCash() { desk(); const cardGroup = group(world, 0, .08, 0); cashMesh = new Mesh(plane, new MeshBasicMaterial({ color: PAPER, toneMapped: false })); materials.add(cashMesh.material as Material); cashMesh.scale.set(3.2, 2.15, 1); cashMesh.rotation.x = -Math.PI / 2; cashMesh.position.y = .25; cardGroup.add(cashMesh); tower = group(world, 2.6, .04, -.15); for (let i = 0; i < 24; i++) {
+        const m = rb(tower, LIME, Math.sin(i) * .03, i * .025, 0, 1.3, .022, 1.85);
+        m.name = `bill${i}`;
+    } rb(world, '#e9ad9e', -2.7, .04, 0, 1.6, .1, 2.3); rb(world, INK, -2.7, .13, -1.1, 1.6, .2, .12); label(world, '退票券', '非現金，不用感動', -2.7, .45, -1.15, 1.5, .45); ball(world, '#d6a36d', -2.7, .27, .6, .48, .15, .4); for (let i = -2; i <= 2; i++) {
+        const cut = rb(world, '#9c693e', -2.7 + i * .16, .39, .6, .035, .012, .5);
+        cut.rotation.y = .4;
+    } for (let i = 0; i < 8; i++)
+        rb(cardGroup, '#9cab71', Math.sin(i) * .015, .025 + i * .026, 0, 3.2, .023, 2.15); }

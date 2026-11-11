@@ -183,3 +183,83 @@ test('UX-17 shawarma heat follows temperature and reduced motion freezes spit ro
  assert.deepEqual(shawarmaPresentation({...run,temperature:NaN,elapsed:NaN},false),{cooked:0,rotation:0});
  assert.equal(shawarmaPresentation({...run,temperature:999},false).cooked,1);assert.equal(JSON.stringify(run),before);
 });
+
+// Execute the actual TSX event closures with a deterministic React hook boundary.
+// This is not a browser, native focus, layout, WebGL or visual acceptance test.
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {transformSync} from 'esbuild';
+import * as React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import * as marketDomain from '../../apps/portal-web/src/games/cooking/market-domain.js';
+import {recipeOf} from '../../apps/portal-web/src/games/cooking/catalog.js';
+import {MarketIllustration} from '../../apps/portal-web/src/games/cooking/MarketIllustration.js';
+type UiNode={type:unknown;props:Record<string,any>};
+function marketUi(id:MarketRun['recipe']='corn-dog',bookNotice?:UiNode){
+ const hooks:any[]=[],effects:(()=>unknown)[]=[],layouts:(()=>unknown)[]=[],saved=new Map<string,string>(),frames=new Map<number,(time:number)=>void>();let cursor=0,serial=0;
+ const element=(type:unknown,props:Record<string,any>)=>({type,props}),refHooks={useRef:(value:unknown)=>{const index=cursor++;return hooks[index]??=( {current:value});},useState:(initial:unknown)=>{const index=cursor++;if(!(index in hooks))hooks[index]=typeof initial==='function'?(initial as ()=>unknown)():initial;return [hooks[index],(next:unknown)=>{hooks[index]=typeof next==='function'?(next as (v:unknown)=>unknown)(hooks[index]):next;}];},useEffect:(effect:()=>unknown)=>{effects.push(effect);},useLayoutEffect:(effect:()=>unknown)=>{layouts.push(effect);}};
+ const document={activeElement:null as unknown,body:{isConnected:true}};
+ const module={exports:{} as {MarketGame:(props:unknown)=>UiNode}};
+ const code=transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/MarketGame.tsx',import.meta.url),'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'}).code;
+ runInNewContext(code,{module,exports:module.exports,require:(name:string)=>{if(name==='react')return refHooks;if(name==='react/jsx-runtime')return {jsx:element,jsxs:element,Fragment:'fragment'};if(name==='./market-domain')return marketDomain;if(name==='./CoatingHold')return {CoatingHold:()=>null};if(name==='./MarketIllustration')return {MarketIllustration};if(name==='./IngredientIcon')return {IngredientIcon:()=>null};if(name==='../diagnostics')return {syncDiagnostics(){}};throw Error(`Uncovered UI import ${name}`);},sessionStorage:{getItem:(k:string)=>saved.get(k)??null,setItem:(k:string,v:string)=>saved.set(k,v)},requestAnimationFrame:(fn:(time:number)=>void)=>{frames.set(++serial,fn);return serial;},cancelAnimationFrame:(id:number)=>frames.delete(id),document,console});
+ const nodes=(node:any):UiNode[]=>!node||typeof node!=='object'?[]:Array.isArray(node)?node.flatMap(nodes):[node,...nodes(node.props?.children)];
+ const text=(node:any):string=>typeof node==='string'||typeof node==='number'?String(node):Array.isArray(node)?node.map(text).join(''):node?.props?text(node.props.children):'';
+ const render=()=>{cursor=0;effects.length=0;layouts.length=0;return module.exports.MarketGame({recipe:recipeOf(id)!,seed:42,fresh:true,bookNotice,onBack(){},onResult(){},onComplete(){}});};
+ let tree=render();const mode=hooks.findIndex(value=>value==='loading');assert.notEqual(mode,-1);hooks[mode]='fallback';tree=render();
+ const find=(predicate:(node:UiNode)=>boolean)=>{const node=nodes(tree).find(predicate);assert.ok(node,'actual production UI node must exist');return node;};
+ const click=(name:string)=>{const b=find(n=>n.type==='button'&&(n.props['aria-label']??text(n))===name);assert.notEqual(b.props.disabled,true,`${name} is enabled`);b.props.onClick();tree=render();};
+ const state=()=>JSON.parse(saved.get(MARKET_SAVE_KEY)!).run as MarketRun;
+ const tick=(time:number)=>{const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(time);tree=render();};
+ return {click,state,tick,nodes:()=>nodes(tree),find,text,render:()=>{tree=render();return tree;},saved,effects,layouts,hooks,document};
+}
+test('market scene keeps gameplay controls inside the stage and covered controls inert',()=>{
+ for(const id of marketDomain.MARKET_IDS){const ui=marketUi(id),stage=ui.find(n=>n.props['data-market-stage']!==undefined),play=ui.find(n=>n.props.className==='mk-play-space');assert.equal(play.props.inert,true);assert.equal(ui.nodes().filter(n=>n.type==='button'&&ui.text(n)==='開火，開始做！').length,1);assert.ok(stage.props.children);ui.click('開火，開始做！');assert.equal(ui.state().status,'playing');assert.equal(ui.find(n=>n.props.className==='mk-play-space').props.inert,false);ui.click('暫停');assert.equal(ui.state().status,'paused');assert.equal(ui.find(n=>n.props.className==='mk-play-space').props.inert,true);ui.click('食譜與操作提示');assert.ok(ui.find(n=>n.type==='dialog'&&n.props['aria-label']==='食譜與操作提示'));ui.click('關閉操作提示');assert.equal(ui.state().status,'paused');ui.click('繼續這一盤');assert.equal(ui.state().status,'playing');}
+});
+test('market palettes retain free-cooking selection and authoritative actions, pause and restart',()=>{
+ const ui=marketUi();ui.click('開火，開始做！');ui.tick(0);ui.tick(400);ui.click('熱狗＋70g');ui.tick(800);ui.click('熱狗＋70g');
+ const select=ui.find(n=>n.type==='select');select.props.onChange({target:{value:'0'}});ui.render();ui.tick(1200);ui.click('工具');ui.click('裹麵糊');assert.equal(ui.state().portions[0].coated,true);assert.equal(ui.state().portions[1].coated,false);
+ ui.tick(1600);ui.click('調味醬線');ui.click('番茄醬');ui.click('擠一條波浪醬線');assert.equal(ui.state().sauces.length,1);ui.click('暫停');const snapshot=JSON.stringify(ui.state());ui.tick(50000);assert.equal(JSON.stringify(ui.state()),snapshot);
+ ui.click('繼續這一盤');ui.tick(50400);ui.tick(50800);ui.click('翻這一面');assert.equal(ui.state().portions[0].side,1);assert.equal(ui.state().portions[1].side,0);assert.equal(ui.state().sauces.length,1);
+ ui.click('重新做這一道');ui.click('保留這一盤');assert.equal(ui.state().portions.length,2);assert.equal(ui.state().status,'paused');ui.click('重新做這一道');ui.click('重新開攤');assert.equal(ui.state().status,'ready');assert.deepEqual(ui.state().portions,[]);assert.deepEqual(ui.state().sauces,[]);
+});
+test('market actual modal Tab handler traps focus without invoking gameplay/fullscreen keys',()=>{
+ const ui=marketUi();ui.click('食譜與操作提示');const dialog=ui.find(n=>n.type==='dialog'),focus:string[]=[];const first={focus:()=>focus.push('first')},last={focus:()=>focus.push('last')};
+ // The VM document is intentionally null-active; non-edge Tab is left to native
+ // dialog focus navigation and propagation is still stopped at the modal.
+ let stopped=0,prevented=0;dialog.props.onKeyDown({key:'Tab',shiftKey:false,currentTarget:{querySelectorAll:()=>[first,last]},stopPropagation:()=>stopped++,preventDefault:()=>prevented++});assert.equal(stopped,1);assert.equal(prevented,0);assert.deepEqual(focus,[]);ui.document.activeElement=last;dialog.props.onKeyDown({key:'Tab',shiftKey:false,currentTarget:{querySelectorAll:()=>[first,last]},stopPropagation:()=>stopped++,preventDefault:()=>prevented++});ui.document.activeElement=first;dialog.props.onKeyDown({key:'Tab',shiftKey:true,currentTarget:{querySelectorAll:()=>[first,last]},stopPropagation:()=>stopped++,preventDefault:()=>prevented++});assert.deepEqual(focus,['first','last']);assert.equal(prevented,2);
+ let canceled=0;dialog.props.onCancel({preventDefault:()=>canceled++});ui.render();assert.equal(canceled,1);assert.equal(ui.nodes().filter(n=>n.type==='dialog').length,0);
+});
+test('market SVG follows only actual portions, sides, selection and sauce without mutating domain',()=>{
+ for(const id of marketDomain.MARKET_IDS){let run=begin(id);for(const ingredient of marketDomain.MARKET_MENUS[id])run=act(run,{kind:'add',ingredient});run=time(run,10000);const before=JSON.stringify(run),html=renderToStaticMarkup(React.createElement(MarketIllustration,{run,selected:0}));assert.equal((html.match(/data-market-portion=/g)??[]).length,run.portions.length);assert.match(html,/viewBox="0 0 600 500"/);assert.doesNotMatch(html,/NaN|Infinity/);assert.equal(JSON.stringify(run),before);assert.notEqual(html,renderToStaticMarkup(React.createElement(MarketIllustration,{run:{...run,portions:[]},selected:0})));}
+ let run=act(begin('corn-dog'),{kind:'add',ingredient:'sausage'});const raw=renderToStaticMarkup(React.createElement(MarketIllustration,{run,selected:0}));run=act(run,{kind:'coat'});run=time(run,24000);run=act(run,{kind:'sauce',line:{sauce:'garlic',points:[{x:.2,y:.3},{x:.6,y:.7}]}});const cooked=renderToStaticMarkup(React.createElement(MarketIllustration,{run,selected:0}));assert.notEqual(cooked,raw);assert.match(cooked,/points="120,150 360,350"/);assert.equal((cooked.match(/<polyline/g)??[]).length,1);
+});
+
+test('market actual dialog effects open once, prefer Keep and restore their own trigger without initial focus theft',()=>{
+ const ui=marketUi(),events:string[]=[];assert.equal(ui.effects.length,5);assert.equal(ui.effects[3](),undefined);assert.equal(ui.effects[4](),undefined);
+ for(const [name,label,index] of [['食譜與操作提示','食譜與操作提示',4],['重新做這一道','重新做這道料理',3]] as const){ui.click(name);const node=ui.find(n=>n.type==='dialog'&&n.props['aria-label']===label),trigger=ui.find(n=>n.type==='button'&&n.props['aria-label']===name);node.props.ref.current={showModal:()=>events.push('open'),close:()=>events.push('close'),querySelector:()=>({focus:()=>events.push('keep')})};trigger.props.ref.current={focus:(options:unknown)=>{assert.equal((options as {preventScroll:boolean}).preventScroll,true);events.push('trigger');}};const cleanup=ui.effects[index]() as ()=>void;assert.equal(typeof cleanup,'function');cleanup();if(index===4)ui.click('關閉操作提示');else ui.click('保留這一盤');}
+ assert.deepEqual(events,['open','close','trigger','open','keep','close','trigger']);
+});
+
+test('market SVG pointer selects the actual portion and preserves pointer ownership before the domain flip',()=>{
+ const ui=marketUi('steak-dinner');ui.click('開火，開始做！');ui.tick(0);ui.tick(400);ui.click('牛排＋180g');ui.tick(800);ui.click('牛排＋180g');ui.tick(1200);
+ const events:string[]=[],surface=ui.find(n=>n.props.className==='mk-surface'),currentTarget={getBoundingClientRect:()=>({left:0,top:0,width:600,height:500}),focus:()=>events.push('focus'),setPointerCapture:(id:number)=>events.push(`capture:${id}`)},target={closest:()=>({getAttribute:()=> '0'})};
+ const event={isPrimary:true,button:0,pointerId:7,clientX:180,clientY:220,currentTarget,target,preventDefault:()=>events.push('prevent')};
+ surface.props.onPointerDown({...event,isPrimary:false});assert.deepEqual(events,[]);surface.props.onPointerDown(event);ui.render();assert.deepEqual(events,['prevent','focus','capture:7']);
+ const active=ui.find(n=>n.props.className==='mk-surface');active.props.onPointerUp({...event,pointerId:8});assert.deepEqual(ui.state().portions.map(p=>p.flips),[0,0]);active.props.onPointerUp(event);ui.render();assert.deepEqual(ui.state().portions.map(p=>p.flips),[1,0]);
+ ui.tick(1600);ui.find(n=>n.props.className==='mk-surface').props.onPointerDown(event);ui.render();ui.find(n=>n.props.className==='mk-surface').props.onPointerCancel(event);ui.find(n=>n.props.className==='mk-surface').props.onPointerUp(event);assert.deepEqual(ui.state().portions.map(p=>p.flips),[1,0]);
+});
+
+
+test('market keeps cookbook save errors in its paused stage without nested warning buttons',()=>{
+ const notice={type:'div',props:{className:'ck-save-warning',children:{type:'button',props:{children:'重試保存食譜本'}}}},ui=marketUi('corn-dog',notice);
+ assert.ok(ui.find(n=>n.props.className==='ck-save-warning'));ui.click('開火，開始做！');assert.equal(ui.nodes().filter(n=>n.props.className==='ck-save-warning').length,0);const warning=ui.find(n=>n.type==='button'&&n.props['aria-label']==='畫面與保存狀態');assert.ok(!ui.text(warning).includes('重試保存食譜本'));ui.click('畫面與保存狀態');assert.equal(ui.state().status,'paused');assert.ok(ui.find(n=>n.props.className==='ck-save-warning'));
+});
+
+
+test('market start hands focus over after inert removal, without stealing a newer focus or surviving pause',()=>{
+ const ui=marketUi(),events:string[]=[],target={isConnected:true,closest:()=>null,scrollIntoView:()=>events.push('scroll'),focus:(options:{preventScroll:boolean})=>{assert.equal(options.preventScroll,true);events.push('focus');ui.document.activeElement=target;}},trigger={isConnected:true};
+ ui.find(n=>n.props.className==='mk-surface').props.ref.current=target;ui.document.activeElement=trigger;ui.click('開火，開始做！');assert.deepEqual(events,[],'start never focuses while the old inert DOM may still be committed');trigger.isConnected=false;ui.document.activeElement=ui.document.body;ui.layouts.forEach(effect=>effect());assert.equal(ui.document.activeElement,target);assert.deepEqual(events,['scroll','focus']);
+ ui.click('暫停');const resume={isConnected:true};ui.document.activeElement=resume;ui.click('繼續這一盤');const newer={isConnected:true};ui.document.activeElement=newer;ui.layouts.forEach(effect=>effect());assert.equal(ui.document.activeElement,newer);assert.deepEqual(events,['scroll','focus'],'a newer connected focus owner wins');
+ ui.click('暫停');ui.document.activeElement=resume;ui.click('繼續這一盤');ui.click('暫停');ui.layouts.forEach(effect=>effect());assert.equal(ui.document.activeElement,resume);assert.deepEqual(events,['scroll','focus'],'pause cancels an unconsumed handoff');
+ ui.click('繼續這一盤');target.isConnected=false;ui.layouts.forEach(effect=>effect());assert.deepEqual(events,['scroll','focus'],'a detached target cannot claim focus');
+});

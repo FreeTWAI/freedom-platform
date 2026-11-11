@@ -26,12 +26,13 @@ export function defaultFragmentBinding(input, env = process.env) {
 }
 
 export async function writeDefaultFragment(directory, binding, shard, reportPath, listingPath) {
-  const report = await readBounded(directory, reportPath, MAX_FRAGMENT_BYTES / 2);
+  // Raw evidence shares one budget; publication also counts envelope/escaping bytes.
+  const report = await readBounded(directory, reportPath, MAX_FRAGMENT_BYTES);
   const fragment = { format, admission_evidence: false, binding, profile: 'full',
     current: shard.current, total: shard.total, exit_code: 0,
     report: report.toString('utf8'), evidence_sha256: digest(report) };
   if (shard.current === 1) {
-    const listing = await readBounded(directory, listingPath, MAX_FRAGMENT_BYTES / 2);
+    const listing = await readBounded(directory, listingPath, MAX_FRAGMENT_BYTES - report.length);
     fragment.listing = listing.toString('utf8');
     fragment.listing_exit_code = 0;
     fragment.listing_evidence_sha256 = digest(listing);

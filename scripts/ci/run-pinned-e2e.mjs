@@ -207,7 +207,7 @@ async function main() {
     if (!key || Object.hasOwn(input, key) || typeof value !== 'string' || !value || value.startsWith('--')) { valid = false; break; }
     input[key] = value;
   }
-  if (!valid || !input.root || (input.defaultShard !== undefined && !/^[123]$/.test(input.defaultShard))
+  if (!valid || !input.root || (input.defaultShard !== undefined && !E2E_DEFAULT_SHARDS.some(shard => String(shard.current) === input.defaultShard))
     || (input.defaultShard !== undefined && input.defaultReports !== undefined)
     || (input.guildProfile && (input.defaultShard !== undefined || input.defaultReports !== undefined))) {
     console.error('invalid_pinned_e2e_arguments');
@@ -372,7 +372,7 @@ async function main() {
             }
           };
           // Reserve CPU until every native game case in shard 1 has passed,
-          // then overlap its remaining ordinary journeys with shards 2/3.
+          // then overlap its remaining ordinary journeys with the remaining shards.
           // Without a completion signal, retain the safe whole-shard wait.
           // All processes still share one deadline and cancellation boundary.
           const first = runPartition(E2E_DEFAULT_SHARDS[0]);

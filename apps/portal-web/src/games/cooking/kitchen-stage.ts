@@ -4,6 +4,7 @@ import {createDishModel,type DishModel} from './dish-model';
 import {bakeRigidGroup} from '../stage-batch';
 import {createKitchenFoodBatch} from './kitchen-food-batch';
 import {ingredientVisual,type IngredientLayer} from './ingredient-visuals';
+import {createPreparationModel,isVolumetricPreparation} from './preparation-model';
 import {currentStep,cutGuide,plateTarget,type CookingRun} from './domain';
 import {KITCHEN_VIEW as V,type Shape} from './catalog';
 
@@ -18,6 +19,7 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
  // generic palette. Heat must never recolor the board, spoon or next recipe.
  const ingredientMaterials=new Map<string,MeshStandardMaterial>(),ingredientGeometry=new Map<readonly IngredientLayer[],BufferGeometry[]>();
  const ingredientCuts=new Map<Group,{whole:Group;cut:Group}>();
+ let preparationModel:ReturnType<typeof createPreparationModel>|null=null;
  let foodBatch:ReturnType<typeof createKitchenFoodBatch>=null;
  let completedDish:DishModel|null=null;let disposed=false,identity='',objects:{food:Group[];tool:Group;body:Group;steam:Mesh[];flaps:Group[];liquid:Mesh|null;stream:Mesh|null;flames:Mesh[]}|null=null;
  const light=new DirectionalLight('#fff5e4',3.1),lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
@@ -78,9 +80,14 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
   let lastMix:{amount:number;x:number|undefined;y:number|undefined}|null=null;
   let lastKnead:{held:number;motion:boolean}|null=null;
   let lastStatic:string|null=null;
-  function build(run:CookingRun){lastStatic=null;lastKnead=null;lastMix=null;openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();ingredientGeometry.clear();ingredientCuts.clear();ingredientMaterials.forEach(m=>m.dispose());ingredientMaterials.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,.7,.1);objects=null;return;}camera.lookAt(0,0,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
+  function build(run:CookingRun){lastStatic=null;lastKnead=null;lastMix=null;openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();ingredientGeometry.clear();ingredientCuts.clear();preparationModel=null;ingredientMaterials.forEach(m=>m.dispose());ingredientMaterials.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,.7,.1);objects=null;return;}camera.lookAt(0,0,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
    if(['slice','knead','fold'].includes(s.kind)){rb(body,C.edge,0,.04,.1,6.4,.28,4.5);rb(body,'#e7bd84',0,.2,.1,6.1,.08,4.2);rb(body,'#d1a56d',-2.68,.25,.1,.05,.012,3.5);}
-   if(s.kind==='slice'){for(let i=0;i<Math.min(8,s.goal);i++){const p=food(body,s.shape,.95,s.ingredient,true);p.position.set(-1.9+i*3.8/(s.goal-1),.28,.05);pieces.push(p);}rb(tool,C.dark,0,.25,-.7,.23,.2,.9);rb(tool,'#bec4bd',0,.22,.18,.19,.07,1.25);rb(tool,C.cream,0,.37,-.62,.07,.02,.43);}
+   if(s.kind==='slice'){const visual=ingredientVisual(s.ingredient,s.shape);
+    if(visual&&isVolumetricPreparation(visual.id)){
+     const planes=Array.from({length:s.goal},(_,count)=>screen(cutGuide({...run,active:{...run.active,count}}),.5,.3).x);
+     preparationModel=createPreparationModel(visual.id,planes,stepGeometry,ingredientMaterials);body.add(preparationModel.root);pieces.push(preparationModel.root);
+    }else for(let i=0;i<Math.min(8,s.goal);i++){const p=food(body,s.shape,.95,s.ingredient,true);p.position.set(-1.9+i*3.8/(s.goal-1),.28,.05);pieces.push(p);}
+    rb(tool,C.dark,0,.25,-.7,.23,.2,.9);rb(tool,'#bec4bd',0,.22,.18,.19,.07,1.25);rb(tool,C.cream,0,.37,-.62,.07,.02,.43);}
    if(s.kind==='knead'){pieces.push(food(body,'dough',3.8));pieces[0].position.set(0,.26,.1);mitten(tool);}
    if(s.kind==='mix'){body.position.z=1.2;mesh(body,bowl,C.mint,0,0,0,1.55,1.15,1.2);ring(body,C.cream,0,1.5,0,2.76).scale.z=.78;liquid=mesh(body,cylinder,foodColors[s.shape],0,1.23,0,2.48,.08,1.85);for(let i=0;i<5;i++){const p=food(body,s.shape,.85,s.ingredient);p.position.set(Math.cos(i*1.3)*1.2,1.29,Math.sin(i*1.3)*.8);pieces.push(p);}rb(tool,'#ab774e',0,.5,-.7,.18,.18,2.35);ball(tool,C.wood,0,.39,.47,.4,.09,.6);}
    if(s.kind==='pan'||s.kind==='boil'){rb(body,C.mint,0,-.02,0,6,.58,4.4);rb(body,'#4e6561',0,.3,0,5.4,.1,3.9);for(const x of [-2.2,2.2])mesh(body,cylinder,C.gold,x,.33,1.75,.22,.1,.22);for(let i=0;i<5;i++){const f=mesh(body,cone,i%2?C.gold:C.red,(i-2)*.55,.55,.8,.19,.5,.18);flames.push(f);}
@@ -107,7 +114,7 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
     else mat(foodColors[s.shape]).color.set(foodColors[s.shape]).lerp(a.amount>1?burnt:baked,Math.min(.7,a.amount*.4));
    }
    o.tool.visible=s.kind!=='bake'||a.amount>=.6;
-   if(s.kind==='slice'){o.food.forEach((g,i)=>{const done=i<a.count,preparation=ingredientCuts.get(g);if(preparation){preparation.whole.visible=!done;preparation.cut.visible=done;}g.position.z=done?1.1:.05;g.rotation.y=done?(i-2)*.1:0;g.scale.setScalar(done?.65:.95);});o.tool.position.copy(pos??screen(cutGuide(run),.33,.8));o.tool.position.y+=motion?pulse*.4:0;}
+   if(s.kind==='slice'){if(preparationModel)preparationModel.update(a.count);else o.food.forEach((g,i)=>{const done=i<a.count,preparation=ingredientCuts.get(g);if(preparation){preparation.whole.visible=!done;preparation.cut.visible=done;}g.position.z=done?1.1:.05;g.rotation.y=done?(i-2)*.1:0;g.scale.setScalar(done?.65:.95);});const knifeHeight=preparationModel?preparationModel.surfaceHeight(screen(point?.x??cutGuide(run),.5,.3).x)+.1:.8;o.tool.position.copy(preparationModel?screen(point?.x??cutGuide(run),point?.y??.33,knifeHeight):pos??screen(cutGuide(run),.33,.8));o.tool.position.y+=motion?pulse*.4:0;}
    if(s.kind==='knead'){const dough=o.food[0],squash=Math.min(1,held);dough.scale.set(3.8*(1+squash*.22),3.8*(1-squash*.42),3.8*(1+squash*.13));o.tool.position.set(0,2.6-squash*1.8,.2);o.tool.rotation.z=motion?Math.sin(held*2)*.025:0;}
    if(s.kind==='mix'){const angle=a.amount;for(let i=0;i<o.food.length;i++){o.food[i].position.x=Math.cos(i*1.3+angle)*1.2;o.food[i].position.z=Math.sin(i*1.3+angle)*.8;}o.tool.position.copy(pos??new Vector3(Math.cos(angle)*1.4,1.5,1.2+Math.sin(angle)*.8));o.tool.rotation.y=angle+.6;}
    if(s.kind==='pan'){const flip=motion&&a.flipped?Math.min(1,(run.elapsed-a.lastAt)/450):1;for(const g of o.food){g.position.y=1.07+(a.flipped&&motion?Math.sin(flip*Math.PI)*1.1:0);g.rotation.x=a.flipped?Math.PI*2*flip:0;}o.tool.position.copy(pos??new Vector3(2.2,1.2,1.1));o.tool.rotation.y=-.5;}

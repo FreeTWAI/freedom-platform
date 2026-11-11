@@ -5,6 +5,11 @@ export type IngredientLayer = Readonly<{color:string;points:readonly Point[]}>;
 export type IngredientVisual = Readonly<{id:'banana'|'citrus'|'tomato'|'mango'|'avocado'|'potato'|'pumpkin'|'sweet-potato'|'mushroom';layers:readonly IngredientLayer[];cutLayers?:readonly IngredientLayer[]}>;
 const ink='#73513b';
 
+// Fraction of the fixed preparation camera width occupied by the whole food.
+// Domain guides and actual mesh endpoints share this scale; SVG uses the same
+// domain guide. Only the mushroom is shortened, never its accepted-cut count.
+export const preparationSpan=(id:string|undefined)=>id==='mushroom'?.40:.56;
+
 // Original cut-paper silhouettes. Coordinates are shared by SVG and the shallow
 // 3D pieces, not inferred from recipe names. No texture, random detail or game state.
 function layer(color:string,points:readonly Point[]):IngredientLayer {
