@@ -1919,3 +1919,45 @@ test('PT-fullview: enlarged chair controls reserve intrinsic height and keep the
  assert.match(ui,/className="pt-primary-control"[^>]*controlHandlers\(1,\{kind:'jump'\}\)/);
  assert.match(css,/\.pt-chair-controls>\.pt-primary-control[^}]*min-width:44px;min-height:48px/);
 });
+
+test('PT-fullview: holiday shared rigid rims preserve every world-space triangle, material and shadow',async()=>{
+ const T=await import('three');
+ const {bakeRigidGroup}=await import('../../apps/portal-web/src/games/stage-batch.js');
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/party/stage.ts',import.meta.url),'utf8');
+ const start=source.indexOf('const rim=group(gardenRims,x,0,z);'),end=source.indexOf('const body=group(hole',start);
+ assert.ok(start>0&&end>start);assert.match(source,/bakeRigidGroup\(gardenRims,geometries\)/);
+ const construction=source.slice(start,end);
+ assert.doesNotMatch(construction,/bakeRigidGroup/);
+ const gardenRims=new T.Group(),owned=new Set<import('three').BufferGeometry>();
+ const C={wood:'#b16f4a',ink:'#463957',gold:'#f6ca64',peach:'#ee835c'};
+ const palette=new Map<string,import('three').MeshToonMaterial>();
+ const cylinder=new T.CylinderGeometry(1,1,1,24),torus=new T.TorusGeometry(1,.075,8,32),paperPetal=new T.CylinderGeometry(1,1,1,6);
+ const group=(parent:import('three').Group,x=0,y=0,z=0)=>{const g=new T.Group();g.position.set(x,y,z);parent.add(g);return g;};
+ const mesh=(p:import('three').Group,g:import('three').BufferGeometry,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx)=>{let material=palette.get(c);if(!material){material=new T.MeshToonMaterial({color:c});palette.set(c,material);}const m=new T.Mesh(g,material);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=m.receiveShadow=true;p.add(m);return m;};
+ // Execute the actual renderer's rim construction, not a simplified substitute.
+ const build=new Function('group','gardenRims','mesh','cylinder','torus','paperPetal','C','i','x','z',construction);
+ for(let i=0;i<6;i++)build(group,gardenRims,mesh,cylinder,torus,paperPetal,C,i,(i%3-1)*2.5,Math.floor(i/3)*2.6-1.35);
+ const snapshot=()=>{gardenRims.updateWorldMatrix(true,true);const triangles:string[]=[],materials=new Set<import('three').Material>();let calls=0;
+  gardenRims.traverse(o=>{if(!(o instanceof T.Mesh))return;calls++;assert.equal(o.castShadow,true);assert.equal(o.receiveShadow,true);materials.add(o.material);const g=o.geometry,p=g.getAttribute('position'),n=g.getAttribute('normal'),uv=g.getAttribute('uv'),normal=new T.Matrix3().getNormalMatrix(o.matrixWorld),count=g.index?.count??p.count;
+   for(let j=0;j<count;j+=3){const vertices:string[]=[];for(let k=0;k<3;k++){const ix=g.index?.getX(j+k)??j+k,v=new T.Vector3().fromBufferAttribute(p,ix).applyMatrix4(o.matrixWorld),nv=new T.Vector3().fromBufferAttribute(n,ix).applyMatrix3(normal).normalize();vertices.push([...v.toArray(),...nv.toArray(),uv.getX(ix),uv.getY(ix)].join(','));}triangles.push(`${o.material.uuid}:${vertices.join(';')}`);}
+  });return {triangles:triangles.sort((a,b)=>a.split(':')[0].localeCompare(b.split(':')[0])),materials,calls};};
+ const before=snapshot();bakeRigidGroup(gardenRims,owned);const after=snapshot();
+ assert.equal(after.triangles.length,before.triangles.length);
+ for(let i=0;i<before.triangles.length;i++){
+  const [am,av]=after.triangles[i].split(':'),[bm,bv]=before.triangles[i].split(':');assert.equal(am,bm);
+  const actual=av.split(/[;,]/).map(Number),expected=bv.split(/[;,]/).map(Number);assert.equal(actual.length,expected.length);
+  for(let k=0;k<actual.length;k++)assert.ok(Math.abs(actual[k]-expected[k])<1e-6,`triangle ${i} attribute ${k}: Float32 transform error`);
+ }
+ assert.deepEqual(after.materials,before.materials);
+ assert.equal(before.calls,66);assert.equal(after.calls,4);assert.equal(after.triangles.length,before.triangles.length);
+ owned.forEach(g=>g.dispose());for(const g of [cylinder,torus,paperPetal])g.dispose();palette.forEach(m=>m.dispose());
+});
+
+
+test('PT-fullview: compact light holiday left column preserves playable core (CPU geometry)',()=>{
+ const viewport=partyViewport(667,375,90.4,26,22,340);
+ assert.equal(viewport.core.width,305);assert.equal(viewport.core.height,228.75);
+ assert.ok(viewport.core.height>=163);assert.ok(viewport.core.x>=22);
+ assert.ok(viewport.core.x+viewport.core.width<=327);
+ assert.ok(viewport.core.y>=90.4);assert.ok(viewport.core.y+viewport.core.height<=349);
+});

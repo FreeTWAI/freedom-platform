@@ -149,10 +149,13 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       for(let i=0;i<9;i++){const flag=mesh(scenery,plane,[C.peach,C.leaf,C.navy][i%3],-4+i,2.9+Math.abs(4-i)*.09,-4.4,.65,.48,1);flag.rotation.z=(i%2?1:-1)*.12;}
       sign(scenery,'今日公休委員會','WEEKEND GARDEN CLUB',0,2,-4.5,3.8);bakeRigidGroup(scenery,geometries);
       const badgeTextures=([C.leaf,C.navy] as const).map((color,i)=>canvasTexture(ctx=>{ctx.fillStyle=C.cream;ctx.fillRect(0,0,256,128);ctx.fillStyle=color;ctx.font='900 64px "Microsoft JhengHei",sans-serif';ctx.textAlign='center';ctx.fillText(i?'開會':'休假',128,88);},256,128));
+      // All six rims are rigid in world space; batch across holes without
+      // touching animated bodies, labels, ray proxies or any source geometry.
+      const gardenRims=group(world);
       for(let i=0;i<6;i++){
         const x=(i%3-1)*2.5,z=Math.floor(i/3)*2.6-1.35,hole=group(world,x,0,z);holes.push(hole);
-        const rim=group(hole);mesh(rim,cylinder,C.wood,0,.2,0,.95,.4,.95);mesh(rim,cylinder,C.ink,0,.42,0,.79,.06,.79);mesh(rim,torus,C.gold,0,.47,0,.85,.85,.85).rotation.x=-Math.PI/2;
-        for(let k=0;k<8;k++){const a=k*Math.PI/4;const petal=mesh(rim,paperPetal,i%2?C.peach:C.gold,Math.cos(a)*.91,.19,Math.sin(a)*.91,.24,.12,.33);petal.rotation.y=-a+Math.PI/2;}bakeRigidGroup(rim,geometries);
+        const rim=group(gardenRims,x,0,z);mesh(rim,cylinder,C.wood,0,.2,0,.95,.4,.95);mesh(rim,cylinder,C.ink,0,.42,0,.79,.06,.79);mesh(rim,torus,C.gold,0,.47,0,.85,.85,.85).rotation.x=-Math.PI/2;
+        for(let k=0;k<8;k++){const a=k*Math.PI/4;const petal=mesh(rim,paperPetal,i%2?C.peach:C.gold,Math.cos(a)*.91,.19,Math.sin(a)*.91,.24,.12,.33);petal.rotation.y=-a+Math.PI/2;}
         const body=group(hole,0,.15,0);ball(body,C.cream,0,.52,0,.61,.54,.58);decal(body,face,0,.55,.55,.86,.76);
         const leaves=group(body);leaf(leaves,.07,1.15,0,1.35);leaf(leaves,-.14,1.13,0,.8);
         const tie=group(body);rb(tie,C.navy,0,1.06,0,.88,.13,.73);rb(tie,C.navy,0,1.21,-.04,.64,.25,.6);const t=rb(tie,C.peach,0,.16,.56,.18,.36,.06);t.rotation.z=.2;
@@ -162,6 +165,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         const label=decal(hole,labelTexture,0,.25,1.005,.51,.27);sprites.push({body,leaf:leaves,tie,label});
         const proxy=new Mesh(cylinder,ghostMaterials);proxy.layers.set(1);proxy.scale.set(1,.95,1);proxy.position.set(x,.85,z);proxy.userData.hole=i;world.add(proxy);proxies.push(proxy);anchorPositions.push(new Vector3(x,.85,z));
       }
+      bakeRigidGroup(gardenRims,geometries);
     }
     const liveViewport=host.hasAttribute('data-party-live-viewport');
     let viewport=partyViewport(640,480);

@@ -35,12 +35,23 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
       const bounds=canvas.getBoundingClientRect();if(bounds.width<=0||bounds.height<=0)return;
       const toolbar=bar?Math.ceil(bar.getBoundingClientRect().width+8):0;
       if(root.style.getPropertyValue('--pt-toolbar-width')!==`${toolbar}px`)root.style.setProperty('--pt-toolbar-width',`${toolbar}px`);
-      const top=Math.max(...[heading,hud,bar].filter((el):el is HTMLElement=>!!el).map(el=>el.getBoundingClientRect().bottom-bounds.top),0)+8;
+      let top=Math.max(...[heading,hud,bar].filter((el):el is HTMLElement=>!!el).map(el=>el.getBoundingClientRect().bottom-bounds.top),0)+8;
       const foot=[root.querySelector<HTMLElement>('.pt-controls'),root.querySelector<HTMLElement>('.pt-holiday-footer')].filter((el):el is HTMLElement=>!!el&&el.getBoundingClientRect().height>0);
-      const bottom=Math.max(0,...foot.map(el=>bounds.bottom-el.getBoundingClientRect().top))+8;
+      let bottom=Math.max(0,...foot.map(el=>bounds.bottom-el.getBoundingClientRect().top))+8;
       const footerHeight=root.querySelector<HTMLElement>('.pt-holiday-footer')?.getBoundingClientRect().height??0;
       if(root.style.getPropertyValue('--pt-footer-height')!==`${footerHeight}px`)root.style.setProperty('--pt-footer-height',`${footerHeight}px`);
-      const rootStyle=getComputedStyle(root),left=Math.max(0,parseFloat(rootStyle.paddingLeft)||0),right=Math.max(0,parseFloat(rootStyle.paddingRight)||0);
+      const rootStyle=getComputedStyle(root),left=Math.max(0,parseFloat(rootStyle.paddingLeft)||0);
+      let right=Math.max(0,parseFloat(rootStyle.paddingRight)||0);
+      // The light holiday buttons ARE its scene. In the two-column shell the
+      // right-hand feedback/tools do not obscure the empty area below the left
+      // heading. Keep the canonical 4:3 core there instead of subtracting that
+      // unrelated footer from the full viewport (especially at 200% text).
+      const headingBox=heading?.getBoundingClientRect(),hudBox=hud?.getBoundingClientRect();
+      if(light&&game==='holiday'&&headingBox&&hudBox&&hudBox.left>=headingBox.right&&hudBox.top<headingBox.bottom){
+        top=Math.max(headingBox.bottom,bar?.getBoundingClientRect().bottom??headingBox.bottom)-bounds.top+8;
+        bottom=Math.max(0,parseFloat(rootStyle.paddingBottom)||0);
+        right=Math.max(right,bounds.right-hudBox.left+8);
+      }
       const next=partyViewport(bounds.width,bounds.height,top,bottom,left,right);
       for(const [key,value] of [['--pt-scene-top',top],['--pt-scene-bottom',bottom],['--pt-scene-left',left],['--pt-scene-right',right]] as const)if(canvas.style.getPropertyValue(key)!==`${value}px`)canvas.style.setProperty(key,`${value}px`);
       setViewport(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);
