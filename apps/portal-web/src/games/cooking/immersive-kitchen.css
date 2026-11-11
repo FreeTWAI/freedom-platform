@@ -233,3 +233,9 @@
 .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay>.ck-help { align-self: stretch; text-align: left; flex: 0 1 auto; min-height: 44px; overflow: auto; }
 
 .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay>button { flex: 0 0 auto; }
+
+/* Render the real kitchen across the complete stage while the independently
+   clipped interaction rectangle stays clear of HUD, dock and safe areas. */
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-kitchen-panorama { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-kitchen-panorama canvas { width:100%; height:100%; aspect-ratio:auto; }
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-live-scene.ck-visual-3d { background:transparent; }
