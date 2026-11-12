@@ -221,3 +221,20 @@
   .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.4fr)}
  }
 }
+
+/* Enlarged narrative scrolls independently; the primary action remains inside
+   its owner instead of requiring the whole dialog to leave the viewport. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+ .pt-holiday-modal{box-sizing:border-box;max-height:100dvh;display:flex;overflow:hidden}
+ .pt-holiday-overlay .pt-panel:has(>.pt-panel-copy){max-height:100%;min-height:0;overflow:hidden;flex-wrap:nowrap}
+ .pt-panel>.pt-panel-copy{flex:1 1 auto;min-width:0;min-height:0;width:100%;overflow:auto;overscroll-behavior:contain}
+ .pt-panel>.pt-panel-copy>:not(:last-child){margin-bottom:12px}
+ .pt-panel>.pt-panel-copy:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+ .pt-panel:has(>.pt-panel-copy)>button{flex:0 0 auto}
+ .pt-hole-controls:not(.pt-light-grid)>button{padding-block:2px}
+}
+@media(max-width:559px){
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--holiday{
+  .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-template-columns:minmax(0,1.6fr) minmax(0,.8fr) minmax(0,1.2fr)}
+ }
+}

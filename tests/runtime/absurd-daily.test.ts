@@ -1982,3 +1982,15 @@ test('PT-fullview orthographic floor remains ahead of near plane without moving 
     }
   }
 });
+
+
+test('PT-fullview: enlarged narrative scroll has a separate reachable primary action (source contract)',()=>{
+ const css=readFileSync(new URL('../../apps/portal-web/src/games/party/party.css',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+ assert.equal((ui.match(/className="pt-panel-copy" tabIndex=\{0\}/g)??[]).length,3);
+ assert.match(ui,/<\/div><button ref=\{helpClose\}/);
+ assert.match(ui,/<\/div><button ref=\{resumeButton\}/);
+ assert.match(css,/\.pt-holiday-modal\{box-sizing:border-box;max-height:100dvh;display:flex;overflow:hidden\}/);
+ assert.match(css,/\.pt-panel>\.pt-panel-copy\{[^}]*min-height:0;[^}]*overflow:auto/);
+ assert.match(css,/\.pt-panel:has\(>\.pt-panel-copy\)>button\{flex:0 0 auto\}/);
+});

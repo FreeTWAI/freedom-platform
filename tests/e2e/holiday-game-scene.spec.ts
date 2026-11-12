@@ -276,6 +276,10 @@ for(const light of [false,true])for(const rejected of [false,true])for(const vie
   if(!light){await partyAdvance(page,PT.holidayRoundMs+250);const p=await holidayHitPoint(page,holidayTargets(42,1).good);await page.mouse.click(p.x,p.y);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','260');}
   const help=page.getByRole('button',{name:'玩法與設定',exact:true});await holidayControlHit(help);await help.click();
   const close=page.getByRole('button',{name:'回到遊戲',exact:true});await expect(close).toBeFocused();await holidayModalTextScale(page,scale);await holidayControlHit(close);
+  const narrative=page.getByLabel('完整玩法說明',{exact:true});await narrative.focus();await expect(narrative).toBeFocused();
+  await narrative.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+  expect(await narrative.evaluate(el=>el.clientHeight>0&&el.scrollTop+el.clientHeight>=el.scrollHeight-1)).toBe(true);
+  await holidayControlHit(close);
   const modal=page.locator('.pt-holiday-overlay').filter({has:close});await expect(modal).toBeVisible();
   const at=await partyElapsed(page);await page.clock.runFor(1000);expect(await partyElapsed(page)).toBe(at);
   for(let i=0;i<12;i++){await page.keyboard.press(i<6?'Tab':'Shift+Tab');expect(await modal.evaluate(el=>el.contains(document.activeElement))).toBe(true);}
