@@ -9,7 +9,7 @@ import {BRIDGE_VERSION,NATIVE_TOOL_ROUTES} from '../../modules/guild-tools/contr
 import {inspectTool,safeFrameOrigins,toolUrl} from '../../modules/guild-tools/validation.js';
 import {createNodePreviewFetch} from '../../apps/platform-api/src/node-preview-fetch.js';
 const url=process.env.TEST_DATABASE_URL;
-if(!url||!/^postgresql:\/\/[^@]+@127\.0\.0\.1:56445\/fp_p1_tools$/.test(url))throw Error('Explicit isolated tools database required');
+assert.ok(url,'Set an isolated TEST_DATABASE_URL');
 const schema='fp_tools_'+randomUUID().replaceAll('-',''),admin=new Pool({connectionString:url}),pool=new Pool({connectionString:url,options:`-c search_path=${schema}`});
 const origin='http://127.0.0.1:46445';
 let app=createApp(pool,origin,'local',{linkPreviewFetch:async()=>new Response('<html></html>',{headers:{'content-type':'text/html'}})});
