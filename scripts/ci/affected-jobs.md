@@ -354,3 +354,17 @@ narrow lane has run on hosted CI. Actual narrow-lane DB execution and hosted
 runtime savings remain unverified; no new PostgreSQL platform is a prerequisite
 for this bounded selector correction. The prior baseline cancellation failure
 also remains unchanged.
+
+## Merge-group identity
+
+Merge groups always select the full job set, including deploy-preflight. The
+selector receives the group's base SHA for consistent event inputs; this never
+permits a narrowed queue profile. Every candidate checkout remains github.sha,
+which GitHub defines as the merge-group head for this event.
+
+Source integrity also compares the event's merge_group.head_sha with that
+candidate and requires merge_group.base_sha to be a distinct ancestor. Fetch the
+complete group history for that check. Do not require the PR-specific two-parent
+shape for a queue candidate. Existing immutable-migration and exact-byte checks
+still apply. Group evidence is pre-merge evidence; it cannot replace successful
+Verify and CodeQL push runs on the resulting main SHA for release admission.

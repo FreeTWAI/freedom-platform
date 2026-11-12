@@ -74,6 +74,12 @@ def verify(repository, base, candidate, event, head=None):
         commit = archive.git(repository, ['cat-file', 'commit', candidate])
         parents = [line[7:].decode() for line in commit.split(b'\n\n', 1)[0].splitlines() if line.startswith(b'parent ')]
         archive.require(parents == [base, head], 'source_integration_unproven')
+    if event == 'merge_group':
+        archive.require(isinstance(head, str) and archive.HEX40.fullmatch(head)
+                        and head == candidate, 'source_merge_group_head_mismatch')
+        archive.require(base != candidate and
+                        archive.git(repository, ['merge-base', base, candidate]).decode().strip() == base,
+                        'source_merge_group_base_unproven')
     migrations = {path: row for path, row in baseline.items() if path.startswith('migrations/') and path.endswith('.sql')}
     issues = []
     for path, row in migrations.items():
