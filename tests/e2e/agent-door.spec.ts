@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {test,expect} from './fixtures.js';
-import {navigate,openAccountSettings} from './navigation.js';
+import {openFeatureSearch} from './navigation.js';
 import {e2eOrigin} from '../../packages/testing/e2e-origin.js';
 // The ephemeral credential must not be captured in Playwright traces/screenshots.
 test.use({trace:'off',screenshot:'off'});
@@ -13,7 +13,10 @@ test('member creates one token in the portal; their agent registers and reads it
  await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
  await page.getByRole('button',{name:'登入',exact:true}).click();
  await expect(page.locator('.shell')).toBeVisible();
- await navigate(page,'我的名片');await openAccountSettings(page,'Agent 連線');
+ await openFeatureSearch(page);
+ await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'自動化',exact:true}).click();
+ await expect(page).toHaveURL(/#automation\/agent$/);
+ await expect(page.getByLabel('自動化檢視')).toHaveValue('#automation/agent');
  const panel=page.getByRole('region',{name:'Agent 連線'});
  await panel.getByRole('button',{name:'建立金鑰',exact:true}).click();
  const block=panel.getByLabel('交給 Agent（僅此一次）');await expect(block).toBeVisible();
@@ -43,7 +46,7 @@ test('member creates one token in the portal; their agent registers and reads it
  await page.setViewportSize({width:390,height:844});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await panel.screenshot({path:testInfo.outputPath('agent-tokens-390.png')});
- await page.reload();await openAccountSettings(page,'Agent 連線');
+ await page.reload();await expect(page.getByLabel('自動化檢視')).toHaveValue('#automation/agent');
  await expect(page.getByLabel('交給 Agent（僅此一次）')).toHaveCount(0);
  await page.getByRole('region',{name:'Agent 連線'}).locator('summary').filter({hasText:'我的 Agent'}).click();
  await page.getByRole('button',{name:'撤銷',exact:true}).click();

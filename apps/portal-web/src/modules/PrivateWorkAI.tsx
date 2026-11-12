@@ -24,8 +24,9 @@ const matching = (a: ModelSelection, b: ModelSelection) => JSON.stringify(a) ===
 
 /** Private content, CSRF and unresolved command keys stay in memory only. Every
  * replay is member-initiated and preserves the original body, key and CAS. */
-export function PrivateWorkAI({ client }: { client: PortalClient }) {
-  const [works, setWorks] = useState<Work[] | null>(null), [workId, setWorkId] = useState('');
+export function PrivateWorkAI({ client, selectedId }: { client: PortalClient; selectedId?:string }) {
+  const [works, setWorks] = useState<Work[] | null>(null), [workId, setWorkId] = useState(selectedId??'');
+  useEffect(()=>{setWorkId(selectedId??'');},[selectedId]);
   const [work, setWork] = useState<Work | null>(null), [overview, setOverview] = useState<Overview | null>(null);
   const [title, setTitle] = useState(''), [objective, setObjective] = useState('');
   const [creating, setCreating] = useState(false), [loading, setLoading] = useState(false), [busy, setBusy] = useState(false);

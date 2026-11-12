@@ -1,4 +1,5 @@
 import {seedLocal} from '../../packages/testing/seed';
+import {migrate} from '../../scripts/database';
 import {createApp} from '../../apps/platform-api/src/app';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,17 +12,19 @@ import {legacyMigrationProfile} from '../../packages/db/migration-plan.mjs';
 import {resolve} from 'node:path';
 import {entryQuestionsForGuild,BUILTIN_GUILD_QUESTION_KEYS,sampleGuildAnswers} from '../../modules/positioning/guild-questions';
 
-// Upgrade SQL is tested independently of release-frontier reconciliation (204/205 are other workstreams).
-test('206 adds two built-in guilds without requiring books, repositories or category approval',async()=>{
+for(const integrated of [false,true])test(`206 adds two built-in guilds without requiring books, repositories or category approval (${integrated?'integrated runner':'isolated upgrade'})`,async()=>{
  const url=process.env.TEST_DATABASE_URL;
  assert.ok(url&&new URL(url).hostname==='127.0.0.1'&&new URL(url).pathname.startsWith('/fp_'),'explicit disposable database required');
  const schema='fp_shell_'+randomUUID().replaceAll('-','');
  const admin=new Pool({connectionString:url}),pool=new Pool({connectionString:url,options:`-c search_path=${schema}`});
  try {
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const sources=readMigrationSources(resolve('migrations')).filter(source=>Number(source.name.slice(0,3))<=203);
-  await runMigrationPlan(pool,{sources,profile:legacyMigrationProfile({first:1,last:203,known_gaps:[22]})});
-  await pool.query(readFileSync(new URL('../../migrations/206_creative_tool_guilds.sql',import.meta.url),'utf8'));
+  if(integrated)await migrate(pool);
+  else {
+   const sources=readMigrationSources(resolve('migrations')).filter(source=>Number(source.name.slice(0,3))<=203);
+   await runMigrationPlan(pool,{sources,profile:legacyMigrationProfile({first:1,last:203,known_gaps:[22]})});
+   await pool.query(readFileSync(new URL('../../migrations/206_creative_tool_guilds.sql',import.meta.url),'utf8'));
+  }
   const rows=(await pool.query("SELECT guild_key,name,module_key FROM positioning_guild_catalog WHERE guild_key IN ('guild_games','guild_ar') ORDER BY guild_key")).rows;
   assert.deepEqual(rows,[{guild_key:'guild_ar',name:'AR 互動公會',module_key:'ar'},{guild_key:'guild_games',name:'小遊戲公會',module_key:'guilds'}]);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM positioning_guild_catalog')).rows[0].n,20);

@@ -18,17 +18,17 @@ export const agentOperations: readonly AgentOperation[] = [
   {id:'credit.achievements',featureFlag:'FREEDOM_SOCIAL_ACHIEVEMENTS_ENABLED',method:'GET',route:'/api/v1/me/social-achievements',scope:'read',title:'我的社群成果',screen:'credit'},
   {id:'notifications.list',method:'GET',route:'/api/v1/me/notifications',scope:'read',title:'我的通知',screen:'notifications'},
   {id:'agent.events',method:'GET',route:'/api/v1/agent/events',scope:'read',title:'我的變更',screen:'notifications'},
-  {id:'shares.preview',method:'POST',route:'/api/v1/shares/preview',scope:'share',title:'預覽分享',screen:'shares',integration:true,example:{kind:'repository',url:'https://github.com/example/project'}},
-  {id:'shares.create',method:'POST',route:'/api/v1/shares',scope:'share',title:'發布分享',screen:'shares',integration:true,publicItem:true,example:{kind:'repository',url:'https://github.com/example/project'}},
-  {id:'shares.list',method:'GET',route:'/api/v1/shares',scope:'read',title:'查看分享',screen:'shares',integration:true},
-  {id:'shares.read',method:'GET',route:'/api/v1/shares/:share_id',scope:'read',title:'查看分享內容',screen:'shares',integration:true},
-  {id:'shares.retract',method:'POST',route:'/api/v1/shares/:share_id/retract',scope:'share',title:'撤回自己的分享',screen:'shares',integration:true,example:{}},
-  {id:'shares.report',method:'POST',route:'/api/v1/shares/:share_id/report',scope:'share',title:'檢舉分享',screen:'shares',integration:true,example:{reason:'內容不適當'}},
-  {id:'shares.links',method:'POST',route:'/api/v1/shares/:share_id/links',scope:'share',title:'建立分享連結',screen:'shares',integration:true,example:{}},
-  {id:'shares.star',method:'POST',route:'/api/v1/shares/:share_id/star',scope:'react',title:'收藏分享（未開放）',screen:'shares',integration:true,granted:false,example:{}},
-  {id:'credit.read',method:'GET',route:'/api/v1/me/credit',scope:'read',title:'我的貢獻',screen:'credit',integration:true},
+  {id:'shares.preview',method:'POST',route:'/api/v1/shares/preview',scope:'share',title:'預覽分享',screen:'shares',example:{kind:'repository',url:'https://github.com/example/project'}},
+  {id:'shares.create',method:'POST',route:'/api/v1/shares',scope:'share',title:'發布分享',screen:'shares',publicItem:true,example:{kind:'repository',url:'https://github.com/example/project'}},
+  {id:'shares.list',method:'GET',route:'/api/v1/shares',scope:'read',title:'查看自己的分享',screen:'shares'},
+  {id:'shares.read',method:'GET',route:'/api/v1/shares/:share_id',scope:'read',title:'查看自己的分享內容',screen:'shares'},
+  {id:'shares.retract',method:'POST',route:'/api/v1/shares/:share_id/retract',scope:'share',title:'撤回自己的分享',screen:'shares',example:{}},
+  {id:'shares.report',method:'POST',route:'/api/v1/shares/:share_id/report',scope:'share',title:'檢舉分享（限本人）',screen:'shares',granted:false,example:{reason:'內容不適當'}},
+  {id:'shares.links',method:'POST',route:'/api/v1/shares/:share_id/links',scope:'share',title:'建立自己的分享連結',screen:'shares',example:{}},
+  {id:'shares.star',method:'POST',route:'/api/v1/shares/:share_id/star',scope:'react',title:'收藏分享（未開放）',screen:'shares',granted:false,example:{}},
+  {id:'credit.read',method:'GET',route:'/api/v1/me/credit',scope:'read',title:'我的貢獻',screen:'credit'},
 ];
-// /shares/:share_id/star deliberately has no grant: react has no routes in pass 1.
+// Report, claim and star are person-only. No react routes are granted in pass 1.
 export function agentOperation(method:string,registeredPattern:string) {
   return agentOperations.find(op=>op.granted!==false&&op.method===method&&op.route===registeredPattern);
 }

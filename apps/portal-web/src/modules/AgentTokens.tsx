@@ -27,7 +27,7 @@ function AgentTokenSession({client}:{client:PortalClient}){
   finally{flight.current=false;if(live())setBusy(false);}
  }
  async function copy(){try{await navigator.clipboard.writeText(secret);if(live())setNotice('已複製');}catch{if(live())setNotice('請選取文字複製');}}
- return <section className="agent-tokens stack" aria-label="Agent 連線"><h3>自動化</h3>
+ return <section className="agent-tokens stack" aria-label="Agent 連線"><h2>我的 Agent</h2>
   {secret?<div className="stack"><label className="field">交給 Agent（僅此一次）<textarea readOnly rows={8} value={secret} autoComplete="off" spellCheck={false} onFocus={e=>e.currentTarget.select()}/></label><div className="experience-actions"><button className="btn btn-primary" onClick={()=>void copy()}>複製給 Agent</button><button className="btn btn-ghost btn-sm" onClick={()=>setSecret('')}>已保存</button></div></div>:
    <form className="stack" onSubmit={e=>{e.preventDefault();void action('/me/agent-tokens',{name,scopes},true);}}>
     <label className="field">名稱<input value={name} onChange={e=>setName(e.target.value)} maxLength={80} required disabled={busy}/></label>

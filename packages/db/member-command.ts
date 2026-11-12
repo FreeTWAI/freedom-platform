@@ -12,13 +12,18 @@ export interface Command {
   lockUser?: boolean;
 }
 
+/** The same server-owned namespace is used for replay preparation and command receipts. */
+export function memberReceiptOperation(input:Pick<Command,'actor'|'operation'>):string {
+  return input.actor.agent ? `agent/${input.actor.agent.connection_id}/${input.operation}` : input.operation;
+}
+
 export async function memberCommand<T>(pool: Pool, input: Command,
   authorize: (q: PoolClient) => Promise<unknown>, run: (q: PoolClient) => Promise<T>,
   revalidate?: (q: PoolClient) => Promise<void>): Promise<T> {
   requireCondition(/^[A-Za-z0-9_-]{8,128}$/.test(input.key),400,'idempotency_required','請提供有效的 Idempotency-Key。');
   return runCommandCore(pool, {
     authenticateAndLock: q => lockMemberSession(q, input.actor, input.lockUser, Boolean(input.actor.agent)),
-    ...legacyMemberReceiptPorts<T>(input.actor.agent ? {...input,operation:`agent/${input.actor.agent.connection_id}/${input.operation}`} : input, revalidate),
+    ...legacyMemberReceiptPorts<T>({...input,operation:memberReceiptOperation(input)}, revalidate),
   }, authorize, async q=>{
     if(input.actor.agent)await consumeAgentBudget(q,input.actor,input.operation,input.key,input.body,input.expected);
     const result=await run(q);

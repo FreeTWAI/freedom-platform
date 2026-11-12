@@ -124,7 +124,6 @@ export const agentOperations = [
     "scope": "share",
     "title": "預覽分享",
     "screen": "shares",
-    "integration": true,
     "example": {
       "kind": "repository",
       "url": "https://github.com/example/project"
@@ -137,7 +136,6 @@ export const agentOperations = [
     "scope": "share",
     "title": "發布分享",
     "screen": "shares",
-    "integration": true,
     "publicItem": true,
     "example": {
       "kind": "repository",
@@ -149,18 +147,16 @@ export const agentOperations = [
     "method": "GET",
     "route": "/api/v1/shares",
     "scope": "read",
-    "title": "查看分享",
-    "screen": "shares",
-    "integration": true
+    "title": "查看自己的分享",
+    "screen": "shares"
   },
   {
     "id": "shares.read",
     "method": "GET",
     "route": "/api/v1/shares/:share_id",
     "scope": "read",
-    "title": "查看分享內容",
-    "screen": "shares",
-    "integration": true
+    "title": "查看自己的分享內容",
+    "screen": "shares"
   },
   {
     "id": "shares.retract",
@@ -169,29 +165,15 @@ export const agentOperations = [
     "scope": "share",
     "title": "撤回自己的分享",
     "screen": "shares",
-    "integration": true,
     "example": {}
-  },
-  {
-    "id": "shares.report",
-    "method": "POST",
-    "route": "/api/v1/shares/:share_id/report",
-    "scope": "share",
-    "title": "檢舉分享",
-    "screen": "shares",
-    "integration": true,
-    "example": {
-      "reason": "內容不適當"
-    }
   },
   {
     "id": "shares.links",
     "method": "POST",
     "route": "/api/v1/shares/:share_id/links",
     "scope": "share",
-    "title": "建立分享連結",
+    "title": "建立自己的分享連結",
     "screen": "shares",
-    "integration": true,
     "example": {}
   },
   {
@@ -200,7 +182,6 @@ export const agentOperations = [
     "route": "/api/v1/me/credit",
     "scope": "read",
     "title": "我的貢獻",
-    "screen": "credit",
-    "integration": true
+    "screen": "credit"
   }
 ] as const;

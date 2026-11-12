@@ -4,7 +4,7 @@ export const agentContract = {
   "info": {
     "title": "自由工坊 Agent API",
     "version": "1.0.0",
-    "description": "由 agent-allowlist.ts 產生；未列入的操作一律拒絕。整合中路由可能尚未掛載。"
+    "description": "由 agent-allowlist.ts 產生；未列入的操作一律拒絕。"
   },
   "servers": [
     {
@@ -519,7 +519,6 @@ export const agentContract = {
         "operationId": "shares.preview",
         "summary": "預覽分享",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -574,7 +573,6 @@ export const agentContract = {
         "operationId": "shares.create",
         "summary": "發布分享",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -631,9 +629,8 @@ export const agentContract = {
       },
       "get": {
         "operationId": "shares.list",
-        "summary": "查看分享",
+        "summary": "查看自己的分享",
         "x-required-scope": "read",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -662,9 +659,8 @@ export const agentContract = {
     "/shares/{share_id}": {
       "get": {
         "operationId": "shares.read",
-        "summary": "查看分享內容",
+        "summary": "查看自己的分享內容",
         "x-required-scope": "read",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -705,7 +701,6 @@ export const agentContract = {
         "operationId": "shares.retract",
         "summary": "撤回自己的分享",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -761,75 +756,11 @@ export const agentContract = {
         }
       }
     },
-    "/shares/{share_id}/report": {
-      "post": {
-        "operationId": "shares.report",
-        "summary": "檢舉分享",
-        "x-required-scope": "share",
-        "x-integration-pending": true,
-        "security": [
-          {
-            "AgentBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "share_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{8,128}$"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              },
-              "example": {
-                "reason": "內容不適當"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
-          },
-          "401": {
-            "description": "金鑰到期、撤銷或停用。"
-          },
-          "403": {
-            "description": "權限不足或功能未開放。"
-          },
-          "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
-          },
-          "429": {
-            "description": "已達限制，停止操作。"
-          }
-        }
-      }
-    },
     "/shares/{share_id}/links": {
       "post": {
         "operationId": "shares.links",
-        "summary": "建立分享連結",
+        "summary": "建立自己的分享連結",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -890,7 +821,6 @@ export const agentContract = {
         "operationId": "credit.read",
         "summary": "我的貢獻",
         "x-required-scope": "read",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []

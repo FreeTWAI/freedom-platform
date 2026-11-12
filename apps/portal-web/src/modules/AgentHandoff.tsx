@@ -8,7 +8,7 @@ export function agentHandoffText({screen,task,resourceId,origin,features=[]}:{sc
  return [`# ${task}`,`API：${origin}/api/v1\n指引：${origin}/agent.md`,
   ...operations.map(op=>`## ${op.title}\n${op.method} ${resourceId?op.route.replace(':id',resourceId):op.route}\n權限：${op.scope}${op.ifMatch?'\nIf-Match: "最新活動 aggregate_version"':''}${op.example?'\n```json\n'+JSON.stringify(op.example,null,2)+'\n```':'\n範例：以 GET 讀取此路徑。'}`),
   '## Headers\nAuthorization: Bearer $FREEDOM_AGENT_TOKEN\nContent-Type: application/json\nIdempotency-Key: 每項寫入一組識別碼；重試沿用原值。\n不要帶 Cookie。',
-  '先由我在「我的名片 → 帳號設定 → Agent 連線」建立金鑰，再安全交給你；不要索取密碼。',
+  '先由我在「自動化 → 我的 Agent」建立金鑰，再安全交給你；不要索取密碼。',
   '## 停止規則\n'+agentStopRules].join('\n\n');
 }
 export function AgentHandoff(props:{screen:'events'|'credit';task:string;resourceId?:string;features?:string[]}){

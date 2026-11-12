@@ -1057,7 +1057,7 @@ function Workspace({
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">
               <div>
-                {launchpadOpen ? null : <h1 id="workspace-page-title">{isShareRoute(locationHash)?(locationHash==='#me/credit'?'我的貢獻':'分享'):consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : (resolvePortalRoute(locationHash||'#'+tab).toolId ? guildTool(resolvePortalRoute(locationHash||'#'+tab).guildKey!,resolvePortalRoute(locationHash||'#'+tab).toolId!)?.title ?? '工具' : PORTAL_PLACES.find(p=>p.id===resolvePortalRoute(locationHash||'#'+tab).place)?.title ?? t(`nav.${tab}`))}</h1>}
+                {launchpadOpen ? null : <h1 id="workspace-page-title">{isShareRoute(locationHash)?'分享':consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : (resolvePortalRoute(locationHash||'#'+tab).toolId ? guildTool(resolvePortalRoute(locationHash||'#'+tab).guildKey!,resolvePortalRoute(locationHash||'#'+tab).toolId!)?.title ?? '工具' : PORTAL_PLACES.find(p=>p.id===resolvePortalRoute(locationHash||'#'+tab).place)?.title ?? t(`nav.${tab}`))}</h1>}
               </div>
               <PageTools pageId={consoleRoute ? 'supplier-console' : tab} client={client} compact/>
               <div className="topbar-actions"><PlatformHelperHost pageId={consoleRoute ? 'supplier-console' : tab} routeIdentity={locationHash}

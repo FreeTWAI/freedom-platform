@@ -10,6 +10,7 @@ const EventMissions = lazy(() => import('../modules/EventMissions').then(m => ({
 const EventMemberCards = lazy(() => import('../modules/EventMemberCards').then(m => ({default: m.EventMemberCards})))
 const SocialZone = lazy(() => import('../modules/SocialZone').then(m => ({default: m.SocialZone})))
 const MemberServices = lazy(() => import('../modules/MemberServices').then(m => ({default: m.MemberServices})))
+const MyCredit = lazy(() => import('../share/MyCredit').then(m => ({default: m.MyCredit})))
 const PromotionBoards = lazy(() => import('../modules/PromotionBoards').then(m => ({default: m.PromotionBoards})))
 const EventHighlights = lazy(() => import('../modules/EventHighlights').then(m => ({default: m.EventHighlights})))
 const TesterMap = lazy(() => import('../modules/TesterMap').then(m => ({default: m.TesterMap})))
@@ -60,7 +61,7 @@ export const communityFeatures = {
   },
   "promotion": {
     moduleId: "community", placement: 'page',
-    render: ({client}) => <PromotionBoards client={client} />,
+    render: ({client}) => <><MyCredit client={client}/><PromotionBoards client={client} resultsOnly/></>,
   },
   "tester-map": {
     moduleId: "tester-map", placement: 'page',

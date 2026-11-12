@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {canonicalHash,legacyHash,resolvePortalRoute,LEGACY_ROUTES,PORTAL_PLACES} from '../../apps/portal-web/src/portal-route';
+import {canonicalHash,legacyHash,resolvePortalRoute,privateWorkId,LEGACY_ROUTES,PORTAL_PLACES} from '../../apps/portal-web/src/portal-route';
 import {canOpenGuestProfile} from '../../apps/portal-web/src/modules/profile-publication-route';
 const expected = {
  home:'home',social:'home',profile:'me',account:'me/settings','my-content':'me/content',todos:'me/start',
- members:'explore/people',skills:'explore/resources',showcase:'explore/works',events:'explore/events',services:'explore/services',highlights:'explore/events/results','community-search':'explore',opensource:'home/share/resource',guilds:'guilds',community:'guilds/community','community-hub':'guilds/community','private-ai':'automation',messages:'me/messages',friends:'me/messages/contacts',squads:'me/teams',business:'me/workspaces',reservations:'me/orders',promotion:'me/shares',
+ members:'explore/people',skills:'explore/resources',showcase:'explore/works',events:'explore/events',services:'explore/services',highlights:'explore/events/results','community-search':'explore',opensource:'home/share/resource',guilds:'guilds',community:'guilds/community','community-hub':'guilds/community','private-ai':'automation/work',messages:'me/messages',friends:'me/messages/contacts',squads:'me/teams',business:'me/workspaces',reservations:'me/orders',promotion:'me/credit',
  stores:'guilds/guild_commerce_sales/tools/store',retail:'guilds/guild_commerce_sales/tools/retail-kit','virtual-commerce':'guilds/guild_commerce_sales/tools/rehearsal',supplier:'guilds/guild_product_quality_supply/tools/supplier-kit',marketing:'guilds/guild_marketing/tools/marketing',cocreation:'guilds/guild_ai_vibe/tools/cocreation',workbench:'guilds/guild_ai_project/tools/work',tasks:'guilds/guild_ai_project/tools/work/discovery',engagement:'guilds/guild_opportunity_partnership/tools/engagement',positioning:'guilds/guild_talent_direction/tools/assessment','newbie-village':'guilds/guild_talent_direction/tools/village','tester-map':'guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map',ar:'guilds/guild_ar/tools/ar','guild-workspace':'guilds/manage',
 };
 test('exactly five places and all 38 historical tabs',()=>{assert.equal(PORTAL_PLACES.length,5);assert.equal(Object.keys(expected).length,38);assert.deepEqual(LEGACY_ROUTES,expected)});
@@ -37,3 +37,23 @@ test('native tool catalog has one owner and extends existing launchpad grammar',
  for(const tool of GUILD_TOOLS){assert.equal(tool.kind,'native');assert.ok(tool.title.length<=6);assert.equal(guildKeyFromHash(toolHash(tool)+'?draft=id'),tool.guild_key);assert.equal(guildActionFromHash(toolHash(tool)),'tools');assert.equal(guildToolFromHash(toolHash(tool)),tool.tool_id);assert.equal(guildRoute(tool.guild_key,'tools',tool.tool_id),toolHash(tool));}
  for(const key of ['community','manage','unknown'])assert.equal(guildKeyFromHash('#guilds/'+key),null);
 });
+
+ test('integrated object and owner routes preserve raw queries and selected work',()=>{
+  const id='12345678-1234-4234-8234-123456789abc',query='?via=raw%2Bvalue&other=a+b';
+  const share=resolvePortalRoute('#shares/'+id+query);
+  assert.equal(share.hash,'#shares/'+id+query);assert.equal(share.legacyHash,share.hash);
+  assert.equal(share.place,'explore');assert.equal(share.tab,'community-search');assert.equal(share.ownerOnly,false);
+  assert.equal(canonicalHash('#promotion'+query),'#me/credit'+query);
+  assert.equal(resolvePortalRoute('#me/credit'+query).tab,'promotion');
+  assert.equal(canonicalHash('#me/shares'+query),'#me/credit'+query);
+  assert.equal(canonicalHash('#automation'+query),'#automation/agent'+query);
+  for(const path of ['#automation/agent','#automation/devices','#automation/models','#automation/connections']){
+   const r=resolvePortalRoute(path);assert.equal(r.tab,'private-ai');assert.equal(r.place,'automation');assert.equal(r.ownerOnly,true);
+  }
+  assert.equal(canonicalHash('#private-ai/'+id+query),'#automation/work/'+id+query);
+  assert.equal(legacyHash('#automation/work/'+id+query),'#private-ai/'+id+query);
+  assert.equal(canonicalHash('#private-ai?work='+id),'#automation/work?work='+id);
+  for(const hash of ['#private-ai/'+id,'#private-ai?work='+id,'#automation/work/'+id,'#automation/work?work='+id])assert.equal(privateWorkId(hash),id);
+  assert.equal(privateWorkId('#automation/agent?work='+id),undefined);
+  assert.equal(privateWorkId('#private-ai?work=invalid'),undefined);
+ });

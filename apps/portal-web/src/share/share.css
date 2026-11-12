@@ -8,7 +8,7 @@
 .share-box .btn-primary { margin-top:.75rem; }
 .share-preview { margin-top:.75rem;overflow-wrap:anywhere; }
 .share-preview p { margin:.4rem 0; }
-.share-options { display:grid;gap:.5rem; }
+.share-options { display:flex;flex-wrap:wrap;gap:.5rem; }
 .share-image { display:block;margin-block:.5rem; }
 .share-page { max-width:54rem;margin-inline:auto;overflow-wrap:anywhere; }
 .share-page pre { overflow:auto;max-width:100%;padding:1rem;background:var(--bg-elev);border:1px solid var(--line);border-radius:12px; }

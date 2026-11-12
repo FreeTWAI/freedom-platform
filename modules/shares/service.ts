@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool, PoolClient } from 'pg';
 import { command, journal, type Command } from '../../packages/db/index.js';
+import { memberReceiptOperation } from '../../packages/db/member-command.js';
 import { readWithMemberSession } from '../../packages/db/member-session.js';
 import { requireCondition } from '../../packages/shared/problem.js';
 import { authRateLimit } from '../identity-membership/members.js';
@@ -12,7 +13,7 @@ import { appendCredit } from './credit.js';
 import type { AdapterContext, PreparedShare, ShareRow } from './types.js';
 export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional()}).strict();
 export async function readShare(q:PoolClient,actor:Actor,id:string,lock=false):Promise<ShareRow> {
-  const s=(await q.query<ShareRow>(`SELECT * FROM shares WHERE share_id=$1 AND community_id=$2 ${lock?'FOR UPDATE':''}`,[id,actor.community_id])).rows[0];
+  const s=(await q.query<ShareRow>(`SELECT * FROM shares WHERE share_id=$1 AND community_id=$2 AND ($3::uuid IS NULL OR first_sharer_user_id=$3) ${lock?'FOR UPDATE':''}`,[id,actor.community_id,actor.agent?actor.user_id:null])).rows[0];
   requireCondition(s,404,'not_found','找不到分享。');
   if(s.ref_id)requireCondition(await existingTitle(q,actor,s.kind,s.ref_id),404,'not_found','找不到分享。');
   return s;
@@ -42,10 +43,12 @@ async function saveRepository(q:PoolClient,p:PreparedShare) {
 export async function createShare(pool:Pool,input:Command,context:AdapterContext={}) {
   const body=shareInput.parse(input.body);
   // A completed retry never depends on upstream availability. command still validates the digest and current authority.
-  const prior=await readWithMemberSession(pool,input.actor,async q=>(await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,input.operation,input.key])).rows[0]?.response as {share_id:string}|undefined);
+  const receipt=async(q:PoolClient)=>(await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,memberReceiptOperation(input),input.key])).rows[0]?.response as {share_id:string}|undefined;
+  const prior=await readWithMemberSession(pool,input.actor,receipt);
   const p=prior?null:await prepare(pool,input,context);
   return command(pool,input,async q=>{
-    if(prior)await readShare(q,input.actor,prior.share_id);
+    const current=await receipt(q);
+    if(current)await readShare(q,input.actor,current.share_id,true);
     if(p)await shareAdapter(body).authorize?.(q,input.actor,p);
     if(body.guild_key)requireCondition((await q.query('SELECT 1 FROM positioning_guild_catalog WHERE guild_key=$1',[body.guild_key])).rowCount,422,'guild_not_found','找不到公會。');
   },async q=>{
@@ -61,6 +64,7 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
       s=(await q.query<ShareRow>(`INSERT INTO shares(community_id,kind,canonical_key,canonical_url,repo_id,ref_table,ref_id,title,first_sharer_user_id,guild_key,editor_notes)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,[input.actor.community_id,p.kind,p.canonical_key,p.canonical_url,repoId,p.ref_table??null,p.ref_id??null,p.title,input.actor.user_id,body.guild_key??null,JSON.stringify(body.text?{intro:body.text}:{})])).rows[0];
     }
+    requireCondition(!input.actor.agent||s.first_sharer_user_id===input.actor.user_id,404,'not_found','找不到分享。');
     requireCondition(s.state==='published',409,'share_unavailable','這份分享已停止公開。');
     await appendCredit(q,{share_id:s.share_id,community_id:s.community_id,user_id:input.actor.user_id,role:created?'sharer':'co_sharer',basis:created?'created':'shared_again',source_ref:`share:${s.share_id}:${input.actor.user_id}`,actor_user_id:input.actor.user_id});
     if(created)await journal(q,input.actor,'share',s.share_id,1,'publish',{kind:s.kind});
@@ -96,7 +100,7 @@ export async function shareLink(pool:Pool,input:Command,id:string) {
 }
 export async function listShares(q:PoolClient,actor:Actor,raw:unknown) {
   const query=z.object({limit:z.coerce.number().int().min(1).max(50).default(20),offset:z.coerce.number().int().min(0).max(10000).default(0)}).strict().parse(raw);
-  const rows=(await q.query<ShareRow>(`SELECT * FROM shares WHERE community_id=$1 AND state='published' AND (first_sharer_user_id IS NULL OR NOT is_verification_test_account(first_sharer_user_id)) ORDER BY created_at DESC,share_id LIMIT $2 OFFSET $3`,[actor.community_id,query.limit,query.offset])).rows;
+  const rows=(await q.query<ShareRow>(`SELECT * FROM shares WHERE community_id=$1 AND state='published' AND ($4::uuid IS NULL OR first_sharer_user_id=$4) AND (first_sharer_user_id IS NULL OR NOT is_verification_test_account(first_sharer_user_id)) ORDER BY created_at DESC,share_id LIMIT $2 OFFSET $3`,[actor.community_id,query.limit,query.offset,actor.agent?actor.user_id:null])).rows;
   const items=[];
   for(const s of rows){if(!s.ref_id||await existingTitle(q,actor,s.kind,s.ref_id))items.push({share_id:s.share_id,kind:s.kind,title:s.title,url:`/#shares/${s.share_id}`});}
   return {items,next_offset:rows.length===query.limit?query.offset+query.limit:null};

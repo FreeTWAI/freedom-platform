@@ -11,10 +11,11 @@ const origin='http://127.0.0.1:4310';
 const url=process.env.TEST_DATABASE_URL!;
 assert.ok(url?.includes('/fp_'),'explicit isolated database required');
 const schema=`fp_agent_${process.pid}_${Date.now()}`,admin=createPool(url),pool=new Pool({connectionString:url,options:`-c search_path=${schema}`,max:12});
-const app=createApp(pool,origin,'local',{eventParticipationEnabled:true,socialAchievementsEnabled:true});
+let shareFetchOffline=false,shareFetchCalls=0;
+const app=createApp(pool,origin,'local',{eventParticipationEnabled:true,socialAchievementsEnabled:true,linkPreviewFetch:async url=>{shareFetchCalls++;if(shareFetchOffline)throw Error('synthetic upstream offline');return new Response('<title>Synthetic '+new URL(String(url)).pathname+'</title>',{headers:{'Content-Type':'text/html'}});}});
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
-beforeEach(async()=>{await pool.query('TRUNCATE communities,login_attempts,auth_rate_limits CASCADE');await seedLocal(pool);});
+beforeEach(async()=>{shareFetchOffline=false;shareFetchCalls=0;await pool.query('TRUNCATE communities,login_attempts,auth_rate_limits CASCADE');await seedLocal(pool);});
 type Session={cookie:string;csrf:string;user:any};
 async function req(path:string,opts:{session?:Session;token?:string;body?:unknown;key?:string;method?:string;headers?:Record<string,string>}={}){
  const {session,token,body,key=randomUUID(),method=body===undefined?'GET':'POST'}=opts;
@@ -268,4 +269,117 @@ test('expiry during a real domain wait rejects data and rolls back writes; revoc
    assert.equal((await pool.query('SELECT 1 FROM community_event_rsvps WHERE event_id=$1',[id])).rowCount,0);
   }finally{await gate.query('ROLLBACK');gate.release();if(pending)await pending;}
  }
+});
+
+async function shareMember(index=0){
+ const session=await ready(index);
+ await pool.query('UPDATE users SET email=$2 WHERE user_id=$1',[session.user.user_id,`agent-share-${index}@example.com`]);
+ return session;
+}
+async function confirmShare(session:Session,connectionId:string){
+ const list=await req('/api/v1/me/agent-tokens',{session});
+ const pending=list.data.items.find((i:any)=>i.connection_id===connectionId).pending_publication;
+ assert.ok(pending);
+ assert.equal((await req(`/api/v1/me/agent-tokens/${connectionId}/confirm`,{session,body:{request_sha256:pending.request_sha256}})).status,200);
+}
+test('shares: read/share scopes stay separate, report/claim/star and unknown routes deny, mixed credentials reject',async()=>{
+ const session=await shareMember(),read=await issue(session,['read']),write=await issue(session,['share']);
+ const body={url:'https://example.com/scope'};
+ assert.equal((await req('/api/v1/shares/preview',{token:read.access_token,body})).status,403);
+ assert.equal((await req('/api/v1/shares',{token:read.access_token,body})).status,403);
+ assert.equal((await req('/api/v1/shares/preview',{token:write.access_token,body})).status,200);
+ assert.equal((await req('/api/v1/shares',{token:write.access_token})).status,403);
+ assert.equal((await req('/api/v1/me/credit',{token:write.access_token})).status,403);
+ assert.equal((await req('/api/v1/shares',{token:read.access_token})).status,200);
+ assert.equal((await req('/api/v1/me/credit',{token:read.access_token})).status,200);
+ const full=await issue(session),id=randomUUID();
+ for(const suffix of ['report','claim','star','delete','anything'])assert.equal((await req(`/api/v1/shares/${id}/${suffix}`,{token:full.access_token,body:{reason:'synthetic'}})).status,403,suffix);
+ assert.equal((await req(`/s/${id}`,{token:full.access_token})).status,403);
+ for(const path of ['/api/v1/shares','/api/v1/me/credit'])assert.equal((await req(path,{token:full.access_token,session})).status,400);
+ assert.equal((await req('/api/v1/shares',{token:full.access_token,session,body})).status,400);
+});
+test('shares: A token cannot list, read, retract or link B shares, including receipt replay after visibility changes',async()=>{
+ const a=await shareMember(),b=await shareMember(1),issued=await issue(a),token=issued.access_token;
+ const own=await req('/api/v1/shares',{session:a,body:{url:'https://example.com/a',text:'private editor note'}});
+ const other=await req('/api/v1/shares',{session:b,body:{url:'https://example.com/b',text:'B private editor note'}});
+ assert.equal(own.status,200);assert.equal(other.status,200);
+ const id=own.data.share_id,foreign=other.data.share_id;
+ const listed=await req('/api/v1/shares',{token});assert.equal(listed.status,200);assert.deepEqual(listed.data.items.map((i:any)=>i.share_id),[id]);
+ const detail=await req(`/api/v1/shares/${id}`,{token});assert.equal(detail.status,200);assert.ok(!JSON.stringify(detail.data).includes('private editor note'));assert.equal(detail.data.editor_notes,undefined);
+ for(const suffix of ['','/retract','/links'])assert.equal((await req(`/api/v1/shares/${foreign}${suffix}`,{token,...(suffix?{body:{}}:{})})).status,404,suffix);
+ assert.equal((await req('/api/v1/shares?user_id='+b.user.user_id,{token})).status,422);
+ const credit=await req('/api/v1/me/credit',{token});assert.equal(credit.status,200);assert.ok(credit.data.items.length);assert.ok(credit.data.items.every((i:any)=>i.share_id===id));
+ const key=randomUUID();assert.equal((await req(`/api/v1/shares/${id}/links`,{token,body:{},key})).status,200);
+ await assert.rejects(pool.query('UPDATE shares SET first_sharer_user_id=$2 WHERE share_id=$1',[id,b.user.user_id]),/identity is immutable/);
+ assert.equal((await req(`/api/v1/shares/${id}/retract`,{session:a,body:{}})).status,200);
+ assert.equal((await req(`/api/v1/shares/${id}/links`,{token,body:{},key})).status,404,'cached link is not replayed after retraction');
+ assert.equal((await pool.query("SELECT state FROM shares WHERE share_id=$1",[foreign])).rows[0].state,'published');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM promotion_links WHERE target_key=$1',[foreign])).rows[0].n,0);
+});
+test('shares: first publication waits for exact browser consent, offline replay is per token, and concurrent daily cap holds at twenty',async()=>{
+ const session=await shareMember(),issued=await issue(session),token=issued.access_token,path='/api/v1/shares',body={url:'https://example.com/first'},key=randomUUID();
+ assert.equal((await req(path,{token,body,key})).status,202);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM shares')).rows[0].n,0);
+ await confirmShare(session,issued.connection_id);
+ const created=await req(path,{token,body,key});assert.equal(created.status,200,JSON.stringify(created.data));assert.equal(created.data.via_agent,true);
+ const fetches=shareFetchCalls;shareFetchOffline=true;
+ assert.deepEqual((await req(path,{token,body,key})).data,created.data);assert.equal(shareFetchCalls,fetches,'replay does not read upstream');shareFetchOffline=false;
+ assert.equal((await req(path,{token,body:{url:'https://example.com/changed'},key})).status,409);
+ for(let i=1;i<19;i++)assert.equal((await req(path,{token,body:{url:`https://example.com/item/${i}`}})).status,200);
+ const final=await Promise.all([19,20].map(i=>req(path,{token,body:{url:`https://example.com/item/${i}`}})));
+ assert.deepEqual(final.map(r=>r.status).sort(),[200,429]);assert.equal(final.find(r=>r.status===429)!.data.code,'agent_daily_cap');
+ assert.equal((await pool.query('SELECT public_items FROM agent_daily_usage WHERE connection_id=$1',[issued.connection_id])).rows[0].public_items,20);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM agent_publications WHERE connection_id=$1',[issued.connection_id])).rows[0].n,20);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM shares WHERE first_sharer_user_id=$1',[session.user.user_id])).rows[0].n,20);
+ shareFetchOffline=true;assert.deepEqual((await req(path,{token,body,key})).data,created.data);
+ const second=await issue(session);assert.equal((await req(path,{token:second.access_token,body,key})).status,202,'a different token cannot replay a confirmed publication');
+ const retractKey=randomUUID(),retract=`${path}/${created.data.share_id}/retract`;
+ assert.equal((await req(retract,{token,body:{},key:retractKey})).status,200);
+ assert.equal((await req(retract,{token,body:{},key:retractKey})).status,200);
+ assert.equal((await req(`${path}/${created.data.share_id}`,{token})).status,404);
+});
+
+test('shares: source privacy and receipt authority remain current; browser receipts never become agent receipts',async()=>{
+ const session=await shareMember(),issued=await issue(session),token=issued.access_token,path='/api/v1/shares',body={url:'https://example.com/namespace'},key=randomUUID();
+ const browser=await req(path,{session,body,key});assert.equal(browser.status,200);
+ assert.equal((await req(path,{token,body,key})).status,202);await confirmShare(session,issued.connection_id);
+ const agent=await req(path,{token,body,key});assert.equal(agent.status,200);assert.equal(agent.data.created,false);assert.equal(agent.data.via_agent,true);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2',[session.user.user_id,key])).rows[0].n,2);
+ const foreign=await shareMember(1),foreignShare=await req(path,{session:foreign,body:{url:'https://example.com/foreign'}});
+ assert.equal(foreignShare.status,200);
+ assert.equal((await req(path,{token,body:{url:'https://example.com/foreign'}})).status,404,'cannot co-share B canonical object through the token');
+ const eventId=randomUUID();
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+ SELECT $1,community_id,user_id,'private source fixture','synthetic',now()+interval '1 day',now()+interval '25 hours','online','online','published','open','other' FROM users WHERE user_id=$2`,[eventId,session.user.user_id]);
+ const eventBody={kind:'event',ref_id:eventId},eventKey=randomUUID();
+ const shared=await req(path,{token,body:eventBody,key:eventKey});assert.equal(shared.status,200,JSON.stringify(shared.data));
+ await pool.query("UPDATE community_events SET state='cancelled' WHERE event_id=$1",[eventId]);
+ assert.equal((await req(`${path}/${shared.data.share_id}`,{token})).status,404);
+ assert.equal((await req(path,{token,body:eventBody,key:eventKey})).status,404,'publication receipt does not reveal withdrawn source');
+ const credit=await req('/api/v1/me/credit',{token});assert.equal(credit.status,200);assert.ok(!JSON.stringify(credit.data).includes('private source fixture'));
+});
+
+test('shares: committed credit reaches only its member feed once; replay, reversal and rolled-back facts emit nothing new',async()=>{
+ const a=await shareMember(),b=await shareMember(1),issued=await issue(a),other=await issue(b),token=issued.access_token;
+ const body={url:'https://example.com/credited'},key=randomUUID();
+ const share=await req('/api/v1/shares',{session:a,body,key});assert.equal(share.status,200);
+ const id=share.data.share_id;
+ const credit=(await pool.query('SELECT event_id,source_ref FROM share_credit_events WHERE share_id=$1 AND units=1',[id])).rows[0];
+ const recorded=(await pool.query("SELECT source_key FROM agent_change_events WHERE resource_id=$1 AND kind='share.credited'",[id])).rows;
+ assert.deepEqual(recorded,[{source_key:credit.event_id}]);
+ assert.deepEqual((await req('/api/v1/shares',{session:a,body,key})).data,share.data);
+ const first=await req('/api/v1/agent/events',{token});assert.equal(first.status,200);
+ assert.equal(first.data.items.filter((i:any)=>i.kind==='share.credited'&&i.resource_id===id).length,1);
+ assert.equal((await req('/api/v1/agent/events',{token:other.access_token})).data.items.filter((i:any)=>i.resource_id===id).length,0);
+ const {transaction}=await import('../../packages/db/index.js');
+ const {appendCredit}=await import('../../modules/shares/credit.js');
+ const community=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[a.user.user_id])).rows[0].community_id;
+ await assert.rejects(transaction(pool,async q=>{
+  assert.ok(await appendCredit(q,{share_id:id,community_id:community,user_id:a.user.user_id,role:'sharer',basis:'star_confirmed',source_ref:randomUUID(),actor_user_id:b.user.user_id}));
+  throw Error('synthetic rollback');
+ }),/synthetic rollback/);
+ assert.equal((await req(`/api/v1/shares/${id}/retract`,{session:a,body:{}})).status,200);
+ assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[id])).rows[0].n,0);
+ const next=await req('/api/v1/agent/events?after='+encodeURIComponent(first.data.next_cursor),{token});assert.equal(next.status,200);assert.deepEqual(next.data.items,[]);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM agent_change_events WHERE resource_id=$1 AND kind='share.credited'",[id])).rows[0].n,1);
 });

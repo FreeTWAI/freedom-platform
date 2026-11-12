@@ -1,4 +1,5 @@
 import {test,expect} from './fixtures.js';
+import {openFeatureSearch} from './navigation.js';
 import {DEMO_PASSWORD,DEMO_USERS} from '../../packages/testing/seed.js';
 test('one share box publishes recorded original README, star action and member contribution at mobile width',async({page})=>{
  await page.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
@@ -19,7 +20,22 @@ test('one share box publishes recorded original README, star action and member c
  await expect(page.locator('.share-readme script,.share-readme svg,.share-readme [onerror],.share-readme iframe')).toHaveCount(0);
  expect(await page.evaluate(()=>Boolean((window as unknown as {shareXss?:boolean}).shareXss))).toBe(false);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
- await page.getByRole('link',{name:'我的貢獻',exact:true}).click();
+ await expect(page.locator('.nav-primary [aria-current]')).toHaveText('探索');
+ const shareHash=new URL(page.url()).hash;
+ await page.evaluate(hash=>{window.location.hash=hash+'?via=fixture%2Bcode';},shareHash);
+ await page.reload();await expect(page).toHaveURL(/#shares\/[0-9a-f-]+\?via=fixture%2Bcode$/);
+ await expect(page.getByRole('heading',{name:'README',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'我也要分享',exact:true}).click();
+ await expect(page.getByRole('status').filter({hasText:'已複製'})).toBeVisible();
+ await openFeatureSearch(page);
+ await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'我的',exact:true}).click();
+ await page.getByLabel('我的檢視').selectOption({label:'我的貢獻'});
+ await expect(page).toHaveURL(/#me\/credit$/);
+ await expect(page.getByLabel('我的檢視').locator('option').filter({hasText:'分享成效'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'交給我的 Agent',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'我的推廣連結'})).toBeVisible();
+ await expect(page.getByRole('region',{name:'我的推廣連結'}).getByText('freetwai-test/shared-repo',{exact:true})).toBeVisible();
+ await expect(page.getByText('查看推廣排行榜',{exact:true})).toBeVisible();
  await expect(page.getByRole('region',{name:'我的貢獻'}).getByRole('link',{name:'freetwai-test/shared-repo'})).toBeVisible();
  await expect(page.getByRole('region',{name:'我的貢獻'}).getByText('分享 1',{exact:true})).toBeVisible();
 });

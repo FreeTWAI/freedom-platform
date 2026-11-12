@@ -176,8 +176,10 @@ test('creation navigation keeps three task choices and all child routes discover
   await expect(page.getByRole('heading',{name:'合作紀錄',level:1,exact:true})).toBeVisible();
   await navigate(page,'任務協作');
   await expect(page).toHaveURL(/#guilds\/guild_ai_project\/tools\/work$/);await expect(page.getByRole('heading',{name:'工作',level:1,exact:true})).toBeVisible();
-  await navigate(page,'私人 AI 工作室');await expect(page).toHaveURL(/#automation$/);
+  await navigate(page,'私人 AI 工作室');await expect(page).toHaveURL(/#automation\/work$/);
   await expect(page.getByRole('heading',{name:'自動化',level:1,exact:true})).toBeVisible();
   await expect(links).toHaveCount(0);
+  await page.goBack();await expect(page).toHaveURL(/#automation\/agent$/);
+  await expect(page.getByRole('region',{name:'Agent 連線'})).toBeVisible();
   await page.goBack();await expect(page).toHaveURL(/#guilds\/guild_ai_project\/tools\/work$/);
 });

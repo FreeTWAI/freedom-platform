@@ -1,5 +1,6 @@
 import React, { lazy } from 'react';
 import type { PortalFeatureEntries } from './types';
+import {privateWorkId} from '../portal-route';
 
 const WorkbenchPanel = lazy(() => import('../modules/WorkbenchPanel').then(m => ({default: m.WorkbenchPanel})))
 const ShowcasePanel = lazy(() => import('../modules/ShowcasePanel').then(m => ({default: m.ShowcasePanel})))
@@ -21,7 +22,7 @@ export const workFeatures = {
   },
   "private-ai": {
     moduleId: "execution-runs", placement: 'page',
-    render: ({client, session}) => <PrivateWorkAI client={client} key={session.user.user_id}/>,
+    render: ({client, session, locationHash}) => <PrivateWorkAI client={client} key={session.user.user_id} selectedId={privateWorkId(locationHash)}/>,
   },
   "showcase": {
     moduleId: "work", placement: 'page',
