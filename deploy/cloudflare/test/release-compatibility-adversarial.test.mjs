@@ -8,7 +8,7 @@ import { evaluateReleaseCompatibility, compatibilityLedgerDigest } from '../lib/
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const last = Math.max(...readdirSync(join(root, 'migrations')).filter(n => /^\d{3}_.*\.sql$/.test(n)).map(n => Number(n.slice(0, 3))));
-const scan = checkMigrations(join(root, 'migrations'), { first: 1, last, known_gaps: [22] });
+const scan = checkMigrations(join(root, 'migrations'), { first: 1, last, known_gaps: [22,207] });
 const capabilities = ['identity.passwordless-null-safe.v1', 'commerce.checkout-contact-retention.v1', 'commerce.hosted-checkout.v1','commerce.hosted-inventory-reservation.v1','commerce.hosted-payment.v1','commerce.hosted-supply-catalog.v1', 'community.guest-invitation-credit.v1', 'opensource.sharing-visibility.v1', 'platform.legacy.v1', 'work.explicit-wire.v1', 'avatar.asset-bridge.v1', 'work.personal-owner-acl.v1', 'work.private-human-result.v1', 'work.server-policy.v1'];
 const identity = (character) => ({ source_sha: character.repeat(40), artifact_sha256: character.repeat(64) });
 function fixture() {

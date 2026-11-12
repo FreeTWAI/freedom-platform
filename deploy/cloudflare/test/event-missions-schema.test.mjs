@@ -6,7 +6,7 @@ import {LEGACY_MIGRATIONS,resolveMigrationPlan} from '../../../packages/db/migra
 import {checkMigrations} from '../lib/migrations.mjs';
 
 const root=fileURLToPath(new URL('../../../migrations',import.meta.url));
-const profile=last=>({format:LEGACY_MIGRATIONS,first:1,last,known_gaps:[22]});
+const profile=last=>({format:LEGACY_MIGRATIONS,first:1,last,known_gaps:last>=208?[22,207]:[22]});
 const sources=()=>readMigrationSources(root);
 const historical=()=>resolveMigrationPlan(sources().filter(row=>Number(row.name.slice(0,3))<=195),profile(195));
 
@@ -20,8 +20,12 @@ test('mission candidate preserves exact PR1170 schema195 ledger without treating
  assert.notEqual(next.ledger_digest,old.ledger_digest);
 });
 
-test('explicit203 scan accepts only complete catalog; historical202/201/200/199/198/197/196/195/194 profiles are not silently advanced',()=>{
- assert.equal(checkMigrations(root,profile(203)).ok,true);
+test('explicit208 scan accepts only complete catalog; historical206/205/204/203/202/201/200/199/198/197/196/195/194 profiles are not silently advanced',()=>{
+ assert.equal(checkMigrations(root,profile(208)).ok,true);
+ assert.equal(checkMigrations(root,profile(206)).ok,false);
+ assert.equal(checkMigrations(root,profile(205)).ok,false);
+ assert.equal(checkMigrations(root,profile(204)).ok,false);
+ assert.equal(checkMigrations(root,profile(203)).ok,false);
  assert.equal(checkMigrations(root,profile(202)).ok,false);
  assert.equal(checkMigrations(root,profile(201)).ok,false);
  assert.equal(checkMigrations(root,profile(200)).ok,false);
@@ -31,7 +35,7 @@ test('explicit203 scan accepts only complete catalog; historical202/201/200/199/
  assert.equal(checkMigrations(root,profile(196)).ok,false);
  assert.equal(checkMigrations(root,profile(195)).ok,false);
  assert.equal(checkMigrations(root,profile(194)).ok,false);
- assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(203)));
+ assert.throws(()=>resolveMigrationPlan(sources().filter(row=>row.name!=='195_event_helpers.sql'),profile(208)));
 });
 
 test('mission schema has no attendee, friend or Contribution write and clearing is not a hard-erasure claim',()=>{

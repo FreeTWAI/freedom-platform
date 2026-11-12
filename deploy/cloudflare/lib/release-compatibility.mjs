@@ -248,6 +248,16 @@ const FOUNDATION_NAMES = [
   '202_tester_map_accounts.sql',
   // Private source quarantine only; no capture/publication/GC capability.
   '203_member_game_quarantine.sql',
+  // Published-by-default shares and reversible attribution credit; no payment, credential, admin or release authority.
+  '204_shares.sql',
+  // Scoped member agent-token records, publication tracking and change feeds; no payment, credential-management, admin or release authority.
+  '205_agent_tokens.sql',
+  // Games/AR guild and track catalog entries pending category review; no membership, appointment or release authority.
+  '206_creative_tool_guilds.sql',
+  // 207 is reserved for the unmerged guild-tools migration; no filename is accepted here.
+  null,
+  // Event import/registration metadata, claims and share-driven moderation/credit; no automatic publication, payment, credential, admin or release authority.
+  '208_event_publication.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
@@ -319,7 +329,7 @@ function ledger(value, digest) {
   for (const row of value) {
     exact(row, ['name', 'sha256']); text(row.name, /^[0-9]{3}_[a-z0-9_]+\.sql$/); text(row.sha256, HEX64, 64);
     const number = Number(row.name.slice(0, 3));
-    if (number !== previous + (previous === 21 ? 2 : 1)) reject('schema_ledger_invalid');
+    if (number !== previous + (previous === 21 || previous === 206 ? 2 : 1)) reject('schema_ledger_invalid');
     if (number >= 76 && FOUNDATION_NAMES[number - 76] !== row.name) reject('schema_unknown');
     previous = number;
   }
@@ -368,7 +378,7 @@ function validateMixed(value, digest) {
   let previous = 0;
   for (const row of legacy) {
     const number = Number(row.name.slice(0, 3));
-    if (number !== previous + (previous === 21 ? 2 : 1)) reject('schema_ledger_invalid');
+    if (number !== previous + (previous === 21 || previous === 206 ? 2 : 1)) reject('schema_ledger_invalid');
     if (number >= 76 && FOUNDATION_NAMES[number - 76] !== row.name) reject('schema_unknown');
     previous = number;
   }

@@ -66,3 +66,36 @@ test('enrollment capability alone does not invent connection or execution author
   for (const record of f.host.release_records) record.capabilities = record.capabilities.filter(c => c !== connection);
   const r = run(f); assert.equal(r.status, 'compatible'); assert(!r.required_capabilities.includes(connection));
 });
+
+test('205 member tokens do not replace the 088 connection shape or its enrollment prerequisite', () => {
+  const f = fixture();
+  assert(f.scan.ledger.some(row => row.name === '205_agent_tokens.sql'));
+  const before = structuredClone(f);
+  before.scan.ledger = before.scan.ledger.filter(row => Number(row.name.slice(0,3)) <= 204);
+  before.scan.ledger_digest = compatibilityLedgerDigest(before.scan.ledger);
+  for (const object of [before.host.observation,before.host.rollback_floor]) {
+    object.schema_ledger = before.scan.ledger; object.schema_ledger_digest = before.scan.ledger_digest;
+  }
+  for (const record of before.host.release_records) record.schema_ledger_digests = [before.scan.ledger_digest];
+  assert.equal(run(before).status, 'compatible');
+  assert.equal(run(f).status, 'compatible');
+  assert.deepEqual(run(f).required_capabilities, run(before).required_capabilities);
+  for (const source of ['enable_shapes','enabled_shapes','written_shapes','rollback_floor_shapes']) {
+    const enabled = structuredClone(f);
+    (source === 'enable_shapes' ? enabled.input : source === 'rollback_floor_shapes' ? enabled.host : enabled.host.observation)[source] = [connection];
+    assert.equal(run(enabled).status, 'compatible');
+    assert(run(enabled).required_capabilities.includes(connection));
+    assert(run(enabled).required_capabilities.includes(enrollment));
+    for (const binary of [0,1]) for (const capability of [connection,enrollment]) {
+      const missing = structuredClone(enabled);
+      missing.host.release_records[binary].capabilities = missing.host.release_records[binary].capabilities.filter(c => c !== capability);
+      const result = run(missing); assert.equal(result.status, 'incompatible');
+      assert(result.issues.some(i => i.code === 'release_capability_missing' && i.capability === capability && i.source_sha === missing.host.release_records[binary].source_sha));
+    }
+  }
+  for (const binary of [0,1]) {
+    const oldApproval = structuredClone(f);
+    oldApproval.host.release_records[binary].schema_ledger_digests = [before.scan.ledger_digest];
+    assert(run(oldApproval).issues.some(i => i.code === 'release_schema_unsupported'));
+  }
+});

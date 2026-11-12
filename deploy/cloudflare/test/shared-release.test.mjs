@@ -5438,3 +5438,31 @@ test('lease-loss floor replay preserves every original intent and rejects incomp
     if (shape === 'uncommitted') assert.throws(() => apply({ ...proof, policySha256: 'f'.repeat(64) }));
   }
 });
+
+test('pass-1 source frontier reserves only 207 without changing the installed profile or admitting unknown gaps', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'pass1-frontier-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'migrations'));
+  const installed = { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] };
+  for (let n = 1; n <= 206; n++) if (n !== 22) {
+    await writeFile(join(root, 'migrations', `${String(n).padStart(3, '0')}_fixture.sql`), 'SELECT 1;\n');
+  }
+  assert.deepEqual(sourceMigrationProfile(root, installed), { ...installed, last: 206 });
+  await writeFile(join(root, 'migrations/208_unreviewed.sql'), 'SELECT 1;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await rm(join(root, 'migrations/208_unreviewed.sql'));
+  await writeFile(join(root, 'migrations/208_event_publication.sql'), 'SELECT 1;');
+  assert.deepEqual(sourceMigrationProfile(root, installed), { ...installed, last: 208, known_gaps: [22,207] });
+  assert.deepEqual(installed, { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] });
+  for (const n of [204,205,206]) {
+    const path = join(root, `migrations/${n}_fixture.sql`);
+    await rm(path);
+    assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+    await writeFile(path, 'SELECT 1;');
+  }
+  await writeFile(join(root, 'migrations/207_unreviewed.sql'), 'SELECT 1;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await rm(join(root, 'migrations/207_unreviewed.sql'));
+  await writeFile(join(root, 'migrations/208_event_publication.sql'), 'CREATE ROLE unreviewed;');
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+});
