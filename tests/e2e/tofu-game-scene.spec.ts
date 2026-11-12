@@ -328,7 +328,9 @@ function installTofuReadbackProbe(options:boolean|{suppressShadow:boolean}){
  }});
  const api={device,start(){
   if(originalRaf)throw Error('Diagnostic already started');
-  originalRaf=window.requestAnimationFrame;active=true;
+  // Wrap scheduling now, but do not treat synchronous start/fullscreen renders
+  // as measured RAF work. Shadow intervention arms only at mark(), after setup.
+  originalRaf=window.requestAnimationFrame;active=!shadowExperiment;
   window.requestAnimationFrame=function(callback){return originalRaf!.call(window,time=>{
    const before=draws;const work={token:++rafToken,offscreenAttempted:0,offscreenExecuted:0,mainDraws:0,targets:new Set<unknown>(),segments:0};
    frameWork=work;try{callback.call(window,time);}finally{frameWork=null;}const count=draws-before;
@@ -341,7 +343,7 @@ function installTofuReadbackProbe(options:boolean|{suppressShadow:boolean}){
     finally{if(samples.length<120)samples.push({work:shadowExperiment?{...work,targets:work.targets.size}:undefined,frame:frames,drawCalls:count,probeWallMs,pixel:copy,validReadState});else overflow=true;}
    }
   });};
- },mark(){draws=0;frames=0;samples.length=0;baseline={...device,dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState};baselineState=describe(state);
+ },mark(){active=true;draws=0;frames=0;samples.length=0;baseline={...device,dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState};baselineState=describe(state);
  },read(){
   active=false;const actualState=readState(),glError=gl.getError(),stateTrackingMatches=JSON.stringify(describe(state))===JSON.stringify(describe(actualState));
   if(glError!==gl.NO_ERROR)errors.push(`Diagnostic GL error ${glError}`);if(!stateTrackingMatches)errors.push('Diagnostic GL state tracking mismatch');

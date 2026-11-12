@@ -2258,7 +2258,11 @@ test('PT-tofu-profile: shadow intervention skips only wrapped 512px offscreen dr
   const gl=Object.assign(Object.create(methods),c,{getExtension:()=>null,getParameter:(k:number)=>values.get(k),getContextAttributes:()=>({}),getError:()=>0,isContextLost:()=>false,readPixels(){throw Error('Suppression experiment must not issue readback');}});
   const canvas={width:640,height:480,getContext:()=>gl},window:any={requestAnimationFrame:(cb:Function)=>{queue.push(cb);return 1;}};
   const fn=runInNewContext(`${js};installTofuReadbackProbe`,{window,document:{querySelector:()=>({querySelector:()=>canvas}),visibilityState:'visible'},performance:{now:()=>0},navigator:{hardwareConcurrency:2},devicePixelRatio:1});
-  fn({suppressShadow});const api=window.__tofuReadbackProbe;api.start();api.mark();
+  fn({suppressShadow});const api=window.__tofuReadbackProbe;api.start();
+  // The real begin/fullscreen path renders synchronously before measurement.
+  // Neither arm may suppress or reject these setup draws.
+  gl.bindFramebuffer(gl.FRAMEBUFFER,{});gl.viewport(0,0,512,512);gl.drawArrays();gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,640,480);gl.drawArrays();
+  assert.deepEqual(events,['shadow','main']);events.length=0;api.mark();
   if(mode==='unwrapped')assert.throws(()=>gl.drawArrays(),/outside wrapped RAF/);
   else{
    window.requestAnimationFrame(()=>{gl.bindFramebuffer(gl.FRAMEBUFFER,{});gl.viewport(0,0,mode==='wrong-viewport'?256:512,512);gl.drawArrays();gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,640,480);gl.drawArrays();});
