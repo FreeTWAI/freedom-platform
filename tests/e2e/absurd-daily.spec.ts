@@ -2493,3 +2493,17 @@ for(const game of ['chair','tofu','holiday'] as const)test(`PT-fullview: ${game}
   await hit('減少動態開');await expect(tools.getByRole('button',{name:'減少動態關',exact:true})).toHaveAttribute('aria-pressed','false');
   await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);expect(await partyElapsed(page)).toBe(elapsed);
 });
+
+
+// Frontal composition is verified from the real mounted renderer and real input.
+test('PT-front: holiday presents aligned non-overlapping rows and ray-picks the live reward',async({page},testInfo)=>{
+  await page.setViewportSize({width:390,height:844});await openParty(page,'holiday');await partyAdvance(page,300);
+  const host=page.locator('.pt-canvas');await expect(host.locator('canvas')).toHaveAttribute('data-party-projection','front');
+  const anchors=JSON.parse((await host.getAttribute('data-anchors'))!) as {x:number;y:number}[];
+  expect(anchors).toHaveLength(6);
+  for(let i=0;i<3;i++){expect(Math.abs(anchors[i].x-anchors[i+3].x)).toBeLessThan(.00001);expect(anchors[i+3].y-anchors[i].y).toBeGreaterThan(.05);}
+  const label=(await page.getByRole('button',{name:/第 [1-6] 格：休假/}).getAttribute('aria-label'))!,hole=Number(label.match(/第 (\d)/)![1])-1;
+  const box=(await host.boundingBox())!,a=anchors[hole];await page.mouse.click(box.x+a.x*box.width,box.y+a.y*box.height);
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await testInfo.attach('holiday-front-real-input.png',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+});

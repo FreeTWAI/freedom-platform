@@ -2,6 +2,7 @@ import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,Directional
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup} from '../stage-batch';
 import {createTofuOpaqueBatch} from './tofu-batch';
+import {tofuFrontLayer,holidayFrontAnchor} from './light-party';
 import {partyViewport,partyBufferSize,withPartyCaptureView} from './viewport';
 import {PARTY_RULES as R,type PartyGameId} from './catalog';
 import {chairJump,chairWave,holidayOpen,holidayTargets,tofuAxis,tofuPosition,type PartyRun,type TofuLayer} from './domain';
@@ -43,7 +44,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
   const dispose=()=>{if(disposed)return;disposed=true;resizeObserver?.disconnect();styleObserver?.disconnect();window.removeEventListener('resize',resizeSafely);renderer.domElement.removeEventListener('webglcontextlost',lost);tofuBatch?.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());key.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
   try {
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);renderer.toneMapping=game==='holiday'?NoToneMapping:ACESFilmicToneMapping;renderer.toneMappingExposure=game==='chair'?1.2:1.05;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;
-    renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
+    renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.dataset.partyProjection='front';renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
     const scene=new Scene();scene.background=new Color(game==='holiday'?'#f4dfb1':game==='chair'?'#142039':'#dbe3d8');
     const camera=game==='chair'?new PerspectiveCamera(43,4/3,.1,80):new OrthographicCamera(-6,6,4.5,-4.5,.1,80);
     const ray=new Raycaster(),world=new Group();ray.layers.set(1);scene.add(world);
@@ -52,7 +53,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     const geo=<T extends BufferGeometry>(g:T):T=>{geometries.add(g);return g;};
     const round=geo(new RoundedBoxGeometry(1,1,1,3,.16)),box=geo(new BoxGeometry(1,1,1)),sphere=geo(new SphereGeometry(1,20,14)),cylinder=geo(new CylinderGeometry(1,1,1,24)),torus=geo(new TorusGeometry(1,.075,8,32)),plane=geo(new PlaneGeometry(1,1));
     const palette=new Map<string,MeshToonMaterial|MeshStandardMaterial>();
-    function mat(color:string){let m=palette.get(color);if(!m){m=game==='holiday'?new MeshToonMaterial({color,gradientMap:gradient}):new MeshStandardMaterial({color,roughness:game==='chair'?.48:.94,metalness:game==='chair'?.22:0});materials.add(m);palette.set(color,m);}return m;}
+    function mat(color:string){let m=palette.get(color);if(!m){m=game==='holiday'?new MeshToonMaterial({color,gradientMap:gradient}):new MeshStandardMaterial({color,roughness:game==='chair'?.48:.94,metalness:game==='chair'?.22:0,emissive:game==='chair'&&(color===C.sage||color===C.gold)?color:'#000000',emissiveIntensity:.45});materials.add(m);palette.set(color,m);}return m;}
     function mesh(p:Group,g:BufferGeometry,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx){const m=new Mesh(g,mat(c));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;m.receiveShadow=true;p.add(m);return m;}
     const rb=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy:number,sz:number)=>mesh(p,round,c,x,y,z,sx,sy,sz);
     const ball=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx)=>mesh(p,sphere,c,x,y,z,sx,sy,sz);
@@ -107,9 +108,9 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     const landingEdges=Array.from({length:4},()=>{const edge=new Mesh(round,landingMaterial);landing.add(edge);return edge;});
     const holes:Group[]=[],sprites:{body:Group;leaf:Group;tie:Group;label:Mesh}[]=[],proxies:Mesh[]=[],anchorPositions:Vector3[]=[];
     const ghostMaterials=new MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});materials.add(ghostMaterials);
-    function tofu(p:Group){const g=group(p);rb(g,C.cream,0,0,0,1,.94,1);rb(g,'#e5d5b5',0,-.3,0,1.01,.12,1.01);const stamp=decal(g,face,-.04,.482,.02,.48,.48);stamp.rotation.x=-Math.PI/2;leaf(g,.31,.54,-.22,.55);return g;}
+    function tofu(p:Group){const g=group(p);rb(g,C.cream,0,0,0,1,.94,1);rb(g,'#e5d5b5',0,-.3,0,1.01,.12,1.01);decal(g,face,0,.03,.505,.48,.72);leaf(g,.31,.54,-.22,.55);return g;}
     if(game==='chair'){
-      camera.position.set(0,5.5,8.8);camera.lookAt(0,.75,-2.7);
+      camera.position.set(0,3.3,8.5);camera.lookAt(0,1.4,-4);
       beam(scenery,C.ink,0,2.5,-13,12,5,.3);decal(scenery,panorama,0,8,-12.8,64,24);
       // Tall window architecture and a continuous floor, not a coloured letterbox.
       for(const side of [-1,1])for(const z of [-12,-4,4]){beam(scenery,C.wood,side*7,5,z,.22,10,.22);beam(scenery,C.sage,side*6.85,5,z,.035,8,.035);}
@@ -159,7 +160,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       const chop=rb(world,C.wood,3.4,.15,1.3,.09,.1,3);chop.rotation.y=.3;const chop2=rb(world,C.wood,3.7,.15,1.3,.09,.1,3);chop2.rotation.y=.3;
       tofus=Array.from({length:R.tofuGoal+1},()=>tofu(world));activeTofu=tofu(world);crumb=tofu(world);tofuBatch=createTofuOpaqueBatch(world,[...tofus,activeTofu,crumb]);
     }else{
-      camera.position.set(3.8,8.6,9.5);camera.lookAt(0,.4,0);
+      camera.position.set(0,2.3,12);camera.lookAt(0,2.3,0);
       // Folded six-sided paper petals keep a readable silhouette without the
       // dense rounded-box tessellation being repeated in every shadow pass.
       const paperPetal=geo(new CylinderGeometry(1,1,1,6));
@@ -168,14 +169,21 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       for(const side of [-1,1]){const leaf=mesh(scenery,paperPetal,C.leaf,side*5.8,.9,3.7,1,2.3,.12);leaf.rotation.z=side*.4;}
       for(const side of [-1,1]){beam(scenery,C.wood,side*4.5,1.7,-4.5,.12,3.4,.12);for(let i=0;i<3;i++){const petal=ball(scenery,i%2?C.peach:C.gold,side*(4.25+i*.2),.55+i*.45,-3.7,.5,.7,.09);petal.rotation.z=side*(.3+i*.3);}}
       for(let i=0;i<9;i++){const flag=mesh(scenery,plane,[C.peach,C.leaf,C.navy][i%3],-4+i,2.9+Math.abs(4-i)*.09,-4.4,.65,.48,1);flag.rotation.z=(i%2?1:-1)*.12;}
-      sign(scenery,'今日公休委員會','WEEKEND GARDEN CLUB',0,2,-4.5,3.8);bakeRigidGroup(scenery,geometries);
+      // Layered paper proscenium faces the audience, not an overhead board.
+      beam(scenery,C.navy,0,2.3,-1.8,12,9,.12);
+      decal(scenery,panorama,0,2.3,-1.7,10.4,7.8);
+      for(const side of [-1,1])for(let fold=0;fold<4;fold++){
+        beam(scenery,fold%2?C.peach:'#bf4e63',side*(4.5+fold*.3),2.4,-.5+fold*.08,.34,7,.15);
+      }
+      for(const y of [-.12,2.48]){beam(scenery,C.wood,0,y,.3,8,.18,1.8);beam(scenery,C.gold,0,y+.12,1.2,8,.08,.06);}
+      sign(scenery,'今日公休劇場','THE WEEKEND MATINEE',0,5.45,-.8,4.8);bakeRigidGroup(scenery,geometries);
       const badgeTextures=([C.leaf,C.navy] as const).map((color,i)=>canvasTexture(ctx=>{ctx.fillStyle=C.cream;ctx.fillRect(0,0,256,128);ctx.fillStyle=color;ctx.font='900 64px "Microsoft JhengHei",sans-serif';ctx.textAlign='center';ctx.fillText(i?'開會':'休假',128,88);},256,128));
       // All six rims are rigid in world space; batch across holes without
       // touching animated bodies, labels, ray proxies or any source geometry.
       const gardenRims=group(world);
       for(let i=0;i<6;i++){
-        const x=(i%3-1)*2.5,z=Math.floor(i/3)*2.6-1.35,hole=group(world,x,0,z);holes.push(hole);
-        const rim=group(gardenRims,x,0,z);mesh(rim,cylinder,C.wood,0,.2,0,.95,.4,.95);mesh(rim,cylinder,C.ink,0,.42,0,.79,.06,.79);mesh(rim,torus,C.gold,0,.47,0,.85,.85,.85).rotation.x=-Math.PI/2;
+        const anchor=holidayFrontAnchor(i),{x,z}=anchor,y=anchor.y-.85,hole=group(world,x,y,z);holes.push(hole);
+        const rim=group(gardenRims,x,y,z);mesh(rim,cylinder,C.wood,0,.2,0,.95,.4,.95);mesh(rim,cylinder,C.ink,0,.42,0,.79,.06,.79);mesh(rim,torus,C.gold,0,.47,0,.85,.85,.85).rotation.x=-Math.PI/2;
         for(let k=0;k<8;k++){const a=k*Math.PI/4;const petal=mesh(rim,paperPetal,i%2?C.peach:C.gold,Math.cos(a)*.91,.19,Math.sin(a)*.91,.24,.12,.33);petal.rotation.y=-a+Math.PI/2;}
         const body=group(hole,0,.15,0);ball(body,C.cream,0,.52,0,.61,.54,.58);decal(body,face,0,.55,.55,.86,.76);
         const leaves=group(body);leaf(leaves,.07,1.15,0,1.35);leaf(leaves,-.14,1.13,0,.8);
@@ -184,7 +192,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         bakeRigidGroup(leaves,geometries);bakeRigidGroup(tie,geometries);
         const labelTexture=canvasTexture(ctx=>{ctx.fillStyle=C.cream;ctx.fillRect(0,0,256,128);ctx.fillStyle=C.ink;ctx.font='900 72px system-ui';ctx.textAlign='center';ctx.fillText(String(i+1),128,92);},256,128);
         const label=decal(hole,labelTexture,0,.25,1.005,.51,.27);sprites.push({body,leaf:leaves,tie,label});
-        const proxy=new Mesh(cylinder,ghostMaterials);proxy.layers.set(1);proxy.scale.set(1,.95,1);proxy.position.set(x,.85,z);proxy.userData.hole=i;world.add(proxy);proxies.push(proxy);anchorPositions.push(new Vector3(x,.85,z));
+        const proxy=new Mesh(cylinder,ghostMaterials);proxy.layers.set(1);proxy.scale.set(1,.95,1);proxy.position.set(x,anchor.y,z);proxy.userData.hole=i;world.add(proxy);proxies.push(proxy);anchorPositions.push(new Vector3(x,anchor.y,z));
       }
       bakeRigidGroup(gardenRims,geometries);
     }
@@ -201,7 +209,8 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       project();
       if(last)update(last,lastMotion);
     };
-    function setTofu(g:Group,l:TofuLayer,y:number){g.visible=true;g.position.set(l.x,y,l.z);g.scale.set(l.width,R.tofuHeight,l.depth);}
+    let frontAxis:'x'|'z'='x';
+    function setTofu(g:Group,l:TofuLayer,y:number){l=tofuFrontLayer(l,frontAxis);g.visible=true;g.position.set(l.x,y,l.z);g.scale.set(l.width,R.tofuHeight,l.depth);}
     function update(s:PartyRun,motion:boolean){
       if(disposed)return;last=s;lastMotion=motion;const t=s.elapsed/1000,feedbackAge=s.elapsed-s.feedbackAt;
       if(s.game==='chair'&&chair){
@@ -213,18 +222,19 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
           p.hazard.position.set(w.lane*1.5,0,2.4-age/1000*R.worldSpeed);p.cart.visible=w.kind==='cart';p.meeting.visible=w.kind==='meeting';p.ticket.position.set(w.ticketLane*1.5,motion?Math.sin(t*3+index)*.05:0,p.hazard.position.z);p.ticket.rotation.y=motion?Math.sin(t*2)*.15:0;
         });
       }else if(s.game==='tofu'&&activeTofu&&crumb){
+        frontAxis=s.fall?.axis??tofuAxis(s);
         tofus.forEach((g,i)=>{g.visible=i<s.layers.length;if(g.visible)setTofu(g,s.layers[i],.52+i*R.tofuHeight);});
         const n=s.layers.length,topY=.52+n*R.tofuHeight,fall=s.fall,phase=fall?Math.min(1,(s.elapsed-fall.at)/R.tofuFallMs):0;
         activeTofu.visible=s.status!=='done';if(activeTofu.visible)setTofu(activeTofu,fall?fall.from:tofuPosition(s),topY+(1-phase*phase)*1.7);
-        const projected=fall?fall.from:tofuPosition(s),top=s.layers[s.layers.length-1];landing.visible=s.status!=='done'&&!fall;
-        landing.position.set(projected.x,topY-R.tofuHeight/2+.018,projected.z);landingMaterial.color.set(Math.abs(projected[tofuAxis(s)]-top[tofuAxis(s)])<=R.tofuPerfect?C.leaf:C.gold);
+        const canonical=fall?fall.from:tofuPosition(s),projected=tofuFrontLayer(canonical,frontAxis),top=tofuFrontLayer(s.layers[s.layers.length-1],frontAxis);landing.visible=s.status!=='done'&&!fall;
+        landing.position.set(projected.x,topY-R.tofuHeight/2+.018,projected.z);landingMaterial.color.set(Math.abs(projected.x-top.x)<=R.tofuPerfect?C.leaf:C.gold);
         landingEdges.forEach((e,i)=>{const alongX=i<2;e.position.set(alongX?0:(i===2?-1:1)*projected.width/2,0,alongX?(i===0?-1:1)*projected.depth/2:0);e.scale.set(alongX?projected.width:.045,.025,alongX?.045:projected.depth);});
         if(fall&&!fall.kept){activeTofu.position.y=topY+1.7-phase*phase*3.5;activeTofu.rotation.z=motion?phase*.5:0;}else activeTofu.rotation.z=0;
         const age=s.elapsed-s.feedbackAt;crumb.visible=motion&&!!s.feedback&&!s.feedback.includes('完美')&&age<600;
         if(crumb.visible){const top=s.layers[s.layers.length-1];setTofu(crumb,{...top,x:top.x+1.6+age/400,width:.35},topY-age/220);crumb.rotation.z=age/170;}
-        const focus=(n-1)*R.tofuHeight*.46,cam=camera as OrthographicCamera,size=4.2+n*.09;cam.left=-size*4/3;cam.right=size*4/3;cam.top=size;cam.bottom=-size;cam.position.set(6,focus+6.2,8);cam.lookAt(0,focus+1.25,0);cam.updateProjectionMatrix();
+        const focus=(n-1)*R.tofuHeight*.46,cam=camera as OrthographicCamera,size=4.2+n*.09;cam.left=-size*4/3;cam.right=size*4/3;cam.top=size;cam.bottom=-size;cam.position.set(0,focus+2.1,14);cam.lookAt(0,focus+1.25,0);cam.updateProjectionMatrix();
       }else if(s.game==='holiday'){
-        camera.position.set(3.8,8.6,9.5);camera.lookAt(0,.4,0);
+        camera.position.set(0,2.3,12);camera.lookAt(0,2.3,0);
         const targets=holidayTargets(s.seed,s.round),phase=s.elapsed%R.holidayRoundMs,visible=s.status==='ready'||s.status==='done'||(phase>=R.holidayOpenMs&&phase<R.holidayCloseMs);
         sprites.forEach((p,i)=>{const kind=i===targets.good?'good':i===targets.boss?'boss':'empty',pressed=!!(s.pressed&(1<<i));p.body.visible=visible&&kind!=='empty'&&!pressed;p.leaf.visible=kind==='good';p.tie.visible=kind==='boss';p.body.position.y=.25+(motion?Math.min(1,Math.max(0,(phase-R.holidayOpenMs)/120))*.14:.14);p.body.rotation.z=motion?Math.sin(t*5+i)*.055:0;});
       }

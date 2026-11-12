@@ -1924,7 +1924,7 @@ test('PT-fullview: holiday shared rigid rims preserve every world-space triangle
  const T=await import('three');
  const {bakeRigidGroup}=await import('../../apps/portal-web/src/games/stage-batch.js');
  const source=readFileSync(new URL('../../apps/portal-web/src/games/party/stage.ts',import.meta.url),'utf8');
- const start=source.indexOf('const rim=group(gardenRims,x,0,z);'),end=source.indexOf('const body=group(hole',start);
+ const start=source.indexOf('const rim=group(gardenRims,x,y,z);'),end=source.indexOf('const body=group(hole',start);
  assert.ok(start>0&&end>start);assert.match(source,/bakeRigidGroup\(gardenRims,geometries\)/);
  const construction=source.slice(start,end);
  assert.doesNotMatch(construction,/bakeRigidGroup/);
@@ -1935,8 +1935,8 @@ test('PT-fullview: holiday shared rigid rims preserve every world-space triangle
  const group=(parent:import('three').Group,x=0,y=0,z=0)=>{const g=new T.Group();g.position.set(x,y,z);parent.add(g);return g;};
  const mesh=(p:import('three').Group,g:import('three').BufferGeometry,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx)=>{let material=palette.get(c);if(!material){material=new T.MeshToonMaterial({color:c});palette.set(c,material);}const m=new T.Mesh(g,material);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=m.receiveShadow=true;p.add(m);return m;};
  // Execute the actual renderer's rim construction, not a simplified substitute.
- const build=new Function('group','gardenRims','mesh','cylinder','torus','paperPetal','C','i','x','z',construction);
- for(let i=0;i<6;i++)build(group,gardenRims,mesh,cylinder,torus,paperPetal,C,i,(i%3-1)*2.5,Math.floor(i/3)*2.6-1.35);
+ const build=new Function('group','gardenRims','mesh','cylinder','torus','paperPetal','C','i','x','y','z',construction);
+ for(let i=0;i<6;i++){const a=holidayFrontAnchor(i);build(group,gardenRims,mesh,cylinder,torus,paperPetal,C,i,a.x,a.y-.85,a.z);}
  const snapshot=()=>{gardenRims.updateWorldMatrix(true,true);const triangles:string[]=[],materials=new Set<import('three').Material>();let calls=0;
   gardenRims.traverse(o=>{if(!(o instanceof T.Mesh))return;calls++;assert.equal(o.castShadow,true);assert.equal(o.receiveShadow,true);materials.add(o.material);const g=o.geometry,p=g.getAttribute('position'),n=g.getAttribute('normal'),uv=g.getAttribute('uv'),normal=new T.Matrix3().getNormalMatrix(o.matrixWorld),count=g.index?.count??p.count;
    for(let j=0;j<count;j+=3){const vertices:string[]=[];for(let k=0;k<3;k++){const ix=g.index?.getX(j+k)??j+k,v=new T.Vector3().fromBufferAttribute(p,ix).applyMatrix4(o.matrixWorld),nv=new T.Vector3().fromBufferAttribute(n,ix).applyMatrix3(normal).normalize();vertices.push([...v.toArray(),...nv.toArray(),uv.getX(ix),uv.getY(ix)].join(','));}triangles.push(`${o.material.uuid}:${vertices.join(';')}`);}
@@ -1993,4 +1993,43 @@ test('PT-fullview: enlarged narrative scroll has a separate reachable primary ac
  assert.match(css,/\.pt-holiday-modal\{box-sizing:border-box;max-height:100dvh;display:flex;overflow:hidden\}/);
  assert.match(css,/\.pt-panel>\.pt-panel-copy\{[^}]*min-height:0;[^}]*overflow:auto/);
  assert.match(css,/\.pt-panel:has\(>\.pt-panel-copy\)>button\{flex:0 0 auto\}/);
+});
+
+
+// Orthogonal axis exchange is presentation only, never a second scoring system.
+import {tofuFrontLayer,holidayFrontAnchor} from '../../apps/portal-web/src/games/party/light-party.js';
+test('PT-front: both alternating tofu axes remain visible and preserve exact clipped dimensions',()=>{
+  const layer={x:.7,z:-.4,width:1.3,depth:2.1},snapshot=JSON.stringify(layer);
+  assert.deepEqual(tofuFrontLayer(layer,'x'),layer);
+  assert.deepEqual(tofuFrontLayer(layer,'z'),{x:-.4,z:.7,width:2.1,depth:1.3});
+  assert.deepEqual(tofuFrontLayer(tofuFrontLayer(layer,'z'),'z'),layer);
+  for(const axis of ['x','z'] as const){
+    const shifted={...layer,[axis]:layer[axis]+.5};
+    const point=(l:typeof layer)=>tofuFaces(l,.48,axis)[0].split(' ')[0].split(',').map(Number);
+    assert.equal(point(shifted)[0]-point(layer)[0],21,'either active domain axis moves visibly right');
+    assert.equal(point(shifted)[1],point(layer)[1],'axis travel does not counterfeit vertical falling');
+    const p=tofuFrontLayer(layer,axis);assert.equal(p.width*p.depth,layer.width*layer.depth);
+  }
+  assert.equal(JSON.stringify(layer),snapshot);
+});
+test('PT-front: six holiday ray targets form two unobscured frontal rows in every viewport',async()=>{
+  const {OrthographicCamera,Vector3}=await import('three');
+  for(const [w,h] of [[390,844],[320,568],[667,375],[1440,900],[640,480]]){
+    const viewport=partyViewport(w,h,Math.min(100,h/5),Math.min(160,h/4)),v=viewport.view;
+    const camera=new OrthographicCamera(-6,6,4.5,-4.5,.1,80);
+    camera.position.set(0,2.3,12);camera.lookAt(0,2.3,0);
+    camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);camera.updateMatrixWorld(true);
+    const points=Array.from({length:6},(_,hole)=>{const a=holidayFrontAnchor(hole),p=new Vector3(a.x,a.y,a.z).project(camera);return {x:(p.x+1)*w/2,y:(1-p.y)*h/2};});
+    for(const p of points){assert.ok(p.x>=viewport.core.x&&p.x<=viewport.core.x+viewport.core.width);assert.ok(p.y>=viewport.core.y&&p.y<=viewport.core.y+viewport.core.height);}
+    for(let i=0;i<3;i++){assert.equal(points[i].x,points[i+3].x);assert.ok(points[i].y<points[i+3].y);}
+    assert.equal(new Set(points.map(p=>`${p.x},${p.y}`)).size,6);
+  }
+  assert.throws(()=>holidayFrontAnchor(-1));assert.throws(()=>holidayFrontAnchor(6));
+});
+
+test('PT-front: a completed Z-axis tower preserves its live direction in the result SVG',()=>{
+  const run={...newParty('tofu',42),game:'tofu',status:'done',turn:1,layers:[{x:0,z:0,width:3,depth:3},{x:.7,z:-.4,width:1.3,depth:2.1}],elapsed:60000} as TofuRun;
+  assert.equal(tofuView(run).axis,'z');
+  const svg=partyResultSvg(run);
+  for(const [i,layer] of run.layers.entries())for(const face of tofuFaces(layer,i*PT.tofuHeight,'z'))assert.ok(svg.includes(`points="${face}"`));
 });

@@ -37,8 +37,8 @@ export function LightPartyScene({run,viewport=partyViewport(640,480)}:{run:Chair
     </svg><p className="pt-light-readout">{run.status==='done'?`本局完成 · ${run.tickets} 張票`:next?`第 ${next.index+1} 波 · ${next.kind==='meeting'?'會議桌要換路':'推車可以跳'} · ${Math.ceil(next.remaining/100)/10} 秒後到達`:'前方暫時沒有障礙'}<br/>左右滑換路，點場景或按空白鍵跳躍。黃票上的葉子是假日票。</p></>;
   }
   const view=tofuView(run);
-  const block=(layer:Parameters<typeof tofuFaces>[0],bottom:number,key:string,active=false)=><g key={key} data-tofu-layer={key} data-x={layer.x} data-z={layer.z} data-width={layer.width} data-depth={layer.depth}>{tofuFaces(layer,bottom).map((points,i)=><polygon key={i} points={points} fill={active&&i===2?'#e5bd68':TOFU_FACE_COLORS[i]} stroke="#443b37" strokeWidth="2.5" strokeLinejoin="round"/>)}</g>;
-  return <><svg className="pt-light-world" viewBox={viewBox} aria-hidden="true" focusable="false" data-light-world="tofu" data-view-elapsed={run.elapsed} data-turn={run.turn} data-axis={view.axis} data-offset={view.offset} data-fall-progress={view.progress}>
+  const block=(layer:Parameters<typeof tofuFaces>[0],bottom:number,key:string,active=false)=><g key={key} data-tofu-layer={key} data-x={layer.x} data-z={layer.z} data-width={layer.width} data-depth={layer.depth}>{tofuFaces(layer,bottom,view.axis).map((points,i)=><polygon key={i} points={points} fill={active&&i===0?'#e5bd68':TOFU_FACE_COLORS[i]} stroke="#443b37" strokeWidth="2.5" strokeLinejoin="round"/>)}</g>;
+  return <><svg className="pt-light-world" viewBox={viewBox} aria-hidden="true" focusable="false" data-light-world="tofu" data-view-elapsed={run.elapsed} data-turn={run.turn} data-projection="front-axis" data-axis={view.axis} data-offset={view.offset} data-fall-progress={view.progress}>
     <rect x="-5000" y="-5000" width="10000" height="10000" fill="#e7ede3"/>
     <path d="M-3000 250Q-1400 -900 -700 -200T500 -220T2100 -450T4000 100V4000H-3000Z" fill="#c8d5c8"/>
     <path d="M-3000 300Q-1200 -260 -300 120T1300 -70T4000 200V4000H-3000Z" fill="#9bb4a2"/>
@@ -54,7 +54,7 @@ export function LightPartyScene({run,viewport=partyViewport(640,480)}:{run:Chair
     {[330,355,380,405,430].map(y=><path key={y} d={`M24 ${y}H616`} stroke="#9f8869"/>)}
     <ellipse cx="320" cy="426" rx="146" ry="41" fill="#7aaba1" stroke="#405b60" strokeWidth="3"/><ellipse cx="320" cy="422" rx="128" ry="31" fill="none" stroke="#bda78b" strokeWidth="3"/>
     {view.layers.map((layer,i)=>block(layer,i*R.tofuHeight,String(i)))}
-    {view.kept&&<polygon points={tofuFaces(view.kept,run.layers.length*R.tofuHeight)[2]} fill="none" stroke="#416851" strokeWidth="4" strokeDasharray="8 5"/>}
+    {view.kept&&<polygon points={tofuFaces(view.kept,run.layers.length*R.tofuHeight,view.axis)[0]} fill="none" stroke="#416851" strokeWidth="4" strokeDasharray="8 5"/>}
     {view.active&&block(view.active,view.bottom,'moving',true)}
-  </svg><p className="pt-light-readout">{run.status==='done'?`完成 ${run.layers.length-1} 層 · ${run.misses} 次失手`:view.falling?view.kept?'正在落下，綠色虛線是會保留的部分。':'這塊沒有足夠重疊，正在落下。':`${view.axis.toUpperCase()} 軸移動 · ${view.aligned?'對齊了！現在落下':'等上層靠齊，再點或按空白鍵落下'}`}<br/>黃色是移動豆腐，奶油色是已落定的真實樓層。減少動態仍保留移動與落下。</p></>;
+  </svg><p className="pt-light-readout">{run.status==='done'?`完成 ${run.layers.length-1} 層 · ${run.misses} 次失手`:view.falling?view.kept?'正在落下，綠色虛線是會保留的部分。':'這塊沒有足夠重疊，正在落下。':`${view.axis.toUpperCase()} 軸正面 · ${view.aligned?'對齊了！現在落下':'等上層靠齊，再點或按空白鍵落下'}`}<br/>黃色是移動豆腐，奶油色是已落定的真實樓層。減少動態仍保留移動與落下。</p></>;
 }

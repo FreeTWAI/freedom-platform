@@ -128,3 +128,12 @@ Verify 42182160341／job127774498252 的真實trace、error-context與截圖顯�
 三款原生／輕量的 320×568、390×844、667×375、1440×900 共 24 組整頁實圖案例；原 phone／desktop PNG 與 catalog PNG 保留，新增尺寸使用直接瀏覽器 JPEG（quality85）控制報告體積。另保留 200% 文字原案例並加入非零安全邊界及全畫面證據、三尺寸實際 touch raycast、旋轉後命中與暫停不變斷言。沒有變更 timeout、retry、分數、CI 或 auth guard。
 
 此節記錄候選契約與測試來源，不是執行收據。新 exact-head 瀏覽器結果／實圖、美術品質與實機 Safari 驗收尚待正常 runner 與使用者檢視；不得預填 PASS。
+
+
+### 2026-11-12 正視角增量候選（待新版實際畫面）
+
+承接 #1338 的 `2111853f`，不是重做或宣稱接受前輪美術。辦公椅改低視線、無橫向傾斜的夜城跑道與發光建築線；豆腐改正面陶藝堆疊，畫面將當前 X/Z 軸交換為螢幕水平，native/light 同用純呈現座標轉換，原 domain 軸、裁切與分數不變；假日改正對觀眾的雙層紙藝劇場，六洞與 raycast/anchors 同時移到兩列立面，不讓後排被前排遮住。操作、全版安全核心、200% 文字與既有完整旅程保留。
+
+新測試涵蓋兩軸可見位移／尺寸與不可變狀態、六洞各 viewport 正面分列，以及原生實際點取休假後的分數與截圖。原 rim batching 測試只遷移新列的 y 座標，完整三角形／法線／UV／material／shadow 和 draw 減量斷言保留。
+
+雲端 lockfile 安裝與前輪 baseline runtime 239/239 通過。此輪 typecheck、production build、module-check、operator 21/21 及 diff check 通過；runtime 242 案中 241 通過，唯一失敗為下述 PT-6 舊縮圖來源，沒有 skip；正式新 CI 尚待。原封不動 native capture 在 Chromium 啟動時遭 process_singleton socket EPERM，經正式沙盒升級仍同錯，未改 flags/profile；已提供的雲端瀏覽器也無法連到此 workspace loopback。目錄 preview 暫保留前輪真實圖片與來源，PT-6 source gate 應如實失敗，待新 CI 原生 capture receipt 才能更新；不偽填 hash。真人美術與手機／Safari 驗收仍未完成，未核准、合併或部署。
