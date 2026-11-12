@@ -51,6 +51,9 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
   for(const [i,color]of [C.mint,C.red,C.gold].entries()){const b=group(set,2.8+i*.42,0,-2.5);mesh(b,cylinder,color,0,.35,0,.18,.7,.18);rb(b,C.cream,0,.35,.18,.24,.3,.035);mesh(b,cylinder,C.dark,0,.77,0,.14,.15,.14);}
   // The guide is an original mitten-like kitchen cat, rather than a human hand sprite.
   const cat=group(set,-3.4,.2,-2.65);ball(cat,C.mint,0,.45,0,.5,.5,.4);for(const side of [-1,1]){const ear=mesh(cat,cone,C.mint,side*.3,.93,0,.19,.35,.18);ear.rotation.z=-side*.2;ball(cat,C.ink,side*.17,.51,.36,.04,.065,.025);}ball(cat,C.red,0,.35,.4,.055,.04,.035);rb(cat,C.cream,0,.04,.05,.72,.24,.5);bakeRigidGroup(set,geometries);
+  // Keep food-to-board contact shadows, not a room-sized silhouette from the
+  // mounted board onto the distant wall/cabinet. No extra lights or shadow maps.
+  set.name='kitchen/backdrop';set.traverse(node=>{if(node instanceof Mesh)node.receiveShadow=false;});
   const ray=new Raycaster(),ground=new Plane(new Vector3(0,0,1),-.3),intersection=new Vector3();
   function screen(x:number,y:number,depth=.3){
    // A horizontal view ray is parallel to the old horizontal work plane.

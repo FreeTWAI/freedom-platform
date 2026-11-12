@@ -482,3 +482,46 @@ test('immersive kitchen: 320x568 viewport fallback keeps controls separate',asyn
   await page.getByRole('button',{name:'退出全螢幕',exact:true}).click();
   await expect(page.locator('.fullscreen-game--viewport')).toHaveCount(0);
 });
+
+
+// Additive native evidence for all nine operations. These recipes cover every
+// operation using normal controls; no saved-run injection or test-only renderer.
+for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440,height:900}])for(const id of ['rice-balls','margherita-pizza','pearl-milk-tea','egg-fried-rice'])test(`front kitchen journey: ${id} at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+ const recipe=recipeOf(id)!,errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.setViewportSize(viewport);await page.clock.install();
+ await page.goto(`/play?game=kitchen&practice=1&recipe=${id}&seed=42`);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+ await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+ await page.getByRole('button',{name:'開始料理',exact:true}).click();
+ const game=page.locator('.ck-game'),stage=page.locator('.fullscreen-game');
+ await expect.poll(()=>page.evaluate(()=>({width:innerWidth,height:innerHeight}))).toEqual(viewport);
+ const shot=async(kind:string,state:string)=>{await page.clock.runFor(40);await capturePreparationScreenshot(stage,testInfo,`front-${id}-${kind}-${state}-${viewport.width}x${viewport.height}.png`);};
+ const scenePoint=async(x:number,y:number)=>{const b=(await page.locator('.ck-scene').boundingBox())!;return {x:b.x+x*b.width,y:b.y+y*b.height};};
+ for(const [index,s] of recipe.steps.entries()){
+  await expect(page.locator('[data-cooking-scene]')).toHaveAttribute('data-cooking-scene',s.kind);await expect(page.locator('.ck-visual-3d')).toBeVisible();
+  await page.clock.runFor(160);
+  if(viewport.width===390){
+   const spacing=await game.evaluate(el=>{const scene=el.querySelector('.ck-live-scene')!.getBoundingClientRect(),dock=el.querySelector('.ck-game-controls')!.getBoundingClientRect(),mission=el.querySelector('.ck-stage-mission')!.getBoundingClientRect();return {above:scene.top-mission.bottom,below:dock.top-scene.bottom,bottom:dock.bottom,viewport:innerHeight};});
+   expect(spacing.above).toBeGreaterThanOrEqual(10);expect(spacing.above).toBeLessThanOrEqual(14);expect(spacing.below).toBeGreaterThanOrEqual(10);expect(spacing.below).toBeLessThanOrEqual(14);expect(spacing.bottom).toBeLessThanOrEqual(spacing.viewport);
+  }
+  await shot(s.kind,'start');
+  if(s.kind==='slice')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);await page.getByRole('button',{name:'沿線切一刀',exact:true}).click();if(i===0)await shot(s.kind,'cut');}
+  if(s.kind==='mix'){
+   const first=await scenePoint(.8,.52);await page.mouse.move(first.x,first.y);await page.mouse.down();
+   for(let i=1;i<=s.goal*32;i++){const angle=i*Math.PI/16,p=await scenePoint(.5+.3*Math.cos(angle),.52+.3*Math.sin(angle));await page.mouse.move(p.x,p.y);if(i===16)await shot(s.kind,'stir');}await page.mouse.up();
+  }
+  if(s.kind==='knead')for(let i=0;i<s.goal;i++){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs/2);if(i===0)await shot(s.kind,'press');await page.clock.runFor(s.holdMs/2);await page.keyboard.up('Space');await page.clock.runFor(160);}
+  if(s.kind==='pan'||s.kind==='boil'||s.kind==='bake'){
+   const slider=page.getByRole('slider'),b=(await slider.boundingBox())!;await slider.click({position:{x:8+(b.width-16)*s.heat/100,y:b.height/2}});
+   if(s.kind==='pan'){await page.clock.runFor(s.durationMs*.55);await shot(s.kind,'heated');await page.getByRole('button',{name:'翻面！',exact:true}).click();await page.clock.runFor(s.durationMs*.65);}
+   if(s.kind==='boil'){for(let i=0;i<3;i++){await page.clock.runFor(2300);if(i===0)await shot(s.kind,'foam');const skim=page.getByRole('button',{name:/撈掉泡沫/});if(await skim.isEnabled())await skim.click();}await page.clock.runFor(3000);}
+   if(s.kind==='bake'){await page.clock.runFor(s.durationMs*.8);await shot(s.kind,'baked');await page.getByRole('button',{name:'出爐！',exact:true}).click();}
+  }
+  if(s.kind==='pour'){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(s.durationMs*s.target/2);await shot(s.kind,'pouring');await page.clock.runFor(s.durationMs*s.target/2);await page.keyboard.up('Space');}
+  if(s.kind==='fold')for(const [i,direction] of s.directions.entries()){await page.clock.runFor(160);await game.focus();await page.keyboard.press(`Arrow${direction[0].toUpperCase()+direction.slice(1)}`);if(i===0)await shot(s.kind,'folded');}
+  if(s.kind==='plate')for(let i=0;i<s.goal;i++){await page.clock.runFor(160);await page.getByRole('button',{name:'放到提示位置',exact:true}).click();if(i===0)await shot(s.kind,'placed');}
+  if(index<recipe.steps.length-1){const next=page.getByRole('button',{name:/^下一步：/});await expect(next).toBeVisible();await next.click();}
+ }
+ expect(await page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.status,COOKING_RUN_KEY)).toBe('done');await page.clock.resume();
+ await expect(page.locator('.fw-arcade-result')).toBeVisible();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible({timeout:10_000});
+ await capturePreparationScreenshot(page.locator('.fw-arcade-result'),testInfo,`front-${id}-completed-${viewport.width}x${viewport.height}.png`);expect(errors).toEqual([]);
+});

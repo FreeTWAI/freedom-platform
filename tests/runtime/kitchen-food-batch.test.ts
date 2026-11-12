@@ -510,3 +510,15 @@ test('mounted work boards sit in front of the cabinet instead of hiding their lo
   }finally{f.stage.dispose();}
  }
 });
+
+
+test('front backdrop does not receive oversized board silhouettes while food contact shadows remain',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('fish-and-chips')!;
+ try{
+  f.stage.update({...domain.newCookingRun(recipe,42,'front-shadow'),status:'playing'},null,1000,false);
+  const backdrop=f.scene().getObjectByName('kitchen/backdrop')!,body=f.scene().getObjectByName('kitchen/body')!;let backdropMeshes=0,contactReceivers=0;
+  backdrop.traverse(o=>{if(o instanceof T.Mesh){backdropMeshes++;assert.equal(o.receiveShadow,false);}});
+  body.traverse(o=>{if(o instanceof T.Mesh&&o.receiveShadow)contactReceivers++;});
+  assert.ok(backdropMeshes>0);assert.ok(contactReceivers>0,'food and board retain local depth cues');
+ }finally{f.stage.dispose();}
+});
