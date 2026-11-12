@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest, isReleaseFailureCode, sameActor, readReleaseArtifact, automaticReleaseEvent } from './admission.mjs';
+import { REPOSITORY, REPOSITORY_ID, OPERATORS, requireRelease as check, isSha, isDigest, isReleaseFailureCode, sameActor, readReleaseArtifact, automaticReleaseEvent, validPairReceipt } from './admission.mjs';
 import { publicLeaseLoss } from './operator.mjs';
 
 const prefix = `/repos/${REPOSITORY}`, path = '.github/workflows/shared-release.yml';
@@ -54,10 +54,15 @@ async function requireFailedRelease(api, admission, installation, { id, format, 
   checkRun(run);
   const compare = await api(`${prefix}/compare/${run.head_sha}...${admission.mainShaObserved}`);
   check(['ahead', 'identical'].includes(compare.status) && compare.merge_base_commit?.sha === run.head_sha, code);
+  const baseName = `release-result-${id}-${run.run_attempt}`, targetName = `${baseName}-${admission.target}`;
+  const { artifact, receipt } = await readReleaseArtifact(api, run, automatic ? targetName : [baseName, targetName], code);
+  const paired = !automatic && artifact.name === targetName;
+  check(paired ? validPairReceipt(receipt, run) : receipt.authorization === undefined, code);
+  const chained = automatic || paired;
   const jobs = await api(`${prefix}/actions/runs/${id}/attempts/${run.run_attempt}/jobs?per_page=100`);
-  check(jobs.total_count === jobs.jobs?.length && (automatic ? jobs.total_count === 3
+  check(jobs.total_count === jobs.jobs?.length && (chained ? jobs.total_count === 3
     : [2, 3].includes(jobs.total_count)), code);
-  const failedJob = automatic && admission.target === 'next' ? 'production' : 'deploy';
+  const failedJob = chained && admission.target === 'next' ? 'production' : 'deploy';
   const expectedJobs = [['admission', 'success'], ['deploy', failedJob === 'deploy' ? 'failure' : 'success'],
     ...(jobs.total_count === 3 ? [['production', failedJob === 'production' ? 'failure' : 'skipped']] : [])];
   for (const [name, conclusion] of expectedJobs) {
@@ -68,13 +73,11 @@ async function requireFailedRelease(api, admission, installation, { id, format, 
       matching[0].steps?.filter(step => step.name === stepName && step.status === 'completed'
         && step.conclusion === (i ? 'success' : 'failure')).length === 1), code);
   }
-  const name = `release-result-${id}-${run.run_attempt}${automatic ? '-' + admission.target : ''}`;
-  const { artifact, receipt } = await readReleaseArtifact(api, run, name, code);
   check(receipt?.format === 'freedom.shared-release/v1' && receipt.status === 'failed' && receipt.mode === 'deploy'
     && receipt.releaseKind === 'independent' && receipt.providerOutcome === 'unknown_until_confirmed'
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID && receipt.controllerSha === run.head_sha
     && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
-    && (!automatic || automaticReleaseEvent(receipt.automatic) === run.event)
+    && (automatic ? automaticReleaseEvent(receipt.automatic) === run.event : receipt.automatic === undefined)
     && receipt.sourceSha === admission.sourceSha && receipt.sourceTree === admission.sourceTree
     && /^ghcr\.io\/freetwai\/freedom-release-operator@sha256:[a-f0-9]{64}$/.test(receipt.operatorImage ?? '')
     && receipt.configSha256 === installation.configSha256 && isDigest(receipt.configSha256)
