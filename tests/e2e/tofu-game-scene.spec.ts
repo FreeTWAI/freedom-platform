@@ -194,7 +194,7 @@ for(const rejected of [false,true])test(`PT-TOFU-SCENE: explicit light choice ow
  await page.getByRole('button',{name:'豆腐落下！',exact:true}).press('Enter');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.clock.runFor(550);await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-turn','1');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
 });
 // Bounded browser-process evidence only. No frame skipping, readback or GPU flush.
-async function traceNativeTofuClockChunk(page:Page){
+async function traceNativeTofuClockChunk(page:Page,prefix='tofu-idle-first-second'){
  const session=await page.context().browser()!.newBrowserCDPSession();
  const failures:unknown[]=[],parts:Buffer[]=[];let handle:string|undefined,started=false,guardStopped=false,bytes=0;
  let timer:ReturnType<typeof setTimeout>|undefined,stop:Promise<void>|undefined;
@@ -218,7 +218,7 @@ async function traceNativeTofuClockChunk(page:Page){
    if(bytes>32*1024*1024)throw Error('Native trace exceeded bounded 32MiB output');
    parts.push(data);if(chunk.eof){complete=true;break;}
   }})(),'stream drain',5000);
-  await test.info().attach('tofu-idle-first-second-browser-trace.json',{body:Buffer.concat(parts),contentType:'application/json'});
+  await test.info().attach(`${prefix}-browser-trace.json`,{body:Buffer.concat(parts),contentType:'application/json'});
  }catch(error){failures.push(error);}
  finally{
   if(timer)clearTimeout(timer);
@@ -226,12 +226,13 @@ async function traceNativeTofuClockChunk(page:Page){
   if(handle)try{await bounded(session.send('IO.close',{handle}),'stream close',2000);}catch(error){failures.push(error);}
   try{await bounded(session.detach(),'detach',2000);}catch(error){failures.push(error);}
  }
- try{await test.info().attach('tofu-idle-first-second-browser-trace-status.json',{body:Buffer.from(JSON.stringify({
+ try{await test.info().attach(`${prefix}-browser-trace-status.json`,{body:Buffer.from(JSON.stringify({
   scope:'Bounded instrumented browser trace; not GPU-time, FPS or performance acceptance',
   head:process.env.HEAD_SHA??null,run:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,
   categories,diagnostic_total_wall_ms:Number(process.hrtime.bigint()-begin)/1e6,bytes,complete,dataLoss,guardStopped,clockCompleted,wholeWindow:clockCompleted&&complete&&!dataLoss&&!guardStopped&&failures.length===0,errors:failures.map(String),
  })),contentType:'application/json'});}catch(error){failures.push(error);}
  if(failures.length)throw failures[0];
+ return {wholeWindow:clockCompleted&&complete&&!dataLoss&&!guardStopped,complete,dataLoss,guardStopped,clockCompleted,bytes};
 }
 
 for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} sixty-second idle expiry keeps zero score and no invented tower`,async({page})=>{
@@ -268,4 +269,86 @@ for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} s
   if(failures.length)throw failures[0];
  }
  await partyAdvance(page,PT.tofuMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();expect(await partyElapsed(page)).toBe(PT.tofuMs);await tofuFullscreen(page,true);
+});
+
+// Test-only intervention: a frame-end fence moves preceding queued work ahead
+// of compositor readback. It cannot distinguish physical raster from resolve,
+// and is never used by a product path or the original idle acceptance journey.
+function installTofuFrameFence(fence:boolean){
+ const host=document.querySelector('.pt-canvas')!,canvas=host.querySelector('canvas')!;
+ const gl=canvas.getContext('webgl2')!;
+ if(!gl)throw Error('Paired diagnostic requires the existing native WebGL2 context');
+ const now=performance.now.bind(performance); // capture before Playwright clock installation
+ const debug=gl.getExtension('WEBGL_debug_renderer_info');
+ const device={vendor:gl.getParameter(gl.VENDOR),renderer:gl.getParameter(gl.RENDERER),version:gl.getParameter(gl.VERSION),
+  unmaskedVendor:debug?gl.getParameter(debug.UNMASKED_VENDOR_WEBGL):null,unmaskedRenderer:debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):null,
+  attributes:gl.getContextAttributes(),hardwareConcurrency:navigator.hardwareConcurrency,dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState};
+ const names=['drawArrays','drawElements','drawArraysInstanced','drawElementsInstanced'] as const;
+ const originals=names.map(name=>({name,own:Object.getOwnPropertyDescriptor(gl,name),fn:gl[name]}));
+ const samples:{frame:number;drawCalls:number;fenceWallMs:number|null}[]=[];
+ let baseline={...device};
+ let draws=0,frames=0,overflow=false,active=false,originalRaf:typeof requestAnimationFrame|undefined;
+ const errors:string[]=[];
+ for(const {name,fn} of originals)Object.defineProperty(gl,name,{configurable:true,writable:true,value:function(...args:unknown[]){if(active)draws++;return Reflect.apply(fn,gl,args);}});
+ const api={device,start(){
+  if(originalRaf)throw Error('Diagnostic already started');
+  originalRaf=window.requestAnimationFrame;active=true;
+  window.requestAnimationFrame=function(callback){return originalRaf!.call(window,time=>{
+   const before=draws;callback.call(window,time);const count=draws-before;
+   if(active&&count){
+    frames++;let fenceWallMs:number|null=null;
+    if(fence){const begin=now();try{gl.finish();}catch(error){errors.push(String(error));throw error;}finally{fenceWallMs=now()-begin;}}
+    if(samples.length<120)samples.push({frame:frames,drawCalls:count,fenceWallMs});else overflow=true;
+   }
+  });};
+ },mark(){draws=0;frames=0;samples.length=0;baseline={...device,dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState};
+ },read(){active=false;return {fence,frames,draws,samples,unwrappedDraws:draws-samples.reduce((total,sample)=>total+sample.drawCalls,0),overflow,errors,contextLost:gl.isContextLost(),device:baseline,
+  after:{dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState}};
+ },restore(){active=false;if(originalRaf)window.requestAnimationFrame=originalRaf;for(const {name,own} of originals){if(own)Object.defineProperty(gl,name,own);else delete (gl as unknown as Record<string,unknown>)[name];}}};
+ (window as unknown as {__tofuFrameFence:typeof api}).__tofuFrameFence=api;
+}
+
+for(const order of ['AB','BA'] as const)test(`PT-TOFU-DIAGNOSTIC: paired frame fence ${order} is not performance acceptance`,async({browser,baseURL,viewport,deviceScaleFactor},testInfo)=>{
+ // Two short arms fit the existing default deadline; no timeout/launch changes.
+ // Fresh isolated contexts for every arm, identical source/seed/viewport/DPR.
+ const rows:Record<string,unknown>[]=[];const failures:unknown[]=[];
+ const diagnosticViewport=viewport??{width:1280,height:720},diagnosticDpr=deviceScaleFactor??1;
+ for(const arm of order){
+  const context=await browser.newContext({baseURL,viewport:diagnosticViewport,deviceScaleFactor:diagnosticDpr,reducedMotion:'no-preference'});
+  const page=await context.newPage(),errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  let installed=false;const row:Record<string,unknown>={arm,fence:arm==='B'};rows.push(row);
+  try{
+   await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
+   await page.goto('/play?game=tofu&seed=42');await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');
+   await page.evaluate(installTofuFrameFence,arm==='B');installed=true;
+   await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));
+   await page.evaluate(()=>{(window as any).__tofuFrameFence.start();});
+   await page.getByRole('button',{name:'開始派對！',exact:true}).click();await tofuFullscreen(page,true);
+   await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','3d');
+   const snapshot=async()=>({elapsed:await partyElapsed(page),state:await page.locator('.pt-root').getAttribute('data-party-state'),score:await page.locator('.pt-root').getAttribute('data-party-score'),render:await page.locator('.pt-canvas').evaluate(el=>({...((el as HTMLElement).dataset)}))});
+   row.before=await snapshot();await page.evaluate(()=>{(window as any).__tofuFrameFence.mark();});
+   const begin=process.hrtime.bigint();row.trace=await traceNativeTofuClockChunk(page,`tofu-frame-fence-${order}-${arm}`);row.instrumentedWallMs=Number(process.hrtime.bigint()-begin)/1e6;
+   row.measurement=await page.evaluate(()=>{return (window as any).__tofuFrameFence.read();});row.after=await snapshot();
+   const measurement=row.measurement as any,before=row.before as any,after=row.after as any;
+   row.eligible=(row.trace as {wholeWindow:boolean}).wholeWindow&&measurement.frames>=28&&measurement.frames<=32&&measurement.samples.length===measurement.frames&&measurement.unwrappedDraws===0&&!measurement.overflow&&!measurement.contextLost&&!measurement.errors.length&&!errors.length&&
+    measurement.device.visibility==='visible'&&measurement.after.visibility==='visible'&&measurement.device.dpr===diagnosticDpr&&measurement.after.dpr===diagnosticDpr&&
+    measurement.samples.reduce((total:number,sample:{drawCalls:number})=>total+sample.drawCalls,0)===measurement.draws&&measurement.device.width===measurement.after.width&&measurement.device.height===measurement.after.height&&
+    before.state==='playing'&&after.state==='playing'&&before.score==='0'&&after.score==='0'&&after.elapsed-before.elapsed>=900&&after.elapsed-before.elapsed<=1000;
+   // Eligibility is diagnostic validity only; no speed threshold or product pass.
+   expect(row.eligible,'paired diagnostic window incomplete or altered').toBe(true);
+  }catch(error){row.error=String(error);row.eligible=false;failures.push(error);}
+  finally{
+   if(installed)try{if(!row.measurement)row.measurement=await page.evaluate(()=>{return (window as any).__tofuFrameFence.read();});await page.evaluate(()=>{(window as any).__tofuFrameFence.restore();});}catch(error){row.cleanupError=String(error);row.eligible=false;failures.push(error);}
+   row.pageErrors=errors;if(errors.length)row.eligible=false;
+   try{await context.close();}catch(error){row.closeError=String(error);row.eligible=false;failures.push(error);}
+   await testInfo.attach(`tofu-frame-fence-${order}-${arm}-measurement.json`,{body:JSON.stringify({scope:'Test-only paired intervention, not native FPS/GPU-time or acceptance; do not add nested trace spans or infer raster/resolve cause',head:process.env.HEAD_SHA??null,run:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,browserVersion:browser.version(),viewport:diagnosticViewport,deviceScaleFactor:diagnosticDpr,seed:42,setupDivergence:'Clock installed after ready to retain native performance.now; unlike original idle clock-before-navigation. Paired diagnostic only, not interchangeable acceptance evidence',row},null,2),contentType:'application/json'});
+  }
+ }
+ const [a,b]=rows.map(row=>row.measurement as any);
+ const sameState=(key:'before'|'after')=>JSON.stringify(rows[0]?.[key])===JSON.stringify(rows[1]?.[key]);
+ const pairEligible=rows.length===2&&rows.every(row=>row.eligible===true)&&a.frames===b.frames&&a.draws===b.draws&&JSON.stringify(a.device)===JSON.stringify(b.device)&&sameState('before')&&sameState('after');
+ await testInfo.attach(`tofu-frame-fence-${order}-pair.json`,{body:JSON.stringify({order,pairEligible,scope:'Diagnostic comparability only; no product/performance acceptance',errors:failures.map(String)}),contentType:'application/json'});
+ if(failures.length)throw failures[0];
+ // A pair must render identical work and state, not merely two positive counts.
+ expect(pairEligible,'paired windows differ in device, state, render work or validity').toBe(true);
 });

@@ -2128,9 +2128,37 @@ test('PT-tofu-profile: bounded diagnostic owns one clock chunk and preserves fai
   if(mode==='clock-error')await assert.rejects(fn(page),(error:unknown)=>error===primary);
   else if(mode==='read-error')await assert.rejects(fn(page),/read failure/);
   else if(mode.endsWith('-timeout'))await assert.rejects(fn(page),/deadline/);
-  else await fn(page);
+  else {const result=await fn(page);assert.equal(result.wholeWindow,mode==='ok');}
   assert.equal(advances,1);assert.equal(calls.filter(x=>x==='Tracing.end').length,1);assert.equal(calls.includes('IO.close'),mode!=='completion-timeout');assert.equal(calls.at(-1),'detach');
   const status=JSON.parse(attachments.get('tofu-idle-first-second-browser-trace-status.json')!.toString());
   assert.equal(status.wholeWindow,mode==='ok');assert.equal(status.guardStopped,mode==='guard');assert.equal(status.dataLoss,mode==='data-loss');
+ }
+});
+
+test('PT-tofu-profile: paired fence targets real draw callbacks and restores isolated instrumentation',()=>{
+ // Execute the browser helper with synthetic RAF/WebGL only. Not GPU evidence.
+ const source=readFileSync(new URL('../e2e/tofu-game-scene.spec.ts',import.meta.url),'utf8');
+ const start=source.indexOf('function installTofuFrameFence('),end=source.indexOf("\nfor(const order of ['AB','BA']",start);
+ assert.ok(start>=0&&end>start);
+ const js=transformSync(source.slice(start,end),{loader:'ts',target:'es2023',format:'esm'}).code;
+ for(const fence of [false,true]){
+  const queue:((time:number)=>void)[]=[],calls:string[]=[];let now=0;
+  const methods:any={drawArrays(){calls.push('drawArrays');},drawElements(){calls.push('drawElements');},drawArraysInstanced(){calls.push('drawArraysInstanced');},drawElementsInstanced(){calls.push('drawElementsInstanced');}};
+  const gl:any=Object.create(methods);Object.assign(gl,{VENDOR:1,RENDERER:2,VERSION:3,getExtension:()=>null,getParameter:(n:number)=>`synthetic-${n}`,getContextAttributes:()=>({alpha:true}),isContextLost:()=>false,finish(){calls.push('finish');now+=5;}});
+  const canvas={width:390,height:844,getContext:(type:string)=>{assert.equal(type,'webgl2');return gl;}};
+  const raf=(cb:(time:number)=>void)=>{queue.push(cb);return queue.length;};
+  const window:any={requestAnimationFrame:raf};
+  const setup=runInNewContext(`${js};installTofuFrameFence`,{window,document:{querySelector:()=>({querySelector:()=>canvas}),visibilityState:'visible'},performance:{now:()=>now},navigator:{hardwareConcurrency:2},devicePixelRatio:1});
+  setup(fence);const api=window.__tofuFrameFence;
+  // Clock installation replaces RAF before start; the helper must wrap that
+  // replacement and restore it, not restore the pre-clock browser scheduler.
+  const clockRaf=(cb:(time:number)=>void)=>raf(cb);window.requestAnimationFrame=clockRaf;
+  api.start();api.mark();
+  window.requestAnimationFrame(()=>{});queue.shift()!(0);assert.deepEqual(calls,[]);
+  window.requestAnimationFrame(()=>{gl.drawArrays();gl.drawElements();});queue.shift()!(16);
+  const result=api.read();assert.equal(result.frames,1);assert.equal(result.draws,2);assert.equal(result.samples[0].drawCalls,2);assert.equal(result.samples[0].fenceWallMs,fence?5:null);
+  assert.equal(calls.filter(x=>x==='finish').length,fence?1:0);assert.equal(result.overflow,false);
+  api.restore();assert.equal(window.requestAnimationFrame,clockRaf);
+  for(const name of Object.keys(methods)){assert.equal(Object.hasOwn(gl,name),false);assert.equal(gl[name],methods[name]);}
  }
 });
