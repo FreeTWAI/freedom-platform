@@ -24,7 +24,7 @@ export type PromotionKind = typeof PROMOTION_KINDS[number];
 export type PromotionPeriod = 'week' | 'month' | 'all';
 const VISITOR_CAP = 20;
 const NETWORK_CAP = 60;
-const LINK_CAP = 200;
+export const PROMOTION_LINK_CAP = 200;
 const TAIPEI = 8 * 60 * 60 * 1000;
 
 const PLATFORM_DESCRIPTION = '加入公會、領取 Repo 技能書，和夥伴一起供貨、開店與做開源作品。';
@@ -192,7 +192,7 @@ export async function createPromotionLink(pool: Pool, actor: Actor, raw: unknown
           return linkView(existing, title, points);
         }
         const used = (await q.query('SELECT count(*)::int AS n FROM promotion_links WHERE user_id=$1 AND created_at>=$2', [actor.user_id, day])).rows[0].n as number;
-        requireCondition(used < LINK_CAP, 429, 'promotion_link_limit', '今天建立的分享連結已達上限。');
+        requireCondition(used < PROMOTION_LINK_CAP, 429, 'promotion_link_limit', '今天建立的分享連結已達上限。');
         const code = randomBytes(7).toString('base64url');
         const inserted = (await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code,created_at)
           VALUES($1,$2,$3,$4,$5,$6) RETURNING link_id,kind,target_key,code`, [actor.community_id, actor.user_id, body.kind, key, code, now])).rows[0];

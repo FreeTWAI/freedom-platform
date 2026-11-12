@@ -68,11 +68,11 @@ test('create retries, duplicate co-sharer, concurrent creates, ledger uniqueness
  await reportShare(pool,cmd(actors[1],{reason:'Spam'},'report'),first.share_id);await reportShare(pool,cmd(actors[1],{reason:'Spam'},'report'),first.share_id);
  assert.equal((await pool.query('SELECT state FROM shares WHERE share_id=$1',[first.share_id])).rows[0].state,'published');
  await reportShare(pool,cmd(actors[2],{reason:'Spam'},'report'),first.share_id);await reportShare(pool,cmd(actors[3],{reason:'Spam'},'report'),first.share_id);
- assert.equal((await pool.query('SELECT state FROM shares WHERE share_id=$1',[first.share_id])).rows[0].state,'hidden');
- assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[first.share_id])).rows[0].n,0);
- await transaction(pool,async q=>{assert.equal(await appendCredit(q,{...fact,source_ref:'hidden'}),undefined);assert.ok((await myCredit(q,actors[0])).items.every(x=>x.count===0));});
+ assert.equal((await pool.query('SELECT state FROM shares WHERE share_id=$1',[first.share_id])).rows[0].state,'published','Young accounts and co-sharers do not count toward hiding');
+ assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[first.share_id])).rows[0].n,4);
+ await transaction(pool,async q=>{assert.ok((await myCredit(q,actors[0])).items.some(x=>x.count===1));});
  await retractShare(pool,cmd(actors[0],{},'retract'),first.share_id);await retractShare(pool,cmd(actors[0],{},'retract'),first.share_id);
- assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[first.share_id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[first.share_id])).rows[0].n,3,'Co-sharers and spreader reach survive personal retraction');
 });
 test('twenty per-member daily creations; retry and existing object remain allowed',async()=>{
  const member=actors[4],previewFetch=async()=>new Response('<title>Page</title>',{headers:{'Content-Type':'text/html'}});
@@ -81,7 +81,7 @@ test('twenty per-member daily creations; retry and existing object remain allowe
  const r=await createShare(pool,cmd(member,{url:'https://example.com/page/0'}),{previewFetch});assert.equal(r.created,false);
 });
 
-test('repository cache renders original README/release, caches 24h and hides a vanished upstream with reversals',async()=>{
+test('repository cache renders original README/release, caches 24h and hides a vanished upstream without automatic credit penalty',async()=>{
  const {refreshRepository,repositoryPage}=await import('../../modules/shares/repository-cache.js');
  const fixture:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname;
@@ -102,7 +102,7 @@ test('repository cache renders original README/release, caches 24h and hides a v
  await pool.query("UPDATE canonical_repositories SET refresh_after=now()-interval '1 day' WHERE repo_id=$1",[repoId]);
  await refreshRepository(pool,repoId,{fetcher:async()=>new Response(null,{status:404})});
  assert.equal((await pool.query('SELECT state FROM shares WHERE share_id=$1',[s.share_id])).rows[0].state,'hidden');
- assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[s.share_id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[s.share_id])).rows[0].n,1);
 });
 
 test('real GitHub adapter confirms repository star once and verifies an author outside the catalog',async()=>{

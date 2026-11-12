@@ -1,3 +1,4 @@
+import {moderateShare} from '../../../../modules/shares/moderation.js';
 import {createCommunityCertificationAdminRoutes} from './community-certification.js';
 import type {EffectJournalPort} from '../../../../modules/agent-commerce/operations/journal/journal.js';
 import {createCommerceAdmissionRoutes} from './commerce-admissions.js';
@@ -57,6 +58,8 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
   if(communityCertificationEnabled===true)app.route('/community-certifications',createCommunityCertificationAdminRoutes(pool,verifyAccess,github.origin,command));
   const paging=(c:Context<AdminEnv>)=>z.object({limit:z.coerce.number().int().min(1).max(100).default(25),offset:z.coerce.number().int().min(0).max(100000).default(0)}).parse(c.req.query());
   const result=(c:Context<AdminEnv>,value:any)=>{if(value.aggregate_version)c.header('ETag',`"${value.aggregate_version}"`);return c.json(value);};
+  app.post('/shares/:id/restore',async c=>c.json(await moderateShare(pool,await command(c),z.uuid().parse(c.req.param('id')),'restore')));
+  app.post('/shares/:id/confirm',async c=>c.json(await moderateShare(pool,await command(c),z.uuid().parse(c.req.param('id')),'confirm')));
   app.get('/bootstrap',async c=>c.json({...await adminBootstrap(pool,c.get('admin')),community_certification_enabled:communityCertificationEnabled===true,csrf_token:c.get('adminCsrf'),pending_guild_appointments:await nominatedGuildAppointments(pool,c.get('admin'))}));
   app.get('/github-app',async c=>c.json({...await githubAppSetupStatus(pool,c.get('admin')),setup_available:Boolean(github.tokenKey)}));
   app.post('/github-app/start',async c=>{
