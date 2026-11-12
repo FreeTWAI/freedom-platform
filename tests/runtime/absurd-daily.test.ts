@@ -2105,3 +2105,32 @@ test('PT-tofu-perf: capture enters, copies and restores before yielding the draw
  const result=withPartyCaptureView(()=>{assert.equal(yielded,false);events.push('fresh render');},()=>{assert.equal(yielded,false);events.push('synchronous copy');return 'image';},()=>{assert.equal(yielded,false);events.push('restore render');});
  assert.equal(result,'image');assert.deepEqual(events,['fresh render','synchronous copy','restore render']);
 });
+
+test('PT-tofu-profile: bounded diagnostic owns one clock chunk and preserves failures and cleanup',async()=>{
+ // Synthetic CDP lifecycle test only, not native browser or GPU evidence.
+ const source=readFileSync(new URL('../e2e/tofu-game-scene.spec.ts',import.meta.url),'utf8');
+ const start=source.indexOf('async function traceNativeTofuClockChunk('),end=source.indexOf('\nfor(const light of [false,true])test(',start);
+ assert.ok(start>=0&&end>start);
+ const js=transformSync(source.slice(start,end),{loader:'ts',target:'es2023',format:'esm'}).code;
+ for(const mode of ['ok','clock-error','read-error','guard','data-loss','completion-timeout','drain-timeout']){
+  const calls:string[]=[],attachments=new Map<string,Buffer>();let finish!:(value:unknown)=>void,guard!:()=>void,advances=0,timers=0;
+  const primary=Error('original clock failure');
+  const session={once(_event:string,cb:(value:unknown)=>void){finish=cb;},async send(method:string,args?:any){
+   calls.push(method);
+   if(method==='Tracing.getCategories')return {categories:['gpu','cc','private-not-selected']};
+   if(method==='Tracing.start'){assert.equal(args.traceConfig.traceBufferSizeInKb,8192);assert.equal(args.traceConfig.enableArgumentFilter,true);assert.deepEqual(Array.from(args.traceConfig.includedCategories),['gpu','cc']);}
+   if(method==='Tracing.end'&&mode!=='completion-timeout')finish({stream:'owned',dataLossOccurred:mode==='data-loss'});
+   if(method==='IO.read'){assert.equal(args.handle,'owned');assert.equal(args.size,65536);if(mode==='read-error')throw Error('read failure');if(mode==='drain-timeout')return new Promise(()=>{});return {data:'{"traceEvents":[]}',eof:true};}
+   return {};
+  },async detach(){calls.push('detach');if(mode==='clock-error')throw Error('later cleanup failure');}};
+  const fn=runInNewContext(`${js};traceNativeTofuClockChunk`,{Buffer,process:{env:{},hrtime:{bigint:()=>1n}},setTimeout:(cb:()=>void,ms:number)=>{assert.ok([12000,5000,2000].includes(ms));if(ms===12000)guard=cb;timers++;if((mode==='completion-timeout'&&timers===3)||(mode==='drain-timeout'&&timers===4))queueMicrotask(cb);return timers;},clearTimeout:()=>{},test:{info:()=>({attach:async(name:string,data:{body:Buffer})=>{attachments.set(name,data.body);}})}});
+  const page={context:()=>({browser:()=>({newBrowserCDPSession:async()=>session})}),clock:{runFor:async(ms:number)=>{assert.equal(ms,1000);advances++;if(mode==='guard')guard();if(mode==='clock-error')throw primary;}}};
+  if(mode==='clock-error')await assert.rejects(fn(page),(error:unknown)=>error===primary);
+  else if(mode==='read-error')await assert.rejects(fn(page),/read failure/);
+  else if(mode.endsWith('-timeout'))await assert.rejects(fn(page),/deadline/);
+  else await fn(page);
+  assert.equal(advances,1);assert.equal(calls.filter(x=>x==='Tracing.end').length,1);assert.equal(calls.includes('IO.close'),mode!=='completion-timeout');assert.equal(calls.at(-1),'detach');
+  const status=JSON.parse(attachments.get('tofu-idle-first-second-browser-trace-status.json')!.toString());
+  assert.equal(status.wholeWindow,mode==='ok');assert.equal(status.guardStopped,mode==='guard');assert.equal(status.dataLoss,mode==='data-loss');
+ }
+});

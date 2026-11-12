@@ -193,6 +193,47 @@ for(const rejected of [false,true])test(`PT-TOFU-SCENE: explicit light choice ow
  await route.fulfill({response});await page.evaluate(async moduleUrl=>{await import(moduleUrl);},url);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','light');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);expect(await partyElapsed(page)).toBe(at);await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-offset',offset!);await tofuFullscreen(page,rejected);
  await page.getByRole('button',{name:'豆腐落下！',exact:true}).press('Enter');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.clock.runFor(550);await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-turn','1');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
 });
+// Bounded browser-process evidence only. No frame skipping, readback or GPU flush.
+async function traceNativeTofuClockChunk(page:Page){
+ const session=await page.context().browser()!.newBrowserCDPSession();
+ const failures:unknown[]=[],parts:Buffer[]=[];let handle:string|undefined,started=false,guardStopped=false,bytes=0;
+ let timer:ReturnType<typeof setTimeout>|undefined,stop:Promise<void>|undefined;
+ const completed=new Promise<{stream?:string;dataLossOccurred:boolean}>(resolve=>session.once('Tracing.tracingComplete',resolve));
+ const bounded=async<T,>(operation:Promise<T>,label:string,ms=5000)=>{let timeout:ReturnType<typeof setTimeout>|undefined;try{return await Promise.race([operation,new Promise<never>((_resolve,reject)=>{timeout=setTimeout(()=>reject(Error(`Native trace ${label} deadline`)),ms);})]);}finally{if(timeout)clearTimeout(timeout);}};
+ const end=()=>stop??=(async()=>{if(started)await bounded(session.send('Tracing.end'),'stop');})();
+ const wanted=['gpu','viz','cc','renderer.scheduler','devtools.timeline','toplevel','disabled-by-default-gpu.service'];
+ let categories:string[]=[],complete=false,dataLoss=false,clockCompleted=false;const begin=process.hrtime.bigint();
+ try{
+  const available=(await session.send('Tracing.getCategories')).categories;categories=wanted.filter(c=>available.includes(c));
+  if(!categories.length)throw Error('Native tracing categories unavailable');
+  await session.send('Tracing.start',{transferMode:'ReturnAsStream',streamFormat:'json',traceConfig:{recordMode:'recordUntilFull',traceBufferSizeInKb:8192,enableArgumentFilter:true,includedCategories:categories}});started=true;
+  timer=setTimeout(()=>{guardStopped=true;void end().catch(error=>failures.push(error));},12000);
+  try{await page.clock.runFor(1000);clockCompleted=true;}catch(error){failures.push(error);}
+  finally{if(timer)clearTimeout(timer);await end();}
+  const result=await bounded(completed,'completion');handle=result.stream;dataLoss=result.dataLossOccurred;
+  if(!handle)throw Error('Native trace stream missing');
+  await bounded((async()=>{for(;;){
+   const chunk=await session.send('IO.read',{handle,size:65536});
+   const data=Buffer.from(chunk.data,chunk.base64Encoded?'base64':'utf8');bytes+=data.length;
+   if(bytes>32*1024*1024)throw Error('Native trace exceeded bounded 32MiB output');
+   parts.push(data);if(chunk.eof){complete=true;break;}
+  }})(),'stream drain',5000);
+  await test.info().attach('tofu-idle-first-second-browser-trace.json',{body:Buffer.concat(parts),contentType:'application/json'});
+ }catch(error){failures.push(error);}
+ finally{
+  if(timer)clearTimeout(timer);
+  try{await end();}catch(error){failures.push(error);}
+  if(handle)try{await bounded(session.send('IO.close',{handle}),'stream close',2000);}catch(error){failures.push(error);}
+  try{await bounded(session.detach(),'detach',2000);}catch(error){failures.push(error);}
+ }
+ try{await test.info().attach('tofu-idle-first-second-browser-trace-status.json',{body:Buffer.from(JSON.stringify({
+  scope:'Bounded instrumented browser trace; not GPU-time, FPS or performance acceptance',
+  head:process.env.HEAD_SHA??null,run:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,
+  categories,diagnostic_total_wall_ms:Number(process.hrtime.bigint()-begin)/1e6,bytes,complete,dataLoss,guardStopped,clockCompleted,wholeWindow:clockCompleted&&complete&&!dataLoss&&!guardStopped&&failures.length===0,errors:failures.map(String),
+ })),contentType:'application/json'});}catch(error){failures.push(error);}
+ if(failures.length)throw failures[0];
+}
+
 for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} sixty-second idle expiry keeps zero score and no invented tower`,async({page})=>{
  // Keep the original native idle deadline. Hosted 0e95383e trace took about
  // 7.87s per simulated second; profiling below diagnoses, not relaxes, that
@@ -208,14 +249,14 @@ for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} s
    await session.send('Performance.enable');await session.send('Profiler.enable');
    const before=await session.send('Performance.getMetrics');
    await session.send('Profiler.start');const start=process.hrtime.bigint();
-   try{for(let i=0;i<3;i++)await page.clock.runFor(1000);}catch(error){failures.push(error);}
+   try{await traceNativeTofuClockChunk(page);for(let i=1;i<3;i++)await page.clock.runFor(1000);}catch(error){failures.push(error);}
    const wall_ms=Number(process.hrtime.bigint()-start)/1e6;
    try{
     const {profile}=await session.send('Profiler.stop');
     await test.info().attach('tofu-idle-first-three-seconds.cpuprofile',{body:Buffer.from(JSON.stringify(profile)),contentType:'application/json'});
     const after=await session.send('Performance.getMetrics');
     await test.info().attach('tofu-idle-first-three-seconds-metrics.json',{body:Buffer.from(JSON.stringify({
-     scope:'Instrumented first three native idle seconds; includes profiling overhead, not a performance acceptance result',
+     scope:'First three scheduled native idle chunks; first chunk includes browser tracing setup/drain; see actual elapsed. Includes all diagnostic overhead, not performance acceptance',
      wall_ms,before:before.metrics,after:after.metrics,
      elapsed:await partyElapsed(page),render:await page.locator('.pt-canvas').evaluate(el=>({...((el as HTMLElement).dataset)})),
     })),contentType:'application/json'});
