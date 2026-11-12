@@ -1,5 +1,5 @@
 import {GuildToolDirectory} from '../guild-tools/GuildToolDirectory';
-import {GuildToolPage} from '../guild-tools/GuildToolPage';
+import {RegisteredTools} from '../frame-tools/RegisteredTools';
 import {guildTool} from '../guild-tools/catalog';
 import {guildKeyFromHash,guildActionFromHash} from '../modules/guild-launchpad-route';
 import {lazy} from 'react';
@@ -35,7 +35,7 @@ export function PlaceView({context,render,defaultTab}:{context:PortalFeatureCont
  const key=guildKeyFromHash(route.hash);
  if(key&&(guildActionFromHash(route.hash)==='tools'||['guild_games','guild_ar'].includes(key)&&[undefined,'start'].includes(guildActionFromHash(route.hash)))) {
   const tool=route.toolId?guildTool(key,route.toolId):undefined;
-  return <GuildToolPage guildKey={key} tool={tool} site={site} onNavigate={hash=>selectTab('guilds',hash)}>{tool?.tool_id==='arcade'?<Arcade/>:tool?<>{tool.tool_id==='work'&&<label className="field">工作檢視<select aria-label="工作檢視" value={route.tab==='tasks'?'discovery':'execution'} onChange={e=>selectTab(e.target.value==='discovery'?'tasks':'workbench')}><option value="execution">我的工作</option><option value="discovery">探索任務</option></select></label>}{content}</>:<p role="status">找不到這個工具。</p>}</GuildToolPage>;
+  return <RegisteredTools guildKey={key} toolId={route.toolId} client={context.client} memberKey={context.session.user.user_id} tool={tool} site={site} onNavigate={hash=>selectTab('guilds',hash)}>{tool?.tool_id==='arcade'?<Arcade/>:tool?<>{tool.tool_id==='work'&&<label className="field">工作檢視<select aria-label="工作檢視" value={route.tab==='tasks'?'discovery':'execution'} onChange={e=>selectTab(e.target.value==='discovery'?'tasks':'workbench')}><option value="execution">我的工作</option><option value="discovery">探索任務</option></select></label>}{content}</>:<p role="status">找不到這個工具。</p>}</RegisteredTools>;
  }
  return <>{route.place==='me'&&context.canManagePlatform&&<a className="btn btn-secondary btn-small" href="/admin">管理</a>}{route.place==='guilds'&&!key&&context.canManageGuild&&<button type="button" className="btn btn-secondary btn-small" onClick={()=>selectTab('guild-workspace')}>公會管理</button>}{route.place==='guilds'&&!key&&<GuildToolDirectory onOpen={hash=>selectTab('guilds',hash)}/ >}{choices.length>0&&<label className="field">檢視<select aria-label={`${route.place==='explore'?'探索':route.place==='me'?'我的':'自動化'}檢視`} value={selected?.hash??choices[0].hash} onChange={event=>{const c=choices.find(c=>c.hash===event.target.value);if(c)selectTab(c.tab,c.hash)}}>{choices.map(c=><option value={c.hash} key={c.hash}>{c.title}</option>)}</select></label>}{content}</>;
 }

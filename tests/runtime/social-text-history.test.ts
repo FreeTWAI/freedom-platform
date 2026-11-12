@@ -408,3 +408,10 @@ test('mounted SocialTextTools mention disclosure',async t=>{
   h.click(h.button('標註會員'));advance(200);assert.equal(h.requests.length,1);await h.settle(0,{items:[]});assert.match(h.picker()!.textContent,/沒有符合的會員/);
  });
 });
+
+test('registered arcade canonical links and guided legacy links retain bounded challenge semantics',async()=>{
+ const {gameChallengeLink:parse}=await gameTextHarness(),origin='https://workshop.example.test',base='/#guilds/guild_games/tools/arcade';
+ for(const path of [base+'?game=cash&seed=42',base+'?game=kitchen&recipe=egg-fried-rice&practice=1&seed=42','/play?game=kitchen&recipe=egg-fried-rice&practice=1&seed=42'])assert.equal(parse(origin+path,origin)?.href,path);
+ for(const tail of ['?game=cash&seed=0','?game=cash&seed=42&url=https://evil.test','?game=kitchen&recipe=egg-fried-rice&practice=2&seed=42','?game=kitchen&recipe=egg-fried-rice&seed=42&practice=1'])assert.equal(parse(origin+base+tail,origin),null);
+ assert.equal(parse(origin+'/#guilds/guild_ar/tools/arcade?game=cash&seed=42',origin),null);
+});

@@ -1,0 +1,62 @@
+{
+  "format": "freedom.module/v1",
+  "module_id": "guild-tools",
+  "owner_role": "foundation",
+  "owned_paths": [
+    "modules/guild-tools/**",
+    "apps/platform-api/src/routes/guild-tools.ts",
+    "apps/portal-web/src/frame-tools/**",
+    "migrations/207_guild_tools.sql",
+    "tests/runtime/guild-tools.test.ts",
+    "tests/runtime/guild-tool-bridge.test.ts",
+    "tests/e2e/guild-tools.spec.ts",
+    "templates/guild-tool/**",
+    "apps/portal-web/public/guild-tool/**",
+    "tests/e2e/guild-tools-arcade.spec.ts"
+  ],
+  "public_exports": [
+    "modules/guild-tools/contract.ts",
+    "modules/guild-tools/service.ts"
+  ],
+  "dependencies": [
+    "command-core",
+    "shared",
+    "guild-workspace",
+    "shares",
+    "absurd-daily",
+    "platform-admin-portal",
+    "client-connections",
+    "portal-features"
+  ],
+  "contract_families": [],
+  "client_profiles": [
+    "member"
+  ],
+  "instructions": [
+    "AGENTS.md",
+    "DESIGN.md",
+    "packages/db/README.md"
+  ],
+  "invariants": [
+    "current-authority-before-replay",
+    "no-secrets-in-artifacts"
+  ],
+  "tests": [
+    "runtime.full"
+  ],
+  "surfaces": [
+    {
+      "surface_id": "guild-tools.member",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/guild-tools.ts",
+      "operations": [
+        "guild.tools.register",
+        "guild.tools.read",
+        "guild.tools.report",
+        "guild.tools.accept",
+        "guild.tools.disable"
+      ],
+      "auth_profile": "member-session"
+    }
+  ]
+}

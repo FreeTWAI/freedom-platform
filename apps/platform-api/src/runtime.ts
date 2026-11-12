@@ -36,6 +36,9 @@ export const SHARED_NETWORK_KEY = 'shared-server';
  * bindings, so no configuration is shared through process-wide state.
  */
 export type PlatformRuntime = {
+  /** Registration-only arbitrary public HTTPS transport; absent hides registration and fails closed. */
+  guildToolFetch?:(input:string,init?:RequestInit)=>Promise<Response>;
+  guildToolSigner?:import('../../../modules/guild-tools/tokens.js').ToolSigner;
   /** Optional Google login; false/absent is OFF. Secrets never enter public config. */
   googleLogin?: GoogleLoginOptions;
   afterResponse?:(work:()=>Promise<void>)=>void;

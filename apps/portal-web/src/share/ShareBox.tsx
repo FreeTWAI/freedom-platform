@@ -14,7 +14,7 @@ export function ShareBoxLauncher({client,userId,onChoose,disabled=false,storesEn
   const [draft,setDraft]=useState(()=>{try{return sessionStorage.getItem(`share-draft:${userId}`)??'';}catch{return '';}});
   useEffect(()=>installShareComposer((r,resolve)=>{finish.current?.({status:'cancelled'});finish.current=resolve;setRequest(r);if(!operation.current){if(r.url||r.text)setDraft(r.url??r.text??'');if(r.image)retainedImage.current=r.image;if(r.text||r.url||r.image)retainedMode.current=(r.text||r.image)&&!r.url?'post':'link';}}),[]);
   useEffect(()=>()=>{finish.current?.({status:'cancelled'});finish.current=null;},[]);
-  function done(result:ShareComposeResult){finish.current?.(result);finish.current=null;setRequest(null);trigger.current?.focus();if(result.status==='published'){operation.current=null;retainedImage.current=undefined;setDraft('');try{sessionStorage.removeItem(`share-draft:${userId}`);}catch{}if(result.url){if(result.url.startsWith('/events/'))window.location.assign(result.url);else window.location.hash=result.url.replace(/^\/+#/,'#');}}}
+  function done(result:ShareComposeResult){finish.current?.(result);finish.current=null;setRequest(null);trigger.current?.focus();if(result.status==='published'){operation.current=null;retainedImage.current=undefined;setDraft('');try{sessionStorage.removeItem(`share-draft:${userId}`);}catch{}if(result.url&&!request?.source){if(result.url.startsWith('/events/'))window.location.assign(result.url);else window.location.hash=result.url.replace(/^\/+#/,'#');}}}
   return <><button ref={trigger} className="btn btn-primary" disabled={disabled} aria-label="分享或提交" aria-haspopup="dialog" aria-expanded={request!==null} onClick={()=>void openShareComposer()}>＋分享</button>
     {request&&<ShareBox pending={operation} retainedImage={retainedImage} retainedMode={retainedMode} client={client} request={request} value={draft} onChange={v=>{setDraft(v);try{sessionStorage.setItem(`share-draft:${userId}`,v);}catch{/* Memory draft remains. */}}} onDone={done} onChoose={onChoose} storesEnabled={storesEnabled} onMyContent={onMyContent}/>}
   </>;
@@ -48,7 +48,7 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
         if(image){if(image.size>2*1024*1024||!['image/png','image/jpeg','image/webp'].includes(image.type))throw Error('圖片限 2 MB 的 PNG、JPEG 或 WebP。');const bytes=new Uint8Array(await image.arrayBuffer());let binary='';for(const b of bytes)binary+=String.fromCharCode(b);attached={mime_type:image.type,data_base64:btoa(binary)};}
         const post=await client.post<{post_id:string}>('/social-posts/notes',{...(p.body as object),...(attached?{image:attached}:{})},{idempotencyKey:p.key});p.postId=post.post_id;
       }
-      const result=await client.post<{share_id:string;url:string}>('/shares',p.postId?{kind:'post',ref_id:p.postId}:p.body,{idempotencyKey:p.key+'-share'});
+      const result=await client.post<{share_id:string;url:string}>('/shares',{...(p.postId?{kind:'post',ref_id:p.postId}:p.body as object),...(request.source?{source:request.source}:{})},{idempotencyKey:p.key+'-share'});
       if(current()){pending.current=null;finish({status:'published',...result});}
     }catch(e){if(current()){setError(e instanceof Error?e.message:'發布失敗，請重試。');if(e instanceof ApiError&&e.definitiveResponse&&!pending.current?.postId)pending.current=null;}}
     finally{if(current())setBusy(false);}

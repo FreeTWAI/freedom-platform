@@ -383,6 +383,8 @@ test('shares: committed credit reaches only its member feed once; replay, revers
  assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[id])).rows[0].n,0);
  const next=await req('/api/v1/agent/events?after='+encodeURIComponent(first.data.next_cursor),{token});assert.equal(next.status,200);assert.deepEqual(next.data.items,[]);
  assert.equal((await pool.query("SELECT count(*)::int n FROM agent_change_events WHERE resource_id=$1 AND kind='share.credited'",[id])).rows[0].n,1);
+});
+
 test('event adapter keeps the approved request digest and exposes scoped share and RSVP operations',async()=>{
  const session=await ready(),issued=await issue(session),token=issued.access_token,key=randomUUID();
  const body={kind:'event',url:'https://example.com/agent-event',event:{title:'Agent 分享合成活動',starts_at:'2099-01-01T10:00:00Z',location:'合成場地'}};

@@ -85,6 +85,75 @@ export const agentContract = {
     }
   },
   "paths": {
+    "/guilds/{guild}/tools/{tool}/token": {
+      "post": {
+        "operationId": "tools.identity",
+        "summary": "取得工具專屬身分",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "guild",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "tool",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。"
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。"
+          },
+          "403": {
+            "description": "權限不足或功能未開放。"
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。"
+          },
+          "429": {
+            "description": "已達限制，停止操作。"
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "operationId": "events.list",
