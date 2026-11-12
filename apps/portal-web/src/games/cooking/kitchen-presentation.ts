@@ -14,3 +14,10 @@ export function kitchenPresentation(v:KitchenViewport,zoom=1){
  // bounded buffer on both axes rather than discarding portrait width samples.
  return {left,right:left+horizontal*v.width/v.coreWidth,top,bottom:top-vertical*v.height/v.coreHeight,width:V.width,height:V.height};
 }
+
+/** A deliberate upward scoop starts on the pan, not a tap anywhere on stage. */
+export const kitchenPanStart=(p:{x:number;y:number})=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=.2&&p.x<=.8&&p.y>=.25&&p.y<=.82;
+export function kitchenPanStroke(from:{x:number;y:number},to:{x:number;y:number}){
+ const rise=from.y-to.y;
+ return kitchenPanStart(from)&&Number.isFinite(to.x)&&Number.isFinite(to.y)&&to.x>=.12&&to.x<=.88&&to.y>=.14&&to.y<=.88&&rise>=.12&&rise>Math.abs(to.x-from.x);
+}

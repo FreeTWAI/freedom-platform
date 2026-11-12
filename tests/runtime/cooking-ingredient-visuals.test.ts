@@ -1,3 +1,4 @@
+import * as kitchenPresentation from '../../apps/portal-web/src/games/cooking/kitchen-presentation';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -318,4 +319,67 @@ test('actual guide negative probe restores styles synchronously on success and m
     assert.throws(()=>f.probe({target,styles:{filter:'opacity(0)'}}),/measurement failed/);
     assert.equal(element.getAttribute('style'),before);
   }
+});
+
+
+test('pan scoop requires finite on-pan origin and a deliberate upward stroke, not a tap',()=>{
+ const {kitchenPanStart:start,kitchenPanStroke:stroke}=kitchenPresentation;
+ assert.equal(stroke({x:.5,y:.65},{x:.5,y:.42}),true);
+ for(const end of [{x:.5,y:.65},{x:.5,y:.6},{x:.7,y:.65},{x:.5,y:.85},{x:.9,y:.2},{x:NaN,y:.4}])assert.equal(stroke({x:.5,y:.65},end),false);
+ for(const origin of [{x:.1,y:.7},{x:.9,y:.7},{x:.5,y:.9},{x:Infinity,y:.5},{x:.5,y:NaN}]){assert.equal(start(origin),false);assert.equal(stroke(origin,{x:.5,y:.4}),false);}
+});
+
+// Exercise the actual input closures and domain. This is not native focus,
+// pointer capture, touchscreen or visual evidence; those stay in browser tests.
+function panInputHarness(){
+ const recipe=RECIPES.find(r=>r.id==='egg-fried-rice')!,step=recipe.steps.findIndex(s=>s.kind==='pan');
+ const live={current:{...domain.newCookingRun(recipe,42,'pan-input'),step,status:'playing' as const,lastNow:1000,active:{...domain.newCookingRun(recipe,42,'pan-input').active,amount:.5}}};
+ const gesture={current:null as any},holdOwner={current:null},pointFrame={current:0},pendingPoint={current:null},points:any[]=[];
+ let prevented=0,focused=0,captured=false;
+ const target={getBoundingClientRect:()=>({left:0,top:0,width:100,height:100}),setPointerCapture:()=>{captured=true;},hasPointerCapture:()=>captured,releasePointerCapture:()=>{captured=false;},focus:()=>{focused++;}};
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingGame.tsx',import.meta.url),'utf8');
+ const from=source.indexOf('  const currentZoom='),to=source.indexOf('  const holdButton=');assert.ok(from>=0&&to>from);
+ const env={...kitchenPresentation,live,gesture,holdOwner,pointFrame,pendingPoint,visualMode:'3d',currentStep:domain.currentStep,selectedIngredient:false,
+  setPoint:(p:any)=>points.push(p),paintPoint:(p:any)=>points.push(p),setSelectedIngredient(){},setNotice(){},flush(){},cancelAnimationFrame(){},
+  command:(action:any,at=live.current.step)=>{live.current=domain.actCooking(live.current,{...action,step:at},1000) as typeof live.current;},pause:()=>{gesture.current=null;live.current.status='paused' as any;},holdStart(){},holdEnd(){}};
+ const clearing=source.slice(source.indexOf('  const clearGesture='),source.indexOf('  const paintPoint='))+source.slice(source.indexOf('  const cancel=()=>'),source.indexOf('  const sameHold='));
+ const handlers=runInNewContext(transformSync(clearing+source.slice(from,to)+';module.exports={down,move,up,key,cancelPointer}',{loader:'ts',format:'cjs'}).code,{...env,module:{exports:{}}});
+ // transform's module.exports assignment is the last expression.
+ const h=handlers as {down:(e:any)=>void;move:(e:any)=>void;up:(e:any)=>void;key:(e:any,release?:boolean)=>void;cancelPointer:(e:any)=>void};
+ const event=(x=.5,y=.65,id=1)=>({clientX:x*100,clientY:y*100,pointerId:id,button:0,isPrimary:true,currentTarget:target,preventDefault:()=>prevented++});
+ return {...h,live,gesture,points,event,target,prevented:()=>prevented,focused:()=>focused};
+}
+test('actual pan pointer handlers reject taps, foreign pointers, outside starts and stale steps',()=>{
+ for(const type of ['mouse','touch']){
+  const h=panInputHarness(),e=(x:number,y:number,id=1)=>({...h.event(x,y,id),pointerType:type});
+  h.down(e(.1,.7));assert.equal(h.gesture.current,null);h.up(e(.5,.4));assert.equal(h.live.current.active.flipped,false);
+  h.down(e(.5,.65));h.up(e(.5,.65));assert.equal(h.live.current.active.flipped,false);
+  h.down(e(.5,.65));h.down(e(.55,.65,2));assert.equal((h.gesture.current as {id:number}|null)?.id,1);h.up(e(.5,.42,2));assert.equal(h.live.current.active.flipped,false);
+  h.up(e(.5,.42));assert.equal(h.live.current.active.flipped,true);assert.equal(h.gesture.current,null);assert.ok(h.focused()>0);
+  assert.equal(JSON.stringify(h.points.at(-1)),JSON.stringify({x:.5,y:.42}),'release keeps the actual spatula endpoint instead of snapping to default');
+  const last=h.live.current.active.lastAt;h.up(e(.5,.42));assert.equal(h.live.current.active.lastAt,last);
+ }
+ const stale=panInputHarness();stale.down(stale.event());stale.live.current.step++;stale.up(stale.event(.5,.42));assert.equal(stale.live.current.active.flipped,false);
+});
+test('actual pan keyboard remains accessible without a separate button and does not hijack fields',()=>{
+ for(const shortcut of [' ','f','F']){
+  const h=panInputHarness(),event=(tag='svg',repeat=false)=>({key:shortcut,repeat,target:{closest:()=>tag==='svg'?null:{}},preventDefault(){}});
+  h.key(event('svg',true));assert.equal(h.live.current.active.flipped,false);
+  h.key(event('input'));assert.equal(h.live.current.active.flipped,false);
+  h.key({...event(),ctrlKey:true});assert.equal(h.live.current.active.flipped,false);
+  h.key(event());assert.equal(h.live.current.active.flipped,true);
+ }
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingGame.tsx',import.meta.url),'utf8');
+ assert.ok(!source.includes("{s.kind==='pan'&&<button"));
+ const svg=readFileSync(new URL('../../apps/portal-web/src/games/cooking/CookingIllustration.tsx',import.meta.url),'utf8');
+ assert.ok(svg.includes("tabIndex={s.kind==='pan'&&run.status==='playing'?0:undefined}"));
+});
+
+test('actual pan cancellation clears the captured owner before reentry',()=>{
+ for(const type of ['mouse','touch']){
+  const h=panInputHarness(),e=(id=1)=>({...h.event(.5,.65,id),pointerType:type});
+  h.down(e());h.cancelPointer(e(2));assert.equal((h.gesture.current as {id:number}|null)?.id,1);
+  h.cancelPointer(e());assert.equal(h.gesture.current,null);h.up(h.event(.5,.42));assert.equal(h.live.current.active.flipped,false);
+  h.down(e());h.up(h.event(.5,.42));assert.equal(h.live.current.active.flipped,true);
+ }
 });

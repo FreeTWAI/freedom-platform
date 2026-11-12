@@ -512,7 +512,7 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
   if(s.kind==='knead')for(let i=0;i<s.goal;i++){await game.focus();await page.keyboard.down('Space');await page.clock.runFor(s.holdMs/2);if(i===0)await shot(s.kind,'press');await page.clock.runFor(s.holdMs/2);await page.keyboard.up('Space');await page.clock.runFor(160);}
   if(s.kind==='pan'||s.kind==='boil'||s.kind==='bake'){
    const slider=page.getByRole('slider'),b=(await slider.boundingBox())!;await slider.click({position:{x:8+(b.width-16)*s.heat/100,y:b.height/2}});
-   if(s.kind==='pan'){await page.clock.runFor(s.durationMs*.55);await shot(s.kind,'heated');await page.getByRole('button',{name:'翻面！',exact:true}).click();await page.clock.runFor(s.durationMs*.65);}
+   if(s.kind==='pan'){await page.clock.runFor(s.durationMs*.55);await shot(s.kind,'heated');{const b=(await page.locator('.ck-scene-pan').boundingBox())!;await expect(page.getByRole('button',{name:'翻面！',exact:true})).toHaveCount(0);await page.mouse.move(b.x+b.width*.5,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.5,b.y+b.height*.42,{steps:5});await page.mouse.up();}await page.clock.runFor(s.durationMs*.65);}
    if(s.kind==='boil'){for(let i=0;i<3;i++){await page.clock.runFor(2300);if(i===0)await shot(s.kind,'foam');const skim=page.getByRole('button',{name:/撈掉泡沫/});if(await skim.isEnabled())await skim.click();}await page.clock.runFor(3000);}
    if(s.kind==='bake'){await page.clock.runFor(s.durationMs*.8);await shot(s.kind,'baked');await page.getByRole('button',{name:'出爐！',exact:true}).click();}
   }
@@ -544,7 +544,29 @@ for(const viewport of [{width:390,height:844},{width:667,height:375},{width:1440
   const body=await capturePreparationScreenshot(stage,testInfo,`${prefix}.png`),canvas=await capturePreparationScreenshot(native,testInfo,`${prefix}-native.png`);
   frames.push({name,requestedVirtualMs,pageClockMs,sha256:createHash('sha256').update(body).digest('hex'),nativeSha256:createHash('sha256').update(canvas).digest('hex')});
  };
- await capture('before',0);await page.getByRole('button',{name:'翻面！',exact:true}).click();const strokeClockMs=await page.evaluate(()=>performance.now());
+ const panScene=page.locator('.ck-scene-pan'),b=(await panScene.boundingBox())!;
+ await expect(page.getByRole('button',{name:'翻面！',exact:true})).toHaveCount(0);
+ const flipped=()=>page.evaluate(key=>JSON.parse(sessionStorage.getItem(key)!).run.active.flipped,COOKING_RUN_KEY);
+ // Real pointer input: tapping and dragging sideways are not a hidden flip button.
+ await page.mouse.click(b.x+b.width*.5,b.y+b.height*.65);expect(await flipped()).toBe(false);
+ await page.mouse.move(b.x+b.width*.45,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.65,b.y+b.height*.65);await page.mouse.up();expect(await flipped()).toBe(false);
+ await page.mouse.move(b.x+b.width*.1,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.5,b.y+b.height*.42);await page.mouse.up();expect(await flipped()).toBe(false);
+ await capture('before',0);
+ if(viewport.width===390){
+  // CDP feeds Chromium's native touch input path, not a dispatched DOM event or
+  // injected application state. A cancelled finger cannot complete a scoop.
+  const touch=await page.context().newCDPSession(page);
+  try{await touch.send('Emulation.setTouchEmulationEnabled',{enabled:true});
+   const points=(y:number)=>[{x:b.x+b.width*.5,y:b.y+b.height*y,id:1}];
+   await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:points(.65)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(.5)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});expect(await flipped()).toBe(false);
+   await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:points(.65)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(.42)});
+   await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }finally{await touch.send('Emulation.setTouchEmulationEnabled',{enabled:false});await touch.detach();}
+ }else{await page.mouse.move(b.x+b.width*.5,b.y+b.height*.65);await page.mouse.down();await page.mouse.move(b.x+b.width*.5,b.y+b.height*.42,{steps:5});await page.mouse.up();}
+ expect(await flipped()).toBe(true);const strokeClockMs=await page.evaluate(()=>performance.now());
  let previous=0;for(const [name,offset] of [['push',100],['lift',225],['settled',500]] as const){await page.clock.runFor(offset-previous);await capture(name,offset);previous=offset;}
  await testInfo.attach(`scoop-${viewport.width}x${viewport.height}-timeline.json`,{body:Buffer.from(JSON.stringify({recipe:recipe.id,seed:42,viewport,strokeClockMs,frames,note:'Native screenshots at requested virtual offsets; no synthesized frames, not a measured real-time video.'},null,2)),contentType:'application/json'});
  expect(new Set(frames.map(f=>f.nativeSha256)).size).toBeGreaterThan(1);expect(frames[2].pageClockMs).toBeGreaterThan(frames[1].pageClockMs);expect(frames[3].pageClockMs-strokeClockMs).toBeGreaterThanOrEqual(450);
