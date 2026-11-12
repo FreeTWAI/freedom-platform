@@ -161,10 +161,10 @@ export const TESTER_AREAS: readonly TesterArea[] = [
   {
     id: 'profile', owners: ['C', 'D'],
     name: ['個人空間與帳號', 'Personal space and account', '個人スペースとアカウント', '개인 공간과 계정', 'Espacio personal y cuenta'],
-    summary: ['#profile、頭像選單、名片、我的內容與帳號安全。', '#profile, avatar menu, profile card, My content and account security.', '#profile、アバターメニュー、名刺、自分のコンテンツ、セキュリティ。', '#profile, 아바타 메뉴, 프로필 카드, 내 콘텐츠, 계정 보안.', '#profile, menú del avatar, tarjeta, Mi contenido y seguridad.'],
+    summary: ['#profile、設定選單、名片、我的內容與帳號安全。', '#profile, settings menu, profile card, My content and account security.', '#profile、設定メニュー、名刺、自分のコンテンツ、セキュリティ。', '#profile, 설정 메뉴, 프로필 카드, 내 콘텐츠, 계정 보안.', '#profile, menú de ajustes, tarjeta, Mi contenido y seguridad.'],
     features: [
       { id: 'profile.space', pages: ['profile'], href: '#profile', redesign: [1010], name: ['#profile 本人空間（非公開牆）', '#profile personal space (not a public wall)', '#profile 個人スペース（公開ウォールではない）', '#profile 개인 공간(공개 담벼락 아님)', '#profile espacio personal (no es un muro público)'] },
-      { id: 'profile.menu', pages: ['profile', 'account'], redesign: [1010], name: ['頭像選單：語言（5 種）與外觀（5 種）', 'Avatar menu: language (5) and appearance (5)', 'アバターメニュー：言語（5）と外観（5）', '아바타 메뉴: 언어(5)와 테마(5)', 'Menú del avatar: idioma (5) y apariencia (5)'] },
+      { id: 'profile.menu', pages: ['profile', 'account'], redesign: [1010], name: ['設定選單：語言（5 種）與外觀（5 種）', 'Settings menu: language (5) and appearance (5)', '設定メニュー：言語（5）と外観（5）', '설정 메뉴: 언어(5)와 테마(5)', 'Menú de ajustes: idioma (5) y apariencia (5)'] },
       { id: 'profile.card', pages: ['account'], href: '#account', name: ['我的名片、頭像與公開範圍', 'Profile card, avatar and visibility', '名刺・アバター・公開範囲', '프로필 카드 · 아바타 · 공개 범위', 'Tarjeta, avatar y visibilidad'] },
       { id: 'profile.community-certification', pages: ['account'], flag: 'community_certification_enabled', name: ['人工社群認證（非實名查驗；未啟用候選）', 'Manual community review (not identity verification; disabled candidate)', '手動のコミュニティ認証（本人確認ではない・無効の候補）', '수동 커뮤니티 인증(본인 확인 아님 · 비활성 후보)', 'Revisión comunitaria manual (no verifica identidad; candidato desactivado)'] },
       { id: 'profile.social-titles', pages: ['account'], flag: 'social_achievements_enabled', name: ['自願累積社群稱號（未啟用候選）', 'Opt-in social titles (disabled candidate)', '任意参加の称号（無効の候補）', '선택 참여 칭호(비활성 후보)', 'Títulos voluntarios (candidato desactivado)'] },
@@ -212,11 +212,11 @@ export const TESTER_AREAS: readonly TesterArea[] = [
   {
     id: 'search', owners: ['B', 'D'],
     name: ['搜尋', 'Search', '検索', '검색', 'Búsqueda'],
-    summary: ['搜尋社群內容、分頁清單與功能搜尋。', 'Community search, paginated lists and feature search.', 'コミュニティ検索、ページ送り、機能検索。', '커뮤니티 검색, 목록 페이지, 기능 찾기.', 'Búsqueda en la comunidad, listas paginadas y funciones.'],
+    summary: ['搜尋社群內容、分頁清單與五個入口導覽。', 'Community search, paginated lists and five-place navigation.', 'コミュニティ検索、ページ送り、5つの入口。', '커뮤니티 검색, 목록 페이지, 다섯 입구 탐색.', 'Búsqueda en la comunidad, listas paginadas y cinco entradas.'],
     features: [
       { id: 'search.content', pages: ['community-search'], href: '#community-search', flag: 'community_search_enabled', redesign: [998], name: ['搜尋社群內容（會員與未登入）', 'Community search (members and signed out)', 'コミュニティ検索（会員・未ログイン）', '커뮤니티 검색(회원 · 비로그인)', 'Búsqueda (con y sin sesión)'] },
       { id: 'search.lists', pages: ['community-search', 'friends'], redesign: [998], name: ['分頁清單與切換帳號後的結果', 'Paginated lists and results after switching accounts', 'ページ送りとアカウント切り替え後の結果', '목록 페이지와 계정 전환 후 결과', 'Listas paginadas y resultados al cambiar de cuenta'] },
-      { id: 'search.features', name: ['導覽「搜尋功能」', 'Navigation “Find a feature”', 'ナビの「機能を探す」', '내비게이션 “기능 찾기”', '«Buscar una función» en la navegación'] },
+      { id: 'search.features', name: ['五個入口與上一頁', 'Five places and browser Back', '5つの入口とブラウザーの戻る', '다섯 입구와 브라우저 뒤로 가기', 'Cinco entradas y Atrás del navegador'] },
       { id: 'search.relations', pages: ['my-content'], flag: 'community_relations_enabled', name: ['書籤與追蹤', 'Bookmarks and follows', 'ブックマークとフォロー', '북마크와 팔로우', 'Marcadores y seguimientos'] },
     ],
   },
@@ -249,7 +249,7 @@ export const TESTER_AREAS: readonly TesterArea[] = [
       { id: 'contrib.opensource', pages: ['opensource'], href: '#opensource', name: ['開源投稿', 'Share open source', 'オープンソース投稿', '오픈 소스 공유', 'Compartir código abierto'] },
       { id: 'contrib.marketing', pages: ['marketing'], href: '#marketing', name: ['行銷工作室', 'Marketing studio', 'マーケティング', '마케팅 스튜디오', 'Estudio de marketing'] },
       { id: 'contrib.services', pages: ['services'], href: '#services', name: ['社員服務', 'Member services', 'メンバーのサービス', '회원 서비스', 'Servicios de miembros'] },
-      { id: 'contrib.promotion', pages: ['promotion'], href: '#promotion', name: ['推廣排行榜', 'Promotion rankings', '紹介ランキング', '홍보 순위', 'Clasificación de difusión'] },
+      { id: 'contrib.promotion', pages: ['promotion'], href: '#promotion', name: ['我的貢獻', 'My contributions', '自分の貢献', '내 기여', 'Mis contribuciones'] },
       { id: 'contrib.private-ai', pages: ['private-ai'], flag: 'FREEDOM_PRIVATE_AI_ENABLED', name: ['私人工作與 AI', 'Private work and AI', '非公開の作業とAI', '비공개 작업과 AI', 'Trabajo privado e IA'] },
     ],
   },
