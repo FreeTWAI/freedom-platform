@@ -1,5 +1,6 @@
 import {RecentEvents} from './share/RecentEvents';
-import {GuildToolPage} from './guild-tools/GuildToolPage';
+import {ToolShareResume} from './frame-tools/ToolShareResume';
+import {RegisteredTools} from './frame-tools/RegisteredTools';
 import {guildTool} from './guild-tools/catalog';
 import {canonicalHash,currentLegacyHash,legacyHash,replaceLegacyAddress,resolvePortalRoute,PORTAL_PLACES} from './portal-route';
 import {SeasonalWelcome} from './seasonal/SeasonalTheme';
@@ -328,9 +329,10 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     // Authentication callbacks take precedence over every guest publication entry.
     const publicToolRoute=resolvePortalRoute(window.location.hash);
     const catalogGuild=guildKeyFromHash(window.location.hash);
-    if(!googleCallback&&!resetToken&&catalogGuild&&guildActionFromHash(window.location.hash)==='tools'&&!publicToolRoute.toolId)return <main className="main stack"><BrandPoster compact/><GuildToolPage guildKey={catalogGuild} site={site}/></main>;
+    if(!googleCallback&&!resetToken&&catalogGuild&&guildActionFromHash(window.location.hash)==='tools'&&!publicToolRoute.toolId)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={catalogGuild} site={site}/></main>;
     const publicTool=publicToolRoute.guildKey&&publicToolRoute.toolId?guildTool(publicToolRoute.guildKey,publicToolRoute.toolId):undefined;
-    if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/><GuildToolPage guildKey={publicTool.guild_key} tool={publicTool} site={site}><PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></GuildToolPage></main>;
+    if(!googleCallback&&!resetToken&&publicToolRoute.guildKey&&publicToolRoute.toolId&&!publicTool)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicToolRoute.guildKey} toolId={publicToolRoute.toolId}/></main>;
+    if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicTool.guild_key} tool={publicTool} site={site}><PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></RegisteredTools></main>;
     if(!googleCallback&&!resetToken&&!profileLoginRequested&&profileRoute?.kind==='visitor'&&canOpenGuestProfile(locationHash,window.location.search))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><h1>個人頁</h1><VisitorProfile client={client} id={profileRoute.id} onLogin={beginProfileLogin}/><a className="btn btn-secondary btn-small" href="#home">返回自由工坊</a></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
@@ -1065,7 +1067,7 @@ function Workspace({
                 sessionGeneration={client.sessionGeneration} availablePageIds={Object.keys(TAB_TITLES)} guildLaunchpadEnabled={site?.guild_launchpad_enabled}
                 mobileOpen={mobileOpen} messagesOpen={messagesOpen} pending={Boolean(pending)} accessExpired={Boolean(error?.accessExpired)} onNavigate={navigateFromHelper} onHelperReady={receiveHelper}/><ShareLauncher key={session.user.user_id+client.sessionGeneration} client={client} userId={session.user.user_id} onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
             </header>
-            <div className="workspace-content">
+            <div className="workspace-content"><ToolShareResume/>
               <GuideHost key={helperScope} pageId={consoleRoute ? 'supplier-console' : tab} scopeKey={session.user.user_id}
                 helperAction={helperReady?.scope===helperScope?helperReady.action:undefined}
                 memberAccess={!error?.accessExpired && !mobileOpen && !pending && (tab !== 'guild-workspace' || canManageGuild) && (!['business', 'stores'].includes(tab) || site?.guild_launchpad_enabled === true)}/>

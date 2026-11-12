@@ -1,4 +1,5 @@
 import {eventOrganizerClaims,reviewEventOrganizer} from '../../../../modules/community/event-claims.js';
+import {adminTools,disableToolAsAdmin} from '../../../../modules/guild-tools/admin.js';
 import {createCommunityCertificationAdminRoutes} from './community-certification.js';
 import type {EffectJournalPort} from '../../../../modules/agent-commerce/operations/journal/journal.js';
 import {createCommerceAdmissionRoutes} from './commerce-admissions.js';
@@ -84,6 +85,8 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
     await refreshGuildDiscoveryReports(pool,{communityId:c.get('admin').community_id,reviewer:github.guildReviewer});
     return c.json({...await guildDiscoveryReport(pool,c.get('admin').community_id),ai_configured:Boolean(github.guildReviewer)});
   });
+  app.get('/guild-tools',async c=>c.json(await adminTools(pool,c.get('admin'))));
+  app.post('/guild-tools/:id/disable',async c=>c.json(await disableToolAsAdmin(pool,await command(c),c.req.param('id'))));
   app.get('/guilds',async c=>c.json({items:await adminGuilds(pool,c.get('admin'))}));
   app.get('/guilds/:key/master-candidates',async c=>c.json(await adminGuildMasterCandidates(pool,c.get('admin'),c.req.param('key'),c.req.query())));
   app.post('/guilds/:key/master',async c=>result(c,await appointGuildMaster(pool,await command(c),z.string().min(1).max(100).parse(c.req.param('key')))));

@@ -13,7 +13,7 @@ import { shareAdapter } from './adapters/registry.js';
 import { existingTitle } from './adapters/existing.js';
 import { appendCredit } from './credit.js';
 import type { AdapterContext, PreparedShare, ShareRow } from './types.js';
-export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional()}).strict();
+export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional(),source:z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),guild_key:z.string().regex(/^guild_[a-zA-Z0-9_]+$/),ref:z.string().max(200).optional()}).strict().optional()}).strict();
 async function lockEventSource(q:PoolClient,actor:Actor,id:string){
  await q.query(`SELECT e.event_id FROM community_events e JOIN shares s ON s.ref_id=e.event_id AND s.kind='event' WHERE s.share_id=$1 AND s.community_id=$2 FOR UPDATE OF e`,[id,actor.community_id]);
 }
@@ -55,6 +55,7 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
   const p=prior?null:await prepare(pool,input,context);
   requireCondition(!p?.event,422,'event_details_required','請確認活動名稱、時間和地點。');
   return command(pool,input,async q=>{
+    if(body.source)requireCondition((await q.query("SELECT 1 FROM guild_tools WHERE guild_key=$1 AND tool_id=$2 AND community_id=$3 AND state='enabled' AND scopes ? 'share:compose' FOR SHARE",[body.source.guild_key,body.source.tool_id,input.actor.community_id])).rowCount,403,'tool_unavailable','工具已停用或未允許分享。');
     const current=await receipt(q);
     if(current)await readShare(q,input.actor,current.share_id,true);
     if(p)await shareAdapter(body).authorize?.(q,input.actor,p);
@@ -74,6 +75,7 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
     requireCondition(!input.actor.agent||s.first_sharer_user_id===input.actor.user_id,404,'not_found','找不到分享。');
     requireCondition(s.state==='published',409,'share_unavailable','這份分享已停止公開。');
     await appendCredit(q,{share_id:s.share_id,community_id:s.community_id,user_id:input.actor.user_id,role:created?'sharer':'co_sharer',basis:created?'created':'shared_again',source_ref:`share:${s.share_id}:${input.actor.user_id}`,actor_user_id:input.actor.user_id});
+    if(body.source)await q.query('INSERT INTO guild_tool_share_sources(share_id,tool,revision,member) SELECT $1,id,revision,$2 FROM guild_tools WHERE guild_key=$3 AND tool_id=$4 ON CONFLICT DO NOTHING',[s.share_id,input.actor.user_id,body.source.guild_key,body.source.tool_id]);
     if(created)await journal(q,input.actor,'share',s.share_id,1,'publish',{kind:s.kind});
     return {share_id:s.share_id,created,url:`/#shares/${s.share_id}`};
   });
