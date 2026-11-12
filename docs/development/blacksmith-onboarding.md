@@ -3,8 +3,8 @@
 Tracking and future admission ledger: [#866](https://github.com/FreeTWAI/freedom-platform/issues/866).
 
 The [workflow](../../.github/workflows/blacksmith-onboarding.yml) is an optional
-onboarding benchmark, not a required check or substitute for Verify, CodeQL or
-the existing CircleCI worker-unit lane. It provides connection/build evidence only.
+onboarding benchmark, not a required check or substitute for Verify or CodeQL.
+It provides connection/build evidence only.
 Its short workload does not prove that Blacksmith saves time on our bottleneck.
 There is no automatic routing, deployment or paid overage authorization.
 
