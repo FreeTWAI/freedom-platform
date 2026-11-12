@@ -28,7 +28,10 @@ function attributes(source:string):Map<string,string>|null {
   const attrs=new Map<string,string>();let offset=0;
   const pattern=/\s+([a-zA-Z][a-zA-Z0-9_-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'`=<>]+)))?/y;
   while(offset<source.length){
-    if(/^\s*\/?\s*$/.test(source.slice(offset)))break;
+    // Two adjacent whitespace repetitions backtrack quadratically on a long
+    // whitespace prefix followed by an attribute. Trim once, then compare.
+    const remaining=source.slice(offset).trim();
+    if(remaining===''||remaining==='/')break;
     pattern.lastIndex=offset;const m=pattern.exec(source);if(!m)return null;offset=pattern.lastIndex;
     const name=m[1].toLowerCase();if(!attrs.has(name))attrs.set(name,m[2]??m[3]??m[4]??'');
   }

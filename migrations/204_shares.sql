@@ -11,6 +11,7 @@ CREATE TABLE shares (
   title text NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
   first_sharer_user_id uuid REFERENCES users,
   state text NOT NULL DEFAULT 'published' CHECK (state IN ('published','hidden','retracted')),
+  reports_confirmed_at timestamptz,
   guild_key text REFERENCES positioning_guild_catalog(guild_key),
   editor_notes jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(editor_notes)='object'),
   legacy_ref jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(legacy_ref)='array'),
@@ -49,7 +50,15 @@ CREATE TABLE share_credit_events (
 );
 -- Identity belongs to the fact, not to its recipient: one star/registration cannot credit two members.
 CREATE UNIQUE INDEX share_credit_fact ON share_credit_events(community_id,basis,source_ref) WHERE units=1;
-CREATE UNIQUE INDEX share_credit_sharer ON share_credit_events(share_id,user_id) WHERE basis IN ('created','shared_again') AND units=1;
+-- Endorsements have their own lifecycle; the ledger retains every credited cycle.
+CREATE TABLE share_endorsements (
+  endorsement_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  share_id uuid NOT NULL REFERENCES shares,
+  user_id uuid NOT NULL REFERENCES users,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  withdrawn_at timestamptz
+);
+CREATE UNIQUE INDEX share_endorsement_active ON share_endorsements(share_id,user_id) WHERE withdrawn_at IS NULL;
 CREATE INDEX share_credit_member ON share_credit_events(community_id,user_id,created_at DESC);
 CREATE FUNCTION share_credit_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE s shares; prior share_credit_events;
@@ -69,6 +78,7 @@ BEGIN
   IF NEW.actor_user_id IS NOT NULL AND (is_verification_test_account(NEW.actor_user_id)
     OR NOT EXISTS(SELECT 1 FROM users WHERE user_id=NEW.actor_user_id AND community_id=NEW.community_id AND active)) THEN RETURN NULL; END IF;
   IF NEW.basis IN ('star_confirmed','registration','qualified_click_day') AND NEW.actor_user_id=NEW.user_id THEN RETURN NULL; END IF;
+  IF NEW.role IN ('sharer','co_sharer') AND NOT EXISTS(SELECT 1 FROM share_endorsements WHERE share_id=NEW.share_id AND user_id=NEW.user_id AND withdrawn_at IS NULL) THEN RETURN NULL; END IF;
   IF NEW.basis='star_confirmed' AND NEW.actor_user_id IS NULL THEN RAISE EXCEPTION 'star requires a confirmed member'; END IF;
   IF NEW.basis='created' AND NEW.user_id IS DISTINCT FROM s.first_sharer_user_id THEN RAISE EXCEPTION 'invalid first sharer'; END IF;
   IF NEW.basis='shared_again' AND NEW.user_id=s.first_sharer_user_id THEN RETURN NULL; END IF;
@@ -81,11 +91,6 @@ BEGIN
   IF ROW(NEW.share_id,NEW.community_id,NEW.kind,NEW.canonical_key,NEW.repo_id,NEW.ref_table,NEW.ref_id,NEW.first_sharer_user_id,NEW.created_at)
     IS DISTINCT FROM ROW(OLD.share_id,OLD.community_id,OLD.kind,OLD.canonical_key,OLD.repo_id,OLD.ref_table,OLD.ref_id,OLD.first_sharer_user_id,OLD.created_at)
     THEN RAISE EXCEPTION 'share identity is immutable'; END IF;
-  IF NEW.state<>OLD.state AND NEW.state<>'published' THEN
-    INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref,actor_user_id,reverses_event_id)
-      SELECT community_id,share_id,user_id,role,basis,-1,source_ref,actor_user_id,event_id
-      FROM share_credit_events WHERE share_id=OLD.share_id AND units=1 ON CONFLICT DO NOTHING;
-  END IF;
   RETURN NEW;
 END $$;
 CREATE TRIGGER shares_retained BEFORE UPDATE OR DELETE ON shares FOR EACH ROW EXECUTE FUNCTION shares_guard();
@@ -93,6 +98,9 @@ CREATE TABLE share_reports (
   share_id uuid NOT NULL REFERENCES shares,
   user_id uuid NOT NULL REFERENCES users,
   reason text NOT NULL CHECK (length(reason) BETWEEN 1 AND 500),
+  eligible boolean NOT NULL,
+  dismissed_at timestamptz,
+  confirmed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(share_id,user_id)
 );

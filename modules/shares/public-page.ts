@@ -10,8 +10,7 @@ export async function publicSharePage(pool:Pool,id:string,origin:string,via?:str
   const share=(await q.query(`SELECT share_id,title,kind,canonical_url,repo_id FROM shares WHERE share_id=$1 AND kind IN ('repository','link') AND state='published'
     AND (first_sharer_user_id IS NULL OR NOT is_verification_test_account(first_sharer_user_id))`,[id])).rows[0];
   requireCondition(share,404,'not_found','找不到分享。');
-  const count=(await q.query(`SELECT count(*)::int n FROM share_credit_events e WHERE share_id=$1 AND basis IN ('created','shared_again') AND units=1
-    AND NOT EXISTS(SELECT 1 FROM share_credit_events r WHERE r.reverses_event_id=e.event_id)`,[id])).rows[0].n;
+  const count=(await q.query(`SELECT count(*)::int n FROM share_endorsements WHERE share_id=$1 AND withdrawn_at IS NULL AND NOT is_verification_test_account(user_id)`,[id])).rows[0].n;
   return {share,count,repository:share.repo_id?await repositoryPage(q,share.repo_id):null};
  });
  const {share:s,repository:r}=data;

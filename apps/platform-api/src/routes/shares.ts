@@ -23,7 +23,11 @@ export function createShareRoutes(pool:Pool,context:AdapterContext={},loadSocial
   app.get('/shares/:share_id',async c=>{
     const result=await readWithMemberSession(pool,c.get('actor'),async q=>{
       const s=await visibleShare(q,c.get('actor'),z.uuid().parse(c.req.param('share_id')));
-      const sharers=(await q.query(`SELECT u.display_name,e.role FROM share_credit_events e JOIN users u USING(user_id) WHERE e.share_id=$1 AND e.units=1 AND e.basis IN ('created','shared_again','claim_verified') AND NOT EXISTS(SELECT 1 FROM share_credit_events r WHERE r.reverses_event_id=e.event_id) ORDER BY e.created_at LIMIT 50`,[s.share_id])).rows;
+      const sharers=(await q.query(`SELECT u.display_name,CASE WHEN e.user_id=$2 THEN 'sharer' ELSE 'co_sharer' END AS role
+        FROM share_endorsements e JOIN users u USING(user_id) WHERE e.share_id=$1 AND e.withdrawn_at IS NULL AND NOT is_verification_test_account(e.user_id)
+        UNION ALL SELECT u.display_name,e.role FROM share_credit_events e JOIN users u USING(user_id)
+        WHERE e.share_id=$1 AND e.basis='claim_verified' AND e.units=1 AND NOT EXISTS(SELECT 1 FROM share_credit_events r WHERE r.reverses_event_id=e.event_id)
+        LIMIT 50`,[s.share_id,s.first_sharer_user_id])).rows;
       const {editor_notes:archivedNotes,...publicFields}=s;
       return {...publicFields,sharers,repository:s.repo_id?await repositoryPage(q,s.repo_id):null};
     });

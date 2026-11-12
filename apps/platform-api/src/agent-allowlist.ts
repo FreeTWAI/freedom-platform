@@ -38,6 +38,8 @@ export const agentOperations: readonly AgentOperation[] = [
   {id:'shares.report',method:'POST',route:'/api/v1/shares/:share_id/report',scope:'share',title:'檢舉分享（限本人）',screen:'shares',granted:false,example:{reason:'內容不適當'}},
   {id:'shares.links',method:'POST',route:'/api/v1/shares/:share_id/links',scope:'share',title:'建立自己的分享連結',screen:'shares',example:{}},
   {id:'shares.star',method:'POST',route:'/api/v1/shares/:share_id/star',scope:'react',title:'收藏分享（未開放）',screen:'shares',granted:false,example:{}},
+  {id:'shares.restore',method:'POST',route:'/admin/api/shares/:id/restore',scope:'share',title:'恢復分享（限管理員）',screen:'shares',granted:false},
+  {id:'shares.confirm',method:'POST',route:'/admin/api/shares/:id/confirm',scope:'share',title:'確認檢舉（限管理員）',screen:'shares',granted:false},
   {id:'credit.read',method:'GET',route:'/api/v1/me/credit',scope:'read',title:'我的貢獻',screen:'credit'},
 ];
 // Report, claim and star are person-only. No react routes are granted in pass 1.
