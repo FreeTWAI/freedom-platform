@@ -1,8 +1,8 @@
 {
   "format": "freedom.party-art/v1",
-  "created_at": "2026-11-12T03:13:38.463Z",
+  "created_at": "2026-11-12T05:20:20.473Z",
   "source": "apps/portal-web/src/games/party/stage.ts",
-  "source_sha256": "424eb678de05f520a7bfbae3ef900f6ed1a4dae2cccd6034a67edc12908762b3",
+  "source_sha256": "32afbe8be2582535471e224bcac4b7085b10a45446818157a891711aec94d989",
   "native_canvas": {
     "width": 640,
     "height": 480,
@@ -19,13 +19,13 @@
     "dpr": 1
   },
   "compiled_factory": {
-    "file": "_native-party-fixture-CNwAZymK.js",
-    "sha256": "cccd10950aaa63748f7d87fc9895f2131e464edb72f3634276937f3727067c61"
+    "file": "_native-party-fixture-BXAVzlEh.js",
+    "sha256": "0947d8160780726c980d9cfb2823b550fbebfd51774e367e3fbd5e0b9e6ead95"
   },
   "source_inputs": [
     {
       "path": "apps/portal-web/src/games/party/stage.ts",
-      "sha256": "424eb678de05f520a7bfbae3ef900f6ed1a4dae2cccd6034a67edc12908762b3"
+      "sha256": "32afbe8be2582535471e224bcac4b7085b10a45446818157a891711aec94d989"
     },
     {
       "path": "apps/portal-web/src/games/stage-batch.ts",
@@ -89,9 +89,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 37.299999999813735,
-        "construct": 271.10000000009313,
-        "capture": 287.30000000004657
+        "import": 54.39999999990687,
+        "construct": 317.39999999990687,
+        "capture": 360.70000000018626
       }
     },
     {
@@ -113,9 +113,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.10000000009313226,
-        "construct": 132.30000000004657,
-        "capture": 322.19999999995343
+        "import": 0.19999999972060323,
+        "construct": 168.60000000009313,
+        "capture": 394.10000000009313
       }
     },
     {
@@ -137,9 +137,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999986030161,
-        "construct": 121.19999999995343,
-        "capture": 231.30000000004657
+        "import": 0.10000000009313226,
+        "construct": 166.89999999990687,
+        "capture": 281.1999999997206
       }
     }
   ]
