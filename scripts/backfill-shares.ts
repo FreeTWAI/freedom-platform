@@ -11,6 +11,6 @@ const pool=new Pool({connectionString:raw});
 try{
  // Optional read-only token so the one-off run is not held to GitHub's anonymous limit.
  const plan=await planShareBackfill(pool,{token:process.env.SHARES_BACKFILL_GITHUB_TOKEN||undefined});
- const dry=await applyShareBackfill(pool,plan,false);console.log(JSON.stringify({mode:'dry-run',counts:dry}));
- if(process.argv.includes('--apply')){const applied=await applyShareBackfill(pool,plan,true);console.log(JSON.stringify({mode:'apply',counts:applied}));}
+ const dry=await applyShareBackfill(pool,plan,false);console.log(JSON.stringify({mode:'dry-run',counts:dry,unresolved:plan.unresolved}));
+ if(process.argv.includes('--apply')){const applied=await applyShareBackfill(pool,plan,true);console.log(JSON.stringify({mode:'apply',counts:applied,unresolved:plan.unresolved}));}
 }finally{await pool.end();}

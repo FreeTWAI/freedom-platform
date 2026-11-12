@@ -1,3 +1,4 @@
+import {Problem} from '../../packages/shared/problem.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {communityCatalog,type SkillBook} from '../community/catalog.js';
@@ -9,7 +10,7 @@ import type {AdapterContext,RepositoryFacts} from './types.js';
 type Legacy={kind:'oss_project'|'skill_submission'|'book';id:string};
 type Source={community:string;url:string;owner:string|null;created:string;legacy:Legacy;notes:unknown};
 type Group={community:string;facts:RepositoryFacts;sources:Source[]};
-export type BackfillPlan={repositories:Group[];events:{event_id:string;community_id:string;organizer_ref:string;title:string;created_at:Date}[]};
+export type BackfillPlan={unresolved:{url:string;code:string;legacy:Legacy}[];repositories:Group[];events:{event_id:string;community_id:string;organizer_ref:string;title:string;created_at:Date}[]};
 export async function planShareBackfill(pool:Pool,context:AdapterContext={},books:readonly SkillBook[]=communityCatalog.skill_books):Promise<BackfillPlan>{
  const projects=(await pool.query(`SELECT p.*,v.source_snapshot FROM oss_projects p LEFT JOIN oss_project_versions v ON v.version_id=p.current_version_id WHERE p.sharing_withdrawn_at IS NULL ORDER BY p.created_at,p.project_id`)).rows;
  const submissions=(await pool.query(`SELECT s.*,p.repository_url,p.repository_full_name,(s.image_bytes IS NOT NULL OR s.storage_source='asset') AS has_image FROM skill_submissions s JOIN oss_projects p USING(project_id) WHERE s.status='published' AND s.consent_to_share AND NOT (s.payload ? 'page_content_draft') AND p.sharing_withdrawn_at IS NULL ORDER BY s.published_at,s.submission_id`)).rows;
@@ -18,18 +19,26 @@ export async function planShareBackfill(pool:Pool,context:AdapterContext={},book
  for(const s of submissions)sources.push({community:s.community_id,url:s.repository_url,owner:s.owner_ref,created:new Date(s.published_at).toISOString(),legacy:{kind:'skill_submission',id:s.submission_id},notes:{...s.payload,...communitySkillArt(s.repository_full_name),...(s.has_image?{illustration_url:`/api/v1/skill-submissions/${s.submission_id}/illustration`}:{})}});
  for(const c of communities)for(const b of books)sources.push({community:c.community_id,url:b.upstream_url,owner:null,created:'9999',legacy:{kind:'book',id:b.id},notes:{title:b.title,guide:b.guide??null,cover_url:b.cover_url??null,share_content:getSkillShareContent(b.id),attribution:'catalog_self_declared',source_commit:b.source_commit}});
  const resolved=new Map<string,RepositoryFacts>(),groups=new Map<string,Group>();
+ const unresolved:BackfillPlan['unresolved']=[],failures=new Map<string,string>();
  for(const source of sources){
   const key=source.url.toLowerCase().replace(/\/$/,'');let facts=resolved.get(key);
+  if(failures.has(key)){unresolved.push({url:source.url,code:failures.get(key)!,legacy:source.legacy});continue;}
   if(!facts){
    const retained=(await pool.query(`SELECT c.* FROM canonical_repositories c JOIN shares s USING(repo_id) WHERE s.community_id=$1 AND s.legacy_ref @> $2::jsonb`,[source.community,JSON.stringify([source.legacy])])).rows[0];
    // Only reuse an identity previously resolved by this backfill/share path, including original-fork resolution.
    if(retained?.facts?.id&&!retained.source_repo_id)facts=retained.facts as RepositoryFacts;
-   else facts=await repositoryFacts(source.url,context);
+   else {
+    try {facts=await repositoryFacts(source.url,context);}
+    catch(error){
+     const code=error instanceof Problem?error.code:'repository_resolution_failed';
+     failures.set(key,code);unresolved.push({url:source.url,code,legacy:source.legacy});continue;
+    }
+   }
    resolved.set(key,facts);
   }
   const groupKey=`${source.community}/${facts.id}`;let group=groups.get(groupKey);if(!group){group={community:source.community,facts,sources:[]};groups.set(groupKey,group);}group.sources.push(source);
  }
- return {repositories:[...groups.values()],events:(await pool.query("SELECT event_id,community_id,organizer_ref,title,created_at FROM community_events WHERE state='published' ORDER BY created_at,event_id")).rows};
+ return {unresolved,repositories:[...groups.values()],events:(await pool.query("SELECT event_id,community_id,organizer_ref,title,created_at FROM community_events WHERE state='published' ORDER BY created_at,event_id")).rows};
 }
 export type BackfillCounts={repositories:number;shares:number;credits:number;notes:number;links:number};
 async function addOwner(q:PoolClient,id:string,owner:string,counts:BackfillCounts){
@@ -37,7 +46,7 @@ async function addOwner(q:PoolClient,id:string,owner:string,counts:BackfillCount
  if(await endorseShare(q,share,owner,true))counts.credits++;
 }
 /** The same transaction executes both modes. Dry run rolls back every write (including trigger effects). */
-export async function applyShareBackfill(pool:Pool,plan:BackfillPlan,apply=false):Promise<BackfillCounts>{
+export async function applyShareBackfill(pool:Pool,plan:Pick<BackfillPlan,'repositories'|'events'>,apply=false):Promise<BackfillCounts>{
  const q=await pool.connect();const counts:BackfillCounts={repositories:0,shares:0,credits:0,notes:0,links:0};
  try{
   await q.query('BEGIN');await q.query("SELECT pg_advisory_xact_lock(hashtextextended('shares/backfill/v1',0))");

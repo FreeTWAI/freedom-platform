@@ -134,3 +134,143 @@ test('real GitHub adapter confirms repository star once and verifies an author o
  await pool.query("UPDATE repo_credit_claims SET state='revoked' WHERE claim_id=$1",[claim.claim_id]);
  assert.equal((await pool.query("SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1 AND basis='claim_verified'",[s.share_id])).rows[0].n,0);
 });
+
+test('renamed repository URLs share one numeric identity and current name; moved fork source resolves',async()=>{
+ const current={...original,id:950,full_name:'fixture/renamed'};
+ const calls:string[]=[];
+ const fixture:typeof fetch=async(input,init)=>{
+  const u=String(input);calls.push(u);assert.equal(init?.redirect,'manual');
+  if(u==='https://api.github.com/repos/fixture/old')return new Response(null,{status:301,headers:{Location:'https://api.github.com/repositories/950'}});
+  if(u==='https://api.github.com/repos/fixture/moved-fork')return Response.json({...original,id:951,fork:true,source:{full_name:'fixture/old'}});
+  assert.ok(['https://api.github.com/repositories/950','https://api.github.com/repos/fixture/renamed'].includes(u));return Response.json(current);
+ };
+ assert.equal((await repositoryFacts('https://github.com/fixture/moved-fork',{fetcher:fixture})).full_name,current.full_name);
+ const a=await createShare(pool,cmd(actors[0],{url:'https://github.com/fixture/old'}),{fetcher:fixture});
+ const b=await createShare(pool,cmd(actors[1],{url:'https://github.com/fixture/renamed'}),{fetcher:fixture});
+ assert.equal(a.share_id,b.share_id);assert.equal(b.created,false);
+ // Existing shares created before the move also refresh their list projection on re-sharing.
+ await pool.query("UPDATE shares SET title='fixture/old',canonical_url='https://github.com/fixture/old' WHERE share_id=$1",[a.share_id]);
+ await pool.query("UPDATE canonical_repositories SET full_name='fixture/old',current_url='https://github.com/fixture/old' WHERE provider_repo_id='950'");
+ await createShare(pool,cmd(actors[1],{url:'https://github.com/fixture/old'}),{fetcher:fixture});
+ const stored=(await pool.query('SELECT s.title,s.canonical_url,c.full_name,c.current_url FROM shares s JOIN canonical_repositories c USING(repo_id) WHERE s.share_id=$1',[a.share_id])).rows[0];
+ assert.deepEqual(stored,{title:current.full_name,canonical_url:'https://github.com/fixture/renamed',full_name:current.full_name,current_url:'https://github.com/fixture/renamed'});
+ assert.equal((await pool.query("SELECT count(*)::int n FROM shares WHERE canonical_key='github:950'")).rows[0].n,1);
+});
+
+test('repository moves refuse every unsafe Location and unsupported status before another fetch',async()=>{
+ const {Problem}=await import('../../packages/shared/problem.js');
+ const locations=[
+  'https://evil.test/repositories/950','http://api.github.com/repositories/950',
+  'https://api.github.com:443/repositories/950','https://api.github.com:8443/repositories/950',
+  'https://user@api.github.com/repositories/950','https://user:password@api.github.com/repositories/950',
+  'https://api.github.com/repositories/950?x=1','https://api.github.com/repositories/950#x',
+  'https://api.github.com/repositories/abc','https://api.github.com/repositories/',
+  'https://api.github.com/repositories/123456789012345678901','https://api.github.com/repositories/950/',
+  'https://api.github.com/repositories/%39%35%30','https://api.github.com/repositories/950/../951',
+  'https://api.github.com/repositories/950/readme','https://api.github.com/repos/fixture/old',
+  'https://API.GITHUB.COM/repositories/950','https://api.github.com.evil.test/repositories/950',
+  '//api.github.com/repositories/950','/repositories/950','',
+ ];
+ for(const location of locations){
+  let calls=0;
+  await assert.rejects(repositoryFacts('https://github.com/fixture/old',{fetcher:async(input)=>{
+   calls++;assert.equal(String(input),'https://api.github.com/repos/fixture/old');
+   return new Response(null,{status:301,headers:{Location:location}});
+  }}),e=>e instanceof Problem&&e.status===422&&e.code==='github_repository_moved'&&e.message==='這個儲存庫已搬移，請貼上新的網址。',location);
+  assert.equal(calls,1,location);
+ }
+ for(const status of [302,303,305,306]){
+  let calls=0;
+  await assert.rejects(repositoryFacts('https://github.com/fixture/old',{fetcher:async()=>{calls++;return new Response(null,{status,headers:{Location:'https://api.github.com/repositories/950'}});}}),{code:'github_repository_moved'});
+  assert.equal(calls,1);
+ }
+});
+
+test('301, 307 and 308 accept 1–20 digits; a second move or loop is refused',async()=>{
+ for(const status of [301,307,308])for(const id of ['1','12345678901234567890']){
+  let calls=0;
+  const facts=await repositoryFacts('https://github.com/fixture/old',{fetcher:async input=>{
+   calls++;if(calls===1)return new Response(null,{status,headers:{Location:`https://api.github.com/repositories/${id}`}});
+   assert.equal(String(input),`https://api.github.com/repositories/${id}`);return Response.json(original);
+  }});assert.equal(facts.id,'901');assert.equal(calls,2);
+ }
+ for(const next of ['https://api.github.com/repositories/951','https://api.github.com/repositories/950','https://api.github.com/repos/fixture/old','https://evil.test/repositories/951']){
+  const calls:string[]=[];
+  await assert.rejects(repositoryFacts('https://github.com/fixture/old',{fetcher:async input=>{
+   calls.push(String(input));return new Response(null,{status:301,headers:{Location:calls.length===1?'https://api.github.com/repositories/950':next}});
+  }}),{code:'github_repository_moved'});
+  assert.deepEqual(calls,['https://api.github.com/repos/fixture/old','https://api.github.com/repositories/950']);
+ }
+});
+
+test('redirect keeps token-first then anonymous retry, Retry-After and shared signal',async()=>{
+ const {randomBytes}=await import('node:crypto');
+ const {shareRepositoryJson}=await import('../../modules/shares/github.js');
+ const token=randomBytes(24).toString('hex');
+ for(const status of [401,403,429]){
+  const calls:{url:string;auth:string|null}[]=[];const signal=AbortSignal.timeout(8000);
+  const result=await shareRepositoryJson('/repos/fixture/old',signal,async(input,init)=>{
+   const auth=new Headers(init?.headers).get('authorization');calls.push({url:String(input),auth});
+   assert.equal(init?.signal,signal);assert.equal(init?.redirect,'manual');
+   if(calls.length===1)return new Response(null,{status:301,headers:{Location:'https://api.github.com/repositories/950'}});
+   return auth?new Response('denied',{status}):Response.json(original);
+  },false,196608,token);
+  assert.deepEqual(result,original);
+  assert.deepEqual(calls,[{url:'https://api.github.com/repos/fixture/old',auth:`Bearer ${token}`},{url:'https://api.github.com/repositories/950',auth:`Bearer ${token}`},{url:'https://api.github.com/repositories/950',auth:null}]);
+ }
+ let calls=0;
+ await assert.rejects(shareRepositoryJson('/repos/fixture/old',AbortSignal.timeout(8000),async()=>{
+  calls++;
+  if(calls===1)return new Response(null,{status:301,headers:{Location:'https://api.github.com/repositories/950'}});
+  return new Response(null,{status:429,headers:calls===2?{'Retry-After':'17'}:{}});
+ },false,196608,token),{code:'github_rate_limited',retryAfterSeconds:17});
+ assert.equal(calls,3);
+ calls=0;
+ await assert.rejects(shareRepositoryJson('/repos/fixture/old',AbortSignal.timeout(8000),async()=>{
+  calls++;if(calls===2)return new Response(null,{status:401});
+  return new Response(null,{status:301,headers:{Location:`https://api.github.com/repositories/${calls===1?950:951}`}});
+ },false,196608,token),{code:'github_repository_moved'});assert.equal(calls,3);
+});
+
+test('redirect retains JSON limits and public visibility; shared GitHub reader still refuses moves',async()=>{
+ const {publicRepositoryJson}=await import('../../modules/opensource-marketing/github.js');
+ for(const [payload,code] of [[{...original,description:'x'.repeat(196608)},'github_response_too_large'],[{...original,private:true},'github_repository_unavailable'],[{...original,archived:true},'github_repository_unavailable']] as const){
+  let calls=0;
+  await assert.rejects(repositoryFacts('https://github.com/fixture/old',{fetcher:async()=>++calls===1?new Response(null,{status:301,headers:{Location:'https://api.github.com/repositories/950'}}):Response.json(payload)}),{code});
+ }
+ let calls=0;
+ await assert.rejects(publicRepositoryJson('/repos/fixture/old',AbortSignal.timeout(8000),async()=>{calls++;return new Response(null,{status:301,headers:{Location:'https://api.github.com/repositories/950'}});}),{code:'github_unavailable'});
+ assert.equal(calls,1);
+});
+
+test('refresh resolves renamed facts, README and release; conditional reads and body limits survive',async()=>{
+ const {refreshRepository,repositoryPage}=await import('../../modules/shares/repository-cache.js');
+ const s=await createShare(pool,cmd(actors[0],{url:'https://github.com/fixture/pre-move'}),{fetcher:async()=>Response.json({...original,id:960,full_name:'fixture/pre-move'})});
+ const repoId=(await pool.query('SELECT repo_id FROM shares WHERE share_id=$1',[s.share_id])).rows[0].repo_id;
+ let conditional=false,oversized=false,badSuffix=false,bare=false;const calls:string[]=[];
+ const fixture:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;calls.push(path);assert.equal(init?.redirect,'manual');
+  if(path.startsWith('/repos/')){
+   const suffix=path.endsWith('/readme')?'/readme':path.endsWith('/releases/latest')?'/releases/latest':'';
+   return new Response(null,{status:308,headers:{Location:`https://api.github.com/repositories/960${badSuffix&&suffix==='/readme'?'/releases/latest':bare?'':suffix}`}});
+  }
+  if(path==='/repositories/960/readme'){
+   assert.equal(new Headers(init?.headers).get('accept'),'application/vnd.github.html+json');
+   if(conditional){assert.equal(new Headers(init?.headers).get('if-none-match'),'"moved-readme"');return new Response(null,{status:304});}
+   return new Response(oversized?'x'.repeat(1048577):'<h2>Install</h2><pre><code>npm install renamed</code></pre>',{headers:{etag:'"moved-readme"'}});
+  }
+  if(path==='/repositories/960/releases/latest')return Response.json({tag_name:'v2',name:'Moved',html_url:'https://github.com/fixture/post-move/releases/tag/v2',published_at:null});
+  assert.equal(path,'/repositories/960');return Response.json({...original,id:960,full_name:'fixture/post-move'});
+ };
+ await refreshRepository(pool,repoId,{fetcher:fixture},true);
+ assert.ok(calls.includes('/repositories/960/readme'));assert.ok(calls.includes('/repositories/960/releases/latest'));
+ const stored=(await pool.query('SELECT title,canonical_url FROM shares WHERE share_id=$1',[s.share_id])).rows[0];
+ assert.deepEqual(stored,{title:'fixture/post-move',canonical_url:'https://github.com/fixture/post-move'});
+ await transaction(pool,async q=>{const page=await repositoryPage(q,repoId);assert.equal(page.full_name,'fixture/post-move');assert.equal(page.quick_start,'npm install renamed');assert.equal(page.latest_release.tag_name,'v2');});
+ conditional=true;bare=true;await refreshRepository(pool,repoId,{fetcher:fixture},true);
+ conditional=false;oversized=true;
+ await assert.rejects(refreshRepository(pool,repoId,{fetcher:fixture},true),{code:'readme_too_large'});
+ assert.match((await pool.query('SELECT readme_html FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0].readme_html,/npm install renamed/);
+ oversized=false;badSuffix=true;
+ await assert.rejects(refreshRepository(pool,repoId,{fetcher:fixture},true),{code:'github_repository_moved'});
+});
