@@ -263,3 +263,37 @@ test('market start hands focus over after inert removal, without stealing a newe
  ui.click('暫停');ui.document.activeElement=resume;ui.click('繼續這一盤');ui.click('暫停');ui.layouts.forEach(effect=>effect());assert.equal(ui.document.activeElement,resume);assert.deepEqual(events,['scroll','focus'],'pause cancels an unconsumed handoff');
  ui.click('繼續這一盤');target.isConnected=false;ui.layouts.forEach(effect=>effect());assert.deepEqual(events,['scroll','focus'],'a detached target cannot claim focus');
 });
+
+// Production camera and actual Three matrix/ray math, not native browser evidence.
+test('front market camera stays level through portrait, landscape and desktop resizing',async()=>{
+ const {marketFrontCamera,createMarketWorktop}=await import('../../apps/portal-web/src/games/cooking/market-stage.js');
+ const {Vector2,Plane}=await import('three');
+ for(const [width,height] of [[296,514],[1180,614],[667,175],[768,640],[320,1000]]){
+  const camera=marketFrontCamera(width,height),surface=createMarketWorktop(),direction=camera.getWorldDirection(new Vector3());
+  assert.ok(Math.abs(direction.x)<1e-12&&Math.abs(direction.y)<1e-12&&direction.z<-.999999,'camera must be horizontal and centered');
+  const plane=new Plane(new Vector3(0,1,0),-.5).applyMatrix4(surface.matrixWorld);
+  for(const x of [-1.7,0,1.7])for(const z of [-1.25,0,1.25]){
+   const point=new Vector3(x,.5,z),world=surface.localToWorld(point.clone()),projected=world.clone().project(camera);
+   assert.ok(Math.abs(projected.x)<1&&Math.abs(projected.y)<1,'entire actionable plane remains visible');
+   const ray=new Raycaster();ray.setFromCamera(new Vector2(projected.x,projected.y),camera);
+   const hit=ray.ray.intersectPlane(plane,new Vector3());assert.ok(hit,'front view must not make the interaction plane parallel');
+   const local=surface.worldToLocal(hit);assert.ok(local.distanceTo(point)<1e-10,'same world-to-domain inverse retains sauce coordinates');
+  }
+ }
+});
+test('front market rays hit the rendered tilted food without changing portion ownership',async()=>{
+ const {marketFrontCamera,createMarketWorktop}=await import('../../apps/portal-web/src/games/cooking/market-stage.js');
+ const {Vector2}=await import('three');
+ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as const){
+  const ingredient=({ 'egg-fried-rice':'rice','steak-dinner':'steak',shawarma:'bread','corn-dog':'sausage'} as const)[id];
+  const run=act(begin(id),{kind:'add',ingredient}),kit=new FoodKit(),food=marketFood(run,kit),surface=createMarketWorktop();
+  surface.add(food.root);food.root.position.y=.25;surface.updateMatrixWorld(true);
+  try{
+   let hits=0;const camera=marketFrontCamera(390,440),ray=new Raycaster();
+   for(let y=-.8;y<=.8;y+=.02)for(let x=-.8;x<=.8;x+=.02){
+    ray.setFromCamera(new Vector2(x,y),camera);const hit=ray.intersectObject(food.root,true)[0];if(hit&&(id==='egg-fried-rice'||id==='shawarma'||marketHitPortion(hit,food.root)===0))hits++;
+   }
+   assert.ok(hits>0,`${id}: actual front-facing geometry retains a directly selectable portion`);
+  }finally{food.dispose();kit.dispose();}
+ }
+});

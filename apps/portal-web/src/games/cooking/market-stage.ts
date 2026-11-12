@@ -19,13 +19,24 @@ export function marketHitPortion(hit:Intersection<Object3D>,root:Object3D):numbe
  for(let node:Object3D|null=hit.object;node&&node!==root;node=node.parent)if(typeof node.userData.portion==='number')return node.userData.portion;
  return null;
 }
+/** Level, centered camera. Narrow viewports expand vertically, never crop the worktop. */
+export function marketFrontCamera(width:number,height:number){
+ const aspect=width>0&&height>0&&Number.isFinite(width/height)?width/height:6/5;
+ const fov=2*Math.atan(Math.tan(19*Math.PI/180)*Math.max(1,(6/5)/aspect))*180/Math.PI;
+ const camera=new PerspectiveCamera(fov,aspect,.1,45);
+ camera.position.set(0,1.2,12);camera.lookAt(0,1.2,0);camera.updateMatrixWorld();return camera;
+}
+/** Only the working surface tilts; the stall and its upright spit face the viewer. */
+export function createMarketWorktop(){const root=new Group();root.rotation.x=Math.PI/5;root.position.y=1.2;root.updateMatrixWorld();return root;}
+
 /** UX-9: close-up worktop; bounded geometry, shared materials, explicit scene ownership. */
 export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
  const renderer=new WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power'}),scene=new Scene(),kit=new FoodKit(),work=new Group(),foodRoot=new Group(),spit=new Group(),light=new DirectionalLight('#fff5e4',2.4);
+ let resizeObserver:ResizeObserver|undefined,resizeView:(()=>void)|undefined;
  let studio:ReturnType<typeof foodStudio>|undefined,motion:MediaQueryList|undefined,refreshMotion:(()=>void)|undefined;
  let disposed=false,food:ReturnType<typeof marketFood>|null=null,fingerprint='',recipe='',snapshot:MarketRun|null=null,tossAt=-Infinity,foodMinY=0;
  const lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
- const dispose=()=>{if(disposed)return;disposed=true;if(refreshMotion)motion?.removeEventListener('change',refreshMotion);renderer.domElement.removeEventListener('webglcontextlost',lost);food?.dispose();kit.dispose();studio?.dispose();light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();scene.clear();};
+ const dispose=()=>{if(disposed)return;disposed=true;resizeObserver?.disconnect();if(resizeView)window.removeEventListener('resize',resizeView);if(refreshMotion)motion?.removeEventListener('change',refreshMotion);renderer.domElement.removeEventListener('webglcontextlost',lost);food?.dispose();kit.dispose();studio?.dispose();light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();scene.clear();};
  try{
   renderer.setSize(768,640,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.toneMapping=ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFSoftShadowMap;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
   studio=foodStudio(renderer,scene);scene.background=new Color('#32251b');scene.add(new HemisphereLight('#fff8ed','#4c3021',.65));light.position.set(-3,8,4);light.castShadow=true;light.shadow.mapSize.set(1024,1024);Object.assign(light.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.5,far:25});light.shadow.normalBias=.03;scene.add(light);
@@ -33,22 +44,22 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
   kit.block(work,'#634b36',0,1.15,-4.1,14,2.6,.35,'wood');for(const x of [-4.5,-3,3,4.5]){kit.disk(work,'#cfbc91',x,.05,-2.6,.48,.25);kit.disk(work,'#b27343',x,.2,-2.6,.42,.05);kit.mesh(work,kit.ring,'#96867a',x,.24,-2.6,.45,.45,.45,'metal').rotation.x=-Math.PI/2;}
   kit.block(work,'#d3bc8b',-3.5,-.05,.6,1.1,.1,2.4,'wood');const knife=kit.block(work,'#b8b7a9',-3.5,.06,.2,.25,.035,1.15,'metal');knife.rotation.y=.25;kit.block(work,'#46362a',-3.22,.08,1.08,.16,.12,.6,'wood');
   for(const [i,c]of ['#b24323','#d9ae2c','#e8d6a7'].entries()){kit.disk(work,c,3.4,.23,.3+i*.66,.21,.75);kit.disk(work,'#f5e3bb',3.4,.68,.3+i*.66,.11,.18);}
-  bakeRigidGroup(work,kit.geometries);scene.add(work,foodRoot,spit);
-  const camera=new PerspectiveCamera(38,6/5,.1,45);camera.position.set(5,8.6,8);camera.lookAt(0,.1,-.25);const fill=new DirectionalLight('#dbe7ff',.7);fill.position.set(5,3,-3);scene.add(fill);
-  const cooker=new Group();scene.add(cooker);
+  bakeRigidGroup(work,kit.geometries);const worktop=createMarketWorktop();scene.add(work,worktop,spit);spit.position.set(0,1.2,-1);worktop.add(foodRoot);
+  const camera=marketFrontCamera(768,640);const fill=new DirectionalLight('#dbe7ff',.7);fill.position.set(5,3,-3);scene.add(fill);
+  const cooker=new Group();worktop.add(cooker);
   let cornDogStall:ReturnType<typeof createCornDogStall>|null=null,spitMaterial:ReturnType<FoodKit['mat']>|null=null;
-  const ray=new Raycaster(),ndc=new Vector2(),plane=new Plane(new Vector3(0,1,0),-.5),intersection=new Vector3();
+  const ray=new Raycaster(),ndc=new Vector2(),plane=new Plane(new Vector3(0,1,0),-.5).applyMatrix4(worktop.matrixWorld),intersection=new Vector3();
   const hit=(point:{x:number;y:number})=>{
    if(disposed||!Number.isFinite(point.x)||!Number.isFinite(point.y))return null;
-   const box=host.getBoundingClientRect(),scale=Math.min(box.width/768,box.height/640),width=768*scale,height=640*scale;if(!width||!height)return null;
-   const x=(point.x*box.width-(box.width-width)/2)/width,y=(point.y*box.height-(box.height-height)/2)/height;if(x<0||x>1||y<0||y>1)return null;
+   const box=host.getBoundingClientRect();if(!box.width||!box.height)return null;
+   const x=point.x,y=point.y;if(x<0||x>1||y<0||y>1)return null;
    ndc.set(x*2-1,1-y*2);ray.setFromCamera(ndc,camera);const closest=ray.intersectObjects(foodRoot.children,true)[0];let index:number|null=null,location:Vector3;
    if(closest){location=closest.point;index=marketHitPortion(closest,foodRoot);}
    else{if(!ray.ray.intersectPlane(plane,intersection))return null;location=intersection;}
-   const px=location.x/3.4+.5,py=location.z/2.5+.5;if(px<0||px>1||py<0||py>1)return null;return {index,point:{x:px,y:py}};
+   const local=worktop.worldToLocal(location.clone()),px=local.x/3.4+.5,py=local.z/2.5+.5;if(px<0||px>1||py<0||py>1)return null;return {index,point:{x:px,y:py}};
   };
   const bubbleMaterial=kit.mat('#ead18a','plain');bubbleMaterial.transparent=true;bubbleMaterial.opacity=.48;
-  const bubbles=new InstancedMesh(kit.ring,bubbleMaterial,24),bubblePose=new Object3D();motion=matchMedia('(prefers-reduced-motion: reduce)');scene.add(bubbles);bubbles.visible=false;
+  const bubbles=new InstancedMesh(kit.ring,bubbleMaterial,24),bubblePose=new Object3D();motion=matchMedia('(prefers-reduced-motion: reduce)');worktop.add(bubbles);bubbles.visible=false;
   function setup(r:MarketRun){cooker.clear();spit.clear();cornDogStall=null;recipe=r.recipe;
    if(r.recipe==='egg-fried-rice'||r.recipe==='steak-dinner'){
     kit.block(cooker,'#49362b',0,-.08,.1,5.55,.25,4.6,'wood');kit.disk(cooker,'#252927',0,.03,0,2.43,.22,1.96,'metal');kit.disk(cooker,'#34352c',0,.16,0,2.22,.07,1.73,'metal');kit.mesh(cooker,kit.ring,'#697167',0,.23,0,2.31,2.31,1.85,'metal').rotation.x=-Math.PI/2;
@@ -77,7 +88,7 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
     }
    }
    const plated=r.status==='done'||(r.recipe==='corn-dog'&&r.portions.length>0&&r.portions.every(p=>p.lifted));
-   cooker.visible=!plated;spit.visible=!plated;if(plated)camera.position.set(.25,7.5,7.9);else camera.position.set(5,8.6,8);camera.lookAt(0,plated ? .3 : .1,plated ? 0 : -.25);camera.zoom=plated?(r.recipe==='steak-dinner'?1.08:1.15):1;camera.updateProjectionMatrix();
+   cooker.visible=!plated;spit.visible=!plated;camera.zoom=plated?(r.recipe==='steak-dinner'?1.08:1.15):1;camera.updateProjectionMatrix();
    foodRoot.position.set(0,plated?-.225-foodMinY:.25,0);foodRoot.rotation.set(0,0,0);
    if(r.recipe==='egg-fried-rice'&&!motion!.matches&&r.status==='playing'){const age=(r.elapsed-tossAt)/1000;if(age<.7){const lift=Math.sin(age/.7*Math.PI);foodRoot.position.y+=lift*.9;foodRoot.rotation.x=lift*-.28;}}
    cornDogStall?.update(r);
@@ -90,6 +101,14 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
    render();
   };
   refreshMotion=()=>{if(snapshot&&!disposed)update(snapshot);};motion.addEventListener('change',refreshMotion);
-  return {hit,update,capture:()=>{if(!snapshot||disposed)throw Error('料理畫面尚未就緒');update({...snapshot,status:'done'});return renderer.domElement.toDataURL('image/png');},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
+  // Keep the old maximum pixel budget while covering the actual play viewport.
+  const sizeView=(width:number,height:number)=>{
+   const next=marketFrontCamera(width,height);camera.aspect=next.aspect;camera.fov=next.fov;camera.updateProjectionMatrix();
+   const dpr=Math.min(devicePixelRatio||1,1.5),scale=Math.min(dpr,Math.sqrt(768*640*2.25/(width*height)));
+   renderer.setPixelRatio(1);renderer.setSize(Math.max(1,Math.floor(width*scale)),Math.max(1,Math.floor(height*scale)),false);
+  };
+  resizeView=()=>{if(disposed)return;const box=host.getBoundingClientRect();if(box.width<=0||box.height<=0)return;sizeView(box.width,box.height);if(snapshot)render();};
+  if(typeof ResizeObserver!=='undefined'){resizeObserver=new ResizeObserver(resizeView);resizeObserver.observe(host);}window.addEventListener('resize',resizeView);resizeView();
+  return {hit,update,capture:()=>{if(!snapshot||disposed)throw Error('料理畫面尚未就緒');const original=snapshot;try{sizeView(768,640);update({...original,status:'done'});return renderer.domElement.toDataURL('image/png');}finally{resizeView!();update(original);}},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
  }catch(cause){dispose();throw cause;}
 }
