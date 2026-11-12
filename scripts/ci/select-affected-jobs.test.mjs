@@ -697,7 +697,8 @@ test('verify workflow keeps the required gate, unconditional integrity, and hist
   assert.match(on, /merge_group:\n/);
   assert.match(on, /push:\n/);
   assert.doesNotMatch(on, /\n\s+paths:/u);
-  assert.equal([...text.matchAll(/github\.event\.merge_group/g)].length, 1);
+  assert.ok(jobBlock(text, 'select').includes('github.event.merge_group.base_sha'));
+  assert.ok(jobBlock(text, 'source-integrity').includes('github.event.merge_group.head_sha'));
   assert.ok(jobBlock(text, 'source-integrity').includes('github.event.merge_group.base_sha')); // baseline for immutable migrations, never a skip
   assert.match(text, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/u);
   for (const id of ['select', 'verify']) {
@@ -1503,7 +1504,7 @@ test('delivery CI retains native restore and daily backup diagnostics in its sel
   assert.match(job, /postgres-integration\.mjs --source \./);
   assert.match(job, /run-pinned-suite\.mjs --root \. --suite ci\.daily-backup/);
   assert.match(job, /node node_modules\/typescript\/bin\/tsc --noEmit/);
-  assert.match(jobBlock(workflow, 'select'), /github\.event\.pull_request\.base\.sha \|\| github\.event\.before/);
+  assert.match(jobBlock(workflow, 'select'), /github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_sha \|\| github\.event\.before/);
 });
 
 function deliveryWorkflow(value) {
