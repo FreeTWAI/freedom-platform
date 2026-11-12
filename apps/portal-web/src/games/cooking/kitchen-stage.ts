@@ -1,4 +1,4 @@
-import {ACESFilmicToneMapping,BoxGeometry,Color,CylinderGeometry,DirectionalLight,DoubleSide,ExtrudeGeometry,FrontSide,Float32BufferAttribute,Group,HemisphereLight,LatheGeometry,Mesh,MeshStandardMaterial,OrthographicCamera,PCFShadowMap,Plane,Raycaster,Scene,Shape as Contour,SphereGeometry,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
+import {ACESFilmicToneMapping,BoxGeometry,Color,CylinderGeometry,DirectionalLight,DoubleSide,ExtrudeGeometry,FrontSide,Float32BufferAttribute,Group,InstancedMesh,DynamicDrawUsage,HemisphereLight,LatheGeometry,Mesh,MeshStandardMaterial,OrthographicCamera,PCFShadowMap,Plane,Raycaster,Scene,Shape as Contour,SphereGeometry,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {createDishModel,type DishModel} from './dish-model';
 import {bakeRigidGroup} from '../stage-batch';
@@ -24,9 +24,24 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
  const ingredientCuts=new Map<Group,{whole:Group;cut:Group}>();
  let preparationModel:ReturnType<typeof createPreparationModel>|null=null;
  let foodBatch:ReturnType<typeof createKitchenFoodBatch>=null;
+ const ambientBatches:{mesh:InstancedMesh;sources:Mesh[]}[]=[];
+ const clearAmbient=()=>{for(const {mesh} of ambientBatches){mesh.removeFromParent();mesh.dispose();}ambientBatches.length=0;};
+ // Only factory-owned opaque steam/flame meshes are admitted. Their local TRS,
+ // material, topology and shadow flags stay unchanged; no geometry is disposed here.
+ function batchAmbient(parent:Group,sources:Mesh[]){
+  const groups:Mesh[][]=[];
+  if(sources.some(m=>m.parent!==parent||m.constructor!==Mesh||Array.isArray(m.material)||!(m.material instanceof MeshStandardMaterial)||m.material.transparent||m.material.opacity!==1||!m.visible||m.children.length||m.customDepthMaterial||m.customDistanceMaterial||!m.matrixAutoUpdate||!m.matrixWorldAutoUpdate||[m.scale.x,m.scale.y,m.scale.z].some(n=>!Number.isFinite(n)||n<=0)))return;
+  for(const source of sources){const group=groups.find(g=>g[0].geometry===source.geometry&&g[0].material===source.material&&g[0].castShadow===source.castShadow&&g[0].receiveShadow===source.receiveShadow&&g[0].layers.mask===source.layers.mask&&g[0].renderOrder===source.renderOrder);if(group)group.push(source);else groups.push([source]);}
+  for(const group of groups){if(group.length<2)continue;const first=group[0];
+   const mesh=new InstancedMesh(first.geometry,first.material,group.length);mesh.name='kitchen/ambient';mesh.instanceMatrix.setUsage(DynamicDrawUsage);mesh.castShadow=first.castShadow;mesh.receiveShadow=first.receiveShadow;mesh.layers.mask=first.layers.mask;mesh.renderOrder=first.renderOrder;
+   for(const source of group)source.removeFromParent();parent.add(mesh);ambientBatches.push({mesh,sources:group});
+  }
+ }
+ function updateAmbient(){for(const {mesh,sources} of ambientBatches){for(let i=0;i<sources.length;i++){sources[i].updateMatrix();mesh.setMatrixAt(i,sources[i].matrix);}mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingBox();mesh.computeBoundingSphere();}}
+
  let completedDish:DishModel|null=null;let disposed=false,identity='',objects:{food:Group[];tool:Group;body:Group;steam:Mesh[];flaps:Group[];liquid:Mesh|null;stream:Mesh|null;flames:Mesh[]}|null=null;
  const light=new DirectionalLight('#fff1dc',2.1),lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
- const dispose=()=>{if(disposed)return;disposed=true;foodBatch?.dispose();completedDish?.dispose();renderer.domElement.removeEventListener('webglcontextlost',lost);stepGeometry.forEach(g=>g.dispose());ingredientMaterials.forEach(m=>m.dispose());geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
+ const dispose=()=>{if(disposed)return;disposed=true;clearAmbient();foodBatch?.dispose();completedDish?.dispose();renderer.domElement.removeEventListener('webglcontextlost',lost);stepGeometry.forEach(g=>g.dispose());ingredientMaterials.forEach(m=>m.dispose());geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();};
  try{
   renderer.setSize(V.width,V.height,false);// Supersample standard-DPI displays too, within the same fixed 960×672 cap.
   renderer.setPixelRatio(V.maxDpr);renderer.toneMapping=ACESFilmicToneMapping;renderer.toneMappingExposure=.94;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFShadowMap;renderer.shadowMap.autoUpdate=false;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
@@ -116,7 +131,7 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
   // Bake changes pigment, not shadow depth, except when the oven tool appears.
   let lastBakeToolVisible:boolean|null=null;
   let lastStatic:string|null=null;
-  function build(run:CookingRun){lastBakeToolVisible=null;lastStatic=null;lastKnead=null;lastMix=null;openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();ingredientGeometry.clear();ingredientCuts.clear();preparationModel=null;ingredientMaterials.forEach(m=>m.dispose());ingredientMaterials.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,1.2,0);objects=null;return;}camera.lookAt(0,1.2,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
+  function build(run:CookingRun){clearAmbient();lastBakeToolVisible=null;lastStatic=null;lastKnead=null;lastMix=null;openMaterials.clear();foodBatch?.dispose();foodBatch=null;completedDish?.dispose();completedDish=null;work.clear();stepGeometry.forEach(g=>g.dispose());stepGeometry.clear();ingredientGeometry.clear();ingredientCuts.clear();preparationModel=null;ingredientMaterials.forEach(m=>m.dispose());ingredientMaterials.clear();if(run.status==='done'){completedDish=createDishModel(run.recipeId);completedDish.root.position.set(0,.12,.2);completedDish.root.rotation.y=-.25;work.add(completedDish.root);camera.lookAt(0,1.2,0);objects=null;return;}camera.lookAt(0,1.2,0);const s=currentStep(run),body=group(work),tool=group(work),pieces:Group[]=[],steam:Mesh[]=[],flaps:Group[]=[],flames:Mesh[]=[];let liquid:Mesh|null=null,stream:Mesh|null=null;
    if(['slice','knead','fold'].includes(s.kind)){rb(body,C.edge,0,.04,.1,6.4,.28,4.5,'wood');rb(body,'#e7bd84',0,.2,.1,6.1,.08,4.2,'wood');rb(body,'#d1a56d',-2.68,.25,.1,.05,.012,3.5,'wood');}
    if(s.kind==='slice'){const visual=ingredientVisual(s.ingredient,s.shape);
     if(visual&&isVolumetricPreparation(visual.id)){
@@ -139,7 +154,7 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    // tilted camera. Keep each ingredient's local simulation unchanged.
    if(['slice','knead','fold','plate'].includes(s.kind)){body.rotation.x=Math.PI/2;body.position.y=1.2;body.position.z=BOARD_DEPTH;tool.rotation.x=Math.PI/2;}
    body.name='kitchen/body';tool.name='kitchen/tool';
-   bakeRigidGroup(body,stepGeometry,new Set([...pieces,...steam,...flaps,...flames,...(liquid?[liquid]:[])]));objects={food:pieces,tool,body,steam,flaps,liquid,stream,flames};if(s.kind==='pan'||s.kind==='boil')foodBatch=createKitchenFoodBatch(body,pieces);
+   bakeRigidGroup(body,stepGeometry,new Set([...pieces,...steam,...flaps,...flames,...(liquid?[liquid]:[])]));batchAmbient(body,[...steam,...flames]);objects={food:pieces,tool,body,steam,flaps,liquid,stream,flames};if(s.kind==='pan'||s.kind==='boil')foodBatch=createKitchenFoodBatch(body,pieces);
   }
   const baked=new Color('#bd864b'),burnt=new Color('#805335');
   function syncMaterialSides(run:CookingRun){
@@ -166,7 +181,7 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    if(s.kind==='pour'){o.tool.position.set(-1.4,1.8,-.1);o.tool.rotation.z=a.holdAt===null?.12:-.7;const height=.12+Math.min(1,a.amount)*1.8,level=(.1+height)/1.6,profile=[[0,.04],[.02,.8],[.2,1.2],[.65,1.55],[1.15,1.7],[1.3,1.8]];let radius=.8;for(let i=1;i<profile.length;i++){const [y1,r1]=profile[i],[y0,r0]=profile[i-1];if(level<=y1){radius=r0+(r1-r0)*(level-y0)/(y1-y0);break;}}o.liquid!.scale.set(radius*1.1*.92,height,radius*1.1*.92);o.stream!.visible=a.holdAt!==null;}
    if(s.kind==='fold'){o.flaps.forEach((g,i)=>{g.rotation.z=i<a.count?-.85:0;g.visible=i<a.count;});o.tool.position.copy(pos??new Vector3(2.4,1.3,BOARD_DEPTH+.5));}
    if(s.kind==='plate'){o.food.forEach((g,i)=>{g.visible=i<a.count;if(g.visible){const p=plateTarget({...run,active:{...a,count:i}});o.body.updateMatrixWorld(true);g.position.copy(o.body.worldToLocal(screen(p.x,p.y,BOARD_DEPTH+.45)));}});o.tool.position.copy(pos??new Vector3(-3.5,.35,BOARD_DEPTH+.6));o.tool.visible=a.count<s.goal;}
-   o.flames.forEach((f,i)=>{f.scale.y=.3+a.heat/100*.6+(motion?Math.sin(t*5+i)*.04:0);});foodBatch?.update();
+   o.flames.forEach((f,i)=>{f.scale.y=.3+a.heat/100*.6+(motion?Math.sin(t*5+i)*.04:0);});foodBatch?.update();updateAmbient();
    // Mixing has no time-driven animation: only the stir angle and pointer move
    // its food/tool. Keep the presented frame until one of those inputs changes.
    if(s.kind==='mix'&&lastMix&&lastMix.amount===a.amount&&lastMix.x===point?.x&&lastMix.y===point?.y)return;
