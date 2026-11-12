@@ -1,0 +1,73 @@
+name: Park pending pull requests
+# Temporary control for the platform revamp. A pull request carrying the `pending`
+# label is parked: it stays open and its branch is untouched, but it does not use the
+# shared Verify runners. When Verify is requested for such a pull request, this
+# workflow cancels that run and sets a `parked` status on the head commit, so the
+# reason shows in the pull request's checks. A cancelled Verify is not a pass, so a
+# parked pull request still cannot satisfy the required check. Any doubt (no matching
+# pull request, a failed lookup) leaves Verify running.
+#
+# To unpark, remove the label. The next push runs Verify normally.
+#
+# This runs from the default branch with the repository token. It never checks out
+# or executes pull-request code, and it reads branch names only as API parameters.
+on:
+  workflow_run:
+    workflows: ['Verify local milestone']
+    types: [requested]
+permissions: {}
+jobs:
+  park:
+    if: >-
+      github.repository == 'FreeTWAI/freedom-platform' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Cancel Verify for a pull request labelled pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          VERIFY_RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+          PARK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          case "$VERIFY_RUN_ID" in ''|*[!0-9]*) echo "::error::unexpected run id"; exit 1;; esac
+          case "$HEAD_SHA" in *[!0-9a-f]*) echo "::error::unexpected head sha"; exit 1;; esac
+          [ "${#HEAD_SHA}" -eq 40 ] || { echo "::error::unexpected head sha length"; exit 1; }
+          if [ -z "$HEAD_OWNER" ] || [ -z "$HEAD_BRANCH" ]; then
+            echo "This run names no head owner or branch. Verify run $VERIFY_RUN_ID continues."
+            exit 0
+          fi
+
+          # An empty or malformed head filter makes the API list every open pull request,
+          # so the response is matched against the same head again before a label counts.
+          head_label="$HEAD_OWNER:$HEAD_BRANCH"
+          parked=$(gh api --method GET "repos/$REPOSITORY/pulls" \
+            -f state=open -f "head=$head_label" -f per_page=100 |
+            jq -r --arg head "$head_label" '[.[] | select(.head.label == $head)
+              | select(any(.labels[]; .name == "pending")) | .number] | map(tostring) | join(" ")')
+          if [ -z "$parked" ]; then
+            echo "No pending pull request for this head. Verify run $VERIFY_RUN_ID continues."
+            exit 0
+          fi
+
+          echo "Pull request(s) $parked carry the pending label. Cancelling Verify run $VERIFY_RUN_ID."
+          if ! gh api --method POST "repos/$REPOSITORY/actions/runs/$VERIFY_RUN_ID/cancel" >/dev/null; then
+            echo "::warning::Verify run $VERIFY_RUN_ID could not be cancelled; it may have finished already."
+          fi
+          gh api --method POST "repos/$REPOSITORY/statuses/$HEAD_SHA" \
+            -f state=pending -f context=parked -f "target_url=$PARK_RUN_URL" \
+            -f description='已停放（pending 標籤）：改版期間不使用共用 CI。移除標籤後，下次推送照常執行。' >/dev/null
+          {
+            echo "### Parked"
+            echo "Pull request(s) $parked carry the \`pending\` label, so Verify run $VERIFY_RUN_ID was cancelled."
+            echo "Remove the label to unpark. The next push runs Verify normally."
+          } >> "$GITHUB_STEP_SUMMARY"
