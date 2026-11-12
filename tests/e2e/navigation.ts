@@ -1,3 +1,7 @@
+import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata';
+import {resolvePortalRoute,portalHash,PORTAL_PLACES} from '../../apps/portal-web/src/portal-route';
+import {GUILD_TOOLS} from '../../apps/portal-web/src/guild-tools/catalog';
+import type {TabId} from '../../apps/portal-web/src/types';
 import { expect, type Page, type Locator } from './fixtures.js';
 
 /** Member tools are secondary; open their visible disclosure before choosing one.
@@ -54,45 +58,28 @@ export async function expandHomeSections(page:Page){
 }
 
 export async function openFeatureSearch(page:Page){
-  await closeChat(page);
-  const menu=page.getByRole('button',{name:'開啟選單',exact:true});
-  if(await menu.isVisible())await menu.click();
-  const more=page.locator('.nav-more');
-  if(!await more.evaluate(element=>(element as HTMLDetailsElement).open))await more.locator(':scope > summary').click();
+ await closeChat(page);
+ const menu=page.getByRole('button',{name:'開啟選單',exact:true});
+ if(await menu.isVisible())await menu.click();
 }
-
-/** Follow the same visible navigation a member uses, including phone menus and groups. */
-export async function navigate(page: Page, name: string) {
-  await expect(page.locator('.shell')).toBeVisible();
-  if (name === '我的訊息') {
-    await openChat(page);
-    return;
-  }
-  await closeChat(page);
-  if (['我的名片', '入門指南'].includes(name)) {
-    const settings = page.getByRole('button', { name: '設定', exact: true });
-    if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
-    await page.getByRole('menuitem', { name:name==='我的名片'?'資料與帳號設定':name, exact: true }).click();
-    return;
-  }
-  const menu = page.getByRole('button', { name: '開啟選單', exact: true });
-  if (await menu.isVisible()) await menu.click();
-  const navigation = page.getByRole('navigation', { name: '主要工作區', includeHidden: true });
-  await expect(navigation).toBeVisible();
-  const target = navigation.getByRole('button', { name, exact: true, includeHidden: true });
-  if (await target.count() === 0) {
-    const more = navigation.locator('.nav-more');
-    if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) await more.locator(':scope > summary').click();
-    await navigation.getByRole('searchbox').fill(name);
-  }
-  await expect(target).toHaveCount(1);
-  const groups = target.locator('xpath=ancestor::details');
-  // Open the outer disclosure before its nested group, using visible controls.
-  for (let index = 0; index < await groups.count(); index++) {
-    const group = groups.nth(index);
-    if (!await group.evaluate(element => (element as HTMLDetailsElement).open)) await group.locator(':scope > summary').click();
-  }
-  await target.click();
+/** Compatibility names describe the existing task; navigation uses the five visible places. */
+export async function navigate(page:Page,name:string) {
+ await expect(page.locator('.shell')).toBeVisible();
+ if(name==='我的訊息'){await openChat(page);return;}
+ await closeChat(page);
+ const aliases:Record<string,TabId>={'我的定位':'positioning','供貨商品管理':'stores','我的名片':'account','私人 AI 工作室':'private-ai','會員首頁':'home','我的內容':'my-content'};
+ const tab=aliases[name]??Object.entries(TAB_TITLES).find(([,title])=>title===name)?.[0] as TabId;
+ if(!tab)throw new Error('Unmapped navigation task: '+name);
+ const hash=name==='供貨商品管理'?portalHash('stores','/supply'):portalHash(tab);
+ const route=resolvePortalRoute(hash),place=PORTAL_PLACES.find(p=>p.id===route.place)!;
+ await openFeatureSearch(page);
+ await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:place.title,exact:true}).click();
+ if(route.toolId){
+  await page.getByLabel('公會工具',{exact:true}).selectOption(route.guildKey!);
+  const tool=GUILD_TOOLS.find(t=>t.guild_key===route.guildKey&&t.tool_id===route.toolId)!;
+  await page.getByRole('button',{name:tool.title,exact:true}).click();
+  if(tab==='tasks')await page.getByLabel('工作檢視',{exact:true}).selectOption('discovery');
+ }else if(['me','explore','automation'].includes(route.place))await page.getByLabel(place.title+'檢視',{exact:true}).selectOption(hash);
 }
 
 /** Choose an optional feed through the same secondary dialog a member opens. */

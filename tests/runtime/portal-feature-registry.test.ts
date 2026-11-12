@@ -171,14 +171,16 @@ test('home and member-card consumers do not statically download account editors'
   }
 });
 
-test('account lazy boundary retains all original editors and the negative eager edge is detected',()=>{
+test('account editors retain their lazy boundary and tool connections move to lazy automation',()=>{
   const identity=readFileSync(new URL('../../apps/portal-web/src/features/identity.tsx',import.meta.url),'utf8');
   assert.match(identity,/const AccountPanel = lazy\(\(\) => import\('\.\.\/modules\/AccountSettingsPanel'\)\.then\(m => \(\{default: m\.AccountPanel\}\)\)\)/);
   const account=staticModuleInputs('modules/AccountSettingsPanel.tsx');
   // The entry itself is <stdin>; its actual subcomponent graph remains complete.
-  for(const name of accountOnlyModules.filter(name=>name!=='AccountSettingsPanel'))assert.equal(hasModule(account,name),true,name);
+  for(const name of accountOnlyModules.filter(name=>name!=='AccountSettingsPanel'&&name!=='ClientConnections'))assert.equal(hasModule(account,name),true,name);
+  assert.equal(hasModule(account,'ClientConnections'),false);
+  assert.match(readFileSync(new URL('../../apps/portal-web/src/features/PlaceView.tsx',import.meta.url),'utf8'),/ClientConnections=lazy/);
   const eager=staticModuleInputs('modules/MemberHome.tsx',"\nimport './AccountSettingsPanel';");
-  for(const name of accountOnlyModules)assert.equal(hasModule(eager,name),true,`negative control must detect ${name}`);
+  for(const name of accountOnlyModules.filter(name=>name!=='ClientConnections'))assert.equal(hasModule(eager,name),true,`negative control must detect ${name}`);
 });
 
 test('account composition preserves the state owner, leave guard and explicit query flags',()=>{

@@ -7,7 +7,7 @@ async function login(page:Page){
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');const authResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/login' && response.request().method() === 'POST', {timeout: 25_000});
   await page.getByRole('button',{name:'登入',exact:true}).click();
   expect((await authResponse).status()).toBe(200);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
 }
 async function choose(page:Page,label:string){
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
@@ -82,8 +82,8 @@ test('在站內商店刊登 opens the existing stores page',async({page})=>{
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
   await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
   await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'在站內商店刊登',exact:true}).click();
-  await expect(page).toHaveURL(/#stores$/);
-  await expect(page.getByRole('heading',{name:'我的商店',level:1,exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);
+  await expect(page.getByRole('heading',{name:'商店',level:1,exact:true})).toBeVisible();
   await expect(page.locator('[data-share-entry="stores"]')).toBeVisible();
   await expect(page.locator('[data-share-entry="stores"]')).toBeFocused();
   await expect(page.locator('.share-entry-status')).toHaveCount(0);
@@ -94,8 +94,8 @@ test('供貨給其他店家 opens the existing supply catalog',async({page})=>{
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
   await page.getByRole('dialog',{name:'你想分享什麼？',exact:true}).getByRole('button',{name:'刊登商品',exact:true}).click();
   await page.getByRole('dialog',{name:'你的商品準備好了嗎？',exact:true}).getByRole('button',{name:'供貨給其他店家',exact:true}).click();
-  await expect(page).toHaveURL(/#stores\/supply$/);
-  await expect(page.getByRole('heading',{name:'我的供貨商品庫',level:1,exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
+  await expect(page.getByRole('heading',{name:'供貨商品庫',level:1,exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'我的供貨商品庫',level:2,exact:true})).toBeVisible();
   await expect(page.locator('[data-share-entry="supply"]')).toBeFocused();
   await expect(page.locator('.share-entry-status')).toHaveCount(0);
@@ -138,12 +138,12 @@ test('a store detail load error still focuses the same-tab share list',async({pa
   }
   await openDetail();
   await chooseProduct('供貨給其他店家');
-  await expect(page).toHaveURL(/#stores\/supply$/);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   await expect(page.locator('[data-share-entry="supply"]')).toBeFocused();
   await expect(page.getByRole('status').filter({hasText:'分享入口暫時無法載入'})).toHaveCount(0);
   await openDetail();
   await chooseProduct('在站內商店刊登');
-  await expect(page).toHaveURL(/#stores$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);
   await expect(page.locator('[data-share-entry="stores"]')).toBeFocused();
   await expect(page.getByRole('status').filter({hasText:'分享入口暫時無法載入'})).toHaveCount(0);
 });
@@ -175,7 +175,7 @@ test('a refused leave from an unpublished store does not settle the supply share
   await expect(name).toHaveValue('留下未發布草稿');
   page.once('dialog',d=>d.accept());
   await chooseSupply();
-  await expect(page).toHaveURL(/#stores\/supply$/);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   await expect(page.locator('[data-share-entry="supply"]')).toBeFocused();
 });
 

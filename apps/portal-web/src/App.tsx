@@ -1,3 +1,6 @@
+import {GuildToolPage} from './guild-tools/GuildToolPage';
+import {guildTool} from './guild-tools/catalog';
+import {canonicalHash,currentLegacyHash,legacyHash,replaceLegacyAddress,resolvePortalRoute,PORTAL_PLACES} from './portal-route';
 import {SeasonalWelcome} from './seasonal/SeasonalTheme';
 import {useSeasonalTheme} from './seasonal/useSeasonalTheme';
 import {parseProfileRoute,canOpenGuestProfile} from './modules/profile-publication-route';
@@ -56,6 +59,7 @@ import {LanguageProvider,LanguagePicker,useLanguage} from './language'
 import {authErrorMessage} from './auth-messages'
 import {AppInstallProvider,InstallAppButton} from './AppInstall'
 
+const Arcade=lazy(()=>import('./games/AbsurdDaily').then(m=>({default:m.AbsurdDaily})));
 const PublicGuildLaunchpad = lazy(() => import('./guild-blocks/GuildLaunchpadPage').then(m => ({default: m.PublicGuildLaunchpad})))
 const PublicArPage=lazy(()=>import('./modules/community-ar/Panel').then(m=>({default:m.PublicArPage})))
 const VisitorProfile = lazy(() => import('./modules/VisitorProfile').then(m => ({default:m.VisitorProfile})))
@@ -85,6 +89,7 @@ const rememberOnboarding=(userId:string,started:boolean)=>{try{if(started)sessio
 const initialGoogleCallback=captureGoogleCallback();
 
 export function App() {
+  replaceLegacyAddress();
   // Old pop-out links now enter the same member message panel.
   const legacyConsole=new URL(window.location.href)
   const adminRoute=window.location.pathname==='/admin'||window.location.pathname.startsWith('/admin/')
@@ -101,21 +106,21 @@ export function App() {
 
 const resetTokenFromHash=()=>/^#reset-password\/([A-Za-z0-9_-]{43})$/.exec(window.location.hash)?.[1]??null
 const eventIdFromLocation=()=>{
-  const inHash=/^#events\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\?.*)?$/.exec(window.location.hash)?.[1];
+  const inHash=/^#events\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\?.*)?$/.exec(currentLegacyHash())?.[1];
   if(inHash)return inHash;
   if(window.location.hash&&!readEventParticipationToken())return null;
   return /^\/events\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/.exec(window.location.pathname)?.[1]??null;
 }
 const eventReturnPath=()=>{
   const id=eventIdFromLocation();if(!id)return null;
-  const hash=/^#events\/[^?]+(?:\?(.*))?$/.exec(window.location.hash);
+  const hash=/^#events\/[^?]+(?:\?(.*))?$/.exec(currentLegacyHash());
   const refs=new URLSearchParams(hash?hash[1]??'':window.location.search).getAll('ref');
   const query=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?`?ref=${refs[0]}`:'';
   // Only public event identity/referral survives authentication, never a private capability.
   return hash?`/#events/${id}${query}`:`/events/${id}${query}`;
 }
 const eventLoginFromLocation=()=>Boolean(eventIdFromLocation()&&window.history.state?.freedomEventLogin===window.location.href)
-const isMessagesHash=(hash:string)=>hash.split('?')[0]==='#messages'
+const isMessagesHash=(hash:string)=>legacyHash(hash).split('?')[0]==='#messages'
 const isMessagesHistoryEntry=(state:unknown)=>Boolean(state&&typeof state==='object'&&(state as Record<string,unknown>).freedomMessagesOpen===true)
 function messagesHistoryState(open:boolean,state:unknown=window.history.state){
   const next:Record<string,unknown>=state&&typeof state==='object'?{...state}:{}
@@ -159,7 +164,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   const [emailVerificationToken,setEmailVerificationToken]=useState(()=>/^#verify-email\/([A-Za-z0-9_-]{43})$/.exec(window.location.hash)?.[1]??null);
   const [publicEventId,setPublicEventId]=useState(eventIdFromLocation)
   const [eventLoginRequested,setEventLoginRequested]=useState(eventLoginFromLocation)
-  const [locationHash,setLocationHash]=useState(() => window.location.hash)
+  const [locationHash,setLocationHash]=useState(currentLegacyHash)
   const [profileLoginRequested,setProfileLoginRequested]=useState(()=>window.history.state?.freedomProfileLogin===window.location.hash);
   const profileRoute=parseProfileRoute(locationHash);
   const beginProfileLogin=()=>{window.history.pushState({...window.history.state,freedomProfileLogin:window.location.hash},'');setProfileLoginRequested(true);};
@@ -177,7 +182,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   useEffect(()=>{const changed=()=>{setSharedCardToken(memberCardFromLocation());setMemberLoginRequested(false)};window.addEventListener('popstate',changed);return()=>window.removeEventListener('popstate',changed)},[])
   useEffect(()=>{const changed=()=>setResetToken(resetTokenFromHash());window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed)},[])
   useEffect(()=>{const changed=()=>setEmailVerificationToken(/^#verify-email\/([A-Za-z0-9_-]{43})$/.exec(window.location.hash)?.[1]??null);window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed)},[]);
-  useEffect(()=>{const changed=()=>{setLocationHash(window.location.hash);setEntryIntent(entryIntentFromHash());setPublicEventId(eventIdFromLocation());setEventLoginRequested(eventLoginFromLocation());setTesterLoginRequested(false);setLaunchpadLoginRequested(false)};window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);return()=>{window.removeEventListener('hashchange',changed);window.removeEventListener('popstate',changed)}},[])
+  useEffect(()=>{const changed=()=>{setLocationHash(legacyHash(replaceLegacyAddress()));setEntryIntent(entryIntentFromHash());setPublicEventId(eventIdFromLocation());setEventLoginRequested(eventLoginFromLocation());setTesterLoginRequested(false);setLaunchpadLoginRequested(false)};window.addEventListener('hashchange',changed);window.addEventListener('popstate',changed);return()=>{window.removeEventListener('hashchange',changed);window.removeEventListener('popstate',changed)}},[])
   const sessionGeneration = useRef(0)
   const loadOnboarding = useCallback(async () => {
     const generation = sessionGeneration.current
@@ -197,9 +202,9 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
 
   const applySession = useCallback((next: SessionPayload) => {
     // Public reading can resume before the member workspace's onboarding gate.
-    const postReturn=window.location.pathname==='/'&&window.location.hash==='#account'?publicPostReturn(window.location.search):null
+    const postReturn=window.location.pathname==='/'&&currentLegacyHash()==='#account'?publicPostReturn(window.location.search):null
     if(postReturn){window.location.replace(postReturn);return}
-    const memberReturn=window.location.pathname==='/'?memberPostReturn(window.location.search,window.location.hash):null
+    const memberReturn=window.location.pathname==='/'?memberPostReturn(window.location.search,currentLegacyHash()):null
     if(memberReturn){window.history.replaceState(null,'',memberReturn);window.dispatchEvent(new HashChangeEvent('hashchange'))}
     if(eventLoginFromLocation()){
       const state={...window.history.state};delete state.freedomEventLogin;delete state.freedomEventAuthMode
@@ -252,7 +257,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
         return
       }
       if (err instanceof ApiError && err.unauthorized) {
-        const sharedPost=window.location.pathname==='/'?anonymousSharedPost(window.location.search,window.location.hash):null
+        const sharedPost=window.location.pathname==='/'?anonymousSharedPost(window.location.search,currentLegacyHash()):null
         if(sharedPost){window.location.replace(sharedPost);return}
         toLogin()
         return
@@ -293,7 +298,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     const destination=eventReturnPath();if(!destination)return;
     // Scrub unallowlisted query/fragment data before creating any auth history entry.
     window.history.replaceState(null,'',destination);
-    setLocationHash(window.location.hash);setPublicEventId(eventIdFromLocation());
+    setLocationHash(legacyHash(replaceLegacyAddress()));setPublicEventId(eventIdFromLocation());
     window.history.pushState({freedomEventLogin:window.location.href,freedomEventAuthMode:mode},'');
     setEventLoginRequested(true);
   };
@@ -318,10 +323,15 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   if(emailVerificationToken)return <EmailVerificationConfirm key={emailVerificationToken} client={client} token={emailVerificationToken}/>;
   if (resetToken || phase !== 'ready' || !session) {
     // Authentication callbacks take precedence over every guest publication entry.
+    const publicToolRoute=resolvePortalRoute(window.location.hash);
+    const catalogGuild=guildKeyFromHash(window.location.hash);
+    if(!googleCallback&&!resetToken&&catalogGuild&&guildActionFromHash(window.location.hash)==='tools'&&!publicToolRoute.toolId)return <main className="main stack"><BrandPoster compact/><GuildToolPage guildKey={catalogGuild} site={site}/></main>;
+    const publicTool=publicToolRoute.guildKey&&publicToolRoute.toolId?guildTool(publicToolRoute.guildKey,publicToolRoute.toolId):undefined;
+    if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/><GuildToolPage guildKey={publicTool.guild_key} tool={publicTool} site={site}><PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></GuildToolPage></main>;
     if(!googleCallback&&!resetToken&&!profileLoginRequested&&profileRoute?.kind==='visitor'&&canOpenGuestProfile(locationHash,window.location.search))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><h1>個人頁</h1><VisitorProfile client={client} id={profileRoute.id} onLogin={beginProfileLogin}/><a className="btn btn-secondary btn-small" href="#home">返回自由工坊</a></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
-    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-hub')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
+    if(!googleCallback&&!resetToken&&['#community','#community-hub'].includes(locationHash.split('?')[0]))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#tester-map'&&!testerLoginRequested)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#tester-map" onClick={event=>{event.preventDefault();beginTesterLogin();}}>{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap reportClient={client} onLogin={beginTesterLogin}/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>eventLogin()} onJoin={site?.registration_enabled?()=>eventLogin('register'):undefined}/>;
@@ -363,7 +373,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
       ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={publicEventId?'原本的活動報名':entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
-      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(window.location.hash.split('?')[0]!=='#tester-map' && !eventIdFromLocation() && parseProfileRoute(window.location.hash)?.kind!=='visitor' && !entryIntent && !buyerRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash) && !sellerOrdersRoute(window.location.hash + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(currentLegacyHash().split('?')[0]!=='#tester-map' && !eventIdFromLocation() && parseProfileRoute(currentLegacyHash())?.kind!=='visitor' && !entryIntent && !buyerRoute(currentLegacyHash()) && !sellerOrdersRoute(currentLegacyHash()) && !sellerOrdersRoute(currentLegacyHash() + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
     : sharedCardToken ? <PublicMemberPage client={client} token={sharedCardToken} session={session} onLogin={()=>{}} onReturn={returnToWorkshop} onEdit={editOwnCard}/> : <>
     <AuthorClaimProvider client={client}><DevelopmentAccessProvider client={client} session={session}>
     <Workspace key={`${session.user.user_id}:${client.sessionGeneration}`}
@@ -432,8 +442,8 @@ function LoginView({
   const skillReturnRequest = useRef<AbortController | null>(null)
   const [storefrontReturn] = useState(() => storefrontReturnFromSearch(window.location.search))
   const postEntryUrl=window.location.href
-  const postReturnPath=!resetToken&&window.location.pathname==='/'&&window.location.hash==='#account'?publicPostReturn(window.location.search):null
-  const memberPostPath=!resetToken&&window.location.pathname==='/'?memberPostReturn(window.location.search,window.location.hash):null
+  const postReturnPath=!resetToken&&window.location.pathname==='/'&&currentLegacyHash()==='#account'?publicPostReturn(window.location.search):null
+  const memberPostPath=!resetToken&&window.location.pathname==='/'?memberPostReturn(window.location.search,currentLegacyHash()):null
   const authEpoch = useRef(0)
   const emailInput = useRef<HTMLInputElement>(null)
   const authForm = useRef<HTMLFormElement>(null)
@@ -720,13 +730,14 @@ function Workspace({
     setHelperReady(previous=>action?{scope:helperScope,action}:previous?.scope===helperScope?null:previous);
   },[helperScope]);
   const {canEndSession:canEndConsoleSession}=useGameConsole()
-  const consoleRoute = tab === 'stores' && site?.supplier_console_enabled === true ? parseSupplierConsoleRoute(locationHash) : null
-  const sellerRoute = tab === 'stores' && site?.commerce_console_enabled === true ? parseSellerConsoleRoute(locationHash) : null;
+  const consoleRoute = tab === 'stores' && site?.supplier_console_enabled === true ? parseSupplierConsoleRoute(legacyHash(locationHash)) : null
+  const sellerRoute = tab === 'stores' && site?.commerce_console_enabled === true ? parseSellerConsoleRoute(legacyHash(locationHash)) : null;
   const pageLeaveGuard = useRef<((nextHash: string | null) => boolean) | null>(null)
   const acceptedHash = useRef(window.location.hash)
-  const registerPageLeave = useCallback((guard: ((nextHash: string | null) => boolean) | null) => { pageLeaveGuard.current = guard }, [])
+  const registerPageLeave = useCallback((guard: ((nextHash: string | null) => boolean) | null) => { pageLeaveGuard.current = guard ? next => guard(next === null ? null : legacyHash(next)) : null }, [])
   const replaceBuyerLocation = useCallback((hash: string) => {
-    if (!buyerRoute(hash)) return
+    if (!buyerRoute(legacyHash(hash))) return
+    hash=canonicalHash(hash)
     // Only the buyer page uses this after holding/confirming its exact attempt.
     acceptedHash.current = hash
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${hash}`)
@@ -789,7 +800,7 @@ function Workspace({
       return
     }
     previousTab.current = tab
-    if(tab!=='social')setNotificationTarget(current=>current?.tab==='social'?null:current)
+    if(tab!=='social'&&tab!=='home')setNotificationTarget(current=>current?.tab==='social'?null:current)
     logConsoleEvent({channel:consoleChannel('guide_navigation'),kind:'guide',source:'導覽',message:`已進入「${tabTitle(tab)}」。${TAB_GUIDANCE[tab]}`})
     mainContent.current?.focus({ preventScroll: true })
     workspaceTopbar.current?.scrollIntoView({ block: 'start', behavior: 'instant' })
@@ -803,7 +814,8 @@ function Workspace({
   }, [locationHash])
   const selectTab = useCallback((next: TabId, destinationHash?: string) => {
     if(next==='messages'){openMessages();return}
-    const nextHash = destinationHash ?? `#${next}`
+    const nextHash = canonicalHash(destinationHash ?? `#${next}`)
+    next = resolvePortalRoute(nextHash).tab
     if (nextHash !== acceptedHash.current && pageLeaveGuard.current && !pageLeaveGuard.current(nextHash)) return
     acceptedHash.current = nextHash
     if(next==='friends')setFriendScope('accepted')
@@ -846,10 +858,10 @@ function Workspace({
   }
   function chooseShare(target:ShareTarget){
     const definition=SHARE_TARGETS[target]
-    const destination=target==='post'&&tab==='home'?'home':definition.tab
+    const destination=target==='post'?'home':definition.tab
     setShareNotice('');setShareEntry({target,tab:destination,sequence:++shareSequence.current});selectTab(destination,definition.hash)
     // A refused page-leave leaves the current hash, so this entry must not settle on the page that stayed.
-    if(acceptedHash.current!==(definition.hash??'#'+destination))setShareEntry(null)
+    if(acceptedHash.current!==canonicalHash(definition.hash??'#'+destination))setShareEntry(null)
   }
   useEffect(()=>{
     if(!shareEntry)return
@@ -887,12 +899,12 @@ function Workspace({
   },[locationHash])
   const launchpadEnabled = site?.guild_launchpad_enabled === true
   useEffect(() => {
-    setLocationHash(window.location.hash)
+    setLocationHash(replaceLegacyAddress())
     setTab(tabFromHash(launchpadEnabled))
   }, [launchpadEnabled])
   useEffect(() => {
     const changed = (event:Event) => {
-      const nextHash = window.location.hash
+      const nextHash = replaceLegacyAddress()
       const current={href:window.location.href,state:window.history.state}
       const previous=messageLocation.current
       const transition=messageHistoryTransition.current
@@ -944,7 +956,7 @@ function Workspace({
     window.addEventListener('popstate', changed)
     return () => { window.removeEventListener('hashchange', changed); window.removeEventListener('popstate', changed) }
   }, [launchpadEnabled,openMessages])
-  const launchpadOpen = site?.guild_launchpad_enabled === true && tab === 'guilds' && guildKeyFromHash(locationHash) !== null
+  const launchpadOpen = site?.guild_launchpad_enabled === true && tab === 'guilds' && guildKeyFromHash(locationHash) !== null && guildActionFromHash(locationHash)!=='tools'
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<ActionError | null>(null)
   const keysRef = useRef(new Map<string, string>())
@@ -1043,7 +1055,7 @@ function Workspace({
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">
               <div>
-                {launchpadOpen ? null : <h1 id="workspace-page-title">{consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : t(`nav.${tab}`)}</h1>}
+                {launchpadOpen ? null : <h1 id="workspace-page-title">{consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : (resolvePortalRoute(locationHash||'#'+tab).toolId ? guildTool(resolvePortalRoute(locationHash||'#'+tab).guildKey!,resolvePortalRoute(locationHash||'#'+tab).toolId!)?.title ?? '工具' : PORTAL_PLACES.find(p=>p.id===resolvePortalRoute(locationHash||'#'+tab).place)?.title ?? t(`nav.${tab}`))}</h1>}
               </div>
               <PageTools pageId={consoleRoute ? 'supplier-console' : tab} client={client} compact/>
               <div className="topbar-actions"><PlatformHelperHost pageId={consoleRoute ? 'supplier-console' : tab} routeIdentity={locationHash}
@@ -1065,7 +1077,7 @@ function Workspace({
             {tab==='home'&&!consoleRoute&&!sellerRoute&&seasonal.season&&<SeasonalWelcome season={seasonal.season} onShare={()=>chooseShare('post')} disabled={Boolean(pending)||Boolean(error?.accessExpired)}/>}
             <PageLoadBoundary label={t(`nav.${tab}`)} resetKey={tab}>
             {renderPortalFeature(tab, {
-              client, session, site, locationHash, selectTab, friendScope, notificationTarget, headerMember,
+              client, session, site, locationHash, selectTab, friendScope, notificationTarget, headerMember, canManageGuild, canManagePlatform,
               registerPageLeave, replaceBuyerLocation, onSessionExpired,
               openHomeJournal: () => requestHomeJournalOpen(() => {
                 if (pageLeaveGuard.current && !pageLeaveGuard.current(null)) return false;
@@ -1093,22 +1105,9 @@ function tabTitle(tab: TabId): string {
   return TAB_TITLES[tab]
 }
 
-function tabFromHash(launchpadEnabled: boolean): TabId {
-  const value = window.location.hash.slice(1)
-  if(parseProfileRoute(window.location.hash))return 'profile'
-  if(value==='account?view=recognition'||value==='account?view=connections')return 'account'
-  if(isMessagesHash(window.location.hash))return 'home'
-  if(value === 'reservations' || value.startsWith('reservations/'))return 'reservations'
-  if(value.split('?')[0]==='community-search')return 'community-search'
-  if(value==='my-content'||value.startsWith('my-content/'))return 'my-content'
-  if(value.split('?')[0]==='opensource')return 'opensource'
-  if(!value && window.location.pathname === '/device')return 'private-ai'
-  if(value.startsWith('events/'))return 'events'
-  if(value.startsWith('showcase/'))return 'showcase'
-  if(value.startsWith('squad-outcomes/'))return 'squads'
-  if(launchpadEnabled && value.startsWith('guilds/'))return 'guilds'
-  if(value === 'stores' || value.startsWith('stores/'))return 'stores'
-  if(value === 'highlights' || value.startsWith('highlights/'))return 'highlights'
-  if(!value&&eventIdFromLocation())return 'events'
-  return Object.hasOwn(TAB_TITLES, value) ? value as TabId : 'home'
+function tabFromHash(_launchpadEnabled: boolean): TabId {
+ if(!window.location.hash && window.location.pathname==='/device')return 'private-ai';
+ if(!window.location.hash && eventIdFromLocation())return 'events';
+ const route=resolvePortalRoute(window.location.hash);
+ return route.tab==='messages'?'home':route.tab;
 }

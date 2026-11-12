@@ -1,3 +1,5 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route';
+const canonicalUrl=(value:string)=>{const url=new URL(value);if(url.hash)url.hash=canonicalHash(url.hash);return url.href;};
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page,type Request,type Route} from './fixtures.js';
 import {quickJoin} from './quick-join.js';
@@ -117,7 +119,7 @@ async function login(page:Page){
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  const home=page.getByRole('heading',{name:'會員首頁',exact:true});
+  const home=page.getByRole('heading',{name:'動態',exact:true});
   const join=page.getByRole('region',{name:'快速加入公會',exact:true});
   await expect(home.or(join)).toBeVisible();
   if(await join.isVisible())await quickJoin(page);
@@ -127,7 +129,7 @@ async function login(page:Page){
 async function startAtA(page:Page,routes:EventRoutes,entry:Entry){
   await login(page);
   await page.goto(entryPath(entry,routes.a.event_id));
-  await expect(page).toHaveURL(routes.url(entryPath(entry,routes.a.event_id)));
+  await expect(page).toHaveURL(canonicalUrl(routes.url(entryPath(entry,routes.a.event_id))));
   await expect(detail(page).getByRole('heading',{name:routes.a.title,exact:true})).toBeVisible();
   await expect(detail(page).getByRole('button',{name:'我要參加',exact:true})).toBeEnabled();
   await expect.poll(()=>routes.listReads).toBeGreaterThan(0);
@@ -141,7 +143,7 @@ async function openNotification(page:Page,routes:EventRoutes,event:CommunityEven
   await expect(panel).toBeVisible();
   await panel.getByRole('button').filter({has:page.getByText(`前往 ${event.title}`,{exact:true})}).click();
   await expect(panel).toBeHidden();
-  await expect(page).toHaveURL(routes.url(`/#events/${event.event_id}`));
+  await expect(page).toHaveURL(canonicalUrl(routes.url(`/#events/${event.event_id}`)));
 }
 
 async function expectPendingB(page:Page,routes:EventRoutes,timeOrigin:number){
@@ -185,7 +187,7 @@ for(const entry of ['path','hash'] as const)test(`notification changes ${entry} 
     await releaseDetailB(page,routes,200);
     await expect(detail(page).getByRole('heading',{name:routes.a.title,exact:true})).toHaveCount(0);
     await joinCurrentEvent(page,routes,routes.b);
-    await expect(page).toHaveURL(routes.url(`/#events/${routes.b.event_id}`));
+    await expect(page).toHaveURL(canonicalUrl(routes.url(`/#events/${routes.b.event_id}`)));
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }finally{await routes.cleanup();}
 });
@@ -203,7 +205,7 @@ for(const entry of ['path','hash'] as const)for(const status of [403,404,503] as
     await expect(detail(page).getByRole('button',{name:/^(我要參加|取消報名)$/})).toHaveCount(0);
     expect(routes.writes).toEqual([]);
     await detail(page).getByRole('button',{name:'返回活動列表與行事曆',exact:true}).click();
-    await expect(page).toHaveURL(routes.url('/#events'));
+    await expect(page).toHaveURL(canonicalUrl(routes.url('/#events')));
     const list=page.getByRole('region',{name:'活動發佈區',exact:true});
     await expect(list.getByRole('alert')).toContainText('服務暫時無法回應（503）。請稍後重試。');
     const before=routes.listReads;
@@ -214,7 +216,7 @@ for(const entry of ['path','hash'] as const)for(const status of [403,404,503] as
     await expect(card).toBeVisible();
     await expect(list.getByRole('alert')).toHaveCount(0);
     await card.getByRole('link',{name:'活動專頁',exact:true}).click();
-    await expect(page).toHaveURL(routes.url(`/#events/${routes.b.event_id}`));
+    await expect(page).toHaveURL(canonicalUrl(routes.url(`/#events/${routes.b.event_id}`)));
     await joinCurrentEvent(page,routes,routes.b);
   }finally{await routes.cleanup();}
 });
@@ -230,7 +232,7 @@ for(const entry of ['path','hash'] as const)for(const status of [200,503] as con
     await expect(detail(page).getByRole('heading',{name:routes.c.title,exact:true})).toBeVisible();
     await expect(detail(page).getByRole('button',{name:'我要參加',exact:true})).toBeEnabled();
     await releaseDetailB(page,routes,status);
-    await expect(page).toHaveURL(routes.url(`/#events/${routes.c.event_id}`));
+    await expect(page).toHaveURL(canonicalUrl(routes.url(`/#events/${routes.c.event_id}`)));
     expect(await page.evaluate(()=>performance.timeOrigin)).toBe(timeOrigin);
     await expect(detail(page).getByRole('heading',{name:routes.c.title,exact:true})).toBeVisible();
     await expect(detail(page).getByRole('heading',{name:routes.a.title,exact:true})).toHaveCount(0);

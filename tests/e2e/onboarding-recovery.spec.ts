@@ -110,6 +110,7 @@ test('pending save blocks logout; a late committed answer after actual session e
     for(const question of await page.locator('.guild-question').all())await question.getByRole('radio').first().check();
     await page.locator('.quick-join-finish .btn-primary').click();
     await navigate(page,'我的定位');
+    await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/assessment$/);
     await page.getByRole('button',{name:'補充／繼續探索定位',exact:true}).click();
     for(const title of ['你喜歡怎麼做事？','遇到這些情境，你會怎麼做？']){
       await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();

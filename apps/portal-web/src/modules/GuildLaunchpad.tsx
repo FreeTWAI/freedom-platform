@@ -1,3 +1,5 @@
+import {GUILD_TOOLS} from '../guild-tools/catalog';
+import {guildRoute} from './guild-launchpad-route';
 import {useCallback,useEffect,useId,useLayoutEffect,useRef,useState,type ReactNode,type RefObject} from 'react';
 import {hasLoneSurrogate, recommendedApplications, type FieldError} from '../../../../contracts/guild-launchpad/v1/config';
 import {parseConfig, convertV1, type Config, type ConfigView} from '../../../../contracts/guild-launchpad/v2/config';
@@ -755,6 +757,7 @@ export function GuildLaunchpad({client, guildKey, mode, onBack, onLogin, userId,
         {!visitor && entryAnnouncementBlock && <button type="button" onClick={() => openResource(blockSection(entryAnnouncementBlock), 'announcements')}><span>公會公告 <span aria-hidden="true">→</span></span><strong>{announcements[0]?.title ?? '目前沒有公告'}</strong><small>{announcements.length?'查看已發布的公會消息':'查看公告區；目前尚未發布公告。'}</small></button>}
       </div>
     </section>}
+    {GUILD_TOOLS.some(tool=>tool.guild_key===guildKey)&&<div className="actions"><button type="button" className="btn btn-secondary btn-small" onClick={()=>{if(canNavigate())window.location.hash=guildRoute(guildKey,'tools');}}>工具</button></div>}
     <div className="guild-launchpad-layout">
     {sections.length > 0 && <>
       <nav className="guild-launchpad-nav" aria-label="公會功能">
