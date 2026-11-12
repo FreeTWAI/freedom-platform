@@ -8,6 +8,7 @@ import { runOperator } from './operator.mjs';
 import { requireFailedBackup } from './scheduled-admission.mjs';
 import { requireFailedReleaseHandoff, requireFailedReleaseMigration } from './handoff-admission.mjs';
 import { admitAutomaticRelease } from './automatic-admission.mjs';
+import { admitPairedRelease } from './paired-admission.mjs';
 import { checkEnvironment, checkFlagDecisions } from './environment-check.mjs';
 import { MAX_FLAG_CHANGES, readFlagDecisions, plannedFlagChanges, publicFlagChanges } from './portable/flag-decisions.mjs';
 
@@ -30,6 +31,10 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     // code or reading environment secrets. Execution uses only this job's output.
     const selectMain = env.GITHUB_EVENT_NAME === 'schedule' && env.RELEASE_COMMAND === 'admit';
     let request = requestFromEnvironment(selectMain ? { ...env, RELEASE_SHA: env.CONTROLLER_SHA } : env);
+    if (request.authorization) {
+      requireRelease(env.AUTO_RELEASE_ENABLED === 'true', 'release_pair_disabled');
+      requireRelease(env.RELEASE_COMMAND !== 'admit' || request.target === 'staging-next', 'release_pair_request_invalid');
+    }
     // Actions expression comparisons ignore case. The raw value is the incident
     // switch authority, checked again before either environment can execute.
     if (request.automatic && env.AUTO_RELEASE_ENABLED !== 'true') {
@@ -41,6 +46,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       RELEASE_SHA: (await api(`/repos/${REPOSITORY}/branches/main`)).commit?.sha });
     const admission = request.automatic
       ? await admitAutomaticRelease(request, api, { allowSkip: env.RELEASE_COMMAND === 'admit' })
+      : request.authorization ? await admitPairedRelease(request, api)
       : await admitRelease(request, api);
     if (admission.skipReason) {
       await skip(admission.skipReason);
@@ -56,7 +62,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     receipt.flagChangesObservation = 'not_checked';
     if (env.RELEASE_COMMAND === 'admit') {
       if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT,
-        `source_sha=${admission.sourceSha}\ntarget=${admission.target}\nmode=${admission.mode}\n`);
+        `source_sha=${admission.sourceSha}\ntarget=${admission.target}\nmode=${admission.authorization ? 'deploy-pair' : admission.mode}\n`);
       receipt.status = admission.mode === 'plan' ? 'plan_passed' : 'awaiting_execution';
       // A plan checks GitHub admission only. It has no environment credentials and cannot attest readiness.
       receipt.environmentReadiness = 'not_checked';
@@ -105,6 +111,12 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
       && git(['rev-parse', 'HEAD^{tree}']) === admission.sourceTree
       && git(['status', '--porcelain', '--untracked-files=all']) === '', 'release_checkout_identity_invalid');
     requireRelease(env.RUNNER_TEMP && !source.startsWith(resolve(env.RUNNER_TEMP) + '/'), 'release_runner_paths_invalid');
+    if (request.authorization) {
+      // Repeat mutable GitHub facts after checkout/receipt verification, before
+      // this environment's first write. Main may advance; source never changes.
+      await admitPairedRelease(request, api);
+      receipt.stagingEvidence = await requireStaging(api, admission, installation);
+    }
     const temporaryRoot = join(env.RUNNER_TEMP, `shared-release-${request.runId}-${request.runAttempt}`);
     await mkdir(temporaryRoot, { mode: 0o700 });
     const runUrl = `https://github.com/${REPOSITORY}/actions/runs/${request.runId}/attempts/${request.runAttempt}`;
@@ -122,6 +134,7 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
         transient_environment: false, description: 'Shared release; exact-source checks recorded in Actions',
         payload: { format: 'freedom.shared-release/v1', operatorImage: installation.image,
           ...(request.automatic ? { automatic: request.automatic } : {}),
+          ...(request.authorization ? { authorization: request.authorization } : {}),
           controllerSha: request.controllerSha, configSha256: installation.configSha256,
           runId: request.runId, runAttempt: request.runAttempt,
           actor: admission.original, triggeredBy: admission.triggeredBy },
@@ -140,7 +153,10 @@ export async function main(env = process.env, { api: suppliedApi, executeOperato
     // Persist an honest in-progress record before any remote mutation. Abrupt cancellation
     // cannot turn this into a success; GitHub deployment may remain in_progress for reconciliation.
     await writeFile(join(output, 'receipt.json'), json(receipt), { mode: 0o600 });
-    receipt.phases = await executeOperator({ admission, installation, recoveryEvidence, handoffRecoveryEvidence, migrationRecoveryEvidence,
+    // Pair authorization belongs to the hosted controller/public receipt. Keep
+    // the installed image's existing deploy request and phase protocol intact.
+    const { authorization, ...operatorAdmission } = admission;
+    receipt.phases = await executeOperator({ admission: authorization ? operatorAdmission : admission, installation, recoveryEvidence, handoffRecoveryEvidence, migrationRecoveryEvidence,
       sourceRoot: source, temporaryRoot,
       registry: { username: env.GITHUB_ACTOR, token: env.GH_TOKEN },
       onProgress: async phases => {

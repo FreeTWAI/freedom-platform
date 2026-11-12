@@ -21,8 +21,23 @@ Verify and CodeQL runs are required. The workflow/controller comes from the
 main workflow revision, independently of the selected application revision.
 
 事故停止開關是 repository variable `AUTO_RELEASE_ENABLED`：只有精確值 `true` 才開啟
-`workflow_run` 與 `schedule` 自動准入，未設定或任何其他值都關閉；手動 `workflow_dispatch` 不受影響。
+`workflow_run`、`schedule` 與明確的 `workflow_dispatch mode=deploy-pair` 准入，未設定或任何其他值都關閉；
+既有手動 `plan`／`check`／`deploy`／`handoff` 不受此自動開關影響。
 各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行，不得以自動開關繞過。
+
+Operator-dispatched pairs use only `mode=deploy-pair`, initially targeting staging-next,
+with a full lowercase main SHA and no recovery inputs. Authenticate the actual active
+dispatch run/attempt/controller/repository and both human operators. Both latest
+Deployments must exist, be success and strictly precede the source; no handoff exception.
+Keep that source fixed when main advances. Before each environment repeat mutable checks;
+production requires this run/attempt's successful staging Deployment and digest-verified
+receipt. A different attempt's staging requires the existing manual reconciliation process.
+Public receipts and Deployment payloads retain the real original/triggeredBy humans and
+`authorization.kind=operator_dispatch_pair`, dispatcher ID, source SHA, run ID and attempt.
+This is controller authorization: remove it before the existing `mode=deploy` operator
+request. Do not change the image/protocol or expand the four-operator allowlist.
+Pair dispatch requires human release duty; cron remains best effort. No queue activation
+or hosted acceptance follows from this implementation.
 
 Approved main pushes automatically release after both exact-source main checks
 pass: staging-next first, then next using the same source and installed image.

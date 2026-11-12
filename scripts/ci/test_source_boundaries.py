@@ -147,6 +147,38 @@ class SourceBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(boundary.archive.ArchiveError, 'source_integration_unproven'):
             self.verify(event='pull_request', head=self.base)
 
+    def test_merge_group_requires_event_head_and_target_base_ancestry(self):
+        self.git('switch', '-qc', 'candidate')
+        self.write('leaf.tsx', 'export const label="queue";\n')
+        head = self.commit()
+        self.git('switch', 'main')
+        self.git('merge', '--no-ff', '-qm', 'Synthetic queue candidate', 'candidate')
+        group = self.git('rev-parse', 'HEAD')
+        result = self.verify(event='merge_group', head=group)
+        self.assertEqual(result['status'], 'passed')
+        self.assertEqual(result['source'], group)
+        self.assertEqual(result['base'], self.base)
+        for wrong in [None, '', head, self.base, '0' * 40]:
+            with self.subTest(head=wrong):
+                with self.assertRaisesRegex(boundary.archive.ArchiveError, 'source_merge_group_head_mismatch'):
+                    self.verify(event='merge_group', head=wrong)
+        # A sibling main commit is not the group's base, even with a common ancestor.
+        self.git('switch', '-qc', 'other-main', self.base)
+        self.write('other.txt', 'changed base\n')
+        other = self.commit()
+        self.git('checkout', '--detach', group)
+        for wrong_base in [other, group]:
+            with self.subTest(base=wrong_base):
+                with self.assertRaisesRegex(boundary.archive.ArchiveError, 'source_merge_group_base_unproven'):
+                    boundary.verify(str(self.root), wrong_base, group, 'merge_group', group)
+
+    def test_merge_group_still_rejects_published_migration_changes(self):
+        self.write('migrations/001_base.sql', 'DROP TABLE synthetic;\n')
+        group = self.commit()
+        result = self.verify(event='merge_group', head=group)
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('published_migration_changed', [x['code'] for x in result['issues']])
+
     def test_committed_symlink_and_git_replacement_are_rejected(self):
         (self.root/'link').symlink_to('README.md')
         self.commit()
