@@ -372,3 +372,59 @@ for(const [id,triangles,draws] of [['egg-fried-rice',116508,8],['steak-dinner',4
  }finally{kit.dispose();kit.dispose();}
  assert.ok([...shared.values()].every(count=>count===1));
 });
+
+// Instrument the renderer boundary only: real scene, food, camera and transforms
+// still execute. This proves eliminated duplicate work, not GPU/browser timing.
+test('market viewport allocates and renders once per size, reuses shadows only for camera resize and restores capture',async()=>{
+ const three=await import('three'),deps:Record<string,unknown>={three:null};
+ for(const name of ['food-kit','market-food','corn-dog-stall','corn-dog-presentation','shawarma-presentation'])deps[`./${name}`]=await import(`../../apps/portal-web/src/games/cooking/${name}.js`);
+ deps['../stage-batch']=await import('../../apps/portal-web/src/games/stage-batch.js');deps['./food-studio']={foodStudio:()=>({dispose(){}})};
+ const allocations:number[][]=[],renders:Array<{shadow:boolean;aspect:number;zoom:number}>=[];
+ let box={width:390,height:447},notifyResize=()=>{},windowResize=()=>{},disconnected=false,failCapture=false;
+ class Renderer{
+  shadowMap={enabled:false,autoUpdate:true,needsUpdate:false};info={render:{calls:1,triangles:1},memory:{geometries:1,textures:1}};
+  domElement={setAttribute(){},addEventListener(){},removeEventListener(){},remove(){},toDataURL(){if(failCapture)throw Error('capture failed');return 'data:image/png;native-boundary';}};
+  setDrawingBufferSize(w:number,h:number,dpr:number){allocations.push([w,h,dpr]);}
+  setPixelRatio(){assert.fail('pixel-ratio setter would resize a second time');}setSize(){assert.fail('use one atomic drawing-buffer resize');}
+  render(_scene:unknown,camera:{aspect:number;zoom:number}){renders.push({shadow:this.shadowMap.autoUpdate||this.shadowMap.needsUpdate,aspect:camera.aspect,zoom:camera.zoom});this.shadowMap.needsUpdate=false;}
+  dispose(){}forceContextLoss(){}
+ }
+ deps.three={...three,WebGLRenderer:Renderer};
+ const module={exports:{} as {createMarketStage:typeof import('../../apps/portal-web/src/games/cooking/market-stage.js').createMarketStage}};
+ runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/market-stage.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{
+  module,exports:module.exports,devicePixelRatio:1.5,require:(id:string)=>{assert.ok(id in deps,id);return deps[id];},
+  matchMedia:()=>({matches:false,addEventListener(){},removeEventListener(){}}),
+  ResizeObserver:class{constructor(callback:()=>void){notifyResize=callback;}observe(){}disconnect(){disconnected=true;}},
+  window:{addEventListener(_name:string,callback:()=>void){windowResize=callback;},removeEventListener(){}}
+ });
+ const stage=module.exports.createMarketStage({append(){},getBoundingClientRect:()=>box} as unknown as HTMLElement,()=>{});
+ try{
+  assert.equal(allocations.length,1);assert.equal(renders.length,0);
+  const paused={...begin('corn-dog'),status:'paused' as const};stage.update(paused);assert.equal(renders.length,1);assert.equal(renders.at(-1)!.shadow,true);
+  notifyResize();windowResize();assert.equal(allocations.length,1);assert.equal(renders.length,1,'initial observer and duplicate window notifications must not redraw');
+  box={width:1180,height:614};windowResize();notifyResize();
+  assert.equal(allocations.length,2);assert.equal(renders.length,2);assert.equal(renders.at(-1)!.shadow,false,'light-space shadow map is independent of camera aspect');assert.equal(renders.at(-1)!.aspect,1180/614);
+  for(const [w,h,dpr]of allocations){assert.equal(dpr,1);assert.ok(w*h<=768*640*2.25);}
+  for(const run of [begin('shawarma'),time(begin('shawarma'),1000),act(begin('egg-fried-rice'),{kind:'toss'}),{...paused,status:'done' as const}]){stage.update(run);assert.equal(renders.at(-1)!.shadow,true,'all scene updates, including motion, return/reset and plated transitions, refresh shadows');}
+  stage.update(paused);const start=renders.length,allocationStart=allocations.length;
+  assert.equal(stage.capture(),'data:image/png;native-boundary');assert.equal(renders.length,start+2,'capture renders completed and restored states, without an extra resize render');assert.equal(allocations.length,allocationStart+2);assert.equal(renders.at(-1)!.aspect,1180/614);assert.equal(renders.at(-1)!.zoom,1);assert.ok(renders.slice(start).every(r=>r.shadow));
+  failCapture=true;assert.throws(()=>stage.capture(),/capture failed/);assert.equal(renders.at(-1)!.aspect,1180/614);assert.equal(renders.at(-1)!.zoom,1);assert.equal(renders.at(-1)!.shadow,true);
+ }finally{stage.dispose();}
+ assert.equal(disconnected,true);const before=renders.length;notifyResize();windowResize();assert.equal(renders.length,before);
+});
+
+// Retain the actual pre-batch meshes to measure contacts after the production
+// assembly transforms them. No synthetic screenshot or renderer acceptance.
+test('fried rice grains and garnish follow the real mound surface rather than a floating height plane',async()=>{
+ const {Box3}=await import('three'),kit=new FoodKit(),mesh=kit.mesh.bind(kit),garnishes=new Map<Group,Mesh[]>();let mound:Mesh|undefined,grains=0;
+ kit.mesh=((...args:Parameters<FoodKit['mesh']>)=>{const m=mesh(...args);if(args[9]==='rice'){if(args[1]===kit.sphere)assert.fail('mound must own its sculpted geometry');if(!mound)mound=m;else grains++;}else if(args[2]==='#e7bd52'){const list=garnishes.get(args[0])??[];list.push(m);garnishes.set(args[0],list);}return m;}) as FoodKit['mesh'];
+ const run=displayMarket('egg-fried-rice');run.portions=run.portions.filter(p=>p.kind==='rice'||p.kind==='egg');const food=marketFood(run,kit);
+ try{
+  assert.ok(mound);assert.equal(grains,420);assert.equal(garnishes.size,5);const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0),0,20);
+  for(const [group,parts]of garnishes){
+   const center=new Vector3().setFromMatrixPosition(group.matrixWorld);ray.ray.origin.set(center.x,10,center.z);const hit:import('three').Intersection|undefined=ray.intersectObject(mound,false)[0];assert.ok(hit,'garnish center must be supported by mound');
+   const bounds=new Box3();for(const part of parts){part.geometry.computeBoundingBox();bounds.union(part.geometry.boundingBox!.clone().applyMatrix4(part.matrixWorld));}
+   assert.ok(Math.abs(bounds.min.y-hit.point.y+.012)<1e-6,'garnish underside must contact the real local surface with bounded embed');
+  }
+ }finally{food.dispose();kit.dispose();}
+});

@@ -1428,7 +1428,7 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
  // The installed clock remains paused: resizing must not alter the cooked dish.
  for(const viewport of [{width:390,height:844},{width:1280,height:800}]){
   await page.setViewportSize(viewport);await marketNativeViewport(page);
-  await testInfo.attach(`${id}-live-front-${viewport.width}x${viewport.height}.png`,{body:await page.locator('.mk-surface').screenshot(),contentType:'image/png'});
+  const livePath=testInfo.outputPath(`${id}-live-front-${viewport.width}x${viewport.height}.png`);await page.locator('.mk-surface').screenshot({path:livePath});await testInfo.attach(`${id}-live-front-${viewport.width}x${viewport.height}.png`,{path:livePath,contentType:'image/png'});
  }
  await page.setViewportSize({width:390,height:844});await marketNativeViewport(page);
  expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.sauces,MARKET_SAVE_KEY)).toEqual(before.sauces);
@@ -2430,19 +2430,19 @@ test('AD-scene light: no WebGL requires explicit fallback, failed capture preser
 
 // Native evidence generation is additive. It does not rewrite the catalogue or
 // waive its source/image hash gate; a maintainer must inspect the exact outputs.
-test('MK-art: capture all 66 real catalogue models with the unchanged native preview operator',async({browser},testInfo)=>{
+for(const batch of [0,1,2])test(`MK-art: capture canonical batch ${batch+1}/3 of all 66 real catalogue models`,async({browser},testInfo)=>{
  test.setTimeout(300000);
- const {mkdtemp,readFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{execFile}=await import('node:child_process'),{promisify}=await import('node:util');
+ const {mkdtemp,readFile,copyFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{execFile}=await import('node:child_process'),{promisify}=await import('node:util');
  const run=promisify(execFile),parent=await mkdtemp(join(tmpdir(),'market-native-evidence-')),out=join(parent,'capture'),root=fileURLToPath(new URL('../../',import.meta.url));
  const executable=process.env.CHROMIUM_EXECUTABLE_PATH??browser.browserType().executablePath();
  let failure:unknown;
- try{await run(process.execPath,['modules/absurd-daily/tools/native-previews.mjs','capture',out,executable],{cwd:root,timeout:270000,maxBuffer:8*1024*1024});}catch(error){failure=error;}
+ try{await run(process.execPath,['modules/absurd-daily/tools/native-previews.mjs','capture-batch',out,executable,String(batch)],{cwd:root,timeout:270000,maxBuffer:8*1024*1024});}catch(error){failure=error;}
  // Keep failures as failures, but retain the operator's original receipt for diagnosis.
  const receiptPath=join(out,'receipt.json');
- try{await testInfo.attach('native-preview-receipt.json',{path:receiptPath,contentType:'application/json'});}catch{if(!failure)throw Error('native operator did not produce its receipt');}
+ try{const savedReceipt=testInfo.outputPath(`native-preview-batch-${batch}-receipt.json`);await copyFile(receiptPath,savedReceipt);await testInfo.attach('native-preview-receipt.json',{path:savedReceipt,contentType:'application/json'});}catch{if(!failure)throw Error('native operator did not produce its receipt');}
  if(failure)throw failure;
- const receipt=JSON.parse(await readFile(receiptPath,'utf8'));expect(receipt.status).toBe('captured_pending_visual_review');expect(receipt.errors).toEqual([]);expect(receipt.previews).toHaveLength(66);
- const archive=join(parent,'native-preview-evidence.tar.gz');await run('tar',['-czf',archive,'-C',out,'.'],{timeout:30000});
+ const receipt=JSON.parse(await readFile(receiptPath,'utf8'));expect(receipt.status).toBe('batch_captured_pending_aggregation');expect(receipt.errors).toEqual([]);expect(receipt.previews).toHaveLength(22);expect(receipt.batch.index).toBe(batch);expect(receipt.batch.count).toBe(3);expect(receipt.binding.run_id).toBe(process.env.GITHUB_RUN_ID);expect(receipt.binding.run_attempt).toBe(process.env.GITHUB_RUN_ATTEMPT);expect(receipt.binding.github_sha).toBe(process.env.GITHUB_SHA);
+ const archive=testInfo.outputPath(`native-preview-batch-${batch}.tar.gz`);await run('tar',['-czf',archive,'-C',out,'.'],{timeout:30000});
  await testInfo.attach('native-preview-evidence.tar.gz',{path:archive,contentType:'application/gzip'});
- for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'])await testInfo.attach(`${id}-catalog-original.png`,{path:join(out,`${id}.png`),contentType:'image/png'});
+ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'].filter(id=>receipt.previews.some((p:{recipe:string})=>p.recipe===id)))await testInfo.attach(`${id}-catalog-original.png`,{path:join(out,`${id}.png`),contentType:'image/png'});
 });

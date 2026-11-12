@@ -38,7 +38,7 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
  const lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
  const dispose=()=>{if(disposed)return;disposed=true;resizeObserver?.disconnect();if(resizeView)window.removeEventListener('resize',resizeView);if(refreshMotion)motion?.removeEventListener('change',refreshMotion);renderer.domElement.removeEventListener('webglcontextlost',lost);food?.dispose();kit.dispose();studio?.dispose();light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();scene.clear();};
  try{
-  renderer.setSize(768,640,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.toneMapping=ACESFilmicToneMapping;renderer.toneMappingExposure=.92;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFSoftShadowMap;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
+  renderer.toneMapping=ACESFilmicToneMapping;renderer.toneMappingExposure=.92;renderer.shadowMap.enabled=true;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.type=PCFSoftShadowMap;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
   studio=foodStudio(renderer,scene);scene.background=new Color('#203b3a');scene.add(new HemisphereLight('#fff8ed','#4c3021',.65));light.position.set(-3,8,4);light.castShadow=true;light.shadow.mapSize.set(1024,1024);Object.assign(light.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.5,far:25});light.shadow.normalBias=.03;scene.add(light);
   // A built, front-facing chef's counter, not a floating plate against an empty sky.
   // Every architectural detail is static and batched before the first frame.
@@ -111,7 +111,9 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
    // The fryer has already batched its static body; retain its live dial/lamp.
    if(!cornDogStall)bakeRigidGroup(cooker,kit.geometries);
   }
-  const render=()=>renderer.render(scene,camera);
+  // Shadows depend on scene geometry/light, not viewport size. Updates still
+  // refresh the full-quality map; pure resizes reuse it without a second pass.
+  const render=(sceneChanged=true)=>{renderer.shadowMap.needsUpdate=sceneChanged;renderer.render(scene,camera);};
   const update=(r:MarketRun)=>{
    if(disposed)return;if(snapshot&&r.tosses>snapshot.tosses)tossAt=r.elapsed;if(snapshot&&r.elapsed<snapshot.elapsed)tossAt=-Infinity;snapshot=r;if(recipe!==r.recipe)setup(r);
    const key=JSON.stringify([r.status,r.portions.map(p=>[p.kind,Math.round(p.a*15),Math.round(p.b*15),p.side,p.coated,p.lifted]),r.stirs,r.folds,r.shaves,r.sauces]);
@@ -137,13 +139,18 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
   };
   refreshMotion=()=>{if(snapshot&&!disposed)update(snapshot);};motion.addEventListener('change',refreshMotion);
   // Keep the old maximum pixel budget while covering the actual play viewport.
+  let viewWidth=0,viewHeight=0,viewDpr=0;
   const sizeView=(width:number,height:number)=>{
+   const dpr=Math.min(devicePixelRatio||1,1.5);
+   if(width===viewWidth&&height===viewHeight&&dpr===viewDpr)return false;
+   viewWidth=width;viewHeight=height;viewDpr=dpr;
    const next=marketFrontCamera(width,height);camera.aspect=next.aspect;camera.fov=next.fov;camera.updateProjectionMatrix();
-   const dpr=Math.min(devicePixelRatio||1,1.5),scale=Math.min(dpr,Math.sqrt(768*640*2.25/(width*height)));
-   renderer.setPixelRatio(1);renderer.setSize(Math.max(1,Math.floor(width*scale)),Math.max(1,Math.floor(height*scale)),false);
+   const scale=Math.min(dpr,Math.sqrt(768*640*2.25/(width*height)));
+   // One allocation, not setPixelRatio (which also resizes) followed by setSize.
+   renderer.setDrawingBufferSize(Math.max(1,Math.floor(width*scale)),Math.max(1,Math.floor(height*scale)),1);return true;
   };
-  resizeView=()=>{if(disposed)return;const box=host.getBoundingClientRect();if(box.width<=0||box.height<=0)return;sizeView(box.width,box.height);if(snapshot)render();};
+  resizeView=()=>{if(disposed)return;const box=host.getBoundingClientRect();if(box.width<=0||box.height<=0)return;if(sizeView(box.width,box.height)&&snapshot)render(false);};
   if(typeof ResizeObserver!=='undefined'){resizeObserver=new ResizeObserver(resizeView);resizeObserver.observe(host);}window.addEventListener('resize',resizeView);resizeView();
-  return {hit,update,capture:()=>{if(!snapshot||disposed)throw Error('料理畫面尚未就緒');const original=snapshot;try{sizeView(768,640);update({...original,status:'done'});return renderer.domElement.toDataURL('image/png');}finally{resizeView!();update(original);}},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
+  return {hit,update,capture:()=>{if(!snapshot||disposed)throw Error('料理畫面尚未就緒');const original=snapshot;try{sizeView(768,640);update({...original,status:'done'});return renderer.domElement.toDataURL('image/png');}finally{const box=host.getBoundingClientRect();if(box.width>0&&box.height>0)sizeView(box.width,box.height);update(original);}},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
  }catch(cause){dispose();throw cause;}
 }

@@ -34,18 +34,27 @@ export function marketFood(run:MarketRun,kit:FoodKit){
  root.userData.serving=result?(run.recipe==='steak-dinner'?'cast-iron':run.recipe==='corn-dog'?'paper-tray':'ceramic'):null;
  const base=result ? .18 : 0;
  if(run.recipe==='egg-fried-rice'){
-  const rice=run.portions.filter(p=>p.kind==='rice');if(rice.length){
-   const average=rice.reduce((sum,p)=>sum+(p.a+p.b)/2,0)/rice.length,color=cookedColor('#ead8ac',average*.48),height=.35+Math.min(5,rice.length)*.065;
+  const rice=run.portions.filter(p=>p.kind==='rice');let riceSurface:Mesh|undefined;if(rice.length){
+   const average=rice.reduce((sum,p)=>sum+(p.a+p.b)/2,0)/rice.length,color=cookedColor('#ead8ac',average*.48),height=.56+Math.min(5,rice.length)*.075;
    // A low, irregular mound with embedded short grains, not a smooth bun or noodles.
    const mound=kit.sphere.clone(),positions=mound.getAttribute('position');transient.push(mound);
    for(let i=0;i<positions.count;i++){const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i),a=Math.atan2(z,x),edge=1+.055*Math.sin(a*5)+.035*Math.cos(a*9);positions.setXYZ(i,x*edge,y*(1+.045*Math.sin(x*7+z*5)),z*edge);}
-   mound.computeVertexNormals();kit.mesh(root,mound,color,0,base+.14,0,1.64,height,1.24,'rice');
-   for(let i=0;i<84;i++){
-    const a=i*2.39996,rr=Math.sqrt((i+.5)/84)*.96,x=Math.cos(a)*rr*1.62,z=Math.sin(a)*rr*1.22,y=base+.14+height*Math.sqrt(1-rr*rr);
-    const grain=bite(root,color,x,y-.008,z,.09,.035,.038,'rice');grain.rotation.set(.12*Math.sin(i),a+i*.37,.14*Math.cos(i));
+   mound.computeVertexNormals();riceSurface=kit.mesh(root,mound,color,0,base+.14,0,1.64,height,1.24,'rice');
+   for(let i=0;i<420;i++){
+    const a=i*2.39996,rr=Math.sqrt((i+.5)/420)*.96,x=Math.cos(a)*rr*1.62,z=Math.sin(a)*rr*1.22,y=base+.14+height*Math.sqrt(1-rr*rr);
+    const grain=bite(root,color,x,y-.015,z,.085,.038,.036,'rice');grain.rotation.set(.12*Math.sin(i),a+i*.37,.14*Math.cos(i));
    }
   }
-  run.portions.filter(p=>p.kind!=='rice').forEach((p,index)=>{for(let j=0;j<5;j++){const a=index*1.4+j*2.4,rr=.45+(j%3)*.4;vegetable(p.kind,Math.cos(a)*rr,base+.48+(rice.length*.05),Math.sin(a)*rr*.8,p.kind==='egg'?.19:p.kind==='shrimp'?.18:.12);}});
+  // Seat each garnish's real underside on the actual sculpted mound, not a
+  // constant height plane that leaves the rim ingredients visibly suspended.
+  root.updateWorldMatrix(true,true);
+  const seatRay=new Raycaster(new Vector3(),new Vector3(0,-1,0),0,6);
+  run.portions.filter(p=>p.kind!=='rice').forEach((p,index)=>{for(let j=0;j<5;j++){
+   const a=index*1.4+j*2.4,rr=.38+(j%3)*.38,x=Math.cos(a)*rr,z=Math.sin(a)*rr*.8,garnish=new Group();
+   vegetable(p.kind,0,0,0,p.kind==='egg'?.19:p.kind==='shrimp'?.18:.12,garnish);
+   seatRay.ray.origin.set(x,3,z);const surface=riceSurface?seatRay.intersectObject(riceSurface,false)[0]?.point.y:undefined;
+   garnish.position.set(x,(surface??base+.04)-new Box3().setFromObject(garnish).min.y-.012,z);root.add(garnish);
+  }});
  } else if(run.recipe==='steak-dinner'){
   const meatCount=run.portions.filter(p=>p.kind==='steak').length;let meatIndex=0,sideIndex=0;
   run.portions.forEach((p,portionIndex)=>{

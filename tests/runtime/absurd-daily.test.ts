@@ -975,6 +975,29 @@ test('UX-8 preview operator: dry plan and pure receipt validation never imply na
   for(const path of ['../escape','/absolute','a/../b','a\\b','a//b'])assert.throws(()=>tool.safeRelative(path));
 });
 
+test('UX-8 preview batches: fixed 3x22 partition preserves full validation and rejects mixed evidence',async()=>{
+ const tool=await import(new URL('../../modules/absurd-daily/tools/native-previews.mjs',import.meta.url).href),planned=await tool.plan();
+ // Pure synthetic validator inputs only. They are never stored as native evidence.
+ const fixture=()=>[0,1,2].map(index=>({format:'freedom.native-preview-receipt/v1',status:'batch_captured_pending_aggregation',errors:[],created_at:'fixture',
+  batch:{index,count:3,size:22,plan_sha256:tool.planDigest(planned)},binding:{head_sha:'a'.repeat(40),github_sha:'b'.repeat(40),run_id:'123',run_attempt:'2'},
+  environment:{browser:'validator-fixture',renderer:'not-native',dpr:1,viewport:[1280,900]},source_inputs:structuredClone(planned.source_inputs),
+  build:{factory:'assets/dish.js',inputs:[planned.source_inputs[0]],chunks:[{file:'assets/dish.js',sha256:'a'.repeat(64),imports:[],modules:['apps/portal-web/src/games/cooking/dish-stage.ts']}]},total_bytes:22,
+  previews:tool.batchRecipes(planned,index).map((id:string)=>({recipe:id,path:`apps/portal-web/public/games/absurd-daily/cooking/3d/${id}.webp`,width:512,height:384,bytes:1,sha256:'b'.repeat(64),source_png_sha256:'c'.repeat(64),native:{calls:1,geometries:1,triangles:1,textures:1},canvas_after_dispose:0}))}));
+ const batches=fixture();for(const batch of batches){assert.equal(tool.validateBatch(batch,planned),true);assert.throws(()=>tool.validateCapture({...batch,status:'captured'},planned),/recipe_set/);}
+ const combined=tool.validateBatchSet([batches[2],batches[0],batches[1]],planned);assert.equal(tool.validateCapture(combined,planned),true);assert.deepEqual(combined.previews.map((p:any)=>p.recipe),planned.recipes);assert.equal(combined.total_bytes,66);
+ for(const index of [-1,3,1.5,NaN])assert.throws(()=>tool.batchRecipes(planned,index),/batch_partition/);
+ for(const mutate of [
+  (r:any[])=>r.pop(),(r:any[])=>{r[2]=r[0];},(r:any[])=>{r[0].batch.index=1;},(r:any[])=>{r[0].batch.count=4;},(r:any[])=>{r[0].batch.size=21;},(r:any[])=>{r[0].batch.plan_sha256='d'.repeat(64);},
+  (r:any[])=>{r[0].status='failed';},(r:any[])=>{r[0].errors.push('capture error');},(r:any[])=>{r[0].previews.pop();},(r:any[])=>{r[0].previews[1]=r[0].previews[0];},(r:any[])=>{r[0].previews[0]=r[1].previews[0];},
+  (r:any[])=>{r[0].source_inputs[0].sha256='d'.repeat(64);},(r:any[])=>{r[0].binding.head_sha='c'.repeat(40);},(r:any[])=>{r[0].binding.github_sha='c'.repeat(40);},(r:any[])=>{r[0].binding.run_id='124';},(r:any[])=>{r[0].binding.run_attempt='3';},(r:any[])=>{delete r[0].binding;},
+  (r:any[])=>{r[0].environment.browser='different';},(r:any[])=>{r[0].environment.renderer='different';},(r:any[])=>{r[0].environment.dpr=2;},(r:any[])=>{r[0].environment.viewport=[640,480];},
+  (r:any[])=>{r[0].build.chunks[0].sha256='d'.repeat(64);},(r:any[])=>{r[0].build.inputs=[{...r[0].build.inputs[0],sha256:'e'.repeat(64)}];},
+  (r:any[])=>{r[0].previews[0].native.calls=101;},(r:any[])=>{r[0].previews[0].native.geometries=100;},(r:any[])=>{r[0].previews[0].canvas_after_dispose=1;},(r:any[])=>{r[0].previews[0].width=511;},
+  // Each batch stays under 2.5 MiB but the complete 66 set exceeds the original cap.
+  (r:any[])=>{for(const b of r){for(const p of b.previews)p.bytes=50000;b.total_bytes=22*50000;}},
+ ]){const r=fixture();mutate(r);assert.throws(()=>tool.validateBatchSet(r,planned));}
+});
+
 test('UX-8 preview operator: refuses output reuse, symlinks and changed image/source bytes',async()=>{
   const tool=await import(new URL('../../modules/absurd-daily/tools/native-previews.mjs',import.meta.url).href);
   const {mkdtemp,mkdir,writeFile,symlink,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
@@ -998,6 +1021,39 @@ test('UX-8 preview operator: refuses output reuse, symlinks and changed image/so
     await writeFile(join(out,RECIPES[0].id+'.webp'),webp);await writeFile(join(out,'portal/assets/dish.js'),'wrong');await assert.rejects(tool.validateFiles(root,out,receipt,expected,sharp),/compiled_drift/);await writeFile(join(out,'portal/assets/dish.js'),'chunk');
     await writeFile(join(root,'source.js'),'changed');await assert.rejects(tool.validateFiles(root,out,receipt,expected,sharp),/source_drift/);
   }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('UX-8 preview aggregate: validates real bytes from all batches before a candidate and binds clean git sources',async()=>{
+ const tool=await import(new URL('../../modules/absurd-daily/tools/native-previews.mjs',import.meta.url).href);
+ const {mkdtemp,mkdir,writeFile,readFile,symlink,rm,access}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join,dirname}=await import('node:path'),{execFileSync}=await import('node:child_process'),{fileURLToPath}=await import('node:url');
+ const dir=await mkdtemp(join(tmpdir(),'native-batch-validator-')),root=join(dir,'source');await mkdir(root);
+ try{
+  // Synthetic files and a temporary local git repo test admission only. No browser
+  // is run and the fixture images are never represented as native recipe evidence.
+  const put=async(path:string,data:string|Buffer)=>{await mkdir(dirname(join(root,path)),{recursive:true});await writeFile(join(root,path),data);};
+  await put('modules/absurd-daily/cooking-3d-art.json',JSON.stringify({previews:RECIPES.map(r=>({recipe:r.id})),source_inputs:[{path:'source.js'}]}));
+  for(const path of ['source.js','apps/portal-web/src/games/cooking/dish-stage.ts','apps/portal-web/src/games/cooking/catalog.ts','apps/portal-web/vite.config.ts','modules/absurd-daily/tools/native-previews.mjs','package-lock.json'])await put(path,'fixture');await put('package.json','{}');
+  const git=(args:string[])=>execFileSync('git',args,{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();git(['init']);git(['add','.']);git(['-c','user.name=Validator Fixture','-c','user.email=validator@example.invalid','commit','-m','synthetic source fixture']);
+  const planned=await tool.plan(root),env={GITHUB_SHA:'9'.repeat(40),GITHUB_RUN_ID:'321',GITHUB_RUN_ATTEMPT:'2'},binding=tool.executionBinding(root,planned,env);assert.equal(binding.head_sha,git(['rev-parse','HEAD']));assert.equal(binding.github_sha,env.GITHUB_SHA);
+  assert.throws(()=>tool.executionBinding(root,planned,{}),/execution_binding/);
+  // Dependency resolution only; no source input is read through this symlink.
+  await symlink(fileURLToPath(new URL('../../node_modules',import.meta.url)),join(root,'node_modules'),'dir');
+  const png=await sharp({create:{width:640,height:480,channels:3,background:'#777'}}).png().toBuffer(),webp=await sharp(png).resize(512,384).webp().toBuffer(),dirs:string[]=[];
+  for(let index=0;index<3;index++){
+   const out=join(dir,`batch-${index}`);dirs.push(out);await mkdir(join(out,'portal/assets'),{recursive:true});await writeFile(join(out,'portal/assets/dish.js'),'chunk');
+   const previews=tool.batchRecipes(planned,index).map((id:string)=>({recipe:id,path:`apps/portal-web/public/games/absurd-daily/cooking/3d/${id}.webp`,width:512,height:384,bytes:webp.length,sha256:tool.digest(webp),source_png_sha256:tool.digest(png),native:{calls:1,geometries:1,triangles:1,textures:1},canvas_after_dispose:0}));
+   const receipt={status:'batch_captured_pending_aggregation',batch:{index,count:3,size:22,plan_sha256:tool.planDigest(planned)},binding,source_inputs:planned.source_inputs,errors:[],environment:{browser:'validator-fixture',renderer:'not-native',dpr:1},total_bytes:22*webp.length,previews,
+    build:{factory:'assets/dish.js',inputs:[planned.source_inputs[0]],chunks:[{file:'assets/dish.js',sha256:tool.digest('chunk'),imports:[],modules:['apps/portal-web/src/games/cooking/dish-stage.ts']}]}};
+   for(const p of previews){await writeFile(join(out,p.recipe+'.png'),png);await writeFile(join(out,p.recipe+'.webp'),webp);}await writeFile(join(out,'receipt.json'),JSON.stringify(receipt));await tool.validateBatchFiles(root,out,receipt,planned,sharp);
+   await assert.rejects(access(join(out,'candidate-manifest.json')),'a partial batch must not produce a candidate');
+  }
+  const combined=join(dir,'combined');await assert.rejects(tool.aggregate(root,combined,dirs.slice(0,2)),/batch_set/);await assert.rejects(access(combined));
+  const result=await tool.aggregate(root,combined,[dirs[2]+'/',dirs[0],dirs[1]]);assert.equal(result.status,'captured_pending_visual_review');assert.equal(result.previews.length,66);assert.equal(result.batch_receipts.length,3);
+  const candidate=JSON.parse(await readFile(join(combined,'candidate-manifest.json'),'utf8'));assert.equal(candidate.previews.length,66);assert.deepEqual(candidate.execution_binding,binding);await tool.validateFiles(root,combined,{...result,status:'captured'},planned,sharp);
+  await assert.rejects(tool.aggregate(root,combined,dirs),'outputs cannot be adopted or overwritten');
+  await writeFile(join(dirs[2],planned.recipes[44]+'.png'),'tamper');const badOut=join(dir,'bad-aggregate');await assert.rejects(tool.aggregate(root,badOut,dirs));await assert.rejects(access(join(badOut,'candidate-manifest.json')));
+  await put('source.js','modified');const changed=await tool.plan(root);assert.throws(()=>tool.executionBinding(root,changed,env),/head_source_drift/);await assert.rejects(tool.aggregate(root,join(dir,'changed-head'),dirs),/batch_incomplete|source_drift/);
+ }finally{await rm(dir,{recursive:true,force:true});}
 });
 
 // Controlled Image/canvas/FileReader callbacks test ownership and ordering only.
