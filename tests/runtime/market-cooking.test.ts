@@ -298,6 +298,34 @@ test('front market rays hit the rendered tilted food without changing portion ow
  }
 });
 
+// UX-9: a single plated dog remains on the left, not at the generic dish center.
+// Use real batched food triangles and production camera/worktop; no browser claim.
+for(const [width,height] of [[296,514],[1180,614],[600,500]])test(`plated single corn dog sauce starts on its actual triangle at ${width}x${height}`,async()=>{
+ const {marketFrontCamera,createMarketWorktop}=await import('../../apps/portal-web/src/games/cooking/market-stage.js');
+ const {Box3,Vector2}=await import('three');
+ let run=act(begin('corn-dog'),{kind:'add',ingredient:'sausage'});run=act(run,{kind:'coat'});run=time(run,24000);run=act(run,{kind:'flip',index:0});run=time(run,24000);run=time(act(run,{kind:'lift'}),4000);
+ assert.equal(run.status,'playing');assert.equal(run.portions.length,1);assert.ok(run.portions[0].lifted&&run.portions[0].coated&&run.portions[0].drain>=3000);
+ const kit=new FoodKit(),food=marketFood(run,kit),foodRoot=new Group(),surface=createMarketWorktop(),camera=marketFrontCamera(width,height);
+ try{
+  const bottom=new Box3().setFromObject(food.root).min.y;
+  foodRoot.add(food.root);foodRoot.position.y=-.225-bottom;surface.add(foodRoot);surface.updateMatrixWorld(true);camera.zoom=1.15;camera.updateProjectionMatrix();
+  const hitAt=(point:Vector3)=>{
+   const projected=surface.localToWorld(point.clone()).project(camera);assert.ok(Math.abs(projected.x)<1&&Math.abs(projected.y)<1);
+   const ray=new Raycaster();ray.setFromCamera(new Vector2(projected.x,projected.y),camera);
+   const closest=ray.intersectObjects(foodRoot.children,true)[0];assert.ok(closest,'actual triangle must be hit, not a synthetic interaction plane');
+   const local=surface.worldToLocal(closest.point.clone()),domain={x:local.x/3.4+.5,y:local.z/2.5+.5};
+   return {index:marketHitPortion(closest,foodRoot),domain,accepted:domain.x>=0&&domain.x<=1&&domain.y>=0&&domain.y<=1};
+  };
+  const oldStart=hitAt(new Vector3(-.6,.5,-.35));assert.equal(oldStart.index,null,'generic dish start hits unowned paper tray, not the left dog');assert.ok(oldStart.domain.y<0,'tray hit lies beyond the sauce domain');assert.equal(oldStart.accepted,false,'production domain bounds reject the old UX-9 start');
+  const points=[];
+  for(let step=0;step<=10;step++){
+   const hit=hitAt(new Vector3(-1.15+step*.01,.5,-.4+step*.08));assert.equal(hit.index,0,'every drag sample must hit the sole food portion');assert.equal(hit.accepted,true);points.push(hit.domain);
+  }
+  const dressed=applyMarket(run,{kind:'sauce',line:{sauce:'garlic',points}}).run;
+  assert.equal(dressed.sauces.length,1);assert.deepEqual(dressed.sauces[0].points,points);assert.deepEqual(dressed.portions,run.portions);
+ }finally{food.dispose();kit.dispose();}
+});
+
 for(const [width,height] of [[296,514],[1180,614],[600,500]])test(`fallback sauce follows SVG meet coordinates and rejects letterbox at ${width}x${height}`,()=>{
  const ui=marketUi();ui.click('開火，開始做！');ui.tick(0);ui.tick(400);ui.click('熱狗＋70g');ui.click('調味醬線');ui.click('番茄醬');
  const scale=Math.min(width/600,height/500),left=13,top=27,ox=(width-600*scale)/2,oy=(height-500*scale)/2;
