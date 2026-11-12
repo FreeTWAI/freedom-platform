@@ -11,6 +11,8 @@ export type PortalFeatureContext = {
   session: SessionPayload;
   site: SiteConfig | null;
   locationHash: string;
+  canManageGuild?: boolean;
+  canManagePlatform?: boolean;
   selectTab: (tab: TabId, hash?: string) => void;
   openHomeJournal: () => boolean;
   friendScope: 'accepted' | 'incoming';

@@ -1,3 +1,4 @@
+import {currentLegacyHash} from '../portal-route';
 import {SocialPostOptions} from './SocialPostBookmark';
 import {SocialIcon,SocialTextTools,SocialRichText,SOCIAL_TOPICS,type Mention} from './SocialTools';
 import {Component,lazy,Suspense,useCallback, useEffect, useId, useRef, useState,useSyncExternalStore, type FormEvent,type ReactNode} from 'react';
@@ -160,7 +161,7 @@ async function composeImage(file: File) {
 }
 
 function sharedPostFromLocation():string|null {
-  if(window.location.hash!=='#social')return null;
+  if(!['#home','#social'].includes(currentLegacyHash()))return null;
   const id=new URLSearchParams(window.location.search).get('social-post');
   return id&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)?id:null;
 }

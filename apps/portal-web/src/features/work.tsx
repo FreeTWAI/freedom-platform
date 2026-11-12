@@ -17,7 +17,7 @@ export const workFeatures = {
   },
   "workbench": {
     moduleId: "work", placement: 'page',
-    render: ({}) => <WorkbenchPanel />,
+    render: ({locationHash}) => <WorkbenchPanel selectedId={/^#workbench\/([0-9a-f-]{36})(?:\?|$)/i.exec(locationHash)?.[1]}/>,
   },
   "private-ai": {
     moduleId: "execution-runs", placement: 'page',

@@ -9,7 +9,7 @@ import {WorkContributionRoles} from './ContributionOutcomes'
 import { claimStateLabel, formatIsoLocal, hoursFromNowLocalInput, isPastIso, localInputToIso, looksLikeUrl, participationModeLabel, workStateLabel } from '../format'
 import type { Dashboard, ReviewQueueItem, WorkClaim, WorkItem } from '../types'
 
-export function WorkbenchPanel() {
+export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
   const { session, pending, mutate } = usePortal()
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -27,7 +27,15 @@ export function WorkbenchPanel() {
         client.get<unknown>('/dashboard'),
         client.get<unknown>('/work-items/page'),
       ])
-      const page=requireCursorPage<WorkItem>(itemsPayload,'工作列表')
+      let page=requireCursorPage<WorkItem>(itemsPayload,'工作列表')
+      if(selectedId){
+        const seen=new Set<string>();
+        while(!page.items.some(item=>item.work_item_id===selectedId)&&page.next_cursor&&!seen.has(page.next_cursor)){
+          seen.add(page.next_cursor);
+          const next=requireCursorPage<WorkItem>(await client.get<unknown>(`/work-items/page?cursor=${encodeURIComponent(page.next_cursor)}`),'工作列表');
+          page={...next,items:[...page.items,...next.items]};
+        }
+      }
       setDashboard(requireDashboard<Dashboard>(dashPayload))
       setItems(page.items)
       setNextCursor(page.next_cursor)
@@ -39,7 +47,7 @@ export function WorkbenchPanel() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedId])
 
   async function loadMore() {
     if(!nextCursor||loadingMore)return
@@ -71,6 +79,10 @@ export function WorkbenchPanel() {
     return <ErrorPanel error={loadError ?? { message: '無法顯示工作台', network: false, conflict: false }} onReload={() => void load()} />
   }
 
+  if(selectedId){
+    const selected=[...dashboard.now,...dashboard.next,...items].find(item=>item.work_item_id===selectedId);
+    return selected?<WorkItemCard key={selected.work_item_id} item={selected} pending={pending} mutate={mutate} onChanged={load}/>:<p role="status">找不到這項工作。</p>;
+  }
   const seen = new Set([...dashboard.now, ...dashboard.next].map((item) => item.work_item_id))
   const catalog = items.filter((item) => !item.my_claim && !seen.has(item.work_item_id))
 

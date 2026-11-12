@@ -1,3 +1,4 @@
+import {currentLegacyHash} from '../portal-route';
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { requireItems } from '../api'
 import { client, usePortal, describeError, type ActionError, type PortalContextValue } from '../portal-session'
@@ -100,8 +101,8 @@ export function ShowcasePanel() {
   }, [loading, nextOffset, moreLoading])
   useEffect(() => {
     const reveal = () => {
-      const id = window.location.hash.slice('#showcase/'.length);
-      if (!window.location.hash.startsWith('#showcase/') || !showcases) return;
+      const id = currentLegacyHash().slice('#showcase/'.length);
+      if (!currentLegacyHash().startsWith('#showcase/') || !showcases) return;
       // A deep link may point past the first page: keep paging until it appears or the list ends.
       if (!showcases.some(item => item.showcase_id === id)) { if (nextOffset !== null && !moreError) void loadMore(); return; }
       const card = document.getElementById(`showcase-${id}`);

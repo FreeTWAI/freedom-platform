@@ -1,3 +1,4 @@
+import {currentLegacyHash,canonicalHash} from '../portal-route';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { communitySearchKinds, communitySearchTopics, communitySearchKindLabels, communitySearchTopicLabels, communitySearchPageSchema, guildSearchPageSchema, type CommunitySearchPage, type GuildSearchPage } from '../../../../packages/shared/community-search';
 import { ApiError, type PortalClient } from '../api';
@@ -7,8 +8,8 @@ import {createCommunitySearch, communityListHistoryForSession, type CommunityLis
 type Kind = typeof communitySearchKinds[number];
 type Topic = typeof communitySearchTopics[number];
 type Mine = { kind: Kind; id: string; title: string; topics: Topic[]; aggregate_version: number | null };
-const readQuery = () => new URLSearchParams(window.location.hash.split('?')[1] ?? '').toString();
-const onSearchPage = () => /^#community-search(?:\?|$)/.test(window.location.hash);
+const readQuery = () => new URLSearchParams(currentLegacyHash().split('?')[1] ?? '').toString();
+const onSearchPage = () => /^#community-search(?:\?|$)/.test(currentLegacyHash());
 const message = (error: unknown) => error instanceof Error ? error.message : '無法載入，請重試。';
 type GuildRequest = {q: string; query: string; signal: AbortSignal; revision: number; generation: number};
 const guildNotice = '只搜尋公會名稱與簡介，不套用私人書籤或追蹤清單，也不計入社群內容筆數。';
@@ -53,8 +54,8 @@ function SearchContent({ client, authKey, relationsEnabled, navigation, guildSea
     writeQuery: (query, mode) => {
       if (!onSearchPage()) return;
       const hash = `#community-search${query ? `?${query}` : ''}`;
-      if (mode === 'push') window.history.pushState(window.history.state, '', hash);
-      else window.history.replaceState(window.history.state, '', hash);
+      if (mode === 'push') window.history.pushState(window.history.state, '', canonicalHash(hash));
+      else window.history.replaceState(window.history.state, '', canonicalHash(hash));
     },
   }), [client, authKey, generation, guildEnabled]);
   const state = useSyncExternalStore(search.subscribe, search.getSnapshot, search.getSnapshot);

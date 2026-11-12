@@ -208,8 +208,7 @@ export function PrivateWorkAI({ client }: { client: PortalClient }) {
     {unresolvedControls.map(pending => <div className="banner banner-info" key={pending.path}><p>{pending.label}的結果尚未確認；其他停止或撤銷操作仍可使用。</p><div className="actions">
       <button type="button" className="btn btn-ghost" disabled={controlBusy.includes(pending.path)} onClick={() => void control(pending.label, pending.path, pending)}>以原控制請求確認{pending.label}</button>
     </div></div>)}
-    <DeviceConnections client={client} onChanged={() => void refresh()}/>
-    <ModelSettings client={client}/>
+    {window.location.pathname==='/device'?<><DeviceConnections client={client} onChanged={() => void refresh()}/><ModelSettings client={client}/></>:<div className="actions"><a className="btn btn-secondary btn-small" href="#automation/devices">裝置連線</a><a className="btn btn-secondary btn-small" href="#automation/models">模型設定</a></div>}
     <div className="private-ai-grid">
       <section className="card stack"><h2>建立與編輯工作</h2>
         {works === null ? <p role="status">{loading ? '正在讀取私人工作…' : '私人工作服務尚未可用。'}</p> : <>

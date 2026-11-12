@@ -14,6 +14,8 @@ test('post return accepts one UUID and keeps public reading, legacy member inten
   assert.equal(publicPostReturn('?post_return='+id.toUpperCase()+'&join=1'),'/posts/'+id);
   assert.equal(memberPostReturn('?social-post='+id,'#account'),'/?social-post='+id+'#social');
   assert.equal(anonymousSharedPost('?social-post='+id,'#social'),'/posts/'+id);
+  assert.equal(anonymousSharedPost('?social-post='+id,'#home'),'/posts/'+id);
+  assert.equal(memberPostReturn('?social-post='+id,'#me/settings'),'/?social-post='+id+'#social');
   assert.equal(anonymousSharedPost('?social-post='+id,'#account'),null);
   assert.equal(memberPostReturn('?social-post='+id,'#social'),null);
   for(const value of ['',id+'\n',id+'\r',id+' ',id+'/../other','//elsewhere.test','https://elsewhere.test/',id+'?x=1',id+'#social','00000000-0000-0000-0000-000000000000']){
