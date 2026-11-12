@@ -2139,7 +2139,7 @@ test('PT-tofu-profile: bounded diagnostic owns one clock chunk and preserves fai
 test('PT-tofu-profile: one-pixel diagnostic preserves GL ownership and rejects invalid evidence',()=>{
  // Synthetic RAF/WebGL lifecycle only, not a GPU/resolve measurement.
  const source=readFileSync(new URL('../e2e/tofu-game-scene.spec.ts',import.meta.url),'utf8');
- const start=source.indexOf('function installTofuReadbackProbe('),end=source.indexOf("\nfor(const order of ['AB','BA']",start);
+ const start=source.indexOf('function installTofuReadbackProbe('),end=source.indexOf("\nfor(const shadowExperiment of [false,true]",start);
  assert.ok(start>=0&&end>start);
  const js=transformSync(source.slice(start,end),{loader:'ts',target:'es2023',format:'esm'}).code;
  for(const readback of [false,true])for(const mode of ['ok','fbo-roundtrip','invalid-pack','gl-error','state-mismatch','context-lost','read-error']){
@@ -2246,4 +2246,27 @@ test('PT-tofu-perf: opaque canvas blend bypass retains transparent queue and fai
  assert.match(source,/decal\(scenery,panorama,0,7,-4\.98,64,20,true\)/);
  assert.match(source,/w\*152\/512,game==='tofu'\)/);
  assert.match(source,/decal\(g,face,0,\.03,\.505,\.48,\.72\)/,'transparent face is not an opaque candidate');
+});
+
+test('PT-tofu-profile: shadow intervention skips only wrapped 512px offscreen draws',()=>{
+ const source=readFileSync(new URL('../e2e/tofu-game-scene.spec.ts',import.meta.url),'utf8');
+ const js=transformSync(source.slice(source.indexOf('function installTofuReadbackProbe('),source.indexOf('\nfor(const shadowExperiment of')),{loader:'ts',format:'esm'}).code;
+ for(const suppressShadow of [false,true])for(const mode of ['ok','wrong-viewport','unwrapped']){
+  const values=new Map<number,any>([[4,null],[5,null],[6,14],[7,4],[8,0],[9,0],[10,0],[17,null],[18,[0,0,640,480]]]),queue:Function[]=[],events:string[]=[];
+  const c={VENDOR:1,RENDERER:2,VERSION:3,READ_FRAMEBUFFER_BINDING:4,PIXEL_PACK_BUFFER_BINDING:5,READ_BUFFER:6,PACK_ALIGNMENT:7,PACK_ROW_LENGTH:8,PACK_SKIP_PIXELS:9,PACK_SKIP_ROWS:10,FRAMEBUFFER:11,READ_FRAMEBUFFER:12,PIXEL_PACK_BUFFER:13,BACK:14,RGBA:15,UNSIGNED_BYTE:16,DRAW_FRAMEBUFFER_BINDING:17,VIEWPORT:18,DRAW_FRAMEBUFFER:19,NO_ERROR:0};
+  const methods={drawArrays(){events.push(values.get(17)===null?'main':'shadow');},drawElements(){},drawArraysInstanced(){},drawElementsInstanced(){},bindFramebuffer(target:number,fbo:any){if(target===11||target===19)values.set(17,fbo);if(target===11||target===12){values.set(4,fbo);values.set(6,fbo===null?14:99);}},bindBuffer(){},pixelStorei(){},readBuffer(){},viewport(...v:number[]){values.set(18,v);}};
+  const gl=Object.assign(Object.create(methods),c,{getExtension:()=>null,getParameter:(k:number)=>values.get(k),getContextAttributes:()=>({}),getError:()=>0,isContextLost:()=>false,readPixels(){throw Error('Suppression experiment must not issue readback');}});
+  const canvas={width:640,height:480,getContext:()=>gl},window:any={requestAnimationFrame:(cb:Function)=>{queue.push(cb);return 1;}};
+  const fn=runInNewContext(`${js};installTofuReadbackProbe`,{window,document:{querySelector:()=>({querySelector:()=>canvas}),visibilityState:'visible'},performance:{now:()=>0},navigator:{hardwareConcurrency:2},devicePixelRatio:1});
+  fn({suppressShadow});const api=window.__tofuReadbackProbe;api.start();api.mark();
+  if(mode==='unwrapped')assert.throws(()=>gl.drawArrays(),/outside wrapped RAF/);
+  else{
+   window.requestAnimationFrame(()=>{gl.bindFramebuffer(gl.FRAMEBUFFER,{});gl.viewport(0,0,mode==='wrong-viewport'?256:512,512);gl.drawArrays();gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,640,480);gl.drawArrays();});
+   if(mode==='wrong-viewport')assert.throws(()=>queue.shift()!(16),/Unexpected offscreen viewport/);else queue.shift()!(16);
+  }
+  const result=api.read();
+  if(mode==='ok'){assert.equal(result.draws,2);assert.equal(result.frames,1);assert.equal(result.unwrappedDraws,0);assert.equal(result.errors.length,0);const w=result.samples[0].work;assert.equal(w.offscreenAttempted,1);assert.equal(w.offscreenExecuted,suppressShadow?0:1);assert.equal(w.mainDraws,1);assert.equal(w.targets,1);assert.equal(w.segments,1);assert.deepEqual(events,suppressShadow?['main']:['shadow','main']);}
+  else assert.ok(result.errors.length>0);
+  api.restore();for(const name of Object.keys(methods))assert.equal(Object.hasOwn(gl,name),false);
+ }
 });
