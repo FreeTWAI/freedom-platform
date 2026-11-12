@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { githubCoordinate, publicRepositoryJson, concealedRepository } from '../../opensource-marketing/github.js';
+import { shareRepositoryJson } from '../github.js';
+import { githubCoordinate, concealedRepository } from '../../opensource-marketing/github.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
 import type { AdapterContext, RepositoryFacts, ShareAdapter } from '../types.js';
 const counter=z.number().int().nonnegative().safe();
@@ -10,7 +11,7 @@ export async function repositoryFacts(url:string,context:AdapterContext={}):Prom
   const seen=new Set<string>(),signal=AbortSignal.timeout(8000);
   for(let depth=0;depth<5;depth++) {
     requireCondition(!seen.has(name.toLowerCase()),422,'repository_cycle','無法確認原作。');seen.add(name.toLowerCase());
-    const raw=await publicRepositoryJson(`/repos/${name}`,signal,context.fetcher??fetch,false,196608,context.token);
+    const raw=await shareRepositoryJson(`/repos/${name}`,signal,context.fetcher??fetch,false,196608,context.token);
     requireCondition(!concealedRepository(raw),422,'github_repository_unavailable','原作已不公開。');
     const parsed=repo.safeParse(raw);
     requireCondition(parsed.success,422,'github_repository_unavailable','請分享公開且未封存的原作。');

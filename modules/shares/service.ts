@@ -75,6 +75,10 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,[input.actor.community_id,p.kind,p.canonical_key,p.canonical_url,repoId,p.ref_table??null,p.ref_id??null,p.title,input.actor.user_id,body.guild_key??null,JSON.stringify(body.text?{intro:body.text}:{})])).rows[0];
     }
     requireCondition(s.state!=='hidden',409,'share_unavailable','這份分享已停止公開。');
+    if(!created&&p.repository){
+      await saveRepository(q,p);
+      await q.query('UPDATE shares SET title=$2,canonical_url=$3 WHERE share_id=$1',[s.share_id,p.title,p.canonical_url]);
+    }
     if(s.state==='retracted'){
       await q.query("UPDATE shares SET state='published' WHERE share_id=$1",[s.share_id]);
       s.state='published';

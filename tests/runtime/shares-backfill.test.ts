@@ -49,3 +49,50 @@ test('backfill consolidates originals, preserves legacy sources, matches dry-run
  assert.equal((await pool.query("SELECT count(*)::int n FROM share_credit_events WHERE basis='registration'")).rows[0].n,1);
  assert.equal((await pool.query('SELECT count(*)::int n FROM community_events WHERE event_id IN ($1,$2)',[event,draft])).rows[0].n,2);
 });
+
+test('backfill reports an unresolved source, applies the rest and remains repeatable',async()=>{
+ const broken=randomUUID();
+ await pool.query(`INSERT INTO oss_projects(project_id,community_id,owner_ref,title,description,use_notes,repository_id,repository_full_name,repository_url,relationship)
+ VALUES($1,$2,$3,'Unresolved synthetic','Description','Keep original','999','fixture/unresolved','https://github.com/fixture/unresolved','curator')`,[broken,DEMO_COMMUNITY,owners[2]]);
+ const nextBook={...book,id:'synthetic-moved-book',upstream_url:'https://github.com/fixture/old-next'};
+ const nextFacts={...original,id:923,full_name:'fixture/next'};
+ const fixture:typeof fetch=async input=>{
+  const path=new URL(String(input)).pathname;
+  if(path==='/repos/fixture/unresolved')return new Response(null,{status:301,headers:{Location:'https://elsewhere.example/repository'}});
+  if(path==='/repos/fixture/old-next')return new Response(null,{status:301,headers:{Location:'https://api.github.com/repositories/923'}});
+  assert.equal(path,'/repositories/923');return Response.json(nextFacts);
+ };
+ const plan=await planShareBackfill(pool,{fetcher:fixture},[book,nextBook]);
+ const unresolved=[{url:'https://github.com/fixture/unresolved',code:'github_repository_moved',legacy:{kind:'oss_project',id:broken}}];
+ assert.deepEqual(plan.unresolved,unresolved);
+ const before=(await pool.query('SELECT count(*)::int n FROM share_credit_events')).rows[0].n;
+ const dry=await applyShareBackfill(pool,plan);assert.equal(dry.shares,1);assert.equal(dry.repositories,1);assert.equal(dry.credits,0);
+ assert.deepEqual(await applyShareBackfill(pool,plan,true),dry);
+ assert.equal((await pool.query('SELECT share_id FROM oss_projects WHERE project_id=$1',[broken])).rows[0].share_id,null);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM shares WHERE canonical_key='github:999' OR legacy_ref @> $1::jsonb",[JSON.stringify([unresolved[0].legacy])])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM share_credit_events')).rows[0].n,before);
+ assert.equal((await pool.query("SELECT title FROM shares WHERE canonical_key='github:923'")).rows[0].title,'fixture/next');
+ const again=await planShareBackfill(pool,{fetcher:fixture},[book,nextBook]);assert.deepEqual(again.unresolved,unresolved);
+ assert.deepEqual(await applyShareBackfill(pool,again,true),{repositories:0,shares:0,credits:0,notes:0,links:0});
+});
+
+test('backfill CLI prints unresolved sources in dry-run and apply JSON using recorded fetches',async()=>{
+ const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');
+ const fixture=`globalThis.fetch=async input=>{
+  const url=new URL(String(input));
+  if(url.origin!=='https://api.github.com')throw Error('Unexpected host');
+  if(url.pathname==='/repos/fixture/unresolved')return new Response(null,{status:301,headers:{Location:'https://elsewhere.example/repository'}});
+  return Response.json(${JSON.stringify(original)});
+ };`;
+ const run=async(apply:boolean)=>{
+  const result=await promisify(execFile)(process.execPath,['--import','tsx','--import',`data:text/javascript,${encodeURIComponent(fixture)}`,'scripts/backfill-shares.ts',...(apply?['--apply']:[])],{
+   env:{...process.env,PGOPTIONS:`-c search_path=${schema}`,SHARES_BACKFILL_GITHUB_TOKEN:''},
+  });
+  return result.stdout.trim().split('\n').map(line=>JSON.parse(line));
+ };
+ const dry=await run(false);assert.equal(dry.length,1);assert.equal(dry[0].mode,'dry-run');
+ assert.equal(dry[0].unresolved.length,1);assert.equal(dry[0].unresolved[0].code,'github_repository_moved');
+ const applied=await run(true);assert.equal(applied.length,2);assert.equal(applied[1].mode,'apply');
+ assert.deepEqual(applied[0],dry[0]);assert.deepEqual(applied[1].counts,dry[0].counts);assert.deepEqual(applied[1].unresolved,dry[0].unresolved);
+ const repeated=await run(true);assert.deepEqual(repeated[1].counts,{repositories:0,shares:0,credits:0,notes:0,links:0});assert.deepEqual(repeated[1].unresolved,dry[0].unresolved);
+});
