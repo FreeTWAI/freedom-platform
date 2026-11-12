@@ -41,7 +41,7 @@ async function login(page: Page) {
     && response.request().method() === 'POST');
   await page.getByRole('button', {name: '登入', exact: true}).click();
   expect((await authenticated).status()).toBe(200);
-  await expect(page.getByRole('heading', {name: '會員首頁', level: 1, exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', level: 1, exact: true})).toBeVisible();
   await openHomeGuide(page);
   await openHomeLearning(page);
 }

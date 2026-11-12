@@ -13,7 +13,7 @@ async function login(page:Page){
 }
 test('member helper host uses current canonical help without new writes or raw query echo',async({page})=>{
   await page.goto('/');await expect(launcher(page)).toHaveCount(0);await login(page);await navigate(page,'技能書架');
-  await expect(page.getByRole('heading',{name:'技能書架',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toBeVisible();
   const writes:string[]=[];page.on('request',request=>{if(!['GET','HEAD','OPTIONS'].includes(request.method()))writes.push(new URL(request.url()).pathname);});
   await launcher(page).click();await expect(question(page)).toBeFocused();await question(page).fill('請問我要怎麼學AI？');await question(page).press('Enter');
   await expect(helper(page).getByRole('heading',{name:PORTAL_FEATURE_METADATA.skills.title,exact:true})).toBeVisible();
@@ -27,7 +27,7 @@ test('member helper host yields to page tools, share dialog and messages without
   const help=page.getByRole('dialog',{name:'會員首頁：頁面說明',exact:true});await expect(help).toBeVisible();await expect(launcher(page)).toHaveCount(0);
   await help.getByRole('button',{name:'關閉',exact:true}).click();await expect(launcher(page)).toBeVisible();
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();await expect(launcher(page)).toHaveCount(0);
-  await page.getByRole('button',{name:'關閉分享選單',exact:true}).click();await expect(launcher(page)).toBeVisible();
+  await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:'關閉',exact:true}).click();await expect(launcher(page)).toBeVisible();
   await openChat(page);await expect(launcher(page)).toHaveCount(0);await closeChat(page);await expect(launcher(page)).toBeVisible();
 });
 test('member helper host respects real page-leave refusal and retains an unsaved event draft',async({page})=>{
@@ -36,21 +36,21 @@ test('member helper host respects real page-leave refusal and retains an unsaved
   let accept=false,prompts=0;page.on('dialog',async dialog=>{prompts++;await(accept?dialog.accept():dialog.dismiss());});
   await launcher(page).click();await helper(page).getByRole('button',{name:'學 AI',exact:true}).click();
   await helper(page).getByRole('button',{name:'前往技能書架',exact:true}).click();
-  await expect(page).toHaveURL(/#events$/);await expect(helper(page)).toBeVisible();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('助手導航不可丟掉的合成草稿');expect(prompts).toBe(1);
-  accept=true;await helper(page).getByRole('button',{name:'前往技能書架',exact:true}).click();await expect(page).toHaveURL(/#skills$/);await expect(helper(page)).not.toBeVisible();await expect(page.locator('#main-content')).toBeFocused();
+  await expect(page).toHaveURL(/#explore\/events$/);await expect(helper(page)).toBeVisible();await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('助手導航不可丟掉的合成草稿');expect(prompts).toBe(1);
+  accept=true;await helper(page).getByRole('button',{name:'前往技能書架',exact:true}).click();await expect(page).toHaveURL(/#explore\/resources$/);await expect(helper(page)).not.toBeVisible();await expect(page.locator('#main-content')).toBeFocused();
 });
 test('member helper host resets accepted same-tab routes and a fresh login generation',async({page})=>{
   await login(page);await navigate(page,'我的商店');await launcher(page).click();await question(page).fill('舊路由問題');
   // External history change models an accepted same-tab deep link, not a helper action.
-  await page.evaluate(()=>{location.hash='#stores/supply';});await expect(page).toHaveURL(/#stores\/supply$/);await expect(helper(page)).not.toBeVisible();
+  await page.evaluate(()=>{location.hash='#stores/supply';});await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);await expect(helper(page)).not.toBeVisible();
   await launcher(page).click();await expect(question(page)).toHaveValue('');await page.keyboard.press('Escape');await signOut(page);
   await expect(launcher(page)).toHaveCount(0);await login(page);await launcher(page).click();await expect(question(page)).toHaveValue('');
 });
 test('member helper host transfers focus after accepted same-tab helper navigation',async({page})=>{
-  await login(page);await navigate(page,'供貨商品管理');await expect(page).toHaveURL(/#stores\/supply$/);
+  await login(page);await navigate(page,'供貨商品管理');await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
   await launcher(page).click();await helper(page).getByRole('button',{name:'開店／賣東西',exact:true}).click();
   await helper(page).getByRole('button',{name:'前往我的商店',exact:true}).click();
-  await expect(page).toHaveURL(/#stores$/);await expect(helper(page)).not.toBeVisible();await expect(page.locator('#main-content')).toBeFocused();
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);await expect(helper(page)).not.toBeVisible();await expect(page.locator('#main-content')).toBeFocused();
 });
 for(const flag of [false,undefined])test(`member helper host hides stores when capability is ${String(flag)}`,async({page})=>{
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();const data=await response.json();if(flag===undefined)delete data.guild_launchpad_enabled;else data.guild_launchpad_enabled=flag;await route.fulfill({response,json:data});});
@@ -83,7 +83,7 @@ for(const profile of ['guide-dragon','guide-ai-sister'])test(`member helper char
   await companion.getByRole('button',{name:'帶我看',exact:true}).click();await expect(companion.locator('.page-spirit-guide-directory')).toBeVisible();
   await shortcut.click();await helper(page).getByRole('button',{name:'從哪裡開始',exact:true}).click();
   await helper(page).getByRole('button',{name:`前往${PORTAL_FEATURE_METADATA.todos.title}`,exact:true}).click();
-  await expect(page).toHaveURL(/#todos$/);await expect(helper(page)).not.toBeVisible();await expect(page.locator('#main-content')).toBeFocused();
+  await expect(page).toHaveURL(/#me\/start$/);await expect(helper(page)).not.toBeVisible();await expect(page.locator('#main-content')).toBeFocused();
 });
 for(const width of [320,390])test(`member character helper at ${width}px retains toolbar fallback after theme teardown`,async({page})=>{
   await page.setViewportSize({width,height:420});await page.addInitScript(()=>localStorage.setItem('freedom-theme','guide-dragon'));await login(page);

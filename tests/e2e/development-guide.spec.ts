@@ -84,7 +84,7 @@ test('development tools follow the current page on desktop and phone without a d
  await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
  await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
  await page.getByRole('button',{name:'登入',exact:true}).click();
- await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
  await openPageTools(page); await page.locator('.topbar').getByRole('button',{name:'參與編修'}).click();
  guide=page.getByRole('dialog',{name:/參與編修/});
  await expect(guide.getByRole('link',{name:'給 Agent 的文字版 ↗'})).toHaveAttribute('href','/development/home.md');

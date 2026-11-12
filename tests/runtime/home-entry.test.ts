@@ -1,3 +1,4 @@
+import {canonicalHash,legacyHash} from '../../apps/portal-web/src/portal-route.js';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {parseProfileRoute} from '../../apps/portal-web/src/modules/profile-publication-route.js';
@@ -64,10 +65,10 @@ for (const personalContentEnabled of [false, true]) test(`personal space is the 
     communitySearchEnabled:false,personalContentEnabled,mobileOpen:false,
   }));
   const primary=html.split('<div class="nav-primary">')[1].split('</div>')[0];
-  assert.match(primary,/我的個人空間/);
+  assert.match(primary,/我的/);
   assert.doesNotMatch(primary,/我的內容/);
   assert.equal((primary.match(/aria-current="page"/g)??[]).length,1);
-  assert.match(primary,/aria-current="page"[^>]*>.*?我的個人空間/);
+  assert.match(primary,/aria-current="page"[^>]*>.*?我的/);
   assert.doesNotMatch(html,/mobile-nav-backdrop/);
 });
 
@@ -84,10 +85,11 @@ import {runInNewContext} from 'node:vm';
 import {transformSync} from 'esbuild';
 
 function navigationHistoryHarness(initialHash='#stores/supply') {
+  initialHash=canonicalHash(initialHash);
   const source=readFileSync(new URL('../../apps/portal-web/src/App.tsx',import.meta.url),'utf8');
   const history=source.match(/  useEffect\(\(\) => \{\n    const changed = \(event:Event\) => \{[\s\S]*?\n  \}, \[launchpadEnabled,openMessages\]\)/);
   const navigation=source.match(/const previousTab = useRef\(tab\)\n(  useEffect\(\(\) => \{[\s\S]*?\n  \}, \[([^\]]+)\]\))/);
-  const route=source.match(/function tabFromHash\(launchpadEnabled: boolean\): TabId \{[\s\S]*?\n\}/);
+  const route=source.match(/function tabFromHash\(_launchpadEnabled: boolean\): TabId \{[\s\S]*?\n\}/);
   assert.ok(history,'actual App history effect');assert.ok(navigation,'actual App navigation effect');assert.ok(route,'actual App route parser');
   const listeners=new Map<string,(event:{type:string})=>void>();
   let href=`https://platform.test/${initialHash}`;
@@ -102,6 +104,10 @@ function navigationHistoryHarness(initialHash='#stores/supply') {
   };
   context.window.addEventListener=(type:string,listener:(event:{type:string})=>void)=>listeners.set(type,listener);
   context.window.removeEventListener=(type:string)=>listeners.delete(type);
+  // Load the real resolver into this VM so browser-bound helpers use its window.
+  const routeModule={exports:{}};
+  runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/portal-route.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{module:routeModule,exports:routeModule.exports,window:context.window,URLSearchParams});
+  Object.assign(context,routeModule.exports);
   const evaluate=(code:string)=>runInNewContext(transformSync(code,{loader:'ts',format:'cjs'}).code,context);
   evaluate(`${route[0]};globalThis.tabFromHash=tabFromHash;${history[0]}`);
   const dependencies=navigation[2].split(',').map(x=>x.trim());
@@ -118,8 +124,9 @@ for(const [from,to] of [['#stores/supply','#stores'],['#stores','#stores/supply'
   const h=navigationHistoryHarness(from);h.move(to);
   assert.equal(h.context.tab,'stores');assert.equal(h.state.mobileOpen,false);
   assert.equal(h.state.focus,'main');assert.equal(h.state.focused,1);
-  assert.equal(h.state.scrolled,0);assert.equal(h.state.logs,0);assert.equal(h.state.replaced,0);
-  h.move(to,'hashchange');assert.equal(h.state.focused,1);
+  assert.equal(h.state.scrolled,0);assert.equal(h.state.logs,0);assert.equal(h.state.replaced,1);
+  assert.equal(h.context.locationHash,canonicalHash(to));
+  h.move(canonicalHash(to),'hashchange');assert.equal(h.state.focused,1);
 });
 
 test('same-tab history does not steal focus from an unrelated control',()=>{
@@ -129,11 +136,11 @@ test('same-tab history does not steal focus from an unrelated control',()=>{
 
 test('a rejected history navigation retains the open menu and accepted location',()=>{
   const h=navigationHistoryHarness();h.state.blocked=true;h.move('#stores');
-  assert.equal(h.state.mobileOpen,true);assert.equal(h.state.focus,'menu');assert.equal(h.context.locationHash,'#stores/supply');assert.equal(h.state.replaced,1);
+  assert.equal(h.state.mobileOpen,true);assert.equal(h.state.focus,'menu');assert.equal(h.context.locationHash,canonicalHash('#stores/supply'));assert.equal(h.state.replaced,2);
 });
 
 test('duplicate history events do not dismiss a newly reopened menu',()=>{
-  const h=navigationHistoryHarness();h.move('#stores');h.state.mobileOpen=true;h.state.focus='menu';h.move('#stores','hashchange');
+  const h=navigationHistoryHarness();h.move('#stores');h.state.mobileOpen=true;h.state.focus='menu';h.move(canonicalHash('#stores'),'hashchange');
   assert.equal(h.state.mobileOpen,true);assert.equal(h.state.focus,'menu');
 });
 
@@ -151,13 +158,13 @@ for(const current of ['showcase','opensource','engagement'] as const)test(`creat
     current,onSelect:()=>{},canManageGuild:false,guildLaunchpadEnabled:false,
     communitySearchEnabled:false,personalContentEnabled:true,mobileOpen:false,
   }));
-  const creation=html.match(/<details class="nav-section"[^>]*><summary[^>]*>創作與合作[\s\S]*?<\/summary>([\s\S]*?)<\/details>/)?.[1];
-  assert.ok(creation,'creation group exists');
-  assert.equal((creation.match(/<button /g)??[]).length,3);
-  assert.match(creation,/任務協作/);assert.match(creation,/作品與合作/);assert.match(creation,/私人 AI 工作室/);
-  assert.doesNotMatch(creation,/開源投稿|合作紀錄/);
-  assert.equal((creation.match(/aria-current="page"/g)??[]).length,1);
-  assert.match(creation,/aria-current="page"[^>]*>.*?作品與合作/);
+  const primary=html.split('<div class="nav-primary">')[1].split('</div>')[0];
+  assert.equal((primary.match(/<button /g)??[]).length,5);
+  for(const title of ['動態','探索','公會','自動化','我的'])assert.ok(primary.includes('>'+title+'</button>'));
+  assert.doesNotMatch(primary,/開源投稿|合作紀錄|作品與合作|私人 AI 工作室/);
+  assert.equal((primary.match(/aria-current="page"/g)??[]).length,1);
+  const place=current==='showcase'?'探索':current==='opensource'?'動態':'公會';
+  assert.ok(primary.includes('aria-current="page">'+place+'</button>'));
   const links=renderToStaticMarkup(createElement(WorkSharingEntry,{current}));
   for(const route of ['showcase','opensource','engagement'])assert.match(links,new RegExp(`href="#${route}"`));
   assert.equal((links.match(/aria-current="page"/g)??[]).length,1);
@@ -197,13 +204,18 @@ test('inside navigation and the menu toggle are not outside dismissals',()=>{
 
 for(const target of ['#profile','#profile?view=settings','#profile?member=30000000-0000-4000-8000-000000000001','#profile?member=invalid'])test(`actual history parser delegates profile route ${target} without bypassing focus or leave guards`,()=>{
  const h=navigationHistoryHarness();h.move(target);assert.equal(h.context.tab,'profile');assert.equal(h.state.mobileOpen,false);assert.equal(h.state.focus,'main');assert.equal(h.state.scrolled,1);assert.equal(h.state.logs,1);
- const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(target);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);assert.equal(blocked.state.mobileOpen,true);
+ const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(target);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,2);assert.equal(blocked.state.mobileOpen,true);
 });
 
 for(const view of ['recognition','connections'])test(`${view} account entry uses existing guarded history and rejects unknown account query destinations`,()=>{
  const h=navigationHistoryHarness();h.move(`#account?view=${view}`);assert.equal(h.context.tab,'account');assert.equal(h.state.focus,'main');assert.equal(h.state.mobileOpen,false);
- const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(`#account?view=${view}`);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,1);
- const invalid=navigationHistoryHarness();invalid.move('#account?view=unknown');assert.equal(invalid.context.tab,'home');
+ const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(`#account?view=${view}`);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,2);
+ const invalid=navigationHistoryHarness();invalid.move('#account?view=unknown');
+ // Unknown view parameters stay on ordinary settings; neither private destination is selected.
+ assert.equal(invalid.context.tab,'account');assert.equal(invalid.context.locationHash,'#me/settings?view=unknown');
+ const identity=readFileSync(new URL('../../apps/portal-web/src/features/identity.tsx',import.meta.url),'utf8');
+ const flags=[...identity.matchAll(/focus(?:Connections|ProfileExtras)=\{([^}]+)\}/g)];assert.equal(flags.length,2);
+ for(const flag of flags)assert.equal(runInNewContext(flag[1],{locationHash:'#account?view=unknown'}),false);
 });
 
 // Execute the actual disclosure effect; this models focus scheduling, not native
@@ -215,8 +227,8 @@ function connectionsDisclosureHarness(requested=true){
  class Details {open=false;isConnected=true;parentElement:Details|null=null;querySelector(){return summary;}}
  const summary={focus(){focused++;}};const outer=new Details(),details=new Details();details.parentElement=outer;
  const body={},document={body,activeElement:body as {id?:string},querySelector:(_selector:string)=>null as object|null};
- const window={location:{hash:'#account?view=connections'}};const frames=new Map<number,()=>void>();
- const context={connectionsRef:{current:details},focusConnections:requested,HTMLDetailsElement:Details,document,window,
+ const window={location:{hash:canonicalHash('#account?view=connections')}};const frames=new Map<number,()=>void>();
+ const context={legacyHash,connectionsRef:{current:details},focusConnections:requested,HTMLDetailsElement:Details,document,window,
   requestAnimationFrame:(callback:()=>void)=>{frames.set(1,callback);return 1;},cancelAnimationFrame:(id:number)=>frames.delete(id),useEffect:(callback:()=>void|(()=>void))=>{cleanup=callback()||undefined;}};
  runInNewContext(transformSync(effect[0],{loader:'ts'}).code,context);
  return {details,outer,document,window,get focused(){return focused;},cleanup:()=>cleanup?.(),flush:()=>{for(const callback of frames.values())callback();frames.clear();}};

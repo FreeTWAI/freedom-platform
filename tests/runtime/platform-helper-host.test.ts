@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -79,7 +80,7 @@ test('actual Workspace helper callback and post-commit effect focus only accepte
   const effect=source.match(/  useEffect\(\(\) => \{\n    const expectedHash = helperFocusPending.current[\s\S]*?\n  \}, \[locationHash\]\)/)?.[0];
   assert.ok(select);assert.ok(navigate);assert.ok(effect);
   for(const scenario of ['accepted','refused','same-hash','foreign-modal','unrelated-route','cross-tab'] as const){
-    const initial=scenario==='same-hash'?'#stores':'#stores/supply';
+    const initial=canonicalHash(scenario==='same-hash'?'#stores':'#stores/supply');
     let route=initial,nextTab='stores',dialogOpen=true,focuses=0;
     const context:any={tab:'stores',locationHash:initial,acceptedHash:{current:initial},helperFocusPending:{current:null},pageLeaveGuard:{current:()=>scenario!=='refused'},
       useCallback:(callback:unknown)=>callback,useEffect:(callback:()=>void)=>callback(),openMessages:()=>{},closeMessagesThen:(callback:()=>void)=>callback(),
@@ -88,6 +89,10 @@ test('actual Workspace helper callback and post-commit effect focus only accepte
       document:{querySelector:()=>dialogOpen||scenario==='foreign-modal'?{}:null},
       window:{location:{pathname:'/',search:'',hash:initial},history:{replaceState(){throw Error('unexpected replace');}},dispatchEvent(){throw Error('unexpected event');}},
     };
+    // Load the real resolver into this VM so browser-bound helpers use its window.
+    const routeModule={exports:{}};
+    runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/portal-route.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{module:routeModule,exports:routeModule.exports,window:context.window,URLSearchParams});
+    Object.assign(context,routeModule.exports);
     runInNewContext(transformSync(`${select};${navigate};globalThis.request=navigateFromHelper`,{loader:'ts',format:'cjs'}).code,context);
     context.request(scenario==='cross-tab'?'skills':'stores');assert.equal(focuses,0,'native helper is still open before commit');
     if(scenario==='refused'||scenario==='same-hash'){assert.equal(context.helperFocusPending.current,null);assert.equal(route,initial);}

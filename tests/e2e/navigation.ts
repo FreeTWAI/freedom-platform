@@ -67,19 +67,30 @@ export async function navigate(page:Page,name:string) {
  await expect(page.locator('.shell')).toBeVisible();
  if(name==='我的訊息'){await openChat(page);return;}
  await closeChat(page);
- const aliases:Record<string,TabId>={'我的定位':'positioning','供貨商品管理':'stores','我的名片':'account','私人 AI 工作室':'private-ai','會員首頁':'home','我的內容':'my-content'};
+ const aliases:Record<string,TabId>={'AI 整理供貨商品':'supplier','AI 製作銷售網站':'retail','我的定位':'positioning','供貨商品管理':'stores','我的名片':'account','私人 AI 工作室':'private-ai','會員首頁':'home','我的內容':'my-content'};
  const tab=aliases[name]??Object.entries(TAB_TITLES).find(([,title])=>title===name)?.[0] as TabId;
  if(!tab)throw new Error('Unmapped navigation task: '+name);
  const hash=name==='供貨商品管理'?portalHash('stores','/supply'):portalHash(tab);
  const route=resolvePortalRoute(hash),place=PORTAL_PLACES.find(p=>p.id===route.place)!;
- await openFeatureSearch(page);
- await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:place.title,exact:true}).click();
+ const current=resolvePortalRoute(new URL(page.url()).hash);
+ // Stay in the current place when its view picker is already available. A
+ // refused leave must return to the caller without trying hidden destination UI.
+ if(current.place!==route.place||route.toolId||route.place==='home'||route.place==='guilds'){
+  await openFeatureSearch(page);
+  await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:place.title,exact:true}).click();
+  const arrived=resolvePortalRoute(new URL(page.url()).hash);
+  if(arrived.place!==route.place||(route.toolId&&arrived.hash!=='#guilds'))return;
+ }
  if(route.toolId){
   await page.getByLabel('公會工具',{exact:true}).selectOption(route.guildKey!);
   const tool=GUILD_TOOLS.find(t=>t.guild_key===route.guildKey&&t.tool_id===route.toolId)!;
   await page.getByRole('button',{name:tool.title,exact:true}).click();
   if(tab==='tasks')await page.getByLabel('工作檢視',{exact:true}).selectOption('discovery');
- }else if(['me','explore','automation'].includes(route.place))await page.getByLabel(place.title+'檢視',{exact:true}).selectOption(hash);
+ }else if(tab==='opensource'){
+  await expandHomeSections(page);
+  await page.getByRole('button',{name:'開源投稿 介紹工具與預覽分享內容',exact:true}).click();
+ }else if(tab==='community'||tab==='community-hub')await page.getByRole('button',{name:'社群',exact:true}).click();
+ else if(['me','explore','automation'].includes(route.place))await page.getByLabel(place.title+'檢視',{exact:true}).selectOption(hash);
 }
 
 /** Choose an optional feed through the same secondary dialog a member opens. */

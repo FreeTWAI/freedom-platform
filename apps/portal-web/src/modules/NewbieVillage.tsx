@@ -1,3 +1,4 @@
+import {legacyHash} from '../portal-route';
 import {useEffect,useRef,useState} from 'react';
 import {CLASSES_V2,EXTRA_DATA_V2,QUESTIONS_V2,DIMENSION_META_V2,RADAR_AXES_V2,DIMENSIONS,CAREER_GUILDS,directionDraft,calculateResult,lifestyleBaseline,completeAnswers,STORAGE_KEY,QUESTS,freshProgress,type Quest} from '../../../../modules/newbie-village/index';
 import {useLanguage} from '../language';
@@ -40,7 +41,7 @@ export function NewbieVillage({registerLeave}:{registerLeave?:(guard:((nextHash:
   useEffect(()=>{
     // Store navigation metadata only: never answers or private text in browser history.
     writeVillageView(initial.view,true);
-    const back=()=>{if(window.location.hash==='#newbie-village'){copyRequest.current++;setCopyStatus(null);focusStep.current=true;setView(resumeView(pRef.current,window.history.state?.[HISTORY_KEY]));setClearOpen(false)}};
+    const back=()=>{if(legacyHash(window.location.hash)==='#newbie-village'){copyRequest.current++;setCopyStatus(null);focusStep.current=true;setView(resumeView(pRef.current,window.history.state?.[HISTORY_KEY]));setClearOpen(false)}};
     window.addEventListener('popstate',back);return()=>window.removeEventListener('popstate',back);
   },[initial]);
   const pRef=useRef(p);pRef.current=p;

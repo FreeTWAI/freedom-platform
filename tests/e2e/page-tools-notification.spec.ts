@@ -10,7 +10,7 @@ async function signIn(page:Page){
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 
 async function selectTheme(page:Page,id:(typeof themes)[number][0],label:(typeof themes)[number][1]){
@@ -39,7 +39,7 @@ test('page tools expose labels on demand and preserve touch targets, icons and t
 
   await signIn(page);
   await page.evaluate(()=>{location.hash='members';});
-  await expect(page.getByRole('heading',{name:'工坊夥伴',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'探索',level:1})).toBeVisible();
   // The account group is the bell plus the profile menu; 登出 is inside that menu.
   await expect(page.locator('.topbar').getByRole('button',{name:'登出',exact:true})).toHaveCount(0);
 

@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import { mkdirSync } from 'node:fs';
 import type { MemberCardData } from '../../apps/portal-web/src/modules/Membership.js';
@@ -41,7 +42,7 @@ async function login(page: Page, expand = true, email = 'maker@local.test') {
   const authResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/login' && response.request().method() === 'POST', {timeout: 25_000});
   await page.getByRole('button', { name: '登入', exact: true }).click();
   expect((await authResponse).status()).toBe(200);
-  await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
   // These cases inspect the optional member summary, reached through its visible disclosure.
   if (expand) {
     await openParticipation(page);
@@ -72,26 +73,26 @@ for (const [width,height] of [[1440,1000],[320,844],[360,780],[375,667],[390,844
     if (width <= 860) await expect(page.locator('.home-guide-disclosure')).toHaveJSProperty('open', false);
     const discovery = page.getByRole('navigation', {name: '共創誌與遊戲', exact: true});
     await expect(discovery).toBeVisible();
-    const arcade = discovery.getByRole('link', {name: /^遊戲大廳\s*（另開分頁）$/});
+    const arcade = discovery.getByRole('link', {name: '遊戲大廳', exact: true});
     await expect(arcade).toBeVisible();
-    await expect(arcade).toHaveAttribute('href', '/play');
-    await expect(arcade).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(arcade).toHaveAttribute('href', '#guilds/guild_games/tools/arcade');
+    await expect(arcade).not.toHaveAttribute('target', '_blank');
     expect((await arcade.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await expect(page.getByRole('link', {name: /^遊戲大廳\s*（另開分頁）$/})).toHaveCount(1);
+    await expect(page.getByRole('link', {name: '遊戲大廳', exact: true})).toHaveCount(1);
     const entry = page.getByRole('region', {name: '共創日誌', exact: true});
     await expect(entry).toBeVisible();
     await expect(discovery).toBeInViewport();
-    // The link opens the existing three-game lobby, not a selected game.
-    const popupPromise = context.waitForEvent('page');
+    // The same three-game lobby now opens inside its guild, retaining this tab.
+    const pagesBeforeArcade = context.pages().length;
     await arcade.focus();
     await page.keyboard.press('Enter');
-    const lobby = await popupPromise;
-    await expect(lobby).toHaveURL(new URL('/play', page.url()).href);
+    await expect(page).toHaveURL(new URL('/#guilds/guild_games/tools/arcade', page.url()).href);
+    expect(context.pages()).toHaveLength(pagesBeforeArcade);
     for (const title of ['這張能交嗎？', '蓋完就下班', '這疊有一百萬？']) {
-      await expect(lobby.getByRole('heading', {name: title, exact: true})).toBeVisible();
+      await expect(page.getByRole('heading', {name: title, exact: true})).toBeVisible();
     }
-    await lobby.close();
-    await page.bringToFront();
+    await page.getByRole('link', {name: '自由工坊 · 會員首頁', exact: true}).click();
+    await expect(page.getByRole('heading', {name: '動態', level: 1, exact: true})).toBeVisible();
     expect(outbound).toHaveLength(0);
     await expect(entry.locator('iframe')).toHaveCount(0);
     const url = resolveHomeJournalUrl(process.env.VITE_COMMUNITY_JOURNAL_URL);
@@ -171,7 +172,7 @@ for (const width of [1440, 390]) test(`deep-link document returns home before op
   const deepLink = await page.goto('/device');
   expect(deepLink!.headers()['content-security-policy']).not.toContain('https://aisns.evitina.tw');
   await page.getByRole('link', {name: '自由工坊 · 會員首頁', exact: true}).click();
-  await expect(page.getByRole('heading', {name: '會員首頁', level: 1, exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', level: 1, exact: true})).toBeVisible();
   await openHomeGuide(page);
   await expect(page).toHaveURL(/\/#home$/);
   expect(documents).toEqual(['/', '/device']);
@@ -179,7 +180,7 @@ for (const width of [1440, 390]) test(`deep-link document returns home before op
   await expect(page.locator('iframe[title="共創日誌內容"]')).toHaveCount(0);
   const homeResponse = page.waitForResponse(response => response.request().isNavigationRequest() && new URL(response.url()).pathname === '/');
   await page.getByRole('button', {name: '閱讀共創誌', exact: true}).click();
-  expect((await homeResponse).headers()['content-security-policy']).toContain('frame-src https://aisns.evitina.tw');
+  expect((await homeResponse).headers()['content-security-policy'].split('; ').find(directive => directive.startsWith('frame-src '))).toBe("frame-src 'self' https://aisns.evitina.tw https://freetwai.github.io");
   await expect(page.frameLocator('iframe[title="共創日誌內容"]').getByRole('heading', {name: '深連結回首頁的共創誌'})).toBeVisible();
   expect(documents).toEqual(['/', '/device', '/']);
   expect(outbound).toEqual(['https://aisns.evitina.tw/']);
@@ -285,8 +286,8 @@ for (const scenario of scenarios) {
     await button.focus();
     await expect(button).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(new RegExp(`#${scenario.destination}$`));
-    await expect(page.getByRole('heading', { name: scenario.destination === 'guilds' ? '職業公會' : '技能書架', level: 1, exact: true })).toBeVisible();
+    await expect(page).toHaveURL(new URL('/'+canonicalHash('#'+scenario.destination),page.url()).href);
+    await expect(page.getByRole('heading', { name: scenario.destination === 'guilds' ? '公會' : '探索', level: 1, exact: true })).toBeVisible();
   });
 }
 
@@ -298,14 +299,14 @@ test('a changed guild fact updates the home guidance when home is revisited', as
   await expect(suggestion(page)).toContainText(noGuildMessage);
   await checkGuidance(page, noGuildMessage, 'guilds');
   await suggestion(page).getByRole('button', { name: '探索職業公會', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '職業公會', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '公會', level: 1, exact: true })).toBeVisible();
   card = memberCard({ joined_guilds: [guild] });
   await navigate(page, '會員首頁');
   await openParticipation(page);
   await expect(suggestion(page)).toContainText(choosePrimaryMessage);
   await checkGuidance(page, choosePrimaryMessage, 'guilds');
   await suggestion(page).getByRole('button', { name: '設定主要公會', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '職業公會', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '公會', level: 1, exact: true })).toBeVisible();
   // Leaving the only joined guild returns to an earlier state in this same login.
   card = memberCard();
   await navigate(page, '會員首頁');
@@ -381,8 +382,8 @@ test('a granted primary-guild book opens from the same next-step region', async 
   await dialog.getByRole('button', { name: '關閉技能書介紹', exact: true }).click();
   await expect(dialog).toBeHidden();
   await prompt.getByRole('button', { name: '分享作品與需求', exact: true }).click();
-  await expect(page).toHaveURL(/#showcase$/);
-  await expect(page.getByRole('heading', { name: '作品與合作', level: 1, exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#explore\/works$/);
+  await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   await navigate(page, '會員首頁');
   await openParticipation(page);
   await page.evaluate(() => {
@@ -454,8 +455,8 @@ test('an unfinished claim replaces the open-task hint with a return to my work',
   await resume.focus();
   await expect(resume).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/#workbench$/);
-  await expect(page.getByRole('heading', { name: '任務協作', level: 1, exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#guilds\/guild_ai_project\/tools\/work$/);
+  await expect(page.getByRole('heading', { name: '工作', level: 1, exact: true })).toBeVisible();
 });
 
 test('a failed work dashboard read keeps the open-task hint', async ({ page }) => {
@@ -517,8 +518,8 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   expect(nextBox!.y + nextBox!.height).toBeLessThan(feedBox!.y);
   await entries.getByRole('button', { name: '技能與工具', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/#skills$/);
-  await expect(page.getByRole('heading', { name: '技能書架', level: 1, exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#explore\/resources$/);
+  await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   await page.goBack();
   await expect(disclosure).toHaveJSProperty('open', false);
   await openParticipation(page);
@@ -532,7 +533,7 @@ for (const width of [320, 390]) test(`phone ${width}px keeps the composer in vie
   await expect(composer).toBeInViewport();
   await openParticipation(page);
   await progress.getByRole('button', { name: '查看合作紀錄', exact: true }).click();
-  await expect(page).toHaveURL(/#engagement$/);
+  await expect(page).toHaveURL(/#guilds\/guild_opportunity_partnership\/tools\/engagement$/);
   await expect(page.getByText('還沒有合作紀錄', { exact: true })).toBeVisible();
 });
 
@@ -609,7 +610,7 @@ test('leaving home cancels its late summary and returning reads current facts wi
     await expect(progress).toContainText('正在讀取合作進度');
     await expect(progress.getByRole('button', { name: '接續我的內容', exact: true })).toHaveCount(0);
     await page.getByRole('navigation', { name: '參與自由工坊', exact: true }).getByRole('button', { name: '合作夥伴', exact: true }).click();
-    await expect(page).toHaveURL(/#members$/);
+    await expect(page).toHaveURL(/#explore\/people$/);
     await page.goBack();
     await openParticipation(page);
     await expect(progress).toContainText('還沒有合作紀錄');

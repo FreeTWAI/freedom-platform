@@ -1,5 +1,6 @@
+import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata.js';
 import {test,expect,type Page} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {navigate,closeChat} from './navigation.js';
 import {FEATURE_SEARCH_EXAMPLES,TESTER_AREAS} from '../../modules/tester-map/index.js';
 import {interfaceMessages} from '../../apps/portal-web/src/interface-messages.js';
 
@@ -57,15 +58,15 @@ test('TESTER-003 members open the tester map from the community page and the fea
   await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await navigate(page,'自由工坊社群');
   await page.getByRole('region',{name:'社群測試週',exact:true}).getByRole('button',{name:'查看測試員地圖',exact:true}).click();
-  await expect(page.getByRole('heading',{level:1,name:'測試員地圖',exact:true})).toBeVisible();
-  await expect(page).toHaveURL(/#tester-map$/);
+  await expect(page.getByRole('heading',{level:1,name:'測試地圖',exact:true})).toBeVisible();
+  await expect(page).toHaveURL(/#guilds\/guild_custom_032fd02e754549e9b1e056e2b95b8d50\/tools\/tester-map$/);
   await expect(areaName(page,'訊息與聊天').locator('[data-feature-id="chat.stickers"]')).toContainText('改版優先 · #1013');
   await navigate(page,'會員首頁');
   await navigate(page,'測試員地圖');
-  await expect(page.getByRole('heading',{level:1,name:'測試員地圖',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{level:1,name:'測試地圖',exact:true})).toBeVisible();
 });
 
 test('TESTER-004 a tester follows the guided path, completes a step, keeps progress after reload and can reset it',async({page})=>{
@@ -127,23 +128,23 @@ test('TESTER-005 the feature-search words in the quest find their pages in all f
   await page.goto('/');
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   const languages=['zh-Hant','en','ja','ko','es'] as const;
   for(const [index,language] of languages.entries()){
     await page.evaluate(value=>localStorage.setItem('freedom-interface-language-v1',value),language);
     await page.reload();
-    const navigation=page.getByRole('navigation',{name:interfaceMessages['nav.main'][index],exact:true});
-    await expect(navigation).toBeVisible();
+    // Five places replace the old feature-search menu; the same destinations
+    // remain reachable in every interface language through visible controls.
+    await expect(page.getByRole('navigation',{name:'主要工作區',exact:true})).toBeVisible();
     for(const {tab,term} of FEATURE_SEARCH_EXAMPLES){
-      const more=navigation.locator('.nav-more');
-      if(!await more.evaluate(element=>(element as HTMLDetailsElement).open))await more.locator(':scope > summary').click();
-      const search=navigation.getByRole('searchbox',{name:interfaceMessages['nav.search'][index],exact:true});
-      await search.fill(term[index]);
-      const results=navigation.getByRole('region',{name:interfaceMessages['nav.results'][index],exact:true});
-      await expect(results.getByRole('button',{name:interfaceMessages[`nav.${tab}`][index],exact:true}),`${language}: ${term[index]}`).toBeVisible();
-      // Esc clears the query first, as the step tells testers to check.
-      await search.press('Escape');
-      await expect(search).toHaveValue('');
+      await navigate(page,TAB_TITLES[tab]);
+      if(tab==='messages'){
+        await expect(page.locator('#floating-message-panel').getByRole('heading',{name:interfaceMessages['nav.messages'][index],exact:true}),`${language}: ${term[index]}`).toBeVisible();
+        await closeChat(page);
+      }else{
+        await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);
+        await expect(page.getByRole('heading',{name:'商店',level:1,exact:true}),`${language}: ${term[index]}`).toBeVisible();
+      }
     }
   }
 });
