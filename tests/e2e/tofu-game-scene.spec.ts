@@ -194,9 +194,37 @@ for(const rejected of [false,true])test(`PT-TOFU-SCENE: explicit light choice ow
  await page.getByRole('button',{name:'豆腐落下！',exact:true}).press('Enter');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.clock.runFor(550);await expect(page.locator('[data-light-world=tofu]')).toHaveAttribute('data-turn','1');await expect(page.locator('.pt-canvas canvas')).toHaveCount(0);
 });
 for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} sixty-second idle expiry keeps zero score and no invented tower`,async({page})=>{
- // Every native RAF for the real 60s round took ~106s locally; hosted traces
- // spent ~2.23s per simulated second (~134s before setup). Match the existing
- // native Tofu 180s allowance without changing game, draw or light budgets.
+ // Keep the original native idle deadline. Hosted 0e95383e trace took about
+ // 7.87s per simulated second; profiling below diagnoses, not relaxes, that
+ // workload. Game, draw rate, light budget and terminal assertions stay intact.
  if(!light)test.setTimeout(180_000);
- await openTofuScene(page,light,true);await partyAdvance(page,PT.tofuMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();expect(await partyElapsed(page)).toBe(PT.tofuMs);await tofuFullscreen(page,true);
+ await openTofuScene(page,light,true);
+ if(!light){
+  // Measure the first three ordinary clock chunks, not extra game time. Save
+  // diagnostics before the existing deadline can close the page. CPU samples
+  // distinguish JS work from waiting; they do not establish GPU performance.
+  const session=await page.context().newCDPSession(page);const failures:unknown[]=[];
+  try{
+   await session.send('Performance.enable');await session.send('Profiler.enable');
+   const before=await session.send('Performance.getMetrics');
+   await session.send('Profiler.start');const start=process.hrtime.bigint();
+   try{for(let i=0;i<3;i++)await page.clock.runFor(1000);}catch(error){failures.push(error);}
+   const wall_ms=Number(process.hrtime.bigint()-start)/1e6;
+   try{
+    const {profile}=await session.send('Profiler.stop');
+    await test.info().attach('tofu-idle-first-three-seconds.cpuprofile',{body:Buffer.from(JSON.stringify(profile)),contentType:'application/json'});
+    const after=await session.send('Performance.getMetrics');
+    await test.info().attach('tofu-idle-first-three-seconds-metrics.json',{body:Buffer.from(JSON.stringify({
+     scope:'Instrumented first three native idle seconds; includes profiling overhead, not a performance acceptance result',
+     wall_ms,before:before.metrics,after:after.metrics,
+     elapsed:await partyElapsed(page),render:await page.locator('.pt-canvas').evaluate(el=>({...((el as HTMLElement).dataset)})),
+    })),contentType:'application/json'});
+   }catch(error){failures.push(error);}
+  }catch(error){failures.push(error);}
+  finally{try{await session.detach();}catch(error){failures.push(error);}}
+  // Preserve the original clock/setup error instead of replacing it with a
+  // later evidence/cleanup failure; diagnostic failures are never a pass.
+  if(failures.length)throw failures[0];
+ }
+ await partyAdvance(page,PT.tofuMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();expect(await partyElapsed(page)).toBe(PT.tofuMs);await tofuFullscreen(page,true);
 });
