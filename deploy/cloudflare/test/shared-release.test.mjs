@@ -40,6 +40,7 @@ import { migrationDigest, migrationLedgerDigest } from '../../../packages/db/mig
 import { validatePortableConfig, portableConnections } from '../../shared-release/portable/config.mjs';
 import { BACKUP_PHASES, BACKUP_CRON, backupRequestFromEnvironment, requireScheduledBackup, requireFailedBackup } from '../../shared-release/scheduled-admission.mjs';
 import { admitAutomaticRelease, automaticDisposition } from '../../shared-release/automatic-admission.mjs';
+import { admitPairedRelease, pairedDisposition } from '../../shared-release/paired-admission.mjs';
 import { admitImage, verifyImageCheckout } from '../../shared-release/image-admission.mjs';
 import { checkEnvironment } from '../../shared-release/environment-check.mjs';
 import { main as releaseMain } from '../../shared-release/cli.mjs';
@@ -5436,5 +5437,405 @@ test('lease-loss floor replay preserves every original intent and rejects incomp
     if (shape === 'archive') assert.throws(() => apply({ ...proof, cleanupVerified: false }));
     if (shape === 'empty') assert.throws(() => apply({ ...proof, capturePolicyIntent: 'present' }));
     if (shape === 'uncommitted') assert.throws(() => apply({ ...proof, policySha256: 'f'.repeat(64) }));
+  }
+});
+
+function pairedReleaseFixture() {
+  const f = scheduledReleaseFixture();
+  f.env = { ...f.env, GITHUB_EVENT_NAME: 'workflow_dispatch', RELEASE_MODE: 'deploy-pair', RELEASE_SCHEDULE: '' };
+  f.request = requestFromEnvironment(f.env);
+  f.current.event = 'workflow_dispatch';
+  f.current.triggering_actor.id = OPERATORS[f.env.GITHUB_TRIGGERING_ACTOR];
+  return f;
+}
+
+function pairedStagingFixture() {
+  const f = automaticStagingFixture();
+  delete f.admission.automatic; delete f.state.deployment.payload.automatic; delete f.state.receipt.automatic;
+  const authorization = { kind: 'operator_dispatch_pair', dispatcherId: OPERATORS.teddashh,
+    sourceSha: sha, runId: 33, runAttempt: 2 };
+  f.admission.authorization = structuredClone(authorization);
+  f.state.deployment.payload.authorization = structuredClone(authorization);
+  f.state.receipt.authorization = structuredClone(authorization);
+  f.state.run.event = 'workflow_dispatch';
+  return f;
+}
+
+test('paired dispatch admits actual operators with explicit exact-source authorization and preserves a second operator rerun', async () => {
+  const f = pairedReleaseFixture(), admitted = await admitPairedRelease(f.request, f.api);
+  assert.deepEqual(admitted.authorization, { kind: 'operator_dispatch_pair', dispatcherId: OPERATORS.teddashh,
+    sourceSha: sha, runId: 100, runAttempt: 2 });
+  assert.equal(admitted.mode, 'deploy'); assert.equal(admitted.automatic, undefined);
+  assert.deepEqual(admitted.original, { login: 'teddashh', id: OPERATORS.teddashh });
+  assert.deepEqual(admitted.triggeredBy, { login: 'arumwu', id: OPERATORS.arumwu });
+  assert.equal(admitted.verification.length, 2);
+  assert.equal(f.api.calls.filter(path => path.endsWith('/actions/runs/100')).length, 2);
+  for (const login of Object.keys(OPERATORS)) {
+    const other = pairedReleaseFixture();
+    other.env.GITHUB_ACTOR = login; other.env.GITHUB_ACTOR_ID = String(OPERATORS[login]);
+    other.request = requestFromEnvironment(other.env);
+    other.current.actor = { login, id: OPERATORS[login] };
+    assert.equal((await admitPairedRelease(other.request, other.api)).original.login, login);
+  }
+});
+
+test('paired dispatch refuses every recovery input, invalid SHA and synthetic automatic event', () => {
+  const f = pairedReleaseFixture();
+  for (const value of ['main', 'a'.repeat(39), 'A'.repeat(40), 'a'.repeat(41), sha + '\n', '$(id)', '']) {
+    assert.throws(() => requestFromEnvironment({ ...f.env, RELEASE_SHA: value }), { code: 'release_exact_sha_required' });
+  }
+  for (const key of ['RELEASE_RECOVER_BACKUP_RUN_ID', 'RELEASE_RECOVER_RELEASE_RUN_ID', 'RELEASE_RECOVER_MIGRATION_RUN_ID',
+    'RELEASE_SCHEDULE', 'RELEASE_TRIGGER_RUN_ID', 'RELEASE_TRIGGER_RUN_ATTEMPT']) {
+    for (const value of ['77', '0', ' ']) assert.throws(() => requestFromEnvironment({ ...f.env, [key]: value }),
+      { code: 'release_pair_request_invalid' });
+  }
+  for (const event of ['schedule', 'workflow_run']) assert.throws(() => requestFromEnvironment({ ...f.env, GITHUB_EVENT_NAME: event }),
+    { code: 'release_pair_request_invalid' });
+});
+
+test('paired dispatch rejects nonoperators, bots, revoked permissions and replayed or forged active-run identities', async () => {
+  for (const field of ['actor', 'triggering_actor']) for (const login of ['someone', 'github-merge-queue[bot]']) {
+    const f = pairedReleaseFixture();
+    f.current[field] = { login, id: 118344674 };
+    if (field === 'actor') { f.request.actor = login; f.request.actorId = 118344674; f.request.authorization.dispatcherId = 118344674; }
+    else f.request.triggeringActor = login;
+    await assert.rejects(admitPairedRelease(f.request, f.api), { code: 'release_pair_run_invalid' });
+  }
+  for (const login of ['teddashh', 'arumwu']) {
+    const f = pairedReleaseFixture();
+    f.overrides[`/repos/${REPOSITORY}/collaborators/${login}/permission`] = { permission: 'read', user: { login, id: OPERATORS[login] } };
+    await assert.rejects(admitPairedRelease(f.request, f.api), { code: 'release_operator_permission_missing' });
+  }
+  for (const patch of [{ id: 99 }, { run_attempt: 1 }, { workflow_id: 99 }, { path: '.github/workflows/other.yml' },
+    { event: 'workflow_run' }, { event: 'schedule' }, { repository: { id: 1 } }, { head_repository: { id: 1 } },
+    { head_branch: 'feature' }, { head_sha: sha }, { status: 'completed', conclusion: 'success' },
+    { actor: { login: 'teddashh', id: 1 } }, { triggering_actor: { login: 'arumwu', id: 1 } }]) {
+    const f = pairedReleaseFixture(); Object.assign(f.current, patch);
+    await assert.rejects(admitPairedRelease(f.request, f.api), { code: 'release_pair_run_invalid' });
+  }
+  for (const patch of [{ kind: 'schedule' }, { dispatcherId: OPERATORS.arumwu }, { sourceSha: main }, { runId: 99 },
+    { runAttempt: 1 }, { extra: 'forged' }]) {
+    const f = pairedReleaseFixture(); Object.assign(f.request.authorization, patch);
+    await assert.rejects(admitPairedRelease(f.request, f.api), { code: 'release_pair_request_invalid' });
+  }
+  const inherited = pairedReleaseFixture(), { dispatcherId, ...fields } = inherited.request.authorization;
+  inherited.request.authorization = Object.assign(Object.create({ dispatcherId }), fields, { extra: true });
+  await assert.rejects(admitPairedRelease(inherited.request, inherited.api), { code: 'release_pair_request_invalid' });
+  const f = pairedReleaseFixture(); let reads = 0;
+  const api = async path => path.endsWith('/actions/runs/100') && ++reads === 2 ? { ...f.current, run_attempt: 3 } : f.api(path);
+  await assert.rejects(admitPairedRelease(f.request, api), { code: 'release_pair_run_invalid' });
+});
+
+test('paired dispatch requires main ancestry and latest exact-SHA push Verify and CodeQL even when older CI passed', async () => {
+  for (const source of [sha, main]) {
+    const f = pairedReleaseFixture();
+    f.overrides[`/repos/${REPOSITORY}/compare/${source}...${sha}`] = { status: 'diverged', merge_base_commit: { sha: tree } };
+    await assert.rejects(admitPairedRelease(f.request, f.api), { code: 'release_source_not_merged_main' });
+  }
+  for (const [workflow, runId] of [[1, 11], [2, 22]]) {
+    for (const patch of [{ status: 'queued', conclusion: null }, { status: 'in_progress', conclusion: null },
+      { conclusion: 'failure' }, { event: 'merge_group' }, { head_sha: main }]) {
+      const f = pairedReleaseFixture(), path = `/repos/${REPOSITORY}/actions/runs/${runId}`;
+      f.overrides[path] = { ...await f.api(path), ...patch };
+      await assert.rejects(admitPairedRelease(f.request, f.api));
+    }
+    const missing = pairedReleaseFixture();
+    missing.overrides[`/repos/${REPOSITORY}/actions/workflows/${workflow}/runs?head_sha=${sha}&event=push&branch=main&per_page=100`] = {
+      total_count: 0, workflow_runs: [] };
+    await assert.rejects(admitPairedRelease(missing.request, missing.api), { code: 'release_verification_unavailable' });
+    const newer = pairedReleaseFixture();
+    newer.overrides[`/repos/${REPOSITORY}/actions/workflows/${workflow}/runs?head_sha=${sha}&event=push&branch=main&per_page=100`] = {
+      total_count: 2, workflow_runs: [{ id: runId }, { id: 44 }] };
+    newer.overrides[`/repos/${REPOSITORY}/actions/runs/44`] = { ...await newer.api(`/repos/${REPOSITORY}/actions/runs/${runId}`),
+      id: 44, status: 'in_progress', conclusion: null };
+    await assert.rejects(admitPairedRelease(newer.request, newer.api), { code: 'release_verification_not_successful' });
+  }
+});
+
+test('paired strict disposition rejects absent, failed, pending, equal, newer and diverged latest Deployments in either environment', async () => {
+  const prefix = `/repos/${REPOSITORY}`;
+  for (const [index, target] of ['next', 'staging-next'].entries()) {
+    for (const status of ['failure', 'pending', 'in_progress', 'inactive', 'error', 'queued']) {
+      const f = pairedReleaseFixture(); f.overrides[`${prefix}/deployments/${50 + index}/statuses?per_page=1`] = [{ state: status }];
+      await assert.rejects(admitPairedRelease(f.request, f.api), { code: 'release_pair_previous_unsettled' });
+      assert(!f.api.calls.some(path => path.includes('status=success'))); // no handoff exception lookup
+    }
+    for (const deployments of [[], [{ id: 52, environment: target, sha }]]) {
+      const f = pairedReleaseFixture(); f.overrides[`${prefix}/deployments?environment=${target}&per_page=100`] = deployments;
+      f.overrides[`${prefix}/deployments/52/statuses?per_page=1`] = [{ state: 'success' }];
+      await assert.rejects(admitPairedRelease(f.request, f.api));
+    }
+    for (const status of ['behind', 'identical', 'diverged']) {
+      const f = pairedReleaseFixture();
+      f.overrides[`${prefix}/compare/${'e'.repeat(40)}...${sha}`] = { status, merge_base_commit: { sha } };
+      await assert.rejects(admitPairedRelease(f.request, f.api), { code: 'release_pair_source_not_forward' });
+    }
+    const latest = pairedReleaseFixture();
+    latest.overrides[`${prefix}/deployments?environment=${target}&per_page=100`].push({ id: 99, environment: target, sha: tree });
+    latest.overrides[`${prefix}/deployments/99/statuses?per_page=1`] = [{ state: 'failure' }];
+    await assert.rejects(admitPairedRelease(latest.request, latest.api), { code: 'release_pair_previous_unsettled' });
+  }
+});
+
+test('paired staging then production uses a fixed source after main advances and a same-attempt authorization receipt', async () => {
+  const f = pairedReleaseFixture();
+  const staged = await admitPairedRelease(f.request, f.api);
+  f.overrides[`/repos/${REPOSITORY}/branches/main`] = { commit: { sha: main } };
+  const staging = pairedStagingFixture();
+  // Join the real admission and staging-reader fixtures into a single run/attempt.
+  f.env.GITHUB_RUN_ID = '33'; f.request = requestFromEnvironment(f.env); f.current.id = 33;
+  f.overrides[`/repos/${REPOSITORY}/actions/runs/33`] = f.current;
+  f.overrides[`/repos/${REPOSITORY}/deployments?environment=staging-next&per_page=100`] = [staging.state.deployment];
+  f.overrides[`/repos/${REPOSITORY}/deployments/1/statuses?per_page=1`] = staging.state.statuses;
+  const production = await admitPairedRelease({ ...f.request, target: 'next' }, f.api);
+  assert.equal(production.sourceSha, staged.sourceSha); assert.equal(production.mainShaObserved, main);
+  assert.equal((await requireStaging(staging.api, production, installation)).runAttempt, 2);
+  for (const patch of [{ runId: 34 }, { runAttempt: 1 }]) {
+    await assert.rejects(pairedDisposition(f.api, { ...production, ...patch }), { code: 'release_pair_staging_attempt_invalid' });
+  }
+});
+
+test('paired production rejects cross-run/attempt staging, lost authorization, changed provenance and bad digests', async () => {
+  for (const mutate of [f => { f.admission.runId++; }, f => { f.admission.runAttempt++; },
+    f => { delete f.admission.authorization; }, f => { delete f.state.deployment.payload.authorization; },
+    f => { f.state.deployment.payload.authorization.runAttempt--; }, f => { f.state.deployment.payload.controllerSha = sha; },
+    f => { f.state.receipt.authorization.dispatcherId = OPERATORS.arumwu; }, f => { f.state.receipt.authorization.runId++; },
+    f => { f.state.receipt.authorization.sourceSha = main; }, f => { f.state.receipt.authorization.extra = true; },
+    f => { f.state.receipt.automatic = { schedule: RELEASE_RECONCILE_CRON }; },
+    f => { f.state.receipt.sourceSha = main; }, f => { f.state.receipt.configSha256 = 'f'.repeat(64); },
+    f => { f.state.receipt.controllerSha = sha; }, f => { f.state.receipt.operatorImage = 'forged'; },
+    f => { f.state.receipt.event = 'schedule'; }, f => { f.state.receipt.original.id = 1; },
+    f => { f.state.run.event = 'workflow_run'; }, f => { f.state.jobs[1].conclusion = 'failure'; },
+    f => { f.state.artifact.workflow_run.id++; }, f => { f.state.artifact.name = 'release-result-33-1-staging-next'; },
+    f => { f.state.artifact.digest = 'invalid'; }, f => { f.state.receipt.phases.pop(); }]) {
+    const f = pairedStagingFixture(); mutate(f);
+    await assert.rejects(requireStaging(f.api, f.admission, installation));
+  }
+  // Exercise the real digest/archive reader, not a pre-parsed receipt stub.
+  const f = pairedStagingFixture(), bytes = zipFixture([['receipt.json', JSON.stringify(f.state.receipt)]]);
+  f.state.artifact.size_in_bytes = bytes.length;
+  const download = async url => new URL(String(url)).hostname === 'api.github.com'
+    ? new Response(null, { status: 302, headers: { location: 'https://fixture.blob.core.windows.net/receipt' } })
+    : new Response(bytes);
+  f.api.readArtifact = artifactReader(REPOSITORY, 'synthetic-job-token', download);
+  await assert.rejects(requireStaging(f.api, f.admission, installation), { code: 'release_staging_artifact_digest_mismatch' });
+  f.state.artifact.digest = 'sha256:' + hash(bytes);
+  assert.equal((await requireStaging(f.api, f.admission, installation)).artifactDigest, f.state.artifact.digest);
+});
+
+test('paired CLI honours the raw incident switch and rejects production as the initial dispatch target', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'fp-pair-cli-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const old = process.exitCode; t.after(() => { process.exitCode = old; });
+  for (const command of ['admit', 'execute']) for (const enabled of [undefined, '', 'false', 'TRUE', 'True', ' true']) {
+    const f = pairedReleaseFixture(), output = join(root, `${command}-${String(enabled).trim() || 'empty'}`);
+    await releaseMain({ ...f.env, AUTO_RELEASE_ENABLED: enabled, RELEASE_COMMAND: command, PUBLIC_RECEIPT_DIRECTORY: output }, {
+      api: async () => assert.fail('disabled pair must not call GitHub'), executeOperator: async () => assert.fail('disabled pair cannot execute') });
+    assert.equal(JSON.parse(await readFile(join(output, 'receipt.json'))).error, 'release_pair_disabled');
+  }
+  const f = pairedReleaseFixture();
+  await releaseMain({ ...f.env, RELEASE_COMMAND: 'admit', RELEASE_TARGET: 'next', PUBLIC_RECEIPT_DIRECTORY: root }, { api: f.api });
+  assert.equal(JSON.parse(await readFile(join(root, 'receipt.json'))).error, 'release_pair_request_invalid');
+});
+
+test('paired failed receipts retain strict manual handoff and migration recovery in both environments', async () => {
+  for (const [fixture, verify] of [[failedReleaseHandoffFixture, requireFailedReleaseHandoff],
+    [failedReleaseMigrationFixture, requireFailedReleaseMigration]]) for (const target of ['staging-next', 'next']) {
+    const make = () => {
+      const f = fixture(); f.admission.target = target; f.state.receipt.target = target;
+      f.state.receipt.event = 'workflow_dispatch';
+      f.state.receipt.authorization = { kind: 'operator_dispatch_pair', dispatcherId: OPERATORS.teddashh,
+        sourceSha: sha, runId: 77, runAttempt: 1 };
+      f.state.artifact.name += '-' + target;
+      f.state.jobs.push({ ...structuredClone(f.state.jobs[1]), name: 'production', conclusion: target === 'next' ? 'failure' : 'skipped' });
+      if (target === 'next') { f.state.jobs[1].conclusion = 'success'; f.state.jobs[1].steps[0].conclusion = 'success'; }
+      return f;
+    };
+    const f = make(); assert.equal((await verify(f.api, f.admission, installation)).target, target);
+    for (const mutate of [f => { f.state.receipt.authorization.runAttempt++; },
+      f => { f.state.receipt.authorization.dispatcherId = OPERATORS.arumwu; },
+      f => { f.state.artifact.name = 'release-result-77-1'; },
+      f => { f.state.jobs[2].conclusion = target === 'next' ? 'skipped' : 'failure'; },
+      f => { f.state.receipt.automatic = { schedule: RELEASE_RECONCILE_CRON }; }]) {
+      const bad = make(); mutate(bad); await assert.rejects(verify(bad.api, bad.admission, installation));
+    }
+  }
+});
+
+test('paired workflow intent routes both jobs and receipt names without changing existing automatic or manual selection', async () => {
+  const text = await readFile(new URL('../../../.github/workflows/shared-release.yml', import.meta.url), 'utf8');
+  assert.match(text, /options: \[plan, check, deploy, handoff, deploy-pair\]/);
+  const deploy = text.split('\n  deploy:')[1].split('\n  production:')[0];
+  const production = text.split('\n  production:')[1];
+  const condition = production.match(/    if: (.*)/)[1];
+  for (const event of ['workflow_run', 'schedule', 'workflow_dispatch']) for (const mode of ['plan', 'check', 'deploy', 'handoff', 'deploy-pair']) {
+    for (const result of ['success', 'failure', 'skipped']) {
+      const needs = { admission: { outputs: { mode } }, deploy: { result } };
+      assert.equal(runInNewContext(condition, { github: { event_name: event }, needs }),
+        result === 'success' && (event === 'workflow_dispatch' ? mode === 'deploy-pair' : mode === 'deploy'));
+    }
+  }
+  assert.match(deploy, /if: needs.admission.outputs.mode == 'deploy-pair' \|\| needs.admission.outputs.mode == 'deploy'/);
+  assert.match(deploy, /needs.admission.outputs.mode == 'deploy-pair'\) && '-staging-next'/);
+  assert.match(production, /RELEASE_SHA: \$\{\{ needs.admission.outputs.source_sha \}\}/);
+  assert.match(production, /RELEASE_MODE: \$\{\{ needs.admission.outputs.mode \}\}/);
+});
+
+test('paired authorization cannot be relabelled as natural backup, failed backup or handoff proof', async () => {
+  for (const [fixture, verify] of [[scheduledFixture, requireScheduledBackup], [failedBackupFixture, requireFailedBackup]]) {
+    const f = fixture(); f.state.receipt.authorization = { kind: 'operator_dispatch_pair', dispatcherId: OPERATORS.teddashh,
+      sourceSha: sha, runId: 77, runAttempt: 1 };
+    await assert.rejects(verify(f.api, f.admission, installation));
+  }
+  const f = automaticHandoffFixture();
+  f.state.receipt.authorization = { kind: 'operator_dispatch_pair', dispatcherId: OPERATORS.teddashh,
+    sourceSha: f.state.receipt.sourceSha, runId: f.state.run.id, runAttempt: f.state.run.run_attempt };
+  await assert.rejects(automaticDisposition(f.api, f.admission), { code: 'release_automatic_previous_unsettled' });
+});
+
+test('paired terminal recovery rejects ambiguous artifact names and incomplete listings', async () => {
+  for (const listing of [
+    artifact => ({ total_count: 2, artifacts: [artifact, { ...artifact, id: 79, name: artifact.name + '-staging-next' }] }),
+    artifact => ({ total_count: 101, artifacts: [artifact] }),
+    artifact => ({ total_count: 2, artifacts: [artifact] }),
+  ]) {
+    const f = failedReleaseHandoffFixture();
+    const api = Object.assign(async path => path.includes('/artifacts?') ? listing(f.state.artifact) : f.api(path),
+      { readArtifact: f.api.readArtifact });
+    await assert.rejects(requireFailedReleaseHandoff(api, f.admission, installation), { code: 'release_handoff_recovery_evidence_invalid' });
+  }
+});
+
+test('paired CLI publishes staging then production receipts while preserving the installed operator protocol', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'fp-pair-chain-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const oldExit = process.exitCode, realExec = childProcess.execFileSync;
+  t.after(() => { process.exitCode = oldExit; t.mock.restoreAll(); syncBuiltinESMExports(); });
+  // The checkout boundary is synthetic here; existing checkout tests exercise Git.
+  t.mock.method(childProcess, 'execFileSync', (program, args, ...rest) => {
+    if (program !== 'git' && program !== '/usr/bin/git') return realExec(program, args, ...rest);
+    if (args.includes('ls-tree')) return Buffer.alloc(0);
+    if (args.includes('rev-parse')) return args.at(-1) === 'HEAD' ? sha : tree;
+    if (args.includes('status')) return '';
+    assert.fail('unexpected Git operation');
+  });
+  syncBuiltinESMExports();
+  const f = pairedReleaseFixture(), prefix = `/repos/${REPOSITORY}`;
+  const start = new Date(Date.now() - 1000).toISOString(); f.current.run_started_at = start;
+  const deployments = Object.fromEntries(['next', 'staging-next'].map((target, i) => [target, {
+    id: 50 + i, environment: target, sha: 'e'.repeat(40), payload: { format: 'freedom.shared-release/v1' } }]));
+  const states = new Map([[50, 'success'], [51, 'success']]);
+  const posts = [], operators = [], configByTarget = { 'staging-next': installation.configSha256, next: '9'.repeat(64) };
+  let nextId = 1000, archive, artifact, stagedReceipt, completed;
+  const api = Object.assign(async (path, options) => {
+    if (options?.method === 'POST') {
+      posts.push(structuredClone(options.body));
+      if (path === `${prefix}/deployments`) {
+        const row = { ...options.body, sha: options.body.ref, id: nextId++ };
+        deployments[row.environment] = row; return row;
+      }
+      states.set(Number(path.split('/').at(-2)), options.body.state); return {};
+    }
+    if (path.includes('/deployments?')) {
+      const target = new URL('https://fixture.invalid' + path).searchParams.get('environment');
+      return [structuredClone(deployments[target])];
+    }
+    if (path.includes('/statuses?')) return [{ state: states.get(Number(path.split('/').at(-2))),
+      log_url: `https://github.com/${REPOSITORY}/actions/runs/100/attempts/2` }];
+    if (path.includes('/jobs?')) return { total_count: 3, jobs: ['admission', 'deploy', 'production'].map(name => ({
+      name, run_id: 100, run_attempt: 2, head_sha: main, status: name === 'production' ? 'in_progress' : 'completed',
+      conclusion: name === 'production' ? null : 'success', completed_at: completed,
+      steps: ['Execute the installed environment operator', 'Save public release receipt'].map(name => ({ name, status: 'completed', conclusion: 'success' })) })) };
+    if (path.includes('/artifacts?')) return { total_count: 1, artifacts: [artifact] };
+    return f.api(path);
+  }, { readArtifact: artifactReader(REPOSITORY, 'synthetic-job-token', async url => new URL(String(url)).hostname === 'api.github.com'
+    ? new Response(null, { status: 302, headers: { location: 'https://fixture.blob.core.windows.net/receipt' } })
+    : new Response(archive)) });
+  const executeOperator = async ({ admission, installation: installed, recoveryEvidence, handoffRecoveryEvidence, migrationRecoveryEvidence }) => {
+    assert.equal(admission.mode, 'deploy'); assert.equal(admission.event, 'workflow_dispatch');
+    assert.equal(admission.authorization, undefined); assert.equal(admission.automatic, undefined);
+    assert.equal(admission.sourceSha, sha); assert.equal(admission.controllerSha, main);
+    assert.equal(installed.configSha256, configByTarget[admission.target]);
+    assert.equal(recoveryEvidence, undefined); assert.equal(handoffRecoveryEvidence, undefined); assert.equal(migrationRecoveryEvidence, undefined);
+    operators.push(admission.target);
+    const now = new Date().toISOString();
+    return ['preflight', 'migration', 'deploy', 'health', 'handoff'].map(name => ({ name, status: 'passed', startedAt: now, completedAt: now }));
+  };
+  const admissionOut = join(root, 'admission-output');
+  await releaseMain({ ...f.env, RELEASE_COMMAND: 'admit', GITHUB_OUTPUT: admissionOut,
+    PUBLIC_RECEIPT_DIRECTORY: join(root, 'admission') }, { api });
+  assert.match(await readFile(admissionOut, 'utf8'), new RegExp(`source_sha=${sha}\\ntarget=staging-next\\nmode=deploy-pair\\n`));
+  assert.equal(posts.length, 0);
+  for (const target of ['staging-next', 'next']) {
+    const runner = join(root, target); await mkdir(runner);
+    const output = join(runner, 'public');
+    const beforeReads = f.api.calls.filter(path => path.endsWith('/actions/runs/100')).length;
+    await releaseMain({ ...f.env, RELEASE_COMMAND: 'execute', RELEASE_TARGET: target, RELEASE_ENABLED: 'true',
+      RELEASE_OPERATOR_IMAGE: installation.image, RELEASE_CONFIG_SHA256: configByTarget[target],
+      RUNNER_TEMP: runner, RELEASE_SOURCE_DIRECTORY: join(root, 'source'), PUBLIC_RECEIPT_DIRECTORY: output,
+    }, { api, executeOperator });
+    const receipt = JSON.parse(await readFile(join(output, 'receipt.json')));
+    assert.equal(receipt.status, 'passed', receipt.error);
+    assert.deepEqual(receipt.authorization, f.request.authorization);
+    assert.equal(receipt.original.login, 'teddashh'); assert.equal(receipt.triggeredBy.login, 'arumwu');
+    assert.equal(receipt.mode, 'deploy'); assert.equal(receipt.sourceSha, sha);
+    assert.deepEqual(deployments[target].payload.authorization, receipt.authorization);
+    assert(f.api.calls.filter(path => path.endsWith('/actions/runs/100')).length - beforeReads >= 4,
+      'active run was rechecked immediately before this environment');
+    if (target === 'staging-next') {
+      stagedReceipt = receipt; archive = zipFixture([['receipt.json', JSON.stringify(receipt)]]);
+      completed = new Date().toISOString();
+      artifact = { id: 80, name: 'release-result-100-2-staging-next', expired: false,
+        digest: 'sha256:' + hash(archive), size_in_bytes: archive.length,
+        workflow_run: { id: 100, repository_id: REPOSITORY_ID, head_repository_id: REPOSITORY_ID, head_sha: main, head_branch: 'main' } };
+      f.overrides[`${prefix}/branches/main`] = { commit: { sha: tree } }; // main advances after staging
+    } else {
+      assert.equal(receipt.mainShaObserved, tree);
+      assert.equal(receipt.stagingEvidence.deploymentId, stagedReceipt.deploymentId);
+      assert.equal(receipt.stagingEvidence.artifactDigest, artifact.digest);
+    }
+  }
+  assert.deepEqual(operators, ['staging-next', 'next']);
+  assert.deepEqual(posts.filter(body => body.task === 'deploy').map(body => body.ref), [sha, sha]);
+});
+
+test('paired CLI rechecks mutable authority and Deployment state after checkout before any environment write', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'fp-pair-recheck-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const oldExit = process.exitCode, realExec = childProcess.execFileSync;
+  t.after(() => { process.exitCode = oldExit; t.mock.restoreAll(); syncBuiltinESMExports(); });
+  let onCheckout = () => {};
+  t.mock.method(childProcess, 'execFileSync', (program, args, ...rest) => {
+    if (program !== 'git' && program !== '/usr/bin/git') return realExec(program, args, ...rest);
+    if (args.includes('ls-tree')) return Buffer.alloc(0);
+    if (args.includes('rev-parse')) return args.at(-1) === 'HEAD' ? sha : tree;
+    if (args.includes('status')) { onCheckout(); return ''; }
+    assert.fail('unexpected Git operation');
+  });
+  syncBuiltinESMExports();
+  const prefix = `/repos/${REPOSITORY}`;
+  for (const scenario of ['permission', 'ci', 'deployment', 'attempt', 'installation']) {
+    const f = pairedReleaseFixture();
+    for (const target of ['staging-next', 'next']) {
+      f.overrides[`${prefix}/deployments?environment=${target}&per_page=100`][0].payload = { format: 'freedom.shared-release/v1' };
+    }
+    const ci = await f.api(`${prefix}/actions/runs/22`);
+    onCheckout = () => {
+      if (scenario === 'permission') f.overrides[`${prefix}/collaborators/arumwu/permission`] = {
+        permission: 'read', user: { login: 'arumwu', id: OPERATORS.arumwu } };
+      if (scenario === 'ci') f.overrides[`${prefix}/actions/runs/22`] = { ...ci, conclusion: 'failure' };
+      if (scenario === 'deployment') f.overrides[`${prefix}/deployments/50/statuses?per_page=1`] = [{ state: 'in_progress' }];
+      if (scenario === 'attempt') f.current.run_attempt++;
+    };
+    const runner = join(root, scenario); await mkdir(runner);
+    const output = join(runner, 'public');
+    const api = async (path, options) => { assert.equal(options?.method ?? 'GET', 'GET'); return f.api(path); };
+    await releaseMain({ ...f.env, RELEASE_COMMAND: 'execute', RELEASE_ENABLED: scenario === 'installation' ? 'false' : 'true',
+      RELEASE_OPERATOR_IMAGE: installation.image, RELEASE_CONFIG_SHA256: installation.configSha256,
+      RUNNER_TEMP: runner, RELEASE_SOURCE_DIRECTORY: join(root, 'source'), PUBLIC_RECEIPT_DIRECTORY: output,
+    }, { api, executeOperator: async () => assert.fail('mutable refusal must stop before operator') });
+    const receipt = JSON.parse(await readFile(join(output, 'receipt.json')));
+    assert.equal(receipt.status, 'failed'); assert.equal(receipt.providerOutcome, 'not_started');
+    assert.equal(receipt.error, { permission: 'release_operator_permission_missing', ci: 'release_verification_not_successful',
+      deployment: 'release_pair_previous_unsettled', attempt: 'release_pair_run_invalid', installation: 'release_environment_disabled' }[scenario]);
   }
 });

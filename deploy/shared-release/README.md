@@ -53,10 +53,11 @@ main ruleset 啟用 merge queue，保留原本的獨立審查、CODEOWNERS、最
 逾時設為240分鐘（包含既有完整 CI 的排隊時間）。失敗或衝突退出佇列後須處理原因，
 不自動核准、不刪除檢查，也不反覆重送未知失敗。
 
-啟用佇列前還須讓下方的定期發布補查上 main，驗證一次真正的 schedule run 身分與
-准入結果。GitHub merge queue 的 main push／後續 workflow_run 可能由
+2026-11-12 決策選用下方明確的人工作業 `mode=deploy-pair` 作為佇列後的發布入口；
+排程保留 best-effort 補查，不能承諾無人值守發布。此實作仍需 review、合併與 hosted 驗收。
+GitHub merge queue 的 main push／後續 workflow_run 可能由
 `github-merge-queue[bot]`（ID `118344674`）發起；它不在四位維護者發布名單。
-這個精確 bot 的完成通知不啟動發布工作，改由真正的維護者排程接續；不把 bot 加入
+這個精確 bot 的完成通知不啟動發布工作，由真正的維護者明確派發兩站發布；不把 bot 加入
 一般發布、人工重跑或恢復的授權名單。佇列設定仍須另行安裝並讀回核對，新增 cron
 不代表已啟用 merge queue，也不取代獨立正式核准。
 
@@ -67,8 +68,9 @@ main ruleset 啟用 merge queue，保留原本的獨立審查、CODEOWNERS、最
 ### main 的兩站發布
 
 Repository variable `AUTO_RELEASE_ENABLED` 只有精確值 `true` 才開啟自動發布；
-未設定或任何其他值都關閉自動化。這是事故停止開關，限制 `workflow_run` 與 `schedule` 准入，
-不影響手動 `workflow_dispatch`；各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行。
+未設定或任何其他值都關閉自動化。這是事故停止開關，限制 `workflow_run`、`schedule` 及
+明確的 `workflow_dispatch mode=deploy-pair` 准入；既有手動 `plan`／`check`／`deploy`／`handoff`
+不受此開關影響。各 Environment 的 `RELEASE_ENABLED` 仍控制發布執行。
 GitHub expression 的字串比較不分大小寫，因此 controller 在准入及每站執行前另以
 原始值做精確比對；`TRUE`／`True`／含空白或未設定都不能啟動自動發布。
 
@@ -90,8 +92,9 @@ success；失敗／不明結果、另一 attempt 的同 SHA staging 都停止，
 與 handoff／migration recovery。排程不把對帳收據當作新的完整 staging 收據。
 原 workflow_run 的已驗 handoff 接續能力不變。
 
-正常操作是核准最終版本、啟用 auto-merge／加入佇列，之後由 GitHub 完成候選檢查、
-合併、main CI 和兩站發布；不需要聊天室或個人電腦常駐。變更 PR 仍可能使舊 review
+正常操作先核准最終版本並依當時已安裝的規則合併，等待 resulting main 的精確 CI；
+需要維護者發布時使用下方 paired dispatch。佇列尚須另行安裝與驗收，不能推定 bot 的
+合併會自動完成兩站發布；執行本身不需要聊天室或個人電腦常駐。變更 PR 仍可能使舊 review
 失效。異常看 Actions Summary、原 run 與公開 receipt，先查明再恢復，不靠反覆重送。
 GitHub 的 [schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 可能延遲或漏跑，公開 repo 久未活動也可能停排程；這是定期補查，不是十分鐘內必達。
@@ -102,6 +105,41 @@ GitHub 的 [schedule](https://docs.github.com/en/actions/reference/workflows-and
 經 artifact digest 驗證的收據、版本／tree／工具／設定與五階段。此時整個 run 仍在
 執行正式發布，不能偽稱整個 run 已成功。兩環境收據以 `-staging-next`／`-next`
 分開保存。手動入口及舊的完整 run 收據仍受支援。
+
+### 維護者明確派發兩站發布：`deploy-pair`
+
+只有 teddashh、arumwu、Hao0321、detna-vibe-coding 四位操作人可派發或重跑，
+dispatcher 與 rerunner 的固定 numeric ID 和目前 repo write 權限都要再次通過；bot 不能授權。
+這是人的明確發布責任，沒有等待 cron 的必要，也沒有保證人的回應時間。
+
+1. 確認要發布的完整 40 位小寫十六進位 SHA 已在 main ancestry，且該 SHA 最新的
+   main-push Verify **與** CodeQL workflow runs 成功。Merge-group 或同 tree 不能替代。
+2. 在 main 的 **Shared release → Run workflow** 選 `mode=deploy-pair`、
+   `target=staging-next`、上述 `release_sha`，三個 `recover_*_run_id` 全部留空。
+   此 target 是第一站；成功後同 run 會接續 `next`，不需再派發一次。
+3. 確認 `AUTO_RELEASE_ENABLED` 精確為 `true`；兩個 Environment 仍各受
+   `RELEASE_ENABLED`、已安裝 image/config pins 與既有檢查控制。
+4. 查看 admission、deploy、production 的結果及兩份
+   `release-result-<run>-<attempt>-staging-next`／`-next` 收據。
+   `authorization.kind=operator_dispatch_pair` 綁定 dispatcher ID、source、run、attempt；
+   `original`／`triggeredBy` 仍是真正的人。主線前進不會更換這次來源。
+
+准入與 staging 執行前，兩站最新 Deployment 必須存在、狀態為 success，且來源在 main
+ancestry 嚴格落後於指定 SHA。失敗、pending、不明、缺少、相同或更晚來源都拒絕；
+不採用 workflow_run 的 handoff 例外。`AUTO_RELEASE_ENABLED` 非精確 `true` 會留下
+`release_pair_disabled` 失敗；錯誤 target、混入自動事件標記或任何 recovery input 也拒絕。
+
+Production 再查兩站狀態、兩位操作人、CI 與來源，且只接受同 run、同 attempt 的
+成功 staging Deployment、已完成 job 與 digest 驗證收據，核對 source/tree、controller、
+image、staging config digest、run/attempt 和 authorization。兩站 config 各自綁定自己的
+Environment，並非要求 staging 與 production 的設定 bytes 相同。部分成功後換 attempt
+重跑不能借用上一 attempt 的 staging；相同 SHA 從別的 run/attempt 也不能接續。
+
+事故仍走既有手動 `deploy`／`handoff` 及明確 recovery inputs，先讀回不明結果；
+不要重複派發 paired mode 試圖恢復。終止失敗的 paired receipt 可供既有 handoff／migration
+recovery 驗證，但不會改寫原失敗，也不表示允許重新部署。Controller 將 paired intent
+轉為既有 operator `mode=deploy`，authorization 只保留在公開 controller 收據與 Deployment；
+operator request/receipt protocol、image、五階段與 lease／unknown-outcome 規則不變。
 
 重複通知已發布的版本會略過，較舊版本晚完成 CI 不會把環境倒退。最新 Deployment
 若為 `failure`，只有經驗證的 hosted `mode=handoff` 成功收據，精確對應該 Deployment
