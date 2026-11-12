@@ -2135,29 +2135,39 @@ test('PT-tofu-profile: bounded diagnostic owns one clock chunk and preserves fai
  }
 });
 
-test('PT-tofu-profile: paired fence targets real draw callbacks and restores isolated instrumentation',()=>{
- // Execute the browser helper with synthetic RAF/WebGL only. Not GPU evidence.
+
+test('PT-tofu-profile: one-pixel diagnostic preserves GL ownership and rejects invalid evidence',()=>{
+ // Synthetic RAF/WebGL lifecycle only, not a GPU/resolve measurement.
  const source=readFileSync(new URL('../e2e/tofu-game-scene.spec.ts',import.meta.url),'utf8');
- const start=source.indexOf('function installTofuFrameFence('),end=source.indexOf("\nfor(const order of ['AB','BA']",start);
+ const start=source.indexOf('function installTofuReadbackProbe('),end=source.indexOf("\nfor(const order of ['AB','BA']",start);
  assert.ok(start>=0&&end>start);
  const js=transformSync(source.slice(start,end),{loader:'ts',target:'es2023',format:'esm'}).code;
- for(const fence of [false,true]){
-  const queue:((time:number)=>void)[]=[],calls:string[]=[];let now=0;
-  const methods:any={drawArrays(){calls.push('drawArrays');},drawElements(){calls.push('drawElements');},drawArraysInstanced(){calls.push('drawArraysInstanced');},drawElementsInstanced(){calls.push('drawElementsInstanced');}};
-  const gl:any=Object.create(methods);Object.assign(gl,{VENDOR:1,RENDERER:2,VERSION:3,getExtension:()=>null,getParameter:(n:number)=>`synthetic-${n}`,getContextAttributes:()=>({alpha:true}),isContextLost:()=>false,finish(){calls.push('finish');now+=5;}});
+ for(const readback of [false,true])for(const mode of ['ok','fbo-roundtrip','invalid-pack','gl-error','state-mismatch','context-lost','read-error']){
+  const queue:((time:number)=>void)[]=[],calls:string[]=[];let now=0,errorQueries=0;
+  const constants={VENDOR:1,RENDERER:2,VERSION:3,READ_FRAMEBUFFER_BINDING:4,PIXEL_PACK_BUFFER_BINDING:5,READ_BUFFER:6,PACK_ALIGNMENT:7,PACK_ROW_LENGTH:8,PACK_SKIP_PIXELS:9,PACK_SKIP_ROWS:10,FRAMEBUFFER:11,READ_FRAMEBUFFER:12,PIXEL_PACK_BUFFER:13,BACK:14,RGBA:15,UNSIGNED_BYTE:16,NO_ERROR:0};
+  const values=new Map<number,unknown>([[1,'synthetic-vendor'],[2,'synthetic-renderer'],[3,'synthetic-version'],[4,null],[5,null],[6,14],[7,4],[8,0],[9,0],[10,0]]);
+  const readBuffers=new Map<unknown,unknown>([[null,14]]);
+  const methods:any={drawArrays(){calls.push('drawArrays');},drawElements(){calls.push('drawElements');},drawArraysInstanced(){calls.push('drawArraysInstanced');},drawElementsInstanced(){calls.push('drawElementsInstanced');},
+   bindFramebuffer(target:number,value:unknown){if([11,12].includes(target)){values.set(4,value);values.set(6,readBuffers.get(value));}},bindBuffer(target:number,value:unknown){if(target===13)values.set(5,value);},pixelStorei(name:number,value:unknown){values.set(name,value);},readBuffer(value:number){values.set(6,value);readBuffers.set(values.get(4),value);}};
+  const gl:any=Object.create(methods);Object.assign(gl,constants,{getExtension:()=>null,getParameter:(name:number)=>values.get(name),getContextAttributes:()=>({alpha:true}),isContextLost:()=>mode==='context-lost',getError:()=>{errorQueries++;return mode==='gl-error'&&errorQueries>1?1282:0;},readPixels(x:number,y:number,w:number,h:number,format:number,type:number,pixel:Uint8Array){
+   assert.deepEqual([x,y,w,h,format,type,pixel.length],[0,0,1,1,15,16,4]);calls.push('readPixels');now+=5;if(mode==='read-error')throw Error('synthetic readback failure');pixel.set([1,2,3,255]);
+  }});
   const canvas={width:390,height:844,getContext:(type:string)=>{assert.equal(type,'webgl2');return gl;}};
   const raf=(cb:(time:number)=>void)=>{queue.push(cb);return queue.length;};
-  const window:any={requestAnimationFrame:raf};
-  const setup=runInNewContext(`${js};installTofuFrameFence`,{window,document:{querySelector:()=>({querySelector:()=>canvas}),visibilityState:'visible'},performance:{now:()=>now},navigator:{hardwareConcurrency:2},devicePixelRatio:1});
-  setup(fence);const api=window.__tofuFrameFence;
-  // Clock installation replaces RAF before start; the helper must wrap that
-  // replacement and restore it, not restore the pre-clock browser scheduler.
-  const clockRaf=(cb:(time:number)=>void)=>raf(cb);window.requestAnimationFrame=clockRaf;
-  api.start();api.mark();
-  window.requestAnimationFrame(()=>{});queue.shift()!(0);assert.deepEqual(calls,[]);
-  window.requestAnimationFrame(()=>{gl.drawArrays();gl.drawElements();});queue.shift()!(16);
-  const result=api.read();assert.equal(result.frames,1);assert.equal(result.draws,2);assert.equal(result.samples[0].drawCalls,2);assert.equal(result.samples[0].fenceWallMs,fence?5:null);
-  assert.equal(calls.filter(x=>x==='finish').length,fence?1:0);assert.equal(result.overflow,false);
+  const window:any={requestAnimationFrame:raf},performance={now:()=>now};
+  const setup=runInNewContext(`${js};installTofuReadbackProbe`,{window,document:{querySelector:()=>({querySelector:()=>canvas}),visibilityState:'visible'},performance,navigator:{hardwareConcurrency:2},devicePixelRatio:1});
+  setup(readback);const api=window.__tofuReadbackProbe;
+  const clockRaf=(cb:(time:number)=>void)=>raf(cb);window.requestAnimationFrame=clockRaf;performance.now=()=>-1;
+  api.start();api.mark();window.requestAnimationFrame(()=>{});queue.shift()!(0);assert.deepEqual(calls,[]);
+  window.requestAnimationFrame(()=>{if(mode==='fbo-roundtrip'){gl.bindFramebuffer(gl.FRAMEBUFFER,{});gl.readBuffer(99);}gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);gl.pixelStorei(gl.PACK_ALIGNMENT,4);if(mode!=='fbo-roundtrip')gl.readBuffer(gl.BACK);if(mode==='invalid-pack')gl.pixelStorei(gl.PACK_SKIP_ROWS,1);gl.drawArrays();gl.drawElements();});
+  if(mode==='invalid-pack'||(mode==='read-error'&&readback))assert.throws(()=>queue.shift()!(16),/expected default|synthetic readback failure/);else queue.shift()!(16);
+  // No GL error queries in a frame: these could synchronize and contaminate A.
+  assert.equal(errorQueries,1);if(mode==='state-mismatch')values.set(gl.PACK_SKIP_PIXELS,2);
+  const result=api.read();assert.equal(errorQueries,2);assert.equal(result.frames,1);assert.equal(result.draws,2);assert.equal(result.unwrappedDraws,0);assert.equal(result.samples[0].drawCalls,2);
+  const readIssued=readback&&mode!=='invalid-pack';assert.equal(calls.filter(x=>x==='readPixels').length,readIssued?1:0);assert.equal(result.samples[0].probeWallMs,readIssued?5:null);assert.equal(result.samples[0].validReadState,mode!=='invalid-pack');
+  assert.equal(result.glError,mode==='gl-error'?1282:0);assert.equal(result.stateTrackingMatches,mode!=='state-mismatch');assert.equal(result.contextLost,mode==='context-lost');
+  assert.equal(result.errors.length>0,['invalid-pack','gl-error','state-mismatch'].includes(mode)||(mode==='read-error'&&readback));
+  if(mode==='ok')assert.deepEqual(result.baselineState,result.finalState);
   api.restore();assert.equal(window.requestAnimationFrame,clockRaf);
   for(const name of Object.keys(methods)){assert.equal(Object.hasOwn(gl,name),false);assert.equal(gl[name],methods[name]);}
  }

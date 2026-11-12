@@ -271,10 +271,12 @@ for(const light of [false,true])test(`PT-TOFU-SCENE: ${light?'light':'native'} s
  await partyAdvance(page,PT.tofuMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','done');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','0');await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 0 / 12 層，"]')).toBeVisible();expect(await partyElapsed(page)).toBe(PT.tofuMs);await tofuFullscreen(page,true);
 });
 
-// Test-only intervention: a frame-end fence moves preceding queued work ahead
-// of compositor readback. It cannot distinguish physical raster from resolve,
-// and is never used by a product path or the original idle acceptance journey.
-function installTofuFrameFence(fence:boolean){
+// Test-only one-pixel readback, NOT a pure raster fence. Chromium 153's
+// WebGL finish() intentionally only flushes. A synchronous readPixels includes
+// preceding work, any required resolve and a small copy; compare its time with
+// the subsequent compositor readback, without adding nested/overlapping spans.
+// https://chromium.googlesource.com/chromium/src/+/refs/tags/153.0.8010.12/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+function installTofuReadbackProbe(readback:boolean){
  const host=document.querySelector('.pt-canvas')!,canvas=host.querySelector('canvas')!;
  const gl=canvas.getContext('webgl2')!;
  if(!gl)throw Error('Paired diagnostic requires the existing native WebGL2 context');
@@ -283,32 +285,55 @@ function installTofuFrameFence(fence:boolean){
  const device={vendor:gl.getParameter(gl.VENDOR),renderer:gl.getParameter(gl.RENDERER),version:gl.getParameter(gl.VERSION),
   unmaskedVendor:debug?gl.getParameter(debug.UNMASKED_VENDOR_WEBGL):null,unmaskedRenderer:debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):null,
   attributes:gl.getContextAttributes(),hardwareConcurrency:navigator.hardwareConcurrency,dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState};
- const names=['drawArrays','drawElements','drawArraysInstanced','drawElementsInstanced'] as const;
+ const packNames:number[]=[gl.PACK_ALIGNMENT,gl.PACK_ROW_LENGTH,gl.PACK_SKIP_PIXELS,gl.PACK_SKIP_ROWS];
+ // Queries happen outside the measured window: querying GL error/state in
+ // every callback could itself synchronize the command stream in BOTH arms.
+ const readState=()=>({framebuffer:gl.getParameter(gl.READ_FRAMEBUFFER_BINDING),packBuffer:gl.getParameter(gl.PIXEL_PACK_BUFFER_BINDING),readBuffer:gl.getParameter(gl.READ_BUFFER),pack:packNames.map(name=>gl.getParameter(name))});
+ const state=readState(),describe=(value:typeof state)=>({defaultFramebuffer:value.framebuffer===null,unboundPackBuffer:value.packBuffer===null,defaultReadBuffer:value.readBuffer===gl.BACK,pack:value.pack.slice()});
+ const valid=()=>state.framebuffer===null&&state.packBuffer===null&&state.readBuffer===gl.BACK&&state.pack[0]===4&&state.pack.slice(1).every(value=>value===0);
+ const readBuffers=new Map<unknown,unknown>([[state.framebuffer,state.readBuffer]]);
+ const initialGlError=gl.getError();if(initialGlError!==gl.NO_ERROR)throw Error(`Pre-existing diagnostic GL error ${initialGlError}`);
+ const drawNames=['drawArrays','drawElements','drawArraysInstanced','drawElementsInstanced'] as const;
+ const names=[...drawNames,'bindFramebuffer','bindBuffer','pixelStorei','readBuffer'] as const;
  const originals=names.map(name=>({name,own:Object.getOwnPropertyDescriptor(gl,name),fn:gl[name]}));
- const samples:{frame:number;drawCalls:number;fenceWallMs:number|null}[]=[];
- let baseline={...device};
+ const samples:{frame:number;drawCalls:number;probeWallMs:number|null;pixel:number[]|null;validReadState:boolean}[]=[];
+ const pixel=new Uint8Array(4);let baseline={...device},baselineState=describe(state);
  let draws=0,frames=0,overflow=false,active=false,originalRaf:typeof requestAnimationFrame|undefined;
  const errors:string[]=[];
- for(const {name,fn} of originals)Object.defineProperty(gl,name,{configurable:true,writable:true,value:function(...args:unknown[]){if(active)draws++;return Reflect.apply(fn,gl,args);}});
+ for(const {name,fn} of originals)Object.defineProperty(gl,name,{configurable:true,writable:true,value:function(...args:unknown[]){
+  const result=Reflect.apply(fn,gl,args);
+  if((drawNames as readonly string[]).includes(name)){if(active)draws++;}
+  else if(name==='bindFramebuffer'&&(args[0]===gl.FRAMEBUFFER||args[0]===gl.READ_FRAMEBUFFER)){state.framebuffer=args[1];state.readBuffer=readBuffers.get(args[1]);}
+  else if(name==='bindBuffer'&&args[0]===gl.PIXEL_PACK_BUFFER)state.packBuffer=args[1];
+  else if(name==='pixelStorei'){const index=packNames.indexOf(args[0] as number);if(index>=0)state.pack[index]=args[1];}
+  else if(name==='readBuffer'){state.readBuffer=args[0];readBuffers.set(state.framebuffer,args[0]);}
+  return result;
+ }});
  const api={device,start(){
   if(originalRaf)throw Error('Diagnostic already started');
   originalRaf=window.requestAnimationFrame;active=true;
   window.requestAnimationFrame=function(callback){return originalRaf!.call(window,time=>{
    const before=draws;callback.call(window,time);const count=draws-before;
    if(active&&count){
-    frames++;let fenceWallMs:number|null=null;
-    if(fence){const begin=now();try{gl.finish();}catch(error){errors.push(String(error));throw error;}finally{fenceWallMs=now()-begin;}}
-    if(samples.length<120)samples.push({frame:frames,drawCalls:count,fenceWallMs});else overflow=true;
+    frames++;let probeWallMs:number|null=null,copy:number[]|null=null;const validReadState=valid();
+    try{
+     if(!validReadState)throw Error('Diagnostic read framebuffer or pixel-pack state is not the expected default');
+     if(readback){const begin=now();try{gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);copy=Array.from(pixel);}finally{probeWallMs=now()-begin;}}
+    }catch(error){errors.push(String(error));throw error;}
+    finally{if(samples.length<120)samples.push({frame:frames,drawCalls:count,probeWallMs,pixel:copy,validReadState});else overflow=true;}
    }
   });};
- },mark(){draws=0;frames=0;samples.length=0;baseline={...device,dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState};
- },read(){active=false;return {fence,frames,draws,samples,unwrappedDraws:draws-samples.reduce((total,sample)=>total+sample.drawCalls,0),overflow,errors,contextLost:gl.isContextLost(),device:baseline,
-  after:{dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState}};
+ },mark(){draws=0;frames=0;samples.length=0;baseline={...device,dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState};baselineState=describe(state);
+ },read(){
+  active=false;const actualState=readState(),glError=gl.getError(),stateTrackingMatches=JSON.stringify(describe(state))===JSON.stringify(describe(actualState));
+  if(glError!==gl.NO_ERROR)errors.push(`Diagnostic GL error ${glError}`);if(!stateTrackingMatches)errors.push('Diagnostic GL state tracking mismatch');
+  return {readback,frames,draws,samples,unwrappedDraws:draws-samples.reduce((total,sample)=>total+sample.drawCalls,0),overflow,errors,glError,stateTrackingMatches,baselineState,finalState:describe(actualState),contextLost:gl.isContextLost(),device:baseline,
+   after:{dpr:devicePixelRatio,width:canvas.width,height:canvas.height,visibility:document.visibilityState}};
  },restore(){active=false;if(originalRaf)window.requestAnimationFrame=originalRaf;for(const {name,own} of originals){if(own)Object.defineProperty(gl,name,own);else delete (gl as unknown as Record<string,unknown>)[name];}}};
- (window as unknown as {__tofuFrameFence:typeof api}).__tofuFrameFence=api;
+ (window as unknown as {__tofuReadbackProbe:typeof api}).__tofuReadbackProbe=api;
 }
 
-for(const order of ['AB','BA'] as const)test(`PT-TOFU-DIAGNOSTIC: paired frame fence ${order} is not performance acceptance`,async({browser,baseURL,viewport,deviceScaleFactor},testInfo)=>{
+for(const order of ['AB','BA'] as const)test(`PT-TOFU-DIAGNOSTIC: paired one-pixel readback ${order} is not performance acceptance`,async({browser,baseURL,viewport,deviceScaleFactor},testInfo)=>{
  // Two short arms fit the existing default deadline; no timeout/launch changes.
  // Fresh isolated contexts for every arm, identical source/seed/viewport/DPR.
  const rows:Record<string,unknown>[]=[];const failures:unknown[]=[];
@@ -316,21 +341,21 @@ for(const order of ['AB','BA'] as const)test(`PT-TOFU-DIAGNOSTIC: paired frame f
  for(const arm of order){
   const context=await browser.newContext({baseURL,viewport:diagnosticViewport,deviceScaleFactor:diagnosticDpr,reducedMotion:'no-preference'});
   const page=await context.newPage(),errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
-  let installed=false;const row:Record<string,unknown>={arm,fence:arm==='B'};rows.push(row);
+  let installed=false;const row:Record<string,unknown>={arm,readback:arm==='B'};rows.push(row);
   try{
    await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new DOMException('Synthetic fullscreen rejection','NotAllowedError'));});
    await page.goto('/play?game=tofu&seed=42');await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','ready');
-   await page.evaluate(installTofuFrameFence,arm==='B');installed=true;
+   await page.evaluate(installTofuReadbackProbe,arm==='B');installed=true;
    await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));
-   await page.evaluate(()=>{(window as any).__tofuFrameFence.start();});
+   await page.evaluate(()=>{(window as any).__tofuReadbackProbe.start();});
    await page.getByRole('button',{name:'開始派對！',exact:true}).click();await tofuFullscreen(page,true);
    await expect(page.locator('.pt-root')).toHaveAttribute('data-party-mode','3d');
    const snapshot=async()=>({elapsed:await partyElapsed(page),state:await page.locator('.pt-root').getAttribute('data-party-state'),score:await page.locator('.pt-root').getAttribute('data-party-score'),render:await page.locator('.pt-canvas').evaluate(el=>({...((el as HTMLElement).dataset)}))});
-   row.before=await snapshot();await page.evaluate(()=>{(window as any).__tofuFrameFence.mark();});
-   const begin=process.hrtime.bigint();row.trace=await traceNativeTofuClockChunk(page,`tofu-frame-fence-${order}-${arm}`);row.instrumentedWallMs=Number(process.hrtime.bigint()-begin)/1e6;
-   row.measurement=await page.evaluate(()=>{return (window as any).__tofuFrameFence.read();});row.after=await snapshot();
+   row.before=await snapshot();await page.evaluate(()=>{(window as any).__tofuReadbackProbe.mark();});
+   const begin=process.hrtime.bigint();row.trace=await traceNativeTofuClockChunk(page,`tofu-readback-${order}-${arm}`);row.instrumentedWallMs=Number(process.hrtime.bigint()-begin)/1e6;
+   row.measurement=await page.evaluate(()=>{return (window as any).__tofuReadbackProbe.read();});row.after=await snapshot();
    const measurement=row.measurement as any,before=row.before as any,after=row.after as any;
-   row.eligible=(row.trace as {wholeWindow:boolean}).wholeWindow&&measurement.frames>=28&&measurement.frames<=32&&measurement.samples.length===measurement.frames&&measurement.unwrappedDraws===0&&!measurement.overflow&&!measurement.contextLost&&!measurement.errors.length&&!errors.length&&
+   row.eligible=(row.trace as {wholeWindow:boolean}).wholeWindow&&measurement.frames>=28&&measurement.frames<=32&&measurement.samples.length===measurement.frames&&measurement.unwrappedDraws===0&&!measurement.overflow&&measurement.glError===0&&measurement.stateTrackingMatches&&JSON.stringify(measurement.baselineState)===JSON.stringify(measurement.finalState)&&measurement.samples.every((sample:{validReadState:boolean;pixel:number[]|null})=>sample.validReadState&&(arm==='A'?sample.pixel===null:sample.pixel?.length===4))&&!measurement.contextLost&&!measurement.errors.length&&!errors.length&&
     measurement.device.visibility==='visible'&&measurement.after.visibility==='visible'&&measurement.device.dpr===diagnosticDpr&&measurement.after.dpr===diagnosticDpr&&
     measurement.samples.reduce((total:number,sample:{drawCalls:number})=>total+sample.drawCalls,0)===measurement.draws&&measurement.device.width===measurement.after.width&&measurement.device.height===measurement.after.height&&
     before.state==='playing'&&after.state==='playing'&&before.score==='0'&&after.score==='0'&&after.elapsed-before.elapsed>=900&&after.elapsed-before.elapsed<=1000;
@@ -338,16 +363,16 @@ for(const order of ['AB','BA'] as const)test(`PT-TOFU-DIAGNOSTIC: paired frame f
    expect(row.eligible,'paired diagnostic window incomplete or altered').toBe(true);
   }catch(error){row.error=String(error);row.eligible=false;failures.push(error);}
   finally{
-   if(installed)try{if(!row.measurement)row.measurement=await page.evaluate(()=>{return (window as any).__tofuFrameFence.read();});await page.evaluate(()=>{(window as any).__tofuFrameFence.restore();});}catch(error){row.cleanupError=String(error);row.eligible=false;failures.push(error);}
+   if(installed)try{if(!row.measurement)row.measurement=await page.evaluate(()=>{return (window as any).__tofuReadbackProbe.read();});await page.evaluate(()=>{(window as any).__tofuReadbackProbe.restore();});}catch(error){row.cleanupError=String(error);row.eligible=false;failures.push(error);}
    row.pageErrors=errors;if(errors.length)row.eligible=false;
    try{await context.close();}catch(error){row.closeError=String(error);row.eligible=false;failures.push(error);}
-   await testInfo.attach(`tofu-frame-fence-${order}-${arm}-measurement.json`,{body:JSON.stringify({scope:'Test-only paired intervention, not native FPS/GPU-time or acceptance; do not add nested trace spans or infer raster/resolve cause',head:process.env.HEAD_SHA??null,run:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,browserVersion:browser.version(),viewport:diagnosticViewport,deviceScaleFactor:diagnosticDpr,seed:42,setupDivergence:'Clock installed after ready to retain native performance.now; unlike original idle clock-before-navigation. Paired diagnostic only, not interchangeable acceptance evidence',row},null,2),contentType:'application/json'});
+   await testInfo.attach(`tofu-readback-${order}-${arm}-measurement.json`,{body:JSON.stringify({scope:'Test-only one-pixel readback includes preceding work, resolve and copy, not a pure raster fence or native FPS/GPU-time/acceptance; do not add nested trace spans',head:process.env.HEAD_SHA??null,run:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,browserVersion:browser.version(),viewport:diagnosticViewport,deviceScaleFactor:diagnosticDpr,seed:42,setupDivergence:'Clock installed after ready to retain native performance.now; unlike original idle clock-before-navigation. Paired diagnostic only, not interchangeable acceptance evidence',row},null,2),contentType:'application/json'});
   }
  }
  const [a,b]=rows.map(row=>row.measurement as any);
  const sameState=(key:'before'|'after')=>JSON.stringify(rows[0]?.[key])===JSON.stringify(rows[1]?.[key]);
  const pairEligible=rows.length===2&&rows.every(row=>row.eligible===true)&&a.frames===b.frames&&a.draws===b.draws&&JSON.stringify(a.device)===JSON.stringify(b.device)&&sameState('before')&&sameState('after');
- await testInfo.attach(`tofu-frame-fence-${order}-pair.json`,{body:JSON.stringify({order,pairEligible,scope:'Diagnostic comparability only; no product/performance acceptance',errors:failures.map(String)}),contentType:'application/json'});
+ await testInfo.attach(`tofu-readback-${order}-pair.json`,{body:JSON.stringify({order,pairEligible,scope:'Diagnostic comparability only; no product/performance acceptance',errors:failures.map(String)}),contentType:'application/json'});
  if(failures.length)throw failures[0];
  // A pair must render identical work and state, not merely two positive counts.
  expect(pairEligible,'paired windows differ in device, state, render work or validity').toBe(true);
