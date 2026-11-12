@@ -2098,6 +2098,72 @@ for(const mode of ['native','rejected','unsupported'] as const)for(const family 
   });
 }
 
+// Regression for fallback preserveAspectRatio letterboxing. These are explicit
+// CSS surface sizes, not claims of physical phone or desktop validation.
+for(const size of [{width:296,height:514},{width:1180,height:614}])test(`MK-fallback: sauce tracks actual SVG CTM at ${size.width}x${size.height}, rejects letterbox starts and preserves pointer ownership`,async({page},testInfo)=>{
+ await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+ await page.route('**/assets/market-stage-*.js',route=>route.abort());
+ await page.clock.install();await page.setViewportSize({width:1440,height:1000});
+ await page.goto('/play?game=kitchen&recipe=corn-dog&seed=42');
+ const surface=page.locator('.mk-surface'),svg=page.locator('svg.mk-illustration');
+ await expect(svg).toBeVisible();await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);
+ await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+ await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();
+ await marketAdd(page,'熱狗');await marketPanel(page,'sauces');await page.getByRole('button',{name:'番茄醬',exact:true}).click();
+ await page.locator('.mk-view').evaluate((el,size)=>Object.assign((el as HTMLElement).style,{position:'fixed',left:'20px',top:'20px',width:`${size.width}px`,height:`${size.height}px`,zIndex:'10'}),size);
+ const projection=await svg.evaluate(el=>{
+  const svg=el as SVGSVGElement,ctm=svg.getScreenCTM()!,view=svg.viewBox.baseVal,box=svg.getBoundingClientRect();
+  const project=(x:number,y:number)=>{const p=new DOMPoint(view.x+x*view.width,view.y+y*view.height).matrixTransform(ctm);return {x:p.x,y:p.y};};
+  return {box:box.toJSON(),view:{x:view.x,y:view.y,width:view.width,height:view.height},ctm:{a:ctm.a,b:ctm.b,c:ctm.c,d:ctm.d,e:ctm.e,f:ctm.f},start:project(0,0),end:project(1,1),points:[[.2,.25],[.35,.35],[.5,.45],[.65,.55],[.8,.65]].map(([x,y])=>project(x,y))};
+ });
+ expect(projection.box.width).toBeCloseTo(size.width,4);expect(projection.box.height).toBeCloseTo(size.height,4);
+ expect(projection.view).toEqual({x:0,y:0,width:600,height:500});
+ expect(projection.ctm.a).toBeCloseTo(projection.ctm.d,8);expect(projection.ctm.b).toBe(0);expect(projection.ctm.c).toBe(0);
+ const vertical=size.width/size.height<6/5,gap=vertical?projection.start.y-projection.box.top:projection.start.x-projection.box.left;
+ expect(gap).toBeGreaterThan(20);
+ const letterbox=vertical?{x:projection.box.x+size.width/2,y:projection.box.y+gap/2}:{x:projection.box.x+gap/2,y:projection.box.y+size.height/2};
+ for(const point of [letterbox,...projection.points])expect(await surface.evaluate((el,p)=>{const hit=document.elementFromPoint(p.x,p.y);return !!hit&&(hit===el||el.contains(hit));},point)).toBe(true);
+ const read=()=>page.evaluate(k=>(JSON.parse(sessionStorage.getItem(k)!).run as MarketRun).sauces,MARKET_SAVE_KEY);
+ // Starting in the actual SVG letterbox must not capture a gesture which then
+ // enters the painted image, and must not clamp that start onto an edge.
+ await page.mouse.move(letterbox.x,letterbox.y);await page.mouse.down();await page.mouse.move(projection.points[0].x,projection.points[0].y);await page.mouse.up();
+ expect(await read()).toEqual([]);await expect(svg.locator(':scope > polyline')).toHaveCount(0);
+ await surface.evaluate(el=>{
+  const samples:Array<{x:number;y:number;id:number}>=[];
+  (window as unknown as {marketPointerSamples:typeof samples}).marketPointerSamples=samples;
+  for(const type of ['pointerdown','pointermove'])el.addEventListener(type,event=>{const e=event as PointerEvent;if(e.isTrusted&&e.isPrimary&&e.buttons===1)samples.push({x:e.clientX,y:e.clientY,id:e.pointerId});});
+ });
+ const first=projection.points[0];await page.mouse.move(first.x,first.y);await page.mouse.down();
+ for(let i=1;i<projection.points.length;i++){
+  if(i===2)await surface.evaluate(el=>{
+   const owner=(window as unknown as {marketPointerSamples:Array<{id:number}>}).marketPointerSamples[0].id;
+   for(const type of ['pointercancel','lostpointercapture'])el.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:owner+1000,pointerType:'touch',isPrimary:false}));
+  });
+  const p=projection.points[i];await page.mouse.move(p.x,p.y);
+ }
+ await page.mouse.up();
+ const saved=await read(),samples=await page.evaluate(()=>(window as unknown as {marketPointerSamples:Array<{x:number;y:number;id:number}>}).marketPointerSamples);
+ expect(saved).toHaveLength(1);expect(samples).toHaveLength(projection.points.length);expect(saved[0].points).toHaveLength(samples.length);
+ await expect(svg.locator(':scope > polyline')).toHaveCount(1);
+ const rendered=await svg.locator(':scope > polyline').evaluate(el=>{
+  const line=el as SVGPolylineElement,ctm=line.getScreenCTM()!;
+  return Array.from({length:line.points.numberOfItems},(_,i)=>{const p=line.points.getItem(i),screen=new DOMPoint(p.x,p.y).matrixTransform(ctm);return {local:{x:p.x,y:p.y},screen:{x:screen.x,y:screen.y}};});
+ });
+ expect(rendered).toHaveLength(samples.length);
+ for(let i=0;i<samples.length;i++){
+  const expected=projection.points[i],actual=samples[i],drawn=rendered[i];
+  expect(Math.hypot(actual.x-expected.x,actual.y-expected.y)).toBeLessThanOrEqual(1);
+  expect(Math.hypot(drawn.screen.x-actual.x,drawn.screen.y-actual.y)).toBeLessThanOrEqual(1);
+  expect(drawn.local.x/600).toBeCloseTo(saved[0].points[i].x,6);expect(drawn.local.y/500).toBeCloseTo(saved[0].points[i].y,6);
+ }
+ // Owner cancellation still discards a second real drag, unlike the foreign
+ // cancellation events above. It must not submit a partial or duplicate line.
+ await page.mouse.move(first.x,first.y);await page.mouse.down();await page.mouse.move(projection.points[1].x,projection.points[1].y);
+ await surface.evaluate(el=>{const owner=(window as unknown as {marketPointerSamples:Array<{id:number}>}).marketPointerSamples.at(-1)!.id;el.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:owner,pointerType:'mouse',isPrimary:true}));});
+ await page.mouse.up();expect(await read()).toEqual(saved);await expect(svg.locator(':scope > polyline')).toHaveCount(1);
+ await testInfo.attach(`market-fallback-sauce-ctm-${size.width}x${size.height}.png`,{body:await surface.screenshot(),contentType:'image/png'});
+});
+
 // Market-family integration acceptance is separate from native art acceptance.
 // These cases deliberately exercise the supported SVG fallback; UX-9/UX-16 above
 // continue to exercise the production WebGL renderer and its original budgets.

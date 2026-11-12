@@ -297,3 +297,18 @@ test('front market rays hit the rendered tilted food without changing portion ow
   }finally{food.dispose();kit.dispose();}
  }
 });
+
+for(const [width,height] of [[296,514],[1180,614],[600,500]])test(`fallback sauce follows SVG meet coordinates and rejects letterbox at ${width}x${height}`,()=>{
+ const ui=marketUi();ui.click('開火，開始做！');ui.tick(0);ui.tick(400);ui.click('熱狗＋70g');ui.click('調味醬線');ui.click('番茄醬');
+ const scale=Math.min(width/600,height/500),left=13,top=27,ox=(width-600*scale)/2,oy=(height-500*scale)/2;
+ const svg={viewBox:{baseVal:{x:0,y:0,width:600,height:500}},getScreenCTM:()=>({inverse:()=>({a:1/scale,b:0,c:0,d:1/scale,e:-(left+ox)/scale,f:-(top+oy)/scale})})};
+ const currentTarget={getBoundingClientRect:()=>({left,top,width,height}),querySelector:()=>svg,focus(){},setPointerCapture(){}},target={closest:()=>null};
+ const event=(x:number,y:number,id=7)=>({isPrimary:true,button:0,pointerId:id,clientX:left+ox+x*600*scale,clientY:top+oy+y*500*scale,currentTarget,target,preventDefault(){}});
+ const handlers=()=>ui.find(n=>n.props.className==='mk-surface').props;
+ handlers().onPointerDown(event(.4,.4));handlers().onPointerMove(event(.6,.6,8));handlers().onPointerMove(event(.6,.6));handlers().onPointerUp(event(.6,.6));ui.render();
+ const points=ui.state().sauces[0].points;assert.equal(points.length,2);for(const [i,n] of [.4,.6].entries()){assert.ok(Math.abs(points[i].x-n)<1e-12);assert.ok(Math.abs(points[i].y-n)<1e-12);}
+ const outside=ox>0?{...event(0,.4),clientX:left+ox/2}:{...event(.4,0),clientY:top+oy/2-1};
+ handlers().onPointerDown(outside);handlers().onPointerMove(event(.5,.5));handlers().onPointerUp(event(.5,.5));ui.render();assert.equal(ui.state().sauces.length,1,'letterbox must not start a stroke');
+ handlers().onPointerDown(event(.4,.4));handlers().onPointerMove(outside);handlers().onPointerCancel(event(.4,.4));handlers().onPointerUp(event(.4,.4));ui.render();assert.equal(ui.state().sauces.length,1,'cancelled stroke remains cancelled');
+ svg.getScreenCTM=()=>null as any;handlers().onPointerDown(event(.4,.4));handlers().onPointerUp(event(.4,.4));ui.render();assert.equal(ui.state().sauces.length,1,'unmeasurable SVG must not guess its coordinates');
+});
