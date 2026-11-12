@@ -103,7 +103,7 @@ export async function approveClientPairing(pool:Pool,input:Command,code:string){
  });
 }
 export async function listClientConnections(db:Pool|PoolClient,actor:Actor){
- return (await db.query(`SELECT ${approvedFields} FROM member_client_connections WHERE community_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`,[actor.community_id,actor.user_id])).rows.map(row=>({...row,read_only:true}));
+ return (await db.query(`SELECT ${approvedFields} FROM member_client_connections WHERE community_id=$1 AND user_id=$2 AND kind<>'agent' ORDER BY created_at DESC LIMIT 100`,[actor.community_id,actor.user_id])).rows.map(row=>({...row,read_only:true}));
 }
 export async function revokeClientConnection(pool:Pool,input:Command,id:string){
  z.object({}).strict().parse(input.body);z.uuid().parse(id);

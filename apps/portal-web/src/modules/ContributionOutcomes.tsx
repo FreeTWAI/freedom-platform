@@ -1,3 +1,4 @@
+import {AgentHandoff} from './AgentHandoff';
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import type {PortalClient} from '../api';
 import {formatIsoLocal} from '../format';
@@ -26,6 +27,7 @@ export function MemberContributionOutcomes({client,memberId,active=true,revision
   },[client,path]);
   useEffect(()=>{mounted.current=true;setData(null);setError('');if(active)void load();return()=>{mounted.current=false;sequence.current++;controller.current?.abort();};},[active,load,revision]);
   return <section className="contribution-outcomes stack" aria-label={memberId?'夥伴的成果紀錄':'我的成果紀錄'}>
+    {!memberId&&<AgentHandoff screen="credit" task="讀取我的貢獻紀錄與成果"/>}
     <div className="contribution-heading"><h3>{memberId?'合作成果':'我的成果與角色'}</h3>{data&&<span className="badge">{data.accepted_count} 件已驗收工作</span>}<button className="btn btn-ghost" type="button" disabled={loading||!active} onClick={()=>void load()}>{loading?'更新中…':'更新成果'}</button></div>
     <p className="hint">每件工作只算一次。角色確認記錄實際分工，合作前可查看成果內容與確認人。</p>
     {loading&&!data&&<p role="status">正在讀取成果紀錄…</p>}

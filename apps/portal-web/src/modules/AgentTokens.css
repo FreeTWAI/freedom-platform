@@ -1,0 +1,7 @@
+.agent-tokens{min-width:0;overflow-wrap:anywhere}
+.agent-tokens h3{margin:0}
+.agent-tokens textarea{width:100%;box-sizing:border-box}
+.agent-tokens pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto;font-size:.875rem}
+.agent-scopes{display:flex;flex-wrap:wrap;gap:1rem;border:1px solid var(--line);border-radius:var(--radius,12px);padding:.6rem}
+.agent-scopes label{display:flex;align-items:center;gap:.4rem;min-height:44px}
+.agent-tokens>.btn{width:fit-content;justify-self:start;align-self:start}

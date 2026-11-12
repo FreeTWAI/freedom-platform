@@ -1,3 +1,4 @@
+import { stageAgentPublication } from '../../../modules/client-connections/agent-authority.js';
 import type { MiddlewareHandler } from 'hono';
 import { readSessionCookie } from './session-cookie.js';
 import { timingSafeEqual } from 'node:crypto';
@@ -10,6 +11,14 @@ import type { PlatformEnv } from './module-context.js';
  * body limits belong to the host router. No pre-injected Actor is trusted. */
 export function memberBoundary(pool: Pool, origin: string, onboardingAllowed: (path: string, method: string) => boolean = () => false): MiddlewareHandler<PlatformEnv> {
   return async (c, next) => {
+    const agent=c.get('actor')?.agent;
+    if(agent){
+      if(agent.public_item){
+        const approved=await stageAgentPublication(pool,c.get('actor'),agent.operation!,c.req.header('Idempotency-Key')!,await c.req.json(),c.req.header('If-Match')?.replace(/^"|"$/g,''));
+        if(!approved)return c.json({status:'pending_member',code:'pending_member',detail:'請會員在瀏覽器確認首次發布。'},202);
+      }
+      await next();return;
+    }
     const actor = await authenticate(pool, readSessionCookie(c.req.header('Cookie'),origin));
     c.set('actor', actor);
     if (!['GET', 'HEAD'].includes(c.req.method)) {

@@ -75,7 +75,7 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     (SELECT count(*) FROM community_event_rsvps WHERE event_id=$1 AND state='going' AND NOT is_verification_test_account(user_id))+
     (SELECT count(*) FROM community_event_guest_rsvps WHERE event_id=$1 AND state='going' AND (email_sent_at IS NOT NULL OR confirmed_at IS NOT NULL)) AS total`,[row.event_id])).rows[0].total as string;
   const mine=(await q.query('SELECT state FROM community_event_rsvps WHERE event_id=$1 AND user_id=$2',[row.event_id,actor.user_id])).rows[0]?.state??null;
-  const canReview=row.state==='pending'&&row.review_guild_key&&(await q.query(`SELECT 1 FROM positioning_guild_officers o
+  const canReview=!actor.agent&&row.state==='pending'&&row.review_guild_key&&(await q.query(`SELECT 1 FROM positioning_guild_officers o
     JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
   const media=(await q.query(`SELECT (SELECT orientation FROM community_event_banners WHERE event_id=$1) AS banner_orientation,
@@ -142,7 +142,7 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
     ((SELECT count(*)::int FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.state='going' AND NOT is_verification_test_account(r.user_id))+
       (SELECT count(*)::int FROM community_event_guest_rsvps g WHERE g.event_id=e.event_id AND g.state='going' AND (g.email_sent_at IS NOT NULL OR g.confirmed_at IS NOT NULL))) AS attending_count,
     (SELECT state FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.user_id=$2) AS my_rsvp,
-    (e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
+    (NOT $4::boolean AND e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
       SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
         ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
       WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)) AS can_review
@@ -151,11 +151,11 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
       (e.visibility<>'guild' OR e.organizer_ref=$2 OR EXISTS(
         SELECT 1 FROM positioning_profession_memberships gm WHERE gm.community_id=e.community_id
           AND gm.user_id=$2 AND gm.guild_key=e.guild_key AND gm.state='active')))
-      OR e.organizer_ref=$2 OR (e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
+      OR e.organizer_ref=$2 OR (NOT $4::boolean AND e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
         SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
           ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
         WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)))
-      AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))`,'*'),args)).rows;
+      AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))`,'*'),[...args,Boolean(actor.agent)])).rows;
   return rows.map(row=>{
     const {list_rank:_rank,list_time:_time,...rest}=row;
     return rest.visibility==='referral'&&rest.my_rsvp!=='going'&&rest.organizer_ref!==actor.user_id&&!rest.can_review
@@ -334,7 +334,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
 export async function readEvent(pool:Pool|PoolClient,actor:Actor,id:string,participationHistory=false){
   const row=await scopedEvent(pool,actor,id);
   const member=await canAccessGuildEvent(pool,actor,row);
-  const reviewer=row.state==='pending'&&row.review_guild_key&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o
+  const reviewer=!actor.agent&&row.state==='pending'&&row.review_guild_key&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o
     JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
   const ownHistory=participationHistory&&row.state==='cancelled'&&member&&Boolean((await pool.query(
@@ -630,9 +630,15 @@ export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string)
 
 export async function setRsvp(pool:Pool,input:Command,id:string,participationEnabled=false) {
   const body=z.object({going:z.boolean(),referral_code:shareCode.nullable().optional()}).strict().parse(input.body);
-  return command(pool,input,q=>scopedEvent(q,input.actor,id),async q=>{
+  return command(pool,input,async q=>{
+    await scopedEvent(q,input.actor,id,Boolean(input.actor.agent));
+    // Receipt replay must not restore withdrawn or guild-review-only content.
+    if(input.actor.agent)await readEvent(q,input.actor,id,participationEnabled);
+  },async q=>{
     // Lock the event so simultaneous last-seat requests see the same RSVP count.
     const row=await scopedEvent(q,input.actor,id,true);
+    // An agent never inherits guild-review visibility through a cancellation.
+    if(input.actor.agent)await readEvent(q,input.actor,id,participationEnabled);
     requireCondition(!await testHostHidden(q,row.organizer_ref,input.actor.user_id)&&await canAccessGuildEvent(q,input.actor,row),404,'not_found','找不到這場活動。');
     if(participationEnabled)await reconcileEventWaitlist(q,id);
     const referrer=body.going?await referralOwner(q,id,body.referral_code??null):null;
