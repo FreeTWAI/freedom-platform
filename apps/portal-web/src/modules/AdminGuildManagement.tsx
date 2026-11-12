@@ -1,3 +1,4 @@
+import {AdminTools} from '../frame-tools/AdminTools';
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {CATEGORY_LABELS,CATEGORY_ORDER} from '../../../../contracts/guild-launchpad/v1/guild-preferences';
 import './AdminGuildManagement.css';
@@ -22,7 +23,7 @@ export function AdminGuildManagement({client,guilds,busy,loading,error,onSave,on
   const term=search.trim().toLocaleLowerCase(),shown=guilds.filter(guild=>!term||[guild.name,guild.alias].join(' ').toLocaleLowerCase().includes(term));
   function open(guildKey:string,role:Opened['role'],userId?:string){setOpened({guildKey,role,userId});setSaved(null);}
   return <section className="stack admin-guild-management"><div className="card-head"><h2>公會管理</h2><button type="button" className="btn btn-ghost" disabled={busy||loading} onClick={()=>void onReload()}>重讀公會</button></div>
-    <GuildCategoryTools client={client} busy={busy}/><label className="field admin-guild-filter">搜尋公會<input type="search" value={search} disabled={busy} maxLength={100} onChange={event=>{setSearch(event.target.value);setOpened(null);}} placeholder="例如：影音、資安、活動…"/></label>
+    <AdminTools client={client}/><GuildCategoryTools client={client} busy={busy}/><label className="field admin-guild-filter">搜尋公會<input type="search" value={search} disabled={busy} maxLength={100} onChange={event=>{setSearch(event.target.value);setOpened(null);}} placeholder="例如：影音、資安、活動…"/></label>
     <GuildDiscoveryReport client={client}/>
     {!opened&&error&&<p role="alert" className="banner banner-error">{error}</p>}
     {!loading&&!shown.length&&<p className="muted">{term?'沒有符合的公會。請換個名稱。':'目前沒有公會。'}</p>}

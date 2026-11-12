@@ -7,6 +7,7 @@ export interface AgentOperation {
   example?: Record<string, unknown>; publicItem?: boolean; integration?: boolean; granted?: false; ifMatch?: boolean; featureFlag?: string;
 }
 export const agentOperations: readonly AgentOperation[] = [
+  {id:'tools.identity',method:'POST',route:'/api/v1/guilds/:guild/tools/:tool/token',scope:'read',title:'取得工具專屬身分',screen:'notifications',example:{}},
   {id:'events.list',method:'GET',route:'/api/v1/events',scope:'read',title:'查看活動',screen:'events'},
   {id:'events.read',method:'GET',route:'/api/v1/events/:id',scope:'read',title:'查看活動內容',screen:'events'},
   {id:'events.share',method:'POST',route:'/api/v1/events',scope:'share',title:'分享活動',screen:'events',publicItem:true,example:{title:'讀書會',description:'一起讀書',starts_at:'2027-01-10T10:00:00Z',ends_at:'2027-01-10T11:00:00Z',mode:'online',location:'線上',capacity:20,visibility:'open'}},
