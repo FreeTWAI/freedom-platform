@@ -1,3 +1,5 @@
+import {agentGuide} from '../../../../modules/client-connections/agent-guide.js';
+import {agentContract} from '../../../../modules/client-connections/agent-contract.js';
 import {Hono,type Context} from 'hono';
 import {LIVE_SITE_ORIGIN,developmentMap,developmentPage,pageMarkdown,skillMarkdown,llmsIndex,developmentCss,collaborationCss,skillPageCss,developmentShareJs,pageHtml,indexHtml,skillAgentMarkdown,pageAgentMarkdown} from '../../../../modules/development/service.js';
 import {getSkillCollaboration,type SkillEditorial} from '../../../../modules/community/skill-collaboration.js';
@@ -18,6 +20,8 @@ export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHub
    const id=c.req.param('id');if(!getSkillCollaboration(id))return c.json({error:'skill_not_found'},404);
    return c.json(getSkillCollaboration(id,await readEditorial?.(id)));
  });
+ app.get('/agent.md',c=>{c.header('Content-Type','text/markdown; charset=utf-8');return c.body(agentGuide(new URL(c.req.url).origin));});
+ app.get('/agent/openapi.json',c=>c.json({...agentContract,servers:[{url:new URL(c.req.url).origin+'/api/v1'}]}));
  app.get('/llms.txt',c=>c.text(llmsIndex()));
  app.get('/development.css',c=>{c.header('Content-Type','text/css; charset=utf-8');return c.body(developmentCss+collaborationCss+skillPageCss+githubSocialCss);});
  app.get('/development-share.js',c=>{c.header('Content-Type','text/javascript; charset=utf-8');return c.body(developmentShareJs);});

@@ -1,3 +1,4 @@
+import { consumeAgentBudget, recordAgentPublication } from '../../modules/client-connections/agent-authority.js';
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../../modules/identity-membership/service.js';
 import { requireCondition } from '../shared/problem.js';
@@ -16,9 +17,13 @@ export async function memberCommand<T>(pool: Pool, input: Command,
   revalidate?: (q: PoolClient) => Promise<void>): Promise<T> {
   requireCondition(/^[A-Za-z0-9_-]{8,128}$/.test(input.key),400,'idempotency_required','請提供有效的 Idempotency-Key。');
   return runCommandCore(pool, {
-    authenticateAndLock: q => lockMemberSession(q, input.actor, input.lockUser),
-    ...legacyMemberReceiptPorts<T>(input, revalidate),
-  }, authorize, run);
+    authenticateAndLock: q => lockMemberSession(q, input.actor, input.lockUser, Boolean(input.actor.agent)),
+    ...legacyMemberReceiptPorts<T>(input.actor.agent ? {...input,operation:`agent/${input.actor.agent.connection_id}/${input.operation}`} : input, revalidate),
+  }, authorize, async q=>{
+    if(input.actor.agent)await consumeAgentBudget(q,input.actor,input.operation,input.key,input.body,input.expected);
+    const result=await run(q);
+    return input.actor.agent ? recordAgentPublication(q,input.actor,input.operation,input.key,result) : result;
+  });
 }
 
 /** Internal server ports only, not an authentication API or caller-selectable

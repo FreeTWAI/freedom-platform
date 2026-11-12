@@ -5,7 +5,7 @@ import {Problem,requireCondition} from '../../packages/shared/problem.js';
 import type {Actor} from '../identity-membership/service.js';
 import {avatarUrl} from '../identity-membership/avatars.js';
 import {lockInteractionPair,assertCanContact} from '../identity-membership/blocks.js';
-import {assertCurrentSessionClock} from '../../packages/db/member-session.js';
+import {assertCurrentSessionClock,lockMemberSession} from '../../packages/db/member-session.js';
 import {DirectMessageInput,messageContents,storedMessageBody} from './content.js';
 import {notificationVisibilitySQL} from './notifications.js';
 import {markAllMemberChannelsRead} from './channels.js';
@@ -45,8 +45,7 @@ export function peerId(actor:Actor,raw:string){
 async function currentMember(q:PoolClient,actor:Actor,session:boolean){
   const user=(await q.query(`SELECT ${ready('u')} AS ready FROM users u WHERE u.user_id=$1 AND u.community_id=$2 AND u.active FOR SHARE`,[actor.user_id,actor.community_id])).rows[0];
   requireCondition(user,401,'session_expired','請重新登入。');
-  if(session)requireCondition((await q.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>now() FOR SHARE',
-    [actor.session_hash,actor.user_id])).rowCount===1,401,'session_expired','請重新登入。');
+  if(session)await lockMemberSession(q,actor);
   requireCondition(user.ready,403,'onboarding_required','請先選擇主要公會，完成加入後即可使用會員功能。');
 }
 const SNAPSHOT_ATTEMPTS=3;

@@ -26,7 +26,25 @@
     "packages/client-connections/**",
     "packages/sdk/member-workspace.mjs",
     "apps/portal-web/src/modules/ClientConnections.tsx",
-    "tests/e2e/onboarding-members.spec.ts"
+    "tests/e2e/onboarding-members.spec.ts",
+    "modules/client-connections/agent-authority.ts",
+    "modules/client-connections/agent-tokens.ts",
+    "apps/platform-api/src/agent-allowlist.ts",
+    "apps/platform-api/src/agent-boundary.ts",
+    "apps/platform-api/src/routes/agent-tokens.ts",
+    "migrations/205_agent_tokens.sql",
+    "tests/runtime/agent-door.test.ts",
+    "scripts/build-agent-contract.mjs",
+    "contracts/agent/v1/**",
+    "modules/client-connections/agent-guide.ts",
+    "modules/client-connections/agent-contract.ts",
+    "apps/portal-web/src/modules/agent-operations.ts",
+    "modules/client-connections/agent-feed.ts",
+    "apps/platform-api/src/routes/agent-feed.ts",
+    "apps/portal-web/src/modules/AgentHandoff.tsx",
+    "apps/portal-web/src/modules/AgentTokens.tsx",
+    "apps/portal-web/src/modules/AgentTokens.css",
+    "tests/e2e/agent-door.spec.ts"
   ],
   "public_exports": [
     "modules/client-connections/service.ts"

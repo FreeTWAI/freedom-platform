@@ -1,3 +1,6 @@
+import {createAgentFeedRoutes} from './routes/agent-feed.js';
+import { createAgentTokenRoutes } from './routes/agent-tokens.js';
+import { agentBoundary } from './agent-boundary.js';
 import {createGameUploadRoutes,isGameSourceUpload,checkGameSourceHeaders} from './routes/game-uploads.js';
 import {createTesterMapRoutes,createPublicTesterMapRoutes} from './routes/tester-map.js';
 import { performance } from "node:perf_hooks";
@@ -225,6 +228,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     console.error('request_failed', err instanceof Error ? err.name : 'unknown');
     return c.json({type:'about:blank',title:'Internal error',status:500,code:'internal_error',detail:'操作未完成，請重新整理並查看目前狀態。'},500);
   });
+  app.use('*',agentBoundary(pool));
   // Outermost: Hono resolves downstream onError responses before next() returns.
   app.use('*',async(c,next)=>{
     const started=performance.now();
@@ -270,7 +274,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
       const shopMachine=c.req.path.startsWith('/shop-api/v1/');
       const maintainerWebhook=isMaintainerWebhookPath(c.req.method,c.req.path);
       // GitHub sends no Origin. A browser Origin that is present must still match.
-      if(!commerceProviderEntry&&((!agentUpload&&!shopMachine&&!maintainerWebhook)||c.req.header('Origin')!==undefined))requireCondition(allowedOrigins.has(c.req.header('Origin')??''),403,'origin_rejected',freedomEnv==='local'?'操作來源不正確，請從本機工作台操作。':'操作來源不正確，請從自由工坊網站操作。');
+      if(!commerceProviderEntry&&((!c.get('actor')?.agent&&!agentUpload&&!shopMachine&&!maintainerWebhook)||c.req.header('Origin')!==undefined))requireCondition(allowedOrigins.has(c.req.header('Origin')??''),403,'origin_rejected',freedomEnv==='local'?'操作來源不正確，請從本機工作台操作。':'操作來源不正確，請從自由工坊網站操作。');
       if(commerceProviderEntry) {
         // The signed provider route owns form parsing and its bounded byte stream.
       } else if(agentUpload) {
@@ -596,6 +600,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createRepoMaintainerMemberRoutes(pool));
   app.route('/api/v1',createAvatarRoutes(pool,runtime.avatarAssetStore));
   app.route('/api/v1',createClientConnectionRoutes(pool));
+  app.route('/api/v1',createAgentTokenRoutes(pool));
+  app.route('/api/v1',createAgentFeedRoutes(pool));
   app.route('/api/v1',createJournalMemberRoutes(pool));
   app.route('/api/v1',createSkillSubmissionRoutes(pool,origin,runtime.githubMetricsToken,runtime));
   app.route('/api/v1',createPositioningRoutes(pool,{guildLaunchpadEnabled:runtime.guildLaunchpadEnabled===true,communitySearchEnabled:runtime.communitySearchEnabled===true}));
