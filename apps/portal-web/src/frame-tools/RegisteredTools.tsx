@@ -6,16 +6,20 @@ import {GUILD_TOOLS,type GuildTool} from '../guild-tools/catalog';
 import {FrameTool} from './FrameTool';
 import {BRIDGE_VERSION,SCOPES,isNativeTool,type ToolRecord} from '../../../../modules/guild-tools/contract';
 export function RegisteredTools({guildKey,tool,toolId,children,site,onNavigate,client,memberKey='guest'}:{guildKey:string;tool?:GuildTool;toolId?:string;children?:ReactNode;site?:SiteConfig|null;onNavigate?:(hash:string)=>void;client?:PortalClient;memberKey?:string}){
+ const managing=useRef(false);
  const [items,setItems]=useState<ToolRecord[]>([]),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[tokenAvailable,setTokenAvailable]=useState(false),[registrationAvailable,setRegistrationAvailable]=useState(false),[manage,setManage]=useState(false),[leader,setLeader]=useState(false),[adding,setAdding]=useState(false),[editing,setEditing]=useState<ToolRecord|undefined>(undefined);
  useEffect(()=>{let live=true;setLoaded(false);setManage(false);setRegistrationAvailable(false);setError('');
  const load=()=>fetch(`/api/v1/public/guilds/${guildKey}/tools`,{credentials:'omit'}).then(r=>{if(!r.ok)throw Error('工具列表暫時無法載入。');return r.json();}).then(r=>{if(live){setItems(r.items);setLoaded(true);setError('');}}).catch(e=>{if(live)setError(e.message);});void load();
- if(client&&memberKey!=='guest')void client.get<{manage:boolean;leader:boolean;registration_available:boolean;token_exchange_available:boolean}>(`/guilds/${guildKey}/tools/access`).then(r=>{if(live){setManage(r.manage);setLeader(r.leader);setRegistrationAvailable(r.registration_available);setTokenAvailable(r.token_exchange_available);}}).catch(()=>{});
- const timer=setInterval(load,5000);return()=>{live=false;clearInterval(timer);};},[guildKey,client,memberKey]);
+ if(client&&memberKey!=='guest')void client.get<{manage:boolean;leader:boolean;registration_available:boolean;token_exchange_available:boolean}>(`/guilds/${guildKey}/tools/access`).then(r=>{if(live){managing.current=r.manage;setManage(r.manage);setLeader(r.leader);setRegistrationAvailable(r.registration_available);setTokenAvailable(r.token_exchange_available);}}).catch(()=>{});
+ const timer=setInterval(()=>{if(managing.current)void load();},5000);return()=>{live=false;managing.current=false;clearInterval(timer);};},[guildKey,client,memberKey]);
  const frames=items.filter(t=>!isNativeTool(t.guild_key,t.tool_id));
- const selected=frames.find(t=>t.tool_id===(toolId??tool?.tool_id));
+ const routeTool=toolId??tool?.tool_id;
+ // Reserved native tools never wait for the registry; only the arcade can be replaced by a registered frame.
+ const reserved=!!routeTool&&isNativeTool(guildKey,routeTool);
+ const selected=frames.find(t=>t.tool_id===routeTool);
  const catalog=[...GUILD_TOOLS.filter(t=>!frames.some(r=>r.tool_id===t.tool_id&&r.guild_key===t.guild_key)),...frames.filter(t=>t.state!=='pending'||manage).map(t=>({...t,kind:'frame' as const,old_routes:[]}))];
  return <><GuildToolPage guildKey={guildKey} tool={selected?{...selected,kind:'frame',old_routes:[]}:tool??(toolId?{tool_id:toolId,guild_key:guildKey,title:'工具',kind:'frame',old_routes:[]}:undefined)} site={site} onNavigate={onNavigate} tools={catalog}>
- {error?<p role="alert">{error}</p>:!loaded?<p role="status">載入工具…</p>:selected?<FrameTool key={`${selected.id}:${selected.revision}:${memberKey}:${client?.sessionGeneration}`} tool={selected} client={client} memberKey={memberKey}/>:children}
+ {reserved?children:error?(tool?children:<p role="alert">{error}</p>):!loaded?<p role="status">載入工具…</p>:selected?<FrameTool key={`${selected.id}:${selected.revision}:${memberKey}:${client?.sessionGeneration}`} tool={selected} client={client} memberKey={memberKey}/>:children}
  </GuildToolPage>{manage&&client&&<div className="stack">
  <div className="actions">
  {!adding&&registrationAvailable&&<button className="btn btn-secondary btn-small" onClick={()=>{setEditing(undefined);setAdding(true);}}>新增工具</button>}
