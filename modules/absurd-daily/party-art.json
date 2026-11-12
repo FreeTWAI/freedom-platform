@@ -1,8 +1,8 @@
 {
   "format": "freedom.party-art/v1",
-  "created_at": "2026-11-12T05:20:20.473Z",
+  "created_at": "2026-11-12T15:58:05.353Z",
   "source": "apps/portal-web/src/games/party/stage.ts",
-  "source_sha256": "32afbe8be2582535471e224bcac4b7085b10a45446818157a891711aec94d989",
+  "source_sha256": "eff203acff0481ffa184a9b53890ef021c2dbe57404d20e432d459324b4f45d8",
   "native_canvas": {
     "width": 640,
     "height": 480,
@@ -19,13 +19,13 @@
     "dpr": 1
   },
   "compiled_factory": {
-    "file": "_native-party-fixture-BXAVzlEh.js",
-    "sha256": "0947d8160780726c980d9cfb2823b550fbebfd51774e367e3fbd5e0b9e6ead95"
+    "file": "_native-party-fixture-CYmzmA2C.js",
+    "sha256": "5734de3c01276e517cc21eae6406a0554c0c9c5243e9fb531890b74e90de1b0f"
   },
   "source_inputs": [
     {
       "path": "apps/portal-web/src/games/party/stage.ts",
-      "sha256": "32afbe8be2582535471e224bcac4b7085b10a45446818157a891711aec94d989"
+      "sha256": "eff203acff0481ffa184a9b53890ef021c2dbe57404d20e432d459324b4f45d8"
     },
     {
       "path": "apps/portal-web/src/games/stage-batch.ts",
@@ -89,9 +89,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 54.39999999990687,
-        "construct": 317.39999999990687,
-        "capture": 360.70000000018626
+        "import": 32.300000000046566,
+        "construct": 191.60000000009313,
+        "capture": 251.5999999998603
       }
     },
     {
@@ -113,9 +113,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.19999999972060323,
-        "construct": 168.60000000009313,
-        "capture": 394.10000000009313
+        "import": 0.19999999995343387,
+        "construct": 107.5,
+        "capture": 246.30000000004657
       }
     },
     {
@@ -137,9 +137,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.10000000009313226,
-        "construct": 166.89999999990687,
-        "capture": 281.1999999997206
+        "import": 0.09999999986030161,
+        "construct": 93.5,
+        "capture": 174.30000000004657
       }
     }
   ]
