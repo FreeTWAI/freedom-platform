@@ -10,7 +10,7 @@ import {KITCHEN_VIEW as V,type Shape} from './catalog';
 
 import {kitchenPresentation,kitchenWorkZoom,type KitchenViewport} from './kitchen-presentation';
 export {kitchenPresentation} from './kitchen-presentation';
-export type KitchenStage={resize:(viewport:KitchenViewport)=>void;update:(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean)=>void;dispose:()=>void;capture:()=>string;stats:()=>{calls:number;triangles:number;geometries:number;textures:number}};
+export type KitchenStage={resize:(viewport:KitchenViewport,paint?:boolean)=>void;update:(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean)=>void;dispose:()=>void;capture:()=>string;stats:()=>{calls:number;triangles:number;geometries:number;textures:number}};
 const C={ink:'#393d40',wood:'#dfab72',edge:'#a86d42',cream:'#fff0d1',mint:'#78b9a5',red:'#e87455',gold:'#f2bb55',dark:'#555b61'};
 const BOARD_DEPTH=0;
 const foodColors:Record<Shape,string>={greens:'#67a46f',carrot:'#efa052',meat:'#d68b77',rice:'#f1cb77',dough:'#f0d09a',noodle:'#e8bf70',egg:'#edb541',fruit:'#e66e68',cream:'#f2e4c8',chocolate:'#855b48',fish:'#e9987d'};
@@ -162,10 +162,14 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
   }
   const baked=new Color('#bd864b'),burnt=new Color('#805335');
   function syncMaterialSides(run:CookingRun){
-   // Keep open bowls (and meshes sharing their material) two-sided. Only the
-   // closed pan/boil/bake/mix/knead surfaces are culled; the original shadow pass stays two-sided.
-   const cull=run.status!=='done'&&['pan','boil','bake','mix','knead'].includes(currentStep(run).kind);
-   for(const material of [...palette.values(),...ingredientMaterials.values()]){const side=cull&&!openMaterials.has(material)?FrontSide:DoubleSide;if(material.side!==side){material.side=side;material.shadowSide=DoubleSide;material.needsUpdate=true;}}
+   // Closed, outward-wound factory primitives expose the same nearest surface
+   // to both the work camera and the external directional light. Preserve open
+   // vessels and preparation cut-face geometry as two-sided in both passes.
+   for(const material of [...palette.values(),...ingredientMaterials.values()]){
+    const closed=!openMaterials.has(material)&&!(preparationModel&&[...ingredientMaterials.values()].includes(material));
+    const side=closed?FrontSide:DoubleSide;
+    if(material.side!==side||material.shadowSide!==side){material.side=side;material.shadowSide=side;material.needsUpdate=true;}
+   }
   }
   function update(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean){if(disposed)return;const nextZoom=kitchenWorkZoom(currentStep(run).kind,run.status==='done');if(nextZoom!==zoom){zoom=nextZoom;if(viewport)presentation=kitchenPresentation(viewport,zoom);}const key=`${run.recipeId}/${run.status==='done'?'dish':run.step}`;if(key!==identity){identity=key;for(const color of Object.values(foodColors))palette.get(`food/${color}`)?.color.set(color);build(run);syncMaterialSides(run);}if(run.status==='done'){render();return;}const o=objects!,s=currentStep(run),a=run.active,t=time/1000,held=a.holdAt===null?0:Math.min(1.5,(run.elapsed-a.holdAt)/s.holdMs),pulse=Math.max(0,1-(run.elapsed-a.lastAt)/320),pos=point?screen(point.x,point.y,(s.kind==='mix'?1.4:s.kind==='pan'?.8:s.kind==='boil'?1.2:.35)+(['slice','fold','plate'].includes(s.kind)?BOARD_DEPTH:0)):null;
    if(s.kind==='pan'||s.kind==='bake'){
@@ -203,6 +207,6 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    lastKnead=s.kind==='knead'?{held,motion}:null;
    lastMix=s.kind==='mix'?{amount:a.amount,x:point?.x,y:point?.y}:null;
   }
-  return {update,resize:(nextViewport:KitchenViewport)=>{if(disposed)return;viewport=nextViewport;const next=kitchenPresentation(viewport,zoom);if(presentation&&Object.keys(next).every(key=>next[key as keyof typeof next]===presentation![key as keyof typeof next]))return;presentation=next;renderer.setSize(next.width,next.height,false);render(false);},capture:()=>{if(disposed)throw Error('料理畫面已關閉');try{renderer.setSize(V.width,V.height,false);renderer.shadowMap.needsUpdate=true;renderer.render(scene,camera);return renderer.domElement.toDataURL('image/png');}finally{renderer.setSize(presentation?.width??V.width,presentation?.height??V.height,false);render();}},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
+  return {update,resize:(nextViewport:KitchenViewport,paint=true)=>{if(disposed)return;viewport=nextViewport;const next=kitchenPresentation(viewport,zoom);if(presentation&&Object.keys(next).every(key=>next[key as keyof typeof next]===presentation![key as keyof typeof next]))return;presentation=next;renderer.setSize(next.width,next.height,false);if(paint)render(false);},capture:()=>{if(disposed)throw Error('料理畫面已關閉');try{renderer.setSize(V.width,V.height,false);renderer.shadowMap.needsUpdate=true;renderer.render(scene,camera);return renderer.domElement.toDataURL('image/png');}finally{renderer.setSize(presentation?.width??V.width,presentation?.height??V.height,false);render();}},stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose};
  }catch(error){dispose();throw error;}
 }
