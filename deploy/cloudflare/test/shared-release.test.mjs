@@ -5614,7 +5614,7 @@ test('paired production rejects cross-run/attempt staging, lost authorization, c
   // Exercise the real digest/archive reader, not a pre-parsed receipt stub.
   const f = pairedStagingFixture(), bytes = zipFixture([['receipt.json', JSON.stringify(f.state.receipt)]]);
   f.state.artifact.size_in_bytes = bytes.length;
-  const download = async url => String(url).includes('api.github.com')
+  const download = async url => new URL(String(url)).hostname === 'api.github.com'
     ? new Response(null, { status: 302, headers: { location: 'https://fixture.blob.core.windows.net/receipt' } })
     : new Response(bytes);
   f.api.readArtifact = artifactReader(REPOSITORY, 'synthetic-job-token', download);
@@ -5747,7 +5747,7 @@ test('paired CLI publishes staging then production receipts while preserving the
       steps: ['Execute the installed environment operator', 'Save public release receipt'].map(name => ({ name, status: 'completed', conclusion: 'success' })) })) };
     if (path.includes('/artifacts?')) return { total_count: 1, artifacts: [artifact] };
     return f.api(path);
-  }, { readArtifact: artifactReader(REPOSITORY, 'synthetic-job-token', async url => String(url).includes('api.github.com')
+  }, { readArtifact: artifactReader(REPOSITORY, 'synthetic-job-token', async url => new URL(String(url)).hostname === 'api.github.com'
     ? new Response(null, { status: 302, headers: { location: 'https://fixture.blob.core.windows.net/receipt' } })
     : new Response(archive)) });
   const executeOperator = async ({ admission, installation: installed, recoveryEvidence, handoffRecoveryEvidence, migrationRecoveryEvidence }) => {
