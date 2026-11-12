@@ -427,3 +427,86 @@ test('standard-DPI kitchens supersample within the existing backing-buffer cap',
   for(const [width,height] of f.sizes){assert.ok(width*1.5<=960);assert.ok(height*1.5<=672);}
  }finally{f.stage.dispose();}
 });
+
+test('front kitchen camera stays level for all nine operations and vertical pointer rays stay exact',()=>{
+ for(const kind of ['slice','knead','mix','pan','boil','bake','pour','fold','plate'] as const){
+  const f=factory(true),recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!;
+  const run={...domain.newCookingRun(recipe,42,'front-camera'),step:recipe.steps.findIndex(s=>s.kind===kind),status:'playing' as const};
+  try{
+   for(const point of [{x:.2,y:.25},{x:.5,y:.5},{x:.8,y:.75}]){
+    f.stage.update(run,point,1000,false);const camera=f.camera();camera.updateMatrixWorld(true);
+    const direction=camera.getWorldDirection(new T.Vector3());assert.ok(Math.abs(direction.x)<1e-12&&Math.abs(direction.y)<1e-12&&direction.z<-.999999);
+    assert.equal(f.scene().children.find(o=>o instanceof T.Group)!.rotation.x,0,'the entire kitchen must not rotate to fake a level view');
+    const body=f.scene().getObjectByName('kitchen/body')!,tool=f.scene().getObjectByName('kitchen/tool')!;
+    assert.equal(body.rotation.x,['slice','knead','fold','plate'].includes(kind)?Math.PI/2:0,'only the mounted work board rotates; vessels remain upright');
+    if(['slice','pan','boil','fold','plate'].includes(kind)){
+     const projected=tool.getWorldPosition(new T.Vector3()).project(camera);
+     assert.ok(Math.abs((projected.x+1)/2-point.x)<1e-10,`${kind}: horizontal input alignment`);
+     assert.ok(Math.abs((1-projected.y)/2-point.y)<1e-10,`${kind}: vertical input alignment`);
+    }
+   }
+  }finally{f.stage.dispose();}
+ }
+});
+
+test('front plating transforms accepted targets into board-local space without changing their screen positions',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='plate'))!,step=recipe.steps.findIndex(s=>s.kind==='plate'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-plate'),step,status:'playing' as const};run.active={...run.active,count:catalog.RECIPES.find(r=>r.id===recipe.id)!.steps[step].goal};
+ try{
+  f.stage.update(run,null,1000,false);const body=f.scene().getObjectByName('kitchen/body')!,camera=f.camera();camera.updateMatrixWorld(true);
+  const foods=body.children.filter(o=>o instanceof T.Group);assert.equal(foods.length,run.active.count);
+  for(const [i,food] of foods.entries()){
+   const p=food.getWorldPosition(new T.Vector3()).project(camera),target=domain.plateTarget({...run,active:{...run.active,count:i}});
+   assert.ok(Math.abs((p.x+1)/2-target.x)<1e-10);assert.ok(Math.abs((1-p.y)/2-target.y)<1e-10);
+  }
+ }finally{f.stage.dispose();}
+});
+
+test('mounted kneading board keeps the mitten pressure along the dough normal, not screen vertical',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='knead'))!,step=recipe.steps.findIndex(s=>s.kind==='knead'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-knead'),step,status:'playing' as const};
+ try{
+  const positions:T.Vector3[]=[];
+  for(const held of [0,.5,1]){
+   f.stage.update({...run,elapsed:1000+held*recipe.steps[step].holdMs,active:{...run.active,holdAt:1000}},null,2000,false);
+   const body=f.scene().getObjectByName('kitchen/body')!,tool=f.scene().getObjectByName('kitchen/tool')!;
+   const position=tool.getWorldPosition(new T.Vector3());positions.push(position);
+   const expected=body.localToWorld(new T.Vector3(0,2.6-held*1.8,.2));assert.ok(position.distanceTo(expected)<1e-10);
+  }
+  assert.ok(Math.abs(positions[0].y-positions[2].y)<1e-10);assert.ok(positions[0].z-positions[2].z>1.79);
+ }finally{f.stage.dispose();}
+});
+
+test('front cutting pulse lifts along board depth and cannot slide the knife off its gesture',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='slice'))!,step=recipe.steps.findIndex(s=>s.kind==='slice'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-slice'),step,status:'playing' as const,elapsed:1000};run.active={...run.active,lastAt:1000};
+ try{
+  const positions:T.Vector3[]=[];
+  for(const motion of [false,true]){f.stage.update(run,{x:.6,y:.4},1000,motion);positions.push(f.scene().getObjectByName('kitchen/tool')!.getWorldPosition(new T.Vector3()));}
+  assert.ok(Math.abs(positions[0].x-positions[1].x)<1e-10);assert.ok(Math.abs(positions[0].y-positions[1].y)<1e-10);assert.ok(Math.abs(positions[1].z-positions[0].z-.4)<1e-10);
+ }finally{f.stage.dispose();}
+});
+
+test('front mixing maps the full legal circular gesture to the liquid orbit, never underneath the counter',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='mix'))!,step=recipe.steps.findIndex(s=>s.kind==='mix'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-mix'),step,status:'playing' as const};
+ try{
+  for(let i=0;i<12;i++){
+   const angle=i*Math.PI/6,point={x:.5+.32*Math.cos(angle),y:.5+.32*Math.sin(angle)};f.stage.update(run,point,1000,false);
+   const position=f.scene().getObjectByName('kitchen/tool')!.getWorldPosition(new T.Vector3());
+   assert.ok(Math.abs(position.y-1.5)<1e-10,'spoon stays above the liquid');
+   assert.ok(Math.abs(position.x-Math.cos(angle)*1.4)<1e-10);assert.ok(Math.abs(position.z-(1.2+Math.sin(angle)*.8))<1e-10);
+  }
+ }finally{f.stage.dispose();}
+});
+
+test('mounted work boards sit in front of the cabinet instead of hiding their lower interaction region',()=>{
+ for(const kind of ['slice','knead','fold','plate'] as const){
+  const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!,step=recipe.steps.findIndex(s=>s.kind===kind),f=factory(true);
+  try{
+   f.stage.update({...domain.newCookingRun(recipe,42,'front-clearance'),step,status:'playing'},null,1000,false);
+   const body=f.scene().getObjectByName('kitchen/body')!;body.updateMatrixWorld(true);
+   assert.ok(body.localToWorld(new T.Vector3(0,0,2.25)).z>5,'even the lower board edge is ahead of the cabinet front at z=5');
+  }finally{f.stage.dispose();}
+ }
+});
