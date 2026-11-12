@@ -22,7 +22,7 @@ UI 使用 RAF 前景時鐘；第一幀不計時，blur／hidden／超過 1,500ms
 
 30,000ms，3 條路線（−1／0／1），橫移速度 8 lanes/s，左右輸入冷卻 130ms；跳躍 850ms、最高 1.7 單位，落地前不能再跳。22 個 seeded 波次，第一個在 2,200ms，間隔 1,250ms。每波一個會議桌／推車、一個不同路線的假日票。場景速度 6.4 units/s、顯示未來 2,800ms，碰撞採波次穿越時刻的實際橫向位置，不只比目標路線；容差 .46 lane。推車可在跳高 ≥.8 時越過，會議桌須換路。
 
-撞到扣一顆心、減 30 分（下限0）、combo 清零；3 心用盡立即結束。每個避過的障礙 +15；同路假日票 +100＋10×min(combo,10)。波次只結算一次，數量有界22。手指左右滑 ≥28px 換路、點場景跳；另有左右／跳躍44px以上按鈕，方向鍵／A D／Space。
+撞到扣一顆心、減 30 分（下限0）、combo 清零；3 心用盡立即結束。每個避過的障礙 +15；同路假日票 +100＋10×min(combo,10)。波次只結算一次，數量有界22。手指左右滑 ≥28px 換路、點場景跳；另有 44px 以上的相鄰跑道號碼選擇與「跳一下」按鈕，不顯示方向箭頭 pad；鍵盤方向鍵／A D／Space 保留等價操作。
 
 角色為長耳豆豆乘坐有扶手、五爪輪腳的辦公椅；會議桌帶文件、推車帶杯子，假日票為葉片印記。撞擊歪頭／紙張飛散、收票跳字；分數取決於玩家輸入，無假排行榜。
 
@@ -44,11 +44,15 @@ UI 使用 RAF 前景時鐘；第一幀不計時，blur／hidden／超過 1,500ms
 
 入口加入現有 Playroom，全部70款／料理64／觀察1／派對手速5；桌面和手機仍4個分類。新3D卡片使用實際renderer截圖，不把概念圖當遊戲畫面。大廳只載入目錄和靜態WebP，進場才載入PartyGame與Three。
 
-獨立標題／狀態列／4:3場景／操作列／說明，各自有owner；開始、暫停、完成覆層的文案與CTA在正常文件流，文字變大時可增加高度，不裁字或縮小到不可讀。觸控目標≥44px，focus-visible，200%文字時重排。scene touch-action:none僅限遊戲場景，外層照常捲動。
+即時場景填滿整個全視窗 owner，不以 4:3 小畫布加同色邊界冒充全版。標題／狀態 HUD 與操作／工具列有自己的覆層 owner；原生相機依 host 比例擴展可見世界，輕量 SVG 使用相同擴展 viewBox。640×480 保留為規則投影基準與目錄 capture 尺寸，不限制即時場景的螢幕比例。
 
-模組／renderer載入上限15秒，失敗顯示重試和回大廳；WebGL失敗／contextlost會停止並暫停本局，重建後本人繼續。卸載取消RAF、timeout、listener、ResizeObserver、音效節點，dispose所有自有geometry/material/texture與context。最多DPR1.5／邏輯640×480；池化有限波次與粒子，不隨遊玩無限新增mesh。目標每場<400 draw calls／150k triangles（實測後記錄）；不把此預算宣稱為實機FPS。
+HUD 底部與控制／工具列頂部的實際位置決定安全 gameplay core；角色、跑道、落塊與假日洞口在此核心內，世界背景仍延展至四邊。Canvas 可以位於 HUD 下方，但核心不得被 chrome 遮住；假日 anchors 與 raycast 都以完整 host 正反投影，旋轉與暫停 resize 後仍需一致。`.pt-gameplay-core` 是 aria-hidden／pointer-events:none 的幾何診斷，不是替代遊戲的可點透明按鈕。
 
-暖奶油背景、墨褐輪廓、鼠尾草綠／陶土紅／蜂蜜黃，與既有插畫廚房同一情緒。幾何細節用輪腳、衣摺、餐盤邊、植物、招牌呈現，禁止亮面環境、密集飯粒、隨機白色亮點。自由工坊原Logo完整保留。
+開始、暫停、完成覆層的文案與 CTA 保留正常文件流，文字變大時不裁字或縮小到不可讀。觸控目標≥44px，focus-visible，200% 文字與非零 safe insets 時重排，必要工具可捲動操作但不吞掉遊戲輸入。scene touch-action:none 僅限遊戲場景。
+
+模組／renderer載入上限15秒，失敗顯示重試和回大廳；WebGL失敗／contextlost會停止並暫停本局，重建後本人繼續。卸載取消RAF、timeout、listener、ResizeObserver、音效節點，dispose所有自有geometry/material/texture與context。最多 DPR1.5；即時 framebuffer 依 host 比例配置，但總像素不超過原 640×480×1.5² 預算，capture 保留 640×480 契約並在成功／失敗後還原即時投影。池化有限波次與粒子，不隨遊玩無限新增 mesh。目標每場<400 draw calls／150k triangles（實測後記錄）；不把此預算宣稱為實機FPS。
+
+三款各有自己的場景語言，不共用換色玩具房間：辦公椅是冷夜城市／建築走廊，豆腐是晨霧山景／木作茶屋，假日是層疊紙藝花園／舞台。幾何細節與有方向的光影服務真實玩法，禁止用過量亮點、密集微粒或模糊濾鏡冒充品質；自由工坊原 Logo 完整保留。構圖／電影感與趣味是否符合使用者要求仍需實際運行圖和本人驗收，不能由測試通過推定。
 
 ## PT-7 結算與分享
 
@@ -115,3 +119,49 @@ Verify 42182160341／job127774498252 的真實trace、error-context與截圖顯�
 此新 main worktree 重新執行 production pure／controller 區塊：22/22 通過、0失敗／skip，不以先前候選結果代替。Node內建TS stripping僅確認三個非TSX變更檔語法，不是型別檢查。`module-check`、`git diff --check` 通過；module-check 保留 main 三項 surface_unmapped 警告。根與精確7 paths context 已重新取得，變更規則全文讀取，未變內容與先前實讀原文完整比對；完成檢查只代表本機規則齊備。aggregate verify exit 2／unavailable：descriptors與producer preview bytes通過，runtime因無測試DB、UI因adapter unavailable、surface coverage因registration behavior audit required而not_run，沒有縮小原gate。
 
 依賴不存在且禁止安裝／借用；typecheck、build、完整runtime、React與瀏覽器仍not_run，待本次 draft 的自然CI。舊章節的未發布、未合main及測試紀錄保留為當時歷史，不代表目前 main 或新候選已通過完整驗收。真人美術／趣味、實機與Safari仍未驗，沒有 merge或部署。
+
+
+### PT-FULLVIEW 響應式候選（2026-11-11，未宣稱驗收）
+
+取代即時固定 4:3 合約，保留目錄 capture 的 640×480、既有 domain／分數／持有輸入與資源上限。瀏覽器來源新增整個 owner 的幾何與 hit-test 檢查：場景／原生 framebuffer 或輕量 SVG 投影比例對齊視窗，安全核心不受 HUD／操作列遮擋，六個 native 目標可命中；暫停時 resize 不花時間或改成績，恢復後仍能以新投影命中。
+
+三款原生／輕量的 320×568、390×844、667×375、1440×900 共 24 組整頁實圖案例；原 phone／desktop PNG 與 catalog PNG 保留，新增尺寸使用直接瀏覽器 JPEG（quality85）控制報告體積。另保留 200% 文字原案例並加入非零安全邊界及全畫面證據、三尺寸實際 touch raycast、旋轉後命中與暫停不變斷言。沒有變更 timeout、retry、分數、CI 或 auth guard。
+
+此節記錄候選契約與測試來源，不是執行收據。新 exact-head 瀏覽器結果／實圖、美術品質與實機 Safari 驗收尚待正常 runner 與使用者檢視；不得預填 PASS。
+
+
+### 2026-11-12 正視角增量候選（待新版實際畫面）
+
+承接 #1338 的 `2111853f`，不是重做或宣稱接受前輪美術。辦公椅改低視線、無橫向傾斜的夜城跑道與發光建築線；豆腐改正面陶藝堆疊，畫面將當前 X/Z 軸交換為螢幕水平，native/light 同用純呈現座標轉換，原 domain 軸、裁切與分數不變；假日改正對觀眾的雙層紙藝劇場，六洞與 raycast/anchors 同時移到兩列立面，不讓後排被前排遮住。操作、全版安全核心、200% 文字與既有完整旅程保留。
+
+新測試涵蓋兩軸可見位移／尺寸與不可變狀態、六洞各 viewport 正面分列，以及原生實際點取休假後的分數與截圖。原 rim batching 測試只遷移新列的 y 座標，完整三角形／法線／UV／material／shadow 和 draw 減量斷言保留。
+
+雲端 lockfile 安裝與前輪 baseline runtime 239/239 通過。此輪 typecheck、production build、module-check、operator 21/21 及 diff check 通過；runtime 242 案中 241 通過，唯一失敗為下述 PT-6 舊縮圖來源，沒有 skip；正式新 CI 尚待。原封不動 native capture 在 Chromium 啟動時遭 process_singleton socket EPERM，經正式沙盒升級仍同錯，未改 flags/profile；已提供的雲端瀏覽器也無法連到此 workspace loopback。目錄 preview 暫保留前輪真實圖片與來源，PT-6 source gate 應如實失敗，待新 CI 原生 capture receipt 才能更新；不偽填 hash。真人美術與手機／Safari 驗收仍未完成，未核准、合併或部署。
+
+### 2026-11-12: tighter frontal tofu candidate after b3316009
+
+- Exact-head UI4 originals confirm the frontal camera but the early tower was small. Fit the complete horizontal travel envelope and full tower/fall height with margins, enlarging early tofu by over 25% without sampling or changing domain state. CPU projection regression covers both axes and 1/2/10/13 layers.
+- Reuse unchanged native camera projection/floor fit between frames. Refit on layer/axis changes, resize and capture/restore. Draw cadence, buffers, shadows, gameplay and test timeouts remain unchanged. This removes redundant CPU work, not a measured FPS or timeout fix.
+- b3316009 trace: 30 native tofu clockRunFor(1000) calls consumed 172.83 seconds; timeout snapshot had 29 seconds remaining. UI4:669 pass/1 fail. UI3:650 pass/13 skipped/1 native stale-hold timeout. UI2:625 pass/46 skipped/2 failures (covered tools safe-surface assertion and a 45s timeout). These are unresolved, not accepted.
+- This candidate: typecheck and production build pass; focused runtime242/243, only unchanged source-bound preview gate fails. Native operator in restored cloud still aborts at Chromium process_singleton socket EPERM with unchanged launch. New candidate screenshots/catalog capture and original full CI limits remain required; prior b3316009 PNGs are comparison evidence only. No approval, merge, deployment or Ted branch edits.
+
+### 2026-11-12: covered notice safe-area correction after 6e43ca2e
+
+- Read review5868115107: bounded camera increment has no additional confirmed source defect; browser performance remains unaccepted.
+- Inspected b3316009 UI2 actual failure trace/PNG: 320x568 enlarged-text recovery repeats a long notice in both panel and intrinsic footer, pushing four text tools beyond the bottom safe area. The SVG tool is shorter. This is independent of camera fitting.
+- Only non-playing stages with a panel suppress the duplicate footer `.pt-feedback`. Full ready/paused/recovery/completed notice remains in the panel; `.pt-live-label` totals and all tools remain. No absolute overlay of controls, font shrink, timeout change or removed browser assertion.
+- PASS: typecheck, build, diff check,36chunk complete context. Runtime243/244; only known old preview source-binding fails. Existing compact covered-state/browser journeys remain required. New CSS browser result NOT_RUN locally due previously verified Chromium socket restriction; exact-head CI must verify before acceptance. Native timeout and catalog gaps remain open.
+
+### 2026-11-12: exact capture and transition remeasurement after 6cdabf8e
+
+- Read review5868585928 and exact-head UI2/UI4 evidence. Layout effect previously depended only on game/light/ready, so covered-to-playing CSS could move controls before ResizeObserver delivered the new core. Add status dependency to remeasure synchronously in the layout commit. Keep later ResizeObserver, same core minimum/hit-tests/text scales and timeout gates. Source regression passes; real transition/resize acceptance still pending next CI.
+- Waited for UI1 to finish before publishing again. Run43143242987 UI1:672 pass/1 fail, native holiday paused resize third pick retained2 saved instead of3. UI2:623 pass/4 fail/46 skip; UI3:pass; UI4:665 pass/5 fail including native idle timeout. None are waived.
+- Artifact13912154795 contains source-bound catalog ready seed42 PNG/WebP, receipt and compiled closure. Visually inspected all three original PNGs. validateFiles passed against unchanged renderer inputs, exact compiled bytes, PNG/WebP hashes and dimensions, per-game budgets and disposal. Product previews use these original WebP bytes and the candidate manifest, not edited hashes. UI/React transition code is outside that isolated renderer capture; this is not new UI performance acceptance.
+- Catalog native draw calls chair82/tofu46/holiday49; triangles60100/29220/30098. These are not FPS. No changes to renderer, Three, domain, timeout or CI checks in this increment.
+
+### 2026-11-12: bounded tofu native-work candidate after bdbb25a3
+
+- Read review5869158501 and newer exact-head CI: UI1/2/3 pass; all runtime partitions/aggregate and static/source/CodeQL pass. UI4 has669 pass/1 fail, only original180000ms native tofu idle expiry, snapshot31seconds remaining. State-transition overlap and holiday resumed targeting regressions are cleared on bdbb25a3, not reworked here.
+- Only tofu draws its opaque tabletop before the underlying slab, retaining all geometry/materials/depth/shadow casters and transparent ordering. Verified installed Three opaque ordering and added actual render-list regression. Hidden slab fragments can reject on depth before expensive shading; actual gain is not yet measured.
+- Only tofu stops preserving its drawing buffer between frames. All product captures explicitly render then synchronously copy to2Dcanvas before encoding; operator renders then synchronously reads PNG in the same evaluation. Added non-yielding capture regression. Chair/holiday context settings unchanged; no DPR/30fps/quality/threshold reductions.
+- PASS:typecheck,production build,diff check,36chunk context. Runtime246/247:the only failure is now stale catalog source binding after this renderer change. Last verified preview bytes retained; must obtain new native capture/receipt and check nonblank pixels before refreshing. Do not relabel old hashes. Ready/paused/done composition, JPEG/retry/restore and original native idle deadline require exact-head CI. This is a candidate optimization, not a verified performance fix; no merge/approval/deployment.

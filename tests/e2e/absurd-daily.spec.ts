@@ -401,7 +401,7 @@ test('PT-4: tofu uses actual moving-block timing, rejects an in-flight second dr
   test.setTimeout(180000);await openParty(page,'tofu');
   for(let layer=0;layer<PT.tofuGoal;layer++){
     let aligned=false;for(let t=0;t<180;t++){const offset=Math.abs(Number(await page.locator('.pt-canvas').getAttribute('data-tofu-offset')));if(offset<.105){aligned=true;break;}await page.clock.runFor(offset>.7?90:10);}expect(aligned).toBe(true);
-    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer===0)await page.locator('.pt-canvas').press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.locator('.pt-canvas').press('Space');await page.clock.runFor(510);
+    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});await expect(drop).toHaveText('落下');if(layer===0)await page.locator('.pt-canvas').click();else if(layer===1)await page.locator('.pt-canvas').press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toHaveText('降落中');await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();await page.locator('.pt-canvas').press('Space');await page.clock.runFor(510);
   }
   await expect(page.locator('.pt-scoreboard strong[aria-label^="完成 12 / 12 層，"]')).toBeVisible();expect(await partyResult(page,'tofu')).toBe(2925);
 });
@@ -427,12 +427,18 @@ test('PT-2/6: a render exception from a paused UI action is contained, with the 
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openParty(page,'holiday');await partyAdvance(page,300);await page.getByRole('button',{name:/第 [1-6] 格：休假/}).click();await page.getByRole('button',{name:'暫停',exact:true}).click();const clear=await page.evaluateHandle(()=>WebGL2RenderingContext.prototype.clear);await page.evaluate(()=>{WebGL2RenderingContext.prototype.clear=function(){throw Error('Synthetic PT render fault');};});await page.getByRole('button',{name:'減少動態關',exact:true}).click();await expect(page.getByRole('alert')).toContainText('本局仍保留');await expect(page.locator('.pt-canvas')).toHaveAttribute('data-party-stage','failed');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');expect(errors).toEqual([]);await page.evaluate(original=>{WebGL2RenderingContext.prototype.clear=original;},clear);await clear.dispose();await page.getByRole('button',{name:'重建 3D 場景',exact:true}).click();await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await partyAdvance(page,500);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
 });
 
-test('PT-6: compact and landscape 200% text preserves the start/control owners for every party game',async({page})=>{
+test('PT-6: compact and landscape 200% text preserves the start/control owners for every party game',async({page},testInfo)=>{
   test.setTimeout(120000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   for(const viewport of [{width:320,height:568},{width:667,height:375}])for(const g of PARTY_GAMES){
     await page.setViewportSize(viewport);await page.goto(`/play?game=${g.id}&seed=42`);await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();
     await page.evaluate(()=>{const styles=[...document.querySelectorAll('.fw-arcade-root,.fw-arcade-root *')].filter(e=>e instanceof HTMLElement).map(e=>({e:e as HTMLElement,font:parseFloat(getComputedStyle(e).fontSize),line:parseFloat(getComputedStyle(e).lineHeight)}));for(const {e,font,line}of styles){e.style.fontSize=`${font*2}px`;if(Number.isFinite(line))e.style.lineHeight=`${line*2}px`;}});
-    const owners=()=>page.locator('.pt-root').evaluate(root=>{const problems:string[]=[];for(const b of root.querySelectorAll('button')){if(!b.checkVisibility())continue;const r=b.getBoundingClientRect();if(r.width<44||r.height<44)problems.push(`small:${b.textContent}`);const owner=b.closest('.pt-panel,.pt-controls,.pt-tools,.pt-heading');if(owner){const o=owner.getBoundingClientRect();if(r.left<o.left-1||r.right>o.right+1||r.top<o.top-1||r.bottom>o.bottom+1)problems.push(`owner:${b.textContent}`);}}return problems;});expect(await owners()).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'開始派對！',exact:true}).click();await exitStartedFullscreen(page);expect(await owners()).toEqual([]);await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();
+    await page.locator('.pt-root').evaluate(el=>{for(const [side,value]of Object.entries({top:12,right:8,bottom:16,left:8}))(el as HTMLElement).style.setProperty(`--game-safe-${side}`,`${value}px`);});
+    const narrative=page.getByLabel('本局說明',{exact:true});await narrative.focus();await expect(narrative).toBeFocused();
+    await narrative.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+    expect(await narrative.evaluate(el=>el.clientHeight>0&&el.scrollTop+el.clientHeight>=el.scrollHeight-1)).toBe(true);
+    const start=page.getByRole('button',{name:'開始派對！',exact:true});
+    expect(await start.evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;})).toBe(true);
+    const owners=()=>page.locator('.pt-root').evaluate(root=>{const problems:string[]=[];for(const b of root.querySelectorAll('button')){if(!b.checkVisibility())continue;const r=b.getBoundingClientRect();if(r.width<44||r.height<44)problems.push(`small:${b.textContent}`);const owner=b.closest('.pt-panel,.pt-controls,.pt-tools,.pt-heading');if(owner){const o=owner.getBoundingClientRect();if(r.left<o.left-1||r.right>o.right+1||r.top<o.top-1||r.bottom>o.bottom+1)problems.push(`owner:${b.textContent}`);}}return problems;});expect(await owners()).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'開始派對！',exact:true}).click();await expectPartyFullViewport(page);await testInfo.attach(`party-${g.id}-${viewport.width}x${viewport.height}-200pct-safe-insets.jpg`,{body:await page.locator('.fullscreen-game').screenshot({type:'jpeg',quality:85}),contentType:'image/jpeg'});await exitStartedFullscreen(page);expect(await owners()).toEqual([]);await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('button',{name:'繼續這一局',exact:true})).toBeVisible();
   }expect(errors).toEqual([]);
 });
 
@@ -441,7 +447,7 @@ test('PT-6: a failed lazy 3D renderer offers retry and a working return to the l
 });
 
 test('PT-6: landscape play keeps the real canvas and every primary control in the same viewport',async({page})=>{
-  await page.setViewportSize({width:667,height:375});for(const g of PARTY_GAMES){await page.goto(`/play?game=${g.id}&seed=42`);await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await page.getByRole('button',{name:'開始派對！',exact:true}).click();await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.fullscreenElement?.classList.contains('fullscreen-game'))).toBe(true);const boxes=await page.locator('.pt-canvas,.pt-controls button').evaluateAll(elements=>elements.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom};}));for(const r of boxes){expect(r.left).toBeGreaterThanOrEqual(0);expect(r.top).toBeGreaterThanOrEqual(0);expect(r.right).toBeLessThanOrEqual(667);expect(r.bottom).toBeLessThanOrEqual(375);}await exitStartedFullscreen(page);}
+  await page.setViewportSize({width:667,height:375});for(const g of PARTY_GAMES){await page.goto(`/play?game=${g.id}&seed=42`);await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();await page.getByRole('button',{name:'開始派對！',exact:true}).click();await expect(page.getByRole('dialog',{name:'遊戲全螢幕',exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.fullscreenElement?.classList.contains('fullscreen-game'))).toBe(true);const boxes=await page.locator('.pt-canvas,.pt-controls button').evaluateAll(elements=>elements.map(e=>{const r=e.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom};}));for(const r of boxes){expect(r.left).toBeGreaterThanOrEqual(0);expect(r.top).toBeGreaterThanOrEqual(0);expect(r.right).toBeLessThanOrEqual(667);expect(r.bottom).toBeLessThanOrEqual(375);}await expectPartyFullViewport(page);await exitStartedFullscreen(page);}
 });
 
 test('PT-6: lobby previews fail gracefully, keep Three cold and release the context on return',async({page})=>{
@@ -452,8 +458,8 @@ test('PT-6: lobby previews fail gracefully, keep Three cold and release the cont
 
 test.describe('PT-6 touchscreen input',()=>{
   test.use({hasTouch:true});
-  test('PT-6: a real touch tap raycasts the visible holiday character',async({page})=>{
-    await page.setViewportSize({width:390,height:844});await openParty(page,'holiday');await partyAdvance(page,250);const label=(await page.getByRole('button',{name:/第 [1-6] 格：休假/}).getAttribute('aria-label'))!,hole=Number(label.match(/第 (\d)/)![1])-1;const anchor=JSON.parse((await page.locator('.pt-canvas').getAttribute('data-anchors'))!)[hole],b=(await page.locator('.pt-canvas').boundingBox())!;await page.touchscreen.tap(b.x+anchor.x*b.width,b.y+anchor.y*b.height);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-live-label')).toContainText('已守住 1 個假日');
+  for(const viewport of [{width:390,height:844},{width:667,height:375},{width:320,height:568}])test(`PT-6: a real touch tap raycasts the visible holiday character at ${viewport.width}x${viewport.height}`,async({page})=>{
+    await page.setViewportSize(viewport);await openParty(page,'holiday');await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await partyAdvance(page,250);await expectPartyFullViewport(page);const label=(await page.getByRole('button',{name:/第 [1-6] 格：休假/}).getAttribute('aria-label'))!,hole=Number(label.match(/第 (\d)/)![1])-1;const anchor=JSON.parse((await page.locator('.pt-canvas').getAttribute('data-anchors'))!)[hole],b=(await page.locator('.pt-canvas').boundingBox())!;await page.touchscreen.tap(b.x+anchor.x*b.width,b.y+anchor.y*b.height);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');await expect(page.locator('.pt-live-label')).toContainText('已守住 1 個假日');
   });
 });
 async function openLightHoliday(page:Page){
@@ -476,7 +482,7 @@ test('PT-action-light: chair without WebGL completes all real ticket waves under
   test.setTimeout(150000);await page.setViewportSize({width:320,height:568});await page.emulateMedia({reducedMotion:'reduce'});const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await openLightAction(page,'chair');
   await expect(page.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
   const controls=await page.locator('.pt-controls button').evaluateAll(bs=>bs.map(b=>({w:b.getBoundingClientRect().width,h:b.getBoundingClientRect().height,font:parseFloat(getComputedStyle(b).fontSize)})));for(const b of controls){expect(b.w).toBeGreaterThanOrEqual(44);expect(b.h).toBeGreaterThanOrEqual(44);expect(b.font).toBeGreaterThanOrEqual(14);}
-  let lane=0;for(let i=0;i<PT.chairWaves;i++){const wave=chairWave(42,i);while(lane!==wave.ticketLane){const direction=lane<wave.ticketLane?1:-1;if(i%2)await page.getByRole('button',{name:direction===1?'往右換路':'往左換路',exact:true}).press('Enter');else await page.locator('.pt-canvas').press(direction===1?'ArrowRight':'ArrowLeft');lane+=direction;await partyAdvance(page,await partyElapsed(page)+160);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x',String(lane));}await partyAdvance(page,wave.at+20);}
+  let lane=0;for(let i=0;i<PT.chairWaves;i++){const wave=chairWave(42,i);while(lane!==wave.ticketLane){const direction=lane<wave.ticketLane?1:-1;if(i%2)await page.getByRole('button',{name:`第 ${lane+direction+2} 道`,exact:true}).press('Enter');else await page.locator('.pt-canvas').press(direction===1?'ArrowRight':'ArrowLeft');lane+=direction;await partyAdvance(page,await partyElapsed(page)+160);await expect(page.locator('[data-light-world=chair]')).toHaveAttribute('data-actual-x',String(lane));}await partyAdvance(page,wave.at+20);}
   await partyAdvance(page,PT.chairMs);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','4280');
   const download=page.waitForEvent('download');await page.getByRole('link',{name:'下載本局成果 SVG',exact:true}).press('Enter');const svg=readFileSync((await(await download).path())!,'utf8');expect(svg).toContain('4280 分');expect(svg).toContain('22 張假日票');expect(svg).toContain('沒有保存逐波路線');expect(await partyResult(page,'chair')).toBe(4280);expect(errors).toEqual([]);
 });
@@ -496,7 +502,7 @@ test('PT-action-light: tofu uses the actual RAF clock, twelve timed drops, one l
   await frame();
   for(let layer=0;layer<PT.tofuGoal;layer++){
     let aligned=false;for(let i=0;i<400;i++){const axis=tofuAxis(model);if(Math.abs(tofuPosition(model)[axis]-model.layers.at(-1)![axis])<.06){aligned=true;break;}await frame();}expect(aligned).toBe(true);await assertProjection();
-    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});if(layer%2)await drop.press('Space');else await drop.click();
+    const drop=page.getByRole('button',{name:'豆腐落下！',exact:true});await expect(drop).toHaveText('落下');if(layer===0)await page.locator('.pt-canvas').click();else if(layer%2)await drop.press('Space');else await drop.click();await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toHaveText('降落中');
     model=actParty(model,{kind:'drop'}) as TofuRun;history.set(model.elapsed,model);expect(model.fall?.perfect).toBe(true);expect(await partyElapsed(page)).toBe(model.elapsed);await expect(page.getByRole('button',{name:'豆腐降落中…',exact:true})).toBeDisabled();
     await page.locator('.pt-canvas').press('Space');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));
     for(let i=0;i<16;i++)await frame();const middle=await assertProjection();expect(middle.progress).toBeGreaterThan(.4);expect(middle.progress).toBeLessThan(.7);await expect(page.locator('[data-tofu-layer]')).toHaveCount(layer+2);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',String(model.score));
@@ -2325,4 +2331,179 @@ test('AD-scene light: no WebGL requires explicit fallback, failed capture preser
   await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await page.getByRole('button',{name:'分享成果',exact:true}).click();const share=page.locator('[data-daily-result-share]');await expect(share).toBeVisible();await expect(share.getByRole('button',{name:'關閉分享',exact:true})).toBeFocused();
   expect(await share.evaluate(el=>{const owner=el.closest('.fullscreen-game');return !!owner&&owner.contains(el)&&getComputedStyle(owner).overflowY!=='visible';})).toBe(true);
   await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
+});
+
+// Actual production WebGL captures, never illustration/mockup substitutes.
+for(const game of ['chair','tofu','holiday'] as const)test(`PT-art: ${game} authored scene preserves native budgets and records real pixels`,async({page},testInfo)=>{
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.setViewportSize({width:390,height:844});await openParty(page,game);
+  await partyAdvance(page,game==='chair'?1800:game==='holiday'?300:700);
+  const host=page.locator('.pt-canvas');await expect(host.locator('canvas')).toBeVisible();
+  const stats=await host.evaluate(el=>({calls:Number(el.getAttribute('data-render-calls')),triangles:Number(el.getAttribute('data-render-triangles')),geometries:Number(el.getAttribute('data-render-geometries')),textures:Number(el.getAttribute('data-render-textures'))}));
+  expect(stats.calls).toBeGreaterThan(0);expect(stats.calls).toBeLessThan(400);expect(stats.triangles).toBeGreaterThan(0);expect(stats.triangles).toBeLessThan(150000);
+  await testInfo.attach(`${game}-native-stats`,{body:JSON.stringify(stats),contentType:'application/json'});
+  await testInfo.attach(`${game}-native-scene.png`,{body:await host.screenshot(),contentType:'image/png'});
+  await testInfo.attach(`${game}-phone-page.png`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+  await page.setViewportSize({width:1440,height:900});await testInfo.attach(`${game}-desktop-page.png`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+  expect(errors).toEqual([]);
+});
+
+// Exercise the existing source-bound operator on the normal browser runner.
+// Body attachments survive the pinned JSON report without a new CI/upload lane.
+// Nothing here updates product previews or changes capture admission/budgets.
+test('PT-art: native catalog capture binds real pixels to compiled sources and releases WebGL',async({},testInfo)=>{
+  const require=createRequire(import.meta.url);
+  const {mkdtemp,readFile,readdir,rm}=require('node:fs/promises');
+  const {join}=require('node:path');
+  const {tmpdir}=require('node:os');
+  const {chromium}=require('playwright');
+  const root=fileURLToPath(new URL('../../',import.meta.url));
+  const {capture}=await import(new URL('../../modules/absurd-daily/tools/native-party-previews.mjs',import.meta.url).href);
+  const parent=await mkdtemp(join(tmpdir(),'party-native-evidence-')),out=join(parent,'capture');
+  // Keep emitted chunks as well as images, so validateFiles can independently
+  // recheck exact compiled bytes instead of trusting a manifest-only claim.
+  const attach=async(dir:string,prefix='')=>{
+    const entries=await readdir(dir,{withFileTypes:true}).catch((error:NodeJS.ErrnoException)=>{if(error.code==='ENOENT')return [];throw error;});
+    for(const entry of entries){
+      const name=prefix+entry.name,path=join(dir,entry.name);
+      if(entry.isDirectory())await attach(path,name+'/');
+      else if(entry.isFile())await testInfo.attach('party-capture/'+name,{body:await readFile(path),contentType:name.endsWith('.png')?'image/png':name.endsWith('.webp')?'image/webp':name.endsWith('.json')?'application/json':'text/javascript'});
+    }
+  };
+  try{
+    const receipt=await capture(root,out,chromium.executablePath());
+    expect(receipt.status).toBe('captured_pending_visual_review');
+    expect(receipt.errors).toEqual([]);
+    expect(receipt.previews.map((p:{game:string})=>p.game).sort()).toEqual(['chair','holiday','tofu']);
+  }finally{
+    try{await attach(out);}finally{await rm(parent,{recursive:true,force:true});}
+  }
+});
+
+// A full scene may sit behind HUD chrome; only its projected gameplay core
+// must remain unmasked. Check rendered DOM geometry and actual hit targets,
+// rather than accepting a painted margin around the old 4:3 canvas.
+async function expectPartyFullViewport(page:Page,hitCore=true){
+  await expect.poll(()=>page.locator('.pt-root').evaluate((root,hitCore)=>{
+    const errors:string[]=[],owner=root.closest('.fullscreen-game')!,host=root.querySelector<HTMLElement>('.pt-canvas')!,world=root.querySelector<HTMLElement>('.pt-holiday-world')!,core=root.querySelector<HTMLElement>('.pt-gameplay-core');
+    if(!core)return ['missing gameplay core'];
+    const o=owner.getBoundingClientRect(),r=root.getBoundingClientRect(),h=host.getBoundingClientRect(),c=core.getBoundingClientRect();
+    for(const [name,rect]of [['root',r],['host',h]] as const)for(const edge of ['left','top','right','bottom'] as const)if(Math.abs(rect[edge]-o[edge])>1)errors.push(`${name} not full-owner: ${edge}`);
+    if(Math.abs(o.left)>1||Math.abs(o.top)>1||Math.abs(o.width-innerWidth)>1||Math.abs(o.height-innerHeight)>1)errors.push('owner not full viewport');
+    if(c.width<128||c.height<96||c.left<h.left-1||c.top<h.top-1||c.right>h.right+1||c.bottom>h.bottom+1)errors.push('core outside playable bounds');
+    const canvas=host.querySelector('canvas');
+    if(canvas){const b=canvas.getBoundingClientRect();for(const edge of ['left','top','right','bottom'] as const)if(Math.abs(b[edge]-h[edge])>1)errors.push(`native canvas letterboxed: ${edge}`);if(canvas.width*canvas.height>640*480*1.5**2||!canvas.width||!canvas.height)errors.push('native pixel budget');if(Math.abs(canvas.width/canvas.height-h.width/h.height)>.02)errors.push('native projection aspect mismatch');}
+    const svg=world.querySelector<SVGSVGElement>('.pt-light-world,.pt-paper-scenery');if(svg){const b=svg.getBoundingClientRect();if(Math.abs(svg.viewBox.baseVal.width/svg.viewBox.baseVal.height-h.width/h.height)>.02)errors.push('light projection aspect mismatch');for(const edge of ['left','top','right','bottom'] as const)if(Math.abs(b[edge]-h[edge])>1)errors.push(`light scene letterboxed: ${edge}`);}
+    if(hitCore){
+      for(const [x,y]of [[c.left+4,c.top+4],[c.right-4,c.top+4],[c.left+4,c.bottom-4],[c.right-4,c.bottom-4],[(c.left+c.right)/2,(c.top+c.bottom)/2]]){const hit=document.elementFromPoint(x,y);if(!hit||!world.contains(hit))errors.push('gameplay core obscured');}
+      for(const el of root.querySelectorAll<HTMLElement>('.pt-holiday-heading,.pt-scoreboard,.pt-controls,.pt-holiday-footer')){if(!el.checkVisibility())continue;const b=el.getBoundingClientRect();if(Math.min(c.right,b.right)-Math.max(c.left,b.left)>1&&Math.min(c.bottom,b.bottom)-Math.max(c.top,b.top)>1)errors.push(`chrome overlaps core: ${el.className}`);}
+      for(const button of root.querySelectorAll<HTMLButtonElement>('button')){if(!button.checkVisibility()||button.closest('[inert]'))continue;const b=button.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);if(b.width<44||b.height<44)errors.push(`small control: ${button.getAttribute('aria-label')}`);if(!hit||!button.contains(hit))errors.push(`control obscured: ${button.getAttribute('aria-label')}`);}
+      if(root.classList.contains('pt-holiday')&&canvas){const anchors=JSON.parse(host.dataset.anchors??'[]') as {x:number;y:number}[];if(anchors.length!==6)errors.push('missing native targets');for(const a of anchors){const x=h.left+a.x*h.width,y=h.top+a.y*h.height,hit=document.elementFromPoint(x,y);if(x<c.left||x>c.right||y<c.top||y>c.bottom||!hit||!world.contains(hit))errors.push('native target outside unmasked core');}}
+    }
+    if(document.documentElement.scrollWidth>innerWidth)errors.push('horizontal document overflow');
+    return errors;
+  },hitCore)).toEqual([]);
+}
+
+for(const game of ['chair','tofu','holiday'] as const)for(const light of [false,true])for(const viewport of [{name:'compact',width:320,height:568},{name:'phone',width:390,height:844},{name:'landscape',width:667,height:375},{name:'desktop',width:1440,height:900}] as const)test(`PT-art: ${game} ${light?'light':'native'} ${viewport.name} composition owns its palette and whole-screen evidence`,async({page},testInfo)=>{
+  const expected={chair:{world:'rgb(20, 32, 57)',surface:[36,52,80],ink:'rgb(245, 232, 201)'},tofu:{world:'rgb(219, 227, 216)',surface:[251,247,234],ink:'rgb(53, 79, 70)'},holiday:{world:'rgb(244, 223, 177)',surface:[255,247,228],ink:'rgb(103, 69, 37)'}}[game];
+  // Set the window size before entering native fullscreen; browsers reject resizing it there.
+  await page.setViewportSize({width:viewport.width,height:viewport.height});
+  if(light){if(game==='holiday')await openLightHoliday(page);else await openLightAction(page,game);}else await openParty(page,game);
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+  const owner=page.locator(`.fullscreen-game--${game}`);
+  try{
+  await expect(owner).toHaveCSS('background-color',expected.world);
+  // Read the actual compositing owners, not an unused custom property or a
+  // low-specificity rule. Canvas2D normalizes browser color-mix serialization.
+  for(const [selector,opacity]of [['.pt-scoreboard',.92],['.pt-holiday-feedback',.94]] as const){
+    const rgba=await owner.locator(selector).evaluate(el=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d')!;ctx.fillStyle=getComputedStyle(el).backgroundColor;ctx.fillRect(0,0,1,1);return Array.from(ctx.getImageData(0,0,1,1).data);});
+    for(let channel=0;channel<3;channel++)expect(Math.abs(rgba[channel]-expected.surface[channel])).toBeLessThanOrEqual(1);
+    expect(Math.abs(rgba[3]-Math.round(255*opacity))).toBeLessThanOrEqual(1);
+  }
+  await expect(owner.locator('.pt-scoreboard strong').first()).toHaveCSS('color',expected.ink);
+  await expect(owner.locator('.pt-feedback')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+  await expect(owner.locator('.pt-feedback')).toHaveCSS('color',expected.ink);
+  await expectPartyFullViewport(page);
+  }finally{
+  // Preserve the original phone/desktop PNG evidence; new sizes are actual
+  // JPEG screenshots to avoid duplicating large pixels in the bounded report.
+  if(viewport.name==='phone'||viewport.name==='desktop')await testInfo.attach(`${game}-${light?'light':'native'}-fullscreen-${viewport.name}.png`,{body:await owner.screenshot(),contentType:'image/png'});
+  else await testInfo.attach(`${game}-${light?'light':'native'}-fullscreen-${viewport.name}.jpg`,{body:await owner.screenshot({type:'jpeg',quality:85}),contentType:'image/jpeg'});
+  }
+});
+
+
+for(const light of [false,true])test(`PT-fullview: ${light?'light':'native'} holiday projection resizes while paused without spending time or losing target hits`,async({page},testInfo)=>{
+  // Use the existing viewport fallback so resizing tests the real layout owner,
+  // not a browser's restriction on resizing an active native fullscreen window.
+  await page.addInitScript(()=>{HTMLElement.prototype.requestFullscreen=()=>Promise.reject(new Error('Synthetic unavailable fullscreen'));});
+  await page.setViewportSize({width:390,height:844});
+  if(light)await openLightHoliday(page);else await openParty(page,'holiday');
+  await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();
+  for(const [index,viewport]of [{width:667,height:375},{width:1440,height:900},{width:320,height:568}].entries()){
+    await partyAdvance(page,index*PT.holidayRoundMs+250);
+    await page.getByRole('button',{name:'暫停',exact:true}).click();
+    const elapsed=await partyElapsed(page),score=await page.locator('.pt-root').getAttribute('data-party-score');
+    await page.setViewportSize(viewport);await page.clock.runFor(160);
+    await expectPartyFullViewport(page,false);
+    expect(await partyElapsed(page)).toBe(elapsed);await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);
+    await page.getByRole('button',{name:'繼續這一局',exact:true}).click();await page.clock.runFor(16);
+    await expectPartyFullViewport(page);
+    const good=page.getByRole('button',{name:/第 [1-6] 格：休假/});
+    if(light)await good.click();else{
+      const hole=Number((await good.getAttribute('aria-label'))!.match(/第 (\d)/)![1])-1;
+      const point=await page.locator('.pt-canvas').evaluate((host,hole)=>{const a=JSON.parse((host as HTMLElement).dataset.anchors!)[hole],b=host.getBoundingClientRect();return {x:b.x+a.x*b.width,y:b.y+a.y*b.height};},hole);
+      await page.mouse.click(point.x,point.y);
+    }
+    await expect(page.locator('.pt-live-label')).toContainText(`已守住 ${index+1} 個假日`);
+    await testInfo.attach(`holiday-${light?'light':'native'}-resized-${viewport.width}x${viewport.height}.jpg`,{body:await page.locator('.fullscreen-game').screenshot({type:'jpeg',quality:85}),contentType:'image/jpeg'});
+  }
+});
+
+
+for(const game of ['chair','tofu','holiday'] as const)test(`PT-fullview: ${game} ready and paused tools remain real pointer targets while modal tools are isolated`,async({page})=>{
+  await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'no-preference'});
+  await page.clock.install({time:new Date('2026-10-25T00:00:00Z')});
+  await page.goto(`/play?game=${game}&seed=42`);await expect(page.locator('[data-party-stage="ready"]')).toBeVisible();
+  // The ready screen is already full-viewport, even before a user gesture can
+  // request native fullscreen. Its footer must not fall below site navigation.
+  const readyBounds=await page.locator('.fullscreen-game').boundingBox();
+  expect(readyBounds).not.toBeNull();
+  expect(readyBounds!.x).toBeCloseTo(0,0);expect(readyBounds!.y).toBeCloseTo(0,0);
+  expect(readyBounds!.width).toBeCloseTo(390,0);expect(readyBounds!.height).toBeCloseTo(844,0);
+  const tools=page.locator('.pt-tools');
+  const hit=async(label:string)=>{
+    const button=tools.getByRole('button',{name:label,exact:true});
+    await expect(button).toBeVisible();
+    expect(await button.evaluate(el=>{const b=el.getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return b.width>=44&&b.height>=44&&!!hit&&el.contains(hit);})).toBe(true);
+    await button.click();
+  };
+  await hit('減少動態關');await expect(tools.getByRole('button',{name:'減少動態開',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','ready');
+  await page.clock.pauseAt(new Date('2026-10-25T00:01:00Z'));
+  await page.getByRole('button',{name:'開始派對！',exact:true}).click();await page.clock.runFor(16);await page.getByRole('button',{name:'暫停',exact:true}).click();
+  const elapsed=await partyElapsed(page),score=await page.locator('.pt-root').getAttribute('data-party-score');
+  await hit('玩法與設定');await expect(page.getByRole('dialog',{name:'玩法與設定',exact:true})).toBeVisible();
+  expect(await tools.evaluate(el=>!!el.closest('[inert]'))).toBe(true);
+  await page.getByRole('button',{name:'回到遊戲',exact:true}).click();await expect(tools.getByRole('button',{name:'玩法與設定',exact:true})).toBeFocused();
+  await hit('重新開始');await expect(page.getByRole('button',{name:'確定重來',exact:true})).toBeFocused();
+  expect(await tools.evaluate(el=>!!el.closest('[inert]'))).toBe(true);
+  await page.getByRole('button',{name:'保留這局',exact:true}).click();await expect(tools.getByRole('button',{name:'重新開始',exact:true})).toBeFocused();
+  await hit('減少動態開');await expect(tools.getByRole('button',{name:'減少動態關',exact:true})).toHaveAttribute('aria-pressed','false');
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-state','paused');await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score',score!);expect(await partyElapsed(page)).toBe(elapsed);
+});
+
+
+// Frontal composition is verified from the real mounted renderer and real input.
+test('PT-front: holiday presents aligned non-overlapping rows and ray-picks the live reward',async({page},testInfo)=>{
+  await page.setViewportSize({width:390,height:844});await openParty(page,'holiday');await partyAdvance(page,300);
+  const host=page.locator('.pt-canvas');await expect(host.locator('canvas')).toHaveAttribute('data-party-projection','front');
+  const anchors=JSON.parse((await host.getAttribute('data-anchors'))!) as {x:number;y:number}[];
+  expect(anchors).toHaveLength(6);
+  for(let i=0;i<3;i++){expect(Math.abs(anchors[i].x-anchors[i+3].x)).toBeLessThan(.00001);expect(anchors[i+3].y-anchors[i].y).toBeGreaterThan(.05);}
+  const label=(await page.getByRole('button',{name:/第 [1-6] 格：休假/}).getAttribute('aria-label'))!,hole=Number(label.match(/第 (\d)/)![1])-1;
+  const box=(await host.boundingBox())!,a=anchors[hole];await page.mouse.click(box.x+a.x*box.width,box.y+a.y*box.height);
+  await expect(page.locator('.pt-root')).toHaveAttribute('data-party-score','120');
+  await testInfo.attach('holiday-front-real-input.png',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
 });

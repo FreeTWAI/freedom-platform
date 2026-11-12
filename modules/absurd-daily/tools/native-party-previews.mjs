@@ -7,6 +7,14 @@ import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
 
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
+// Vite defaults an absent NODE_ENV to production in the calling process.
+// Capture can run inside a browser-test worker: never leak that setting into
+// its next fixture, and keep an explicitly configured production guard intact.
+export async function withPreservedNodeEnv(operation){
+ const present=Object.hasOwn(process.env,'NODE_ENV'),value=process.env.NODE_ENV;
+ try{return await operation();}
+ finally{if(present)process.env.NODE_ENV=value;else delete process.env.NODE_ENV;}
+}
 const defaultRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const manifestPath='modules/absurd-daily/party-art.json';
 const factoryPath='apps/portal-web/src/games/party/stage.ts';
@@ -33,7 +41,7 @@ export async function plan(root=defaultRoot){
  const historical=JSON.parse(await regularFile(root,manifestPath));
  const games=historical.previews.map(p=>p.game);
  if([...games].sort().join(',')!=='chair,holiday,tofu'||games.length!==3||new Set(games).size!==3||games.some(id=>!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)))throw Error('game_set');
- const paths=[...new Set([...historical.source_inputs.map(s=>s.path),factoryPath,'apps/portal-web/src/games/party/catalog.ts','apps/portal-web/src/games/party/domain.ts','apps/portal-web/src/games/party/tofu-batch.ts','apps/portal-web/vite.config.ts','modules/absurd-daily/tools/native-party-previews.mjs','package.json','package-lock.json'])];
+ const paths=[...new Set([...historical.source_inputs.map(s=>s.path),factoryPath,'apps/portal-web/src/games/party/catalog.ts','apps/portal-web/src/games/party/domain.ts','apps/portal-web/src/games/party/tofu-batch.ts','apps/portal-web/src/games/party/viewport.ts','apps/portal-web/vite.config.ts','modules/absurd-daily/tools/native-party-previews.mjs','package.json','package-lock.json'])];
  const source_inputs=await Promise.all(paths.map(async path=>({path,sha256:digest(await regularFile(root,path))})));
  return {format:'freedom.native-preview-plan/v1',mode:'dry-plan',root,games,source_inputs,
   scope:'3 catalog previews; not full build, gameplay, native performance acceptance or deployment',
@@ -82,14 +90,14 @@ export async function capture(root,out,executable){
   // Only installed modules; no package manager, installer, API or database server.
   const {build}=await import(require.resolve('vite')),sharp=require('sharp'),{chromium}=require('playwright');
   const inputs=new Map(),transformed=new Map();
-  const built=await build({configFile:resolve(root,'apps/portal-web/vite.config.ts'),build:{write:false,rolldownOptions:{input:'native-party-fixture',preserveEntrySignatures:'strict'}},plugins:[{name:'native-party-fixture',resolveId(id){if(id==='native-party-fixture')return '\0native-party-fixture';},load(id){if(id==='\0native-party-fixture')return `export {createPartyStage} from ${JSON.stringify(resolve(root,factoryPath))}; export {newParty} from ${JSON.stringify(resolve(root,'apps/portal-web/src/games/party/domain.ts'))};`;}},{
+  const built=await withPreservedNodeEnv(()=>build({configFile:resolve(root,'apps/portal-web/vite.config.ts'),build:{write:false,rolldownOptions:{input:'native-party-fixture',preserveEntrySignatures:'strict'}},plugins:[{name:'native-party-fixture',resolveId(id){if(id==='native-party-fixture')return '\0native-party-fixture';},load(id){if(id==='\0native-party-fixture')return `export {createPartyStage} from ${JSON.stringify(resolve(root,factoryPath))}; export {newParty} from ${JSON.stringify(resolve(root,'apps/portal-web/src/games/party/domain.ts'))};`;}},{
    name:'native-preview-input-receipt',enforce:'pre',async transform(code,id){
     if(id.startsWith('\0'))return;
     const file=id.split('?')[0];if(!isAbsolute(file))return;
     const path=relative(root,file).split(sep).join('/');safeRelative(path);
     inputs.set(path,{path,sha256:digest(await regularFile(root,path))});transformed.set(id,{id:relative(root,file).split(sep).join('/')+id.slice(file.length),transform_sha256:digest(code)});
    }
-  }]});
+  }]}));
   const outputs=(Array.isArray(built)?built:[built]).flatMap(b=>b.output),chunks=outputs.filter(o=>o.type==='chunk');
   const factory=chunks.filter(c=>Object.keys(c.modules).some(id=>id.split('?')[0]===resolve(root,factoryPath)));
   if(factory.length!==1||(!factory[0].exports.includes('createPartyStage')||!factory[0].exports.includes('newParty')))throw Error('factory_export_not_identified');

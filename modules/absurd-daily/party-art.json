@@ -1,8 +1,8 @@
 {
   "format": "freedom.party-art/v1",
-  "created_at": "2026-11-05T05:06:14.503Z",
+  "created_at": "2026-11-12T15:58:05.353Z",
   "source": "apps/portal-web/src/games/party/stage.ts",
-  "source_sha256": "1ce46d8f33fc70ae732acdadf73ca46378745bc2394a8cbb9a7ebec2f7103467",
+  "source_sha256": "eff203acff0481ffa184a9b53890ef021c2dbe57404d20e432d459324b4f45d8",
   "native_canvas": {
     "width": 640,
     "height": 480,
@@ -19,13 +19,13 @@
     "dpr": 1
   },
   "compiled_factory": {
-    "file": "_native-party-fixture-C4IK2Mw2.js",
-    "sha256": "010a7a04a7b97ea924bb13ef6d7dc077ac27b36e1213f83376e32fc10f5f4a80"
+    "file": "_native-party-fixture-CYmzmA2C.js",
+    "sha256": "5734de3c01276e517cc21eae6406a0554c0c9c5243e9fb531890b74e90de1b0f"
   },
   "source_inputs": [
     {
       "path": "apps/portal-web/src/games/party/stage.ts",
-      "sha256": "1ce46d8f33fc70ae732acdadf73ca46378745bc2394a8cbb9a7ebec2f7103467"
+      "sha256": "eff203acff0481ffa184a9b53890ef021c2dbe57404d20e432d459324b4f45d8"
     },
     {
       "path": "apps/portal-web/src/games/stage-batch.ts",
@@ -49,7 +49,7 @@
     },
     {
       "path": "modules/absurd-daily/tools/native-party-previews.mjs",
-      "sha256": "fc13f53bb1c4cb2f296d6b25b250ca678398afb6990ec38fb0286aeb605ce93f"
+      "sha256": "af313fbca29def02c090296c2fff4a5b810900f73c1379ad7abc5d90ff5c9ff3"
     },
     {
       "path": "package.json",
@@ -62,9 +62,13 @@
     {
       "path": "apps/portal-web/src/games/domain.ts",
       "sha256": "6d582c91e25bc2411cb7a9c83b2190034ad640a2053e184f4033db8b16bf3bd1"
+    },
+    {
+      "path": "apps/portal-web/src/games/party/viewport.ts",
+      "sha256": "214d7f54b84c609935494eb45861a681243b8d577b4f46ec32e288514e30c658"
     }
   ],
-  "total_bytes": 46844,
+  "total_bytes": 46314,
   "previews": [
     {
       "game": "chair",
@@ -74,20 +78,20 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
       "width": 640,
       "height": 480,
-      "bytes": 10716,
-      "sha256": "df2ece1e84ff1859f34049dd314382268a95fbcf7eeab63ec7f7247df2a59fc1",
-      "source_png_sha256": "82e139792ac42484598bcb2392efb75223ad86f020462a1ef11694a2574c8ffc",
+      "bytes": 24140,
+      "sha256": "b2bd0ad788cc78d8cd08d15200138e619c2e01adf142a7b601cd2db0f024b022",
+      "source_png_sha256": "b6462558fadee0e3cb811c6594138a25fd5d51cd8810058a569082d64f71f65a",
       "native": {
-        "calls": 76,
-        "triangles": 60264,
-        "geometries": 15,
-        "textures": 7
+        "calls": 82,
+        "triangles": 60100,
+        "geometries": 20,
+        "textures": 8
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 42,
-        "construct": 424.69999998807907,
-        "capture": 314.40000000596046
+        "import": 32.300000000046566,
+        "construct": 191.60000000009313,
+        "capture": 251.5999999998603
       }
     },
     {
@@ -98,20 +102,20 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/tofu.webp",
       "width": 640,
       "height": 480,
-      "bytes": 16670,
-      "sha256": "20b1a9c216a18fc66efe416de687a702e4106ba6fce2a9ccfda2c2c79149b06f",
-      "source_png_sha256": "5aabeffe0a7e4e1f49eaf72abe18c80878db09a33ee402db2a0bde341ab3c916",
+      "bytes": 10022,
+      "sha256": "03ec471ace20c55beb6730b9de9c77c95ec102712ec79b43b01315d0a1a551a1",
+      "source_png_sha256": "4d5ec560851f01414456d0fdd34e239c4b7bee3180635a229560a8878ea0e2ef",
       "native": {
-        "calls": 48,
-        "triangles": 26776,
-        "geometries": 11,
-        "textures": 6
+        "calls": 46,
+        "triangles": 29220,
+        "geometries": 14,
+        "textures": 7
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.09999999403953552,
-        "construct": 147.2999999821186,
-        "capture": 351.5
+        "import": 0.19999999995343387,
+        "construct": 107.5,
+        "capture": 246.30000000004657
       }
     },
     {
@@ -122,20 +126,20 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/holiday.webp",
       "width": 640,
       "height": 480,
-      "bytes": 19458,
-      "sha256": "20e024567b9c6fce625ce9e17eb14afe950e586935d3bbd61a6361220d49d3b9",
-      "source_png_sha256": "fd6ce7e6457992f95570460e4122e17dfc2f9f1e8c454b39379e462e70f80fef",
+      "bytes": 12152,
+      "sha256": "767452d6677da8b4f027d3bdd64e27537d23539ae79d795de596add626513e44",
+      "source_png_sha256": "92cd748b71b7a446918bc6f12a79c03d3b412fe1836ac585ce0f9797e7c5c8da",
       "native": {
-        "calls": 88,
-        "triangles": 83936,
-        "geometries": 16,
-        "textures": 14
+        "calls": 49,
+        "triangles": 30098,
+        "geometries": 17,
+        "textures": 16
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 221.59999999403954,
-        "capture": 247.10000002384186
+        "import": 0.09999999986030161,
+        "construct": 93.5,
+        "capture": 174.30000000004657
       }
     }
   ]

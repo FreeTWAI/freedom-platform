@@ -1,14 +1,24 @@
+import {partyViewport} from './viewport';
 import {PARTY_RULES as R} from './catalog';
 import type {ChairRun,TofuRun} from './domain';
 import {chairView,tofuView,tofuFaces,TOFU_FACE_COLORS} from './light-party';
 
 /** Essential motion follows elapsed even with reduced motion; no CSS animation. */
-export function LightPartyScene({run}:{run:ChairRun|TofuRun}){
+export function LightPartyScene({run,viewport=partyViewport(640,480)}:{run:ChairRun|TofuRun;viewport?:ReturnType<typeof partyViewport>}){
+  const viewBox=`${viewport.viewBox.x} ${viewport.viewBox.y} ${viewport.viewBox.width} ${viewport.viewBox.height}`;
   if(run.game==='chair'){
     const view=chairView(run),next=view.waves[0];
-    return <><svg className="pt-light-world" viewBox="0 0 640 480" aria-hidden="true" focusable="false" data-light-world="chair" data-view-elapsed={run.elapsed} data-actual-x={run.x} data-jump={view.jump}>
-      <rect x="30" y="20" width="580" height="440" rx="23" fill="#e4eadd"/><path d="M90 40 L84 445 H556 L550 40Z" fill="#efe7d9" stroke="#443b37" strokeWidth="3"/>
-      {[243,397].map(x=><path key={x} d={`M${x} 45 V435`} stroke="#bda78b" strokeWidth="3" strokeDasharray="10 14"/>)}
+    return <><svg className="pt-light-world" viewBox={viewBox} aria-hidden="true" focusable="false" data-light-world="chair" data-view-elapsed={run.elapsed} data-actual-x={run.x} data-jump={view.jump}>
+      <rect x="-5000" y="-5000" width="10000" height="10000" fill="#142039"/>
+      <path d="M-2400 130H3040L5000 5000H-5000Z" fill="#1c2c45"/>
+      {Array.from({length:29},(_,i)=><g key={i} transform={`translate(${-1600+i*132} 0)`}><path d="M0 -3000V130" stroke="#405571" strokeWidth="5"/><rect x="18" y={-160-(i%4)*70} width="90" height={290+(i%4)*70} fill={i%2?'#263e5a':'#304b66'}/><path d="M34 -60V-40M64 -60V-40M34 -25V-5M64 -25V-5" stroke="#e8c37a" strokeWidth="5"/></g>)}
+      <path d="M-2500 -120H3100M-2500 130H3100M-2500 420H3100M-2500 800H3100M-2500 1300H3100" stroke="#52647e" strokeWidth="4"/>
+      <path d="M140 130L-1500 5000M500 130L2140 5000" stroke="#65d4cf" strokeWidth="5" opacity=".6"/>
+      <circle cx="535" cy="69" r="23" fill="#edc883"/>
+      {[0,1,2,3,4,5,6,7].map(i=><g key={i}><rect x={44+i*71} y={90-(i*13)%42} width="48" height="70" fill="#334a67"/><path d={`M${54+i*71} 83v18m13-18v18m13-18v18`} stroke="#d4b36e" strokeWidth="4"/></g>)}
+      <path d="M140 130 L84 445 H556 L500 130Z" fill="#293c58" stroke="#65d4cf" strokeWidth="3"/>
+      <path d="M55 442 L105 120 H535 L585 442 M72 442 L125 138 H515 L568 442" fill="none" stroke="#456b80" strokeWidth="5"/>
+      {[243,397].map(x=><path key={x} d={`M${x} 45 V435`} stroke="#8795a9" strokeWidth="3" strokeDasharray="10 14"/>)}
       <path d="M93 374 H547" stroke="#7d9973" strokeWidth="4" strokeDasharray="8 7"/>
       {view.waves.map(w=><g key={w.index} data-wave={w.index} data-remaining={w.remaining}>
         <g transform={`translate(${320+w.lane*154} ${w.y})`} stroke="#443b37" strokeWidth="3" strokeLinejoin="round">
@@ -27,12 +37,24 @@ export function LightPartyScene({run}:{run:ChairRun|TofuRun}){
     </svg><p className="pt-light-readout">{run.status==='done'?`本局完成 · ${run.tickets} 張票`:next?`第 ${next.index+1} 波 · ${next.kind==='meeting'?'會議桌要換路':'推車可以跳'} · ${Math.ceil(next.remaining/100)/10} 秒後到達`:'前方暫時沒有障礙'}<br/>左右滑換路，點場景或按空白鍵跳躍。黃票上的葉子是假日票。</p></>;
   }
   const view=tofuView(run);
-  const block=(layer:Parameters<typeof tofuFaces>[0],bottom:number,key:string,active=false)=><g key={key} data-tofu-layer={key} data-x={layer.x} data-z={layer.z} data-width={layer.width} data-depth={layer.depth}>{tofuFaces(layer,bottom).map((points,i)=><polygon key={i} points={points} fill={active&&i===2?'#e5bd68':TOFU_FACE_COLORS[i]} stroke="#443b37" strokeWidth="2.5" strokeLinejoin="round"/>)}</g>;
-  return <><svg className="pt-light-world" viewBox="0 0 640 480" aria-hidden="true" focusable="false" data-light-world="tofu" data-view-elapsed={run.elapsed} data-turn={run.turn} data-axis={view.axis} data-offset={view.offset} data-fall-progress={view.progress}>
-    <rect x="20" y="20" width="600" height="440" rx="26" fill="#e4eadd"/>
-    <ellipse cx="320" cy="426" rx="146" ry="41" fill="#efe7d9" stroke="#443b37" strokeWidth="3"/><ellipse cx="320" cy="422" rx="128" ry="31" fill="none" stroke="#bda78b" strokeWidth="3"/>
+  const block=(layer:Parameters<typeof tofuFaces>[0],bottom:number,key:string,active=false)=><g key={key} data-tofu-layer={key} data-x={layer.x} data-z={layer.z} data-width={layer.width} data-depth={layer.depth}>{tofuFaces(layer,bottom,view.axis).map((points,i)=><polygon key={i} points={points} fill={active&&i===0?'#e5bd68':TOFU_FACE_COLORS[i]} stroke="#443b37" strokeWidth="2.5" strokeLinejoin="round"/>)}</g>;
+  return <><svg className="pt-light-world" viewBox={viewBox} aria-hidden="true" focusable="false" data-light-world="tofu" data-view-elapsed={run.elapsed} data-turn={run.turn} data-projection="front-axis" data-axis={view.axis} data-offset={view.offset} data-fall-progress={view.progress}>
+    <rect x="-5000" y="-5000" width="10000" height="10000" fill="#e7ede3"/>
+    <path d="M-3000 250Q-1400 -900 -700 -200T500 -220T2100 -450T4000 100V4000H-3000Z" fill="#c8d5c8"/>
+    <path d="M-3000 300Q-1200 -260 -300 120T1300 -70T4000 200V4000H-3000Z" fill="#9bb4a2"/>
+    <path d="M-3000 310H4000V5000H-3000Z" fill="#b9a486"/>
+    {Array.from({length:21},(_,i)=><path key={i} d={`M-3000 ${310+i*80}H4000`} stroke="#927a5d" strokeWidth="2"/>)}
+    {Array.from({length:19},(_,i)=><path key={i} d={`M${-1600+i*210} -3000V310`} stroke="#81674c" strokeWidth="9"/>)}
+    <path d="M-3000 -380H4000M-3000 0H4000M-3000 310H4000" stroke="#81674c" strokeWidth="10"/>
+    <circle cx="488" cy="85" r="30" fill="#d8b675"/>
+    <path d="M24 208 Q100 60 204 180 T400 145 T616 175 V310 H24Z" fill="#a8bbae"/>
+    <path d="M24 256 Q120 145 220 225 T440 202 T616 236 V310 H24Z" fill="#809e91"/>
+    <path d="M22 300H618M22 155H618M115 20V300M320 20V300M525 20V300" fill="none" stroke="#81674c" strokeWidth="7"/>
+    <path d="M20 310H620V434Q620 460 594 460H46Q20 460 20 434Z" fill="#b9a486"/>
+    {[330,355,380,405,430].map(y=><path key={y} d={`M24 ${y}H616`} stroke="#9f8869"/>)}
+    <ellipse cx="320" cy="426" rx="146" ry="41" fill="#7aaba1" stroke="#405b60" strokeWidth="3"/><ellipse cx="320" cy="422" rx="128" ry="31" fill="none" stroke="#bda78b" strokeWidth="3"/>
     {view.layers.map((layer,i)=>block(layer,i*R.tofuHeight,String(i)))}
-    {view.kept&&<polygon points={tofuFaces(view.kept,run.layers.length*R.tofuHeight)[2]} fill="none" stroke="#416851" strokeWidth="4" strokeDasharray="8 5"/>}
+    {view.kept&&<polygon points={tofuFaces(view.kept,run.layers.length*R.tofuHeight,view.axis)[0]} fill="none" stroke="#416851" strokeWidth="4" strokeDasharray="8 5"/>}
     {view.active&&block(view.active,view.bottom,'moving',true)}
-  </svg><p className="pt-light-readout">{run.status==='done'?`完成 ${run.layers.length-1} 層 · ${run.misses} 次失手`:view.falling?view.kept?'正在落下，綠色虛線是會保留的部分。':'這塊沒有足夠重疊，正在落下。':`${view.axis.toUpperCase()} 軸移動 · ${view.aligned?'對齊了！現在落下':'等上層靠齊，再點或按空白鍵落下'}`}<br/>黃色是移動豆腐，奶油色是已落定的真實樓層。減少動態仍保留移動與落下。</p></>;
+  </svg><p className="pt-light-readout">{run.status==='done'?`完成 ${run.layers.length-1} 層 · ${run.misses} 次失手`:view.falling?view.kept?'正在落下，綠色虛線是會保留的部分。':'這塊沒有足夠重疊，正在落下。':`${view.axis.toUpperCase()} 軸正面 · ${view.aligned?'對齊了！現在落下':'等上層靠齊，再點或按空白鍵落下'}`}<br/>黃色是移動豆腐，奶油色是已落定的真實樓層。減少動態仍保留移動與落下。</p></>;
 }
