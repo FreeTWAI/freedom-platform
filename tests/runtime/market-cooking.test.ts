@@ -428,3 +428,19 @@ test('fried rice grains and garnish follow the real mound surface rather than a 
   }
  }finally{food.dispose();kit.dispose();}
 });
+
+for(const id of ['egg-fried-rice','shawarma','corn-dog'] as const)test(`market reference detail ${id} owns dry-surface materials and bounded pigment without changing shared defaults`,()=>{
+ const kit=new FoodKit(),mat=kit.mat.bind(kit),defaults=new Map<ReturnType<FoodKit['mat']>,string>();
+ const settings=(m:ReturnType<FoodKit['mat']>)=>JSON.stringify([m.color.getHex(),m.roughness,m.vertexColors,(m as import('three').MeshPhysicalMaterial).clearcoat]);
+ kit.mat=((...args:Parameters<FoodKit['mat']>)=>{const material=mat(...args);if(!defaults.has(material))defaults.set(material,settings(material));return material;}) as FoodKit['mat'];
+ const food=marketFood(displayMarket(id),kit);let pigmented=0;
+ try{
+  for(const [material,original]of defaults)assert.equal(settings(material),original,'market must not mutate shared FoodKit material defaults');
+  food.root.traverse(o=>{if(!(o instanceof Mesh))return;const color=o.geometry.getAttribute('color');if(!color)return;pigmented++;
+   assert.equal(color.count,o.geometry.getAttribute('position').count);const levels=new Set<number>();
+   for(let i=0;i<color.count;i++){for(const n of [color.getX(i),color.getY(i),color.getZ(i)])assert.ok(Number.isFinite(n)&&n>=0&&n<=1);levels.add(Math.round(color.getY(i)*1000));}
+   assert.ok(levels.size>3,'pigment contains geometric variation, not a single recolour');
+   const materials=Array.isArray(o.material)?o.material:[o.material];for(const m of materials){const physical=m as import('three').MeshPhysicalMaterial;assert.equal(physical.vertexColors,true);assert.ok(physical.roughness>=.82&&physical.clearcoat<=.12);}
+  });assert.ok(pigmented>0);
+ }finally{food.dispose();kit.dispose();}
+});

@@ -1,4 +1,4 @@
-import {Box3,BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,Raycaster,SphereGeometry,Vector3} from 'three';
+import {Box3,BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,MeshPhysicalMaterial,Raycaster,SphereGeometry,Vector3} from 'three';
 import {FoodKit,cookedColor} from './food-kit';
 import {bakeRigidGroup} from '../stage-batch';
 import {INGREDIENTS,newMarket,type MarketRun,type MarketId} from './market-domain';
@@ -9,6 +9,28 @@ export function marketFood(run:MarketRun,kit:FoodKit){
  // Small edible details use assembly-owned low-poly geometry, never mutate the shared kit.
  // Their count is bounded independently of frame rate and all parts still batch by material.
  const morsel=new SphereGeometry(1,8,5);transient.push(morsel);
+ // Market-owned surface response: dry grains/crust must not share the broad,
+ // wet clearcoat of sauce. Cache clones in this kit, never mutate shared recipes.
+ const finish=(mesh:Mesh,profile:'rice'|'crust'|'bread',vertexColors=false)=>{
+  const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+  const next=materials.map(source=>{
+   const key=`market/${profile}/${source.uuid}/${vertexColors}`;let owned=kit.materials.get(key);
+   if(!owned){owned=source.clone() as MeshPhysicalMaterial;const physical=owned as MeshPhysicalMaterial;
+    physical.roughness=profile==='rice'?.88:profile==='crust'?.82:.92;
+    physical.clearcoat=profile==='rice'?.06:profile==='crust'?.12:0;
+    physical.clearcoatRoughness=.48;physical.vertexColors=vertexColors;kit.materials.set(key,physical);
+   }return owned;
+  });mesh.material=Array.isArray(mesh.material)?next:next[0];return mesh;
+ };
+ const pigment=(geometry:BufferGeometry,kind:'rice'|'crust'|'bread')=>{
+  const p=geometry.getAttribute('position'),colors:number[]=[];
+  for(let i=0;i<p.count;i++){
+   const x=p.getX(i),y=p.getY(i),z=p.getZ(i),field=Math.sin(x*37+z*29)*Math.sin(y*41-z*17),fold=Math.sin(x*11+z*23+y*13);
+   const toast=kind==='rice'?.06+.08*(field+1)/2:kind==='crust'?.08+.2*(field+1)/2:.04+.16*Math.max(0,fold);
+   colors.push(1-toast*.38,1-toast,1-toast*1.65);
+  }geometry.setAttribute('color',new Float32BufferAttribute(colors,3));
+ };
+
  const bite=(target:Group,color:string,x:number,y:number,z:number,sx:number,sy:number,sz:number,kind:Parameters<FoodKit['mat']>[1]='food')=>kit.mesh(target,morsel,color,x,y,z,sx,sy,sz,kind);
  const vegetable=(kind:string,x:number,y:number,z:number,s=.35,target=root)=>{
   if(kind==='egg'){if(run.recipe==='egg-fried-rice'){for(let j=0;j<3;j++){const e=bite(target,'#e7bd52',x+(j-1)*s*.38,y+(j%2)*s*.14,z+(j%2)*s*.2,s*.7,s*.22,s*.45);e.rotation.set(.15*j,j*1.8,.17*(j-1));}}else{kit.ball(target,'#f0e5b8',x,y,z,s*1.7,.07,s*1.4);kit.ball(target,'#e6ae24',x,y+.08,z,s*.65,.12,s*.65);}}
@@ -39,10 +61,11 @@ export function marketFood(run:MarketRun,kit:FoodKit){
    // A low, irregular mound with embedded short grains, not a smooth bun or noodles.
    const mound=kit.sphere.clone(),positions=mound.getAttribute('position');transient.push(mound);
    for(let i=0;i<positions.count;i++){const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i),a=Math.atan2(z,x),edge=1+.055*Math.sin(a*5)+.035*Math.cos(a*9);positions.setXYZ(i,x*edge,y*(1+.045*Math.sin(x*7+z*5)),z*edge);}
-   mound.computeVertexNormals();riceSurface=kit.mesh(root,mound,color,0,base+.14,0,1.64,height,1.24,'rice');
+   mound.computeVertexNormals();pigment(mound,'rice');riceSurface=finish(kit.mesh(root,mound,color,0,base+.14,0,1.64,height,1.24,'rice'),'rice',true);
+   const grainGeometry=morsel.clone();transient.push(grainGeometry);pigment(grainGeometry,'rice');
    for(let i=0;i<420;i++){
     const a=i*2.39996,rr=Math.sqrt((i+.5)/420)*.96,x=Math.cos(a)*rr*1.62,z=Math.sin(a)*rr*1.22,y=base+.14+height*Math.sqrt(1-rr*rr);
-    const grain=bite(root,color,x,y-.015,z,.085,.038,.036,'rice');grain.rotation.set(.12*Math.sin(i),a+i*.37,.14*Math.cos(i));
+    const grain=finish(kit.mesh(root,grainGeometry,color,x,y-.015,z,.085,.038,.036,'rice'),'rice',true);grain.rotation.set(.12*Math.sin(i),a+i*.37,.14*Math.cos(i));
    }
   }
   // Seat each garnish's real underside on the actual sculpted mound, not a
@@ -79,8 +102,8 @@ export function marketFood(run:MarketRun,kit:FoodKit){
    if(run.folds>=3){
     // A soft tapered roll with a diagonal open cut and an overlapping lip.
     const wrap=kit.wrap.clone(),vertices=wrap.getAttribute('position');transient.push(wrap);
-    for(let i=0;i<vertices.count;i++){const x=vertices.getX(i),y=vertices.getY(i),z=vertices.getZ(i),end=Math.abs(x)/1.55,taper=.86+.14*end;vertices.setXYZ(i,x+z*.36,(y-.48)*taper+.48+.025*Math.sin(x*3),z*taper);}
-    wrap.computeVertexNormals();kit.mesh(root,wrap,'#ffffff',0,base,0,1,1,1,'bread');
+    for(let i=0;i<vertices.count;i++){const x=vertices.getX(i),y=vertices.getY(i),z=vertices.getZ(i),end=Math.abs(x)/1.55,taper=.86+.14*end;vertices.setXYZ(i,x+z*.7,(y-.48)*taper+.48+.025*Math.sin(x*3),z*taper);}
+    wrap.computeVertexNormals();pigment(wrap,'bread');finish(kit.mesh(root,wrap,'#ffffff',0,base,0,1,1,1,'bread'),'bread',true);
     // Thin bread thickness around both slanted openings makes the cut readable
     // against the layered filling; use the same bread material and final batch.
     const rimPositions:number[]=[],rimUvs:number[]=[],rimIndices:number[]=[];
@@ -88,11 +111,11 @@ export function marketFood(run:MarketRun,kit:FoodKit){
      const offset=rimPositions.length/3;
      for(let j=0;j<=44;j++)for(const radius of [1,.91]){
       const a=1.7+j/44*6.05,z=Math.cos(a)*.59*radius,y=.48+Math.sin(a)*.41*radius;
-      rimPositions.push(side*1.55+z*.36,y+.025*Math.sin(side*1.55*3),z);rimUvs.push(j/44,radius);
+      rimPositions.push(side*1.55+z*.7,y+.025*Math.sin(side*1.55*3),z);rimUvs.push(j/44,radius);
      }
      for(let j=0;j<44;j++){const a=offset+j*2;rimIndices.push(a,a+1,a+2,a+1,a+3,a+2);}
     }
-    const rim=new BufferGeometry();rim.setAttribute('position',new Float32BufferAttribute(rimPositions,3));rim.setAttribute('uv',new Float32BufferAttribute(rimUvs,2));rim.setIndex(rimIndices);rim.computeVertexNormals();transient.push(rim);kit.mesh(root,rim,'#ffffff',0,base,0,1,1,1,'bread');
+    const rim=new BufferGeometry();rim.setAttribute('position',new Float32BufferAttribute(rimPositions,3));rim.setAttribute('uv',new Float32BufferAttribute(rimUvs,2));rim.setIndex(rimIndices);rim.computeVertexNormals();pigment(rim,'bread');transient.push(rim);finish(kit.mesh(root,rim,'#ffffff',0,base,0,1,1,1,'bread'),'bread',true);
    }
    else {kit.disk(root,'#ddbc80',0,base+.07,0,2.03,.06,1.65,'bread');if(run.folds)for(const side of [-1,1]){const f=kit.disk(root,'#d8b375',side*1.23,base+.2,0,.87,.05,1.4,'bread');f.rotation.z=side*run.folds*.23;}}
   }
@@ -119,9 +142,9 @@ export function marketFood(run:MarketRun,kit:FoodKit){
      const crust=tip*(.008*Math.sin(a*11+pz*19)+.006*Math.cos(a*17-pz*31)+.004*Math.sin(pz*43));
      vertices.setXYZ(v,px+Math.cos(a)*crust,py+Math.sin(a)*crust*.9,pz);
     }
-    shellGeometry.computeVertexNormals();
+    shellGeometry.computeVertexNormals();pigment(shellGeometry,'crust');
    }
-   const dog=new Mesh(shellGeometry,[material(visible),material(hidden)]);
+   const dog=new Mesh(shellGeometry,[material(visible),material(hidden)]);if(p.coated)finish(dog,'crust',true);
    dog.position.set(x,y,z);dog.scale.set(p.coated?1:.72,1,p.coated?1:.86);
    dog.castShadow=dog.receiveShadow=true;dogGroup.add(dog);
    // Flattened wooden skewer and sparse angular crust, inside the same portion owner.
