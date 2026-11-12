@@ -31,6 +31,16 @@ export function createPartyFloorFit(){
   };
 }
 
+/** Fit the complete travel envelope, not one sampled moving block. */
+export function tofuFrontCamera(layers:readonly TofuLayer[],axis:'x'|'z'){
+  const projected=layers.map(layer=>tofuFrontLayer(layer,axis)),top=projected[projected.length-1];
+  let left=-2.65,right=2.65;
+  for(const layer of projected){left=Math.min(left,layer.x-layer.width/2);right=Math.max(right,layer.x+layer.width/2);}
+  left=Math.min(left,top.x-top.width/2-R.tofuAmplitude);right=Math.max(right,top.x+top.width/2+R.tofuAmplitude);
+  const ceiling=.52+layers.length*R.tofuHeight+1.7+.5;
+  return {x:(left+right)/2,y:ceiling/2,size:Math.max((right-left)/2*.75+.25,ceiling/2+.4)};
+}
+
 /** PT-6: one bounded, original miniature set per mount. No network assets. */
 export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>void):PartyStage {
   const C=game==='chair'?{...ORIGINAL_PALETTE,ink:'#17233e',sage:'#65d4cf',leaf:'#21b9b2',peach:'#f58eab',gold:'#f5d96a',navy:'#384766',wood:'#26354d'}:game==='tofu'?{...ORIGINAL_PALETTE,ink:'#363c36',sage:'#7aaba1',leaf:'#3d6b5e',peach:'#c17e5d',gold:'#c8a266',navy:'#405b60',wood:'#81674c'}:{...ORIGINAL_PALETTE,ink:'#463957',sage:'#98bc58',leaf:'#407944',peach:'#ee835c',gold:'#f6ca64',navy:'#65609a',wood:'#b16f4a'};
@@ -198,7 +208,8 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     }
     const fitFloor=createPartyFloorFit();
     const liveViewport=host.hasAttribute('data-party-live-viewport');
-    let viewport=partyViewport(640,480);
+    let viewport=partyViewport(640,480),projectionDirty=true;
+    let cameraLayers:readonly TofuLayer[]|null=null,cameraAxis:'x'|'z'|null=null;
     function project(){const v=viewport.view;camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);camera.updateProjectionMatrix();}
     resize=()=>{
       if(disposed||capturing)return;
@@ -206,8 +217,8 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         viewport=rect.width>0&&rect.height>0?partyViewport(rect.width,rect.height,parseFloat(style.getPropertyValue('--pt-scene-top'))||0,parseFloat(style.getPropertyValue('--pt-scene-bottom'))||0,parseFloat(style.getPropertyValue('--pt-scene-left'))||0,parseFloat(style.getPropertyValue('--pt-scene-right'))||0):partyViewport(640,480);
         const pixels=partyBufferSize(viewport.width,viewport.height,devicePixelRatio||1);renderer.setPixelRatio(1);renderer.setSize(pixels.width,pixels.height,false);
       }
-      project();
-      if(last)update(last,lastMotion);
+      projectionDirty=true;
+      if(last)update(last,lastMotion);else project();
     };
     let frontAxis:'x'|'z'='x';
     function setTofu(g:Group,l:TofuLayer,y:number){l=tofuFrontLayer(l,frontAxis);g.visible=true;g.position.set(l.x,y,l.z);g.scale.set(l.width,R.tofuHeight,l.depth);}
@@ -232,15 +243,20 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         if(fall&&!fall.kept){activeTofu.position.y=topY+1.7-phase*phase*3.5;activeTofu.rotation.z=motion?phase*.5:0;}else activeTofu.rotation.z=0;
         const age=s.elapsed-s.feedbackAt;crumb.visible=motion&&!!s.feedback&&!s.feedback.includes('完美')&&age<600;
         if(crumb.visible){const top=s.layers[s.layers.length-1];setTofu(crumb,{...top,x:top.x+1.6+age/400,width:.35},topY-age/220);crumb.rotation.z=age/170;}
-        const focus=(n-1)*R.tofuHeight*.46,cam=camera as OrthographicCamera,size=4.2+n*.09;cam.left=-size*4/3;cam.right=size*4/3;cam.top=size;cam.bottom=-size;cam.position.set(0,focus+2.1,14);cam.lookAt(0,focus+1.25,0);cam.updateProjectionMatrix();
+        if(projectionDirty||cameraLayers!==s.layers||cameraAxis!==frontAxis){
+          const pose=tofuFrontCamera(s.layers,frontAxis),cam=camera as OrthographicCamera;
+          cam.left=-pose.size*4/3;cam.right=pose.size*4/3;cam.top=pose.size;cam.bottom=-pose.size;
+          cam.position.set(pose.x,pose.y+.85,14);cam.lookAt(pose.x,pose.y,0);
+          cameraLayers=s.layers;cameraAxis=frontAxis;projectionDirty=true;
+        }
       }else if(s.game==='holiday'){
-        camera.position.set(0,2.3,12);camera.lookAt(0,2.3,0);
+        if(projectionDirty){camera.position.set(0,2.3,12);camera.lookAt(0,2.3,0);}
         const targets=holidayTargets(s.seed,s.round),phase=s.elapsed%R.holidayRoundMs,visible=s.status==='ready'||s.status==='done'||(phase>=R.holidayOpenMs&&phase<R.holidayCloseMs);
         sprites.forEach((p,i)=>{const kind=i===targets.good?'good':i===targets.boss?'boss':'empty',pressed=!!(s.pressed&(1<<i));p.body.visible=visible&&kind!=='empty'&&!pressed;p.leaf.visible=kind==='good';p.tie.visible=kind==='boss';p.body.position.y=.25+(motion?Math.min(1,Math.max(0,(phase-R.holidayOpenMs)/120))*.14:.14);p.body.rotation.z=motion?Math.sin(t*5+i)*.055:0;});
       }
       const burst=s.game==='holiday'?s.pick&&s.elapsed-s.pick.at<500:s.game==='chair'?s.elapsed-s.hitAt<600:feedbackAge<600;
       papers.forEach((p,i)=>{p.visible=motion&&!!burst&&s.status!=='ready';if(!p.visible)return;const age=s.game==='holiday'?s.elapsed-(s.pick?.at??0):s.game==='chair'?s.elapsed-s.hitAt:feedbackAge,a=i*2.4,origin=s.game==='holiday'&&s.pick?anchorPositions[s.pick.hole]:new Vector3(s.game==='chair'?s.x*1.5:0,1,s.game==='chair'?2.4:0);p.position.set(origin.x+Math.sin(a)*age/280,origin.y+1.3+age/350-age*age/200000,origin.z+Math.cos(a)*age/400);p.rotation.set(t*3+i,t*2,age/150+i);});
-      tofuBatch?.update();project();if(camera instanceof OrthographicCamera)fitFloor(camera);renderer.render(scene,camera);
+      tofuBatch?.update();if(projectionDirty){project();if(camera instanceof OrthographicCamera)fitFloor(camera);projectionDirty=false;}renderer.render(scene,camera);
     }
     resize();
     if(liveViewport){
@@ -254,7 +270,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
       pick:(x,y)=>{if(!last||last.game!=='holiday'||!holidayOpen(last))return null;const rect=host.getBoundingClientRect();if(x<rect.left||x>rect.right||y<rect.top||y>rect.bottom)return null;ray.setFromCamera(new Vector2((x-rect.left)/rect.width*2-1,-(y-rect.top)/rect.height*2+1),camera);return ray.intersectObjects(proxies,false)[0]?.object.userData.hole??null;},
       anchors:()=>anchorPositions.map((p,hole)=>{const v=p.clone().project(camera);return {hole,x:(v.x+1)/2,y:(1-v.y)/2};}),
       capture:()=>{if(disposed||!last)throw Error('場景已離開。');return withPartyCaptureView(
-        ()=>{capturing=true;viewport=partyViewport(640,480);renderer.setPixelRatio(1);renderer.setSize(960,720,false);update(last!,lastMotion);},
+        ()=>{capturing=true;projectionDirty=true;viewport=partyViewport(640,480);renderer.setPixelRatio(1);renderer.setSize(960,720,false);update(last!,lastMotion);},
         ()=>{const c=document.createElement('canvas');c.width=960;c.height=720;const ctx=c.getContext('2d');if(!ctx)throw Error('圖片未能建立。');ctx.drawImage(renderer.domElement,0,0,960,720);return c.toDataURL('image/jpeg',.9);},
         ()=>{capturing=false;if(!liveViewport){renderer.setPixelRatio(Math.min(devicePixelRatio||1,R.maxDpr));renderer.setSize(640,480,false);}resize();});},
       stats:()=>({calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures}),dispose,

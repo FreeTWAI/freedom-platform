@@ -137,3 +137,10 @@ Verify 42182160341／job127774498252 的真實trace、error-context與截圖顯�
 新測試涵蓋兩軸可見位移／尺寸與不可變狀態、六洞各 viewport 正面分列，以及原生實際點取休假後的分數與截圖。原 rim batching 測試只遷移新列的 y 座標，完整三角形／法線／UV／material／shadow 和 draw 減量斷言保留。
 
 雲端 lockfile 安裝與前輪 baseline runtime 239/239 通過。此輪 typecheck、production build、module-check、operator 21/21 及 diff check 通過；runtime 242 案中 241 通過，唯一失敗為下述 PT-6 舊縮圖來源，沒有 skip；正式新 CI 尚待。原封不動 native capture 在 Chromium 啟動時遭 process_singleton socket EPERM，經正式沙盒升級仍同錯，未改 flags/profile；已提供的雲端瀏覽器也無法連到此 workspace loopback。目錄 preview 暫保留前輪真實圖片與來源，PT-6 source gate 應如實失敗，待新 CI 原生 capture receipt 才能更新；不偽填 hash。真人美術與手機／Safari 驗收仍未完成，未核准、合併或部署。
+
+### 2026-11-12: tighter frontal tofu candidate after b3316009
+
+- Exact-head UI4 originals confirm the frontal camera but the early tower was small. Fit the complete horizontal travel envelope and full tower/fall height with margins, enlarging early tofu by over 25% without sampling or changing domain state. CPU projection regression covers both axes and 1/2/10/13 layers.
+- Reuse unchanged native camera projection/floor fit between frames. Refit on layer/axis changes, resize and capture/restore. Draw cadence, buffers, shadows, gameplay and test timeouts remain unchanged. This removes redundant CPU work, not a measured FPS or timeout fix.
+- b3316009 trace: 30 native tofu clockRunFor(1000) calls consumed 172.83 seconds; timeout snapshot had 29 seconds remaining. UI4:669 pass/1 fail. UI3:650 pass/13 skipped/1 native stale-hold timeout. UI2:625 pass/46 skipped/2 failures (covered tools safe-surface assertion and a 45s timeout). These are unresolved, not accepted.
+- This candidate: typecheck and production build pass; focused runtime242/243, only unchanged source-bound preview gate fails. Native operator in restored cloud still aborts at Chromium process_singleton socket EPERM with unchanged launch. New candidate screenshots/catalog capture and original full CI limits remain required; prior b3316009 PNGs are comparison evidence only. No approval, merge, deployment or Ted branch edits.

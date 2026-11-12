@@ -2033,3 +2033,24 @@ test('PT-front: a completed Z-axis tower preserves its live direction in the res
   const svg=partyResultSvg(run);
   for(const [i,layer] of run.layers.entries())for(const face of tofuFaces(layer,i*PT.tofuHeight,'z'))assert.ok(svg.includes(`points="${face}"`));
 });
+
+
+test('PT-front: tighter tofu framing includes both complete travel envelopes and tall towers',async()=>{
+ const {tofuFrontCamera}=await import('../../apps/portal-web/src/games/party/stage.js');
+ const {OrthographicCamera,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+ for(const count of [1,2,10,13])for(const axis of ['x','z'] as const){
+  const layers=Array.from({length:count},(_,i)=>({x:i*.04,z:-i*.03,width:3-i*.04,depth:3-i*.03}));
+  const snapshot=JSON.stringify(layers),pose=tofuFrontCamera(layers,axis);
+  const camera=new OrthographicCamera(-pose.size*4/3,pose.size*4/3,pose.size,-pose.size,.1,80);
+  camera.position.set(pose.x,pose.y+.85,14);camera.lookAt(pose.x,pose.y,0);camera.updateMatrixWorld(true);
+  for(const [i,raw]of layers.entries())for(const travel of i===count-1?[-PT.tofuAmplitude,0,PT.tofuAmplitude]:[0]){
+   const layer=tofuFrontLayer(raw,axis);
+   for(const dx of [-1,1])for(const dz of [-1,1])for(const dy of [-1,1]){
+    const p=new Vector3(layer.x+travel+dx*layer.width/2,.52+i*PT.tofuHeight+dy*PT.tofuHeight/2+(travel?PT.tofuHeight+1.7:0),layer.z+dz*layer.depth/2).project(camera);
+    assert.ok(Math.abs(p.x)<1&&Math.abs(p.y)<1,'entire tower and full moving envelope stay inside canonical safe core');
+   }
+  }
+  if(count===1)assert.ok((4.2+.09)/pose.size>1.25,'early tofu is at least 25 percent larger without clipping');
+  assert.equal(JSON.stringify(layers),snapshot);
+ }
+});
