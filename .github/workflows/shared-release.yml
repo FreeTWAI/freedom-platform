@@ -14,16 +14,16 @@ on:
         required: true
         type: string
       target:
-        description: 'Environment'
+        description: 'Environment (deploy-pair requires staging-next and then releases next)'
         required: true
         type: choice
         options: [staging-next, next]
       mode:
-        description: 'plan: admission; check: credentials; deploy: release; handoff: reconcile a completed release without redeploying'
+        description: 'plan: admission; check: credentials; deploy: release; deploy-pair: staging then production; handoff: reconcile a completed release without redeploying'
         required: true
         type: choice
         default: plan
-        options: [plan, check, deploy, handoff]
+        options: [plan, check, deploy, handoff, deploy-pair]
       recover_backup_run_id:
         description: 'Optional failed BEGIN-only backup to reconcile by readback; never starts a backup'
         required: false
@@ -102,7 +102,7 @@ jobs:
           retention-days: 90
   deploy:
     needs: admission
-    if: needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'check' || needs.admission.outputs.mode == 'handoff'
+    if: needs.admission.outputs.mode == 'deploy-pair' || needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'check' || needs.admission.outputs.mode == 'handoff'
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     environment:
@@ -124,7 +124,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        if: needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'handoff'
+        if: needs.admission.outputs.mode == 'deploy-pair' || needs.admission.outputs.mode == 'deploy' || needs.admission.outputs.mode == 'handoff'
         with:
           ref: ${{ needs.admission.outputs.source_sha }}
           path: source
@@ -174,13 +174,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-result-${{ github.run_id }}-${{ github.run_attempt }}${{ github.event_name != 'workflow_dispatch' && '-staging-next' || '' }}
+          name: release-result-${{ github.run_id }}-${{ github.run_attempt }}${{ (github.event_name != 'workflow_dispatch' || needs.admission.outputs.mode == 'deploy-pair') && '-staging-next' || '' }}
           path: ${{ runner.temp }}/release-public/receipt.json
           if-no-files-found: warn
           retention-days: 90
   production:
     needs: [admission, deploy]
-    if: (github.event_name == 'workflow_run' || github.event_name == 'schedule') && needs.admission.outputs.mode == 'deploy' && needs.deploy.result == 'success'
+    if: ((github.event_name == 'workflow_run' || github.event_name == 'schedule') && needs.admission.outputs.mode == 'deploy' || github.event_name == 'workflow_dispatch' && needs.admission.outputs.mode == 'deploy-pair') && needs.deploy.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 110
     environment:

@@ -65,6 +65,7 @@ export async function requireFailedBackup(api, admission, installation) {
     && owner.head_branch === 'main' && owner.head_sha === run.head_sha, 'release_backup_recovery_artifact_invalid');
   const receipt = await api.readArtifact(artifact);
   check(receipt?.format === 'freedom.shared-backup/v1' && receipt.status === 'failed' && receipt.mode === 'backup'
+    && receipt.authorization === undefined
     && receipt.event === run.event && receipt.providerOutcome === 'unknown_until_confirmed'
     && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID && receipt.controllerSha === run.head_sha
     && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
@@ -148,6 +149,7 @@ export async function requireScheduledBackup(api, admission, installation) {
     && owner.head_branch === 'main' && owner.head_sha === run.head_sha, 'release_schedule_artifact_invalid');
   const receipt = await api.readArtifact(artifact);
   check(receipt?.format === 'freedom.shared-backup/v1' && receipt.status === 'passed' && receipt.event === 'schedule'
+    && receipt.authorization === undefined
     && receipt.mode === 'backup' && receipt.providerOutcome === 'backup_and_restore_confirmed'
     && receipt.operatorEvidence === 'validated-backup-phases/v1' && receipt.repository === REPOSITORY && receipt.repositoryId === REPOSITORY_ID
     && receipt.controllerSha === run.head_sha && receipt.target === admission.target && receipt.runId === id && receipt.runAttempt === run.run_attempt
