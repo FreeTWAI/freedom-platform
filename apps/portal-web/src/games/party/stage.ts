@@ -44,7 +44,9 @@ export function tofuFrontCamera(layers:readonly TofuLayer[],axis:'x'|'z'){
 /** PT-6: one bounded, original miniature set per mount. No network assets. */
 export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>void):PartyStage {
   const C=game==='chair'?{...ORIGINAL_PALETTE,ink:'#17233e',sage:'#65d4cf',leaf:'#21b9b2',peach:'#f58eab',gold:'#f5d96a',navy:'#384766',wood:'#26354d'}:game==='tofu'?{...ORIGINAL_PALETTE,ink:'#363c36',sage:'#7aaba1',leaf:'#3d6b5e',peach:'#c17e5d',gold:'#c8a266',navy:'#405b60',wood:'#81674c'}:{...ORIGINAL_PALETTE,ink:'#463957',sage:'#98bc58',leaf:'#407944',peach:'#ee835c',gold:'#f6ca64',navy:'#65609a',wood:'#b16f4a'};
-  const renderer=new WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power',preserveDrawingBuffer:true});
+  // Tofu readbacks render and copy synchronously; do not retain its backbuffer
+  // between frames. Other games keep their existing context configuration.
+  const renderer=new WebGLRenderer({antialias:true,alpha:false,powerPreference:'low-power',preserveDrawingBuffer:game!=='tofu'});
   const geometries=new Set<BufferGeometry>(),materials=new Set<Material>(),textures=new Set<Texture>();
   let resizeObserver:ResizeObserver|undefined,styleObserver:MutationObserver|undefined;
   let disposed=false,lastMotion=false,capturing=false,last:PartyRun|null=null,tofuBatch:ReturnType<typeof createTofuOpaqueBatch>|null=null;
@@ -95,7 +97,10 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     rb(world,game==='chair'?'#17233e':game==='tofu'?'#81674c':'#bf9062',0,-.25,-1.4,game==='chair'?64:256,.5,game==='chair'?64:256);
     // Construct the lit floor with its intended material, not a basic decal.
     const floorSurface=new MeshStandardMaterial({map:floor,roughness:game==='chair'?.58:.96,metalness:game==='chair'?.18:0});materials.add(floorSurface);
-    const ground=new Mesh(plane,floorSurface);ground.position.set(0,.012,-1.4);ground.scale.set(game==='chair'?64:256,game==='chair'?64:256,1);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;world.add(ground);
+    const ground=new Mesh(plane,floorSurface);ground.position.set(0,.012,-1.4);ground.scale.set(game==='chair'?64:256,game==='chair'?64:256,1);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;
+    // Write the opaque tabletop depth before its underlying slab. Keep every
+    // edge/caster/material; hidden slab fragments can fail depth before shading.
+    if(game==='tofu')ground.renderOrder=-1;world.add(ground);
     const scenery=group(world);
     function backdrop(kind:PartyGameId){return canvasTexture(ctx=>{
       const grad=ctx.createLinearGradient(0,0,0,512);grad.addColorStop(0,kind==='chair'?'#12203c':kind==='tofu'?'#e9ede3':'#f9e9b8');grad.addColorStop(1,kind==='chair'?'#52647e':kind==='tofu'?'#c0d1c6':'#e7c68d');ctx.fillStyle=grad;ctx.fillRect(0,0,1024,512);

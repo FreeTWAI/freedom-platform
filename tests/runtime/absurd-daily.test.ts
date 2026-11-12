@@ -2074,3 +2074,25 @@ test('PT-core: covered-to-playing chrome remeasures in the React layout commit',
  assert.ok(measurement.includes('},[game,light,ready,live.current.status]);'),'ready/paused/playing transition invalidates core in the same commit');
  assert.match(measurement,/new ResizeObserver\(measure\)/,'later font and geometry resize observation is retained');
 });
+
+
+test('PT-tofu-perf: early opaque tabletop depth preserves transparent queue and material quality',async()=>{
+ const {WebGLRenderList}=await import(new URL('../../node_modules/three/src/renderers/webgl/WebGLRenderLists.js',import.meta.url).href);
+ const {Mesh,BoxGeometry,PlaneGeometry,MeshStandardMaterial,MeshBasicMaterial,PerspectiveCamera}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+ const slab=new Mesh(new BoxGeometry(),new MeshStandardMaterial()),ground=new Mesh(new PlaneGeometry(),new MeshStandardMaterial({roughness:.96}));
+ const face=new Mesh(new PlaneGeometry(),new MeshBasicMaterial({transparent:true})),camera=new PerspectiveCamera();
+ const list=new WebGLRenderList();ground.renderOrder=-1;
+ for(const object of [slab,ground,face])list.push(object,object.geometry,object.material,0,0,null,camera);
+ list.sort();assert.deepEqual(list.opaque.map((item:{object:unknown})=>item.object),[ground,slab]);assert.deepEqual(list.transparent.map((item:{object:unknown})=>item.object),[face]);
+ assert.equal(ground.material.depthTest,true);assert.equal(ground.material.depthWrite,true);assert.equal(ground.material.transparent,false);assert.equal(ground.material.roughness,.96);
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/party/stage.ts',import.meta.url),'utf8');
+ assert.match(source,/if\(game==='tofu'\)ground.renderOrder=-1/);
+ assert.match(source,/ground.receiveShadow=true/);assert.match(source,/preserveDrawingBuffer:game!=='tofu'/);
+ for(const object of [slab,ground,face]){object.geometry.dispose();object.material.dispose();}
+});
+
+test('PT-tofu-perf: capture enters, copies and restores before yielding the drawing buffer',()=>{
+ const events:string[]=[];let yielded=false;queueMicrotask(()=>{yielded=true;});
+ const result=withPartyCaptureView(()=>{assert.equal(yielded,false);events.push('fresh render');},()=>{assert.equal(yielded,false);events.push('synchronous copy');return 'image';},()=>{assert.equal(yielded,false);events.push('restore render');});
+ assert.equal(result,'image');assert.deepEqual(events,['fresh render','synchronous copy','restore render']);
+});
