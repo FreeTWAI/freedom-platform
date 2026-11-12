@@ -2054,3 +2054,13 @@ test('PT-front: tighter tofu framing includes both complete travel envelopes and
   assert.equal(JSON.stringify(layers),snapshot);
  }
 });
+
+test('PT-covered: panel notices do not reserve a duplicate enlarged footer paragraph',()=>{
+ const css=readFileSync(new URL('../../apps/portal-web/src/games/party/party.css',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+ assert.match(css,/\.pt-holiday-stage:not\(\[data-party-state=playing\]\):has\(\.pt-panel\) \.pt-holiday-feedback \.pt-feedback\{display:none\}/);
+ assert.match(css,/\.pt-feedback\{min-block-size:2\.8em\}/,'playing feedback keeps its full allocation');
+ assert.ok(ui.includes("s.status==='paused'?notice:spec.rule"),'paused notice stays in the panel');
+ assert.ok(ui.includes('{done&&notice&&<p role="status">{notice}</p>}'),'capture failure stays readable in completed panel');
+ assert.ok(ui.includes("{error||'角色和道具就快到齊了。'}"),'recovery explanation remains in the error panel');
+});

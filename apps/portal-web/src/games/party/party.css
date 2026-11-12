@@ -238,3 +238,11 @@
   .pt-holiday-stage[data-party-state] .pt-scoreboard{grid-template-columns:minmax(0,1.6fr) minmax(0,.8fr) minmax(0,1.2fr)}
  }
 }
+
+/* Covered screens already carry the full notice in the panel. Do not allocate
+   a second enlarged paragraph above the persistent tools: on a short phone it
+   pushes their row below the safe edge. Keep the live totals and every tool;
+   normal play retains its complete two-line feedback area. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game:is(.fullscreen-game--holiday,.fullscreen-game--chair,.fullscreen-game--tofu){
+ .pt-holiday-stage:not([data-party-state=playing]):has(.pt-panel) .pt-holiday-feedback .pt-feedback{display:none}
+}
