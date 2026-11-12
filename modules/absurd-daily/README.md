@@ -46,6 +46,25 @@ node modules/absurd-daily/tools/native-previews.mjs capture /absolute/new-eviden
 
 依序呼叫真正 emitted `createDishStage` 生成全部66道，保存原生PNG、512×384 WebP（quality82）、實際 browser／renderer／DPR、來源／輸出 hash、native calls／geometry／textures／triangles、canvas cleanup及 import／construct／capture wall timing。最後重新驗所有來源／chunk／輸出 bytes、尺寸與預算；少一張、重複、來源漂移、錯誤或失敗都不產生 candidate manifest。成功只寫 evidence 內的 `candidate-manifest.json`，仍待視覺審查；**不自動更新 repo manifest／圖片，不代表遊玩、FPS、GPU memory 回收或完整 CI 通過**。operator 應保留原PNG及receipt，核對66個id與現行catalog後，再另行審查素材更新。
 
+### 固定三批與完整聚合
+
+完整 `capture`／`validateCapture` 仍要求全部 66 款。受限 runner 可改用固定三批，每批 22 款，依同一份完整 canonical plan 的順序切分，**不增加每款 60 秒、E2E 或 child-process 的既有 timeout**：
+
+```sh
+# 必須由同一次 GitHub run/attempt 提供 GITHUB_SHA、GITHUB_RUN_ID、GITHUB_RUN_ATTEMPT。
+node modules/absurd-daily/tools/native-previews.mjs capture-batch /absolute/new-batch-0 /absolute/installed-chromium 0
+node modules/absurd-daily/tools/native-previews.mjs capture-batch /absolute/new-batch-1 /absolute/installed-chromium 1
+node modules/absurd-daily/tools/native-previews.mjs capture-batch /absolute/new-batch-2 /absolute/installed-chromium 2
+# 解開各批原始 evidence 後，以相同來源 checkout 聚合；不啟動瀏覽器。
+node modules/absurd-daily/tools/native-previews.mjs aggregate /absolute/new-complete /absolute/new-batch-0 /absolute/new-batch-1 /absolute/new-batch-2
+```
+
+每批 receipt 綁完整 plan hash、固定 index/count/size、實際 `git HEAD`、GitHub SHA、run id 與 attempt；GitHub SHA 可能是 PR merge commit，因此與實際 checkout head 分別記錄，不互相冒充。全部 declared source bytes 必須等於所記錄 HEAD 的 git blobs；dirty source、缺少 execution context 或漂移直接拒絕。各批保留完整 source/build metadata、真 PNG/WebP 與相同 native／尺寸／hash／cleanup 驗證，成功狀態僅為 `batch_captured_pending_aggregation`，**不得生成 candidate 或自稱 66 款通過**。
+
+`aggregate` 只接受三個不同目錄與 index 的完整 22 款集合，要求 union 恰為 66 款，來源、head、GitHub SHA、run、attempt、browser/renderer/DPR/viewport 與 build/chunk/input/transform identity 一致；忽略 metadata 列舉順序，不忽略內容。任一缺批、重複、錯款、混 run/attempt、來源或編譯漂移均拒絕。聚合前逐批重驗檔案；複製至全新 repo 外目錄後，再以原 `validateFiles` 驗證完整 66 張及總 WebP ≤2.5 MiB，才寫 candidate。輸出保留三份原 receipt 及其 hashes，候選仍需視覺審查。partial 的檔案大小不能分批繞過完整集合總預算。
+
+程式入口：`captureBatch(root,out,executable,index)`、`validateBatch(receipt,fullPlan)`、`validateBatchFiles(root,out,receipt,fullPlan,sharp)`、`validateBatchSet(receipts,fullPlan)`、`aggregate(root,out,batchDirectories)`。純驗證測試使用明確標示的合成 fixture／暫存 git repo，不能當成原生圖或效能證據。既有完整 capture 仍可在合適 runner 使用。
+
 目前已知限制：2026-10-27 own-cloud Chromium 在啟動時因 socket EPERM 中止，0／66生成；不得用修改 sandbox／profile／flags 重試來規避。此工具的純驗證測試不代替原生執行。原 `cooking-3d-art.json` 的來源 gate 仍如實失敗；不能只換 hash 宣稱重新生成。
 
 預算依本工具實際的 `createDishStage` 預覽契約：calls≤100、geometries<100；textures 如實記錄並驗非負整數。既有66張預覽記錄為6–14 textures，不能套用 `kitchen-stage` 引導麵團觸控測試的≤3 textures門檻；後者是另一個場景／取樣契約，仍原樣保留。

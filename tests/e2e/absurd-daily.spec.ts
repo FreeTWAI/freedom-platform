@@ -249,9 +249,8 @@ test('UX-15c: releasing a held native holiday target in the next round cannot hi
 test('UX-15c: a real steak tap selects its original portion after a side dish and flips only that steak',async({page})=>{
   test.setTimeout(60000);await marketOpen(page,'steak-dinner');await marketAdd(page,'薯條');await marketAdd(page,'牛排');await marketAdd(page,'牛排');
   const selected=page.getByRole('combobox',{name:'目前操作的食材'});await expect(selected).toHaveValue('2');await marketTime(page,400);
-  const camera=new PerspectiveCamera(38,6/5,.1,45);camera.position.set(5,8.6,8);camera.lookAt(0,.1,-.25);camera.updateMatrixWorld();
-  const p=new Vector3(-.85,.6,0).project(camera),surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!,scale=Math.min(b.width/768,b.height/640),w=768*scale,h=640*scale;
-  await page.mouse.click(b.x+(b.width-w)/2+(p.x+1)*w/2,b.y+(b.height-h)/2+(1-p.y)*h/2);
+  const contact=await marketWorktopPoint(page,[-.85,.6,0]);
+  await page.mouse.click(contact.x,contact.y);
   await expect(selected).toHaveValue('1');const saved=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);
   expect(saved.portions.map(p=>p.side)).toEqual([0,1,0]);
 });
@@ -1291,19 +1290,41 @@ async function expectNativeMarketReady(page:Page,name:'開火，開始做！'|'�
   await expect(game.getByRole('status').filter({hasText:'正在準備料理台…'})).toHaveCount(0);
 }
 async function marketOpen(page:Page,id:MarketId){await page.clock.install();await page.setViewportSize({width:390,height:844});await page.goto(`/play?game=kitchen&recipe=${id}&seed=42`);await expectNativeMarketReady(page);await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();await expect(page.locator('.mk-surface')).toBeFocused();await exitStartedFullscreen(page);await page.clock.runFor(20);}
+// Independently project a local worktop point through the level front camera.
+// Real mouse/touch events still exercise the production inverse and triangle picking.
+async function marketWorktopPoint(page:Page,local:[number,number,number],zoom=1){
+ const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const box=(await surface.boundingBox())!;
+ const aspect=box.width/box.height,fov=2*Math.atan(Math.tan(19*Math.PI/180)*Math.max(1,(6/5)/aspect))*180/Math.PI;
+ const camera=new PerspectiveCamera(fov,aspect,.1,45);camera.position.set(0,1.2,8.4);camera.lookAt(0,1.2,0);camera.zoom=zoom;camera.updateProjectionMatrix();camera.updateMatrixWorld();
+ const [x,y,z]=local,angle=Math.PI/5,p=new Vector3(x,1.2+y*Math.cos(angle)-z*Math.sin(angle),y*Math.sin(angle)+z*Math.cos(angle)).project(camera);
+ expect(Math.abs(p.x)).toBeLessThan(1);expect(Math.abs(p.y)).toBeLessThan(1);
+ const point={x:box.x+(p.x+1)*box.width/2,y:box.y+(1-p.y)*box.height/2};
+ expect(await surface.evaluate((el,p)=>{const hit=document.elementFromPoint(p.x,p.y);return !!hit&&(hit===el||el.contains(hit));},point)).toBe(true);
+ return point;
+}
 async function marketPanel(page:Page,panel:'ingredients'|'tools'|'sauces'){await page.locator('.mk-palette-switch').getByRole('button',{name:panel==='ingredients'?/^食材/:panel==='tools'?'工具':'調味醬線'}).click();}
 // Exercise the production env-backed inset values; this is not device-notch emulation.
 async function marketInsets(page:Page,enabled:boolean){await page.locator('.fullscreen-game').evaluate((el,on)=>{for(const [side,value] of Object.entries({top:28,right:24,bottom:32,left:40})){if(on)(el as HTMLElement).style.setProperty(`--game-safe-${side}`,`${value}px`);else (el as HTMLElement).style.removeProperty(`--game-safe-${side}`);}},enabled);}
 // Read geometry and real hit targets before clicking. A 44px box that is clipped
 // by a scroll container or covered by another row is not an accessible control.
+async function marketNativeViewport(page:Page){
+ // ResizeObserver must refresh the actual backing buffer even while paused.
+ await expect.poll(()=>page.locator('.mk-canvas canvas').evaluate(el=>{
+  const c=el as HTMLCanvasElement,b=c.getBoundingClientRect(),s=el.closest('.mk-surface')!.getBoundingClientRect(),v=el.closest('.mk-view')!.getBoundingClientRect();
+  const fills=[b.left-s.left,b.top-s.top,b.right-s.right,b.bottom-s.bottom,s.left-v.left,s.top-v.top,s.right-v.right,s.bottom-v.bottom].every(n=>Math.abs(n)<=1);
+  return fills&&c.width>0&&c.height>0&&c.width*c.height<=768*640*2.25&&Math.abs(c.width/c.height-b.width/b.height)<=2/Math.min(c.width,c.height);
+ })).toBe(true);
+}
 async function marketSceneBounds(page:Page,fullscreen=true){
  const root=page.locator('.fullscreen-game');// Normal mode is a full-height document-flow stage. Align its border box,
  // before checking whole-stage viewport bounds. Nearest scrolling left the
  // stage partially outside at 195px in CI. This only positions the page;
  // all game controls still use ordinary clicks and the unchanged hit checks.
  if(!fullscreen)await root.evaluate(el=>el.scrollIntoView({block:'start',inline:'nearest',behavior:'instant'}));
- const geometry=await root.evaluate(el=>{const r=el.getBoundingClientRect(),s=el.querySelector('.mk-surface')!.getBoundingClientRect(),d=el.querySelector('.mk-tray')!.getBoundingClientRect(),style=getComputedStyle(el),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;return {rects:{root:r.toJSON(),surface:s.toJSON(),tray:d.toJSON()},viewport:{width:innerWidth,height:innerHeight},insets:Object.fromEntries(['top','right','bottom','left'].map(side=>[side,safe(side)])),columns:['.mk-game','.mk-workbench','.mk-play-space','.mk-tray'].map(selector=>({selector,value:getComputedStyle(el.querySelector(selector)!).gridTemplateColumns})),within:r.x>=-1&&r.y>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,contained:s.x>=r.x+safe('left')-1&&s.y>=r.y+safe('top')-1&&s.right<=r.right-safe('right')+1&&s.bottom<=r.bottom-safe('bottom')+1&&d.x>=r.x+safe('left')-1&&d.right<=r.right-safe('right')+1&&d.bottom<=r.bottom-safe('bottom')+1,overlap:s.x<d.right&&s.right>d.x&&s.y<d.bottom&&s.bottom>d.y,ratio:s.width/s.height,height:s.height,horizontal:el.scrollWidth<=el.clientWidth};});
- expect(geometry.within,JSON.stringify(geometry)).toBe(true);expect(geometry.contained,JSON.stringify(geometry)).toBe(true);expect(geometry.overlap).toBe(false);expect(geometry.ratio).toBeCloseTo(6/5,2);expect(geometry.height).toBeGreaterThan(44);expect(geometry.horizontal).toBe(true);
+ const geometry=await root.evaluate(el=>{const r=el.getBoundingClientRect(),s=el.querySelector('.mk-surface')!.getBoundingClientRect(),v=el.querySelector('.mk-view')!.getBoundingClientRect(),c=el.querySelector('.mk-canvas canvas')?.getBoundingClientRect(),d=el.querySelector('.mk-tray')!.getBoundingClientRect(),style=getComputedStyle(el),safe=(side:string)=>parseFloat(style.getPropertyValue(`--game-safe-${side}`))||0;return {rects:{root:r.toJSON(),surface:s.toJSON(),view:v.toJSON(),canvas:c?.toJSON(),tray:d.toJSON()},viewport:{width:innerWidth,height:innerHeight},insets:Object.fromEntries(['top','right','bottom','left'].map(side=>[side,safe(side)])),columns:['.mk-game','.mk-workbench','.mk-play-space','.mk-tray'].map(selector=>({selector,value:getComputedStyle(el.querySelector(selector)!).gridTemplateColumns})),within:r.x>=-1&&r.y>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,contained:s.x>=r.x+safe('left')-1&&s.y>=r.y+safe('top')-1&&s.right<=r.right-safe('right')+1&&s.bottom<=r.bottom-safe('bottom')+1&&d.x>=r.x+safe('left')-1&&d.right<=r.right-safe('right')+1&&d.bottom<=r.bottom-safe('bottom')+1,overlap:s.x<d.right&&s.right>d.x&&s.y<d.bottom&&s.bottom>d.y,fillsView:[s.left-v.left,s.top-v.top,s.right-v.right,s.bottom-v.bottom].every(n=>Math.abs(n)<=1),canvasFills:!c||[c.left-s.left,c.top-s.top,c.right-s.right,c.bottom-s.bottom].every(n=>Math.abs(n)<=1),width:s.width,height:s.height,horizontal:el.scrollWidth<=el.clientWidth};});
+ expect(geometry.within,JSON.stringify(geometry)).toBe(true);expect(geometry.contained,JSON.stringify(geometry)).toBe(true);expect(geometry.overlap).toBe(false);expect(geometry.fillsView,JSON.stringify(geometry)).toBe(true);expect(geometry.canvasFills,JSON.stringify(geometry)).toBe(true);expect(geometry.width).toBeGreaterThan(44);expect(geometry.height).toBeGreaterThan(44);expect(geometry.horizontal).toBe(true);
+
+ if(await root.locator('.mk-canvas canvas').count())await marketNativeViewport(page);
 
  const paletteContrast=await root.locator('.mk-palette-switch button').evaluateAll(buttons=>{
   const rgb=(value:string)=>value.match(/[\d.]+/g)!.map(Number);
@@ -1402,7 +1423,16 @@ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Marke
  if(id==='steak-dinner'){await marketAdd(page,'牛排');await marketAdd(page,'薯條');await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('0');await marketTime(page,23000);await marketButton(page,'翻這一面');await marketTime(page,23000);}
  if(id==='shawarma'){await marketAdd(page,'餅皮');await marketTime(page,6000);for(let i=0;i<4;i++)await marketButton(page,'削一刀');await marketAdd(page,'生菜');await marketAdd(page,'番茄');for(let i=0;i<3;i++)await marketButton(page,`包一折 · ${i}/3`);}
  if(id==='egg-fried-rice'){await marketAdd(page,'白飯');await marketAdd(page,'雞蛋');await marketAdd(page,'蝦仁');for(let i=0;i<10;i++){await marketTime(page,2000);await marketButton(page,'拋鍋！');}}
- await marketButton(page,'一撮鹽 · 0');await marketPanel(page,'sauces');await page.getByRole('button',{name:'蒜味醬',exact:true}).click();const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!;await page.mouse.move(b.x+b.width*.35,b.y+b.height*.5);await page.mouse.down();await page.mouse.move(b.x+b.width*.6,b.y+b.height*.6,{steps:10});await page.mouse.up();await marketTime(page,400);const before=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(before.sauces).toHaveLength(1);if(id==='steak-dinner')await page.evaluate(key=>{const original=Storage.prototype.setItem;(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook=()=>{Storage.prototype.setItem=original;};Storage.prototype.setItem=function(k,v){if(k===key)throw new DOMException('Synthetic cookbook quota','QuotaExceededError');return original.call(this,k,v);};},COOKBOOK_KEY);await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await page.clock.resume();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});const completed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(completed.status).toBe('done');if(id==='steak-dinner'){const warning=page.locator('.fullscreen-game .ck-save-warning');await expect(warning).toBeVisible();expect(await warning.evaluate(el=>!!el.closest('[data-game-stage]'))).toBe(true);await page.evaluate(()=>(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook());await warning.getByRole('button',{name:'重試保存食譜本',exact:true}).click();await expect(warning).toHaveCount(0);}await expect(page.locator('.mk-score>div>strong')).toHaveText(`${marketGrade(completed).score}分`);await expect(page.getByRole('region',{name:'料理分數',exact:true})).toHaveText(`${marketGrade(completed).score}分`);await expect(page.locator('.fw-arcade-result-heading h1')).toHaveText(recipeOf(id)!.name);await expect(page.locator('.fw-arcade-result')).not.toContainText(marketGrade(completed).title);await expect(page.locator('.mk-score svg,.mk-score dl,.mk-score blockquote')).toHaveCount(0);expect(completed.portions).toHaveLength(before.portions.length);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();const canvas=page.locator('.ck-dish-canvas canvas'),original=await canvas.screenshot();await page.getByRole('button',{name:'放大料理',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(false);await page.getByRole('button',{name:'回正',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(true);await testInfo.attach(`${id}-result.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});await page.getByRole('button',{name:'分享成果',exact:true}).click();await expect(page.locator('[data-game-share]')).toBeFocused();const downloading=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();await (await downloading).saveAs(testInfo.outputPath(`${id}-share.png`));
+ await marketButton(page,'一撮鹽 · 0');await marketPanel(page,'sauces');await page.getByRole('button',{name:'蒜味醬',exact:true}).click();const zoom=id==='corn-dog'?1.15:1;/* A single plated corn dog is in the left tray slot. Draw on its actual food triangles, not the empty centre of the paper tray. */const from=await marketWorktopPoint(page,id==='corn-dog'?[-1.15,.5,-.4]:[-.6,.5,-.35],zoom),to=await marketWorktopPoint(page,id==='corn-dog'?[-1.05,.5,.4]:[.35,.5,.35],zoom);await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:10});await page.mouse.up();await marketTime(page,400);const before=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(before.sauces).toHaveLength(1);
+ // Original live-render evidence at both aspect ratios, not a catalogue render.
+ // The installed clock remains paused: resizing must not alter the cooked dish.
+ for(const viewport of [{width:390,height:844},{width:1280,height:800}]){
+  await page.setViewportSize(viewport);await marketNativeViewport(page);
+  const livePath=testInfo.outputPath(`${id}-live-front-${viewport.width}x${viewport.height}.png`);await page.locator('.mk-surface').screenshot({path:livePath});await testInfo.attach(`${id}-live-front-${viewport.width}x${viewport.height}.png`,{path:livePath,contentType:'image/png'});
+ }
+ await page.setViewportSize({width:390,height:844});await marketNativeViewport(page);
+ expect(await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run.sauces,MARKET_SAVE_KEY)).toEqual(before.sauces);
+ if(id==='steak-dinner')await page.evaluate(key=>{const original=Storage.prototype.setItem;(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook=()=>{Storage.prototype.setItem=original;};Storage.prototype.setItem=function(k,v){if(k===key)throw new DOMException('Synthetic cookbook quota','QuotaExceededError');return original.call(this,k,v);};},COOKBOOK_KEY);await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await page.clock.resume();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});const completed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(completed.status).toBe('done');if(id==='steak-dinner'){const warning=page.locator('.fullscreen-game .ck-save-warning');await expect(warning).toBeVisible();expect(await warning.evaluate(el=>!!el.closest('[data-game-stage]'))).toBe(true);await page.evaluate(()=>(window as unknown as {restoreMarketBook:()=>void}).restoreMarketBook());await warning.getByRole('button',{name:'重試保存食譜本',exact:true}).click();await expect(warning).toHaveCount(0);}await expect(page.locator('.mk-score>div>strong')).toHaveText(`${marketGrade(completed).score}分`);await expect(page.getByRole('region',{name:'料理分數',exact:true})).toHaveText(`${marketGrade(completed).score}分`);await expect(page.locator('.fw-arcade-result-heading h1')).toHaveText(recipeOf(id)!.name);await expect(page.locator('.fw-arcade-result')).not.toContainText(marketGrade(completed).title);await expect(page.locator('.mk-score svg,.mk-score dl,.mk-score blockquote')).toHaveCount(0);expect(completed.portions).toHaveLength(before.portions.length);await expect(page.getByRole('button',{name:'發到自由工坊',exact:true})).toBeEnabled();const canvas=page.locator('.ck-dish-canvas canvas'),original=await canvas.screenshot();await page.getByRole('button',{name:'放大料理',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(false);await page.getByRole('button',{name:'回正',exact:true}).click();await expect(page.locator('.ck-dish-canvas')).toHaveAttribute('data-render-pending','0');expect((await canvas.screenshot()).equals(original)).toBe(true);await testInfo.attach(`${id}-result.png`,{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});await page.getByRole('button',{name:'分享成果',exact:true}).click();await expect(page.locator('[data-game-share]')).toBeFocused();const downloading=page.waitForEvent('download');await page.getByRole('link',{name:'下載完整成果 PNG',exact:true}).click();await (await downloading).saveAs(testInfo.outputPath(`${id}-share.png`));
  if(id==='steak-dinner'){await page.setViewportSize({width:390,height:844});await testInfo.attach('steak-dinner-phone.png',{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});await page.setViewportSize({width:667,height:375});await testInfo.attach('steak-dinner-landscape.png',{body:await page.locator('.fullscreen-game').screenshot(),contentType:'image/png'});}
  await page.evaluate(()=>Object.defineProperty(navigator,'share',{configurable:true,value:undefined}));await page.getByRole('button',{name:'系統分享圖片／連結',exact:true}).click();const link=await page.getByRole('textbox',{name:'同題連結',exact:true}).inputValue();expect(new URL(link).searchParams.get('practice')).toBeNull();expect(new URL(link).searchParams.get('recipe')).toBe(id);expect(posts).toBe(0);expect(errors).toEqual([]);
 });
@@ -1427,14 +1457,14 @@ test('UX-11: touching a real corn dog selects and flips that piece; lifted food 
  test.setTimeout(120000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await marketOpen(page,'corn-dog');
  for(let i=0;i<2;i++){await marketAdd(page,'熱狗');await marketButton(page,'裹麵糊');}
  await marketTime(page,22000);await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('1');
- const surface=page.locator('.mk-surface');await surface.scrollIntoViewIfNeeded();const b=(await surface.boundingBox())!,cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
- // The left food's actual camera-projected location at the production 6:5 aspect.
- await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:b.x+b.width*.395,y:b.y+b.height*.433,id:1}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+ const contact=await marketWorktopPoint(page,[-1.15,.55,0]),cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+ // The left food's actual tilted-worktop position, projected through a level camera.
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...contact,id:1}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
  await expect(page.getByRole('combobox',{name:'目前操作的食材'})).toHaveValue('0');const touched=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(touched.portions[0].side).toBe(1);expect(touched.portions[1].side).toBe(0);
  await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption('1');await marketButton(page,'翻這一面');await marketTime(page,22000);
  for(const i of ['0','1']){await page.getByRole('combobox',{name:'目前操作的食材'}).selectOption(i);await marketButton(page,'起鍋瀝油');}
- await expect(page.locator('[data-market-view="dressing"]')).toBeVisible();await expect(page.locator('.mk-surface-hint')).toContainText('起鍋了');await marketTime(page,4000);await marketPanel(page,'sauces');await page.getByRole('button',{name:'番茄醬',exact:true}).click();await surface.scrollIntoViewIfNeeded();const tray=(await surface.boundingBox())!;
- await page.mouse.move(tray.x+tray.width*.35,tray.y+tray.height*.46);await page.mouse.down();await page.mouse.move(tray.x+tray.width*.47,tray.y+tray.height*.56,{steps:12});await page.mouse.up();await marketTime(page,400);
+ await expect(page.locator('[data-market-view="dressing"]')).toBeVisible();await expect(page.locator('.mk-surface-hint')).toContainText('起鍋了');await marketTime(page,4000);await marketPanel(page,'sauces');await page.getByRole('button',{name:'番茄醬',exact:true}).click();const from=await marketWorktopPoint(page,[-1.15,.5,-.4],1.15),to=await marketWorktopPoint(page,[-1.05,.5,.4],1.15);
+ await page.mouse.move(from.x,from.y);await page.mouse.down();await page.mouse.move(to.x,to.y,{steps:12});await page.mouse.up();await marketTime(page,400);
  const dressed=await page.evaluate(k=>JSON.parse(sessionStorage.getItem(k)!).run as MarketRun,MARKET_SAVE_KEY);expect(dressed.portions.every(p=>p.lifted&&p.coated&&p.drain>=3000)).toBe(true);expect(dressed.sauces).toHaveLength(1);expect(dressed.sauces[0].points.length).toBeGreaterThan(2);await page.screenshot({path:testInfo.outputPath('corn-dog-dressing.png'),fullPage:true});
  await page.getByRole('button',{name:'上桌，看看我的手藝！ ↗',exact:true}).click();await page.clock.resume();await expect(page.getByRole('link',{name:'下載完整成果 PNG',exact:true})).toBeVisible();await expect(page.locator('[data-dish-view="ready"]')).toBeVisible({timeout:15000});expect(errors).toEqual([]);
 });
@@ -1896,7 +1926,7 @@ for (const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Mark
     const canvas=await game.locator('.mk-canvas canvas').elementHandle();
     const surface=game.locator('.mk-surface');
     expect(await surface.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(120);
-    expect(await surface.evaluate(el=>{const b=el.getBoundingClientRect();return Math.abs(b.width/b.height-6/5);})).toBeLessThan(.01);
+    await marketSceneBounds(page);
     for(const button of await game.locator('.fullscreen-game__bar button').all()){
       const metrics=await button.evaluate(el=>({height:el.getBoundingClientRect().height,font:parseFloat(getComputedStyle(el).fontSize)}));
       expect(metrics.height).toBeGreaterThanOrEqual(44);expect(metrics.font).toBeGreaterThanOrEqual(14);
@@ -1910,6 +1940,11 @@ for (const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as Mark
     await testInfo.attach(`market-native-${id}-help.png`,{body:await game.screenshot(),contentType:'image/png'});
     await page.keyboard.press('Escape');
     await testInfo.attach(`market-native-${id}-paused.png`,{body:await game.screenshot(),contentType:'image/png'});
+    const pausedRun=await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY);
+    await page.setViewportSize({width:390,height:844});await marketNativeViewport(page);
+    await testInfo.attach(`market-native-${id}-front-paused-phone.png`,{body:await game.screenshot(),contentType:'image/png'});
+    await page.setViewportSize({width:1280,height:800});await marketNativeViewport(page);
+    expect(await page.evaluate(k=>sessionStorage.getItem(k),MARKET_SAVE_KEY)).toBe(pausedRun);
     await expect(game.getByRole('button',{name:'食譜與操作提示',exact:true})).toBeFocused();
     await expect(game.getByRole('button',{name:'重新做這一道',exact:true})).toBeVisible();
     await game.getByRole('button',{name:'繼續這一盤',exact:true}).click();await expect(surface).toBeFocused();
@@ -2071,6 +2106,72 @@ for(const mode of ['native','rejected','unsupported'] as const)for(const family 
     expect(await page.evaluate(()=>(window as any).__startFullscreenRequests)).toBe(mode==='unsupported'?0:1);
   });
 }
+
+// Regression for fallback preserveAspectRatio letterboxing. These are explicit
+// CSS surface sizes, not claims of physical phone or desktop validation.
+for(const size of [{width:296,height:514},{width:1180,height:614}])test(`MK-fallback: sauce tracks actual SVG CTM at ${size.width}x${size.height}, rejects letterbox starts and preserves pointer ownership`,async({page},testInfo)=>{
+ await page.addInitScript(()=>Object.defineProperty(document,'fullscreenEnabled',{configurable:true,value:false}));
+ await page.route('**/assets/market-stage-*.js',route=>route.abort());
+ await page.clock.install();await page.setViewportSize({width:1440,height:1000});
+ await page.goto('/play?game=kitchen&recipe=corn-dog&seed=42');
+ const surface=page.locator('.mk-surface'),svg=page.locator('svg.mk-illustration');
+ await expect(svg).toBeVisible();await expect(page.locator('.mk-canvas canvas')).toHaveCount(0);
+ await page.clock.pauseAt(new Date(await page.evaluate(()=>Date.now())+1000));
+ await page.getByRole('button',{name:'開火，開始做！',exact:true}).click();
+ await marketAdd(page,'熱狗');await marketPanel(page,'sauces');await page.getByRole('button',{name:'番茄醬',exact:true}).click();
+ await page.locator('.mk-view').evaluate((el,size)=>Object.assign((el as HTMLElement).style,{position:'fixed',left:'20px',top:'20px',width:`${size.width}px`,height:`${size.height}px`,zIndex:'10'}),size);
+ const projection=await svg.evaluate(el=>{
+  const svg=el as SVGSVGElement,ctm=svg.getScreenCTM()!,view=svg.viewBox.baseVal,box=svg.getBoundingClientRect();
+  const project=(x:number,y:number)=>{const p=new DOMPoint(view.x+x*view.width,view.y+y*view.height).matrixTransform(ctm);return {x:p.x,y:p.y};};
+  return {box:box.toJSON(),view:{x:view.x,y:view.y,width:view.width,height:view.height},ctm:{a:ctm.a,b:ctm.b,c:ctm.c,d:ctm.d,e:ctm.e,f:ctm.f},start:project(0,0),end:project(1,1),points:[[.2,.25],[.35,.35],[.5,.45],[.65,.55],[.8,.65]].map(([x,y])=>project(x,y))};
+ });
+ expect(projection.box.width).toBeCloseTo(size.width,4);expect(projection.box.height).toBeCloseTo(size.height,4);
+ expect(projection.view).toEqual({x:0,y:0,width:600,height:500});
+ expect(projection.ctm.a).toBeCloseTo(projection.ctm.d,8);expect(projection.ctm.b).toBe(0);expect(projection.ctm.c).toBe(0);
+ const vertical=size.width/size.height<6/5,gap=vertical?projection.start.y-projection.box.top:projection.start.x-projection.box.left;
+ expect(gap).toBeGreaterThan(20);
+ const letterbox=vertical?{x:projection.box.x+size.width/2,y:projection.box.y+gap/2}:{x:projection.box.x+gap/2,y:projection.box.y+size.height/2};
+ for(const point of [letterbox,...projection.points])expect(await surface.evaluate((el,p)=>{const hit=document.elementFromPoint(p.x,p.y);return !!hit&&(hit===el||el.contains(hit));},point)).toBe(true);
+ const read=()=>page.evaluate(k=>(JSON.parse(sessionStorage.getItem(k)!).run as MarketRun).sauces,MARKET_SAVE_KEY);
+ // Starting in the actual SVG letterbox must not capture a gesture which then
+ // enters the painted image, and must not clamp that start onto an edge.
+ await page.mouse.move(letterbox.x,letterbox.y);await page.mouse.down();await page.mouse.move(projection.points[0].x,projection.points[0].y);await page.mouse.up();
+ expect(await read()).toEqual([]);await expect(svg.locator(':scope > polyline')).toHaveCount(0);
+ await surface.evaluate(el=>{
+  const samples:Array<{x:number;y:number;id:number}>=[];
+  (window as unknown as {marketPointerSamples:typeof samples}).marketPointerSamples=samples;
+  for(const type of ['pointerdown','pointermove'])el.addEventListener(type,event=>{const e=event as PointerEvent;if(e.isTrusted&&e.isPrimary&&e.buttons===1)samples.push({x:e.clientX,y:e.clientY,id:e.pointerId});});
+ });
+ const first=projection.points[0];await page.mouse.move(first.x,first.y);await page.mouse.down();
+ for(let i=1;i<projection.points.length;i++){
+  if(i===2)await surface.evaluate(el=>{
+   const owner=(window as unknown as {marketPointerSamples:Array<{id:number}>}).marketPointerSamples[0].id;
+   for(const type of ['pointercancel','lostpointercapture'])el.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:owner+1000,pointerType:'touch',isPrimary:false}));
+  });
+  const p=projection.points[i];await page.mouse.move(p.x,p.y);
+ }
+ await page.mouse.up();
+ const saved=await read(),samples=await page.evaluate(()=>(window as unknown as {marketPointerSamples:Array<{x:number;y:number;id:number}>}).marketPointerSamples);
+ expect(saved).toHaveLength(1);expect(samples).toHaveLength(projection.points.length);expect(saved[0].points).toHaveLength(samples.length);
+ await expect(svg.locator(':scope > polyline')).toHaveCount(1);
+ const rendered=await svg.locator(':scope > polyline').evaluate(el=>{
+  const line=el as SVGPolylineElement,ctm=line.getScreenCTM()!;
+  return Array.from({length:line.points.numberOfItems},(_,i)=>{const p=line.points.getItem(i),screen=new DOMPoint(p.x,p.y).matrixTransform(ctm);return {local:{x:p.x,y:p.y},screen:{x:screen.x,y:screen.y}};});
+ });
+ expect(rendered).toHaveLength(samples.length);
+ for(let i=0;i<samples.length;i++){
+  const expected=projection.points[i],actual=samples[i],drawn=rendered[i];
+  expect(Math.hypot(actual.x-expected.x,actual.y-expected.y)).toBeLessThanOrEqual(1);
+  expect(Math.hypot(drawn.screen.x-actual.x,drawn.screen.y-actual.y)).toBeLessThanOrEqual(1);
+  expect(drawn.local.x/600).toBeCloseTo(saved[0].points[i].x,6);expect(drawn.local.y/500).toBeCloseTo(saved[0].points[i].y,6);
+ }
+ // Owner cancellation still discards a second real drag, unlike the foreign
+ // cancellation events above. It must not submit a partial or duplicate line.
+ await page.mouse.move(first.x,first.y);await page.mouse.down();await page.mouse.move(projection.points[1].x,projection.points[1].y);
+ await surface.evaluate(el=>{const owner=(window as unknown as {marketPointerSamples:Array<{id:number}>}).marketPointerSamples.at(-1)!.id;el.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:owner,pointerType:'mouse',isPrimary:true}));});
+ await page.mouse.up();expect(await read()).toEqual(saved);await expect(svg.locator(':scope > polyline')).toHaveCount(1);
+ await testInfo.attach(`market-fallback-sauce-ctm-${size.width}x${size.height}.png`,{body:await surface.screenshot(),contentType:'image/png'});
+});
 
 // Market-family integration acceptance is separate from native art acceptance.
 // These cases deliberately exercise the supported SVG fallback; UX-9/UX-16 above
@@ -2325,4 +2426,23 @@ test('AD-scene light: no WebGL requires explicit fallback, failed capture preser
   await page.getByRole('button',{name:'⛶ 全螢幕',exact:true}).click();await page.getByRole('button',{name:'分享成果',exact:true}).click();const share=page.locator('[data-daily-result-share]');await expect(share).toBeVisible();await expect(share.getByRole('button',{name:'關閉分享',exact:true})).toBeFocused();
   expect(await share.evaluate(el=>{const owner=el.closest('.fullscreen-game');return !!owner&&owner.contains(el)&&getComputedStyle(owner).overflowY!=='visible';})).toBe(true);
   await page.getByRole('button',{name:'回遊樂場',exact:true}).click();await expect(page.locator('#fw-arcade-main')).toBeFocused();
+});
+
+// Native evidence generation is additive. It does not rewrite the catalogue or
+// waive its source/image hash gate; a maintainer must inspect the exact outputs.
+for(const batch of [0,1,2])test(`MK-art: capture canonical batch ${batch+1}/3 of all 66 real catalogue models`,async({browser},testInfo)=>{
+ test.setTimeout(300000);
+ const {mkdtemp,readFile,copyFile}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path'),{execFile}=await import('node:child_process'),{promisify}=await import('node:util');
+ const run=promisify(execFile),parent=await mkdtemp(join(tmpdir(),'market-native-evidence-')),out=join(parent,'capture'),root=fileURLToPath(new URL('../../',import.meta.url));
+ const executable=process.env.CHROMIUM_EXECUTABLE_PATH??browser.browserType().executablePath();
+ let failure:unknown;
+ try{await run(process.execPath,['modules/absurd-daily/tools/native-previews.mjs','capture-batch',out,executable,String(batch)],{cwd:root,timeout:270000,maxBuffer:8*1024*1024});}catch(error){failure=error;}
+ // Keep failures as failures, but retain the operator's original receipt for diagnosis.
+ const receiptPath=join(out,'receipt.json');
+ try{const savedReceipt=testInfo.outputPath(`native-preview-batch-${batch}-receipt.json`);await copyFile(receiptPath,savedReceipt);await testInfo.attach('native-preview-receipt.json',{path:savedReceipt,contentType:'application/json'});}catch{if(!failure)throw Error('native operator did not produce its receipt');}
+ if(failure)throw failure;
+ const receipt=JSON.parse(await readFile(receiptPath,'utf8'));expect(receipt.status).toBe('batch_captured_pending_aggregation');expect(receipt.errors).toEqual([]);expect(receipt.previews).toHaveLength(22);expect(receipt.batch.index).toBe(batch);expect(receipt.batch.count).toBe(3);expect(receipt.binding.run_id).toBe(process.env.GITHUB_RUN_ID);expect(receipt.binding.run_attempt).toBe(process.env.GITHUB_RUN_ATTEMPT);expect(receipt.binding.github_sha).toBe(process.env.GITHUB_SHA);
+ const archive=testInfo.outputPath(`native-preview-batch-${batch}.tar.gz`);await run('tar',['-czf',archive,'-C',out,'.'],{timeout:30000});
+ await testInfo.attach('native-preview-evidence.tar.gz',{path:archive,contentType:'application/gzip'});
+ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'].filter(id=>receipt.previews.some((p:{recipe:string})=>p.recipe===id)))await testInfo.attach(`${id}-catalog-original.png`,{path:join(out,`${id}.png`),contentType:'image/png'});
 });

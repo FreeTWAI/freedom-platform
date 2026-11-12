@@ -1,11 +1,12 @@
 import {shawarmaPresentation} from '../../apps/portal-web/src/games/cooking/shawarma-presentation.js';
 import {test} from 'node:test';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {advanceMarket,applyMarket,canServe,marketGrade,marketMass,newMarket,parseMarket,readMarket,saveMarket,MARKET_SAVE_KEY,type MarketRun,type MarketAction} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 import {emptyCookbook,updateCookbook} from '../../apps/portal-web/src/games/cooking/storage.js';
 import {Float32BufferAttribute,Group,Mesh,Raycaster,Vector3} from 'three';
 import {FoodKit} from '../../apps/portal-web/src/games/cooking/food-kit.js';
-import {marketFood} from '../../apps/portal-web/src/games/cooking/market-food.js';
+import {marketFood,displayMarket} from '../../apps/portal-web/src/games/cooking/market-food.js';
 import {marketHitPortion} from '../../apps/portal-web/src/games/cooking/market-stage.js';
 import {cornDogPresentation} from '../../apps/portal-web/src/games/cooking/corn-dog-presentation.js';
 import {createCornDogStall} from '../../apps/portal-web/src/games/cooking/corn-dog-stall.js';
@@ -262,4 +263,184 @@ test('market start hands focus over after inert removal, without stealing a newe
  ui.click('暫停');const resume={isConnected:true};ui.document.activeElement=resume;ui.click('繼續這一盤');const newer={isConnected:true};ui.document.activeElement=newer;ui.layouts.forEach(effect=>effect());assert.equal(ui.document.activeElement,newer);assert.deepEqual(events,['scroll','focus'],'a newer connected focus owner wins');
  ui.click('暫停');ui.document.activeElement=resume;ui.click('繼續這一盤');ui.click('暫停');ui.layouts.forEach(effect=>effect());assert.equal(ui.document.activeElement,resume);assert.deepEqual(events,['scroll','focus'],'pause cancels an unconsumed handoff');
  ui.click('繼續這一盤');target.isConnected=false;ui.layouts.forEach(effect=>effect());assert.deepEqual(events,['scroll','focus'],'a detached target cannot claim focus');
+});
+
+// Production camera and actual Three matrix/ray math, not native browser evidence.
+test('front market camera stays level through portrait, landscape and desktop resizing',async()=>{
+ const {marketFrontCamera,createMarketWorktop}=await import('../../apps/portal-web/src/games/cooking/market-stage.js');
+ const {Vector2,Plane}=await import('three');
+ for(const [width,height] of [[296,514],[1180,614],[667,175],[768,640],[320,1000]]){
+  const camera=marketFrontCamera(width,height),surface=createMarketWorktop(),direction=camera.getWorldDirection(new Vector3());
+  assert.ok(Math.abs(direction.x)<1e-12&&Math.abs(direction.y)<1e-12&&direction.z<-.999999,'camera must be horizontal and centered');
+  const plane=new Plane(new Vector3(0,1,0),-.5).applyMatrix4(surface.matrixWorld);
+  for(const x of [-1.7,0,1.7])for(const z of [-1.25,0,1.25]){
+   const point=new Vector3(x,.5,z),world=surface.localToWorld(point.clone()),projected=world.clone().project(camera);
+   assert.ok(Math.abs(projected.x)<1&&Math.abs(projected.y)<1,'entire actionable plane remains visible');
+   const ray=new Raycaster();ray.setFromCamera(new Vector2(projected.x,projected.y),camera);
+   const hit=ray.ray.intersectPlane(plane,new Vector3());assert.ok(hit,'front view must not make the interaction plane parallel');
+   const local=surface.worldToLocal(hit);assert.ok(local.distanceTo(point)<1e-10,'same world-to-domain inverse retains sauce coordinates');
+  }
+ }
+});
+test('front market rays hit the rendered tilted food without changing portion ownership',async()=>{
+ const {marketFrontCamera,createMarketWorktop}=await import('../../apps/portal-web/src/games/cooking/market-stage.js');
+ const {Vector2}=await import('three');
+ for(const id of ['egg-fried-rice','steak-dinner','shawarma','corn-dog'] as const){
+  const ingredient=({ 'egg-fried-rice':'rice','steak-dinner':'steak',shawarma:'bread','corn-dog':'sausage'} as const)[id];
+  const run=act(begin(id),{kind:'add',ingredient}),kit=new FoodKit(),food=marketFood(run,kit),surface=createMarketWorktop();
+  surface.add(food.root);food.root.position.y=.25;surface.updateMatrixWorld(true);
+  try{
+   let hits=0;const camera=marketFrontCamera(390,440),ray=new Raycaster();
+   for(let y=-.8;y<=.8;y+=.02)for(let x=-.8;x<=.8;x+=.02){
+    ray.setFromCamera(new Vector2(x,y),camera);const hit=ray.intersectObject(food.root,true)[0];if(hit&&(id==='egg-fried-rice'||id==='shawarma'||marketHitPortion(hit,food.root)===0))hits++;
+   }
+   assert.ok(hits>0,`${id}: actual front-facing geometry retains a directly selectable portion`);
+  }finally{food.dispose();kit.dispose();}
+ }
+});
+
+// UX-9: a single plated dog remains on the left, not at the generic dish center.
+// Use real batched food triangles and production camera/worktop; no browser claim.
+for(const [width,height] of [[296,514],[1180,614],[600,500]])test(`plated single corn dog sauce starts on its actual triangle at ${width}x${height}`,async()=>{
+ const {marketFrontCamera,createMarketWorktop}=await import('../../apps/portal-web/src/games/cooking/market-stage.js');
+ const {Box3,Vector2}=await import('three');
+ let run=act(begin('corn-dog'),{kind:'add',ingredient:'sausage'});run=act(run,{kind:'coat'});run=time(run,24000);run=act(run,{kind:'flip',index:0});run=time(run,24000);run=time(act(run,{kind:'lift'}),4000);
+ assert.equal(run.status,'playing');assert.equal(run.portions.length,1);assert.ok(run.portions[0].lifted&&run.portions[0].coated&&run.portions[0].drain>=3000);
+ const kit=new FoodKit(),food=marketFood(run,kit),foodRoot=new Group(),surface=createMarketWorktop(),camera=marketFrontCamera(width,height);
+ try{
+  const bottom=new Box3().setFromObject(food.root).min.y;
+  foodRoot.add(food.root);foodRoot.position.y=-.225-bottom;surface.add(foodRoot);surface.updateMatrixWorld(true);camera.zoom=1.15;camera.updateProjectionMatrix();
+  const hitAt=(point:Vector3)=>{
+   const projected=surface.localToWorld(point.clone()).project(camera);assert.ok(Math.abs(projected.x)<1&&Math.abs(projected.y)<1);
+   const ray=new Raycaster();ray.setFromCamera(new Vector2(projected.x,projected.y),camera);
+   const closest=ray.intersectObjects(foodRoot.children,true)[0];assert.ok(closest,'actual triangle must be hit, not a synthetic interaction plane');
+   const local=surface.worldToLocal(closest.point.clone()),domain={x:local.x/3.4+.5,y:local.z/2.5+.5};
+   return {index:marketHitPortion(closest,foodRoot),domain,accepted:domain.x>=0&&domain.x<=1&&domain.y>=0&&domain.y<=1};
+  };
+  const oldStart=hitAt(new Vector3(-.6,.5,-.35));assert.equal(oldStart.index,null,'generic dish start hits unowned paper tray, not the left dog');assert.ok(oldStart.domain.y<0,'tray hit lies beyond the sauce domain');assert.equal(oldStart.accepted,false,'production domain bounds reject the old UX-9 start');
+  const points=[];
+  for(let step=0;step<=10;step++){
+   const hit=hitAt(new Vector3(-1.15+step*.01,.5,-.4+step*.08));assert.equal(hit.index,0,'every drag sample must hit the sole food portion');assert.equal(hit.accepted,true);points.push(hit.domain);
+  }
+  const dressed=applyMarket(run,{kind:'sauce',line:{sauce:'garlic',points}}).run;
+  assert.equal(dressed.sauces.length,1);assert.deepEqual(dressed.sauces[0].points,points);assert.deepEqual(dressed.portions,run.portions);
+ }finally{food.dispose();kit.dispose();}
+});
+
+for(const [width,height] of [[296,514],[1180,614],[600,500]])test(`fallback sauce follows SVG meet coordinates and rejects letterbox at ${width}x${height}`,()=>{
+ const ui=marketUi();ui.click('開火，開始做！');ui.tick(0);ui.tick(400);ui.click('熱狗＋70g');ui.click('調味醬線');ui.click('番茄醬');
+ const scale=Math.min(width/600,height/500),left=13,top=27,ox=(width-600*scale)/2,oy=(height-500*scale)/2;
+ const svg={viewBox:{baseVal:{x:0,y:0,width:600,height:500}},getScreenCTM:()=>({inverse:()=>({a:1/scale,b:0,c:0,d:1/scale,e:-(left+ox)/scale,f:-(top+oy)/scale})})};
+ const currentTarget={getBoundingClientRect:()=>({left,top,width,height}),querySelector:()=>svg,focus(){},setPointerCapture(){}},target={closest:()=>null};
+ const event=(x:number,y:number,id=7)=>({isPrimary:true,button:0,pointerId:id,clientX:left+ox+x*600*scale,clientY:top+oy+y*500*scale,currentTarget,target,preventDefault(){}});
+ const handlers=()=>ui.find(n=>n.props.className==='mk-surface').props;
+ handlers().onPointerDown(event(.4,.4));handlers().onPointerMove(event(.6,.6,8));handlers().onPointerMove(event(.6,.6));handlers().onPointerUp(event(.6,.6));ui.render();
+ const points=ui.state().sauces[0].points;assert.equal(points.length,2);for(const [i,n] of [.4,.6].entries()){assert.ok(Math.abs(points[i].x-n)<1e-12);assert.ok(Math.abs(points[i].y-n)<1e-12);}
+ const outside=ox>0?{...event(0,.4),clientX:left+ox/2}:{...event(.4,0),clientY:top+oy/2-1};
+ handlers().onPointerDown(outside);handlers().onPointerMove(event(.5,.5));handlers().onPointerUp(event(.5,.5));ui.render();assert.equal(ui.state().sauces.length,1,'letterbox must not start a stroke');
+ handlers().onPointerDown(event(.4,.4));handlers().onPointerMove(outside);handlers().onPointerCancel(event(.4,.4));handlers().onPointerUp(event(.4,.4));ui.render();assert.equal(ui.state().sauces.length,1,'cancelled stroke remains cancelled');
+ svg.getScreenCTM=()=>null as any;handlers().onPointerDown(event(.4,.4));handlers().onPointerUp(event(.4,.4));ui.render();assert.equal(ui.state().sauces.length,1,'unmeasurable SVG must not guess its coordinates');
+});
+
+// Measured on a105c57331, before the market-only geometry redesign. These are
+// the old assembly costs, not new relaxed rendering budgets or browser evidence.
+for(const [id,triangles,draws] of [['egg-fried-rice',116508,8],['steak-dinner',42132,30],['shawarma',16560,8],['corn-dog',72064,36]] as const)test(`market art ${id}: deterministic 16-portion geometry stays within previous cost and disposes once`,()=>{
+ const run=displayMarket(id);run.portions=Array.from({length:16},(_,i)=>({...run.portions[i%run.portions.length]}));
+ const before=JSON.stringify(run),kit=new FoodKit(),shared=new Map([...kit.geometries].map(g=>[g,0]));
+ for(const g of shared.keys())g.addEventListener('dispose',()=>shared.set(g,shared.get(g)!+1));
+ let expected:string|undefined,materialCount:number|undefined;
+ try{
+  for(const elapsed of [run.elapsed,run.elapsed+16,run.elapsed+32000]){
+   const food=marketFood({...run,elapsed},kit),owned=new Map(food.geometries.map(g=>[g,0])),hash=createHash('sha256');let actualTriangles=0,actualDraws=0;
+   for(const g of owned.keys())g.addEventListener('dispose',()=>owned.set(g,owned.get(g)!+1));
+   try{
+    food.root.updateMatrixWorld(true);food.root.traverse(o=>{
+     if(!(o instanceof Mesh))return;
+     const geometry=o.geometry;actualTriangles+=(geometry.index?.count??geometry.getAttribute('position').count)/3;actualDraws+=Array.isArray(o.material)?geometry.groups.length:1;
+     hash.update(JSON.stringify([o.matrixWorld.elements,geometry.groups,o.userData]));
+     for(const name of Object.keys(geometry.attributes).sort())hash.update(JSON.stringify([name,Array.from(geometry.getAttribute(name).array)]));
+     if(geometry.index)hash.update(JSON.stringify(Array.from(geometry.index.array)));
+     const position=geometry.getAttribute('position');for(let i=0;i<position.count;i++)assert.ok(Number.isFinite(position.getX(i))&&Number.isFinite(position.getY(i))&&Number.isFinite(position.getZ(i)));
+    });
+    assert.ok(actualTriangles<=triangles,`${actualTriangles} triangles must not exceed old ${triangles}`);assert.ok(actualDraws<=draws,`${actualDraws} draws must not exceed old ${draws}`);
+    const digest=hash.digest('hex');if(expected)assert.equal(digest,expected,'elapsed frames must not randomize or accumulate decorative geometry');else expected=digest;
+    if(materialCount!==undefined)assert.equal(kit.materials.size,materialCount,'rebuilding unchanged food must not grow the material cache');else materialCount=kit.materials.size;
+   }finally{food.dispose();food.dispose();}
+   assert.ok([...owned.values()].every(count=>count===1),'all temporary originals, clones and batch outputs dispose exactly once');assert.equal(food.root.children.length,0);assert.ok([...shared.values()].every(count=>count===0),'assembly must never dispose shared kit geometry');
+  }
+  assert.equal(JSON.stringify(run),before,'art cannot mutate the recipe, portions or sauce');
+ }finally{kit.dispose();kit.dispose();}
+ assert.ok([...shared.values()].every(count=>count===1));
+});
+
+// Instrument the renderer boundary only: real scene, food, camera and transforms
+// still execute. This proves eliminated duplicate work, not GPU/browser timing.
+test('market viewport allocates and renders once per size, reuses shadows only for camera resize and restores capture',async()=>{
+ const three=await import('three'),deps:Record<string,unknown>={three:null};
+ for(const name of ['food-kit','market-food','corn-dog-stall','corn-dog-presentation','shawarma-presentation'])deps[`./${name}`]=await import(`../../apps/portal-web/src/games/cooking/${name}.js`);
+ deps['../stage-batch']=await import('../../apps/portal-web/src/games/stage-batch.js');deps['./food-studio']={foodStudio:()=>({dispose(){}})};
+ const allocations:number[][]=[],renders:Array<{shadow:boolean;aspect:number;zoom:number}>=[];
+ let box={width:390,height:447},notifyResize=()=>{},windowResize=()=>{},disconnected=false,failCapture=false;
+ class Renderer{
+  shadowMap={enabled:false,autoUpdate:true,needsUpdate:false};info={render:{calls:1,triangles:1},memory:{geometries:1,textures:1}};
+  domElement={setAttribute(){},addEventListener(){},removeEventListener(){},remove(){},toDataURL(){if(failCapture)throw Error('capture failed');return 'data:image/png;native-boundary';}};
+  setDrawingBufferSize(w:number,h:number,dpr:number){allocations.push([w,h,dpr]);}
+  setPixelRatio(){assert.fail('pixel-ratio setter would resize a second time');}setSize(){assert.fail('use one atomic drawing-buffer resize');}
+  render(_scene:unknown,camera:{aspect:number;zoom:number}){renders.push({shadow:this.shadowMap.autoUpdate||this.shadowMap.needsUpdate,aspect:camera.aspect,zoom:camera.zoom});this.shadowMap.needsUpdate=false;}
+  dispose(){}forceContextLoss(){}
+ }
+ deps.three={...three,WebGLRenderer:Renderer};
+ const module={exports:{} as {createMarketStage:typeof import('../../apps/portal-web/src/games/cooking/market-stage.js').createMarketStage}};
+ runInNewContext(transformSync(readFileSync(new URL('../../apps/portal-web/src/games/cooking/market-stage.ts',import.meta.url),'utf8'),{loader:'ts',format:'cjs'}).code,{
+  module,exports:module.exports,devicePixelRatio:1.5,require:(id:string)=>{assert.ok(id in deps,id);return deps[id];},
+  matchMedia:()=>({matches:false,addEventListener(){},removeEventListener(){}}),
+  ResizeObserver:class{constructor(callback:()=>void){notifyResize=callback;}observe(){}disconnect(){disconnected=true;}},
+  window:{addEventListener(_name:string,callback:()=>void){windowResize=callback;},removeEventListener(){}}
+ });
+ const stage=module.exports.createMarketStage({append(){},getBoundingClientRect:()=>box} as unknown as HTMLElement,()=>{});
+ try{
+  assert.equal(allocations.length,1);assert.equal(renders.length,0);
+  const paused={...begin('corn-dog'),status:'paused' as const};stage.update(paused);assert.equal(renders.length,1);assert.equal(renders.at(-1)!.shadow,true);
+  notifyResize();windowResize();assert.equal(allocations.length,1);assert.equal(renders.length,1,'initial observer and duplicate window notifications must not redraw');
+  box={width:1180,height:614};windowResize();notifyResize();
+  assert.equal(allocations.length,2);assert.equal(renders.length,2);assert.equal(renders.at(-1)!.shadow,false,'light-space shadow map is independent of camera aspect');assert.equal(renders.at(-1)!.aspect,1180/614);
+  for(const [w,h,dpr]of allocations){assert.equal(dpr,1);assert.ok(w*h<=768*640*2.25);}
+  for(const run of [begin('shawarma'),time(begin('shawarma'),1000),act(begin('egg-fried-rice'),{kind:'toss'}),{...paused,status:'done' as const}]){stage.update(run);assert.equal(renders.at(-1)!.shadow,true,'all scene updates, including motion, return/reset and plated transitions, refresh shadows');}
+  stage.update(paused);const start=renders.length,allocationStart=allocations.length;
+  assert.equal(stage.capture(),'data:image/png;native-boundary');assert.equal(renders.length,start+2,'capture renders completed and restored states, without an extra resize render');assert.equal(allocations.length,allocationStart+2);assert.equal(renders.at(-1)!.aspect,1180/614);assert.equal(renders.at(-1)!.zoom,1);assert.ok(renders.slice(start).every(r=>r.shadow));
+  failCapture=true;assert.throws(()=>stage.capture(),/capture failed/);assert.equal(renders.at(-1)!.aspect,1180/614);assert.equal(renders.at(-1)!.zoom,1);assert.equal(renders.at(-1)!.shadow,true);
+ }finally{stage.dispose();}
+ assert.equal(disconnected,true);const before=renders.length;notifyResize();windowResize();assert.equal(renders.length,before);
+});
+
+// Retain the actual pre-batch meshes to measure contacts after the production
+// assembly transforms them. No synthetic screenshot or renderer acceptance.
+test('fried rice grains and garnish follow the real mound surface rather than a floating height plane',async()=>{
+ const {Box3}=await import('three'),kit=new FoodKit(),mesh=kit.mesh.bind(kit),garnishes=new Map<Group,Mesh[]>();let mound:Mesh|undefined,grains=0;
+ kit.mesh=((...args:Parameters<FoodKit['mesh']>)=>{const m=mesh(...args);if(args[9]==='rice'){if(args[1]===kit.sphere)assert.fail('mound must own its sculpted geometry');if(!mound)mound=m;else grains++;}else if(args[2]==='#e7bd52'){const list=garnishes.get(args[0])??[];list.push(m);garnishes.set(args[0],list);}return m;}) as FoodKit['mesh'];
+ const run=displayMarket('egg-fried-rice');run.portions=run.portions.filter(p=>p.kind==='rice'||p.kind==='egg');const food=marketFood(run,kit);
+ try{
+  assert.ok(mound);assert.equal(grains,420);assert.equal(garnishes.size,5);const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0),0,20);
+  for(const [group,parts]of garnishes){
+   const center=new Vector3().setFromMatrixPosition(group.matrixWorld);ray.ray.origin.set(center.x,10,center.z);const hit:import('three').Intersection|undefined=ray.intersectObject(mound,false)[0];assert.ok(hit,'garnish center must be supported by mound');
+   const bounds=new Box3();for(const part of parts){part.geometry.computeBoundingBox();bounds.union(part.geometry.boundingBox!.clone().applyMatrix4(part.matrixWorld));}
+   assert.ok(Math.abs(bounds.min.y-hit.point.y+.012)<1e-6,'garnish underside must contact the real local surface with bounded embed');
+  }
+ }finally{food.dispose();kit.dispose();}
+});
+
+for(const id of ['egg-fried-rice','shawarma','corn-dog'] as const)test(`market reference detail ${id} owns dry-surface materials and bounded pigment without changing shared defaults`,()=>{
+ const kit=new FoodKit(),mat=kit.mat.bind(kit),defaults=new Map<ReturnType<FoodKit['mat']>,string>();
+ const settings=(m:ReturnType<FoodKit['mat']>)=>JSON.stringify([m.color.getHex(),m.roughness,m.vertexColors,(m as import('three').MeshPhysicalMaterial).clearcoat]);
+ kit.mat=((...args:Parameters<FoodKit['mat']>)=>{const material=mat(...args);if(!defaults.has(material))defaults.set(material,settings(material));return material;}) as FoodKit['mat'];
+ const food=marketFood(displayMarket(id),kit);let pigmented=0;
+ try{
+  for(const [material,original]of defaults)assert.equal(settings(material),original,'market must not mutate shared FoodKit material defaults');
+  food.root.traverse(o=>{if(!(o instanceof Mesh))return;const color=o.geometry.getAttribute('color');if(!color)return;pigmented++;
+   assert.equal(color.count,o.geometry.getAttribute('position').count);const levels=new Set<number>();
+   for(let i=0;i<color.count;i++){for(const n of [color.getX(i),color.getY(i),color.getZ(i)])assert.ok(Number.isFinite(n)&&n>=0&&n<=1);levels.add(Math.round(color.getY(i)*1000));}
+   assert.ok(levels.size>3,'pigment contains geometric variation, not a single recolour');
+   const materials=Array.isArray(o.material)?o.material:[o.material];for(const m of materials){const physical=m as import('three').MeshPhysicalMaterial;assert.equal(physical.vertexColors,true);assert.ok(physical.roughness>=.82&&physical.clearcoat<=.12);}
+  });assert.ok(pigmented>0);
+ }finally{food.dispose();kit.dispose();}
 });

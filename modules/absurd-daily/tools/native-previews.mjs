@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
+import {execFileSync} from 'node:child_process';
 
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const defaultRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
@@ -40,11 +41,11 @@ export async function plan(root=defaultRoot){
   requires:['explicit native execution permission','installed Vite, Playwright, sharp and Chromium','loopback socket capability'],
   output_policy:'new directory outside repository; candidate manifest only after complete validation; never updates product assets'};
 }
-export function validateCapture(receipt,expected){
+function validateReceipt(receipt,expected,recipes){
  if(receipt.status!=='captured'||receipt.errors.length||!receipt.environment?.browser||!receipt.environment?.renderer||receipt.environment.dpr!==1)throw Error('native_capture_incomplete');
  if(receipt.source_inputs.length!==expected.source_inputs.length||receipt.source_inputs.some((s,i)=>s.path!==expected.source_inputs[i].path||s.sha256!==expected.source_inputs[i].sha256))throw Error('source_drift');
- const ids=new Set(expected.recipes);
- if(receipt.previews.length!==66||ids.size!==66||new Set(receipt.previews.map(p=>p.recipe)).size!==66)throw Error('recipe_set');
+ const ids=new Set(recipes);
+ if(receipt.previews.length!==recipes.length||ids.size!==recipes.length||new Set(receipt.previews.map(p=>p.recipe)).size!==recipes.length)throw Error('recipe_set');
  let bytes=0;
  for(const p of receipt.previews){
   if(!ids.has(p.recipe)||p.path!==`apps/portal-web/public/games/absurd-daily/cooking/3d/${p.recipe}.webp`||p.width!==512||p.height!==384||!Number.isSafeInteger(p.bytes)||p.bytes<=0||!hashPattern.test(p.sha256)||!hashPattern.test(p.source_png_sha256))throw Error('invalid_preview');
@@ -60,8 +61,11 @@ export function validateCapture(receipt,expected){
  for(const i of meta.inputs)if(!hashPattern.test(i.sha256)||!safeRelative(i.path))throw Error('input_binding');
  return true;
 }
-export async function validateFiles(root,out,receipt,expected,sharp){
- validateCapture(receipt,expected);
+export function validateCapture(receipt,expected){
+ if(expected.recipes.length!==66||new Set(expected.recipes).size!==66)throw Error('recipe_set');
+ return validateReceipt(receipt,expected,expected.recipes);
+}
+async function validateOutputFiles(root,out,receipt,sharp){
  for(const s of receipt.source_inputs.concat(receipt.build.inputs))if(digest(await regularFile(root,s.path))!==s.sha256)throw Error('source_drift');
  for(const c of receipt.build.chunks)if(digest(await regularFile(out,'portal/'+c.file))!==c.sha256)throw Error('compiled_drift');
  for(const p of receipt.previews){
@@ -71,12 +75,100 @@ export async function validateFiles(root,out,receipt,expected,sharp){
  }
 }
 
-export async function capture(root,out,executable){
+
+export async function validateFiles(root,out,receipt,expected,sharp){
+ validateCapture(receipt,expected);await validateOutputFiles(root,out,receipt,sharp);
+}
+const canonical=value=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+export const planDigest=expected=>digest(canonical({recipes:expected.recipes,source_inputs:expected.source_inputs}));
+export function batchRecipes(expected,index){
+ if(!Number.isInteger(index)||index<0||index>=3||expected.recipes.length!==66||new Set(expected.recipes).size!==66)throw Error('batch_partition');
+ return expected.recipes.slice(index*22,(index+1)*22);
+}
+function validateBinding(binding){
+ if(!binding||Object.values(binding).some(v=>typeof v!=='string')||Object.keys(binding).sort().join(',')!=='github_sha,head_sha,run_attempt,run_id'||!/^([a-f0-9]{40})$/.test(binding.head_sha)||!/^([a-f0-9]{40})$/.test(binding.github_sha)||!/^[1-9]\d*$/.test(binding.run_id)||!/^[1-9]\d*$/.test(binding.run_attempt))throw Error('execution_binding');
+}
+function verifyHeadSources(root,expected,head){
+ const actual=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+ if(actual!==head)throw Error('head_drift');
+ // A source hash plus an unrelated commit label is not a head-bound capture.
+ for(const input of expected.source_inputs)if(digest(execFileSync('git',['show',`${head}:${safeRelative(input.path)}`],{cwd:root,maxBuffer:32*1024*1024}))!==input.sha256)throw Error('head_source_drift');
+}
+export function executionBinding(root,expected,env=process.env){
+ const binding={head_sha:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),github_sha:env.GITHUB_SHA,run_id:env.GITHUB_RUN_ID,run_attempt:env.GITHUB_RUN_ATTEMPT};
+ validateBinding(binding);verifyHeadSources(root,expected,binding.head_sha);return binding;
+}
+export function validateBatch(receipt,expected){
+ if(receipt.status!=='batch_captured_pending_aggregation'||!receipt.batch||receipt.batch.count!==3||receipt.batch.size!==22||receipt.batch.plan_sha256!==planDigest(expected))throw Error('batch_incomplete');
+ validateBinding(receipt.binding);const recipes=batchRecipes(expected,receipt.batch.index);
+ if(receipt.previews.some((p,i)=>p.recipe!==recipes[i]))throw Error('batch_partition');
+ return validateReceipt({...receipt,status:'captured'},expected,recipes);
+}
+export async function validateBatchFiles(root,out,receipt,expected,sharp){
+ validateBatch(receipt,expected);await validateOutputFiles(root,out,receipt,sharp);
+}
+function buildIdentity(build){
+ return canonical({...build,inputs:[...build.inputs].sort((a,b)=>a.path.localeCompare(b.path)),transforms:build.transforms?[...build.transforms].sort((a,b)=>a.id.localeCompare(b.id)):undefined,
+  chunks:build.chunks.map(c=>({...c,imports:[...c.imports].sort(),modules:[...c.modules].sort()})).sort((a,b)=>a.file.localeCompare(b.file))});
+}
+export function validateBatchSet(receipts,expected){
+ if(receipts.length!==3)throw Error('batch_set');for(const r of receipts)validateBatch(r,expected);
+ if(new Set(receipts.map(r=>r.batch.index)).size!==3)throw Error('batch_set');
+ const ordered=[...receipts].sort((a,b)=>a.batch.index-b.batch.index),first=ordered[0];
+ for(const r of ordered.slice(1)){
+  if(canonical(r.binding)!==canonical(first.binding))throw Error('execution_drift');
+  if(canonical(r.environment)!==canonical(first.environment))throw Error('environment_drift');
+  if(buildIdentity(r.build)!==buildIdentity(first.build))throw Error('build_drift');
+ }
+ const receipt={format:'freedom.native-preview-receipt/v1',status:'captured',created_at:new Date().toISOString(),binding:first.binding,source_inputs:first.source_inputs,environment:first.environment,build:first.build,errors:[],previews:ordered.flatMap(r=>r.previews),total_bytes:ordered.reduce((n,r)=>n+r.total_bytes,0)};
+ validateCapture(receipt,expected);return receipt;
+}
+async function writeCandidate(out,receipt){
+ const manifest={format:'freedom.cooking-3d-art/v1',created_at:receipt.created_at,origin:'original procedural 3D models; actual production createDishStage factory',environment:receipt.environment,compiled_factory:{file:receipt.build.factory.split('/').at(-1),sha256:receipt.build.chunks.find(c=>c.file===receipt.build.factory).sha256},source_inputs:receipt.source_inputs,total_bytes:receipt.total_bytes,previews:receipt.previews};
+ if(receipt.binding)manifest.execution_binding=receipt.binding;
+ await writeFile(resolve(out,'candidate-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
+}
+export async function aggregate(root,out,batchDirs){
  const expected=await plan(root);root=expected.root;
+ if(batchDirs.length!==3||new Set(batchDirs.map(p=>resolve(p))).size!==3)throw Error('batch_set');
+ const inputs=[];
+ for(const supplied of batchDirs){
+  if(!isAbsolute(supplied))throw Error('unsafe_batch_directory');
+  const path=resolve(supplied);if(await realpath(path)!==path||(await lstat(path)).isSymbolicLink())throw Error('unsafe_batch_directory');
+  const bytes=await regularFile(path,'receipt.json');inputs.push({path,bytes,receipt:JSON.parse(bytes)});
+ }
+ const receipt=validateBatchSet(inputs.map(i=>i.receipt),expected);verifyHeadSources(root,expected,receipt.binding.head_sha);
+ const sharp=createRequire(resolve(root,'package.json'))('sharp');
+ for(const input of inputs)await validateBatchFiles(root,input.path,input.receipt,expected,sharp);
+ out=await freshOutput(root,out);
+ try{
+  for(const input of inputs){
+   await writeFile(resolve(out,`batch-${input.receipt.batch.index}-receipt.json`),input.bytes,{flag:'wx'});
+   for(const p of input.receipt.previews)for(const ext of ['png','webp'])await writeFile(resolve(out,`${p.recipe}.${ext}`),await regularFile(input.path,`${p.recipe}.${ext}`),{flag:'wx'});
+  }
+  for(const chunk of receipt.build.chunks){const path='portal/'+safeRelative(chunk.file);await mkdir(dirname(resolve(out,path)),{recursive:true});await writeFile(resolve(out,path),await regularFile(inputs[0].path,path),{flag:'wx'});}
+  await writeFile(resolve(out,'build-metadata.json'),JSON.stringify(receipt.build,null,2)+'\n',{flag:'wx'});
+  receipt.batch_receipts=inputs.map(i=>({index:i.receipt.batch.index,sha256:digest(i.bytes)})).sort((a,b)=>a.index-b.index);
+  // Validate the actual assembled bytes again; partial capture never grants admission.
+  await validateFiles(root,out,receipt,expected,sharp);verifyHeadSources(root,expected,receipt.binding.head_sha);
+  await writeCandidate(out,receipt);receipt.status='captured_pending_visual_review';
+ }catch(error){receipt.status='failed';receipt.errors.push(String(error));throw error;}
+ finally{await writeFile(resolve(out,'receipt.json'),JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});}
+ return receipt;
+}
+export const capture=(root,out,executable)=>captureSelected(root,out,executable,null);
+export async function captureBatch(root,out,executable,index){
+ if(!Number.isInteger(index)||index<0||index>=3)throw Error('batch_partition');
+ return captureSelected(root,out,executable,index);
+}
+async function captureSelected(root,out,executable,index){
+ const expected=await plan(root);root=expected.root;
+ const partial=index!==null,recipes=partial?batchRecipes(expected,index):expected.recipes,binding=partial?executionBinding(root,expected):undefined;
  if(!executable||!isAbsolute(executable)||!(await lstat(executable)).isFile())throw Error('explicit_installed_browser_required');
  out=await freshOutput(root,out);
  const require=createRequire(resolve(root,'package.json'));
  const receipt={format:'freedom.native-preview-receipt/v1',status:'failed',created_at:new Date().toISOString(),source_inputs:expected.source_inputs,previews:[],errors:[],total_bytes:0};
+ if(partial){receipt.binding=binding;receipt.batch={index,count:3,size:22,plan_sha256:planDigest(expected)};}
  let browser,server;
  try{
   // Only installed modules; no package manager, installer, API or database server.
@@ -113,7 +205,7 @@ export async function capture(root,out,executable){
   await context.route('**/*',route=>route.request().url().startsWith(origin+'/')?route.continue():route.abort());
   const page=await context.newPage();page.on('pageerror',e=>receipt.errors.push(String(e)));page.on('requestfailed',r=>receipt.errors.push('request_failed: '+new URL(r.url()).pathname));page.on('response',r=>{if(r.status()!==200)receipt.errors.push('http_'+r.status());});
   await page.goto(origin+'/capture.html');
-  for(const recipe of expected.recipes){
+  for(const recipe of recipes){
    let timer;let result;try{result=await Promise.race([page.evaluate(async({factory,recipe})=>{
     const t=performance.now(),{createDishStage}=await import('/'+factory),imported=performance.now();
     const host=document.getElementById('host');let stage,result,lost=false;
@@ -134,10 +226,11 @@ export async function capture(root,out,executable){
   await browser.close();browser=null;
   await new Promise((ok,no)=>server.close(error=>error?no(error):ok()));server=null;
   receipt.total_bytes=receipt.previews.reduce((n,p)=>n+p.bytes,0);receipt.status='captured';
-  await validateFiles(root,out,receipt,expected,sharp);
-  const manifest={format:'freedom.cooking-3d-art/v1',created_at:receipt.created_at,origin:'original procedural 3D models; actual production createDishStage factory',environment:receipt.environment,compiled_factory:{file:receipt.build.factory.split('/').at(-1),sha256:receipt.build.chunks.find(c=>c.file===receipt.build.factory).sha256},source_inputs:receipt.source_inputs,total_bytes:receipt.total_bytes,previews:receipt.previews};
-  await writeFile(resolve(out,'candidate-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
-  receipt.status='captured_pending_visual_review';
+  if(partial){
+   receipt.status='batch_captured_pending_aggregation';await validateBatchFiles(root,out,receipt,expected,sharp);verifyHeadSources(root,expected,binding.head_sha);
+  }else{
+   await validateFiles(root,out,receipt,expected,sharp);await writeCandidate(out,receipt);receipt.status='captured_pending_visual_review';
+  }
  }catch(error){receipt.status='failed';receipt.errors.push(String(error));throw error;}
  finally{
   try{await browser?.close();}finally{if(server)await new Promise(ok=>server.close(ok));await writeFile(resolve(out,'receipt.json'),JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});}
@@ -148,6 +241,8 @@ async function main(){
  const args=process.argv.slice(2);
  if(!args.length||args[0]==='plan'&&args.length===1){console.log(JSON.stringify(await plan(),null,2));return;}
  if(args[0]==='capture'&&args.length===3){console.log(JSON.stringify(await capture(defaultRoot,args[1],args[2]),null,2));return;}
- throw Error('Usage: node modules/absurd-daily/tools/native-previews.mjs [plan | capture NEW_OUTPUT_ABSOLUTE INSTALLED_CHROMIUM_ABSOLUTE]');
+ if(args[0]==='capture-batch'&&args.length===4){console.log(JSON.stringify(await captureBatch(defaultRoot,args[1],args[2],Number(args[3])),null,2));return;}
+ if(args[0]==='aggregate'&&args.length===5){console.log(JSON.stringify(await aggregate(defaultRoot,args[1],args.slice(2)),null,2));return;}
+ throw Error('Usage: node modules/absurd-daily/tools/native-previews.mjs [plan | capture OUT CHROMIUM | capture-batch OUT CHROMIUM INDEX_0_TO_2 | aggregate OUT BATCH0 BATCH1 BATCH2]');
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main().catch(e=>{console.error(e);process.exitCode=1;});

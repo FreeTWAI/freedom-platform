@@ -1,37 +1,37 @@
 /* One workbench, including the presentation controls owned by FullscreenGame.
    Grid tracks reserve actual HUD/dock height. Explicit zero-minimum columns
    keep palette min-content widths from widening the portrait workbench. No absolute control overlays the
-   live 6:5 hit-test rectangle; only paused/ready overlays cover inert content. */
+   full live hit-test viewport; only paused/ready overlays cover inert content. */
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market {
  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:0;position:relative;
  height:min(900px,100dvh);min-height:0;box-sizing:border-box;overflow:hidden;padding:var(--game-safe-top) var(--game-safe-right) var(--game-safe-bottom) var(--game-safe-left);
- background:#b58354;border:2px solid #7f634d;border-radius:18px;
+ background:#cabb9e;border:2px solid #9c896b;border-radius:18px;
 }
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market:is(:fullscreen,.fullscreen-game--viewport){position:fixed;inset:0;width:100%;height:100dvh;min-height:0;border:0;border-radius:0;padding:var(--game-safe-top) var(--game-safe-right) var(--game-safe-bottom) var(--game-safe-left)}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__bar{position:relative;inset:auto;max-width:none;min-height:44px;padding:4px 8px;gap:4px;background:#29476a;flex-wrap:wrap;border:0;z-index:2}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__bar{position:relative;inset:auto;max-width:none;min-height:44px;padding:4px 8px;gap:4px;background:#183c37;flex-wrap:wrap;border:0;z-index:2}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__button{min-width:44px;min-height:44px;padding:6px 10px;margin:0;flex:none}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__button span{font-size:20px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help summary{min-width:44px;justify-content:center;color:#fff9eb}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help[open]{flex:1 1 100%}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market .fullscreen-game__mode-help p{position:static;width:auto;margin:0;padding:6px}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);width:100%;height:100%;max-width:none;min-height:0;margin:0;overflow:hidden;background:#b58354;color:#392f2c}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading{display:flex;flex-wrap:nowrap;gap:4px;margin:0;padding:4px 8px;border:0;border-radius:0;box-shadow:none;background:#29476a}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-game.mk-immersive{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);width:100%;height:100%;max-width:none;min-height:0;margin:0;overflow:hidden;background:#cabb9e;color:#303d35}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading{display:flex;flex-wrap:nowrap;gap:4px;margin:0;padding:4px 8px;border:0;border-radius:0;box-shadow:none;background:#183c37}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading:after{display:none}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading h1{flex:1;min-width:0;margin:0;font-size:16px;line-height:1.4;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive button{min-height:44px;min-width:44px;line-height:1.4;font-size:14px;flex-shrink:0}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading button{padding:6px 8px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-workbench{position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);min-width:0;min-height:0;overflow:hidden}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-play-space{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(44px,1fr) auto;min-width:0;min-height:0;overflow:hidden}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{display:flex;gap:6px;overflow:auto;overscroll-behavior:contain;padding:4px 8px;border:0;border-radius:0;background:#29476a}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{display:flex;gap:6px;overflow:auto;overscroll-behavior:contain;padding:4px 8px;border:0;border-radius:0;background:#183c37}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud>div{display:flex;align-items:baseline;gap:4px;min-width:max-content;padding:0 6px 0 0;border:0;background:transparent}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud span,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud strong,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud small{font-size:14px;line-height:1.6;white-space:nowrap}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud meter{display:none}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-view{container-type:size;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;overflow:hidden;background:#b58354}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-surface{position:relative;width:min(100cqw,120cqh);height:auto;min-height:0;max-height:none;aspect-ratio:6/5;margin:0;border:0;background:#b58354;scroll-margin:0}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-view{container-type:size;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;overflow:hidden;background:#cabb9e}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-surface{position:relative;width:100%;height:100%;min-height:0;max-height:none;aspect-ratio:auto;margin:0;border:0;background:#cabb9e;scroll-margin:0}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-surface-hint{bottom:4px;left:4px;right:4px;max-width:calc(100% - 8px);padding:2px 8px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{min-height:0;max-height:none;min-width:0;overflow:hidden;overscroll-behavior:contain;padding:6px 8px;margin:0;border:0;border-top:2px solid #7f634d;border-radius:0;background:#e7b97e;box-shadow:none;scroll-padding:6px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{min-height:0;max-height:none;min-width:0;overflow:hidden;overscroll-behavior:contain;padding:6px 8px;margin:0;border:0;border-top:2px solid #9c896b;border-radius:0;background:#eee5d1;box-shadow:none;scroll-padding:6px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch{display:flex;gap:6px;align-items:center;overflow:auto;margin-bottom:4px}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch button{color:#574135;background:#fffbed;border-color:#7f634d;padding:6px 10px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch button{color:#574135;background:#fffbed;border-color:#9c896b;padding:6px 10px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette-switch [aria-pressed=true]{background:#f4cf70;box-shadow:inset 0 -3px 0 #b58b45}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-palette[hidden]{display:none}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-ingredients{display:flex;gap:6px;overflow:auto;padding:2px 2px 6px;overscroll-behavior:contain}
@@ -47,12 +47,12 @@
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-piece{margin:4px 0;font-size:14px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-piece select{margin:2px 0;width:100%;max-width:100%;font-size:16px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat{display:flex;flex-wrap:nowrap;overflow:auto;align-items:center;gap:4px;padding:2px 0}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span{flex-shrink:0;color:#392f2c;font-size:14px;min-width:0;white-space:nowrap}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span{flex-shrink:0;color:#303d35;font-size:14px;min-width:0;white-space:nowrap}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heat>span:last-child{min-width:max-content}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-serve{margin:4px 0;padding:8px;min-width:0;box-shadow:none;white-space:normal;overflow-wrap:anywhere}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-instruction,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-live-score{min-height:0;margin:0;padding:6px 0;font-size:14px;line-height:1.6;background:transparent;color:#392f2c;text-align:left}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-instruction,.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-live-score{min-height:0;margin:0;padding:6px 0;font-size:14px;line-height:1.6;background:transparent;color:#303d35;text-align:left}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover{position:absolute;inset:0;z-index:3;display:block;min-height:0;height:auto;padding:12px;overflow:auto;overscroll-behavior:contain;background:#241c1566;backdrop-filter:blur(2px)}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover .sg-intro-copy{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:10px;width:min(100%,480px);min-width:0;margin:auto;padding:16px;border:1px solid #7f634d;border-radius:16px;overflow:hidden;box-sizing:border-box}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover .sg-intro-copy{display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:10px;width:min(100%,480px);min-width:0;margin:auto;padding:16px;border:1px solid #9c896b;border-radius:16px;overflow:hidden;box-sizing:border-box}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover h2{font-size:22px;line-height:1.4;overflow-wrap:anywhere}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover p{font-size:14px;line-height:1.6;max-width:none}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-cover button{align-self:stretch;flex-shrink:0;min-width:0;width:100%;margin:0;padding:10px;white-space:normal;overflow-wrap:anywhere;box-shadow:none;font-size:16px}
@@ -85,7 +85,7 @@
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-canvas canvas{display:block;width:100%;height:100%;object-fit:contain}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-surface{touch-action:none;outline-offset:-4px;isolation:isolate}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-surface-hint{position:absolute;pointer-events:none;margin:auto;width:fit-content;color:#fff1d4;background:#34251de8;border-radius:14px}
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-confirm{position:fixed;inset:0;margin:auto;background:#fff6e8;color:#392f2c;border:2px solid #7f634d;border-radius:16px}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-confirm{position:fixed;inset:0;margin:auto;background:#fff6e8;color:#303d35;border:2px solid #9c896b;border-radius:16px}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-confirm::backdrop{background:#261c15b8}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-confirm p{font-size:14px;line-height:1.6}
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-coating button{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
@@ -100,7 +100,7 @@
 /* Feedback lives in the scrollable palette, not in a track that can squeeze the
    cooking rectangle. The fire and primary-action tracks size to enlarged text and never scroll away.
    Portrait palette height is bounded; the dock row takes its actual natural height. */
-.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-instruction{position:static;width:auto;height:auto;min-width:0;overflow:visible;clip-path:none;line-height:1.6;padding:2px 4px;margin:0 0 4px;background:#fff6e8;color:#392f2c}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-instruction{position:static;width:auto;height:auto;min-width:0;overflow:visible;clip-path:none;line-height:1.6;padding:2px 4px;margin:0 0 4px;background:#fff6e8;color:#303d35}
 @media(min-width:760px),(min-width:560px) and (max-height:500px){
  /* Share the real top row at wide/short sizes. display:contents preserves the
     section's DOM/modal ownership, while the parent grid reserves both toolbars. */
@@ -115,7 +115,7 @@
     Otherwise the compact Serve label wraps and steals height from the heat row. */
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-play-space{grid-template-columns:minmax(0,1fr) minmax(max(240px,9em),30%);grid-template-rows:auto minmax(44px,1fr)}
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{grid-column:1/-1}
- .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{grid-column:2;grid-row:2;border-top:0;border-left:2px solid #7f634d}
+ .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{grid-column:2;grid-row:2;border-top:0;border-left:2px solid #9c896b}
 }
 /* A narrow CSS viewport also occurs under browser zoom. Keep the action rows
    intact; only secondary content scrolls. The HUD remains in the accessibility
@@ -139,3 +139,16 @@
  .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game.fullscreen-game--market:not(:fullscreen):not(.fullscreen-game--viewport){width:100vw;margin-inline:calc(50% - 50vw);border-radius:0}
 }
 .fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .fullscreen-game--market>.ck-empty{grid-column:1/-1;grid-row:2;min-height:0;overflow:auto;margin:0}
+
+/* Chef's counter: tactile enamel controls and a legible, restrained instrument rail.
+   Geometry and safe-area grid remain unchanged; no decoration steals input space. */
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading{border-bottom:1px solid #527066}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading h1{color:#fff7de;font-weight:800;letter-spacing:.02em}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud{box-shadow:inset 0 -1px #ffffff19;color:#f6edd7}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-hud span{color:#d4ddcc}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-tray{border-top:3px solid #aa8c55;background:linear-gradient(#f4edde,#e7dcc3)}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive button{border-radius:10px;box-shadow:0 2px 0 #352e2426;font-weight:700}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-heading button{background:#f4eddb;color:#263f35;border-color:#b7a582}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-surface-hint{background:#142e2edd;color:#fff3d6;border:1px solid #cbb78466;border-radius:8px;backdrop-filter:blur(4px)}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-ingredients button{background:#fffbef;color:#303d35;border-color:#b7a582}
+.fw-arcade-root.fw-arcade-toy-console.fw-arcade-shotengai .mk-immersive .mk-serve{background:#a6402d;color:#fff9e9;border-color:#713523}
