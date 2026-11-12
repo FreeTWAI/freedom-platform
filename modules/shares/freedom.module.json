@@ -13,6 +13,7 @@
     "tests/e2e/shares.spec.ts",
     "scripts/backfill-shares.ts",
     "tests/runtime/event-import.test.ts",
+    "tests/runtime/event-share-security.test.ts",
     "tests/fixtures/event-import/**",
     "tests/runtime/security-review-shares.test.ts",
     "tests/runtime/security-review-sanitizer.test.ts"

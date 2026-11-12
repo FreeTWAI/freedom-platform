@@ -9,6 +9,7 @@ export async function moderateShare(pool:Pool,input:AdminCommand,id:string,decis
   z.uuid().parse(id);
   const body=z.object({reason:z.string().trim().min(3).max(1000)}).strict().parse(input.body);
   const scoped=async(q:PoolClient)=>{
+    await q.query("SELECT e.event_id FROM community_events e JOIN shares s ON s.ref_id=e.event_id AND s.kind='event' WHERE s.share_id=$1 AND s.community_id=$2 FOR UPDATE OF e",[id,input.admin.community_id]);
     const share=(await q.query('SELECT * FROM shares WHERE share_id=$1 AND community_id=$2 FOR UPDATE',[id,input.admin.community_id])).rows[0];
     requireCondition(share,404,'not_found','找不到分享。');return share;
   };

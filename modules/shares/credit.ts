@@ -29,6 +29,7 @@ export async function endorseShare(q:PoolClient,share:{share_id:string;community
  * Reads authoritative rows; guests need confirmed_at. Safe to repeat and to run during backfill.
  */
 export async function creditEventRegistrations(q:PoolClient,eventId:string):Promise<number> {
+  if(!(await q.query("SELECT 1 FROM community_events WHERE event_id=$1 AND state='published' AND registration_mode='platform'",[eventId])).rowCount)return 0;
   const shares=(await q.query("SELECT share_id,community_id FROM shares WHERE kind='event' AND ref_id=$1 AND state='published' ORDER BY share_id FOR UPDATE",[eventId])).rows;
   let credited=0;
   for(const share of shares){
@@ -42,8 +43,17 @@ export async function creditEventRegistrations(q:PoolClient,eventId:string):Prom
       const eligible=(await q.query(`SELECT 1 FROM users WHERE user_id=$1 AND community_id=$3
         AND lower(trim(email))<>lower(trim($2)) AND NOT is_verification_test_email($2)`,[r.recipient,r.email,share.community_id])).rowCount;
       if(!eligible)continue;
+      const person=(await q.query('SELECT user_id FROM users WHERE community_id=$1 AND lower(trim(email))=lower(trim($2))',[share.community_id,r.email])).rows[0];
+      const actorId=r.actor_id??person?.user_id??null;
+      if(actorId&&(await q.query('SELECT 1 FROM community_event_registration_credit_people WHERE event_id=$1 AND user_id=$2',[eventId,actorId])).rowCount)continue;
       const identity=createHash('sha256').update(r.email.trim().toLowerCase()).digest('hex');
-      if(await appendCredit(q,{...share,user_id:r.recipient,role:'spreader',basis:'registration',source_ref:`registration:${share.share_id}:${identity}`,actor_user_id:r.actor_id}))credited++;
+      const source=`registration:${share.share_id}:${identity}`;
+      if(await appendCredit(q,{...share,user_id:r.recipient,role:'spreader',basis:'registration',source_ref:source,actor_user_id:actorId}))credited++;
+      // Retain member identity even when the email fact was first recorded as a guest.
+      // Mark only an actual positive fact, never an unconfirmed or rejected attempt.
+      if(actorId)await q.query(`INSERT INTO community_event_registration_credit_people(event_id,user_id)
+        SELECT $1,$2 WHERE EXISTS(SELECT 1 FROM share_credit_events WHERE share_id=$3 AND basis='registration' AND units=1 AND source_ref=$4)
+        ON CONFLICT DO NOTHING`,[eventId,actorId,share.share_id,source]);
     }
   }
   return credited;

@@ -1,5 +1,5 @@
 import {requireSharePublicationQuota} from './publication-quota.js';
-import {createEvent} from '../community/events.js';
+import {createEvent,canAccessGuildEvent} from '../community/events.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool, PoolClient } from 'pg';
@@ -11,7 +11,7 @@ import { authRateLimit } from '../identity-membership/members.js';
 import type { Actor } from '../identity-membership/service.js';
 import { shareAdapter } from './adapters/registry.js';
 import { existingTitle } from './adapters/existing.js';
-import { endorseShare, reverseCredit } from './credit.js';
+import { endorseShare, reverseCredit, creditEventRegistrations } from './credit.js';
 import { PROMOTION_LINK_CAP, taipeiDate, taipeiDayStart } from '../community/promotion.js';
 import type { AdapterContext, PreparedShare, ShareRow } from './types.js';
 export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional(),source:z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),guild_key:z.string().regex(/^guild_[a-zA-Z0-9_]+$/),ref:z.string().max(200).optional()}).strict().optional()}).strict();
@@ -58,7 +58,8 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
   return command(pool,input,async q=>{
     if(body.source)requireCondition((await q.query("SELECT 1 FROM guild_tools WHERE guild_key=$1 AND tool_id=$2 AND community_id=$3 AND state='enabled' AND scopes ? 'share:compose' FOR SHARE",[body.source.guild_key,body.source.tool_id,input.actor.community_id])).rowCount,403,'tool_unavailable','工具已停用或未允許分享。');
     const current=await receipt(q);
-    if(current)await readShare(q,input.actor,current.share_id,true);
+    if(current){await lockEventSource(q,input.actor,current.share_id);await readShare(q,input.actor,current.share_id,true);}
+    if(p?.kind==='event')await q.query('SELECT 1 FROM community_events WHERE event_id=$1 AND community_id=$2 FOR UPDATE',[p.ref_id,input.actor.community_id]);
     if(p)await shareAdapter(body).authorize?.(q,input.actor,p);
     if(body.guild_key)requireCondition((await q.query('SELECT 1 FROM positioning_guild_catalog WHERE guild_key=$1',[body.guild_key])).rowCount,422,'guild_not_found','找不到公會。');
   },async q=>{
@@ -79,6 +80,7 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
       s.state='published';
     }
     await endorseShare(q,s,input.actor.user_id);
+    if(s.kind==='event')await creditEventRegistrations(q,s.ref_id!);
     if(body.source)await q.query('INSERT INTO guild_tool_share_sources(share_id,tool,revision,member) SELECT $1,id,revision,$2 FROM guild_tools WHERE guild_key=$3 AND tool_id=$4 ON CONFLICT DO NOTHING',[s.share_id,input.actor.user_id,body.source.guild_key,body.source.tool_id]);
     if(created)await journal(q,input.actor,'share',s.share_id,1,'publish',{kind:s.kind});
     return {share_id:s.share_id,created,url:`/#shares/${s.share_id}`};
@@ -88,7 +90,11 @@ export async function retractShare(pool:Pool,input:Command,id:string) {
   z.object({}).strict().parse(input.body);
   return command(pool,input,async q=>{
     await lockEventSource(q,input.actor,id);
-    await readShare(q,input.actor,id,true);
+    // Withdrawing one's retained endorsement remains possible while event moderation hides its source.
+    const share=(await q.query(`SELECT * FROM shares WHERE share_id=$1 AND community_id=$2
+      AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM share_endorsements WHERE share_id=$1 AND user_id=$3)) FOR UPDATE`,[id,input.actor.community_id,input.actor.agent?input.actor.user_id:null])).rows[0];
+    requireCondition(share,404,'not_found','找不到分享。');
+    if(share.kind!=='event')await readShare(q,input.actor,id);
     requireCondition((await q.query('SELECT 1 FROM share_endorsements WHERE share_id=$1 AND user_id=$2',[id,input.actor.user_id])).rowCount,403,'share_owner_required','只能撤回自己的分享。');
   },async q=>{
     const withdrawn=await q.query('UPDATE share_endorsements SET withdrawn_at=now() WHERE share_id=$1 AND user_id=$2 AND withdrawn_at IS NULL RETURNING endorsement_id',[id,input.actor.user_id]);
@@ -147,6 +153,12 @@ export async function myCredit(q:PoolClient,actor:Actor,raw:unknown={}) {
   const rows=(await q.query(`SELECT s.share_id,s.title,s.kind,s.state,s.ref_id,e.role,e.basis,sum(e.units)::int AS count
     FROM share_credit_events e JOIN shares s USING(share_id,community_id)
     WHERE e.community_id=$1 AND e.user_id=$2 GROUP BY s.share_id,e.role,e.basis ORDER BY s.share_id,e.role,e.basis LIMIT 100 OFFSET $3`,[actor.community_id,actor.user_id,query.offset])).rows;
-  for(const s of rows)if(s.ref_id&&!await existingTitle(q,actor,s.kind,s.ref_id)){s.title='已停止分享';s.count=0;} 
+  for(const s of rows)if(s.ref_id&&!await existingTitle(q,actor,s.kind,s.ref_id)){
+    if(s.kind==='event'&&s.state==='hidden'){
+      const event=(await q.query('SELECT * FROM community_events WHERE event_id=$1 AND community_id=$2 AND NOT is_verification_test_account(organizer_ref)',[s.ref_id,actor.community_id])).rows[0];
+      if(event&&await canAccessGuildEvent(q,actor,event))continue;
+    }
+    s.title='已停止分享';s.count=0;
+  }
   return {items:rows.map(({ref_id:_,...row})=>row),next_offset:rows.length===100?query.offset+100:null};
 }
