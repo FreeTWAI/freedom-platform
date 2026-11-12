@@ -1,8 +1,35 @@
 import {z} from 'zod';
 import type {Pool,PoolClient} from 'pg';
-import {adminCommand,audit,type AdminCommand} from '../platform-admin/service.js';
+import {adminCommand,audit,type AdminCommand,type AdminActor} from '../platform-admin/service.js';
 import {requireCondition} from '../../packages/shared/problem.js';
 import {reverseCredit} from './credit.js';
+
+/** A decision queue, not a report/user export. Titles are the published share snapshot. */
+export async function listHeldShares(pool:Pool,admin:AdminActor) {
+  return (await pool.query(`SELECT s.share_id,s.kind,s.title,
+    CASE WHEN s.kind IN ('repository','link') THEN s.canonical_url
+      WHEN s.kind='event' AND e.visibility IN ('open','referral') THEN '/events/'||e.event_id
+      WHEN s.kind='service' THEN '/services/'||s.ref_id
+      WHEN s.kind='post' AND EXISTS(SELECT 1 FROM community_social_publications p WHERE p.post_id=s.ref_id AND p.enabled) THEN '/posts/'||s.ref_id
+      ELSE NULL END AS public_url,
+    reports.open_reports,reports.reasons,
+    -- The schema retains report times, not a separate state-transition timestamp.
+    -- The third eligible report is the threshold that caused this hold.
+    (SELECT r.created_at FROM share_reports r WHERE r.share_id=s.share_id
+      AND r.eligible AND r.dismissed_at IS NULL AND r.confirmed_at IS NULL
+      AND NOT is_verification_test_account(r.user_id)
+      AND NOT EXISTS(SELECT 1 FROM share_endorsements x WHERE x.share_id=s.share_id AND x.user_id=r.user_id AND x.withdrawn_at IS NULL)
+      ORDER BY r.created_at,r.user_id OFFSET 2 LIMIT 1) AS hidden_at
+    FROM shares s
+    LEFT JOIN community_events e ON s.kind='event' AND e.event_id=s.ref_id AND e.community_id=s.community_id
+    CROSS JOIN LATERAL (SELECT count(*)::int AS open_reports,
+      (array_agg(r.reason ORDER BY r.created_at,r.user_id))[1:3] AS reasons
+      FROM share_reports r WHERE r.share_id=s.share_id AND r.dismissed_at IS NULL AND r.confirmed_at IS NULL) reports
+    WHERE s.community_id=$1 AND s.state='hidden' AND s.reports_confirmed_at IS NULL
+      AND reports.open_reports>0 AND NOT is_verification_test_account(s.first_sharer_user_id)
+      AND (e.event_id IS NULL OR NOT is_verification_test_account(e.organizer_ref))
+    ORDER BY hidden_at ASC NULLS LAST,s.share_id LIMIT 100`,[admin.community_id])).rows;
+}
 
 /** Existing verified platform-admin authority and receipts; never a member/agent command. */
 export async function moderateShare(pool:Pool,input:AdminCommand,id:string,decision:'restore'|'confirm') {

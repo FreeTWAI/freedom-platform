@@ -65,6 +65,15 @@ async function scopedEvent(q:Pick<PoolClient,'query'>,actor:Actor,id:string,lock
   requireCondition(row,404,'not_found','找不到這場活動。');return row;
 }
 
+// Hidden shares remain exclusively under platform share moderation, even after confirmation.
+const eventNotHeldSql="NOT EXISTS(SELECT 1 FROM shares held WHERE held.kind='event' AND held.ref_id=e.event_id AND held.community_id=e.community_id AND held.state='hidden')";
+async function eventIsHeld(q:Pick<PoolClient,'query'>,row:any){
+  return Boolean((await q.query("SELECT 1 FROM shares WHERE kind='event' AND ref_id=$1 AND community_id=$2 AND state='hidden'",[row.event_id,row.community_id])).rowCount);
+}
+async function requireEventNotHeld(q:Pick<PoolClient,'query'>,row:any){
+  requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動因檢舉暫停公開，請由平台管理員在「檢舉處理」處理。');
+}
+
 export async function canAccessGuildEvent(q:Pick<PoolClient,'query'>,actor:Actor,row:any){
   if(row.visibility!=='guild'||row.organizer_ref===actor.user_id)return true;
   const member=await q.query(`SELECT 1 FROM positioning_profession_memberships
@@ -79,7 +88,7 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     (SELECT count(*) FROM community_event_rsvps WHERE event_id=$1 AND state='going' AND NOT is_verification_test_account(user_id))+
     (SELECT count(*) FROM community_event_guest_rsvps WHERE event_id=$1 AND state='going' AND (email_sent_at IS NOT NULL OR confirmed_at IS NOT NULL)) AS total`,[row.event_id])).rows[0].total as string;
   const mine=(await q.query('SELECT state FROM community_event_rsvps WHERE event_id=$1 AND user_id=$2',[row.event_id,actor.user_id])).rows[0]?.state??null;
-  const canReview=!actor.agent&&row.state==='pending'&&row.review_guild_key&&(await q.query(`SELECT 1 FROM positioning_guild_officers o
+  const canReview=!actor.agent&&row.state==='pending'&&row.review_guild_key&&!await eventIsHeld(q,row)&&(await q.query(`SELECT 1 FROM positioning_guild_officers o
     JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
   const media=(await q.query(`SELECT (SELECT orientation FROM community_event_banners WHERE event_id=$1) AS banner_orientation,
@@ -146,7 +155,7 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
     ((SELECT count(*)::int FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.state='going' AND NOT is_verification_test_account(r.user_id))+
       (SELECT count(*)::int FROM community_event_guest_rsvps g WHERE g.event_id=e.event_id AND g.state='going' AND (g.email_sent_at IS NOT NULL OR g.confirmed_at IS NOT NULL))) AS attending_count,
     (SELECT state FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.user_id=$2) AS my_rsvp,
-    (NOT $4::boolean AND e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
+    (NOT $4::boolean AND e.state='pending' AND ${eventNotHeldSql} AND e.review_guild_key IS NOT NULL AND EXISTS(
       SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
         ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
       WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)) AS can_review
@@ -155,7 +164,7 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
       (e.visibility<>'guild' OR e.organizer_ref=$2 OR EXISTS(
         SELECT 1 FROM positioning_profession_memberships gm WHERE gm.community_id=e.community_id
           AND gm.user_id=$2 AND gm.guild_key=e.guild_key AND gm.state='active')))
-      OR e.organizer_ref=$2 OR (NOT $4::boolean AND e.state='pending' AND e.review_guild_key IS NOT NULL AND EXISTS(
+      OR e.organizer_ref=$2 OR (NOT $4::boolean AND e.state='pending' AND ${eventNotHeldSql} AND e.review_guild_key IS NOT NULL AND EXISTS(
         SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
           ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
         WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)))
@@ -340,7 +349,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
 export async function readEvent(pool:Pool|PoolClient,actor:Actor,id:string,participationHistory=false){
   const row=await scopedEvent(pool,actor,id);
   const member=await canAccessGuildEvent(pool,actor,row);
-  const reviewer=!actor.agent&&row.state==='pending'&&row.review_guild_key&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o
+  const reviewer=!actor.agent&&row.state==='pending'&&row.review_guild_key&&!await eventIsHeld(pool,row)&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o
     JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
   const ownHistory=participationHistory&&row.state==='cancelled'&&member&&Boolean((await pool.query(
@@ -436,7 +445,7 @@ async function bannerSnapshot(pool:Pick<Pool,'query'>,id:string,actor?:Actor):Pr
  WHERE e.event_id=$1 AND ${actor?'e.community_id=$2':"e.state='published' AND e.visibility IN ('referral','open') AND NOT is_verification_test_account(e.organizer_ref)"}`,actor?[id,actor.community_id]:[id])).rows[0];
  if(!row)return undefined;
  let member=false,reviewer=false;
- if(actor){member=await canAccessGuildEvent(pool,actor,row);reviewer=row.state==='pending'&&row.review_guild_key&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active' WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;if(!(row.organizer_ref===actor.user_id||reviewer||row.state==='published'&&member))return undefined;}
+ if(actor){member=await canAccessGuildEvent(pool,actor,row);reviewer=row.state==='pending'&&row.review_guild_key&&!await eventIsHeld(pool,row)&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active' WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;if(!(row.organizer_ref===actor.user_id||reviewer||row.state==='published'&&member))return undefined;}
  return {purpose:'community.event-banner',targetId:id,variant:'banner',domainVersion:String(row.aggregate_version),source:row.storage_source,authorizationVersion:JSON.stringify([row.community_id,row.organizer_ref,row.state,row.visibility,row.guild_key,row.review_guild_key,row.orientation,member,reviewer]),legacyBytes:row.image_bytes,assetId:row.asset_id,scopeId:row.scope_id,representationId:row.representation_id,metadata:row.representation_id?{contentType:row.content_type,byteSize:row.byte_size,sha256:row.content_sha256,transformVersion:row.transform_version,policyRevision:row.policy_revision,profileId:row.profile_id}:null};
 }
 export async function readEventBanner(pool:Pool,actor:Actor,id:string,store?:ObjectStore){return (await readDomainMedia(()=>readWithMemberSession(pool,actor,q=>bannerSnapshot(q,id,actor)),{purpose:'community.event-banner',targetId:id,variant:'banner'},store)).bytes;}
@@ -585,6 +594,7 @@ export async function cancelEvent(pool:Pool,input:Command,id:string,participatio
 }
 
 async function applyReview(q:PoolClient,row:any,decision:'approve'|'reject',reason:string,reviewer:{name:string;userId?:string;adminId?:string}){
+  await requireEventNotHeld(q,row);
   requireCondition(row.state==='pending',409,'event_reviewed','這場活動已完成審核。');
   requireCondition(Date.parse(row.starts_at)>Date.now(),409,'event_started','活動開始時間已過，請提交新的活動。');
   const state=decision==='approve'?'published':'rejected';
@@ -612,7 +622,7 @@ async function requireGuildReviewer(q:PoolClient,actor:Actor,row:any){
 
 export async function reviewEventAsGuildMaster(pool:Pool,input:Command,id:string){
   const body=reviewInput.parse(input.body);
-  return command(pool,input,async q=>{const row=await scopedEvent(q,input.actor,id);await requireGuildReviewer(q,input.actor,row);},async q=>{
+  return command(pool,input,async q=>{const row=await scopedEvent(q,input.actor,id);await requireGuildReviewer(q,input.actor,row);await requireEventNotHeld(q,row);},async q=>{
     const row=await scopedEvent(q,input.actor,id,true);await requireGuildReviewer(q,input.actor,row);checkVersion(row.aggregate_version,input.expected);
     const name=(await q.query('SELECT display_name FROM users WHERE user_id=$1',[input.actor.user_id])).rows[0].display_name as string;
     const reviewed=await applyReview(q,row,body.decision,body.reason,{name,userId:input.actor.user_id});
@@ -625,7 +635,7 @@ export async function listAdminEventQueue(pool:Pool,admin:AdminActor){
   return (await pool.query(`SELECT e.*,u.display_name AS organizer_name,g.name AS guild_name
     FROM community_events e JOIN users u ON u.user_id=e.organizer_ref
     LEFT JOIN positioning_guild_catalog g ON g.guild_key=e.guild_key
-    WHERE e.community_id=$1 AND e.state='pending' AND NOT is_verification_test_account(e.organizer_ref) ORDER BY e.created_at,e.event_id LIMIT 100`,[admin.community_id])).rows;
+    WHERE e.community_id=$1 AND e.state='pending' AND ${eventNotHeldSql} AND NOT is_verification_test_account(e.organizer_ref) ORDER BY e.created_at,e.event_id LIMIT 100`,[admin.community_id])).rows;
 }
 
 export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string){
@@ -634,7 +644,7 @@ export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string)
     const row=(await q.query(`SELECT * FROM community_events WHERE event_id=$1 AND community_id=$2${lock?' FOR UPDATE':''}`,[id,input.admin.community_id])).rows[0];
     requireCondition(row,404,'event_not_found','找不到這場活動。');return row;
   };
-  return adminCommand(pool,input,q=>scoped(q),async q=>{
+  return adminCommand(pool,input,async q=>{const row=await scoped(q);await requireEventNotHeld(q,row);return row;},async q=>{
     const row=await scoped(q,true);checkVersion(row.aggregate_version,input.expected);
     const reviewed=await applyReview(q,row,body.decision,body.reason,{name:input.admin.display_name,adminId:input.admin.admin_id});
     await audit(q,input.admin,'community_event_review','community_event',id,body.reason,
