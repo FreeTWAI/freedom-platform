@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import ts from '@typescript/typescript6';
 import { readFileSync } from 'node:fs';
 import { developmentPages } from '../../modules/development/pages.js';
+import { PORTAL_PLACES, resolvePortalRoute } from '../../apps/portal-web/src/portal-route.js';
+import { GUILD_TOOLS } from '../../apps/portal-web/src/guild-tools/catalog.js';
+import { guildRepository } from '../../modules/guild-workspace/repositories/registry.js';
 import { interfaceMessages } from '../../apps/portal-web/src/interface-messages.js';
 import {
   COVERAGE_STATUSES, TESTER_AREAS, TESTER_COVERAGE, TESTER_FLAGS, TESTER_GROUP_IDS, TESTER_GUILD, TESTER_NON_FEATURE_SITE_FIELDS,
   areasForGroup, coverageSummary, isDefaultOff, validateTesterMap, type TesterArea,
-  FEATURE_SEARCH_EXAMPLES, QUEST_PATHS, QUEST_STAGES, QUEST_STEP_IDS, TESTER_PROGRESS_KEY, normalizeProgress, readTesterProgress, resetTesterProgress,
+  QUEST_PATHS, QUEST_STAGES, QUEST_STEP_IDS, TESTER_PROGRESS_KEY, normalizeProgress, readTesterProgress, resetTesterProgress,
   stageProgress, testerMedals, toggleStep, writeTesterProgress, type TesterProgress,
 } from '../../modules/tester-map/index.js';
 
@@ -189,13 +192,52 @@ test('tester-map: event registration is not behind event_participation_enabled, 
   assert.equal(features.find(feature => feature.id === 'events.participation')!.flag, 'event_participation_enabled');
 });
 
-test('tester-map quest: feature-search words appear in every language and match that language’s navigation title', () => {
+test('tester-map quest: five-place words appear in every language and match visible navigation and screen titles', () => {
   const step = steps.find(item => item.id === 'explore.features')!;
-  for (const {tab, term} of FEATURE_SEARCH_EXAMPLES) for (let index = 0; index < 5; index++) {
-    assert.ok(step.task[index].includes(term[index]), `${index}:${term[index]}`);
-    const title = interfaceMessages[`nav.${tab}`][index].toLocaleLowerCase();
-    assert.ok(title.includes(term[index].toLocaleLowerCase()), `${tab}[${index}] “${term[index]}” not in “${title}”`);
+  const view = readFileSync('apps/portal-web/src/features/PlaceView.tsx', 'utf8');
+  const directory = readFileSync('apps/portal-web/src/guild-tools/GuildToolDirectory.tsx', 'utf8');
+  const navigation = readFileSync('apps/portal-web/src/Navigation.tsx', 'utf8');
+  assert.ok(navigation.includes('{item.title}'));
+  const message = /choice\('([^']+)','messages'\)/.exec(view)![1];
+  assert.ok(view.includes('>檢視<select'));
+  assert.ok(directory.includes('>公會工具<select'));
+  const tools = ['store', 'catalog'].map(id => GUILD_TOOLS.find(tool => tool.tool_id === id)!);
+  const labels = ['me', 'guilds'].map(id => PORTAL_PLACES.find(place => place.id === id)!.title);
+  // These shell controls currently render Chinese literals in every locale.
+  const visible = [...labels, '檢視', message, '公會工具', ...tools.flatMap(tool => [guildRepository(tool.guild_key)!.name, tool.title])];
+  for (let index = 0; index < 5; index++) {
+    for (const label of visible) assert.ok(step.task[index].includes(label), `${index}: ${label}`);
+    for (const key of ['nav.messages'] as const)
+      assert.ok(step.check[index].includes(interfaceMessages[key][index]), `${index}: ${key}`);
+    for (const tool of tools) assert.ok(step.check[index].includes(tool.title), `${index}: ${tool.title}`);
+    assert.ok(step.task[index].includes(['瀏覽器上一頁', 'browser Back', 'ブラウザーで戻', '브라우저에서 뒤로', 'Atrás'][index]));
+    assert.ok(!step.task[index].includes(interfaceMessages['nav.more'][index]));
+    assert.ok(!step.title[index].includes(interfaceMessages['nav.search'][index]));
   }
+  for (const [id, place, tab] of [
+    ['guild.shelf', 'explore', 'skills'], ['profile.content', 'me', 'my-content'],
+    ['profile.todos', 'me', 'todos'], ['social.people', 'explore', 'members'],
+    ['market.orders', 'me', 'reservations'], ['market.orders', 'me', 'business'],
+    ['builder.promotion', 'explore', 'services'], ['builder.promotion', 'me', 'promotion'],
+  ]) {
+    const label = new RegExp("choice\\('([^']+)','" + tab + "'").exec(view)![1];
+    const placeTitle = PORTAL_PLACES.find(item => item.id === place)!.title;
+    for (const task of steps.find(item => item.id === id)!.task) {
+      assert.ok(task.includes(placeTitle), `${id}: ${placeTitle}`);
+      assert.ok(task.includes(label), `${id}: ${label}`);
+    }
+  }
+  for (const [id, toolId] of [['builder.tasks', 'work'], ['builder.tasks', 'cocreation'], ['builder.opensource', 'marketing'], ['market.offer', 'supplier-kit'], ['market.offer', 'retail-kit']]) {
+    const tool = GUILD_TOOLS.find(item => item.tool_id === toolId)!;
+    for (const task of steps.find(item => item.id === id)!.task) {
+      assert.ok(task.includes(tool.title), `${id}: ${tool.title}`);
+      assert.ok(task.includes(guildRepository(tool.guild_key)!.name), `${id}: guild`);
+    }
+  }
+  for (let index = 0; index < 5; index++)
+    assert.ok(steps.find(item => item.id === 'profile.menu')!.task[index].includes(interfaceMessages['settings.title'][index]));
+  assert.equal(resolvePortalRoute('#messages').place, 'me');
+  for (const hash of ['#stores', '#stores/supply']) assert.equal(resolvePortalRoute(hash).place, 'guilds');
 });
 
 test('tester-map quest: event and highlight checks quote the real visibility labels and expect restricted recaps to be refused', () => {

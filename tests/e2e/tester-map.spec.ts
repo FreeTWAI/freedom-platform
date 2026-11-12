@@ -1,7 +1,6 @@
-import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata.js';
 import {test,expect,type Page} from './fixtures.js';
-import {navigate,closeChat} from './navigation.js';
-import {FEATURE_SEARCH_EXAMPLES,TESTER_AREAS} from '../../modules/tester-map/index.js';
+import {navigate} from './navigation.js';
+import {QUEST_STAGES,TESTER_AREAS} from '../../modules/tester-map/index.js';
 import {interfaceMessages} from '../../apps/portal-web/src/interface-messages.js';
 
 const areaName=(page:Page,name:string)=>page.getByRole('region',{name,exact:true});
@@ -136,15 +135,29 @@ test('TESTER-005 the feature-search words in the quest find their pages in all f
     // Five places replace the old feature-search menu; the same destinations
     // remain reachable in every interface language through visible controls.
     await expect(page.getByRole('navigation',{name:'主要工作區',exact:true})).toBeVisible();
-    for(const {tab,term} of FEATURE_SEARCH_EXAMPLES){
-      await navigate(page,TAB_TITLES[tab]);
-      if(tab==='messages'){
-        await expect(page.locator('#floating-message-panel').getByRole('heading',{name:interfaceMessages['nav.messages'][index],exact:true}),`${language}: ${term[index]}`).toBeVisible();
-        await closeChat(page);
-      }else{
-        await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store$/);
-        await expect(page.getByRole('heading',{name:'商店',level:1,exact:true}),`${language}: ${term[index]}`).toBeVisible();
-      }
+    const step=QUEST_STAGES.flatMap(stage=>stage.steps).find(step=>step.id==='explore.features')!;
+    const nav=page.getByRole('navigation',{name:'主要工作區',exact:true});
+    expect(step.task[index]).toContain('我的');
+    expect(step.task[index]).toContain('訊息');
+    await nav.getByRole('button',{name:'我的',exact:true}).click();
+    await page.getByLabel('我的檢視',{exact:true}).selectOption({label:'訊息'});
+    await expect(page.locator('#floating-message-panel').getByRole('heading',{name:interfaceMessages['nav.messages'][index],exact:true})).toBeVisible();
+    await page.goBack();
+    await expect(page.locator('#floating-message-panel')).toBeHidden();
+    for(const target of [
+      {guild:'電商與銷售公會',tool:'商店',path:'#guilds/guild_commerce_sales/tools/store'},
+      {guild:'商品品質與供應公會',tool:'供貨商品庫',path:'#guilds/guild_product_quality_supply/tools/catalog'},
+    ] as const){
+      for(const label of ['公會','公會工具',target.guild,target.tool]) expect(step.task[index]).toContain(label);
+      await nav.getByRole('button',{name:'公會',exact:true}).click();
+      await page.getByLabel('公會工具',{exact:true}).selectOption({label:target.guild});
+      const listHash=new URL(page.url()).hash;
+      await page.getByRole('button',{name:target.tool,exact:true}).click();
+      await expect.poll(()=>new URL(page.url()).hash).toBe(target.path);
+      await expect(page.getByRole('heading',{name:target.tool,level:1,exact:true})).toBeVisible();
+      await page.goBack();
+      await expect.poll(()=>new URL(page.url()).hash).toBe(listHash);
+      await expect(page.getByRole('button',{name:target.tool,exact:true})).toBeVisible();
     }
   }
 });
