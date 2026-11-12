@@ -13,7 +13,7 @@ export {kitchenPresentation} from './kitchen-presentation';
 export type KitchenStage={resize:(viewport:KitchenViewport,paint?:boolean)=>void;update:(run:CookingRun,point:{x:number;y:number}|null,time:number,motion:boolean)=>void;dispose:()=>void;capture:()=>string;stats:()=>{calls:number;triangles:number;geometries:number;textures:number}};
 const C={ink:'#393d40',wood:'#dfab72',edge:'#a86d42',cream:'#fff0d1',mint:'#78b9a5',red:'#e87455',gold:'#f2bb55',dark:'#555b61'};
 const BOARD_DEPTH=0;
-const foodColors:Record<Shape,string>={greens:'#67a46f',carrot:'#efa052',meat:'#d68b77',rice:'#f1cb77',dough:'#f0d09a',noodle:'#e8bf70',egg:'#edb541',fruit:'#e66e68',cream:'#f2e4c8',chocolate:'#855b48',fish:'#e9987d'};
+const foodColors:Record<Shape,string>={greens:'#67a46f',carrot:'#efa052',meat:'#d68b77',rice:'#ead1a0',dough:'#f0d09a',noodle:'#e8bf70',egg:'#edb541',fruit:'#e66e68',cream:'#f2e4c8',chocolate:'#855b48',fish:'#e9987d'};
 
 /** UX-7: original culinary miniature, with material-specific studio lighting. Rendered food never mutates cooking rules. */
 export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStage{
@@ -52,17 +52,22 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
   // Keep culinary grain in owned geometry; no PMREM or additional GPU maps.
   const woodGeometry=new Map<BufferGeometry,BufferGeometry>();
   function grained(g:BufferGeometry){let result=woodGeometry.get(g);if(!result){result=own(g.clone());const p=result.getAttribute('position'),colors:number[]=[];for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),tone=.91+.045*Math.sin(z*31+x*3)+.02*Math.sin(z*71+x*1.7);colors.push(tone,tone*.985,tone*.95);}result.setAttribute('color',new Float32BufferAttribute(colors,3));woodGeometry.set(g,result);}return result;}
+  // Reusable bounded culinary topology: individual long grains and small pearls,
+  // not scaled yellow meal-sized balls. These are original, texture-free meshes.
+  const morsel=own(new SphereGeometry(1,12,8)),grainGeometry=own(new SphereGeometry(1,8,6));
+  const bladeOutline=new Contour();bladeOutline.moveTo(0,0);bladeOutline.lineTo(1.1,0);bladeOutline.quadraticCurveTo(1.35,.015,1.45,.12);bladeOutline.lineTo(1.35,.38);bladeOutline.lineTo(0,.44);bladeOutline.closePath();
+  const chefBlade=own(new ExtrudeGeometry(bladeOutline,{depth:.035,bevelEnabled:true,bevelSize:.008,bevelThickness:.006,bevelSegments:1,steps:1,curveSegments:5}));chefBlade.rotateY(-Math.PI/2);chefBlade.translate(.0175,0,-.35);
   const doughSurface=own(sphere.clone()),doughPositions=doughSurface.getAttribute('position'),flour:number[]=[];
   for(let i=0;i<doughPositions.count;i++){const x=doughPositions.getX(i),y=doughPositions.getY(i),z=doughPositions.getZ(i),tone=.89+.055*Math.sin(x*17+z*11)*Math.cos(y*23-z*7)+.035*Math.sin(x*41+y*13);flour.push(tone,tone*.975,tone*.92);}
   doughSurface.setAttribute('color',new Float32BufferAttribute(flour,3));
-  type Surface='ceramic'|'wood'|'steel'|'iron'|'food';
+  type Surface='ceramic'|'wood'|'steel'|'iron'|'food'|'pearl'|'cloth';
   const vesselLip=own(new TorusGeometry(1,.065,10,40));
   const waterContour=new Contour();waterContour.moveTo(1,0);waterContour.absarc(0,0,1,0,Math.PI*2,false);waterContour.closePath();
   const waterVolume=own(new ExtrudeGeometry(waterContour,{depth:1,bevelEnabled:false,steps:1,curveSegments:24}));waterVolume.rotateX(-Math.PI/2);
   const taperedWater=own(waterVolume.clone()),waterPositions=taperedWater.getAttribute('position');for(let i=0;i<waterPositions.count;i++){const taper=.45+.55*waterPositions.getY(i);waterPositions.setX(i,waterPositions.getX(i)*taper);waterPositions.setZ(i,waterPositions.getZ(i)*taper);}taperedWater.computeVertexNormals();
   // A complete liquid volume inside a complete vessel. Its footprint stays
   // inside the vessel at the lowest water height, rather than protruding through it.
-  const palette=new Map<string,MeshStandardMaterial>(),openMaterials=new Set<MeshStandardMaterial>();function mat(color:string,surface:Surface='ceramic'){const key=`${surface}/${color}`;let m=palette.get(key);if(!m){m=new MeshStandardMaterial({color,roughness:surface==='steel'?.25:surface==='iron'?.76:surface==='wood'?.84:surface==='food'?.52:.3,metalness:surface==='steel'?.82:surface==='iron'?.3:0,side:DoubleSide,vertexColors:surface==='wood'});m.userData.kitchenSurface=surface;palette.set(key,m);materials.add(m);}return m;}
+  const palette=new Map<string,MeshStandardMaterial>(),openMaterials=new Set<MeshStandardMaterial>();function mat(color:string,surface:Surface='ceramic'){const key=`${surface}/${color}`;let m=palette.get(key);if(!m){m=new MeshStandardMaterial({color,roughness:surface==='pearl'?.24:surface==='cloth'?.95:surface==='steel'?.25:surface==='iron'?.76:surface==='wood'?.84:surface==='food'?.52:.3,metalness:surface==='steel'?.82:surface==='iron'?.3:0,side:DoubleSide,vertexColors:surface==='wood'});m.userData.kitchenSurface=surface;palette.set(key,m);materials.add(m);}return m;}
   const group=(p:Group,x=0,y=0,z=0)=>{const g=new Group();g.position.set(x,y,z);p.add(g);return g;};
   function mesh(p:Group,g:BufferGeometry,color:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx,surface:Surface='ceramic'){const role:Surface=p.userData.kitchenSurface??surface,material=mat(color,role);if(role==='wood')g=grained(g);if(g===bowl)openMaterials.add(material);const m=new Mesh(g,material);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=m.receiveShadow=true;p.add(m);return m;}
   const rb=(p:Group,c:string,x:number,y:number,z:number,xs:number,ys:number,zs:number,surface:Surface='ceramic')=>mesh(p,round,c,x,y,z,xs,ys,zs,surface);
@@ -97,7 +102,11 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    const hit=ray.ray.intersectPlane(ground,intersection);if(!hit)throw Error('Invalid work surface projection');return hit.clone();
   }
   function food(p:Group,shape:Shape,size=1,ingredient='',cuttable=false){const g=group(p),color=foodColors[shape],visual=ingredientVisual(ingredient,shape);g.userData.kitchenSurface='food';
-   if(visual){
+   if(ingredient.includes('珍珠')){
+    g.name='ingredient/tapioca-pearls';g.userData.kitchenSurface='pearl';
+    for(let i=0;i<11;i++){const angle=i*2.39996,r=.10+.22*Math.sqrt(i/10),pearl=mesh(g,morsel,i%3?'#321b12':'#49271a',Math.cos(angle)*r,.10+(i%3)*.032,Math.sin(angle)*r,.082,.078,.082,'pearl');pearl.name='food/tapioca-pearl';}
+   }
+   else if(visual){
     g.name=`ingredient/${visual.id}`;
     const addLayers=(target:Group,layers:readonly IngredientLayer[])=>{
      let geometry=ingredientGeometry.get(layers);
@@ -117,7 +126,12 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    }
    else if(shape==='carrot'){mesh(g,cone,color,0,.24,0,.3,.55,.3);for(const side of [-1,1]){const l=ball(g,'#6b9e62',side*.1,.59,0,.09,.25,.06);l.rotation.z=-side*.4;}}
    else if(shape==='greens'){for(let i=0;i<3;i++){const leaf=ball(g,i%2?'#8db878':color,(i-1)*.16,.17,0,.22,.09,.44);leaf.rotation.y=(i-1)*.55;}rb(g,'#b7c58d',0,.12,.18,.06,.07,.6);}
-   else if(shape==='rice'){ball(g,color,0,.19,0,.4,.28,.35);for(let i=0;i<3;i++)rb(g,i%2?'#7ca571':'#e8a15e',(i-1)*.2,.36,Math.sin(i)*.15,.14,.07,.13);}
+   else if(shape==='rice'){
+    g.name='ingredient/separate-rice-grains';
+    for(let i=0;i<24;i++){const angle=i*2.39996,r=.34*Math.sqrt((i+.5)/24),grain=mesh(g,grainGeometry,'#ead1a0',Math.cos(angle)*r,.065+.14*(1-r/.38),Math.sin(angle)*r,.039,.035,.115,'food');grain.rotation.y=angle+.6;grain.name='food/rice-grain';}
+    if(ingredient.includes('炒飯'))for(let i=0;i<6;i++){const angle=i*1.7,r=.24;const garnish=mesh(g,box,i%2?'#7ca571':'#edc358',Math.cos(angle)*r,.19,Math.sin(angle)*r,.09,.035,.075,'food');garnish.rotation.y=angle;}
+    else if(ingredient.includes('芝麻'))for(let i=0;i<6;i++){const seed=mesh(g,grainGeometry,'#4b3422',Math.cos(i*1.7)*.24,.2,Math.sin(i*1.7)*.24,.015,.01,.035,'food');seed.rotation.y=i*.8;}
+   }
    else if(shape==='noodle'){for(let i=0;i<3;i++){const t=ring(g,color,(i-1)*.09,.13+i*.08,0,.28+i*.04);t.scale.z=.7;}rb(g,'#79a66f',.19,.35,.1,.08,.07,.28);}
    else if(shape==='fish'){rb(g,color,0,.18,0,.7,.3,.48);for(const x of [-.23,0,.23]){const line=rb(g,'#f6d4b3',x,.34,0,.04,.018,.43);line.rotation.y=-.25;}}
    else if(shape==='egg'){ball(g,'#f9e6bf',0,.09,0,.5,.1,.4);ball(g,color,.02,.2,.01,.23,.14,.23);}
@@ -129,7 +143,8 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
    else{ball(g,color,0,.22,0,.4,.24,.36);}
    g.scale.setScalar(size);bakeRigidGroup(g,stepGeometry);return g;
   }
-  function mitten(p:Group){const g=group(p);ball(g,C.mint,0,0,0,.55,.22,.57);for(let i=0;i<4;i++)ball(g,C.mint,(i-1.5)*.25,0,.49,.16,.18,.23);ball(g,C.red,0,.2,.12,.22,.03,.25);rb(g,C.cream,0,-.01,-.6,.64,.3,.4);bakeRigidGroup(g,stepGeometry);return g;}
+  function mitten(p:Group){const g=group(p);g.name='tool/oven-mitt';ball(g,'#d8cbb6',0,0,0,.49,.19,.62,'cloth');ball(g,'#d8cbb6',-.43,-.01,.1,.24,.18,.32,'cloth');rb(g,'#b9aa91',0,-.01,-.61,.65,.27,.38,'cloth');for(const z of [-.25,0,.25])rb(g,'#c7b9a2',0,.185,z,.57,.012,.012,'cloth');bakeRigidGroup(g,stepGeometry);return g;}
+
   let lastMix:{amount:number;x:number|undefined;y:number|undefined}|null=null;
   let lastKnead:{held:number;motion:boolean}|null=null;
   // Bake changes pigment, not shadow depth, except when the oven tool appears.
@@ -142,13 +157,13 @@ export function createKitchenStage(host:HTMLElement,onLost:()=>void):KitchenStag
      const planes=Array.from({length:s.goal},(_,count)=>screen(cutGuide({...run,active:{...run.active,count}}),.5,.3).x);
      preparationModel=createPreparationModel(visual.id,planes,stepGeometry,ingredientMaterials);body.add(preparationModel.root);pieces.push(preparationModel.root);
     }else for(let i=0;i<Math.min(8,s.goal);i++){const p=food(body,s.shape,.95,s.ingredient,true);p.position.set(-1.9+i*3.8/(s.goal-1),.28,.05);pieces.push(p);}
-    rb(tool,C.dark,0,.25,-.7,.23,.2,.9);rb(tool,'#bec4bd',0,.22,.18,.19,.07,1.25,'steel');rb(tool,C.cream,0,.37,-.62,.07,.02,.43);}
+    rb(tool,'#493a2e',0,.27,-.82,.22,.2,.94,'wood');mesh(tool,chefBlade,'#bec8cd',0,0,0,1,1,1,'steel').name='tool/chef-blade';for(const z of [-1.04,-.66])ball(tool,'#bec8cd',0,.375,z,.032,.012,.032,'steel');}
    if(s.kind==='knead'){pieces.push(food(body,'dough',3.8));pieces[0].position.set(0,.26,.1);mitten(tool);}
-   if(s.kind==='mix'){body.position.z=1.2;mesh(body,bowl,'#a7b3b6',0,0,0,1.55,1.15,1.2,'steel');vesselRim(body,C.cream,0,1.5,0,2.76).scale.z=.78;liquid=mesh(body,waterVolume,foodColors[s.shape],0,.73,0,2.24,.54,1.58,'food');for(let i=0;i<5;i++){const p=food(body,s.shape,.85,s.ingredient);p.position.set(Math.cos(i*1.3)*1.2,1.29,Math.sin(i*1.3)*.8);pieces.push(p);}rb(tool,'#ab774e',0,.5,-.7,.18,.18,2.35,'wood');ball(tool,C.wood,0,.39,.47,.4,.09,.6,'wood');}
+   if(s.kind==='mix'){body.position.z=1.2;mesh(body,bowl,'#a7b3b6',0,0,0,1.55,1.15,1.2,'steel');vesselRim(body,C.cream,0,1.5,0,2.76).scale.z=.78;liquid=mesh(body,waterVolume,s.ingredient.includes('珍珠')?'#b98b62':foodColors[s.shape],0,.73,0,2.24,.54,1.58,'food');for(let i=0;i<5;i++){const p=food(body,s.shape,.85,s.ingredient);p.position.set(Math.cos(i*1.3)*1.2,1.29,Math.sin(i*1.3)*.8);pieces.push(p);}rb(tool,'#ab774e',0,.5,-.7,.18,.18,2.35,'wood');ball(tool,C.wood,0,.39,.47,.4,.09,.6,'wood');}
    if(s.kind==='pan'||s.kind==='boil'){rb(body,C.mint,0,-.02,0,6,.58,4.4);rb(body,'#4e6561',0,.3,0,5.4,.1,3.9);for(const x of [-2.2,2.2])mesh(body,cylinder,C.gold,x,.33,1.75,.22,.1,.22);for(let i=0;i<5;i++){const f=mesh(body,cone,i%2?C.gold:C.red,(i-2)*.55,.55,.8,.19,.5,.18);flames.push(f);}
     mesh(body,cylinder,C.dark,0,.73,0,2.28,.47,1.85,'iron');ring(body,'#74746b',0,1.01,0,2.2).scale.z=.84;
     if(s.kind==='pan'){rb(body,C.ink,2.8,.8,.35,1.9,.23,.43);mesh(body,cylinder,'#a18b62',0,1,0,2.09,.08,1.7);for(let i=0;i<5;i++){const p=food(body,s.shape,1.4,s.ingredient);p.position.set((i%3-1)*1.2,1.07,(Math.floor(i/3)-.5)*1.25);pieces.push(p);}rb(tool,C.wood,0,.3,0,.2,.2,2,'wood');rb(tool,C.cream,0,.3,1,.74,.09,.85);}
-    else{mesh(body,bowl,'#a7b3b6',0,.5,0,1.3,.65,1.15,'steel');liquid=mesh(body,waterVolume,'#e8c78e',0,.94,0,1.86,.36,1.5,'food');for(let i=0;i<3;i++){const p=food(body,s.shape,1,s.ingredient);p.position.set((i-1)*1.05,1.42,Math.sin(i)*.45);p.position.y+=1.24-new Box3().setFromObject(p,true).min.y;pieces.push(p);}for(let i=0;i<4;i++)steam.push(ball(body,C.cream,(i-1.5)*.85,1.5,i%2?.55:-.35,.12));rb(tool,C.wood,0,.3,-.4,.15,.17,2,'wood');ring(tool,C.cream,0,.3,.65,.5);}
+    else{mesh(body,bowl,'#a7b3b6',0,.5,0,1.3,.65,1.15,'steel');liquid=mesh(body,waterVolume,s.ingredient.includes('珍珠')?'#68381f':'#e8c78e',0,.94,0,1.86,.36,1.5,'food');for(let i=0;i<3;i++){const p=food(body,s.shape,1,s.ingredient);p.position.set((i-1)*1.05,1.42,Math.sin(i)*.45);p.position.y+=1.24-new Box3().setFromObject(p,true).min.y;pieces.push(p);}for(let i=0;i<4;i++)steam.push(ball(body,C.cream,(i-1.5)*.85,1.5,i%2?.55:-.35,.12));rb(tool,C.wood,0,.3,-.4,.15,.17,2,'wood');ring(tool,C.cream,0,.3,.65,.5);}
    }
    if(s.kind==='bake'){rb(body,C.ink,0,-.08,-.1,6,.3,3.6);rb(body,C.mint,0,1.2,-.12,5.7,2.7,3.5);rb(body,C.cream,0,2.32,1.67,5.1,.42,.16);rb(body,C.gold,0,1.05,1.75,5.12,1.85,.13);rb(body,'#6d4b39',0,1.06,1.84,4.72,1.45,.08);rb(body,C.wood,0,.48,1.92,4.1,.12,1.5);rb(body,C.cream,0,1.97,1.86,3.3,.12,.2);for(const x of [-2.1,2.1])mesh(body,cylinder,C.cream,x,2.34,1.76,.23,.16,.23).rotation.x=Math.PI/2;for(let i=0;i<3;i++){const p=food(body,s.shape,1.45,s.ingredient);p.position.set((i-1)*1.12,.56,1.94);pieces.push(p);}mitten(tool);}
    if(s.kind==='pour'){mesh(body,bowl,'#a7b3b6',.65,0,.6,1.1,1.6,1.1,'steel');vesselRim(body,C.red,.65,2.08,.6,1.98);liquid=mesh(body,taperedWater,foodColors[s.shape],.65,.45,.6,1,.12,1,'food');const jug=group(tool);mesh(jug,bowl,'#a7b3b6',0,0,0,.7,.9,.7,'steel');vesselRim(jug,C.cream,0,1.19,0,1.25);mesh(jug,torus,C.mint,-1.1,.45,0,.6,.6,.6).rotation.y=Math.PI/2;stream=mesh(work,cylinder,foodColors[s.shape],.35,2.35,.2,.12,1.8,.12);}
