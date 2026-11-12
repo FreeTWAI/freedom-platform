@@ -248,6 +248,16 @@ const FOUNDATION_NAMES = [
   '202_tester_map_accounts.sql',
   // Private source quarantine only; no capture/publication/GC capability.
   '203_member_game_quarantine.sql',
+  // Published-by-default shares and reversible attribution credit; no payment, credential, admin or release authority.
+  '204_shares.sql',
+  // Scoped member agent-token records, publication tracking and change feeds; no payment, credential-management, admin or release authority.
+  '205_agent_tokens.sql',
+  // Games/AR guild and track catalog entries pending category review; no membership, appointment or release authority.
+  '206_creative_tool_guilds.sql',
+  // Guild tool registrations, history, reports, audit, share sources, origin challenges and short-lived identity token grants; no publication, payment, credential-management, admin or release authority.
+  '207_guild_tools.sql',
+  // Event import/registration metadata, claims and share-driven moderation/credit; no automatic publication, payment, credential, admin or release authority.
+  '208_event_publication.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
