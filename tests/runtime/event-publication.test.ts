@@ -42,13 +42,14 @@ test('five creations per member per 24h; concurrency and replay do not exceed th
  assert.equal(results.filter(x=>x.status==='fulfilled').length,1);
  assert.equal((await pool.query('SELECT count(*)::int n FROM community_events WHERE organizer_ref=$1',[actors[4].user_id])).rows[0].n,5);
 });
-test('three distinct share reports hide the event and reverse credit; repeated reporter counts once',async()=>{
+test('three eligible share reports hide the event without reversing credit; repeated reporter counts once',async()=>{
  const e=await createEvent(pool,cmd(actors[1],body()));
+ await pool.query("UPDATE users SET created_at=now()-interval '8 days' WHERE user_id=ANY($1::uuid[])",[[actors[0].user_id,actors[2].user_id,actors[3].user_id]]);
  for(const i of [0,0,2])await reportShare(pool,cmd(actors[i],{reason:'合成檢舉'}),e.share_id);
  assert.equal((await publicEvent(pool,e.event_id)).event_id,e.event_id);
  await reportShare(pool,cmd(actors[3],{reason:'合成檢舉'}),e.share_id);
  await assert.rejects(publicEvent(pool,e.event_id),{status:404});await assert.rejects(readEvent(pool,actors[0],e.event_id),{status:404});
- assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[e.share_id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[e.share_id])).rows[0].n,1);
 });
 test('pending release step dry-runs, excludes past and moderated events, and safely repeats',async()=>{
  const e=await createEvent(pool,cmd(actors[2],body()));

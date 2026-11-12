@@ -25,6 +25,11 @@ test('paste event link, confirm, publish, register signed out and credit its sha
  await expect(g.locator('meta[property="og:title"]')).toHaveAttribute('content','合成讀書會確認版');
  await g.getByLabel('姓名',{exact:true}).fill('合成訪客');await g.getByLabel('Email',{exact:true}).fill('event-guest@example.com');await g.getByRole('button',{name:'報名',exact:true}).click();
  await expect(g.getByRole('status')).toContainText('尚未確認');await expect(g.getByLabel('Email',{exact:true})).toHaveJSProperty('readOnly',true);await g.getByRole('button',{name:'重試原報名',exact:true}).click();await expect(g.getByRole('status')).toContainText('報名已確認');expect(attempts).toHaveLength(2);expect(attempts[0]).toBe(attempts[1]);expect(await g.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const beforeConfirmation=await e2eAuthPool.query("SELECT count(*)::int n FROM share_credit_events e JOIN shares s USING(share_id) WHERE s.ref_id=$1 AND e.basis='registration'",[id]);expect(beforeConfirmation.rows[0].n).toBe(0);
+ const capability=(await e2eAuthPool.query('SELECT token_secret FROM community_event_guest_capabilities WHERE event_id=$1 AND email=$2',[id,'event-guest@example.com'])).rows[0].token_secret;
+ await g.goto(`${eventUrl}#participation=${capability}`);
+ await expect(g.getByRole('heading',{name:'活動參與管理',exact:true})).toBeVisible();
+ await expect.poll(async()=>Boolean((await e2eAuthPool.query('SELECT confirmed_at FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[id,'event-guest@example.com'])).rows[0].confirmed_at)).toBe(true);
  }finally{await guest.close();}
  await page.reload();await page.getByRole('button',{name:'我也要分享',exact:true}).click();await expect(page.getByText(/1 人報名/)).toBeVisible();
  const credit=await e2eAuthPool.query("SELECT sum(e.units)::int n FROM share_credit_events e JOIN shares s USING(share_id) WHERE s.ref_id=$1 AND e.basis='registration' AND e.user_id=$2",[id,DEMO_USERS[0].user_id]);expect(credit.rows[0].n).toBe(1);

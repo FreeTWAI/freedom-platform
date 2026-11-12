@@ -348,7 +348,11 @@ test('shares: source privacy and receipt authority remain current; browser recei
  assert.equal((await pool.query('SELECT count(*)::int n FROM command_receipts WHERE user_id=$1 AND idempotency_key=$2',[session.user.user_id,key])).rows[0].n,2);
  const foreign=await shareMember(1),foreignShare=await req(path,{session:foreign,body:{url:'https://example.com/foreign'}});
  assert.equal(foreignShare.status,200);
- assert.equal((await req(path,{token,body:{url:'https://example.com/foreign'}})).status,404,'cannot co-share B canonical object through the token');
+ const coShare=await req(path,{token,body:{url:'https://example.com/foreign'}});
+ assert.equal(coShare.status,200,'A token may add its own member endorsement to a canonical object');
+ assert.equal(coShare.data.share_id,foreignShare.data.share_id);
+ assert.equal((await pool.query('SELECT first_sharer_user_id FROM shares WHERE share_id=$1',[coShare.data.share_id])).rows[0].first_sharer_user_id,foreign.user.user_id);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM share_endorsements WHERE share_id=$1 AND withdrawn_at IS NULL',[coShare.data.share_id])).rows[0].n,2);
  const eventId=randomUUID();
  await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
  SELECT $1,community_id,user_id,'private source fixture','synthetic',now()+interval '1 day',now()+interval '25 hours','online','online','published','open','other' FROM users WHERE user_id=$2`,[eventId,session.user.user_id]);

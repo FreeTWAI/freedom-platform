@@ -23,7 +23,7 @@ export async function reviewEventOrganizer(pool:Pool,input:AdminCommand,id:strin
   requireCondition(body.decision==='revoke'?prior.state==='verified':prior.state==='pending',409,'claim_resolved','認領狀態已變更。');
   const state=body.decision==='verify'?'verified':body.decision==='reject'?'rejected':'revoked';
   const claim=(await q.query('UPDATE community_event_organizer_claims SET state=$2,version=version+1 WHERE claim_id=$1 RETURNING *',[id,state])).rows[0];
-  const share=(await q.query("SELECT * FROM shares WHERE kind='event' AND ref_id=$1 AND community_id=$2",[claim.event_id,claim.community_id])).rows[0];
+  const share=(await q.query("SELECT * FROM shares WHERE kind='event' AND ref_id=$1 AND community_id=$2 FOR UPDATE",[claim.event_id,claim.community_id])).rows[0];
   if(share&&state==='verified')await appendCredit(q,{community_id:claim.community_id,share_id:share.share_id,user_id:claim.user_id,role:'organizer',basis:'claim_verified',source_ref:`event-claim:${id}`,actor_user_id:claim.user_id});
   if(state==='revoked'){const rows=(await q.query("SELECT event_id FROM share_credit_events WHERE source_ref=$1 AND units=1",[`event-claim:${id}`])).rows;for(const row of rows)await reverseCredit(q,row.event_id);}
   await audit(q,input.admin,'event_organizer_claim','event_organizer_claim',id,body.reason,{state:prior.state},{state});return {claim_id:id,state,version:claim.version};

@@ -1,4 +1,4 @@
-import {creditEventRegistration} from '../shares/event-ledger.js';
+import {creditEventRegistrations} from '../shares/credit.js';
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -43,13 +43,18 @@ export async function ensureGuestCapability(q:PoolClient,id:string,body:{email:s
 export function eventGuestManagementLink(origin:string,id:string,token:string){return `${origin}/events/${id}#participation=${token}`;}
 export async function markGuestCapabilityProviderAccepted(q:Query,id:string,email:string){await q.query("UPDATE community_event_guest_capabilities SET provider_status='provider_accepted' WHERE event_id=$1 AND email=$2",[id,email.trim().toLowerCase()]);}
 export async function resolveGuestParticipation(q:Query,id:string,token:string):Promise<{event:any;email:string;going:boolean}>{
+  if(!('release' in q))return transaction(q,client=>resolveGuestParticipation(client,id,token));
   requireCondition(/^[A-Za-z0-9_-]{43}$/.test(token),404,'not_found','參與管理連結無效。');
   const cap=(await q.query('SELECT email,name,referral_code FROM community_event_guest_capabilities WHERE event_id=$1 AND token_hash=$2',[id,createHash('sha256').update(token).digest('hex')])).rows[0];
   requireCondition(cap,404,'not_found','參與管理連結無效。');
-  const event=await eventRow(q,id),identity={guest_email:cap.email},rsvp=await ownRsvp(q,id,identity);
+  const event=await eventRow(q,id,true),identity={guest_email:cap.email},rsvp=await ownRsvp(q,id,identity);
   await guestLegal(q,event,cap,Boolean(rsvp?.confirmed_at||rsvp?.email_sent_at||await ownEntry(q,id,identity)));
   await q.query('UPDATE community_event_guest_capabilities SET verified_at=COALESCE(verified_at,now()) WHERE event_id=$1 AND email=$2',[id,cap.email]);
   const going=event.state==='published'&&rsvp?.state==='going';
+  if(going){
+    await q.query("UPDATE community_event_guest_rsvps SET confirmed_at=COALESCE(confirmed_at,now()) WHERE event_id=$1 AND email=$2 AND state='going'",[id,cap.email]);
+    await creditEventRegistrations(q,id);
+  }
   return {event:going?event:{...event,location:null,online_url:null},email:cap.email,going};
 }
 export async function resolveGuestParticipationByEmail(q:Query,id:string,email:string):Promise<{event:any;email:string;going:boolean}>{
@@ -147,7 +152,7 @@ if(identity.member_ref){
     confirmed_at=EXCLUDED.confirmed_at,registration_attempt_id=EXCLUDED.registration_attempt_id,credited_invitation_id=NULL,referred_by_user_id=COALESCE(community_event_guest_rsvps.referred_by_user_id,EXCLUDED.referred_by_user_id)`,
     [id,identity.guest_email,cap.name,now,referrer]);
 }
-await creditEventRegistration(q,id,identity);
+await creditEventRegistrations(q,id);
 await markEventParticipationGoing(q,id,identity);await bump(q,id);await reconcileEventWaitlist(q,id,now);
 return deadline;
 }

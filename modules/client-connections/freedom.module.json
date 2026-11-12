@@ -44,7 +44,8 @@
     "apps/portal-web/src/modules/AgentHandoff.tsx",
     "apps/portal-web/src/modules/AgentTokens.tsx",
     "apps/portal-web/src/modules/AgentTokens.css",
-    "tests/e2e/agent-door.spec.ts"
+    "tests/e2e/agent-door.spec.ts",
+    "tests/runtime/security-review-agent.test.ts"
   ],
   "public_exports": [
     "modules/client-connections/service.ts"

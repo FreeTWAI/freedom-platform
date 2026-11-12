@@ -62,6 +62,18 @@ export const agentContract = {
       "route": "/api/v1/shares/:share_id/star",
       "title": "收藏分享（未開放）",
       "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/admin/api/shares/:id/restore",
+      "title": "恢復分享（限管理員）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/admin/api/shares/:id/confirm",
+      "title": "確認檢舉（限管理員）",
+      "agent_scope": null
     }
   ],
   "openapi": "3.1.1",

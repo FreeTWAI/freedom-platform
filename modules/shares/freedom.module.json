@@ -13,13 +13,17 @@
     "tests/e2e/shares.spec.ts",
     "scripts/backfill-shares.ts",
     "tests/runtime/event-import.test.ts",
-    "tests/fixtures/event-import/**"
+    "tests/runtime/event-share-security.test.ts",
+    "tests/fixtures/event-import/**",
+    "tests/runtime/security-review-shares.test.ts",
+    "tests/runtime/security-review-sanitizer.test.ts"
   ],
   "public_exports": [
     "modules/shares/service.ts",
     "modules/shares/types.ts",
     "modules/shares/event-ledger.ts",
-    "modules/shares/credit.ts"
+    "modules/shares/credit.ts",
+    "modules/shares/moderation.ts"
   ],
   "dependencies": [
     "command-core",
@@ -30,7 +34,8 @@
     "work",
     "assets",
     "skill-submissions",
-    "client-connections"
+    "client-connections",
+    "application-composition"
   ],
   "contract_families": [],
   "client_profiles": [

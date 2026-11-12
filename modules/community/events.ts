@@ -1,5 +1,6 @@
 import {exposeEvent} from './event-exposure.js';
-import {publishEventShare,creditEventRegistration} from '../shares/event-ledger.js';
+import {publishEventShare} from '../shares/event-ledger.js';
+import {creditEventRegistrations} from '../shares/credit.js';
 import {normalizeShareUrl} from '../../packages/shared/share-url.js';
 import {eventPrizePhotos,lockRemovedEventPrizePhotos,detachEventPrizePhotos,requireEventPrizePhotoMember} from './event-prize-photos.js';
 import {eventVideoStorageMode,type EventVideoAssetService} from '../assets/event-video.js';
@@ -321,7 +322,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
     // Record that result even if only the hold expires, retaining the final event-start boundary below.
     const confirmed=await q.query("UPDATE community_event_guest_rsvps SET state='going',email_sent_at=now() WHERE event_id=$1 AND email=$2 AND registration_attempt_id=$3 AND state IN ('pending','going')",[id,email,registration.attempt_id]);
     requireCondition(confirmed.rowCount===1,409,'event_closed','報名狀態已變更，請重新確認本人狀態。');
-    await creditEventRegistration(q,id,{guest_email:email});
+    await creditEventRegistrations(q,id);
     if(registration.capability)await markGuestCapabilityProviderAccepted(q,id,email);
     if(registration.invitation_id){
       const accepted=await q.query(`UPDATE community_event_waitlist SET status='accepted',aggregate_version=aggregate_version+1
@@ -597,7 +598,7 @@ async function applyReview(q:PoolClient,row:any,decision:'approve'|'reject',reas
     title:decision==='approve'?'活動已核准':'活動未通過審核',
     body:decision==='approve'?`${reviewer.name} 已核准「${row.title}」，現在可公開報名。`:`${reviewer.name} 未核准「${row.title}」：${reason}`,
     action:{tab:'events',resource_id:null}});
-  if(decision==='approve'){await publishEventShare(q,updated);await q.query("UPDATE shares SET state='published' WHERE kind='event' AND ref_id=$1 AND state='hidden'",[row.event_id]);}
+  if(decision==='approve')await publishEventShare(q,updated);
   return updated;
 }
 
@@ -678,7 +679,7 @@ export async function setRsvp(pool:Pool,input:Command,id:string,participationEna
         aggregate_version=community_event_rsvps.aggregate_version+1,updated_at=now()
       RETURNING rsvp_id,aggregate_version`,[randomUUID(),id,input.actor.user_id,body.going?'going':'cancelled',referrer===input.actor.user_id?null:referrer])).rows[0];
     await journal(q,input.actor,'community_event_rsvp',rsvp.rsvp_id,rsvp.aggregate_version,body.going?'rsvp':'withdraw_rsvp',{event_id:id});
-    if(body.going)await creditEventRegistration(q,id,{member_ref:input.actor.user_id});
+    if(body.going)await creditEventRegistrations(q,id);
     if(body.going){await markEventParticipationGoing(q,id,{member_ref:input.actor.user_id});if(participationEnabled)await reconcileEventWaitlist(q,id);}
     else await cancelEventParticipation(q,id,{member_ref:input.actor.user_id},new Date(),{reconcile:participationEnabled});
     return eventView(q,input.actor,await scopedEvent(q,input.actor,id));

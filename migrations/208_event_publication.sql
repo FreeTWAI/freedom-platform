@@ -12,10 +12,13 @@ CREATE INDEX community_events_duplicate ON community_events(community_id,lower(t
 -- Share moderation owns the threshold. Return the event to the retained human queue.
 CREATE FUNCTION moderate_shared_event() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.kind='event' AND NEW.state IN ('hidden','retracted') AND OLD.state='published' THEN
-    UPDATE community_events SET state=CASE WHEN NEW.state='hidden' THEN 'pending' ELSE 'cancelled' END,
+  IF NEW.kind='event' AND NEW.state='hidden' AND OLD.state='published' THEN
+    UPDATE community_events SET state='pending',
       aggregate_version=aggregate_version+1,updated_at=now()
       WHERE event_id=NEW.ref_id AND community_id=NEW.community_id AND state='published';
+  ELSIF NEW.kind='event' AND OLD.state='hidden' AND NEW.state IN ('published','retracted') THEN
+    UPDATE community_events SET state='published',aggregate_version=aggregate_version+1,updated_at=now()
+      WHERE event_id=NEW.ref_id AND community_id=NEW.community_id AND state='pending';
   END IF;
   RETURN NEW;
 END $$;
