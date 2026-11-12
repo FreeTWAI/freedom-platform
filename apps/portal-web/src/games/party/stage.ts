@@ -1,6 +1,6 @@
 import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,DirectionalLight,Group,HemisphereLight,Mesh,MeshBasicMaterial,MeshToonMaterial,MeshStandardMaterial,NearestFilter,NoToneMapping,ACESFilmicToneMapping,RepeatWrapping,OrthographicCamera,PCFShadowMap,PerspectiveCamera,PlaneGeometry,Raycaster,RedFormat,Scene,SphereGeometry,SRGBColorSpace,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
-import {bakeRigidGroup} from '../stage-batch';
+import {bakeRigidGroup,indexExactAttributes} from '../stage-batch';
 import {createTofuOpaqueBatch} from './tofu-batch';
 import {tofuFrontLayer,holidayFrontAnchor} from './light-party';
 import {partyViewport,partyBufferSize,withPartyCaptureView} from './viewport';
@@ -9,6 +9,17 @@ import {chairJump,chairWave,holidayOpen,holidayTargets,tofuAxis,tofuPosition,typ
 
 export type PartyStage={update:(s:PartyRun,motion:boolean)=>void;capture:()=>string;pick:(x:number,y:number)=>number|null;anchors:()=>{hole:number;x:number;y:number}[];stats:()=>{calls:number;triangles:number;geometries:number;textures:number};dispose:()=>void};
 const ORIGINAL_PALETTE={ink:'#45433b',cream:'#fff0c9',sage:'#74ae98',leaf:'#397c5e',peach:'#e99773',gold:'#f0bb53',lilac:'#b6a0c8',navy:'#627799',wood:'#c59663'};
+
+/** Reuse only bit-identical position/normal/UV tuples, never weld by distance.
+ * Tofu uses this geometry only with our built-in standard/basic shaders and
+ * Three's default shadow shaders: no morph targets, skinning or gl_VertexID.
+ * Triangle order and all attribute bits remain the authored rounded surface.
+ */
+export function partyRoundedGeometry(game:PartyGameId){
+  const geometry=new RoundedBoxGeometry(1,1,1,3,.16);
+  if(game==='tofu')indexExactAttributes(geometry);
+  return geometry;
+}
 
 /** Extend depth, not the authored XY composition, when a full-viewport
  * orthographic window reaches below the original near plane. Scratch vectors
@@ -63,7 +74,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     scene.add(new HemisphereLight(game==='chair'?'#c9edff':'#fff9ed',game==='chair'?'#273759':'#a7a28e',1.1));key.position.set(-5,10,7);key.castShadow=true;key.shadow.mapSize.set(512,512);Object.assign(key.shadow.camera,{left:-8,right:8,top:9,bottom:-15,near:.5,far:30});key.shadow.normalBias=.04;scene.add(key);
     const gradient=new DataTexture(new Uint8Array([105,190,255]),3,1,RedFormat);gradient.minFilter=NearestFilter;gradient.magFilter=NearestFilter;gradient.needsUpdate=true;textures.add(gradient);
     const geo=<T extends BufferGeometry>(g:T):T=>{geometries.add(g);return g;};
-    const round=geo(new RoundedBoxGeometry(1,1,1,3,.16)),box=geo(new BoxGeometry(1,1,1)),sphere=geo(new SphereGeometry(1,20,14)),cylinder=geo(new CylinderGeometry(1,1,1,24)),torus=geo(new TorusGeometry(1,.075,8,32)),plane=geo(new PlaneGeometry(1,1));
+    const round=geo(partyRoundedGeometry(game)),box=geo(new BoxGeometry(1,1,1)),sphere=geo(new SphereGeometry(1,20,14)),cylinder=geo(new CylinderGeometry(1,1,1,24)),torus=geo(new TorusGeometry(1,.075,8,32)),plane=geo(new PlaneGeometry(1,1));
     const palette=new Map<string,MeshToonMaterial|MeshStandardMaterial>();
     function mat(color:string){let m=palette.get(color);if(!m){m=game==='holiday'?new MeshToonMaterial({color,gradientMap:gradient}):new MeshStandardMaterial({color,roughness:game==='chair'?.48:.94,metalness:game==='chair'?.22:0,emissive:game==='chair'&&(color===C.sage||color===C.gold)?color:'#000000',emissiveIntensity:.45});materials.add(m);palette.set(color,m);}return m;}
     function mesh(p:Group,g:BufferGeometry,c:string,x:number,y:number,z:number,sx:number,sy=sx,sz=sx){const m=new Mesh(g,mat(c));m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=true;m.receiveShadow=true;p.add(m);return m;}

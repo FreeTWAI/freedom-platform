@@ -2172,3 +2172,51 @@ test('PT-tofu-profile: one-pixel diagnostic preserves GL ownership and rejects i
   for(const name of Object.keys(methods)){assert.equal(Object.hasOwn(gl,name),false);assert.equal(gl[name],methods[name]);}
  }
 });
+
+test('PT-tofu-perf: rounded vertex reuse preserves every ordered triangle attribute bit',async()=>{
+ const {partyRoundedGeometry}=await import('../../apps/portal-web/src/games/party/stage.js');
+ const {Matrix4,Vector3,Quaternion,Euler}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+ const original=partyRoundedGeometry('chair'),indexed=partyRoundedGeometry('tofu'),holiday=partyRoundedGeometry('holiday');
+ assert.equal(original.index,null);assert.equal(holiday.index,null);
+ assert.equal(original.getAttribute('position').count,1764);assert.equal(indexed.getAttribute('position').count,380);assert.equal(indexed.index!.count,1764);
+ assert.deepEqual(indexed.groups,original.groups);assert.deepEqual(indexed.drawRange,original.drawRange);assert.deepEqual(indexed.morphAttributes,{});
+ const compare=(a:typeof original,b:typeof indexed)=>{
+  const expanded=b.toNonIndexed();
+  assert.deepEqual(Object.keys(expanded.attributes),Object.keys(a.attributes));
+  for(const name of Object.keys(a.attributes)){
+   const before=a.getAttribute(name),after=expanded.getAttribute(name);
+   assert.equal(after.itemSize,before.itemSize);assert.equal(after.normalized,before.normalized);assert.equal(after.count,before.count);
+   assert.deepEqual(Buffer.from(after.array.buffer,after.array.byteOffset,after.array.byteLength),Buffer.from(before.array.buffer,before.array.byteOffset,before.array.byteLength),`${name} raw bits and triangle order`);
+  }
+  a.computeBoundingBox();b.computeBoundingBox();a.computeBoundingSphere();b.computeBoundingSphere();
+  assert.deepEqual(b.boundingBox,a.boundingBox);assert.deepEqual(b.boundingSphere,a.boundingSphere);expanded.dispose();
+ };
+ compare(original,indexed);
+ // These are the same local bake operations used by the instanced tofu pieces:
+ // non-uniform body/base/leaf scales and rotation, not a tolerance-based oracle.
+ for(const scale of [[1,.94,1],[1.01,.12,1.01],[.01925,.1485,.0165]]){
+  const matrix=new Matrix4().compose(new Vector3(.31,.54,-.22),new Quaternion().setFromEuler(new Euler(0,.3,-.65)),new Vector3(...scale));
+  const a=original.clone().applyMatrix4(matrix),b=indexed.clone().applyMatrix4(matrix);compare(a,b);a.dispose();b.dispose();
+ }
+ original.dispose();indexed.dispose();holiday.dispose();
+});
+
+test('PT-tofu-perf: indexed pieces retain instance transforms, shadows and transparent faces',async()=>{
+ const {partyRoundedGeometry}=await import('../../apps/portal-web/src/games/party/stage.js');
+ const {createTofuOpaqueBatch}=await import('../../apps/portal-web/src/games/party/tofu-batch.js');
+ const T=await import('three');
+ const geometry=partyRoundedGeometry('tofu'),material=new T.MeshStandardMaterial({roughness:.94}),faceMaterial=new T.MeshBasicMaterial({transparent:true}),faceGeometry=new T.PlaneGeometry();
+ const parent=new T.Group(),copies=Array.from({length:3},(_,i)=>{
+  const root=new T.Group();root.position.set(i*.2,.52+i*.4,-i*.1);root.scale.set(3-i*.3,.4,3-i*.2);root.rotation.y=i*.3;
+  const body=new T.Mesh(geometry,material);body.scale.set(1,.94,1);body.castShadow=true;body.receiveShadow=true;root.add(body);root.add(new T.Mesh(faceGeometry,faceMaterial));parent.add(root);return root;
+ });
+ const batch=createTofuOpaqueBatch(parent,copies);assert.equal(batch.meshes.length,1);const mesh=batch.meshes[0];
+ assert.equal(mesh.geometry.index!.count,1764);assert.equal(mesh.geometry.getAttribute('position').count,380);assert.equal(mesh.material,material);assert.equal(mesh.castShadow,true);assert.equal(mesh.receiveShadow,true);
+ for(const count of [1,3,0,2]){
+  copies.forEach((copy:any,i:number)=>{copy.visible=i<count;});batch.update();assert.equal(mesh.count,count);assert.equal(mesh.visible,count>0);
+  for(let i=0;i<count;i++){const matrix=new T.Matrix4();mesh.getMatrixAt(i,matrix);copies[i].updateMatrix();assert.deepEqual(matrix.elements,Array.from(new Float32Array(copies[i].matrix.elements)));}
+ }
+ assert.ok(copies.every((copy:any)=>copy.children.length===1&&copy.children[0].material===faceMaterial));
+ let ownedDisposed=0;mesh.geometry.addEventListener('dispose',()=>ownedDisposed++);batch.dispose();batch.dispose();assert.equal(ownedDisposed,1);assert.equal(mesh.parent,null);
+ geometry.dispose();material.dispose();faceMaterial.dispose();faceGeometry.dispose();
+});
