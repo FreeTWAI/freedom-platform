@@ -1,4 +1,4 @@
-import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,DirectionalLight,Group,HemisphereLight,Mesh,MeshBasicMaterial,MeshToonMaterial,MeshStandardMaterial,NearestFilter,NoToneMapping,ACESFilmicToneMapping,RepeatWrapping,OrthographicCamera,PCFShadowMap,PerspectiveCamera,PlaneGeometry,Raycaster,RedFormat,Scene,SphereGeometry,SRGBColorSpace,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
+import {BoxGeometry,CanvasTexture,Color,CylinderGeometry,DataTexture,DirectionalLight,Group,HemisphereLight,Mesh,MeshBasicMaterial,MeshToonMaterial,MeshStandardMaterial,NearestFilter,NoBlending,NoToneMapping,ACESFilmicToneMapping,RepeatWrapping,OrthographicCamera,PCFShadowMap,PerspectiveCamera,PlaneGeometry,Raycaster,RedFormat,Scene,SphereGeometry,SRGBColorSpace,TorusGeometry,Vector2,Vector3,WebGLRenderer,type BufferGeometry,type Material,type Texture} from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {bakeRigidGroup,indexExactAttributes} from '../stage-batch';
 import {createTofuOpaqueBatch} from './tofu-batch';
@@ -19,6 +19,27 @@ export function partyRoundedGeometry(game:PartyGameId){
   const geometry=new RoundedBoxGeometry(1,1,1,3,.16);
   if(game==='tofu')indexExactAttributes(geometry);
   return geometry;
+}
+
+/** Keep transparent sorting/depth unchanged; omit destination blending only for
+ * a locally generated, immutable canvas proven fully opaque at initialization.
+ * Unexpected canvas/readback shapes keep the original blend path.
+ */
+export function partyDecalMaterial(texture:Texture,opaqueCandidate=false){
+  const material=new MeshBasicMaterial({map:texture,transparent:true,toneMapped:false});
+  if(opaqueCandidate){
+    try{
+      const canvas=texture.image as HTMLCanvasElement;
+      if(canvas.width>0&&canvas.height>0&&canvas.width*canvas.height<=1024*512){
+        const pixels=canvas.getContext('2d')?.getImageData(0,0,canvas.width,canvas.height).data;
+        if(pixels?.length===canvas.width*canvas.height*4){
+          let opaque=true;for(let i=3;i<pixels.length;i+=4)if(pixels[i]!==255){opaque=false;break;}
+          if(opaque)material.blending=NoBlending;
+        }
+      }
+    }catch{/* Preserve the original material when opacity cannot be established. */}
+  }
+  return material;
 }
 
 /** Extend depth, not the authored XY composition, when a full-viewport
@@ -84,9 +105,9 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
     const beam=(p:Group,c:string,x:number,y:number,z:number,sx:number,sy:number,sz:number)=>mesh(p,box,c,x,y,z,sx,sy,sz);
     const group=(p:Group,x=0,y=0,z=0)=>{const g=new Group();g.position.set(x,y,z);p.add(g);return g;};
     function canvasTexture(draw:(c:CanvasRenderingContext2D)=>void,w=256,h=256){const el=document.createElement('canvas');el.width=w;el.height=h;const ctx=el.getContext('2d');if(!ctx)throw Error('無法建立派對場景。');draw(ctx);const t=new CanvasTexture(el);t.colorSpace=SRGBColorSpace;textures.add(t);return t;}
-    function decal(p:Group,t:Texture,x:number,y:number,z:number,w:number,h:number){const m=new MeshBasicMaterial({map:t,transparent:true,toneMapped:false});materials.add(m);const o=new Mesh(plane,m);o.position.set(x,y,z);o.scale.set(w,h,1);p.add(o);return o;}
+    function decal(p:Group,t:Texture,x:number,y:number,z:number,w:number,h:number,opaqueCandidate=false){const m=partyDecalMaterial(t,opaqueCandidate);materials.add(m);const o=new Mesh(plane,m);o.position.set(x,y,z);o.scale.set(w,h,1);p.add(o);return o;}
     const face=canvasTexture(ctx=>{ctx.strokeStyle=C.ink;ctx.fillStyle=C.ink;ctx.lineCap='round';ctx.lineWidth=9;for(const x of [82,174]){ctx.beginPath();ctx.ellipse(x,107,8,12,0,0,Math.PI*2);ctx.fill();}ctx.beginPath();ctx.arc(128,126,23,.15,Math.PI-.15);ctx.stroke();ctx.fillStyle='#d98c7d';ctx.beginPath();ctx.ellipse(57,132,14,7,0,0,7);ctx.ellipse(199,132,14,7,0,0,7);ctx.fill();});
-    function sign(p:Group,title:string,sub:string,x:number,y:number,z:number,w=2.6){const t=canvasTexture(ctx=>{ctx.fillStyle=C.leaf;ctx.fillRect(0,0,512,152);ctx.fillStyle=C.cream;ctx.font='800 43px system-ui';ctx.textAlign='center';ctx.fillText(title,256,66);ctx.font='500 22px system-ui';ctx.fillText(sub,256,112);},512,152);rb(p,C.wood,x,y,z-.06,w+.16,w*.31+.16,.14);return decal(p,t,x,y,z+.03,w,w*152/512);}
+    function sign(p:Group,title:string,sub:string,x:number,y:number,z:number,w=2.6){const t=canvasTexture(ctx=>{ctx.fillStyle=C.leaf;ctx.fillRect(0,0,512,152);ctx.fillStyle=C.cream;ctx.font='800 43px system-ui';ctx.textAlign='center';ctx.fillText(title,256,66);ctx.font='500 22px system-ui';ctx.fillText(sub,256,112);},512,152);rb(p,C.wood,x,y,z-.06,w+.16,w*.31+.16,.14);return decal(p,t,x,y,z+.03,w,w*152/512,game==='tofu');}
     function leaf(p:Group,x:number,y:number,z:number,scale=1){const l=ball(p,C.leaf,x,y,z,.14*scale,.32*scale,.07*scale);l.rotation.z=-.65;rb(p,C.gold,x-.02,y-.1*scale,z,.035*scale,.27*scale,.03*scale);}
     function plant(p:Group,x:number,z:number){const g=group(p,x,0,z);mesh(g,cylinder,C.peach,0,.25,0,.3,.5,.3);for(let i=0;i<3;i++){const a=i*2.2;const l=ball(g,i%2?C.sage:C.leaf,Math.cos(a)*.23,.7+i*.14,Math.sin(a)*.23,.17,.5,.13);l.rotation.z=(i-1)*.45;}bakeRigidGroup(g,geometries);return g;}
     // Three authored sets, not a single recoloured room. Textures are generated
@@ -172,7 +193,7 @@ export function createPartyStage(host:HTMLElement,game:PartyGameId,onLost:()=>vo
         return {hazard,cart,meeting,ticket};
       });
     }else if(game==='tofu'){
-      beam(scenery,C.wood,0,2.3,-5.1,11,4.6,.18);decal(scenery,panorama,0,7,-4.98,64,20);
+      beam(scenery,C.wood,0,2.3,-5.1,11,4.6,.18);decal(scenery,panorama,0,7,-4.98,64,20,true);
       // Shoji posts continue upward into the portrait frame; layered mountains
       // remain visible behind the actual ceramic/wood set.
       for(const side of [-1,1]){beam(scenery,C.wood,side*6.8,5,-5.05,.14,10,.14);beam(scenery,C.wood,side*11,5,-5.05,.14,10,.14);}

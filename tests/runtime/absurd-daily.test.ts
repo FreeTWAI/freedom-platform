@@ -2220,3 +2220,30 @@ test('PT-tofu-perf: indexed pieces retain instance transforms, shadows and trans
  let ownedDisposed=0;mesh.geometry.addEventListener('dispose',()=>ownedDisposed++);batch.dispose();batch.dispose();assert.equal(ownedDisposed,1);assert.equal(mesh.parent,null);
  geometry.dispose();material.dispose();faceMaterial.dispose();faceGeometry.dispose();
 });
+
+test('PT-tofu-perf: opaque canvas blend bypass retains transparent queue and fails closed',async()=>{
+ const {partyDecalMaterial}=await import('../../apps/portal-web/src/games/party/stage.js');
+ const T=await import('three');
+ const {WebGLRenderList}=await import(new URL('../../node_modules/three/src/renderers/webgl/WebGLRenderLists.js',import.meta.url).href);
+ for(const mode of ['opaque','partial','empty','wrong-length','oversize','throw','not-candidate']){
+  let reads=0;const pixels=new Uint8ClampedArray([3,72,131,255,255,0,77,mode==='partial'?254:255]);
+  const canvas={width:mode==='oversize'?1025:mode==='empty'?0:2,height:mode==='oversize'?512:1,getContext:()=>({getImageData:()=>{reads++;if(mode==='throw')throw Error('unreadable');return {data:mode==='wrong-length'?pixels.subarray(0,4):pixels};}})};
+  const texture=new T.Texture(canvas as any),material=partyDecalMaterial(texture,mode!=='not-candidate');
+  assert.equal(material.blending,mode==='opaque'?T.NoBlending:T.NormalBlending);
+  assert.equal(material.transparent,true);assert.equal(material.depthWrite,true);assert.equal(material.depthTest,true);assert.equal(material.depthFunc,T.LessEqualDepth);
+  assert.equal(material.opacity,1);assert.equal(material.toneMapped,false);assert.equal(material.premultipliedAlpha,false);assert.equal(material.alphaToCoverage,false);assert.equal(material.map,texture);
+  assert.equal(reads,['empty','oversize','not-candidate'].includes(mode)?0:1);
+  const plane=new T.PlaneGeometry(),object=new T.Mesh(plane,material),face=new T.Mesh(plane,new T.MeshBasicMaterial({transparent:true}));
+  const list=new WebGLRenderList(),camera=new T.PerspectiveCamera();
+  for(const mesh of [object,face])list.push(mesh,mesh.geometry,mesh.material,0,0,null,camera);
+  list.sort();assert.equal(list.opaque.length,0);assert.deepEqual(list.transparent.map((item:any)=>item.object),[object,face]);
+  // For alpha exactly one, both premultiplied/non-premultiplied source-over
+  // replace the destination. No tolerance or alpha-threshold approximation.
+  if(mode==='opaque')for(let c=0;c<3;c++)for(const destination of [0,.37,1])assert.equal(pixels[c]/255*1+destination*(1-1),pixels[c]/255);
+  material.dispose();face.material.dispose();plane.dispose();texture.dispose();
+ }
+ const source=readFileSync(new URL('../../apps/portal-web/src/games/party/stage.ts',import.meta.url),'utf8');
+ assert.match(source,/decal\(scenery,panorama,0,7,-4\.98,64,20,true\)/);
+ assert.match(source,/w\*152\/512,game==='tofu'\)/);
+ assert.match(source,/decal\(g,face,0,\.03,\.505,\.48,\.72\)/,'transparent face is not an opaque candidate');
+});
