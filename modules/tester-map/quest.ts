@@ -272,3 +272,60 @@ export const QUEST_PATHS: Record<TesterGroupId, readonly string[]> = {
 };
 
 export const QUEST_STEP_IDS: readonly string[] = QUEST_STAGES.flatMap(stage => stage.steps.map(step => step.id));
+
+/** Shortcuts share canonical steps and private progress, not new account state. */
+export const COMMERCE_TEST_PATHS: readonly {id: string; name: Localized; detail: Localized; href: string; steps: readonly string[]}[] = [
+  {
+    "id": "supplier",
+    "name": [
+      "供應商測試路線",
+      "Supplier test path",
+      "供給者のテスト順路",
+      "공급자 테스트 경로",
+      "Ruta de prueba del proveedor"
+    ],
+    "detail": [
+      "從供貨介紹開始，建立測試商品，再確認預留界線。",
+      "Read the supply guide, create a test product, then check reservation boundaries.",
+      "供給案内を読み、テスト商品を作り、予約の境界を確認します。",
+      "공급 안내를 읽고 테스트 상품을 만든 뒤 예약의 경계를 확인하세요.",
+      "Lee la guía de suministro, crea un producto de prueba y revisa los límites de las reservas."
+    ],
+    "href": "#supplier",
+    "steps": [
+      "market.offer",
+      "market.supply",
+      "market.orders"
+    ]
+  },
+  {
+    "id": "seller",
+    "name": [
+      "銷售者測試路線",
+      "Seller test path",
+      "販売者のテスト順路",
+      "판매자 테스트 경로",
+      "Ruta de prueba del vendedor"
+    ],
+    "detail": [
+      "從銷售介紹開始，預覽測試商店，再確認預留界線。",
+      "Read the sales guide, preview a test store, then check reservation boundaries.",
+      "販売案内を読み、テストショップをプレビューし、予約の境界を確認します。",
+      "판매 안내를 읽고 테스트 상점을 미리본 뒤 예약의 경계를 확인하세요.",
+      "Lee la guía de ventas, previsualiza una tienda de prueba y revisa los límites de las reservas."
+    ],
+    "href": "#retail",
+    "steps": [
+      "market.offer",
+      "market.store",
+      "market.orders"
+    ]
+  }
+];
+export const COMMERCE_TEST_NOTICE: Localized = [
+  "只用測試資料；不要發布、收款或建立真實訂單。路線共用原有步驟與私人進度，不代表正式驗收。",
+  "Use test data only; do not publish, collect payment or create real orders. Paths share existing steps and private progress, not official acceptance.",
+  "テストデータのみ使用し、公開・集金・実際の注文はしないでください。既存の手順と非公開の進捗を共有し、正式な検収ではありません。",
+  "테스트 데이터만 사용하고 게시·수금·실제 주문은 하지 마세요. 기존 단계와 비공개 진행 상황을 공유하며 공식 검수가 아닙니다.",
+  "Usa solo datos de prueba; no publiques, cobres ni crees pedidos reales. Las rutas comparten pasos y progreso privado; no son una aceptación oficial."
+];

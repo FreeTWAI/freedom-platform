@@ -4,7 +4,7 @@ import {TesterAccountContext,TesterAccountPanel,TesterStepFeedback,TesterReport}
 import {useContext, useEffect, useRef, useState} from 'react';
 import {
   ISSUES_URL, REDESIGN_BATCH_PR, TEST_WEEK, TESTER_AREAS, TESTER_COVERAGE_UPDATED_AT, TESTER_FLAGS_OBSERVED_AT,
-  TESTER_GROUP_IDS, TESTER_GROUPS, TESTER_GUILD, COVERAGE_STATUSES, QUEST_PATHS, QUEST_STAGES,
+  TESTER_GROUP_IDS, TESTER_GROUPS, TESTER_GUILD, COVERAGE_STATUSES, QUEST_PATHS, QUEST_STAGES, COMMERCE_TEST_PATHS, COMMERCE_TEST_NOTICE,
   areasForGroup, coverageOf, coverageSummary, isDefaultOff, overallProgress,
   stageProgress, testerMedals, toggleStep,
   type CoverageStatus, type Localized, type QuestStage, type QuestStep, type TesterFeature, type TesterGroupId, type TesterProgress,
@@ -150,6 +150,25 @@ export function TesterMap({client,reportClient=client,onLogin}: {client?:PortalC
       <h2 id="tester-quest-title">{t('testerMap.quest')}</h2>
       <p>{t('testerMap.questIntro')}</p>
       <TesterAccountPanel account={account} client={client}/>{reportClient&&<TesterReport client={reportClient}/>}
+      <section className="card stack" aria-label={pick(QUEST_STAGES.find(stage => stage.id === 'market')!.name)}>
+        <p className="field-hint">{pick(COMMERCE_TEST_NOTICE)}</p>
+        {COMMERCE_TEST_PATHS.map(route => <div key={route.id} data-commerce-test-path={route.id}>
+          <h3>{pick(route.name)}</h3><p>{pick(route.detail)}</p>
+          <a className="btn btn-ghost btn-small" href={route.href}>{t('testerMap.stepOpen')}</a>
+          <ol>{route.steps.map(id => {
+            const stage = QUEST_STAGES.find(value => value.steps.some(step => step.id === id))!;
+            const step = stage.steps.find(value => value.id === id)!;
+            return <li key={id}><button type="button" className="btn btn-ghost btn-small" onClick={() => {
+              setOpenStages(value => new Set([...value, stage.id]));
+              requestAnimationFrame(() => {
+                const target = document.querySelector<HTMLElement>(`[data-step-id="${id}"]`);
+                target?.scrollIntoView({block: 'start'});
+                target?.querySelector<HTMLElement>('a,button')?.focus({preventScroll: true});
+              });
+            }}>{pick(step.title)}{progress.done.includes(id) ? ` · ${t('testerMap.stepDone')}` : ''}</button></li>;
+          })}</ol>
+        </div>)}
+      </section>
       <fieldset className="card tester-quest-groups">
         <legend>{t('testerMap.chooseGroup')}</legend>
         <label className="tester-quest-group"><input type="radio" name="tester-group" disabled={account.busy} checked={progress.group === null} onChange={() => chooseGroup(null)}/><span><strong>{t('testerMap.noGroup')}</strong></span></label>

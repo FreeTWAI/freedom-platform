@@ -147,3 +147,23 @@ test('TESTER-005 the feature-search words in the quest find their pages in all f
     }
   }
 });
+
+test('TESTER-006 commerce paths open canonical steps and share private progress', async({page}) => {
+  await page.goto('/#tester-map');
+  const supplier = page.locator('[data-commerce-test-path="supplier"]');
+  const seller = page.locator('[data-commerce-test-path="seller"]');
+  await expect(supplier.getByRole('link')).toHaveAttribute('href', '#supplier');
+  await expect(seller.getByRole('link')).toHaveAttribute('href', '#retail');
+  await supplier.getByRole('button', {name: '供貨與販售入口', exact: true}).click();
+  const step = page.locator('[data-step-id="market.offer"]');
+  await expect(page.locator('[data-stage-id="market"]')).toHaveJSProperty('open', true);
+  await expect(step.getByRole('link')).toBeFocused();
+  await step.getByRole('button', {name: '完成這一步', exact: true}).click();
+  for (const route of [supplier, seller]) await expect(route.getByRole('button', {name: /供貨與販售入口/})).toContainText('完成');
+  await page.reload();
+  await expect(seller.getByRole('button', {name: /供貨與販售入口/})).toContainText('完成');
+  await seller.getByRole('button', {name: '預覽測試商店', exact: true}).click();
+  await expect(page.locator('[data-step-id="market.store"] a')).toBeFocused();
+  await page.setViewportSize({width:390,height:844});
+  expect(await noHorizontalOverflow(page)).toBe(true);
+});

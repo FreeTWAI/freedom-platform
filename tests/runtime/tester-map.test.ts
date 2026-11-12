@@ -7,7 +7,7 @@ import { interfaceMessages } from '../../apps/portal-web/src/interface-messages.
 import {
   COVERAGE_STATUSES, TESTER_AREAS, TESTER_COVERAGE, TESTER_FLAGS, TESTER_GROUP_IDS, TESTER_GUILD, TESTER_NON_FEATURE_SITE_FIELDS,
   areasForGroup, coverageSummary, isDefaultOff, validateTesterMap, type TesterArea,
-  FEATURE_SEARCH_EXAMPLES, QUEST_PATHS, QUEST_STAGES, QUEST_STEP_IDS, TESTER_PROGRESS_KEY, normalizeProgress, readTesterProgress, resetTesterProgress,
+  COMMERCE_TEST_PATHS, COMMERCE_TEST_NOTICE, FEATURE_SEARCH_EXAMPLES, QUEST_PATHS, QUEST_STAGES, QUEST_STEP_IDS, TESTER_PROGRESS_KEY, normalizeProgress, readTesterProgress, resetTesterProgress,
   stageProgress, testerMedals, toggleStep, writeTesterProgress, type TesterProgress,
 } from '../../modules/tester-map/index.js';
 
@@ -249,4 +249,19 @@ test('tester-map quest: store steps never ask for photo uploads while hosted_sto
   const market = QUEST_STAGES.find(stage => stage.id === 'market')!;
   for (const step of market.steps) for (let index = 0; index < 5; index++)
     for (const text of [step.task[index], step.check[index]]) assert.doesNotMatch(text, asksForUpload[index], `${step.id}[${index}]`);
+});
+
+test('tester-map: commerce paths reuse canonical steps without duplicate progress', () => {
+  assert.deepEqual(COMMERCE_TEST_PATHS.map(p => p.id), ['supplier', 'seller']);
+  assert.deepEqual(COMMERCE_TEST_PATHS.map(p => p.href), ['#supplier', '#retail']);
+  for (const path of COMMERCE_TEST_PATHS) {
+    assert.equal(new Set(path.steps).size, path.steps.length);
+    for (const id of path.steps) assert.ok(QUEST_STEP_IDS.includes(id));
+    for (const texts of [path.name, path.detail, COMMERCE_TEST_NOTICE]) {
+      assert.equal(texts.length, 5); assert.ok(texts.every(text => text.trim()));
+    }
+    assert.equal(path.steps.at(-1), 'market.orders');
+  }
+  assert.ok(COMMERCE_TEST_PATHS[0].steps.includes('market.supply'));
+  assert.ok(COMMERCE_TEST_PATHS[1].steps.includes('market.store'));
 });
