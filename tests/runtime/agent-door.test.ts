@@ -1,6 +1,6 @@
 import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomBytes} from 'node:crypto';
 import {Pool} from 'pg';
 import {createPool} from '../../packages/db/index.js';
 import {migrate} from '../../scripts/database.js';
@@ -397,4 +397,112 @@ test('event adapter keeps the approved request digest and exposes scoped share a
  const shared=await req(`/api/v1/events/${eventId}/share`,{token,body:{}});assert.equal(shared.status,200,JSON.stringify(shared.data));assert.match(shared.data.path,/^\/go\//);
  assert.equal((await req(`/api/v1/events/${eventId}/rsvp`,{token,body:{going:true}})).status,200);
  const restricted=await issue(session,['read']);assert.equal((await req(`/api/v1/events/${eventId}/share`,{token:restricted.access_token,body:{}})).status,403);
+});
+
+// Attacker-controlled Authorization must select exactly one credential lane.
+const legacyLanes = [
+ {name:'CLI read',path:'/client-api/v1/connection',prefix:'fw_read_',status:401,code:'client_token_invalid'},
+ {name:'shop machine',path:'/shop-api/v1/connection',prefix:'fw_shop_',status:401,code:'shop_key_invalid'},
+ {name:'skill upload key',path:'/agent-api/v1/skill-submissions',prefix:'fpk_',body:{},status:401,code:'upload_key_invalid'},
+ {name:'skill upload grant',path:`/agent-api/v1/skill-submissions/${randomUUID()}`,prefix:'fpg_',body:{},status:401,code:'upload_grant_invalid'},
+ {name:'journal key',path:'/agent-api/v1/journal-submissions',prefix:'fjp_',body:{},status:401,code:'journal_key_invalid'},
+ {name:'development key',path:'/development-agent/v1/proposals',prefix:'fpd_',body:{title:'Synthetic',summary:'Synthetic'},status:401,code:'development_key_required'},
+ {name:'bootstrap DPoP',path:'/execution-api/v1/bootstrap',prefix:'DPoP',body:{},status:503,code:'private_ai_product_unavailable'},
+ {name:'machine model DPoP',path:`/execution-api/v1/model-steps/${randomUUID()}`,prefix:'DPoP',status:503,code:'private_ai_product_unavailable'},
+ {name:'member model',path:'/api/v1/me/model-settings',prefix:'fw_shop_',status:503,code:'private_ai_product_unavailable'},
+ {name:'hosted order',path:`/api/v1/me/hosted-orders/${randomUUID()}`,prefix:'fw_shop_',status:401,code:'login_required'},
+] as const;
+const spellings=(token:string)=>[
+ ['bearer',`Bearer ${token}`,403],['scheme case',`bEaReR ${token}`,403],['spaces',`Bearer   ${token}`,403],
+ ['tab',`Bearer\t${token}`,401],['mixed whitespace',`Bearer \t ${token}`,401],
+ ['prefix case',`Bearer ${token.replace('fw_agent_','FW_AgEnT_')}`,401],
+ ['quoted token',`Bearer "${token}"`,401],['quoted header',`"Bearer ${token}"`,401],
+ ['comma first',`Bearer ${token}, Bearer other`,401],['comma last',`Basic other, Bearer ${token}`,401],
+ ['wrong scheme',`Basic ${token}`,401],['embedded',`opaque-${token}-suffix`,401],
+] as const;
+for(const lane of legacyLanes)test(`credential lanes: ${lane.name} keeps its own refusal and blocks every raw agent spelling`,async()=>{
+ const session=await ready(),issued=await issue(session),token=issued.access_token;
+ const legacyApp=createApp(pool,origin,'local',{shopKeyPolicy:'legacy-compatible',guildLaunchpadEnabled:true});
+ const send=(authorization:string)=>legacyApp.request(origin+lane.path,{
+  method:'body' in lane?'POST':'GET',headers:{Authorization:authorization,'Content-Type':'application/json','Idempotency-Key':randomUUID()},
+  ...('body' in lane?{body:JSON.stringify(lane.body)}:{}),
+ });
+ // A structurally correct but unknown legacy credential retains that lane's error.
+ const credential=lane.prefix==='DPoP'?`DPoP ${Buffer.from(randomUUID()).toString('base64url')}.e30.signature`:`Bearer ${lane.prefix}${randomBytes(32).toString('base64url')}`;
+ const own=await send(credential),ownBody=await own.json() as any;
+ assert.equal(own.status,lane.status,JSON.stringify(ownBody));assert.equal(ownBody.code,lane.code);
+ assert.equal(own.headers.get('X-Content-Type-Options'),'nosniff');
+ assert.match(own.headers.get('Content-Type')!,/^application\/(?:problem\+)?json/);
+ assert.equal(own.headers.get('Cache-Control'),['bootstrap DPoP','machine model DPoP','member model','hosted order'].includes(lane.name)?'private, no-store':'no-store');
+ for(const [name,authorization,status] of spellings(token)){
+  const response=await send(authorization),body=await response.json() as any;
+  assert.equal(response.status,status,`${lane.name}/${name}: ${JSON.stringify(body)}`);
+  assert.equal(body.code,status===403?'scope_required':'agent_token_invalid');
+  assert.equal(response.headers.get('Cache-Control'),'no-store');
+  assert.equal(response.headers.get('X-Content-Type-Options'),'nosniff');
+  assert.equal(response.headers.get('Content-Type'),'application/json');
+  assert.equal(response.headers.get('Referrer-Policy'),'no-referrer');
+  assert.ok(response.headers.get('Content-Security-Policy'));
+ }
+ const row=(await pool.query('SELECT failure_count FROM member_client_connections WHERE connection_id=$1',[issued.connection_id])).rows[0];
+ assert.equal(row.failure_count,3,'only the three well-formed agent refusals reach the agent journal');
+});
+
+test('legacy CLI reader independently excludes agent rows, including legacy-shaped stored hashes and encoded agent credentials',async()=>{
+ const {readClientResource}=await import('../../modules/client-connections/service.js');
+ const session=await ready(),issued=await issue(session),suffix=randomBytes(32).toString('base64url'),legacy='fw_read_'+suffix;
+ for(const credential of [issued.access_token,issued.access_token.replaceAll('_','%5F'),Buffer.from(issued.access_token).toString('base64'),JSON.stringify(issued.access_token)]){
+  await assert.rejects(readClientResource(pool,'Bearer '+credential,'connection'),(error:any)=>error.code==='client_token_invalid');
+ }
+ // This storage-level adversary exercises the SQL kind guard, independent of parsing.
+ await pool.query('UPDATE member_client_connections SET token_hash=$2 WHERE connection_id=$1',[issued.connection_id,tokenHash(legacy)]);
+ await assert.rejects(readClientResource(pool,'Bearer '+legacy,'connection'),(error:any)=>error.code==='client_token_invalid');
+ const connection=randomUUID();
+ await pool.query(`INSERT INTO member_client_connections(connection_id,user_id,community_id,client_name,kind,scope,token_hash)
+ SELECT $1,user_id,community_id,'Synthetic CLI','supplier','supplier:read',$2 FROM users WHERE user_id=$3`,[connection,tokenHash('fw_read_'+randomBytes(32).toString('base64url')),session.user.user_id]);
+ await pool.query('UPDATE member_client_connections SET token_hash=$2 WHERE connection_id=$1',[issued.connection_id,tokenHash(issued.access_token)]);
+ await pool.query('UPDATE member_client_connections SET token_hash=$2 WHERE connection_id=$1',[connection,tokenHash(legacy)]);
+ const response=await req('/client-api/v1/connection',{token:legacy});
+ assert.equal(response.status,200);assert.equal(response.data.kind,'supplier');assert.equal(response.data.connection_id,connection);
+ assert.equal(response.response.headers.get('Cache-Control'),'no-store');
+});
+
+test('non-agent Authorization is a strict no-op for every path, response and request body',async()=>{
+ const {Hono}=await import('hono');const {agentBoundary}=await import('../../apps/platform-api/src/agent-boundary.js');
+ const noDatabase=new Proxy({},{get(){assert.fail('unclaimed requests must not access the database');}}) as Pool;
+ const lane=new Hono<any>();
+ lane.use('*',agentBoundary(noDatabase,()=>{assert.fail('unclaimed requests must not request or set headers');}));
+ lane.all('*',async c=>new Response(await c.req.text(),{status:418,headers:{'Cache-Control':'private, no-store','Content-Type':'text/plain','X-Legacy':'unchanged'}}));
+ for(const path of ['/api/v1/events','/client-api/v1/connection','/execution-api/v1/bootstrap','/unknown']){
+  const encoded='fw%5Fagent%5F'+randomBytes(32).toString('base64url');
+  for(const authorization of [undefined,'',...legacyLanes.map(l=>`Bearer ${l.prefix}${randomBytes(32).toString('base64url')}`),'Basic '+Buffer.from('fw_agent_'+randomUUID()).toString('base64'),'Bearer '+encoded]){
+   const response=await lane.request(origin+path,{method:'POST',headers:authorization===undefined?{}:{Authorization:authorization},body:'untouched body'});
+   assert.equal(response.status,418);assert.equal(await response.text(),'untouched body');
+   assert.deepEqual(Object.fromEntries(response.headers),{'cache-control':'private, no-store','content-type':'text/plain','x-legacy':'unchanged'});
+  }
+ }
+});
+
+test('installed cookie-only private AI readers retain their credential rejection and private headers',async()=>{
+ const {createPrivateAiProductTransport}=await import('../../apps/platform-api/src/private-ai-product.js');
+ const {createLocalFixtureModelStepHost}=await import('../../modules/agent-execution/model-step-host.js');
+ const {FakeObjectStore}=await import('../../packages/asset-storage/fake-store.js');
+ const host=createLocalFixtureModelStepHost({environment:'local',origin,recover:async()=>{throw Error('unexpected recovery');},resolveCredential:async()=>{throw Error('unexpected credential read');}});
+ const port=await createPrivateAiProductTransport(pool,{origin,environment:'local',clientId:'boundary-lanes',host,store:new FakeObjectStore()});
+ const installed=createApp(pool,origin,'local',{privateAiProduct:port});
+ const session=await ready(),issued=await issue(session);
+ for(const path of ['/api/v1/me/model-settings','/api/v1/me/model-step-overview','/api/v1/me/execution-runs','/api/v1/me/credential-ingests']){
+  const own=await installed.request(origin+path,{headers:{Authorization:'Bearer fw_shop_'+randomBytes(32).toString('base64url')}});
+  assert.equal(own.status,403);assert.equal((await own.json() as any).code,'credential_kind_rejected');
+  assert.equal(own.headers.get('Cache-Control'),'private, no-store');
+  assert.equal(own.headers.get('Vary'),'Origin, Cookie, Authorization, DPoP');
+  assert.equal(own.headers.get('X-Content-Type-Options'),'nosniff');assert.equal(own.headers.get('Content-Type'),'application/json');
+  for(const [name,authorization,status] of spellings(issued.access_token)){
+   // Keep the token live so every family proves allowlist refusal, not suspension.
+   await pool.query('UPDATE member_client_connections SET failure_count=0,suspended_at=NULL WHERE connection_id=$1',[issued.connection_id]);
+   const response=await installed.request(origin+path,{headers:{Authorization:authorization}});
+   assert.equal(response.status,status,name);assert.equal((await response.json() as any).code,status===403?'scope_required':'agent_token_invalid');
+   assert.equal(response.headers.get('X-Content-Type-Options'),'nosniff');
+  }
+ }
 });
