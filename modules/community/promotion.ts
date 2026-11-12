@@ -19,7 +19,7 @@ import type { Actor } from '../identity-membership/service.js';
 
 // Click totals are a display board, like the GitHub author boards.
 // They are never written into XP, contributions, rewards or work records.
-export const PROMOTION_KINDS = ['member_card', 'platform', 'skill_book', 'social_post', 'member_service', 'event'] as const;
+export const PROMOTION_KINDS = ['member_card', 'platform', 'skill_book', 'social_post', 'member_service', 'event', 'share'] as const;
 export type PromotionKind = typeof PROMOTION_KINDS[number];
 export type PromotionPeriod = 'week' | 'month' | 'all';
 const VISITOR_CAP = 20;
@@ -131,6 +131,11 @@ async function memberCardTarget(pool: Pool | PoolClient, actor: Actor, target: s
 }
 
 async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: PromotionKind, target: string) {
+  if (kind === 'share') {
+    requireCondition(z.uuid().safeParse(target).success,422,'validation_failed','分享目標不正確。');
+    const row=(await pool.query("SELECT title FROM shares WHERE share_id=$1 AND community_id=$2 AND state='published' AND kind IN ('repository','link')",[target,actor.community_id])).rows[0];
+    requireCondition(row,404,'not_found','找不到分享。');return {title:row.title as string,key:target};
+  }
   if (kind === 'platform') {
     const page = platformTarget(target);
     requireCondition(page, 422, 'validation_failed', '平台分享目標不正確。');
@@ -213,6 +218,9 @@ function catalogBook(target: string) {
 
 // Titles are read-only and batched: one query per kind that actually appears. Catalog books need none.
 async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) {
+  const shareIds=rows.filter(row=>row.kind==='share'&&z.uuid().safeParse(row.target_key).success).map(row=>row.target_key);
+  const shareRows=shareIds.length?(await pool.query("SELECT share_id::text AS id,title,state='published' AS available FROM shares WHERE community_id=$1 AND share_id=ANY($2::uuid[])",[actor.community_id,shareIds])).rows:[];
+  const shareById=new Map(shareRows.map(row=>[row.id,row]));
   const events = rows.filter(row => row.kind === 'event' && z.uuid().safeParse(row.target_key).success).map(row => row.target_key);
   const posts = rows.filter(row => row.kind === 'social_post' && z.uuid().safeParse(row.target_key).success).map(row => row.target_key);
   const submissions = rows.filter(row => row.kind === 'skill_book' && /^submission:[0-9a-f-]{36}$/i.test(row.target_key)).map(row => row.target_key.slice(11).toLowerCase());
@@ -230,6 +238,7 @@ async function mineTitles(pool: Pool|PoolClient, actor: Actor, rows: MineRow[]) 
   const eventById = new Map(eventRows.map(row => [row.id, row]));
   const postById = new Map(postRows.map(row => [row.id, row]));
   return (row: MineRow) => {
+    if(row.kind==='share'){const found=shareById.get(row.target_key);return found?{title:found.title,available:found.available}:{title:'已無法開啟',available:false};}
     if (row.kind === 'platform') {
       const page = platformTarget(row.target_key);
       return { title: page?.title ?? '自由工坊', available: Boolean(page) };
@@ -300,7 +309,8 @@ export async function promotionLeaderboards(pool: Pool|PoolClient, actor: Actor,
   const period = periodSchema.parse(periodRaw ?? 'week');
   const since = periodStart(period, now);
   const rows = (await pool.query(promotionLeaderboardSql, [actor.community_id, since, actor.user_id])).rows as { kind: PromotionKind; user_id: string; display_name: string; points: number; aggregate_version: string | null; has_avatar: boolean }[];
-  const boards = PROMOTION_KINDS.map(kind => {
+  // New shares expose evidence counts in /me/credit, never a new score board.
+  const boards = PROMOTION_KINDS.filter(kind=>kind!=='share').map(kind => {
     const scored: Scored[] = rows.filter(row => row.kind === kind).map(row => ({
       user_id: row.user_id, display_name: row.display_name, points: row.points, rank: 0,
       avatar_url: avatarUrl(row.user_id, row.aggregate_version ?? 1, row.has_avatar),
@@ -331,6 +341,7 @@ function absoluteUrl(origin: string, url: string) {
 
 async function shareable(pool: Pool, link: LinkRow) {
   if (link.revoked_at || !link.owner_active) return false;
+  if (link.kind === 'share') return Boolean((await pool.query("SELECT 1 FROM shares WHERE share_id=$1 AND community_id=$2 AND state='published' AND kind IN ('repository','link') AND (first_sharer_user_id IS NULL OR NOT is_verification_test_account(first_sharer_user_id))",[link.target_key,link.community_id])).rowCount);
   if (link.kind === 'platform') return Boolean(platformTarget(link.target_key));
   if (link.kind === 'skill_book') {
     if (link.target_key.startsWith('book:')) return communityCatalog.skill_books.some(item => item.id === link.target_key.slice(5));
@@ -357,6 +368,10 @@ type OpenTarget = { href: string; title: string; description: string; image?: { 
   ({ navigation: 'internal' } | { navigation: 'external'; destination: string; action: string });
 
 async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date): Promise<OpenTarget | null> {
+  if(link.kind==='share'){
+    const row=(await pool.query("SELECT title FROM shares WHERE share_id=$1 AND community_id=$2 AND state='published' AND kind IN ('repository','link')",[link.target_key,link.community_id])).rows[0];
+    return row?{navigation:'internal',href:`/s/${link.target_key}?via=${link.code}`,title:row.title,description:'自由工坊分享'}:null;
+  }
   if (link.kind === 'member_card') {
     if (link.revoked_at || !link.owner_active) return null;
     const card = await memberCardForLink(pool, link);
@@ -467,6 +482,7 @@ export async function creditPromotionClick(pool: Pool, input: { code: string; us
   const link = await readLink(pool, input.code);
   if (!link || !await shareable(pool, link)) return;
   if (isPreviewBot(input.userAgent)) return;
+  if (input.sessionUserId && (await pool.query('SELECT is_verification_test_account($1) AS test',[input.sessionUserId])).rows[0].test) return;
   if (input.sessionUserId && input.sessionUserId === link.user_id) return;
   const day = taipeiDate(input.now);
   const salt = await clickSalt(pool, day);

@@ -49,7 +49,9 @@ import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../m
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from './modules/public-post-return'
 import { CommunitySearch } from './modules/CommunitySearch'
 import { guildKeyFromHash, guildActionFromHash } from './modules/guild-launchpad-route'
-import {ShareLauncher,SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
+import {SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
+import {ShareBoxLauncher as ShareLauncher} from './share/ShareBox'
+import {ShareRoute,isShareRoute} from './share/ShareRoute'
 import { setSharingDraftAccount } from './modules/authoring-drafts'
 import type { SessionPayload, TabId } from './types'
 import {LanguageProvider,LanguagePicker,useLanguage} from './language'
@@ -1043,12 +1045,12 @@ function Workspace({
           <section className="main workspace-main">
             <header ref={workspaceTopbar} className="topbar workspace-topbar">
               <div>
-                {launchpadOpen ? null : <h1 id="workspace-page-title">{consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : t(`nav.${tab}`)}</h1>}
+                {launchpadOpen ? null : <h1 id="workspace-page-title">{isShareRoute(locationHash)?(locationHash==='#me/credit'?'我的貢獻':'分享'):consoleRoute ? t(consoleRoute.titleKey) : sellerRoute ? t(sellerRoute.titleKey) : tab === 'stores' && (locationHash === '#stores/supply' || /^#stores\/[^/]+\/[^/]+\/supply(?:[/?]|$)/.test(locationHash)) ? t('stores.supplyTitle') : t(`nav.${tab}`)}</h1>}
               </div>
               <PageTools pageId={consoleRoute ? 'supplier-console' : tab} client={client} compact/>
               <div className="topbar-actions"><PlatformHelperHost pageId={consoleRoute ? 'supplier-console' : tab} routeIdentity={locationHash}
                 sessionGeneration={client.sessionGeneration} availablePageIds={Object.keys(TAB_TITLES)} guildLaunchpadEnabled={site?.guild_launchpad_enabled}
-                mobileOpen={mobileOpen} messagesOpen={messagesOpen} pending={Boolean(pending)} accessExpired={Boolean(error?.accessExpired)} onNavigate={navigateFromHelper} onHelperReady={receiveHelper}/><ShareLauncher onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
+                mobileOpen={mobileOpen} messagesOpen={messagesOpen} pending={Boolean(pending)} accessExpired={Boolean(error?.accessExpired)} onNavigate={navigateFromHelper} onHelperReady={receiveHelper}/><ShareLauncher key={session.user.user_id+client.sessionGeneration} client={client} userId={session.user.user_id} onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
             </header>
             <div className="workspace-content">
               <GuideHost key={helperScope} pageId={consoleRoute ? 'supplier-console' : tab} scopeKey={session.user.user_id}
@@ -1064,7 +1066,7 @@ function Workspace({
             )}
             {tab==='home'&&!consoleRoute&&!sellerRoute&&seasonal.season&&<SeasonalWelcome season={seasonal.season} onShare={()=>chooseShare('post')} disabled={Boolean(pending)||Boolean(error?.accessExpired)}/>}
             <PageLoadBoundary label={t(`nav.${tab}`)} resetKey={tab}>
-            {renderPortalFeature(tab, {
+            {isShareRoute(locationHash)?<ShareRoute key={session.user.user_id+client.sessionGeneration} client={client} hash={locationHash}/>:renderPortalFeature(tab, {
               client, session, site, locationHash, selectTab, friendScope, notificationTarget, headerMember,
               registerPageLeave, replaceBuyerLocation, onSessionExpired,
               openHomeJournal: () => requestHomeJournalOpen(() => {
