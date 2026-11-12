@@ -5,10 +5,10 @@ import {fileURLToPath} from 'node:url';
 import {readMigrationSources} from '../../../packages/db/migration-files.mjs';
 import {legacyMigrationProfile,resolveMigrationPlan} from '../../../packages/db/migration-plan.mjs';
 const sql=readFileSync(new URL('../../../migrations/208_event_publication.sql',import.meta.url),'utf8');
-test('208 extends the exact unchanged 206 ledger with only its reviewed migration',()=>{
+test('208 extends the exact unchanged 207 ledger with only its reviewed migration',()=>{
  const sources=readMigrationSources(fileURLToPath(new URL('../../../migrations',import.meta.url)));
- const prior=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=206),legacyMigrationProfile({first:1,last:206,known_gaps:[22]}));
- const next=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=208),legacyMigrationProfile({first:1,last:208,known_gaps:[22,207]}),prior.ledger);
+ const prior=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=207),legacyMigrationProfile({first:1,last:207,known_gaps:[22]}));
+ const next=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=208),legacyMigrationProfile({first:1,last:208,known_gaps:[22]}),prior.ledger);
  assert.deepEqual(next.pending,['208_event_publication.sql']);
  assert.deepEqual(next.ledger.slice(0,-1),prior.ledger);
  assert.notEqual(next.ledger_digest,prior.ledger_digest);

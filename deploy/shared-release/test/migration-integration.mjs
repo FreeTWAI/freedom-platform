@@ -30,8 +30,9 @@ export async function verifyMigration({ root, openCluster }) {
   const last = Math.max(...sources.map(item => Number(item.name.slice(0, 3))));
   const installedProfile = { format: LEGACY_MIGRATIONS, first: 1, last: 189, known_gaps: [22] };
   const profile = sourceMigrationProfile(source, installedProfile);
+  assert.equal(last, 208);
   assert.equal(profile.last, last);
-  assert.deepEqual(profile.known_gaps, [22, 207]);
+  assert.deepEqual(profile.known_gaps, [22]);
   const pending = `${String(last + 1).padStart(3, '0')}_shared_release_fixture.sql`;
   await put('migrations/' + pending, `CREATE TABLE shared_release_fixture(id integer PRIMARY KEY);
 ALTER TABLE shared_release_fixture ENABLE ROW LEVEL SECURITY;

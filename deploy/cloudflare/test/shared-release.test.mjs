@@ -5439,7 +5439,7 @@ test('lease-loss floor replay preserves every original intent and rejects incomp
   }
 });
 
-test('pass-1 source frontier reserves only 207 without changing the installed profile or admitting unknown gaps', async t => {
+test('pass-1 source frontier requires 207 without changing the installed profile or admitting unknown gaps', async t => {
   const root = await mkdtemp(join(tmpdir(), 'pass1-frontier-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, 'migrations'));
@@ -5452,10 +5452,13 @@ test('pass-1 source frontier reserves only 207 without changing the installed pr
   assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
   await rm(join(root, 'migrations/208_unreviewed.sql'));
   await writeFile(join(root, 'migrations/208_event_publication.sql'), 'SELECT 1;');
-  assert.deepEqual(sourceMigrationProfile(root, installed), { ...installed, last: 208, known_gaps: [22,207] });
+  assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
+  await writeFile(join(root, 'migrations/207_guild_tools.sql'), 'SELECT 1;');
+  assert.deepEqual(sourceMigrationProfile(root, installed), { ...installed, last: 208 });
   assert.deepEqual(installed, { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] });
-  for (const n of [204,205,206]) {
-    const path = join(root, `migrations/${n}_fixture.sql`);
+  for (const n of [204,205,206,207]) {
+    const name = n === 207 ? '207_guild_tools.sql' : `${n}_fixture.sql`;
+    const path = join(root, 'migrations', name);
     await rm(path);
     assert.throws(() => sourceMigrationProfile(root, installed), { code: 'release_migration_sql_policy_invalid' });
     await writeFile(path, 'SELECT 1;');

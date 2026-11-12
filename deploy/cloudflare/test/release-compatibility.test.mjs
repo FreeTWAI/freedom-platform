@@ -1976,12 +1976,12 @@ test('schema201 prize photos require exact ledger approval without enabling pers
  const restored=fixtureAt(201);restored.host.rollback_floor.schema_ledger=structuredClone(restored.scan.ledger);restored.host.rollback_floor.schema_ledger_digest=restored.scan.ledger_digest;restored.host.observation.schema_ledger=old.ledger;restored.host.observation.schema_ledger_digest=old.ledger_digest;restored.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);assert(codes(evaluate(restored)).includes('historical_schema_floor_mismatch'));
 });
 
-for (const version of [2,3]) test(`pass-1 v${version} accepts only registered identities and the explicit 207 gap`, () => {
+for (const version of [2,3]) test(`pass-1 v${version} accepts only registered identities and a contiguous frontier through 208`, () => {
   const fresh = () => version === 2 ? fixture() : v3Fixture(catalogs().ab, catalogs().ab.ledger);
   const result = evaluate(fresh());
   assert.equal(result.status, 'compatible');
   for (const authority of ['deployment_authority','execution_authority','restore_proof']) assert.equal(result[authority], false);
-  for (const name of ['204_shares.sql','205_agent_tokens.sql','206_creative_tool_guilds.sql','208_event_publication.sql']) {
+  for (const name of ['204_shares.sql','205_agent_tokens.sql','206_creative_tool_guilds.sql','207_guild_tools.sql','208_event_publication.sql']) {
     const renamed = fresh(); renamed.scan = structuredClone(renamed.scan);
     renamed.scan.ledger.find(row => row.name === name).name = name.slice(0, 3) + '_unreviewed.sql';
     renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
@@ -1994,6 +1994,7 @@ for (const version of [2,3]) test(`pass-1 v${version} accepts only registered id
     missing.scan.ledger = missing.scan.ledger.filter(row => row.name !== name);
     missing.scan.ledger_digest = compatibilityLedgerDigest(missing.scan.ledger);
     assert.notEqual(evaluate(missing).status, 'compatible');
+    if (name === '207_guild_tools.sql') assert.deepEqual(codes(evaluate(missing)), ['schema_ledger_invalid']);
   }
   for (const name of ['022_unreviewed.sql','207_unreviewed.sql','209_unreviewed.sql']) {
     const unknown = fresh(); unknown.scan = structuredClone(unknown.scan);

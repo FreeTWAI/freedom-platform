@@ -31,11 +31,7 @@ export function sourceMigrationProfile(sourceRoot, installed) {
     'release_migration_profile_invalid');
   const last = Math.max(...sources.map(row => Number(row.name.slice(0, 3))));
   check(last >= installed.last && last <= 999, 'release_migration_frontier_mismatch');
-  // Pass 1 reserves 207 for the unmerged guild-tools branch. Only the reviewed
-  // 208 identity selects this gap; never infer arbitrary missing numbers from SQL.
-  // A later 207 file is refused until this operator policy is explicitly updated.
-  const known_gaps = sources.some(row => row.name === '208_event_publication.sql') ? [22, 207] : [...installed.known_gaps];
-  const profile = { ...installed, known_gaps, last };
+  const profile = { ...installed, known_gaps: [...installed.known_gaps], last };
   // Validate before deriving a candidate database or creating an installation.
   check(checkMigrations(join(sourceRoot, 'migrations'), profile).ok, 'release_migration_sql_policy_invalid');
   return Object.freeze(profile);
