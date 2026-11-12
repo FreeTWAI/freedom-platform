@@ -1,10 +1,12 @@
+import * as presentationHelpers from '../../apps/portal-web/src/games/cooking/kitchen-presentation';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {runInNewContext} from 'node:vm';import {createHash} from 'node:crypto';import {transformSync} from 'esbuild';import * as T from 'three';import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {kitchenPresentation} from '../../apps/portal-web/src/games/cooking/kitchen-stage';
 import * as preparation from '../../apps/portal-web/src/games/cooking/preparation-model';
 import * as ingredients from '../../apps/portal-web/src/games/cooking/ingredient-visuals';
 import * as React from 'react';import * as jsxRuntime from 'react/jsx-runtime';import {renderToStaticMarkup} from 'react-dom/server';import * as cues from '../../apps/portal-web/src/games/cooking/cues';
 import {createKitchenFoodBatch} from '../../apps/portal-web/src/games/cooking/kitchen-food-batch';import {bakeRigidGroup} from '../../apps/portal-web/src/games/stage-batch';import * as domain from '../../apps/portal-web/src/games/cooking/domain';import * as catalog from '../../apps/portal-web/src/games/cooking/catalog';
 
-for(const kind of ['slice','fold','plate','pour'] as const)test(`${kind} retains identical idle geometry and redraws actual progress`,()=>{
+for(const kind of ['slice','fold','plate','pour','bake'] as const)test(`${kind} retains identical idle geometry and redraws actual progress`,()=>{
  const f=factory(true),recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!;
  let run={...domain.newCookingRun(recipe,42,'idle-frame'),step:recipe.steps.findIndex(s=>s.kind===kind),status:'playing' as const,elapsed:1000};
  try{
@@ -24,9 +26,9 @@ test('shared opaque food preserves world vertices and normals for moving uniform
 test('unsupported bytes, material identity, transparency, shader, scale and shadow configuration reject without mutation',()=>{const changes:Array<(x:ReturnType<typeof fixture>)=>void>=[x=>(x.copies[1].children[0] as T.Mesh).geometry.attributes.position.setX(0,.6),x=>{(x.copies[1].children[0] as T.Mesh).material=x.material.clone();},x=>{x.material.transparent=true;},x=>{x.material.onBeforeCompile=()=>{};},x=>{x.copies[1].scale.y=.8;},x=>{x.copies[1].scale.x=-1;},x=>{(x.copies[1].children[0] as T.Mesh).castShadow=false;}];for(const change of changes){const x=fixture();change(x);assert.equal(createKitchenFoodBatch(x.parent,x.copies),null);assert.equal(x.parent.children.length,5);x.copies.forEach(r=>assert.equal(r.children[0].visible,true));}});
 test('dynamic fallback, compact visibility, bounds and idempotent cleanup preserve shared ownership',()=>{const {parent,copies,material}=fixture(),geometry=(copies[0].children[0] as T.Mesh).geometry,batch=createKitchenFoodBatch(parent,copies)!;let shared=0,disposed=0;geometry.addEventListener('dispose',()=>shared++);material.addEventListener('dispose',()=>shared++);batch.meshes[0].addEventListener('dispose',()=>disposed++);copies[0].scale.y=.7;batch.update();assert.equal(batch.meshes[0].visible,false);copies.forEach(r=>assert.equal(r.children[0].visible,true));copies[0].scale.setScalar(1.4);copies.forEach(r=>r.visible=false);batch.update();assert.equal(batch.meshes[0].count,0);copies[4].visible=true;copies[4].position.set(19,7,4);batch.update();assert.equal(batch.meshes[0].count,1);assert.ok(batch.meshes[0].boundingBox!.max.x>19);batch.dispose();batch.dispose();batch.update();assert.equal(disposed,1);assert.equal(shared,0);assert.equal(parent.children.length,5);});
 // Actual factory/update logic, GPU/DOM boundary only stubbed. Disabled batch is a task-shaped negative control.
-function factory(optimized:boolean,stepOverride?:catalog.CookingStep){let scene:T.Scene,renders=0;const extrusions:T.ExtrudeGeometry[]=[];function observedExtrusion(...args:ConstructorParameters<typeof T.ExtrudeGeometry>){const geometry=new T.ExtrudeGeometry(...args);extrusions.push(geometry);return geometry;}class Renderer{domElement={setAttribute(){},addEventListener(){},removeEventListener(){},remove(){}};shadowMap={};info={render:{calls:0,triangles:0},memory:{geometries:0,textures:0}};setSize(){}setPixelRatio(){}dispose(){}forceContextLoss(){}render(s:T.Scene){renders++;scene=s;s.updateMatrixWorld(true);}}const module={exports:{} as any};const source=readFileSync(new URL('../../apps/portal-web/src/games/cooking/kitchen-stage.ts',import.meta.url),'utf8');runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{module,exports:module.exports,devicePixelRatio:1,require:(id:string)=>{if(id==='three')return {...T,WebGLRenderer:Renderer,ExtrudeGeometry:observedExtrusion};if(id.includes('RoundedBox'))return {RoundedBoxGeometry};if(id==='../stage-batch')return {bakeRigidGroup};if(id==='./kitchen-food-batch')return {createKitchenFoodBatch:optimized?createKitchenFoodBatch:()=>null};if(id==='./dish-model')return {createDishModel(){throw Error('not used');}};if(id==='./domain')return stepOverride?{...domain,currentStep:()=>stepOverride}:domain;if(id==='./catalog')return catalog;if(id==='./ingredient-visuals')return ingredients;if(id==='./preparation-model')return preparation;throw Error(id);}});return {stage:module.exports.createKitchenStage({append(){}},()=>{}),scene:()=>scene!,renders:()=>renders,extrusions};}
+function factory(optimized:boolean,stepOverride?:catalog.CookingStep){let scene:T.Scene,camera:T.OrthographicCamera,renders=0,captureError=false;const sizes:number[][]=[],pixelRatios:number[]=[],shadowPasses:boolean[]=[];const extrusions:T.ExtrudeGeometry[]=[],tori:T.TorusGeometry[]=[];function observedTorus(...args:ConstructorParameters<typeof T.TorusGeometry>){const geometry=new T.TorusGeometry(...args);tori.push(geometry);return geometry;}function observedExtrusion(...args:ConstructorParameters<typeof T.ExtrudeGeometry>){const geometry=new T.ExtrudeGeometry(...args);if(args[1]?.depth===.09&&args[1]?.bevelEnabled!==false)extrusions.push(geometry);return geometry;}class Renderer{domElement={setAttribute(){},addEventListener(){},removeEventListener(){},remove(){},toDataURL(){if(captureError)throw Error('capture unavailable');return 'data:image/png;base64,fixture';}};shadowMap={autoUpdate:true,needsUpdate:false};info={render:{calls:0,triangles:0},memory:{geometries:0,textures:0}};setSize(w:number,h:number){sizes.push([w,h]);}setPixelRatio(value:number){pixelRatios.push(value);}dispose(){}forceContextLoss(){}render(s:T.Scene,c:T.OrthographicCamera){shadowPasses.push(this.shadowMap.autoUpdate||this.shadowMap.needsUpdate);this.shadowMap.needsUpdate=false;camera=c.clone();renders++;scene=s;s.updateMatrixWorld(true);}}const module={exports:{} as any};const actualSource=readFileSync(new URL('../../apps/portal-web/src/games/cooking/kitchen-stage.ts',import.meta.url),'utf8');const source=optimized?actualSource:actualSource.replace('batchAmbient(body,[...steam,...flames]);','');runInNewContext(transformSync(source,{loader:'ts',format:'cjs'}).code,{module,exports:module.exports,devicePixelRatio:1,require:(id:string)=>{if(id==='three')return {...T,WebGLRenderer:Renderer,ExtrudeGeometry:observedExtrusion,TorusGeometry:observedTorus};if(id.includes('RoundedBox'))return {RoundedBoxGeometry};if(id==='../stage-batch')return {bakeRigidGroup};if(id==='./kitchen-food-batch')return {createKitchenFoodBatch:optimized?createKitchenFoodBatch:()=>null};if(id==='./dish-model')return {createDishModel(){throw Error('not used');}};if(id==='./domain')return stepOverride?{...domain,currentStep:()=>stepOverride}:domain;if(id==='./kitchen-presentation')return presentationHelpers;if(id==='./catalog')return catalog;if(id==='./ingredient-visuals')return ingredients;if(id==='./preparation-model')return preparation;throw Error(id);}});return {stage:module.exports.createKitchenStage({append(){}},()=>{}),scene:()=>scene!,renders:()=>renders,camera:()=>camera!,failCapture:()=>{captureError=true;},sizes,pixelRatios,extrusions,tori,shadowPasses};}
 function snapshot(scene:T.Scene){const values:{key:string;matrix:number[]}[]=[];let draws=0;scene.updateMatrixWorld(true);scene.traverseVisible(o=>{if(!(o instanceof T.Mesh))return;draws++;const hash=createHash('sha256');for(const name of Object.keys(o.geometry.attributes).sort()){const a=o.geometry.attributes[name] as T.BufferAttribute;hash.update(name).update(new Uint8Array(a.array.buffer,a.array.byteOffset,a.array.byteLength));}if(o.geometry.index){const a=o.geometry.index.array;hash.update(new Uint8Array(a.buffer,a.byteOffset,a.byteLength));}const m=o.material as T.MeshStandardMaterial,key=hash.digest('hex')+m.color.getHexString()+`/${o.castShadow}/${o.receiveShadow}/${o.layers.mask}/${o.renderOrder}`;if(o instanceof T.InstancedMesh){for(let i=0;i<o.count;i++){const matrix=new T.Matrix4();o.getMatrixAt(i,matrix);values.push({key,matrix:new T.Matrix4().multiplyMatrices(o.matrixWorld,matrix).toArray()});}}else values.push({key,matrix:o.matrixWorld.toArray()});});values.sort((a,b)=>a.key.localeCompare(b.key)||a.matrix[12]-b.matrix[12]||a.matrix[13]-b.matrix[13]||a.matrix[14]-b.matrix[14]);return {values,draws};}
-test('real pan/boil heat, toss and steam frames preserve expanded geometry/material/transforms with fewer draws',()=>{for(const [id,kind,before,after] of [['egg-fried-rice','pan',39,27],['pearl-milk-tea','boil',37,31]] as const){const recipe=catalog.recipeOf(id)!,step=recipe.steps.findIndex(s=>s.kind===kind),original=factory(false),candidate=factory(true);let run={...domain.newCookingRun(recipe,42,'oracle'),step,status:'playing' as const};for(const [i,time] of [1000,1100,1250,1500].entries()){run={...run,elapsed:time,active:{...run.active,amount:i*.2,heat:40+i*10,foam:i*.15,flipped:i>0,lastAt:1100}};original.stage.update(run,null,time,true);candidate.stage.update(run,null,time,true);const a=snapshot(original.scene()),b=snapshot(candidate.scene());assert.equal(a.draws,before);assert.equal(b.draws,after);assert.equal(a.values.length,b.values.length);for(let j=0;j<a.values.length;j++){assert.equal(a.values[j].key,b.values[j].key);a.values[j].matrix.forEach((n,k)=>assert.ok(Math.abs(n-b.values[j].matrix[k])<2e-6,`${id}/${i}/${j}/${k}`));}}original.stage.dispose();candidate.stage.dispose();}});
+test('real pan/boil heat, toss and steam frames preserve expanded geometry/material/transforms with fewer draws',()=>{for(const [id,kind,before,after] of [['egg-fried-rice','pan',39,24],['pearl-milk-tea','boil',34,24]] as const){const recipe=catalog.recipeOf(id)!,step=recipe.steps.findIndex(s=>s.kind===kind),original=factory(false),candidate=factory(true);let run={...domain.newCookingRun(recipe,42,'oracle'),step,status:'playing' as const};for(const [i,time] of [1000,1100,1250,1500].entries()){run={...run,elapsed:time,active:{...run.active,amount:i*.2,heat:40+i*10,foam:i*.15,flipped:i>0,lastAt:1100}};original.stage.update(run,null,time,i!==3);candidate.stage.update(run,null,time,i!==3);const a=snapshot(original.scene()),b=snapshot(candidate.scene());assert.equal(a.draws,before);assert.equal(b.draws,after);assert.equal(a.values.length,b.values.length);for(let j=0;j<a.values.length;j++){assert.equal(a.values[j].key,b.values[j].key);a.values[j].matrix.forEach((n,k)=>assert.ok(Math.abs(n-b.values[j].matrix[k])<2e-6,`${id}/${i}/${j}/${k}`));}}original.stage.dispose();candidate.stage.dispose();}});
 test('special attribute layouts and material render hooks fail closed',()=>{
  for(const special of ['instanced','float16','gpu-type','material-hook'] as const){const x=fixture();if(special==='material-hook')x.material.onBeforeRender=()=>{};else for(const [i,root] of x.copies.entries()){const geometry=(root.children[0] as T.Mesh).geometry,a=geometry.getAttribute('position');if(special==='instanced')geometry.setAttribute('position',new T.InstancedBufferAttribute(new Float32Array(a.array),3));if(special==='float16')geometry.setAttribute('position',new T.Float16BufferAttribute(Array.from(a.array),3));if(special==='gpu-type'&&i===1)(a as T.BufferAttribute).gpuType=T.IntType;}
  assert.equal(createKitchenFoodBatch(x.parent,x.copies),null,special);assert.equal(x.parent.children.length,5);x.copies.forEach(root=>assert.equal(root.children[0].visible,true));}
@@ -39,30 +41,8 @@ test('manual root and part matrices survive rejected eligibility and dynamic fal
 test('manual world matrices are never replaced by reconstructed instance transforms',()=>{for(const target of ['root','part'] as const){const x=fixture(),o=target==='root'?x.copies[1]:x.copies[1].children[0];o.matrixWorldAutoUpdate=false;o.matrixWorld.makeTranslation(45,-20,11);const before=o.matrixWorld.clone();assert.equal(createKitchenFoodBatch(x.parent,x.copies),null);assert.deepEqual(o.matrixWorld,before);}const x=fixture(),batch=createKitchenFoodBatch(x.parent,x.copies)!;x.copies[0].matrixWorldAutoUpdate=false;x.copies[0].matrixWorld.makeTranslation(45,-20,11);const before=x.copies[0].matrixWorld.clone();batch.update();assert.equal(batch.meshes[0].visible,false);assert.deepEqual(x.copies[0].matrixWorld,before);batch.dispose();});
 
 // Exercise the real factory across identities: palette materials survive scene rebuilds.
-test('stage culling keeps open vessels and shared materials two-sided, preserves shadows and resets on exit',()=>{
- const f=factory(true),seen=new Set<T.MeshStandardMaterial>();
- try{
-  for(const kind of ['slice','mix','knead','pan','boil','bake','pour','boil','mix','fold'] as const){
-   const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!,step=recipe.steps.findIndex(s=>s.kind===kind);
-   const run={...domain.newCookingRun(recipe,42,'material_transition'),step,status:'playing' as const};
-   f.stage.update(run,null,1000,true);
-   const culled=kind==='pan'||kind==='boil'||kind==='bake'||kind==='mix'||kind==='knead';let closed=0,open=0;
-   f.scene().traverse(o=>{
-    if(!(o instanceof T.Mesh))return;
-    for(const material of Array.isArray(o.material)?o.material:[o.material]){
-     const m=material as T.MeshStandardMaterial;seen.add(m);
-     // Vessel palette entries are also shared by closed scene/tool parts.
-     const vessel=(kind==='boil'&&m.color.getHexString()==='e87455')||(kind==='mix'&&m.color.getHexString()==='78b9a5');
-     assert.equal(m.side,culled&&!vessel?T.FrontSide:T.DoubleSide,`${kind}/${m.color.getHexString()}`);
-     if(culled&&!vessel){assert.equal(m.shadowSide,T.DoubleSide,'culled surfaces retain two-sided shadow casting');closed++;}
-     if(vessel)open++;
-    }
-   });
-   if(culled)assert.ok(closed>0,'closed surfaces actually exercise culling');
-   if(kind==='boil'||kind==='mix')assert.ok(open>0,'open vessel/shared material is present after batching');
-   if(!culled)for(const m of seen)assert.equal(m.side,T.DoubleSide,'leaving culled stages resets even retained palette entries');
-  }
- }finally{f.stage.dispose();}
+test('closed factory surfaces retain stable culling across steps while complete vessels remain two-sided',()=>{
+ const f=factory(true);try{for(const kind of ['mix','knead','pan','boil','bake','pour','boil','mix','fold'] as const){const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!,step=recipe.steps.findIndex(s=>s.kind===kind);f.stage.update({...domain.newCookingRun(recipe,42,'sides'),step,status:'playing'},null,1000,true);let closed=0,open=0;f.scene().traverse(o=>{if(!(o instanceof T.Mesh))return;for(const m of (Array.isArray(o.material)?o.material:[o.material]) as T.MeshStandardMaterial[]){const vessel=m.color.getHexString()==='a7b3b6';assert.equal(m.side,vessel?T.DoubleSide:T.FrontSide);assert.equal(m.shadowSide,m.side);if(vessel)open++;else closed++;}});assert.ok(closed);if(['mix','boil','pour'].includes(kind))assert.ok(open);}}finally{f.stage.dispose();}
 });
 
 
@@ -116,13 +96,13 @@ test('real ingredient meshes use shared contours, bounded opaque parts and no pe
    f.extrusions.forEach((geometry,i)=>{
     const contour=geometry.parameters.shapes as T.Shape,points=contour.getPoints();
     assert.deepEqual(points.slice(0,layers[i].points.length).map(p=>[p.x,p.y]),layers[i].points.map(([x,y])=>[x*.3,-y*.3]));
-    geometry.computeBoundingBox();assert.ok(geometry.boundingBox!.min.z>=0&&geometry.boundingBox!.max.z<.071);
+    geometry.computeBoundingBox();assert.ok(geometry.boundingBox!.min.z>=-.0061&&geometry.boundingBox!.max.z<.0961);
    });
    for(const root of roots){
     const variants=visual.cutLayers?root.children:[root];
     if(visual.cutLayers)assert.equal(variants.length,2,'whole and cut remain independently switchable groups');
     variants.forEach((variant,i)=>{const stateLayers=i===1?visual.cutLayers!:visual.layers;assert.equal(variant.children.length,new Set(stateLayers.map(layer=>layer.color)).size,'same-color details are rigidly batched within each variant');assert.ok(variant.children.length<=4);});
-    root.traverse(o=>{if(o instanceof T.Mesh){const m=o.material as T.MeshStandardMaterial;assert.equal(m.transparent,false);assert.equal(m.map,null);assert.equal(m.roughness,1);assert.equal(m.side,T.DoubleSide);const positions=o.geometry.getAttribute('position');for(const value of positions.array)assert.ok(Number.isFinite(value));o.updateMatrix();for(let i=0;i<positions.count;i++){const p=new T.Vector3().fromBufferAttribute(positions,i).applyMatrix4(o.matrix);assert.ok(Math.abs(p.x)<=.301&&Math.abs(p.z)<=.301&&p.y>=.059&&p.y<=.281,'extruded and batched pieces stay inside the original food footprint');}}});
+    root.traverse(o=>{if(o instanceof T.Mesh){const m=o.material as T.MeshStandardMaterial;assert.equal(m.transparent,false);assert.equal(m.map,null);assert.equal(m.roughness,.52);assert.equal(m.side,T.FrontSide);const positions=o.geometry.getAttribute('position');for(const value of positions.array)assert.ok(Number.isFinite(value));o.updateMatrix();for(let i=0;i<positions.count;i++){const p=new T.Vector3().fromBufferAttribute(positions,i).applyMatrix4(o.matrix);assert.ok(Math.abs(p.x)<=.301&&Math.abs(p.z)<=.301&&p.y>=.059&&p.y<=.281,`extruded and batched pieces stay inside the original food footprint: ${p.x}/${p.y}/${p.z}`);}}});
    }
    const before=resources(f.scene()),extrusions=f.extrusions.length,renders=f.renders();
    f.stage.update({...run,elapsed:2000},null,2000,false);assert.equal(f.renders(),renders);assert.deepEqual(resources(f.scene()),before);
@@ -153,7 +133,7 @@ test('ingredient heat is isolated, batches preserve real geometry and all step r
    const a=snapshot(original.scene()),b=snapshot(candidate.scene());
    assert.ok(b.draws<a.draws);assert.equal(a.values.length,b.values.length);
    a.values.forEach((value,j)=>{assert.equal(value.key,b.values[j].key);value.matrix.forEach((n,k)=>assert.ok(Math.abs(n-b.values[j].matrix[k])<2e-6));});
-   for(const [material,base] of baseColors){assert.equal(material.color.getHexString(),base.clone().lerp(new T.Color(amount>1?'#805335':'#bd864b'),Math.min(.7,amount*.4)).getHexString());assert.equal(material.side,T.FrontSide);assert.equal(material.shadowSide,T.DoubleSide);}
+   for(const [material,base] of baseColors){assert.equal(material.color.getHexString(),base.clone().lerp(new T.Color(amount>1?'#805335':'#bd864b'),Math.min(.7,amount*.4)).getHexString());assert.equal(material.side,T.FrontSide);assert.equal(material.shadowSide,T.FrontSide);}
    for(const [material,color] of otherMaterials)assert.equal(material.color.getHexString(),color,'cookware cannot share the heated food palette');
    assert.deepEqual(resources(candidate.scene()),before);assert.equal(candidate.extrusions.length,extrusions);
   }
@@ -205,7 +185,7 @@ test('single volumetric foods partition exactly at guide planes with bounded res
    model.root.traverse(o=>{if(o instanceof T.Mesh){assert.ok(owned.has(o.geometry));for(const v of o.geometry.getAttribute('position').array)assert.ok(Number.isFinite(v));assert.equal((o.material as T.MeshStandardMaterial).map,null);}});
    for(let i=0;i<7;i++){
     const a=model.faces[i].right.geometry.getAttribute('position'),b=model.faces[i+1].left.geometry.getAttribute('position');
-    for(const [mesh,position] of [[model.faces[i].right,a],[model.faces[i+1].left,b]] as const)for(let n=0;n<position.count;n++)assert.ok(Math.abs(position.getX(n)+mesh.parent!.position.x-planes[i])<(id==='pumpkin'&&n>=120?.00601:1e-6),'the flesh lies on the knife plane; only raised seeds stand .006 above it');
+    for(const [mesh,position] of [[model.faces[i].right,a],[model.faces[i+1].left,b]] as const)for(let n=0;n<position.count;n++)assert.ok(Math.abs(position.getX(n)+mesh.parent!.position.x-planes[i])<(id==='pumpkin'&&n>=1320?.00601:1e-6),'the flesh lies on the knife plane; only raised seeds stand .006 above it');
    }
    const refs=resources(model.root);for(const count of [...Array.from({length:8},(_,i)=>i),0]){model.update(count);model.faces.forEach((f,i)=>{assert.equal(f.left.visible,i>0&&i<=count);assert.equal(f.right.visible,i<count);assert.equal(model.segments[i].position.z,i<count?.65:0);});assert.deepEqual(resources(model.root),refs);
     model.root.updateMatrixWorld(true);const world=new T.Box3().setFromObject(model.root,true);assert.ok(world.min.x>=-3.05&&world.max.x<=3.05,`${id}/${count}: slices remain across the board`);assert.ok(world.min.z>=-2&&world.max.z<=2.2,`${id}/${count}: slices remain within board depth`);assert.ok(world.min.y>=.249);
@@ -344,3 +324,322 @@ test('mushroom cap, flesh border and tapered stalk have explicit real dimensions
   }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
  }
 });
+
+
+test('panoramic kitchen preserves exact input projection with asymmetric safe rectangles and bounded pixels',()=>{
+ const fixtures=[{width:390,height:844,left:0,top:285,coreWidth:390,coreHeight:273},{width:1440,height:900,left:360,top:180,coreWidth:720,coreHeight:504},{width:667,height:375,left:40,top:120,coreWidth:300,coreHeight:210}];
+ for(const v of fixtures){
+  const p=kitchenPresentation(v);assert.ok(p.width<=640&&p.height<=448,'backing buffer remains at most 960x672 at the existing 1.5 DPR');
+  assert.equal(p.width,640,'portrait retains the full existing horizontal sampling budget');
+  assert.equal(p.height,448,'vertical sampling never exceeds the original budget');
+  for(const [u,w] of [[0,0],[1,0],[0,1],[1,1],[.5,.5]]){
+   const x=-4.65+u*9.3,y=3.255-w*6.51;
+   assert.ok(Math.abs((x-p.left)/(p.right-p.left)*p.width*(v.width/p.width)-(v.left+u*v.coreWidth))<1e-8);
+   assert.ok(Math.abs((p.top-y)/(p.top-p.bottom)*p.height*(v.height/p.height)-(v.top+w*v.coreHeight))<1e-8);
+  }
+ }
+ assert.throws(()=>kitchenPresentation({...fixtures[0],coreWidth:0}));assert.throws(()=>kitchenPresentation({...fixtures[0],top:NaN}));
+});
+test('panorama resize redraws a paused cached scene and capture restores presentation immediately',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('pumpkin-soup')!,run={...domain.newCookingRun(recipe,42,'panorama'),status:'paused' as const};
+ try{
+  f.stage.update(run,null,1000,false);const before=snapshot(f.scene()),v={width:390,height:844,left:0,top:285,coreWidth:390,coreHeight:273},p=kitchenPresentation(v,presentationHelpers.kitchenWorkZoom(domain.currentStep(run).kind)),count=f.renders();
+  f.stage.resize(v);assert.equal(f.renders(),count+1);assert.deepEqual(snapshot(f.scene()),before);assert.equal(f.camera().left,p.left);assert.equal(f.camera().bottom,p.bottom);
+  f.stage.resize(v);assert.equal(f.renders(),count+1,'identical observer measurements never redraw');
+  assert.equal(f.stage.capture(),'data:image/png;base64,fixture');assert.equal(f.renders(),count+3,'capture restores the full presentation before returning');
+  assert.deepEqual(f.sizes.slice(-2),[[640,448],[p.width,p.height]]);assert.equal(f.camera().bottom,p.bottom);
+  f.failCapture();assert.throws(()=>f.stage.capture(),/capture unavailable/);assert.deepEqual(f.sizes.slice(-2),[[640,448],[p.width,p.height]]);assert.equal(f.camera().bottom,p.bottom,'failed export also restores full presentation immediately');
+  f.stage.resize({width:667,height:375,left:40,top:120,coreWidth:300,coreHeight:210});assert.deepEqual(snapshot(f.scene()),before,'rotation never moves food or changes input geometry');
+ }finally{f.stage.dispose();}
+});
+
+test('cutting close-up shares exact inverse input and SVG viewBox projection, without zooming other tools',()=>{
+ const {kitchenWorkZoom,kitchenInputPoint,kitchenGuideViewBox}=presentationHelpers;
+ assert.equal(kitchenWorkZoom('slice'),1.2);assert.equal(kitchenWorkZoom('slice',true),1);
+ for(const kind of ['mix','pan','boil','plate','knead','fold','bake','pour'])assert.equal(kitchenWorkZoom(kind),1);
+ const v={width:390,height:844,left:0,top:285,coreWidth:390,coreHeight:273},zoom=1.2,p=kitchenPresentation(v,zoom),[vx,vy,vw,vh]=kitchenGuideViewBox(zoom).split(' ').map(Number);
+ for(const [x,y] of [[.22,.33],[.5,.5],[.78,.65]]){
+  const screenX=(x*800-vx)/vw,screenY=(y*560-vy)/vh,input=kitchenInputPoint(screenX,screenY,zoom);
+  assert.ok(Math.abs(input.x-x)<1e-12&&Math.abs(input.y-y)<1e-12,'exact gesture inverse, not domain tolerance');
+  assert.ok(Math.abs(((-4.65+9.3*x)-p.left)/(p.right-p.left)*v.width-(v.left+screenX*v.coreWidth))<1e-8);
+  assert.ok(Math.abs((p.top-(3.255-6.51*y))/(p.top-p.bottom)*v.height-(v.top+screenY*v.coreHeight))<1e-8);
+ }
+});
+
+test('preparation pigments are deterministic, seam-continuous and reveal layered real cut flesh',()=>{
+ for(const id of preparation.VOLUMETRIC_PREPARATION_IDS){
+  const planes=[-1.2,-.4,.4,1.2],owned=new Set<T.BufferGeometry>(),materials=new Map<string,T.MeshStandardMaterial>();
+  const model=preparation.createPreparationModel(id,planes,owned,materials);
+  try{
+   const skins=model.segments.map(g=>g.getObjectByName('preparation/skin') as T.Mesh);
+   for(const skin of skins){
+    const colors=skin.geometry.getAttribute('color'),distinct=new Set<string>();
+    for(let i=0;i<colors.count;i++){
+     const channels=[colors.getX(i),colors.getY(i),colors.getZ(i)];
+     channels.forEach(v=>assert.ok(Number.isFinite(v)&&v>=0&&v<=1.2));
+     distinct.add(channels.map(v=>v.toFixed(4)).join('/'));
+    }
+    assert.ok(distinct.size>80,`${id}: real pigment variation must survive beyond a flat colour swap`);
+   }
+   for(let seam=0;seam<planes.length;seam++){
+    const at=(mesh:T.Mesh)=>{const p=mesh.geometry.getAttribute('position'),c=mesh.geometry.getAttribute('color'),result=new Map<string,number[]>();for(let i=0;i<p.count;i++)if(Math.abs(p.getX(i)+mesh.parent!.position.x-planes[seam])<1e-6)result.set(`${p.getY(i).toFixed(5)}/${p.getZ(i).toFixed(5)}`,[c.getX(i),c.getY(i),c.getZ(i)]);return result;};
+    const left=at(skins[seam]),right=at(skins[seam+1]);assert.ok(left.size>=39);
+    for(const [point,color] of left){const other=right.get(point);assert.ok(other,`${id}: both sides share the same skin seam`);color.forEach((value,i)=>assert.ok(Math.abs(value-other![i])<1e-6));}
+   }
+   if(id!=='mushroom'){
+    const face=model.faces[2].right.geometry,c=face.getAttribute('color'),p=face.getAttribute('position');
+    assert.ok(p.count>=1320&&p.count<=1500,'six flesh bands and at most five 12-triangle seeds have a fixed vertex budget');
+    const tones=new Set(Array.from({length:c.count},(_,i)=>[c.getX(i),c.getY(i),c.getZ(i)].map(v=>v.toFixed(4)).join('/')));
+    assert.ok(tones.size>50,'thin rind, flesh and core retain distinct pigments');
+   }
+   const before=snapshot(model.root as unknown as T.Scene);
+   model.update(2);model.update(0);assert.deepEqual(snapshot(model.root as unknown as T.Scene),before,'cuts do not rerandomize surface appearance');
+  }finally{owned.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
+ }
+});
+
+test('standard-DPI kitchens supersample within the existing backing-buffer cap',()=>{
+ const f=factory(true);try{
+  assert.deepEqual(f.pixelRatios,[1.5]);
+  f.stage.resize({width:1180,height:814,left:300,top:200,coreWidth:580,coreHeight:406});
+  for(const [width,height] of f.sizes){assert.ok(width*1.5<=960);assert.ok(height*1.5<=672);}
+ }finally{f.stage.dispose();}
+});
+
+test('fixed work camera overlooks all nine operations and horizontal contact rays stay exact',()=>{
+ for(const kind of ['slice','knead','mix','pan','boil','bake','pour','fold','plate'] as const){
+  const f=factory(true),recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!;
+  const run={...domain.newCookingRun(recipe,42,'front-camera'),step:recipe.steps.findIndex(s=>s.kind===kind),status:'playing' as const};
+  try{
+   for(const point of [{x:.2,y:.25},{x:.5,y:.5},{x:.8,y:.75}]){
+    f.stage.update(run,point,1000,false);const camera=f.camera();camera.updateMatrixWorld(true);
+    const direction=camera.getWorldDirection(new T.Vector3());assert.ok(Math.abs(direction.x)<1e-12&&direction.y<-.8&&direction.z<-.5);
+    assert.equal(f.scene().children.find(o=>o instanceof T.Group)!.rotation.x,0,'the entire kitchen must not rotate to fake a level view');
+    const body=f.scene().getObjectByName('kitchen/body')!,tool=f.scene().getObjectByName('kitchen/tool')!;
+    assert.equal(body.rotation.x,0,'boards and vessels remain on the actual horizontal work surface');
+    if(kind==='pan'||kind==='boil'){const head=tool.localToWorld(new T.Vector3(0,.3,kind==='pan'?1:.65));assert.ok(head.y>(kind==='pan'?1.04:1.44),`${kind}: tool head clears the cooking surface`);}
+    if(['slice','pan','boil','fold','plate'].includes(kind)){
+     const projected=tool.getWorldPosition(new T.Vector3()).project(camera);
+     assert.ok(Math.abs((projected.x+1)/2-point.x)<1e-10,`${kind}: horizontal input alignment`);
+     assert.ok(Math.abs((1-projected.y)/2-point.y)<1e-10,`${kind}: vertical input alignment`);
+    }
+   }
+  }finally{f.stage.dispose();}
+ }
+});
+
+test('front plating transforms accepted targets into board-local space without changing their screen positions',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='plate'))!,step=recipe.steps.findIndex(s=>s.kind==='plate'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-plate'),step,status:'playing' as const};run.active={...run.active,count:catalog.RECIPES.find(r=>r.id===recipe.id)!.steps[step].goal};
+ try{
+  f.stage.update(run,null,1000,false);const body=f.scene().getObjectByName('kitchen/body')!,camera=f.camera();camera.updateMatrixWorld(true);
+  const foods=body.children.filter(o=>o instanceof T.Group);assert.equal(foods.length,run.active.count);
+  for(const [i,food] of foods.entries()){
+   const p=food.getWorldPosition(new T.Vector3()).project(camera),target=domain.plateTarget({...run,active:{...run.active,count:i}});
+   assert.ok(Math.abs((p.x+1)/2-target.x)<1e-10);assert.ok(Math.abs((1-p.y)/2-target.y)<1e-10);
+  }
+ }finally{f.stage.dispose();}
+});
+
+test('horizontal kneading board keeps pressure along its physical normal',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='knead'))!,step=recipe.steps.findIndex(s=>s.kind==='knead'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-knead'),step,status:'playing' as const};
+ try{
+  const positions:T.Vector3[]=[];
+  for(const held of [0,.5,1]){
+   f.stage.update({...run,elapsed:1000+held*recipe.steps[step].holdMs,active:{...run.active,holdAt:1000}},null,2000,false);
+   const body=f.scene().getObjectByName('kitchen/body')!,tool=f.scene().getObjectByName('kitchen/tool')!;
+   const position=tool.getWorldPosition(new T.Vector3());positions.push(position);
+   body.updateMatrixWorld(true);const ray=new T.Raycaster(new T.Vector3(0,10,.2),new T.Vector3(0,-1,0));const surface=ray.intersectObject(body,true)[0];assert.ok(surface);const gap=position.y-.12-surface.point.y;assert.ok(gap>=-.01&&gap<=(1-held)*.45+.03,'palm rests on the actual dough surface without burying');
+  }
+  assert.ok(Math.abs(positions[0].z-positions[2].z)<1e-10);assert.ok(positions[0].y-positions[2].y>1);
+ }finally{f.stage.dispose();}
+});
+
+test('workstation cutting pulse lifts normal to the board without lateral slip',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='slice'))!,step=recipe.steps.findIndex(s=>s.kind==='slice'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-slice'),step,status:'playing' as const,elapsed:1000};run.active={...run.active,lastAt:1000};
+ try{
+  const positions:T.Vector3[]=[];
+  for(const motion of [false,true]){f.stage.update(run,{x:.6,y:.4},1000,motion);positions.push(f.scene().getObjectByName('kitchen/tool')!.getWorldPosition(new T.Vector3()));}
+  assert.ok(Math.abs(positions[0].x-positions[1].x)<1e-10);assert.ok(Math.abs(positions[0].z-positions[1].z)<1e-10);assert.ok(Math.abs(positions[1].y-positions[0].y-.4)<1e-10);
+ }finally{f.stage.dispose();}
+});
+
+test('front mixing maps the full legal circular gesture to the liquid orbit, never underneath the counter',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='mix'))!,step=recipe.steps.findIndex(s=>s.kind==='mix'),f=factory(true);
+ const run={...domain.newCookingRun(recipe,42,'front-mix'),step,status:'playing' as const};
+ try{
+  for(let i=0;i<12;i++){
+   const angle=i*Math.PI/6,point={x:.5+.32*Math.cos(angle),y:.5+.32*Math.sin(angle)};f.stage.update(run,point,1000,false);
+   const position=f.scene().getObjectByName('kitchen/tool')!.getWorldPosition(new T.Vector3());
+   assert.ok(Math.abs(position.y-1.5)<1e-10,'spoon stays above the liquid');
+   assert.ok(Math.abs(position.x-Math.cos(angle)*1.4)<1e-10);assert.ok(Math.abs(position.z-(1.2+Math.sin(angle)*.8))<1e-10);
+  }
+ }finally{f.stage.dispose();}
+});
+
+test('horizontal work boards remain on the actual countertop',()=>{
+ for(const kind of ['slice','knead','fold','plate'] as const){
+  const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!,step=recipe.steps.findIndex(s=>s.kind===kind),f=factory(true);
+  try{
+   f.stage.update({...domain.newCookingRun(recipe,42,'front-clearance'),step,status:'playing'},null,1000,false);
+   const body=f.scene().getObjectByName('kitchen/body')!;body.updateMatrixWorld(true);
+   assert.equal(body.localToWorld(new T.Vector3(0,0,2.25)).y,0,'the board rests above the countertop, not vertically across the cabinet');
+  }finally{f.stage.dispose();}
+ }
+});
+
+
+test('front backdrop does not receive oversized board silhouettes while food contact shadows remain',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('fish-and-chips')!;
+ try{
+  f.stage.update({...domain.newCookingRun(recipe,42,'front-shadow'),status:'playing'},null,1000,false);
+  const backdrop=f.scene().getObjectByName('kitchen/backdrop')!,body=f.scene().getObjectByName('kitchen/body')!;let backdropMeshes=0,contactReceivers=0;
+  backdrop.traverse(o=>{if(o instanceof T.Mesh){backdropMeshes++;assert.equal(o.receiveShadow,false);}});
+  body.traverse(o=>{if(o instanceof T.Mesh&&o.receiveShadow)contactReceivers++;});
+  assert.ok(backdropMeshes>0);assert.ok(contactReceivers>0,'food and board retain local depth cues');
+ }finally{f.stage.dispose();}
+});
+
+test('culinary materials separate wood, steel, food and ceramic while wood pigment uses owned vertices, not GPU maps',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('potato-salad')??catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='slice'))!;
+ const run={...domain.newCookingRun(recipe,42,'studio_materials'),step:recipe.steps.findIndex(s=>s.kind==='slice'),status:'playing' as const};
+ f.stage.update(run,null,1000,false);const surfaces=new Map<string,Set<T.MeshStandardMaterial>>(),maps=new Set<T.Texture>();
+ f.scene().traverse(o=>{if(o instanceof T.Mesh){const m=o.material as T.MeshStandardMaterial,role=m.userData.kitchenSurface;if(role){if(!surfaces.has(role))surfaces.set(role,new Set());surfaces.get(role)!.add(m);}if(m.map)maps.add(m.map);}});
+ assert.ok(surfaces.get('wood')!.size>=2);assert.ok(surfaces.get('steel')!.size>=1);assert.equal(maps.size,0);
+ for(const m of surfaces.get('wood')!){assert.equal(m.roughness,.84);assert.equal(m.metalness,0);assert.equal(m.map,null);assert.equal(m.vertexColors,true);}
+ for(const m of surfaces.get('steel')!){assert.equal(m.roughness,.25);assert.equal(m.metalness,.82);assert.equal(m.map,null);}
+ const woodMeshes:T.Mesh[]=[];f.scene().traverse(o=>{if(o instanceof T.Mesh&&(o.material as T.Material).userData.kitchenSurface==='wood')woodMeshes.push(o);});assert.ok(woodMeshes.length);const geometry=woodMeshes[0].geometry,colors=geometry.getAttribute('color');assert.ok(colors);for(const value of colors.array)assert.ok(Number.isFinite(value)&&value>.7&&value<=1);let disposed=0;geometry.addEventListener('dispose',()=>disposed++);
+ assert.equal(f.scene().environment,null);const lights:T.DirectionalLight[]=[];f.scene().traverse(o=>{if(o instanceof T.DirectionalLight)lights.push(o);});assert.equal(lights.length,2);assert.equal(lights.filter(l=>l.castShadow).length,1);
+ f.stage.update({...run,elapsed:3000},null,3000,false);assert.equal(disposed,0);f.stage.dispose();f.stage.dispose();assert.equal(disposed,1);
+});
+
+test('work view exposes complete steel vessels and full bounded liquid volumes',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('rice-balls')!,run={...domain.newCookingRun(recipe,42,'vessel_section'),status:'playing' as const};
+ try{f.stage.update(run,null,1000,false);const body=f.scene().getObjectByName('kitchen/body')!;let liquid:T.Mesh|undefined;
+ body.traverse(o=>{if(o instanceof T.Mesh&&o.geometry instanceof T.ExtrudeGeometry&&Math.abs(o.position.y-.73)<1e-6)liquid=o;});
+ assert.ok(liquid);assert.equal(liquid.scale.y,.54);assert.equal(liquid.position.y+liquid.scale.y,1.27);assert.ok(f.camera().getWorldDirection(new T.Vector3()).y<-.8);
+ liquid.geometry.computeBoundingBox();assert.ok(liquid.geometry.boundingBox!.max.z>.99);assert.ok(liquid.geometry.boundingBox!.min.z<-.99);assert.ok(liquid.scale.x<2.385,'water bottom fits the bowl profile');assert.ok(f.tori.some(g=>g.parameters.arc===Math.PI*2&&g.parameters.tube===.065));
+ }finally{f.stage.dispose();}
+});
+
+test('pour adds a bounded full-volume from the bottom instead of raising a floating disk',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('pearl-milk-tea')!,run={...domain.newCookingRun(recipe,42,'pour_volume'),step:recipe.steps.findIndex(s=>s.kind==='pour'),status:'playing' as const};
+ try{let previous=0,liquid:T.Mesh|undefined,geometry:T.BufferGeometry|undefined;
+ for(const amount of [0,.25,.6,1]){f.stage.update({...run,active:{...run.active,amount}},null,1000,false);const body=f.scene().getObjectByName('kitchen/body')!;
+ body.traverse(o=>{if(o instanceof T.Mesh&&o.geometry instanceof T.ExtrudeGeometry&&Math.abs(o.position.x-.65)<1e-6)liquid=o;});assert.ok(liquid);assert.equal(liquid.position.y,.45);assert.ok(liquid.scale.y>previous);previous=liquid.scale.y;assert.ok(liquid.scale.x<2);assert.equal(liquid.scale.x,liquid.scale.z);if(geometry)assert.equal(liquid.geometry,geometry);geometry=liquid.geometry;}
+ }finally{f.stage.dispose();}
+});
+
+
+test('bake redraws pigment without rebuilding unchanged shadow depth, including both tool crossings',()=>{
+ const f=factory(true),recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='bake'))!;
+ let run={...domain.newCookingRun(recipe,42,'bake-shadow'),step:recipe.steps.findIndex(s=>s.kind==='bake'),status:'playing' as const};
+ try{
+  const update=(amount:number)=>{run={...run,active:{...run.active,amount}};f.stage.update(run,null,1000,true);};
+  update(.1);const before=snapshot(f.scene());update(.2);assert.notDeepEqual(snapshot(f.scene()),before,'browning still changes the actual material');
+  update(.6);update(.7);update(.5);update(.4);
+  assert.deepEqual(f.shadowPasses,[true,false,true,false,true,false]);
+  const draws=f.renders();update(.4);assert.equal(f.renders(),draws,'unchanged bake pigment retains its framebuffer');
+  const other=domain.newCookingRun(catalog.recipeOf('pumpkin-soup')!,42,'reset');f.stage.update(other,null,1000,true);update(.4);
+  assert.equal(f.shadowPasses.at(-1),true,'rebuilding restores shadow depth even at the same amount');
+ }finally{f.stage.dispose();}
+});
+test('camera-only resizing reuses shadows while successful and failed captures force fresh depth',()=>{
+ const f=factory(true),run=domain.newCookingRun(catalog.recipeOf('pumpkin-soup')!,42,'shadow-resize');
+ try{
+  f.stage.resize({width:390,height:844,left:0,top:285,coreWidth:390,coreHeight:273});assert.deepEqual(f.shadowPasses,[true],'first presentation cannot reuse an uninitialized shadow');
+  f.stage.update(run,null,1000,false);const before=snapshot(f.scene());
+  f.stage.resize({width:667,height:375,left:40,top:120,coreWidth:300,coreHeight:210});assert.equal(f.shadowPasses.at(-1),false);assert.deepEqual(snapshot(f.scene()),before);
+  f.stage.capture();assert.deepEqual(f.shadowPasses.slice(-2),[true,true]);
+  f.failCapture();assert.throws(()=>f.stage.capture(),/capture unavailable/);assert.deepEqual(f.shadowPasses.slice(-2),[true,true]);
+  f.stage.update({...run,active:{...run.active,count:1}},null,1016,false);assert.equal(f.shadowPasses.at(-1),true);
+ }finally{f.stage.dispose();}
+});
+
+
+test('ambient instances retain bounded resources and dispose instance buffers on every step rebuild',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('pearl-milk-tea')!,step=recipe.steps.findIndex(s=>s.kind==='boil');
+ let run={...domain.newCookingRun(recipe,42,'ambient-resources'),step,status:'playing' as const};
+ try{
+  f.stage.update(run,null,1000,true);const instances:T.InstancedMesh[]=[];f.scene().traverse(o=>{if(o instanceof T.InstancedMesh&&o.name==='kitchen/ambient')instances.push(o);});assert.equal(instances.length,3);assert.deepEqual(instances.map(m=>m.count).sort(),[2,3,4]);
+  const geometries=instances.map(m=>m.geometry),materials=instances.map(m=>m.material),buffers=instances.map(m=>m.instanceMatrix);let disposed=0,geometryDisposed=0;
+  instances.forEach(m=>m.addEventListener('dispose',()=>disposed++));new Set(geometries).forEach(g=>g.addEventListener('dispose',()=>geometryDisposed++));
+  for(let i=0;i<30;i++){run={...run,elapsed:1000+i*33,active:{...run.active,foam:i/30,heat:30+i}};f.stage.update(run,null,run.elapsed,true);instances.forEach((m,j)=>{assert.equal(m.geometry,geometries[j]);assert.equal(m.material,materials[j]);assert.equal(m.instanceMatrix,buffers[j]);assert.ok(m.boundingBox&&!m.boundingBox.isEmpty());assert.ok(m.boundingSphere&&m.boundingSphere.radius>0);});}
+  f.stage.update({...run,step:step+1},null,2100,true);assert.equal(disposed,3);assert.equal(geometryDisposed,0,'shared primitives survive the step');instances.forEach(m=>assert.equal(m.parent,null));
+  f.stage.update(run,null,2200,false);const replacement:T.InstancedMesh[]=[];f.scene().traverse(o=>{if(o instanceof T.InstancedMesh&&o.name==='kitchen/ambient')replacement.push(o);});assert.equal(replacement.length,3);assert.ok(replacement.every(m=>!instances.includes(m)));
+  replacement.forEach(m=>m.addEventListener('dispose',()=>disposed++));f.stage.dispose();f.stage.dispose();assert.equal(disposed,6);assert.equal(geometryDisposed,2,'owned cone and sphere dispose only at stage teardown');
+ }finally{f.stage.dispose();}
+});
+
+
+test('workstation contact projection stays aligned on phone, landscape and desktop',()=>{
+ const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='slice'))!,step=recipe.steps.findIndex(s=>s.kind==='slice');
+ for(const v of [{width:390,height:844,left:0,top:285,coreWidth:390,coreHeight:273},{width:667,height:375,left:40,top:120,coreWidth:300,coreHeight:210},{width:1440,height:900,left:360,top:180,coreWidth:720,coreHeight:504}]){
+  const f=factory(true),run={...domain.newCookingRun(recipe,42,'work-projection'),step,status:'playing' as const};
+  try{f.stage.resize(v);for(const input of [{x:.3,y:.3},{x:.5,y:.5},{x:.7,y:.7}]){
+   const point=presentationHelpers.kitchenInputPoint(input.x,input.y,1.2);f.stage.update(run,point,1000,false);
+   const projected=f.scene().getObjectByName('kitchen/tool')!.getWorldPosition(new T.Vector3()).project(f.camera());
+   assert.ok(Math.abs((projected.x+1)/2*v.width-(v.left+input.x*v.coreWidth))<1e-8);
+   assert.ok(Math.abs((1-projected.y)/2*v.height-(v.top+input.y*v.coreHeight))<1e-8);
+  }}finally{f.stage.dispose();}
+ }
+});
+test('dough has deterministic owned flour pigment without changing topology, contact shape or GPU texture count',()=>{
+ const f=factory(true),recipe=catalog.recipeOf('margherita-pizza')!,step=recipe.steps.findIndex(s=>s.kind==='knead');
+ const run={...domain.newCookingRun(recipe,42,'flour'),step,status:'playing' as const};
+ try{f.stage.update(run,null,1000,false);const meshes:T.Mesh[]=[];f.scene().traverse(o=>{if(o instanceof T.Mesh&&(o.material as T.MeshStandardMaterial).color.getHexString()==='f0d09a')meshes.push(o);});assert.ok(meshes.length);
+  const g=meshes[0].geometry,m=meshes[0].material as T.MeshStandardMaterial,c=g.getAttribute('color');assert.ok(c);assert.equal(m.map,null);assert.equal(m.vertexColors,true);
+  const tones=new Set(Array.from({length:c.count},(_,i)=>c.getX(i).toFixed(4)));assert.ok(tones.size>50,'flour is surface pigment rather than one flat colour');
+  const before=snapshot(f.scene());f.stage.update({...run,elapsed:3000},null,3000,false);assert.deepEqual(snapshot(f.scene()),before);let disposed=0;g.addEventListener('dispose',()=>disposed++);f.stage.dispose();f.stage.dispose();assert.equal(disposed,1);
+ }finally{f.stage.dispose();}
+});
+
+test('complete vessels contain every liquid vertex below the lip and inside their inner wall',()=>{
+ const inner=[[.09,.04],[.11,.72],[.2,1.12],[.65,1.47],[1.15,1.62],[1.3,1.72]];
+ for(const kind of ['pour','boil'] as const){const f=factory(true),recipe=catalog.recipeOf('pearl-milk-tea')!,step=recipe.steps.findIndex(s=>s.kind===kind),run={...domain.newCookingRun(recipe,42,'liquid-interior'),step,status:'playing' as const};
+ try{for(const amount of [0,.25,.6,1]){f.stage.update({...run,active:{...run.active,amount}},null,1000,false);const body=f.scene().getObjectByName('kitchen/body')!;body.updateMatrixWorld(true);let liquid:T.Mesh|undefined;body.traverse(o=>{if(o instanceof T.Mesh&&o.geometry instanceof T.ExtrudeGeometry)liquid=o;});assert.ok(liquid);
+ const positions=liquid.geometry.getAttribute('position');for(let i=0;i<positions.count;i++){const p=new T.Vector3().fromBufferAttribute(positions,i).applyMatrix4(liquid.matrixWorld);const x=(p.x-(kind==='pour'?.65:0))/(kind==='pour'?1.1:1.3),y=(p.y-(kind==='pour'?0:.5))/(kind==='pour'?1.6:.65),z=(p.z-(kind==='pour'?.6:0))/(kind==='pour'?1.1:1.15);assert.ok(y>=.09-1e-6&&y<=1.3+1e-6);let radius=0;for(let j=1;j<inner.length;j++){const [y1,r1]=inner[j],[y0,r0]=inner[j-1];if(y<=y1+1e-6){radius=r0+(r1-r0)*(y-y0)/(y1-y0);break;}}assert.ok(Math.hypot(x,z)<=radius+1e-5,`${kind}/${amount}: water vertex inside vessel at ${y}`);}
+ }}finally{f.stage.dispose();}}
+});
+
+ test('boiling ingredients touch the liquid instead of hovering above the full vessel',()=>{const f=factory(false),recipe=catalog.recipeOf('pearl-milk-tea')!,step=recipe.steps.findIndex(s=>s.kind==='boil');try{f.stage.update({...domain.newCookingRun(recipe,42,'boil-contact'),step,status:'playing'},null,1000,false);const body=f.scene().getObjectByName('kitchen/body')!,food=body.children.filter(o=>['food','pearl'].includes(o.userData.kitchenSurface));assert.equal(food.length,3);for(const piece of food){const b=new T.Box3().setFromObject(piece,true);assert.ok(Math.abs(b.min.y-1.24)<1e-6);assert.ok(b.max.y>1.24);}}finally{f.stage.dispose();}});
+
+test('closed-surface shadow culling preserves nearest light-ray depth against two-sided baseline',()=>{
+ for(const kind of ['slice','knead','mix','pan','boil','bake','pour','fold','plate'] as const){const f=factory(true),recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind===kind))!,step=recipe.steps.findIndex(s=>s.kind===kind);
+ try{for(const active of [false,true]){const run={...domain.newCookingRun(recipe,42,'shadow-depth'),step,status:'playing' as const,elapsed:1000};if(active)run.active={...run.active,count:2,amount:.7,heat:60,foam:.4,holdAt:0,flipped:true,lastAt:850};f.stage.update(run,active?{x:.65,y:.45}:null,1000,active);const scene=f.scene();scene.updateMatrixWorld(true);let light:T.DirectionalLight|undefined;const meshes:T.Mesh[]=[];scene.traverseVisible(o=>{if(o instanceof T.DirectionalLight&&o.castShadow)light=o;if(o instanceof T.Mesh&&o.castShadow&&o.visible)meshes.push(o);});assert.ok(light);light.shadow.updateMatrices(light);const cam=light.shadow.camera;cam.updateMatrixWorld(true);const direction=cam.getWorldDirection(new T.Vector3()),ray=new T.Raycaster();ray.far=cam.far-cam.near;
+ const materials=new Map<T.Material,T.Side>();for(const m of meshes)for(const material of Array.isArray(m.material)?m.material:[m.material])materials.set(material,material.side);
+ for(let y=0;y<17;y++)for(let x=0;x<17;x++){const origin=new T.Vector3(-1+(x+.5)*2/17,-1+(y+.5)*2/17,-1).unproject(cam);ray.set(origin,direction);const before=ray.intersectObjects(meshes,false)[0]?.distance;for(const m of materials.keys())m.side=T.DoubleSide;const baseline=ray.intersectObjects(meshes,false)[0]?.distance;for(const [m,side] of materials)m.side=side;if(before===undefined||baseline===undefined)assert.equal(before,baseline,`${kind}: silhouette`);else assert.ok(Math.abs(before-baseline)<1e-6,`${kind}: nearest caster depth differs`);}
+ }}finally{f.stage.dispose();}}
+});
+
+ test('initial measurement presents the kitchen once at its final viewport',()=>{const f=factory(true),recipe=catalog.recipeOf('rice-balls')!,v={width:390,height:844,left:0,top:285,coreWidth:390,coreHeight:273};try{f.stage.resize(v,false);assert.equal(f.renders(),0);f.stage.update({...domain.newCookingRun(recipe,42,'first-presentation'),status:'playing'},null,1000,false);assert.equal(f.renders(),1);const p=kitchenPresentation(v);assert.equal(f.camera().left,p.left);assert.equal(f.camera().top,p.top);f.stage.resize({...v,top:280});assert.equal(f.renders(),2,'later resize still redraws');}finally{f.stage.dispose();}});
+
+test('preparation surfaces and pumpkin seed cut faces retain two-sided colour and shadow coverage',()=>{
+ for(const ingredient of ['carrot','potato','pumpkin','mushroom','cucumber']){const recipe=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='slice'&&ingredients.ingredientVisual(s.ingredient,s.shape)?.id===ingredient));if(!recipe)continue;const f=factory(true),step=recipe.steps.findIndex(s=>s.kind==='slice'&&ingredients.ingredientVisual(s.ingredient,s.shape)?.id===ingredient),run={...domain.newCookingRun(recipe,42,'prep-sides'),step,status:'playing' as const};try{f.stage.update({...run,active:{...run.active,count:2}},null,1000,false);let covered=0;f.scene().traverse(o=>{if(o instanceof T.Mesh&&o.name.startsWith('preparation/')){const m=o.material as T.MeshStandardMaterial;assert.equal(m.side,T.DoubleSide);assert.equal(m.shadowSide,T.DoubleSide);covered++;}});assert.ok(covered,ingredient);}finally{f.stage.dispose();}}
+});
+
+test('milk tea uses small dark glazed tapioca clusters, not the rice fallback',()=>{
+ const f=factory(false),recipe=catalog.recipeOf('pearl-milk-tea')!;
+ try{for(const kind of ['boil','mix'] as const){const step=recipe.steps.findIndex(s=>s.kind===kind);f.stage.update({...domain.newCookingRun(recipe,42,'tapioca'),step,status:'playing'},null,1000,false);const roots=ingredientRoots(f.scene());assert.equal(roots.length,kind==='boil'?3:5);for(const root of roots){assert.equal(root.name,'ingredient/tapioca-pearls');let vertices=0;root.traverse(o=>{if(o instanceof T.Mesh){const m=o.material as T.MeshStandardMaterial;assert.equal(m.userData.kitchenSurface,'pearl');assert.equal(m.roughness,.24);assert.equal(m.map,null);assert.ok(['321b12','49271a'].includes(m.color.getHexString()));vertices+=o.geometry.getAttribute('position').count;}});assert.ok(vertices>=11*80&&vertices<=11*130,'eleven separately shaped small pearls in bounded reused topology');}const before=resources(f.scene());f.stage.update({...domain.newCookingRun(recipe,42,'tapioca'),step,status:'playing'},null,2000,false);assert.deepEqual(resources(f.scene()),before);}}finally{f.stage.dispose();}
+});
+
+test('fried rice contains elongated separate grains with small egg and scallion pieces',()=>{const f=factory(false),recipe=catalog.recipeOf('egg-fried-rice')!,step=recipe.steps.findIndex(s=>s.kind==='pan');try{f.stage.update({...domain.newCookingRun(recipe,42,'rice-grains'),step,status:'playing'},null,1000,false);const roots=ingredientRoots(f.scene());assert.equal(roots.length,5);for(const root of roots){assert.equal(root.name,'ingredient/separate-rice-grains');let rice:T.Mesh|undefined;root.traverse(o=>{if(o instanceof T.Mesh&&(o.material as T.MeshStandardMaterial).color.getHexString()==='ead1a0')rice=o;});assert.ok(rice);assert.ok(rice.geometry.getAttribute('position').count>=24*60&&rice.geometry.getAttribute('position').count<=24*70);const bounds=new T.Box3().setFromObject(root,true);assert.ok(bounds.max.y-bounds.min.y<.4,'loose shallow grains, not a large spherical rice ball');}}finally{f.stage.dispose();}});
+
+test('chef blade has a real curved cutting profile and cloth mitt avoids toy paw colours',()=>{const f=factory(true),recipe=catalog.recipeOf('margherita-pizza')!;try{const slice=catalog.RECIPES.find(r=>r.steps.some(s=>s.kind==='slice'))!;f.stage.update({...domain.newCookingRun(slice,42,'knife'),step:slice.steps.findIndex(s=>s.kind==='slice'),status:'playing'},null,1000,false);const blade=f.scene().getObjectByName('tool/chef-blade') as T.Mesh;assert.ok(blade);const m=blade.material as T.MeshStandardMaterial;assert.equal(m.userData.kitchenSurface,'steel');blade.geometry.computeBoundingBox();const size=blade.geometry.boundingBox!.getSize(new T.Vector3());assert.ok(size.x<.06&&size.y>.4&&size.z>1.4);let disposed=0;blade.geometry.addEventListener('dispose',()=>disposed++);f.stage.update({...domain.newCookingRun(recipe,42,'mitt'),step:recipe.steps.findIndex(s=>s.kind==='bake'),status:'playing'},null,1000,false);assert.equal(disposed,0,'knife topology remains stage-owned for later steps');const mitt=f.scene().getObjectByName('tool/oven-mitt');assert.ok(mitt);mitt.traverse(o=>{if(o instanceof T.Mesh){const material=o.material as T.MeshStandardMaterial;assert.equal(material.userData.kitchenSurface,'cloth');assert.equal(material.roughness,.95);assert.ok(['d8cbb6','b9aa91','c7b9a2'].includes(material.color.getHexString()));}});f.stage.dispose();assert.equal(disposed,1);}finally{f.stage.dispose();}});
+
+test('sesame rice uses sesame, never the fried-rice egg and scallion garnish',()=>{const f=factory(false),recipe=catalog.recipeOf('rice-balls')!;try{f.stage.update({...domain.newCookingRun(recipe,42,'sesame'),status:'playing'},null,1000,false);const roots=ingredientRoots(f.scene());assert.equal(roots.length,5);for(const root of roots){const colors=new Set<string>();root.traverse(o=>{if(o instanceof T.Mesh)colors.add((o.material as T.MeshStandardMaterial).color.getHexString());});assert.ok(colors.has('4b3422'));assert.equal(colors.has('edc358'),false);assert.equal(colors.has('7ca571'),false);}}finally{f.stage.dispose();}});
+
+
+test('working glove separates four fingers and thumb with bounded reused topology',()=>{const f=factory(true),recipe=catalog.recipeOf('rice-balls')!;try{f.stage.update({...domain.newCookingRun(recipe,42,'working-hand'),step:recipe.steps.findIndex(s=>s.kind==='knead'),status:'playing'},null,1000,false);const hand=f.scene().getObjectByName('tool/gloved-hand');assert.ok(hand);assert.equal(f.scene().getObjectByName('tool/oven-mitt'),undefined);let triangles=0;hand.traverse(o=>{if(o instanceof T.Mesh){triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;assert.equal((o.material as T.MeshStandardMaterial).userData.kitchenSurface,'cloth');}});assert.ok(triangles<=1200);const bounds=new T.Box3().setFromObject(hand,true);assert.ok(bounds.max.z-bounds.min.z>1.2);assert.ok(bounds.max.y-bounds.min.y<.3); // low palm rather than spherical fist
+}finally{f.stage.dispose();}});
+
+test('knife broad face is visible while its straight cutting edge stays on the guide plane',()=>{const f=factory(true),recipe=catalog.recipeOf('egg-fried-rice')!;try{f.stage.update({...domain.newCookingRun(recipe,42,'blade-readable'),status:'playing'},null,1000,false);const blade=f.scene().getObjectByName('tool/chef-blade') as T.Mesh,tool=f.scene().getObjectByName('kitchen/tool')!;f.scene().updateMatrixWorld(true);const normal=new T.Vector3(1,0,0).transformDirection(blade.matrixWorld),view=f.camera().getWorldDirection(new T.Vector3());assert.ok(Math.abs(normal.dot(view))>.3,'not edge-on');for(const z of [-.3,.5]){const edge=tool.localToWorld(new T.Vector3(0,0,z));assert.ok(Math.abs(edge.x-tool.position.x)<1e-9,'tilt around the edge, not the blade centre');}}finally{f.stage.dispose();}});
+
+test('pan grains form touching irregular patches on the pan instead of five floating portions',()=>{const f=factory(false),recipe=catalog.recipeOf('egg-fried-rice')!,step=recipe.steps.findIndex(s=>s.kind==='pan');try{f.stage.update({...domain.newCookingRun(recipe,42,'rice-contact'),step,status:'playing'},null,1000,false);const roots=ingredientRoots(f.scene()),boxes=roots.map(r=>new T.Box3().setFromObject(r,true));for(const b of boxes){assert.ok(b.min.y>=1.04&&b.min.y<1.09,'grains touch pan top');assert.ok(b.max.y<1.2);assert.ok(b.min.x>-2.09&&b.max.x<2.09&&b.min.z>-1.7&&b.max.z<1.7);}for(let i=0;i<boxes.length;i++)assert.ok(boxes.some((b,j)=>j!==i&&b.intersectsBox(boxes[i])),'no isolated serving mounds');assert.ok(new Set(roots.map(r=>r.rotation.y)).size===5);}finally{f.stage.dispose();}});
+
+
+test('fried rice follows a pan-contact spatula scoop and settles without whole-portion somersaults',()=>{const f=factory(false),recipe=catalog.recipeOf('egg-fried-rice')!,step=recipe.steps.findIndex(s=>s.kind==='pan'),run={...domain.newCookingRun(recipe,42,'scoop'),step,status:'playing' as const};try{const positions:T.Vector3[]=[];for(const elapsed of [0,90,225,449,450]){f.stage.update({...run,elapsed,active:{...run.active,flipped:true,lastAt:0}},null,elapsed,true);const roots=ingredientRoots(f.scene()),tool=f.scene().getObjectByName('kitchen/tool')!;positions.push(tool.position.clone());if(elapsed===225){const heights=roots.map(r=>r.position.y);assert.ok(Math.max(...heights)-Math.min(...heights)>.15,'scoop is local, not whole-pan levitation');assert.ok(Math.min(...heights)<1.08,'far rice remains on the pan');}for(const root of roots){assert.ok(Math.abs(root.rotation.x)<.36,'small turn, not a rotating rice portion');const bounds=new T.Box3().setFromObject(root,true);assert.ok(bounds.min.y>=1.02,'never through pan floor');assert.ok(bounds.min.x>-2.09&&bounds.max.x<2.09&&bounds.min.z>-1.7&&bounds.max.z<1.7);if(elapsed===450)assert.ok(bounds.min.y<1.09,'settles back on the pan');}if(elapsed===0)assert.ok(Math.abs(tool.position.y+.255-1.04)<.01,'spatula edge begins on the pan surface');}assert.ok(positions[1].z<positions[0].z,'pushes into the rice');assert.ok(positions[2].y>positions[1].y,'then lifts the scoop');}finally{f.stage.dispose();}});
+
+test('rice scoop returns continuously to a held pointer anchor without snapping',()=>{for(const point of [null,{x:.65,y:.45}]){const f=factory(false),recipe=catalog.recipeOf('egg-fried-rice')!,step=recipe.steps.findIndex(s=>s.kind==='pan'),run={...domain.newCookingRun(recipe,42,'scoop-anchor'),step,status:'playing' as const};try{const poses:T.Vector3[]=[];for(const elapsed of [449,450]){f.stage.update({...run,elapsed,active:{...run.active,flipped:true,lastAt:0}},point,elapsed,true);poses.push(f.scene().getObjectByName('kitchen/tool')!.position.clone());}assert.ok(poses[0].distanceTo(poses[1])<.01,'last frame and rest share the same pointer anchor');}finally{f.stage.dispose();}}});

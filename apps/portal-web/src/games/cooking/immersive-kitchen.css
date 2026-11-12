@@ -233,3 +233,25 @@
 .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay>.ck-help { align-self: stretch; text-align: left; flex: 0 1 auto; min-height: 44px; overflow: auto; }
 
 .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-scene-overlay>button { flex: 0 0 auto; }
+
+/* Render the real kitchen across the complete stage while the independently
+   clipped interaction rectangle stays clear of HUD, dock and safe areas. */
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-kitchen-panorama { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-kitchen-panorama canvas { width:100%; height:100%; aspect-ratio:auto; }
+.fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-live-scene.ck-visual-3d { background:transparent; }
+
+/* On phones keep the instruction, work surface and tools in one compact stack.
+   Preserve the exact 10:7 input core, safe areas and full-stage renderer; do not
+   stretch food or enlarge the scene underneath controls to fill empty pixels. */
+@media (orientation: portrait) and (max-width: 600px) {
+  .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive {
+    --ck-compact-core-height: min(calc((var(--ck-stage-width, 100vw) - var(--game-safe-left) - var(--game-safe-right)) * 7 / 10), max(0px, calc(var(--ck-stage-height, 100dvh) - var(--ck-top-space) - var(--ck-dock-space))));
+  }
+  .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-live-scene {
+    top: calc(var(--ck-top-space) + var(--ck-compact-core-height) / 2);
+  }
+  .fw-arcade-root.fw-arcade-toy-console .ck-game.ck-immersive .ck-game-controls {
+    top: calc(var(--ck-top-space) + var(--ck-compact-core-height) + 12px);
+    bottom: auto;
+  }
+}
