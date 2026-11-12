@@ -1,8 +1,8 @@
 {
   "format": "freedom.party-art/v1",
-  "created_at": "2026-11-11T22:10:38.298Z",
+  "created_at": "2026-11-12T03:13:38.463Z",
   "source": "apps/portal-web/src/games/party/stage.ts",
-  "source_sha256": "f0e25f68a4e4e21a4daab35a59c9b5e3fd822f3169049f7bb24364f1ddc87338",
+  "source_sha256": "424eb678de05f520a7bfbae3ef900f6ed1a4dae2cccd6034a67edc12908762b3",
   "native_canvas": {
     "width": 640,
     "height": 480,
@@ -19,13 +19,13 @@
     "dpr": 1
   },
   "compiled_factory": {
-    "file": "_native-party-fixture-BBWbJK_i.js",
-    "sha256": "af7a88c3bf04a6672721e18353d2462c58c2a93bfd229add14d5a76c3421829d"
+    "file": "_native-party-fixture-CNwAZymK.js",
+    "sha256": "cccd10950aaa63748f7d87fc9895f2131e464edb72f3634276937f3727067c61"
   },
   "source_inputs": [
     {
       "path": "apps/portal-web/src/games/party/stage.ts",
-      "sha256": "f0e25f68a4e4e21a4daab35a59c9b5e3fd822f3169049f7bb24364f1ddc87338"
+      "sha256": "424eb678de05f520a7bfbae3ef900f6ed1a4dae2cccd6034a67edc12908762b3"
     },
     {
       "path": "apps/portal-web/src/games/stage-batch.ts",
@@ -68,7 +68,7 @@
       "sha256": "214d7f54b84c609935494eb45861a681243b8d577b4f46ec32e288514e30c658"
     }
   ],
-  "total_bytes": 78868,
+  "total_bytes": 46314,
   "previews": [
     {
       "game": "chair",
@@ -78,9 +78,9 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/chair.webp",
       "width": 640,
       "height": 480,
-      "bytes": 27248,
-      "sha256": "06419c50631102020886de9c87cb1e0ae28114d5870cc037a35a7a2e42208468",
-      "source_png_sha256": "c6c7a126731dd7e9aca400040ff479fd434c3695d1b5f1a6f8106f2177f8ccd2",
+      "bytes": 24140,
+      "sha256": "b2bd0ad788cc78d8cd08d15200138e619c2e01adf142a7b601cd2db0f024b022",
+      "source_png_sha256": "b6462558fadee0e3cb811c6594138a25fd5d51cd8810058a569082d64f71f65a",
       "native": {
         "calls": 82,
         "triangles": 60100,
@@ -89,9 +89,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 41.300000000046566,
-        "construct": 216.5,
-        "capture": 300.89999999990687
+        "import": 37.299999999813735,
+        "construct": 271.10000000009313,
+        "capture": 287.30000000004657
       }
     },
     {
@@ -102,9 +102,9 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/tofu.webp",
       "width": 640,
       "height": 480,
-      "bytes": 23024,
-      "sha256": "0ee6eb39c04ec6c78cc1304ed72dcb4ca6d5a1001376ab34a0a4bdba56bb4328",
-      "source_png_sha256": "bac90d2453ecb4c833db3d05c1df8ee0458e5e558813ac13e610d10499d1dbdd",
+      "bytes": 10022,
+      "sha256": "03ec471ace20c55beb6730b9de9c77c95ec102712ec79b43b01315d0a1a551a1",
+      "source_png_sha256": "4d5ec560851f01414456d0fdd34e239c4b7bee3180635a229560a8878ea0e2ef",
       "native": {
         "calls": 46,
         "triangles": 29220,
@@ -113,9 +113,9 @@
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0,
-        "construct": 135.70000000018626,
-        "capture": 331.69999999995343
+        "import": 0.10000000009313226,
+        "construct": 132.30000000004657,
+        "capture": 322.19999999995343
       }
     },
     {
@@ -126,20 +126,20 @@
       "path": "apps/portal-web/public/games/absurd-daily/party/holiday.webp",
       "width": 640,
       "height": 480,
-      "bytes": 28596,
-      "sha256": "9f98df10300bce6c885a0eb0c905e4676d181d817e14b58f566eafef4036684c",
-      "source_png_sha256": "a6a046afa9477ff4f655130bad6601af6f7e3896808bff470821ae77620d752a",
+      "bytes": 12152,
+      "sha256": "767452d6677da8b4f027d3bdd64e27537d23539ae79d795de596add626513e44",
+      "source_png_sha256": "92cd748b71b7a446918bc6f12a79c03d3b412fe1836ac585ce0f9797e7c5c8da",
       "native": {
-        "calls": 46,
-        "triangles": 29784,
-        "geometries": 16,
+        "calls": 49,
+        "triangles": 30098,
+        "geometries": 17,
         "textures": 16
       },
       "canvas_after_dispose": 0,
       "timing_ms": {
-        "import": 0.10000000009313226,
-        "construct": 118.30000000004657,
-        "capture": 244.39999999990687
+        "import": 0.09999999986030161,
+        "construct": 121.19999999995343,
+        "capture": 231.30000000004657
       }
     }
   ]

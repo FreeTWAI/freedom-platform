@@ -2064,3 +2064,13 @@ test('PT-covered: panel notices do not reserve a duplicate enlarged footer parag
  assert.ok(ui.includes('{done&&notice&&<p role="status">{notice}</p>}'),'capture failure stays readable in completed panel');
  assert.ok(ui.includes("{error||'角色和道具就快到齊了。'}"),'recovery explanation remains in the error panel');
 });
+
+
+test('PT-core: covered-to-playing chrome remeasures in the React layout commit',()=>{
+ const ui=readFileSync(new URL('../../apps/portal-web/src/games/party/PartyGame.tsx',import.meta.url),'utf8');
+ const measurement=ui.slice(ui.indexOf('  // Measure real chrome'),ui.indexOf('  const restoreHolidayFocus'));
+ assert.match(measurement,/useLayoutEffect/);
+ assert.match(measurement,/window.addEventListener\('resize',measure\);measure\(\)/,'layout commit measures immediately rather than waiting on an observer');
+ assert.ok(measurement.includes('},[game,light,ready,live.current.status]);'),'ready/paused/playing transition invalidates core in the same commit');
+ assert.match(measurement,/new ResizeObserver\(measure\)/,'later font and geometry resize observation is retained');
+});

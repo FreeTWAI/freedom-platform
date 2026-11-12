@@ -59,7 +59,9 @@ export function PartyGame({game,seed,onBack,onResult,onStart}:{game:PartyGameId;
     const observer=new ResizeObserver(measure);elements.forEach(el=>observer.observe(el));
     window.addEventListener('resize',measure);measure();
     return()=>{observer.disconnect();cancelAnimationFrame(redraw);window.removeEventListener('resize',measure);};
-  },[game,light,ready]);
+  // Covered/playing chrome changes in this commit, before ResizeObserver delivers.
+  // Remeasure synchronously so the first playable frame cannot use covered bounds.
+  },[game,light,ready,live.current.status]);
   const restoreHolidayFocus=useRef<'restart'|'help'|null>(null);
   const [help,setHelp]=useState(false);
   useLayoutEffect(()=>{
