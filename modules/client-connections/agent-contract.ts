@@ -64,6 +64,12 @@ export const agentContract = {
       "agent_scope": null
     },
     {
+      "method": "GET",
+      "route": "/admin/api/shares/held",
+      "title": "檢舉處理（限管理員）",
+      "agent_scope": null
+    },
+    {
       "method": "POST",
       "route": "/admin/api/shares/:id/restore",
       "title": "恢復分享（限管理員）",

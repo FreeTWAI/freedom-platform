@@ -16,7 +16,9 @@
     "tests/runtime/event-share-security.test.ts",
     "tests/fixtures/event-import/**",
     "tests/runtime/security-review-shares.test.ts",
-    "tests/runtime/security-review-sanitizer.test.ts"
+    "tests/runtime/security-review-sanitizer.test.ts",
+    "tests/runtime/admin-held-shares.test.ts",
+    "tests/e2e/admin-held-shares.spec.ts"
   ],
   "public_exports": [
     "modules/shares/service.ts",
@@ -78,6 +80,17 @@
         "shares.public.read"
       ],
       "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "shares.admin-moderation",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/admin.ts",
+      "operations": [
+        "shares.held",
+        "shares.restore",
+        "shares.confirm"
+      ],
+      "auth_profile": "platform-admin"
     }
   ]
 }

@@ -46,6 +46,8 @@
 
 | 方法與路徑（前綴 `/admin/api`） | 用途與回傳 |
 | --- | --- |
+| `GET /shares/held` | `{items}`；同社群尚未確認的隱藏分享，有未結案檢舉才列出，排除驗證帳號。每筆只有 `share_id,kind,title,public_url,open_reports,reasons,hidden_at`；理由最多三則，不附檢舉人身分。依第三則有效檢舉時間（`hidden_at`）由舊到新，最多100筆；舊資料沒有三則有效檢舉時時間為 null 並排最後。標題取已分享快照，連結僅限已有公開入口。 |
+| `POST /shares/:id/restore`、`POST /shares/:id/confirm` | `{reason}`，3–1000字，沿用 Access、CSRF、冪等與稽核。恢復會結清檢舉並恢復仍有分享者的內容；確認下架保留隱藏並沖回 credit，兩者均移出待處理清單。Agent token 禁用。被檢舉暫停的活動只在「檢舉處理」處理，不列入一般活動審核；一般審核命令回409及處理入口提示。 |
 | `GET /bootstrap` | `{admin, csrf_token, summary, available_skill_books, pending_guild_appointments}`；admin 包含 `admin_id, community_id, email, display_name, role`。summary 包含會員數、有效會員數、待審公會數、公會數、有效管理員數。 |
 | `POST /link-member` | `{}`；需要 Access 管理員驗證，加上同社群、同 email 的有效會員 cookie，且會員已完成加入（選定主要公會）。本人確認後才綁定信箱與預先指定的公會長任命。 |
 | `GET /members?limit=25&offset=0&q=` | `{items,next_offset}`；limit 1–100、offset 0–100000、q 最多100字。管理專用欄位包含 email、active、onboarding_required、onboarding_completed_at、onboarding_entry_mode、email_verified_at、aggregate_version、目前公會。`onboarding_entry_mode` 為 `assessment` 或 `quick`（既有會員預設 `assessment`，不因此被重新封鎖）。名單把加入方式顯示成「已完成定位」、「已加入（未做定位）」、「尚未完成加入」或「既有會員」：還沒選定主要公會是「尚未完成加入」；已用快速加入、定位測驗還沒做完是「已加入（未做定位）」；定位測驗已做完是「已完成定位」；`onboarding_required=false` 的舊帳號是「既有會員」。 |
