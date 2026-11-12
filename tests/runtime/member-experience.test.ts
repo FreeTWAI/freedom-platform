@@ -28,18 +28,18 @@ async function signIn(email=DEMO_USERS[0].email):Promise<Session>{
   const result=await request('/auth/login',undefined,{email,password:DEMO_PASSWORD});assert.equal(result.status,200,JSON.stringify(result.data));
   return {cookie:result.response.headers.get('set-cookie')!.split(';')[0],csrf:result.data.csrf_token,user:result.data.user};
 }
-const draft=()=>({title:'一起練習社群提案',description:'交流並做出一份可分享的提案。',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'https://example.org/meeting',capacity:1});
+const draft=()=>({title:'一起練習社群提案 '+randomUUID().slice(0,8),description:'交流並做出一份可分享的提案。',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'https://example.org/meeting',capacity:1});
 async function guildMaster(userId:string,guildKey='guild_security'){await pool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state) VALUES($1,$2,$3,$4,'active')`,[randomUUID(),DEMO_COMMUNITY,userId,guildKey]);await pool.query(`INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,$2,$3)`,[DEMO_COMMUNITY,guildKey,userId]);}
 
-test('new member can preview safe events and submit one for review, while RSVP stays gated',async()=>{
+test('new member can preview safe events and publish one immediately, while RSVP stays gated',async()=>{
   const member=await signIn(),host=await signIn(DEMO_USERS[1].email);
   assert.equal((await request('/events',host,draft())).status,201);
   await pool.query('UPDATE users SET onboarding_required=true WHERE user_id=$1',[member.user.user_id]);
   const tasks=await request('/task-board/preview',member);assert.equal(tasks.status,200);assert.ok(Array.isArray(tasks.data.items));
   assert.ok(tasks.data.items.every((item:any)=>!('owner_ref' in item)&&!('participation_terms' in item)&&!('my_claim' in item)));
-  const events=await request('/events',member);assert.equal(events.status,200);assert.equal(events.data.items.length,0);
-  const submitted=await request('/events',member,draft());assert.equal(submitted.status,201);assert.equal(submitted.data.state,'pending');
-  const own=(await request('/events',member)).data.items[0];assert.equal(own.event_id,submitted.data.event_id);
+  const events=await request('/events',member);assert.equal(events.status,200);assert.equal(events.data.items.length,1);
+  const submitted=await request('/events',member,draft());assert.equal(submitted.status,201);assert.equal(submitted.data.state,'published');
+  const own=(await request('/events',member)).data.items.find((e:any)=>e.event_id===submitted.data.event_id);assert.equal(own.event_id,submitted.data.event_id);
   assert.equal(own.location,undefined);assert.equal(own.organizer_name,undefined);
   assert.equal((await request(`/events/${submitted.data.event_id}/rsvp`,member,{going:true})).status,403);
   assert.equal((await request('/me/contribution-records',member)).status,403);
@@ -104,11 +104,13 @@ test('onboarding task preview decides claim-window eligibility after native Work
 test('member event publishing, editing, RSVP capacity, cancellation and idempotency are scoped',async()=>{
   const owner=await signIn(),first=await signIn(DEMO_USERS[1].email),second=await signIn(DEMO_USERS[2].email);
   await guildMaster(first.user.user_id,'guild_member_operations');
-  const body={...draft(),guild_key:'guild_security'},key=randomUUID();
+  const body={...draft(),visibility:'workshop'},key=randomUUID();
   const created=await request('/events',owner,body,undefined,key);assert.equal(created.status,201,JSON.stringify(created.data));
-  assert.equal(created.data.state,'pending');
+  assert.equal(created.data.state,'published');
   assert.equal(created.data.review_guild_key,'guild_member_operations');
   assert.deepEqual((await request('/events',owner,body,undefined,key)).data,created.data);
+  // Exercise the retained pending queue using an explicit pre-release fixture.
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[created.data.event_id]);
   const id=created.data.event_id;
   assert.equal((await request(`/events/${id}/update`,first,{...body,title:'冒名修改'},1)).status,403);
   assert.equal((await request(`/events/${id}/update`,owner,{...body,title:'更新活動'},1)).status,200);
@@ -127,7 +129,7 @@ test('member event publishing, editing, RSVP capacity, cancellation and idempote
   assert.equal((await request(`/events/${id}/cancel`,owner,{},3)).status,200);
   assert.equal((await request(`/events/${id}/rsvp`,first,{going:true})).status,409);
   const list=await request('/events',owner);assert.equal(list.data.items.find((item:any)=>item.event_id===id).state,'cancelled');
-  const announcements=await request('/events/bulletins',second);assert.deepEqual(announcements.data.items.map((item:any)=>item.kind).sort(),['approved','submitted']);
+  const announcements=await request('/events/bulletins',second);assert.deepEqual(announcements.data.items.map((item:any)=>item.kind).sort(),['approved']);
   assert.match(announcements.data.items.find((item:any)=>item.kind==='approved').message,/核准了/);
   const ownerNotices=await request('/me/notifications',owner);assert.ok(ownerNotices.data.items.some((item:any)=>item.kind==='event_approved'));
 });
@@ -184,9 +186,9 @@ test('the private event list is denied when its projection wait outlives the own
 test('the organizer referral report is denied when its projection wait outlives the owner session',async()=>{
  const owner=await signIn(),master=await signIn(DEMO_USERS[1].email);
  await guildMaster(master.user.user_id,'guild_member_operations');
- const created=await request('/events',owner,{...draft(),guild_key:'guild_security'});assert.equal(created.status,201,JSON.stringify(created.data));
+ const created=await request('/events',owner,{...draft(),visibility:'open'});assert.equal(created.status,201,JSON.stringify(created.data));
  const id=created.data.event_id as string;
- assert.equal((await request(`/events/${id}/review`,master,{decision:'approve',reason:'符合公會活動安排。'},1)).status,200);
+ assert.equal((await request(`/events/${id}`,owner)).data.state,'published');
  assert.equal((await request(`/events/${id}/share-code`,owner,{})).status,200);
  const blocker=await pool.connect();let pending:ReturnType<typeof request>|undefined;
  try{
@@ -212,9 +214,9 @@ test('the organizer referral report is denied when its projection wait outlives 
 test('the event bulletin list is denied when its projection wait outlives the owner session',async()=>{
  const owner=await signIn(),master=await signIn(DEMO_USERS[1].email);
  await guildMaster(master.user.user_id,'guild_member_operations');
- const created=await request('/events',owner,{...draft(),guild_key:'guild_security'});assert.equal(created.status,201,JSON.stringify(created.data));
+ const created=await request('/events',owner,{...draft(),visibility:'open'});assert.equal(created.status,201,JSON.stringify(created.data));
  const id=created.data.event_id as string;
- assert.equal((await request(`/events/${id}/review`,master,{decision:'approve',reason:'符合公會活動安排。'},1)).status,200);
+ assert.equal((await request(`/events/${id}`,owner)).data.state,'published');
  const blocker=await pool.connect();let pending:ReturnType<typeof request>|undefined;
  try{
   await blocker.query('BEGIN');
@@ -274,8 +276,8 @@ test('contribution records do not assign an unapproved score',async()=>{
 test('simultaneous requests for the last event seat admit only one member',async()=>{
   const owner=await signIn(),first=await signIn(DEMO_USERS[1].email),second=await signIn(DEMO_USERS[2].email);
   await guildMaster(first.user.user_id,'guild_member_operations');
-  const created=await request('/events',owner,{...draft(),guild_key:'guild_security'});assert.equal(created.status,201);
-  assert.equal((await request(`/events/${created.data.event_id}/review`,first,{decision:'approve',reason:'可公開報名。'},1)).status,200);
+  const created=await request('/events',owner,{...draft(),visibility:'open'});assert.equal(created.status,201);
+  assert.equal((await request(`/events/${created.data.event_id}`,owner)).data.state,'published');
   const path=`/events/${created.data.event_id}/rsvp`;
   const results=await Promise.all([request(path,first,{going:true}),request(path,second,{going:true})]);
   assert.deepEqual(results.map(result=>result.status).sort(),[200,409]);
@@ -290,6 +292,7 @@ test('reading group, hybrid link, and guild exchange details survive review inpu
   const base={...draft(),location:'Discord 讀書會場地',event_kind:'reading_group',topic:'AI 與協作',online_url:'https://example.org/reading'};
   const reading=await request('/events',owner,base);
   assert.equal(reading.status,201,JSON.stringify(reading.data));
+  assert.equal(reading.data.state,'published');await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[reading.data.event_id]);
   assert.equal(reading.data.event_kind,'reading_group');
   assert.equal(reading.data.topic,'AI 與協作');
   assert.equal(reading.data.online_url,'https://example.org/reading');
@@ -302,16 +305,17 @@ test('reading group, hybrid link, and guild exchange details survive review inpu
   assert.equal((await request('/events',owner,{...base,event_kind:'guild_skill_exchange',topic:null,guild_key:null})).status,422);
   const hybrid=await request('/events',owner,{...base,mode:'hybrid',location:'台北市',event_kind:'meetup',topic:null});
   assert.equal(hybrid.status,201,JSON.stringify(hybrid.data));
+  assert.equal(hybrid.data.state,'published');await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[hybrid.data.event_id]);
   assert.equal(hybrid.data.location,'台北市');
   assert.equal(hybrid.data.online_url,'https://example.org/reading');
   assert.equal(hybrid.data.review_guild_key,'guild_event_space');
   assert.equal((await request('/events',physicalMaster)).data.items.find((item:any)=>item.event_id===hybrid.data.event_id).can_review,true);
   assert.equal((await request(`/events/${hybrid.data.event_id}/update`,owner,{...base,mode:'online',event_kind:'meetup',topic:null},1)).status,422);
-  const exchange=await request('/events',owner,{...base,event_kind:'guild_skill_exchange',topic:null,guild_key:'guild_security'});
+  const exchange=await request('/events',owner,{...base,title:'獨立技能交流',event_kind:'guild_skill_exchange',topic:null,guild_key:'guild_security'});
   assert.equal(exchange.status,201,JSON.stringify(exchange.data));
   assert.equal(exchange.data.review_guild_key,'guild_security');
   assert.equal((await request('/events',physicalMaster,{...base,event_kind:'guild_skill_exchange',topic:null,guild_key:'guild_security'})).status,403);
-  const privateExchange=await request('/events',owner,{...base,event_kind:'guild_skill_exchange',topic:null,guild_key:'guild_security',visibility:'guild'});
+  const privateExchange=await request('/events',owner,{...base,title:'獨立公會活動',event_kind:'guild_skill_exchange',topic:null,guild_key:'guild_security',visibility:'guild'});
   assert.equal(privateExchange.status,201,JSON.stringify(privateExchange.data));
   assert.equal(privateExchange.data.visibility,'guild');
   assert.equal((await request('/events/bulletins',physicalMaster)).data.items.some((item:any)=>item.event_id===privateExchange.data.event_id),false);
@@ -334,8 +338,8 @@ test('public referral event hides online details, emails registrants, and credit
   const created=await request('/events',owner,{...draft(),capacity:3,visibility:'referral',online_url:'https://example.org/private-room'});
   assert.equal(created.status,201,JSON.stringify(created.data));
   const id=created.data.event_id;
-  assert.equal((await request(`/public/events/${id}`)).status,404,'pending events stay private');
-  assert.equal((await request(`/events/${id}/review`,sharer,{decision:'approve',reason:'內容完整'},1)).status,200);
+  assert.equal((await request(`/public/events/${id}`)).status,200,'new referral events are live immediately');
+  assert.equal((await request(`/events/${id}`,owner)).data.state,'published');
   const publicPage=await request(`/public/events/${id}`);
   assert.equal(publicPage.status,200);
   assert.equal(publicPage.data.online_url,null);
@@ -364,11 +368,11 @@ test('workshop events stay member-only while fully open events expose their page
   await guildMaster(reviewer.user.user_id,'guild_member_operations');
   const workshop=await request('/events',owner,{...draft(),visibility:'workshop'});
   const open=await request('/events',owner,{...draft(),visibility:'open',capacity:2,online_url:'https://example.org/open-room'});
-  for(const item of [workshop,open])assert.equal((await request(`/events/${item.data.event_id}/review`,reviewer,{decision:'approve',reason:'活動資料完整'},1)).status,200);
+  for(const item of [workshop,open])assert.equal((await request(`/events/${item.data.event_id}`,owner)).data.state,'published');
   assert.equal((await request(`/public/events/${workshop.data.event_id}`)).status,404);
   assert.equal((await request(`/events/${workshop.data.event_id}`,owner)).status,200);
   const page=await request(`/public/events/${open.data.event_id}`);
-  assert.equal(page.status,200);assert.equal(page.data.online_url,'https://example.org/open-room');
+  assert.equal(page.status,200);assert.equal(page.data.online_url,null);
   const sent:string[]=[];
   const mailApp=createApp(pool,origin,'local',{eventEmailSender:async(to)=>{sent.push(to);}});
   const response=await mailApp.request(`${origin}/api/v1/public/events/${open.data.event_id}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'公開訪客',email:'open@example.org',referral_code:null})});
@@ -379,7 +383,7 @@ test('failed guest email holds a seat briefly and an expired pending registratio
   const owner=await signIn(),reviewer=await signIn(DEMO_USERS[1].email);
   await guildMaster(reviewer.user.user_id,'guild_member_operations');
   const created=await request('/events',owner,{...draft(),capacity:1,visibility:'open'}),id=created.data.event_id;
-  assert.equal((await request(`/events/${id}/review`,reviewer,{decision:'approve',reason:'資料完整'},1)).status,200);
+  assert.equal((await request(`/events/${id}`,owner)).data.state,'published');
   const failing=createApp(pool,origin,'local',{eventEmailSender:async()=>{throw new Error('mail unavailable')}});
   const register=async(appInstance:ReturnType<typeof createApp>,email:string)=>{
     const response=await appInstance.request(`${origin}/api/v1/public/events/${id}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'訪客',email,referral_code:null})});
@@ -400,7 +404,7 @@ test('member RSVP releases an expired guest email reservation before checking ca
   const owner=await signIn(),reviewer=await signIn(DEMO_USERS[1].email),member=await signIn(DEMO_USERS[2].email);
   await guildMaster(reviewer.user.user_id,'guild_member_operations');
   const created=await request('/events',owner,{...draft(),capacity:1,visibility:'open'}),id=created.data.event_id;
-  assert.equal((await request(`/events/${id}/review`,reviewer,{decision:'approve',reason:'資料完整'},1)).status,200);
+  assert.equal((await request(`/events/${id}`,owner)).data.state,'published');
   const failing=createApp(pool,origin,'local',{eventEmailSender:async()=>{throw new Error('mail unavailable')}});
   const response=await failing.request(`${origin}/api/v1/public/events/${id}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'訪客',email:'pending@example.org',referral_code:null})});
   assert.equal(response.status,503);

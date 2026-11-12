@@ -38,7 +38,7 @@ async function publishedEvent(owner:Session,reviewer:Session,extra:Record<string
   await pool.query(`INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,'guild_member_operations',$2) ON CONFLICT DO NOTHING`,[DEMO_COMMUNITY,reviewer.id]);
   const created=await request<{event_id:string}>('/events',owner,{title:'名單測試',description:'合成活動',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'https://example.org/meeting',capacity:10,visibility:'open',...extra});
   assert.equal(created.status,201,JSON.stringify(created.data));
-  assert.equal((await request(`/events/${created.data.event_id}/review`,reviewer,{decision:'approve',reason:'資料完整'},1)).status,200);
+  assert.equal((await request<{state:string}>(`/events/${created.data.event_id}`,owner)).data.state,'published');
   return created.data.event_id;
 }
 

@@ -433,12 +433,12 @@ test('the interstitial escapes text, sets open-graph tags and ignores extra quer
   assert.match(openHtml, new RegExp(`content="${'公'.repeat(160)}"`));
   assert.match(openHtml, new RegExp(`https://freetwai\\.com/api/v1/public/events/${openId}/banner`));
   const closedHtml = await page(`/go/${closedLink.data.code}`);
-  assert.match(closedHtml, /content="機密活動標題ZZZ"/);
-  assert.match(closedHtml, /content="機密說明YYY"/);
+  assert.doesNotMatch(closedHtml, /機密活動標題ZZZ/);
+  assert.doesNotMatch(closedHtml, /機密說明YYY/);assert.match(closedHtml, /content="自由工坊活動"/);
   assert.match(closedHtml, /property="og:image" content="https:\/\/freetwai\.com\/brand\/og-freedom-workshop-20261030\.jpg"/);
   assert.match(closedHtml, /property="og:image:width" content="1200"/);
   assert.match(closedHtml, /property="og:image:height" content="628"/);
-  assert.ok(closedHtml.includes(secret) && closedHtml.includes('機密說明YYY') && !closedHtml.includes('/banner'));
+  assert.ok(!closedHtml.includes(secret) && !closedHtml.includes('機密說明YYY') && !closedHtml.includes('/banner'));
   assert.match(closedHtml, new RegExp(`data-target="/events/${closedId}\\?ref=`));
   const referralHtml = await page(`/go/${referralLink.data.code}`);
   assert.match(referralHtml, /content="推薦活動標題"/);
@@ -483,8 +483,8 @@ test('guild and workshop previews use the brand image, and an ended event opens 
     return response.text();
   }
   const guildHtml = await htmlOf(guildLink.data.code);
-  assert.match(guildHtml, /content="公會預覽標題"/);
-  assert.match(guildHtml, /content="公會預覽說明"/);
+  assert.doesNotMatch(guildHtml, /公會預覽標題/);
+  assert.doesNotMatch(guildHtml, /公會預覽說明/);assert.match(guildHtml, /content="自由工坊活動"/);
   assert.match(guildHtml, /property="og:image" content="https:\/\/freetwai\.com\/brand\/og-freedom-workshop-20261030\.jpg"/);
   assert.match(guildHtml, /property="og:image:width" content="1200"/);
   assert.match(guildHtml, /property="og:image:height" content="628"/);

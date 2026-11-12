@@ -103,8 +103,9 @@ test('another community event cannot be joined using an authenticated account or
 });
 
 test('creation policy is explicit, legacy omission defaults guest, and pending owner edits preserve omission',async()=>{
-  const legacy=await createEvent(pool,command(0,'POST /events',details()));assert.equal(legacy.registration_policy,'guest_allowed');
-  const created=await createEvent(pool,command(0,'POST /events',{...details(),registration_policy:'community_member'}));assert.equal(created.registration_policy,'community_member');
+  const legacy=await createEvent(pool,command(0,'POST /events',{...details(),title:'獨立預設訪客活動'}));assert.equal(legacy.registration_policy,'guest_allowed');
+  const created=await createEvent(pool,command(0,'POST /events',{...details(),title:'獨立政策活動',registration_policy:'community_member'}));assert.equal(created.registration_policy,'community_member');
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[created.event_id]); // Retained legacy review/edit lane.
   const updated=await updateEvent(pool,command(0,`PUT /events/${created.event_id}`,details(),Number(created.aggregate_version)),created.event_id);
   assert.equal(updated.registration_policy,'community_member');
   await assert.rejects(updateEvent(pool,command(1,`PUT /events/${created.event_id}`,{...details(),registration_policy:'guest_allowed'},Number(updated.aggregate_version)),created.event_id),denied('organizer_required'));

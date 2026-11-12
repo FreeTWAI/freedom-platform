@@ -196,8 +196,15 @@ test('an unavailable share page reports failure, keeps retry and does not create
  test('expanded share kinds reach events, services, collaboration, cocreation and drafts without publication',async({page})=>{
   await login(page);
   const writes:string[]=[];page.on('request',request=>{if(request.method()==='POST')writes.push(new URL(request.url()).pathname);});
+  // 活動 stays in the share box: it opens the three-field event form instead of leaving.
+  await choose(page,'刊登商品');
+  const box=page.getByRole('dialog',{name:'分享',exact:true});
+  await box.getByRole('button',{name:'活動',exact:true}).click();
+  for(const field of ['名稱','時間','地點'])await expect(box.getByLabel(field,{exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(box).toBeHidden();
   for(const [label,hash] of [
-   ['活動','#explore/events'],['服務','#explore/services'],['找人合作','#explore/works'],
+   ['服務','#explore/services'],['找人合作','#explore/works'],
    ['共創邀請','#guilds/guild_ai_vibe/tools/cocreation'],['我的內容','#me/content'],
   ]){
    await choose(page,'刊登商品');

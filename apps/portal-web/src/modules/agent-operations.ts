@@ -26,14 +26,27 @@ export const agentOperations = [
     "publicItem": true,
     "example": {
       "title": "讀書會",
-      "description": "一起讀書",
-      "starts_at": "2027-01-10T10:00:00Z",
-      "ends_at": "2027-01-10T11:00:00Z",
-      "mode": "online",
-      "location": "線上",
-      "capacity": 20,
-      "visibility": "open"
+      "starts_at": "2099-01-10T10:00:00Z",
+      "location": "線上"
     }
+  },
+  {
+    "id": "events.links",
+    "method": "POST",
+    "route": "/api/v1/events/:id/share",
+    "scope": "share",
+    "title": "分享活動連結",
+    "screen": "events",
+    "example": {}
+  },
+  {
+    "id": "events.interest",
+    "method": "POST",
+    "route": "/api/v1/events/:id/interest",
+    "scope": "rsvp",
+    "title": "原站活動有興趣",
+    "screen": "events",
+    "example": {}
   },
   {
     "id": "events.rsvp",

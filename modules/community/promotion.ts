@@ -410,7 +410,8 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
   if (link.kind === 'event') {
     const event = await eventStillShared(pool, link.target_key);
     if (!event) return null;
-    const preview = { title: event.title, description: event.description.slice(0, 160) };
+    const readable=event.visibility==='open'||event.visibility==='referral';
+    const preview = readable&&!event.test_host ? { title: event.title, description: event.description.slice(0, 160) } : {title:'自由工坊活動',description:'登入後依活動權限查看。'};
     // Same gate as /highlights/:id: published, already ended in the database, and not a test-account host.
     if (new Date(event.ends_at).getTime() <= now.getTime()) {
       const highlight = await publicHighlight(pool, link.target_key);

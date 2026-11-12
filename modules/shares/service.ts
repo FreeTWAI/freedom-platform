@@ -1,3 +1,5 @@
+import {requireSharePublicationQuota} from './publication-quota.js';
+import {createEvent} from '../community/events.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool, PoolClient } from 'pg';
@@ -11,7 +13,10 @@ import { shareAdapter } from './adapters/registry.js';
 import { existingTitle } from './adapters/existing.js';
 import { appendCredit } from './credit.js';
 import type { AdapterContext, PreparedShare, ShareRow } from './types.js';
-export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional()}).strict();
+export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional()}).strict();
+async function lockEventSource(q:PoolClient,actor:Actor,id:string){
+ await q.query(`SELECT e.event_id FROM community_events e JOIN shares s ON s.ref_id=e.event_id AND s.kind='event' WHERE s.share_id=$1 AND s.community_id=$2 FOR UPDATE OF e`,[id,actor.community_id]);
+}
 export async function readShare(q:PoolClient,actor:Actor,id:string,lock=false):Promise<ShareRow> {
   const s=(await q.query<ShareRow>(`SELECT * FROM shares WHERE share_id=$1 AND community_id=$2 AND ($3::uuid IS NULL OR first_sharer_user_id=$3) ${lock?'FOR UPDATE':''}`,[id,actor.community_id,actor.agent?actor.user_id:null])).rows[0];
   requireCondition(s,404,'not_found','找不到分享。');
@@ -31,7 +36,7 @@ async function prepare(pool:Pool,input:Command,context:AdapterContext) {
 }
 export async function previewShare(pool:Pool,input:Command,context:AdapterContext={}) {
   const p=await prepare(pool,input,context);
-  return {kind:p.kind,title:p.title,url:p.canonical_url,description:p.repository?.description??'',original_author:p.repository?.owner_login??null};
+  return {kind:p.kind,title:p.title,url:p.canonical_url,description:p.repository?.description??'',original_author:p.repository?.owner_login??null,...(p.event?{event:p.event}:{})};
 }
 async function saveRepository(q:PoolClient,p:PreparedShare) {
   if(!p.repository)return null;
@@ -42,10 +47,13 @@ async function saveRepository(q:PoolClient,p:PreparedShare) {
 }
 export async function createShare(pool:Pool,input:Command,context:AdapterContext={}) {
   const body=shareInput.parse(input.body);
+  if(body.kind==='event'&&body.event){const e=await createEvent(pool,input,{...body.event,...(body.url?{source_url:body.url}:{})});return {...(input.actor.agent?{via_agent:true}:{}),share_id:e.share_id,created:true,url:`/events/${e.event_id}`};}
+  requireCondition(body.kind!=='event'||body.ref_id,422,'event_details_required','請確認活動名稱、時間和地點。');
   // A completed retry never depends on upstream availability. command still validates the digest and current authority.
   const receipt=async(q:PoolClient)=>(await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,memberReceiptOperation(input),input.key])).rows[0]?.response as {share_id:string}|undefined;
   const prior=await readWithMemberSession(pool,input.actor,receipt);
   const p=prior?null:await prepare(pool,input,context);
+  requireCondition(!p?.event,422,'event_details_required','請確認活動名稱、時間和地點。');
   return command(pool,input,async q=>{
     const current=await receipt(q);
     if(current)await readShare(q,input.actor,current.share_id,true);
@@ -58,8 +66,7 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
     let s=(await q.query<ShareRow>('SELECT * FROM shares WHERE community_id=$1 AND kind=$2 AND canonical_key=$3 FOR UPDATE',[input.actor.community_id,p.kind,p.canonical_key])).rows[0];
     const created=!s;
     if(!s){
-      const n=(await q.query(`SELECT count(*)::int n FROM shares WHERE first_sharer_user_id=$1 AND created_at>=(date_trunc('day',now() AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei')`,[input.actor.user_id])).rows[0].n;
-      requireCondition(n<20,429,'share_daily_limit','今天的分享已達上限。');
+      await requireSharePublicationQuota(q,input.actor.user_id);
       const repoId=await saveRepository(q,p);
       s=(await q.query<ShareRow>(`INSERT INTO shares(community_id,kind,canonical_key,canonical_url,repo_id,ref_table,ref_id,title,first_sharer_user_id,guild_key,editor_notes)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,[input.actor.community_id,p.kind,p.canonical_key,p.canonical_url,repoId,p.ref_table??null,p.ref_id??null,p.title,input.actor.user_id,body.guild_key??null,JSON.stringify(body.text?{intro:body.text}:{})])).rows[0];
@@ -73,14 +80,14 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
 }
 export async function retractShare(pool:Pool,input:Command,id:string) {
   z.object({}).strict().parse(input.body);
-  return command(pool,input,async q=>{const s=await readShare(q,input.actor,id,true);requireCondition(s.first_sharer_user_id===input.actor.user_id,403,'share_owner_required','只能撤回自己的分享。');},async q=>{
+  return command(pool,input,async q=>{await lockEventSource(q,input.actor,id);const s=await readShare(q,input.actor,id,true);requireCondition(s.first_sharer_user_id===input.actor.user_id,403,'share_owner_required','只能撤回自己的分享。');},async q=>{
     await q.query("UPDATE shares SET state='retracted' WHERE share_id=$1 AND state<>'retracted'",[id]);
     return {share_id:id,state:'retracted' as const};
   });
 }
 export async function reportShare(pool:Pool,input:Command,id:string) {
   const body=z.object({reason:z.string().trim().min(1).max(500)}).strict().parse(input.body);
-  return command(pool,input,async q=>{const s=await readShare(q,input.actor,id,true);requireCondition(s.first_sharer_user_id!==input.actor.user_id,422,'self_report','不能檢舉自己的分享。');},async q=>{
+  return command(pool,input,async q=>{await lockEventSource(q,input.actor,id);const s=await readShare(q,input.actor,id,true);requireCondition(s.first_sharer_user_id!==input.actor.user_id,422,'self_report','不能檢舉自己的分享。');},async q=>{
     const test=(await q.query('SELECT is_verification_test_account($1) AS test',[input.actor.user_id])).rows[0].test;
     requireCondition(!test,403,'test_report','測試帳號不計入檢舉。');
     await q.query('INSERT INTO share_reports(share_id,user_id,reason) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[id,input.actor.user_id,body.reason]);

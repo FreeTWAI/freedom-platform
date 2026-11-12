@@ -1,3 +1,4 @@
+import {guestEventInterest} from '../../../../modules/community/event-interest.js';
 import { type Context } from 'hono';
 import { z } from 'zod';
 import { requireCondition } from '../../../../packages/shared/problem.js';
@@ -41,6 +42,7 @@ export function registerPublicEventParticipationRoutes(app: PlatformFeatureApp, 
       return c.json(await requestGuestEventParticipation(pool,z.uuid().parse(c.req.param('id')),body,runtime.eventEmailSender,origin));
     });
   }
+  app.post('/api/v1/public/events/:id/interest',async c=>{await authRateLimit(pool,'event-interest-network',authNetwork(c),30,3600);return c.json(await guestEventInterest(pool,z.uuid().parse(c.req.param('id')),await c.req.json()));});
   app.post('/api/v1/public/events/:id/register',async c=>{
     requireCondition(runtime.eventEmailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');
     const body=await c.req.json();

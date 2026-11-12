@@ -1,3 +1,4 @@
+import {replaceLegacyAddress,canonicalHash,portalHash,legacyHash,resolvePortalRoute} from '../../apps/portal-web/src/portal-route.js';
 import {test,type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -117,7 +118,7 @@ const OWNER='30000000-0000-4000-8000-000000000001';
 const IDS=['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000003'];
 const event=(i:number)=>({event_id:IDS[i],title:['活動甲','活動乙','活動丙'][i],description:'合成活動說明 '+i,starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'合成線上活動 '+i,event_kind:'meetup',topic:null,online_url:null,visibility:'open',registration_policy:'community_member',banner_url:null,banner_orientation:null,video_url:null,video_mime:null,capacity:100,state:'published',aggregate_version:1,attending_count:0,my_rsvp:null,guild_key:null,review_guild_key:null,can_review:false,review_reason:null,organizer_ref:OWNER,organizer_name:'合成主辦'});
 const row=(i:number)=>({kind:'member',user_id:'member-'+i,nickname:'名單會員'+i,avatar_url:null,registered_at:new Date().toISOString()});
-function fixture(t:TestContext,hash='#events',pathname='/'){
+function fixture(t:TestContext,hash='#explore/events',pathname='/'){
  const originalConfirm=window.confirm;t.after(()=>{window.confirm=originalConfirm;});
  const commits:{hash:string;text:string;roster:string}[]=[],requests:any[]=[],container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as any);let mounted=true;
  Object.assign(window.location,{origin:'https://fixture.invalid',pathname,search:'',hash});
@@ -129,10 +130,10 @@ function fixture(t:TestContext,hash='#events',pathname='/'){
  let shell:any;
  function Host(){
   const [current,setHash]=React.useState(props.locationHash);props.locationHash=current;
-  shell={useCallback:React.useCallback,useEffect:React.useEffect,acceptedHash:React.useRef(current),pageLeaveGuard:React.useRef(null),messageHistoryTransition:React.useRef(null),isMessagesHistoryEntry:()=>false,messagesHistoryState:()=>null,messageLocation:React.useRef({href:window.location.href,state:null}),messageLeaveGuard:React.useRef(null),notificationSequence:React.useRef(0),canEndConsoleSession:()=>true,orderNotificationDestination:()=>null,
+  shell={replaceLegacyAddress,canonicalHash,portalHash,legacyHash,resolvePortalRoute,useCallback:React.useCallback,useEffect:React.useEffect,acceptedHash:React.useRef(current),pageLeaveGuard:React.useRef(null),messageHistoryTransition:React.useRef(null),isMessagesHistoryEntry:()=>false,messagesHistoryState:()=>null,messageLocation:React.useRef({href:window.location.href,state:null}),messageLeaveGuard:React.useRef(null),notificationSequence:React.useRef(0),canEndConsoleSession:()=>true,orderNotificationDestination:()=>null,
    launchpadEnabled:false,tabFromHash:()=> 'events',isMessagesHash:()=>false,setMessagesMounted(){},setTab(){},setLocationHash:setHash,setFriendScope(){},setMessagesOpen(){},setMobileOpen(){},mainContent:{current:{focus(){}}},setNotificationTarget(){},window,HashChangeEvent:class{constructor(public type:string){}}};
   runInNewContext(transformSync(shellSource,{loader:'tsx',format:'cjs'}).code,shell);
-  return React.createElement(React.Profiler,{id:'events',onRender(){commits.push({hash:current,text:container.textContent,roster:descendants(container).find(n=>n.nodeName==='DIALOG'&&(n.attributes.class??'')==='event-attendees-dialog')?.textContent??''});}},entry.render({...props,registerPageLeave:shell.route.registerPageLeave,selectTab:shell.route.selectTab}));
+  return React.createElement(React.Profiler,{id:'events',onRender(){commits.push({hash:current,text:container.textContent,roster:descendants(container).find(n=>n.nodeName==='DIALOG'&&(n.attributes.class??'')==='event-attendees-dialog')?.textContent??''});}},entry.render({...props,locationHash:props.locationHash?legacyHash(props.locationHash):'',registerPageLeave:shell.route.registerPageLeave,selectTab:shell.route.selectTab}));
  }
  const render=()=>flush(()=>root.render(React.createElement(Host)));
  // Model the browser's hash/history event only. The production App callback and
@@ -153,57 +154,57 @@ const transient=(status=503)=>new ApiError({message:'PRIVATE server detail must 
 const retry=(h:ReturnType<typeof fixture>)=>{const button=h.button('重新讀取活動');assert(button,'transient detail failure offers an in-place retry');h.click(button);};
 const noWrites=(h:ReturnType<typeof fixture>)=>assert.deepEqual(h.requests.filter(r=>r.method!=='GET'),[],'read recovery never sends a write');
 for(const entry of ['hash','path'] as const)for(const status of [0,408,429,503])test(`${entry} detail ${status} recovers in place with one exact GET and no list reload`,async t=>{
- const h=fixture(t,entry==='hash'?'#events/'+IDS[1]:'',entry==='path'?'/events/'+IDS[1]:'/');await h.start([event(0)]);
+ const h=fixture(t,entry==='hash'?'#explore/events/'+IDS[1]:'',entry==='path'?'/events/'+IDS[1]:'/');await h.start([event(0)]);
  await h.settle(detailRead(h,1),transient(status),true);assert.match(h.text(),/活動暫時無法載入/);assert.doesNotMatch(h.text(),/找不到這場活動|PRIVATE|活動甲/);
  const before=h.requests.length;h.commits.length=0;retry(h);assert.deepEqual(h.requests.slice(before).map(r=>({method:r.method,path:r.path})),[{method:'GET',path:'/events/'+IDS[1]}]);
  assert(!h.button('重新讀取活動'));assert.match(h.text(),/正在載入活動/);assert(!h.button('我要參加'));for(const c of h.commits)assert.doesNotMatch(c.text,/活動暫時無法載入|找不到這場活動/,'retry becomes loading at its first commit');
  await h.settle(detailRead(h,1),event(1));assert.match(h.text(),/活動乙/);assert(!h.button('重新讀取活動'));noWrites(h);
 });
 for(const status of [401,403,404])test(`detail ${status} remains ambiguous without revealing old content or server details`,async t=>{
- const h=fixture(t,'#events/'+IDS[0]);await h.start([]);await h.settle(detailRead(h,0),event(0));h.route('#events/'+IDS[1]);await h.settle(detailRead(h,1),transient(status),true);
+ const h=fixture(t,'#explore/events/'+IDS[0]);await h.start([]);await h.settle(detailRead(h,0),event(0));h.route('#explore/events/'+IDS[1]);await h.settle(detailRead(h,1),transient(status),true);
  assert.match(h.text(),/找不到這場活動，或目前無法查看/);assert.doesNotMatch(h.text(),/活動甲|PRIVATE|活動暫時無法載入/);assert(!h.button('重新讀取活動'));assert(!h.button('我要參加'));noWrites(h);
 });
 test('a second failed retry remains recoverable and repeated clicks do not duplicate reads',async t=>{
- const h=fixture(t,'#events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);const button=h.button('重新讀取活動')!;const before=h.requests.length;
+ const h=fixture(t,'#explore/events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);const button=h.button('重新讀取活動')!;const before=h.requests.length;
  flush(()=>{button.dispatchEvent({type:'click',button:0});button.dispatchEvent({type:'click',button:0});});assert.equal(h.requests.length,before+1);assert(!h.button('重新讀取活動'));
  await h.settle(detailRead(h,1),transient(),true);retry(h);await h.settle(detailRead(h,1),event(1));assert.match(h.text(),/活動乙/);noWrites(h);
 });
 for(const late of ['success','failure'])test(`a pending retry cannot overwrite the next accepted route with late ${late}`,async t=>{
- const h=fixture(t,'#events/'+IDS[0]);await h.start([]);await h.settle(detailRead(h,0),transient(),true);retry(h);const old=detailRead(h,0);
- h.commits.length=0;h.route('#events/'+IDS[1]);assert.match(h.text(),/正在載入活動/);assert(!h.button('重新讀取活動'));await h.settle(detailRead(h,1),event(1));await h.settle(old,late==='success'?event(0):transient(),late==='failure');assert.match(h.text(),/活動乙/);for(const c of h.commits)assert.doesNotMatch(c.text,/活動甲|活動暫時無法載入/);noWrites(h);
+ const h=fixture(t,'#explore/events/'+IDS[0]);await h.start([]);await h.settle(detailRead(h,0),transient(),true);retry(h);const old=detailRead(h,0);
+ h.commits.length=0;h.route('#explore/events/'+IDS[1]);assert.match(h.text(),/正在載入活動/);assert(!h.button('重新讀取活動'));await h.settle(detailRead(h,1),event(1));await h.settle(old,late==='success'?event(0):transient(),late==='failure');assert.match(h.text(),/活動乙/);for(const c of h.commits)assert.doesNotMatch(c.text,/活動甲|活動暫時無法載入/);noWrites(h);
 });
 test('leaving the page and returning does not retain the previous failed retry',async t=>{
- const h=fixture(t,'#events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);h.route('#events');await h.settle(old,transient(),true);assert(!h.button('重新讀取活動'));h.route('#events/'+IDS[1]);assert.match(h.text(),/正在載入活動/);assert.notEqual(detailRead(h,1),old);await h.settle(detailRead(h,1),event(1));assert.match(h.text(),/活動乙/);noWrites(h);
+ const h=fixture(t,'#explore/events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);h.route('#explore/events');await h.settle(old,transient(),true);assert(!h.button('重新讀取活動'));h.route('#explore/events/'+IDS[1]);assert.match(h.text(),/正在載入活動/);assert.notEqual(detailRead(h,1),old);await h.settle(detailRead(h,1),event(1));assert.match(h.text(),/活動乙/);noWrites(h);
 });
 for(const change of ['account','generation'])test(`replacement ${change} fences the old retry before effects and ignores its result`,async t=>{
- const h=fixture(t,'#events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);
+ const h=fixture(t,'#explore/events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);
  if(change==='generation')h.client.sessionGeneration++;else h.props.session={user:{user_id:'50000000-0000-4000-8000-000000000001'}};
  h.commits.length=0;h.render();assert(!h.button('重新讀取活動'));assert.match(h.text(),/正在載入活動/);await h.settle(old,event(1));assert.doesNotMatch(h.text(),/活動乙/);for(const c of h.commits)assert.doesNotMatch(c.text,/活動暫時無法載入|活動乙/);noWrites(h);
 });
 for(const listed of [true,false])test(`list recovery ${listed?'contains':'omits'} selected event without letting a late retry overwrite current state`,async t=>{
- const h=fixture(t,'#events/'+IDS[1]);await h.settle(h.requests.find(r=>r.path==='/events'),transient(),true);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);
+ const h=fixture(t,'#explore/events/'+IDS[1]);await h.settle(h.requests.find(r=>r.path==='/events'),transient(),true);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);
  // The #1257 base exposes list retry only on the list page. Follow the real
  // return action and App route instead of relying on Ted's added detail toolbar.
  h.click(h.button('返回活動列表與行事曆')!);
  // Plain host location.hash has no automatic browser event. Dispatch the real
  // hashchange before traversing back so App's history snapshot is current.
- flush(()=>window.dispatchEvent({type:'hashchange'}));h.click(h.button('重試')!);h.route('#events/'+IDS[1]);assert.equal(h.props.locationHash,'#events/'+IDS[1]);
+ flush(()=>window.dispatchEvent({type:'hashchange'}));h.click(h.button('重試')!);h.route('#explore/events/'+IDS[1]);assert.equal(h.props.locationHash,'#explore/events/'+IDS[1]);
  for(const path of ['/guilds/directory','/events/bulletins'])await h.settle(h.requests.filter(r=>r.path===path).at(-1),{items:[]});await h.settle(h.requests.filter(r=>r.path==='/events').at(-1),{items:listed?[event(1)]:[event(0)]});await h.settle(old,transient(),true);
  if(listed){assert.match(h.text(),/活動乙/);assert(!h.button('重新讀取活動'));}
  else{assert.match(h.text(),/正在載入活動/);await h.settle(detailRead(h,1),transient(),true);retry(h);await h.settle(detailRead(h,1),event(1));assert.match(h.text(),/活動乙/);}
  noWrites(h);
 });
 test('wrong event ID retry receipt does not expose another event or enable its commands',async t=>{
- const h=fixture(t,'#events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);await h.settle(detailRead(h,1),event(2));assert.doesNotMatch(h.text(),/活動丙|活動乙/);assert(!h.button('我要參加'));assert.match(h.text(),/找不到這場活動，或目前無法查看/);noWrites(h);
+ const h=fixture(t,'#explore/events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);await h.settle(detailRead(h,1),event(2));assert.doesNotMatch(h.text(),/活動丙|活動乙/);assert(!h.button('我要參加'));assert.match(h.text(),/找不到這場活動，或目前無法查看/);noWrites(h);
 });
 test('unmount ignores a pending retry completion',async t=>{
- const h=fixture(t,'#events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);h.unmount();await h.settle(old,event(1));assert.equal(h.text(),'');noWrites(h);
+ const h=fixture(t,'#explore/events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);const old=detailRead(h,1);h.unmount();await h.settle(old,event(1));assert.equal(h.text(),'');noWrites(h);
 });
 for(const state of ['pending','unknown'])test(`read retry followed by ${state} RSVP retains the original command and leave guard`,async t=>{
- const h=fixture(t,'#events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);await h.settle(detailRead(h,1),event(1));h.click(h.button('我要參加')!);const original=h.requests.find(r=>r.method==='POST');assert(original);
- if(state==='unknown')await h.settle(original,transient(0),true);h.route('#events/'+IDS[0]);assert.equal(window.location.hash,'#events/'+IDS[1]);assert.equal(h.props.locationHash,'#events/'+IDS[1]);assert.equal(h.requests.filter(r=>r.method==='POST').length,1);
+ const h=fixture(t,'#explore/events/'+IDS[1]);await h.start([event(0)]);await h.settle(detailRead(h,1),transient(),true);retry(h);await h.settle(detailRead(h,1),event(1));h.click(h.button('我要參加')!);const original=h.requests.find(r=>r.method==='POST');assert(original);
+ if(state==='unknown')await h.settle(original,transient(0),true);h.route('#explore/events/'+IDS[0]);assert.equal(window.location.hash,'#explore/events/'+IDS[1]);assert.equal(h.props.locationHash,'#explore/events/'+IDS[1]);assert.equal(h.requests.filter(r=>r.method==='POST').length,1);
  if(state==='pending')await h.settle(original,transient(0),true);h.click(h.button('重試原活動操作')!);const command=h.requests.filter(r=>r.method==='POST').at(-1);assert.equal(command.path,original.path);assert.deepEqual(command.body,original.body);assert.deepEqual(command.options,original.options);assert(!h.button('重新讀取活動'));
 });
 test('rejected dirty navigation keeps the draft and does not trigger another detail read',async t=>{
- const h=fixture(t);await h.start([event(0)]);h.click(h.button('辦活動')!);const title=h.nodes().find(n=>n.nodeName==='INPUT'&&h.propsOf(n)?.maxLength===120);assert(title);flush(()=>h.propsOf(title).onChange({target:{value:'保留草稿'}}));const before=h.requests.length;window.confirm=()=>false;h.route('#events/'+IDS[1]);assert.equal(window.location.hash,'#events');assert.equal(h.propsOf(title).value,'保留草稿');assert.equal(h.requests.length,before);noWrites(h);
+ const h=fixture(t);await h.start([event(0)]);h.click(h.button('辦活動')!);const title=h.nodes().find(n=>n.nodeName==='INPUT'&&h.propsOf(n)?.maxLength===120);assert(title);flush(()=>h.propsOf(title).onChange({target:{value:'保留草稿'}}));const before=h.requests.length;window.confirm=()=>false;h.route('#explore/events/'+IDS[1]);assert.equal(window.location.hash,'#explore/events');assert.equal(h.propsOf(title).value,'保留草稿');assert.equal(h.requests.length,before);noWrites(h);
 });

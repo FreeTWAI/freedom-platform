@@ -130,7 +130,20 @@
     "tests/runtime/event-date-input.test.ts",
     "tests/runtime/event-clipboard-recovery.test.ts",
     "tests/runtime/event-detail-retry.test.ts",
-    "tests/e2e/event-detail-retry.spec.ts"
+    "tests/e2e/event-detail-retry.spec.ts",
+    "modules/community/publish-pending-events.ts",
+    "scripts/publish-pending-events.ts",
+    "migrations/208_event_publication.sql",
+    "tests/runtime/event-publication.test.ts",
+    "modules/community/event-page.ts",
+    "apps/platform-api/src/routes/event-pages.ts",
+    "apps/portal-web/public/event-page.js",
+    "apps/portal-web/public/event-page.css",
+    "modules/community/event-sharing.ts",
+    "modules/community/event-exposure.ts",
+    "modules/community/event-claims.ts",
+    "modules/community/event-interest.ts",
+    "tests/e2e/event-sharing.spec.ts"
   ],
   "public_exports": [
     "modules/community/catalog.ts",

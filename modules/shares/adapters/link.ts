@@ -1,3 +1,4 @@
+import {importEvent} from './event-import.js';
 import { createHash } from 'node:crypto';
 import { normalizeShareUrl } from '../../../packages/shared/share-url.js';
 import { Problem, requireCondition } from '../../../packages/shared/problem.js';
@@ -25,11 +26,13 @@ export async function fetchShareLink(raw:string,fetcher?:PreviewFetch) {
     const chunks:Uint8Array[]=[];let bytes=0;
     try { for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;requireCondition(bytes<=1048576,422,'share_too_large','網頁過大。');chunks.push(value);} }
     finally {await reader.cancel().catch(()=>{});reader.releaseLock();}
-    return {url:normalized.url,title:previewTitle(Buffer.concat(chunks).toString('utf8'))??new URL(normalized.url).hostname};
+    const html=Buffer.concat(chunks).toString('utf8');
+    return {url:normalized.url,html,title:previewTitle(html)??new URL(normalized.url).hostname};
   }
   throw new Problem(422,'share_fetch_rejected','無法讀取這個公開網址。');
 }
 export const linkAdapter:ShareAdapter={kind:'link',async prepare(input,context){
   const page=await fetchShareLink(input.url??'',context.previewFetch);
+  if(!input.kind&&/application\/ld\+json|event:start_time|text\/calendar|\.ics(?:["'?\s>]|$)/i.test(page.html)){const event=await importEvent(page.url,async(url,init)=>url===page.url?new Response(page.html,{headers:{'Content-Type':'text/html'}}):context.previewFetch!(url,init));if(event.starts_at&&event.title)return {kind:'event',canonical_key:event.source_url,canonical_url:event.source_url,title:event.title,event};}
   return {kind:'link',canonical_key:`url:${createHash('sha256').update(page.url).digest('hex')}`,canonical_url:page.url,title:page.title};
 }};

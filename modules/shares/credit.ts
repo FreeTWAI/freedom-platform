@@ -1,3 +1,4 @@
+import {recordAgentChange} from '../client-connections/agent-feed.js';
 import type { PoolClient } from 'pg';
 import {recordAgentChange} from '../client-connections/agent-feed.js';
 export type CreditFact={share_id:string;community_id:string;user_id:string;role:'sharer'|'co_sharer'|'original_author'|'organizer'|'spreader';basis:'created'|'shared_again'|'claim_verified'|'qualified_click_day'|'star_confirmed'|'registration';source_ref:string;actor_user_id?:string|null};
