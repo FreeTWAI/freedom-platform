@@ -43,7 +43,7 @@ test('publication and share-box event envelope endorse once, including replay an
  const owner=await member(),input=cmd(owner,{kind:'event',event:eventBody()}),result=await createShare(pool,input);
  assert.deepEqual(await createShare(pool,input),result);
  const e=(await pool.query('SELECT e.* FROM community_events e JOIN shares s ON s.ref_id=e.event_id WHERE s.share_id=$1',[result.share_id])).rows[0];
- await Promise.all([0,1].map(()=>transaction(pool,async q=>{await q.query('SELECT 1 FROM community_events WHERE event_id=$1 FOR UPDATE',[e.event_id]);await publishEventShare(q,e);}))); 
+ await Promise.all([0,1].map(()=>transaction(pool,async q=>{await q.query('SELECT 1 FROM community_events WHERE event_id=$1 FOR UPDATE',[e.event_id]);await publishEventShare(q,e);})));
  assert.equal(await active(result.share_id),1);assert.equal(await count(result.share_id,'created'),1);
  const other=await member();await createShare(pool,cmd(other,{kind:'event',ref_id:e.event_id}));assert.equal(await active(result.share_id),2);assert.equal(await count(result.share_id,'shared_again'),1);
 });
