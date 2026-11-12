@@ -1,3 +1,4 @@
+import {RecentEvents} from './share/RecentEvents';
 import {GuildToolPage} from './guild-tools/GuildToolPage';
 import {guildTool} from './guild-tools/catalog';
 import {canonicalHash,currentLegacyHash,legacyHash,replaceLegacyAddress,resolvePortalRoute,PORTAL_PLACES} from './portal-route';
@@ -581,7 +582,7 @@ function LoginView({
         onChooseEntry(target);setMode(site?.registration_enabled?'register':'login');setError(null);setResetNotice('')
         requestAnimationFrame(()=>emailInput.current?.focus())
       }}/></div></section>}
-      <div className="login-form-area">
+      <div className="login-form-area"><RecentEvents/>
       <section className="card login-card" aria-labelledby="login-heading">
         {!accessExpired && activeMode!=='confirm-reset'&&<div className="auth-switch" role="group" aria-label={t('auth.switch')}><button type="button" className={activeMode==='login'?'selected':''} aria-pressed={activeMode==='login'} onClick={()=>{setMode('login');setError(null);setResetNotice('')}}>{t('auth.memberLogin')}</button>{site?.registration_enabled&&<button type="button" className={activeMode==='register'?'selected':''} aria-pressed={activeMode==='register'} onClick={()=>{setMode('register');setError(null);setResetNotice('')}}>{t('auth.create')}</button>}</div>}
         <header className="login-card-heading"><h2 id="login-heading">{t(accessExpired?'auth.accessExpired':activeMode==='register'?'auth.join':activeMode==='request-reset'?'auth.forgot':activeMode==='confirm-reset'?'auth.newPasswordTitle':'auth.login')}</h2><PageTools pageId="registration" compact/></header>

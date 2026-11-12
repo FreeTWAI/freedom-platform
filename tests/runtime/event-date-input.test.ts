@@ -125,19 +125,19 @@ function panel(t:TestContext){
  const submit=()=>{const form=h.nodes().find(n=>n.nodeName==='FORM');assert(form);flush(()=>form.dispatchEvent({type:'submit'}));};
  return {...h,props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
 }
-const ack=(request:any,overrides:any={})=>stored({...request.body,aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
+const ack=(request:any,overrides:any={})=>stored({...request.body,state:request.path==='/events'?'published':'pending',aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
 const tuple=(r:any)=>JSON.stringify({path:r.path,body:r.body,options:r.options});
 
 async function openDraft(h:ReturnType<typeof panel>,editing:boolean){
  await h.ready(editing?[stored()]:[]);h.click(h.button(editing?'編輯草稿':'辦活動'));
- h.change('活動名稱','保留的合成活動');h.change('活動說明','保留的合成說明');h.change('線上場地','合成場地');
+ h.change('活動名稱','保留的合成活動');h.change('活動說明','保留的合成說明');h.change(editing?'線上場地':'地點','合成場地');
  h.change('開始時間','2099-01-01T12:00');h.change('結束時間','2099-01-01T13:00');
 }
 for(const editing of [false,true]){
  for(const label of ['開始時間','結束時間'])test(`invalid ${label} remains editable and can recover when ${editing?'editing':'creating'}`,async t=>{
   const h=panel(t);await openDraft(h,editing);h.change(label,'10000-01-01T12:00');h.submit();
   assert.equal(h.writes().length,0,'invalid date never sends a command');
-  for(const [field,value] of [['活動名稱','保留的合成活動'],['活動說明','保留的合成說明'],['線上場地','合成場地'],[label,'10000-01-01T12:00']]){
+  for(const [field,value] of [['活動名稱','保留的合成活動'],['活動說明','保留的合成說明'],[editing?'線上場地':'地點','合成場地'],[label,'10000-01-01T12:00']]){
    assert.equal(propsOf(h.field(field)).disabled,false,'form remains editable');assert.equal(propsOf(h.field(field)).value,value,'draft is preserved');
   }
   assert.match(h.text(),/年份須為四位數/);
@@ -149,7 +149,7 @@ for(const editing of [false,true]){
   assert.equal(request.body.starts_at,new Date('2099-01-01T12:00').toISOString());assert.equal(request.body.ends_at,new Date('2099-01-01T13:00').toISOString());
   assert.equal(propsOf(h.field(label)).disabled,true,'real pending command locks the editor');assert.equal(h.leave(),false);
   await h.settle(request,ack(request));await h.ready([ack(request)]);
-  assert.equal(h.nodes().filter(n=>n.nodeName==='FORM').length,0);assert.match(h.text(),editing?/活動已更新/:/活動已送出審核/);assert.equal(h.writes().length,1);
+  assert.equal(h.nodes().filter(n=>n.nodeName==='FORM').length,0);assert.match(h.text(),editing?/活動已更新/:/活動已發布/);assert.equal(h.writes().length,1);
  });
  test(`four-digit upper boundary retains its original payload when ${editing?'editing':'creating'}`,async t=>{
   const h=panel(t);await openDraft(h,editing);h.change('開始時間','9999-01-01T12:00');h.change('結束時間','9999-01-01T13:00');h.submit();

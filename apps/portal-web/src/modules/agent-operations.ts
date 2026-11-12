@@ -26,14 +26,27 @@ export const agentOperations = [
     "publicItem": true,
     "example": {
       "title": "讀書會",
-      "description": "一起讀書",
-      "starts_at": "2027-01-10T10:00:00Z",
-      "ends_at": "2027-01-10T11:00:00Z",
-      "mode": "online",
-      "location": "線上",
-      "capacity": 20,
-      "visibility": "open"
+      "starts_at": "2099-01-10T10:00:00Z",
+      "location": "線上"
     }
+  },
+  {
+    "id": "events.links",
+    "method": "POST",
+    "route": "/api/v1/events/:id/share",
+    "scope": "share",
+    "title": "分享活動連結",
+    "screen": "events",
+    "example": {}
+  },
+  {
+    "id": "events.interest",
+    "method": "POST",
+    "route": "/api/v1/events/:id/interest",
+    "scope": "rsvp",
+    "title": "原站活動有興趣",
+    "screen": "events",
+    "example": {}
   },
   {
     "id": "events.rsvp",
@@ -124,7 +137,6 @@ export const agentOperations = [
     "scope": "share",
     "title": "預覽分享",
     "screen": "shares",
-    "integration": true,
     "example": {
       "kind": "repository",
       "url": "https://github.com/example/project"
@@ -137,7 +149,6 @@ export const agentOperations = [
     "scope": "share",
     "title": "發布分享",
     "screen": "shares",
-    "integration": true,
     "publicItem": true,
     "example": {
       "kind": "repository",
@@ -150,8 +161,7 @@ export const agentOperations = [
     "route": "/api/v1/shares",
     "scope": "read",
     "title": "查看分享",
-    "screen": "shares",
-    "integration": true
+    "screen": "shares"
   },
   {
     "id": "shares.read",
@@ -159,8 +169,7 @@ export const agentOperations = [
     "route": "/api/v1/shares/:share_id",
     "scope": "read",
     "title": "查看分享內容",
-    "screen": "shares",
-    "integration": true
+    "screen": "shares"
   },
   {
     "id": "shares.retract",
@@ -169,7 +178,6 @@ export const agentOperations = [
     "scope": "share",
     "title": "撤回自己的分享",
     "screen": "shares",
-    "integration": true,
     "example": {}
   },
   {
@@ -179,7 +187,6 @@ export const agentOperations = [
     "scope": "share",
     "title": "檢舉分享",
     "screen": "shares",
-    "integration": true,
     "example": {
       "reason": "內容不適當"
     }
@@ -191,7 +198,6 @@ export const agentOperations = [
     "scope": "share",
     "title": "建立分享連結",
     "screen": "shares",
-    "integration": true,
     "example": {}
   },
   {
@@ -200,7 +206,6 @@ export const agentOperations = [
     "route": "/api/v1/me/credit",
     "scope": "read",
     "title": "我的貢獻",
-    "screen": "credit",
-    "integration": true
+    "screen": "credit"
   }
 ] as const;

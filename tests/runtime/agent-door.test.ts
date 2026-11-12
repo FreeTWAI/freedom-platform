@@ -230,7 +230,8 @@ test('RSVP and notification producers emit confirmed, updated and waitlist invit
 
 test('a guild master token cannot read another member pending event through list, detail or RSVP cancellation',async()=>{
  const owner=await ready(),reviewer=await ready(1),issued=await issue(reviewer);
- const created=await req('/api/v1/events',{session:owner,body:eventBody()});assert.equal(created.status,201);assert.equal(created.data.state,'pending');
+ const created=await req('/api/v1/events',{session:owner,body:eventBody()});assert.equal(created.status,201);assert.equal(created.data.state,'published');
+ await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[created.data.event_id]);
  await pool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state)
  VALUES($1,$2,$3,$4,'active') ON CONFLICT DO NOTHING`,[randomUUID(),created.data.community_id,reviewer.user.user_id,created.data.review_guild_key]);
  await pool.query('INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[created.data.community_id,created.data.review_guild_key,reviewer.user.user_id]);
@@ -268,4 +269,18 @@ test('expiry during a real domain wait rejects data and rolls back writes; revoc
    assert.equal((await pool.query('SELECT 1 FROM community_event_rsvps WHERE event_id=$1',[id])).rowCount,0);
   }finally{await gate.query('ROLLBACK');gate.release();if(pending)await pending;}
  }
+});
+
+test('event adapter keeps the approved request digest and exposes scoped share and RSVP operations',async()=>{
+ const session=await ready(),issued=await issue(session),token=issued.access_token,key=randomUUID();
+ const body={kind:'event',url:'https://example.com/agent-event',event:{title:'Agent 分享合成活動',starts_at:'2099-01-01T10:00:00Z',location:'合成場地'}};
+ assert.equal((await req('/api/v1/shares',{token,body,key})).status,202);
+ const list=await req('/api/v1/me/agent-tokens',{session}),proposal=list.data.items[0].pending_publication;assert.deepEqual(proposal.body,body);
+ assert.equal((await req(`/api/v1/me/agent-tokens/${issued.connection_id}/confirm`,{session,body:{request_sha256:proposal.request_sha256}})).status,200);
+ const published=await req('/api/v1/shares',{token,body,key});assert.equal(published.status,200,JSON.stringify(published.data));
+ assert.deepEqual((await req('/api/v1/shares',{token,body,key})).data,published.data);
+ const eventId=published.data.url.split('/').pop();assert.equal((await req(`/api/v1/events/${eventId}`,{token})).data.state,'published');
+ const shared=await req(`/api/v1/events/${eventId}/share`,{token,body:{}});assert.equal(shared.status,200,JSON.stringify(shared.data));assert.match(shared.data.path,/^\/go\//);
+ assert.equal((await req(`/api/v1/events/${eventId}/rsvp`,{token,body:{going:true}})).status,200);
+ const restricted=await issue(session,['read']);assert.equal((await req(`/api/v1/events/${eventId}/share`,{token:restricted.access_token,body:{}})).status,403);
 });

@@ -1,3 +1,4 @@
+import {eventOrganizerClaims,reviewEventOrganizer} from '../../../../modules/community/event-claims.js';
 import {createCommunityCertificationAdminRoutes} from './community-certification.js';
 import type {EffectJournalPort} from '../../../../modules/agent-commerce/operations/journal/journal.js';
 import {createCommerceAdmissionRoutes} from './commerce-admissions.js';
@@ -91,6 +92,8 @@ export function createAdminRoutes(pool:Pool,verifyAccess:AdminAccessVerifier=ver
   app.get('/admins',async c=>c.json({items:await adminNominees(pool,c.get('admin'))}));
   app.post('/admins/:id/status',async c=>result(c,await changePlatformAdminStatus(pool,await command(c),c.req.param('id'))));
   app.get('/audit',async c=>c.json({items:await adminAudit(pool,c.get('admin'))}));
+  app.get('/event-organizer-claims',async c=>c.json(await eventOrganizerClaims(pool,c.get('admin'))));
+  app.post('/event-organizer-claims/:id/review',async c=>c.json(await reviewEventOrganizer(pool,await command(c),z.uuid().parse(c.req.param('id')))));
   app.get('/author-claims',async c=>c.json(await adminAuthorClaims(pool,c.get('admin'),z.enum(['review','verified']).parse(c.req.query('queue')??'review'))));
   app.post('/author-claims/:id/review',async c=>{
     const value=await reviewAuthorClaim(pool,await command(c),z.uuid().parse(c.req.param('id')));

@@ -1,3 +1,4 @@
+import {createEventPageRoutes} from './routes/event-pages.js';
 import {createAgentFeedRoutes} from './routes/agent-feed.js';
 import { createAgentTokenRoutes } from './routes/agent-tokens.js';
 import { agentBoundary } from './agent-boundary.js';
@@ -503,6 +504,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   registerPublicMemberProfiles(app, featureContext);
   app.route('/api/v1',createPublicProfileCoverRoutes(pool,runtime.avatarAssetStore));
   app.route('/api/v1',createPublicEventPrizePhotoRoutes(pool,runtime.eventPrizePhotoAssetStore));
+  app.route('/',createEventPageRoutes(pool,origin,runtime.eventParticipationEnabled===true,Boolean(runtime.eventEmailSender)));
   registerPublicEventMediaRoutes(app, featureContext);
   registerPublicPromotion(app,pool,runtime,origin);
   registerPublicSocialPosts(app,pool,runtime);

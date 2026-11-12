@@ -11,11 +11,15 @@
     "tests/runtime/shares-sanitizer.test.ts",
     "tests/runtime/shares-backfill.test.ts",
     "tests/e2e/shares.spec.ts",
-    "scripts/backfill-shares.ts"
+    "scripts/backfill-shares.ts",
+    "tests/runtime/event-import.test.ts",
+    "tests/fixtures/event-import/**"
   ],
   "public_exports": [
     "modules/shares/service.ts",
-    "modules/shares/types.ts"
+    "modules/shares/types.ts",
+    "modules/shares/event-ledger.ts",
+    "modules/shares/credit.ts"
   ],
   "dependencies": [
     "command-core",
@@ -25,7 +29,8 @@
     "github-social",
     "work",
     "assets",
-    "skill-submissions"
+    "skill-submissions",
+    "client-connections"
   ],
   "contract_families": [],
   "client_profiles": [

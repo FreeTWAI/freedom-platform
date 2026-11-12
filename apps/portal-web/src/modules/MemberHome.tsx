@@ -1,3 +1,4 @@
+import {RecentEvents} from '../share/RecentEvents';
 import {useLanguage} from '../language';
 import {FirstParticipation} from './FirstParticipation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -252,7 +253,7 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
       <HomeJournal onOpen={openHomeJournal}/>
       <a className="btn btn-ghost" href="#guilds/guild_games/tools/arcade">遊戲大廳</a>
     </nav>
-    <section className="home-timeline" aria-label="首頁社群動態"><SocialZone focusPost={focusPost} client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
+    <RecentEvents client={client}/><section className="home-timeline" aria-label="首頁社群動態"><SocialZone focusPost={focusPost} client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-context home-guide-disclosure" aria-label="我的工坊" open={wide}><summary>我的工坊</summary>
     <div className="home-support">

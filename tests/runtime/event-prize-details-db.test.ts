@@ -34,7 +34,7 @@ beforeEach(async()=>{
     sessions.push({cookie:response.headers.get('set-cookie')!.split(';')[0],csrf:body.csrf_token});
   }
 });
-function details(){return {title:'合成有獎活動',description:'隔離獎品說明測試',starts_at:'2099-01-01T12:00:00Z',ends_at:'2099-01-01T13:00:00Z',mode:'online',location:'合成教室',capacity:20,visibility:'open'};}
+function details(){return {title:'合成有獎活動 '+randomUUID().slice(0,8),description:'隔離獎品說明測試',starts_at:'2099-01-01T12:00:00Z',ends_at:'2099-01-01T13:00:00Z',mode:'online',location:'合成教室',capacity:20,visibility:'open'};}
 function prize(extra:Partial<EventPrizeDetail>={}):EventPrizeDetail{return {prize_id:randomUUID(),name:'紀念筆記本',description:'主辦者提供的合成獎品說明',quantity:2,icon_id:'gift',completion_rule:'完成活動中公告的分享任務，由主辦者確認。',claim_note:'請在活動結束後向主辦者詢問領取方式。',...extra};}
 async function request<T=EventResult>(path:string,session:Session|undefined=sessions[0],body?:unknown,version?:number,key=randomUUID()){
   const headers:Record<string,string>={Origin:origin,...(session?{Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{})};
@@ -44,7 +44,9 @@ async function request<T=EventResult>(path:string,session:Session|undefined=sess
 }
 async function create(prizes:EventPrizeDetail[]=[prize()]){
   const response=await request('/events',sessions[0],{...details(),prize_details:prizes});
-  assert.equal(response.status,201,JSON.stringify(response.data));return response.data;
+  assert.equal(response.status,201,JSON.stringify(response.data));assert.equal(response.data.state,'published');
+  // Retained legacy queue fixture: prize edits and reviews still operate on pending rows.
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[response.data.event_id]);return {...response.data,state:'pending'};
 }
 async function stored(id:string){return (await pool.query('SELECT to_jsonb(e) AS value FROM community_events e WHERE event_id=$1',[id])).rows[0].value;}
 async function snapshot(){
@@ -147,6 +149,7 @@ test('create and update exact retries return original receipts; changed body or 
   assert.equal(replay.status,201);assert.deepEqual(replay.data,first.data);assert.deepEqual(await snapshot(),created);
   const conflict=await request('/events',sessions[0],{...body,prize_details:[]},undefined,key);
   assert.equal(conflict.status,409);assert.equal(conflict.data.code,'idempotency_conflict');assert.deepEqual(await snapshot(),created);
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[first.data.event_id]);
   const path=`/events/${first.data.event_id}/update`,updateKey=randomUUID(),changed={...details(),prize_details:[prize()]};
   const edited=await request(path,sessions[0],changed,first.data.aggregate_version,updateKey);assert.equal(edited.status,200);
   const saved=await snapshot(),repeat=await request(path,sessions[0],changed,first.data.aggregate_version,updateKey);
@@ -254,5 +257,6 @@ test('maximum-length Unicode event descriptions and five prizes survive the boun
   const body={...details(),title:char.repeat(120),description:char.repeat(3000),help_need:char.repeat(500),location:char.repeat(300),topic:char.repeat(160),online_url:'https://example.org/'+char.repeat(480),prize_details};
   assert(Buffer.byteLength(JSON.stringify(body))>32768);
   const first=await request('/events',sessions[0],body);assert.equal(first.status,201,JSON.stringify(first.data));assert.deepEqual(first.data.prize_details,prize_details);
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[first.data.event_id]);
   const update=await request(`/events/${first.data.event_id}/update`,sessions[0],body,first.data.aggregate_version);assert.equal(update.status,200);assert.deepEqual(update.data.prize_details,prize_details);
 });

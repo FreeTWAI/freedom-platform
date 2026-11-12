@@ -1,3 +1,6 @@
+import {claimEventOrganizer} from '../../../../modules/community/event-claims.js';
+import {eventInterest} from '../../../../modules/community/event-interest.js';
+import {shareEvent} from '../../../../modules/community/event-sharing.js';
 import {readEventHelper,listEventHelpers,mutateEventHelper,decideEventHelper} from '../../../../modules/community/event-helpers.js';
 import {listEventAttendance,mutateEventAttendance} from '../../../../modules/community/event-attendance.js';
 import type {PlatformRuntime} from '../runtime.js';
@@ -80,6 +83,9 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
     app.patch('/events/:id/waitlist-policy',async c=>{const eventId=id(c.req.param('id'));const result=await setEventWaitlistPolicy(pool,await moduleCommand(c),eventId);await dispatch(eventId);return c.json(result);});
     app.patch('/events/:id/schedule',async c=>{const eventId=id(c.req.param('id'));const result=await updateEventSchedule(pool,await moduleCommand(c),eventId);await dispatch(eventId);return c.json(result);});
   }
+  app.post('/events/:id/claim',async c=>c.json(await claimEventOrganizer(pool,await moduleCommand(c),id(c.req.param('id')))));
+  app.post('/events/:id/interest',async c=>c.json(await eventInterest(pool,id(c.req.param('id')),await moduleCommand(c))));
+  app.post('/events/:id/share',async c=>c.json(await shareEvent(pool,await moduleCommand(c),id(c.req.param('id')))));
   app.get('/events',async c=>c.json({items:await readWithMemberSession(pool,c.get('actor'),q=>listEvents(q,c.get('actor')))}));
   app.get('/events/bulletins',async c=>c.json({items:await readWithMemberSession(pool,c.get('actor'),q=>listEventBulletins(q,c.get('actor')))}));
   app.get('/events/:id',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>readEvent(q,c.get('actor'),id(c.req.param('id')),runtime?.eventParticipationEnabled===true))));

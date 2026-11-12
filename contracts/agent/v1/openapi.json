@@ -1,4 +1,62 @@
 {
+  "x-denied-operations": [
+    {
+      "method": "GET",
+      "route": "/api/v1/public/events",
+      "title": "公開近期活動（匿名）",
+      "agent_scope": null
+    },
+    {
+      "method": "GET",
+      "route": "/events/:id",
+      "title": "活動頁（匿名或瀏覽器）",
+      "agent_scope": null
+    },
+    {
+      "method": "GET",
+      "route": "/events/:id/calendar.ics",
+      "title": "活動行事曆（匿名或瀏覽器）",
+      "featureFlag": "FREEDOM_EVENT_PARTICIPATION_ENABLED",
+      "agent_scope": null
+    },
+    {
+      "method": "GET",
+      "route": "/events.ics",
+      "title": "公開行事曆（匿名）",
+      "featureFlag": "FREEDOM_EVENT_PARTICIPATION_ENABLED",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/public/events/:id/interest",
+      "title": "原站活動訪客興趣（匿名）",
+      "agent_scope": null
+    },
+    {
+      "method": "GET",
+      "route": "/admin/api/event-organizer-claims",
+      "title": "主辦認領佇列（管理員）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/admin/api/event-organizer-claims/:id/review",
+      "title": "主辦認領核實（管理員）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/events/:id/claim",
+      "title": "主辦認領（本人操作）",
+      "agent_scope": null
+    },
+    {
+      "method": "POST",
+      "route": "/api/v1/shares/:share_id/star",
+      "title": "收藏分享（未開放）",
+      "agent_scope": null
+    }
+  ],
   "openapi": "3.1.1",
   "info": {
     "title": "自由工坊 Agent API",
@@ -78,13 +136,8 @@
               },
               "example": {
                 "title": "讀書會",
-                "description": "一起讀書",
-                "starts_at": "2027-01-10T10:00:00Z",
-                "ends_at": "2027-01-10T11:00:00Z",
-                "mode": "online",
-                "location": "線上",
-                "capacity": 20,
-                "visibility": "open"
+                "starts_at": "2099-01-10T10:00:00Z",
+                "location": "線上"
               }
             }
           }
@@ -135,6 +188,126 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。"
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。"
+          },
+          "403": {
+            "description": "權限不足或功能未開放。"
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。"
+          },
+          "429": {
+            "description": "已達限制，停止操作。"
+          }
+        }
+      }
+    },
+    "/events/{id}/share": {
+      "post": {
+        "operationId": "events.links",
+        "summary": "分享活動連結",
+        "x-required-scope": "share",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。"
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。"
+          },
+          "403": {
+            "description": "權限不足或功能未開放。"
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。"
+          },
+          "429": {
+            "description": "已達限制，停止操作。"
+          }
+        }
+      }
+    },
+    "/events/{id}/interest": {
+      "post": {
+        "operationId": "events.interest",
+        "summary": "原站活動有興趣",
+        "x-required-scope": "rsvp",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {}
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "操作成功；欄位沿用原會員 API。"
@@ -518,7 +691,6 @@
         "operationId": "shares.preview",
         "summary": "預覽分享",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -573,7 +745,6 @@
         "operationId": "shares.create",
         "summary": "發布分享",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -632,7 +803,6 @@
         "operationId": "shares.list",
         "summary": "查看分享",
         "x-required-scope": "read",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -663,7 +833,6 @@
         "operationId": "shares.read",
         "summary": "查看分享內容",
         "x-required-scope": "read",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -704,7 +873,6 @@
         "operationId": "shares.retract",
         "summary": "撤回自己的分享",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -765,7 +933,6 @@
         "operationId": "shares.report",
         "summary": "檢舉分享",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -828,7 +995,6 @@
         "operationId": "shares.links",
         "summary": "建立分享連結",
         "x-required-scope": "share",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []
@@ -889,7 +1055,6 @@
         "operationId": "credit.read",
         "summary": "我的貢獻",
         "x-required-scope": "read",
-        "x-integration-pending": true,
         "security": [
           {
             "AgentBearer": []

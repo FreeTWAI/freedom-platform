@@ -1,3 +1,4 @@
+import {EventComposer} from './EventComposer';
 import {useEffect,useId,useRef,useState,type MutableRefObject} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import type {ShareTarget} from '../ShareLauncher';
@@ -12,14 +13,14 @@ export function ShareBoxLauncher({client,userId,onChoose,disabled=false,storesEn
   const [draft,setDraft]=useState(()=>{try{return sessionStorage.getItem(`share-draft:${userId}`)??'';}catch{return '';}});
   useEffect(()=>installShareComposer((r,resolve)=>{finish.current?.({status:'cancelled'});finish.current=resolve;setRequest(r);if(!operation.current){if(r.url||r.text)setDraft(r.url??r.text??'');if(r.image)retainedImage.current=r.image;if(r.text||r.url||r.image)retainedMode.current=(r.text||r.image)&&!r.url?'post':'link';}}),[]);
   useEffect(()=>()=>{finish.current?.({status:'cancelled'});finish.current=null;},[]);
-  function done(result:ShareComposeResult){finish.current?.(result);finish.current=null;setRequest(null);trigger.current?.focus();if(result.status==='published'){operation.current=null;retainedImage.current=undefined;setDraft('');try{sessionStorage.removeItem(`share-draft:${userId}`);}catch{}if(result.url)window.location.hash=result.url.replace(/^\/+#/,'#');}}
+  function done(result:ShareComposeResult){finish.current?.(result);finish.current=null;setRequest(null);trigger.current?.focus();if(result.status==='published'){operation.current=null;retainedImage.current=undefined;setDraft('');try{sessionStorage.removeItem(`share-draft:${userId}`);}catch{}if(result.url){if(result.url.startsWith('/events/'))window.location.assign(result.url);else window.location.hash=result.url.replace(/^\/+#/,'#');}}}
   return <><button ref={trigger} className="btn btn-primary" disabled={disabled} aria-label="分享或提交" onClick={()=>void openShareComposer()}>＋分享</button>
     {request&&<ShareBox pending={operation} retainedImage={retainedImage} retainedMode={retainedMode} client={client} request={request} value={draft} onChange={v=>{setDraft(v);try{sessionStorage.setItem(`share-draft:${userId}`,v);}catch{/* Memory draft remains. */}}} onDone={done} onChoose={onChoose} storesEnabled={storesEnabled} onMyContent={onMyContent}/>}
   </>;
 }
 export function ShareBox({pending,retainedImage,retainedMode,client,request,value,onChange,onDone,onChoose,storesEnabled,onMyContent}:{pending:MutableRefObject<Pending|null>;retainedImage:MutableRefObject<Blob|undefined>;retainedMode:MutableRefObject<'link'|'post'>;client:PortalClient;request:ShareComposeRequest;value:string;onChange:(v:string)=>void;onDone:(r:ShareComposeResult)=>void;onChoose:(t:ShareTarget)=>void;storesEnabled:boolean;onMyContent?:()=>void}){
   const dialog=useRef<HTMLDialogElement>(null),id=useId(),generation=client.sessionGeneration;
-  const [preview,setPreview]=useState<Preview|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[more,setMore]=useState(false);
+  const [preview,setPreview]=useState<Preview|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[more,setMore]=useState(false),[eventMode,setEventMode]=useState(request.kind==='event');
   const [image,setImage]=useState<Blob|undefined>(retainedImage.current??request.image),[mode,setMode]=useState<'link'|'post'>(retainedMode.current);
   const sequence=useRef(0),live=useRef(true);
   useEffect(()=>{live.current=true;dialog.current?.showModal();return()=>{live.current=false;sequence.current++;};},[]);
@@ -30,13 +31,14 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
     if(mode==='post'){setPreview(value.trim()?{kind:'post',title:value.slice(0,80),url:'',description:'同社群會員可見',original_author:null}:null);return;}
     setPreview(null);setError('');const seq=++sequence.current;
     if(!/^https:\/\//i.test(value.trim()))return;
-    const timer=setTimeout(()=>{void client.post<Preview>('/shares/preview',{url:value.trim(),...(['repository','link'].includes(request.kind??'')?{kind:request.kind}:{})},{idempotencyKey:crypto.randomUUID()}).then(p=>{if(current()&&sequence.current===seq)setPreview(p);},e=>{if(current()&&sequence.current===seq)setError(e.message);});},400);
+    try{if(/(^|\.)(accupass\.com|meetup\.com|eventbrite\.com|lu\.ma|luma\.com)$/.test(new URL(value.trim()).hostname)){setEventMode(true);return;}}catch{}
+    const timer=setTimeout(()=>{void client.post<Preview>('/shares/preview',{url:value.trim(),...(['repository','link','event'].includes(request.kind??'')?{kind:request.kind}:{})},{idempotencyKey:crypto.randomUUID()}).then(p=>{if(current()&&sequence.current===seq){if(p.kind==='event')setEventMode(true);else setPreview(p);}},e=>{if(current()&&sequence.current===seq)setError(e.message);});},400);
     return()=>{clearTimeout(timer);sequence.current++;};
   },[value,mode]);
   async function publish(){
     if(!preview||busy)return;if(image&&(image.size>2*1024*1024||!['image/png','image/jpeg','image/webp'].includes(image.type))){setError('圖片限 2 MB 的 PNG、JPEG 或 WebP。');return;}if(mode==='link'&&image){setError('附圖請選貼文。');return;}setBusy(true);setError('');
     try{
-      if(!pending.current)pending.current={key:crypto.randomUUID(),body:mode==='post'?{text:value.trim()}:{url:value.trim(),...(['repository','link'].includes(request.kind??'')?{kind:request.kind}:{}),...(request.text&&request.url?{text:request.text}:{})}};
+      if(!pending.current)pending.current={key:crypto.randomUUID(),body:mode==='post'?{text:value.trim()}:{url:value.trim(),...(['repository','link','event'].includes(request.kind??'')?{kind:request.kind}:{}),...(request.text&&request.url?{text:request.text}:{})}};
       const p=pending.current;
       if(mode==='post'&&!p.postId){
         let attached:unknown;
@@ -56,8 +58,8 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
       <button className="btn btn-secondary btn-small" onClick={()=>editor('work')}>作品</button>
       <button className="btn btn-secondary btn-small" onClick={()=>setMore(!more)} aria-expanded={more}>種類</button>
     </div>
-    {more?<div className="share-options">
-      <button className="btn btn-secondary" onClick={()=>{onDone({status:'cancelled'});window.location.hash='#events';}}>活動</button>
+    {eventMode?<EventComposer client={client} onDone={onDone} initialUrl={value}/>:more?<div className="share-options">
+      <button className="btn btn-secondary" onClick={()=>{setMore(false);setEventMode(true);}}>活動</button>
       <button className="btn btn-secondary" onClick={()=>{onDone({status:'cancelled'});window.location.hash='#services';}}>服務</button>
       <button className="btn btn-secondary" onClick={()=>editor('product')}>上傳商品</button>
       <button className="btn btn-secondary" onClick={()=>editor('product-start')}>準備商品</button>

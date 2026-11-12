@@ -5,7 +5,7 @@ export function agentGuide(origin:string){
  '# 自由工坊 Agent',
  '會員可授權自己的 Agent 透過網站同一套 API 分享、報名與讀取本人紀錄。未列出的操作一律拒絕。',
  '## 取得金鑰',
- '會員登入後，到「我的名片 → 帳號設定 → Agent 連線」建立金鑰；新選單整合後入口為「自動化」。勾選讀取、分享、報名，複製僅顯示一次的文字。不要交出密碼或 cookie。',
+ '會員登入後，到「自動化 → Agent 連線」建立金鑰。勾選讀取、分享、報名，複製僅顯示一次的文字。不要交出密碼或 cookie。',
  `API base URL：${origin}/api/v1`,
  `機器契約：${origin}/agent/openapi.json`,
  '公開指引與契約請勿附帶 Authorization。',
@@ -21,8 +21,9 @@ export function agentGuide(origin:string){
    ...(op.ifMatch?['先 GET 活動讀取 aggregate_version，再送 If-Match（含雙引號）。']:[]),
    ...(op.example?['範例 JSON：','```json',JSON.stringify(op.example,null,2),'```']:['範例：`curl -H "Authorization: Bearer $FREEDOM_AGENT_TOKEN" "'+origin+op.route+'"`']));
  }
+ lines.push('## 活動分享', 'POST /api/v1/events 只需 title、starts_at（含時區）、location，發布後立即開放。每位會員 24 小時最多 5 場。選 guild_key 後限該公會；不能藉 Agent 擴大可見範圍。匯入先 POST /api/v1/shares/preview，內容 {kind:"event",url:"https://來源網址"}；核對後 POST /api/v1/shares，內容 {kind:"event",url:"https://來源網址",event:{title,starts_at,location}}。來源讀取失敗時手動補齊，外部報名只計興趣。', '## 不授予 Agent 的端點', ...agentOperations.filter(op=>op.granted===false).map(op=>`${op.method} ${op.route} — ${op.title}；無 Agent scope。`));
  lines.push('## 變更與限制',
- '`GET /api/v1/agent/events?after=<next_cursor>` 只讀本人變更。保存 next_cursor，下次從該值讀取；事件可能延後到下一頁出現，依事件 id 去重。回應無訊息正文。候補獲邀不等於報名成功，仍須接受邀請。share.credited 的實際來源待 shares 分支接上交易內記錄。',
+ '`GET /api/v1/agent/events?after=<next_cursor>` 只讀本人變更。保存 next_cursor，下次從該值讀取；事件可能延後到下一頁出現，依事件 id 去重。回應無訊息正文。候補獲邀不等於報名成功，仍須接受邀請。已確認的分享與活動報名歸因可產生 share.credited。有效點閱統計請讀取分享頁。',
  '金鑰 90 天到期；會員可查看最後使用時間、今日發布量，續期會換新金鑰並撤銷舊金鑰。首次公開發布回覆 202 pending_member，尚未發布；請會員在瀏覽器檢查確切內容並確認，再用相同 key、內容重試。後續不再需要金鑰首次確認，仍遵守原功能的審核規則。',
  '每把金鑰每日最多 20 件公開內容（UTC 日界）。react、message 尚無可用路由；100 次反應／日是保留上限，不授予反應權。十次累計 4xx（含 429）會自動停用，成功呼叫不清除次數。202 待確認不計失敗。',
  '## 停止規則',
