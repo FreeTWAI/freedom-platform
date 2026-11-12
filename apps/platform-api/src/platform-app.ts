@@ -230,7 +230,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     console.error('request_failed', err instanceof Error ? err.name : 'unknown');
     return c.json({type:'about:blank',title:'Internal error',status:500,code:'internal_error',detail:'操作未完成，請重新整理並查看目前狀態。'},500);
   });
-  app.use('*',agentBoundary(pool));
+  app.use('*',agentBoundary(pool,path=>platformResponseHeaders(path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true)));
   // Outermost: Hono resolves downstream onError responses before next() returns.
   app.use('*',async(c,next)=>{
     const started=performance.now();

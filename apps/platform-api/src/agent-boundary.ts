@@ -8,11 +8,12 @@ import type { PlatformEnv } from './module-context.js';
 
 /** Installed before ANY public, member, provider or admin handler. Hono's matched
  * route metadata, never a caller-supplied path/prefix, selects the capability. */
-export function agentBoundary(pool:Pool):MiddlewareHandler<PlatformEnv> {
+export function agentBoundary(pool:Pool,responseHeaders:(path:string)=>Record<string,string>):MiddlewareHandler<PlatformEnv> {
  return async(c,next)=>{
   const authorization=c.req.header('Authorization');
-  if(!authorization||(!c.req.path.startsWith('/api/v1/')&&!/^Bearer +fw_agent_/i.test(authorization)))return next();
-  c.header('Cache-Control','no-store');
+  // Claim every raw spelling of our credential, and leave all other lanes untouched.
+  if(!authorization||!/fw_agent_/i.test(authorization))return next();
+  for(const [name,value] of Object.entries(responseHeaders(c.req.path)))c.header(name,value);
   requireCondition(c.req.header('Cookie')===undefined,400,'ambiguous_credentials','請只使用一種登入憑證。');
   const actor=await authenticateAgent(pool,authorization);
   try {

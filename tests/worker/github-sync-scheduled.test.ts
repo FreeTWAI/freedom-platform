@@ -24,7 +24,8 @@ async function capture(run: () => Promise<void>) {
 
 test('the platform worker exposes scheduled and runs one bounded sync for events, repositories and metrics', async () => {
   const pool = {ended: 0, async end() { this.ended += 1; }};
-  let retained = 0;
+  let retained = 0, refreshed = 0;
+  const githubFetcher: typeof fetch = async () => { throw Error('unexpected network'); };
   let seen: {budget?: number; token?: string; pool?: unknown} = {};
   let pruned: unknown;
   const handler = createWorkerHandler({
@@ -37,7 +38,10 @@ test('the platform worker exposes scheduled and runs one bounded sync for events
     commerceSweep:async()=>0,
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
     commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),
+    githubFetcher,
+    sharesRefresh: async (given, options, limit) => { assert.equal(given, pool); assert.equal(options?.token, TOKEN); assert.equal(options?.fetcher, githubFetcher); assert.equal(limit, 20); refreshed++; return 0; },
     syncGitHub: async (given, options?: GitHubSyncOptions) => {
+      assert.equal(refreshed, 1);
       seen = {budget: options?.budget, token: options?.token, pool: given};
       return empty;
     },
@@ -53,6 +57,7 @@ test('the platform worker exposes scheduled and runs one bounded sync for events
   assert.equal(seen.pool, pool);
   assert.equal(pruned, pool, 'the scheduled run prunes expired auth records with the same pool');
   assert.equal(retained, 1);
+  assert.equal(refreshed, 1);
   assert.equal(pool.ended, 1);
   assert.equal(pending.length, 1);
   await Promise.all(pending);
@@ -71,6 +76,7 @@ test('a scheduled sync failure is logged without the token and still ends the po
     commerceSweep:async()=>0,
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
     commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),
+    sharesRefresh: async (given, options, limit) => { assert.equal(given, pool); assert.equal(options?.token, TOKEN); assert.equal(limit, 20); return 0; },
     syncGitHub: async () => { throw new Error('sync failed ' + TOKEN); },
     authPrune: async () => ({sessions: 0, login_attempts: 0, auth_rate_limits: 0, password_reset_tokens: 0}),
   });
@@ -98,6 +104,7 @@ test('a failing auth prune logs one line and still ends the pool', async () => {
     commerceSweep:async()=>0,
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
     commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),
+    sharesRefresh: async (given, options, limit) => { assert.equal(given, pool); assert.equal(options?.token, TOKEN); assert.equal(limit, 20); return 0; },
     syncGitHub: async () => empty,
     authPrune: async () => { throw new Error('prune failed ' + TOKEN); },
   });
@@ -126,4 +133,28 @@ test('a pool factory failure is logged by name and does not end a pool', async (
   assert.equal(logged.join(' ').includes('secret'), false);
   assert.equal(ended, 0);
   await Promise.all(pending);
+});
+
+test('share refresh failure is redacted and does not stop GitHub sync or pool cleanup', async () => {
+  const calls: string[] = [];
+  const pool = { async end() { calls.push('end'); } };
+  const handler = createWorkerHandler({
+    createPool: () => pool as unknown as Pool,
+    commerceRetention: async () => ({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),
+    commerceDueWork: async () => ({claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0}),
+    commerceSweep: async () => 0,
+    commerceEmailSweep: async () => ({expired:0,deleted:0}),
+    commerceApplyDeferred: async () => ({applied:0,failed:0,skipped:0}),
+    sharesRefresh: async (given, options, limit) => {
+      assert.equal(given, pool); assert.equal(options?.token, TOKEN); assert.equal(limit, 20);
+      calls.push('shares'); throw Error('refresh failed ' + TOKEN);
+    },
+    syncGitHub: async (_given, options) => { assert.equal(options?.token, TOKEN); calls.push('github'); return empty; },
+    authPrune: async () => { calls.push('auth'); return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}; },
+  });
+  const {ctx, pending} = context();
+  const logged = await capture(async () => { await handler.scheduled({}, env(), ctx); await Promise.all(pending); });
+  assert.deepEqual(logged, ['shares_refresh_failed']);
+  assert.equal(logged.join(' ').includes(TOKEN), false);
+  assert.deepEqual(calls, ['shares', 'github', 'auth', 'end']);
 });
