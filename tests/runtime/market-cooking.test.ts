@@ -1,11 +1,12 @@
 import {shawarmaPresentation} from '../../apps/portal-web/src/games/cooking/shawarma-presentation.js';
 import {test} from 'node:test';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {advanceMarket,applyMarket,canServe,marketGrade,marketMass,newMarket,parseMarket,readMarket,saveMarket,MARKET_SAVE_KEY,type MarketRun,type MarketAction} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 import {emptyCookbook,updateCookbook} from '../../apps/portal-web/src/games/cooking/storage.js';
 import {Float32BufferAttribute,Group,Mesh,Raycaster,Vector3} from 'three';
 import {FoodKit} from '../../apps/portal-web/src/games/cooking/food-kit.js';
-import {marketFood} from '../../apps/portal-web/src/games/cooking/market-food.js';
+import {marketFood,displayMarket} from '../../apps/portal-web/src/games/cooking/market-food.js';
 import {marketHitPortion} from '../../apps/portal-web/src/games/cooking/market-stage.js';
 import {cornDogPresentation} from '../../apps/portal-web/src/games/cooking/corn-dog-presentation.js';
 import {createCornDogStall} from '../../apps/portal-web/src/games/cooking/corn-dog-stall.js';
@@ -339,4 +340,35 @@ for(const [width,height] of [[296,514],[1180,614],[600,500]])test(`fallback sauc
  handlers().onPointerDown(outside);handlers().onPointerMove(event(.5,.5));handlers().onPointerUp(event(.5,.5));ui.render();assert.equal(ui.state().sauces.length,1,'letterbox must not start a stroke');
  handlers().onPointerDown(event(.4,.4));handlers().onPointerMove(outside);handlers().onPointerCancel(event(.4,.4));handlers().onPointerUp(event(.4,.4));ui.render();assert.equal(ui.state().sauces.length,1,'cancelled stroke remains cancelled');
  svg.getScreenCTM=()=>null as any;handlers().onPointerDown(event(.4,.4));handlers().onPointerUp(event(.4,.4));ui.render();assert.equal(ui.state().sauces.length,1,'unmeasurable SVG must not guess its coordinates');
+});
+
+// Measured on a105c57331, before the market-only geometry redesign. These are
+// the old assembly costs, not new relaxed rendering budgets or browser evidence.
+for(const [id,triangles,draws] of [['egg-fried-rice',116508,8],['steak-dinner',42132,30],['shawarma',16560,8],['corn-dog',72064,36]] as const)test(`market art ${id}: deterministic 16-portion geometry stays within previous cost and disposes once`,()=>{
+ const run=displayMarket(id);run.portions=Array.from({length:16},(_,i)=>({...run.portions[i%run.portions.length]}));
+ const before=JSON.stringify(run),kit=new FoodKit(),shared=new Map([...kit.geometries].map(g=>[g,0]));
+ for(const g of shared.keys())g.addEventListener('dispose',()=>shared.set(g,shared.get(g)!+1));
+ let expected:string|undefined,materialCount:number|undefined;
+ try{
+  for(const elapsed of [run.elapsed,run.elapsed+16,run.elapsed+32000]){
+   const food=marketFood({...run,elapsed},kit),owned=new Map(food.geometries.map(g=>[g,0])),hash=createHash('sha256');let actualTriangles=0,actualDraws=0;
+   for(const g of owned.keys())g.addEventListener('dispose',()=>owned.set(g,owned.get(g)!+1));
+   try{
+    food.root.updateMatrixWorld(true);food.root.traverse(o=>{
+     if(!(o instanceof Mesh))return;
+     const geometry=o.geometry;actualTriangles+=(geometry.index?.count??geometry.getAttribute('position').count)/3;actualDraws+=Array.isArray(o.material)?geometry.groups.length:1;
+     hash.update(JSON.stringify([o.matrixWorld.elements,geometry.groups,o.userData]));
+     for(const name of Object.keys(geometry.attributes).sort())hash.update(JSON.stringify([name,Array.from(geometry.getAttribute(name).array)]));
+     if(geometry.index)hash.update(JSON.stringify(Array.from(geometry.index.array)));
+     const position=geometry.getAttribute('position');for(let i=0;i<position.count;i++)assert.ok(Number.isFinite(position.getX(i))&&Number.isFinite(position.getY(i))&&Number.isFinite(position.getZ(i)));
+    });
+    assert.ok(actualTriangles<=triangles,`${actualTriangles} triangles must not exceed old ${triangles}`);assert.ok(actualDraws<=draws,`${actualDraws} draws must not exceed old ${draws}`);
+    const digest=hash.digest('hex');if(expected)assert.equal(digest,expected,'elapsed frames must not randomize or accumulate decorative geometry');else expected=digest;
+    if(materialCount!==undefined)assert.equal(kit.materials.size,materialCount,'rebuilding unchanged food must not grow the material cache');else materialCount=kit.materials.size;
+   }finally{food.dispose();food.dispose();}
+   assert.ok([...owned.values()].every(count=>count===1),'all temporary originals, clones and batch outputs dispose exactly once');assert.equal(food.root.children.length,0);assert.ok([...shared.values()].every(count=>count===0),'assembly must never dispose shared kit geometry');
+  }
+  assert.equal(JSON.stringify(run),before,'art cannot mutate the recipe, portions or sauce');
+ }finally{kit.dispose();kit.dispose();}
+ assert.ok([...shared.values()].every(count=>count===1));
 });

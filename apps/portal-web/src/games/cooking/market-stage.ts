@@ -24,7 +24,7 @@ export function marketFrontCamera(width:number,height:number){
  const aspect=width>0&&height>0&&Number.isFinite(width/height)?width/height:6/5;
  const fov=2*Math.atan(Math.tan(19*Math.PI/180)*Math.max(1,(6/5)/aspect))*180/Math.PI;
  const camera=new PerspectiveCamera(fov,aspect,.1,45);
- camera.position.set(0,1.2,12);camera.lookAt(0,1.2,0);camera.updateMatrixWorld();return camera;
+ camera.position.set(0,1.2,8.4);camera.lookAt(0,1.2,0);camera.updateMatrixWorld();return camera;
 }
 /** Only the working surface tilts; the stall and its upright spit face the viewer. */
 export function createMarketWorktop(){const root=new Group();root.rotation.x=Math.PI/5;root.position.y=1.2;root.updateMatrixWorld();return root;}
@@ -38,13 +38,48 @@ export function createMarketStage(host:HTMLElement,onLost:()=>void):MarketStage{
  const lost=(e:Event)=>{e.preventDefault();if(!disposed)onLost();};
  const dispose=()=>{if(disposed)return;disposed=true;resizeObserver?.disconnect();if(resizeView)window.removeEventListener('resize',resizeView);if(refreshMotion)motion?.removeEventListener('change',refreshMotion);renderer.domElement.removeEventListener('webglcontextlost',lost);food?.dispose();kit.dispose();studio?.dispose();light.shadow.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();scene.clear();};
  try{
-  renderer.setSize(768,640,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.toneMapping=ACESFilmicToneMapping;renderer.toneMappingExposure=1.1;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFSoftShadowMap;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
-  studio=foodStudio(renderer,scene);scene.background=new Color('#32251b');scene.add(new HemisphereLight('#fff8ed','#4c3021',.65));light.position.set(-3,8,4);light.castShadow=true;light.shadow.mapSize.set(1024,1024);Object.assign(light.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.5,far:25});light.shadow.normalBias=.03;scene.add(light);
-  kit.block(work,'#aa7140',0,-.55,0,14,.65,12,'wood');for(let i=-4;i<=4;i++)kit.block(work,'#6c472c',0,-.218,i*1.3,14,.008,.018,'wood');
-  kit.block(work,'#634b36',0,1.15,-4.1,14,2.6,.35,'wood');for(const x of [-4.5,-3,3,4.5]){kit.disk(work,'#cfbc91',x,.05,-2.6,.48,.25);kit.disk(work,'#b27343',x,.2,-2.6,.42,.05);kit.mesh(work,kit.ring,'#96867a',x,.24,-2.6,.45,.45,.45,'metal').rotation.x=-Math.PI/2;}
-  kit.block(work,'#d3bc8b',-3.5,-.05,.6,1.1,.1,2.4,'wood');const knife=kit.block(work,'#b8b7a9',-3.5,.06,.2,.25,.035,1.15,'metal');knife.rotation.y=.25;kit.block(work,'#46362a',-3.22,.08,1.08,.16,.12,.6,'wood');
-  for(const [i,c]of ['#b24323','#d9ae2c','#e8d6a7'].entries()){kit.disk(work,c,3.4,.23,.3+i*.66,.21,.75);kit.disk(work,'#f5e3bb',3.4,.68,.3+i*.66,.11,.18);}
+  renderer.setSize(768,640,false);renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.toneMapping=ACESFilmicToneMapping;renderer.toneMappingExposure=.92;renderer.shadowMap.enabled=true;renderer.shadowMap.type=PCFSoftShadowMap;renderer.domElement.setAttribute('aria-hidden','true');renderer.domElement.addEventListener('webglcontextlost',lost);host.append(renderer.domElement);
+  studio=foodStudio(renderer,scene);scene.background=new Color('#203b3a');scene.add(new HemisphereLight('#fff8ed','#4c3021',.65));light.position.set(-3,8,4);light.castShadow=true;light.shadow.mapSize.set(1024,1024);Object.assign(light.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:.5,far:25});light.shadow.normalBias=.03;scene.add(light);
+  // A built, front-facing chef's counter, not a floating plate against an empty sky.
+  // Every architectural detail is static and batched before the first frame.
+  kit.block(work,'#553c2d',0,-1.7,0,14,1.8,8,'wood');
+  kit.block(work,'#c9b89a',0,-.76,0,14,.1,8,'plain');
+  kit.block(work,'#927553',0,-.85,4,14,.24,.13,'wood');
+  // Deep glazed tile wall, inset brass rails and warm timber reveals.
+  kit.block(work,'#142e2e',0,3,-4.4,14,7,.3,'plain');
+  for(let row=0;row<8;row++)for(let col=-8;col<=8;col++){
+   const x=col*.88+(row%2)*.44,y=.35+row*.64;
+   kit.block(work,(row+col)%3===0?'#31534e':'#274741',x,y,-4.18,.85,.61,.06,'ceramic');
+  }
+  for(const x of [-4.8,4.8])kit.block(work,'#856344',x,2.5,-4.04,.22,5.4,.24,'wood');
+  kit.block(work,'#ba9158',0,3.9,-3.97,10,.035,.035,'metal');
+  kit.block(work,'#614632',0,2.82,-3.92,9.6,.14,.65,'wood');
+  // Identifiable ceramic mise-en-place jars stay peripheral to the food/hit plane.
+  for(const [i,x] of [-3.65,-2.95,2.95,3.65].entries()){
+   kit.disk(work,i%2?'#d4c4a2':'#53756d',x,3.12,-3.88,.23,.47,.23,'ceramic');
+   kit.disk(work,'#a38155',x,3.38,-3.88,.25,.07,.25,'wood');
+   kit.block(work,'#eee0bd',x,3.12,-3.64,.23,.16,.015,'paper');
+  }
+  // Rolled metal prep bowls and a folded towel anchor the side work zones.
+  for(const x of [-3.35,3.35]){
+   kit.disk(work,'#88938c',x,-.02,-1.1,.43,.27,.43,'metal');
+   kit.disk(work,'#263b33',x,.12,-1.1,.37,.025,.37,'plain');
+   kit.mesh(work,kit.ring,'#c6cdc1',x,.14,-1.1,.42,.42,.42,'metal').rotation.x=-Math.PI/2;
+  }
+  kit.block(work,'#e4d8bb',-3.35,-.13,.5,1.05,.08,1.5,'paper');
+  for(const x of [-3.7,-3.6])kit.block(work,'#3f645b',x,-.083,.5,.035,.008,1.5,'plain');
+  for(const [i,c]of ['#a34527','#c29a36','#e0cf9e'].entries()){
+   kit.disk(work,c,3.3,-.01,.5+i*.48,.15,.44,.15,'plain');
+   kit.disk(work,'#e6dcc4',3.3,.25,.5+i*.48,.075,.14,.075,'plain');
+  }
   bakeRigidGroup(work,kit.geometries);const worktop=createMarketWorktop();scene.add(work,worktop,spit);spit.position.set(0,1.2,-1);worktop.add(foodRoot);
+  // The display slab uses the same local surface as the food. Its top is exactly
+  // the settled plate's -.225 plane: no floating dish or camera-only fake shadow.
+  const deck=new Group();worktop.add(deck);
+  kit.block(deck,'#a18a69',0,-.5,0,6.8,.55,5.4,'wood');
+  kit.block(deck,'#d1c2a6',0,-.245,0,6.75,.04,5.35,'plain');
+  for(const x of [-3.2,3.2])kit.block(deck,'#856b47',x,-.34,0,.05,.15,5.36,'wood');
+  bakeRigidGroup(deck,kit.geometries);
   const camera=marketFrontCamera(768,640);const fill=new DirectionalLight('#dbe7ff',.7);fill.position.set(5,3,-3);scene.add(fill);
   const cooker=new Group();worktop.add(cooker);
   let cornDogStall:ReturnType<typeof createCornDogStall>|null=null,spitMaterial:ReturnType<FoodKit['mat']>|null=null;
