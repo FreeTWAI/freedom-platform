@@ -27,7 +27,7 @@ const profile={real_world_occupations:['茶農','店面經營者'],background:'�
 test('expanded directions remain separate from 18 Guild professions and do not expose private profiles',async()=>{
   const member=await signIn();const view=await request('/me/positioning',member),guilds=await request('/guilds',member);
   assert.equal(view.status,200);assert.equal(view.data.profile,null);assert.ok(view.data.tracks.length>=20);
-  assert.equal(guilds.data.items.length,18);assert.equal(new Set(guilds.data.items.map((g:any)=>g.profession_key)).size,18);
+  assert.equal(guilds.data.items.length,20);assert.equal(new Set(guilds.data.items.map((g:any)=>g.profession_key)).size,20);
   assert.ok(guilds.data.items.every((g:any)=>g.membership===null));assert.deepEqual(view.data.recommendations,[]);
   assert.equal((await request('/me/positioning')).status,401);
 });

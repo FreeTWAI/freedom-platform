@@ -24,6 +24,11 @@ test('hostile HTML cannot retain executable tags, attributes, CSS or dangerous U
  ];
  for(const input of hostile){const result=sanitizeReadme(input,'fixture/repo');assert.doesNotMatch(result,/<(?:script|style|iframe|svg|math|form|input|object|embed|template|noscript)\b/i);assert.doesNotMatch(result,/<[a-z][^>]*\s(?:on\w+|style|id|name|class|srcset|data-[\w-]+)=/i);assert.doesNotMatch(result,/(?:href|src)="(?:javascript|data|vbscript):/i);assert.doesNotMatch(result,/src="https:\/\/evil/);assert.equal(sanitizeReadme(result,'fixture/repo'),result,'sanitizer output is stable');}
 });
+test('quick start is plain text: escaped markup in a code block stays text, never markup',()=>{
+ const sanitized=sanitizeReadme('<h2>Install</h2><pre><code>echo &lt;script&gt;alert(1)&lt;/script&gt; &amp;&amp; <b>run</b></code></pre>','fixture/repo');
+ assert.equal(sanitized.includes('<script'),false);
+ assert.equal(readmeQuickStart(sanitized,'fixture/repo'),'echo <script>alert(1)</script> && run');
+});
 test('bounded input and nesting, malformed markup, entities and fallback',()=>{
  assert.throws(()=>sanitizeReadme('x'.repeat(1048577),'a/b'),/too_large/);
  assert.throws(()=>sanitizeReadme('<div>'.repeat(101),'a/b'),/nesting/);

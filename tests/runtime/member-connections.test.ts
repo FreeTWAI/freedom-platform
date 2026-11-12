@@ -94,7 +94,7 @@ test('quick entry explicitly joins a real guild, preserves private draft and gra
   assert.equal((await request('/me/onboarding/quick-start',session,body)).status,409);
   const card=await request('/members/'+session.id,session);assert.deepEqual(card.data.capabilities,[]);assert.equal(card.data.primary_guild.guild_key,'guild_ai_vibe');assert.ok(result.data.skill_books.length>0);
   assert.equal((await request('/members',session)).status,200);assert.equal((await request('/work-items',session)).status,200);
-  const guilds=(await request('/guilds/directory',session)).data.items;assert.equal(guilds.length,18);assert.ok(guilds.every((guild:any)=>Array.isArray(guild.tags)));
+  const guilds=(await request('/guilds/directory',session)).data.items;assert.equal(guilds.length,20);assert.ok(guilds.every((guild:any)=>Array.isArray(guild.tags)));
   assert.equal((await request('/admin',session)).status,404);
 });
 test('quick entry races cannot create conflicting primary guilds or double grants',async()=>{

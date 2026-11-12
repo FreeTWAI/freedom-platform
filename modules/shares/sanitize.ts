@@ -76,9 +76,24 @@ export function sanitizeReadme(html:string,repository:string,branch='main'):stri
   while(stack.length)output.push(`</${stack.pop()!}>`);
   return output.join('');
 }
+/** Text of markup that sanitizeReadme produced: every `<` there opens one of our tags, because text
+ * and attribute values are escaped. Tags are skipped by scanning, then entities are decoded once.
+ * The result is plain text: callers must escape it (both share pages do). */
+function sanitizedText(sanitized:string):string {
+  let text='',position=0;
+  while(position<sanitized.length){
+    const start=sanitized.indexOf('<',position);
+    if(start<0){text+=sanitized.slice(position);break;}
+    text+=sanitized.slice(position,start);
+    const end=sanitized.indexOf('>',start);
+    if(end<0)break;
+    position=end+1;
+  }
+  return entities(text);
+}
 /** Sanitized markup only. Extract a small plain-text code example below an installation heading. */
 export function readmeQuickStart(sanitized:string,repository:string):string {
   const heading=/<h[1-6]>[^<]*(?:install|quick\s*start|getting\s*started|安裝|快速開始|開始用)[\s\S]*?<\/h[1-6]>/i.exec(sanitized);
-  if(heading){const rest=sanitized.slice(heading.index+heading[0].length).split(/<h[1-6]>/)[0];const code=/<pre>(?:<code>)?([\s\S]*?)<\/pre>/.exec(rest);if(code)return entities(code[1].replace(/<[^>]+>/g,'')).trim().slice(0,4000);}
+  if(heading){const rest=sanitized.slice(heading.index+heading[0].length).split(/<h[1-6]>/)[0];const code=/<pre>(?:<code>)?([\s\S]*?)<\/pre>/.exec(rest);if(code)return sanitizedText(code[1]).trim().slice(0,4000);}
   return `git clone https://github.com/${repository}.git`;
 }
