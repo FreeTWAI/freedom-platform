@@ -1,3 +1,4 @@
+import { refreshDueRepositories } from '../../../modules/shares/repository-cache.js';
 import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
 import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
 import {createStorefrontAppearanceLifecycle} from '../../../modules/assets/storefront-appearance.js';
@@ -598,6 +599,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               await (deps.commerceFlushJournal??flushControlEvents)(pool,createR2EffectJournal(resolveFreedomEnv(env.FREEDOM_ENV),env.COMMERCE_JOURNAL),{limit:200});
             }catch{console.error('commerce_control_journal_failed');}
           }
+          try{await refreshDueRepositories(pool,{fetcher:deps.githubFetcher},20);}catch{console.error('shares_refresh_failed');}
           try{await syncGitHub(pool, {fetcher: deps.githubFetcher, token, budget: GITHUB_SYNC_REQUEST_BUDGET});}
           catch(error){const name=error instanceof Error&&/^[A-Za-z][A-Za-z0-9_]*$/.test(error.name)?error.name:'unknown';console.error('github_sync_failed',name);}
           if(env.FREEDOM_REGISTRATION_COMMUNITY_ID){

@@ -1,3 +1,4 @@
+import { githubCoordinate } from '../opensource-marketing/github.js';
 import {createCipheriv,createDecipheriv,createHash,randomBytes} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
@@ -168,7 +169,7 @@ export class GitHubSocial {
   }
   async start(actor:Actor,returnTo='#guilds'){
     const config=this.configured();
-    requireCondition(/^#[a-z][a-z0-9_-]{0,63}$/.test(returnTo)||['#join/supplier','#join/showcase','#join/tasks'].includes(returnTo)||communityCatalog.skill_books.some(book=>returnTo==='/development/skills/'+book.id),422,'github_return_to_invalid','請從工坊頁面重新連接 GitHub。');
+    requireCondition(/^#[a-z][a-z0-9_-]{0,63}$/.test(returnTo)||['#join/supplier','#join/showcase','#join/tasks'].includes(returnTo)||/^#shares\/[0-9a-f-]{36}(?:\?via=[A-Za-z0-9_-]{10})?$/.test(returnTo)||communityCatalog.skill_books.some(book=>returnTo==='/development/skills/'+book.id),422,'github_return_to_invalid','請從工坊頁面重新連接 GitHub。');
     return this.member(actor,async q=>{
       await this.rate(q,actor,'oauth-start',5,600);
       const state=randomBytes(32).toString('base64url'),verifier=randomBytes(32).toString('base64url'),expires=new Date(Date.now()+10*60*1000);
@@ -314,6 +315,30 @@ export class GitHubSocial {
       try{await this.saveMetrics(q,key,await this.provider.metrics(book.repository,token));}
       catch(error){if(!(error instanceof GitHubProviderError))throw error;await this.failMetrics(q,key,error.code);}
       return {book_id:bookId,connected:true,starred:desired,confirmed:true};
+    });
+  }
+  /** Repository shares use provider identity rather than a catalog book ID. Repeated PUT is idempotent. */
+  async starRepository(actor:Actor,repository:string,repositoryId:string,onConfirmed?:(q:PoolClient,githubId:string,first:boolean)=>Promise<void>){
+    githubCoordinate(`https://github.com/${repository}`);this.configured();
+    return this.member(actor,async q=>{
+      await this.rate(q,actor,'star-write',30);
+      const connection=await this.connection(q,actor);requireCondition(connection,409,'github_connect_required','請先連結 GitHub。');
+      await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`github-star/${connection.github_user_id}/${repository.toLowerCase()}`]);
+      const existed=(await q.query('SELECT 1 FROM skill_star_support WHERE github_user_id=$1 AND repository_key=$2',[connection.github_user_id,repository.toLowerCase()])).rowCount===1;
+      const already=await this.withToken(q,actor,connection,async token=>{
+        await assertCurrentSessionClock(q,actor);
+        const facts=await this.provider.metrics(repository,token);
+        requireCondition(facts.repository_identity?.id===repositoryId&&!facts.archived,409,'repository_identity_changed','原作身分已變更。');
+        await this.saveMetrics(q,repository.toLowerCase(),facts);
+        // An already-present upstream star did not originate from this page.
+        const already=await this.provider.starred(repository,token);
+        await this.provider.star(repository,token,true,()=>assertCurrentSessionClock(q,actor));
+        await recordConfirmedStar(q,connection.github_user_id,repository,true);
+        if(already&&!existed)await q.query('UPDATE skill_star_support SET via_share_id=NULL WHERE github_user_id=$1 AND repository_key=$2',[connection.github_user_id,repository.toLowerCase()]);
+        return already;
+      });
+      await onConfirmed?.(q,connection.github_user_id,!existed&&!already);
+      return {github_user_id:connection.github_user_id,first_confirmation:!existed&&!already,starred:true as const};
     });
   }
   async following(actor:Actor,username:string){

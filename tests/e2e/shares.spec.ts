@@ -1,0 +1,25 @@
+import {test,expect} from './fixtures.js';
+import {DEMO_PASSWORD,DEMO_USERS} from '../../packages/testing/seed.js';
+test('one share box publishes recorded original README, star action and member contribution at mobile width',async({page})=>{
+ await page.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/#home');
+ await page.getByLabel('電子郵件',{exact:true}).fill(DEMO_USERS[0].email);
+ await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
+ await page.getByRole('button',{name:'登入',exact:true}).click();
+ await page.getByRole('button',{name:'分享或提交',exact:true}).click();
+ const box=page.getByRole('dialog',{name:'分享',exact:true});await expect(box).toBeVisible();
+ await box.getByLabel('貼上連結',{exact:true}).fill('https://github.com/freetwai-test/shared-repo');
+ await expect(box.getByText('freetwai-test/shared-repo',{exact:true})).toBeVisible();
+ await box.getByRole('button',{name:'發布',exact:true}).click();
+ await expect(page).toHaveURL(/#shares\/[0-9a-f-]+$/);
+ await expect(page.getByRole('heading',{name:'README',exact:true})).toBeVisible();
+ await expect(page.getByText('這是原作 README 的合成錄製內容。')).toBeVisible();
+ await expect(page.getByRole('link',{name:'☆ GitHub 加星',exact:true})).toHaveAttribute('href','https://github.com/freetwai-test/shared-repo');
+ await expect(page.locator('.share-readme script,.share-readme svg,.share-readme [onerror],.share-readme iframe')).toHaveCount(0);
+ expect(await page.evaluate(()=>Boolean((window as unknown as {shareXss?:boolean}).shareXss))).toBe(false);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.getByRole('link',{name:'我的貢獻',exact:true}).click();
+ await expect(page.getByRole('region',{name:'我的貢獻'}).getByRole('link',{name:'freetwai-test/shared-repo'})).toBeVisible();
+ await expect(page.getByRole('region',{name:'我的貢獻'}).getByText('分享 1',{exact:true})).toBeVisible();
+});
