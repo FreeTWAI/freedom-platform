@@ -1,6 +1,6 @@
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
-import {navigate,openPageTools} from './navigation.js';
+import {navigate,openPageTools,expandHomeSections} from './navigation.js';
 
 type CapabilityWindow=Window&{localCapabilities:{kind:'copy'|'share';value:string|ShareData;active:boolean;resolve:()=>void;reject:(error:Error)=>void}[]};
 const languages=[['zh-Hant','繁體中文','複製中…'],['en','English','Copying…'],['ja','日本語','コピー中…'],['ko','한국어','복사 중…'],['es','Español','Copiando…']] as const;
@@ -28,7 +28,7 @@ async function finish(page:Page,index=0,error?:'denied'|'cancel'){
 const calls=(page:Page)=>page.evaluate(()=>(window as unknown as CapabilityWindow).localCapabilities.map(({kind,value,active})=>({kind,value,active})));
 async function login(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
-  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
 }
 async function capture(page:Page,dialog:Locator,name:string){
   for(const theme of ['light','dark','versefolk']){
@@ -61,7 +61,7 @@ async function optimization(page:Page,language:typeof languages[number][0]='zh-H
   await dialog.getByRole('button',{name:labels.optimize,exact:true}).click();await dialog.getByRole('button',{name:'到自己的 AI 工具',exact:true}).click();return dialog;
 }
 async function promotion(page:Page){
-  await navigate(page,'推廣排行榜');await page.getByRole('button',{name:'分享自由工坊',exact:true}).click();const dialog=page.getByRole('dialog',{name:'分享「自由工坊」',exact:true});
+  await navigate(page,'會員首頁');await expandHomeSections(page);await page.getByRole('button',{name:'分享自由工坊',exact:true}).click();const dialog=page.getByRole('dialog',{name:'分享「自由工坊」',exact:true});
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);return dialog;
 }
 async function skill(page:Page){

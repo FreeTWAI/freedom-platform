@@ -22,7 +22,7 @@ async function registerJoined(page:Page,profile='guide-ai-sister'){
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await expect(widget(page)).toHaveCount(0);
   await page.getByLabel('找感興趣的公會').fill('AI 開發公會');await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   if(profile==='guide-ai-sister')await expect(widget(page)).toHaveAttribute('data-character-id','claude');
 }
 async function openGuide(page:Page){
@@ -75,7 +75,8 @@ test('member selects one character; it persists across reload and changes outfit
   await expect(widget(page)).toHaveAttribute('data-character-id','kimi');await expect(widget(page)).toHaveAttribute('data-open','false');
   await page.reload();await expect(widget(page)).toHaveAttribute('data-character-id','kimi');
   expect(await page.evaluate(()=>localStorage.getItem('freedom-ai-sister-character'))).toBe('kimi');
-  expect(new Set(art)).toEqual(new Set([asset('claude/education-outfit'),asset('kimi/education-outfit'),asset('kimi/workplace-outfit')]));
+  // Reaching the work tool now visits the guild directory and its outfit first.
+  expect(new Set(art)).toEqual(new Set([asset('claude/education-outfit'),asset('kimi/education-outfit'),asset('kimi/international-outfit'),asset('kimi/workplace-outfit')]));
   expect(dragon).toEqual([]);
 });
 

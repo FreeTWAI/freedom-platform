@@ -8,7 +8,7 @@ async function login(page:Page,email='maker@local.test',navigate=true){
   if(navigate)await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
 }
 const frameBarrier=(page:Page)=>page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
 
@@ -139,7 +139,7 @@ for(const mode of ['single','all'] as const)test(`an old account ${mode} read ac
   try{await readRequest!.fulfill({json:{read_at:'2026-01-02T00:00:00Z'}});await (await acknowledgement).finished();await frameBarrier(page);
     inboxEvents=await page.evaluate(()=>(window as typeof window&{noticeEvents:number}).noticeEvents);
     expect(inboxEvents).toBe(0);expect(previewReads).toBe(before);
-    await expect(page).toHaveURL(currentUrl);await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+    await expect(page).toHaveURL(currentUrl);await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   }finally{if(readRequest)await readRequest.fulfill({json:{read_at:'2026-01-02T00:00:00Z'}}).catch(()=>{});}
 });
 

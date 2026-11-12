@@ -38,7 +38,7 @@ async function openInvitation(page: Page, owner: Member, requester: Member) {
   await page.getByLabel('電子郵件', { exact: true }).fill(owner.email);
   await page.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
   await page.getByRole('button', { name: '登入', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
   await navigate(page, '我的好友');
   await panel(page).getByRole('button', { name: '收到的邀請', exact: true }).click();
   const row = panel(page).locator('.directory-member').filter({ has: page.getByRole('heading', { name: requester.nickname, exact: true }) });
@@ -104,8 +104,8 @@ test('mobile unknown invitation blocks find-partners navigation and canonical or
     assertOriginal(commands);
     expect(await relation(e2eAuthPool, owner, requester)).toEqual({ state: 'accepted', version: 2 });
     await panel(page).getByRole('button', { name: '找新夥伴', exact: true }).click();
-    await expect(page).toHaveURL(/#members$/);
-    await expect(page.getByRole('heading', { name: '工坊夥伴', level: 1, exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/#explore\/people$/);
+    await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
   } finally { await page.unrouteAll({ behavior: 'wait' }); }
 });
@@ -134,7 +134,7 @@ test('pending invitation blocks global home until the original POST settles', as
     await expect(panel(page).getByText(`已和${requester.nickname}成為好友。`, { exact: true })).toBeVisible();
     await home(page).click();
     await expect(page).toHaveURL(/#home$/);
-    await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
     expect(commands).toHaveLength(1);
   } finally { held.release(); await page.unrouteAll({ behavior: 'wait' }); }
 });
@@ -160,7 +160,7 @@ test('canonical ACK permits home navigation while only its directory refresh is 
     expect(await relation(e2eAuthPool, owner, requester)).toEqual({ state: 'accepted', version: 2 });
     await home(page).click();
     await expect(page).toHaveURL(/#home$/);
-    await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
     await expect(panel(page)).toHaveCount(0);
     held.release();
     await page.unrouteAll({ behavior: 'wait' });
@@ -191,7 +191,7 @@ test('mobile chat overlay opens and closes without losing an unknown original in
     await expect(panel(page).getByText(`已和${requester.nickname}成為好友。`, { exact: true })).toBeVisible();
     assertOriginal(commands);
     await home(page).click();
-    await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
   } finally { await page.unrouteAll({ behavior: 'wait' }); }
 });
 
@@ -210,7 +210,7 @@ test('known initial 422 does not lock navigation or carry a recovery command int
     await expect(retry(page)).toHaveCount(0);
     await expect(accept).toBeEnabled();
     await home(page).click();
-    await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
     await navigate(page, '我的好友');
     await panel(page).getByRole('button', { name: '收到的邀請', exact: true }).click();
     await expect(panel(page).getByRole('button', { name: '接受邀請', exact: true })).toBeEnabled();
@@ -218,6 +218,6 @@ test('known initial 422 does not lock navigation or carry a recovery command int
     expect(commands).toHaveLength(1);
     expect(await relation(e2eAuthPool, owner, requester)).toEqual({ state: 'pending', version: 1 });
     await panel(page).getByRole('button', { name: '找新夥伴', exact: true }).click();
-    await expect(page).toHaveURL(/#members$/);
+    await expect(page).toHaveURL(/#explore\/people$/);
   } finally { await page.unrouteAll({ behavior: 'wait' }); }
 });

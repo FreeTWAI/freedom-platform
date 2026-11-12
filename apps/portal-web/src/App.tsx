@@ -332,7 +332,10 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     if(!googleCallback&&!resetToken&&catalogGuild&&guildActionFromHash(window.location.hash)==='tools'&&!publicToolRoute.toolId)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={catalogGuild} site={site}/></main>;
     const publicTool=publicToolRoute.guildKey&&publicToolRoute.toolId?guildTool(publicToolRoute.guildKey,publicToolRoute.toolId):undefined;
     if(!googleCallback&&!resetToken&&publicToolRoute.guildKey&&publicToolRoute.toolId&&!publicTool)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicToolRoute.guildKey} toolId={publicToolRoute.toolId}/></main>;
-    if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicTool.guild_key} tool={publicTool} site={site}><PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></RegisteredTools></main>;
+    if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/>
+      {publicTool.tab&&<header className="topbar"><h1>{t(`nav.${publicTool.tab}`)}</h1><PageTools pageId={publicTool.tab} client={client}/></header>}
+      {publicTool.tool_id==='tester-map'?<a className="btn btn-secondary btn-small tester-map-back" href={canonicalHash('#tester-map')} onClick={event=>{event.preventDefault();beginTesterLogin();}}>{t('testerMap.back')}</a>:publicTool.tool_id==='village'?<a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a>:null}
+      <RegisteredTools guildKey={publicTool.guild_key} tool={publicTool} site={site}><PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></RegisteredTools></main>;
     if(!googleCallback&&!resetToken&&!profileLoginRequested&&profileRoute?.kind==='visitor'&&canOpenGuestProfile(locationHash,window.location.search))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><h1>個人頁</h1><VisitorProfile client={client} id={profileRoute.id} onLogin={beginProfileLogin}/><a className="btn btn-secondary btn-small" href="#home">返回自由工坊</a></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
@@ -847,7 +850,7 @@ function Workspace({
     selectTab(next)
     // The guard's accepted hash, not the void callback, proves a route change.
     // Focus only after the keyed helper dialog has been removed from the DOM.
-    if (next === tab && acceptedHash.current !== previousHash && acceptedHash.current === `#${next}`) helperFocusPending.current = acceptedHash.current
+    if (next === tab && acceptedHash.current !== previousHash && acceptedHash.current === canonicalHash(`#${next}`)) helperFocusPending.current = acceptedHash.current
   }, [selectTab, tab])
   function navigateNotification(action:BellAction){
     const destination=orderNotificationDestination(action)

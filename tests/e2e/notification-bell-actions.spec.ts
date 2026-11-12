@@ -7,7 +7,7 @@ async function login(page:Page,email:string){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
 }
 async function inviteMaker(page:Page){
   const status=await page.evaluate(async()=>{
@@ -58,7 +58,7 @@ test('clicking an older notification opens its friend response beyond the first 
   const read=await readResponse;
   expect(read.status()).toBe(200);
   expect((await read.json()).read_at).toEqual(expect.any(String));
-  await expect(page).toHaveURL(/#members$/);
+  await expect(page).toHaveURL(/#explore\/people$/);
   await expect(popover).toBeHidden();
   await expect(page.locator('.notification-bell-trigger')).toHaveAccessibleName(`通知，${unreadBefore-1} 則未讀`);
   const afterResponse=await page.request.get('/api/v1/me/notifications?limit=6&offset=0');

@@ -2,7 +2,7 @@ import {test,expect,type Page} from './fixtures.js';
 async function login(page:Page) {
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('reviewer@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
 }
 async function clear(page:Page) {
   const session=await (await page.request.get('/api/v1/session')).json();
@@ -19,8 +19,8 @@ test('TESTER-ACCOUNT-001 login imports guest progress before opening map; report
     await device.locator('[data-step-id="arrival.preview"]').getByRole('button',{name:'完成這一步',exact:true}).click();
     await device.getByRole('link',{name:'返回登入',exact:true}).click();
     await device.getByLabel('電子郵件',{exact:true}).fill('reviewer@local.test');await device.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await device.getByRole('button',{name:'登入',exact:true}).click();
-    await expect(device.getByRole('heading',{name:'測試員地圖',level:1,exact:true})).toBeVisible();
-    await expect(device).toHaveURL(/#tester-map$/);
+    await expect(device.getByRole('heading',{name:'測試地圖',level:1,exact:true})).toBeVisible();
+    await expect(device).toHaveURL(/#guilds\/guild_custom_032fd02e754549e9b1e056e2b95b8d50\/tools\/tester-map$/);
     await expect.poll(async()=>((await (await device.request.get('/api/v1/me/tester-map')).json()).progress.done)).toContain('arrival.preview');
     expect(await device.evaluate(()=>localStorage.getItem('freedom-tester-map-progress-v1'))).toBeNull();
     await device.goto('/#tester-map');
@@ -60,7 +60,7 @@ test('TESTER-ACCOUNT-002 failed import retains guest progress and retries the im
     return route.continue();
   });
   await page.getByRole('link',{name:'返回登入',exact:true}).click();await page.getByLabel('電子郵件',{exact:true}).fill('reviewer@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'測試員地圖',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'測試地圖',level:1,exact:true})).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('尚未確認儲存結果');
   expect(await page.evaluate(()=>localStorage.getItem('freedom-tester-map-progress-v1'))).toContain('arrival.preview');
   fail=false;await page.getByRole('button',{name:'重試',exact:true}).click();
@@ -125,7 +125,7 @@ test('TESTER-ACCOUNT-005 guest start-card login returns to map and guests read a
    await expect(report.locator('fieldset')).toHaveCount(0);await expect(report).not.toContainText(session.user.user_id);await expect(report).not.toContainText(session.user.email);
    await guest.locator('[aria-labelledby="tester-start-title"]').getByRole('button',{name:'登入',exact:true}).click();
    await guest.getByLabel('電子郵件',{exact:true}).fill('reviewer@local.test');await guest.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await guest.getByRole('button',{name:'登入',exact:true}).click();
-   await expect(guest.getByRole('heading',{name:'測試員地圖',level:1,exact:true})).toBeVisible();await expect(guest).toHaveURL(/#tester-map$/);
+   await expect(guest.getByRole('heading',{name:'測試地圖',level:1,exact:true})).toBeVisible();await expect(guest).toHaveURL(/#guilds\/guild_custom_032fd02e754549e9b1e056e2b95b8d50\/tools\/tester-map$/);
  }finally{await context.close();await clear(page);}
 });
 

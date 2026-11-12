@@ -39,7 +39,7 @@ test('unknown helper ACK survives read and later 403, preserving key body versio
   await open(page);const panel=page.getByRole('region',{name:'申請幫忙',exact:true});
   await panel.getByRole('button',{name:'撤回幫忙申請'}).click();await expect(panel.getByRole('button',{name:'重試原幫忙操作'})).toBeVisible();
   await panel.getByRole('button',{name:'重新讀取幫忙狀態'}).click();await expect(panel.getByRole('button',{name:'撤回幫忙申請'})).toBeDisabled();
-  await page.getByRole('button',{name:'返回活動列表與行事曆'}).click();await expect(page).toHaveURL(new RegExp(`#events/${id}$`));
+  await page.getByRole('button',{name:'返回活動列表與行事曆'}).click();await expect(page).toHaveURL(new RegExp(`#explore/events/${id}$`));
   await panel.getByRole('button',{name:'重試原幫忙操作'}).click();await expect(panel.getByRole('button',{name:'重試原幫忙操作'})).toBeVisible();
   expect(writes).toHaveLength(2);expect(writes[1]).toEqual(writes[0]);
   resolve=true;await panel.getByRole('button',{name:'重試原幫忙操作'}).click();await expect(panel.getByRole('button',{name:'重試原幫忙操作'})).toHaveCount(0);expect(writes[2]).toEqual(writes[0]);
@@ -57,10 +57,10 @@ test('organizer sees private helper applications and decides using application v
 for(const width of [320,390])test(`simple event form keeps scope visible and opens invalid advanced fields at ${width}px`,async({page})=>{
   await page.setViewportSize({width,height:844});await open(page);await page.getByRole('button',{name:'返回活動列表與行事曆'}).click();
   await page.getByRole('button',{name:'辦活動',exact:true}).click();const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動'})});
-  await expect(form.getByLabel('活動名稱',{exact:true})).toBeFocused();await expect(form).toContainText('核准後的參與範圍：僅自由工坊會員');
-  await form.getByLabel('活動名稱',{exact:true}).fill('合成手機活動');await form.getByLabel('活動說明',{exact:true}).fill('合成活動');await form.getByLabel('線上場地',{exact:true}).fill('合成場地');
-  const options=form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true});await options.click();await form.getByLabel('活動類型').selectOption('reading_group');await options.click();
-  await form.getByRole('button',{name:'送出審核'}).click();await expect(form.getByLabel('讀書會主題')).toBeVisible();await expect(form.getByLabel('讀書會主題')).toBeFocused();
+  await expect(form.getByLabel('活動名稱',{exact:true})).toBeFocused();await expect(form.getByText('公開 · 時間依裝置時區',{exact:true})).toBeVisible();
+  await form.getByLabel('活動名稱',{exact:true}).fill('合成手機活動');await form.getByLabel('地點',{exact:true}).fill('合成場地');
+  const options=form.getByText('選填設定',{exact:true});await options.click();await form.getByLabel('活動說明',{exact:true}).fill('合成活動');await form.getByLabel('活動類型').selectOption('reading_group');await options.click();
+  await form.getByRole('button',{name:'發布'}).click();await expect(form.getByLabel('讀書會主題')).toBeVisible();await expect(form.getByLabel('讀書會主題')).toBeFocused();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  const box=await form.getByRole('button',{name:'送出審核'}).boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);
+  const box=await form.getByRole('button',{name:'發布'}).boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);
 });
