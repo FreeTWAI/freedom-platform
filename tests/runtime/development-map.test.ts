@@ -91,7 +91,7 @@ test('public skill guidance survives a repository cache outage without substitut
   const normalized=normalizeSql(sql);
   if(normalized===normalizeSql(PUBLIC_BOOK_CACHE_SQL)){
    return Promise.resolve({rows:[{
-    provider_repo_id:'9001',
+    provider_repo_id:'9001',established_provider_repo_id:'9001',observed_needs_recheck:false,
     full_name:'teddashh/ai-security-scanner',
     current_url:'https://github.com/teddashh/ai-security-scanner',
     description:'Cached original scanner description from GitHub',
@@ -131,4 +131,72 @@ test('unknown guide paths do not become an SPA fallback and authored text cannot
  const body=markdownBody('## <img src=x onerror=alert(1)>\nhttps://example.invalid/"onclick="alert(1)\n```sh\n<script>boom</script>\n```');
  assert.equal(body.includes('<img'),false);assert.equal(body.includes('<script>'),false);
  assert.equal(body.includes('href="javascript:'),false);assert.match(body,/&lt;script&gt;/);
+});
+
+test('book cache rejects reused coordinates, unresolved identity changes and unbound metrics',async()=>{
+ const {readBookOriginalCache}=await import('../../modules/shares/repository-cache.js');
+ const book={id:'identity-book',repository_url:'https://github.com/Workshop/reviewed',upstream_url:'https://github.com/Original/old',source_commit:'a'.repeat(40)};
+ const genuine={provider_repo_id:'101',established_provider_repo_id:'101',full_name:'Original/new',current_url:'https://github.com/Original/new',observed_book_id:book.id,observed_requested_full_name:'Original/old',observed_needs_recheck:false,readme_html:'<p>Genuine README</p>',description:'Genuine description',facts:{owner_login:'Original',stars:12},latest_release:{tag_name:'v1',name:'Genuine release',html_url:'https://github.com/Original/new/releases/tag/v1',published_at:null},fetch_state:'ready',fetched_at:new Date()};
+ const replacement={...genuine,provider_repo_id:'202',full_name:'Original/old',current_url:book.upstream_url,observed_book_id:null,established_provider_repo_id:null,readme_html:'<p>Replacement README</p>',facts:{owner_login:'Replacement',stars:999},latest_release:{...genuine.latest_release,name:'Replacement release'}};
+ const read=(rows:unknown[])=>readBookOriginalCache({query:async(sql:string)=>({rows:sql===PUBLIC_BOOK_CACHE_SQL?rows:[{repository_key:'original/old',snapshot:{stargazers_count:999}}]})} as unknown as Pool,book);
+ for(const rows of [[replacement,genuine],[genuine,replacement]]){
+  const result=await read(rows);
+  assert.equal(result.url,genuine.current_url);
+  assert.equal(result.readme_html,genuine.readme_html);
+  assert.equal(result.original_author,'Original');
+  assert.equal(result.latest_release?.name,'Genuine release');
+  assert.equal(result.stars,12);
+ }
+ for(const rows of [[replacement],[{...genuine,observed_needs_recheck:true},replacement],[]]){
+  const result=await read(rows);
+  assert.equal(result.url,book.repository_url);
+  assert.equal(result.readme_html,null);
+  assert.equal(result.original_author,null);
+  assert.equal(result.latest_release,null);
+  assert.equal(result.stars,null);
+ }
+});
+
+test('both book Markdown exports treat upstream HTML, links and fences as data',async()=>{
+ const {skillMarkdown,skillAgentMarkdown}=await import('../../modules/development/service.js');
+ const {buildBookOriginalCache}=await import('../../modules/shares/repository-cache.js');
+ const cache={...buildBookOriginalCache({id:'security-scanner',repository_url:'https://github.com/Original/tool'}),description:'[description](javascript:alert(1)) <img src="https://tracker.example/description">',readme_html:'<p>&lt;img src="https://tracker.example/pixel"&gt; [click](javascript:alert(1))</p>',quick_start:'echo safe\n````\n<img src="https://tracker.example/fence">\n[click](javascript:alert(1))',latest_release:{tag_name:'[release](javascript:alert(1))',name:'<img src="https://tracker.example/release">',html_url:'javascript:alert(1)',published_at:null},ahead_of_pin:true,latest_version_url:'javascript:alert(1)',latest_version_label:'<img src="https://tracker.example/label">'};
+ for(const markdown of [skillMarkdown('security-scanner',null,cache)!,skillAgentMarkdown('security-scanner',null,undefined,cache)!]){
+  assert.ok(markdown.includes('`````sh\n'+cache.quick_start+'\n`````'));
+  const outsideCode=markdown.replace(/`````sh\n[\s\S]*?\n`````/g,'');
+  assert.doesNotMatch(outsideCode,/<img|\]\(javascript:/);
+  assert.ok(outsideCode.includes('&lt;img'));
+  assert.ok(outsideCode.includes('\\[click\\]'));
+  assert.doesNotMatch(outsideCode,/最新 Release：\[release\]/);
+ }
+});
+
+test('Markdown helpers escape punctuation, HTML and links and keep arbitrary code delimiters contained',async()=>{
+ const {escapeMarkdownText,markdownCodeFence,markdownHttpsUrl}=await import('../../modules/development/service.js');
+ assert.equal(escapeMarkdownText('<img> & [x](javascript:alert(1)) *bold* `code`'), '&lt;img&gt; &amp; \\[x\\]\\(javascript\\:alert\\(1\\)\\) \\*bold\\* \\`code\\`');
+ assert.equal(escapeMarkdownText('1. list\n- list\n# title'),'1\\. list\n\\- list\n\\# title');
+ for(const size of [0,3,4,12]){
+  const code='echo start\n'+'`'.repeat(size)+'\n<img src="https://tracker.example/pixel">';
+  const fence='`'.repeat(Math.max(3,size+1));
+  assert.equal(markdownCodeFence(code),fence+'sh\n'+code+'\n'+fence);
+ }
+ assert.equal(markdownHttpsUrl('https://example.com/a(b)'), 'https://example.com/a%28b%29');
+ assert.equal(escapeMarkdownText('http://example.com www.example.com a@example.com'),'http\\://example\\.com www\\.example\\.com a\\@example\\.com');
+ assert.equal(markdownHttpsUrl('javascript:alert(1)'), 'javascript\\:alert\\(1\\)');
+ assert.equal(markdownHttpsUrl('<https://example.com>'), '&lt;https\\://example\\.com&gt;');
+});
+
+
+test('book HTML and Markdown show stored description without claiming unbound original metadata',async()=>{
+ const {communityCatalog}=await import('../../modules/community/catalog.js');
+ const book=communityCatalog.skill_books.find(book=>book.id==='security-scanner')!;
+ const fallback=createApp({query:async()=>({rows:[]})} as unknown as Pool,origin);
+ const html=await (await fallback.request('/development/skills/'+book.id)).text();
+ assert.ok(html.includes(book.description));
+ assert.doesNotMatch(html, /class="sp-author-name"|class="sp-original-stat">★/);
+ for(const suffix of ['.md','/SKILL.md']){
+  const text=await (await fallback.request('/development/skills/'+book.id+suffix)).text();
+  assert.ok(text.includes('原作 Repo：'+book.repository_url));
+  assert.doesNotMatch(text,/原作作者／帳號：|原作 Stars：/);
+ }
 });

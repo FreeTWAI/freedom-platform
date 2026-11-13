@@ -1,8 +1,8 @@
 import {useContext} from 'react';
-import {GitHubBookSocial,SkillBookStarGateContext} from './GitHubSocial';
+import {GitHubBookSocial,SkillBookStarGateContext,type OriginalSocialMetadata} from './GitHubSocial';
 
 type BookIdentity = { id?: string; book_id?: string; cover_url?: string };
-type BookSource = BookIdentity & { upstream_url?: string; star_url?: string; repository_url: string; guide?: {credit_role?: '維護'|'策展'} };
+type BookSource = BookIdentity & { original_cache?:OriginalSocialMetadata|null; upstream_url?: string; star_url?: string; repository_url: string; guide?: {credit_role?: '維護'|'策展'} };
 type RepoCountInput = {
   id?: string;
   book_id?: string;
@@ -41,7 +41,7 @@ export function skillBookCoverUrl(book: BookIdentity) {
 // Metrics and stars always credit the original author, independently of workshop forks.
 export function skillBookStarUrl(book: BookSource) {
   try {
-    const url = new URL(book.upstream_url ?? book.star_url ?? book.repository_url);
+    const url = new URL(book.original_cache?.url ?? book.upstream_url ?? book.star_url ?? book.repository_url);
     if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.username || url.password || url.port) return null;
     if (!/^\/[a-z\d][a-z\d-]*\/[a-z\d_.-]+\/?$/i.test(url.pathname)) return null;
     return `https://github.com${url.pathname.replace(/\/$/, '')}`;
@@ -60,7 +60,7 @@ export function SkillBookSourceAccount({book}:{book:BookSource}) {
 
 export function SkillBookStar({ book,compact=false }: { book: BookSource;compact?:boolean }) {
   const url = skillBookStarUrl(book),id=book.id??book.book_id;
-  return url&&id ? <GitHubBookSocial bookId={id} repositoryUrl={url} compact={compact} sourceCredit={Boolean(book.guide?.credit_role)}/> : null;
+  return url&&id ? <GitHubBookSocial bookId={id} repositoryUrl={url} compact={compact} originalCache={book.original_cache??{url:null,original_author:null,stars:null}} sourceCredit={Boolean(book.guide?.credit_role)}/> : null;
 }
 
 export function SkillBookStarGate({books}:{books:(BookSource&{title:string})[]}){

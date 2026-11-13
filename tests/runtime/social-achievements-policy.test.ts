@@ -1,3 +1,4 @@
+import {PUBLIC_BOOK_CACHE_SQL} from '../../modules/shares/repository-cache.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {SOCIAL_THRESHOLDS,SOCIAL_TITLES,socialProgress,unlockedTitles,titleProjection} from '../../modules/social-achievements/policy.js';
@@ -58,7 +59,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 for(const enabled of [undefined,false,true])test(`composed social settings, withdrawal and review routes follow explicit flag ${enabled}`,async()=>{
  let queries=0;const fail=async()=>{queries++;throw Error('unexpected DB access');};
- const app=createApp({query:fail,connect:fail} as any,'http://127.0.0.1:4310','local',{socialAchievementsEnabled:enabled});
+ const app=createApp({query:(sql:string)=>sql===PUBLIC_BOOK_CACHE_SQL?Promise.resolve({rows:[]}):fail(),connect:fail} as any,'http://127.0.0.1:4310','local',{socialAchievementsEnabled:enabled});
  const paths=app.routes.map(r=>`${r.method} ${r.path}`);
  for(const path of ['GET /api/v1/me/social-achievements','POST /api/v1/me/social-achievements','POST /api/v1/me/social-achievements/erase','POST /api/v1/me/social-achievements/appeal','GET /api/v1/admin/social-achievements','GET /api/v1/admin/social-achievements/:id','POST /api/v1/admin/social-achievements/:id'])assert.equal(paths.includes(path),enabled===true,path);
  const response=await app.request('http://127.0.0.1:4310/api/v1/site');assert.equal((await response.json() as any).social_achievements_enabled,enabled===true);assert.equal(queries,0);

@@ -16,6 +16,7 @@ import {SkillInstall} from './SkillInstall';
 
 export type OriginalReleaseSummary={tag_name:string;name:string|null;html_url:string;published_at:string|null};
 export type OriginalCacheData={
+  social_metrics?:{forks_count:number|null;open_issues_count:number|null;subscribers_count:number|null;pushed_at:string|null};
   full_name:string|null;url:string|null;original_author:string|null;description:string|null;
   topics:string[];license_spdx:string|null;default_branch:string|null;stars:number|null;
   readme_html?:string|null;quick_start:string|null;latest_release:OriginalReleaseSummary|null;
@@ -36,9 +37,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
   const cache=cooperation?.original_cache??book.original_cache??null;
   const originalUrl=httpsLink(cache?.url)||upstream;
   const reading=httpsLink(guide?.reading_url)||originalUrl,website=httpsLink(book.introduction_url)||httpsLink(guide?.website_url),fork=originalUrl?`${originalUrl.replace(/\/$/,'')}/fork`:null,contribute=httpsLink(guide?.contribution_url);
-  const source=originalUrl?new URL(originalUrl):null;
-  const originalFullName=cache?.full_name??(source?.hostname==='github.com'?source.pathname.slice(1):originalUrl);
-  const originalAuthor=cache?.original_author??(originalFullName&&originalFullName.includes('/')?originalFullName.split('/')[0]:null);
+  const originalAuthor=cache?.original_author??null;
   const guideCredit=guide?.author_name?`${guide.credit_role?'來源標示的'+guide.credit_role:'作者'}：${guide.author_name}`:null;
   const originalStars=typeof cache?.stars==='number'?cache.stars:null;
   const distinctCopy=repository&&originalUrl&&repository!==originalUrl?repository:null;
@@ -61,13 +60,13 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
     <dialog ref={dialog} className="skill-intro-dialog" aria-label={visited?undefined:book.title} aria-labelledby={visited?id:undefined} aria-describedby={visited?`${id}-purpose`:undefined} data-book-id={book.id??book.book_id} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();close();}} onClose={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
       {/* Defer untouched books, then retain their subtree across close/reopen. */}
       {visited&&<div className="stack"><header className="skill-intro-header"><div><div className="eyebrow">{community?'自由工坊 · 社群技能書':'自由工坊 · 公會技能庫'}</div><h2 id={id}>{book.title}</h2></div><button className="btn btn-ghost" type="button" onClick={close} autoFocus aria-label="關閉技能書介紹">關閉</button></header>
-        <div className="skill-intro-original-head"><div className="skill-intro-cover-copy"><div className="tag-list">{beginner&&<span className="badge">{beginner.category}</span>}{guide&&<span className="badge">{guide.format}</span>}{guildName&&<span className="badge">{guildName}</span>}{guideCredit&&<span className="badge">{guideCredit}</span>}<span className="badge">原作：{originalAuthor??'原作'}</span><span className="badge">★ {originalStars??'—'}</span>{cache?.latest_release&&<a className="badge" href={cache.latest_release.html_url} target="_blank" rel="noopener noreferrer">Release {cache.latest_release.tag_name} ↗</a>}</div>
+        <div className="skill-intro-original-head"><div className="skill-intro-cover-copy"><div className="tag-list">{beginner&&<span className="badge">{beginner.category}</span>}{guide&&<span className="badge">{guide.format}</span>}{guildName&&<span className="badge">{guildName}</span>}{guideCredit&&<span className="badge">{guideCredit}</span>}{originalAuthor&&<span className="badge">原作：{originalAuthor}</span>}{originalStars!==null&&<span className="badge">★ {originalStars}</span>}{cache?.latest_release&&<a className="badge" href={cache.latest_release.html_url} target="_blank" rel="noopener noreferrer">Release {cache.latest_release.tag_name} ↗</a>}</div>
         {open&&<SkillBookBadges bookId={bookId} community={community}/>}</div></div>
         {cache?.ahead_of_pin&&cache.latest_version_url&&<div className="skill-intro-upstream-notice" role="note"><span>原作者有新版本：</span><a href={cache.latest_version_url} target="_blank" rel="noopener noreferrer">{cache.latest_version_label??'查看新版本'} ↗</a></div>}
-        <div className="actions skill-intro-primary-actions"><button type="button" className="btn btn-primary" aria-controls={`${id}-start`} onClick={()=>{startSection.current?.scrollIntoView({block:'start'});startSection.current?.focus();}}>開始用</button>{open&&<SkillBookStar book={book} compact/>}<SkillShare bookId={bookId} title={book.title} active={open}/>{originalUrl&&<a className="btn btn-ghost" href={originalUrl} target="_blank" rel="noopener noreferrer">查看原作 Repo ↗</a>}</div>
+        <div className="actions skill-intro-primary-actions"><button type="button" className="btn btn-primary" aria-controls={`${id}-start`} onClick={()=>{startSection.current?.scrollIntoView({block:'start'});startSection.current?.focus();}}>開始用</button>{open&&<SkillBookStar book={{...book,original_cache:cache}} compact/>}<SkillShare bookId={bookId} title={book.title} active={open}/>{originalUrl&&<a className="btn btn-ghost" href={originalUrl} target="_blank" rel="noopener noreferrer">查看原作 Repo ↗</a>}</div>
         <section ref={startSection} id={`${id}-start`} tabIndex={-1} className="stack skill-intro-original-start">
           <h3>開始用</h3>
-          <p className="skill-intro-purpose multiline-text" id={`${id}-purpose`}>{cache?.description??`來自原作 ${originalFullName??book.title}（目前尚未快取原作簡介與 README，請查看原作 Repo）。`}</p>
+          <p className="skill-intro-purpose multiline-text" id={`${id}-purpose`}>{cache?.description??book.description}</p>
           {cache?.latest_release&&<div className="skill-intro-release"><strong>最新 Release：</strong><a href={cache.latest_release.html_url} target="_blank" rel="noopener noreferrer">{cache.latest_release.name||cache.latest_release.tag_name}（{cache.latest_release.tag_name}）↗</a></div>}
           {cache?.quick_start&&<section className="stack"><h4>原作起步指令（快取）</h4><pre ref={quickstartCode} tabIndex={-1} className="skill-intro-command"><code>{cache.quick_start}</code></pre>{open&&<QuickstartCopy key={cache.quick_start} commands={cache.quick_start} onSelect={()=>{
             const element=quickstartCode.current,selection=window.getSelection();

@@ -286,3 +286,41 @@ test('skillBookIdForFullName resolves both original upstream_url and integration
   assert.equal(skillBookIdForFullName(origFull),'security-scanner');
   assert.equal(skillBookIdForFullName(copyFull),'security-scanner');
 });
+
+test('platform install resolves numeric identity before pinned tree downloads and fails closed on mismatch',async()=>{
+ const {createApp}=await import('../../apps/platform-api/src/app.js');
+ const {PUBLIC_BOOK_CACHE_SQL}=await import('../../modules/shares/repository-cache.js');
+ const selected=communityCatalog.skill_books.find(b=>b.id==='security-scanner')!;
+ const pinned=selected.source_commit??selected.guide!.source_commit;
+ const oldName=new URL(selected.upstream_url).pathname.slice(1);
+ const body='---\nname: renamed-tool\n---\nReviewed skill';
+ const sha=await gitBlobSha1(encoder.encode(body));
+ for(const mismatch of [false,true]){
+  const calls:string[]=[];
+  const fetcher=(async(input:string|URL|Request,init?:RequestInit)=>{
+   const url=String(input);calls.push(url);assert.equal(init?.redirect,'manual');
+   if(url.startsWith('https://api.github.com/repos/'+oldName+'/'))return new Response(null,{status:301,headers:{location:'https://api.github.com/repositories/101'}});
+   if(url==='https://api.github.com/repositories/101')return Response.json({id:mismatch?202:101,full_name:'Original/renamed',private:false,visibility:'public',fork:false,archived:false});
+   if(url===`https://api.github.com/repos/Original/renamed/git/trees/${pinned}?recursive=1`)return Response.json({sha:pinned,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
+   if(url===`https://raw.githubusercontent.com/Original/renamed/${pinned}/SKILL.md`)return new Response(body);
+   throw new Error('Unexpected GitHub request '+url);
+  }) as typeof fetch;
+  if(!mismatch){
+   // Exercise the actual 301 response: the old coordinate cannot serve the pinned tree.
+   const oldResponse=await createSkillInstallRoutes(fetcher,undefined,[selected]).request(`/api/v1/skills/${selected.id}/install-bundle`);
+   assert.equal(oldResponse.status,503);
+   assert.deepEqual(calls,[`https://api.github.com/repos/${oldName}/git/trees/${pinned}?recursive=1`]);
+   calls.length=0;
+  }
+  // An observation can outlive (or precede) cached metadata.
+  const pool={query:async(sql:string)=>({rows:sql===PUBLIC_BOOK_CACHE_SQL?[{observed_book_id:selected.id,observed_requested_full_name:oldName,observed_needs_recheck:false,established_provider_repo_id:'101',provider_repo_id:null,full_name:null}]:[]})} as unknown as import('pg').Pool;
+  const app=createApp(pool,'http://127.0.0.1:46465','local',{githubSocial:{fetcher}});
+  const response=await app.request(`/api/v1/skills/${selected.id}/install-bundle`);
+  if(mismatch){assert.equal(response.status,422);assert.deepEqual(calls,['https://api.github.com/repositories/101']);}
+  else {
+   assert.equal(response.status,200);
+   const bundle=await response.json();assert.equal(bundle.repository,'Original/renamed');assert.equal(bundle.commit,pinned);
+   assert.deepEqual(calls,['https://api.github.com/repositories/101',`https://api.github.com/repos/Original/renamed/git/trees/${pinned}?recursive=1`,`https://raw.githubusercontent.com/Original/renamed/${pinned}/SKILL.md`]);
+  }
+ }
+});

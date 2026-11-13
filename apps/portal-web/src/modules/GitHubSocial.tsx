@@ -67,7 +67,8 @@ export function GitHubSourceLinks({repositoryUrl}:{repositoryUrl:string}){
 function count(value:number|null|undefined){return typeof value==='number'&&Number.isFinite(value)?value.toLocaleString('zh-TW'):'—';}
 function date(value:string|null|undefined){return value&&!Number.isNaN(Date.parse(value))?new Date(value).toLocaleDateString('zh-TW'):'—';}
 
-export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,sourceCredit=false}:{bookId:string;repositoryUrl:string;compact?:boolean;returnTo?:string;sourceCredit?:boolean}){
+export type OriginalSocialMetadata={fetched_at?:string|null;stale?:boolean;url:string|null;original_author:string|null;stars:number|null;social_metrics?:{forks_count:number|null;open_issues_count:number|null;subscribers_count:number|null;pushed_at:string|null}};
+export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,sourceCredit=false,originalCache}:{bookId:string;repositoryUrl:string;compact?:boolean;returnTo?:string;sourceCredit?:boolean;originalCache?:OriginalSocialMetadata}){
   const store=useContext(SocialContext)??publicStore;
   const starCountId=useId();
   useSyncExternalStore(store.subscribe,store.snapshot,store.snapshot);
@@ -79,9 +80,9 @@ export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,so
     const observer=new IntersectionObserver(entries=>{if(entries.some(item=>item.isIntersecting)){setVisible(true);observer.disconnect();}});
     observer.observe(node);return()=>observer.disconnect();
   },[]);
-  useEffect(()=>{if(visible){void store.loadMetrics(bookId);void store.loadAccount();}},[store,bookId,visible]);
+  useEffect(()=>{if(visible){if(!originalCache)void store.loadMetrics(bookId);void store.loadAccount();}},[store,bookId,visible,originalCache]);
   useEffect(()=>{if(visible&&account.value?.connected)void store.loadStar(bookId);},[store,bookId,visible,account.value]);
-  const value=metrics.value,connected=account.value?.connected===true&&star.value?.connected!==false,known=typeof star.value?.starred==='boolean';
+  const value=originalCache?{...originalCache.social_metrics,stargazers_count:originalCache.stars,stale:originalCache.stale??false,error:null,archived:false,checked_at:originalCache.fetched_at??null,language:null}:metrics.value,connected=account.value?.connected===true&&star.value?.connected!==false,known=typeof star.value?.starred==='boolean';
   const old=Boolean(value?.stale||value?.error||metrics.error),unknown=!value||value.error&&!value.checked_at;
   async function connect(){
     setConnecting(true);setConnectError('');
@@ -90,7 +91,7 @@ export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,so
   }
   const secondaryMetrics=<><div><dt>待處理 Issues／PR</dt><dd>{count(value?.open_issues_count)}</dd></div><div><dt>追蹤專案 · Watch</dt><dd><a className="github-watch-link" href={repositoryUrl} target="_blank" rel="noopener noreferrer" aria-label="追蹤專案（Watch）↗" title="前往 GitHub，選擇 Watch 通知">{count(value?.subscribers_count)}</a></dd></div><div><dt>最近更新</dt><dd>{date(value?.pushed_at)}</dd></div></>;
   const metricsNote=<p className="github-metrics-note">{metrics.loading&&!value?'正在讀取 GitHub 數據…':unknown?'GitHub 數據暫時無法讀取':`${old?'上次取得的數據':'數據更新'} · ${date(value?.checked_at)}`}{value?.language?` · ${value.language}`:''}</p>;
-  const source=<div className="github-social-source"><a href={repositoryUrl} target="_blank" rel="noopener noreferrer">{sourceCredit?'原作':'原作者'} GitHub ↗</a><a href={new URL(repositoryUrl).origin+'/'+new URL(repositoryUrl).pathname.split('/')[1]} target="_blank" rel="noopener noreferrer">Follow {sourceCredit?'來源帳號':'原作者'} ↗</a>{value?.archived&&<span className="badge">已封存</span>}</div>;
+  const source=(!originalCache||originalCache.original_author)&&<div className="github-social-source"><a href={repositoryUrl} target="_blank" rel="noopener noreferrer">{sourceCredit?'原作':'原作者'} GitHub ↗</a><a href={new URL(repositoryUrl).origin+'/'+new URL(repositoryUrl).pathname.split('/')[1]} target="_blank" rel="noopener noreferrer">Follow {sourceCredit?'來源帳號':'原作者'} ↗</a>{value?.archived&&<span className="badge">已封存</span>}</div>;
   const accountLoading=account.loading&&!account.value;
   const actionLabel=!store.member?'登入後 Star':accountLoading?'確認 GitHub 連結…':account.error?'重新確認 GitHub 連結':!account.value?.configured?'GitHub 連結尚未啟用':!connected?connecting?'前往 GitHub…':'連結 GitHub 後 Star':star.saving?'正在保存…':!known?'Star 狀態待確認':star.value?.starred?'取消 Star':'Star';
   const actionHint=store.member&&account.value?.configured&&!connected&&!connecting&&!account.error?'連結 GitHub，回來後再點星星。':actionLabel;
@@ -105,14 +106,14 @@ export function GitHubBookSocial({bookId,repositoryUrl,compact=false,returnTo,so
     <div className="github-social-overview"><div className="github-social-actions">
       {!store.member?<a className="btn btn-ghost github-star-control" href={repositoryUrl} target="_blank" rel="noopener noreferrer" aria-label="到 GitHub Star ↗" aria-describedby={starCountId} title="前往原作 GitHub 加星">{starContents}</a>:<button className="btn btn-ghost skill-book-star github-star-control" aria-label={actionLabel} aria-description={actionHint} aria-describedby={starCountId} title={`${actionHint} · ${count(value?.stargazers_count)} Stars`} aria-pressed={connected&&known?star.value!.starred!:undefined} aria-busy={star.saving||connecting||accountLoading} disabled={disabled} onClick={starAction}>{starContents}</button>}
       <a className="github-fork-link github-count-control" href={`${repositoryUrl}/fork`} target="_blank" rel="noopener noreferrer" aria-label="Fork 專案 ↗" title={`Fork 專案 · ${count(value?.forks_count)} Forks`}>{forkContents}</a>
-      {(metrics.error||value?.error)&&<button className="github-retry" onClick={()=>void store.loadMetrics(bookId,true)} disabled={metrics.loading}>重讀數據</button>}
+      {!originalCache&&(metrics.error||value?.error)&&<button className="github-retry" onClick={()=>void store.loadMetrics(bookId,true)} disabled={metrics.loading}>重讀數據</button>}
       {connected&&star.error&&<button className="github-retry" onClick={()=>void store.loadStar(bookId,true)} disabled={star.loading||star.saving}>重讀 Star 狀態</button>}
       {star.reauthorize&&<button type="button" className="btn btn-ghost btn-small" disabled={connecting||star.loading||star.saving} onClick={()=>void connect()}>連結／重新授權 GitHub</button>}
     </div>
-    {compact&&<details className="github-metrics-details"><summary aria-label="更多 GitHub 數據">更多</summary><div className="github-metrics-expanded">{source}<dl className="github-book-metrics">{secondaryMetrics}</dl>{!unknown&&!old&&metricsNote}</div></details>}
+    {compact&&(!originalCache||originalCache.original_author)&&<details className="github-metrics-details"><summary aria-label="更多 GitHub 數據">更多</summary><div className="github-metrics-expanded">{source}{(!originalCache||originalCache.social_metrics)&&<dl className="github-book-metrics">{secondaryMetrics}</dl>}{(!originalCache||originalCache.social_metrics)&&!unknown&&!old&&metricsNote}</div></details>}
     </div>
-    {!compact&&<dl className="github-book-metrics">{secondaryMetrics}</dl>}
-    {(!compact||unknown||old)&&metricsNote}
+    {!compact&&(!originalCache||originalCache.social_metrics)&&<dl className="github-book-metrics">{secondaryMetrics}</dl>}
+    {(!originalCache||originalCache.social_metrics)&&(!compact||unknown||old)&&metricsNote}
     {actionStatus&&<p className="github-action-status" role={star.saving||connecting?'status':undefined}>{actionStatus}</p>}
     {(connectError||account.error||star.error)&&<p className="github-social-error" role="alert">{connectError||account.error||star.error}</p>}
     {store.member&&(star.error||account.error||!account.loading&&account.value&&!account.value.configured)&&<a className="github-retry" href={repositoryUrl} target="_blank" rel="noopener noreferrer">前往 GitHub Star ↗</a>}
