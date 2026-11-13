@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import {randomUUID} from 'node:crypto';
 import {emptySellerPolicies,POLICY_KINDS,POLICY_LABELS} from '../../contracts/guild-launchpad/v1/storefront-policies.js';
 import {totpCode} from '../../modules/identity-membership/totp.js';
@@ -1235,7 +1236,7 @@ test('all store flags compose from owner setup through bank payment and meetup d
       await bp.goto('/shops/' + slug + '/products/' + products[0].sku);
       await expect(bp.getByRole('button', {name: '加入購物車', exact: true})).toHaveCount(0);
       await admin.goto('/admin');
-      await admin.getByRole('button', {name: '商店准入', exact: true}).click();
+      await adminNavigate(admin,'store-admissions');
       const admissions = admin.getByRole('region', {name: '商店准入', exact: true});
       const card = admissions.locator(`[data-store-instance="${instance}"]`);
       async function showStore() {

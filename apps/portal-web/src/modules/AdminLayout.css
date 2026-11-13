@@ -155,7 +155,7 @@
 .admin-nav-search > input { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 1rem; }
 .admin-nav-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; width: 100%; padding: 9px 10px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--ink); text-align: start; font: inherit; font-size: .875rem; cursor: pointer; }
 .admin-nav-link:hover { background: var(--bg); border-color: var(--line); }
-.admin-nav-link.is-current { background: var(--green-soft); color: var(--green-2); box-shadow: inset 3px 0 var(--green-2); font-weight: 700; }
+.admin-nav-link.is-current { background: var(--green-soft); color: var(--ink); box-shadow: inset 3px 0 var(--green-2); font-weight: 700; }
 .admin-nav-link:focus-visible,.admin-nav-search > input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .admin-nav-count { display: inline-grid; place-items: center; min-width: 24px; min-height: 24px; padding-inline: 5px; border-radius: 7px; color: var(--ink); background: var(--bg); font-weight: 700; }
 .admin-content { min-width: 0; display: grid; gap: 14px; scroll-margin-top: 76px; }
@@ -219,3 +219,13 @@
   .admin-filter-bar { gap: 5px; }
   .admin-filter-bar > button { flex: 1 0 auto; padding-inline: 10px; }
 }
+
+.admin-place-list { list-style: none; padding: 0; margin: 0; }
+.admin-place-list li { border-bottom: 1px solid var(--line); }
+.admin-object-link { display: flex; width: 100%; gap: 12px; justify-content: space-between; align-items: center; min-height: 64px; padding: 12px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.admin-object-link span { min-width: 0; overflow-wrap: anywhere; }
+.admin-object-link small { display: block; color: var(--muted); }
+.admin-object-link time { white-space: nowrap; font-size: .875rem; color: var(--muted); }
+.admin-object-link:hover { background: var(--surface); }
+.admin-object-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.admin-workspace [hidden] { display: none !important; }

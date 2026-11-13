@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {test,expect,type Page} from './fixtures.js';
@@ -99,7 +100,7 @@ test('owner setup, independent admin admission, safe scope receipt and immediate
   await buyer.goto(`/shops/${slug}/products/${product.sku}`);await expect(buyer.getByRole('button',{name:'加入購物車',exact:true})).toHaveCount(0);
   await screenshots(page,'.seller-console',width=>info.outputPath(`overview-light-${width}.png`));
   const sellerContrast=await badgeContrast(page,'.seller-console');
-  await admin.goto('/admin');await admin.getByRole('button',{name:'商店准入',exact:true}).click();
+  await admin.goto('/admin');await adminNavigate(admin,'store-admissions');
   const card=admin.locator(`[data-store-instance="${instance}"]`);await expect(card).toContainText('合成開店準備商店');
   await card.getByRole('button',{name:'准入',exact:true}).click();await expect(card).toContainText('准入後，只要其他條件都成立，這間店就能接受新訂單。');await card.getByLabel('操作理由',{exact:true}).fill('合成範圍核對與獨立管理員確認');await card.getByRole('button',{name:'確認准入',exact:true}).click();await expect(card.getByText('准入：有效',{exact:true})).toBeVisible();
   const admitted=(await e2eAuthPool.query('SELECT admission_id FROM commerce_store_admissions WHERE tenant_id=$1 AND instance_id=$2 AND revoked_at IS NULL',[tenant,instance])).rows;expect(admitted).toHaveLength(1);

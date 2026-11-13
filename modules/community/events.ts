@@ -677,11 +677,11 @@ export async function reviewEventAsGuildMaster(pool:Pool,input:Command,id:string
   });
 }
 
-export async function listAdminEventQueue(pool:Pool,admin:AdminActor){
+export async function listAdminEventQueue(pool:Pool,admin:AdminActor,limit=100,offset=0){
   return (await pool.query(`SELECT e.*,u.display_name AS organizer_name,g.name AS guild_name
     FROM community_events e JOIN users u ON u.user_id=e.organizer_ref
     LEFT JOIN positioning_guild_catalog g ON g.guild_key=e.guild_key
-    WHERE e.community_id=$1 AND e.state='pending' AND ${eventNotHeldSql} AND NOT is_verification_test_account(e.organizer_ref) ORDER BY e.created_at,e.event_id LIMIT 100`,[admin.community_id])).rows;
+    WHERE e.community_id=$1 AND e.state='pending' AND ${eventNotHeldSql} AND NOT is_verification_test_account(e.organizer_ref) ORDER BY e.created_at,e.event_id LIMIT $2 OFFSET $3`,[admin.community_id,limit,offset])).rows;
 }
 
 export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string){

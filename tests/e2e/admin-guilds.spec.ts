@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 
 const guildKey='guild_test',csrf='synthetic-admin-csrf';
@@ -13,9 +14,10 @@ async function setup(page:Page,options:Fixture){
     if(path===`/guilds/${guildKey}/master-candidates`)return options.candidates(route);
     if(path===`/guilds/${guildKey}/master`){const body=route.request().postDataJSON();expect(route.request().headers()['x-admin-csrf']).toBe(csrf);expect(route.request().headers()['if-match']).toBe(`"${options.expectedVersion?.()??7}"`);current={user_id:body.user_id,display_name:`人選 ${body.user_id}`};version=8;return options.appoint?options.appoint(route):route.fulfill({json:{user_id:body.user_id,aggregate_version:8}});}
     if(path===`/guilds/${guildKey}/experts`&&options.expert)return options.expert(route);
+    if(path==='/skill-maintainers'||path==='/admins')return route.fulfill({json:{items:[]}});
     return route.fulfill({status:404,json:{detail:'Unexpected synthetic request'}});
   });
-  await page.goto('/admin');await page.getByRole('button',{name:'公會管理',exact:true}).click();await page.getByRole('button',{name:'設定公會長',exact:true}).click();
+  await page.goto('/admin?view=people');await page.getByRole('button',{name:'測試活動公會 公會',exact:true}).click();await page.getByRole('button',{name:'設定公會長',exact:true}).click();
   return {panel:page.getByRole('region',{name:'測試活動公會公會長人選',exact:true}),reads:()=>generalReads,setExperts:(value:any[])=>{experts=value;},setGuild:(nextVersion:number,nextCurrent:{user_id:string;display_name:string}|null)=>{version=nextVersion;current=nextCurrent;}};
 }
 
@@ -52,7 +54,7 @@ test('a version conflict offers a read-only refresh before selecting and appoint
 test('general member pagination uses the submitted query while a new search is still being typed',async({page})=>{
   const queries:URLSearchParams[]=[];
   await setup(page,{candidates:route=>route.fulfill({json:{items:[],total:0,next_offset:null}}),members:route=>{const query=new URL(route.request().url()).searchParams;queries.push(query);const offset=Number(query.get('offset')),term=query.get('q');return route.fulfill({json:{items:[{user_id:`${term||'initial'}-${offset}`,display_name:`${term||'原始'}會員 ${offset}`,email:`sample-${offset}@example.test`,active:true,onboarding_required:false,onboarding_completed_at:null,aggregate_version:1,guilds:[]}],next_offset:offset||term?null:25}});}});
-  await page.getByRole('button',{name:'會員管理',exact:true}).click();await page.getByLabel('搜尋會員',{exact:true}).fill('新查詢');await page.getByRole('button',{name:'查看更多會員',exact:true}).click();await expect(page.getByRole('heading',{name:'原始會員 25',exact:true})).toBeVisible();expect(queries.at(-1)!.get('q')).toBe('');expect(queries.at(-1)!.get('offset')).toBe('25');await page.getByRole('button',{name:'搜尋',exact:true}).click();await expect(page.getByRole('heading',{name:'新查詢會員 0',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'原始會員 25',exact:true})).toHaveCount(0);expect(queries.at(-1)!.get('q')).toBe('新查詢');expect(queries.at(-1)!.get('offset')).toBe('0');
+  await adminNavigate(page,'members');await page.getByLabel('搜尋會員',{exact:true}).fill('新查詢');await page.getByRole('button',{name:'查看更多會員',exact:true}).click();await expect(page.getByRole('heading',{name:'原始會員 25',exact:true})).toBeVisible();expect(queries.at(-1)!.get('q')).toBe('');expect(queries.at(-1)!.get('offset')).toBe('25');await page.getByRole('button',{name:'搜尋',exact:true}).click();await expect(page.getByRole('heading',{name:'新查詢會員 0',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'原始會員 25',exact:true})).toHaveCount(0);expect(queries.at(-1)!.get('q')).toBe('新查詢');expect(queries.at(-1)!.get('offset')).toBe('0');
 });
 
 

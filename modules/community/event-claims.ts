@@ -15,7 +15,12 @@ export async function claimEventOrganizer(pool:Pool,input:Command,id:string){
   await journal(q,input.actor,'event_organizer_claim',claim.claim_id,claim.version,'submit',{});return claim;
  });
 }
-export async function eventOrganizerClaims(pool:Pool,admin:AdminActor){return {items:(await pool.query('SELECT * FROM community_event_organizer_claims WHERE community_id=$1 ORDER BY created_at DESC LIMIT 100',[admin.community_id])).rows};}
+export async function eventOrganizerClaims(pool:Pool,admin:AdminActor,state:'pending'|'all'='all',limit=100,offset=0){
+ const rows=(await pool.query(`SELECT c.claim_id,c.event_id,c.statement,c.evidence_url,c.state,c.version,c.created_at
+  FROM community_event_organizer_claims c WHERE c.community_id=$1 AND ($2='all' OR c.state=$2)
+  ORDER BY c.created_at,c.claim_id LIMIT $3 OFFSET $4`,[admin.community_id,state,limit+1,offset])).rows;
+ return {items:rows.slice(0,limit),next_offset:rows.length>limit?offset+limit:null};
+}
 export async function reviewEventOrganizer(pool:Pool,input:AdminCommand,id:string){
  const body=z.object({decision:z.enum(['verify','reject','revoke']),reason:z.string().trim().min(3).max(1000)}).strict().parse(input.body);
  return adminCommand(pool,input,async q=>{requireCondition((await q.query('SELECT 1 FROM community_event_organizer_claims WHERE claim_id=$1 AND community_id=$2',[id,input.admin.community_id])).rowCount,404,'not_found','找不到認領。');},async q=>{

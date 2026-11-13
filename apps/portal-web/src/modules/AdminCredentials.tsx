@@ -61,7 +61,7 @@ function expiryLine(item: Credential): string {
   return when;
 }
 
-export function AdminCredentials({client,onAttention}: {client: AdminClient;onAttention?:(message:string)=>void}) {
+export function AdminCredentials({client,onAttention,onAttentionKey,selectedKey,expanded=false}: {onAttentionKey?:(key:string)=>void;selectedKey?:string|null;expanded?:boolean;client: AdminClient;onAttention?:(message:string)=>void}) {
   const [items, setItems] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -98,10 +98,13 @@ export function AdminCredentials({client,onAttention}: {client: AdminClient;onAt
     }
   }
   const alarms = items.map(alarm).filter((text): text is string => Boolean(text));
-  const attention=alarms.join('；'),unknown=items.filter(item=>item.level==='unknown').length;
+  const attention=alarms.slice(0,1).join('；'),unknown=items.filter(item=>item.level==='unknown').length;
+  useEffect(()=>{onAttentionKey?.(items.find(item=>alarm(item))?.credential_key??'');},[items,onAttentionKey]);
   useEffect(()=>{onAttention?.(error?`憑證狀態暫時無法讀取：${error}`:attention);},[attention,error,onAttention]);
   useEffect(()=>()=>onAttention?.(''),[onAttention]);
   useEffect(()=>{if((attention||error||unknown)&&disclosure.current)disclosure.current.open=true;},[attention,error,unknown]);
+  useEffect(()=>{if(disclosure.current&&expanded)disclosure.current.open=true;},[expanded]);
+  useEffect(()=>{if(expanded&&selectedKey)requestAnimationFrame(()=>{document.getElementById(`credential-${selectedKey}`)?.focus();});},[expanded,selectedKey,items]);
   return <>
     {!onAttention&&alarms.length > 0 && <a className="admin-credential-banner" href="#admin-credentials" onClick={()=>{if(disclosure.current)disclosure.current.open=true;}}>{attention}</a>}
     <details ref={disclosure} className="card admin-credential-disclosure" id="admin-credentials">
@@ -114,7 +117,7 @@ export function AdminCredentials({client,onAttention}: {client: AdminClient;onAt
       {loading && <p role="status">正在讀取憑證狀態</p>}
       {error && <p className="field-hint">{error}</p>}
       {!loading && !error && !items.length && <p className="muted">目前沒有憑證狀態</p>}
-      {items.map(item => <article className="admin-credential-row" key={item.credential_key}>
+      {items.map(item => <article className="admin-credential-row" key={item.credential_key} id={`credential-${item.credential_key}`} tabIndex={-1}>
         <div className="admin-credential-main">
           <div className="admin-credential-title">
             <h3>{item.label}</h3>

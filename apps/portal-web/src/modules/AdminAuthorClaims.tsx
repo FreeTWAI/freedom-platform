@@ -11,12 +11,13 @@ type Claim = {
 type Change = {book_id: string; book_title: string; provider_repo_id: string; previous_provider_repo_id: string | null; full_name: string; requested_full_name: string};
 type Queue = {queue: 'review' | 'verified'; items: Claim[]; identity_changes: Change[]};
 
-export function AdminAuthorClaims({client, busy, onMutate}: {client: AdminClient; busy: boolean; onMutate: (path: string, body: unknown, version?: number | null) => Promise<boolean>}) {
+export function AdminAuthorClaims({client, busy, onMutate, selectedId}: {selectedId?:string|null;client: AdminClient; busy: boolean; onMutate: (path: string, body: unknown, version?: number | null) => Promise<boolean>}) {
   const [queue, setQueue] = useState<'review' | 'verified'>('review');
   const [data, setData] = useState<Queue | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [decisions,setDecisions]=useState<Record<string,'verify'|'reject'|'dispute'|'revoke'>>({});
   const [ack, setAck] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -38,13 +39,13 @@ export function AdminAuthorClaims({client, busy, onMutate}: {client: AdminClient
   return <section className="stack">
     <div className="card-head"><h2>作者認領審核</h2><button className="btn btn-ghost" type="button" disabled={busy || loading} onClick={() => void load()}>更新</button></div>
     <p className="muted">平台管理員審核原作者、共同原創作者與維護者認領。Repo 寫入權、GitHub App、平台投稿、公會職務與目錄署名都不會自動核實。不能審核自己提交、或連結到自己 GitHub 帳號的申請。</p>
-    <div className="actions" role="tablist" aria-label="認領佇列">
+    <div hidden={!!selectedId} className="actions" role="tablist" aria-label="認領佇列">
       <button type="button" className={queue === 'review' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setQueue('review')}>待審核</button>
       <button type="button" className={queue === 'verified' ? 'btn btn-primary' : 'btn btn-ghost'} onClick={() => setQueue('verified')}>已核實</button>
     </div>
     {error && <p className="banner banner-error" role="alert">{error}</p>}
     {loading && <p role="status">正在載入認領…</p>}
-    {!!data?.identity_changes.length && <div className="stack">{data.identity_changes.map(change => <article key={change.book_id} className="card stack">
+    {!selectedId && !!data?.identity_changes.length && <div className="stack">{data.identity_changes.map(change => <article key={change.book_id} className="card stack">
       <h3>原作 Repo 身分已變更</h3>
       <p>{change.book_title}：{change.requested_full_name} 現在是 {change.full_name}（{change.provider_repo_id}）。先前的認領留在 {change.previous_provider_repo_id}，沒有自動轉移。</p>
       <label className="field">複核說明<input value={ack[change.book_id] ?? ''} onChange={event => setAck(current => ({...current, [change.book_id]: event.target.value}))} maxLength={1000}/></label>
@@ -53,7 +54,7 @@ export function AdminAuthorClaims({client, busy, onMutate}: {client: AdminClient
         <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void acknowledge(change)}>確認已複核</button>
       </div>
     </article>)}</div>}
-    <div className="card-grid">{data?.items.map(claim => <article key={claim.claim_id} className="card stack">
+    <div className="card-grid">{data?.items.filter(claim=>!selectedId||claim.claim_id===selectedId).map(claim => <article key={claim.claim_id} className="card stack">
       <div className="card-head"><h3>{claim.repo.full_name}</h3><span className="badge">{claim.state_label}</span></div>
       <p>{claim.role_label} · {claim.display_name} · @{claim.github_login}（{claim.github_user_id}）</p>
       <p className="field-hint">技能書 {claim.source_snapshot.book_id} · Repo {claim.repo.provider_repo_id}{claim.appeal_count > 0 ? ' · 申訴後重送' : ''}</p>
@@ -63,14 +64,7 @@ export function AdminAuthorClaims({client, busy, onMutate}: {client: AdminClient
       {claim.reason && <p className="field-hint">先前理由：{claim.reason}</p>}
       {!!claim.related_claims.length && <ul>{claim.related_claims.map(item => <li key={item.claim_id}>{item.display_name} @{item.github_login} · {item.role_label} · {item.state_label}</li>)}</ul>}
       <label className="field">審核理由<input value={reasons[claim.claim_id] ?? ''} onChange={event => setReasons(current => ({...current, [claim.claim_id]: event.target.value}))} maxLength={1000}/></label>
-      <div className="actions">
-        {(claim.state === 'pending' || claim.state === 'disputed') && <>
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void review(claim, 'verify')}>核實</button>
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void review(claim, 'reject')}>駁回</button>
-          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void review(claim, 'dispute')}>標示爭議</button>
-        </>}
-        {claim.state === 'verified' && <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void review(claim, 'revoke')}>撤銷</button>}
-      </div>
+      <label className="field">決定<select aria-label="決定" value={decisions[claim.claim_id]??(claim.state==='verified'?'revoke':'verify')} onChange={e=>setDecisions(current=>({...current,[claim.claim_id]:e.target.value as 'verify'|'reject'|'dispute'|'revoke'}))}>{claim.state==='verified'?<option value="revoke">撤銷</option>:<><option value="verify">核實</option><option value="reject">駁回</option><option value="dispute">標示爭議</option></>}</select></label><button type="button" className="btn btn-primary" disabled={busy||(reasons[claim.claim_id]??'').trim().length<3} onClick={()=>void review(claim,decisions[claim.claim_id]??(claim.state==='verified'?'revoke':'verify'))}>確認</button>
     </article>)}</div>
     {!loading && data && !data.items.length && !error && <p className="muted">{queue === 'verified' ? '目前沒有已核實的認領。' : '目前沒有待審核的認領。'}</p>}
   </section>;

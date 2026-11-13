@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata';
 import {resolvePortalRoute,portalHash,PORTAL_PLACES} from '../../apps/portal-web/src/portal-route';
 import {GUILD_TOOLS} from '../../apps/portal-web/src/guild-tools/catalog';
@@ -171,14 +172,9 @@ export async function openAdminNavigation(page:Page){
   return navigation;
 }
 export async function navigateAdmin(page:Page,name:string){
-  const navigation=await openAdminNavigation(page);
-  const button=navigation.getByRole('button',{name,exact:true});
-  const changed=await button.getAttribute('aria-current')!=='page';
-  await button.click();
-  const workspace=page.getByRole('region',{name:`${name}工作區`,exact:true});
-  await expect(workspace).toBeVisible();
-  if(changed)await expect(workspace).toBeFocused();
-  await expect(page.getByRole('dialog',{name:'切換管理功能',exact:true})).toBeHidden();
+ const keys:Record<string,string>={'會員管理':'members','公會管理':'guilds','公會申請':'guild-applications','管理員名單':'admins','作者認領審核':'author-claims','社群認證審核':'community-certifications','商店准入':'store-admissions','PR 審核':'review-center','GitHub 連結':'github','操作紀錄':'audit','系統錯誤日誌':'errors','系統憑證':'credentials','技能書維護者':'guild-workspace'};
+ await adminNavigate(page,keys[name]??name);
+ const workspace=page.getByRole('region',{name:`${name}工作區`,exact:true});await expect(workspace).toBeVisible();await expect(workspace).toBeFocused();await expect(page.getByRole('dialog',{name:'切換管理功能',exact:true})).toBeHidden();
 }
 
 /** Traverse real tab stops rather than programmatically forcing focus-visible. */

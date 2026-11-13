@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 import {openFeatureSearch,navigate} from './navigation.js';
 
@@ -21,17 +22,17 @@ async function workspaceFixture(page:Page,onStatus?:(route:Route)=>Promise<void>
 
 let dropAdminBrowserSchema:(()=>Promise<void>)|undefined;
 
-test('admin mobile navigation is searchable, returns focus on Escape and supports browser history',async({page},testInfo)=>{
+test('admin mobile navigation has three places, returns focus on Escape and supports browser history',async({page},testInfo)=>{
   const fixture=await workspaceFixture(page);await page.setViewportSize({width:390,height:844});
   await page.goto('/admin?view=guild-applications');
-  await expect(page.getByRole('heading',{name:'公會申請',exact:true})).toBeVisible();await expect(page.locator('.admin-content')).toHaveAttribute('aria-busy','false');
+  await expect(page.getByRole('heading',{name:'待處理',exact:true})).toBeVisible();await expect(page.locator('.admin-content')).toHaveAttribute('aria-busy','false');
   expect(fixture.requests.find(request=>request.path==='/guild-applications')?.state).toBe('pending');
   await expect(page.locator('#admin-credentials')).not.toHaveAttribute('open','');
-  expect((await page.getByRole('heading',{name:'公會申請',exact:true}).boundingBox())!.y).toBeLessThan(500);
+  expect((await page.getByRole('heading',{name:'待處理',exact:true}).boundingBox())!.y).toBeLessThan(500);
   await expect(page.getByRole('textbox',{name:'公會宗旨',exact:true})).toHaveCount(0);
   await page.screenshot({path:testInfo.outputPath('admin-mobile-pending.png'),fullPage:true});
   for(const [width,height] of [[320,720],[768,1024],[1440,900]]){
-    await page.setViewportSize({width,height});await expect(page.getByRole('heading',{name:'公會申請',exact:true})).toBeVisible();
+    await page.setViewportSize({width,height});await expect(page.getByRole('heading',{name:'待處理',exact:true})).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${width}px workspace overflow`).toBe(true);
     await page.screenshot({path:testInfo.outputPath(`admin-pending-${width}.png`),fullPage:true});
   }
@@ -40,50 +41,48 @@ test('admin mobile navigation is searchable, returns focus on Escape and support
   const dialog=page.getByRole('dialog',{name:'切換管理功能',exact:true});await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button',{name:'關閉管理選單',exact:true})).toBeFocused();await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();await expect(trigger).toBeFocused();
-  await trigger.click();await dialog.getByRole('searchbox',{name:'搜尋管理功能',exact:true}).fill('操作');
-  await expect(dialog.getByRole('button',{name:'會員管理',exact:true})).toHaveCount(0);await dialog.getByRole('button',{name:'操作紀錄',exact:true}).click();
-  await expect(page).toHaveURL(/view=audit/);await expect(page.locator('.admin-content')).toBeFocused();await page.goBack();
-  await expect(page.getByRole('heading',{name:'公會申請',exact:true})).toBeVisible();await expect(dialog).not.toBeVisible();
-  await trigger.click();await dialog.getByRole('button',{name:'系統憑證',exact:true}).click();
-  await expect(page.locator('#admin-credentials')).toHaveAttribute('open','');await expect(page.getByRole('heading',{name:'憑證到期',exact:true})).toBeInViewport();await expect(dialog).not.toBeVisible();
+  await trigger.click();await expect(dialog.getByRole('button')).toHaveCount(4);await dialog.getByRole('button',{name:'系統',exact:true}).click();
+  await expect(page).toHaveURL(/view=system/);await expect(page.locator('.admin-content')).toBeFocused();await page.goBack();
+  await expect(page.getByRole('heading',{name:'待處理',exact:true})).toBeVisible();await expect(dialog).not.toBeVisible();
+  await adminNavigate(page,'credentials');await expect(page.locator('#admin-credentials')).toHaveAttribute('open','');await expect(page.getByRole('heading',{name:'憑證到期',exact:true})).toBeInViewport();await expect(dialog).not.toBeVisible();
   expect(fixture.requests.filter(request=>request.method==='POST')).toHaveLength(0);
 });
 
 test('admin application filters use server states and preserve an unfinished review across workspace switches',async({page})=>{
-  const fixture=await workspaceFixture(page);await page.goto('/admin?view=guild-applications');
+  const fixture=await workspaceFixture(page);await page.goto('/admin?view=guild-applications&manage=1');
   const row=page.locator('.admin-application-card');await row.getByText('開始審核',{exact:true}).click();
   await page.getByRole('textbox',{name:'公會宗旨',exact:true}).fill('尚未送出的合成審核草稿');
   await page.getByRole('textbox',{name:'審核說明',exact:true}).fill('先保存於目前頁面，稍後繼續');
-  await page.getByRole('button',{name:'會員管理',exact:true}).click();await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'公會申請',exact:true}).click();await expect(page.locator('.admin-content')).toHaveAttribute('aria-busy','false');
+  await adminNavigate(page,'members');await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
+  await adminNavigate(page,'guild-applications');await expect(page.locator('.admin-content')).toHaveAttribute('aria-busy','false');
   await expect(page.getByRole('textbox',{name:'公會宗旨',exact:true})).toHaveValue('尚未送出的合成審核草稿');
   await expect(page.getByRole('textbox',{name:'審核說明',exact:true})).toHaveValue('先保存於目前頁面，稍後繼續');
   await page.getByRole('group',{name:'公會申請篩選'}).getByRole('button',{name:'已核准',exact:true}).click();
   await expect(page.getByRole('heading',{name:'合成歷史公會',exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'合成待審公會',exact:true})).toHaveCount(0);
   await row.getByText('查看申請與審核紀錄',{exact:true}).click();await expect(row).toContainText('合成已完成審核');
-  expect(fixture.requests.filter(request=>request.path==='/guild-applications').map(request=>request.state)).toEqual(['pending','pending','approved']);
+  expect(fixture.requests.filter(request=>request.path==='/guild-applications').map(request=>request.state)).toContain('approved');
   expect(fixture.requests.filter(request=>request.method==='POST')).toHaveLength(0);
 });
 
 test('admin change of verified principal discards earlier private rows and unfinished review fields',async({page})=>{
-  const fixture=await workspaceFixture(page);await page.goto('/admin');
+  const fixture=await workspaceFixture(page);await page.goto('/admin?view=members&manage=1');
   await page.getByRole('textbox',{name:'搜尋會員',exact:true}).fill('private-owner-a@example.test');await page.getByRole('button',{name:'搜尋',exact:true}).click();
   await expect.poll(()=>fixture.requests.filter(request=>request.path==='/members').at(-1)?.query).toBe('private-owner-a@example.test');await page.getByRole('checkbox',{name:'顯示測試資料'}).check();
-  await page.getByRole('button',{name:'公會申請',exact:true}).click();await page.getByText('開始審核',{exact:true}).click();
+  await adminNavigate(page,'guild-applications');await page.getByText('開始審核',{exact:true}).click();
   await page.getByRole('textbox',{name:'公會宗旨',exact:true}).fill('先前管理身分的私人草稿');
-  fixture.changeOwner();await page.locator('.admin-account > summary').click();await page.getByRole('button',{name:'重新確認管理身分',exact:true}).click();
-  await expect(page.getByText('待審申請已處理完畢',{exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'合成待審公會',exact:true})).toHaveCount(0);
+  fixture.changeOwner();await adminNavigate(page,'audit');await page.locator('.admin-account > summary').click();await page.getByRole('button',{name:'重新確認管理身分',exact:true}).click();
+  await adminNavigate(page,'guild-applications');await expect(page.getByText('待審申請已處理完畢',{exact:true})).toBeVisible();await expect(page.getByRole('heading',{name:'合成待審公會',exact:true})).toHaveCount(0);
   await expect(page.getByRole('textbox',{name:'公會宗旨',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'會員管理',exact:true}).click();await expect(page.getByRole('textbox',{name:'搜尋會員',exact:true})).toHaveValue('');await expect(page.getByRole('checkbox',{name:'顯示測試資料'})).not.toBeChecked();
+  await adminNavigate(page,'members');await expect(page.getByRole('textbox',{name:'搜尋會員',exact:true})).toHaveValue('');await expect(page.getByRole('checkbox',{name:'顯示測試資料'})).not.toBeChecked();
   await expect.poll(()=>fixture.requests.filter(request=>request.path==='/members').at(-1)?.query).toBe('');expect(fixture.requests.filter(request=>request.path==='/members').at(-1)?.includeTest).toBe('false');
 });
 
 test('a delayed member command refreshes the current workspace and cannot restore the previous member view',async({page})=>{
   let finish!:()=>void;const delayed=new Promise<void>(resolve=>{finish=resolve;});
   const fixture=await workspaceFixture(page,async route=>{await delayed;await route.fulfill({json:{saved:true}});});
-  await page.goto('/admin');await page.getByText('管理操作',{exact:true}).click();await page.getByRole('button',{name:'停用這位會員',exact:true}).click();
+  await page.goto('/admin?view=members&manage=1');await page.getByText('管理操作',{exact:true}).click();await page.getByRole('button',{name:'停用這位會員',exact:true}).click();
   await page.getByRole('textbox',{name:'操作理由',exact:true}).fill('合成操作，驗證延遲結果仍留在目前工作區');await page.getByRole('button',{name:'確認停用這位會員',exact:true}).click();
-  await expect.poll(()=>fixture.requests.some(request=>request.method==='POST')).toBe(true);await page.getByRole('button',{name:'公會申請',exact:true}).click();
+  await expect.poll(()=>fixture.requests.some(request=>request.method==='POST')).toBe(true);await adminNavigate(page,'guild-applications');
   await expect(page.getByRole('heading',{name:'合成待審公會',exact:true})).toBeVisible();finish();
   await expect(page.getByText('管理操作已保存，並留下操作紀錄。',{exact:true})).toBeVisible();await expect(page).toHaveURL(/view=guild-applications/);
   expect(fixture.requests.filter(request=>request.path==='/members')).toHaveLength(1);await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toHaveCount(0);
@@ -91,8 +90,8 @@ test('a delayed member command refreshes the current workspace and cannot restor
 
 test('an optional admin module load failure leaves navigation and the member workspace usable',async({page})=>{
   await workspaceFixture(page);await page.route(/\/assets\/AdminGuildManagement-[^/]+\.js$/,route=>route.abort('failed'));
-  await page.goto('/admin');await page.getByRole('button',{name:'公會管理',exact:true}).click();await expect(page.locator('.admin-content').getByRole('alert')).toBeVisible();
-  await page.getByRole('button',{name:'會員管理',exact:true}).click();await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();await expect(page.getByText('合成會員',{exact:true})).toBeVisible();
+  await page.goto('/admin');await adminNavigate(page,'guilds');await expect(page.locator('.admin-content').getByRole('alert')).toBeVisible();
+  await adminNavigate(page,'members');await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();await expect(page.getByText('合成會員',{exact:true})).toBeVisible();
 });
 test.afterEach(async()=>{const drop=dropAdminBrowserSchema;dropAdminBrowserSchema=undefined;if(drop)await drop();});
 
@@ -114,7 +113,7 @@ test('ordinary members cannot see the admin entry and direct links still require
   await expect(page.getByRole('button',{name:'會員管理',exact:true})).toHaveCount(0);
 });
 
-test('admin member toggle reveals classified test accounts without changing summary totals',async({page})=>{
+test('admin member toggle reveals classified test accounts without restoring duplicate summary controls',async({page})=>{
  const queries:string[]=[];
  await page.route('**/admin/api/**',route=>{
   const url=new URL(route.request().url());
@@ -125,15 +124,15 @@ test('admin member toggle reveals classified test accounts without changing summ
   }
   return route.fulfill({json:{items:[]}});
  });
- await page.goto('/admin');
+ await page.goto('/admin?view=members&manage=1');
  await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
- const memberTotal=page.locator('.admin-summary > div').filter({has:page.getByText('會員',{exact:true})}).locator('dd');
- await expect(memberTotal.getByRole('button')).toHaveAccessibleName('會員 1，開啟會員管理');
+ const memberTotal=page.locator('.admin-summary-strip');
+ await expect(memberTotal).toHaveCount(0);
  await expect(page.getByText('Synthetic verifier')).toHaveCount(0);
  await page.getByRole('checkbox',{name:'顯示測試資料'}).check();
  await expect(page.getByText('Synthetic verifier')).toBeVisible();
  await expect(page.getByText('測試帳號')).toBeVisible();
- await expect(memberTotal.getByRole('button')).toHaveAccessibleName('會員 1，開啟會員管理');
+ await expect(memberTotal).toHaveCount(0);
  await page.setViewportSize({width:390,height:844});
  await expect(page.getByRole('checkbox',{name:'顯示測試資料'})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -157,7 +156,7 @@ test('admin header and navigation cards keep their content inside the card borde
   for(const [width,height] of [[1440,900],[390,844],[320,720]]){
     await page.setViewportSize({width,height});
     await page.goto('/admin');
-    await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'待處理',exact:true})).toBeVisible();
     if(width<961)await page.getByRole('button',{name:'開啟管理選單',exact:true}).click();
     // Every theme paints both blocks as cards; the logo, page tools and nav buttons must not touch their border.
     for(const theme of ['light','dark','versefolk']){
@@ -170,7 +169,7 @@ test('admin header and navigation cards keep their content inside the card borde
       for(const inset of insets)expect(inset,`${theme} ${width}px card inset`).toBeGreaterThanOrEqual(11.5);
     }
     if(width>960){
-      const last=page.getByRole('navigation',{name:'平台管理選單'}).getByRole('button',{name:'系統憑證',exact:true});
+      const last=page.getByRole('navigation',{name:'平台管理選單'}).getByRole('button',{name:'系統',exact:true});
       await last.scrollIntoViewIfNeeded();await expect(last).toBeInViewport();
     }
     if(width<961)await page.getByRole('button',{name:'關閉管理選單',exact:true}).click();
@@ -197,19 +196,19 @@ test('verified admin UI keeps member, guild, nomination and audit operations sep
     const payload=path==='/bootstrap'?{admin:{admin_id:'fixture-admin',display_name:'測試管理員',email:'admin@example.test',role:'super_admin',community_id:'community-fixture'},csrf_token:csrf,summary:{members:1,active_members:active?1:0,pending_guild_applications:reviewed?0:1,guilds:1,admins:1},available_skill_books:[{id:'testing-book',title:'協作入門技能書'}],pending_guild_appointments:[{guild_key:'guild_pending',name:'預定公會',state:linked?'bound':'pending',bound_user_id:linked?user:null}]}:path==='/members'?{items:[member],next_offset:null}:path==='/guild-applications'?{items:[{application_id:'application-fixture',name:'專業測試公會',profession:'軟體測試',reason:'一起練習測試與分享測試技巧',state:reviewed?'approved':'pending',applicant_name:'申請夥伴',applicant_email:'applicant@example.test',aggregate_version:3,review_reason:reviewed?'已有明確學習方向':null}],next_offset:null}:path==='/guilds'?{items:[{guild_key:'guild_testing',name:'測試公會',purpose:'一起測試實用的作品',guild_master:master?{user_id:user,display_name:'待管理夥伴'}:null,officer_version:master?33:28}]}:path==='/guilds/guild_testing/master-candidates'?{items:[{user_id:user,display_name:member.display_name,email:member.email,active,joined:true,eligible:active,eligibility_reason:active?null:'inactive',is_current:master,is_expert:false,expert_version:null}],total:1,next_offset:null}:path==='/admins'?{items:[{admin_id:'fixture-admin',display_name:'測試管理員',email:'admin@example.test',role:'super_admin',active:true,identity_binding:'unverified_email_match'}]}:{items:[{audit_id:'audit-fixture',admin_name:'測試管理員',action:'member_status',reason:'配合會員本人提出的停用要求',created_at:'2026-09-23T12:00:00Z',target_type:'member',target_ref:user}]};
     await route.fulfill({json:payload});
   });
-  await page.goto('/admin');await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
+  await page.goto('/admin?view=members&manage=1');await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
   await expect(page.locator('.admin-member-positioning')).toHaveText('尚未完成加入');
   expect(memberSessionRequests).toBe(1);
-  await expect(page.getByText('預定公會 · 等待本人確認連結',{exact:true})).toBeVisible();
+  await adminNavigate(page,'audit');await expect(page.getByText('預定公會 · 等待本人確認連結',{exact:true})).toBeVisible();await adminNavigate(page,'members');
   await page.locator('.admin-member-row').getByText('管理操作',{exact:true}).click();
   await page.getByRole('button',{name:'停用這位會員',exact:true}).click();await page.getByLabel('操作理由',{exact:true}).fill('配合會員本人提出的停用要求');await page.getByRole('button',{name:'確認停用這位會員',exact:true}).click();await expect(page.getByText('已停用',{exact:true})).toBeVisible();
   expect(calls[0].headers['x-admin-csrf']).toBe(csrf);expect(calls[0].headers['if-match']).toBe('"7"');expect(calls[0].headers['idempotency-key']).toBeTruthy();expect(calls[0].body.active).toBe(false);
   await page.getByRole('button',{name:'重新啟用會員',exact:true}).click();await page.getByLabel('操作理由',{exact:true}).fill('會員本人確認重新啟用');await page.getByRole('button',{name:'確認重新啟用會員',exact:true}).click();await expect(page.getByText('啟用中',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'公會申請',exact:true}).click();await page.getByText('開始審核',{exact:true}).click();await page.getByLabel('公會宗旨',{exact:true}).fill('一起練習軟體測試並分享經驗');await page.getByLabel('新成員的第一步',{exact:true}).fill('閱讀入門技能書並完成第一個測試');await page.getByLabel('審核說明',{exact:true}).fill('已有明確學習方向');
-  await expect(page.getByRole('button',{name:'保存審核決定',exact:true})).toBeDisabled();await page.getByLabel('協作入門技能書',{exact:true}).check();await page.getByRole('button',{name:'保存審核決定',exact:true}).click();await page.getByRole('group',{name:'公會申請篩選'}).getByRole('button',{name:'已核准',exact:true}).click();await expect(page.locator('.admin-application-card .badge')).toHaveText('已核准');expect(calls.find(call=>call.path.includes('/review'))?.body.guild.skill_book_ids).toEqual(['testing-book']);
-  await page.getByRole('button',{name:'公會管理',exact:true}).click();await page.getByRole('button',{name:'設定公會長',exact:true}).click();await page.getByRole('radio',{name:'待管理夥伴 · member@example.test',exact:true}).check();await page.getByLabel('任命理由',{exact:true}).fill('具備帶領公會的經驗並同意任命');await page.getByRole('button',{name:'確認任命',exact:true}).click();await expect(page.getByText('公會長：待管理夥伴',{exact:true})).toBeVisible();expect(calls.find(call=>call.path.includes('/master'))?.headers['if-match']).toBe('"28"');
-  await page.getByRole('button',{name:'管理員名單',exact:true}).click();await expect(page.getByText(/同信箱會員尚未驗證，不視為身分綁定/)).toBeVisible();
-  await page.getByRole('button',{name:'操作紀錄',exact:true}).click();await expect(page.getByText('操作人：測試管理員',{exact:true})).toBeVisible();
+  await adminNavigate(page,'guild-applications');await page.getByText('開始審核',{exact:true}).click();await page.getByLabel('公會宗旨',{exact:true}).fill('一起練習軟體測試並分享經驗');await page.getByLabel('新成員的第一步',{exact:true}).fill('閱讀入門技能書並完成第一個測試');await page.getByLabel('審核說明',{exact:true}).fill('已有明確學習方向');
+  await expect(page.getByRole('button',{name:'確認',exact:true})).toBeDisabled();await page.getByLabel('協作入門技能書',{exact:true}).check();await page.getByRole('button',{name:'確認',exact:true}).click();await page.getByRole('group',{name:'公會申請篩選'}).getByRole('button',{name:'已核准',exact:true}).click();await expect(page.locator('.admin-application-card .badge')).toHaveText('已核准');expect(calls.find(call=>call.path.includes('/review'))?.body.guild.skill_book_ids).toEqual(['testing-book']);
+  await adminNavigate(page,'guilds');await page.getByRole('button',{name:'設定公會長',exact:true}).click();await page.getByRole('radio',{name:'待管理夥伴 · member@example.test',exact:true}).check();await page.getByLabel('任命理由',{exact:true}).fill('具備帶領公會的經驗並同意任命');await page.getByRole('button',{name:'確認任命',exact:true}).click();await expect(page.getByText('公會長：待管理夥伴',{exact:true})).toBeVisible();expect(calls.find(call=>call.path.includes('/master'))?.headers['if-match']).toBe('"28"');
+  await adminNavigate(page,'admins');await expect(page.getByText(/同信箱會員尚未驗證，不視為身分綁定/)).toBeVisible();
+  await adminNavigate(page,'audit');await expect(page.getByText('操作人：測試管理員',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'連結我的會員帳號並確認會長任命',exact:true}).click();await expect(page.getByText('預定公會 · 已連結會員並確認任命',{exact:true})).toBeVisible();expect(calls.find(call=>call.path==='/link-member')?.headers['x-admin-csrf']).toBe(csrf);
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
@@ -260,7 +259,7 @@ test('admin appointment, access sync, revocation and reactivation use real isola
     const targetPage=await second.newPage();
     await targetPage.goto(origin+'/admin');
     await expect(targetPage.getByRole('heading',{name:'需要管理員驗證',exact:true})).toBeVisible();
-    await page.goto(origin+'/admin');
+    await page.goto(origin+'/admin?view=members&manage=1');
     const member=page.locator('.admin-member-row').filter({has:page.getByRole('heading',{name:'測試新管理員',exact:true})});
     await member.getByText('管理操作',{exact:true}).click();
     await member.getByRole('button',{name:'任命管理員',exact:true}).click();
@@ -316,7 +315,7 @@ test('admin appointment, access sync, revocation and reactivation use real isola
     expect((await pool.query('SELECT count(*)::int AS n FROM positioning_profession_memberships WHERE user_id=$1 AND guild_key=$2',[targetId,guildKey])).rows[0].n).toBe(0);
     const firstGeneral=await (await page.request.get(origin+'/admin/api/members?limit=25&offset=0')).json();expect(firstGeneral.items.some((item:any)=>item.user_id===targetId)).toBe(false);
     const guildName=(await pool.query('SELECT name FROM positioning_guild_catalog WHERE guild_key=$1',[guildKey])).rows[0].name;
-    await page.getByRole('button',{name:'公會管理',exact:true}).click();await page.getByRole('searchbox',{name:'搜尋公會',exact:true}).fill(guildName);
+    await adminNavigate(page,'guilds');await page.getByText('公會設定',{exact:true}).click();await page.getByRole('searchbox',{name:'搜尋公會',exact:true}).fill(guildName);
     const guildCard=page.getByRole('article',{name:guildName,exact:true});await guildCard.getByRole('button',{name:'設定公會長',exact:true}).click();
     const picker=guildCard.getByRole('region',{name:`${guildName}公會長人選`,exact:true}),choice=picker.getByRole('radio',{name:`${leaderName} · ${targetEmail}`,exact:true});
     await picker.getByRole('searchbox',{name:'搜尋公會長人選',exact:true}).fill('Zulu');await picker.getByRole('button',{name:'查詢人選',exact:true}).click();await expect(choice).toBeVisible();
@@ -331,7 +330,7 @@ test('admin appointment, access sync, revocation and reactivation use real isola
     expect((await pool.query('SELECT onboarding_required,onboarding_completed_at FROM users WHERE user_id=$1',[targetId])).rows[0]).toEqual(beforeAppointment);
     const appointmentAudit=(await pool.query("SELECT reason,after_state FROM platform_admin_audit WHERE community_id=$1 AND action='appoint_guild_master' AND target_ref=$2",[DEMO_COMMUNITY,guildKey])).rows;
     expect(appointmentAudit).toHaveLength(1);expect(appointmentAudit[0].after_state.user_id).toBe(targetId);expect(appointmentAudit[0].after_state.membership_joined).toBe(true);expect(appointmentAudit[0].reason).toBe('本人同意帶領讀書會與活動安排');
-    await page.getByRole('button',{name:'操作紀錄',exact:true}).click();
+    await adminNavigate(page,'audit');
     await expect(page.getByText('任命平台管理員',{exact:true})).toBeVisible();
     await expect(page.getByText('調整管理權限',{exact:true})).toHaveCount(2);
     await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

@@ -11,7 +11,7 @@ export const ReviewInput=z.object({decision:z.enum(['approve','reject','revoke']
 export const CertificationSettingsSchema=z.object({state:z.enum(certificationStates),aggregate_version:z.number().int().positive().safe(),show_community_certification:z.boolean(),statement:z.string().max(1000),policy_version:z.literal(CERTIFICATION_POLICY)}).strict();
 export type CertificationSettings=z.infer<typeof CertificationSettingsSchema>;
 export const CertificationReviewAckSchema=z.object({updated:z.literal(true)}).strict();
-export const CertificationQueueSchema=z.object({items:z.array(CertificationSettingsSchema.extend({user_id:z.string().uuid(),display_name:z.string()}).strict()).max(50),next_offset:z.number().int().nonnegative().safe().nullable()}).strict();
+export const CertificationQueueSchema=z.object({items:z.array(CertificationSettingsSchema.extend({user_id:z.string().uuid(),display_name:z.string(),submitted_at:z.string().nullable().optional()}).strict()).max(50),next_offset:z.number().int().nonnegative().safe().nullable()}).strict();
 export type CertificationBadge={kind:'community_certification';label:'社群認證';description:typeof CERTIFICATION_DESCRIPTION};
 /** Presentation only. Call with facts admitted by the canonical SQL profile ACL. */
 export function certificationBadge(state:unknown,optIn:unknown):CertificationBadge|undefined{
