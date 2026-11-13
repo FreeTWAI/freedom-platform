@@ -1,3 +1,4 @@
+import {recordEventChange,notifyEventRegistrants} from './event-changes.js';
 import {exposeEvent} from './event-exposure.js';
 import {publishEventShare} from '../shares/event-ledger.js';
 import {creditEventRegistrations} from '../shares/credit.js';
@@ -21,7 +22,7 @@ import {avatarUrl} from '../identity-membership/avatars.js';
 import {lockMemberGuilds} from '../positioning/onboarding.js';
 import {requireFullGuildMember} from '../positioning/member-tier.js';
 import {adminCommand,audit,type AdminActor,type AdminCommand} from '../platform-admin/service.js';
-import {cancelEventParticipation,countEventSeats,ensureGuestCapability,eventGuestManagementLink,markEventParticipationGoing,markGuestCapabilityProviderAccepted,notifyEventParticipationChanged,reconcileEventWaitlist} from './event-waitlist.js';
+import {cancelEventParticipation,countEventSeats,ensureGuestCapability,eventGuestManagementLink,markEventParticipationGoing,markGuestCapabilityProviderAccepted,notifyEventParticipationChanged,requireEventScheduleCapacity,reconcileEventSchedule,reconcileEventWaitlist} from './event-waitlist.js';
 import {cancelEventReminders} from './event-reminders.js';
 
 import {eventBannerStorageMode,type EventBannerAssetService} from '../assets/event-banner.js';
@@ -74,6 +75,13 @@ async function requireEventNotHeld(q:Pick<PoolClient,'query'>,row:any){
   requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動因檢舉暫停公開，請由平台管理員在「檢舉處理」處理。');
 }
 
+/** Same report hold predicate as review; owner edits never release moderation. */
+export async function requireEventEditable(q:Pick<PoolClient,'query'>,row:any){
+  requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動正在檢舉處理中。');
+  const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
+  requireCondition(['pending','published'].includes(row.state)&&new Date(row.starts_at).getTime()>clock.getTime(),409,'event_closed','只能修改尚未開始的活動。');
+}
+
 export async function canAccessGuildEvent(q:Pick<PoolClient,'query'>,actor:Actor,row:any){
   if(row.visibility!=='guild'||row.organizer_ref===actor.user_id)return true;
   const member=await q.query(`SELECT 1 FROM positioning_profession_memberships
@@ -109,7 +117,7 @@ async function bulletin(q:PoolClient,row:any,kind:'submitted'|'approved'|'reject
     :kind==='approved'?`${actorName} 核准了 ${organizerName} 的${scope}「${row.title}」。`
     :`${actorName} 未核准 ${organizerName} 的${scope}「${row.title}」。`;
   await q.query(`INSERT INTO community_event_bulletins(bulletin_id,event_id,community_id,kind,actor_name,message)
-    VALUES($1,$2,$3,$4,$5,$6)`,[randomUUID(),row.event_id,row.community_id,kind==='published'?'approved':kind,actorName,message]);
+    VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(event_id,kind) DO NOTHING`,[randomUUID(),row.event_id,row.community_id,kind==='published'?'approved':kind,actorName,message]);
 }
 
 export async function listEventBulletins(db:Pool|PoolClient,actor:Actor){
@@ -354,7 +362,7 @@ export async function readEvent(pool:Pool|PoolClient,actor:Actor,id:string,parti
   const reviewer=!actor.agent&&row.state==='pending'&&row.review_guild_key&&!await eventIsHeld(pool,row)&&(await pool.query(`SELECT 1 FROM positioning_guild_officers o
     JOIN positioning_profession_memberships m ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
-  const ownHistory=participationHistory&&row.state==='cancelled'&&member&&Boolean((await pool.query(
+  const ownHistory=row.state==='cancelled'&&member&&Boolean((await pool.query(
     "SELECT 1 FROM community_event_rsvps WHERE event_id=$1 AND user_id=$2 AND confirmed_at IS NOT NULL UNION ALL SELECT 1 FROM community_event_waitlist WHERE event_id=$1 AND member_ref=$2",[id,actor.user_id])).rowCount);
   requireCondition(!await testHostHidden(pool,row.organizer_ref,actor.user_id)&&(row.organizer_ref===actor.user_id||Boolean(reviewer)||row.state==='published'&&member||ownHistory),404,'not_found','找不到這場活動。');
   return eventView(pool,actor,row);
@@ -366,7 +374,7 @@ export async function authorizeEventBannerWrite(q:PoolClient,actor:Actor,id:stri
  const row=await scopedEvent(q,actor,id,lock);
  requireCondition(row.organizer_ref===actor.user_id,403,'organizer_required','只能修改自己活動的 Banner。');
  await refuseInternGuildExchange(q,actor,row);
- if(editable){const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改尚未開始的活動。');}
+ if(editable)await requireEventEditable(q,row);
  return row;
 }
 /** Current organizer authority also protects historical photo receipts. Only
@@ -376,8 +384,7 @@ export async function authorizeEventPrizePhotoOwner(q:PoolClient,actor:Actor,id:
  await lockMemberGuilds(q,actor);const row=await scopedEvent(q,actor,id,lock);
  requireCondition(row.organizer_ref===actor.user_id,403,'organizer_required','只能修改自己活動的獎品照片。');
  await refuseInternGuildExchange(q,actor,row);
- if(editable){const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
-  requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>clock.getTime(),409,'event_closed','只能修改尚未開始的活動。');}
+ if(editable)await requireEventEditable(q,row);
  return row;
 }
 export async function eventBannerResult(q:PoolClient,actor:Actor,id:string){
@@ -398,13 +405,14 @@ export async function saveEventBanner(pool:Pool,input:Command,id:string,upload:{
   },async q=>{
     const row=await scopedEvent(q,input.actor,id,true);
     checkVersion(row.aggregate_version,input.expected);
-    requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改尚未開始的活動。');
+    await requireEventEditable(q,row);
     if(upload){
       const normalized=await normalizeEventPoster(upload.mime,upload.bytes,orientation);
       await q.query(`INSERT INTO community_event_banners(event_id,image_bytes,orientation) VALUES($1,$2,$3)
         ON CONFLICT(event_id) DO UPDATE SET image_bytes=EXCLUDED.image_bytes,orientation=EXCLUDED.orientation,updated_at=now()`,[id,normalized,orientation]);
     }else await q.query('DELETE FROM community_event_banners WHERE event_id=$1',[id]);
     const updated=(await q.query('UPDATE community_events SET aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *',[id])).rows[0];
+    if(row.state==='published')await recordEventChange(q,row,updated,['cover']);
     await journal(q,input.actor,'community_event',id,updated.aggregate_version,upload?'save_banner':'remove_banner',{});
     return eventView(q,input.actor,updated);
   });
@@ -469,11 +477,12 @@ export async function saveEventVideo(pool:Pool,input:Command,id:string,upload:{b
     await refuseInternGuildExchange(q,input.actor,row);
   },async q=>{
     const row=await scopedEvent(q,input.actor,id,true);checkVersion(row.aggregate_version,input.expected);
-    requireCondition(['pending','published'].includes(row.state)&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改尚未開始的活動。');
+    await requireEventEditable(q,row);
     if(upload)await q.query(`INSERT INTO community_event_videos(event_id,media_bytes,mime_type) VALUES($1,$2,$3)
       ON CONFLICT(event_id) DO UPDATE SET media_bytes=EXCLUDED.media_bytes,mime_type=EXCLUDED.mime_type,updated_at=now()`,[id,upload.bytes,upload.mime]);
     else await q.query('DELETE FROM community_event_videos WHERE event_id=$1',[id]);
     const updated=(await q.query('UPDATE community_events SET aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *',[id])).rows[0];
+    if(row.state==='published')await recordEventChange(q,row,updated,['video']);
     await journal(q,input.actor,'community_event',id,updated.aggregate_version,upload?'save_video':'remove_video',{});
     return eventView(q,input.actor,updated);
   });
@@ -541,18 +550,22 @@ export async function createEvent(pool:Pool,input:Command,eventBody:unknown=inpu
 }
 
 export async function updateEvent(pool:Pool,input:Command,id:string) {
-  const body=details.parse(input.body);
+  const {source_cover_url,...raw}=z.object({source_cover_url:eventSourceUrl.nullable().optional()}).passthrough().parse(input.body);
+  const body=details.parse(raw);
   // Set only by a new transaction that actually detaches photos. Historical
   // receipts remain replayable after the original event start.
   let photoRemovalDeadline:number|undefined;
   return command(pool,input,async q=>{
     const row=await scopedEvent(q,input.actor,id);
-    requireCondition(row.organizer_ref===input.actor.user_id,403,'organizer_required','只能編輯自己發佈的活動。');
+    requireCondition(!input.actor.agent&&row.organizer_ref===input.actor.user_id,403,'organizer_required','只能編輯自己發佈的活動。');
+    requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動正在檢舉處理中。');
     await refuseInternGuildExchange(q,input.actor,row);
   },async q=>{
     const row=await scopedEvent(q,input.actor,id,true);
     checkVersion(row.aggregate_version,input.expected);
-    requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>Date.now(),409,'event_closed','只能修改待審核且尚未開始的活動。');
+    await requireEventEditable(q,row);
+    requireCondition(row.state==='pending'||body.registration_policy===undefined||body.registration_policy===row.registration_policy,409,'event_registration_policy_immutable','發布後不能更改報名方式。');
+    await requireEventScheduleCapacity(q,id,body.capacity);
     requireCondition(Date.parse(body.starts_at)>Date.now(),422,'event_in_past','活動開始時間須在未來。');
     requireCondition(body.guild_key===row.guild_key&&body.mode===row.mode&&body.event_kind===row.event_kind&&body.visibility===row.visibility,422,'event_review_route_immutable','送出後不能更換主辦公會、形式、類型或參與範圍；請取消並重新提交。');
     const removedPhotos=body.prize_details===undefined?[]:await lockRemovedEventPrizePhotos(q,id,body.prize_details);
@@ -561,18 +574,21 @@ export async function updateEvent(pool:Pool,input:Command,id:string) {
     // after those locks, before detachment and the event write in this transaction.
     await assertCurrentSessionClock(q,input.actor);
     const decisionClock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
-    requireCondition(row.state==='pending'&&Date.parse(row.starts_at)>decisionClock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');
+    await requireEventEditable(q,row);
     requireCondition(Date.parse(body.starts_at)>decisionClock.getTime(),422,'event_in_past','活動開始時間須在未來。');
     await detachEventPrizePhotos(q,removedPhotos);
-    if(removedPhotos.length)photoRemovalDeadline=Math.min(Date.parse(row.starts_at),Date.parse(body.starts_at));
+    photoRemovalDeadline=Math.min(Date.parse(row.starts_at),Date.parse(body.starts_at));
     const updated=(await q.query(`UPDATE community_events SET title=$2,description=$3,starts_at=$4,ends_at=$5,mode=$6,location=$7,capacity=$8,
-      event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,registration_policy=$14,prize_details=$15::jsonb,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need,body.registration_policy??row.registration_policy,JSON.stringify(body.prize_details===undefined?row.prize_details:body.prize_details)])).rows[0];
-    await journal(q,input.actor,'community_event',id,updated.aggregate_version,'update',{title:body.title});
-    return eventView(q,input.actor,updated);
+      event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,registration_policy=$14,prize_details=$15::jsonb,source_cover_url=$16,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need,body.registration_policy??row.registration_policy,JSON.stringify(body.prize_details===undefined?row.prize_details:body.prize_details),source_cover_url===undefined?row.source_cover_url:source_cover_url])).rows[0];
+    if(row.state==='published')await reconcileEventSchedule(q,id,body.starts_at);
+    const current=await scopedEvent(q,input.actor,id);
+    if(row.state==='published')await recordEventChange(q,row,current);
+    await journal(q,input.actor,'community_event',id,current.aggregate_version,'update',{title:body.title});
+    return eventView(q,input.actor,current);
   },async q=>{
     if(photoRemovalDeadline!==undefined){
       const clock=(await q.query('SELECT clock_timestamp() AS now')).rows[0].now;
-      requireCondition(photoRemovalDeadline>clock.getTime(),409,'event_closed','只能修改待審核且尚未開始的活動。');
+      requireCondition(photoRemovalDeadline>clock.getTime(),409,'event_closed','只能修改尚未開始的活動。');
       await assertCurrentSessionClock(q,input.actor);
     }
   });
@@ -582,19 +598,44 @@ export async function cancelEvent(pool:Pool,input:Command,id:string,participatio
   z.object({}).strict().parse(input.body);
   return command(pool,input,async q=>{
     const row=await scopedEvent(q,input.actor,id);
-    requireCondition(row.organizer_ref===input.actor.user_id,403,'organizer_required','只能取消自己發佈的活動。');
+    requireCondition(!input.actor.agent&&row.organizer_ref===input.actor.user_id,403,'organizer_required','只能取消自己發佈的活動。');
     await refuseInternGuildExchange(q,input.actor,row);
   },async q=>{
     const row=await scopedEvent(q,input.actor,id,true);
     checkVersion(row.aggregate_version,input.expected);
     requireCondition(row.state==='published'||row.state==='pending',409,'event_closed','這場活動已關閉。');
     await q.query("UPDATE community_events SET state='cancelled',aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1",[id]);
-    await reconcileEventWaitlist(q,id);
+    await reconcileEventWaitlist(q,id,new Date(),false);
     await cancelEventReminders(q,id);
-    if(participationEnabled)await notifyEventParticipationChanged(q,id,'event_cancelled');
+    await notifyEventParticipationChanged(q,id,'event_cancelled');
     const updated=await scopedEvent(q,input.actor,id);
+    if(row.state==='published')await recordEventChange(q,row,updated,['state']);
     await journal(q,input.actor,'community_event',id,updated.aggregate_version,'cancel',{},'freedom.community.event.cancelled.v1');
     return eventView(q,input.actor,updated);
+  });
+}
+
+export async function announceEvent(pool:Pool,input:Command,id:string){
+  const body=z.object({message:text(300)}).strict().parse(input.body);
+  const authorize=async(q:PoolClient,lock=false)=>{
+    const row=await scopedEvent(q,input.actor,id,lock);
+    requireCondition(!input.actor.agent&&row.organizer_ref===input.actor.user_id,403,'organizer_required','只有主辦者可通知參加者。');
+    await refuseInternGuildExchange(q,input.actor,row);
+    requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動正在檢舉處理中。');
+    return row;
+  };
+  return command(pool,input,q=>authorize(q).then(()=>{}),async q=>{
+    const row=await authorize(q,true);checkVersion(row.aggregate_version,input.expected);
+    requireCondition(row.state==='published',409,'event_closed','這場活動已關閉。');
+    const count=Number((await q.query(`SELECT count(*) n FROM community_event_announcements WHERE event_id=$1
+      AND created_at >= date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei'`,[id])).rows[0].n);
+    requireCondition(count<3,429,'event_announcement_limit','每天最多通知參加者 3 次。');
+    const updated=(await q.query('UPDATE community_events SET aggregate_version=aggregate_version+1,updated_at=clock_timestamp() WHERE event_id=$1 RETURNING *',[id])).rows[0];
+    const announcementId=randomUUID();
+    await q.query('INSERT INTO community_event_announcements(announcement_id,event_id,event_version,body) VALUES($1,$2,$3,$4)',[announcementId,id,updated.aggregate_version,body.message]);
+    await notifyEventRegistrants(q,updated,'event_announcement',body.message);
+    await journal(q,input.actor,'community_event',id,updated.aggregate_version,'announcement',{announcement_id:announcementId});
+    return {announcement_id:announcementId,event_id:id,event_version:Number(updated.aggregate_version),recorded:true};
   });
 }
 

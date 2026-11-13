@@ -42,7 +42,7 @@ for(const width of [320,390,1440])for(const theme of ['light','dark','versefolk'
  await page.setViewportSize({width,height:900});await page.emulateMedia({reducedMotion:'reduce'});await page.addInitScript(theme=>{localStorage.setItem('freedom-theme',theme);localStorage.setItem('freedom-seasonal-theme','off');},theme);
  const owner=await login(page),state=await routes(page,owner,true);
  try{
-  await page.goto('/#events');await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();
+  await page.goto(`/#events/${state.event.event_id}/manage`);await page.getByText('其他設定',{exact:true}).click();await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();
   const editor=page.getByRole('region',{name:'合成獎品 的照片設定',exact:true}),input=editor.getByLabel('選擇獎品照片');
   await expect(editor.getByRole('heading',{name:'合成獎品 的照片',exact:true})).toBeFocused();await expect(input).toBeEnabled();await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:png});await expect(editor.getByText('尚未儲存的預覽',{exact:false})).toBeVisible();expect(state.writes).toHaveLength(0);
   await expect(input).toHaveCSS('font-size','16px');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -68,7 +68,7 @@ test('default OFF native management prevents selection but retains explicit remo
  const owner=await login(page),state=await routes(page,owner);state.setAvailability(false);
  const prize=state.event.prize_details![0];state.event.aggregate_version=4;state.event.prize_photos=[{prize_id:prize.prize_id,photo_version:4,url:`/api/v1/events/${state.event.event_id}/prizes/${prize.prize_id}/photo?v=4`}];
  try{
-  await page.goto('/#events');await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();const editor=page.getByRole('region',{name:'合成獎品 的照片設定',exact:true});await expect(editor.getByText(/照片上傳尚未開放或暫時無法使用/)).toBeVisible();await expect(editor.getByLabel('選擇獎品照片')).toBeDisabled();expect(state.writes).toHaveLength(0);
+  await page.goto(`/#events/${state.event.event_id}/manage`);await page.getByText('其他設定',{exact:true}).click();await page.getByRole('button',{name:'管理 合成獎品 的照片',exact:true}).click();const editor=page.getByRole('region',{name:'合成獎品 的照片設定',exact:true});await expect(editor.getByText(/照片上傳尚未開放或暫時無法使用/)).toBeVisible();await expect(editor.getByLabel('選擇獎品照片')).toBeDisabled();expect(state.writes).toHaveLength(0);
   await editor.getByRole('button',{name:'移除已保存照片',exact:true}).click();await editor.getByRole('button',{name:'返回，不移除',exact:true}).click();expect(state.writes).toHaveLength(0);
   await editor.getByRole('button',{name:'移除已保存照片',exact:true}).click();await editor.getByRole('button',{name:'確定移除照片',exact:true}).click();await expect(editor.getByText(/目前沒有已保存照片/)).toBeVisible();expect(state.writes).toHaveLength(1);expect(state.writes[0].operation).toBe('remove');
   state.setAvailability(true);await editor.getByRole('button',{name:'重新確認照片上傳狀態',exact:true}).click();await expect(editor.getByLabel('選擇獎品照片')).toBeEnabled();expect(state.writes).toHaveLength(1);

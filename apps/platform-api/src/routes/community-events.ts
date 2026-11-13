@@ -14,10 +14,10 @@ import { authRateLimit } from '../../../../modules/identity-membership/members.j
 import type { EventEmailSender } from '../../../../modules/community/events.js';
 import { moduleCommand, type PlatformEnv } from '../module-context.js';
 import { readWithMemberSession } from '../../../../packages/db/member-session.js';
-import { eventVideoHttp, cancelEvent, createEvent, eventReferralReport,eventAttendees, getEventShareCode, listEventBulletins, listEvents, readEvent, readEventBanner, readEventVideo, reviewEventAsGuildMaster, saveEventBanner, saveEventVideo, setRsvp, updateEvent } from '../../../../modules/community/events.js';
+import { eventVideoHttp, announceEvent, cancelEvent, createEvent, eventReferralReport,eventAttendees, getEventShareCode, listEventBulletins, listEvents, readEvent, readEventBanner, readEventVideo, reviewEventAsGuildMaster, saveEventBanner, saveEventVideo, setRsvp, updateEvent } from '../../../../modules/community/events.js';
 import {readMemberEventCalendar} from '../../../../modules/community/event-calendar.js';
 import {readEventReminder,saveEventReminder} from '../../../../modules/community/event-reminders.js';
-import {mutateEventWaitlist,processEventWaitlist,readEventParticipation,setEventWaitlistPolicy,updateEventSchedule} from '../../../../modules/community/event-waitlist.js';
+import {mutateEventWaitlist,processEventWaitlist,processEventNotices,readEventParticipation,setEventWaitlistPolicy,updateEventSchedule} from '../../../../modules/community/event-waitlist.js';
 
 // Bounded event text/prize payload, including escaped supplementary Unicode.
 export const EVENT_DETAILS_REQUEST_BYTES=160*1024;
@@ -73,7 +73,7 @@ export async function eventAssetVideoResponse(c:Context,pool:Pool,id:string,stor
 export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSender,origin='',runtime?:Pick<PlatformRuntime,'eventBannerAssets'|'eventBannerAssetStore'|'eventVideoAssets'|'eventVideoAssetStore'|'eventParticipationEnabled'>) {
   const app=new Hono<PlatformEnv>();
   const id=(raw:string)=>z.uuid().parse(raw);
-  const dispatch=async(eventId:string)=>{if(runtime?.eventParticipationEnabled===true)await processEventWaitlist(pool,async(to,subject,body)=>{requireCondition(emailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');await emailSender(to,subject,body);},origin,undefined,eventId);};
+  const dispatch=async(eventId:string)=>{if(emailSender)await (runtime?.eventParticipationEnabled===true?((p:Pool,s:EventEmailSender,o:string,id:string)=>processEventWaitlist(p,s,o,undefined,id)):processEventNotices)(pool,async(to,subject,body)=>{requireCondition(emailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');await emailSender(to,subject,body);},origin,eventId);};
   if(runtime?.eventParticipationEnabled===true){
     app.get('/events/:id/participation',async c=>c.json(await readEventParticipation(pool,c.get('actor'),id(c.req.param('id')))));
     app.get('/events/:id/calendar',async c=>c.json(await readMemberEventCalendar(pool,c.get('actor'),id(c.req.param('id')))));
@@ -127,7 +127,8 @@ export function createCommunityEventRoutes(pool:Pool,emailSender?:EventEmailSend
     c.header('ETag',`"${result.aggregate_version}"`);return c.json(result);
   });
   app.post('/events/:id/video/remove',async c=>c.json(await saveEventVideo(pool,await moduleCommand(c),id(c.req.param('id')),null)));
-  app.post('/events/:id/update',async c=>c.json(await updateEvent(pool,await moduleCommand(c),id(c.req.param('id')))));
+  app.post('/events/:id/update',async c=>{const eventId=id(c.req.param('id'));const result=await updateEvent(pool,await moduleCommand(c),eventId);await dispatch(eventId);return c.json(result);});
+  app.post('/events/:id/announcements',async c=>{const eventId=id(c.req.param('id'));const result=await announceEvent(pool,await moduleCommand(c),eventId);await dispatch(eventId);return c.json(result);});
   app.post('/events/:id/cancel',async c=>{const eventId=id(c.req.param('id'));const result=await cancelEvent(pool,await moduleCommand(c),eventId,runtime?.eventParticipationEnabled===true);await dispatch(eventId);return c.json(result);});
   app.post('/events/:id/review',async c=>c.json(await reviewEventAsGuildMaster(pool,await moduleCommand(c),id(c.req.param('id')))));
   app.post('/events/:id/rsvp',async c=>{

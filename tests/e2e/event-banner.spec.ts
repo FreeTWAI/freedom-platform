@@ -69,7 +69,8 @@ test('large event posters are prepared on create and edit, preserving orientatio
   expect(event.state).toBe('published');
   await e2eAuthPool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[event.event_id]);
   await page.reload();
-  await card.getByRole('button', {name: '編輯草稿'}).click();
+  await card.getByRole('link',{name:'管理活動',exact:true}).click();
+  await card.getByRole('button', {name: '編輯活動'}).click();
   await card.getByText('加上海報或影片（選填）',{exact:true}).click();
   const picker = card.getByLabel('活動海報（選填）');
   const portrait = await sharp({create: {width: 1200, height: 800, channels: 3, background: '#366177'}}).withMetadata({orientation: 6}).jpeg().toBuffer();

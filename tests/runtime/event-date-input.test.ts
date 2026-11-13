@@ -123,13 +123,13 @@ function panel(t:TestContext){
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const ready=async(items:any[]=[])=>{for(const r of reads().filter(r=>!r.done)){r.done=true;await settle(r,{items:r.path==='/events'?items:[]});}};
  const submit=()=>{const form=h.nodes().find(n=>n.nodeName==='FORM');assert(form);flush(()=>form.dispatchEvent({type:'submit'}));};
- return {...h,props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
+ return {...h,button:(name:string)=>{if(name==='編輯活動'&&!props.locationHash.includes('/manage')){props.locationHash='#events/'+ID+'/manage';h.setProps(props);}return h.button(name);},props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
 }
 const ack=(request:any,overrides:any={})=>stored({...request.body,state:request.path==='/events'?'published':'pending',aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
 const tuple=(r:any)=>JSON.stringify({path:r.path,body:r.body,options:r.options});
 
 async function openDraft(h:ReturnType<typeof panel>,editing:boolean){
- await h.ready(editing?[stored()]:[]);h.click(h.button(editing?'編輯草稿':'辦活動'));
+ await h.ready(editing?[stored()]:[]);h.click(h.button(editing?'編輯活動':'辦活動'));
  h.change('活動名稱','保留的合成活動');h.change('活動說明','保留的合成說明');h.change(editing?'線上場地':'地點','合成場地');
  h.change('開始時間','2099-01-01T12:00');h.change('結束時間','2099-01-01T13:00');
 }

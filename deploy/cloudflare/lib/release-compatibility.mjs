@@ -258,6 +258,7 @@ const FOUNDATION_NAMES = [
   '207_guild_tools.sql',
   // Event import/registration metadata, claims and share-driven moderation/credit; no automatic publication, payment, credential, admin or release authority.
   '208_event_publication.sql',
+  '209_event_management.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

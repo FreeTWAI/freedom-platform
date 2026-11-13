@@ -49,7 +49,7 @@ import { commerceCheckoutQueryDeps } from './routes/hosted-checkout.js';
 import { GITHUB_SYNC_REQUEST_BUDGET, syncGitHubRepositories } from '../../../modules/community/github-sync.js';
 import {refreshGuildDiscoveryReports} from '../../../modules/community/guild-discovery.js';
 import {pruneExpiredAuthRecords} from '../../../modules/identity-membership/auth-pruning.js';
-import {processEventWaitlist} from '../../../modules/community/event-waitlist.js';
+import {processEventWaitlist,processEventNotices} from '../../../modules/community/event-waitlist.js';
 import {processEventReminders} from '../../../modules/community/event-reminders.js';
 import {createEventVideoAssetService,resolveEventVideoUploadPolicy} from '../../../modules/assets/event-video.js';
 import {createEventBannerAssetService,resolveEventBannerUploadPolicy} from '../../../modules/assets/event-banner.js';
@@ -574,6 +574,9 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               try{await processEventWaitlist(pool,send,config.origin);}catch{console.error('event_waitlist_failed');}
               try{await processEventReminders(pool,send,{enabled:true});}catch{console.error('event_reminders_failed');}
             }catch{console.error('event_participation_not_ready');}
+          }
+          if(env.FREEDOM_EVENT_PARTICIPATION_ENABLED!=='true'&&env.EMAIL){
+            try{const config=readWorkerConfig(env);await processEventNotices(pool,async(to,subject,text)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});},config.origin);}catch{console.error('event_notices_failed');}
           }
           let contactRetention:CommerceContactRetention|undefined;
           try{contactRetention=readCommerceContactRetention(env);}catch{console.error('commerce_contact_retention_invalid');}

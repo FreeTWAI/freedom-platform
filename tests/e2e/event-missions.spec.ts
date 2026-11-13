@@ -9,7 +9,7 @@ async function open(page:Page,organizer=other){
   await page.route('**/api/v1/events',route=>route.request().method()==='GET'?route.fulfill({json:{items:[value]}}):route.continue());
   await page.route(`**/api/v1/events/${id}`,route=>route.fulfill({json:value}));
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
-  await navigate(page,'社群活動');await page.getByRole('link',{name:'活動專頁',exact:true}).click();
+  await navigate(page,'社群活動');await page.evaluate(id=>{window.location.hash=`events/${id}`;},id);
 }
 
 const templateIds=['read_intro','think_question','notice_interest'];

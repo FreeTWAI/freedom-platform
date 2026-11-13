@@ -100,7 +100,7 @@ test('session change while first media is pending cannot start the second file',
   h.client.sessionGeneration++;h.client.csrfToken='new-session';h.view();h.media[0].resolve(stored({aggregate_version:2,banner_url:'/synthetic-banner',banner_orientation:'landscape'}));await settle();assert.equal(h.media.length,1);assert.equal(h.preparations.length,1);assert.equal(h.notices.length,0);h.cleanup();
 });
 test('update retry accepts the original historical snapshot after its start time and preserves expected version',async t=>{
-  const h=harness();await ready(h,[stored({aggregate_version:9})]);h.click('編輯草稿');h.fill({title:'  Trimmed title  ',description:'  Trimmed description  ',location:'  Trimmed location  ',help_need:'  Help needed  '});h.submit();const first=h.writes[0];assert.equal(first.options.ifMatch,9);first.reject(unknown());await settle();t.mock.method(Date,'now',()=>Date.UTC(2031,0,1));h.submit();assert.equal(tuple(h.writes[1]),tuple(first));
+  const h=harness();await ready(h,[stored({aggregate_version:9})]);h.props.locationHash='#events/'+id+'/manage';h.view();h.click('編輯活動');h.fill({title:'  Trimmed title  ',description:'  Trimmed description  ',location:'  Trimmed location  ',help_need:'  Help needed  '});h.submit();const first=h.writes[0];assert.equal(first.options.ifMatch,9);first.reject(unknown());await settle();t.mock.method(Date,'now',()=>Date.UTC(2031,0,1));h.submit();assert.equal(tuple(h.writes[1]),tuple(first));
   h.writes[1].resolve(ack(first,{starts_at:'2030-01-01T20:00:00+08:00',ends_at:'2030-01-01T21:00:00+08:00',help_need:'Help needed'}));await settle();assert.match(text(h.view()),/活動已更新，仍待審核/);h.cleanup();
 });
 

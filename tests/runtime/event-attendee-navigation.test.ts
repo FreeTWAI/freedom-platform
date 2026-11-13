@@ -118,7 +118,7 @@ const OWNER='30000000-0000-4000-8000-000000000001';
 const IDS=['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'];
 const event=(i:number)=>({event_id:IDS[i],title:['活動甲','活動乙'][i],description:'合成活動說明 '+i,starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'合成線上活動 '+i,event_kind:'meetup',topic:null,online_url:null,visibility:'open',registration_policy:'community_member',banner_url:null,banner_orientation:null,video_url:null,video_mime:null,capacity:100,state:'published',aggregate_version:1,attending_count:0,my_rsvp:null,guild_key:null,review_guild_key:null,can_review:false,review_reason:null,organizer_ref:OWNER,organizer_name:'合成主辦'});
 const row=(i:number)=>({kind:'member',user_id:'member-'+i,nickname:'名單會員'+i,avatar_url:null,registered_at:new Date().toISOString()});
-function fixture(t:TestContext,hash='#events'){
+function fixture(t:TestContext,hash='#events/'+IDS[0]+'/manage'){
  hash=canonicalHash(hash);
  const originalConfirm=window.confirm;t.after(()=>{window.confirm=originalConfirm;});
  const commits:{hash:string;text:string;roster:string}[]=[],requests:any[]=[],container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as any);let mounted=true;
@@ -151,12 +151,12 @@ function fixture(t:TestContext,hash='#events'){
  return{container,client,props,render,route,start,reads,requests,settle,click,button,dialog,commits,nodes,propsOf,text:()=>container.textContent};
 }
 test('current route changes dismiss the previous event roster instead of reopening it over the list',async t=>{
- const h=fixture(t,'#events/'+IDS[0]);await h.start();h.click(h.button('報名名單')!);assert(h.dialog().open);const first=h.reads('/attendees')[0];await h.settle(first,{items:[row(0)],total:1,next_offset:null});assert.match(h.dialog().textContent,/活動甲/);
+ const h=fixture(t,'#events/'+IDS[0]+'/manage');await h.start();h.click(h.button('報名名單')!);assert(h.dialog().open);const first=h.reads('/attendees')[0];await h.settle(first,{items:[row(0)],total:1,next_offset:null});assert.match(h.dialog().textContent,/活動甲/);
  h.route('#events');assert.equal(h.dialog().open,false,'browser Back route must dismiss old roster');
 });
 test('current event changes dismiss the previous event roster rather than showing A over B',async t=>{
- const h=fixture(t,'#events/'+IDS[0]);await h.start();h.click(h.button('報名名單')!);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});
- h.route('#events/'+IDS[1]);assert.equal(h.dialog().open,false,'event B must not retain A roster');
+ const h=fixture(t,'#events/'+IDS[0]+'/manage');await h.start();h.click(h.button('報名名單')!);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});
+ h.route('#events/'+IDS[1]+'/manage');assert.equal(h.dialog().open,false,'event B must not retain A roster');
 });
 test('initial failure and pagination failure both recover via actual retry controls',async t=>{
  const h=fixture(t);await h.start();h.click(h.button('報名名單')!);await h.settle(h.reads('/attendees')[0],new Error('合成名單暫時失敗'),true);h.click(h.button('重試',h.dialog())!);assert.match(h.reads('/attendees').at(-1).path,/offset=0$/);await h.settle(h.reads('/attendees').at(-1),{items:Array.from({length:50},(_,i)=>row(i)),total:51,next_offset:50});
@@ -165,17 +165,17 @@ test('initial failure and pagination failure both recover via actual retry contr
 test('close and reopen ignores the previous pending roster response',async t=>{
  const h=fixture(t);await h.start();const trigger=h.button('報名名單')!;h.click(trigger);const old=h.reads('/attendees')[0];h.click(h.button('關閉',h.dialog())!);assert(!h.dialog().open);h.click(trigger);const current=h.reads('/attendees').at(-1);await h.settle(current,{items:[row(1)],total:1,next_offset:null});await h.settle(old,{items:[row(0)],total:1,next_offset:null});assert.match(h.dialog().textContent,/名單會員1/);assert.doesNotMatch(h.dialog().textContent,/名單會員0/);
 });
-for(const initial of ['#events','#events/'+IDS[0]])test(`accepted leave from ${initial} fences stale roster at commit and return needs a fresh open`,async t=>{
+for(const initial of ['#events/'+IDS[0]+'/manage','#events/'+IDS[0]+'/manage?from=legacy'])test(`accepted leave from ${initial} fences stale roster at commit and return needs a fresh open`,async t=>{
  const h=fixture(t,initial);await h.start();h.click(h.button('報名名單')!);const old=h.reads('/attendees')[0];await h.settle(old,{items:[row(0)],total:1,next_offset:null});
- const next=initial==='#events'?'#events/'+IDS[0]:'#events';h.commits.length=0;h.route(next);assert.equal(window.location.hash,canonicalHash(next));assert(!h.dialog().open);
+ const next=initial.endsWith('legacy')?'#events/'+IDS[1]+'/manage':'#events';h.commits.length=0;h.route(next);assert.equal(window.location.hash,canonicalHash(next));assert(!h.dialog().open);
  for(const commit of h.commits.filter(c=>c.hash===canonicalHash(next))){assert.doesNotMatch(commit.text,/名單會員0/,'no old private row in destination commit');assert.equal(commit.roster,'','no old roster scope in destination commit');}
  const readCount=h.reads('/attendees').length;h.route(initial);assert(!h.dialog().open);assert.equal(h.reads('/attendees').length,readCount,'history must not silently reopen or reload roster');
  h.click(h.button('報名名單')!);assert(h.dialog().open);assert.equal(h.reads('/attendees').length,readCount+1);assert.match(h.reads('/attendees').at(-1).path,new RegExp(IDS[0]+'/attendees\\?limit=50&offset=0$'));assert.doesNotMatch(h.dialog().textContent,/名單會員0/);
  await h.settle(h.reads('/attendees').at(-1),{items:[row(1)],total:1,next_offset:null});assert.match(h.dialog().textContent,/名單會員1/);
 });
 for(const late of ['success','failure'])test(`late ${late} after accepted leave cannot reopen old roster or contaminate new event`,async t=>{
- const h=fixture(t,'#events/'+IDS[0]);await h.start();h.click(h.button('報名名單')!);const old=h.reads('/attendees')[0];
- h.route('#events/'+IDS[1]);assert(!h.dialog().open);h.click(h.button('報名名單')!);const current=h.reads('/attendees').at(-1);assert.match(current.path,new RegExp(IDS[1]+'/attendees'));await h.settle(current,{items:[row(1)],total:1,next_offset:null});
+ const h=fixture(t,'#events/'+IDS[0]+'/manage');await h.start();h.click(h.button('報名名單')!);const old=h.reads('/attendees')[0];
+ h.route('#events/'+IDS[1]+'/manage');assert(!h.dialog().open);h.click(h.button('報名名單')!);const current=h.reads('/attendees').at(-1);assert.match(current.path,new RegExp(IDS[1]+'/attendees'));await h.settle(current,{items:[row(1)],total:1,next_offset:null});
  await h.settle(old,late==='success'?{items:[row(0)],total:1,next_offset:null}:new Error('舊名單失敗'),late==='failure');assert(h.dialog().open);assert.match(h.dialog().textContent,/活動乙/);assert.match(h.dialog().textContent,/名單會員1/);assert.doesNotMatch(h.dialog().textContent,/名單會員0|舊名單失敗/);
 });
 // App imports one PortalClient singleton; the actual feature key changes on
@@ -186,25 +186,25 @@ for(const change of ['generation','account'])test(`replacement ${change} removes
  if(change==='generation')h.client.sessionGeneration++;if(change==='account')h.props.session={user:{user_id:'50000000-0000-4000-8000-000000000001'}};
  h.commits.length=0;h.render();assert(!h.dialog().open);assert.doesNotMatch(h.text(),/名單會員0/);for(const commit of h.commits)assert.doesNotMatch(commit.text,/名單會員0/,'private roster absent in every replacement commit');await h.settle(old,{items:[row(1)],total:2,next_offset:null});assert(!h.dialog().open);assert.doesNotMatch(h.text(),/名單會員[01]/);
 });
-for(const state of ['pending','unknown'])test(`rejected ${state} RSVP navigation preserves current roster and original operation`,async t=>{
- const h=fixture(t,'#events/'+IDS[0]);await h.start();h.click(h.button('我要參加')!);const original=h.requests.find(r=>r.method==='POST');assert(original);
+for(const state of ['pending','unknown'])test(`rejected ${state} cancellation navigation preserves current roster and original operation`,async t=>{
+ const h=fixture(t,'#events/'+IDS[0]+'/manage');await h.start();h.click(h.button('取消活動')!);h.click(h.button('確認取消活動')!);const original=h.requests.find(r=>r.method==='POST');assert(original);
  if(state==='unknown')await h.settle(original,new ApiError({message:'合成ACK遺失',network:true}),true);
  h.click(h.button('報名名單')!);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});const reads=h.reads('/attendees').length;
- h.route('#events');assert.equal(window.location.hash,canonicalHash('#events/'+IDS[0]));assert.equal(h.props.locationHash,canonicalHash('#events/'+IDS[0]));assert(h.dialog().open);assert.match(h.dialog().textContent,/名單會員0/);assert.equal(h.reads('/attendees').length,reads);assert.equal(h.requests.filter(r=>r.method==='POST').length,1);
+ h.route('#events');assert.equal(window.location.hash,canonicalHash('#events/'+IDS[0]+'/manage'));assert.equal(h.props.locationHash,canonicalHash('#events/'+IDS[0]+'/manage'));assert(h.dialog().open);assert.match(h.dialog().textContent,/名單會員0/);assert.equal(h.reads('/attendees').length,reads);assert.equal(h.requests.filter(r=>r.method==='POST').length,1);
  h.click(h.button('關閉',h.dialog())!);if(state==='pending')await h.settle(original,new ApiError({message:'合成ACK遺失',network:true}),true);
  h.click(h.button('重試原活動操作')!);const retry=h.requests.filter(r=>r.method==='POST').at(-1);assert.equal(retry.path,original.path);assert.deepEqual(retry.body,original.body);assert.deepEqual(retry.options,original.options);
 });
 test('rejected dirty navigation keeps the roster; accepted discard alone clears it',async t=>{
- const h=fixture(t);await h.start();h.click(h.button('辦活動')!);const title=h.nodes().find(n=>n.nodeName==='INPUT'&&h.propsOf(n)?.maxLength===120);assert(title);
+ const h=fixture(t);await h.start();h.click(h.button('編輯活動')!);const title=h.nodes().find(n=>n.nodeName==='INPUT'&&h.propsOf(n)?.maxLength===120);assert(title);
  flush(()=>h.propsOf(title).onChange({target:{value:'保留未儲存草稿'}}));h.click(h.button('報名名單')!);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});let confirmations=0;window.confirm=()=>{confirmations++;return false;};
- h.route('#events/'+IDS[1]);assert.equal(confirmations,1);assert.equal(window.location.hash,canonicalHash('#events'));assert(h.dialog().open);assert.match(h.dialog().textContent,/名單會員0/);assert.equal(h.propsOf(title).value,'保留未儲存草稿');
- window.confirm=()=>true;h.route('#events/'+IDS[1]);assert.equal(window.location.hash,canonicalHash('#events/'+IDS[1]));assert(!h.dialog().open);assert.equal(h.requests.filter(r=>r.method==='POST').length,0);
+ h.route('#events/'+IDS[1]+'/manage');assert.equal(confirmations,1);assert.equal(window.location.hash,canonicalHash('#events/'+IDS[0]+'/manage'));assert(h.dialog().open);assert.match(h.dialog().textContent,/名單會員0/);assert.equal(h.propsOf(title).value,'保留未儲存草稿');
+ window.confirm=()=>true;h.route('#events/'+IDS[1]+'/manage');assert.equal(window.location.hash,canonicalHash('#events/'+IDS[1]+'/manage'));assert(!h.dialog().open);assert.equal(h.requests.filter(r=>r.method==='POST').length,0);
 });
 test('same accepted route retains the open roster, and explicit cancel restores its trigger',async t=>{
- const h=fixture(t);await h.start();const trigger=h.button('報名名單')!;h.click(trigger);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});h.route('#events');assert(h.dialog().open);assert.equal(h.reads('/attendees').length,1);
+ const h=fixture(t);await h.start();const trigger=h.button('報名名單')!;h.click(trigger);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});h.route('#events/'+IDS[0]+'/manage');assert(h.dialog().open);assert.equal(h.reads('/attendees').length,1);
  flush(()=>h.dialog().dispatchEvent({type:'cancel',bubbles:false}));assert(!h.dialog().open);assert.equal(document.activeElement,trigger,'synthetic focus port only, native focus is covered by E2E');
 });
 
 test('opening the next event roster never commits the previous private rows',async t=>{
- const h=fixture(t,'#events/'+IDS[0]);await h.start();h.click(h.button('報名名單')!);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});h.route('#events/'+IDS[1]);h.commits.length=0;h.click(h.button('報名名單')!);assert(h.commits.length);for(const commit of h.commits)assert.doesNotMatch(commit.text,/名單會員0/,'child commits before effects must not show prior event rows');
+ const h=fixture(t,'#events/'+IDS[0]+'/manage');await h.start();h.click(h.button('報名名單')!);await h.settle(h.reads('/attendees')[0],{items:[row(0)],total:1,next_offset:null});h.route('#events/'+IDS[1]+'/manage');h.commits.length=0;h.click(h.button('報名名單')!);assert(h.commits.length);for(const commit of h.commits)assert.doesNotMatch(commit.text,/名單會員0/,'child commits before effects must not show prior event rows');
 });

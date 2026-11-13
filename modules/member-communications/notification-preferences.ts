@@ -156,7 +156,7 @@ export function isNotificationQuietHours(prefs: Pick<NotificationPreferences, 'q
 function category(kind: string): NotificationCategory | null {
   if (kind === 'friend_request' || kind === 'friend_accepted' || kind === 'friend_declined') return 'friends';
   if (kind === 'squad_invitation' || kind === 'squad_join_requested' || kind === 'squad_join_accepted') return 'squads';
-  if (kind === 'event_submitted' || kind === 'event_review_needed' || kind === 'event_approved' || kind === 'event_rejected' || kind === 'event_start_reminder') return 'events';
+  if (kind === 'event_submitted' || kind === 'event_review_needed' || kind === 'event_approved' || kind === 'event_rejected' || kind === 'event_start_reminder' || kind === 'event_schedule_changed' || kind === 'event_cancelled' || kind === 'event_announcement') return 'events';
   return null; // Guild authority, security/transaction and unknown future kinds are never muted.
 }
 interface NoticeRow { notification_id: string; kind: Notification['kind']; title: string; created_at: Date | string; action_tab: NonNullable<Notification['action']>['tab'] | null; action_resource_id: string | null }
@@ -171,7 +171,7 @@ const eventAccessSql = `e.community_id=$1 AND (e.organizer_ref=$2 OR NOT is_veri
   OR (e.state='pending' AND EXISTS(SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
     ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
     WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)))`;
-const eventNoticeAccessSql = `(n.kind NOT IN ('event_submitted','event_review_needed','event_approved','event_rejected','event_start_reminder','event_waitlist_invited','event_schedule_changed','event_cancelled')
+const eventNoticeAccessSql = `(n.kind NOT IN ('event_submitted','event_review_needed','event_approved','event_rejected','event_start_reminder','event_waitlist_invited','event_schedule_changed','event_cancelled','event_announcement')
   OR n.action_resource_id IS NULL OR EXISTS(SELECT 1 FROM community_events e
     WHERE e.event_id::text=n.action_resource_id::text AND (${eventAccessSql} OR (
       n.kind='event_cancelled' AND e.state='cancelled' AND e.community_id=$1
@@ -182,7 +182,7 @@ const eventNoticeAccessSql = `(n.kind NOT IN ('event_submitted','event_review_ne
         OR EXISTS(SELECT 1 FROM community_event_waitlist w WHERE w.event_id=e.event_id AND w.member_ref=$2))
     ))))`;
 const socialNotificationKinds = ['friend_request', 'friend_accepted', 'friend_declined', 'squad_invitation', 'squad_join_requested', 'squad_join_accepted',
-  'event_submitted', 'event_review_needed', 'event_approved', 'event_rejected', 'event_start_reminder'];
+  'event_submitted', 'event_review_needed', 'event_approved', 'event_rejected', 'event_start_reminder', 'event_schedule_changed', 'event_cancelled', 'event_announcement'];
 interface EventBulletinReminder { bulletin_id: string; event_id: string; kind: string; message: string; title: string; created_at: string }
 async function readableEventBulletins(q: PoolClient, actor: Actor): Promise<EventBulletinReminder[]> {
   return (await q.query(`SELECT b.bulletin_id,b.event_id,b.kind,b.message,e.title,b.created_at

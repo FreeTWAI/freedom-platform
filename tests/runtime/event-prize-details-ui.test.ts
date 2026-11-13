@@ -126,7 +126,7 @@ function panel(t:TestContext){
  const settle=async(r:any,value:any,reject=false)=>{assert(r);await React.act(async()=>{r[reject?'reject':'resolve'](value);await new Promise(resolve=>setImmediate(resolve));});};
  const ready=async(items:any[]=[])=>{for(const r of reads().filter(r=>!r.done)){r.done=true;await settle(r,{items:r.path==='/events'?items:[]});}};
  const submit=(twice=false)=>{const form=h.nodes().find(n=>n.nodeName==='FORM');assert(form);flush(()=>{form.dispatchEvent({type:'submit'});if(twice)form.dispatchEvent({type:'submit'});});};
- return {...h,props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
+ return {...h,button:(name:string)=>{if(name==='編輯活動'&&!props.locationHash.includes('/manage')){props.locationHash='#events/'+ID+'/manage';h.setProps(props);}return h.button(name);},props,client,requests,reads,writes,settle,ready,submit,leave:()=>{let result:boolean|undefined;flush(()=>{result=guard?.();});return result;}};
 }
 const ack=(request:any,overrides:any={})=>stored({...request.body,state:request.path==='/events'?'published':'pending',aggregate_version:(request.options?.ifMatch??0)+1,...overrides});
 const tuple=(r:any)=>JSON.stringify({path:r.path,body:r.body,options:r.options});
@@ -155,7 +155,7 @@ for(const change of ['client','session','user','unmount'])test(`late prize ACK c
  await h.settle(first,ack(first));assert.equal(h.writes().length,1);if(change!=='unmount'){assert.doesNotMatch(h.text(),/合成獎品|活動已發布/);await h.ready();h.click(h.button('辦活動'));assert.equal(h.field('活動名稱').value,'');assert.equal(h.button('移除獎品 1'),undefined);}
 });
 test('edit keeps server prize IDs, preserves unknown original version and rejects wrong-event receipt',async t=>{
- const h=panel(t),data=stored({aggregate_version:9,prize_details:eventPrizePayload([prize()])});await h.ready([data]);h.click(h.button('編輯草稿'));h.change('準備幾份','4');h.submit();const first=h.writes()[0];assert.equal(first.options.ifMatch,9);assert.equal(first.body.prize_details[0].prize_id,data.prize_details[0].prize_id);await h.settle(first,ack(first,{event_id:'10000000-0000-4000-8000-000000000002'}));assert.equal(h.leave(),false);h.submit();assert.equal(tuple(h.writes()[1]),tuple(first));await h.settle(h.writes()[1],ack(first));assert.match(h.text(),/活動已更新/);
+ const h=panel(t),data=stored({aggregate_version:9,prize_details:eventPrizePayload([prize()])});await h.ready([data]);h.click(h.button('編輯活動'));h.change('準備幾份','4');h.submit();const first=h.writes()[0];assert.equal(first.options.ifMatch,9);assert.equal(first.body.prize_details[0].prize_id,data.prize_details[0].prize_id);await h.settle(first,ack(first,{event_id:'10000000-0000-4000-8000-000000000002'}));assert.equal(h.leave(),false);h.submit();assert.equal(tuple(h.writes()[1]),tuple(first));await h.settle(h.writes()[1],ack(first));assert.match(h.text(),/活動已更新/);
 });
 
 test('event A prize details never render as event B while its GET is pending or late',async t=>{
@@ -167,13 +167,13 @@ test('event A prize details never render as event B while its GET is pending or 
 
 test('late newer event GET cannot silently rebase an older prize draft onto a new version',async t=>{
  const h=panel(t);h.props.locationHash='#events/'+ID;h.setProps(h.props);
- const original=stored({prize_details:eventPrizePayload([prize()])});await h.settle(h.reads().find(r=>r.path==='/events/'+ID),original);h.click(h.button('編輯草稿'));h.change('獎品名稱','尚未儲存的草稿獎品');
+ const original=stored({prize_details:eventPrizePayload([prize()])});await h.settle(h.reads().find(r=>r.path==='/events/'+ID),original);h.click(h.button('編輯活動'));h.change('獎品名稱','尚未儲存的草稿獎品');
  await h.ready([stored({aggregate_version:2,prize_details:eventPrizePayload([{...prize(),name:'其他操作的新獎品'}])})]);
  assert.equal(h.field('獎品名稱').value,'尚未儲存的草稿獎品');h.submit();assert.equal(h.writes().length,0);assert.match(h.text(),/活動已有較新的版本/);assert.equal(h.field('獎品名稱').value,'尚未儲存的草稿獎品');
 });
 
 for(const [label,value] of [['null',null],['object',{}],['malformed array',[{name:'untrusted'}]],['unknown icon',[{...eventPrizePayload([prize()])[0],icon_id:'unknown'}]]])test(`malformed persisted prizes ${label} cannot be opened as an editable empty list`,async t=>{
- const h=panel(t);await h.ready([stored({prize_details:value})]);assert.match(h.text(),/獎品資料無法確認/);assert.equal(propsOf(h.button('編輯草稿')).disabled,true);assert.equal(h.writes().length,0);
+ const h=panel(t);await h.ready([stored({prize_details:value})]);assert.match(h.text(),/獎品資料無法確認/);assert.equal(propsOf(h.button('編輯活動')).disabled,true);assert.equal(h.writes().length,0);
 });
 
 test('shared event keyboard focus and prize fields use the declared semantic focus token',()=>{
