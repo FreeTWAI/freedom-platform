@@ -10,12 +10,100 @@ import {fileURLToPath} from 'node:url';
 import type {RunResult} from '../../apps/portal-web/src/games/result-card.js';
 import {test,expect,type Page,type Route} from './fixtures.js';
 import {navigate} from './navigation.js';
-import {cashDeck,stampTarget} from '../../apps/portal-web/src/games/domain.js';
+import {cashDeck,stampTarget,RULES} from '../../apps/portal-web/src/games/domain.js';
 import {chairWave,holidayTargets,actParty,advanceParty,newParty,startParty,tofuAxis,tofuPosition,type TofuRun} from '../../apps/portal-web/src/games/party/domain.js';
 import {PARTY_GAMES,PARTY_RULES as PT,type PartyGameId} from '../../apps/portal-web/src/games/party/catalog.js';
 import {GAME_HANDOFF_EVENT,GAME_HANDOFF_KEY,type GameDraft} from '../../apps/portal-web/src/games/result-bridge.js';
 import {marketGrade,MARKET_SAVE_KEY,type MarketRun,type MarketId} from '../../apps/portal-web/src/games/cooking/market-domain.js';
 const {PerspectiveCamera,Vector3}=createRequire(new URL('../../apps/portal-web/package.json',import.meta.url))('three');
+
+// New isolated PHOTO/CASH proposals. These exercise original source and real
+// pointer events, not a renderer mock or generated artwork. PHOTO uses a
+// controlled clock so scoring/timeout assertions do not depend on runner speed.
+for(const mode of ['photo','cash'] as const)for(const [width,height] of [[1440,1000],[390,844],[667,375]] as const)test(`AD ${mode} atelier ${width}x${height}: direct input, interruption and original capture`,async({browser},info)=>{
+ const context=await browser.newContext({viewport:{width,height},hasTouch:width<1000,isMobile:width<1000,deviceScaleFactor:1});const page=await context.newPage();
+ try{
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const logo='data:image/png;base64,'+readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url)).toString('base64');
+  const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountPhotoCashAtelier} from './apps/portal-web/src/games/photo-cash-atelier';const game=mountPhotoCashAtelier(document.body,${JSON.stringify(logo)},${JSON.stringify(mode)});window.addEventListener('pagehide',()=>game.dispose(),{once:true});window.addEventListener('atelier-dispose',()=>game.dispose(),{once:true});`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022',minify:true}).outputFiles[0].text;
+  const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${mode} · 可操作預覽</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`;
+  if(mode==='photo'){await page.clock.install({time:new Date('2026-11-11T00:00:00Z')});await page.clock.pauseAt(new Date('2026-11-11T00:00:01Z'));}
+  await page.setContent(html);const root=page.locator('.night-atelier'),canvas=root.getByRole('application');await expect(root).toHaveAttribute('data-native','true');await expect(canvas).toBeVisible();
+  await expect(root).toHaveAttribute('data-scene-coverage','full-viewport');
+  const canvasBounds=await canvas.boundingBox();expect(canvasBounds).not.toBeNull();expect(canvasBounds!.x).toBe(0);expect(canvasBounds!.y).toBe(0);expect(canvasBounds!.width).toBe(width);expect(canvasBounds!.height).toBe(height);
+  // Actual originals captured before the time-limited client leaves. No hidden
+  // overlays, screenshot CSS, viewport resizing, image editing or image mocks.
+  let capture=await page.screenshot({type:'jpeg',quality:92});
+  await info.attach(`${mode}-atelier-intro-${width}x${height}.jpg`,{body:capture,contentType:'image/jpeg'});
+  const metrics=await root.evaluate(el=>({calls:Number((el as HTMLElement).dataset.drawCalls),triangles:Number((el as HTMLElement).dataset.triangles)}));expect(metrics.calls).toBeGreaterThan(0);expect(metrics.calls).toBeLessThan(160);expect(metrics.triangles).toBeGreaterThan(1000);
+  await page.getByRole('button',{name:'暫停',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();const elapsed=await root.getAttribute('data-elapsed');await page.waitForTimeout(120);expect(await root.getAttribute('data-elapsed')).toBe(elapsed);await page.keyboard.press('Tab');await expect(page.getByRole('button',{name:'繼續遊戲',exact:true})).toBeFocused();await page.keyboard.press('Enter');await expect(page.getByRole('dialog')).toBeHidden();await expect(canvas).toBeFocused();
+  const pan=await root.getAttribute('data-pan-x');await canvas.press('ArrowRight');expect(await root.getAttribute('data-pan-x')).toBe(pan);await expect(root.getByRole('button',{name:/往左|往右|往上|往下/})).toHaveCount(0);
+  const touch=width<1000?await context.newCDPSession(page):null;
+  const finger=async(type:'touchStart'|'touchMove'|'touchEnd',x=width/2,y=height/2)=>touch!.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x,y,id:1}]});
+  const begin=async()=>{if(touch)await finger('touchStart');else{await page.mouse.move(width/2,height/2);await page.mouse.down();}};
+  const finish=async()=>{if(touch)await finger('touchEnd');else await page.mouse.up();};
+  // Inject cancellation for an ignored second pointer while the owner uses
+  // actual mouse/touch input. It must not release or consume the owner gesture.
+  const cancelOther=async()=>{for(const type of ['pointercancel','lostpointercapture'])await canvas.dispatchEvent(type,{pointerId:9999,isPrimary:false,pointerType:'touch'});};
+  await begin();await page.keyboard.press('Escape');await finish();await expect(root).toHaveAttribute('data-index','0');await page.getByRole('button',{name:'繼續遊戲',exact:true}).click();
+  if(mode==='photo'){
+   await begin();await cancelOther();if(touch)await finger('touchMove',width/2+35,height/2+20);else await page.mouse.move(width/2+35,height/2+20,{steps:4});await finish();expect(Number(await root.getAttribute('data-pan-x'))).toBeLessThan(0);
+   await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-film','1');await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-index','1');await expect(root).toHaveAttribute('data-film','0');
+   await page.clock.runFor(120);await expect(root).toHaveAttribute('data-flash','false');const previousStars=Number(await root.getAttribute('data-stars'));await begin();if(touch)await finger('touchMove',width/2-width*.12,height/2+height*.0484);else await page.mouse.move(width/2-width*.12,height/2+height*.0484,{steps:4});await finish();capture=await page.screenshot({type:'jpeg',quality:92});for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-stars',String(previousStars+3));await expect(root).toHaveAttribute('data-index','2');
+   for(let i=0;i<2;i++)await page.getByRole('button',{name:'按下快門',exact:true}).click();await expect(root).toHaveAttribute('data-ended','true');await expect(root).toHaveAttribute('data-flash','false');await expect(page.getByRole('status')).toContainText('三位客人已拍完');await expect(page.getByRole('button',{name:'按下快門',exact:true})).toBeDisabled();
+  }else{
+   const leftButton=page.getByRole('button',{name:'退回大餅',exact:true}),rightButton=page.getByRole('button',{name:'收下鈔票',exact:true});
+   const leftRect=await leftButton.boundingBox(),rightRect=await rightButton.boundingBox();expect(leftRect!.x+leftRect!.width).toBeLessThan(width/2);expect(rightRect!.x).toBeGreaterThan(width/2);expect(Math.abs(leftRect!.y-rightRect!.y)).toBeLessThan(2);
+   const deck=cashDeck(42),first=deck[0];await page.getByRole('button',{name:first.valid?'退回大餅':'收下鈔票',exact:true}).dblclick();await expect(root).toHaveAttribute('data-index','0');await expect(root).toHaveAttribute('data-mistakes','1');await page.waitForTimeout(180);
+   await begin();await cancelOther();const dx=first.valid?70:-70;if(touch)await finger('touchMove',width/2+dx,height/2);else await page.mouse.move(width/2+dx,height/2,{steps:4});await finish();await expect(root).toHaveAttribute('data-index','1');await expect(root).toHaveAttribute('data-decision',first.valid?'keep':'reject');await expect(page.getByRole('status')).toContainText('已分類 1 / 30 張');await page.waitForTimeout(700);await expect(root).toHaveAttribute('data-cash-settled','true');await expect(root.locator('.night-sort-flight')).toHaveAttribute('data-direction',first.valid?'keep':'reject');await expect(root.locator('.night-sort-flight')).toHaveCSS('opacity','0');capture=await page.screenshot({type:'jpeg',quality:92});
+   // A predominantly vertical gesture does not sort a card.
+   await begin();if(touch)await finger('touchMove',width/2+5,height/2+60);else await page.mouse.move(width/2+5,height/2+60,{steps:4});await finish();await expect(root).toHaveAttribute('data-index','1');
+   for(let i=1;i<deck.length;i++){await page.waitForTimeout(180);await page.getByRole('button',{name:deck[i].valid?'收下鈔票':'退回大餅',exact:true}).click();await expect(root).toHaveAttribute('data-index',String(i+1));}
+   await expect(root).toHaveAttribute('data-ended','true');await expect(page.getByRole('status')).toContainText('100 萬盤點完成');await expect(root).toHaveAttribute('data-cash-settled','true');await expect(page.getByRole('button',{name:'收下鈔票',exact:true})).toBeDisabled();
+  }
+  const stats=await sharp(capture).stats();expect(stats.channels.slice(0,3).some(c=>c.stdev>20)).toBe(true);await info.attach(`${mode}-atelier-gameplay-${width}x${height}.jpg`,{body:capture,contentType:'image/jpeg'});
+  // Controls remain in-bounds and physically clickable, including the smallest
+  // landscape screen. Actual hit targets, not only CSS declarations.
+  const bounds=await root.getByRole('button').evaluateAll(buttons=>buttons.filter(b=>b.getClientRects().length).map(b=>{const r=b.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};}));for(const b of bounds){expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44);expect(b.x).toBeGreaterThanOrEqual(0);expect(b.y).toBeGreaterThanOrEqual(0);expect(b.right).toBeLessThanOrEqual(width);expect(b.bottom).toBeLessThanOrEqual(height);}
+  await page.getByRole('button',{name:'重新開始',exact:true}).click();await expect(root).toHaveAttribute('data-index','0');await expect(root).toHaveAttribute('data-ended','false');
+  if(mode==='photo'){await begin();await page.clock.fastForward(12001);await expect(root).toHaveAttribute('data-index','1');if(touch)await finger('touchMove',width/2+30,height/2+20);else await page.mouse.move(width/2+30,height/2+20);await finish();await expect(root).toHaveAttribute('data-pan-x','0');await expect(root).toHaveAttribute('data-pan-y','0');}
+  await page.evaluate(()=>window.dispatchEvent(new Event('atelier-dispose')));await expect(root).toHaveCount(0);await expect(page.locator('canvas')).toHaveCount(0);expect(errors).toEqual([]);
+  // Existing reporter stdout retains bounded public synthetic originals on pass
+  // and failure. Native full-resolution JPEG output, never resized or postprocessed.
+  // Transport limit is not a graphics/performance acceptance budget.
+  expect(capture.byteLength).toBeLessThanOrEqual(2*1024*1024);const {createHash}=createRequire(import.meta.url)('node:crypto');const id=`${mode}-${width}x${height}`,encoded=capture.toString('base64'),parts=Math.ceil(encoded.length/3072);console.log('PHOTO_CASH_ATELIER_CAPTURE '+JSON.stringify({format:'photo-cash-atelier-preview/v2',mimeType:'image/jpeg',nativeQuality:92,candidate:process.env.GITHUB_SHA??'local-uncommitted',id,bytes:capture.byteLength,sha256:createHash('sha256').update(capture).digest('hex'),parts,viewport:{width,height},metrics}));for(let i=0;i<parts;i++)console.log(`PHOTO_CASH_ATELIER_JPEG ${id} ${i+1}/${parts} ${encoded.slice(i*3072,(i+1)*3072)}`);
+ }finally{await context.close();}
+});
+
+// Separate from the unchanged 45-second 30-card acceptance case: compare the
+// retained framebuffer to a complete native redraw at the identical viewport.
+for(const [width,height,dpr] of [[1440,1000,1],[390,844,2],[667,375,1]] as const)test(`AD cash damage rendering ${width}x${height}@${dpr} matches full redraw`,async({browser})=>{
+ const context=await browser.newContext({viewport:{width,height},deviceScaleFactor:dpr});
+ try{
+  const page=await context.newPage();
+  const script=buildSync({stdin:{resolveDir:fileURLToPath(new URL('../..',import.meta.url)),contents:`import {mountPhotoCashAtelier} from './apps/portal-web/src/games/photo-cash-atelier';mountPhotoCashAtelier(document.body,'','cash');`,loader:'ts'},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022'}).outputFiles[0].text;
+  await page.setContent(`<html><head><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body><script>${script.replace(/<\/script/gi,'<\\/script')}</script></body></html>`);
+  const root=page.locator('.night-atelier'),canvas=root.getByRole('application');
+  await expect(root).toHaveAttribute('data-native','true');
+  const compareFullRedraw=async()=>{
+   const retained=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());
+   // ResizeObserver invalidates the retained buffer. Restore original viewport
+   // before comparison, so this does not substitute a smaller acceptance image.
+   await page.setViewportSize({width:width+1,height});
+   await expect.poll(()=>canvas.evaluate(el=>(el as HTMLCanvasElement).width)).toBe(Math.floor((width+1)*Math.min(dpr,RULES.maxDpr)));
+   await page.setViewportSize({width,height});
+   await expect.poll(()=>canvas.evaluate(el=>(el as HTMLCanvasElement).width)).toBe(Math.floor(width*Math.min(dpr,RULES.maxDpr)));
+   const full=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());
+   expect(retained).toBe(full);
+  };
+  await page.mouse.move(width/2,height/2);await page.mouse.down();
+  await page.mouse.move(width/2+(cashDeck(42)[0].valid?70:-70),height/2,{steps:4});
+  await compareFullRedraw(); // tilted/moved paper and its live shadow
+  await page.mouse.up();await expect(root).toHaveAttribute('data-index','1');
+  await page.waitForTimeout(250);await compareFullRedraw(); // old shadow erased
+
+ }finally{await context.close();}
+});
 
 test.afterEach(async({page},testInfo)=>{
   if(testInfo.title!=='UX-15c: completed guided export survives development StrictMode replay and production cold reload'
