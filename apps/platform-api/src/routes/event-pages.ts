@@ -19,7 +19,8 @@ export function createEventPageRoutes(pool:Pool,origin:string,participation:bool
   const actor=await viewer(c.req.header('Cookie')),event=await read(z.uuid().parse(c.req.param('id')),actor);
   c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');
   if(event.visibility!=='open')c.header('X-Robots-Tag','noindex, nofollow');
-  return c.html(eventPageHtml(event,origin,{member:Boolean(actor),participation,guest:participation&&email}));
+  const refs=c.req.queries('ref')??[],referralCode=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?refs[0]:undefined;
+  return c.html(eventPageHtml(event,origin,{member:Boolean(actor),participation,guest:participation&&email,referralCode}));
  });
  if(participation)app.get('/events/:id/calendar.ics',async c=>{
   const actor=await viewer(c.req.header('Cookie')),event=await read(z.uuid().parse(c.req.param('id')),actor),result=generateEventCalendar(event);

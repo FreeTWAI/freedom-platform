@@ -22,22 +22,22 @@ test('mobile newcomer sees all guilds, can filter and enters after one choice wi
   await page.getByLabel('密碼',{exact:true}).fill('freedom-connections-password');
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   const quick=page.getByRole('region',{name:'快速加入公會'});
-  await expect(quick.getByRole('radio')).toHaveCount(18);
+  await expect(quick.getByRole('radio')).toHaveCount(20);
   await quick.getByRole('button',{name:'影音與創作',exact:true}).click();await expect(quick.getByRole('radio')).toHaveCount(6);
-  await quick.getByRole('button',{name:'全部主題',exact:true}).click();await expect(quick.getByRole('radio')).toHaveCount(18);
+  await quick.getByRole('button',{name:'全部主題',exact:true}).click();await expect(quick.getByRole('radio')).toHaveCount(20);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/issue-42-quick-entry-320.png',fullPage:true});
   await quick.locator('input[value="guild_ai_vibe"]').check();
   await quick.getByRole('button',{name:/下一步：回答 \d+ 個小問題/}).click();
   await answerGuildQuestions(quick);
   await quick.getByRole('button',{name:'加入公會，開始參與'}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await navigate(page,'我的定位');await expect(page.getByText('已選擇公會',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'補充／繼續探索定位'})).toBeVisible();
   await navigate(page,'技能書架');await expect(page.getByRole('region',{name:'已解鎖技能書',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('a shared card opens anonymously, survives reload, rotates and can be disabled',async({page,browser})=>{
-  await signup(page,'分享名片作者');await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
+  await signup(page,'分享名片作者');await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
   const settings=page.getByRole('region',{name:'分享我的工坊名片'});
   await expect(settings.getByRole('checkbox',{name:'在分享頁顯示我的頭像'})).not.toBeChecked();
   await settings.getByRole('button',{name:'建立分享連結'}).click();
@@ -55,7 +55,7 @@ test('a shared card opens anonymously, survives reload, rotates and can be disab
   }finally{await guestContext.close();}
 });
 test('invited visitor signs up, returns to the card and becomes a friend only after acceptance',async({page,browser})=>{
-  await signup(page,'邀請發起人');await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
+  await signup(page,'邀請發起人');await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'分享名片設定（免登入）');
   const sharing=page.getByRole('region',{name:'分享我的工坊名片'});await sharing.getByRole('button',{name:'建立分享連結'}).click();const openCard=sharing.getByRole('link',{name:'開啟名片',exact:true});await expect(openCard).toBeVisible();const url=await openCard.getAttribute('href');
   const context=await browser.newContext(),guest=await context.newPage();let releaseAccept=()=>{};
   try{
@@ -78,8 +78,8 @@ test('invited visitor signs up, returns to the card and becomes a friend only af
 test('home recommends a shared-guild member and guild topic filtering works in all themes',async({page,browser})=>{
   const context=await browser.newContext({baseURL:new URL(test.info().project.use.baseURL as string).origin}),candidate=await context.newPage();
   try{
-    await signup(candidate,'共讀推薦夥伴',true,'guild_human_design');await expect(candidate.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
-    await signup(page,'共讀探索者',true,'guild_human_design');await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+    await signup(candidate,'共讀推薦夥伴',true,'guild_human_design');await expect(candidate.getByRole('heading',{name:'動態',level:1})).toBeVisible();
+    await signup(page,'共讀探索者',true,'guild_human_design');await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
     await page.locator('.home-personal > summary').click();
     const recommendation=page.getByRole('region',{name:'認識一位工坊夥伴'});await expect(recommendation.getByRole('heading',{name:'共讀推薦夥伴',exact:true})).toBeVisible();await expect(recommendation.getByText('你們都加入了人類圖研究所')).toBeVisible();
     await recommendation.getByRole('button',{name:'查看名片'}).click();await expect(recommendation.locator('.member-card')).toBeVisible();await recommendation.getByRole('button',{name:'換一位'}).click();await expect(recommendation.locator('.connection-person h3')).not.toHaveText('共讀推薦夥伴');

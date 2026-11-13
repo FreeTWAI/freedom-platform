@@ -30,7 +30,7 @@ test('guest profile is one public read, no authenticated profile/inventory or mu
  expect(calls.filter(value=>value.includes('/public/member-profiles/'))).toHaveLength(1);
  expect(calls.some(value=>value.includes('/me/content')||value.includes(`/members/${target}/profile`)||value.startsWith('POST'))).toBe(false);
  await page.getByRole('button',{name:'登入後加好友或私訊'}).click();await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'取消登入，返回個人頁'}).click();await expect(page.getByRole('heading',{name:profile.display_name})).toBeVisible();expect(page.url()).toContain(`#profile?member=${target}`);
+ await page.getByRole('button',{name:'取消登入，返回個人頁'}).click();await expect(page.getByRole('heading',{name:profile.display_name})).toBeVisible();expect(page.url()).toContain(`#me?member=${target}`);
 });
 test('owner preview does not save, public needs explicit consent, unknown result retries exact body and key',async({page})=>{
  let stored={...settings},attempts: {body:unknown;key:string|null}[]=[];

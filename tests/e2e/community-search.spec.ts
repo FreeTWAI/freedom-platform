@@ -35,7 +35,7 @@ async function post(page: Page, path: string, body: unknown, expected = 201) {
 }
 async function search(page: Page, query: string) {
   await navigate(page, '搜尋社群內容');
-  await expect(page.getByRole('heading', { level: 1, name: '搜尋社群內容', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '探索', exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: '關鍵字', exact: true }).fill(query);
   await expect(page.getByRole('region', { name: '社群內容搜尋結果' })).toHaveAttribute('aria-busy', 'false');
 }

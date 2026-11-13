@@ -38,7 +38,7 @@ async function account(page:Page,name:string){
 }
 async function joinGuild(page:Page){
   await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 async function hintContrast(page:Page){
   return page.locator('.home-assessment-hint').evaluate(element=>{

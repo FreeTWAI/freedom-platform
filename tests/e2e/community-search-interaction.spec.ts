@@ -48,7 +48,7 @@ test('IME input is not searched or placed in history until composition completes
   await input(page).dispatchEvent('compositionstart');
   await input(page).fill('ㄕ');await page.clock.runFor(300);
   await input(page).fill('設計');await input(page).press('Enter');await page.clock.runFor(300);
-  expect(requests.length).toBe(baseline);expect(new URL(page.url()).hash).toBe('#community-search?q=before');
+  expect(requests.length).toBe(baseline);expect(new URL(page.url()).hash).toBe('#explore?q=before');
   await expect(results(page).getByText('選字完成後會自動搜尋。',{exact:true})).toBeVisible();
   await input(page).dispatchEvent('compositionend',{data:'設計'});
   await page.clock.runFor(180);
@@ -104,7 +104,7 @@ test('clear conditions resets filters and cursor, keeps the searchbox focused on
   await expect(results(page)).toHaveAttribute('aria-busy','false');
   await expect(conditions(page).getByRole('checkbox',{name:'作品',exact:true})).not.toBeChecked();
   await expect(conditions(page).getByRole('checkbox',{name:'工具資源',exact:true})).not.toBeChecked();
-  expect(new URL(page.url()).hash).toBe('#community-search');expect(requests.at(-1)).toBe('');
+  expect(new URL(page.url()).hash).toBe('#explore');expect(requests.at(-1)).toBe('');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 

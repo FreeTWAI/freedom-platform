@@ -232,7 +232,7 @@ function dispatch(initial='photo'){
   const element=(type:unknown,props:any,...children:any[])=>({type,props:props??{},children});
   const useState=(initial:any)=>{const i=cursor++;if(!(i in slots))slots[i]=typeof initial==='function'?initial():initial;return [slots[i],(next:any)=>{slots[i]=typeof next==='function'?next(slots[i]):next;}];};
   const effect=(fn:()=>any,deps:any[])=>{const i=cursor++;if(!slots[i]||deps.some((v,j)=>!Object.is(v,slots[i][j]))){slots[i]=deps;pending.push(fn);}};
-  const location={get search(){return search;},get href(){return `https://example.test/play${search}`;}};
+  const location={hash:'',get search(){return search;},get href(){return `https://example.test/play${search}`;}};
   const components=Object.fromEntries(['FullscreenGame','GameBoard','Result','MemberGameUpload','CommunityGameSubmission','ArcadeLobby','MarketLoader','CookingLoader','PartyLoader'].map(name=>[name,name]));
   const context={...components,element,Fragment:'fragment',useState,useRef:(v:any)=>{const i=cursor++;return slots[i]??=( {current:v});},useCallback:(fn:any)=>{cursor++;return fn;},useEffect:effect,useLayoutEffect:effect,
     location,URL,URLSearchParams,initialGame:()=>new URLSearchParams(search).get('game'),recipeOf:()=>null,seedOf:()=>42,freshSeed:()=>99,

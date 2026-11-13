@@ -147,7 +147,7 @@ test('GitHub connect navigates to real authorization and returning never stars a
   await page.route('**/api/v1/me/github/connect',route=>{connects.push(route.request().postDataJSON());expect(route.request().headers()['x-csrf-token']).toBeTruthy();return route.fulfill({json:{authorization_url:'https://github.com/login/oauth/authorize?client_id=synthetic-test-client&state=synthetic-test-state'}});});
   await page.route('https://github.com/login/oauth/authorize?*',route=>route.fulfill({contentType:'text/html',body:'<p>Synthetic authorization page</p>'}));
   await login(page);const card=await book(page);await expect(card.getByRole('button',{name:'連結 GitHub 後 Star',exact:true})).toBeEnabled();await card.locator('.github-star-count').click();
-  await expect(page).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize\?/);expect(connects).toEqual([{return_to:'#skills'}]);expect(starWrites).toBe(0);
+  await expect(page).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize\?/);expect(connects).toEqual([{return_to:'#explore/resources'}]);expect(starWrites).toBe(0);
   connected=true;await page.goto('/#skills');const returned=await book(page);await expect(returned.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(starWrites).toBe(0);
 });
 
@@ -231,7 +231,7 @@ test('a denied Star offers GitHub re-authorization once and does not retry the w
   await page.route('https://github.com/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Synthetic GitHub</title>'}));
   await reauth.click();
   await expect(page).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize\?/);
-  expect(connects).toEqual([{return_to:'#skills'}]);
+  expect(connects).toEqual([{return_to:'#explore/resources'}]);
   expect(writes).toBe(1);
   await page.goto('/#skills');
   const returned=await book(page);
@@ -303,7 +303,7 @@ for(const target of ['#join/supplier','#join/showcase','#join/tasks'])test(`onbo
 for(const target of ['https://elsewhere.example.invalid/#join/tasks','//elsewhere.example.invalid/#join/tasks','#join/unknown','#join/supplier?next=outside'])test(`onboarding OAuth callback rejects unsafe return ${target}`,async({page})=>{
   await page.route('**/api/v1/me/github/complete',route=>route.fulfill({json:{return_to:target}}));
   await login(page);const origin=new URL(page.url()).origin;await page.goto('/github/callback?code=synthetic&state=synthetic');
-  await expect(page).toHaveURL(origin+'/#skills');
+  await expect(page).toHaveURL(origin+'/#explore/resources');
 });
 
 test('public Star, Fork, sharing and author source stay available without login or JavaScript',async({page,browser})=>{
