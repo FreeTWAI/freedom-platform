@@ -23,7 +23,7 @@ const CLAIM_EXISTS = (login: string) => `這個拉取請求已由 ${login} 認�
 
 export const PULL_LIST_COLUMNS = `p.pull_id, p.repository_id, r.full_name, p.number, p.title, p.html_url, p.state, p.queue_state,
   p.author_login, p.author_association, p.author_type, p.is_draft, p.is_fork, p.paused, p.github_updated_at, p.head_observed_at,
-  p.head_sha, p.labels, p.aggregate_version, p.queue_reasons->0 AS first_queue_reason,
+  p.head_sha, p.labels, p.aggregate_version, p.github_created_at AS created_at, p.queue_reasons->0 AS first_queue_reason,
   r.guild_key, g.name AS guild_name, r.scope_kind, r.open_to_guilds, r.skill_book_id,
   active_claim.claim_id, active_claim.reviewer_user_id, active_claim.reviewer_login, active_claim.acting_as,
   active_claim.guild_key AS claim_guild_key, cg.name AS claim_guild_name, active_claim.skill_book_id AS claim_skill_book_id,
@@ -57,7 +57,7 @@ export const PULL_LIST_JOINS = `
 
 export function presentListRow(row: Record<string, any>) {
   return {
-    pull_id: row.pull_id, repository_id: row.repository_id, full_name: row.full_name, number: row.number, title: row.title,
+    created_at: iso(row.created_at), pull_id: row.pull_id, repository_id: row.repository_id, full_name: row.full_name, number: row.number, title: row.title,
     html_url: row.html_url, state: row.state, queue_state: row.queue_state, author_login: row.author_login,
     author_association: row.author_association, author_type: row.author_type, is_draft: row.is_draft, is_fork: row.is_fork, paused: row.paused,
     github_updated_at: iso(row.github_updated_at), head_sha: row.head_sha, labels: row.labels, aggregate_version: row.aggregate_version,

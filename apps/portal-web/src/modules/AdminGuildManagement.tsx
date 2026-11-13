@@ -18,13 +18,13 @@ type ProfileSave=(guild:ManagedGuild,body:ProfileBody)=>Promise<boolean>;
 type Opened={guildKey:string;role:'master'|'expert'|'remove'|'profile';userId?:string};
 const failure=(cause:unknown)=>cause instanceof Error?cause.message:'無法載入人選，請重試。';
 
-export function AdminGuildManagement({client,guilds,busy,loading,error,onSave,onExpert,onProfile,onReload}:{client:Client;guilds:ManagedGuild[];busy:boolean;loading:boolean;error:string;onSave:Assignment;onExpert:ExpertAssignment;onProfile:ProfileSave;onReload:()=>Promise<void>}){
+export function AdminGuildManagement({client,guilds,busy,loading,error,onSave,onExpert,onProfile,onReload,detail=false}:{detail?:boolean;client:Client;guilds:ManagedGuild[];busy:boolean;loading:boolean;error:string;onSave:Assignment;onExpert:ExpertAssignment;onProfile:ProfileSave;onReload:()=>Promise<void>}){
   const [search,setSearch]=useState(''),[opened,setOpened]=useState<Opened|null>(null),[saved,setSaved]=useState<{guildKey:string;message:string}|null>(null);
   const term=search.trim().toLocaleLowerCase(),shown=guilds.filter(guild=>!term||[guild.name,guild.alias].join(' ').toLocaleLowerCase().includes(term));
   function open(guildKey:string,role:Opened['role'],userId?:string){setOpened({guildKey,role,userId});setSaved(null);}
   return <section className="stack admin-guild-management"><div className="card-head"><h2>公會管理</h2><button type="button" className="btn btn-ghost" disabled={busy||loading} onClick={()=>void onReload()}>重讀公會</button></div>
-    <AdminTools client={client}/><GuildCategoryTools client={client} busy={busy}/><label className="field admin-guild-filter">搜尋公會<input type="search" value={search} disabled={busy} maxLength={100} onChange={event=>{setSearch(event.target.value);setOpened(null);}} placeholder="例如：影音、資安、活動…"/></label>
-    <GuildDiscoveryReport client={client}/>
+    <details hidden={detail}><summary>公會設定</summary><AdminTools client={client}/><GuildCategoryTools client={client} busy={busy}/><label className="field admin-guild-filter">搜尋公會<input type="search" value={search} disabled={busy} maxLength={100} onChange={event=>{setSearch(event.target.value);setOpened(null);}} placeholder="例如：影音、資安、活動…"/></label>
+    <GuildDiscoveryReport client={client}/></details>
     {!opened&&error&&<p role="alert" className="banner banner-error">{error}</p>}
     {!loading&&!shown.length&&<p className="muted">{term?'沒有符合的公會。請換個名稱。':'目前沒有公會。'}</p>}
     <div className="admin-guild-list">{shown.map(guild=><article className={`card stack admin-guild-card${opened?.guildKey===guild.guild_key?' is-editing':''}`} key={guild.guild_key} aria-label={guild.name}>

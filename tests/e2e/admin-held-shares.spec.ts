@@ -62,27 +62,27 @@ test('three eligible reports go to 檢舉處理; restore and confirm remove rows
    expect((await page.request.get(`${origin}/api/v1/public/events/${event.event_id}`)).status()).toBe(404);
   }
   await page.context().setExtraHTTPHeaders(adminHeaders);await page.goto(origin+'/admin?view=events');
-  await expect(page.getByText('目前沒有待審核活動。',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'檢舉處理',exact:true}).click();
+  await expect(page.getByText('目前沒有待處理項目。',{exact:true})).toBeVisible();
+  await page.getByLabel('種類',{exact:true}).selectOption('held-shares');await page.getByRole('button',{name:/合成待恢復活動/}).click();
   const first=page.getByRole('article',{name:'合成待恢復活動',exact:true}),second=page.getByRole('article',{name:'合成待下架活動',exact:true});
   await expect(first.getByText('活動 · 3 則檢舉',{exact:true})).toBeVisible();
   await expect(first.getByRole('link',{name:'合成待恢復活動',exact:true})).toHaveAttribute('href',`/events/${events[0].event_id}`);
   for(let i=1;i<=3;i++)await expect(first.getByText(`合成檢舉理由 ${i}`,{exact:true})).toBeVisible();
-  await expect(first.getByRole('button',{name:'恢復公開',exact:true})).toBeDisabled();
-  await first.getByLabel('處理理由',{exact:true}).fill('兩字');await expect(first.getByRole('button',{name:'恢復公開',exact:true})).toBeDisabled();
+  await expect(first.getByRole('button',{name:'確認',exact:true})).toBeDisabled();
+  await first.getByLabel('處理理由',{exact:true}).fill('兩字');await expect(first.getByRole('button',{name:'確認',exact:true})).toBeDisabled();
   for(const width of [1440,390]){
    await page.setViewportSize({width,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
    await page.screenshot({path:testInfo.outputPath(`held-shares-${width}.png`)});
   }
   await first.getByLabel('處理理由',{exact:true}).fill('內容符合規範');
-  await first.getByRole('button',{name:'恢復公開',exact:true}).click();await expect(first).toHaveCount(0);
-  await expect(second.getByRole('heading',{name:'合成待下架活動',exact:true})).toBeFocused();
+  await first.getByRole('button',{name:'確認',exact:true}).click();await expect(first).toHaveCount(0);
+  await expect(page.locator('.admin-content')).toBeFocused();await page.getByRole('button',{name:/合成待下架活動/}).click();
   expect((await page.request.get(`${origin}/api/v1/public/events/${events[0].event_id}`)).status()).toBe(200);
   const publicPage=await contexts[0].newPage();await publicPage.goto(`${origin}/events/${events[0].event_id}`);
   await expect(publicPage.getByRole('heading',{name:'合成待恢復活動',exact:true})).toBeVisible();
-  await second.getByLabel('處理理由',{exact:true}).fill('確認違反規範');await second.getByRole('button',{name:'確認下架',exact:true}).click();
-  await expect(second).toHaveCount(0);await expect(page.getByRole('heading',{name:'檢舉處理',exact:true})).toBeFocused();
-  await expect(page.getByText('目前沒有被檢舉暫停的內容。',{exact:true})).toBeVisible();
+  await second.getByLabel('處理理由',{exact:true}).fill('確認違反規範');await second.getByLabel('決定',{exact:true}).selectOption('confirm');await second.getByRole('button',{name:'確認',exact:true}).click();
+  await expect(second).toHaveCount(0);await expect(page.locator('.admin-content')).toBeFocused();
+  await expect(page.getByText('目前沒有待處理項目。',{exact:true})).toBeVisible();
   expect((await page.request.get(`${origin}/api/v1/public/events/${events[1].event_id}`)).status()).toBe(404);
   expect((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[events[1].share_id])).rows[0].n).toBe(0);
  }finally{for(const context of contexts)await context.close();}

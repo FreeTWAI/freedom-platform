@@ -1,3 +1,4 @@
+import {adminNavigate} from './admin-navigation.js';
 import {randomUUID} from 'node:crypto';
 import type {Page} from '@playwright/test';
 import {navigate} from './navigation.js';
@@ -77,7 +78,7 @@ test('member submits an original-author claim and an admin verification changes 
       await route.continue({headers});
     });
     await adminPage.goto('/admin');
-    await adminPage.getByRole('button', {name: '作者認領審核', exact: true}).click();
+    await adminNavigate(adminPage,'author-claims');
     const claim = adminPage.locator('article', {hasText: STATEMENT});
     await expect(claim).toBeVisible();
     await expect(claim).toContainText('88001122');
@@ -88,7 +89,7 @@ test('member submits an original-author claim and an admin verification changes 
     }
     await adminPage.setViewportSize({width: 1280, height: 900});
     await claim.getByLabel('審核理由').fill('已核對公開的原作紀錄。');
-    await claim.getByRole('button', {name: '核實', exact: true}).click();
+    await claim.getByRole('button', {name: '確認', exact: true}).click();
     await expect(adminPage.getByText('管理操作已保存，並留下操作紀錄。')).toBeVisible();
     await adminContext.close();
 

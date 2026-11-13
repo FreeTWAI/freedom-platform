@@ -135,7 +135,7 @@ export async function listAdminStoreReadiness(pool:Pool,admin:AdminActor,deps:St
       await authorizeAdmin(q,admin);await bindTenantScope(q,tenant_id);
       const tenant=(await q.query('SELECT display_name,status FROM tenants WHERE tenant_id=$1 AND community_id=$2',[tenant_id,admin.community_id])).rows[0];
       if(!tenant)return;
-      const instances=(await q.query<{instance_id:string;status:string;module_release_ref:string;active_admission:boolean}>(`SELECT i.instance_id,i.status,i.module_release_ref,
+      const instances=(await q.query<{instance_id:string;status:string;module_release_ref:string;active_admission:boolean;created_at:Date}>(`SELECT i.instance_id,i.status,i.module_release_ref,i.created_at,
         EXISTS(SELECT 1 FROM commerce_store_admissions a WHERE a.tenant_id=i.tenant_id AND a.instance_id=i.instance_id AND a.environment=$2 AND a.revoked_at IS NULL) AS active_admission
         FROM module_instances i WHERE i.tenant_id=$1 AND i.module_key='storefront' ORDER BY i.instance_id`,[tenant_id,deps.environment])).rows;
       let member:boolean|undefined;
@@ -162,7 +162,7 @@ export async function listAdminStoreReadiness(pool:Pool,admin:AdminActor,deps:St
         const active=rows.find(row=>row.revoked_at===null),revoked=rows.find(row=>row.revoked_at!==null);
         const readiness=await storeReadiness(q,tenant_id,inst.instance_id,deps);
         if(readiness.accepting_orders)summary.accepting_orders++;
-        items.push({tenant_id,tenant_display_name:tenant.display_name,tenant_status:tenant.status,instance_id:inst.instance_id,instance_status:inst.status,
+        items.push({created_at:inst.created_at.toISOString(),tenant_id,tenant_display_name:tenant.display_name,tenant_status:tenant.status,instance_id:inst.instance_id,instance_status:inst.status,
           store:p?{name:p.name,slug:p.slug,public_path:p.slug&&p.current_publication_id?publicStorePath(p.slug):null}:null,module_release_ref:inst.module_release_ref,
           admission:{active:active?storeAdmissionView(active):null,
             last_revoked:revoked?storeAdmissionView(revoked):null},admin_is_member:member,

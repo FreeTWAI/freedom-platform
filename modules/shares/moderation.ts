@@ -5,7 +5,7 @@ import {requireCondition} from '../../packages/shared/problem.js';
 import {reverseCredit} from './credit.js';
 
 /** A decision queue, not a report/user export. Titles are the published share snapshot. */
-export async function listHeldShares(pool:Pool,admin:AdminActor) {
+export async function listHeldShares(pool:Pool,admin:AdminActor,limit=100,offset=0) {
   return (await pool.query(`SELECT s.share_id,s.kind,s.title,
     CASE WHEN s.kind IN ('repository','link') THEN s.canonical_url
       WHEN s.kind='event' AND e.visibility IN ('open','referral') THEN '/events/'||e.event_id
@@ -28,7 +28,7 @@ export async function listHeldShares(pool:Pool,admin:AdminActor) {
     WHERE s.community_id=$1 AND s.state='hidden' AND s.reports_confirmed_at IS NULL
       AND reports.open_reports>0 AND NOT is_verification_test_account(s.first_sharer_user_id)
       AND (e.event_id IS NULL OR NOT is_verification_test_account(e.organizer_ref))
-    ORDER BY hidden_at ASC NULLS LAST,s.share_id LIMIT 100`,[admin.community_id])).rows;
+    ORDER BY hidden_at ASC NULLS LAST,s.share_id LIMIT $2 OFFSET $3`,[admin.community_id,limit,offset])).rows;
 }
 
 /** Existing verified platform-admin authority and receipts; never a member/agent command. */

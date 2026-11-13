@@ -61,7 +61,7 @@ test('admin credential card requests renewal and warns before GitHub expiry', as
     await expect(plain.getByText('GitHub 讀取權杖')).toHaveCount(0);
     await page.context().setExtraHTTPHeaders({'X-Synthetic-Admin': 'owner'});
     await page.setViewportSize({width: 390, height: 844});
-    await page.goto(origin + '/admin');
+    await page.goto(origin + '/admin?view=credentials');
     await expect(page.getByRole('heading', {name: '憑證到期', exact: true})).toBeVisible();
     await expect(page.getByRole('heading', {name: 'GitHub 讀取權杖', exact: true})).toBeVisible();
     await expect(page.getByRole('heading', {name: 'Cloudflare 部署權杖', exact: true})).toBeVisible();
@@ -83,7 +83,10 @@ test('admin credential card requests renewal and warns before GitHub expiry', as
     await page.getByRole('button', {name: '重新整理', exact: true}).click();
     const banner = page.getByRole('link', {name: 'GitHub 讀取權杖 將於 10 天後到期', exact: true});
     await expect(banner).toBeVisible();
-    await expect(banner).toHaveAttribute('href', '#admin-credentials');
+    await expect(banner).toHaveAttribute('href', '/admin?view=credentials&object=github_metrics_token');
+    await banner.click();
+    await expect(page).toHaveURL(/view=credentials&object=github_metrics_token/);
+    await expect(page.locator('#credential-github_metrics_token')).toBeFocused();
     await expect(page.getByText('即將到期', {exact: true})).toBeVisible();
     await expect(page.getByText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/).first()).toBeVisible();
     for (const [width, height] of [[390, 844], [820, 900], [1280, 800], [320, 720]] as const) {
