@@ -39,9 +39,10 @@ test('current guild authority, acceptance, revisions, opaque subjects, report de
  const html=await app.request(origin+'/guild-tool-preview/'+registered.data.id);assert.equal(html.status,200);assert.match(html.headers.get('content-security-policy')!,/https:\/\/tools.example.test/);
  // The preview's executable script is constant and allowed by its hash; the values ride in an inert data block.
  const previewHtml=await html.text(),previewCsp=html.headers.get('content-security-policy')!;
- const previewData=JSON.parse(previewHtml.match(/<script type="application\/json" id="preview-data">([^<]*)<\/script>/)![1]!);
+ const between=(open:string)=>{const start=previewHtml.indexOf(open);assert.ok(start>=0,open);const end=previewHtml.indexOf('</script>',start+open.length);assert.ok(end>0,open);return previewHtml.slice(start+open.length,end);};
+ const previewData=JSON.parse(between('<script type="application/json" id="preview-data">'));
  assert.equal(previewData.preview_id,registered.data.id);assert.equal(previewData.platform_origin,origin);assert.equal(previewData.tool_id,'example');
- const previewScript=previewHtml.match(/<script>([^<]*)<\/script>/)![1]!;assert.ok(!previewScript.includes(registered.data.id)&&!previewScript.includes(origin),'no per-preview value is spliced into code');
+ const previewScript=between('<script>');assert.ok(!previewScript.includes(registered.data.id)&&!previewScript.includes(origin),'no per-preview value is spliced into code');
  assert.ok(previewCsp.includes(`script-src 'sha256-${createHash('sha256').update(previewScript).digest('base64')}'`),'the CSP hash allows exactly the constant script');
  let page=await app.request(origin+'/');assert.doesNotMatch(page.headers.get('content-security-policy')!,/tools.example.test/);
  assert.equal((await req(base+'/example/accept',other,{},1)).status,403);
