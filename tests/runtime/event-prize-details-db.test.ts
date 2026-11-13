@@ -132,14 +132,15 @@ test('cross-community events stay unreadable and cannot be edited by a valid mem
   assert.equal(denied.status,404);assert.equal(denied.data.code,'not_found');assert.deepEqual(await snapshot(),before);
 });
 
-test('published promises and already-started pending events cannot be rewritten',async()=>{
+test('published prizes can be edited before the start; started drafts still refuse without writes',async()=>{
   const first=await create(),path=`/events/${first.event_id}/update`;
-  for(const state of ['published','started']){
-    if(state==='published')await pool.query("UPDATE community_events SET state='published' WHERE event_id=$1",[first.event_id]);
-    else await pool.query("UPDATE community_events SET state='pending',starts_at=now()-interval '1 minute' WHERE event_id=$1",[first.event_id]);
-    const before=await snapshot(),denied=await request(path,sessions[0],{...details(),prize_details:[]},first.aggregate_version);
-    assert.equal(denied.status,409);assert.equal(denied.data.code,'event_closed');assert.deepEqual(await snapshot(),before);
-  }
+  await pool.query("UPDATE community_events SET state='published' WHERE event_id=$1",[first.event_id]);
+  const updated=await request(path,sessions[0],{...details(),prize_details:[]},first.aggregate_version);
+  assert.equal(updated.status,200);assert.deepEqual(updated.data.prize_details,[]);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_changes WHERE event_id=$1',[first.event_id])).rows[0].n,1);
+  await pool.query("UPDATE community_events SET state='pending',starts_at=now()-interval '1 minute' WHERE event_id=$1",[first.event_id]);
+  const before=await snapshot(),denied=await request(path,sessions[0],{...details(),prize_details:[]},updated.data.aggregate_version);
+  assert.equal(denied.status,409);assert.equal(denied.data.code,'event_closed');assert.deepEqual(await snapshot(),before);
 });
 
 test('create and update exact retries return original receipts; changed body or version conflicts without writes',async()=>{

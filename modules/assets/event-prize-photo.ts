@@ -1,3 +1,4 @@
+import {recordEventMediaChange} from '../community/event-changes.js';
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import type {Pool,PoolClient} from 'pg';
@@ -84,7 +85,8 @@ function assetsForPrize(pool:Pool,store:ObjectStore,actor:Actor,eventId:string,p
   async publish(q,_context,current,row){
    await editable(q,current,eventId,prizeId);
    const next=(await q.query('UPDATE community_events SET aggregate_version=aggregate_version+1,updated_at=clock_timestamp() WHERE event_id=$1 AND aggregate_version=$2 RETURNING aggregate_version',[eventId,row.expected_version])).rows[0];
-   requireCondition(next,412,'version_conflict','活動已更新，請重新載入後再操作。');const version=Number(next.aggregate_version);
+   requireCondition(next,412,'version_conflict','活動已更新，請重新載入後再操作。');
+   await recordEventMediaChange(q,eventId,'prize_photos');const version=Number(next.aggregate_version);
    await q.query('UPDATE community_event_prize_photo_targets SET asset_id=$2,linked_at_version=$3 WHERE target_id=$1',[targetId,row.asset_id,version]);
    return {aggregateVersion:String(version),result:version,fact:{aggregateType:'community_event',id:eventId,data:{prize_id:prizeId,photo_version:version},eventType:'freedom.community.event.prize-photo.replaced.v1'}};
   },
@@ -113,6 +115,7 @@ export async function mutateEventPrizePhoto(pool:Pool,raw:Command,rawEventId:str
    await q.query('UPDATE community_event_prize_photo_targets SET asset_id=NULL,linked_at_version=NULL WHERE target_id=$1',[target.target_id]);
    await q.query("UPDATE assets SET state='retired',retired_at=clock_timestamp() WHERE asset_id=$1 AND state='ready'",[target.asset_id]);
    const next=(await q.query('UPDATE community_events SET aggregate_version=aggregate_version+1,updated_at=clock_timestamp() WHERE event_id=$1 AND aggregate_version=$2 RETURNING aggregate_version',[eventId,expected])).rows[0];requireCondition(next,412,'version_conflict','活動已更新，請重新載入後再操作。');
+   await recordEventMediaChange(q,eventId,'prize_photos');
    const version=Number(next.aggregate_version);await scopedJournal(q,c,{aggregate_type:'community_event',id:eventId,version,operation:command.operation,data:{prize_id:prizeId},eventType:'freedom.community.event.prize-photo.removed.v1'});mutated=true;return ack(version);
   },async q=>{await authorize(q);if(mutated)await editable(q,actor,eventId,prizeId);});}
  if(!store)throw unavailable();

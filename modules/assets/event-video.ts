@@ -1,3 +1,4 @@
+import {recordEventMediaChange} from '../community/event-changes.js';
 import {z} from 'zod';
 import type {Pool,PoolClient} from 'pg';
 import type {MemberScopeContext} from '../../packages/resource-scopes/index.js';
@@ -41,6 +42,7 @@ export function createEventVideoAssetService(pool:Pool,dependencies:EventVideoAs
    const saved=(await q.query('UPDATE community_events SET aggregate_version=aggregate_version+1,updated_at=clock_timestamp() WHERE event_id=$1 AND aggregate_version=$2 RETURNING aggregate_version',[target.targetId,row.expected_version])).rows[0];requireCondition(saved,412,'version_conflict','資料已更新，請重新整理後再操作。');
    await q.query('UPDATE community_event_video_asset_targets SET asset_id=$2,linked_at_version=$3 WHERE event_id=$1',[target.targetId,row.asset_id,saved.aggregate_version]);
    await q.query("INSERT INTO community_event_videos(event_id,media_bytes,mime_type,storage_source) VALUES($1,NULL,$2,'asset') ON CONFLICT(event_id) DO UPDATE SET mime_type=EXCLUDED.mime_type,storage_source='asset',updated_at=clock_timestamp()",[target.targetId,row.source_content_type]);
+   await recordEventMediaChange(q,target.targetId,'video');
    const result={intentId:row.intent_id,assetId:row.asset_id,eventId:target.targetId,aggregateVersion:saved.aggregate_version as string};return {aggregateVersion:result.aggregateVersion,result,fact:{aggregateType:'community_event',id:target.targetId,data:{asset_id:row.asset_id,intent_id:row.intent_id},eventType:'freedom.community.event.video.replaced.v1'}};
   },
  });

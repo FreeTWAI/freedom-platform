@@ -227,19 +227,19 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
     const publicPage=await immediateGuest.newPage();
     await publicPage.goto(new URL(eventAppPath(`/events/${created.event_id}`),page.url()).href);
     await expectPrize(publicPage.getByRole('region',{name:'活動獎品說明',exact:true}));
-    await expect(publicPage.getByRole('button',{name:'編輯草稿',exact:true})).toHaveCount(0);
+    await expect(publicPage.getByRole('button',{name:'編輯活動',exact:true})).toHaveCount(0);
   }finally{await immediateGuest.close();}
-  await page.goto(eventAppPath(`/events/${id}`));await page.reload();
+  await page.goto(`/#events/${id}/manage`);await page.reload();await page.getByText('其他設定',{exact:true}).click();
   const card=page.locator('.experience-card'),details=card.getByRole('region',{name:'活動獎品說明',exact:true});
   await expectPrize(details,prize.name,true);
-  await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
+  await card.getByRole('button',{name:'編輯活動',exact:true}).click();
   const editor=card.locator('form.experience-editor');
   for(const [label,value] of [['獎品名稱',prize.name],['獎品介紹（選填）',prize.description],['準備幾份','3'],['要做到什麼',prize.completion_rule],['怎麼領取',prize.claim_note]])await expect(editor.getByLabel(label,{exact:true})).toHaveValue(value);
   await expect(editor.getByRole('radio',{name:'書本',exact:true})).toBeChecked();
   const renamed='合成入門書（更新版）';await editor.getByLabel('獎品名稱',{exact:true}).fill(renamed);
   const edited=await save(page,editor,id);
   expect(edited.prize_details).toEqual([{...prize,name:renamed,prize_id:stableId}]);
-  await page.reload();await expectPrize(details,renamed,true);
+  await page.reload();await page.getByText('其他設定',{exact:true}).click();await expectPrize(details,renamed,true);
   const guest=await browser.newContext({viewport:{width,height:844}});
   try{
     const publicPage=await guest.newPage();
@@ -253,9 +253,9 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
     expect(await publicPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await publicPage.evaluate(()=>window.scrollTo(0,0));
     await publicPage.screenshot({path:info.outputPath(`public-prize-${width}.png`),fullPage:true});
-    // Published promises are not silently editable, including by the organizer.
+    // Published prizes remain durable; their organizer can open the same edit form before the start.
     await logout(page);await login(page,eventFixture.email);await page.goto(eventAppPath(`/events/${id}`));
-    await expectPrize(details,renamed);await expect(card.getByRole('button',{name:'編輯草稿',exact:true})).toHaveCount(0);
+    await expectPrize(details,renamed);await card.getByRole('link',{name:'管理活動',exact:true}).click();await expect(card.getByRole('button',{name:'編輯活動',exact:true})).toBeEnabled();
     const durable=(await e2eAuthPool.query('SELECT state,prize_details FROM community_events WHERE event_id=$1 AND organizer_ref=$2',[id,eventFixture.user])).rows[0];
     expect(durable).toEqual({state:'published',prize_details:[{...prize,name:renamed,prize_id:stableId}]});
     await expect(publicDetails).toContainText('報名、活動結束或分享成果也不代表已符合條件');
@@ -347,9 +347,9 @@ eventTest('no-prize minimal submission stays optional and reads back empty',asyn
   await expect(form.getByLabel('獎品名稱',{exact:true})).toHaveCount(0);
   const result=await save(page,form);expect(result.prize_details).toEqual([]);expect(result.state).toBe('published');
   const id=await legacyDraft(e2eAuthPool,result.event_id);
-  await page.goto(eventAppPath(`/events/${id}`));await page.reload();
+  await page.goto(`/#events/${id}/manage`);await page.reload();await page.getByText('其他設定',{exact:true}).click();
   await expect(page.getByRole('region',{name:'活動獎品說明',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'編輯草稿',exact:true}).click();
+  await page.getByRole('button',{name:'編輯活動',exact:true}).click();
   await expect(page.getByRole('button',{name:'加入獎品',exact:true})).toBeVisible();
   await expect(page.getByLabel('獎品名稱',{exact:true})).toHaveCount(0);
   expect((await e2eAuthPool.query('SELECT prize_details FROM community_events WHERE event_id=$1 AND organizer_ref=$2',[id,eventFixture.user])).rows[0].prize_details).toEqual([]);

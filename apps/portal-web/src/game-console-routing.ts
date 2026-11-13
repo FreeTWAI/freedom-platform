@@ -25,7 +25,7 @@ const NOTIFICATION_CONSOLE_CHANNELS = {
   event_rejected: 'system',
   event_waitlist_invited: 'system',
   event_schedule_changed: 'system',
-  event_cancelled: 'system',
+  event_cancelled: 'system', event_announcement: 'system',
   event_start_reminder: 'system',
   squad_member_removed: 'system',
   social_post_commented: 'system',

@@ -30,6 +30,8 @@ const matches = (path:string, prefix:string) => path===prefix || path.startsWith
 const split = (hash:string) => {const raw=hash.replace(/^#/, ''); const i=raw.indexOf('?'); return i<0?[raw,'']:[raw.slice(0,i),raw.slice(i)];};
 export function canonicalHash(hash:string):string {
   const [path,query]=split(hash);
+  const eventControl=/^(?:events|explore\/events)\/([0-9a-f-]{36})\/(attendance|attendees|schedule|waitlist-policy)$/.exec(path);
+  if(eventControl)return '#explore/events/'+eventControl[1]+'/manage'+(eventControl[2]==='attendance'?'/attendance':'')+query;
   if(path==='automation')return '#automation/agent'+query;
   if(matches(path,'me/shares'))return '#me/credit'+path.slice('me/shares'.length)+query;
   if(matches(path,'stores/supply'))return '#'+catalog+path.slice('stores/supply'.length)+query;

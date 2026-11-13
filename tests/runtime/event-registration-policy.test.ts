@@ -111,7 +111,7 @@ test('creation policy is explicit, legacy omission defaults guest, and pending o
   await assert.rejects(updateEvent(pool,command(1,`PUT /events/${created.event_id}`,{...details(),registration_policy:'guest_allowed'},Number(updated.aggregate_version)),created.event_id),denied('organizer_required'));
   const changed=await updateEvent(pool,command(0,`PUT /events/${created.event_id}`,{...details(),registration_policy:'guest_allowed'},Number(updated.aggregate_version)),created.event_id);assert.equal(changed.registration_policy,'guest_allowed');
   await pool.query("UPDATE community_events SET state='published' WHERE event_id=$1",[created.event_id]);
-  await assert.rejects(updateEvent(pool,command(0,`PUT /events/${created.event_id}`,{...details(),registration_policy:'community_member'},Number(changed.aggregate_version)),created.event_id),denied('event_closed'));
+  await assert.rejects(updateEvent(pool,command(0,`PUT /events/${created.event_id}`,{...details(),registration_policy:'community_member'},Number(changed.aggregate_version)),created.event_id),denied('event_registration_policy_immutable'));
 });
 
 test('policy rejects unknown values at schema and database boundaries',async()=>{

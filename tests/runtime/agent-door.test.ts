@@ -95,6 +95,16 @@ test('first exact publication waits for browser confirmation; replay, concurrenc
  assert.equal((await req(path,{token,body,key})).status,201,'replay works at cap');
  assert.equal((await pool.query('SELECT count(*)::int AS n FROM agent_publications WHERE connection_id=$1',[issued.connection_id])).rows[0].n,2);
 });
+test('even an organizer agent token cannot edit, announce or cancel an event',async()=>{
+ const session=await ready(),issued=await issue(session),created=await req('/api/v1/events',{session,body:eventBody()});
+ assert.equal(created.status,201);
+ for(const operation of ['update','announcements','cancel']){
+  const response=await req(`/api/v1/events/${created.data.event_id}/${operation}`,{token:issued.access_token,body:operation==='announcements'?{message:'合成通知'}:{},headers:{'If-Match':`"${created.data.aggregate_version}"`}});
+  assert.equal(response.status,403);
+ }
+ assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[created.data.event_id])).rows[0].state,'published');
+});
+
 test('ten denied requests suspend a token; successful reads do not erase failures',async()=>{
  const session=await ready(),issued=await issue(session),token=issued.access_token;
  for(let i=0;i<10;i++){assert.equal((await req('/api/v1/unlisted',{token})).status,403);if(i<9)assert.equal((await req('/api/v1/events',{token})).status,200);}

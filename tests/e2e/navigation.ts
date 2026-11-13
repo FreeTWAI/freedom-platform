@@ -255,11 +255,14 @@ export async function expectDestination(page: Page, legacy: string) {
 /** Public event URLs retain their member tools behind the visible management link. */
 export async function openEventManagement(page: Page, eventId?: string) {
   if(eventId)await page.goto(`/events/${eventId}`);
-  const detail=page.getByRole('region',{name:'活動專頁',exact:true}),management=page.getByRole('link',{name:'活動管理',exact:true});
-  await expect(detail.or(management)).toBeVisible();
-  if(!await detail.isVisible())await management.click();
-  await expect(detail).toBeVisible();
-  if(eventId)expect(new URL(page.url()).hash).toBe(`#explore/events/${eventId}`);
+  const manager=page.getByRole('region',{name:'管理活動',exact:true}),detail=page.getByRole('region',{name:'活動專頁',exact:true});
+  const link=page.getByRole('link',{name:'活動管理',exact:true}).or(page.getByRole('link',{name:'參與設定',exact:true}));
+  await expect(manager.or(detail).or(link)).toBeVisible();
+  if(!await manager.isVisible()&&!await detail.isVisible())await link.click();
+  const nativeManage=detail.getByRole('link',{name:'管理活動',exact:true});
+  if(await nativeManage.isVisible())await nativeManage.click();
+  await expect(manager.or(detail)).toBeVisible();
+  if(eventId)expect(new URL(page.url()).hash).toBe(`#explore/events/${eventId}${await manager.isVisible()?'/manage':''}`);
 }
 
 /** The native event app retains authoring, guest retry and private participation controls.
