@@ -108,7 +108,7 @@ export function EventFields({value,onChange,guilds=[],guildLocked=false,disabled
     <label className="field">{value.mode==='in_person'?'線上直播連結（選填）':'線上參與連結'}<input disabled={disabled} type="url" pattern="https://.*" required={value.mode==='hybrid'} maxLength={500} value={value.online_url} onChange={e=>set('online_url',e.target.value)} placeholder="https://"/>{value.mode==='hybrid'&&<small>同時提供實體地點與線上參與連結。</small>}</label></>;
   const summary=<>    {value.visibility==='referral'&&<p className="field-hint">海報、影片與活動說明都會公開。請勿在這些內容中放入線上參與連結或 QR 碼。</p>}
     <p className="field-hint">審核：{reviewerFor(value,guilds)}的公會長，或平台管理員。</p></>;
-  const registrationPolicy=<label className="field">報名方式<select aria-label="報名方式" disabled={disabled} value={value.registration_policy} onChange={e=>set('registration_policy',e.target.value as EventDraft['registration_policy'])}><option value="community_member">社群帳號登入後報名（建議）</option><option value="guest_allowed">允許訪客以姓名與 Email 報名</option></select><small>公開活動頁不等於開放訪客報名。公會／工坊的參與範圍仍適用；報名方式只能在已送審、尚未開始的待審核活動修改。</small></label>;
+  const registrationPolicy=<label className="field">報名方式<select aria-label="報名方式" disabled={disabled} value={value.registration_policy} onChange={e=>set('registration_policy',e.target.value as EventDraft['registration_policy'])}><option value="community_member">社群帳號登入後報名（建議）</option><option value="guest_allowed">允許訪客以姓名與 Email 報名</option></select><small>公開活動頁不等於開放訪客報名；公會／工坊的參與範圍仍適用。發布後不能更改。</small></label>;
   const revealInvalid=(event:FormEvent<HTMLDivElement>)=>{
     const target=event.target as HTMLElement;
     // Open synchronously before native validation attempts to focus the field.
