@@ -108,3 +108,17 @@ test('content uses are explicit, multi-valued and independent of business catego
     for(const use of skillBookUses)assert.equal(matchesSkillBookUse(id,use),false);
   }
 });
+
+test('book Star widgets use bound metadata and do not infer authors from coordinates',async()=>{
+ const {createElement}=await import('react');
+ const {renderToStaticMarkup}=await import('react-dom/server');
+ const {SkillBookStar}=await import('../../apps/portal-web/src/modules/SkillBookCover.js');
+ const book={id:'synthetic-book',repository_url:'https://github.com/Workshop/copy',upstream_url:'https://github.com/Original/old'};
+ const unknown=renderToStaticMarkup(createElement(SkillBookStar,{book,compact:true}));
+ assert.doesNotMatch(unknown,/Follow|更多 GitHub 數據|github-book-metrics/);
+ const bound={...book,original_cache:{url:'https://github.com/Original/new',original_author:'Original',stars:12}};
+ const html=renderToStaticMarkup(createElement(SkillBookStar,{book:bound,compact:true}));
+ assert.match(html,/href="https:\/\/github.com\/Original\/new"/);
+ assert.match(html,/>12<\/span>/);
+ assert.doesNotMatch(html,/github-book-metrics/);
+});

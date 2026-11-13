@@ -96,3 +96,33 @@ test('backfill CLI prints unresolved sources in dry-run and apply JSON using rec
  assert.deepEqual(applied[0],dry[0]);assert.deepEqual(applied[1].counts,dry[0].counts);assert.deepEqual(applied[1].unresolved,dry[0].unresolved);
  const repeated=await run(true);assert.deepEqual(repeated[1].counts,{repositories:0,shares:0,credits:0,notes:0,links:0});assert.deepEqual(repeated[1].unresolved,dry[0].unresolved);
 });
+
+test('backfilled book retains its numeric original without observations across a move and name reuse',async()=>{
+ const {readBookOriginalCache,resolveBookOriginalUrl}=await import('../../modules/shares/repository-cache.js');
+ const {createSkillInstallRoutes}=await import('../../apps/platform-api/src/routes/skill-install.js');
+ const {gitBlobSha1}=await import('../../modules/skill-install/bundle.js');
+ const selected={...book,id:'backfilled-identity',repository_url:'https://github.com/Workshop/reviewed',upstream_url:'https://github.com/Fixture/old',source_commit:'a'.repeat(40)};
+ const plan=await planShareBackfill(pool,{fetcher:async()=>Response.json({...original,id:8801,full_name:'Fixture/old'})},[selected]);
+ await applyShareBackfill(pool,plan,true);
+ assert.equal((await pool.query('SELECT 1 FROM catalog_repo_observations WHERE book_id=$1',[selected.id])).rowCount,0);
+ await pool.query(`UPDATE canonical_repositories SET full_name='Fixture/renamed',current_url='https://github.com/Fixture/renamed',readme_html='<p>Genuine README</p>' WHERE provider_repo_id='8801'`);
+ await pool.query(`INSERT INTO canonical_repositories(repo_id,provider,provider_repo_id,full_name,current_url,facts,readme_html) VALUES(gen_random_uuid(),'github','8802','Fixture/old','https://github.com/Fixture/old','{"owner_login":"Replacement"}','<p>Replacement README</p>')`);
+ const cached=await readBookOriginalCache(pool,selected);
+ assert.equal(cached.repository_id,'8801');assert.equal(cached.url,'https://github.com/Fixture/renamed');assert.equal(cached.readme_html,'<p>Genuine README</p>');
+ const body='---\nname: backfilled\n---\nReviewed copy',sha=await gitBlobSha1(new TextEncoder().encode(body)),calls:string[]=[];
+ const fake:typeof fetch=async input=>{
+  const url=String(input);calls.push(url);
+  if(url==='https://api.github.com/repositories/8801')return Response.json({...original,id:8801,full_name:'Fixture/renamed'});
+  if(url.includes('/Fixture/old/'))return new Response(null,{status:301,headers:{location:'https://api.github.com/repositories/8801'}});
+  if(url===`https://api.github.com/repos/Fixture/renamed/git/trees/${selected.source_commit}?recursive=1`)return Response.json({sha:selected.source_commit,tree:[{path:'SKILL.md',type:'blob',sha,size:body.length}]});
+  if(url===`https://raw.githubusercontent.com/Fixture/renamed/${selected.source_commit}/SKILL.md`)return new Response(body);
+  throw Error('Unexpected GitHub request '+url);
+ };
+ const response=await createSkillInstallRoutes(fake,undefined,[selected],{resolveOriginalUrl:()=>resolveBookOriginalUrl(pool,selected,{fetcher:fake})}).request(`/api/v1/skills/${selected.id}/install-bundle`);
+ assert.equal(response.status,200);assert.equal((await response.json()).repository,'Fixture/renamed');assert.equal(calls.length,3);
+ await pool.query(`INSERT INTO catalog_repo_observations(book_id,provider,provider_repo_id,requested_full_name,full_name,current_url,needs_recheck) VALUES($1,'github','8802','Fixture/old','Fixture/old','https://github.com/Fixture/old',true)`,[selected.id]);
+ const unresolved=await readBookOriginalCache(pool,selected);
+ assert.equal(unresolved.repository_id,null);assert.equal(unresolved.url,selected.repository_url);assert.equal(unresolved.original_author,null);assert.equal(unresolved.stars,null);
+ const unknown={...selected,id:'unobserved-book'};
+ assert.equal(await resolveBookOriginalUrl(pool,unknown,{fetcher:async()=>{throw Error('Unbound original must not be fetched');}}),unknown.repository_url);
+});

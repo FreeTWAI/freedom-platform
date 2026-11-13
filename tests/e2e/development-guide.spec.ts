@@ -1,7 +1,10 @@
+import {seedBookOriginals} from './skill-book-original-fixture.js';
 import {openPageTools} from './navigation.js';
 import { navigate } from './navigation.js';
 import {test,expect} from './fixtures.js';
 import {submittedSkillHtml} from '../../apps/platform-api/src/routes/published-skills.js';
+
+test.beforeEach(async({e2eAuthPool})=>seedBookOriginals(e2eAuthPool));
 
 const publicAuthorFixture={items:[{name:'測試作者',role:'作者',card_path:'/member-cards/'+'a'.repeat(43),card:{nickname:'測試作者',headline:'把影音工具做得更好用。',design:'editorial',primary_guild:{guild_key:'guild_creator',name:'影音創作公會'},capabilities:['影片剪輯','工具開發'],avatar_url:null,links:[{label:'作者網站',url:'https://example.com/author'}],profile_links:[]}}]};
 

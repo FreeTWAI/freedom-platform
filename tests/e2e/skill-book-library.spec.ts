@@ -1,3 +1,4 @@
+import {seedBookOriginals} from './skill-book-original-fixture.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import { randomUUID } from 'node:crypto';
 import { navigate } from './navigation.js';
@@ -5,7 +6,8 @@ import {test,expect,type Page,type Locator} from './fixtures.js';
 import type {SkillBook} from '../../modules/community/catalog';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 
-test.beforeEach(async({page})=>{
+test.beforeEach(async({page,e2eAuthPool})=>{
+  await seedBookOriginals(e2eAuthPool);
   // Preview every catalog book without pretending the fixture member has guild grants.
   await page.route('**/api/v1/me/skill-books',route=>route.fulfill({json:{items:[]}}));
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:false,connected:false,github_user:null}}));
@@ -251,7 +253,8 @@ test('the original repository leads member introductions and public skill pages'
   await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',original);
 });
 
-test('every bookshelf uses compact illustrated rows with full copy, live counts and expandable secondary metrics',async({page})=>{
+test('every bookshelf uses compact illustrated rows with full copy, live counts and expandable secondary metrics',async({page,e2eAuthPool})=>{
+  await e2eAuthPool.query(`UPDATE canonical_repositories SET facts=facts || '{"stars":127,"metrics":{"forks_count":18,"open_issues_count":4,"subscribers_count":6,"pushed_at":"2026-09-20T10:00:00Z"}}'::jsonb WHERE provider_repo_id=(SELECT provider_repo_id FROM catalog_repo_observations WHERE book_id='social-post')`);
   const metrics={repository_url:'https://github.com/Hao0321/claude-skill-social-post',stargazers_count:127,forks_count:18,open_issues_count:4,subscribers_count:6,pushed_at:'2026-09-20T10:00:00Z',language:'TypeScript',archived:false,checked_at:'2026-09-23T10:00:00Z',stale:false,error:null};
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:true,connected:true,github_user:{id:'synthetic-density',login:'synthetic-density'}}}));
   await page.route('**/api/v1/me/github/books/*/star',route=>route.fulfill({json:{book_id:route.request().url().split('/').at(-2),starred:false,connected:true}}));

@@ -12,6 +12,8 @@ import type { AdapterContext,RepositoryFacts } from './types.js';
 const releaseSchema=z.object({tag_name:z.string().max(200),name:z.string().max(300).nullable(),html_url:z.string().max(2048),published_at:z.string().nullable()});
 export type BookReleaseSummary={tag_name:string;name:string|null;html_url:string;published_at:string|null};
 export type BookOriginalCache={
+  repository_id?:string|null;
+  social_metrics?:{forks_count:number|null;open_issues_count:number|null;subscribers_count:number|null;pushed_at:string|null};
   full_name:string|null;
   url:string|null;
   original_author:string|null;
@@ -32,19 +34,26 @@ export type BookOriginalCache={
   stale:boolean;
 };
 export type BookOriginalCacheSummary=Omit<BookOriginalCache,'readme_html'>;
-export type BookOriginalLookupInput={id:string;repository_url:string;upstream_url?:string;source_commit?:string;reviewed_at?:string};
-export const PUBLIC_BOOK_CACHE_SQL=`SELECT cr.repo_id, cr.provider_repo_id, cr.full_name, cr.current_url, cr.description, cr.topics,
+export type BookOriginalLookupInput={id:string;repository_url:string;upstream_url?:string;source_commit?:string;reviewed_at?:string;description?:string};
+export const PUBLIC_BOOK_CACHE_SQL=`WITH requested AS (
+  SELECT * FROM unnest($1::text[], $2::text[]) AS b(book_id, full_name)
+), bindings AS (
+  SELECT o.book_id, o.provider_repo_id, o.requested_full_name, o.needs_recheck
+  FROM catalog_repo_observations o JOIN requested b USING(book_id) WHERE o.provider='github'
+  UNION
+  SELECT b.book_id, cr.provider_repo_id, b.full_name, false
+  FROM requested b JOIN shares s ON s.legacy_ref @> jsonb_build_array(jsonb_build_object('kind','book','id',b.book_id))
+  JOIN canonical_repositories cr ON cr.repo_id=s.repo_id AND cr.provider='github'
+  WHERE NOT EXISTS (SELECT 1 FROM catalog_repo_observations o WHERE o.book_id=b.book_id)
+)
+SELECT cr.repo_id, cr.provider_repo_id, cr.full_name, cr.current_url, cr.description, cr.topics,
   cr.license_spdx, cr.readme_html, cr.latest_release, cr.facts, cr.fetched_at, cr.fetch_state,
-  obs.book_id AS observed_book_id, obs.requested_full_name AS observed_requested_full_name,
+  b.book_id AS observed_book_id, b.requested_full_name AS observed_requested_full_name,
+  b.provider_repo_id AS established_provider_repo_id, b.needs_recheck AS observed_needs_recheck,
   m.snapshot AS metric_snapshot, m.checked_at AS metric_checked_at
-FROM canonical_repositories cr
-LEFT JOIN catalog_repo_observations obs
-  ON obs.provider = cr.provider AND obs.provider_repo_id = cr.provider_repo_id AND obs.book_id = ANY($1::text[])
-LEFT JOIN github_repository_metrics m
-  ON m.repository_key = lower(cr.full_name)
-WHERE cr.provider = 'github'
-  AND cr.fetch_state <> 'unavailable'
-  AND (obs.book_id IS NOT NULL OR lower(cr.full_name) = ANY($2::text[]))`;
+FROM bindings b
+LEFT JOIN canonical_repositories cr ON cr.provider='github' AND cr.provider_repo_id=b.provider_repo_id
+LEFT JOIN github_repository_metrics m ON m.repository_key=lower(cr.full_name)`;
 export const PUBLIC_BOOK_METRICS_SQL=`SELECT repository_key, snapshot, checked_at FROM github_repository_metrics WHERE repository_key = ANY($1::text[])`;
 function githubCoordinateOrNull(url:string|null|undefined):string|null{
   if(!url)return null;
@@ -117,6 +126,8 @@ export async function repositoryPage(q:PoolClient,repoId:string) {
 }
 type CachedRepoRow={
   provider_repo_id:string;
+  established_provider_repo_id:string;
+  observed_needs_recheck:boolean;
   full_name:string;
   current_url:string;
   description:string|null;
@@ -129,19 +140,12 @@ type CachedRepoRow={
   fetch_state:string|null;
   observed_book_id:string|null;
   observed_requested_full_name:string|null;
-  metric_snapshot:{stargazers_count?:number;repository_identity?:{id?:string}}|null;
+  metric_snapshot:{stargazers_count?:number;forks_count?:number;open_issues_count?:number;subscribers_count?:number;pushed_at?:string|null;repository_identity?:{id?:string}}|null;
   metric_checked_at:Date|string|null;
 };
-type CachedMetricRow={
-  repository_key:string;
-  snapshot:{stargazers_count?:number}|null;
-  checked_at:Date|string|null;
-};
-export function buildBookOriginalCache(book:BookOriginalLookupInput,row?:CachedRepoRow|null,metric?:CachedMetricRow|null):BookOriginalCache{
-  const originalUrl=book.upstream_url??book.repository_url;
-  const originalCoord=githubCoordinateOrNull(originalUrl);
-  const fullName=row?.full_name??originalCoord;
-  const url=row?.current_url??originalUrl;
+export function buildBookOriginalCache(book:BookOriginalLookupInput,row?:CachedRepoRow|null):BookOriginalCache{
+  const fullName=row?.full_name??null;
+  const url=row?.current_url??book.repository_url;
   const facts=(row?.facts??{}) as Partial<RepositoryFacts>;
   const defaultBranch=typeof facts.default_branch==='string'&&facts.default_branch?facts.default_branch:null;
   const release=row?.latest_release??null;
@@ -149,13 +153,13 @@ export function buildBookOriginalCache(book:BookOriginalLookupInput,row?:CachedR
   const pinnedSha=validCommitSha(book.source_commit);
   const fetchedAtIso=row?.fetched_at?new Date(row.fetched_at).toISOString():null;
   const metricFresh=Boolean(row&&row.metric_snapshot?.repository_identity?.id===row.provider_repo_id&&(!row.fetched_at||new Date(row.metric_checked_at??0)>=new Date(row.fetched_at)));
+  const socialSnapshot=metricFresh?row?.metric_snapshot:facts.metrics;
+  const numeric=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:null;
   const stars=metricFresh&&typeof row?.metric_snapshot?.stargazers_count==='number'
     ?row.metric_snapshot.stargazers_count
     :typeof facts.stars==='number'
       ?facts.stars
-      :typeof metric?.snapshot?.stargazers_count==='number'
-        ?metric.snapshot.stargazers_count
-        :null;
+      :null;
   const releaseDateMs=release?.published_at?Date.parse(release.published_at):Number.NaN;
   const reviewedAtMs=book.reviewed_at?Date.parse(book.reviewed_at):Number.NaN;
   const releaseAfterReview=Number.isFinite(releaseDateMs)&&Number.isFinite(reviewedAtMs)&&releaseDateMs>reviewedAtMs;
@@ -176,11 +180,12 @@ export function buildBookOriginalCache(book:BookOriginalLookupInput,row?:CachedR
     full_name:fullName,
     url,
     original_author:facts.owner_login??(fullName?fullName.split('/')[0]:null),
-    description:row?.description??null,
+    description:row?.description??book.description??null,
     topics:Array.isArray(row?.topics)?row.topics:[],
     license_spdx:row?.license_spdx??null,
     default_branch:defaultBranch,
     stars,
+    ...(socialSnapshot?{social_metrics:{forks_count:numeric(socialSnapshot.forks_count),open_issues_count:numeric(socialSnapshot.open_issues_count),subscribers_count:numeric(socialSnapshot.subscribers_count),pushed_at:typeof socialSnapshot.pushed_at==='string'?socialSnapshot.pushed_at:null}}:{}),
     readme_html:readmeHtml,
     quick_start:readmeHtml&&fullName?readmeQuickStart(readmeHtml,fullName):null,
     latest_release:release,
@@ -197,43 +202,41 @@ export function summarizeBookOriginalCache(cache:BookOriginalCache):BookOriginal
   const {readme_html:_omitted,...summary}=cache;
   return summary;
 }
-function matchesOriginalRow(book:BookOriginalLookupInput,row:CachedRepoRow):boolean{
-  const originalUrl=book.upstream_url??book.repository_url;
-  const originalCoord=githubCoordinateOrNull(originalUrl);
-  const copyCoord=githubCoordinateOrNull(book.repository_url);
-  if(!originalCoord)return false;
-  const rowCoord=row.full_name.toLowerCase();
-  if(rowCoord===originalCoord)return true;
-  // Accept a renamed original observed under its previous coordinate as long as it is not the distinct integration copy.
-  return row.observed_book_id===book.id
-    &&row.observed_requested_full_name?.toLowerCase()===originalCoord
-    &&(!copyCoord||copyCoord===originalCoord||rowCoord!==copyCoord);
+function boundRows(book:BookOriginalLookupInput,rows:CachedRepoRow[]):CachedRepoRow[]{
+  const coordinate=githubCoordinateOrNull(book.upstream_url||book.repository_url);
+  const candidates=rows.filter(row=>row.observed_book_id===book.id);
+  if(!candidates.length||candidates.some(row=>row.observed_needs_recheck
+    ||row.observed_requested_full_name?.toLowerCase()!==coordinate
+    ||!/^\d{1,20}$/.test(row.established_provider_repo_id)))return [];
+  if(new Set(candidates.map(row=>row.established_provider_repo_id)).size!==1)return [];
+  return candidates;
 }
 export async function readBookOriginalCaches(pool:Pool,books:readonly BookOriginalLookupInput[]):Promise<Map<string,BookOriginalCache>>{
   const result=new Map<string,BookOriginalCache>();
   if(books.length===0)return result;
-  const bookIds=books.map(book=>book.id);
-  const coords=[...new Set(books.map(book=>githubCoordinateOrNull(book.upstream_url??book.repository_url)).filter((v):v is string=>Boolean(v)))];
   let repoRows:CachedRepoRow[]=[];
-  let metricRows:CachedMetricRow[]=[];
   try{
-    repoRows=(await pool.query(PUBLIC_BOOK_CACHE_SQL,[bookIds,coords])).rows as CachedRepoRow[];
-    if(coords.length>0){
-      metricRows=(await pool.query(PUBLIC_BOOK_METRICS_SQL,[coords])).rows as CachedMetricRow[];
-    }
-  }catch{
-    repoRows=[];
-    metricRows=[];
-  }
-  const metricsByCoord=new Map(metricRows.map(m=>[m.repository_key.toLowerCase(),m]));
+    repoRows=(await pool.query(PUBLIC_BOOK_CACHE_SQL,[books.map(book=>book.id),books.map(book=>githubCoordinateOrNull(book.upstream_url||book.repository_url))])).rows as CachedRepoRow[];
+  }catch{ /* Unavailable identity evidence uses only the reviewed catalog copy. */ }
   for(const book of books){
-    const originalCoord=githubCoordinateOrNull(book.upstream_url??book.repository_url);
-    const matchedRow=repoRows.find(row=>matchesOriginalRow(book,row))??null;
-    const metric=originalCoord?metricsByCoord.get(originalCoord)??null:null;
-    result.set(book.id,buildBookOriginalCache(book,matchedRow,metric));
+    const bound=boundRows(book,repoRows);
+    const repositoryId=bound[0]?.established_provider_repo_id??null;
+    const cached=bound.filter(row=>row.provider_repo_id===repositoryId&&row.full_name&&row.fetch_state!=='unavailable');
+    // SQL deduplicates bindings; never choose between conflicting cache candidates by row order.
+    const row=cached.length===1?cached[0]:null;
+    result.set(book.id,{...buildBookOriginalCache(book,row),repository_id:repositoryId});
   }
   return result;
 }
 export async function readBookOriginalCache(pool:Pool,book:BookOriginalLookupInput):Promise<BookOriginalCache>{
   return (await readBookOriginalCaches(pool,[book])).get(book.id)??buildBookOriginalCache(book);
+}
+/** Resolve the established identity, never a possibly reused coordinate, before pinning downloads. */
+export async function resolveBookOriginalUrl(pool:Pool,book:BookOriginalLookupInput,context:AdapterContext={}):Promise<string>{
+  const cache=await readBookOriginalCache(pool,book);
+  if(!cache.repository_id)return book.repository_url;
+  const raw=await publicRepositoryJson(`/repositories/${cache.repository_id}`,AbortSignal.timeout(8000),context.fetcher??fetch,false,196608,context.token);
+  const parsed=z.object({id:z.number().int().positive().safe(),full_name:z.string(),private:z.literal(false),visibility:z.literal('public'),fork:z.literal(false),archived:z.literal(false)}).safeParse(raw);
+  requireCondition(parsed.success&&String(parsed.data.id)===cache.repository_id,422,'repository_identity_changed','原作身分已變更。');
+  return `https://github.com/${githubCoordinate(`https://github.com/${parsed.data.full_name}`)}`;
 }

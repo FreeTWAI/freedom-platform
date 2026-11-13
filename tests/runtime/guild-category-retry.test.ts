@@ -1,3 +1,4 @@
+import {distinctOriginalRepoCount} from '../../apps/portal-web/src/modules/SkillBookCover.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {stripTypeScriptTypes} from 'node:module';
@@ -75,7 +76,7 @@ test('current authority still precedes receipt replay; the original key recovers
 const cardSource=readFileSync('apps/portal-web/src/modules/GuildCard.tsx','utf8');
 const cardStart=cardSource.indexOf('type GuildPanel='),cardEnd=cardSource.indexOf('// Measure intrinsic content',cardStart);assert.ok(cardStart>=0&&cardEnd>cardStart);
 const cardCode=transformSync(cardSource.slice(cardStart,cardEnd),{loader:'tsx',jsxFactory:'React.createElement',target:'es2023'}).code;
-const GuildCard=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,useState:(value:unknown)=>[value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null});
+const GuildCard=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,distinctOriginalRepoCount,useState:(value:unknown)=>[value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null});
 const nodes=(value:any):any[]=>Array.isArray(value)?value.flatMap(nodes):React.isValidElement(value)?[value,...nodes((value.props as any).children)]:[];
 const text=(value:any):string=>Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text((value.props as any).children):typeof value==='string'?value:'';
 test('GuildCard unknown-write blocking affects mutation controls only, with the default unchanged',()=>{

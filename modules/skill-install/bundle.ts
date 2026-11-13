@@ -139,10 +139,9 @@ export function createSkillInstallBundleLoader(fetcher:Fetcher=globalThis.fetch,
     if(!baseSource)throw new Problem(404,'skill_install_unavailable','這本技能書沒有可安裝的收錄版本。');
     let source=baseSource;
     if(resolveOriginalUrl){
-      const resolved=parseGithubOwnerRepo(await resolveOriginalUrl(bookId).catch(()=>null));
-      if(resolved){
-        source={...baseSource,owner:resolved.owner,repo:resolved.repo};
-      }
+      const resolved=parseGithubOwnerRepo(await resolveOriginalUrl(bookId));
+      if(!resolved)throw new Problem(422,'repository_identity_changed','無法確認原作身分。');
+      source={...baseSource,owner:resolved.owner,repo:resolved.repo};
     }
     const key=source.owner+'/'+source.repo+'@'+source.commit+'#'+source.book_id;
     let pending=cache.get(key);
