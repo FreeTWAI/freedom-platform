@@ -70,7 +70,8 @@ test('published changes persist and mandatory notices deduplicate for members an
  await saveNotificationPreferences(pool,cmd(actors[1],{...preferences,categories:{...preferences.categories,events:'summary'}},2),false);
  assert.ok((await readNotificationSummary(pool,actors[1],false,new Date())).items.some(n=>n.id===notice[0].notification_id&&n.path===`#events/${e.event_id}`));
  const sent:string[]=[];const send=async(to:string,_subject:string,body:string)=>{assert.equal(to,'verified@example.com');sent.push(body);};
- // Both versions can remain queued until after cancellation when transport is unavailable.
+ // Deliver the confirmed update before cancellation; cancellation is queued independently.
+ await processEventNotices(pool,send,'https://example.org',e.event_id);
  const cancel=cmd(actors[4],{},changed.aggregate_version);await cancelEvent(pool,cancel,e.event_id,false);await cancelEvent(pool,cancel,e.event_id,false);
  await processEventNotices(pool,send,'https://example.org',e.event_id);await processEventNotices(pool,send,'https://example.org',e.event_id);
  assert.equal(sent.length,2);assert.match(sent[0],/更新場地/);assert.ok(sent[0].includes(`/events/${e.event_id}`));assert.match(sent[1],/已取消/);
@@ -101,4 +102,187 @@ test('announcements are owner-only, bounded, replay-safe and limited to three pe
  assert.equal((await pool.query("SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1 AND recipient_ref=$2",[e.event_id,actors[2].user_id])).rows[0].n,0);
  await pool.query("UPDATE community_event_announcements SET created_at=(date_trunc('day',clock_timestamp() AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei')-interval '1 second' WHERE event_id=$1",[e.event_id]);
  assert.equal((await announceEvent(pool,cmd(actors[4],{message:'新的一天'},await version()),e.event_id)).recorded,true);
+});
+
+async function noticeFixture(){
+ const id=randomUUID();
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,online_url,state,visibility,waitlist_enabled,response_window_minutes,capacity)
+ VALUES($1,$2,$3,'合成私人活動','合成測試','2099-06-01T10:00:00Z','2099-06-01T11:00:00Z','online','私人會議室','https://example.org/private-meeting','published','open',true,30,4)`,[id,DEMO_COMMUNITY,actors[4].user_id]);
+ await setRsvp(pool,cmd(actors[1],{going:true}),id);
+ for(const [actor,status] of [[actors[2],'queued'],[actors[3],'invited']] as const)await pool.query(`INSERT INTO community_event_waitlist(entry_id,event_id,member_ref,status,invited_at,expires_at,invitation_id) VALUES(gen_random_uuid(),$1,$2,$3,now(),now()+interval '1 day',gen_random_uuid())`,[id,actor.user_id,status]);
+ const {ensureGuestCapability}=await import('../../modules/community/event-waitlist.js');
+ const {transaction}=await import('../../packages/db/index.js');
+ for(const status of ['going','queued','invited']){
+  const email=`${status}@example.com`;
+  await transaction(pool,q=>ensureGuestCapability(q,id,{email,name:'合成訪客'}));
+  if(status==='going')await pool.query("INSERT INTO community_event_guest_rsvps(event_id,email,name,state,confirmed_at) VALUES($1,$2,'合成訪客','going',now())",[id,email]);
+  else await pool.query(`INSERT INTO community_event_waitlist(entry_id,event_id,guest_email,status,invited_at,expires_at,invitation_id) VALUES(gen_random_uuid(),$1,$2,$3,now(),now()+interval '1 day',gen_random_uuid())`,[id,email,status]);
+ }
+ await pool.query('UPDATE community_event_guest_capabilities SET verified_at=now() WHERE event_id=$1',[id]);
+ return id;
+}
+async function editNotice(id:string,patch:Record<string,unknown>){
+ const e=(await pool.query('SELECT * FROM community_events WHERE event_id=$1',[id])).rows[0];
+ return updateEvent(pool,cmd(actors[4],{...fields(e),...patch},e.aggregate_version),id);
+}
+const privateNotice=(body:string)=>{assert.match(body,/私人會議室/);assert.match(body,/https:\/\/example.org\/private-meeting/);};
+const safeNotice=(body:string)=>{assert.equal(body,'「合成私人活動」\n活動時間或地點有更新，請到活動頁查看。');};
+test('change notices apply event reader access to queued, invited and confirmed members, including later revocation',async()=>{
+ const id=await noticeFixture();await editNotice(id,{ends_at:'2099-06-01T12:00:00Z'});
+ const {listNotifications}=await import('../../modules/member-communications/service.js');
+ for(const actor of actors.slice(1,4)){
+  const stored=(await pool.query("SELECT body FROM member_notifications WHERE action_resource_id=$1 AND recipient_ref=$2 AND kind='event_schedule_changed'",[id,actor.user_id])).rows[0];
+  const delivered=(await listNotifications(pool,actor,{})).items.find(n=>n.action?.resource_id===id)!;
+  assert.equal(delivered.action?.tab,'events');
+  if(actor===actors[1]){privateNotice(stored.body);privateNotice(delivered.body);}else{safeNotice(stored.body);safeNotice(delivered.body);}
+ }
+ await setRsvp(pool,cmd(actors[1],{going:false}),id);
+ safeNotice((await listNotifications(pool,actors[1],{})).items.find(n=>n.action?.resource_id===id)!.body);
+});
+test('guest change delivery rechecks queued, invited, confirmed and changed registrations',async()=>{
+ const {processEventNotices}=await import('../../modules/community/event-waitlist.js');
+ for(const changeStatus of [false,true]){
+  const id=await noticeFixture();await editNotice(id,{ends_at:'2099-06-01T12:00:00Z'});
+  if(changeStatus){
+   await pool.query("UPDATE community_event_guest_rsvps SET state='cancelled' WHERE event_id=$1 AND email='going@example.com'",[id]);
+   await pool.query("INSERT INTO community_event_waitlist(entry_id,event_id,guest_email,status) VALUES(gen_random_uuid(),$1,'going@example.com','queued')",[id]);
+   await pool.query("INSERT INTO community_event_guest_rsvps(event_id,email,name,state,confirmed_at) VALUES($1,'queued@example.com','合成訪客','going',now())",[id]);
+  }
+  const sent=new Map<string,string>();await processEventNotices(pool,async(to,_subject,body)=>{sent.set(to,body);},'https://example.org',id);
+  assert.equal(sent.size,3);
+  for(const [email,body] of sent){
+   assert.ok(body.endsWith(`/events/${id}`));
+   if(email===(changeStatus?'queued@example.com':'going@example.com'))privateNotice(body);
+   else safeNotice(body.slice(0,body.lastIndexOf('\n')));
+  }
+ }
+});
+test('insignificant seconds and location whitespace edits retain history without notices; a minute change notifies once',async()=>{
+ const id=await noticeFixture();
+ await editNotice(id,{ends_at:'2099-06-01T11:00:01Z'});
+ assert.equal((await pool.query('SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1',[id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1',[id])).rows[0].n,0);
+ await editNotice(id,{location:'私人會議室  A'});
+ await pool.query('DELETE FROM member_notifications WHERE action_resource_id=$1',[id]);
+ await pool.query('DELETE FROM community_event_participation_notices WHERE event_id=$1',[id]);
+ await editNotice(id,{location:'私人會議室 \t A'});
+ assert.equal((await pool.query('SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1',[id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1',[id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_changes WHERE event_id=$1',[id])).rows[0].n,3);
+ await editNotice(id,{ends_at:'2099-06-01T11:01:00Z'});
+ assert.equal((await pool.query("SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1 AND recipient_ref=$2",[id,actors[1].user_id])).rows[0].n,1);
+});
+test('ten alternating location edits coalesce unread and pending notices while preserving all audit versions',async()=>{
+ const id=await noticeFixture();let notificationId:string|undefined;
+ for(let i=0;i<10;i++){
+  await editNotice(id,{location:`私人會議室${i%2?'甲':'乙'}`});
+  const rows=(await pool.query("SELECT notification_id,body FROM member_notifications WHERE action_resource_id=$1 AND recipient_ref=$2 AND kind='event_schedule_changed'",[id,actors[1].user_id])).rows;
+  assert.equal(rows.length,1);if(notificationId)assert.equal(rows[0].notification_id,notificationId);notificationId=rows[0].notification_id;
+  assert.match(rows[0].body,new RegExp(`私人會議室${i%2?'甲':'乙'}`));
+  const pending=(await pool.query("SELECT guest_email,count(*)::int n FROM community_event_participation_notices WHERE event_id=$1 AND status='pending' GROUP BY guest_email",[id])).rows;
+  assert.equal(pending.length,3);assert.ok(pending.every(r=>r.n===1));
+ }
+ assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_changes WHERE event_id=$1',[id])).rows[0].n,10);
+ const {processEventNotices}=await import('../../modules/community/event-waitlist.js');let sent=0;
+ await Promise.all([1,2].map(()=>processEventNotices(pool,async()=>{sent++;},'https://example.org',id)));
+ assert.equal(sent,3);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1 AND status='skipped'",[id])).rows[0].n,27);
+});
+test('guest change delivery consumes one hourly and three daily slots even across fresh edit versions',async()=>{
+ const id=await noticeFixture();const {processEventNotices}=await import('../../modules/community/event-waitlist.js');let sent=0;
+ const deliver=()=>processEventNotices(pool,async()=>{sent++;},'https://example.org',id);
+ for(let i=0;i<10;i++){await editNotice(id,{location:`私人會議室${i%2?'甲':'乙'}`});await deliver();}
+ assert.equal(sent,3);
+ for(let slot=2;slot<=3;slot++){
+  await pool.query("UPDATE community_event_participation_notices SET attempted_at=attempted_at-interval '61 minutes' WHERE event_id=$1 AND attempted_at IS NOT NULL",[id]);
+  await deliver();assert.equal(sent,slot*3);
+  await editNotice(id,{location:`私人會議室第${slot}次`});
+ }
+ await pool.query("UPDATE community_event_participation_notices SET attempted_at=attempted_at-interval '61 minutes' WHERE event_id=$1 AND attempted_at IS NOT NULL",[id]);
+ await deliver();assert.equal(sent,9);
+ await pool.query("UPDATE community_event_participation_notices SET attempted_at=attempted_at-interval '1 day' WHERE event_id=$1 AND attempted_at IS NOT NULL",[id]);
+ await deliver();assert.equal(sent,12);
+});
+test('queued schedule delivery after cancellation contains no private details and cancellation still delivers',async()=>{
+ const id=await noticeFixture();const e=await editNotice(id,{ends_at:'2099-06-01T12:00:00Z'});
+ await cancelEvent(pool,cmd(actors[4],{},e.aggregate_version),id,false);
+ const {processEventNotices}=await import('../../modules/community/event-waitlist.js');const sent:string[]=[];
+ await processEventNotices(pool,async(_to,_subject,body)=>{sent.push(body);},'https://example.org',id);
+ assert.ok(sent.some(body=>body.includes('已取消')));
+ assert.ok(sent.some(body=>body.includes('活動時間或地點有更新')));
+ assert.ok(sent.every(body=>!body.includes('私人會議室')&&!body.includes('private-meeting')));
+});
+test('a superseding edit between claim and delivery skips the old claim and preserves the latest pending notice',async()=>{
+ const id=await noticeFixture();await editNotice(id,{location:'私人會議室舊版'});
+ const {processEventNotices}=await import('../../modules/community/event-waitlist.js');
+ let intercepted=false;
+ const interceptedPool={query:pool.query.bind(pool),connect:async()=>{
+  const client=await pool.connect(),query=client.query.bind(client);let claimed=false;
+  const wrapper={query:async(...args:any[])=>{
+   const result=await (query as any)(...args);
+   if(String(args[0]).includes("SET status='unknown',attempted_at")&&result.rowCount)claimed=true;
+   if(claimed&&args[0]==='COMMIT'&&!intercepted){intercepted=true;await editNotice(id,{location:'私人會議室最新版'});}
+   return result;
+  },release:()=>client.release()};return wrapper;
+ }} as unknown as Pool;
+ const sent:string[]=[];await processEventNotices(interceptedPool,async(_to,_subject,body)=>{sent.push(body);},'https://example.org',id);
+ assert.equal(intercepted,true);assert.equal(sent.length,0);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1 AND status='skipped'",[id])).rows[0].n,3);
+ await pool.query("UPDATE community_event_participation_notices SET attempted_at=attempted_at-interval '61 minutes' WHERE event_id=$1",[id]);
+ await processEventNotices(pool,async(_to,_subject,body)=>{sent.push(body);},'https://example.org',id);
+ assert.equal(sent.length,3);assert.ok(sent.every(body=>!body.includes('私人會議室舊版')));assert.ok(sent.some(body=>body.includes('私人會議室最新版')));
+});
+test('failed and unknown guest attempts consume change budget while announcements retain their own allowance',async()=>{
+ const id=await noticeFixture();await editNotice(id,{location:'私人會議室甲'});
+ const {processEventNotices}=await import('../../modules/community/event-waitlist.js');
+ const failed=await processEventNotices(pool,async()=>{throw Error('synthetic provider outcome');},'https://example.org',id);
+ assert.equal(failed.failed,3);
+ await pool.query("UPDATE community_event_participation_notices SET status='unknown' WHERE event_id=$1",[id]);
+ await editNotice(id,{location:'私人會議室乙'});
+ await processEventNotices(pool,async()=>assert.fail('unknown attempt cannot free the hourly slot'),'https://example.org',id);
+ const {announceEvent}=await import('../../modules/community/events.js');
+ for(let i=0;i<3;i++){
+  const e=(await pool.query('SELECT * FROM community_events WHERE event_id=$1',[id])).rows[0];
+  await announceEvent(pool,cmd(actors[4],{message:`合成通知${i}`},e.aggregate_version),id);
+ }
+ const sent:string[]=[];await processEventNotices(pool,async(_to,_subject,body)=>{sent.push(body);},'https://example.org',id);
+ assert.equal(sent.length,3);assert.ok(sent.every(body=>body.includes('合成通知')));
+});
+test('schema208 upgrade coalesces legacy unread changes and pending guest versions without deleting history',async()=>{
+ const {fileURLToPath}=await import('node:url');
+ const {readMigrationSources}=await import('../../packages/db/migration-files.mjs');
+ const {legacyMigrationProfile}=await import('../../packages/db/migration-plan.mjs');
+ const {runMigrationPlan}=await import('../../packages/db/migration-runner.mjs');
+ const upgradeSchema=`fp_notice_upgrade_${randomUUID().replaceAll('-','')}`;
+ const upgrade=new Pool({connectionString:url,options:`-c search_path=${upgradeSchema}`});
+ await admin.query(`CREATE SCHEMA ${upgradeSchema}`);
+ try{
+  const sources=readMigrationSources(fileURLToPath(new URL('../../migrations/',import.meta.url))).filter(s=>Number(s.name.slice(0,3))<=208);
+  await runMigrationPlan(upgrade,{sources,profile:legacyMigrationProfile({first:1,last:208,known_gaps:[22]})});await seedLocal(upgrade);
+  const id=randomUUID(),recipient=DEMO_USERS[1].user_id;
+  await upgrade.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state)
+   VALUES($1,$2,$3,'合成升級','合成升級','2099-01-01T10:00:00Z','2099-01-01T11:00:00Z','in_person','舊場地','published')`,[id,DEMO_COMMUNITY,DEMO_USERS[0].user_id]);
+  for(const version of [1,2])await upgrade.query(`INSERT INTO member_notifications(community_id,recipient_ref,kind,source_key,title,body,action_tab,action_resource_id)
+   VALUES($1,$2,'event_schedule_changed',$3,'活動已更新','舊場地','events',$4)`,[DEMO_COMMUNITY,recipient,`event/${id}/schedule/${version}`,id]);
+  await upgrade.query(`INSERT INTO member_notifications(community_id,recipient_ref,kind,source_key,title,body,action_tab,action_resource_id)
+   VALUES($1,$2,'event_cancelled',$3,'活動已取消','合成其他通知','events',$4)`,[DEMO_COMMUNITY,recipient,`event/${id}/cancel`,id]);
+  const {ensureGuestCapability}=await import('../../modules/community/event-waitlist.js');
+  const {transaction}=await import('../../packages/db/index.js');
+  await transaction(upgrade,q=>ensureGuestCapability(q,id,{email:'upgrade@example.com',name:'合成訪客'}));
+  for(const version of [1,2])await upgrade.query(`INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind)
+   VALUES(gen_random_uuid(),$1,'upgrade@example.com',$2,'event_schedule_changed')`,[id,version]);
+  await migrate(upgrade);
+  const counts=async()=> (await upgrade.query("SELECT count(*)::int total,count(*) FILTER(WHERE read_at IS NULL)::int unread FROM member_notifications WHERE action_resource_id=$1 AND kind='event_schedule_changed'",[id])).rows[0];
+  assert.deepEqual(await counts(),{total:2,unread:1});
+  assert.equal((await upgrade.query("SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1 AND kind='event_cancelled' AND read_at IS NULL",[id])).rows[0].n,1);
+  assert.equal((await upgrade.query("SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1 AND status='skipped'",[id])).rows[0].n,1);
+  assert.equal((await upgrade.query("SELECT event_version FROM community_event_participation_notices WHERE event_id=$1 AND status='pending'",[id])).rows[0].event_version,'2');
+  const {login}=await import('../../modules/identity-membership/service.js');const {DEMO_PASSWORD}=await import('../../packages/testing/seed.js');
+  const owner=(await login(upgrade,DEMO_USERS[0].email,DEMO_PASSWORD)).actor;
+  await upgrade.query("INSERT INTO community_event_rsvps(rsvp_id,event_id,user_id,state,confirmed_at) VALUES(gen_random_uuid(),$1,$2,'going',now())",[id,recipient]);
+  const e=(await upgrade.query('SELECT * FROM community_events WHERE event_id=$1',[id])).rows[0];
+  await updateEvent(upgrade,cmd(owner,{...fields(e),location:'升級後場地'},e.aggregate_version),id);
+  assert.deepEqual(await counts(),{total:2,unread:1});
+  assert.equal((await upgrade.query("SELECT body FROM member_notifications WHERE action_resource_id=$1 AND kind='event_schedule_changed' AND read_at IS NULL",[id])).rows[0].body.includes('升級後場地'),true);
+ }finally{await upgrade.end();await admin.query(`DROP SCHEMA ${upgradeSchema} CASCADE`);}
 });
