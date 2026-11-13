@@ -12,7 +12,8 @@
     "tests/e2e/guild-tools.spec.ts",
     "templates/guild-tool/**",
     "apps/portal-web/public/guild-tool/**",
-    "tests/e2e/guild-tools-arcade.spec.ts"
+    "tests/e2e/guild-tools-arcade.opt-in.ts",
+    "playwright.arcade.config.ts"
   ],
   "public_exports": [
     "modules/guild-tools/contract.ts",
