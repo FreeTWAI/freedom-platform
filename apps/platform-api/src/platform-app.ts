@@ -109,6 +109,7 @@ import { CollaborationGitHub } from '../../../modules/co-creation/github.js';
 import { checkSocialThumbnailHeaders, isSocialThumbnailUpload, registerMemberPromotion, registerPublicPromotion } from './routes/promotion.js';
 import { registerPublicSocialPosts, registerMemberPublicSocialPosts } from './routes/public-social-posts.js';
 import { registerPublicSocialPostPage } from './routes/public-social-post-page.js';
+import { registerMemberWorkSharing, registerPublicWorkPage, registerPublicWorks } from './routes/works-public.js';
 import { SOCIAL_NOTE_REQUEST_BYTES } from '../../../modules/community/social-posts.js';
 import { checkServiceCoverHeaders, isServiceCoverUpload, registerMemberServices, registerPublicMemberServices } from './routes/member-services.js';
 import { recordSearchOperation } from '../../../modules/community/participation-metrics.js';
@@ -452,7 +453,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   };
   app.use('/api/v1/me/content',personalContentEnabled);
   app.use('/api/v1/me/showcases',personalContentEnabled);
-  app.use('/api/v1/me/showcases/*',personalContentEnabled);
+  app.use('/api/v1/me/showcases/*',async(c,next)=>{
+    if(/^\/api\/v1\/me\/showcases\/[^/]+\/sharing$/.test(c.req.path))return next();
+    return personalContentEnabled(c,next);
+  });
   const squadOutcomesEnabled:MiddlewareHandler=async(c,next)=>{c.header('Cache-Control','no-store');requireCondition(runtime.squadOutcomesEnabled===true,404,'not_found','找不到這個頁面。');await next();};
   for(const path of ['/api/v1/squads/:id/outcomes','/api/v1/squad-outcomes/*','/api/v1/me/squad-outcomes','/api/v1/public/squad-outcomes/*'])app.use(path,squadOutcomesEnabled);
   const eventOutcomesEnabled:MiddlewareHandler=async(c,next)=>{c.header('Cache-Control','no-store');requireCondition(runtime.eventOutcomesEnabled===true,404,'not_found','找不到這個頁面。');await next();};
@@ -521,6 +525,8 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   registerPublicPromotion(app,pool,runtime,origin);
   registerPublicSocialPosts(app,pool,runtime);
   registerPublicSocialPostPage(app,pool,runtime,freedomEnv==='local'||Boolean(runtime.registrationCommunityId()));
+  registerPublicWorks(app,pool,runtime);
+  registerPublicWorkPage(app,pool,runtime,origin);
   registerPublicMemberServices(app,pool,runtime);
   app.route('/',createEventHighlightPublicRoutes(pool,runtime.publicOrigin,runtime));
   if(runtime.squadOutcomesEnabled===true)app.route('/api/v1/public',createPublicSquadOutcomeRoutes(pool));
@@ -584,6 +590,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1', createHostedOrderRoutes(pool, { discoveryInstalled: runtime.guildLaunchpadEnabled === true, admissionEnabled: runtime.hostedReservationsEnabled === true, cursors: runtime.tenantListCursors }));
   registerMemberSearchRoutes(app, featureContext);
   registerPersonalContentRoutes(app, featureContext);
+  registerMemberWorkSharing(app, pool);
   registerNotificationPreferenceRoutes(app, featureContext);
   registerMemberAccountRoutes(app, featureContext);
   registerWorkListRoutes(app, featureContext);

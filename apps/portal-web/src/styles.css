@@ -803,3 +803,12 @@ input,textarea,select{background:#0c1017;border-color:#404959;color:var(--ink)}i
 .email-settings .btn, .email-confirm .btn { width: fit-content; max-width: 100%; justify-self: start; align-self: start; min-height: 44px; border: 1px solid var(--line); }
 .email-settings .btn-secondary, .email-confirm .btn-secondary { background: var(--bg-elev); color: var(--ink); }
 .email-settings .btn:hover:not(:disabled), .email-settings .btn:focus-visible, .email-confirm .btn:hover:not(:disabled), .email-confirm .btn:focus-visible { border-color: var(--focus); }
+
+.work-public-sharing { border-top: 1px solid var(--line); padding-top: 0.7rem; margin-top: 0.35rem; gap: 0.45rem; min-width: 0; }
+.work-public-switch { align-items: center; cursor: pointer; min-width: 0; }
+.work-public-switch > span { display: grid; gap: 0.15rem; min-width: 0; }
+.work-public-explain { font-size: 0.82rem; font-weight: 400; }
+.work-public-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; min-width: 0; }
+.work-public-link { font-size: 0.85rem; overflow-wrap: anywhere; word-break: break-word; }
+.work-public-sharing .btn-small { width: fit-content; max-width: 100%; min-height: 44px; padding: 8px 14px; background: var(--bg-elev); color: var(--ink); border: 1px solid var(--line); }
+.work-public-sharing .btn-small:hover:not(:disabled), .work-public-sharing .btn-small:focus-visible { border-color: var(--focus); }

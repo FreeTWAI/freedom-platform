@@ -11,6 +11,8 @@ import { transaction } from '../../packages/db/index.js';
 import { fetchShareLink } from '../../modules/shares/adapters/link.js';
 import { repositoryFacts } from '../../modules/shares/adapters/repository.js';
 import { creditPromotionClick,promotionGo } from '../../modules/community/promotion.js';
+import { createShowcase } from '../../modules/opportunity-project-work/business.js';
+import { readPublicWork, setShowcaseSharing } from '../../modules/opportunity-project-work/public-sharing.js';
 const url=process.env.TEST_DATABASE_URL;
 assert.ok(url,'Set an isolated TEST_DATABASE_URL');
 const schema=`fp_shares_${randomUUID().replaceAll('-','')}`;
@@ -273,4 +275,54 @@ test('refresh resolves renamed facts, README and release; conditional reads and 
  assert.match((await pool.query('SELECT readme_html FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0].readme_html,/npm install renamed/);
  oversized=false;badSuffix=true;
  await assert.rejects(refreshRepository(pool,repoId,{fetcher:fixture},true),{code:'github_repository_moved'});
+});
+
+test('work shares keep non-opted-in works member-only and link opted-in works outward with once-per-click sharer credit', async () => {
+ const creator = actors[0], sharer = actors[1], visitor = actors[2];
+ const work = await createShowcase(pool, cmd(creator, {
+  title: '可公開分享的作品',
+  description: '作品簡介內容',
+  artifact_ref: 'artifact:work-share-test',
+  consent_to_share: true,
+ }, 'showcases'));
+
+ // Non-opted-in work can be shared inside the community, but refuses outward /go/ links.
+ const workShare = await createShare(pool, cmd(sharer, { kind: 'work', ref_id: work.showcase_id }, 'shares'), {});
+ assert.equal(workShare.created, true);
+ const storedShare = (await pool.query('SELECT kind, canonical_url, ref_id FROM shares WHERE share_id=$1', [workShare.share_id])).rows[0];
+ assert.equal(storedShare.kind, 'work');
+ assert.equal(storedShare.canonical_url, `/#showcase/${work.showcase_id}`);
+ await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id), { code: 'use_original_share' });
+
+ // Owner opts in for the exact work version.
+ const enabled = await setShowcaseSharing(pool, { ...cmd(creator, { enabled: true, work_version: String(work.aggregate_version) }, 'sharing'), expected: String(work.aggregate_version) }, work.showcase_id);
+ assert.equal(enabled.available, true);
+
+ // Now creating an outward /go/:code link succeeds and resolves to /works/:id?via=:code.
+ const links = await shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id);
+ assert.match(links.path, /^\/go\/[A-Za-z0-9_-]{10}$/);
+ const goHtml = await promotionGo(pool, links.code, undefined, 'http://127.0.0.1:4310');
+ assert.ok(goHtml && goHtml.includes(`/works/${work.showcase_id}?via=${links.code}`));
+
+ // Qualified click credits the sharer once; self-click and duplicate visitor click do not double-credit.
+ await creditPromotionClick(pool, { code: links.code, userAgent: 'Mozilla/5.0', sessionUserId: sharer.user_id, network: 'synthetic', now: new Date() });
+ for (let i = 0; i < 2; i++) {
+  await creditPromotionClick(pool, { code: links.code, userAgent: 'Mozilla/5.0', sessionUserId: visitor.user_id, network: 'synthetic-visitor', now: new Date() });
+ }
+ const credits = (await pool.query("SELECT basis, units, user_id FROM share_credit_events WHERE share_id=$1 AND basis='qualified_click_day'", [workShare.share_id])).rows;
+ assert.equal(credits.length, 1);
+ assert.equal(credits[0].units, 1);
+ assert.equal(credits[0].user_id, sharer.user_id);
+
+ // Public work view resolves sharer credit from ?via=code.
+ const publicView = await readPublicWork(pool, work.showcase_id, DEMO_COMMUNITY, links.code);
+ assert.ok(publicView);
+ assert.equal(publicView.sharer_name, (await pool.query('SELECT display_name FROM users WHERE user_id=$1', [sharer.user_id])).rows[0].display_name);
+
+ // Withdrawing public consent immediately disables /go/:code and /works/:id and refuses new /links.
+ await setShowcaseSharing(pool, { ...cmd(creator, { enabled: false }, 'sharing'), expected: enabled.version }, work.showcase_id);
+ const afterWithdrawGo = await promotionGo(pool, links.code, undefined, 'http://127.0.0.1:4310');
+ assert.equal(afterWithdrawGo, null);
+ assert.equal(await readPublicWork(pool, work.showcase_id, DEMO_COMMUNITY, links.code), null);
+ await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id), { code: 'use_original_share' });
 });

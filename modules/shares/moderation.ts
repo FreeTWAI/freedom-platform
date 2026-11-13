@@ -11,6 +11,7 @@ export async function listHeldShares(pool:Pool,admin:AdminActor) {
       WHEN s.kind='event' AND e.visibility IN ('open','referral') THEN '/events/'||e.event_id
       WHEN s.kind='service' THEN '/services/'||s.ref_id
       WHEN s.kind='post' AND EXISTS(SELECT 1 FROM community_social_publications p WHERE p.post_id=s.ref_id AND p.enabled) THEN '/posts/'||s.ref_id
+      WHEN s.kind='work' AND EXISTS(SELECT 1 FROM work_public_publications w JOIN showcases sc USING(showcase_id) WHERE w.showcase_id=s.ref_id AND w.enabled AND w.approved_work_version=sc.aggregate_version AND sc.status='published' AND sc.visibility='community') THEN '/works/'||s.ref_id
       ELSE NULL END AS public_url,
     reports.open_reports,reports.reasons,
     -- The schema retains report times, not a separate state-transition timestamp.
