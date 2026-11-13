@@ -1,59 +1,13 @@
 import {eventAppPath} from './navigation.js';
 import {randomUUID} from 'node:crypto';
+import type {Pool} from 'pg';
 import {hashPassword} from '../../modules/identity-membership/service.js';
-import {test as base,expect,type Page,type Locator} from './fixtures.js';
-import {Pool} from 'pg';
-import {serve} from '@hono/node-server';
-import {serveStatic} from '@hono/node-server/serve-static';
-import {LOCAL_DATABASE_URL} from '../../packages/db/index.js';
-import {migrate} from '../../scripts/database.js';
-import {seedLocal,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
-import {e2eSchema,resetE2eAuthState} from '../../packages/testing/e2e-auth-isolation.js';
-import {createApp} from '../../apps/platform-api/src/app.js';
-import {TENANT_CURSOR_TEST_KEY} from '../runtime/tenant-cursor-fixture.js';
+import {expect,type Page,type Locator} from './fixtures.js';
+import {isolatedSchemaTest} from './isolated-schema.js';
 import {navigate,signOut} from './navigation.js';
 
-// Authoring only: execute through the official isolated local/CI E2E harness.
-// Never point this journey or its synthetic fixture at a production database.
-// Publication retains immutable credit facts. Own the entire schema so those
-// identities never leak into another file's single-community guild catalog.
-const test=base.extend({
-  e2eAuthPool:[async({},use,workerInfo)=>{
-    if(workerInfo.config.workers!==1)throw Error('The event fixture requires one worker.');
-    const schema=e2eSchema(`fp_e2e_${randomUUID().replaceAll('-','')}`);
-    const connectionString=process.env.TEST_DATABASE_URL??LOCAL_DATABASE_URL;
-    const admin=new Pool({connectionString,max:1});
-    const pool=new Pool({connectionString,options:`-c search_path=${schema}`,application_name:schema});
-    try{
-      await admin.query(`CREATE SCHEMA ${schema}`);
-      await migrate(pool);await seedLocal(pool);
-      await use(pool);
-    }finally{
-      await pool.end();
-      try{await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);}finally{await admin.end();}
-    }
-  },{scope:'worker'}],
-  isolateAuth:async({e2eAuthPool},use)=>{
-    const schema=e2eSchema((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema);
-    await resetE2eAuthState(e2eAuthPool,schema);await use();
-  },
-  baseURL:async({e2eAuthPool},use)=>{
-    let app:ReturnType<typeof createApp>|undefined;
-    const server=serve({hostname:'127.0.0.1',port:0,fetch:request=>app?app.fetch(request):new Response(null,{status:503})});
-    try{
-      if(!server.listening)await new Promise<void>((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
-      const address=server.address();if(!address||typeof address==='string')throw Error('Event fixture listener unavailable.');
-      const origin=`http://127.0.0.1:${address.port}`;
-      app=createApp(e2eAuthPool,origin,'local',{registrationCommunityId:DEMO_COMMUNITY,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});
-      app.use('/*',serveStatic({root:'./apps/portal-web/dist'}));
-      app.get('*',serveStatic({path:'./apps/portal-web/dist/index.html'}));
-      await use(origin);
-    }finally{
-      if('closeAllConnections' in server)server.closeAllConnections();
-      await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
-    }
-  },
-});
+// Publication retains immutable credit facts; this journey owns its schema.
+const test=isolatedSchemaTest;
 test.use({timezoneId:'Asia/Taipei'});
 const eventTest=test.extend<{eventFixture:{user:string;email:string;reviewerEmail:string}}>({
   eventFixture:async({page,e2eAuthPool},use,info)=>{

@@ -213,6 +213,17 @@ test('compact visitor entry leaves breathing room below the email field on a sho
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
+test('compact visitor entry keeps the email field above 624px even when recent events load',async({page})=>{
+  const future=new Date(Date.now()+86_400_000).toISOString();
+  await page.route('**/api/v1/public/events',route=>route.fulfill({json:{items:[{event_id:'00000000-0000-4000-8000-000000000091',title:'合成近期交流會',starts_at:future,state:'published'}]}}));
+  await page.setViewportSize({width:320,height:640});await page.goto('/');
+  const events=page.getByRole('region',{name:'近期活動',exact:true});await expect(events).toBeVisible();
+  const email=page.getByLabel('電子郵件',{exact:true});await expect(email).toBeVisible();
+  const box=(await email.boundingBox())!;expect(box.y+box.height).toBeLessThanOrEqual(624);
+  expect((await email.boundingBox())!.y).toBeLessThan((await events.boundingBox())!.y);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 for (const width of [390, 1280]) test(`visitor resource preview reads only three public books on demand at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 844 });
   let previewReads = 0, fullCatalogReads = 0;

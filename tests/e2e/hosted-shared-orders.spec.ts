@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { canonicalHash } from '../../apps/portal-web/src/portal-route.js';
 import { test, expect, type Page } from './fixtures.js';
 import { navigate, signOut } from './navigation.js';
 import { quickJoin } from './quick-join.js';
@@ -19,7 +20,7 @@ async function register(page: Page, nickname: string) {
   await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
   await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
   await quickJoin(page, guild);
-  await expect(page.getByRole('heading', {name: '會員首頁', level: 1})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', level: 1})).toBeVisible();
   return email;
 }
 async function login(page: Page, email: string) {
@@ -50,7 +51,7 @@ async function createStore(page:Page,name:string) {
   await flow.getByRole('button',{name:'產生啟動方案',exact:true}).click();
   await flow.getByRole('button',{name:'確認啟動',exact:true}).click();
   await flow.getByRole('button',{name:'設定我的商店',exact:true}).click();
-  await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
   const hash=new URL(page.url()).hash,slug='shared-'+randomUUID().slice(0,8);
   const setup=page.getByRole('form',{name:'建立商店',exact:true});
   await setup.getByLabel('商店名稱',{exact:true}).fill(name);await setup.getByLabel('商店網址',{exact:true}).fill(slug);
@@ -246,7 +247,7 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
     await expect(customer.getByRole('region', {name: '我的預留'})).toContainText('預留中');
     const orderId = await customer.getByLabel('預留編號', {exact: true}).inputValue();
     await a.getByRole('link', {name: '供貨訂單', exact: true}).click();
-    await expect(a).toHaveURL(new RegExp('#' + supplierStore.hash + '/supply-orders$'));
+    await expect(a).toHaveURL(new RegExp(canonicalHash('#' + supplierStore.hash + '/supply-orders') + '$'));
     const orders = a.locator('.hosted-store');
     await expect(orders).toContainText('零售 B'); await expect(orders).toContainText(title + ' × 3');
     await expect(orders).not.toContainText(otherTitle); await expect(orders).not.toContainText(buyer.email);
@@ -266,7 +267,7 @@ test('supplier-only A accepts B, explicitly opens reservations, reads only its o
       }
     }
     await a.getByRole('link', {name: '返回供貨商品庫', exact: true}).click();
-    await expect(a).toHaveURL(new RegExp('#' + supplierStore.hash + '/supply$'));
+    await expect(a).toHaveURL(new RegExp(canonicalHash('#' + supplierStore.hash + '/supply') + '$'));
     await expect(a.getByRole('button', {name: '新增供貨商品', exact: true})).toBeVisible();
     await a.getByRole('navigation', {name: '供貨工作區'}).getByRole('button', {name: '預留與訂單', exact: true}).click();
     await a.getByRole('button', {name: '停止接受新預留', exact: true}).click();

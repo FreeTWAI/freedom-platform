@@ -2,7 +2,9 @@ import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import sharp from 'sharp';
-import {test,expect,type Page} from './fixtures.js';
+import {expect,type Page} from './fixtures.js';
+// Publication retains immutable credit facts in the synthetic community; own the schema.
+import {isolatedSchemaTest as test} from './isolated-schema.js';
 import {navigate,signOut,openEventManagement,openEventOptions,seedLegacyEventDraft,clearMemberAgentEvents} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_USERS} from '../../packages/testing/seed.js';
 
