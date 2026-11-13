@@ -1,5 +1,8 @@
 import {test,before,after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
+import {agentOperations} from '../../apps/platform-api/src/agent-allowlist.js';
+import {agentBodySchemas,agentJsonSchema} from '../../apps/platform-api/src/agent-schemas.js';
+import {z} from 'zod';
 import {randomUUID,randomBytes} from 'node:crypto';
 import {Pool} from 'pg';
 import {createPool} from '../../packages/db/index.js';
@@ -22,7 +25,12 @@ async function req(path:string,opts:{session?:Session;token?:string;body?:unknow
  const headers:Record<string,string>={...(session?{Origin:origin,Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{}),...(token?{Authorization:'Bearer '+token}:{}),...opts.headers};
  if(body!==undefined){headers['Content-Type']='application/json';headers['Idempotency-Key']=key;}
  const response=await app.request(origin+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
- const data=await response.json() as any;return {status:response.status,data,response};
+ const data=await response.json() as any;
+ if(token&&response.status>=200&&response.status<202){
+  const op=agentOperations.find(op=>op.granted!==false&&op.method===method&&new RegExp('^'+op.route.replace(/:[a-z_]+/g,'[^/]+')+'$').test(path.split('?')[0]));
+  if(op)assert.ok(z.fromJSONSchema(agentJsonSchema(agentBodySchemas[op.id])).safeParse(body??{}).success,`contract rejected runtime fixture for ${op.id}`);
+ }
+ return {status:response.status,data,response};
 }
 async function ready(index=0):Promise<Session>{
  const r=await req('/api/v1/auth/login',{body:{email:DEMO_USERS[index].email,password:DEMO_PASSWORD},headers:{Origin:origin}});assert.equal(r.status,200);
@@ -172,7 +180,7 @@ test('repository sharing uses existing import with hash-only credentials and mem
 test('public guide and generated contract describe exactly the granted operations without credentials',async()=>{
  const {agentOperations}=await import('../../apps/platform-api/src/agent-allowlist.js');
  const response=await app.request(origin+'/agent.md'),guide=await response.text();assert.equal(response.status,200);assert.match(response.headers.get('content-type')!,/text\/markdown/);
- assert.ok(guide.includes('Idempotency-Key'));assert.ok(!/fw_agent_[A-Za-z0-9_-]{43}/.test(guide));
+ assert.ok(guide.includes('Idempotency-Key'));assert.ok(guide.includes(origin+'/api/v1/mcp'));assert.ok(guide.includes('tools/list'));assert.ok(guide.includes('2025-11-25'));assert.ok(!/fw_agent_[A-Za-z0-9_-]{43}/.test(guide));
  assert.ok((await (await app.request(origin+'/llms.txt')).text()).includes('/agent.md'));
  const contract=await (await app.request(origin+'/agent/openapi.json')).json() as any;
  assert.deepEqual(Object.values(contract.paths).flatMap((p:any)=>Object.values(p).map((op:any)=>op.operationId)).sort(),agentOperations.filter(op=>op.granted!==false).map(op=>op.id).sort());
@@ -180,17 +188,25 @@ test('public guide and generated contract describe exactly the granted operation
 });
 
 test('contract --check detects a changed allowlist and a changed generated artifact',async()=>{
- const {mkdtempSync,mkdirSync,copyFileSync,appendFileSync,readFileSync,writeFileSync,rmSync}=await import('node:fs');
+ const {mkdtempSync,mkdirSync,copyFileSync,appendFileSync,readFileSync,writeFileSync,rmSync,symlinkSync,readdirSync}=await import('node:fs');
  const {tmpdir}=await import('node:os');const {join,dirname}=await import('node:path');const {spawnSync}=await import('node:child_process');
  const dir=mkdtempSync(join(tmpdir(),'agent-contract-test-'));
  try{
   const files=['scripts/build-agent-contract.mjs','apps/platform-api/src/agent-allowlist.ts','contracts/agent/v1/openapi.json','apps/portal-web/src/modules/agent-operations.ts','modules/client-connections/agent-contract.ts'];
   for(const file of files){mkdirSync(dirname(join(dir,file)),{recursive:true});copyFileSync(file,join(dir,file));}
   writeFileSync(join(dir,'package.json'),'{"type":"module"}');
+  symlinkSync(process.cwd()+'/node_modules',join(dir,'node_modules'));
+  symlinkSync(process.cwd()+'/packages',join(dir,'packages'));
+  for(const name of readdirSync('modules'))if(name!=='client-connections')symlinkSync(process.cwd()+'/modules/'+name,join(dir,'modules',name));
+  for(const name of readdirSync('modules/client-connections'))if(name!=='agent-contract.ts')symlinkSync(process.cwd()+'/modules/client-connections/'+name,join(dir,'modules/client-connections',name));
+  copyFileSync('apps/platform-api/src/agent-schemas.ts',join(dir,'apps/platform-api/src/agent-schemas.ts'));
   const check=()=>spawnSync(process.execPath,['scripts/build-agent-contract.mjs','--check'],{cwd:dir,encoding:'utf8'});
   assert.equal(check().status,0);
   appendFileSync(join(dir,files[2]),' ');assert.equal(check().status,1);
   copyFileSync(files[2],join(dir,files[2]));
+  const schemaFile=join(dir,'apps/platform-api/src/agent-schemas.ts');
+  writeFileSync(schemaFile,readFileSync(schemaFile,'utf8').replace('max(100)','max(99)'));assert.equal(check().status,1);
+  copyFileSync('apps/platform-api/src/agent-schemas.ts',schemaFile);
   const table=join(dir,files[1]);writeFileSync(table,readFileSync(table,'utf8').replace("title:'查看活動'","title:'活動列表'"));assert.equal(check().status,1);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

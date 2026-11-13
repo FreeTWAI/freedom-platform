@@ -1,3 +1,4 @@
+import {agentMcp} from './agent-mcp.js';
 import {createEventPageRoutes} from './routes/event-pages.js';
 import {createGuildToolRoutes,createPublicGuildToolRoutes} from './routes/guild-tools.js';
 import {frameOrigins} from '../../../modules/guild-tools/service.js';
@@ -125,6 +126,7 @@ import { registerPublicEventMediaRoutes } from './features/public-event-media.js
 import { registerMemberCommerceRoutes } from './features/commerce.js';
 
 const SLOW_REQUEST_THRESHOLD_MS=1000;
+const DEFAULT_API_JSON_BYTES=32768;
 const JSON_UTF8_DECODER=new TextDecoder('utf-8',{fatal:true});
 // Unicode mode treats a valid UTF-16 pair as one code point, outside this range.
 const UNPAIRED_JSON_SURROGATE=/[\uD800-\uDFFF]/u;
@@ -233,6 +235,11 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
     console.error('request_failed', err instanceof Error ? err.name : 'unknown');
     return c.json({type:'about:blank',title:'Internal error',status:500,code:'internal_error',detail:'操作未完成，請重新整理並查看目前狀態。'},500);
   });
+  app.all('/api/v1/mcp',agentMcp(pool,{origin,origins:allowedOrigins,hosts:allowedHosts,runtime,bodyLimit:DEFAULT_API_JSON_BYTES,
+    responseHeaders:path=>platformResponseHeaders(path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true),
+    registered:op=>app.routes.some(route=>route.method===op.method&&route.path===op.route),
+    dispatch:async request=>app.request(request),
+  }));
   app.use('*',agentBoundary(pool,path=>platformResponseHeaders(path,brokerFormOrigin,paymentFormOrigin,runtime.shortVideosEnabled===true)));
   // Outermost: Hono resolves downstream onError responses before next() returns.
   app.use('*',async(c,next)=>{
@@ -342,7 +349,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
           c.req.method==='POST'&&c.req.path==='/api/v1/social-posts/notes'?SOCIAL_NOTE_REQUEST_BYTES:
           c.req.method==='POST'&&c.req.path==='/api/v1/commerce/preview'?6*24000+14:
           storePoliciesInstalled(runtime)&&isSellerPoliciesSave(c.req.method,c.req.path)?524288:
-          storeVariantsInstalled(runtime)&&isProductGroupReplace(c.req.method,c.req.path)?131072:32768;
+          storeVariantsInstalled(runtime)&&isProductGroupReplace(c.req.method,c.req.path)?131072:DEFAULT_API_JSON_BYTES;
         requireCondition(Number(c.req.header('Content-Length')??0)<=jsonLimit,413,'body_too_large','內容過長。');
         if(c.req.raw.body) {
           let size=0;

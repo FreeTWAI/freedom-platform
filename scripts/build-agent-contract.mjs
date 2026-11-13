@@ -2,19 +2,23 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {agentOperations} from '../apps/platform-api/src/agent-allowlist.ts';
+import {tsImport} from 'tsx/esm/api';
+const {agentBodySchemas,agentPathSchemas,agentQuerySchemas,agentInputSchema,agentJsonSchema}=await tsImport('../apps/platform-api/src/agent-schemas.ts',import.meta.url);
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const active=agentOperations.filter(op=>op.granted!==false);
 const paths={};
 for(const op of active){
  const path=op.route.replace('/api/v1','').replace(/:([a-z_]+)/g,'{$1}');
- const parameters=[...path.matchAll(/\{([^}]+)\}/g)].map(m=>({name:m[1],in:'path',required:true,schema:{type:'string',format:'uuid'}}));
+ const parameters=[...path.matchAll(/\{([^}]+)\}/g)].map(m=>({name:m[1],in:'path',required:true,schema:agentJsonSchema(agentPathSchemas[m[1]])}));
  if(op.method!=='GET')parameters.push({name:'Idempotency-Key',in:'header',required:true,schema:{type:'string',pattern:'^[A-Za-z0-9_-]{8,128}$'}});
  if(op.ifMatch)parameters.push({name:'If-Match',in:'header',required:true,description:'最新活動 aggregate_version，含雙引號。',schema:{type:'string'}});
- if(op.id==='agent.events')parameters.push({name:'after',in:'query',required:false,description:'上次回應的 next_cursor；省略從本功能啟用後的紀錄開始。',schema:{type:'string'}});
+ if(agentQuerySchemas[op.id])for(const [name,schema] of Object.entries(agentQuerySchemas[op.id].shape))parameters.push({name,in:'query',required:false,schema:agentJsonSchema(schema)});
  paths[path]??={};paths[path][op.method.toLowerCase()]={operationId:op.id,summary:op.title,'x-required-scope':op.scope,
  ...(op.integration?{'x-integration-pending':true}:{}),...(op.featureFlag?{'x-feature-flag':op.featureFlag}:{}),
  security:[{AgentBearer:[]}],parameters,
- ...(op.example?{requestBody:{required:true,content:{'application/json':{schema:{type:'object'},example:op.example}}}}:{}),
+ 'x-input-schema':agentJsonSchema(agentInputSchema(op)),
+ 'x-body-schema':agentJsonSchema(agentBodySchemas[op.id]),
+ ...(op.method!=='GET'?{requestBody:{required:true,content:{'application/json':{schema:agentJsonSchema(agentBodySchemas[op.id]),...(op.example?{example:op.example}:{})}}}}:{}),
  responses:{'200':{description:'操作成功；欄位沿用原會員 API。'},...(op.publicItem?{'201':{description:'已建立，實際發布狀態依回應 state。'},'202':{description:'pending_member：請會員確認後以相同內容和 key 重試。'}}:{}),'401':{description:'金鑰到期、撤銷或停用。'},'403':{description:'權限不足或功能未開放。'},'409':{description:'內容或狀態衝突，停止並詢問會員。'},'429':{description:'已達限制，停止操作。'}}};
 }
 const contract={'x-denied-operations':agentOperations.filter(op=>op.granted===false).map(({method,route,title,featureFlag})=>({method,route,title,...(featureFlag?{featureFlag}:{}),agent_scope:null})),openapi:'3.1.1',info:{title:'自由工坊 Agent API',version:'1.0.0',description:'由 agent-allowlist.ts 產生；未列入的操作一律拒絕。'},servers:[{url:'https://freetwai.com/api/v1'}],components:{securitySchemes:{AgentBearer:{type:'http',scheme:'bearer',bearerFormat:'fw_agent_opaque'}}},paths};

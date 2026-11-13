@@ -45,7 +45,11 @@
     "apps/portal-web/src/modules/AgentTokens.tsx",
     "apps/portal-web/src/modules/AgentTokens.css",
     "tests/e2e/agent-door.spec.ts",
-    "tests/runtime/security-review-agent.test.ts"
+    "tests/runtime/security-review-agent.test.ts",
+    "apps/platform-api/src/agent-schemas.ts",
+    "tests/runtime/agent-contract.test.ts",
+    "apps/platform-api/src/agent-mcp.ts",
+    "tests/runtime/agent-mcp.test.ts"
   ],
   "public_exports": [
     "modules/client-connections/service.ts"
@@ -100,6 +104,19 @@
         "client-connections.requests.read"
       ],
       "auth_profile": "client-read-bearer"
+    },
+    {
+      "surface_id": "client-connections.agent-mcp",
+      "kind": "http",
+      "entry": "apps/platform-api/src/agent-mcp.ts",
+      "operations": [
+        "initialize",
+        "notifications/initialized",
+        "ping",
+        "tools/list",
+        "tools/call"
+      ],
+      "auth_profile": "member-agent-bearer"
     }
   ]
 }
