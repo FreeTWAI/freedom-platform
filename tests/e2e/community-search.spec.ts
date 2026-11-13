@@ -43,13 +43,12 @@ const results = (page: Page) => page.getByRole('region', { name: '社群內容�
 
 test('SEARCH-001 actual anonymous and member HTTP search keep public and same-community audiences separate', async ({ browser, page, baseURL, e2eAuthPool }) => {
   const token = `搜尋範圍${randomUUID().slice(0, 8)}`;
-  const foreignCommunity = randomUUID();
+  const foreignCommunity = randomUUID(), event = randomUUID();
   let logged: Awaited<ReturnType<typeof signedIn>> | undefined;
   try {
     const member = await person(e2eAuthPool);
     await e2eAuthPool.query('INSERT INTO communities VALUES($1,$2)', [foreignCommunity, '搜尋外部合成社群']);
     const foreign = await person(e2eAuthPool, foreignCommunity);
-    const event = randomUUID();
     await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
       VALUES($1,$2,$3,$4,'公開摘要',now()+interval '1 day',now()+interval '2 days','online','私人位置','published','open','other')`,
     [event, DEMO_COMMUNITY, member.id, `${token}公開活動`]);
@@ -77,6 +76,8 @@ test('SEARCH-001 actual anonymous and member HTTP search keep public and same-co
       const cleanup = await e2eAuthPool.connect();
       try {
         await cleanup.query('BEGIN');
+        // This public fixture must not alter later visitor-page layout checks.
+        await cleanup.query('DELETE FROM community_events WHERE event_id=$1', [event]);
         await cleanup.query('DELETE FROM community_social_posts WHERE community_id=$1', [foreignCommunity]);
         await cleanup.query('DELETE FROM users WHERE community_id=$1', [foreignCommunity]);
         await cleanup.query('DELETE FROM communities WHERE community_id=$1', [foreignCommunity]);

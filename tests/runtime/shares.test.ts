@@ -11,7 +11,7 @@ import { transaction } from '../../packages/db/index.js';
 import { fetchShareLink } from '../../modules/shares/adapters/link.js';
 import { repositoryFacts } from '../../modules/shares/adapters/repository.js';
 import { creditPromotionClick,promotionGo } from '../../modules/community/promotion.js';
-import { createShowcase } from '../../modules/opportunity-project-work/business.js';
+import { createShowcase, withdrawOwnShowcase, updateOwnShowcase, publishOwnShowcase } from '../../modules/opportunity-project-work/business.js';
 import { readPublicWork, setShowcaseSharing } from '../../modules/opportunity-project-work/public-sharing.js';
 const url=process.env.TEST_DATABASE_URL;
 assert.ok(url,'Set an isolated TEST_DATABASE_URL');
@@ -325,4 +325,34 @@ test('work shares keep non-opted-in works member-only and link opted-in works ou
  assert.equal(afterWithdrawGo, null);
  assert.equal(await readPublicWork(pool, work.showcase_id, DEMO_COMMUNITY, links.code), null);
  await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id), { code: 'use_original_share' });
+});
+
+
+test('work previews never disclose an internal share snapshot after editing and approving a new version', async () => {
+ const creator = actors[0], sharer = actors[1];
+ const work = await createShowcase(pool, cmd(creator, {
+  title: 'Confidential customer X', description: 'Internal-only summary',
+  public_url: 'https://example.com/internal-version', consent_to_share: true,
+ }, 'showcases'));
+ const share = await createShare(pool, cmd(sharer, {kind:'work', ref_id:work.showcase_id}, 'shares'), {});
+ const withdrawn = await withdrawOwnShowcase(pool, {...cmd(creator, {}, 'withdraw'), expected:String(work.aggregate_version)}, work.showcase_id);
+ const edited = await updateOwnShowcase(pool, {...cmd(creator, {
+  title:'Approved public work', description:'Approved public summary', public_url:'https://example.com/approved-version',
+ }, 'edit'), expected:String(withdrawn.aggregate_version)}, work.showcase_id);
+ const published = await publishOwnShowcase(pool, {...cmd(creator, {consent_to_share:true}, 'publish'), expected:String(edited.aggregate_version)}, work.showcase_id);
+ await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), share.share_id), {code:'use_original_share'});
+ const approved = await setShowcaseSharing(pool, {...cmd(creator, {enabled:true, work_version:String(published.aggregate_version)}, 'sharing'), expected:String(published.aggregate_version)}, work.showcase_id);
+ const link = await shareLink(pool, cmd(sharer, {}, 'links'), share.share_id);
+ const projection = await readPublicWork(pool, work.showcase_id, DEMO_COMMUNITY);
+ assert.ok(projection);
+ const html = await promotionGo(pool, link.code, undefined, 'https://example.com');
+ assert.ok(html);
+ for (const secret of ['Confidential customer X', 'Internal-only summary', '/internal-version']) assert.equal(html.includes(secret), false, secret);
+ assert.ok(html.includes(projection.title));
+ assert.ok(html.includes(projection.description));
+ assert.match(html, /property="og:title" content="Approved public work/);
+ assert.match(html, /property="og:description" content="Approved public summary/);
+ assert.equal((await pool.query('SELECT title FROM shares WHERE share_id=$1', [share.share_id])).rows[0].title, 'Confidential customer X');
+ await setShowcaseSharing(pool, {...cmd(creator, {enabled:false}, 'sharing'), expected:approved.version}, work.showcase_id);
+ assert.equal(await promotionGo(pool, link.code, undefined, 'https://example.com'), null);
 });
