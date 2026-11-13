@@ -13,6 +13,7 @@ import { shareAdapter } from './adapters/registry.js';
 import { existingTitle } from './adapters/existing.js';
 import { endorseShare, reverseCredit, creditEventRegistrations } from './credit.js';
 import { PROMOTION_LINK_CAP, taipeiDate, taipeiDayStart } from '../community/promotion.js';
+import { readPublicWork } from '../opportunity-project-work/public-sharing.js';
 import type { AdapterContext, PreparedShare, ShareRow } from './types.js';
 export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional(),source:z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),guild_key:z.string().regex(/^guild_[a-zA-Z0-9_]+$/),ref:z.string().max(200).optional()}).strict().optional()}).strict();
 async function lockEventSource(q:PoolClient,actor:Actor,id:string){
@@ -131,8 +132,10 @@ export async function reportShare(pool:Pool,input:Command,id:string) {
 export async function shareLink(pool:Pool,input:Command,id:string) {
   z.object({}).strict().parse(input.body);
   return command(pool,input,q=>visibleShare(q,input.actor,id,true),async q=>{
-    // Restricted domain objects use their original sharing surface, not a public share projection.
-    const s=await visibleShare(q,input.actor,id);requireCondition(['repository','link'].includes(s.kind),422,'use_original_share','請使用原頁面的分享。');
+    // Restricted domain objects use their original sharing surface unless the creator opted into public work reading.
+    const s=await visibleShare(q,input.actor,id);
+    const workPublic=s.kind==='work'&&s.ref_id?Boolean(await readPublicWork(q,s.ref_id,input.actor.community_id)):false;
+    requireCondition(['repository','link'].includes(s.kind)||workPublic,422,'use_original_share','請使用原頁面的分享。');
     // Share links consume the same member/day budget as the original promotion route.
     const now=new Date();
     await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`promo-link:${input.actor.user_id}:${taipeiDate(now)}`]);

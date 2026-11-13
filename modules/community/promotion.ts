@@ -15,7 +15,13 @@ import { getEventShareCode } from './events.js';
 import { highlightShareImage, readHighlightEvent } from './event-highlights.js';
 import { avatarUrl } from '../identity-membership/avatars.js';
 import { readPublicCards } from '../identity-membership/member-sharing.js';
+import { PUBLIC_WORK_VISIBLE } from '../opportunity-project-work/public-sharing.js';
 import type { Actor } from '../identity-membership/service.js';
+
+const SHARE_TARGET_JOIN = `LEFT JOIN showcases s ON sh.kind='work' AND s.showcase_id=sh.ref_id AND s.community_id=sh.community_id
+  LEFT JOIN users u ON sh.kind='work' AND u.user_id=s.owner_ref
+  LEFT JOIN work_public_publications publication ON sh.kind='work' AND publication.showcase_id=sh.ref_id`;
+const SHARE_TARGET_VISIBLE = `(sh.kind IN ('repository','link') OR (sh.kind='work' AND ${PUBLIC_WORK_VISIBLE}))`;
 
 // Click totals are a display board, like the GitHub author boards.
 // They are never written into XP, contributions, rewards or work records.
@@ -133,7 +139,7 @@ async function memberCardTarget(pool: Pool | PoolClient, actor: Actor, target: s
 async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: PromotionKind, target: string) {
   if (kind === 'share') {
     requireCondition(z.uuid().safeParse(target).success,422,'validation_failed','分享目標不正確。');
-    const row=(await pool.query("SELECT title FROM shares WHERE share_id=$1 AND community_id=$2 AND state='published' AND kind IN ('repository','link')",[target,actor.community_id])).rows[0];
+    const row=(await pool.query(`SELECT sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[target,actor.community_id])).rows[0];
     requireCondition(row,404,'not_found','找不到分享。');return {title:row.title as string,key:target};
   }
   if (kind === 'platform') {
@@ -341,7 +347,7 @@ function absoluteUrl(origin: string, url: string) {
 
 async function shareable(pool: Pool, link: LinkRow) {
   if (link.revoked_at || !link.owner_active) return false;
-  if (link.kind === 'share') return Boolean((await pool.query("SELECT 1 FROM shares WHERE share_id=$1 AND community_id=$2 AND state='published' AND kind IN ('repository','link') AND (first_sharer_user_id IS NULL OR NOT is_verification_test_account(first_sharer_user_id))",[link.target_key,link.community_id])).rowCount);
+  if (link.kind === 'share') return Boolean((await pool.query(`SELECT 1 FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE} AND (sh.first_sharer_user_id IS NULL OR NOT is_verification_test_account(sh.first_sharer_user_id))`,[link.target_key,link.community_id])).rowCount);
   if (link.kind === 'platform') return Boolean(platformTarget(link.target_key));
   if (link.kind === 'skill_book') {
     if (link.target_key.startsWith('book:')) return communityCatalog.skill_books.some(item => item.id === link.target_key.slice(5));
@@ -369,8 +375,10 @@ type OpenTarget = { href: string; title: string; description: string; image?: { 
 
 async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date): Promise<OpenTarget | null> {
   if(link.kind==='share'){
-    const row=(await pool.query("SELECT title FROM shares WHERE share_id=$1 AND community_id=$2 AND state='published' AND kind IN ('repository','link')",[link.target_key,link.community_id])).rows[0];
-    return row?{navigation:'internal',href:`/s/${link.target_key}?via=${link.code}`,title:row.title,description:'自由工坊分享'}:null;
+    const row=(await pool.query(`SELECT sh.kind, sh.ref_id, sh.title, s.description FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[link.target_key,link.community_id])).rows[0];
+    if(!row)return null;
+    if(row.kind==='work')return {navigation:'internal',href:`/works/${row.ref_id}?via=${link.code}`,title:row.title,description:row.description??'自由工坊公開作品'};
+    return {navigation:'internal',href:`/s/${link.target_key}?via=${link.code}`,title:row.title,description:'自由工坊分享'};
   }
   if (link.kind === 'member_card') {
     if (link.revoked_at || !link.owner_active) return null;

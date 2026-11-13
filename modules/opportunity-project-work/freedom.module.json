@@ -85,7 +85,12 @@
     "tests/runtime/task-board-loading.test.ts",
     "tests/e2e/task-board-loading.spec.ts",
     "apps/portal-web/src/modules/BenefitObservations.tsx",
-    "apps/portal-web/src/modules/WorkSharingEntry.tsx"
+    "apps/portal-web/src/modules/WorkSharingEntry.tsx",
+    "apps/portal-web/src/modules/WorkPublicSharing.tsx",
+    "apps/platform-api/src/routes/works-public.ts",
+    "migrations/210_work_public_sharing.sql",
+    "tests/runtime/works-public.test.ts",
+    "tests/e2e/works-public.spec.ts"
   ],
   "owner_role": "foundation",
   "public_exports": [
@@ -93,8 +98,11 @@
     "modules/opportunity-project-work/private-work.ts",
     "modules/opportunity-project-work/private-commands.ts",
     "modules/opportunity-project-work/contribution-roles.ts",
+    "modules/opportunity-project-work/public-sharing.ts",
+    "modules/opportunity-project-work/public-work-page.ts",
     "apps/portal-web/src/modules/ContributionOutcomes.tsx",
-    "apps/portal-web/src/modules/task-board-loading.ts"
+    "apps/portal-web/src/modules/task-board-loading.ts",
+    "apps/portal-web/src/modules/WorkPublicSharing.tsx"
   ],
   "surfaces": [
     {
@@ -217,6 +225,44 @@
         "work.roles.withdraw",
         "work.roles.confirm",
         "member.contribution-outcomes.read"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "work.public-read",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/works-public.ts",
+      "operations": [
+        "work.public.read"
+      ],
+      "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "work.public-read-page",
+      "kind": "page",
+      "entry": "apps/platform-api/src/routes/works-public.ts",
+      "operations": [
+        "work.public-page.view"
+      ],
+      "auth_profile": "public-anonymous-read"
+    },
+    {
+      "surface_id": "work.public-sharing-consent",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/works-public.ts",
+      "operations": [
+        "work.sharing.read",
+        "work.sharing.update"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "work.public-sharing-control",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/WorkPublicSharing.tsx",
+      "operations": [
+        "work.sharing.toggle",
+        "work.sharing.copy-link"
       ],
       "auth_profile": "member-session"
     }

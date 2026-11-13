@@ -258,6 +258,9 @@ const FOUNDATION_NAMES = [
   '207_guild_tools.sql',
   // Event import/registration metadata, claims and share-driven moderation/credit; no automatic publication, payment, credential, admin or release authority.
   '208_event_publication.sql',
+  null,
+  // Owner opt-in public work reading consent records only; existing works remain member-only without automatic backfill or release authority.
+  '210_work_public_sharing.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({
@@ -329,7 +332,7 @@ function ledger(value, digest) {
   for (const row of value) {
     exact(row, ['name', 'sha256']); text(row.name, /^[0-9]{3}_[a-z0-9_]+\.sql$/); text(row.sha256, HEX64, 64);
     const number = Number(row.name.slice(0, 3));
-    if (number !== previous + (previous === 21 ? 2 : 1)) reject('schema_ledger_invalid');
+    if (number !== previous + (previous === 21 ? 2 : 1) && !(previous === 208 && number === 210)) reject('schema_ledger_invalid');
     if (number >= 76 && FOUNDATION_NAMES[number - 76] !== row.name) reject('schema_unknown');
     previous = number;
   }
@@ -378,7 +381,7 @@ function validateMixed(value, digest) {
   let previous = 0;
   for (const row of legacy) {
     const number = Number(row.name.slice(0, 3));
-    if (number !== previous + (previous === 21 ? 2 : 1)) reject('schema_ledger_invalid');
+    if (number !== previous + (previous === 21 ? 2 : 1) && !(previous === 208 && number === 210)) reject('schema_ledger_invalid');
     if (number >= 76 && FOUNDATION_NAMES[number - 76] !== row.name) reject('schema_unknown');
     previous = number;
   }
