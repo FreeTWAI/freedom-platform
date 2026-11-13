@@ -157,7 +157,7 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     await approveCard.getByLabel('新成員的第一步',{exact:true}).fill('先讀入門技能書並完成一件小事。');
     await approveCard.getByLabel('方向探索與陪跑入門',{exact:true}).check();
     await approveCard.getByLabel('審核說明',{exact:true}).fill('核准並附上別名與稱號。');
-    await approveCard.getByRole('button',{name:'保存審核決定',exact:true}).click();
+    await approveCard.getByRole('button',{name:'確認',exact:true}).click();
     await expect(approveCard.getByText('已核准',{exact:true})).toBeVisible();
 
     await navigateAdmin(admin,'公會管理');
@@ -229,7 +229,7 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
     await mergeCard.getByLabel('目標公會',{exact:true}).selectOption(SECURITY);
     await mergeCard.getByLabel('別名',{exact:true}).fill('資安小名');
     await mergeCard.getByLabel('審核說明',{exact:true}).fill('併入資安公會並留下別名。');
-    await expect(mergeCard.getByRole('button',{name:'併入這個公會',exact:true})).toBeEnabled();
+    await expect(mergeCard.getByRole('button',{name:'確認',exact:true})).toBeEnabled();
     for(const [width,file] of [[390,'admin-merge-390.png'],[1280,'admin-merge-1280.png']] as const){
       await admin.setViewportSize({width,height:900});
       await mergeCard.scrollIntoViewIfNeeded();
@@ -245,7 +245,7 @@ test('guild aliases sit beside the name, and an admin can edit profiles, approve
       }
       await mergeCard.screenshot({path:shot(file)});
     }
-    await mergeCard.getByRole('button',{name:'併入這個公會',exact:true}).click();
+    await mergeCard.getByRole('button',{name:'確認',exact:true}).click();
     await expect(mergeCard.locator('.badge.guild-merged')).toHaveText('已併入');
     await mergeCard.getByText('查看申請與審核紀錄',{exact:true}).click();
     await expect(mergeCard.locator('details.admin-application-details')).toHaveJSProperty('open',true);

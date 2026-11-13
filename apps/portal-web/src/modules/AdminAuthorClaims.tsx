@@ -11,13 +11,19 @@ type Claim = {
 type Change = {book_id: string; book_title: string; provider_repo_id: string; previous_provider_repo_id: string | null; full_name: string; requested_full_name: string};
 type Queue = {queue: 'review' | 'verified'; items: Claim[]; identity_changes: Change[]};
 
+type Decision = 'verify' | 'reject' | 'dispute' | 'revoke';
+function validDecision(state: string, saved?: Decision): Decision {
+  if (state === 'verified') return 'revoke';
+  return saved === 'verify' || saved === 'reject' || saved === 'dispute' ? saved : 'verify';
+}
+
 export function AdminAuthorClaims({client, busy, onMutate, selectedId}: {selectedId?:string|null;client: AdminClient; busy: boolean; onMutate: (path: string, body: unknown, version?: number | null) => Promise<boolean>}) {
   const [queue, setQueue] = useState<'review' | 'verified'>('review');
   const [data, setData] = useState<Queue | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [reasons, setReasons] = useState<Record<string, string>>({});
-  const [decisions,setDecisions]=useState<Record<string,'verify'|'reject'|'dispute'|'revoke'>>({});
+  const [decisions,setDecisions]=useState<Record<string,Decision>>({});
   const [ack, setAck] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -26,10 +32,14 @@ export function AdminAuthorClaims({client, busy, onMutate, selectedId}: {selecte
     finally { setLoading(false); }
   }, [client, queue]);
   useEffect(() => { void load(); }, [load]);
-  async function review(claim: Claim, decision: 'verify' | 'reject' | 'dispute' | 'revoke') {
+  async function review(claim: Claim, decision: Decision) {
     const reason = (reasons[claim.claim_id] ?? '').trim();
     if (reason.length < 3) { setError('請填寫至少 3 個字的理由。'); return; }
-    if (await onMutate(`/author-claims/${claim.claim_id}/review`, {decision, reason}, claim.version)) await load();
+    if (await onMutate(`/author-claims/${claim.claim_id}/review`, {decision, reason}, claim.version)) {
+      setDecisions(current => { const next = {...current}; delete next[claim.claim_id]; return next; });
+      setReasons(current => { const next = {...current}; delete next[claim.claim_id]; return next; });
+      await load();
+    }
   }
   async function acknowledge(change: Change) {
     const reason = (ack[change.book_id] ?? '').trim();
@@ -54,7 +64,9 @@ export function AdminAuthorClaims({client, busy, onMutate, selectedId}: {selecte
         <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void acknowledge(change)}>確認已複核</button>
       </div>
     </article>)}</div>}
-    <div className="card-grid">{data?.items.filter(claim=>!selectedId||claim.claim_id===selectedId).map(claim => <article key={claim.claim_id} className="card stack">
+    <div className="card-grid">{data?.items.filter(claim=>!selectedId||claim.claim_id===selectedId).map(claim => {
+      const decision = validDecision(claim.state, decisions[claim.claim_id]);
+      return <article key={claim.claim_id} className="card stack">
       <div className="card-head"><h3>{claim.repo.full_name}</h3><span className="badge">{claim.state_label}</span></div>
       <p>{claim.role_label} · {claim.display_name} · @{claim.github_login}（{claim.github_user_id}）</p>
       <p className="field-hint">技能書 {claim.source_snapshot.book_id} · Repo {claim.repo.provider_repo_id}{claim.appeal_count > 0 ? ' · 申訴後重送' : ''}</p>
@@ -64,8 +76,9 @@ export function AdminAuthorClaims({client, busy, onMutate, selectedId}: {selecte
       {claim.reason && <p className="field-hint">先前理由：{claim.reason}</p>}
       {!!claim.related_claims.length && <ul>{claim.related_claims.map(item => <li key={item.claim_id}>{item.display_name} @{item.github_login} · {item.role_label} · {item.state_label}</li>)}</ul>}
       <label className="field">審核理由<input value={reasons[claim.claim_id] ?? ''} onChange={event => setReasons(current => ({...current, [claim.claim_id]: event.target.value}))} maxLength={1000}/></label>
-      <label className="field">決定<select aria-label="決定" value={decisions[claim.claim_id]??(claim.state==='verified'?'revoke':'verify')} onChange={e=>setDecisions(current=>({...current,[claim.claim_id]:e.target.value as 'verify'|'reject'|'dispute'|'revoke'}))}>{claim.state==='verified'?<option value="revoke">撤銷</option>:<><option value="verify">核實</option><option value="reject">駁回</option><option value="dispute">標示爭議</option></>}</select></label><button type="button" className="btn btn-primary" disabled={busy||(reasons[claim.claim_id]??'').trim().length<3} onClick={()=>void review(claim,decisions[claim.claim_id]??(claim.state==='verified'?'revoke':'verify'))}>確認</button>
-    </article>)}</div>
+      <label className="field">決定<select aria-label="決定" value={decision} onChange={e=>setDecisions(current=>({...current,[claim.claim_id]:e.target.value as Decision}))}>{claim.state==='verified'?<option value="revoke">撤銷</option>:<><option value="verify">核實</option><option value="reject">駁回</option><option value="dispute">標示爭議</option></>}</select></label><button type="button" className="btn btn-primary" disabled={busy||(reasons[claim.claim_id]??'').trim().length<3} onClick={()=>void review(claim,decision)}>確認</button>
+    </article>;
+    })}</div>
     {!loading && data && !data.items.length && !error && <p className="muted">{queue === 'verified' ? '目前沒有已核實的認領。' : '目前沒有待審核的認領。'}</p>}
   </section>;
 }

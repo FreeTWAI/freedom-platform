@@ -315,7 +315,7 @@ test('admin appointment, access sync, revocation and reactivation use real isola
     expect((await pool.query('SELECT count(*)::int AS n FROM positioning_profession_memberships WHERE user_id=$1 AND guild_key=$2',[targetId,guildKey])).rows[0].n).toBe(0);
     const firstGeneral=await (await page.request.get(origin+'/admin/api/members?limit=25&offset=0')).json();expect(firstGeneral.items.some((item:any)=>item.user_id===targetId)).toBe(false);
     const guildName=(await pool.query('SELECT name FROM positioning_guild_catalog WHERE guild_key=$1',[guildKey])).rows[0].name;
-    await adminNavigate(page,'guilds');await page.getByText('公會設定',{exact:true}).click();await page.getByRole('searchbox',{name:'搜尋公會',exact:true}).fill(guildName);
+    await adminNavigate(page,'guilds');await page.getByRole('searchbox',{name:'搜尋公會',exact:true}).fill(guildName);
     const guildCard=page.getByRole('article',{name:guildName,exact:true});await guildCard.getByRole('button',{name:'設定公會長',exact:true}).click();
     const picker=guildCard.getByRole('region',{name:`${guildName}公會長人選`,exact:true}),choice=picker.getByRole('radio',{name:`${leaderName} · ${targetEmail}`,exact:true});
     await picker.getByRole('searchbox',{name:'搜尋公會長人選',exact:true}).fill('Zulu');await picker.getByRole('button',{name:'查詢人選',exact:true}).click();await expect(choice).toBeVisible();
