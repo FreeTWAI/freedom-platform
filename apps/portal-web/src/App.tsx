@@ -120,8 +120,9 @@ const eventReturnPath=()=>{
   const hash=/^#events\/[^?]+(?:\?(.*))?$/.exec(currentLegacyHash());
   const refs=new URLSearchParams(hash?hash[1]??'':window.location.search).getAll('ref');
   const query=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?`?ref=${refs[0]}`:'';
-  // Only public event identity/referral survives authentication, never a private capability.
-  return hash?`/#events/${id}${query}`:`/events/${id}${query}`;
+  // Keep the explicit native-app entry on reload; no private capability or other query survives.
+  const app=!hash&&new URLSearchParams(window.location.search).get('app')==='1';
+  return hash?`/#events/${id}${query}`:`/events/${id}${query}${app?(query?'&app=1':'?app=1'):''}`;
 }
 const eventLoginFromLocation=()=>Boolean(eventIdFromLocation()&&window.history.state?.freedomEventLogin===window.location.href)
 const isMessagesHash=(hash:string)=>legacyHash(hash).split('?')[0]==='#messages'

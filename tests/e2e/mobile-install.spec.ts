@@ -6,7 +6,7 @@ import {navigate,closeChat} from './navigation.js';
 
 async function login(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
-  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
 }
 
 test('real manifest and square brand icons have stable public launch URLs and no registered offline worker',async({playwright,browserName,baseURL},info)=>{
@@ -81,12 +81,16 @@ test('simulated standalone chat closes with browser Back and reopens with Forwar
     const world=page.locator('#messages-panel-world');await world.getByRole('button',{name:'世界聊天',exact:true}).click();
     const draft=world.getByRole('textbox',{name:'世界聊天訊息',exact:true});await draft.fill('上一頁與下一頁保留的聊天草稿');
     await page.goBack();await expect(chat).toBeHidden();await expect(page).toHaveURL(home);
-    await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
     await page.goForward();await expect(chat).toBeVisible();await expect(draft).toHaveValue('上一頁與下一頁保留的聊天草稿');
     await expect(page.locator('.floating-messages')).toBeHidden();
     await closeChat(page);await expect(page.locator('.floating-messages')).toBeVisible();
     await navigate(page,'技能書架');await page.goBack();await expect(chat).toBeHidden();
-    await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+    // The visible route now has two entries: 探索, then its resource view.
+    await expect(page).toHaveURL(/#explore$/);
+    await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toBeVisible();
+    await page.goBack();await expect(chat).toBeHidden();await expect(page).toHaveURL(home);
+    await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   }finally{await context.close();}
 });
 
@@ -110,7 +114,7 @@ test('authenticated cold launch and in-page guild hashes open the requested chat
     const hash=`#messages?guild=${encodeURIComponent(guild.channel_key)}`;
     if(index===0)await page.goto('/'+hash);
     else{
-      await closeChat(page);await navigate(page,'技能書架');await expect(page).toHaveURL(/#skills$/);
+      await closeChat(page);await navigate(page,'技能書架');await expect(page).toHaveURL(/#explore\/resources$/);
       await page.evaluate(hash=>{window.location.hash=hash;},hash);
     }
     await expect(chat).toHaveCount(1);await expect(chat).toBeVisible();

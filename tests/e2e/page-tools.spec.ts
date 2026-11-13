@@ -9,7 +9,7 @@ test('every workspace page exposes contextual tools, filtered issues and agent g
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible({timeout:20000});
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible({timeout:20000});
   await page.route('**/api/v1/me/github',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({configured:true,connected:true,github_user:{id:'123',login:'maker'}})}));
   await openPageTools(page); await page.getByRole('button',{name:'提出想法'}).click();
   const idea=page.getByRole('dialog',{name:'會員首頁：提出想法'});
@@ -69,7 +69,7 @@ test('phone keeps world chat in an in-page drawer and admin keeps a dock',async(
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await openPageTools(page); await expect(page.getByRole('button',{name:'提出想法'})).toBeVisible(); await page.locator('.page-tools-menu > summary').click();
   await openChat(page);
   await expect(page.getByRole('button',{name:'在獨立視窗開啟訊息控制台'})).toBeHidden();
@@ -108,7 +108,7 @@ test('unlinked member gets GitHub guidance and screenshot handoff',async({page})
   await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible({timeout:20000});
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible({timeout:20000});
   await openPageTools(page); await page.getByRole('button',{name:'提出想法'}).click();
   const idea=page.getByRole('dialog',{name:'會員首頁：提出想法'});
   await expect(idea.getByRole('status')).toHaveText('目前顯示上次同步的資料，請稍後重新同步。');
@@ -159,7 +159,7 @@ test('page tools load on demand, ignore cancelled or older opens, and recover a 
 
     await page.reload();await chooseHelp();await expect.poll(()=>requests).toBe(2);
     await page.evaluate(()=>{window.location.hash='tester-map'});
-    await expect(page.getByRole('heading',{name:'測試員地圖',level:1})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'測試地圖',level:1})).toBeVisible();
     await settle();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
     const currentHelp=page.getByRole('button',{name:'頁面說明',exact:true});await currentHelp.click();
     const currentDialog=page.getByRole('dialog',{name:'測試員地圖：頁面說明'});await expect(currentDialog).toBeVisible();

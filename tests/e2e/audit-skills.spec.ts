@@ -159,7 +159,7 @@ for (const width of [1280, 390]) {
 
     test('community footprint offers an explicit reload after a failed read', async ({ page }) => {
       let failures = 1;
-      await page.route('**/api/v1/community', route => failures-- > 0 ? route.fulfill({ status: 503, json: { error: { code: 'unavailable', message: 'unavailable' } } }) : route.fallback());
+      await page.route('**/api/v1/community', route => new URL(page.url()).hash==='#guilds/community'&&failures-- > 0 ? route.fulfill({ status: 503, json: { error: { code: 'unavailable', message: 'unavailable' } } }) : route.fallback());
       await login(page); await navigate(page, '自由工坊社群');
       const failure = page.getByRole('alert').filter({ hasText: '社群資料暫時無法載入。' });
       await expect(failure).toBeVisible();
@@ -227,7 +227,7 @@ for (const width of [1280, 390]) {
       await expect(page).toHaveURL(/^https:\/\/github\.com\/login\/oauth\/authorize\?/);
       expect(connects).toEqual([{ return_to: '#skills' }]);
       await page.goto('/github/callback?code=synthetic&state=synthetic-shelf-return-state');
-      await expect(page).toHaveURL(/\/#skills$/);
+      await expect(page).toHaveURL(/\/#explore\/resources$/);
       const linked = page.getByRole('region', { name: 'GitHub 連結', exact: true });
       await expect(linked).toContainText('GitHub 已連結 @synthetic-shelf');
       await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -238,14 +238,14 @@ for (const width of [1280, 390]) {
       await expect(card.getByRole('link', { name: 'Fork 專案 ↗', exact: true })).toHaveAttribute('href', 'https://github.com/Hao0321/claude-skill-social-post/fork');
       expect(starWrites).toBe(0);
       await linked.getByRole('button', { name: '管理 GitHub 連結', exact: true }).click();
-      await expect(page).toHaveURL(/\/#account\?view=connections$/);
+      await expect(page).toHaveURL(/\/#me\/settings\?view=connections$/);
       await expect(page.locator('[data-account-connections] > summary')).toBeFocused();
       await expect(page.locator('.github-connection-panel').getByRole('button', { name: '解除 GitHub 連結', exact: true })).toBeVisible();
       await page.reload();
       await expect(page.locator('[data-account-connections] > summary')).toBeFocused();
       await expect(page.locator('.github-connection-panel').getByRole('button', { name: '解除 GitHub 連結', exact: true })).toBeVisible();
       await page.goBack();
-      await expect(page).toHaveURL(/\/#skills$/);
+      await expect(page).toHaveURL(/\/#explore\/resources$/);
       await page.goForward();
       await expect(page.locator('[data-account-connections] > summary')).toBeFocused();
       await expect(page.locator('.github-connection-panel').getByRole('button', { name: '解除 GitHub 連結', exact: true })).toBeVisible();

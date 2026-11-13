@@ -9,7 +9,7 @@ async function login(page: Page, email = 'maker@local.test') {
   await page.getByLabel('電子郵件', { exact: true }).fill(email);
   await page.getByLabel('密碼', { exact: true }).fill('freedom-local-demo');
   await page.getByRole('button', { name: '登入', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '會員首頁', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', exact: true })).toBeVisible();
 }
 async function fillTool(page: Page, title: string) {
   await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://github.com/freetwai-test/simple-work');
@@ -87,7 +87,7 @@ test('simple tool submission previews without writes, edits freely, then publish
   page.on('request', request => { if (request.method() === 'POST' && new URL(request.url()).pathname.includes('skill-submissions')) writes.push(new URL(request.url()).pathname); });
   await login(page); await navigate(page, '技能書架');
   await page.getByRole('button', { name: '投稿開源工具', exact: true }).click();
-  await expect(page).toHaveURL(/#opensource$/);
+  await expect(page).toHaveURL(/#home\/share\/resource$/);
   await expect(page.getByRole('button', { name: '上傳技能' })).toBeHidden();
   await fillTool(page, '想法整理工具');
   await page.getByRole('button', { name: '預覽投稿' }).click();
@@ -292,7 +292,7 @@ test('manual skill unknown save remains retryable after My Content URL resume re
   await navigate(page, '我的內容');
   const own = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
   await own.getByRole('link', { name: '繼續', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp('#opensource\\?submission=' + submissionId));
+  await expect(page).toHaveURL(new RegExp('#home/share/resource\\?submission=' + submissionId));
   await expect(page.getByRole('button', { name: '重試儲存私人草稿', exact: true })).toBeEnabled();
   await expect(page.getByLabel('作品名稱', { exact: true })).toHaveValue(title);
   await expect(page.getByLabel('作品名稱', { exact: true })).toBeDisabled();

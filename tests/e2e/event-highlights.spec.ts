@@ -46,7 +46,7 @@ async function login(page: Page, email = 'maker@local.test') {
 
 async function openHighlights(page: Page) {
   await navigate(page, '活動集錦');
-  await expect(page.getByRole('heading', {name: '活動集錦', level: 1, exact: true})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '探索', level: 1, exact: true})).toBeVisible();
 }
 
 async function noOverflow(page: Page, label: string) {

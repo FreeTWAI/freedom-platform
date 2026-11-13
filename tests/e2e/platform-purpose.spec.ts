@@ -15,6 +15,14 @@ const entries = [
   {button:'開發者：找專案與夥伴', target:'tasks', label:'社群專案與任務', heading:'社群任務'},
 ];
 
+const destinations: Record<string, {hash:string; heading:string}> = {
+  supplier: {hash:'guilds/guild_product_quality_supply/tools/supplier-kit', heading:'供貨工具'},
+  showcase: {hash:'explore/works', heading:'探索'},
+  tasks: {hash:'guilds/guild_ai_project/tools/work/discovery', heading:'工作'},
+  members: {hash:'explore/people', heading:'探索'},
+  retail: {hash:'guilds/guild_commerce_sales/tools/retail-kit', heading:'零售工具'},
+};
+
 for (const entry of entries) test(`${entry.target} entry survives registration and refresh, retains guild gate and opens the actual module`,async({page})=>{
   await page.setViewportSize({width:390,height:844});await page.goto('/');
   await page.getByRole('button',{name:entry.button,exact:true}).click();
@@ -30,13 +38,13 @@ for (const entry of entries) test(`${entry.target} entry survives registration a
   expect((await page.request.get('/api/v1/retail/catalog')).status()).toBe(403);
   await expect(page.getByRole('navigation',{name:'主要工作區'})).toHaveCount(0);
   await quickJoin(page);
-  await expect(page).toHaveURL(new RegExp(`#${entry.target}$`));
-  await expect(page.getByRole('heading',{name:entry.heading,exact:true,level:1})).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`#${destinations[entry.target].hash}$`));
+  await expect(page.getByRole('heading',{name:destinations[entry.target].heading,exact:true,level:1})).toBeVisible();
 });
 
 test('existing members reach their chosen entry and all six collaboration destinations without selecting a permanent role',async({page})=>{
   await page.goto('/');await page.getByRole('button',{name:entries[0].button,exact:true}).click();await login(page);
-  await expect(page).toHaveURL(/#supplier$/);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/supplier-kit$/);
   const actions=[['展示我的商品','supplier','我有東西要賣'],['找合作夥伴','members','工坊夥伴'],['找合作案件','showcase','作品與合作'],['挑商品推廣','retail','我可以賣東西'],['找專案任務','tasks','社群任務'],['分享開發作品','showcase','作品與合作']];
   for(const [label,target,heading] of actions){
     await page.goto('/#home');
@@ -50,8 +58,8 @@ test('existing members reach their chosen entry and all six collaboration destin
     // rather than duplicating six role-oriented buttons on the member home.
     const navigationLabel = target === 'supplier' ? 'AI 整理供貨商品' : target === 'retail' ? 'AI 製作銷售網站' : heading;
     await test.step(label, () => navigate(page, navigationLabel));
-    await expect(page).toHaveURL(new RegExp(`#${target}$`));
-    await expect(page.getByRole('heading',{name:heading,exact:true,level:1})).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`#${destinations[target].hash}$`));
+    await expect(page.getByRole('heading',{name:destinations[target].heading,exact:true,level:1})).toBeVisible();
   }
 });
 

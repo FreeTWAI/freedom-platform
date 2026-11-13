@@ -198,7 +198,7 @@ for (const sample of [
     await expect(page.locator('.hosted-store-product')).toContainText('區塊回訪茶杯');
     const catalogs = await (await page.request.get('/api/v1/me/supply-catalogs?pagination=cursor')).json();
     expect(catalogs.items).toHaveLength(1);
-    expect(catalogHash).toBe(`#stores/${catalogs.items[0].tenant_id}/${catalogs.items[0].instance_id}/supply`);
+    expect(catalogHash).toBe(`#guilds/guild_product_quality_supply/tools/catalog/${catalogs.items[0].tenant_id}/${catalogs.items[0].instance_id}/supply`);
     await page.goto(`/#guilds/${sample.guild}`);
 
     // Restore the author's full membership for layout history administration.
@@ -234,7 +234,7 @@ for (const sample of [
     await expect(page.getByText(titleA, {exact: true})).toBeVisible();
     await page.getByRole('button', {name: '查看我的內容', exact: true}).click();
     await page.getByRole('article', {name: `作品：${titleA}`, exact: true}).getByRole('link', {name: '編輯', exact: true}).click();
-    await expect(page).toHaveURL(new RegExp(`#my-content/showcases/${workId}$`));
+    await expect(page).toHaveURL(new RegExp(`#me/content/showcases/${workId}$`));
     await expect(page.getByLabel('作品標題', {exact: true})).toHaveValue(titleA);
     await page.getByRole('button', {name: '回到內容清單', exact: true}).click();
 

@@ -235,7 +235,8 @@ test('migration 198 binds 台式英文抓蟲器 only to the approved 語言學�
   await pool.query("UPDATE guild_creation_applications SET state='approved',approved_guild_key=$2 WHERE application_id=$1",[application,guild]);
   const approved=await state();await pool.query(sql);
   const after=await state();
-  assert.deepEqual(after.bindings.filter(row=>!approved.bindings.some(old=>old.community_id===row.community_id&&old.guild_key===row.guild_key&&old.book_id===row.book_id)),[{community_id:community,guild_key:guild,book_id:'taiwanese-english-checker'}]);
+  // Migration 204 adds the optional share link; replaying 198 does not create one.
+  assert.deepEqual(after.bindings.filter(row=>!approved.bindings.some(old=>old.community_id===row.community_id&&old.guild_key===row.guild_key&&old.book_id===row.book_id)),[{community_id:community,guild_key:guild,book_id:'taiwanese-english-checker',share_id:null}]);
   const added=after.grants.filter(row=>!approved.grants.some(old=>old.grant_id===row.grant_id));
   assert.deepEqual(added.map(row=>[row.community_id,row.user_id,row.guild_key,row.book_id]),[[community,users[0],guild,'taiwanese-english-checker']]);
   for(const key of ['publications','development','preferences','memberships'] as const)assert.deepEqual(after[key],approved[key],key);

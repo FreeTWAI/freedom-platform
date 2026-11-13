@@ -66,7 +66,7 @@ async function member(db: Pool, page: Page, membership: 'active' | 'none' | 'lef
 async function openSetup(page: Page) {
   await page.evaluate(() => {window.location.hash = '#stores';});
   await page.getByRole('link', {name: '建立我的商店', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/setup$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/setup$/);
   await expect(setup(page)).toBeVisible();
 }
 async function createSpace(page: Page, name: string) {
@@ -80,7 +80,7 @@ async function launch(page: Page) {
   await expect(flow(page).getByRole('region', {name: '啟動進度', exact: true})).toContainText('開店工具已啟用');
   await expect(flow(page)).toContainText('這不代表已可接單');
   await flow(page).getByRole('button', {name: '繼續商店設定', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
 }
 
 test('member starts from stores, explicitly joins inline and continues into the existing setup', async ({page, e2eAuthPool}, info) => {
@@ -109,7 +109,7 @@ test('member starts from stores, explicitly joins inline and continues into the 
   await openSetup(page);
   await join.focus(); await page.keyboard.press('Enter');
   await expect(flow(page).getByRole('heading', {name: '設定商店空間', exact: true})).toBeFocused();
-  await expect(page).toHaveURL(/#stores\/setup$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/setup$/);
   expect(joins).toBe(1);
   await expect(flow(page).getByRole('link', {name: '建立或選擇業務空間', exact: true})).toHaveAttribute('href', '#business');
   const preference = await e2eAuthPool.query('SELECT primary_guild_key FROM guild_member_preferences WHERE community_id=$1 AND user_id=$2', [DEMO_COMMUNITY, user.id]);
@@ -135,7 +135,7 @@ test('unknown inline join retains the original key and membership version until 
   await setup(page).getByRole('button', {name: /加入.*並繼續/}).click();
   await expect(setup(page).getByRole('alert')).toContainText('加入結果尚未確認');
   await setup(page).getByRole('link', {name: '返回我的商店', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/setup$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/setup$/);
   expect(attempts).toHaveLength(1);
   expect(attempts[0].version).toBe('"3"');
   await setup(page).getByRole('button', {name: '重試加入', exact: true}).click();
@@ -162,7 +162,7 @@ test('member qualification and launch eligibility remain separate and can recove
   blocked = false;
   await setup(page).getByRole('button', {name: '重新確認資格', exact: true}).click();
   await expect(flow(page)).toBeVisible();
-  await expect(page).toHaveURL(/#stores\/setup$/);
+  await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/setup$/);
 });
 
 test('pure supply stays visibly distinct and an independent store can be created in the same journey', async ({page, e2eAuthPool}, info) => {
@@ -203,7 +203,7 @@ test('pure supply stays visibly distinct and an independent store can be created
   await createSpace(page, '獨立的新零售店');
   await expect(flow(page)).not.toContainText('保留既有的純供貨商品庫');
   await launch(page);
-  expect(new URL(page.url()).hash).not.toBe('#' + supply.hash);
+  expect(new URL(page.url()).hash).not.toBe('#guilds/guild_commerce_sales/tools/store/' + supply.hash.slice('stores/'.length));
   expect((await (await page.request.get('/api/v1/tenants?limit=100')).json()).items).toHaveLength(before.items.length + 1);
   const retained = await (await page.request.get('/api/v1' + supply.root + '/supply-profile')).json();
   expect(retained.retail_enabled).toBe(false); expect(retained.product_count).toBe(1);
@@ -273,7 +273,7 @@ test('commerce guild keeps a supply-only catalog unchanged while opening an inde
   expect(store.instance_id).not.toBe(catalogBefore.instance_id);
   expect(afterLaunch.find(row => row.tenant_id === before[0].tenant_id)).toEqual(before[0]);
   await flow(page).getByRole('button', {name: '設定我的商店', exact: true}).click();
-  await expect(page).toHaveURL(new RegExp(`#stores/${independent.tenant_id}/${store.instance_id}$`));
+  await expect(page).toHaveURL(new RegExp(`#guilds/guild_commerce_sales/tools/store/${independent.tenant_id}/${store.instance_id}$`));
   const storeSetup = page.getByRole('form', {name: '建立商店', exact: true});
   await storeSetup.getByLabel('商店名稱', {exact: true}).fill('公會獨立零售店');
   await storeSetup.getByLabel('商店網址', {exact: true}).fill('guild-' + independent.tenant_id.replaceAll('-', '').replace(/[0-9]/g, digit => String.fromCharCode(97 + Number(digit))));

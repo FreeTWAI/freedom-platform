@@ -1,4 +1,5 @@
 import {useEffect, useId, useRef, useState} from 'react';
+import {createPortal} from 'react-dom';
 import type {PortalClient} from '../api';
 import {useLanguage} from '../language';
 import {useLocalAction} from '../useLocalAction';
@@ -25,7 +26,15 @@ export function PromotionShare({client, kind, target, title, text, label = '分�
   useEffect(() => { if (manual && open) { manualField.current?.focus(); manualField.current?.select(); } }, [manual, open]);
   const url = link ? `${window.location.origin}${link.path}` : '';
   const copyText = text ? `${text}\n${url}` : url;
-  function close() { generation.current++; setOpen(false); setStatus(''); setManual(false); dialog.current?.close(); trigger.current?.focus(); }
+  function close() {
+    generation.current++; setOpen(false); setStatus(''); setManual(false); dialog.current?.close();
+    // Responsive disclosures can close while the modal is open. Reveal the
+    // original trigger before returning keyboard focus to it.
+    for (let parent = trigger.current?.parentElement; parent; parent = parent.parentElement) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+    }
+    trigger.current?.focus();
+  }
   async function load(run: number) {
     setBusy(true); setError(''); setStatus(''); setManual(false);
     try {
@@ -68,7 +77,7 @@ export function PromotionShare({client, kind, target, title, text, label = '分�
   }
   return <div className="skill-share promotion-share">
     <button ref={trigger} type="button" className="btn btn-ghost" aria-haspopup="dialog" onClick={openDialog}>{label}</button>
-    <dialog ref={dialog} className="skill-share-dialog promotion-share-dialog" aria-labelledby={`${id}-title`} onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)}>
+    {createPortal(<dialog ref={dialog} className="skill-share-dialog promotion-share-dialog" aria-labelledby={`${id}-title`} onCancel={event => { event.preventDefault(); close(); }} onClose={() => setOpen(false)}>
       {open && <div>
         <header className="skill-share-head"><h2 id={`${id}-title`}>分享「{title}」</h2><button type="button" className="btn btn-ghost" onClick={close} aria-label="關閉分享">關閉</button></header>
         {text && <p className="skill-share-text">{text}</p>}
@@ -84,6 +93,6 @@ export function PromotionShare({client, kind, target, title, text, label = '分�
         {status && <p className="skill-share-status" role="status">{status}</p>}
         {manual && <div className="field"><label htmlFor={`${id}-manual`}>手動複製分享內容</label><textarea ref={manualField} id={`${id}-manual`} value={copyText} readOnly rows={3} onFocus={event => event.currentTarget.select()}/></div>}
       </div>}
-    </dialog>
+    </dialog>, document.body)}
   </div>;
 }

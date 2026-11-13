@@ -3,7 +3,7 @@ import {openChat,closeChat,signOut} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 
 async function login(page:Page){
-  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 test('legacy console is retired; the unified inbox keeps site-controlled features and reloads private history only after selection',async({page})=>{
   let siteReads=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/site')siteReads++;});

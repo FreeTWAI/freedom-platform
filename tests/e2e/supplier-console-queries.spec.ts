@@ -567,7 +567,7 @@ test("SC-E2E-51 partner detail shows that shop's reservations for the owner only
     await relSection.getByRole('link', {name: '查看這間店的全部預留', exact: true}).click();
     await expect(activePage(ownerPage).getByRole('heading', {level: 2, name: '預留與訂單', exact: true})).toBeVisible();
     expect(await ownerPage.evaluate(() => window.location.hash)).toBe(
-      `#${storeA.hash}/supply/reservations?partner=${partner1Id}`,
+      `#guilds/guild_product_quality_supply/tools/catalog/${storeA.hash.slice("stores/".length)}/supply/reservations?partner=${partner1Id}`,
     );
     await expect(
       activePage(ownerPage).getByRole('form', {name: '篩選預留', exact: true}).getByRole('combobox', {name: '合作店家', exact: true}),
