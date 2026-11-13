@@ -1,7 +1,7 @@
 import {forgetFrameOrigins,frameOrigins} from '../../modules/guild-tools/service.js';
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
 import {migrate} from '../../scripts/database.js';
 import {seedLocal,DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
@@ -37,6 +37,12 @@ test('current guild authority, acceptance, revisions, opaque subjects, report de
  assert.equal((await req(base,other,input)).status,403);
  const registered=await req(base,leader,input);assert.equal(registered.status,201,JSON.stringify(registered));assert.equal(registered.data.state,'pending');
  const html=await app.request(origin+'/guild-tool-preview/'+registered.data.id);assert.equal(html.status,200);assert.match(html.headers.get('content-security-policy')!,/https:\/\/tools.example.test/);
+ // The preview's executable script is constant and allowed by its hash; the values ride in an inert data block.
+ const previewHtml=await html.text(),previewCsp=html.headers.get('content-security-policy')!;
+ const previewData=JSON.parse(previewHtml.match(/<script type="application\/json" id="preview-data">([^<]*)<\/script>/)![1]!);
+ assert.equal(previewData.preview_id,registered.data.id);assert.equal(previewData.platform_origin,origin);assert.equal(previewData.tool_id,'example');
+ const previewScript=previewHtml.match(/<script>([^<]*)<\/script>/)![1]!;assert.ok(!previewScript.includes(registered.data.id)&&!previewScript.includes(origin),'no per-preview value is spliced into code');
+ assert.ok(previewCsp.includes(`script-src 'sha256-${createHash('sha256').update(previewScript).digest('base64')}'`),'the CSP hash allows exactly the constant script');
  let page=await app.request(origin+'/');assert.doesNotMatch(page.headers.get('content-security-policy')!,/tools.example.test/);
  assert.equal((await req(base+'/example/accept',other,{},1)).status,403);
  assert.equal((await req(base+'/example/accept',leader,{},1)).status,200);

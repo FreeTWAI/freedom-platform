@@ -1,7 +1,8 @@
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {createServer,type AddressInfo} from 'node:net';
-import {dirname} from 'node:path';
+import {join,resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {Pool} from 'pg';
 import {test as base} from './fixtures.js';
 import {LOCAL_DATABASE_URL} from '../../packages/db/index.js';
@@ -16,6 +17,17 @@ import {e2eSchema,resetE2eAuthState} from '../../packages/testing/e2e-auth-isola
 // and port, so the community never leaks into another file's single-community
 // guild catalog. The server drops its schema on the same graceful signal that
 // Playwright sends the shared server.
+type WebServer={command:string;cwd?:string;env?:Record<string,string>;timeout?:number;gracefulShutdown?:{timeout:number}};
+// Hosted CI wraps the repository config in a trusted one that passes the server as
+// an array, and Playwright gives workers no array server; read the repository
+// config itself, as the trusted config does.
+async function configuredServer(testDir:string){
+  const root=resolve(testDir,'../..');
+  const {default:config}=await import(pathToFileURL(join(root,'playwright.config.ts')).href);
+  const server:WebServer|undefined=Array.isArray(config.webServer)?config.webServer[0]:config.webServer;
+  if(!server)throw Error('The isolated-schema fixture starts the configured browser-test server.');
+  return {server,cwd:server.cwd===undefined?root:resolve(root,server.cwd)};
+}
 async function loopbackPort(){
   const probe=createServer();
   await new Promise<void>((resolve,reject)=>{probe.once('error',reject);probe.listen(0,'127.0.0.1',resolve);});
@@ -26,12 +38,11 @@ async function loopbackPort(){
 
 export const isolatedSchemaTest=base.extend<{},{isolatedServer:{origin:string;schema:string}}>({
   isolatedServer:[async({},use,workerInfo)=>{
-    const {workers,webServer,configFile}=workerInfo.config;
-    if(workers!==1)throw Error('The isolated-schema fixture requires one worker.');
-    if(!webServer)throw Error('The isolated-schema fixture starts the configured browser-test server.');
+    if(workerInfo.config.workers!==1)throw Error('The isolated-schema fixture requires one worker.');
+    const {server:webServer,cwd}=await configuredServer(workerInfo.project.testDir);
     const schema=e2eSchema(`fp_e2e_${randomUUID().replaceAll('-','')}`);
     const port=await loopbackPort(),origin=`http://127.0.0.1:${port}`;
-    const server=spawn(webServer.command,{shell:true,detached:true,cwd:webServer.cwd??(configFile?dirname(configFile):process.cwd()),
+    const server=spawn(webServer.command,{shell:true,detached:true,cwd,
       stdio:['ignore','ignore','pipe'],env:{...process.env,...webServer.env,FREEDOM_E2E_SCHEMA:schema,FREEDOM_E2E_PORT:String(port)}});
     let stderr='';server.stderr!.on('data',chunk=>{stderr=(stderr+chunk).slice(-4000);});
     let running=true;const exited=new Promise<void>(resolve=>server.once('exit',()=>{running=false;resolve();}));
