@@ -8,6 +8,10 @@ import {changeTool,listTools,manageAccess,registerTool,toolContext} from '../../
 import {toolUrl} from '../../../../modules/guild-tools/validation.js';
 import {requireCondition} from '../../../../packages/shared/problem.js';
 import type {PreviewFetch} from '../../../../modules/community/link-preview.js';
+// Preview data is spliced into executable script: escape every character that could close the
+// script element or break a string literal there, not only '<'.
+const SCRIPT_UNSAFE:Record<string,string>={'<':'\\u003C','>':'\\u003E','/':'\\u002F','&':'\\u0026','\b':'\\b','\f':'\\f','\n':'\\n','\r':'\\r','\t':'\\t','\0':'\\u0000','\u2028':'\\u2028','\u2029':'\\u2029'};
+const scriptJson=(value:unknown)=>JSON.stringify(value).replace(/[<>/&\b\f\n\r\t\0\u2028\u2029]/g,character=>SCRIPT_UNSAFE[character]!);
 export function createPublicGuildToolRoutes(pool:Pool,origin:string,signer?:ToolSigner){
  const app=new Hono();
  app.get('/.well-known/guild-tool-jwks.json',c=>{c.header('Cache-Control','no-store');return c.json(toolJwks(signer));});
@@ -17,7 +21,7 @@ export function createPublicGuildToolRoutes(pool:Pool,origin:string,signer?:Tool
  requireCondition(/^[0-9a-f-]{36}$/.test(c.req.param('id')),404,'not_found','找不到預覽。');
  const r=(await pool.query("SELECT tool_id,guild_key,entry_url,origin,profile FROM guild_tools WHERE id=$1 AND state='pending' AND updated_at>clock_timestamp()-interval '1 hour'",[c.req.param('id')])).rows[0];
  requireCondition(r,404,'not_found','預覽已過期，請重新登錄。');const u=toolUrl(r.entry_url,origin);requireCondition(u.origin===r.origin,404,'not_found','找不到預覽。');
- const data=JSON.stringify({...r,nonce:randomUUID()}).replaceAll('<','\\u003c');
+ const data=scriptJson({...r,nonce:randomUUID()});
  const script=`const t=${data},f=document.querySelector('iframe');let ready=false,count=0,start=Date.now();const bounded=(v,n)=>{if(!v||typeof v!=='object'||Array.isArray(v))return false;let c=0;for(const k in v)if(++c>n)return false;return true};f.src=t.entry_url;f.onload=()=>{t.nonce=crypto.randomUUID();f.contentWindow.postMessage({version:'freedom.guild-launchpad/v2',type:'init',tool_id:t.tool_id,guild_key:t.guild_key,nonce:t.nonce},t.profile==='origin'?t.origin:'*')};addEventListener('message',e=>{if(e.source!==f.contentWindow||e.origin!==(t.profile==='origin'?t.origin:'null'))return;if(Date.now()-start>=60000){start=Date.now();count=0}if(++count>120)return;const m=e.data;if(!bounded(m,8)||!bounded(m.payload,0)||typeof m.operation!=='string'||m.operation.length>40||m.version!=='freedom.guild-launchpad/v2'||m.tool_id!==t.tool_id||m.guild_key!==t.guild_key||m.nonce!==t.nonce||m.type!=='request'||typeof m.request_id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(m.request_id))return;const ok=m.operation==='context.get';f.contentWindow.postMessage({version:m.version,type:'response',tool_id:t.tool_id,guild_key:t.guild_key,nonce:t.nonce,request_id:m.request_id,ok,...(ok?{result:{guild:t.guild_key,tool:t.tool_id,theme:'light',locale:'zh-TW',signed_in:false,preview:true,platform_origin:${JSON.stringify(origin)}}}:{error:{code:'preview_only',message:'加入後才能使用'}})},t.profile==='origin'?t.origin:'*');if(ok&&!ready){ready=true;parent.postMessage({type:'guild-tool-preview-ready',id:${JSON.stringify(c.req.param('id'))}},${JSON.stringify(origin)})}});`;
  const hash=createHash('sha256').update(script).digest('base64');
  c.header('Content-Security-Policy',`default-src 'none'; script-src 'sha256-${hash}'; frame-src ${u.origin}; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`);
