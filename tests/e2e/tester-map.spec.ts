@@ -60,12 +60,12 @@ test('TESTER-003 members open the tester map from the community page and the fea
   await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await navigate(page,'自由工坊社群');
   await page.getByRole('region',{name:'社群測試週',exact:true}).getByRole('button',{name:'查看測試員地圖',exact:true}).click();
-  await expect(page.getByRole('heading',{level:1,name:'測試地圖',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{level:1,name:'測試員地圖',exact:true})).toBeVisible();
   await expect(page).toHaveURL(/#guilds\/guild_custom_032fd02e754549e9b1e056e2b95b8d50\/tools\/tester-map$/);
   await expect(areaName(page,'訊息與聊天').locator('[data-feature-id="chat.stickers"]')).toContainText('改版優先 · #1013');
   await navigate(page,'會員首頁');
   await navigate(page,'測試員地圖');
-  await expect(page.getByRole('heading',{level:1,name:'測試地圖',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{level:1,name:'測試員地圖',exact:true})).toBeVisible();
 });
 
 test('TESTER-004 a tester follows the guided path, completes a step, keeps progress after reload and can reset it',async({page})=>{

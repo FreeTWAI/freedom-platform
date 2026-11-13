@@ -646,7 +646,7 @@ test('members share a personal tester-map link that lands publicly and credits t
     const visitor = await guest.newPage();
     await visitor.goto(url, { waitUntil: 'commit' });
     await expect(visitor).toHaveURL(baseURL + '/#guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map');
-    await expect(visitor.getByRole('heading', { level: 1, name: '測試地圖', exact: true })).toBeVisible();
+    await expect(visitor.getByRole('heading', { level: 1, name: '測試員地圖', exact: true })).toBeVisible();
     await expect(visitor.locator('.tester-map .promotion-share')).toHaveCount(0);
     await expect(visitor.locator('.tester-map').getByRole('link', { name: '測試員地圖', exact: true })).toHaveAttribute('href', '/#tester-map');
     await expect.poll(() => destinationPoints(e2eAuthPool, code)).toBe(before + 1);

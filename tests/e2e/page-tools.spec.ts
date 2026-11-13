@@ -159,7 +159,7 @@ test('page tools load on demand, ignore cancelled or older opens, and recover a 
 
     await page.reload();await chooseHelp();await expect.poll(()=>requests).toBe(2);
     await page.evaluate(()=>{window.location.hash='tester-map'});
-    await expect(page.getByRole('heading',{name:'測試地圖',level:1})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'測試員地圖',level:1})).toBeVisible();
     await settle();await expect(page.locator('.page-tools-dialog')).toHaveCount(0);
     const currentHelp=page.getByRole('button',{name:'頁面說明',exact:true});await currentHelp.click();
     const currentDialog=page.getByRole('dialog',{name:'測試員地圖：頁面說明'});await expect(currentDialog).toBeVisible();

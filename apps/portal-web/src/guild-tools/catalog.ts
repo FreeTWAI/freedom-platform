@@ -12,7 +12,7 @@ export const GUILD_TOOLS:readonly GuildTool[]=[
  {tool_id:'catalog',guild_key:'guild_product_quality_supply',title:'供貨商品庫',kind:'native',old_routes:['#stores/supply','#stores/:tenant/:store/supply','#stores/:tenant/:store/supply-orders'],tab:'stores'},
  native('supplier','供貨工具'),native('marketing','行銷'),native('cocreation','作品共創'),
  {...native('workbench','工作'),old_routes:['#workbench','#tasks']},native('engagement','合作紀錄'),
- native('positioning','定位測驗'),native('newbie-village','新手村'),native('tester-map','測試地圖'),native('ar','AR 互動'),
+ native('positioning','定位測驗'),native('newbie-village','新手村'),native('tester-map','測試員地圖'),native('ar','AR 互動'),
  {tool_id:'arcade',guild_key:'guild_games',title:'遊戲大廳',kind:'native',old_routes:['/play']},
 ];
 export const guildTool=(guildKey:string,toolId:string)=>GUILD_TOOLS.find(t=>t.guild_key===guildKey&&t.tool_id===toolId);

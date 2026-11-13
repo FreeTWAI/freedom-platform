@@ -210,8 +210,8 @@ test('member previews an event, an authorized officer approves it, and participa
       const html=await rejected.text();expect(html).toContain(`href="/events/${event.event_id}?app=1"`);expect(html).toContain(`href="/#explore/events/${event.event_id}"`);
     }
     await loginLink.click();
-    // Authentication retains public identity/referral and scrubs the one-time app entry switch.
-    const eventUrl=publicUrl.href;
+    // Authentication retains public identity/referral and the explicit native-app selector, so a reload stays in the app.
+    const eventUrl=publicUrl.href,appUrl=new URL(eventUrl);appUrl.searchParams.append('app','1');
     const eventLocation=new URL(eventUrl);
     expect(eventLocation.origin).toBe(new URL(shared).origin);
     expect(eventLocation.pathname).toMatch(/^\/events\/[0-9a-f-]{36}\/?$/);
@@ -221,7 +221,7 @@ test('member previews an event, an authorized officer approves it, and participa
     await publicPage.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
     await publicPage.getByRole('button',{name:'登入',exact:true}).click();
     await expect(publicPage.getByRole('region',{name:'活動專頁',exact:true})).toContainText(title);
-    await expect(publicPage).toHaveURL(eventUrl);
+    await expect(publicPage).toHaveURL(appUrl.href);
     expect(await publicPage.evaluate(()=>window.history.state?.freedomEventLogin)).toBeUndefined();
     await publicPage.goBack();await publicPage.goForward();
     await expect(publicPage.getByRole('region',{name:'活動專頁',exact:true})).toContainText(title);
