@@ -4,11 +4,11 @@ import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {command,checkVersion,type Command} from '../../packages/db/index.js';
 import {readWithMemberSession} from '../../packages/db/member-session.js';
-import {requireCondition} from '../../packages/shared/problem.js';
+import {Problem,requireCondition} from '../../packages/shared/problem.js';
 import type {Actor} from '../identity-membership/service.js';
 import {requireLeader,viewerAccess,assertDelegatedViewerDeadline} from '../guild-workspace/launchpad-config.js';
 import {inspectTool,safeFrameOrigins} from './validation.js';
-import type {PreviewFetch} from '../community/link-preview.js';
+import type {GuildToolFetch} from './transport.js';
 import {isNativeTool,type ToolRecord} from './contract.js';
 const columns='id,guild_key,tool_id,title,entry_url,origin,bridge_version,profile,scopes,permissions,state,revision';
 export async function listTools(pool:Pool,guild:string){return {items:(await pool.query(`SELECT ${columns} FROM guild_tools WHERE guild_key=$1 ORDER BY tool_id LIMIT 16`,[guild])).rows as ToolRecord[]};}
@@ -30,10 +30,12 @@ export async function frameOrigins(pool:Pool,origin:string){
 async function access(q:PoolClient,actor:Actor,guild:string){requireCondition(!actor.agent,403,'guild_leader_required','請由公會長在平台操作。');const a=await viewerAccess(q,actor,guild);requireCondition(a.publish,403,'guild_leader_required','請由此公會會長或受委任成員操作。');return {...a,edit:false,preview:false};}
 export async function manageAccess(pool:Pool,actor:Actor,guild:string){return readWithMemberSession(pool,actor,async q=>{const a=await viewerAccess(q,actor,guild);await assertDelegatedViewerDeadline(q,actor,guild,{...a,edit:false,preview:false});return {manage:a.publish,leader:a.leader};});}
 async function audit(q:PoolClient,actor:Actor,row:ToolRecord,action:string){await q.query('INSERT INTO guild_tool_audit(id,tool,revision,actor,action) VALUES($1,$2,$3,$4,$5)',[randomUUID(),row.id,row.revision,actor.user_id,action]);}
-export async function registerTool(pool:Pool,input:Command,guild:string,origin:string,fetcher?:PreviewFetch){
+export async function registerTool(pool:Pool,input:Command,guild:string,origin:string,fetcher?:GuildToolFetch){
  // Authenticate before external work, then repeat current authorization inside the write transaction.
  await readWithMemberSession(pool,input.actor,async q=>{const a=await access(q,input.actor,guild);await assertDelegatedViewerDeadline(q,input.actor,guild,a);});
  await authRateLimit(pool,'guild-tool-registration',input.actor.user_id,20,3600);
+ const rawUrl=(input.body as {entry_url?:unknown}|null)?.entry_url;
+ if(typeof rawUrl==='string'&&fetcher?.assertUrl){try{fetcher.assertUrl(rawUrl);}catch{throw new Problem(422,'tool_fetch_failed','無法安全讀取網站，請檢查公開網址。');}}
  const body=await inspectTool(input.body,origin,fetcher);requireCondition(!isNativeTool(guild,body.tool_id),409,'native_tool_reserved','此代號屬於平台工具，請換一個代號。');const proof=body.profile==='origin'?await verifyOriginChallenge(pool,input.actor,guild,body.origin,(input.body as {origin_challenge_id?:string}).origin_challenge_id,fetcher):undefined;let rights:Awaited<ReturnType<typeof access>>;
  const result=await command(pool,input,async q=>{rights=await access(q,input.actor,guild);if(proof)await assertOriginProofCurrent(q,proof,input.actor,guild,body.origin);await q.query("SELECT pg_advisory_xact_lock(hashtextextended('guild-tools-registry',0))");},async q=>{
  const prior=(await q.query('SELECT * FROM guild_tools WHERE guild_key=$1 AND tool_id=$2 FOR UPDATE',[guild,body.tool_id])).rows[0];

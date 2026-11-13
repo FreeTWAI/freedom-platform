@@ -4,6 +4,11 @@
   "owner_role": "foundation",
   "owned_paths": [
     "modules/guild-tools/**",
+    "apps/platform-api/src/worker-guild-tool-fetch.ts",
+    "apps/platform-api/src/worker-guild-tool-signer.ts",
+    "scripts/generate-guild-tool-signing-key.mjs",
+    "tests/runtime/guild-tool-worker-signer.test.ts",
+    "tests/runtime/guild-tool-worker-fetch.test.ts",
     "apps/platform-api/src/routes/guild-tools.ts",
     "apps/portal-web/src/frame-tools/**",
     "migrations/207_guild_tools.sql",
