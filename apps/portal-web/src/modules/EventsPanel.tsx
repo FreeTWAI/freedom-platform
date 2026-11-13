@@ -108,6 +108,7 @@ export function EventFields({value,onChange,guilds=[],guildLocked=false,disabled
     <label className="field">{value.mode==='in_person'?'線上直播連結（選填）':'線上參與連結'}<input disabled={disabled} type="url" pattern="https://.*" required={value.mode==='hybrid'} maxLength={500} value={value.online_url} onChange={e=>set('online_url',e.target.value)} placeholder="https://"/>{value.mode==='hybrid'&&<small>同時提供實體地點與線上參與連結。</small>}</label></>;
   const summary=<>    {value.visibility==='referral'&&<p className="field-hint">海報、影片與活動說明都會公開。請勿在這些內容中放入線上參與連結或 QR 碼。</p>}
     <p className="field-hint">審核：{reviewerFor(value,guilds)}的公會長，或平台管理員。</p></>;
+  const registrationPolicy=<label className="field">報名方式<select aria-label="報名方式" disabled={disabled} value={value.registration_policy} onChange={e=>set('registration_policy',e.target.value as EventDraft['registration_policy'])}><option value="community_member">社群帳號登入後報名（建議）</option><option value="guest_allowed">允許訪客以姓名與 Email 報名</option></select><small>公開活動頁不等於開放訪客報名。公會／工坊的參與範圍仍適用；報名方式只能在已送審、尚未開始的待審核活動修改。</small></label>;
   const revealInvalid=(event:FormEvent<HTMLDivElement>)=>{
     const target=event.target as HTMLElement;
     // Open synchronously before native validation attempts to focus the field.
@@ -118,7 +119,7 @@ export function EventFields({value,onChange,guilds=[],guildLocked=false,disabled
     <label className="field">活動名稱<input disabled={disabled} required maxLength={120} value={value.title} onChange={e=>set('title',e.target.value)}/></label>
     <label className="field">開始時間<input disabled={disabled} required type="datetime-local" value={value.starts_at} onChange={e=>{const starts_at=e.target.value,end=new Date(Date.parse(starts_at)+3600000);change({...value,starts_at,ends_at:Number.isFinite(end.getTime())?localTime(end.toISOString()):value.ends_at});}}/></label>
     <label className="field">地點<input disabled={disabled} required maxLength={300} value={value.location} onChange={e=>set('location',e.target.value)}/></label>
-    <details className="event-form-options"><summary>選填設定</summary><div className="experience-fields">{kind}{body}{capacity}{audience}
+    <details className="event-form-options"><summary>選填設定</summary><div className="experience-fields">{kind}{body}{capacity}{audience}{registrationPolicy}
     <label className="field">需要哪些幫手（選填）<textarea data-event-help-need maxLength={500} disabled={disabled} value={value.help_need??''} onChange={e=>set('help_need',e.target.value)}/></label>
     <EventPrizeFields value={value.prize_details??[]} onChange={next=>set('prize_details',next)} disabled={disabled}/></div></details>
     <small>{value.visibility==='guild'?'僅公會成員':'公開'} · 時間依裝置時區</small>
@@ -126,7 +127,7 @@ export function EventFields({value,onChange,guilds=[],guildLocked=false,disabled
   return <div className="experience-fields" onInvalidCapture={revealInvalid}>
     <label className="field">活動名稱<input disabled={disabled} required maxLength={120} value={value.title} onChange={e=>set('title',e.target.value)}/></label>
     {!progressive&&kind}{body}
-    <label className="field">報名方式<select aria-label="報名方式" disabled={disabled} value={value.registration_policy} onChange={e=>set('registration_policy',e.target.value as EventDraft['registration_policy'])}><option value="community_member">社群帳號登入後報名（建議）</option><option value="guest_allowed">允許訪客以姓名與 Email 報名</option></select><small>公開活動頁不等於開放訪客報名。公會／工坊的參與範圍仍適用；報名方式只能在已送審、尚未開始的待審核活動修改。</small></label>
+    {registrationPolicy}
     {progressive?<details className="event-form-options"><summary>更多設定：活動類型、人數、公會與參與範圍</summary><div className="experience-fields">{kind}{capacity}{audience}</div></details>:<>{capacity}{audience}</>}
     {progressive&&<label className="field">需要哪些幫手（選填）<textarea data-event-help-need disabled={disabled} maxLength={500} rows={3} value={value.help_need??''} onChange={e=>set('help_need',e.target.value)} placeholder="例如：需要 2 位夥伴在活動前 30 分鐘協助報到"/><small>需求會隨活動一起審核、依活動參與範圍顯示。幫忙申請與活動報名分開；幫手名單不公開。請勿填寫私人聯絡方式。</small></label>}
     {progressive&&<EventPrizeFields value={value.prize_details??[]} onChange={next=>set('prize_details',next)} disabled={disabled}/>}

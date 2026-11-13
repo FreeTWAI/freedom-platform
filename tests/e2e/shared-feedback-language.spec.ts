@@ -1,6 +1,6 @@
 import {openSettingsPanel,closeSettingsMenu} from './settings-menu-helpers.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
-import {openChat,closeChat,navigate,openFeatureSearch} from './navigation.js';
+import {openChat,closeChat,navigate,openExploreFeatureSearch} from './navigation.js';
 
 // Expected copy is independent of the implementation's interface catalog.
 const languages=[
@@ -18,7 +18,7 @@ async function login(page:Page,language:Language=languages[0]){
   await form.locator('[name=email]').fill('maker@local.test');
   await form.locator('[name=password]').fill('freedom-local-demo');
   await form.getByRole('button',{name:language.login,exact:true}).click();
-  await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await expect(page.locator('.social-write-trigger')).toBeVisible();
 }
 
@@ -62,7 +62,7 @@ for(const [index,language] of languages.entries()){
       await expect(form.locator('[name=email]')).toHaveValue('maker@local.test');
       await expect(form.locator('[name=password]')).toHaveValue('freedom-local-demo');
       await contained(page,feedback);expect(attempts).toBe(1);
-      release();await expect(page.getByRole('heading',{name:next.home,level:1,exact:true})).toBeVisible();
+      release();await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
       await expect(feedback).toHaveCount(0);expect(attempts).toBe(1);
     }finally{release();await context.close();}
   });
@@ -119,7 +119,7 @@ test('a held deferred page translates in place and navigation can still leave it
     expect(await page.locator('.page-loading .request-feedback-progress').evaluate(element=>getComputedStyle(element).animationName)).toBe('none');
     await page.screenshot({path:info.outputPath('loading-es-320.png'),fullPage:true});
     await page.setViewportSize({width:1280,height:844});
-    await closeChat(page);await page.locator('#workspace-navigation').getByRole('button',{name:'Inicio',exact:true}).click();
+    await closeChat(page);await page.locator('#workspace-navigation').getByRole('button',{name:'動態',exact:true}).click();
     await expect(page.locator('.social-write-trigger')).toBeVisible();
   }finally{release();}
   expect(assets).toBe(1);
@@ -157,9 +157,8 @@ for (const [index, language] of languages.entries()) {
     const context=await browser.newContext({locale:language.locale,viewport:{width:1280,height:844}});
     try {
       const page=await context.newPage();await login(page,language);
-      const mobile=page.locator('.mobile-menu-toggle');
-      if(await mobile.isVisible())await mobile.click();
-      const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+      await navigate(page,'搜尋社群內容');
+      const menu=page.locator('.place-feature-search'),trigger=menu.locator(':scope > summary');
       await trigger.click();
       const search=menu.locator('input[type=search]');await expect(search).toBeFocused();
       const contentSearch=menu.getByRole('button',{name:contentSearchLabels[index],exact:true});
@@ -182,14 +181,13 @@ for (const [index, language] of languages.entries()) {
       await expect(trigger).toBeFocused();
       await trigger.press('Enter');await expect(search).toBeFocused();await expect(search).toHaveValue('');
       await search.fill('zz-no-feature-93275');
-      const panel=(await menu.locator('.nav-more-content').boundingBox())!;expect(panel).not.toBeNull();
-      await expect(page.getByRole('heading',{name:language.home,level:1,exact:true})).toHaveCount(1);
-      // The home heading is screen-reader-only. Use the visible composer's
-      // non-interactive left padding, outside the panel, without opening a form.
-      const outside=page.locator('.home-timeline .social-composer-start');
+      const panel=(await menu.locator('.place-feature-search-content').boundingBox())!;expect(panel).not.toBeNull();
+      await expect(page.getByRole('heading',{name:'探索',level:1,exact:true})).toHaveCount(1);
+      // Click the visible Explore view label above the lookup without selecting a destination.
+      const outside=page.getByLabel('探索檢視',{exact:true}).locator('..');
       await expect(outside).toBeVisible();
       const box=(await outside.boundingBox())!;
-      expect(box.x+4).toBeLessThan(panel.x);
+      expect(box.y+4).toBeLessThan(panel.y);
       await outside.click({position:{x:4,y:4}});
       await expect(page.locator('.social-publish-dialog[open]')).toHaveCount(0);
       await expect(trigger).toHaveAttribute('aria-expanded','false');
@@ -224,8 +222,8 @@ for (const [index, language] of languages.entries()) {
 }
 
 test('Safari Escape with keyCode 229 alone keeps the feature query and menu open',async({page})=>{
-  await page.setViewportSize({width:1280,height:844});await login(page);
-  const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+  await page.setViewportSize({width:1280,height:844});await login(page);await navigate(page,'搜尋社群內容');
+  const menu=page.locator('.place-feature-search'),trigger=menu.locator(':scope > summary');
   await trigger.click();
   const search=menu.getByRole('searchbox',{name:'搜尋功能'});await expect(search).toBeFocused();
   await search.fill('zz-no-feature-93275');
@@ -244,12 +242,12 @@ for(const [index,width] of [320,390,1280].entries())test(`${width}px content sea
   await page.locator('.settings-menu-button').click();await openSettingsPanel(page,'appearance');
   await page.getByRole('menuitemradio',{name:['自由工坊－明亮','自由工坊－夜航','自由工坊－敘生'][index],exact:true}).click();
   await closeSettingsMenu(page);
-  const menu=page.locator('.nav-more'),trigger=menu.locator(':scope > summary');
+  const menu=page.locator('.place-feature-search'),trigger=menu.locator(':scope > summary');
   const search=menu.getByRole('searchbox',{name:'搜尋功能',exact:true});
   const handoff=menu.getByRole('button',{name:contentSearchLabels[0],exact:true});
   const original='  資安 GitHub & C++ #?= / 🛠  ';
   for(const query of [original,'作品']){
-    await openFeatureSearch(page);await expect(search).toHaveValue('');await search.fill(query);
+    await openExploreFeatureSearch(page);await expect(search).toHaveValue('');await search.fill(query);
     await expect(handoff).toBeVisible();await contained(page,handoff);
     const box=(await handoff.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);
     await handoff.click();
@@ -274,8 +272,8 @@ for(const capability of ['disabled','missing'] as const)test(`feature search has
     await route.fulfill({response,json:site});
   });
   let contentReads=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/community-search')contentReads++;});
-  await login(page);await openFeatureSearch(page);
-  const menu=page.locator('.nav-more'),search=menu.getByRole('searchbox',{name:'搜尋功能',exact:true});
+  await login(page);await openExploreFeatureSearch(page);
+  const menu=page.locator('.place-feature-search'),search=menu.getByRole('searchbox',{name:'搜尋功能',exact:true});
   await search.fill('zz-no-feature-93275');
   await expect(menu.getByRole('status')).toContainText('0');
   await expect(menu.getByRole('button',{name:contentSearchLabels[0],exact:true})).toHaveCount(0);
@@ -293,13 +291,13 @@ test('content search handoff respects unsaved page departure protection',async({
   let discard=false,prompts=0,writes=0;
   page.on('dialog',async dialog=>{prompts++;await(discard?dialog.accept():dialog.dismiss());});
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes++;});
-  const menu=page.locator('.nav-more');
+  const menu=page.locator('.place-feature-search');
   for(const accepted of [false,true]){
-    discard=accepted;await openFeatureSearch(page);
+    discard=accepted;await openExploreFeatureSearch(page);
     await menu.getByRole('searchbox',{name:'搜尋功能',exact:true}).fill('資安');
     await menu.getByRole('button',{name:contentSearchLabels[0],exact:true}).click();
     if(!accepted){
-      await expect(page).toHaveURL(/#events$/);
+      await expect(page).toHaveURL(/#explore\/events$/);
       await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('必須保留的搜尋測試草稿');
       expect(prompts).toBe(1);
     }
@@ -310,17 +308,20 @@ test('content search handoff respects unsaved page departure protection',async({
 
 test('390px feature search consumes two Escapes before the phone menu closes',async({page})=>{
   await page.setViewportSize({width:390,height:844});await login(page);
-  const toggle=page.locator('.mobile-menu-toggle');await toggle.click();
-  const nav=page.locator('#workspace-navigation');await expect(nav).toBeVisible();
-  const menu=nav.locator('.nav-more'),trigger=menu.locator(':scope > summary');
-  await trigger.click();
+  await openExploreFeatureSearch(page);
+  const toggle=page.locator('.mobile-menu-toggle'),nav=page.locator('#workspace-navigation');
+  await expect(nav).toBeHidden();
+  const menu=page.locator('.place-feature-search'),trigger=menu.locator(':scope > summary');
   const search=menu.getByRole('searchbox',{name:'搜尋功能'});await expect(search).toBeFocused();
   await search.fill('zz-no-feature-93275');
   await search.press('Escape');await expect(search).toHaveValue('');await expect(search).toBeFocused();
-  await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(toggle).toHaveAttribute('aria-expanded','true');
+  await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(toggle).toHaveAttribute('aria-expanded','false');
   await search.press('Escape');await expect(trigger).toHaveAttribute('aria-expanded','false');await expect(trigger).toBeFocused();
-  await expect(toggle).toHaveAttribute('aria-expanded','true');await expect(nav).toBeVisible();
-  await trigger.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');
+  await expect(toggle).toHaveAttribute('aria-expanded','false');await expect(nav).toBeHidden();
+  // The lookup now lives outside the phone menu. Its two Escapes leave that menu closed;
+  // opening the five-place menu still gives it its own single Escape dismissal.
+  await toggle.click();await expect(nav).toBeVisible();
+  await page.keyboard.press('Escape');await expect(toggle).toHaveAttribute('aria-expanded','false');
   await expect(nav).toBeHidden();await expect(toggle).toBeFocused();
 });
 
@@ -335,7 +336,7 @@ test('failed lazy import recovers by loading a new document after the network re
   const documentLoaded=page.waitForEvent('load');
   await alert.getByRole('button',{name:languages[0].reload,exact:true}).click();
   await documentLoaded;
-  await expect(page.getByRole('heading',{name:languages[0].home,level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await openChat(page);
   await expect(page.getByRole('tab',{name:/^私人訊息/})).toBeVisible();
   await expect(page.getByRole('alert').filter({hasText:languages[0].failed})).toHaveCount(0);

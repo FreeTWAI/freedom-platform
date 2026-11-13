@@ -67,14 +67,28 @@ export async function navigate(page:Page,name:string) {
  await expect(page.locator('.shell')).toBeVisible();
  if(name==='我的訊息'){await openChat(page);return;}
  await closeChat(page);
+ const automation:Record<string,string>={'模型設定':'#automation/models','工具連線':'#automation/connections','裝置連線':'#automation/devices'};
  const aliases:Record<string,TabId>={'我的定位':'positioning','供貨商品管理':'stores','我的名片':'account','私人 AI 工作室':'private-ai','會員首頁':'home','我的內容':'my-content'};
- const tab=aliases[name]??Object.entries(TAB_TITLES).find(([,title])=>title===name)?.[0] as TabId;
+ const tab=(automation[name]?'private-ai':aliases[name])??Object.entries(TAB_TITLES).find(([,title])=>title===name)?.[0] as TabId;
  if(!tab)throw new Error('Unmapped navigation task: '+name);
- const hash=name==='供貨商品管理'?portalHash('stores','/supply'):portalHash(tab);
+ if(tab==='community'||tab==='community-hub'){
+  await openExploreFeatureSearch(page);
+  await page.getByLabel('搜尋功能',{exact:true}).fill(TAB_TITLES[tab]);
+  await page.locator('.place-feature-search').getByRole('region',{name:'功能搜尋結果',exact:true}).getByRole('button',{name:TAB_TITLES[tab],exact:true}).click();
+  return;
+ }
+ const hash=automation[name]??(name==='供貨商品管理'?portalHash('stores','/supply'):portalHash(tab));
  const route=resolvePortalRoute(hash),place=PORTAL_PLACES.find(p=>p.id===route.place)!;
  await openFeatureSearch(page);
- await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:place.title,exact:true}).click();
- if(route.toolId){
+ const destination=page.locator('#workspace-navigation').getByRole('button',{name:place.title,exact:true,includeHidden:true});
+ await destination.click();
+ // A declined leave guard keeps the current place. Do not search for controls
+ // in the rejected destination or issue a second navigation attempt.
+ if(await destination.getAttribute('aria-current')!=='page')return;
+ if(tab==='opensource'){
+  await openHomeGuide(page);
+  await page.locator('.home-destinations button').filter({has:page.getByText('開源投稿',{exact:true})}).click();
+ }else if(route.toolId){
   await page.getByLabel('公會工具',{exact:true}).selectOption(route.guildKey!);
   const tool=GUILD_TOOLS.find(t=>t.guild_key===route.guildKey&&t.tool_id===route.toolId)!;
   await page.getByRole('button',{name:tool.title,exact:true}).click();
@@ -191,4 +205,55 @@ export async function openAccountSettings(page:Page,...labels:string[]){
     }
     if(!await target.evaluate(element=>(element as HTMLDetailsElement).open))await target.locator(':scope > summary').click();
   }
+}
+
+/** Remove the new per-member feed rows before deleting synthetic fixture users. */
+export async function clearMemberAgentEvents(db: import('pg').Pool | import('pg').PoolClient, ids: string[]) {
+  await db.query('DELETE FROM agent_change_events WHERE user_id=ANY($1::uuid[])', [ids]);
+}
+
+/** Reveal the retained event fields through the current optional-settings disclosure. */
+export async function openEventOptions(page: Page) {
+  const options=page.locator('form.experience-editor details').filter({has:page.getByText('選填設定',{exact:true}).or(page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}))});
+  await expect(options).toHaveCount(1);
+  if(!await options.evaluate(element=>(element as HTMLDetailsElement).open))await options.locator(':scope > summary').click();
+}
+
+/** Reconstruct a pre-revamp pending event for the retained draft-editing tests.
+ * New publication is asserted separately; this SQL is fixture setup, not a UI transition. */
+export async function seedLegacyEventDraft(db: import('pg').Pool, eventId: string) {
+  const result=await db.query("UPDATE community_events SET state='pending' WHERE event_id=$1 AND state='published' RETURNING event_id",[eventId]);
+  expect(result.rowCount).toBe(1);
+}
+
+/** Open feature lookup in Explore; keep its current content-query history. */
+export async function openExploreFeatureSearch(page: Page) {
+  await closeChat(page);
+  if(resolvePortalRoute(new URL(page.url()).hash).place!=='explore'){
+    await openFeatureSearch(page);
+    const explore=page.locator('#workspace-navigation').getByRole('button',{name:'探索',exact:true,includeHidden:true});
+    await explore.click();
+    if(await explore.getAttribute('aria-current')!=='page')return;
+  }
+  const lookup=page.locator('.place-feature-search');
+  await expect(lookup).toBeVisible();
+  if(!await lookup.evaluate(element=>(element as HTMLDetailsElement).open))await lookup.locator(':scope > summary').click();
+}
+
+/** Assert an existing task's canonical address and its current place/tool heading. */
+export async function expectDestination(page: Page, legacy: string) {
+  const route=resolvePortalRoute(legacy.startsWith('#')?legacy:'#'+legacy);
+  const title=route.toolId?GUILD_TOOLS.find(tool=>tool.guild_key===route.guildKey&&tool.tool_id===route.toolId)!.title:PORTAL_PLACES.find(place=>place.id===route.place)!.title;
+  await expect.poll(()=>new URL(page.url()).hash).toBe(route.hash);
+  await expect(page.getByRole('heading',{level:1})).toHaveText(title);
+}
+
+/** Public event URLs retain their member tools behind the visible management link. */
+export async function openEventManagement(page: Page, eventId?: string) {
+  if(eventId)await page.goto(`/events/${eventId}`);
+  const detail=page.getByRole('region',{name:'活動專頁',exact:true}),management=page.getByRole('link',{name:'活動管理',exact:true});
+  await expect(detail.or(management)).toBeVisible();
+  if(!await detail.isVisible())await management.click();
+  await expect(detail).toBeVisible();
+  if(eventId)expect(new URL(page.url()).hash).toBe(`#explore/events/${eventId}`);
 }

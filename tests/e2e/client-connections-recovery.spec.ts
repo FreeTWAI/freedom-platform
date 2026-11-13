@@ -8,8 +8,7 @@ const problem=(status:number,title:string,detail:string)=>({status,contentType:'
 async function openConnections(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await navigate(page, '我的名片');
-  await openAccountSettings(page,'帳號與安全','連結 GitHub 與其他工具');
+  await navigate(page, '工具連線');
   const heading=page.getByRole('heading',{name:'連接我的客戶端（讀取）',exact:true});
   await expect(heading).toBeVisible();
   return heading.locator('xpath=ancestor::section[1]');

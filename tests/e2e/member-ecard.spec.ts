@@ -22,7 +22,7 @@ async function signup(page:Page,name:string){
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await expect(page.getByRole('heading',{name:`${name}，歡迎來到自由工坊。`})).toBeVisible();
   await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
 }
 async function contrast(page:Page,selector:string){
   return page.locator(selector).first().evaluate(element=>{
@@ -520,7 +520,7 @@ test('platform-public profile links render with brand icons and match the public
       await owner.getByRole('button',{name:'編輯名片',exact:true}).click();
       await openAccountSettings(owner,'分享名片設定（免登入）');
       await expect(owner.getByRole('region',{name:'分享我的工坊名片'})).toBeVisible();
-      await expect(owner).toHaveURL(/#account/);
+      await expect(owner).toHaveURL(/#me\/settings/);
     }finally{await owner.close();}
     await page.setViewportSize({width:1280,height:900});
     const fields=await settings.locator('.member-share-fields').boundingBox();

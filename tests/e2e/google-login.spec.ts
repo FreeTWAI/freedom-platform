@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
 
@@ -103,7 +104,7 @@ for(const [entry,heading] of [['/#newbie-village','新手村任務'],['/#communi
   const result=page.getByRole('region',{name:'完成 Google 登入',exact:true});
   await expect(result).toBeVisible();await expect(result.getByRole('status')).toContainText('已取消這次 Google 授權');
   await expect(page.getByRole('heading',{name:heading,exact:true})).toHaveCount(0);
-  expect(new URL(page.url()).hash).toBe(new URL(entry,'http://localhost').hash);expect(cancelled).toBe(1);
+  expect(new URL(page.url()).hash).toBe(canonicalHash(new URL(entry,'http://localhost').hash));expect(cancelled).toBe(1);
 });
 
 for(const entry of ['https://attacker.example/','//attacker.example/','/google/callback?code=secret','/?return_to=https%3A%2F%2Fattacker.example%2F','/#reset-password/'+STATE])test(`rejects unsafe saved continuity: ${entry}`,async({page})=>{
@@ -147,7 +148,7 @@ test('leaving a callback entry prevents a late completion from applying or redir
     await expect(page.getByRole('alert')).toContainText('頁面已變更');
     const response=page.waitForResponse('**/api/v1/auth/google/complete');release();await response;
     await page.getByRole('heading',{name:'完成 Google 登入',exact:true}).click();
-    await expect(page).toHaveURL(/#tasks$/);await expect(page.getByRole('alert')).toContainText('頁面已變更');
+    await expect(page).toHaveURL(/#guilds\/guild_ai_project\/tools\/work\/discovery$/);await expect(page.getByRole('alert')).toContainText('頁面已變更');
   }finally{release();}
 });
 
@@ -320,7 +321,7 @@ test('successful Google link reloads the scrubbed account entry and leaves callb
   await openAccountSecurity(page);await expect(page.getByRole('heading',{name:'登入與安全',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'連結 Google',exact:true})).toHaveCount(0);
   await expect(page.locator('.google-account')).toContainText('已連結 Google。');
-  await expect(page).toHaveURL(/\/#account$/);
+  await expect(page).toHaveURL(/\/#me\/settings$/);
   expect(await page.evaluate(()=>(performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type)).toBe('reload');
   expect(await page.evaluate(key=>sessionStorage.getItem(key),ENTRY_KEY)).toBeNull();
   expect(linked).toBe(1);expect(logins).toBe(0);
@@ -362,7 +363,8 @@ for(const entry of [`/events/${EVENT_ID}?ref=${EVENT_REF}`,`/#events/${EVENT_ID}
   await page.route('**/api/v1/auth/google/cancel',async route=>{cancelled++;await route.fulfill({json:{cancelled:true}})});
   await remember(page,entry);await callback(page,`state=${STATE}&error=access_denied`);
   await expect(page.getByRole('region',{name:'完成 Google 登入',exact:true})).toContainText('已取消這次 Google 授權');
-  await expect(page).toHaveURL(new URL(entry,page.url()).href);expect(cancelled).toBe(1);expect(registrations).toBe(0);
+  const destination=new URL(entry,page.url());if(destination.hash)destination.hash=canonicalHash(destination.hash);
+  await expect(page).toHaveURL(destination.href);expect(cancelled).toBe(1);expect(registrations).toBe(0);
   expect(await page.evaluate(key=>sessionStorage.getItem(key),ENTRY_KEY)).toBeNull();
 });
 for(const entry of [`/events/${EVENT_ID}#participation=${STATE}`,`/events/${EVENT_ID}?ref=${STATE}`,`/events/${EVENT_ID}?ref=${EVENT_REF}&ref=${EVENT_REF}`,`/events/${EVENT_ID}?ref=${EVENT_REF}&return_to=https%3A%2F%2Fattacker.example`, `/#events/${EVENT_ID}?ref=${EVENT_REF}&participation=${STATE}`,`/?ref=${EVENT_REF}`,`/events/${'-'.repeat(36)}?ref=${EVENT_REF}`])test(`Google rejects unsafe event continuity: ${entry}`,async({page})=>{

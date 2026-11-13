@@ -1,3 +1,4 @@
+import {clearMemberAgentEvents} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test,expect,type Page} from './fixtures.js';
@@ -29,7 +30,7 @@ async function setup(db:Pool,kind:'direct'|'guild',sticker:typeof CHAT_STICKERS[
 async function cleanup(db:Pool,ids:string[]){
  const q=await db.connect();
  try{
-  await q.query('BEGIN');
+  await q.query('BEGIN');await clearMemberAgentEvents(q,ids);
   for(const query of [
    'DELETE FROM member_channel_reads WHERE user_id=ANY($1::uuid[])',
    'DELETE FROM guild_member_preferences WHERE user_id=ANY($1::uuid[])',

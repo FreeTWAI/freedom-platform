@@ -213,8 +213,8 @@ test('four chat tabs keep their order and keyboard behaviour without mixing room
   await page.keyboard.press('ArrowLeft');await expectSelected('小隊閒聊');
   await page.keyboard.press('Home');await expectSelected('私人訊息');
   await page.keyboard.press('End');await expectSelected('世界聊天');
-  // The top bar still owns the only h1.
-  await expect(page.getByRole('heading',{level:1})).toHaveCount(1);await expect(page.getByRole('heading',{level:1})).toHaveText('會員首頁');
+  // The top bar still owns the only h1; the legacy messages URL belongs to Mine.
+  await expect(page.getByRole('heading',{level:1})).toHaveCount(1);await expect(page.getByRole('heading',{level:1})).toHaveText('我的');
   for(const label of labels){
     await tab(page,label).click();await noOverflow(page);
     const box=(await tab(page,label).boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.x+box.width).toBeLessThanOrEqual(320);
@@ -300,7 +300,7 @@ test('an empty guild or squad membership offers the real page instead of a made-
   await expect(panel(page,'公會閒聊').locator('[data-channel-key]')).toHaveCount(0);await expect(tab(page,'公會閒聊')).toContainText('沒有未讀');
   await tab(page,'小隊閒聊').click();
   await expect(panel(page,'小隊閒聊').getByText('你還沒有加入任何小隊，加入後會出現該小隊的閒聊頻道。')).toBeVisible();
-  await panel(page,'小隊閒聊').getByRole('button',{name:'前往小隊集合',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
+  await panel(page,'小隊閒聊').getByRole('button',{name:'前往小隊集合',exact:true}).click();await expect(page).toHaveURL(/#me\/teams$/);
   await page.goBack();await expect(page).toHaveURL(/#home$/);
   // The full-screen overlay no longer persists across page navigation.
   await expect(page.locator('#floating-message-panel')).toBeHidden();await openChat(page);
@@ -374,7 +374,7 @@ test('chat entry retains the selected channel while the bell owns notifications'
   await expect(tab(page,'世界聊天')).toHaveAttribute('aria-selected','true');
   await closeChat(page);await page.evaluate(()=>{window.location.hash='messages'});
   await expect(tab(page,'世界聊天')).toHaveAttribute('aria-selected','true');
-  await page.getByRole('button',{name:'建立群組',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
+  await page.getByRole('button',{name:'建立群組',exact:true}).click();await expect(page).toHaveURL(/#me\/teams$/);
 });
 
 test('sending is plain text, retries an unknown result once, and never lets an older re-read undo it',async({page})=>{
@@ -510,7 +510,7 @@ test('leaving a channel clears its history and composer at once, and a late answ
   expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(true);
   const alerts:string[]=[];page.once('dialog',async dialog=>{alerts.push(dialog.message());await dialog.accept();});
   await squad.getByRole('button',{name:'回到小隊集合',exact:true}).click();
-  await expect(page).toHaveURL(/#squads$/);expect(alerts).toHaveLength(0);await expect(thread).toBeHidden();
+  await expect(page).toHaveURL(/#me\/teams$/);expect(alerts).toHaveLength(0);await expect(thread).toBeHidden();
   await expect(page.locator('.floating-message-panel')).toBeHidden();expect(server.log.sends).toEqual([original]);
   // Page navigation collapses the modal but must not discard the blocked
   // operation. Reopen it before the read-only authority recheck.
@@ -534,7 +534,7 @@ test('leaving a channel clears its history and composer at once, and a late answ
   expect(await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;})).toBe(false);
   await guild.getByRole('button',{name:'← 返回公會列表',exact:true}).click();
   await tab(page,'小隊閒聊').click();
-  await squad.getByRole('button',{name:'回到小隊集合',exact:true}).click();await expect(page).toHaveURL(/#squads$/);
+  await squad.getByRole('button',{name:'回到小隊集合',exact:true}).click();await expect(page).toHaveURL(/#me\/teams$/);
   await page.goBack();await expect(page.locator('#floating-message-panel')).toBeHidden();
   await openChat(page);await tab(page,'公會閒聊').click();
   await panel(page,'公會閒聊').getByRole('button',{name:'合成公會乙',exact:true}).click();await expect(panel(page,'公會閒聊').locator('.messages-bubbles .messages-body')).toHaveCount(1);

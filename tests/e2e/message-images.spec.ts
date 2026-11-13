@@ -11,7 +11,7 @@ const png=await sharp({create:{width:8,height:8,channels:3,background:{r:255,g:2
 const image={name:'screenshot.png',mimeType:'image/png',buffer:png};
 async function openDirect(page:Page,controls=true,email='maker@local.test'){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill(email);await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
-  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await page.goto('/#messages');const panel=page.getByRole('tabpanel',{name:/^私人訊息/});
   await panel.locator('.chat-list-toolbar').getByRole('button',{name:'開始新對話',exact:true}).click();await panel.getByLabel('搜尋會員').fill('示範需求者');await panel.getByRole('button',{name:'搜尋會員',exact:true}).click();
   await panel.getByRole('button',{name:'傳訊給 示範需求者',exact:true}).click();
@@ -494,7 +494,7 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
     // would miss the exact same-event race this regression protects.
     await page.evaluate(mode=>{
       const original=window.fetch;let checked=false;
-      const target=mode==='dock-logout'?Array.from(document.querySelectorAll<HTMLElement>('[role=menuitem]')).find(n=>n.textContent?.trim()==='登出'):Array.from(document.querySelectorAll<HTMLButtonElement>('nav[aria-label="主要工作區"] button')).find(n=>n.textContent?.trim()==='會員首頁');
+      const target=mode==='dock-logout'?Array.from(document.querySelectorAll<HTMLElement>('[role=menuitem]')).find(n=>n.textContent?.trim()==='登出'):Array.from(document.querySelectorAll<HTMLButtonElement>('nav[aria-label="主要工作區"] button')).find(n=>n.textContent?.trim()==='動態');
       if(!target)throw Error('guard navigation control missing');
       window.fetch=(input,init)=>{
         if(!checked&&init?.method==='POST'&&/\/images$/.test(String(input))){
@@ -506,7 +506,7 @@ if (process.env.FREEDOM_E2E_MESSAGE_IMAGE_FIXTURE === '1') {
     },mode);
     await thread.locator('form.messages-compose').evaluate((form:HTMLFormElement)=>form.requestSubmit());
     expect(await page.locator('html').getAttribute('data-dm-immediate-unload')).toBe('true');expect(notices).toBe(mode==='dock-logout'?1:0);expect(logouts).toBe(0);
-    await expect(page).toHaveURL(mode==='dock-logout'?/#messages$/:/#home$/);
+    await expect(page).toHaveURL(mode==='dock-logout'?/#me\/messages$/:/#home$/);
     if(mode==='page-navigation'){
       // Home closes the overlay but must not dispose its unknown image send.
       await expect(page.locator('#floating-message-panel')).toBeHidden();
