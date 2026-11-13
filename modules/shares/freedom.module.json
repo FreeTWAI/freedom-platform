@@ -23,6 +23,7 @@
   "public_exports": [
     "modules/shares/service.ts",
     "modules/shares/types.ts",
+    "modules/shares/repository-cache.ts",
     "modules/shares/event-ledger.ts",
     "modules/shares/credit.ts",
     "modules/shares/moderation.ts"

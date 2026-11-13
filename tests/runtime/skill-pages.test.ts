@@ -55,22 +55,22 @@ test('schematic text breaks after punctuation or between words before it splits 
  assert.deepEqual(wrapFlowText('跑測試與預覽',15,200),['跑測試與預覽']);
 });
 
-test('all skill pages explain the problem and mechanism along one readable path before usage and optional project details',()=>{
+test('all skill pages show original start before dated usage notes and optional project details',()=>{
  for(const book of communityCatalog.skill_books){
   const html=render(book.id),content=getSkillPageContent(book.id)!;
   assert.ok(html.startsWith('<!doctype html><html lang="zh-Hant" class="skill-page">'),book.id);
   assert.ok(html.includes('<p class="sp-headline"><span>'+escape(content.headline)+'</span></p>'),book.id);
   for(const outcome of content.outcomes)assert.ok(html.includes('<span>'+escape(outcome)+'</span></li>'),book.id+': '+outcome);
   assert.ok(html.includes('<h2 id="skill-flow-title">'+escape(content.flow.title)+'</h2>'),book.id);
-  assert.ok(html.includes('href="#skill-flow-title">運作原理</a>'),book.id);
+  assert.ok(html.includes('href="#skill-usage-notes">使用筆記</a>'),book.id);
   for(const step of content.flow.steps)assert.ok(html.includes('<h3 class="sf-title">'+escape(step.title)+'</h3><p class="sf-note">'+escape(step.note)+'</p>'),book.id+': '+step.title);
   assert.ok(html.includes(escape(content.problem)),book.id);assert.ok(html.includes(escape(content.mechanism)),book.id);
   assert.ok(html.includes('<div class="sp-conditions"><h3>使用條件</h3><p>'+escape(content.flow.lead)+'</p></div>'),book.id);
-  assert.ok(html.indexOf('class="sp-conditions"')>html.indexOf('id="skill-start"'),book.id);
+  assert.ok(html.indexOf('class="sp-conditions"')>html.indexOf('id="skill-usage-notes"'),book.id);
   assert.equal((html.match(/class="sf-connector"/g)??[]).length,2,book.id);
-  assert.match(html,/<details class="public-skill-details"><summary>作者、版本與參與開發<\/summary>/);
+  assert.match(html,/<details class="public-skill-details sp-usage-notes" id="skill-usage-notes"><summary>使用筆記/);
   assert.doesNotMatch(html,/流程圖僅供參考|功能示意圖，非實際操作截圖|以下連結在新分頁開啟外部網站/);
-  const order=['class="public-skill-entry"','class="sp-engagement"','class="public-github-social"','data-share-launch','id="skill-flow-title"','id="skill-use-title"','<h2>開始使用</h2>','class="public-skill-next"','data-share-root','id="join-workshop"'].map(marker=>html.indexOf(marker));
+  const order=['class="public-skill-entry"','data-skill-author','class="public-github-social"','data-share-launch','class="public-skill-purpose"','id="skill-start"','id="skill-usage-notes"','id="skill-flow-title"','id="skill-use-title"','class="public-skill-next"','data-share-root','id="join-workshop"'].map(marker=>html.indexOf(marker));
   assert.ok(order.every((index,position)=>index>0&&(position===0||index>order[position-1]!)),book.id+': '+order.join(','));
  }
  assert.doesNotMatch(indexHtml(),/class="skill-page"/);

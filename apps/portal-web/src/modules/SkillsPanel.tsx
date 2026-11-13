@@ -76,6 +76,7 @@ export function SkillsPanel({ client, onNavigate, onManageGitHub }: ModulePanelP
           </div>
         </header>
         {notice && <p role="status" className="banner banner-info">{notice}</p>}
+        {ids !== null && <p className="field-hint">會員資格：已解鎖 {ids.length} 本技能書資格（{scope === 'unlocked' ? '下方顯示對應原作資源' : '切換至已解鎖可查看'}）</p>}
         {error && <div role="alert" className="banner banner-error">{error}<button className="btn btn-ghost" onClick={() => setReload(value => value + 1)}>重新載入解鎖紀錄</button></div>}
         {ids === null ? !error && <p role="status">正在載入解鎖紀錄…</p>
           : <>

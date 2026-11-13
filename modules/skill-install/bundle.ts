@@ -15,17 +15,30 @@ const EXCLUDED=[/^\.github\//,/^\.gitignore$/,/^\.gitattributes$/,/^tests?\//,/^
 const REQUEST_TIMEOUT_MS=10_000;
 const CACHE_LIMIT=32;
 
-export type SkillInstallSource={book_id:string;owner:string;repo:string;commit:string};
+export type SkillInstallSource={book_id:string;owner:string;repo:string;commit:string;fallback_owner?:string;fallback_repo?:string};
 export type SkillInstallFile={path:string;sha:string;size:number;content_base64:string};
 export type SkillInstallBundle={format:typeof SKILL_INSTALL_BUNDLE_FORMAT;book_id:string;name:string;repository:string;commit:string;manifest_digest:string;total_bytes:number;files:SkillInstallFile[]};
+export type SkillInstallFallbackRecord={book_id:string;original_repository:string;fallback_repository:string;commit:string;reason:'original_commit_missing';recorded_at:string};
 type Fetcher=typeof fetch;
+const recordedFallbacks=new Map<string,SkillInstallFallbackRecord>();
+export function recordedSkillInstallFallbacks():SkillInstallFallbackRecord[]{return [...recordedFallbacks.values()];}
+export function clearRecordedSkillInstallFallbacks(){recordedFallbacks.clear();}
+export function parseGithubOwnerRepo(url:string|null|undefined):{owner:string;repo:string}|null{
+  if(!url)return null;
+  const match=/^https:\/\/github\.com\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})\/?$/.exec(url);
+  if(!match||match[2].endsWith('.git'))return null;
+  return {owner:match[1],repo:match[2]};
+}
 
 export function skillInstallSource(bookId:string,books:readonly SkillBook[]=communityCatalog.skill_books):SkillInstallSource|null{
   const book=books.find(item=>item.id===bookId);
-  if(!book||!book.source_commit||!/^[0-9a-f]{40}$/.test(book.source_commit))return null;
-  const match=/^https:\/\/github\.com\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})\/?$/.exec(book.repository_url);
-  if(!match||match[2].endsWith('.git'))return null;
-  return {book_id:book.id,owner:match[1],repo:match[2],commit:book.source_commit};
+  const commit=book?.source_commit??book?.guide?.source_commit;
+  if(!book||!commit||!/^[0-9a-f]{40}$/.test(commit))return null;
+  const primary=parseGithubOwnerRepo(book.upstream_url?.trim()||book.repository_url);
+  if(!primary)return null;
+  const copy=parseGithubOwnerRepo(book.repository_url);
+  const distinctCopy=copy&&(copy.owner.toLowerCase()!==primary.owner.toLowerCase()||copy.repo.toLowerCase()!==primary.repo.toLowerCase())?copy:null;
+  return {book_id:book.id,owner:primary.owner,repo:primary.repo,commit,...(distinctCopy?{fallback_owner:distinctCopy.owner,fallback_repo:distinctCopy.repo}:{})};
 }
 
 export function isSafeBundlePath(path:string){
@@ -70,8 +83,30 @@ async function readTree(fetcher:Fetcher,source:SkillInstallSource,token?:string|
   return data.tree;
 }
 
-export async function buildSkillInstallBundle(source:SkillInstallSource,fetcher:Fetcher=globalThis.fetch,token?:string|null):Promise<SkillInstallBundle>{
-  const tree=await readTree(fetcher,source,token);
+export async function buildSkillInstallBundle(source:SkillInstallSource,fetcher:Fetcher=globalThis.fetch,token?:string|null,onFallback?:(record:SkillInstallFallbackRecord)=>void):Promise<SkillInstallBundle>{
+  let activeSource:SkillInstallSource=source;
+  let tree:TreeEntry[];
+  try{
+    tree=await readTree(fetcher,activeSource,token);
+  }catch(error){
+    if(error instanceof Problem&&error.status===404&&source.fallback_owner&&source.fallback_repo&&(source.fallback_owner!==source.owner||source.fallback_repo!==source.repo)){
+      const fallbackSource:SkillInstallSource={book_id:source.book_id,owner:source.fallback_owner,repo:source.fallback_repo,commit:source.commit};
+      tree=await readTree(fetcher,fallbackSource,token);
+      activeSource=fallbackSource;
+      const record:SkillInstallFallbackRecord={
+        book_id:source.book_id,
+        original_repository:source.owner+'/'+source.repo,
+        fallback_repository:fallbackSource.owner+'/'+fallbackSource.repo,
+        commit:source.commit,
+        reason:'original_commit_missing',
+        recorded_at:new Date().toISOString(),
+      };
+      recordedFallbacks.set(source.book_id,record);
+      onFallback?.(record);
+    }else{
+      throw error;
+    }
+  }
   const entries=tree.filter(entry=>entry.type==='blob'&&isInstalledPath(entry.path));
   if(entries.some(entry=>!isSafeBundlePath(entry.path)||!/^[0-9a-f]{40}$/.test(entry.sha)))throw new Problem(422,'skill_package_invalid','技能書含有無法安全安裝的檔名。');
   if(!entries.some(entry=>entry.path==='SKILL.md'))throw new Problem(422,'not_a_skill_package','這個作品根目錄沒有 SKILL.md，不是可安裝的技能書。');
@@ -82,7 +117,7 @@ export async function buildSkillInstallBundle(source:SkillInstallSource,fetcher:
   const queue=[...entries];
   const worker=async()=>{
     for(let entry=queue.shift();entry;entry=queue.shift()){
-      const response=await fetcher('https://raw.githubusercontent.com/'+source.owner+'/'+source.repo+'/'+source.commit+'/'+entry.path.split('/').map(encodeURIComponent).join('/'),{redirect:'manual',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS)});
+      const response=await fetcher('https://raw.githubusercontent.com/'+activeSource.owner+'/'+activeSource.repo+'/'+activeSource.commit+'/'+entry.path.split('/').map(encodeURIComponent).join('/'),{redirect:'manual',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS)});
       if(!response.ok)throw new Problem(503,'skill_source_unreachable','暫時無法讀取技能書來源，請稍後再試。',60);
       const bytes=new Uint8Array(await response.arrayBuffer());
       if(bytes.length>SKILL_INSTALL_LIMITS.fileBytes||await gitBlobSha1(bytes)!==entry.sha)throw new Problem(502,'skill_source_mismatch','技能書內容與收錄版本不一致，已停止安裝。');
@@ -92,20 +127,27 @@ export async function buildSkillInstallBundle(source:SkillInstallSource,fetcher:
   };
   await Promise.all(Array.from({length:4},worker));
   files.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0);
-  return {format:SKILL_INSTALL_BUNDLE_FORMAT,book_id:source.book_id,name:skillFolderName(skillMarkdown,source.repo),repository:source.owner+'/'+source.repo,commit:source.commit,
+  return {format:SKILL_INSTALL_BUNDLE_FORMAT,book_id:activeSource.book_id,name:skillFolderName(skillMarkdown,activeSource.repo),repository:activeSource.owner+'/'+activeSource.repo,commit:activeSource.commit,
     manifest_digest:await manifestDigest(files),total_bytes:files.reduce((sum,file)=>sum+file.size,0),files};
 }
 
 /** commit 不可變，以 repo@commit 快取；失敗不留快取，下次重試。 */
-export function createSkillInstallBundleLoader(fetcher:Fetcher=globalThis.fetch,readToken?:()=>string|null|undefined,books?:readonly SkillBook[]){
+export function createSkillInstallBundleLoader(fetcher:Fetcher=globalThis.fetch,readToken?:()=>string|null|undefined,books?:readonly SkillBook[],onFallback?:(record:SkillInstallFallbackRecord)=>void,resolveOriginalUrl?:(bookId:string)=>Promise<string|null|undefined>){
   const cache=new Map<string,Promise<SkillInstallBundle>>();
   return async(bookId:string)=>{
-    const source=skillInstallSource(bookId,books);
-    if(!source)throw new Problem(404,'skill_install_unavailable','這本技能書沒有可安裝的收錄版本。');
+    const baseSource=skillInstallSource(bookId,books);
+    if(!baseSource)throw new Problem(404,'skill_install_unavailable','這本技能書沒有可安裝的收錄版本。');
+    let source=baseSource;
+    if(resolveOriginalUrl){
+      const resolved=parseGithubOwnerRepo(await resolveOriginalUrl(bookId).catch(()=>null));
+      if(resolved){
+        source={...baseSource,owner:resolved.owner,repo:resolved.repo};
+      }
+    }
     const key=source.owner+'/'+source.repo+'@'+source.commit+'#'+source.book_id;
     let pending=cache.get(key);
     if(!pending){
-      pending=buildSkillInstallBundle(source,fetcher,readToken?.());
+      pending=buildSkillInstallBundle(source,fetcher,readToken?.(),onFallback);
       cache.set(key,pending);
       if(cache.size>CACHE_LIMIT)cache.delete(cache.keys().next().value!);
       pending.catch(()=>{if(cache.get(key)===pending)cache.delete(key);});

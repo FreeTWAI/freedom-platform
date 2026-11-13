@@ -4,12 +4,13 @@ import type {TabId} from '../types';
 import {useGitHubSocialStore} from './GitHubSocial';
 import {GITHUB_CONNECT_AGENT_INSTRUCTION} from './github-connect-help';
 import type {GuildSummary,OnboardingView} from './Onboarding';
+import {distinctOriginalRepoCount} from './SkillBookCover';
 import './MemberSettings.css';
 
 type TaskState='loading'|'error'|'unavailable'|'todo'|'done';
 const stateLabels:Record<TaskState,string>={loading:'讀取中',error:'狀態讀取失敗',unavailable:'尚未啟用',todo:'待完成',done:'已完成'};
 
-type Onboarding={completed:boolean;entryMode:string;assessmentCompleted:boolean;primaryGuildKey:string|null;bookCount:number};
+type Onboarding={completed:boolean;entryMode:string;assessmentCompleted:boolean;primaryGuildKey:string|null;bookCount:number;repoCount:number};
 type Guild={key:string;name:string;active:boolean};
 type Sources={onboarding:Onboarding;directory:Guild[];avatar:boolean;social:boolean};
 type SourceId=keyof Sources;
@@ -24,7 +25,7 @@ const readers:{[K in SourceId]:[string,(value:unknown)=>Sources[K]]}={
   onboarding:['/me/onboarding',value=>{
     const view=value as Partial<OnboardingView>;
     if(!isRecord(view)||typeof view.completed!=='boolean'||typeof view.entry_mode!=='string'||typeof view.assessment_completed!=='boolean'||!Array.isArray(view.skill_books)||!(view.primary_guild_key===null||typeof view.primary_guild_key==='string'))throw malformed();
-    return {completed:view.completed,entryMode:view.entry_mode,assessmentCompleted:view.assessment_completed,primaryGuildKey:view.primary_guild_key||null,bookCount:view.skill_books.length};
+    return {completed:view.completed,entryMode:view.entry_mode,assessmentCompleted:view.assessment_completed,primaryGuildKey:view.primary_guild_key||null,bookCount:view.skill_books.length,repoCount:distinctOriginalRepoCount(view.skill_books)};
   }],
   directory:['/guilds/directory',value=>{
     const items=isRecord(value)?value.items:undefined;if(!Array.isArray(items))throw malformed();
@@ -165,7 +166,7 @@ export function MemberTasks({client,onNavigate}:{client:PortalClient;onNavigate:
   cards.push({key:'skill-book',required:false,title:'領取第一本技能書',
     ...(onboarding.error?{state:'error',body:null,error:onboarding.error,retry:retrying(['onboarding'],'重新讀取技能書狀態')}
       :!onboarding.value?loadingCard('正在確認技能書…')
-      :onboarding.value.bookCount>0?{state:'done',body:<p>已領取 {onboarding.value.bookCount} 本技能書。</p>,action:go('skills','查看技能書架',false)}
+      :onboarding.value.bookCount>0?{state:'done',body:<><p>已領取 {onboarding.value.bookCount} 本技能書。</p><p className="field-hint">會員領取資格數 · 對應 {onboarding.value.repoCount} 個原作資源</p></>,action:go('skills','查看技能書架',false)}
       :{state:'todo',body:<p>到技能書架免費領取第一本技能書。</p>,action:go('skills','前往技能書架',true)})});
 
   const group=(required:boolean,id:string,title:string)=><section className="member-tasks-group" aria-labelledby={id} data-guide-anchor={required?'todos:required':'todos:suggested'}>

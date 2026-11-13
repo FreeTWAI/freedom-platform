@@ -9,7 +9,7 @@ import {GuildAnnouncements} from './GuildWorkspace';
 import {SkillBookIntro} from './SkillBookIntro';
 import {GuildTags} from './GuildFilters';
 import {openMemberChat} from './chat-entry';
-import {SkillBookStarGate} from './SkillBookCover';
+import {SkillBookStarGate,distinctOriginalRepoCount} from './SkillBookCover';
 
 type GuildPanel='overview'|'books'|'members'|'announcements';
 type CommunityCopy={enter:string;overview:string;books:string;members:string;announcements:string;navigation:string;about:string;next:string;chat:string};
@@ -58,7 +58,7 @@ export function GuildCard({guild:g,client,busy,writesBlocked=false,onPrimary,onM
       {launchpadEnabled&&<button type="button" className={`btn ${active?'btn-primary':'btn-ghost'} guild-workspace-entry`} onClick={onLaunchpad}>{active?'進入公會工作區':'預覽公會工作區'}</button>}
       {active&&<button type="button" className="btn btn-ghost guild-community-entry" aria-haspopup="dialog" disabled={busy} onClick={event=>open('overview',event.currentTarget)}>{copy.enter}</button>}
       {active&&<div className="guild-first-step"><p className="multiline-text">{g.first_step}</p><button type="button" className="btn btn-ghost" onClick={()=>openMemberChat('guild',g.guild_key)}>進入公會聊天室</button></div>}
-      <button type="button" className="btn btn-ghost" aria-haspopup="dialog" disabled={busy} onClick={event=>open('books',event.currentTarget)}>公會技能書庫 · {g.skill_books.length}</button>
+      <button type="button" className="btn btn-ghost" aria-haspopup="dialog" disabled={busy} onClick={event=>open('books',event.currentTarget)}>公會技能書庫 · {distinctOriginalRepoCount(g.skill_books)} 個原作資源</button>
       <div className="guild-card-links"><button type="button" className="btn btn-ghost" aria-haspopup="dialog" disabled={busy} onClick={event=>open('members',event.currentTarget)}>查看成員</button>{active&&<button type="button" className="btn btn-ghost" aria-haspopup="dialog" disabled={busy} onClick={event=>open('announcements',event.currentTarget)}>公會公告</button>}</div>
       {active?<details className="guild-membership-settings"><summary>會員設定 · 主力與退出</summary><div className="actions">{categorySlot&&active&&!categorySlot.pending&&categorySlot.onToggle&&<button type="button" className="btn btn-ghost" data-category-action={categorySlot.actionId} disabled={busy||writesBlocked} onClick={categorySlot.onToggle}>{categorySlot.selected?'取消本類主力':'設為本類主力'}</button>}{!categorySlot&&active&&!g.is_primary&&<button className="btn btn-primary" disabled={busy||writesBlocked} onClick={onPrimary}>設為主要公會</button>}{!categorySlot&&active&&!g.is_primary&&onSecondary&&<button type="button" className="btn btn-ghost" disabled={busy||writesBlocked||(!g.is_secondary&&secondaryFull)} onClick={onSecondary}>{g.is_secondary?'取消次要公會':'設為次要公會'}</button>}<button type="button" className="btn btn-ghost" disabled={busy||writesBlocked||legacyPrimary} onClick={onMembership}>退出{g.name}</button></div>{legacyPrimary&&<p className="field-hint">退出前，請先更換主要公會。</p>}</details>:<button type="button" className="btn btn-primary" disabled={busy||writesBlocked} onClick={onMembership}>加入{g.name}</button>}
       {categorySlot?.pending&&<p className="field-hint">分類整理中，仍可使用公會工作區。</p>}

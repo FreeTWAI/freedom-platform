@@ -50,6 +50,7 @@ test('external readers can read and reach signup without running JavaScript',asy
   try{
     const page=await context.newPage();await page.goto(path+'?intro=7');
     await expect(page.getByRole('heading',{name:'Hao 社群貼文技能書',exact:true})).toBeVisible();
+    await page.locator('#skill-usage-notes > summary').click();
     await expect(page.getByRole('heading',{name:'用途與適用範圍',exact:true})).toBeVisible();
     await expect(panel(page).getByRole('link',{name:'免費加入，探索更多資源',exact:true})).toHaveAttribute('href',account());
     await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toBeVisible();
@@ -97,6 +98,7 @@ test('closed registration leaves public reading and existing-account login avail
   await expect(panel(page).getByText(/目前暫停新帳號註冊/)).toBeVisible();
   await expect(panel(page).getByRole('link',{name:'免費加入，探索更多資源',exact:true})).toBeHidden();
   await expect(panel(page).getByRole('link',{name:'已有帳號，登入',exact:true})).toBeVisible();
+  await page.locator('#skill-usage-notes > summary').click();
   await expect(page.getByRole('heading',{name:'用途與適用範圍',exact:true})).toBeVisible();
 });
 
@@ -109,6 +111,7 @@ test('unavailable original content does not turn successful login into a repeat 
 
 test('a broken enhancement script never hides the reading content or plain account links',async({page})=>{
   await page.route('**/skill-acquisition.js',route=>route.abort());await page.goto(path+'?intro=7');
+  await page.locator('#skill-usage-notes > summary').click();
   await expect(page.getByRole('heading',{name:'用途與適用範圍',exact:true})).toBeVisible();
   await expect(panel(page).getByRole('link',{name:'免費加入，探索更多資源',exact:true})).toHaveAttribute('href',account());
   await panel(page).getByRole('link',{name:'繼續閱讀這本技能書',exact:true}).click();
@@ -145,7 +148,7 @@ test.describe('discovery ON Star entries',()=>{
     expect((await (await page.request.get('/api/v1/site')).json()).community_discovery_enabled).toBe(true);
     if(authenticated){await page.goto('/');await signIn(page);await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();}
     await page.goto(path);
-    await page.getByText('作者、版本與參與開發',{exact:true}).click();
+    await page.locator('#skill-usage-notes > summary').click();
     const star=page.getByRole('link',{name:'登入工坊 Star',exact:true});
     await expect(star).toHaveAttribute('href','/?return_to='+encodeURIComponent(path));
     let validations=0;await page.route(url=>url.pathname===path,route=>{validations++;return route.continue();});

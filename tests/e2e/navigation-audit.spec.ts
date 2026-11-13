@@ -148,7 +148,9 @@ test('unlocked and locked shelves partition the authoritative catalog and free p
   await expect(cards).toHaveAttribute('data-book-id', 'security-scanner');
   await cards.getByRole('button', { name: '預覽技能書', exact: true }).click();
   const preview = page.getByRole('dialog', { name: 'AI Security Scanner', exact: true });
-  await expect(preview).toBeVisible(); await expect(preview.getByRole('link', { name: '閱讀技能書 ↗', exact: true })).toBeVisible();
+  await expect(preview).toBeVisible();
+  await expect(preview.getByRole('button', { name: '開始用', exact: true })).toBeVisible();
+  await expect(preview.getByRole('link', { name: '查看原作 Repo ↗', exact: true })).toBeVisible();
   await preview.getByRole('button', { name: '關閉技能書介紹', exact: true }).click();
   await unlocked.click(); await expect(cards).toHaveCount(2); expect(await ids()).toEqual(chosen);
   await expect(category).toHaveValue(''); await expect(category.locator('option').filter({ hasText: /^資訊安全$/ })).toHaveCount(0);
