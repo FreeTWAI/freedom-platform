@@ -6,10 +6,11 @@ import {LIVE_SITE_ORIGIN,developmentMap,developmentPage,pageMarkdown,skillMarkdo
 import {getSkillCollaboration,type SkillEditorial} from '../../../../modules/community/skill-collaboration.js';
 import type {SkillDiscoveryBook} from '../../../../modules/community/discovery.js';
 import type {GitHubMetrics} from '../../../../modules/github-social/service.js';
+import type {BookOriginalCache} from '../../../../modules/shares/repository-cache.js';
 import {getSkillShareContent,skillShareContentVersion} from '../../../../modules/community/skill-share-content.js';
 import {githubSocialCss} from '../generated/runtime-text.js';
 import type {PublicAuthorClaim} from '../../../../modules/community/repo-author-claims.js';
-export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHubMetrics>,readEditorial?:(id:string)=>Promise<SkillEditorial|null>,readDiscovery?:(id:string)=>Promise<SkillDiscoveryBook|undefined>,publicOrigin=LIVE_SITE_ORIGIN,readAuthorClaim?:(id:string)=>Promise<PublicAuthorClaim>,discoveryEnabled=false,readEventBacklinks?:(id:string,c:Context)=>Promise<string>){
+export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHubMetrics>,readEditorial?:(id:string)=>Promise<SkillEditorial|null>,readDiscovery?:(id:string)=>Promise<SkillDiscoveryBook|undefined>,publicOrigin=LIVE_SITE_ORIGIN,readAuthorClaim?:(id:string)=>Promise<PublicAuthorClaim>,discoveryEnabled=false,readEventBacklinks?:(id:string,c:Context)=>Promise<string>,readOriginalCache?:(id:string)=>Promise<BookOriginalCache|undefined>){
  const app=new Hono();
  app.get('/api/v1/skills/:id/share-content',c=>{
    const content=getSkillShareContent(c.req.param('id'));
@@ -18,8 +19,11 @@ export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHub
  app.get('/api/v1/development-map',c=>c.json(developmentMap()));
  app.get('/.well-known/freedom-development.json',c=>c.json(developmentMap()));
  app.get('/api/v1/skills/:id/collaboration',async c=>{
-   const id=c.req.param('id');if(!getSkillCollaboration(id))return c.json({error:'skill_not_found'},404);
-   return c.json(getSkillCollaboration(id,await readEditorial?.(id)));
+   const id=c.req.param('id');const editorial=await readEditorial?.(id);
+   const data=getSkillCollaboration(id,editorial);
+   if(!data)return c.json({error:'skill_not_found'},404);
+   const originalCache=readOriginalCache?await readOriginalCache(id).catch(()=>undefined):undefined;
+   return c.json(originalCache?{...data,original_cache:originalCache}:data);
  });
  app.get('/guild-tool.md',c=>{c.header('Content-Type','text/markdown; charset=utf-8');return c.body(guildToolGuide(new URL(c.req.url).origin));});
  app.get('/agent.md',c=>{c.header('Content-Type','text/markdown; charset=utf-8');return c.body(agentGuide(new URL(c.req.url).origin));});
@@ -31,7 +35,8 @@ export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHub
  app.get('/development/',c=>c.html(indexHtml()));
  app.get('/development/skills/:id/SKILL.md',async c=>{
    const id=c.req.param('id');if(!getSkillCollaboration(id))return c.text('找不到這本技能書。',404);
-   const text=skillAgentMarkdown(id,await readEditorial?.(id),publicOrigin);
+   const [editorial,originalCache]=await Promise.all([readEditorial?.(id),readOriginalCache?.(id).catch(()=>undefined)]);
+   const text=skillAgentMarkdown(id,editorial,publicOrigin,originalCache);
    c.header('Content-Type','text/markdown; charset=utf-8');return c.body(text!);
  });
  app.get('/development/:id/SKILL.md',c=>{
@@ -41,14 +46,15 @@ export function createDevelopmentRoutes(readMetrics?:(id:string)=>Promise<GitHub
  app.get('/development/skills/:id',async c=>{
    const raw=c.req.param('id'),markdown=raw.endsWith('.md'),id=markdown?raw.slice(0,-3):raw;
    if(!getSkillCollaboration(id))return c.text('找不到這本技能書。',404);
-   const editorial=await readEditorial?.(id),text=skillMarkdown(id,editorial)!;
+   const [editorial,originalCache]=await Promise.all([readEditorial?.(id),readOriginalCache?.(id).catch(()=>undefined)]);
+   const text=skillMarkdown(id,editorial,originalCache)!;
    // Public guidance never fetches GitHub or reads member credentials.
    const metrics=markdown?undefined:await readMetrics?.(id).catch(()=>undefined);
    const discovery=markdown?undefined:await readDiscovery?.(id).catch(()=>undefined);
    const authorClaim=markdown?undefined:await readAuthorClaim?.(id).catch(()=>undefined);
    const eventBacklinks=markdown?'':await readEventBacklinks?.(id,c)??'';
    if(!markdown&&readEventBacklinks){c.header('Cache-Control','no-store');c.header('Vary','Cookie');}
-   return markdown?c.text(text):c.html(pageHtml(text.split('\n')[0].slice(2),text,`/development/skills/${encodeURIComponent(id)}.md`,metrics,editorial,discovery,c.req.query('intro'),publicOrigin,authorClaim,discoveryEnabled,eventBacklinks));
+   return markdown?c.text(text):c.html(pageHtml(text.split('\n')[0].slice(2),text,`/development/skills/${encodeURIComponent(id)}.md`,metrics,editorial,discovery,c.req.query('intro'),publicOrigin,authorClaim,discoveryEnabled,eventBacklinks,originalCache));
  });
  app.get('/development/:id',c=>{
    const raw=c.req.param('id'),markdown=raw.endsWith('.md'),id=markdown?raw.slice(0,-3):raw,page=developmentPage(id);

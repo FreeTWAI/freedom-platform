@@ -172,7 +172,7 @@ test('all catalog introductions show authored usage and source before collaborat
   const html=render(undefined,item.id),guide=item.guide!;
   const introduction=html.slice(html.indexOf('<section class="public-skill-introduction"'),html.indexOf('<section class="public-skill-next"'));
   for(const value of [...guide.audience,guide.status,...guide.features,...guide.prerequisites,...guide.first_steps,guide.first_result])assert.ok(introduction.includes(escape(value)),item.id+': '+value);
-  assert.ok(html.indexOf('<h2>開始使用</h2>')<html.indexOf('<h2 id="collaboration-title">'),item.id);
+  assert.ok(html.indexOf('<h2>開始用</h2>')<html.indexOf('<h2 id="collaboration-title">'),item.id);
   assert.ok(html.includes('到 GitHub 看原始碼 ↗'),item.id);
   assert.ok(html.includes('<bdi>'+escape(new URL(item.upstream_url).host+new URL(item.upstream_url).pathname)+'</bdi>'),item.id);
   assert.ok(html.includes('class="sf-legend"'),item.id);
@@ -200,18 +200,20 @@ test('catalog skill CTA follows readable content and preserves the selected intr
 });
 
 
-test('every public skill offers author, Star, Fork and share in the hero while retaining instructions and destinations',()=>{
+test('every public skill offers author, Star and share in the hero while retaining dated usage notes and destinations',()=>{
  for(const item of communityCatalog.skill_books){
   const html=render(undefined,item.id);
+  const start=html.indexOf('id="skill-start"');
+  const notes=html.indexOf('id="skill-usage-notes"');
   const reading=html.indexOf('<section class="public-skill-introduction"');
   const destinations=html.indexOf('<section class="public-skill-next"');
   const share=html.indexOf('data-share-root');
   const social=html.indexOf('<section class="public-github-social"');
-  assert.ok(reading>0&&destinations>reading,item.id);
-  assert.ok(share>destinations&&social>0&&social<reading,item.id);
+  assert.ok(start>0&&notes>start&&reading>notes&&destinations>reading,item.id);
+  assert.ok(share>destinations&&social>0&&social<start,item.id);
   assert.ok(html.indexOf('data-skill-author')<social,item.id);
-  assert.ok(html.indexOf('data-share-launch')<reading,item.id);
-  assert.ok(html.indexOf('href="#skill-start"')<reading,item.id);
+  assert.ok(html.indexOf('data-share-launch')<start,item.id);
+  assert.ok(html.indexOf('href="#skill-start"')<social,item.id);
   assert.ok(html.includes('href="/#skills">登入工坊 Star'),item.id);
   assert.ok(html.includes(escape(item.guide!.first_result)),item.id);
  }

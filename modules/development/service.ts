@@ -4,14 +4,22 @@ import {communityCatalog,officialGuildKeys} from '../community/catalog.js';
 import repositoryIndex from '../../docs/development/repository-guidance-index.json' with {type:'json'};
 import type {SkillDiscoveryBook} from '../community/discovery.js';
 import type {GitHubMetrics} from '../github-social/service.js';
+import type {BookOriginalCache} from '../shares/repository-cache.js';
 import {getSkillCollaboration,type SkillCollaboration,type SkillEditorial} from '../community/skill-collaboration.js';
 import {getSkillShareContent} from '../community/skill-share-content.js';
 import type {PublicAuthorClaim} from '../community/repo-author-claims.js';
 import {publicSkillAcquisition,skillAcquisitionCss} from './skill-acquisition.js';
-import {skillPageBand,skillPageFlow,skillPageHero,skillPageUsage} from './skill-page.js';
+import {skillPageBand,skillPageFlow,skillPageUsage} from './skill-page.js';
 import {getSkillPageContent} from '../community/skill-page-content.js';
 import {publicSkillPath} from '../../packages/shared/skill-acquisition.js';
 import {PUBLIC_REVALIDATION_MARKUP} from '../../packages/shared/public-revalidation.js';
+function readmePlainText(html:string|null|undefined,maxChars=1600):string|null{
+ if(!html)return null;
+ const text=html.replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<\/(p|div|h[1-6]|li|pre|blockquote|tr)>/gi,'\n').replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+ if(!text)return null;
+ return text.length>maxChars?text.slice(0,maxChars).trimEnd()+'\n…':text;
+}
+function pad2(value:number){return String(value).padStart(2,'0');}
 export const platformRepository='FreeTWAI/freedom-platform';
 /** Existing Node deployments link to the live site; candidate runtimes pass their own origin. */
 export const LIVE_SITE_ORIGIN='https://freetwai.com';
@@ -38,27 +46,49 @@ export function pageMarkdown(page:DevelopmentPage){
   '## API 與整體導覽','- /api/v1/development-map\n- /api/v1/protocol\n- /llms.txt\n- /development',
  ].join('\n\n')+'\n';
 }
-export function skillMarkdown(id:string,editorial?:SkillEditorial|null){
+export function skillMarkdown(id:string,editorial?:SkillEditorial|null,originalCache?:BookOriginalCache|null){
  const book=communityCatalog.skill_books.find(b=>b.id===id);if(!book)return null;
  const guide=book.guide;if(!guide)return null;
  const collaboration=getSkillCollaboration(id,editorial);
- return [`# ${book.title}：技能書與協作來源`,(editorial?.summary||guide.beginner.purpose),
-  '## 工坊收錄說明',guide.beginner.category,guide.beginner.for_whom,guide.beginner.make,guide.beginner.workshop_use,guide.beginner.next_step,
-  '## 封面與來源署名',...(guide.author_name?[`${guide.credit_role??'作者'}：${guide.author_name}`]:[]),`封面插畫：${book.cover_url}`,`${guide.credit_role?'原作':'原作者'} GitHub：${book.star_url}`,'登入自由工坊並連結自己的 GitHub，即可在技能書加星或取消星星。',`原作數據：/api/v1/github/books/${book.id}/metrics`,'Stars、Forks、追蹤數、未結 Issues 與 PR 合計、最近程式更新時間以 GitHub 回覆為準；數據附核對時間，讀取失敗不冒充零。',
-  '## 讀者與格式',guide.format,...guide.audience.map(value=>'- '+value),
-  '## 功能與使用範圍',guide.status,...guide.features.map(value=>'- '+value),
-  '## 開始前準備',...guide.prerequisites.map(value=>'- '+value),
-  '## 第一個練習',...guide.first_steps.map((value,index)=>`${index+1}. ${value}`),
-  '## 練習成果',guide.first_result,
-  ...(guide.quickstart?['## 原始專案的起步指令',guide.quickstart.context,'```sh\n'+guide.quickstart.commands+'\n```']:[]),
-  '## 專案與授權',`原作 Repo：${book.upstream_url}\n從原作建立自己的版本：${book.upstream_url}/fork\n工坊整合參考：${book.repository_url}\n記錄的授權：${book.license_status}`,
-  ...(collaboration?['## 一起改這本技能書',collaborationMarkdown(collaboration)]:[]),'## 參與開發',guide.contribution,`工坊 Issue／PR 協調入口：${book.repository_url}/issues`,
-  '先讀該 Repo 根目錄 README.md、AGENTS.md、CONTRIBUTING.md；原始程式、測試及來源授權留在該專案。平台介紹與公會收錄則在 freedom-platform 的 modules/community 維護。',
-  `要改善平台介紹：https://github.com/${platformRepository}/issues`,
-  '## 閱讀與來源',`閱讀原始專案：${guide.reading_url}\n核對日期：${guide.reviewed_at}\n核對版本：${guide.source_commit}`,
+ const originalUrl=originalCache?.url??book.upstream_url;
+ const originalOwner=originalCache?.original_author??new URL(originalUrl).pathname.split('/')[1];
+ const readmeText=readmePlainText(originalCache?.readme_html);
+ const distinctCopy=book.repository_url&&book.repository_url!==originalUrl?book.repository_url:null;
+ return [`# ${book.title}：技能書與協作來源`,
+  `原作 Repo：${originalUrl}`,
+  `從原作建立自己的版本：${originalUrl}/fork`,
+  `原作作者／帳號：${originalOwner}`,
+  `原作 Stars：${typeof originalCache?.stars==='number'?originalCache.stars:'尚未快取（以 GitHub 為準）'}`,
+  ...(originalCache?.latest_release?[`最新 Release：${originalCache.latest_release.tag_name}（${originalCache.latest_release.html_url}）`]:[]),
+  ...(originalCache?.ahead_of_pin&&originalCache.latest_version_url?[`原作者有新版本：${originalCache.latest_version_url}（${originalCache.latest_version_label??'最新版本'}）`]:[]),
+  '## 原作簡介',
+  originalCache?.description??`來自原作 ${originalUrl}（目前尚未快取原作簡介與 README，請以原作 Repo 為準）。`,
+  ...(originalCache?.quick_start?['## 開始用（原作起步指令）','```sh\n'+originalCache.quick_start+'\n```']:[]),
+  ...(readmeText?['## 原作 README（快取摘要）',readmeText]:[]),
+  '## 動作與數據',
+  `原作數據：/api/v1/github/books/${book.id}/metrics`,
+  '登入自由工坊並連結自己的 GitHub，即可為原作加星或取消星星；分享入口見介紹頁。',
+  `## 使用筆記（核對版本 ${guide.source_commit} · 核對日期：${guide.reviewed_at}）`,
+  `以下內容為針對核對版本 \`${guide.source_commit}\`（核對日期：${guide.reviewed_at}）整理的工坊使用筆記與插畫資訊，並非原作最新程式碼的即時說明。`,
+  ...(guide.author_name?[`${guide.credit_role??'作者'}：${guide.author_name}`]:[]),
+  `封面插畫：${book.cover_url}`,
+  editorial?.summary||guide.beginner.purpose,
+  guide.beginner.category,guide.beginner.for_whom,guide.beginner.make,guide.beginner.workshop_use,guide.beginner.next_step,
+  '### 讀者與格式',guide.format,...guide.audience.map(value=>'- '+value),
+  '### 功能與使用範圍',guide.status,...guide.features.map(value=>'- '+value),
+  '### 開始前準備',...guide.prerequisites.map(value=>'- '+value),
+  '### 第一個練習',...guide.first_steps.map((value,index)=>`${index+1}. ${value}`),
+  '### 練習成果',guide.first_result,
+  ...(guide.quickstart?['### 該核對版本的起步指令',guide.quickstart.context,'```sh\n'+guide.quickstart.commands+'\n```']:[]),
+  ...(collaboration?['### 協作筆記',collaborationMarkdown(collaboration)]:[]),
+  '### 核對來源與歷史紀錄',
+  `核對日期：${guide.reviewed_at}\n核對版本：${guide.source_commit}\n核對閱讀來源：${guide.reading_url}\n記錄的授權：${book.license_status}`,
+  ...(distinctCopy?[`歷史紀錄（工坊整合副本）：${distinctCopy}`]:[]),
   ...guide.source_evidence.map(item=>`- ${item.path}：${item.url}`),
   ...(guide.website_url?[`專案網站：${guide.website_url}`]:[]),
-  '## 共創原則','GitHub Issue 是待辦與協調來源，PR 是審查與合併紀錄。先確認任務範圍，再用自己的分支完成相關驗證；保留上游與實際貢獻者。Fork 不等於平台認證、已測試運行或新授權。',
+  '### 參與開發與共創原則',guide.contribution,
+  'GitHub Issue 是待辦與協調來源，PR 是審查與合併紀錄。預設向原作建立 Fork 與提交 PR；保留上游與實際貢獻者。',
+  `要改善平台介紹：https://github.com/${platformRepository}/issues`,
   '完整結構化目錄：/api/v1/development-map',
  ].join('\n\n')+'\n';
 }
@@ -74,8 +104,11 @@ export function developmentHtml(title:string,body:string,meta?:{path:string;desc
  const acquisitionScript=meta?.share&&publicSkillPath(meta.path)?'<script src="/skill-acquisition.js" defer></script>':'';
  const returnPath=meta?.discoveryEnabled===true&&meta.share&&/^\/development\/(?:skills\/[a-z0-9-]+|submissions\/[0-9a-f-]{36})$/.test(meta.path)?'/?return_to='+encodeURIComponent(meta.path):'/';
  const skill=meta?.layout==='skill';
- const flowLink=body.includes('id="skill-flow-title"')?'<a href="#skill-flow-title">運作原理</a>':'';
- return '<!doctype html><html lang="zh-Hant"'+(skill?' class="skill-page"':'')+'><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(title)+(meta?.share?'｜自由工坊技能書':'｜自由工坊開發指引')+'</title>'+head+acquisitionScript+'<link rel="stylesheet" href="/development.css"><link rel="alternate" type="application/json" href="/api/v1/development-map"></head><body>'+(returnPath==='/'?'':PUBLIC_REVALIDATION_MARKUP)+'<nav><a href="'+returnPath+'">自由工坊</a>'+(skill?flowLink+'<a href="#skill-start">開始使用</a><a href="#skill-next-title">原作 Repo</a>':'<a href="/development">開發導覽</a><a href="/llms.txt">Agent 文字索引</a>')+'</nav>'+(skill?'':'<p class="brand-note">FREEDOM WORKSHOP / 自由工坊 · '+(meta?.share?'作品介紹':'共創指引')+'</p><h1>'+escape(title)+'</h1>')+body+'<footer>'+(meta?.share?'自由工坊 · 分享工具，也分享把事情做好的方法。':'這是公開開發文件，沒有會員資料、私人工作或管理權限。')+'</footer></body></html>';
+ const startHref=skill?'#skill-start':'';
+ const navLinks=skill
+  ?'<a href="#skill-start">開始用</a><a href="#skill-usage-notes">使用筆記</a><a href="#skill-next-title">原作 Repo</a>'
+  :'<a href="/development">開發導覽</a><a href="/llms.txt">Agent 文字索引</a>';
+ return '<!doctype html><html lang="zh-Hant"'+(skill?' class="skill-page"':'')+'><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+escape(title)+(meta?.share?'｜自由工坊技能書':'｜自由工坊開發指引')+'</title>'+head+acquisitionScript+'<link rel="stylesheet" href="/development.css"><link rel="alternate" type="application/json" href="/api/v1/development-map"></head><body>'+(returnPath==='/'?'':PUBLIC_REVALIDATION_MARKUP)+'<nav><a href="'+returnPath+'">自由工坊</a>'+(startHref?navLinks:navLinks)+'</nav>'+(skill?'':'<p class="brand-note">FREEDOM WORKSHOP / 自由工坊 · '+(meta?.share?'作品介紹':'共創指引')+'</p><h1>'+escape(title)+'</h1>')+body+'<footer>'+(meta?.share?'自由工坊 · 分享工具，也分享把事情做好的方法。':'這是公開開發文件，沒有會員資料、私人工作或管理權限。')+'</footer></body></html>';
 }
 function imageMeta(image:DevelopmentImage,origin:string){
  const src=escape(origin+image.url),alt=escape(image.alt);
@@ -102,7 +135,8 @@ export function markdownBody(markdown:string){
   if(line.startsWith('```')){closeList();html+=code?'</code></pre>':'<pre><code>';code=!code;continue;}
   if(code){html+=escape(line)+'\n';continue;}
   if(line.startsWith('# '))continue;
-  if(line.startsWith('## ')){closeList();html+='<h2>'+escape(line.slice(3))+'</h2>';}
+  if(line.startsWith('### ')){closeList();html+='<h3>'+escape(line.slice(4))+'</h3>';}
+  else if(line.startsWith('## ')){closeList();html+='<h2>'+escape(line.slice(3))+'</h2>';}
   else if(line.startsWith('- ')){if(!list){html+='<ul>';list=true;}html+='<li>'+linkify(line.slice(2))+'</li>';}
   else if(line.trim()){closeList();html+='<p>'+linkify(line)+'</p>';}
  }
@@ -145,42 +179,63 @@ export function publicSkillEngagement({name,role='作者',repositoryUrl,authorEn
  return '<div class="sp-engagement"><div class="sp-author"><span class="sp-author-role">'+escape(role)+'</span><button type="button" class="sp-author-name" data-skill-author data-author-endpoint="'+escape(authorEndpoint)+'" aria-haspopup="dialog" aria-controls="skill-author-dialog"><span>'+escape(name)+'</span><span class="sp-author-arrow" aria-hidden="true">↗</span></button><span class="sp-author-hint">自由工坊名片</span><noscript><a href="'+escape(github)+'" target="_blank" rel="noopener noreferrer">查看來源 GitHub</a></noscript></div><div class="sp-engagement-actions">'+controls+'<a class="sp-share-launch" href="#share-title" data-share-launch aria-haspopup="dialog"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/></svg>分享</a></div></div>'
   +'<dialog id="skill-author-dialog" class="sp-author-dialog" aria-labelledby="skill-author-title"><div class="sp-author-dialog-head"><h2 id="skill-author-title">自由工坊名片</h2><button type="button" data-author-close aria-label="關閉作者名片">關閉</button></div><div data-author-card></div><p class="sp-author-source"><a href="'+escape(github)+'" target="_blank" rel="noopener noreferrer">查看來源 GitHub ↗</a></p></dialog>';
 }
-export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics?:GitHubMetrics,editorial?:SkillEditorial|null,discovery?:SkillDiscoveryBook,intro?:string,origin=LIVE_SITE_ORIGIN,authorClaim?:PublicAuthorClaim,discoveryEnabled=false,eventBacklinksHtml=''){
+export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics?:GitHubMetrics,editorial?:SkillEditorial|null,discovery?:SkillDiscoveryBook,intro?:string,origin=LIVE_SITE_ORIGIN,authorClaim?:PublicAuthorClaim,discoveryEnabled=false,eventBacklinksHtml='',originalCache?:BookOriginalCache|null){
  const skillId=/^\/development\/skills\/([a-z0-9-]+)\.md$/.exec(markdownUrl)?.[1];
  const book=skillId?communityCatalog.skill_books.find(value=>value.id===skillId):undefined;
  const agentUrl=markdownUrl.replace(/\.md$/,'/SKILL.md');
  const markdownLink='<p><a href="'+escape(markdownUrl)+'">讀取 Markdown 原文</a> · <a href="'+escape(agentUrl)+'">下載 Agent SKILL.md</a></p>';
  if(book?.guide){
-  const actions='<a href="#skill-start">開始使用</a><a href="'+escape(book.upstream_url)+'" target="_blank" rel="noopener noreferrer">查看原作 Repo ↗</a>';
+  const originalUrl=originalCache?.url??book.upstream_url;
+  const parsedOriginal=new URL(originalUrl);
+  const originalFullName=originalCache?.full_name??parsedOriginal.pathname.slice(1);
+  const originalOwner=originalFullName.split('/')[0];
+  const original=escape(originalUrl),author=escape(parsedOriginal.origin+'/'+originalOwner);
   const count=(value:number|null|undefined)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?String(value):'—';
-  const original=escape(book.upstream_url),author=escape(new URL(book.upstream_url).origin+'/'+new URL(book.upstream_url).pathname.split('/')[1]);
-  const stats='<section class="public-github-social" data-skill-social="'+escape(book.id)+'" data-skill-social-compact data-repository="'+original+'" aria-label="原作 GitHub 操作"><div class="public-skill-support">'
-    +'<a href="'+original+'" target="_blank" rel="noopener noreferrer" aria-label="到 GitHub Star ↗"><span aria-hidden="true">☆</span> Star '+count(metrics?.stargazers_count)+'</a>'
-    +'<a href="'+original+'/fork" target="_blank" rel="noopener noreferrer" aria-label="Fork 專案 ↗">'+skillForkIcon+' Fork '+count(metrics?.forks_count)+'</a></div></section>';
-  // Discovery also counts administrator-approved guild bindings; without it the static designation decides.
+  const starsCount=originalCache?.stars??metrics?.stargazers_count??null;
   const official=(discovery?.official_guild_keys??officialGuildKeys(book.id)).length>0;
   const guildBadges=official?(discovery?.official_guilds?.length?discovery.official_guilds.map(guild=>'<span title="自由工坊公會指定技能；不代表原作者背書">✦ '+escape(guild.name)+'指定技能</span>').join(''):'<span title="自由工坊公會指定技能；不代表原作者背書">✦ 官方公會技能</span>'):'<span title="社群成員分享的技能書；不隨加入公會解鎖，所有人都能閱讀">社群技能書</span>';
   const badges='<div class="public-skill-badges" aria-label="技能書徽章">'+guildBadges+(discovery?.is_new_today?'<span>每日新技能</span>':'')+(discovery?.week_rank?'<span>工坊週榜 #'+discovery.week_rank+'</span>':'')+(discovery?.month_rank?'<span>工坊月榜 #'+discovery.month_rank+'</span>':'')+'</div>';
-  const page=getSkillPageContent(book.id);
-  const curated=book.guide.credit_role==='策展';
-  const credit=curated&&book.guide.author_name?'<p>策展 · '+escape(book.guide.author_name)+'</p>':'';
   const verifiedAuthors=authorClaim?.status==='verified_original_author'?authorClaim.verified.filter((person,index,people)=>(person.role==='original_author'||person.role==='co_original_author')&&people.findIndex(other=>(other.role==='original_author'||other.role==='co_original_author')&&other.github_login.toLowerCase()===person.github_login.toLowerCase())===index):[];
-  const authorName=verifiedAuthors.length?verifiedAuthors[0].display_name+(verifiedAuthors.length>1?' 等 '+verifiedAuthors.length+' 位':''):curated?new URL(book.upstream_url).pathname.split('/')[1]:book.guide.author_name??new URL(book.upstream_url).pathname.split('/')[1];
-  const authorRole=verifiedAuthors.length?'原創作者':curated?'來源帳號':book.guide.credit_role??'作者';
-  const engagement=publicSkillEngagement({name:authorName,role:authorRole,repositoryUrl:book.upstream_url,authorEndpoint:'/api/v1/skills/'+book.id+'/author-card',social:stats});
-  const entry=skillPageHero({title:book.title,kind:official?'公會指定技能書':'社群技能書',category:book.guide.beginner.category,format:book.guide.format,purpose:editorial?.summary||book.guide.beginner.purpose,coverUrl:book.cover_url,actions,credit,badges,content:page,engagement});
+  const authorName=verifiedAuthors.length?verifiedAuthors[0].display_name+(verifiedAuthors.length>1?' 等 '+verifiedAuthors.length+' 位':''):originalCache?.original_author??originalOwner;
+  const authorRole=verifiedAuthors.length?'原創作者':'作者帳號';
+  const authorButton='<div class="sp-author"><span class="sp-author-role">'+escape(authorRole)+'</span><button type="button" class="sp-author-name" data-skill-author data-author-endpoint="'+escape('/api/v1/skills/'+book.id+'/author-card')+'" aria-haspopup="dialog" aria-controls="skill-author-dialog"><span>'+escape(authorName)+'</span><span class="sp-author-arrow" aria-hidden="true">↗</span></button><noscript><a href="'+author+'" target="_blank" rel="noopener noreferrer">查看原作 GitHub</a></noscript></div>'
+   +'<dialog id="skill-author-dialog" class="sp-author-dialog" aria-labelledby="skill-author-title"><div class="sp-author-dialog-head"><h2 id="skill-author-title">自由工坊名片</h2><button type="button" data-author-close aria-label="關閉作者名片">關閉</button></div><div data-author-card></div><p class="sp-author-source"><a href="'+author+'" target="_blank" rel="noopener noreferrer">查看原作 GitHub ↗</a></p></dialog>';
+  const releaseChip=originalCache?.latest_release?'<a class="sp-original-stat" href="'+escape(originalCache.latest_release.html_url)+'" target="_blank" rel="noopener noreferrer">最新版本 '+escape(originalCache.latest_release.tag_name)+' ↗</a>':'';
+  const aheadNotice=originalCache?.ahead_of_pin&&originalCache.latest_version_url?'<div class="sp-upstream-notice" role="note"><span>原作者有新版本</span><a href="'+escape(originalCache.latest_version_url)+'" target="_blank" rel="noopener noreferrer">'+escape(originalCache.latest_version_label??'查看新版本')+' ↗</a></div>':'';
+  const stats='<section class="public-github-social" data-skill-social="'+escape(book.id)+'" data-skill-social-compact data-repository="'+original+'" aria-label="加星"><div class="public-skill-support"><a href="'+original+'" target="_blank" rel="noopener noreferrer" aria-label="到 GitHub 加星 ↗"><span aria-hidden="true">☆</span> 加星 '+count(starsCount)+'</a></div></section>';
+  const actions='<a href="#skill-start">開始用</a>'+stats+'<a class="sp-share-launch" href="#share-title" data-share-launch aria-haspopup="dialog">分享</a><a href="'+original+'" target="_blank" rel="noopener noreferrer">查看原作 Repo ↗</a>';
+  const originalSummary=originalCache?.description??'來自原作 '+originalFullName+'（目前尚未快取原作簡介與 README，請直接查看原作 Repo）。';
+  const entry='<section class="public-skill-entry"><div class="sp-hero sp-hero-single"><div class="sp-hero-copy"><div class="sp-eyebrow">'+(official?'公會指定技能書':'社群技能書')+' · '+escape(book.guide.beginner.category)+'</div>'
+   +'<h1 class="sp-title">'+escape(book.title)+'</h1>'
+   +'<div class="sp-original-bar">'+authorButton+'<span class="sp-original-stat">★ '+count(starsCount)+'</span>'+releaseChip+'</div>'
+   +aheadNotice
+   +'<div class="public-skill-actions">'+actions+'</div>'
+   +'<p class="public-skill-purpose">'+escape(originalSummary)+'</p>'
+   +'<div class="sp-hero-notes">'+badges+'</div>'
+   +'</div></div></section>';
+  const startBody=[
+   originalCache?.quick_start?'<div class="sp-quick"><h3>原作的起步指令</h3><pre><code>'+escape(originalCache.quick_start)+'</code></pre></div>':'',
+   originalCache?.latest_release?'<div class="sp-result"><div><h3>最新 Release</h3><p><a href="'+escape(originalCache.latest_release.html_url)+'" target="_blank" rel="noopener noreferrer">'+escape(originalCache.latest_release.name||originalCache.latest_release.tag_name)+'（'+escape(originalCache.latest_release.tag_name)+'）↗</a></p></div></div>':'',
+   originalCache?.readme_html?'<div class="sp-readme-cache"><h3>原作 README（快取）</h3><div class="sp-readme-body">'+originalCache.readme_html+'</div></div>':'<p>目前尚未快取原作 README，請<a href="'+original+'" target="_blank" rel="noopener noreferrer">前往原作 Repo ↗</a>或展開下方「使用筆記」查看針對核對版本的導讀。</p>',
+  ].join('');
+  const startSection='<section class="sp-band sp-start" id="skill-start" aria-labelledby="skill-start-title"><div class="sp-wrap"><h2 id="skill-start-title">開始用</h2>'+startBody+'</div></section>';
+  const page=getSkillPageContent(book.id);
   const cooperation=getSkillCollaboration(book.id,editorial);
   const content=shareContentFor(book.id),selected=shareIntroNumber(intro,content.introductions.length),selectedText=selected?content.introductions[selected-1]:null;
-
+  const coverFigure=book.cover_url?'<figure class="public-skill-cover"><img src="'+escape(book.cover_url)+'" alt="" width="768" height="512"></figure>':'';
+  const curatedSummaryHtml='<p class="sp-headline"><span>'+escape(page?.headline??book.title)+'</span></p><p class="public-skill-purpose">'+escape(editorial?.summary||book.guide.beginner.purpose)+'</p>'
+   +(page?'<ul class="sp-outcomes">'+page.outcomes.map(item=>'<li><span>'+escape(item)+'</span></li>').join('')+'</ul>':'');
+  const distinctCopy=book.repository_url&&book.repository_url!==originalUrl?book.repository_url:null;
+  const source='<section class="public-skill-source"><h2>版本與來源歷史紀錄</h2><p>GitHub 原作帳號：<a href="'+author+'" target="_blank" rel="noopener noreferrer">'+escape(originalOwner)+'</a></p><dl><dt>原作 Repo</dt><dd><a href="'+original+'" target="_blank" rel="noopener noreferrer">'+original+' ↗</a></dd><dt>指南核對來源</dt><dd><a href="'+escape(book.guide.reading_url)+'" target="_blank" rel="noopener noreferrer">'+escape(book.guide.reading_url)+'</a></dd><dt>記錄的授權</dt><dd>'+escape(book.license_status)+'</dd><dt>指南核對版本</dt><dd><code>'+escape(book.guide.source_commit)+'</code></dd><dt>核對日期</dt><dd>'+escape(book.guide.reviewed_at)+'</dd>'+(distinctCopy?'<dt>歷史紀錄（工坊整合副本）</dt><dd><a href="'+escape(distinctCopy)+'" target="_blank" rel="noopener noreferrer">'+escape(distinctCopy)+'</a></dd>':'')+'</dl></section>';
+  const notesBanner='<p class="sp-notes-banner"><strong>使用筆記</strong>：以下導讀、插畫與範例係針對核對版本 <code>'+escape(book.guide.source_commit)+'</code>（核對日期：'+escape(book.guide.reviewed_at)+'）整理，不等同原作最新程式碼說明。'+(originalCache?.ahead_of_pin&&originalCache.latest_version_url?' 原作者已更新至 <a href="'+escape(originalCache.latest_version_url)+'" target="_blank" rel="noopener noreferrer">'+escape(originalCache.latest_version_label??'最新版本')+' ↗</a>。':'')+'</p>';
+  const curatedCredit=book.guide.credit_role==='策展'&&book.guide.author_name?'<p>策展筆記 · '+escape(book.guide.author_name)+' · 共 '+pad2(page?.outcomes.length??0)+' 項核對成果</p>':'';
   const introduction=skillPageUsage(book.guide,page?.flow.lead);
-  const destinations=publicSkillDestinations([{url:book.upstream_url,kind:'source'},...(book.introduction_url?[{url:book.introduction_url,kind:'website' as const}]:[]),{url:book.guide.reading_url,kind:'guide'}]);
-  const source='<section class="public-skill-source"><h2>版本與來源</h2><p>GitHub：<a href="'+author+'" target="_blank" rel="noopener noreferrer">'+escape(new URL(book.upstream_url).pathname.split('/')[1])+'</a></p><dl><dt>原作 Repo</dt><dd>'+escape(book.upstream_url)+'</dd><dt>工坊整合參考</dt><dd>'+escape(book.repository_url)+'</dd><dt>指南核對來源</dt><dd>'+escape(book.guide.reading_url)+'</dd><dt>記錄的授權</dt><dd>'+escape(book.license_status)+'</dd><dt>指南核對版本</dt><dd><code>'+escape(book.guide.source_commit)+'</code></dd><dt>核對日期</dt><dd>'+escape(book.guide.reviewed_at)+'</dd></dl></section>';
+  const usageNotes='<section class="sp-band sp-details-band" aria-label="使用筆記"><div class="sp-wrap"><details class="public-skill-details sp-usage-notes" id="skill-usage-notes"><summary>使用筆記（核對版本 '+escape(book.guide.source_commit.slice(0,7))+' · 核對日期：'+escape(book.guide.reviewed_at)+'）</summary>'+notesBanner+coverFigure+curatedCredit+curatedSummaryHtml+(page?skillPageFlow(page):'')+introduction+'<div class="sp-facts"><p><a href="'+(discoveryEnabled?'/?return_to='+encodeURIComponent('/development/skills/'+book.id):'/#skills')+'">登入工坊 Star</a></p>'+authorClaimMarkup(authorClaim)+source+'</div>'+(cooperation?collaborationHtml(cooperation):'')+eventBacklinksHtml+markdownLink+markdownBody(markdown)+'</details></div></section>';
+  const destinations=publicSkillDestinations([{url:originalUrl,kind:'source'},...(book.introduction_url?[{url:book.introduction_url,kind:'website' as const}]:[])]);
   const share=publicSkillShareMarkup({title:book.title,path:'/development/skills/'+book.id,introductions:content.introductions,selected,origin});
-  const details='<details class="public-skill-details"><summary>完整指南與來源</summary>'+markdownLink+markdownBody(markdown)+'</details>';
-  const extras='<details class="public-skill-details"><summary>作者、版本與參與開發</summary><p><a href="'+(discoveryEnabled?'/?return_to='+encodeURIComponent('/development/skills/'+book.id):'/#skills')+'">登入工坊 Star</a></p>'+authorClaimMarkup(authorClaim)+'<div class="sp-facts">'+source+'</div>'+(cooperation?collaborationHtml(cooperation):'')+eventBacklinksHtml+'</details>';
   const join=publicSkillAcquisition('/development/skills/'+book.id,selected);
-  const body=entry+(page?skillPageFlow(page):'')+introduction+skillPageBand(destinations,'sp-next-band')+skillPageBand(share,'sp-share-band')+skillPageBand(join,'sp-join-band')+skillPageBand(extras,'sp-facts-band')+skillPageBand(details,'sp-details-band');
-  return developmentHtml(book.title,body,{path:'/development/skills/'+book.id,description:selectedText??(editorial?.summary||book.guide.beginner.purpose),image:content.illustration??undefined,share:true,social:true,shareQuery:selected?'intro='+selected:undefined,origin,discoveryEnabled,layout:'skill'});
+  const body=entry+startSection+usageNotes+skillPageBand(destinations,'sp-next-band')+skillPageBand(share,'sp-share-band')+skillPageBand(join,'sp-join-band');
+  return developmentHtml(book.title,body,{path:'/development/skills/'+book.id,description:originalCache?.description??(selectedText??(editorial?.summary||book.guide.beginner.purpose)),image:content.illustration??undefined,share:true,social:true,shareQuery:selected?'intro='+selected:undefined,origin,discoveryEnabled,layout:'skill'});
  }
  return developmentHtml(title,markdownLink+markdownBody(markdown),{path:markdownUrl.replace(/\.md$/,''),description:developmentPage(markdownUrl.split('/').at(-1)!.replace(/\.md$/,''))?.purpose??title,origin});
 }
@@ -213,31 +268,51 @@ function taskLabel(task:SkillCollaboration['tasks'][number]){
  return task.status==='github_issue'?'GitHub 任務，查看最新狀態':task.status==='maintainer_published'?({'todo':'待辦','in_progress':'進行中','done':'已完成'}[task.progress??'todo']+' · 維護者紀錄'):'建議任務';
 }
 function collaborationMarkdown(data:SkillCollaboration){
+ const distinctCopy=data.repository.url&&data.repository.url!==data.contribution.url?data.repository.url:null;
  return [data.intent.summary,`原作 Repo：${data.contribution.url}\n預設 PR 目標：${data.contribution.name}:${data.contribution.default_branch}\n從原作建立自己的版本：${data.contribution.fork_url}\n原作 PR：${data.contribution.pulls_url}`,
- `工坊整合參考：${data.repository.url}\n工坊整合任務專用 Fork：${data.repository.fork_url}\n工坊任務：${data.task_source.issues_url}\n工坊 PR：${data.task_source.pulls_url}\nGitHub Milestones：${data.task_source.milestones_url}`,
- '先閱讀原作現行的貢獻規則。Fork 不會自動回饋原作；修改要以 PR 提交，由原作維護者決定是否合併。工坊整合任務可在工坊審查，另外記錄回饋原作的 PR 或未回送原因。',data.task_source.note,
- ...data.milestones.map(milestone=>`- ${milestone.title}（${milestone.status==='maintainer_published'?'維護者發布':'建議里程碑'}）：${milestone.acceptance}`),
- ...data.tasks.flatMap(task=>[`### ${task.title} · ${taskLabel(task)}`,task.scope,...task.acceptance.map(value=>'- 驗收：'+value),...(task.source_url?[`來源：${task.source_url}`]:[])]),
- `Agent Skill：${data.agent_skill_url}\n協作 JSON：/api/v1/skills/${data.book_id}/collaboration`,
+  ...(distinctCopy?[`歷史紀錄（工坊整合副本）：${distinctCopy}\n工坊任務與 GitHub Milestones：${data.task_source.issues_url} · ${data.task_source.pulls_url} · ${data.task_source.milestones_url}`]:[`專案任務與 Milestones：${data.task_source.issues_url} · ${data.task_source.pulls_url} · ${data.task_source.milestones_url}`]),
+  '先閱讀原作現行的貢獻規則。Fork 不會自動回饋原作；修改要以 PR 提交，由原作維護者決定是否合併。',data.task_source.note,
+  ...data.milestones.map(milestone=>`- ${milestone.title}（${milestone.status==='maintainer_published'?'維護者發布':'建議里程碑'}）：${milestone.acceptance}`),
+  ...data.tasks.flatMap(task=>[`### ${task.title} · ${taskLabel(task)}`,task.scope,...task.acceptance.map(value=>'- 驗收：'+value),...(task.source_url?[`來源：${task.source_url}`]:[])]),
+  `Agent Skill：${data.agent_skill_url}\n協作 JSON：/api/v1/skills/${data.book_id}/collaboration`,
  ].join('\n\n');
 }
 function collaborationHtml(data:SkillCollaboration){
  const link=(url:string,label:string)=>'<a href="'+escape(url)+'">'+escape(label)+'</a>';
  const milestones=data.milestones.map(item=>'<li><strong>'+escape(item.title)+'</strong><span class="collaboration-state">'+(item.status==='maintainer_published'?'維護者發布':'建議里程碑')+'</span><p>'+escape(item.acceptance)+'</p></li>').join('');
  const tasks=data.tasks.map(task=>'<li class="collaboration-task"><h3>'+escape(task.title)+'</h3><span class="collaboration-state">'+escape(taskLabel(task))+'</span><p>'+escape(task.scope)+'</p><ul>'+task.acceptance.map(value=>'<li>'+escape(value)+'</li>').join('')+'</ul>'+(task.source_url?'<p>'+link(task.source_url,'查看任務來源 ↗')+'</p>':'')+'</li>').join('');
- return '<section class="public-collaboration" aria-labelledby="collaboration-title"><h2 id="collaboration-title">一起開發</h2><p>'+escape(data.intent.summary)+'</p><p>原作：'+link(data.contribution.url,data.contribution.name)+'</p><div class="public-skill-actions">'+link(data.contribution.fork_url,'從原作開始共創 ↗')+link(data.contribution.pulls_url,'查看原作 PR ↗')+link(data.agent_skill_url,'下載 Agent SKILL.md')+'</div><p class="collaboration-repository">預設 PR → '+escape(data.contribution.name)+':'+escape(data.contribution.default_branch)+'</p><p>修改由原作維護者審查。保留原作授權、commit 作者與共同貢獻者；收錄不移轉作品權利。</p><details><summary>工坊整合與任務來源</summary><p>'+link(data.repository.url,'查看工坊整合版本')+' · '+link(data.repository.fork_url,'為工坊整合任務建立 Fork')+'</p><p>以下任務在工坊協調。若修改只針對工坊整合，PR 可送到 '+escape(data.repository.name)+':'+escape(data.repository.default_branch)+'，並記錄回饋原作的 PR 或未回送原因。</p><p>'+link(data.task_source.issues_url,'查看工坊 GitHub 任務 ↗')+'</p></details><p class="collaboration-note">'+escape(data.task_source.note)+'</p><h3>里程碑</h3><ul class="collaboration-milestones">'+milestones+'</ul><h3>參與任務</h3><ul class="collaboration-tasks">'+tasks+'</ul><p>'+link(data.task_source.pulls_url,'查看工坊已有 PR')+' · '+link(data.task_source.milestones_url,'GitHub Milestones')+' · '+link('/api/v1/skills/'+data.book_id+'/collaboration','協作 JSON')+'</p></section>';
+ const distinctCopy=data.repository.url&&data.repository.url!==data.contribution.url?data.repository.url:null;
+ const historyDetails=distinctCopy?'<details><summary>歷史紀錄：工坊整合副本與任務來源</summary><p>工坊整合副本（歷史紀錄）：'+link(data.repository.url,data.repository.name)+' · '+link(data.repository.fork_url,'整合副本 Fork')+'</p><p>'+link(data.task_source.issues_url,'查看任務 ↗')+' · '+link(data.task_source.pulls_url,'查看 PR')+' · '+link(data.task_source.milestones_url,'Milestones')+'</p></details>':'';
+ return '<section class="public-collaboration" aria-labelledby="collaboration-title"><h2 id="collaboration-title">一起開發</h2><p>'+escape(data.intent.summary)+'</p><p>原作：'+link(data.contribution.url,data.contribution.name)+'</p><div class="public-skill-actions">'+link(data.contribution.fork_url,'從原作開始共創 ↗')+link(data.contribution.pulls_url,'查看原作 PR ↗')+link(data.agent_skill_url,'下載 Agent SKILL.md')+'</div><p class="collaboration-repository">預設 PR → '+escape(data.contribution.name)+':'+escape(data.contribution.default_branch)+'</p><p>修改由原作維護者審查。保留原作授權、commit 作者與共同貢獻者；收錄不移轉作品權利。</p>'+historyDetails+'<p class="collaboration-note">'+escape(data.task_source.note)+'</p><h3>里程碑</h3><ul class="collaboration-milestones">'+milestones+'</ul><h3>參與任務</h3><ul class="collaboration-tasks">'+tasks+'</ul><p>'+link('/api/v1/skills/'+data.book_id+'/collaboration','協作 JSON')+'</p></section>';
 }
 const frontmatter=(name:string,description:string)=>'---\nname: '+name+'\ndescription: '+JSON.stringify(description)+'\n---\n';
-export function skillAgentMarkdown(id:string,editorial?:SkillEditorial|null,origin=LIVE_SITE_ORIGIN){
+export function skillAgentMarkdown(id:string,editorial?:SkillEditorial|null,origin=LIVE_SITE_ORIGIN,originalCache?:BookOriginalCache|null){
  const data=getSkillCollaboration(id,editorial);if(!data)return null;
- return [frontmatter('freedom-'+id+'-collaboration',`協作改進「${data.title}」。預設向原作 ${data.contribution.name} 提交文件、測試或程式修改；工坊整合任務另列。`),
- '# '+data.title+'：Agent 共作指引',data.purpose,
- '## 工作目標與任務來源',collaborationMarkdown(data),
- '## 開始前讀取',`先讀原作 ${data.contribution.url} 現有的 README、LICENSE、NOTICE、AGENTS.md 與 CONTRIBUTING.md；不存在的文件如實記錄，不把工坊新增的規則當成原作者的規則。`,
- '以下文件是工坊整合與技能介紹的參考，需按任務區分適用範圍：',...data.read_first.map(source=>`- ${source.label}：${source.url}`),
- `原作與工坊的分支資料來源：${origin}/api/v1/development-map；開始前分別查 GitHub 目前 default branch 與 HEAD，記錄實際 base commit。`,
- '## 工坊整合參考路徑','以下路徑核對的是工坊整合版本；修改原作時須先確認原作存在相應路徑，不假設兩者內容完全相同。',...data.source_paths.map(path=>'- '+data.repository.url+'/tree/'+data.repository.default_branch+'/'+path),
- '## 驗證與交付','按本次修改範圍選檢查；下列入口來自工坊整合版本的 repo 開發說明，原作以自己的現行檢查為準。列出不表示已執行。缺工具或資料則記 not_run 與原因，不編造成功。',
+ const book=communityCatalog.skill_books.find(b=>b.id===id);
+ const originalUrl=originalCache?.url??data.contribution.url;
+ const originalAuthor=originalCache?.original_author??data.contribution.name.split('/')[0];
+ const readmeText=readmePlainText(originalCache?.readme_html);
+ const distinctCopy=data.repository.url&&data.repository.url!==originalUrl?data.repository.url:null;
+ return [frontmatter('freedom-'+id+'-collaboration',`使用與協作改進原作「${data.title}」（${originalUrl}）。預設向原作提交修改；使用筆記另註核對版本。`),
+ '# '+data.title+'：Agent 指引（原作優先）',
+ `原作 Repo：${originalUrl}\n原作作者／帳號：${originalAuthor}\n原作 Stars：${typeof originalCache?.stars==='number'?originalCache.stars:'尚未快取'}\n從原作建立自己的版本：${originalUrl}/fork\n預設 PR 目標：${data.contribution.name}:${data.contribution.default_branch}`,
+ ...(originalCache?.latest_release?[`最新 Release：${originalCache.latest_release.tag_name}（${originalCache.latest_release.html_url}）`]:[]),
+ ...(originalCache?.ahead_of_pin&&originalCache.latest_version_url?[`原作者有新版本：${originalCache.latest_version_url}（${originalCache.latest_version_label??'最新版本'}）`]:[]),
+ '## 原作簡介與快取 README',
+ originalCache?.description??`來自原作 ${originalUrl}（尚未快取簡介，請先讀取原作 README）。`,
+ ...(originalCache?.quick_start?['```sh\n'+originalCache.quick_start+'\n```']:[]),
+ ...(readmeText?[readmeText]:[]),
+ '## 開始前讀取',`先讀原作 ${originalUrl} 現有的 README、LICENSE、NOTICE、AGENTS.md 與 CONTRIBUTING.md；不存在的文件如實記錄，不把工坊新增的規則當成原作者的規則。`,
+ `原作分支與資料來源：${origin}/api/v1/development-map；開始前先查原作 GitHub 目前 default branch 與 HEAD，記錄實際 base commit。`,
+ `## 使用筆記（核對版本 ${book?.guide?.source_commit??data.task_source.reviewed_at} · 核對日期：${data.task_source.reviewed_at}）`,
+ `以下為自由工坊針對特定核對版本（核對日期：${data.task_source.reviewed_at}${book?.guide?.source_commit?`，commit ${book.guide.source_commit}`:''}）整理的使用筆記與歷史紀錄，並非原作最新程式說明：`,
+ data.purpose,
+ collaborationMarkdown(data),
+ '### 核對路徑與參考文件（歷史紀錄）',
+ ...(distinctCopy?[`工坊整合副本（歷史紀錄）：${distinctCopy}`]:[]),
+ ...data.read_first.map(source=>`- ${source.label}：${source.url}`),
+ ...data.source_paths.map(path=>'- '+(distinctCopy??originalUrl)+'/tree/'+(distinctCopy?data.repository.default_branch:data.contribution.default_branch)+'/'+path),
+ '### 參考驗證命令','按本次修改範圍選檢查；下列入口來自核對時期記錄，原作以自己的現行檢查為準。缺工具或資料則記 not_run 與原因，不編造成功。',
  '```sh\n'+data.validation_commands.join('\n')+'\n```',
  '## 協作界線',...data.boundaries.map(value=>'- '+value),
  '## 交接欄位',data.handoff_fields.join(', '),

@@ -64,10 +64,10 @@ test('public share HTML keeps canonical metadata and cooperation in collapsed de
  const html=await response.text();
  assert.match(html,/<link rel="canonical" href="https:\/\/freetwai\.com\/development\/skills\/video-autopilot">/);
  assert.match(html,/<meta property="og:image" content="https:\/\/freetwai\.com\/brand\/skill-illustrations\/video-autopilot.webp">/);
- const usage=html.indexOf('id="skill-start"'),details=html.indexOf('<details class="public-skill-details"><summary>作者、版本與參與開發</summary>');
+ const usage=html.indexOf('id="skill-start"'),details=html.indexOf('id="skill-usage-notes"');
  const cooperation=html.indexOf('id="collaboration-title"');
  assert.ok(usage>=0&&usage<details);
- assert.ok(details<cooperation&&cooperation<html.indexOf('</details>',details));
+ assert.ok(details<cooperation&&cooperation<html.indexOf('class="public-skill-next"',details));
  assert.ok(html.includes('href="https://github.com/Hao0321/video-autopilot-kit/fork">從原作開始共創'));
  assert.ok(html.includes('預設 PR → Hao0321/video-autopilot-kit:main'));
  assert.ok(!html.includes('Fork 共創版本'));assert.ok(html.includes('/development/skills/video-autopilot/SKILL.md'));
@@ -87,7 +87,7 @@ test('maintainer editorial changes cannot redirect the original fork or take own
  const markdown=await(await app.request(origin+'/development/skills/video-autopilot/SKILL.md')).text();
  assert.ok(markdown.includes('預設 PR 目標：Hao0321/video-autopilot-kit:main'));
  assert.ok(markdown.includes('不把工坊新增的規則當成原作者的規則'));
- assert.ok(markdown.includes('工坊整合參考路徑'));
+ assert.ok(markdown.includes('使用筆記（核對版本'));
  assert.ok(markdown.includes('由原作維護者決定是否合併'));
 });
 

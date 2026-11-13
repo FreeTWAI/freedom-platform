@@ -15,9 +15,13 @@ export function githubRepositoryPath(url: string): string | null {
   }
 }
 
-/** Catalog book whose repository_url path equals this full name. First match wins. */
+/** Catalog book whose upstream_url or repository_url path equals this full name. Original URL matches first. */
 export function skillBookIdForFullName(fullName: string): string | null {
   const target = fullName.toLowerCase();
+  for (const book of communityCatalog.skill_books) {
+    const upstreamPath = book.upstream_url ? githubRepositoryPath(book.upstream_url) : null;
+    if (upstreamPath && upstreamPath === target) return book.id;
+  }
   for (const book of communityCatalog.skill_books) {
     const path = githubRepositoryPath(book.repository_url);
     if (path && path === target) return book.id;

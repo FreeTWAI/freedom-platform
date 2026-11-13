@@ -3,7 +3,7 @@ import {useEffect,useId,useRef,useState} from 'react';
 import type {PortalClient} from '../api';
 import {SkillBookPurposeFilters,isGuildBook,loadCommunityCatalog,matchesSkillSearch,type CatalogBook} from './Community';
 import {SkillBookCard,httpsLink} from './SkillBookIntro';
-import {SkillBookCover} from './SkillBookCover';
+import {SkillBookCover,distinctOriginalRepoCount} from './SkillBookCover';
 import {CommunityBadge} from './SkillBookBadges';
 import {SkillShare,isSkillIllustrationUrl,submissionSharePath} from './SkillShare';
 import {GitHubSourceLinks} from './GitHubSocial';
@@ -46,7 +46,7 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
     {(bookError||itemError)&&<div role="alert"><p>{bookError&&itemError?'社群技能書暫時無法載入。':'部分社群技能書暫時無法載入。'}</p><button type="button" className="btn btn-ghost" onClick={()=>setRetry(value=>value+1)}>重新載入社群技能書</button></div>}
     {loading?<p role="status">正在載入社群技能書…</p>:entries.length>0?<>
       <div className="skill-library-filters"><label className="field">搜尋社群技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：漫畫、角色、交易…"/></label><SkillBookPurposeFilters category={category} onCategory={setCategory} use={use} onUse={setUse} categories={categories}/>{(search||category||use)&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');setCategory('');setUse('');searchInput.current?.focus();}}>清除篩選</button>}</div>
-      <p className="skill-library-count" role="status">顯示 {shown.length} / {entries.length} 本社群技能書</p>
+      <p className="skill-library-count" role="status">顯示 {distinctOriginalRepoCount(shown.map(entry=>entry.kind==='submission'?{id:entry.item.submission_id,repository_url:entry.item.source.repository_url}:entry.book))} / {distinctOriginalRepoCount(entries.map(entry=>entry.kind==='submission'?{id:entry.item.submission_id,repository_url:entry.item.source.repository_url}:entry.book))} 個社群原作資源</p>
       <div className="card-grid community-book-grid">{shown.map(entry=>entry.kind==='submission'
         ?<SubmissionBookCard key={`submission:${entry.item.submission_id}`} item={entry.item}/>
         :<SkillBookCard key={entry.book.id} book={entry.book} className="community-book" headingLevel={3} community/>)}</div>

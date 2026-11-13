@@ -3,6 +3,33 @@ import {GitHubBookSocial,SkillBookStarGateContext} from './GitHubSocial';
 
 type BookIdentity = { id?: string; book_id?: string; cover_url?: string };
 type BookSource = BookIdentity & { upstream_url?: string; star_url?: string; repository_url: string; guide?: {credit_role?: '維護'|'策展'} };
+type RepoCountInput = {
+  id?: string;
+  book_id?: string;
+  upstream_url?: string | null;
+  star_url?: string | null;
+  repository_url?: string | null;
+  original_cache?: { url?: string | null } | null;
+};
+
+export function originalRepositoryKey(book: RepoCountInput): string {
+  for (const candidate of [book.original_cache?.url, book.upstream_url, book.star_url, book.repository_url]) {
+    if (!candidate) continue;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === 'https:' && url.hostname === 'github.com') {
+        const cleanPath = url.pathname.replace(/\/$/, '').toLowerCase();
+        if (/^\/[a-z\d][a-z\d-]*\/[a-z\d_.-]+$/i.test(cleanPath)) return `github:${cleanPath}`;
+      }
+      return `url:${url.origin}${url.pathname.replace(/\/$/, '')}`.toLowerCase();
+    } catch {}
+  }
+  return `book:${book.id ?? book.book_id ?? ''}`;
+}
+
+export function distinctOriginalRepoCount(books: readonly RepoCountInput[]): number {
+  return new Set(books.map(originalRepositoryKey)).size;
+}
 
 export function skillBookCoverUrl(book: BookIdentity) {
   // Platform books and 社群技能書 share one cover format; see docs/design/*-art-manifest.json.
