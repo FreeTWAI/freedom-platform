@@ -36,3 +36,32 @@ ALTER TABLE member_notifications ADD CONSTRAINT member_notifications_kind_check 
   'commerce_drop_ship_proposed','commerce_drop_ship_accepted','commerce_drop_ship_declined','commerce_drop_ship_revoked',
   'commerce_drop_ship_payment_confirmed','commerce_drop_ship_shipped','commerce_drop_ship_unable'
 ));
+
+-- Delivery attempts reserve the budget before contacting the provider, including
+-- failures and unknown outcomes. Superseded versions never return to pending.
+ALTER TABLE community_event_participation_notices ADD COLUMN attempted_at timestamptz;
+ALTER TABLE community_event_participation_notices DROP CONSTRAINT community_event_participation_notices_status_check;
+ALTER TABLE community_event_participation_notices ADD CONSTRAINT community_event_participation_notices_status_check
+ CHECK(status IN ('pending','unknown','provider_accepted','failed','skipped'));
+UPDATE community_event_participation_notices SET attempted_at=clock_timestamp()
+ WHERE status IN ('unknown','provider_accepted','failed');
+WITH pending AS (
+ SELECT notice_id,row_number() OVER (PARTITION BY event_id,guest_email ORDER BY event_version DESC) AS rank
+ FROM community_event_participation_notices WHERE kind='event_schedule_changed' AND status='pending'
+)
+UPDATE community_event_participation_notices n SET status='skipped' FROM pending p WHERE n.notice_id=p.notice_id AND p.rank>1;
+CREATE UNIQUE INDEX event_change_notice_pending ON community_event_participation_notices(event_id,guest_email)
+ WHERE kind='event_schedule_changed' AND status='pending';
+CREATE INDEX event_change_notice_budget ON community_event_participation_notices(event_id,guest_email,attempted_at)
+ WHERE kind='event_schedule_changed' AND attempted_at IS NOT NULL;
+
+-- Dismiss redundant unread copies from the older per-version producer. The
+-- newest notice retains unread state; older bodies remain in notification history.
+WITH unread AS (
+ SELECT notification_id,row_number() OVER (
+  PARTITION BY community_id,recipient_ref,action_resource_id ORDER BY created_at DESC,notification_id DESC
+ ) AS rank
+ FROM member_notifications WHERE kind='event_schedule_changed' AND action_tab='events' AND action_resource_id IS NOT NULL AND read_at IS NULL
+)
+UPDATE member_notifications n SET read_at=clock_timestamp()
+ FROM unread u WHERE n.notification_id=u.notification_id AND u.rank>1;

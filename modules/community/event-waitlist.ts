@@ -1,4 +1,4 @@
-import {notifyEventRegistrants,recordEventChange} from './event-changes.js';
+import {notifyEventRegistrants,recordEventChange,eventChangeBody} from './event-changes.js';
 import {creditEventRegistrations} from '../shares/credit.js';
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -8,7 +8,7 @@ import {lockMemberSession,assertCurrentSessionClock} from '../../packages/db/mem
 import {Problem,requireCondition} from '../../packages/shared/problem.js';
 import {isoTime,text} from '../../packages/shared/validation.js';
 import type {Actor} from '../identity-membership/service.js';
-import {canAccessGuildEvent,refuseInternGuildExchange,requireEventEditable,type EventEmailSender} from './events.js';
+import {canReadEventParticipationDetails,canAccessGuildEvent,refuseInternGuildExchange,requireEventEditable,type EventEmailSender} from './events.js';
 import {notifyMember} from '../member-communications/notifications.js';
 import {cancelEventReminders,reconcileEventReminders} from './event-reminders.js';
 
@@ -51,7 +51,7 @@ export async function resolveGuestParticipation(q:Query,id:string,token:string):
   const event=await eventRow(q,id,true),identity={guest_email:cap.email},rsvp=await ownRsvp(q,id,identity);
   await guestLegal(q,event,cap,Boolean(rsvp?.confirmed_at||rsvp?.email_sent_at||await ownEntry(q,id,identity)));
   await q.query('UPDATE community_event_guest_capabilities SET verified_at=COALESCE(verified_at,now()) WHERE event_id=$1 AND email=$2',[id,cap.email]);
-  const going=event.state==='published'&&rsvp?.state==='going';
+  const going=canReadEventParticipationDetails(event,event.state==='published'&&rsvp?.state==='going');
   if(going){
     await q.query("UPDATE community_event_guest_rsvps SET confirmed_at=COALESCE(confirmed_at,now()) WHERE event_id=$1 AND email=$2 AND state='going'",[id,cap.email]);
     await creditEventRegistrations(q,id);
@@ -64,7 +64,7 @@ export async function resolveGuestParticipationByEmail(q:Query,id:string,email:s
   requireCondition(cap?.verified_at,404,'not_found','找不到參與紀錄。');
   const identity={guest_email:email},rsvp=await ownRsvp(q,id,identity);
   await guestLegal(q,event,cap,Boolean(rsvp?.confirmed_at||rsvp?.email_sent_at||await ownEntry(q,id,identity)));
-  const going=event.state==='published'&&rsvp?.state==='going';
+  const going=canReadEventParticipationDetails(event,event.state==='published'&&rsvp?.state==='going');
   return {event:going?event:{...event,location:null,online_url:null},email,going};
 }
 export async function countEventSeats(q:Query,id:string,now=new Date()):Promise<number>{return Number((await q.query(`SELECT (SELECT count(*) FROM community_event_rsvps WHERE event_id=$1 AND state='going' AND NOT is_verification_test_account(user_id))+(SELECT count(*) FROM community_event_guest_rsvps WHERE event_id=$1 AND ((state='going' AND (email_sent_at IS NOT NULL OR confirmed_at IS NOT NULL)) OR (state='pending' AND created_at>$2::timestamptz-interval '10 minutes')))+(SELECT count(*) FROM community_event_waitlist w WHERE event_id=$1 AND status='invited' AND expires_at>$2 AND NOT EXISTS(SELECT 1 FROM community_event_rsvps r WHERE r.event_id=w.event_id AND r.user_id=w.member_ref AND r.state='going') AND NOT EXISTS(SELECT 1 FROM community_event_guest_rsvps g WHERE g.event_id=w.event_id AND g.email=w.guest_email AND ((g.state='going' AND (g.email_sent_at IS NOT NULL OR g.confirmed_at IS NOT NULL)) OR (g.state='pending' AND g.created_at>$2::timestamptz-interval '10 minutes')))) AS total`,[id,now])).rows[0].total);}
@@ -236,26 +236,42 @@ for(const candidate of candidates){
 }
 return {reconciled:ids.length,...await processEventNotices(pool,send,origin,eventId,accepted,failed)};
 }
+// A rolling day also bounds every calendar day; unknown attempts consume slots.
+const changeNoticeBudgetSql=`(n.kind<>'event_schedule_changed' OR (
+ NOT EXISTS(SELECT 1 FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email
+   AND a.kind='event_schedule_changed' AND a.attempted_at>clock_timestamp()-interval '1 hour')
+ AND (SELECT count(*) FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email
+   AND a.kind='event_schedule_changed' AND a.attempted_at>clock_timestamp()-interval '1 day')<3))`;
 export async function processEventNotices(pool:Pool,send:EventEmailSender,origin:string,eventId?:string,accepted=0,failed=0){
-const notices=(await pool.query("SELECT notice_id,event_id FROM community_event_participation_notices WHERE status='pending' AND ($1::uuid IS NULL OR event_id=$1) ORDER BY event_version,notice_id LIMIT 100",[eventId??null])).rows;
+const notices=(await pool.query(`SELECT notice_id,event_id FROM community_event_participation_notices n WHERE status='pending'
+ AND ($1::uuid IS NULL OR event_id=$1) AND ${changeNoticeBudgetSql} ORDER BY event_version,notice_id LIMIT 100`,[eventId??null])).rows;
 for(const candidate of notices){
   const claimed=await transaction(pool,async q=>{
     await eventRow(q,candidate.event_id,true);
-    return (await q.query("UPDATE community_event_participation_notices SET status='unknown' WHERE notice_id=$1 AND status='pending' RETURNING *",[candidate.notice_id])).rows[0];
+    return (await q.query(`UPDATE community_event_participation_notices n SET status='unknown',attempted_at=clock_timestamp()
+     WHERE notice_id=$1 AND status='pending' AND ${changeNoticeBudgetSql} RETURNING *`,[candidate.notice_id])).rows[0];
   });
   if(!claimed)continue;
   await transaction(pool,async q=>{
     const event=await eventRow(q,claimed.event_id,true);
+    // An edit may have superseded this claim while the event lock was released.
+    const current=(await q.query("SELECT * FROM community_event_participation_notices WHERE notice_id=$1 AND status='unknown'",[claimed.notice_id])).rows[0];
+    if(!current)return;
+    const skip=async()=>{await q.query("UPDATE community_event_participation_notices SET status='skipped' WHERE notice_id=$1",[claimed.notice_id]);};
+    let source;
     try{
-      const source=await resolveGuestParticipationByEmail(q,event.event_id,claimed.guest_email);
-      if(claimed.kind==='event_cancelled'){if(event.state!=='cancelled')return;}
-      // Cancellation must not discard an earlier version already queued for a registrant.
-      else if(!source.going&&(await ownRsvp(q,event.event_id,{guest_email:claimed.guest_email}))?.state!=='going'&&!(await q.query("SELECT 1 FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2 AND status IN ('queued','invited')",[event.event_id,claimed.guest_email])).rowCount)return;
-    }catch{return;}
+      source=await resolveGuestParticipationByEmail(q,event.event_id,claimed.guest_email);
+      if(claimed.kind==='event_cancelled'){if(event.state!=='cancelled')return skip();}
+      else if(!source.going&&(await ownRsvp(q,event.event_id,{guest_email:claimed.guest_email}))?.state!=='going'&&!(await q.query("SELECT 1 FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2 AND status IN ('queued','invited')",[event.event_id,claimed.guest_email])).rowCount)return skip();
+      if(claimed.kind==='event_schedule_changed'&&(await q.query("SELECT 1 FROM community_event_participation_notices WHERE event_id=$1 AND guest_email=$2 AND kind='event_schedule_changed' AND event_version>$3",[event.event_id,claimed.guest_email,claimed.event_version])).rowCount)return skip();
+    }catch(error){if(error instanceof Problem&&error.status===404)return skip();throw error;}
     let status='provider_accepted';
     try{
-      const noticeBody=claimed.kind==='event_announcement'?String(claimed.body).replace(/[.:@]/g,value=>value+'\u200b'):claimed.body;
-      await send(claimed.guest_email,'自由工坊：活動參與狀態更新',`${noticeBody??(claimed.kind==='event_cancelled'?'活動已取消。':'活動已更新。')}\n${origin}/events/${event.event_id}`);
+      const noticeBody=claimed.kind==='event_schedule_changed'?eventChangeBody(source.event,source.going)
+        :claimed.kind==='event_announcement'?String(current.body).replace(/[.:@]/g,value=>value+'\u200b'):current.body;
+      // Anchor the next cooldown to the actual handoff, after any event-lock wait.
+      await q.query('UPDATE community_event_participation_notices SET attempted_at=clock_timestamp() WHERE notice_id=$1',[claimed.notice_id]);
+      await send(claimed.guest_email,'自由工坊：活動參與狀態更新',`${noticeBody??'活動已取消。'}\n${origin}/events/${event.event_id}`);
       accepted++;
     }catch{status='failed';failed++;}
     await q.query('UPDATE community_event_participation_notices SET status=$2 WHERE notice_id=$1',[claimed.notice_id,status]);

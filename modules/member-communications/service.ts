@@ -1,3 +1,4 @@
+import {memberEventChangeBody} from '../community/event-changes.js';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {command,type Command} from '../../packages/db/index.js';
@@ -86,6 +87,7 @@ export async function listNotifications(pool:Pool,actor:Actor,raw:unknown,orderN
     const unread=(await q.query(`SELECT count(*)::int AS n FROM member_notifications WHERE community_id=$1 AND recipient_ref=$2 AND read_at IS NULL AND ${notificationVisibilitySQL(orderNotificationsEnabled)}`,[actor.community_id,actor.user_id])).rows[0].n;
     const rows=(await q.query(`SELECT notification_id,kind,title,body,created_at,read_at,action_tab,action_resource_id FROM member_notifications
       WHERE community_id=$1 AND recipient_ref=$2 AND ${notificationVisibilitySQL(orderNotificationsEnabled)} ORDER BY created_at DESC,notification_id DESC LIMIT $3 OFFSET $4`,[actor.community_id,actor.user_id,limit+1,offset])).rows;
+    for(const row of rows)if(row.kind==='event_schedule_changed'&&row.action_tab==='events'&&row.action_resource_id)row.body=await memberEventChangeBody(q,actor,row.action_resource_id);
     const page=pageOf(rows.map(notification),limit,offset);
     return {items:page.items,unread_count:unread,next_offset:page.next_offset};
   });

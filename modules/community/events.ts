@@ -91,6 +91,11 @@ export async function canAccessGuildEvent(q:Pick<PoolClient,'query'>,actor:Actor
 
 function privateEventLocationHint(row:{registration_policy?:string}){return row.registration_policy==='community_member'?'登入並完成報名後可查看參與資料':'線上參與資料將寄至報名信箱';}
 
+/** Shared participation-detail rule for event readers and change delivery. */
+export function canReadEventParticipationDetails(row:{state:string},going:boolean,organizer=false,reviewer=false):boolean {
+  return organizer||(row.state!=='cancelled'&&(going||reviewer));
+}
+
 async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
   const count=(await q.query(`SELECT
     (SELECT count(*) FROM community_event_rsvps WHERE event_id=$1 AND state='going' AND NOT is_verification_test_account(user_id))+
@@ -101,7 +106,7 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     WHERE o.community_id=$1 AND o.guild_key=$2 AND o.user_id=$3`,[actor.community_id,row.review_guild_key,actor.user_id])).rowCount===1;
   const media=(await q.query(`SELECT (SELECT orientation FROM community_event_banners WHERE event_id=$1) AS banner_orientation,
     (SELECT mime_type FROM community_event_videos WHERE event_id=$1) AS video_mime`,[row.event_id])).rows[0];
-  const hideOnline=mine!=='going'&&row.organizer_ref!==actor.user_id&&!canReview;
+  const hideOnline=!canReadEventParticipationDetails(row,mine==='going',row.organizer_ref===actor.user_id,Boolean(canReview));
   const cancelledForParticipant=row.state==='cancelled'&&row.organizer_ref!==actor.user_id;
   return {...row,prize_photos:await eventPrizePhotos(q,row.event_id),location:cancelledForParticipant?null:hideOnline&&(row.mode==='online'||/https?:\/\//i.test(row.location))?privateEventLocationHint(row):row.location,
     online_url:cancelledForParticipant||hideOnline?null:row.online_url,
@@ -180,7 +185,7 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
       AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))`,'*'),[...args,Boolean(actor.agent)])).rows;
   return rows.map(row=>{
     const {list_rank:_rank,list_time:_time,...rest}=row;
-    return rest.my_rsvp!=='going'&&rest.organizer_ref!==actor.user_id&&!rest.can_review
+    return !canReadEventParticipationDetails(rest,rest.my_rsvp==='going',rest.organizer_ref===actor.user_id,Boolean(rest.can_review))
       ?{...rest,location:rest.mode==='online'||/https?:\/\//i.test(rest.location)?privateEventLocationHint(rest):rest.location,online_url:null}:rest;
   });
 }
