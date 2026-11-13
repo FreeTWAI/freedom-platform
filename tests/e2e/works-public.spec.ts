@@ -13,7 +13,7 @@ type MemberFixture = {
 };
 
 const test = base.extend<{ creator: MemberFixture }>({
-  creator: async ({ browser, context, e2eAuthPool }, use) => {
+  creator: async ({ browser, e2eAuthPool }, use) => {
     const id = randomUUID();
     const email = `work-public-${id}@example.test`;
     const name = `公開作品測試者 ${id.slice(0, 6)}`;
@@ -22,12 +22,13 @@ const test = base.extend<{ creator: MemberFixture }>({
        SELECT $1,$2,$3,$4,password_hash,$5,false FROM users WHERE user_id=$6`,
       [id, DEMO_COMMUNITY, email, name, randomUUID(), DEMO_USERS[0].user_id],
     );
-    const page = await browser.newPage({ baseURL: e2eOrigin() });
+    const context = await browser.newContext({ baseURL: e2eOrigin() });
+    const page = await context.newPage();
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: e2eOrigin() });
     try {
       await use({ id, email, name, context, page });
     } finally {
-      await page.close();
+      await context.close();
       await e2eAuthPool.query(`UPDATE showcases SET status='withdrawn', visibility='private', aggregate_version=aggregate_version+1 WHERE owner_ref=$1`, [id]);
       await e2eAuthPool.query('UPDATE users SET active=false WHERE user_id=$1', [id]);
     }
@@ -163,3 +164,92 @@ test('PUBLIC-WORK-01 owner opt-in, mobile responsiveness, tracked /go credit, ed
     await visitorCtx.close();
   }
 });
+
+for (const screen of ['card', 'editor'] as const) {
+  test(`PUBLIC-WORK-02 stale ${screen} reloads all content before renewed consent`, async ({ creator }) => {
+    const page = creator.page;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, creator.email);
+    const csrf = (await (await page.request.get('/api/v1/session')).json()).csrf_token;
+    const headers = { Origin: e2eOrigin(), 'X-CSRF-Token': csrf };
+    const command = async (path: string, data: object, version?: string | number, method = 'POST') => {
+      const response = await page.request.fetch(`/api/v1/${path}`, { method, data, headers: {
+        ...headers, 'Idempotency-Key': randomUUID(), ...(version ? { 'If-Match': `"${version}"` } : {}),
+      } });
+      expect(response.ok(), await response.text()).toBe(true);
+      return response.json();
+    };
+    const title = `版本核對 ${randomUUID().slice(0, 6)}`;
+    const first = await command('showcases', { title, description: '第一版摘要', public_url: 'https://example.com/version-one', consent_to_share: true });
+    if (screen === 'card') await navigate(page, '作品與合作');
+    else {
+      await navigate(page, '我的內容');
+      await page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).getByRole('link', { name: '撤下', exact: true }).click();
+    }
+    const scope = screen === 'card'
+      ? page.locator(`#showcase-${first.showcase_id}`)
+      : page.getByRole('region', { name: '私人作品編輯' });
+    const toggle = scope.getByRole('switch', { name: /開放公開閱讀/ });
+    await expect(toggle).toBeEnabled();
+
+    // A second tab changes the authoritative work while this screen still shows v1.
+    const otherTab = await page.context().newPage();
+    await otherTab.goto('/');
+    const revised = await otherTab.evaluate(async ({ id, csrf, version }) => {
+      async function send(suffix: string, method: string, data: object, expected: string | number) {
+        const response = await fetch(`/api/v1/me/showcases/${id}${suffix}`, { method, headers: {
+          'Content-Type': 'application/json', 'X-CSRF-Token': csrf, 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `"${expected}"`,
+        }, body: JSON.stringify(data) });
+        if (!response.ok) throw Error(`fixture mutation failed: ${response.status}`);
+        return response.json();
+      }
+      const withdrawn = await send('/withdraw', 'POST', {}, version);
+      const edited = await send('', 'PATCH', { title: '新版公開作品', description: '新版完整摘要', public_url: 'https://example.com/version-two' }, withdrawn.aggregate_version);
+      return send('/publish', 'POST', { consent_to_share: true }, edited.aggregate_version);
+    }, { id: first.showcase_id, csrf, version: first.aggregate_version });
+    await otherTab.close();
+
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const reloadPath = screen === 'card' ? '**/api/v1/showcases?*' : `**/api/v1/me/showcases/${first.showcase_id}`;
+    await page.route(reloadPath, async route => { await held; await route.continue(); });
+    const attempts: string[] = [];
+    page.on('request', request => {
+      if (request.method() === 'PUT' && request.url().endsWith(`/showcases/${first.showcase_id}/sharing`)) attempts.push(String(request.postDataJSON().work_version));
+    });
+    try {
+      const conflict = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/sharing'));
+      await toggle.click();
+      expect((await conflict).status()).toBe(412);
+      if (screen === 'card') {
+        await expect(scope.getByText('作品已更新，請重新檢視後再開放')).toBeVisible();
+        await expect(toggle).toBeDisabled();
+        await expect(scope.getByRole('heading', { name: title, exact: true })).toBeVisible();
+      } else {
+        // The editor hides its old form throughout the full-content reload.
+        await expect(scope.getByText('載入作品…')).toBeVisible();
+        await expect(toggle).toHaveCount(0);
+      }
+      expect(attempts).toEqual([String(first.aggregate_version)]);
+      release();
+      if (screen === 'card') {
+        await expect(scope.getByRole('heading', { name: revised.title, exact: true })).toBeVisible();
+        await expect(scope.getByText(revised.description, { exact: true })).toBeVisible();
+        await expect(scope.locator('a[href="https://example.com/version-two"]')).toBeVisible();
+      } else {
+        await expect(scope.getByLabel('作品標題', { exact: true })).toHaveValue(revised.title);
+        await expect(scope.getByRole('textbox', { name: '一句話介紹', exact: true })).toHaveValue(revised.description);
+        await expect(scope.getByLabel('作品外部連結（選填）')).toHaveValue(revised.public_url);
+      }
+      await expect(toggle).toBeEnabled();
+      await expect(toggle).not.toBeChecked();
+      await toggle.click();
+      await expect(toggle).toBeChecked();
+      expect(attempts).toEqual([String(first.aggregate_version), String(revised.aggregate_version)]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    } finally {
+      release();
+      await page.unroute(reloadPath);
+    }
+  });
+}

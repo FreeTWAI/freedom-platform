@@ -15,7 +15,7 @@ import { getEventShareCode } from './events.js';
 import { highlightShareImage, readHighlightEvent } from './event-highlights.js';
 import { avatarUrl } from '../identity-membership/avatars.js';
 import { readPublicCards } from '../identity-membership/member-sharing.js';
-import { PUBLIC_WORK_VISIBLE } from '../opportunity-project-work/public-sharing.js';
+import { PUBLIC_WORK_VISIBLE, readPublicWork } from '../opportunity-project-work/public-sharing.js';
 import type { Actor } from '../identity-membership/service.js';
 
 const SHARE_TARGET_JOIN = `LEFT JOIN showcases s ON sh.kind='work' AND s.showcase_id=sh.ref_id AND s.community_id=sh.community_id
@@ -375,9 +375,13 @@ type OpenTarget = { href: string; title: string; description: string; image?: { 
 
 async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date): Promise<OpenTarget | null> {
   if(link.kind==='share'){
-    const row=(await pool.query(`SELECT sh.kind, sh.ref_id, sh.title, s.description FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[link.target_key,link.community_id])).rows[0];
+    const row=(await pool.query(`SELECT sh.kind, sh.ref_id, sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[link.target_key,link.community_id])).rows[0];
     if(!row)return null;
-    if(row.kind==='work')return {navigation:'internal',href:`/works/${row.ref_id}?via=${link.code}`,title:row.title,description:row.description??'自由工坊公開作品'};
+    if (row.kind === 'work') {
+      const work = await readPublicWork(pool, row.ref_id, link.community_id);
+      if (!work) return null;
+      return { navigation: 'internal', href: `/works/${work.showcase_id}?via=${link.code}`, title: work.title, description: work.description };
+    }
     return {navigation:'internal',href:`/s/${link.target_key}?via=${link.code}`,title:row.title,description:'自由工坊分享'};
   }
   if (link.kind === 'member_card') {
