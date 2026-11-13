@@ -7,7 +7,7 @@ async function login(page:Page){
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
   await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
 }
 
@@ -29,13 +29,13 @@ test('real login ACK can wait while the member gets immediate foreground feedbac
     await page.getByRole('button',{name:'登入',exact:true}).click();
     await expect(page.locator('.request-feedback')).toContainText('正在處理');
     await expect(page.getByRole('button',{name:'處理中…',exact:true})).toBeDisabled();
-    await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toHaveCount(0);
+    await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toHaveCount(0);
     await expect.poll(()=>page.evaluate(()=>(window as typeof window&{feedbackLatency:number|null}).feedbackLatency)).not.toBeNull();
     const latency=await page.evaluate(()=>(window as typeof window&{feedbackLatency:number}).feedbackLatency);
     expect(latency).toBeLessThan(100);await info.attach('click-to-feedback-frame-ms',{body:JSON.stringify({sample_count:1,ms:latency,scope:'local controlled login ACK, not production p95'}),contentType:'application/json'});
     mkdirSync('test-results/ux-speed',{recursive:true});await page.screenshot({path:'test-results/ux-speed/login-pending-320.png',fullPage:true});
   }finally{release();}
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   await expect(page.locator('.request-feedback')).toHaveCount(0);
 });
 
@@ -59,7 +59,7 @@ test('a failed deferred page offers recovery while the shared member shell stays
   await openChat(page);
   await expect(page.getByRole('alert')).toContainText('我的訊息暫時無法開啟');
   await expect(page.getByRole('button',{name:'重新載入頁面',exact:true})).toBeVisible();
-  await closeChat(page);await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'會員首頁',exact:true}).click();
+  await closeChat(page);await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'動態',exact:true}).click();
   await expect(page.getByRole('button',{name:'建立貼文',exact:true})).toBeVisible();
 });
 

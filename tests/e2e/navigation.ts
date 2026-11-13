@@ -268,3 +268,11 @@ export function eventAppPath(path:string){
   url.searchParams.set('app','1');
   return url.pathname+url.search+url.hash;
 }
+
+/** Reveal the optional event fields through the current create form disclosure. */
+export async function openEventSettings(page:Page){
+ const options=page.locator('form.experience-editor details').filter({has:page.getByText('選填設定',{exact:true})});
+ await expect(options).toBeVisible();
+ if(!await options.evaluate(element=>(element as HTMLDetailsElement).open))await options.locator(':scope > summary').click();
+ await expect(options).toHaveJSProperty('open',true);
+}

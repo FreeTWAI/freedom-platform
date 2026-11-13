@@ -139,9 +139,9 @@ test('members swipe through shared YouTube links in a scrollbar-free feed; playe
         expect(size.x + size.width).toBeLessThanOrEqual(width);
       }
     }
-    // The homepage admits only the journal and the enabled Short player.
+    // The homepage admits its same-origin tool preview, journal origins and the enabled Short player.
     const csp = (await page.request.get('/')).headers()['content-security-policy'];
-    expect(csp.split(';').map(part=>part.trim()).filter(part=>part.split(/\s+/)[0]==='frame-src')).toEqual(['frame-src https://aisns.evitina.tw https://freetwai.github.io https://www.youtube-nocookie.com']);
+    expect(csp.split(';').map(part=>part.trim()).filter(part=>part.split(/\s+/)[0]==='frame-src')).toEqual(["frame-src 'self' https://aisns.evitina.tw https://freetwai.github.io https://www.youtube-nocookie.com"]);
     expect(csp).toContain("frame-ancestors 'none'");
     await drain();
     expect(violations).toEqual([]);
@@ -294,7 +294,7 @@ test('no Short option or player, and only the journal frame origin when the host
   await expect(options.getByRole('button',{name:'Short',exact:true})).toHaveCount(0);
   expect(await (await page.request.get(`${baseURL}/api/v1/site`)).json()).toMatchObject({short_videos_enabled:false});
   const csp=(await page.request.get(`${baseURL}/`)).headers()['content-security-policy']??'';
-  expect(csp.split(';').map(part=>part.trim()).filter(part=>part.split(/\s+/)[0]==='frame-src')).toEqual(['frame-src https://aisns.evitina.tw https://freetwai.github.io']);
+  expect(csp.split(';').map(part=>part.trim()).filter(part=>part.split(/\s+/)[0]==='frame-src')).toEqual(["frame-src 'self' https://aisns.evitina.tw https://freetwai.github.io"]);
   expect(csp).toContain("frame-ancestors 'none'");
   await expect(page.locator('iframe')).toHaveCount(0);
 });

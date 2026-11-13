@@ -125,6 +125,11 @@ test('event bulletins obey event modes and quiet hours while pending subjects st
   const owner=await member(0),other=await member(2);
   const created=await owner.request('events',{title:'公告偏好與待審核255',description:'尚未公开細節',starts_at:new Date(Date.now()+86400000).toISOString(),ends_at:new Date(Date.now()+90000000).toISOString(),mode:'online',location:'測試參與位置',visibility:'open',capacity:null},undefined,randomUUID(),'POST');
   assert.equal(created.status,201,await created.clone().text());
+  const event=await created.json() as {event_id:string;state:string};assert.equal(event.state,'published');
+  const foreign=body(await preferences(other));foreign.categories.events='instant';foreign.quiet_hours.enabled=false;await save(other,foreign);
+  assert.equal(JSON.stringify(await (await other.request(endpoint+'/event-reminders')).json()).includes('公告偏好與待審核255'),true);
+  // Retain the old pending-source privacy check with an explicit historical fixture.
+  await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[event.event_id]);
   const value=body(await preferences(owner));value.categories.events='instant';value.quiet_hours.enabled=false;await save(owner,value);
   assert.equal(JSON.stringify(await (await owner.request(endpoint+'/event-reminders')).json()).includes('公告偏好與待審核255'),true);
   assert.deepEqual((await (await other.request(endpoint+'/event-reminders')).json() as {items:unknown[]}).items,[]);
@@ -134,7 +139,7 @@ test('event bulletins obey event modes and quiet hours while pending subjects st
   value.categories.events='summary';await save(owner,value);
   assert.deepEqual((await (await owner.request(endpoint+'/event-reminders')).json() as {items:unknown[]}).items,[]);
   assert.equal(JSON.stringify(await (await owner.request(endpoint+'/summary')).json()).includes('公告偏好與待審核255'),true);
-  const foreign=body(await preferences(other));foreign.categories.events='summary';await save(other,foreign);
+  foreign.categories.events='summary';await save(other,foreign);
   assert.equal(JSON.stringify(await (await other.request(endpoint+'/summary')).json()).includes('公告偏好與待審核255'),false);
   value.categories.events='instant';value.quiet_hours={enabled:true,time_zone:'Asia/Taipei',start:'11:00',end:'13:00'};await save(owner,value);
   assert.deepEqual((await (await owner.request(endpoint+'/event-reminders')).json() as {items:unknown[]}).items,[]);

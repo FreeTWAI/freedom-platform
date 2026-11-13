@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import {test, expect, type Page} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {navigate,openEventSettings} from './navigation.js';
 
 async function createDraft(page: Page) {
   await page.goto('/');
@@ -12,8 +12,9 @@ async function createDraft(page: Page) {
   const form = page.locator('form.experience-editor');
   const title = `自動處理海報 ${Date.now()}`;
   await form.getByLabel('活動名稱').fill(title);
+  await openEventSettings(page);
   await form.getByLabel('活動說明').fill('保留活動說明與原始海報，不必自己壓縮。');
-  await form.getByLabel('線上場地').fill('Discord 讀書會場地');
+  await form.getByLabel('地點',{exact:true}).fill('Discord 讀書會場地');
   await form.getByText('加上海報或影片（選填）',{exact:true}).click();
   return {form, title};
 }
@@ -30,7 +31,7 @@ async function holdDecoder(page: Page) {
   });
 }
 
-test('large event posters are prepared on create and edit, preserving orientation and a usable draft after invalid input', async ({page}, testInfo) => {
+test('large event posters are prepared on create and edit, preserving orientation and a usable draft after invalid input', async ({page,e2eAuthPool}, testInfo) => {
   const {form, title} = await createDraft(page);
   for (const width of [390, 1440]) {
     await page.setViewportSize({width, height: width === 390 ? 844 : 900});
@@ -54,7 +55,7 @@ test('large event posters are prepared on create and edit, preserving orientatio
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({path: testInfo.outputPath(`prepared-${width}.png`)});
   }
-  await form.getByRole('button', {name: '送出審核'}).click();
+  await form.getByRole('button', {name: '發布', exact: true}).click();
   const card = page.locator('.experience-card').filter({has: page.getByRole('heading', {name: title, exact: true})});
   await expect(card.locator('.experience-banner-image')).toBeVisible();
   expect(uploads).toHaveLength(1);
@@ -63,6 +64,11 @@ test('large event posters are prepared on create and edit, preserving orientatio
   expect(uploads[0].orientation).toBe('landscape');
   expect(await sharp(uploads[0].bytes).metadata()).toMatchObject({width: 1600, height: 384});
 
+  // Editing an existing pending draft remains supported; new events publish immediately.
+  const event=(await e2eAuthPool.query('SELECT event_id,state FROM community_events WHERE title=$1',[title])).rows[0];
+  expect(event.state).toBe('published');
+  await e2eAuthPool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[event.event_id]);
+  await page.reload();
   await card.getByRole('button', {name: '編輯草稿'}).click();
   await card.getByText('加上海報或影片（選填）',{exact:true}).click();
   const picker = card.getByLabel('活動海報（選填）');
@@ -91,7 +97,7 @@ test('pending poster processing blocks submission and cannot overwrite a replace
   const image = await sharp({create: {width: 120, height: 80, channels: 3, background: '#366177'}}).png().toBuffer();
   await form.getByLabel('活動海報（選填）').setInputFiles({name: '舊照片.png', mimeType: 'image/png', buffer: image});
   await expect(form.getByRole('status')).toHaveText('正在處理圖片…');
-  await expect(form.getByRole('button', {name: '送出審核'})).toBeDisabled();
+  await expect(form.getByRole('button', {name: '發布', exact: true})).toBeDisabled();
   await page.evaluate(() => (window as unknown as {restorePosterDecoder(): void}).restorePosterDecoder());
   await form.getByLabel('活動海報（選填）').setInputFiles({name: '新照片.png', mimeType: 'image/png', buffer: image});
   await expect(form.getByText('已選擇 新照片.png', {exact: false})).toBeVisible();
@@ -107,5 +113,5 @@ test('pending poster processing blocks submission and cannot overwrite a replace
   await page.evaluate(() => (window as unknown as {releasePoster(): Promise<void>}).releasePoster());
   await expect(form.getByText('已選擇', {exact: false})).toHaveCount(0);
   await expect(form.getByRole('status')).toHaveCount(0);
-  await expect(form.getByRole('button', {name: '送出審核'})).toBeEnabled();
+  await expect(form.getByRole('button', {name: '發布', exact: true})).toBeEnabled();
 });
