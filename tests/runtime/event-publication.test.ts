@@ -72,7 +72,7 @@ test('HTML enforces every visibility, hides online details and honors participat
   const tracked=(await pool.query("SELECT code FROM promotion_links WHERE kind='event' AND target_key=$1",[e.event_id])).rows[0].code;
   const preview=await (await app.request(origin+'/go/'+tracked)).text();
   if(['guild','workshop'].includes(visibility))assert.ok(!preview.includes(e.title),'private tracked preview omits event title');
-  assert.equal(response.status,['open','referral'].includes(visibility)?200:404,visibility);assert.ok(!html.includes('https://example.com/private-meet'));
+  assert.equal(response.status,['open','referral'].includes(visibility)?200:404,visibility);assert.ok(!html.includes('private-meet'),'the private meeting link stays off the public page');
   if(response.status===200){assert.match(html,/og:title/);assert.match(html,/application\/ld\+json/);assert.ok(!html.includes('加入行事曆'));assert.ok(!html.includes('name="email"'));}
   const member=await app.request(origin+'/events/'+e.event_id,{headers:{Cookie:'freedom_local_session='+tokens[0]}});assert.equal(member.status,visibility==='guild'?404:200);
   if(visibility==='open'){const on=await enabled.request(origin+'/events/'+e.event_id);assert.match(await on.text(),/name="email"/);}
