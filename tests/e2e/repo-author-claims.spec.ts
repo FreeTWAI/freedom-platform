@@ -114,3 +114,96 @@ test('member submits an original-author claim and an admin verification changes 
     await e2eAuthPool.query('DELETE FROM github_social_connections WHERE user_id=$1', [DEMO_USERS[0].user_id]);
   }
 });
+
+test('author claim review clears retained decision so switching to verified revokes cleanly', async ({page}) => {
+  const claimId = randomUUID();
+  let state: 'pending' | 'verified' | 'revoked' = 'pending';
+  let version = 1;
+  const reviews: {decision: string; reason: string}[] = [];
+  await page.route('**/admin/api/**', route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname.replace('/admin/api', '');
+    if (path === '/bootstrap') {
+      return route.fulfill({json: {
+        admin: {admin_id: 'synthetic-admin', display_name: '認領審核員', email: 'admin@example.test', role: 'super_admin', community_id: DEMO_COMMUNITY},
+        csrf_token: 'synthetic-csrf',
+        community_certification_enabled: false,
+        store_admissions_enabled: false,
+        tool_reports_enabled: false,
+        github_setup_enabled: false,
+        available_skill_books: [],
+        summary: {members: 1, active_members: 1, pending_guild_applications: 0, guilds: 0, admins: 1},
+      }});
+    }
+    if (path === '/credentials') return route.fulfill({json: {items: []}});
+    if (path === '/author-claims') {
+      const queue = url.searchParams.get('queue') === 'verified' ? 'verified' : 'review';
+      const matches = (queue === 'review' && state === 'pending') || (queue === 'verified' && state === 'verified');
+      return route.fulfill({json: {
+        queue,
+        identity_changes: [],
+        items: matches ? [{
+          claim_id: claimId,
+          display_name: '合成申請者',
+          github_login: 'synthetic-author',
+          github_user_id: '88001122',
+          role_label: '原創作者',
+          state,
+          state_label: state === 'verified' ? '已核實' : '認領審核中',
+          evidence_url: null,
+          statement: '合成原作認領測試說明。',
+          appeal_text: null,
+          appeal_count: 0,
+          reason: null,
+          version,
+          submitted_at: '2026-01-01T00:00:00.000Z',
+          source_snapshot: {book_id: 'video-autopilot'},
+          repo: {full_name: 'FreeTWAI/synthetic-repo', current_url: 'https://github.com/FreeTWAI/synthetic-repo', provider_repo_id: '88001122'},
+          related_claims: [],
+        }] : [],
+      }});
+    }
+    if (path === `/author-claims/${claimId}/review` && request.method() === 'POST') {
+      const body = request.postDataJSON() as {decision: string; reason: string};
+      reviews.push(body);
+      if (state === 'verified' && body.decision !== 'revoke') {
+        return route.fulfill({status: 409, json: {code: 'claim_transition_invalid', detail: '這筆認領目前的狀態不能做這個決定。'}});
+      }
+      if (state === 'pending' && body.decision === 'verify') {
+        state = 'verified';
+        version += 1;
+        return route.fulfill({json: {claim_id: claimId, state, version}});
+      }
+      if (state === 'verified' && body.decision === 'revoke') {
+        state = 'revoked';
+        version += 1;
+        return route.fulfill({json: {claim_id: claimId, state, version}});
+      }
+      return route.fulfill({status: 409, json: {code: 'claim_transition_invalid', detail: '這筆認領目前的狀態不能做這個決定。'}});
+    }
+    return route.fulfill({json: {items: []}});
+  });
+
+  await page.goto('/admin?view=author-claims&manage=1');
+  const card = page.locator('article', {hasText: '合成原作認領測試說明。'});
+  await expect(card).toBeVisible();
+  await card.getByLabel('決定', {exact: true}).selectOption('reject');
+  await card.getByLabel('決定', {exact: true}).selectOption('verify');
+  await card.getByLabel('審核理由', {exact: true}).fill('已核對合成認領紀錄');
+  await card.getByRole('button', {name: '確認', exact: true}).click();
+  await expect(page.getByText('管理操作已保存，並留下操作紀錄。')).toBeVisible();
+  await expect(card).toHaveCount(0);
+
+  await page.getByRole('button', {name: '已核實', exact: true}).click();
+  await expect(card).toBeVisible();
+  await expect(card.getByLabel('決定', {exact: true})).toHaveValue('revoke');
+  await card.getByLabel('審核理由', {exact: true}).fill('撤銷核實狀態');
+  await card.getByRole('button', {name: '確認', exact: true}).click();
+  await expect(page.getByText('管理操作已保存，並留下操作紀錄。')).toBeVisible();
+  await expect(card).toHaveCount(0);
+  expect(reviews).toEqual([
+    {decision: 'verify', reason: '已核對合成認領紀錄'},
+    {decision: 'revoke', reason: '撤銷核實狀態'},
+  ]);
+});

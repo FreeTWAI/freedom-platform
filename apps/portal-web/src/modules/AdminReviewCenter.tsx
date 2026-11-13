@@ -62,6 +62,8 @@ export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminDetail | null>(null);
+  const [selectedRow, setSelectedRow] = useState<PullRow | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const listSeq = useRef(0);
@@ -102,27 +104,39 @@ export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
 
   const reloadDetail = useCallback(async (id: string) => {
     const ticket = ++detailSeq.current;
+    setDetailLoading(true);
     try {
       const value = await client.request<AdminDetail>(`/review-center/pulls/${id}`);
       if (ticket !== detailSeq.current) return;
       setDetail(value);
+      if (selectedId === id) setSelectedRow(value);
       setOpenId(id);
     } catch (cause) {
       if (ticket !== detailSeq.current) return;
       setError(cause instanceof Error ? cause.message : '無法載入這個拉取請求。');
+    } finally {
+      if (ticket === detailSeq.current) setDetailLoading(false);
     }
-  }, [client]);
+  }, [client, selectedId]);
 
   useEffect(() => {
     detailSeq.current += 1;
     void loadQueue(tab, 0, repositoryId, guildFilter);
   }, [loadQueue, tab, repositoryId, guildFilter]);
 
-  useEffect(()=>{if(selectedId)void reloadDetail(selectedId);},[selectedId,reloadDetail]);
+  useEffect(() => {
+    detailSeq.current += 1;
+    setOpenId(null);
+    setDetail(null);
+    setSelectedRow(null);
+    if (selectedId) void reloadDetail(selectedId);
+    else setDetailLoading(false);
+  }, [selectedId, reloadDetail]);
 
   async function choose(id: string) {
     if (openId === id) {
       detailSeq.current += 1;
+      setDetailLoading(false);
       setOpenId(null);
       setDetail(null);
       return;
@@ -148,8 +162,10 @@ export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
   ];
   const guildChoices = directory?.guild_choices ?? [];
 
+  const rows = selectedId ? (selectedRow?.pull_id === selectedId ? [selectedRow] : []) : items;
+
   return <section className="stack review-center">
-    <div className="card-head"><h2>PR 審核</h2><button className="btn btn-ghost" type="button" disabled={busy || loading} onClick={() => void (selectedId?reloadDetail(selectedId):loadQueue(tab, 0, repositoryId, guildFilter))}>更新</button></div>
+    <div className="card-head"><h2>PR 審核</h2><button className="btn btn-ghost" type="button" disabled={busy || loading || detailLoading} onClick={() => void (selectedId?reloadDetail(selectedId):loadQueue(tab, 0, repositoryId, guildFilter))}>更新</button></div>
     <details hidden={!!selectedId}><summary>紀錄與設定</summary><dl className="admin-summary review-counts" aria-label="審核概況">
       {countLine.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}
     </dl>
@@ -166,7 +182,7 @@ export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
     </details>{error && <p className="banner banner-error" role="alert">{error}</p>}
     {loading && <p role="status">正在載入審核佇列…</p>}
     <ul className="review-list" aria-label="拉取請求">
-      {(selectedId?(detail?[detail]:[]):items).map(row => <ReviewQueueRow key={row.pull_id} row={row} open={openId === row.pull_id} onToggle={() => void choose(row.pull_id)}>
+      {rows.map(row => <ReviewQueueRow key={row.pull_id} row={row} open={openId === row.pull_id} onToggle={() => void choose(row.pull_id)}>
         {openId === row.pull_id && detail?.pull_id === row.pull_id && <ReviewDetail
           compact={!!selectedId} detail={detail} viewer={summary?.viewer ?? null} repo={(summary?.repositories ?? []).find(item => item.repository_id === detail.repository_id) ?? null}
           guilds={guildChoices} books={directory?.skill_book_choices ?? []} busy={busy} onError={setError} onMutate={onMutate} onDone={() => void afterWrite(row.pull_id)}
@@ -176,7 +192,7 @@ export function AdminReviewCenter({ client, busy, onMutate, selectedId }: {
         {openId === row.pull_id && detail?.pull_id !== row.pull_id && <p role="status">正在載入細節…</p>}
       </ReviewQueueRow>)}
     </ul>
-    {!loading && (selectedId?!detail:!items.length) && !error && <p className="muted">這個佇列目前沒有拉取請求。</p>}
+    {!loading && !(selectedId && detailLoading) && !rows.length && !error && <p className="muted">這個佇列目前沒有拉取請求。</p>}
     {!selectedId && nextOffset !== null && <button type="button" className="btn btn-ghost" disabled={loading || busy} onClick={() => void loadQueue(tab, nextOffset, repositoryId, guildFilter)}>載入更多</button>}
     <details hidden={!!selectedId}><summary>維護設定</summary><IssueHandoff
       repositories={(summary?.repositories ?? []).filter(repo => repo.installation_state === 'active' && repo.mode !== 'off').map(repo => ({ id: repo.repository_id, full_name: repo.full_name }))}

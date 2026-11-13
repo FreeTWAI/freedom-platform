@@ -359,6 +359,13 @@ test('an admin claims, assigns, pauses and reads the review center on desktop an
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     expect(await phone.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.goto(`/admin?view=review-center&object=${PULL_LOW}`);
+    const singleRow=page.locator(`[data-pull-id="${PULL_LOW}"]`);
+    await expect(page.getByLabel('決定',{exact:true})).toBeVisible();
+    await singleRow.getByRole('button',{name:'收合',exact:true}).click();
+    await expect(page.getByLabel('決定',{exact:true})).toHaveCount(0);
+    await expect(singleRow).toBeVisible();
+    await expect(page.getByText('這個佇列目前沒有拉取請求。',{exact:true})).toHaveCount(0);
+    await singleRow.getByRole('button',{name:'詳情',exact:true}).click();
     await expect(page.getByLabel('決定',{exact:true})).toBeVisible();
     await page.getByLabel('決定',{exact:true}).selectOption('pause');
     await page.getByLabel('暫停理由',{exact:true}).fill('合成物件頁暫停審核');

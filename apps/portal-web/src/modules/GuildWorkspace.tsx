@@ -184,7 +184,7 @@ type MaintainerBook={book_id:string;title:string;maintainers:{user_id:string;dis
 type MemberChoice={user_id:string;display_name:string;email:string;active:boolean};
 export function AdminGuildWorkspace({client,selectedBook}:{client:AdminClient;selectedBook?:string|null}){
   const api=useAdminClient(client),[tab,setTab]=useState<'maintainers'|'council'>('maintainers');
-  return <section className="stack guild-workspace"><nav className="guild-workspace-tabs" aria-label="公會治理功能"><button className="btn btn-ghost" aria-pressed={tab==='maintainers'} onClick={()=>setTab('maintainers')}>技能書維護者</button><button className="btn btn-ghost" aria-pressed={tab==='council'} onClick={()=>setTab('council')}>公會長議事區</button></nav>{tab==='maintainers'?<MaintainerManager api={api} selectedBook={selectedBook}/>:<Council api={api}/>}</section>;
+  return <section className="stack guild-workspace"><nav className="guild-workspace-tabs" aria-label="公會治理功能"><button className="btn btn-ghost" aria-pressed={tab==='maintainers'} onClick={()=>setTab('maintainers')}>技能書維護者</button><button className="btn btn-ghost" aria-pressed={tab==='council'} onClick={()=>setTab('council')}>公會長議事區</button></nav>{tab==='maintainers'?<MaintainerManager key={selectedBook??''} api={api} selectedBook={selectedBook}/>:<Council api={api}/>}</section>;
 }
 function MaintainerManager({api,selectedBook}:{api:ReaderWriter;selectedBook?:string|null}){
   const captureOperation=useGuildOperation(api);
