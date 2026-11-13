@@ -5,7 +5,41 @@ import {DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY} from '../../packages/testing/se
 import {readFile} from 'node:fs/promises';
 let server:Server,originProof='';
 test.beforeAll(async()=>{server=createServer(async(q,r)=>{const name=new URL(q.url!,'http://localhost').pathname.slice(1)||'index.html';if(name==='.well-known/freedom-guild-tool.txt'){r.setHeader('Content-Type','text/plain');r.end(originProof);return;}if(!['index.html','main.js','bridge.js','style.css'].includes(name)){r.writeHead(404);r.end();return;}r.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');r.end(await readFile('templates/guild-tool/'+name));});await new Promise<void>(resolve=>server.listen(46455,'127.0.0.1',resolve));});
-test.afterAll(async()=>{await new Promise<void>(resolve=>server.close(()=>resolve()));});
+test.afterAll(async({e2eAuthPool})=>{
+ try{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ finally{
+  // Disabled records still own their routes; leave later native specs with no registered arcade.
+  await e2eAuthPool.query('TRUNCATE guild_tools CASCADE');
+ }
+});
+test('legacy /play hands game, recipe, practice and seed to the registered guild_games arcade',async({page,e2eAuthPool})=>{
+ await page.route('https://guild-tool.example.test/**',async route=>{
+  const response=await fetch('http://127.0.0.1:46455'+new URL(route.request().url()).pathname);
+  await route.fulfill({status:response.status,contentType:response.headers.get('content-type')!,body:await response.text(),headers:{'access-control-allow-origin':'*'}});
+ });
+ await e2eAuthPool.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier) VALUES($1,$2,$3,'guild_games','active','full') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active'",[randomUUID(),DEMO_COMMUNITY,DEMO_USERS[0].user_id]);
+ await e2eAuthPool.query("INSERT INTO positioning_guild_officers(community_id,guild_key,user_id) VALUES($1,'guild_games',$2) ON CONFLICT(community_id,guild_key) DO UPDATE SET user_id=$2",[DEMO_COMMUNITY,DEMO_USERS[0].user_id]);
+ const {e2eOrigin}=await import('../../packages/testing/e2e-origin.js');const origin=e2eOrigin();
+ const login=await page.request.post('/api/v1/auth/login',{headers:{Origin:origin},data:{email:DEMO_USERS[0].email,password:DEMO_PASSWORD}});
+ expect(login.status()).toBe(200);const session=await login.json();
+ const headers={Origin:origin,'X-CSRF-Token':session.csrf_token};
+ const registered=await page.request.post('/api/v1/guilds/guild_games/tools',{headers:{...headers,'Idempotency-Key':randomUUID()},data:{tool_id:'arcade',title:'路由測試',entry_url:'https://guild-tool.example.test/',profile:'sandboxed',bridge_version:'freedom.guild-launchpad/v2',scopes:['context:read'],permissions:[]}});
+ expect(registered.status(),await registered.text()).toBe(201);
+ expect((await page.request.post('/api/v1/guilds/guild_games/tools/arcade/accept',{headers:{...headers,'Idempotency-Key':randomUUID(),'If-Match':'"1"'},data:{}})).status()).toBe(200);
+ try{
+  // Serve the in-repo conformance template, then observe the query inside the real frame.
+  const query='game=kitchen&recipe=egg-fried-rice&practice=1&seed=42';
+  await page.goto('/play?'+query);
+  await expect(page).toHaveURL(origin+'/play?'+query+'#guilds/guild_games/tools/arcade');
+  const frame=page.locator('iframe[title="路由測試"]');
+  await expect(frame).toHaveAttribute('src','https://guild-tool.example.test/?'+query);
+  await expect(page.frameLocator('iframe[title="路由測試"]').locator('#status')).toHaveText('公會：guild_games');
+  const content=await (await frame.elementHandle())!.contentFrame();
+  expect(await content!.evaluate(()=>Object.fromEntries(new URLSearchParams(location.search)))).toEqual({game:'kitchen',recipe:'egg-fried-rice',practice:'1',seed:'42'});
+ }finally{
+  expect((await page.request.post('/api/v1/guilds/guild_games/tools/arcade/disable',{headers:{...headers,'Idempotency-Key':randomUUID(),'If-Match':'"1"'},data:{}})).status()).toBe(200);
+ }
+});
 test('master previews and registers an opaque tool, real bridge operations and hostile frame boundary',async({page,e2eAuthPool},testInfo)=>{
  await page.route('https://guild-tool.example.test/**',async route=>{const response=await fetch('http://127.0.0.1:46455'+new URL(route.request().url()).pathname);await route.fulfill({status:200,contentType:response.headers.get('content-type')!,body:await response.text(),headers:{'access-control-allow-origin':'*'}});});
  await e2eAuthPool.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier) VALUES($1,$2,$3,'guild_games','active','full') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active'",[randomUUID(),DEMO_COMMUNITY,DEMO_USERS[0].user_id]);

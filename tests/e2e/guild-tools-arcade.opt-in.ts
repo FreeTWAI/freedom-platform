@@ -1,3 +1,5 @@
+// Opt-in because the independently deployed guild-games build is not a platform CI dependency.
+// Run: FREEDOM_ARCADE_DIST=/absolute/path/to/guild-games/dist npm run test:e2e:arcade
 import {test,expect,type Page} from './fixtures.js';
 import {createServer,type Server} from 'node:http';
 import {readFile} from 'node:fs/promises';
@@ -8,10 +10,10 @@ import {e2eOrigin} from '../../packages/testing/e2e-origin.js';
 import {GAMES} from '../../apps/portal-web/src/games/domain.js';
 import {RECIPES} from '../../apps/portal-web/src/games/cooking/catalog.js';
 import {PARTY_GAMES} from '../../apps/portal-web/src/games/party/catalog.js';
-const root=resolve(process.env.FREEDOM_ARCADE_DIST??'../guild-games-draft-20261112/dist');let server:Server;
+const root=resolve(process.env.FREEDOM_ARCADE_DIST!);let server:Server;
 const mime:Record<string,string>={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml','.webp':'image/webp','.jpg':'image/jpeg','.json':'application/json'};
 test.beforeAll(async({e2eAuthPool,browser})=>{
- // CI must supply the independently built arcade, not a synthetic replacement page.
+ // The explicit run uses the independently built arcade.
  await readFile(resolve(root,'index.html')).catch(()=>{throw new Error('Arcade build missing: set FREEDOM_ARCADE_DIST to the built standalone arcade directory.');});
  server=createServer(async(q,r)=>{try{const path=resolve(root,'.'+decodeURIComponent(new URL(q.url!,'http://localhost').pathname));if(path!==root&&!path.startsWith(root+'/'))throw Error();const body=await readFile(path===root||path===root+'/'?root+'/index.html':path);r.setHeader('Content-Type',mime[extname(path)]??'text/html');r.end(body);}catch{r.writeHead(404);r.end();}});await new Promise<void>(r=>server.listen(46455,'127.0.0.1',r));
  await e2eAuthPool.query("INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier) VALUES($1,$2,$3,'guild_games','active','full') ON CONFLICT(community_id,user_id,guild_key) DO UPDATE SET state='active'",[randomUUID(),DEMO_COMMUNITY,DEMO_USERS[0].user_id]);
