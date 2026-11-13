@@ -102,13 +102,14 @@ async function eventView(q:Pick<PoolClient,'query'>,actor:Actor,row:any) {
     organizer_name:(await q.query('SELECT display_name FROM users WHERE user_id=$1',[row.organizer_ref])).rows[0]?.display_name??'社群成員',attending_count:Number(count),my_rsvp:mine,can_review:Boolean(canReview)};
 }
 
-async function bulletin(q:PoolClient,row:any,kind:'submitted'|'approved'|'rejected',actorName:string,organizerName:string){
+async function bulletin(q:PoolClient,row:any,kind:'submitted'|'approved'|'rejected'|'published',actorName:string,organizerName:string){
   const scope=row.visibility==='guild'?'公會內部活動':'公開活動';
-  const message=kind==='submitted'?`${organizerName} 提交了${scope}「${row.title}」，等待審核。`
+  const message=kind==='published'?`${organizerName} 發布了${scope}「${row.title}」。`
+    :kind==='submitted'?`${organizerName} 提交了${scope}「${row.title}」，等待審核。`
     :kind==='approved'?`${actorName} 核准了 ${organizerName} 的${scope}「${row.title}」。`
     :`${actorName} 未核准 ${organizerName} 的${scope}「${row.title}」。`;
   await q.query(`INSERT INTO community_event_bulletins(bulletin_id,event_id,community_id,kind,actor_name,message)
-    VALUES($1,$2,$3,$4,$5,$6)`,[randomUUID(),row.event_id,row.community_id,kind,actorName,message]);
+    VALUES($1,$2,$3,$4,$5,$6)`,[randomUUID(),row.event_id,row.community_id,kind==='published'?'approved':kind,actorName,message]);
 }
 
 export async function listEventBulletins(db:Pool|PoolClient,actor:Actor){
@@ -530,6 +531,9 @@ export async function createEvent(pool:Pool,input:Command,eventBody:unknown=inpu
     if(input.actor.agent){await q.query('UPDATE community_events SET via_agent=true WHERE event_id=$1',[id]);row.via_agent=true;}
     const share=await publishEventShare(q,row,true);
     await exposeEvent(q,row);
+    // Keep the existing admitted-event bulletin kind; publication no longer implies human review.
+    const organizer=(await q.query('SELECT display_name FROM users WHERE user_id=$1',[row.organizer_ref])).rows[0].display_name as string;
+    await bulletin(q,row,'published',organizer,organizer);
     await journal(q,input.actor,'community_event',id,1,'publish',{title:body.title,guild_key:body.guild_key},'freedom.community.event.published.v1');
     publishedNow=true;return {...await eventView(q,input.actor,row),share_id:share.share_id};
   },async q=>{if(publishedNow)requireCondition(Date.parse(body.starts_at)>(await q.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime(),422,'event_in_past','活動開始時間須在未來。');});

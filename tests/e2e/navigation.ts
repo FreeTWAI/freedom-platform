@@ -203,3 +203,11 @@ export async function openAccountSettings(page:Page,...labels:string[]){
     if(!await target.evaluate(element=>(element as HTMLDetailsElement).open))await target.locator(':scope > summary').click();
   }
 }
+
+/** Reveal the optional event fields through the current create form disclosure. */
+export async function openEventSettings(page:Page){
+ const options=page.locator('form.experience-editor details').filter({has:page.getByText('選填設定',{exact:true})});
+ await expect(options).toBeVisible();
+ if(!await options.evaluate(element=>(element as HTMLDetailsElement).open))await options.locator(':scope > summary').click();
+ await expect(options).toHaveJSProperty('open',true);
+}

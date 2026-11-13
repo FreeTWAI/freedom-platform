@@ -1,4 +1,5 @@
-import { test, before, after } from 'node:test';
+import {forgetFrameOrigins} from '../../modules/guild-tools/service.js';
+import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -22,19 +23,25 @@ import { currentImageProcessor } from '../../packages/shared/image-runtime.js';
 import { assertPublicDatabase, assertStagingDatabase } from '../../apps/platform-api/src/readiness.js';
 import { githubSocialCss, skillUploadProtocolMarkdown, skillUploadSkillMarkdown } from '../../apps/platform-api/src/generated/runtime-text.js';
 
+beforeEach(()=>forgetFrameOrigins());
+
 const SHA_A = 'a'.repeat(40), SHA_B = 'b'.repeat(40);
 const COMMUNITY = '10000000-0000-4000-8000-00000000000b';
 const SECRET_DSN = 'postgres://candidate_user:do-not-print@db.internal.example:5432/freedom_candidate_secret';
 const SHELL = '<!doctype html><title>shell</title>';
 
 /** Records every query and whether the request pool was ended; answers readiness probes. */
-function fakePool(facts: { name?: string; rolsuper?: boolean; community?: boolean; demo?: boolean; fail?: boolean; endFails?: boolean; emptyReads?: boolean } = {}) {
+function fakePool(facts: { name?: string; rolsuper?: boolean; community?: boolean; demo?: boolean; fail?: boolean; endFails?: boolean; emptyReads?: boolean; frameOriginsFail?: boolean } = {}) {
   const state = { queries: [] as string[], ended: 0 };
   const pool = {
     state,
     async query(sql: string) {
       state.queries.push(sql);
       if (facts.fail) throw new Error('connection refused ' + SECRET_DSN);
+      if (sql.includes('FROM guild_tools')) {
+        if (facts.frameOriginsFail) throw new Error('tool registry unavailable');
+        return { rows: [], rowCount: 0 };
+      }
       if (sql.includes('current_database()')) return { rows: [{ name: facts.name ?? 'freedom_candidate', rolsuper: facts.rolsuper ?? false }], rowCount: 1 };
       if (sql.includes('FROM communities')) return { rows: [], rowCount: facts.community === false ? 0 : 1 };
       if (sql.includes('@local.test')) return { rows: [], rowCount: facts.demo ? 1 : 0 };
@@ -404,6 +411,18 @@ test('static files and navigation fallback come from ASSETS with platform securi
   assert.equal((await missingShell.fetch('http://127.0.0.1:8787/guilds', bare)).status, 404);
 });
 
+test('tool origin read failure keeps the shell available and is cached briefly', async () => {
+  const h = harness({ frameOriginsFail: true }), e = env();
+  for (const path of ['/', '/play', '/play/']) {
+    const shell = await h.fetch('http://127.0.0.1:8787' + path, e);
+    assert.equal(shell.status, 200); assert.equal(await shell.text(), SHELL);
+    assert.equal(shell.headers.get('content-security-policy')!.split('frame-src ')[1].split(';')[0],
+      "'self' https://aisns.evitina.tw https://freetwai.github.io");
+  }
+  assert.equal(h.pools.flatMap(p => p.state.queries).filter(sql => sql.includes('FROM guild_tools')).length, 1);
+  await h.settle();
+});
+
 test('embedded public text is the canonical source and is served without filesystem access', async () => {
   execFileSync(process.execPath, ['scripts/generate-runtime-text.mjs', '--check']);
   assert.equal(githubSocialCss, readFileSync('apps/portal-web/src/modules/GitHubSocial.css', 'utf8'));
@@ -511,7 +530,8 @@ test('startup readiness mirrors the Node public guard, isolates staging and cach
   const h = harness(), e = publicEnv();
   assert.equal((await h.fetch('https://next.freetwai.com/', e)).status, 200);
   assert.equal((await h.fetch('https://next.freetwai.com/', e)).status, 200);
-  assert.equal(h.pools[0].state.queries.length, 3); assert.equal(h.pools[1].state.queries.length, 0);
+  // The first shell read adds the enabled-tool origins query; the next uses its resolved cache.
+  assert.equal(h.pools[0].state.queries.length, 4); assert.equal(h.pools[1].state.queries.length, 0);
   // Failure is not cached: the next request checks again.
   const flaky = harness({ fail: true }), fe = publicEnv();
   await quietly(() => flaky.fetch('https://next.freetwai.com/', fe));

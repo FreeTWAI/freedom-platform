@@ -14,7 +14,8 @@ const deferred=()=>{
 };
 const frameBarrier=(page:Page)=>page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
 const detail=(page:Page)=>page.getByRole('region',{name:'活動專頁',exact:true});
-const entryPath=(entry:Entry,id:string)=>entry==='path'?`/events/${id}`:`/#events/${id}`;
+// The public event page links to this member-app path for notification navigation.
+const entryPath=(entry:Entry,id:string)=>entry==='path'?`/events/${id}?app=1`:`/#events/${id}`;
 
 function makeEvent(letter:string):CommunityEvent{
   const id=randomUUID(),starts=Date.now()+2*86400000;

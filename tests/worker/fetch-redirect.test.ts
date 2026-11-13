@@ -59,7 +59,7 @@ test('workerd admin-sync forced run rejects a redirect without following it, the
 
   // Required by Miniflare even when the database uses local trust auth.
   const workerDatabase = new URL(databaseUrl);
-  workerDatabase.password ||= 'synthetic-workerd-only';
+  workerDatabase.password ||= process.env.PGPASSWORD || 'synthetic-workerd-only';
   const server = createPool(serverUrl.href);
   const calls: string[] = [];
   let mode: 'redirect' | 'allow' = 'redirect';

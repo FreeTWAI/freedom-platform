@@ -29,7 +29,7 @@ const databaseUrl = Object.assign(new URL(serverUrl), { pathname: '/' + database
 
 // Required by Miniflare even when the database uses local trust auth.
 const workerDatabase = new URL(databaseUrl);
-workerDatabase.password ||= 'synthetic-workerd-only';
+workerDatabase.password ||= process.env.PGPASSWORD || 'synthetic-workerd-only';
 const origin = 'http://127.0.0.1:8787';
 const SHELL = '<!doctype html><title>workerd shell</title>';
 // Same date as wrangler.jsonc: the newest the pinned workerd 1.20260921.1 supports.
@@ -130,7 +130,7 @@ async function assertBuildAssetHeaders(fetch: (path: string, init?: RequestInit)
   const baseCsp = security.headers.get('content-security-policy') ?? '';
   assert.doesNotMatch(baseCsp, /(?:^|;)\s*frame-src(?:\s|;|$)/);
   assert.equal(homeSecurity.headers.get('content-security-policy'),
-    baseCsp.replace("; base-uri", "; frame-src https://aisns.evitina.tw https://freetwai.github.io; base-uri"));
+    baseCsp.replace("; base-uri", "; frame-src 'self' https://aisns.evitina.tw https://freetwai.github.io; base-uri"));
   const securityHeaders = ['content-security-policy', 'x-content-type-options', 'referrer-policy'];
   assert.equal(security.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(security.headers.get('referrer-policy'), 'no-referrer');

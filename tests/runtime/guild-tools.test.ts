@@ -1,3 +1,4 @@
+import {forgetFrameOrigins,frameOrigins} from '../../modules/guild-tools/service.js';
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -102,4 +103,39 @@ test('native tool routes cannot be replaced by a registration, while arcade rema
  assert.deepEqual([...NATIVE_TOOL_ROUTES].sort(),GUILD_TOOLS.filter(t=>t.tool_id!=='arcade').map(t=>t.guild_key+'/'+t.tool_id).sort());
  const leader=await login(1);await lead(leader,'guild_ar');const result=await req('/api/v1/guilds/guild_ar/tools',leader,{...input,tool_id:'ar'});assert.equal(result.status,409);assert.equal(result.data.code,'native_tool_reserved');
  assert.equal((await pool.query("SELECT count(*)::int n FROM guild_tools WHERE guild_key='guild_ar' AND tool_id='ar'")).rows[0].n,0);
+});
+
+test('two page loads share one origins read; disabling removes the origin on the next load',async t=>{
+ const leader=await login(0);await lead(leader,'guild_games');
+ const base='/api/v1/guilds/guild_games/tools';
+ const tool={...input,tool_id:'cache-test',entry_url:'https://cache.example.test/'};
+ assert.equal((await req(base,leader,tool)).status,201);
+ assert.equal((await req(base+'/cache-test/accept',leader,{},1)).status,200);
+ const pageApp=createApp(pool,origin);
+ pageApp.get('/',c=>c.html('<!doctype html><title>shell</title>'));
+ forgetFrameOrigins();
+ const query=pool.query.bind(pool);let reads=0;
+ t.mock.method(pool,'query',((...args:any[])=>{
+  if(typeof args[0]==='string'&&args[0].includes('SELECT DISTINCT origin FROM guild_tools'))reads++;
+  return (query as any)(...args);
+ }) as typeof pool.query);
+ for(let i=0;i<2;i++){
+  const page=await pageApp.request(origin+'/');assert.equal(page.status,200);
+  assert.match(page.headers.get('content-security-policy')!,/frame-src[^;]*https:\/\/cache.example.test/);
+ }
+ assert.equal(reads,1);
+ assert.equal((await req(base+'/cache-test/disable',leader,{},1)).status,200);
+ const page=await pageApp.request(origin+'/');assert.equal(page.status,200);
+ assert.doesNotMatch(page.headers.get('content-security-policy')!,/cache.example.test/);assert.equal(reads,2);
+});
+
+test('resolved origin values expire after 60 seconds and failed reads after 10 seconds',async t=>{
+ forgetFrameOrigins();t.after(forgetFrameOrigins);
+ t.mock.timers.enable({apis:['Date'],now:0});let reads=0,fail=false;
+ const fake={query:async()=>{reads++;if(fail)throw new Error('unavailable');return {rows:[{origin:'https://cache.example.test'}]};}} as unknown as Pool;
+ assert.deepEqual(await frameOrigins(fake,origin),['https://cache.example.test']);
+ t.mock.timers.tick(59_999);await frameOrigins(fake,origin);assert.equal(reads,1);
+ t.mock.timers.tick(1);fail=true;assert.deepEqual(await frameOrigins(fake,origin),[]);assert.equal(reads,2);
+ t.mock.timers.tick(9_999);assert.deepEqual(await frameOrigins(fake,origin),[]);assert.equal(reads,2);
+ t.mock.timers.tick(1);fail=false;assert.deepEqual(await frameOrigins(fake,origin),['https://cache.example.test']);assert.equal(reads,3);
 });

@@ -137,7 +137,7 @@ test('inventory preserves native pending and ready states without exposing other
   const own=await (await owner.request('me/content')).json() as any;
   assert.equal(own.items.find((item:any)=>item.id===skill).status,'ready_for_review');
   const eventItem=own.items.find((item:any)=>item.id===eventSource.event_id);
-  assert.equal(eventItem.status,'pending');assert.equal(eventItem.visibility,'private');
+  assert.equal(eventItem.status,'published');assert.equal(eventItem.visibility,'open');
   assert.equal(eventItem.actions.includes('publish'),false);
   assert.equal(JSON.stringify(own).includes('跨社群私人標題254'),false);
   const strangers=await (await other.request('me/content')).json();
@@ -145,7 +145,7 @@ test('inventory preserves native pending and ready states without exposing other
   assert.equal(JSON.stringify(strangers).includes('尚未審核活動254'),false);
   assert.equal((await owner.request('me/showcases/'+foreign)).status,404);
   assert.equal((await other.request('events/'+eventSource.event_id+'/review',{decision:'approve',reason:'不能繞過審核'},eventSource.aggregate_version)).status,403);
-  assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[eventSource.event_id])).rows[0].state,'pending');
+  assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[eventSource.event_id])).rows[0].state,'published');
 });
 
 test('owner inventory and showcase reads reject revoked sessions even when called without HTTP middleware',async()=>{

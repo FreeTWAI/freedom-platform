@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route';
 import {randomUUID} from 'node:crypto';
 import type {Route} from '@playwright/test';
 import {test, expect, type Page} from './fixtures.js';
@@ -75,7 +76,7 @@ for (const action of ['setup', 'create', 'edit'] as const) {
     });
     await open(page, store.hash + '/supply');
     await expect(page.locator('.hosted-supply-catalog')).toBeVisible();
-    await expect(page.getByRole('heading', {level: 1, name: '我的供貨商品庫', exact: true})).toBeVisible();
+    await expect(page.getByRole('heading', {level: 1, name: '供貨商品庫', exact: true})).toBeVisible();
     await expect(page.getByLabel('商店網址', {exact: true})).toHaveCount(0);
     await expect(page.getByRole('heading', {name: '預覽與發布', exact: true})).toHaveCount(0);
     if (action === 'create') await page.getByRole('button', {name: '新增供貨商品', exact: true}).click();
@@ -108,12 +109,12 @@ for (const action of ['setup', 'create', 'edit'] as const) {
     await expect(page.locator('.hosted-supply-catalog').getByRole('alert')).toContainText('尚未確認原操作的結果');
     await expect(form.getByLabel(action === 'setup' ? '商品庫名稱' : '商品名稱', {exact: true})).toBeDisabled();
     await page.getByRole('link', {name: '返回我的供貨商品庫', exact: true}).click();
-    await expect(page).toHaveURL(new RegExp('#' + store.hash + '/supply$'));
+    await expect(page).toHaveURL(new RegExp(canonicalHash('#' + store.hash + '/supply') + '$'));
     await page.evaluate(() => {window.location.hash = 'stores/supply';});
-    await expect(page).toHaveURL(new RegExp('#' + store.hash + '/supply$'));
+    await expect(page).toHaveURL(new RegExp(canonicalHash('#' + store.hash + '/supply') + '$'));
     await page.evaluate(hash => {history.replaceState(null, '', '#home'); history.pushState(null, '', '#' + hash + '/supply');}, store.hash);
     await page.goBack();
-    await expect(page).toHaveURL(new RegExp('#' + store.hash + '/supply$'));
+    await expect(page).toHaveURL(new RegExp(canonicalHash('#' + store.hash + '/supply') + '$'));
     expect(prompts).toBe(0);
     expect(tuples).toHaveLength(1);
     if (action !== 'setup') {
@@ -149,8 +150,8 @@ for (const action of ['setup', 'create', 'edit'] as const) {
     }
     }
     await page.getByRole('link', {name: '返回我的供貨商品庫', exact: true}).click();
-    await expect(page).toHaveURL(/#stores\/supply$/);
-    await expect(page.getByRole('heading', {level: 1, name: '我的供貨商品庫', exact: true})).toBeVisible();
+    await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
+    await expect(page.getByRole('heading', {level: 2, name: '我的供貨商品庫', exact: true})).toBeVisible();
     await expect(page.getByRole('link', {name: '查看商品與供貨', exact: true})).toHaveAttribute('href', '#' + store.hash + '/supply');
   });
 }
@@ -194,12 +195,12 @@ test('supply-only reservation opt-in keeps its exact tuple and navigation guard 
   await expect(page.getByRole('button', {name: '更新供貨狀態', exact: true})).toBeDisabled();
   await workspace(page, '預留與訂單').click();
   await page.getByRole('link', {name: '返回我的供貨商品庫', exact: true}).click();
-  await expect(page).toHaveURL(new RegExp('#' + store.hash + '/supply$'));
+  await expect(page).toHaveURL(new RegExp(canonicalHash('#' + store.hash + '/supply') + '$'));
   await page.evaluate(() => {location.hash = 'home';});
-  await expect(page).toHaveURL(new RegExp('#' + store.hash + '/supply$'));
+  await expect(page).toHaveURL(new RegExp(canonicalHash('#' + store.hash + '/supply') + '$'));
   await page.evaluate(hash => {history.replaceState(null, '', '#home'); history.pushState(null, '', '#' + hash + '/supply');}, store.hash);
   await page.goBack();
-  await expect(page).toHaveURL(new RegExp('#' + store.hash + '/supply$'));
+  await expect(page).toHaveURL(new RegExp(canonicalHash('#' + store.hash + '/supply') + '$'));
   // A full-page close can only warn; this checks the installed warning without closing the test page.
   expect(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true})))).toBe(true);
   await page.getByRole('button', {name: '設定', exact: true}).click();
@@ -221,7 +222,7 @@ test('supply-only reservation opt-in keeps its exact tuple and navigation guard 
   expect(current.reservation_enabled).toBe(true);
   expect(BigInt(current.version)).toBe(BigInt(setting.version) + 1n);
   await page.getByRole('link', {name: '返回我的供貨商品庫', exact: true}).click();
-  await expect(page).toHaveURL(/#stores\/supply$/);
+  await expect(page).toHaveURL(/#guilds\/guild_product_quality_supply\/tools\/catalog$/);
 });
 
 test('supply-only reservation setting handles a known CAS conflict by refreshing and waiting for an explicit new choice', async ({page, e2eAuthPool}) => {
