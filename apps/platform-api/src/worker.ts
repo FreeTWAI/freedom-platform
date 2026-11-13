@@ -1,3 +1,5 @@
+import { installWorkerGuildToolSigner, type GuildToolSigningBindings } from './worker-guild-tool-signer.js';
+import { workerGuildToolFetch } from './worker-guild-tool-fetch.js';
 import { refreshDueRepositories } from '../../../modules/shares/repository-cache.js';
 import {runContactRetentionWork} from '../../../modules/agent-commerce/operations/contact-retention.js';
 import {createStorefrontGalleryLifecycle} from '../../../modules/assets/storefront-gallery.js';
@@ -73,7 +75,7 @@ import { workerPreviewFetch } from './worker-preview-fetch.js';
  * Secrets arrive as bindings and are only passed into explicit per-request
  * options; process.env is never read or written here.
  */
-export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings {
+export interface WorkerEnv extends GuildReviewBindings,WorkerPrivateAiBindings,GuildToolSigningBindings {
   COMMERCE_CREDENTIAL_KEYS?:string;
   FREEDOM_COMMERCE_CHECKOUT_ENABLED?:string;
   FREEDOM_COMMERCE_SELF_SHIP_ENABLED?:string;
@@ -344,6 +346,7 @@ export function workerRuntime(env: WorkerEnv, config: WorkerConfig,options:{quer
     eventEmailSender:env.EMAIL?async(to,subject,text)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});}:undefined,
     health: { runtime: 'cloudflare-workers', release_sha: config.release },
     linkPreviewFetch: workerPreviewFetch,
+    guildToolFetch: workerGuildToolFetch,
     moduleProviders: undefined,
     guildLaunchpadEnabled: env.FREEDOM_GUILD_LAUNCHPAD_ENABLED === 'true',
     commerceQueryTransport:queryTransport,commercePayments:payments,commerceJournal:journal,commerceEmailSender:emailSender,commerceSettings:settings,commerceOrderNotificationsEnabled:readCommerceOrderNotificationsEnabled(env),commerceSelfShipEnabled:readCommerceSelfShipEnabled(env),commerceDropShipEnabled:readCommerceDropShipEnabled(env),
@@ -494,6 +497,7 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
           }
         }
         const runtime=(deps.createRuntime??workerRuntime)(env,config,{queryTransport:deps.commerceQueryTransport}),privateAi=await workerPrivateAiPorts(pool,env,config);
+        runtime.guildToolSigner=await installWorkerGuildToolSigner(env);
         runtime.afterResponse=work=>{afterResponse.push(work);};
         if(deps.commerceQueryTransport)runtime.commerceQueryTransport=deps.commerceQueryTransport;
         if(privateAi)Object.assign(runtime,privateAi);

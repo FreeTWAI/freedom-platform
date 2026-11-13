@@ -802,3 +802,36 @@ test('scheduled contact retention runs with checkout OFF and during quarantine w
  const pending:Promise<unknown>[]=[];await handler.scheduled({},stagingEnv({FREEDOM_COMMERCE_CONTACT_RETENTION:'all',FREEDOM_COMMERCE_CHECKOUT_ENABLED:'false',FREEDOM_COMMERCE_QUARANTINE:'true'}),{waitUntil:p=>{pending.push(p);}});await Promise.all(pending);
  assert.equal(privacy,1);assert.equal(business,0);
 });
+
+test('Worker installs the restricted guild tool transport without a signing key',async()=>{
+ const {workerGuildToolFetch}=await import('../../apps/platform-api/src/worker-guild-tool-fetch.js');
+ const configuration=env(),runtime=workerRuntime(configuration,readWorkerConfig(configuration));
+ assert.equal(runtime.guildToolFetch,workerGuildToolFetch);assert.equal(runtime.guildToolSigner,undefined);
+ await assert.rejects(runtime.guildToolFetch!('https://other.example.test/'),/tool_destination_rejected/);
+});
+
+test('Worker startup installs the generated optional signer once and hides exchange for absent or malformed secrets',async()=>{
+ const generated=execFileSync(process.execPath,['scripts/generate-guild-tool-signing-key.mjs'],{encoding:'utf8'});
+ for(const secret of [undefined,generated,'invalid:'+generated]){
+  const configuration=env({FREEDOM_GUILD_TOOL_SIGNING_KEY:secret}),signers:unknown[]=[],pending:Promise<unknown>[]=[];
+  const handler=createWorkerHandler({createPool:()=>fakePool() as unknown as Pool,createApp:(...args)=>{
+   signers.push(args[3]?.guildToolSigner);assert.equal(typeof args[3]?.guildToolFetch,'function');return createPlatformApp(...args);
+  }});
+  const {result:responses,logged}=await quietly(async()=>{
+   const results:Response[]=[];
+   for(let i=0;i<2;i++)results.push(await handler.fetch(new Request(configuration.APP_ORIGIN+'/.well-known/guild-tool-jwks.json'),configuration,{waitUntil:p=>pending.push(p)}));
+   await Promise.all(pending);return results;
+  });
+  assert.equal(signers.length,2);assert.equal(signers[0],signers[1]);
+  if(secret===generated){
+   assert.ok(signers[0]);assert.equal(responses[0].status,200);
+   const body=await responses[0].json() as {keys:Record<string,unknown>[]};assert.equal(body.keys.length,1);
+   assert.equal(body.keys[0].kid,JSON.parse(generated).kid);assert.equal(body.keys[0].d,undefined);assert.deepEqual(logged,[]);
+  }else{
+   assert.equal(signers[0],undefined);assert.equal(responses[0].status,503);
+   assert.deepEqual(logged,secret===undefined?[]:['guild_tool_signing_key_invalid']);
+  }
+  for(const response of responses){const body=response.bodyUsed?'':await response.text();assert.ok(!body.includes(JSON.parse(generated).d));}
+  assert.ok(!logged.join('\n').includes(JSON.parse(generated).d));
+ }
+});

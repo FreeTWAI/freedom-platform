@@ -139,3 +139,24 @@ test('resolved origin values expire after 60 seconds and failed reads after 10 s
  t.mock.timers.tick(9_999);assert.deepEqual(await frameOrigins(fake,origin),[]);assert.equal(reads,2);
  t.mock.timers.tick(1);fail=false;assert.deepEqual(await frameOrigins(fake,origin),['https://cache.example.test']);assert.equal(reads,3);
 });
+
+test('Worker hosting transport registers, proves origin and accepts only exact enabled frame origins',async()=>{
+ const {createWorkerGuildToolFetch}=await import('../../apps/platform-api/src/worker-guild-tool-fetch.js');
+ let proof='',calls=0;
+ const transport=createWorkerGuildToolFetch(async url=>{calls++;return String(url).endsWith('/.well-known/freedom-guild-tool.txt')
+  ?new Response(proof,{headers:{'content-type':'text/plain'}}):new Response('<html></html>',{headers:{'content-type':'text/html'}});});
+ const prior=app;app=createApp(pool,origin,'local',{guildToolFetch:transport});
+ try{
+ const leader=await login(0);await lead(leader,'guild_games');const base='/api/v1/guilds/guild_games/tools';
+ for(const entry_url of ['https://Tool.pages.dev/','https://tool.pages.dev:443/','https://%74ool.pages.dev/','https://tool.pages.dev./','https://other.example.test/']){
+  const result=await req(base,leader,{...input,tool_id:'worker-tool',entry_url});assert.equal(result.status,422);assert.equal(calls,0);
+ }
+ const body={...input,tool_id:'worker-tool',entry_url:'https://a1b2.tool.pages.dev/app/',profile:'origin'};
+ const challenge=await req(base+'/origin-challenges',leader,{entry_url:body.entry_url});assert.equal(challenge.status,201);proof=challenge.data.contents;
+ const registered=await req(base,leader,{...body,origin_challenge_id:challenge.data.challenge_id});assert.equal(registered.status,201,JSON.stringify(registered));assert.equal(calls,2);
+ assert.doesNotMatch((await app.request(origin+'/')).headers.get('content-security-policy')!,/a1b2\.tool\.pages\.dev/);
+ assert.equal((await req(base+'/worker-tool/accept',leader,{},1)).status,200);
+ const csp=(await app.request(origin+'/')).headers.get('content-security-policy')!;
+ assert.match(csp,/frame-src[^;]*https:\/\/a1b2\.tool\.pages\.dev/);assert.doesNotMatch(csp,/\*\.pages\.dev|https:\/\/tool\.pages\.dev/);
+ }finally{app=prior;}
+});
