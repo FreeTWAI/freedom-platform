@@ -88,7 +88,7 @@ test('existing-account login retains the book and introduction too',async({page}
 
 test('an already authenticated reader can follow an old account link without landing on the home page',async({page})=>{
   await siteWithoutDiscovery(page);await page.goto('/');await signIn(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await page.goto(account());await expect(page).toHaveURL(new RegExp('/development/skills/social-post\\?intro=7#skill-use-title$'));
 });
 
@@ -104,7 +104,7 @@ test('unavailable original content does not turn successful login into a repeat 
   await siteWithoutDiscovery(page);await page.goto(account(false));
   let reads=0;await page.route(url=>url.pathname===path,route=>{reads++;return route.fulfill({status:404,body:'not published'});});
   await signIn(page);await expect(page.getByText('登入成功。原本的技能書目前無法確認或已停止公開，你仍可繼續探索工坊。',{exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();expect(reads).toBe(1);
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();expect(reads).toBe(1);
 });
 
 test('a broken enhancement script never hides the reading content or plain account links',async({page})=>{
@@ -143,14 +143,14 @@ test.describe('discovery ON Star entries',()=>{
   test.use({discoveryOn:true});
   for(const authenticated of [false,true])test(`Star preserves the member destination for ${authenticated?'an authenticated':'an anonymous'} reader`,async({page})=>{
     expect((await (await page.request.get('/api/v1/site')).json()).community_discovery_enabled).toBe(true);
-    if(authenticated){await page.goto('/');await signIn(page);await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();}
+    if(authenticated){await page.goto('/');await signIn(page);await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();}
     await page.goto(path);
     await page.getByText('作者、版本與參與開發',{exact:true}).click();
     const star=page.getByRole('link',{name:'登入工坊 Star',exact:true});
     await expect(star).toHaveAttribute('href','/?return_to='+encodeURIComponent(path));
     let validations=0;await page.route(url=>url.pathname===path,route=>{validations++;return route.continue();});
     await star.click();if(!authenticated)await signIn(page);
-    await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/');expect(validations).toBe(0);
   });
 });
@@ -230,13 +230,19 @@ test.describe('discovery ON event return',()=>{
     try{
       await page.goto('/?join=1&return_to='+encodeURIComponent(destination));await signUp(page);
       await expect(page).toHaveURL(new URL(destination,page.url()).href);
+      // The public return now lands on SSR; its visible member entry resumes the same event.
+      await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();expect(registrationWrites).toBe(0);
+      const memberDestination=`/#explore/events/${id}`;
+      const memberEntry=page.getByRole('link',{name:'活動管理',exact:true});
+      await expect(memberEntry).toHaveAttribute('href',memberDestination);await memberEntry.click();
+      await expect(page).toHaveURL(new URL(memberDestination,page.url()).href);
       await expect(page.getByText('完成加入公會後會返回這場活動，完整定位可稍後補做。返回後仍需自行確認報名，不會自動參加。',{exact:true})).toBeVisible();
       await expect(page.getByRole('region',{name:'快速加入公會'})).toBeVisible();expect(registrationWrites).toBe(0);
-      await page.reload();await expect(page).toHaveURL(new URL(destination,page.url()).href);
+      await page.reload();await expect(page).toHaveURL(new URL(memberDestination,page.url()).href);
       await quickJoin(page);
       await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
       await expect(page.getByRole('button',{name:'我要參加',exact:true})).toBeEnabled();
-      await expect(page).toHaveURL(new URL(destination,page.url()).href);expect(registrationWrites).toBe(0);
+      await expect(page).toHaveURL(new URL(memberDestination,page.url()).href);expect(registrationWrites).toBe(0);
       expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_event_rsvps WHERE event_id=$1',[id])).rows[0].count)).toBe(0);
       expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_event_guest_rsvps WHERE event_id=$1',[id])).rows[0].count)).toBe(0);
     }finally{await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[id]);}
@@ -264,7 +270,7 @@ for(const pending of ['auth','content'] as const)for(const direction of ['Back',
   if(direction==='Back')await page.goBack();else await page.goForward();
   const current=new URL(direction==='Back'?'/?entry=older':'/?entry=newer',page.url()).href;
   await expect(page).toHaveURL(current);release();
-  await expect(page.getByRole('heading',{name:'會員首頁',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',exact:true})).toBeVisible();
   await expect(page).toHaveURL(current);expect(validations).toBe(pending==='auth'?0:1);
 });
 

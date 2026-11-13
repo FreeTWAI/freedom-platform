@@ -203,10 +203,11 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await expect(page).toHaveURL(url => url.pathname === '/' && url.search === '');
   await openBoards(page);
   await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
-  await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
-  const again = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
-  await expect(again.locator('.skill-share-url')).toHaveText(platformGo);
-  await again.getByRole('button', { name: '關閉分享', exact: true }).click();
+  // 我的 now presents results; reuse the existing personal link through its copy action.
+  const existing = page.getByRole('region', {name:'我的推廣連結',exact:true}).getByRole('listitem').filter({has:page.getByText('自由工坊',{exact:true})});
+  await existing.getByRole('button', {name:'複製',exact:true}).click();
+  await expect(page.getByRole('status').filter({hasText:'已複製連結'})).toHaveText('已複製連結');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(platformGo);
   await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.reload();
   await openBoards(page);
@@ -244,7 +245,7 @@ test('platform choices hand the canonical referral URL to LINE and Telegram only
   });
   await login(page);
   await controlPromotionCapabilities(page);
-  await openBoards(page);
+  await expandHomeSections(page);
   await page.evaluate(() => {
     const address = new URL(location.href); address.searchParams.set('private-share', 'never-export');
     history.replaceState(history.state, '', address);
@@ -409,7 +410,7 @@ test('social cards keep a 16:9 thumbnail, a small byline and actions on one row'
   const share = await card.getByRole('button', { name: '推廣原文', exact: true }).boundingBox();
   expect(Math.abs(open!.y - share!.y)).toBeLessThanOrEqual(1);
 
-  await openBoards(page);
+  await navigate(page, '會員首頁');await expandHomeSections(page);
   await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「自由工坊」' });
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
@@ -552,6 +553,7 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
       await noOverflow(page);
     }
     await page.setViewportSize({ width: 1280, height: 900 });
+    await navigate(page, '會員首頁');await expandHomeSections(page);
     await page.getByRole('button', { name: '分享自由工坊', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: '分享「自由工坊」' });
     await expect(dialog.locator('.skill-share-url')).toBeVisible();
@@ -637,14 +639,14 @@ test('members share a personal tester-map link that lands publicly and credits t
   const counted = page.context().waitForEvent('request', { predicate: request => request.url().endsWith('/api/v1/promotion/clicks') });
   await page.goto(url, { waitUntil: 'commit' });
   await counted;
-  await expect(page).toHaveURL(baseURL + '/#tester-map');
+  await expect(page).toHaveURL(baseURL + '/#guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map');
   expect(await destinationPoints(e2eAuthPool, code)).toBe(before);
   const guest = await browser.newContext({ userAgent: GUEST_UA + ' TesterMap/' + Date.now() });
   try {
     const visitor = await guest.newPage();
     await visitor.goto(url, { waitUntil: 'commit' });
-    await expect(visitor).toHaveURL(baseURL + '/#tester-map');
-    await expect(visitor.getByRole('heading', { level: 1, name: '測試員地圖', exact: true })).toBeVisible();
+    await expect(visitor).toHaveURL(baseURL + '/#guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map');
+    await expect(visitor.getByRole('heading', { level: 1, name: '測試地圖', exact: true })).toBeVisible();
     await expect(visitor.locator('.tester-map .promotion-share')).toHaveCount(0);
     await expect(visitor.locator('.tester-map').getByRole('link', { name: '測試員地圖', exact: true })).toHaveAttribute('href', '/#tester-map');
     await expect.poll(() => destinationPoints(e2eAuthPool, code)).toBe(before + 1);
@@ -830,13 +832,15 @@ test('sharing starts with real content choices and keeps ranking optional', asyn
   await login(page);
   let creates = 0;
   page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/v1/promotion/links')) creates++; });
-  await navigate(page, '推廣排行榜');
-  const choices = page.getByRole('region', {name:'選擇分享內容'});
+  await navigate(page, '搜尋社群內容');
+  const choices = page.getByRole('combobox', {name:'探索檢視',exact:true});
   await expect(choices).toBeVisible();
-  await expect(page.locator('.promotion-rankings')).not.toHaveAttribute('open');
-  for (const [label, href] of [['找一本技能書','#skills'],['查看社員服務','#services'],['找一場活動','#events'],['閱讀社群分享','#social']]) {
-    await expect(choices.getByRole('link',{name:label,exact:true})).toHaveAttribute('href',href);
+  for (const [label, hash] of [['資源','#explore/resources'],['服務','#explore/services'],['活動','#explore/events']]) {
+    await expect(choices.getByRole('option',{name:label,exact:true})).toHaveAttribute('value',hash);
   }
+  await expect(page.getByRole('navigation',{name:'主要工作區',exact:true}).getByRole('button',{name:'動態',exact:true})).toBeVisible();
+  await navigate(page, '推廣排行榜');
+  await expect(page.locator('.promotion-rankings')).not.toHaveAttribute('open');
   await expect(page.getByRole('region',{name:'我的推廣連結',exact:true})).toBeVisible();
   expect(creates).toBe(0);
   const summary=page.locator('.promotion-rankings > summary');
@@ -844,10 +848,11 @@ test('sharing starts with real content choices and keeps ranking optional', asyn
   await expect(board(page,'平台推廣排行榜')).toBeVisible();
   await summary.press('Enter');
   await expect(board(page,'平台推廣排行榜')).not.toBeVisible();
-  await choices.getByRole('link',{name:'查看社員服務',exact:true}).click();
-  await expect(page).toHaveURL(/#services$/);
+  await navigate(page, '社員服務');
+  await expect(page).toHaveURL(/#explore\/services$/);
+  await page.goBack();await expect(page).toHaveURL(/#explore$/);
   await page.goBack();
-  await expect(page).toHaveURL(/#promotion$/);
+  await expect(page).toHaveURL(/#me\/credit$/);
   expect(creates).toBe(0);
 });
 

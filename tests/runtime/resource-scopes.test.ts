@@ -379,7 +379,30 @@ test('upgrade from 075 preserves every legacy table and receipt; migration/backf
     const oldPublications = await publicationSnapshot();
     const old = await snapshot(), oldLedger = (await upgrade.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
     await migrate(upgrade); await finishBackfill(upgrade);
-    assert.deepEqual(await snapshot(), old);
+    // 206 adds exactly two creative guilds and their tracks. Preserve every old
+    // row/column, then pin the complete catalogs including the explicit additions.
+    const catalogAdditions = {
+      positioning_guild_catalog: [
+        {guild_key:'guild_ar',profession_key:'ar',name:'AR 互動公會',purpose:'製作與體驗圖案辨識和 AR 互動。',first_step:'建立一張互動圖案。',module_key:'ar',catalog_version:4,alias:'',profession_title:''},
+        {guild_key:'guild_games',profession_key:'games',name:'小遊戲公會',purpose:'製作與體驗小遊戲，分享遊玩成果。',first_step:'選一個遊戲開始體驗。',module_key:'guilds',catalog_version:4,alias:'',profession_title:''},
+      ],
+      positioning_track_catalog: [
+        {track_key:'ar_creator',name:'AR 互動創作者',description:'製作圖案辨識與互動體驗。',guild_key:'guild_ar',role_key:'creator',first_result:'一張可體驗的互動圖案',estimated_minutes:20,catalog_version:4},
+        {track_key:'game_creator',name:'小遊戲創作者',description:'體驗遊戲並製作互動作品。',guild_key:'guild_games',role_key:'creator',first_result:'一份遊戲成果或體驗回饋',estimated_minutes:15,catalog_version:4},
+      ],
+    };
+    for (const [table, additions] of Object.entries(catalogAdditions)) {
+      const key = table === 'positioning_guild_catalog' ? 'guild_key' : 'track_key';
+      const keys = additions.map(row => (row as Record<string, unknown>)[key]);
+      assert.deepEqual((await upgrade.query(`SELECT * FROM ${table} WHERE ${key}=ANY($1::text[]) ORDER BY ${key}`, [keys])).rows, additions);
+      const columns = legacyColumns.get(table)!;
+      const retained = (await upgrade.query(`SELECT to_jsonb(t)::text AS row FROM (SELECT ${columns.map(column => '"' + column + '"').join(',')} FROM ${table} WHERE NOT (${key}=ANY($1::text[]))) t ORDER BY to_jsonb(t)::text`, [keys])).rows;
+      assert.equal(digest(retained), old[table], `${table}: every pre-206 row is unchanged`);
+    }
+    assert.deepEqual(await snapshot(), {...old,
+      positioning_guild_catalog:'e724ebe0c15c07356c5a4d0a84f5ba9713cf4b58bd435256ba2a169a37cc5dd9',
+      positioning_track_catalog:'d71c1e811766ab895ce9417d6b90a58bfa4f08308706ef079887db5316e876e6',
+    });
     const publications = await publicationSnapshot();
     for (const [bookId, row] of oldPublications) assert.equal(publications.get(bookId), row);
     assert.deepEqual([...publications.keys()].filter(bookId => !oldPublications.has(bookId)).sort(), [...addedBookIds].sort());

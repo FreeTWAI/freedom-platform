@@ -67,7 +67,7 @@ export async function navigate(page:Page,name:string) {
  await expect(page.locator('.shell')).toBeVisible();
  if(name==='我的訊息'){await openChat(page);return;}
  await closeChat(page);
- const aliases:Record<string,TabId>={'我的定位':'positioning','供貨商品管理':'stores','我的名片':'account','私人 AI 工作室':'private-ai','會員首頁':'home','我的內容':'my-content'};
+ const aliases:Record<string,TabId>={'我的定位':'positioning','供貨商品管理':'stores','AI 整理供貨商品':'supplier','AI 製作銷售網站':'retail','購買與預留紀錄':'reservations','我的名片':'account','私人 AI 工作室':'private-ai','會員首頁':'home','我的內容':'my-content'};
  const tab=aliases[name]??Object.entries(TAB_TITLES).find(([,title])=>title===name)?.[0] as TabId;
  if(!tab)throw new Error('Unmapped navigation task: '+name);
  const hash=name==='供貨商品管理'?portalHash('stores','/supply'):portalHash(tab);
@@ -79,7 +79,15 @@ export async function navigate(page:Page,name:string) {
   const tool=GUILD_TOOLS.find(t=>t.guild_key===route.guildKey&&t.tool_id===route.toolId)!;
   await page.getByRole('button',{name:tool.title,exact:true}).click();
   if(tab==='tasks')await page.getByLabel('工作檢視',{exact:true}).selectOption('discovery');
- }else if(['me','explore','automation'].includes(route.place))await page.getByLabel(place.title+'檢視',{exact:true}).selectOption(hash);
+ }else if(tab==='guild-workspace')await page.getByRole('button',{name:'公會管理',exact:true}).click();
+ else if(tab==='community'||tab==='community-hub')await page.getByRole('button',{name:'社群',exact:true}).click();
+ else if(tab==='opensource'){
+  await page.getByRole('button',{name:'分享或提交',exact:true}).click();
+  const composer=page.getByRole('dialog',{name:'分享',exact:true});
+  await composer.getByRole('button',{name:'種類',exact:true}).click();
+  await composer.getByRole('button',{name:'開源投稿',exact:true}).click();
+ }
+ else if(['me','explore','automation'].includes(route.place))await page.getByLabel(place.title+'檢視',{exact:true}).selectOption(hash);
 }
 
 /** Choose an optional feed through the same secondary dialog a member opens. */
@@ -191,4 +199,12 @@ export async function openAccountSettings(page:Page,...labels:string[]){
     }
     if(!await target.evaluate(element=>(element as HTMLDetailsElement).open))await target.locator(':scope > summary').click();
   }
+}
+
+/** The native event app retains authoring, guest retry and private participation controls.
+ * The default /events/:id response is now the separate server-rendered public page. */
+export function eventAppPath(path:string){
+  const url=new URL(path,'https://example.test');
+  url.searchParams.set('app','1');
+  return url.pathname+url.search+url.hash;
 }

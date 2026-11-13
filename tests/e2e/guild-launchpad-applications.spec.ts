@@ -4,7 +4,7 @@ import type {TestInfo} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test, expect, type Page} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {openFeatureSearch,navigate} from './navigation.js';
 import {DEMO_COMMUNITY, DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 import type {InstallationView, RegistryOperation, LaunchPlan} from '../../contracts/guild-launchpad/v1/module-registry.js';
@@ -280,7 +280,9 @@ test('unreadable committed tenant creation retains its name and key across two r
     if (!await cards(page).locator('.application-catalog').evaluate(element => (element as HTMLDetailsElement).open)) await cards(page).locator('.application-catalog > summary').click();
     await cards(page).locator('.application-card').filter({has:page.getByRole('heading',{name:'線上商店',exact:true})}).getByRole('button',{name:'啟動應用',exact:true}).click(); await stays(message);
     await page.getByRole('button',{name:'返回公會列表',exact:true}).click(); await stays(message);
-    await navigate(page,'技能書架'); await stays(message);
+    // The guard blocks the first place change, before any resource-view selector can mount.
+    await openFeatureSearch(page);
+    await page.getByRole('navigation',{name:'主要工作區',exact:true}).getByRole('button',{name:'探索',exact:true}).click(); await stays(message);
     const closeMenu=page.getByRole('button',{name:'關閉選單',exact:true}); if(await closeMenu.isVisible()) await closeMenu.click();
     await page.evaluate(()=>{window.location.hash='guilds/guild_commerce_sales';}); await stays(message);
     await page.evaluate(key=>{history.replaceState(null,'','#home');history.pushState(null,'',`#guilds/${key}`);},GUILD);
@@ -324,7 +326,7 @@ test('unreadable committed tenant creation retains its name and key across two r
     expect(workspaces.next_cursor).toBeNull();
     expect(await ownedRows()).toEqual([{...results[0],is_default:true}]);
     await flow(page).getByRole('button',{name:'取消',exact:true}).click(); await expect(flow(page)).toHaveCount(0);
-    await navigate(page,'技能書架'); await expect(page).toHaveURL(/#skills$/); expect(prompts).toBe(0);
+    await navigate(page,'技能書架'); await expect(page).toHaveURL(/#explore\/resources$/); expect(prompts).toBe(0);
   } finally {releaseResponse();}
 });
 
@@ -834,5 +836,5 @@ test('business link from an empty workspace preserves unsaved My Work when leavi
   page.once('dialog',dialog=>{expect(dialog.message()).toBe('有尚未儲存的內容，確定要離開嗎？'); void dialog.dismiss();});
   await link.click(); await expect(page).toHaveURL(new RegExp(`#guilds/${GUILD}$`));
   await expect(flow(page)).toBeVisible(); await expect(title).toHaveValue('離開前仍需保留的工作');
-  page.once('dialog',dialog=>void dialog.accept()); await link.click(); await expect(page).toHaveURL(/#business$/);
+  page.once('dialog',dialog=>void dialog.accept()); await link.click(); await expect(page).toHaveURL(/#me\/workspaces$/);
 });

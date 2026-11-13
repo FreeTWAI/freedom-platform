@@ -120,8 +120,9 @@ const eventReturnPath=()=>{
   const hash=/^#events\/[^?]+(?:\?(.*))?$/.exec(currentLegacyHash());
   const refs=new URLSearchParams(hash?hash[1]??'':window.location.search).getAll('ref');
   const query=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?`?ref=${refs[0]}`:'';
-  // Only public event identity/referral survives authentication, never a private capability.
-  return hash?`/#events/${id}${query}`:`/events/${id}${query}`;
+  // Keep the explicit native-app entry on reload; no private capability or other query survives.
+  const app=!hash&&new URLSearchParams(window.location.search).get('app')==='1';
+  return hash?`/#events/${id}${query}`:`/events/${id}${query}${app?(query?'&app=1':'?app=1'):''}`;
 }
 const eventLoginFromLocation=()=>Boolean(eventIdFromLocation()&&window.history.state?.freedomEventLogin===window.location.href)
 const isMessagesHash=(hash:string)=>legacyHash(hash).split('?')[0]==='#messages'
@@ -332,7 +333,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     if(!googleCallback&&!resetToken&&catalogGuild&&guildActionFromHash(window.location.hash)==='tools'&&!publicToolRoute.toolId)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={catalogGuild} site={site}/></main>;
     const publicTool=publicToolRoute.guildKey&&publicToolRoute.toolId?guildTool(publicToolRoute.guildKey,publicToolRoute.toolId):undefined;
     if(!googleCallback&&!resetToken&&publicToolRoute.guildKey&&publicToolRoute.toolId&&!publicTool)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicToolRoute.guildKey} toolId={publicToolRoute.toolId}/></main>;
-    if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicTool.guild_key} tool={publicTool} site={site}><PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></RegisteredTools></main>;
+    if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicTool.guild_key} tool={publicTool} site={site}>{publicTool.tab&&<header className="topbar"><h1>{publicTool.title}</h1><PageTools pageId={publicTool.tab} client={client}/></header>}<PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></RegisteredTools></main>;
     if(!googleCallback&&!resetToken&&!profileLoginRequested&&profileRoute?.kind==='visitor'&&canOpenGuestProfile(locationHash,window.location.search))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><h1>個人頁</h1><VisitorProfile client={client} id={profileRoute.id} onLogin={beginProfileLogin}/><a className="btn btn-secondary btn-small" href="#home">返回自由工坊</a></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;

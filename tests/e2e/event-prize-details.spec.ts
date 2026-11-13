@@ -1,10 +1,59 @@
+import {eventAppPath} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {hashPassword} from '../../modules/identity-membership/service.js';
-import {test,expect,type Page,type Locator} from './fixtures.js';
+import {test as base,expect,type Page,type Locator} from './fixtures.js';
+import {Pool} from 'pg';
+import {serve} from '@hono/node-server';
+import {serveStatic} from '@hono/node-server/serve-static';
+import {LOCAL_DATABASE_URL} from '../../packages/db/index.js';
+import {migrate} from '../../scripts/database.js';
+import {seedLocal,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
+import {e2eSchema,resetE2eAuthState} from '../../packages/testing/e2e-auth-isolation.js';
+import {createApp} from '../../apps/platform-api/src/app.js';
+import {TENANT_CURSOR_TEST_KEY} from '../runtime/tenant-cursor-fixture.js';
 import {navigate,signOut} from './navigation.js';
 
 // Authoring only: execute through the official isolated local/CI E2E harness.
 // Never point this journey or its synthetic fixture at a production database.
+// Publication retains immutable credit facts. Own the entire schema so those
+// identities never leak into another file's single-community guild catalog.
+const test=base.extend({
+  e2eAuthPool:[async({},use,workerInfo)=>{
+    if(workerInfo.config.workers!==1)throw Error('The event fixture requires one worker.');
+    const schema=e2eSchema(`fp_e2e_${randomUUID().replaceAll('-','')}`);
+    const connectionString=process.env.TEST_DATABASE_URL??LOCAL_DATABASE_URL;
+    const admin=new Pool({connectionString,max:1});
+    const pool=new Pool({connectionString,options:`-c search_path=${schema}`,application_name:schema});
+    try{
+      await admin.query(`CREATE SCHEMA ${schema}`);
+      await migrate(pool);await seedLocal(pool);
+      await use(pool);
+    }finally{
+      await pool.end();
+      try{await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);}finally{await admin.end();}
+    }
+  },{scope:'worker'}],
+  isolateAuth:async({e2eAuthPool},use)=>{
+    const schema=e2eSchema((await e2eAuthPool.query('SELECT current_schema() AS schema')).rows[0].schema);
+    await resetE2eAuthState(e2eAuthPool,schema);await use();
+  },
+  baseURL:async({e2eAuthPool},use)=>{
+    let app:ReturnType<typeof createApp>|undefined;
+    const server=serve({hostname:'127.0.0.1',port:0,fetch:request=>app?app.fetch(request):new Response(null,{status:503})});
+    try{
+      if(!server.listening)await new Promise<void>((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
+      const address=server.address();if(!address||typeof address==='string')throw Error('Event fixture listener unavailable.');
+      const origin=`http://127.0.0.1:${address.port}`;
+      app=createApp(e2eAuthPool,origin,'local',{registrationCommunityId:DEMO_COMMUNITY,tenantCursorSigningKey:TENANT_CURSOR_TEST_KEY});
+      app.use('/*',serveStatic({root:'./apps/portal-web/dist'}));
+      app.get('*',serveStatic({path:'./apps/portal-web/dist/index.html'}));
+      await use(origin);
+    }finally{
+      if('closeAllConnections' in server)server.closeAllConnections();
+      await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+    }
+  },
+});
 test.use({timezoneId:'Asia/Taipei'});
 const eventTest=test.extend<{eventFixture:{user:string;email:string;reviewerEmail:string}}>({
   eventFixture:async({page,e2eAuthPool},use,info)=>{
@@ -30,7 +79,7 @@ const eventTest=test.extend<{eventFixture:{user:string;email:string;reviewerEmai
       const results=await Promise.allSettled([page.unrouteAll({behavior:'wait'})]);
       results.push(...await Promise.allSettled([page.close()]));
       results.push(...await Promise.allSettled([(async()=>{
-        const q=await e2eAuthPool.connect();
+        const q=await e2eAuthPool.connect();let retainedCreditFacts=0,retainedShares=0;
         try{
           await q.query('BEGIN');
           // Match member-command lock order; pending writes finish before the
@@ -56,15 +105,28 @@ const eventTest=test.extend<{eventFixture:{user:string;email:string;reviewerEmai
             await q.query(`DELETE FROM ${table} WHERE community_id=$1`,[community]);
           }
           await q.query('DELETE FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE community_id=$1)',[community]);
-          await q.query('DELETE FROM users WHERE community_id=$1',[community]);
-          await q.query('DELETE FROM communities WHERE community_id=$1',[community]);
+          retainedCreditFacts=Number((await q.query('SELECT count(*) FROM share_credit_events WHERE community_id=$1',[community])).rows[0].count);
+          retainedShares=Number((await q.query('SELECT count(*) FROM shares WHERE community_id=$1',[community])).rows[0].count);
+          if(retainedShares){
+            // Instant publication creates immutable credit facts. Keep their FK
+            // identities until the harness drops its schema; disable all access.
+            await q.query('UPDATE users SET active=false WHERE community_id=$1',[community]);
+            await q.query('UPDATE promotion_links SET revoked_at=COALESCE(revoked_at,now()) WHERE community_id=$1',[community]);
+          }else{
+            await q.query('DELETE FROM users WHERE community_id=$1',[community]);
+            await q.query('DELETE FROM communities WHERE community_id=$1',[community]);
+          }
           await q.query('COMMIT');
         }catch(error){await q.query('ROLLBACK');throw error;}
         finally{q.release();}
         const remaining=Number((await e2eAuthPool.query('SELECT count(*) FROM communities WHERE community_id=$1',[community])).rows[0].count);
         const after=Number((await e2eAuthPool.query('SELECT count(*) FROM communities')).rows[0].count);
-        expect(remaining).toBe(0);expect(after).toBe(before);
-        await info.attach('event-fixture-cleanup',{body:JSON.stringify({community,before,after,remaining}),contentType:'application/json'});
+        expect(remaining).toBe(retainedShares?1:0);expect(after).toBe(before+(retainedShares?1:0));
+        expect(Number((await e2eAuthPool.query('SELECT count(*) FROM users WHERE community_id=$1 AND active',[community])).rows[0].count)).toBe(0);
+        expect(Number((await e2eAuthPool.query('SELECT count(*) FROM sessions WHERE user_id IN (SELECT user_id FROM users WHERE community_id=$1)',[community])).rows[0].count)).toBe(0);
+        expect(Number((await e2eAuthPool.query('SELECT count(*) FROM community_events WHERE community_id=$1',[community])).rows[0].count)).toBe(0);
+        expect(Number((await e2eAuthPool.query('SELECT count(*) FROM share_credit_events WHERE community_id=$1',[community])).rows[0].count)).toBe(retainedCreditFacts);
+        await info.attach('event-fixture-cleanup',{body:JSON.stringify({community,before,after,remaining,retainedShares,retainedCreditFacts}),contentType:'application/json'});
       })()]));
       for(const result of results)if(result.status==='rejected'){
         // Keep the journey/setup error primary, but retain cleanup failures in
@@ -94,8 +156,9 @@ async function openComposer(page:Page,email:string,title:string){
   await page.getByRole('button',{name:'辦活動',exact:true}).click();
   const form=page.locator('form').filter({has:page.getByRole('heading',{name:'辦一場活動',exact:true})});
   await form.getByLabel('活動名稱',{exact:true}).fill(title);
+  await form.getByText('選填設定',{exact:true}).click();
   await form.getByLabel('活動說明',{exact:true}).fill('合成活動：只有獎品說明，沒有真實發獎或付款。');
-  await form.getByLabel('線上場地',{exact:true}).fill('合成教室');
+  await form.getByLabel('地點',{exact:true}).fill('合成教室');
   return form;
 }
 async function fillPrize(form:Locator){
@@ -110,9 +173,22 @@ async function fillPrize(form:Locator){
 }
 async function save(page:Page,form:Locator,id?:string){
   const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===(id?`/api/v1/events/${id}/update`:'/api/v1/events'));
-  await form.getByRole('button',{name:id?'儲存修改':'送出審核',exact:true}).click();
+  await form.getByRole('button',{name:id?'儲存修改':'發布',exact:true}).click();
   const result=await response;expect(result.status()).toBe(id?200:201);
   const body=await result.json();await expect(form).toHaveCount(0);return body;
+}
+// Existing pending records remain editable after instant publication was added.
+// Clone only the event fields into a distinct legacy fixture; never downgrade the
+// newly published event or alter its share/credit history. The legacy draft uses
+// the fixture officer’s review guild, as pending records did before publication.
+async function legacyDraft(pool:Pool,publishedId:string){
+  const id=randomUUID();
+  await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need,registration_policy,prize_details,state)
+    SELECT $1,community_id,organizer_ref,guild_key,title||'（既有草稿）',description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,'guild_member_operations',visibility,help_need,registration_policy,prize_details,'pending'
+    FROM community_events WHERE event_id=$2 AND state='published'`,[id,publishedId]);
+  expect((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[publishedId])).rows[0].state).toBe('published');
+  expect((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[id])).rows[0].state).toBe('pending');
+  return id;
 }
 async function expectPrize(region:Locator,name=prize.name,canManagePhoto=false){
   await expect(region).toBeVisible();
@@ -123,7 +199,7 @@ async function expectPrize(region:Locator,name=prize.name,canManagePhoto=false){
   await expect(region.locator('svg')).toHaveAttribute('aria-hidden','true');
 }
 async function approve(page:Page,reviewerEmail:string,id:string){
-  await logout(page);await login(page,reviewerEmail);await page.goto(`/events/${id}`);
+  await logout(page);await login(page,reviewerEmail);await page.goto(eventAppPath(`/events/${id}`));
   const card=page.locator('.experience-card');
   await card.getByRole('button',{name:'審核活動',exact:true}).click();
   await card.getByLabel('審核理由',{exact:true}).fill('合成審核：核對活動及獎品說明，不代表已選出得獎者。');
@@ -136,17 +212,24 @@ async function approve(page:Page,reviewerEmail:string,id:string){
 for(const width of [320,390])eventTest(`prize description survives create, reload, edit and real publication at ${width}px`,async({page,browser,e2eAuthPool,eventFixture},info)=>{
   await page.setViewportSize({width,height:844});
   const form=await openComposer(page,eventFixture.email,`合成獎品活動 ${eventFixture.user}`);
-  await form.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}).click();
   await form.getByRole('combobox',{name:/^參與範圍/}).selectOption('open');
   await fillPrize(form);
   await form.getByText('送出前預覽活動',{exact:true}).click();
   await expect(form.getByRole('region',{name:'獎品預覽',exact:true})).toContainText(prize.name);
-  const created=await save(page,form),id=created.event_id as string;
-  expect(created.state).toBe('pending');expect(created.prize_details).toHaveLength(1);
+  const created=await save(page,form);
+  expect(created.state).toBe('published');
+  const id=await legacyDraft(e2eAuthPool,created.event_id);expect(created.prize_details).toHaveLength(1);
   expect(created.prize_details[0]).toMatchObject(prize);
   const stableId=created.prize_details[0].prize_id as string;
   expect(stableId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-  await page.goto(`/events/${id}`);await page.reload();
+  const immediateGuest=await browser.newContext({viewport:{width,height:844}});
+  try{
+    const publicPage=await immediateGuest.newPage();
+    await publicPage.goto(new URL(eventAppPath(`/events/${created.event_id}`),page.url()).href);
+    await expectPrize(publicPage.getByRole('region',{name:'活動獎品說明',exact:true}));
+    await expect(publicPage.getByRole('button',{name:'編輯草稿',exact:true})).toHaveCount(0);
+  }finally{await immediateGuest.close();}
+  await page.goto(eventAppPath(`/events/${id}`));await page.reload();
   const card=page.locator('.experience-card'),details=card.getByRole('region',{name:'活動獎品說明',exact:true});
   await expectPrize(details,prize.name,true);
   await card.getByRole('button',{name:'編輯草稿',exact:true}).click();
@@ -160,7 +243,7 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
   const guest=await browser.newContext({viewport:{width,height:844}});
   try{
     const publicPage=await guest.newPage();
-    await publicPage.goto(new URL(`/events/${id}`,page.url()).href);
+    await publicPage.goto(new URL(eventAppPath(`/events/${id}`),page.url()).href);
     await expect(publicPage.getByRole('heading',{name:'活動目前無法公開查看',exact:true})).toBeVisible();
     await expect(publicPage.getByRole('region',{name:'活動獎品說明',exact:true})).toHaveCount(0);
     await approve(page,eventFixture.reviewerEmail,id);
@@ -171,7 +254,7 @@ for(const width of [320,390])eventTest(`prize description survives create, reloa
     await publicPage.evaluate(()=>window.scrollTo(0,0));
     await publicPage.screenshot({path:info.outputPath(`public-prize-${width}.png`),fullPage:true});
     // Published promises are not silently editable, including by the organizer.
-    await logout(page);await login(page,eventFixture.email);await page.goto(`/events/${id}`);
+    await logout(page);await login(page,eventFixture.email);await page.goto(eventAppPath(`/events/${id}`));
     await expectPrize(details,renamed);await expect(card.getByRole('button',{name:'編輯草稿',exact:true})).toHaveCount(0);
     const durable=(await e2eAuthPool.query('SELECT state,prize_details FROM community_events WHERE event_id=$1 AND organizer_ref=$2',[id,eventFixture.user])).rows[0];
     expect(durable).toEqual({state:'published',prize_details:[{...prize,name:renamed,prize_id:stableId}]});
@@ -204,7 +287,7 @@ for(const width of [320,390])eventTest(`prize keyboard, errors, removal and enla
   for(const [label,valid] of [['要做到什麼',prize.completion_rule],['怎麼領取',prize.claim_note]]){
     const input=field.getByLabel(label,{exact:true});
     for(const invalid of ['', '   ']){
-      await input.fill(invalid);await form.getByRole('button',{name:'送出審核',exact:true}).click();
+      await input.fill(invalid);await form.getByRole('button',{name:'發布',exact:true}).click();
       await expect(input).toBeFocused();await expect(input).toHaveAttribute('aria-invalid','true');
       await expect(input).toHaveAccessibleDescription(`請填寫${label}。`);
       await expect(field.getByRole('alert').filter({hasText:`請填寫${label}。`})).toBeVisible();
@@ -214,7 +297,7 @@ for(const width of [320,390])eventTest(`prize keyboard, errors, removal and enla
   }
   for(const invalid of ['0','501','1.5']){
     const quantity=field.getByLabel('準備幾份',{exact:true});await quantity.fill(invalid);
-    await form.getByRole('button',{name:'送出審核',exact:true}).click();
+    await form.getByRole('button',{name:'發布',exact:true}).click();
     await expect(quantity).toBeFocused();await expect(quantity).toHaveAccessibleDescription('請填寫 1 到 500 的整數份數。');expect(writes).toBe(0);
   }
   await field.getByLabel('準備幾份',{exact:true}).fill('3');
@@ -262,25 +345,28 @@ for(const width of [320,390])eventTest(`prize keyboard, errors, removal and enla
 eventTest('no-prize minimal submission stays optional and reads back empty',async({page,eventFixture,e2eAuthPool})=>{
   const form=await openComposer(page,eventFixture.email,`無獎品活動 ${eventFixture.user}`);
   await expect(form.getByLabel('獎品名稱',{exact:true})).toHaveCount(0);
-  const result=await save(page,form);expect(result.prize_details).toEqual([]);
-  await page.goto(`/events/${result.event_id}`);await page.reload();
+  const result=await save(page,form);expect(result.prize_details).toEqual([]);expect(result.state).toBe('published');
+  const id=await legacyDraft(e2eAuthPool,result.event_id);
+  await page.goto(eventAppPath(`/events/${id}`));await page.reload();
   await expect(page.getByRole('region',{name:'活動獎品說明',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'編輯草稿',exact:true}).click();
   await expect(page.getByRole('button',{name:'加入獎品',exact:true})).toBeVisible();
   await expect(page.getByLabel('獎品名稱',{exact:true})).toHaveCount(0);
-  expect((await e2eAuthPool.query('SELECT prize_details FROM community_events WHERE event_id=$1 AND organizer_ref=$2',[result.event_id,eventFixture.user])).rows[0].prize_details).toEqual([]);
+  expect((await e2eAuthPool.query('SELECT prize_details FROM community_events WHERE event_id=$1 AND organizer_ref=$2',[id,eventFixture.user])).rows[0].prize_details).toEqual([]);
 });
 
 eventTest('published workshop-only prize descriptions stay private to members',async({page,browser,eventFixture})=>{
   const form=await openComposer(page,eventFixture.email,`會員獎品活動 ${eventFixture.user}`);
-  // The simple form defaults to workshop visibility; never widen it for this test.
+  // Preserve this scenario's member-only scope through the new optional settings.
+  await form.getByRole('combobox',{name:'參與範圍',exact:true}).selectOption('workshop');
   await fillPrize(form);const result=await save(page,form),id=result.event_id as string;
-  expect(result.visibility).toBe('workshop');
-  await approve(page,eventFixture.reviewerEmail,id);
+  expect(result.visibility).toBe('workshop');expect(result.state).toBe('published');
+  await logout(page);await login(page,eventFixture.reviewerEmail);await page.goto(eventAppPath(`/events/${id}`));
+  await expect(page.locator('.experience-card')).toContainText('開放報名');
   await expectPrize(page.getByRole('region',{name:'活動獎品說明',exact:true}));
   const guest=await browser.newContext();
   try{
-    const publicPage=await guest.newPage();await publicPage.goto(new URL(`/events/${id}`,page.url()).href);
+    const publicPage=await guest.newPage();await publicPage.goto(new URL(eventAppPath(`/events/${id}`),page.url()).href);
     await expect(publicPage.getByRole('heading',{name:'活動目前無法公開查看',exact:true})).toBeVisible();
     await expect(publicPage.getByRole('region',{name:'活動獎品說明',exact:true})).toHaveCount(0);
     await expect(publicPage.getByText(prize.name,{exact:true})).toHaveCount(0);

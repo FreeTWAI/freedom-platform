@@ -78,7 +78,7 @@ async function signIn(page: Page) {
   const authResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/login' && response.request().method() === 'POST', {timeout: 25_000});
   await page.getByLabel('密碼', { exact: true }).press('Enter');
   expect((await authResponse).status()).toBe(200);
-  await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -213,10 +213,10 @@ test('the skip link stays hidden until focused, then moves focus to the page wit
   await page.goto('/');
   await signIn(page);
   await navigate(page, '技能書架');
-  await expect(page.getByRole('heading', { name: '技能書架', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   // Fresh load so keyboard navigation starts at the top of the document.
   await page.reload();
-  await expect(page.getByRole('heading', { name: '技能書架', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   const skip = page.getByRole('link', { name: '跳到主要內容', exact: true });
   // Regression: the link used to peek a few pixels into the top edge of every page.
   expect((await skip.boundingBox())!.y + (await skip.boundingBox())!.height).toBeLessThanOrEqual(0);
@@ -227,8 +227,8 @@ test('the skip link stays hidden until focused, then moves focus to the page wit
   expect(await focusedIsVisiblyOutlined(page)).toBe(true);
   await page.keyboard.press('Enter');
   await expect(page.locator('#main-content')).toBeFocused();
-  await expect(page).toHaveURL(/#skills$/);
-  await expect(page.getByRole('heading', { name: '技能書架', level: 1, exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#explore\/resources$/);
+  await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   expect((await skip.boundingBox())!.y + (await skip.boundingBox())!.height).toBeLessThanOrEqual(0);
 });
 
@@ -272,14 +272,12 @@ for (const viewport of VIEWPORTS) {
       await page.keyboard.press('Enter');
       await expectMenuIconCentered(page, true);
       // Opening the mobile menu focuses its current primary destination.
-      await expect(nav.getByRole('button', { name: '會員首頁', exact: true })).toBeFocused();
+      await expect(nav.getByRole('button', { name: '動態', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
-      await expect(nav.getByRole('button', { name: '我的個人空間', exact: true })).toBeFocused();
-      // Every group opens inside the menu; the last destination can be scrolled into view and chosen.
-      for (const summary of await nav.locator('.nav-section > summary').all()) {
-        if (!await summary.evaluate(node => (node.parentElement as HTMLDetailsElement).open)) await summary.click();
-      }
-      const last = nav.getByRole('button', { name: '自由工坊社群', exact: true });
+      await expect(nav.getByRole('button', { name: '探索', exact: true })).toBeFocused();
+      await expect(nav.locator('.nav-primary').getByRole('button')).toHaveText(['動態', '探索', '公會', '自動化', '我的']);
+      await expect(nav.locator('.nav-more, .nav-search')).toHaveCount(0);
+      const last = nav.getByRole('button', { name: '我的', exact: true });
       await last.scrollIntoViewIfNeeded();
       await expect(last).toBeInViewport();
       await noHorizontalOverflow(page, `${viewport.name} open menu`);
@@ -287,7 +285,7 @@ for (const viewport of VIEWPORTS) {
       await page.screenshot({ path: `test-results/audit-shell-menu-${viewport.name}.png` });
       await last.focus();
       await page.keyboard.press('Enter');
-      await expect(page.getByRole('heading', { name: '自由工坊社群', level: 1, exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '我的', level: 1, exact: true })).toBeVisible();
       await expect(nav).toBeHidden();
       await expect(page.locator('#main-content')).toBeFocused();
       await expect(page.getByRole('heading', { level: 1 })).toBeInViewport();
@@ -296,7 +294,7 @@ for (const viewport of VIEWPORTS) {
       await expect(nav).toBeVisible();
       // Keyboard from a fresh load: skip link, brand home link, then primary destinations.
       await page.reload();
-      await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
       await page.keyboard.press('Tab');
       await expect(page.getByRole('link', { name: '跳到主要內容', exact: true })).toBeFocused();
       await page.keyboard.press('Tab');
@@ -307,52 +305,39 @@ for (const viewport of VIEWPORTS) {
       await expect(brandHome).toBeInViewport();
       expect(await focusedIsVisiblyOutlined(page)).toBe(true);
       await page.keyboard.press('Tab');
-      await expect(nav.getByRole('button',{name:'會員首頁',exact:true})).toBeFocused();
-      for (const name of ['我的個人空間', '職業公會', '技能書架', '搜尋社群內容']) {
+      await expect(nav.getByRole('button',{name:'動態',exact:true})).toBeFocused();
+      for (const name of ['探索', '公會', '自動化', '我的']) {
         await page.keyboard.press('Tab');
         await expect(nav.getByRole('button', { name, exact: true })).toBeFocused();
         expect(await focusedIsVisiblyOutlined(page)).toBe(true);
       }
       await page.keyboard.press('Enter');
-      await expect(page).toHaveURL(/#community-search$/);
-      await expect(page.getByRole('heading', { name: '搜尋社群內容', level: 1, exact: true })).toBeVisible();
-      await nav.getByRole('button', { name: '搜尋社群內容', exact: true }).focus();
-      // A collapsed group opens from the keyboard and its first page is the next stop.
-      await page.keyboard.press('Tab');
-      await expect(page.locator(':focus')).toHaveText(/更多功能/);
+      await expect(page).toHaveURL(/#me$/);
+      await expect(page.getByRole('heading', { name: '我的', level: 1, exact: true })).toBeVisible();
+      // Keyboard access to secondary views now belongs inside the selected place.
+      await nav.getByRole('button', { name: '探索', exact: true }).focus();
       await page.keyboard.press('Enter');
-      await expect(nav.getByRole('searchbox',{name:'搜尋功能'})).toBeFocused();
+      const view = page.getByRole('combobox', { name: '探索檢視', exact: true });
+      await view.focus();
       expect(await focusedIsVisiblyOutlined(page)).toBe(true);
-      await nav.getByRole('searchbox',{name:'搜尋功能'}).fill('會員首頁');
-      await page.keyboard.press('Tab');
-      await expect(nav.getByRole('region',{name:'功能搜尋結果'}).getByRole('button',{name:'會員首頁',exact:true})).toBeFocused();
-      expect(await focusedIsVisiblyOutlined(page)).toBe(true);
+      const resourceIndex = await view.locator('option').evaluateAll(options => options.findIndex(option => (option as HTMLOptionElement).value === '#explore/resources'));
+      expect(resourceIndex).toBeGreaterThanOrEqual(0);
+      await view.press('Home');
+      for (let index = 0; index < resourceIndex; index++) await view.press('ArrowDown');
+      await expect(page).toHaveURL(/#explore\/resources$/);
+      await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
+      await expect(nav.locator('.nav-more, .nav-search')).toHaveCount(0);
+      await nav.getByRole('button', { name: '動態', exact: true }).focus();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/#home$/);
-      await expect(page.getByRole('heading', { name: '會員首頁', level: 1, exact: true })).toBeVisible();
-      await nav.locator('.nav-more > summary').focus();
-      await page.keyboard.press('Enter');
-      await expect(nav.getByRole('searchbox',{name:'搜尋功能'})).toBeFocused();
-      await expect(nav.getByRole('searchbox',{name:'搜尋功能'})).toHaveValue('');
-      await page.keyboard.press('Tab');
-      await expect(page.locator(':focus')).toHaveText(/社群參與/);
-      await page.keyboard.press('Enter');
-      await page.keyboard.press('Tab');
-      await expect(nav.getByRole('button',{name:'AR 圖案互動',exact:true})).toBeFocused();
-      await page.keyboard.press('Tab');
-      await expect(nav.getByRole('button',{name:'社群活動',exact:true})).toBeFocused();
-      // The global header stays reachable while the page scrolls; More owns its own scroll area.
-      for (const s of await nav.locator('.nav-section > summary').all()) {
-        if (!await s.evaluate(node => (node.parentElement as HTMLDetailsElement).open)) await s.click();
-      }
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       expect(await page.locator('.sidebar').evaluate(node => node.getBoundingClientRect().top)).toBeLessThanOrEqual(16);
-      const last = nav.getByRole('button', { name: '自由工坊社群', exact: true });
+      const last = nav.getByRole('button', { name: '我的', exact: true });
       await last.scrollIntoViewIfNeeded();
       await expect(last).toBeInViewport();
       await last.click();
-      await expect(page.getByRole('heading', { name: '自由工坊社群', level: 1, exact: true })).toBeVisible();
-      await expect(nav.getByRole('button', { name: '自由工坊社群', exact: true, includeHidden: true })).toHaveAttribute('aria-current', 'page');
+      await expect(page.getByRole('heading', { name: '我的', level: 1, exact: true })).toBeVisible();
+      await expect(last).toHaveAttribute('aria-current', 'page');
       await expect(page.locator('#main-content')).toBeFocused();
     }
     await noHorizontalOverflow(page, `${viewport.name} community`);
@@ -375,23 +360,29 @@ test('selecting the current page closes More and leaves the legacy commerce cont
     for (const activation of ['pointer', 'keyboard']) {
       // Keep the current hash through reload: selecting this item cannot rely on a tab change.
       await page.reload();
-      await expect(page.getByRole('heading', { name: '我可以賣東西', level: 1, exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '零售工具', level: 1, exact: true })).toBeVisible();
       const phoneMenu = page.getByRole('button', { name: '開啟選單', exact: true });
       if (await phoneMenu.isVisible()) await phoneMenu.click();
       const nav = page.getByRole('navigation', { name: '主要工作區', includeHidden: true });
       await expect(nav).toBeVisible();
-      const more = nav.locator('.nav-more');
-      await more.locator(':scope > summary').click();
-      await expect(more).toHaveJSProperty('open', true);
-      const current = nav.getByRole('button', { name: 'AI 製作銷售網站', exact: true });
+      const current = nav.getByRole('button', { name: '公會', exact: true });
       await expect(current).toHaveAttribute('aria-current', 'page');
       if (activation === 'keyboard') {
         await current.focus();
         await page.keyboard.press('Enter');
       } else await current.click();
       if (width === 390) await expect(nav).toBeHidden();
-      await expect(more).toHaveJSProperty('open', false);
-      await expect(page).toHaveURL(/#retail$/);
+      await expect(nav.locator('.nav-more')).toHaveCount(0);
+      await expect(page.locator('#main-content')).toBeFocused();
+      await navigate(page, 'AI 製作銷售網站');
+      // Repeat selection through the guild's tool list, with the same activation method.
+      await page.getByRole('button', { name: '工具列表', exact: true }).click();
+      const retail = page.getByRole('button', { name: '零售工具', exact: true });
+      if (activation === 'keyboard') {
+        await retail.focus();
+        await page.keyboard.press('Enter');
+      } else await retail.click();
+      await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/retail-kit$/);
       await expect(page.locator('#main-content')).toBeFocused();
       // A real click proves the menu no longer intercepts the original commerce entry.
       const legacy = page.getByText('查看舊版商品與合作資料', { exact: true });

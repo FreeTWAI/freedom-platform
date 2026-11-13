@@ -19,41 +19,37 @@ test('navigation separates collaboration, commerce and management without granti
   await page.route('**/api/v1/guild-workspace', route => route.fulfill({ json: { managed_guilds: [], managed_books: [], can_discuss: false } }));
   await login(page);
   const nav = page.getByRole('navigation', { name: '主要工作區' });
-  const collaboration = nav.locator('.nav-more-content > details').filter({ has: page.locator('summary').filter({ hasText: /^創作與合作/ }) });
-  const commerce = nav.locator('.nav-more-content > details').filter({ has: page.locator('summary').filter({ hasText: /^供貨與銷售/ }) });
-  const management = nav.locator('.nav-more-content > details').filter({ has: page.locator('summary').filter({ hasText: /^管理/ }) });
-  await expect(collaboration).toHaveCount(1); await expect(commerce).toHaveCount(1); await expect(management).toHaveCount(1);
-  await expect(management.getByRole('button', { name: '公會管理', includeHidden: true, exact: true })).toHaveCount(0);
-  await nav.locator('.nav-more > summary').click();
-  await management.locator(':scope > summary').click();
-  await expect(nav.getByRole('link', { name: /平台管理/, includeHidden: true })).toHaveCount(0);
-  await expect(nav.getByText('參與平台', { exact: true })).toHaveCount(0);
-  await expect(nav.getByText('我的協作', { exact: true })).toHaveCount(0);
+  await expect(nav.locator('.nav-primary button')).toHaveText(['動態', '探索', '公會', '自動化', '我的']);
+  await expect(nav.locator('.nav-more,.nav-search')).toHaveCount(0);
+  await nav.getByRole('button', {name:'我的',exact:true}).click();
+  await expect(page.getByRole('link', {name:'管理',exact:true})).toHaveCount(0);
+  await navigate(page, '職業公會');
+  await expect(page.getByRole('button', {name:'公會管理',exact:true})).toHaveCount(0);
+  await expect(nav.getByText('參與平台', {exact:true})).toHaveCount(0);
+  await expect(nav.getByText('我的協作', {exact:true})).toHaveCount(0);
   await navigate(page, '開源投稿');
-  await expect(page.getByRole('heading', { name: '開源投稿', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
   await expect(page.locator('.community-library')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '投稿你的開源工具', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeHidden();
   await page.getByText('使用 Agent 或聊天 AI 協助整理（進階）', { exact: true }).click();
   await expect(page.getByRole('button', { name: '上傳技能', exact: true })).toBeVisible();
-  await nav.locator('.nav-more > summary').click();
-  await commerce.locator(':scope > summary').click();
-  await expect(commerce.getByRole('group', { name: '平台內管理', exact: true })).toBeVisible();
-  await expect(commerce.getByRole('group', { name: 'AI 建站工具（進階）', exact: true })).toBeVisible();
-  await expect(commerce.getByRole('button', { name: '行銷工作室', exact: true })).toHaveAccessibleDescription('準備推廣文案，記錄分享連結');
-  await expect(commerce.getByRole('button', { name: 'AI 整理供貨商品', exact: true })).toHaveAccessibleDescription('下載任務給外部 AI，製作內部供貨網站');
-  const search = nav.getByRole('searchbox');
-  for (const [oldLabel, newLabel] of [['我的供貨商品庫', '供貨商品管理'], ['我的訂單', '購買與預留紀錄'], ['我有東西要賣', 'AI 整理供貨商品'], ['我可以賣東西', 'AI 製作銷售網站']]) {
-    await search.fill(oldLabel);
-    await expect(nav.getByRole('region', { name: '功能搜尋結果' }).getByRole('button', { name: newLabel, exact: true })).toBeVisible();
+  // Platform catalogs, orders and the two AI tools now have distinct visible
+  // place/view/tool entries instead of aliases in the removed feature search.
+  for (const [label, hash, heading] of [
+    ['供貨商品管理', '#guilds/guild_product_quality_supply/tools/catalog', '供貨商品庫'],
+    ['購買與預留紀錄', '#me/orders', '我的'],
+    ['AI 製作銷售網站', '#guilds/guild_commerce_sales/tools/retail-kit', '零售工具'],
+    ['AI 整理供貨商品', '#guilds/guild_product_quality_supply/tools/supplier-kit', '供貨工具'],
+  ]) {
+    await navigate(page, label);
+    await expect.poll(() => new URL(page.url()).hash).toBe(hash);
+    await expect(page.getByRole('heading', {name:heading,level:1,exact:true})).toBeVisible();
   }
-  await search.fill('外部 AI');
-  await expect(nav.getByRole('region', { name: '功能搜尋結果' }).getByRole('button')).toHaveCount(2);
-  await search.fill('');
-  await navigate(page, 'AI 整理供貨商品');
-  await expect(page).toHaveURL(/#supplier$/);
-  await expect(page.getByRole('heading', { name: '我有東西要賣', level: 1, exact: true })).toBeVisible();
-  await expect(commerce.getByRole('button', { name: 'AI 整理供貨商品', includeHidden: true, exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByLabel('公會功能', {exact:true})).toHaveValue('tools');
+  await expect(page.getByRole('button', {name:'工具列表',exact:true})).toBeVisible();
+  await expect(nav.getByRole('button', {name:'公會',exact:true})).toHaveAttribute('aria-current', 'page');
+
 });
 
 test('a synthetic maintainer permission projection reveals guild management without platform management', async ({ page }) => {
@@ -61,12 +57,14 @@ test('a synthetic maintainer permission projection reveals guild management with
   await page.route('**/api/v1/skill-books/social-post/editor', route => route.fulfill({ json: { book_id: 'social-post', summary: '測試技能摘要', collaboration_intro: '從公開任務開始', tasks: [], milestones: [], aggregate_version: 1 } }));
   await login(page); await navigate(page, '公會管理');
   const nav = page.getByRole('navigation', { name: '主要工作區' });
-  const group = nav.getByRole('button', { name: '公會管理', includeHidden: true, exact: true }).locator('xpath=ancestor::details[1]');
-  await expect(group.locator(':scope > summary')).toContainText('管理');
-  await expect(nav.getByRole('link', { name: /平台管理/, includeHidden: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '公會管理', level: 1, exact: true })).toBeVisible();
+  await expect(nav.getByRole('button', {name:'公會',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(page.getByRole('button', {name:'公會管理',exact:true})).toBeVisible();
+  await expect(nav.getByRole('link', {name:/平台管理/,includeHidden:true})).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '公會', level: 1, exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '技能書編輯', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '公會長議事區', exact: true })).toHaveCount(0);
+  await navigate(page, '我的個人空間');
+  await expect(page.getByRole('link', {name:'管理',exact:true})).toHaveCount(0);
 });
 
 test('phone navigation opens, escapes and closes after selection while keeping every destination reachable', async ({ page }) => {
@@ -79,7 +77,7 @@ test('phone navigation opens, escapes and closes after selection while keeping e
   await expect(nav).toBeHidden(); await expect(menu).toBeFocused();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const [label, heading] of [['技能書架', '技能書架'], ['一起開發', '一起開發'], ['AI 整理供貨商品', '我有東西要賣'], ['工坊夥伴', '工坊夥伴'], ['活動集錦', '活動集錦'], ['自由工坊社群', '自由工坊社群'], ['會員首頁', '會員首頁']]) {
+    for (const [label, heading] of [['技能書架', '探索'], ['一起開發', '作品共創'], ['AI 整理供貨商品', '供貨工具'], ['工坊夥伴', '探索'], ['活動集錦', '探索'], ['自由工坊社群', '公會'], ['會員首頁', '動態']]) {
       await navigate(page, label);
       await expect(page.getByRole('heading', { name: heading, level: 1, exact: true })).toBeVisible();
       await expect(nav).toBeHidden(); await expect(menu).toHaveAttribute('aria-expanded', 'false');
@@ -95,21 +93,22 @@ test('phone navigation opens, escapes and closes after selection while keeping e
 
 test('skip navigation preserves the module, and deep links plus browser history preserve selected destinations', async ({ page }) => {
   await login(page); await page.goto('/#positioning');
-  await expect(page.getByRole('heading', { name: '我的定位', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '定位測驗', level: 1, exact: true })).toBeVisible();
   const skip = page.getByRole('link', { name: '跳到主要內容', exact: true });
   await skip.focus(); await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/#positioning$/); await expect(page.locator('#main-content')).toBeFocused();
+  await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/assessment$/); await expect(page.locator('#main-content')).toBeFocused();
   await expect(page.locator('.positioning-heading')).toHaveCount(0);
   await navigate(page, '技能書架'); await navigate(page, '開源投稿');
-  await page.goBack(); await expect(page).toHaveURL(/#skills$/);
-  await expect(page.getByRole('heading', { name: '技能書架', level: 1, exact: true })).toBeVisible();
+  await page.goBack(); await expect(page).toHaveURL(/#home$/);
+  await page.goBack(); await expect(page).toHaveURL(/#explore\/resources$/);
+  await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: '技能書架', level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '探索', level: 1, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
   await navigate(page, '自由工坊社群');
   await expect(page.locator('.community-library')).toHaveCount(0);
   await page.getByRole('button', { name: '前往技能書架', exact: true }).click();
-  await expect(page).toHaveURL(/#skills$/);
+  await expect(page).toHaveURL(/#explore\/resources$/);
   await navigate(page, '我的名片');
   await expect(page.locator('.member-bookshelf,.community-library')).toHaveCount(0);
 });

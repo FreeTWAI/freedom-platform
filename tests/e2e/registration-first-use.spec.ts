@@ -150,7 +150,7 @@ test('checking a committed join after a lost reply continues without a second wr
   await quick.getByRole('button',{name:'加入公會，開始參與',exact:true}).click();
   await expect(quick.getByRole('alert')).toBeVisible();
   await quick.getByRole('button',{name:'重讀加入狀態',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1,exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();
   expect(writes).toBe(1);
 });
 

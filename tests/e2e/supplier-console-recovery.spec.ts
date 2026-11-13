@@ -98,14 +98,14 @@ test('SC-E2E-21 leaving while the outcome is unknown is refused (AT-36)',async({
  await nav(page,'商品與庫存');await expect(page.locator('#workspace-page-title')).toHaveText('商品與庫存');await expect(held(page)).toBeVisible();expect(fault.requests).toHaveLength(1);
  await retryCreate(page,s);
  const saved=await exactlyOne(page,e2eAuthPool,s,title);expect(fault.requests).toHaveLength(2);expect(fault.requests[1]).toEqual(fault.requests[0]);
- await navigate(page,'會員首頁');await expect(page.locator('#workspace-page-title')).toHaveText('會員首頁');
+ await navigate(page,'會員首頁');await expect(page.locator('#workspace-page-title')).toHaveText('動態');
  await go(page,s,'/products/'+saved.product_id);const form=active(page).getByRole('form',{name:'儲存內容',exact:true}),draft=unique('合成未儲存草稿');
  await form.getByRole('textbox',{name:'說明',exact:true}).fill(draft);const draftHash=new URL(page.url()).hash;
  const dismiss=barrier();page.once('dialog',async dialog=>{expect(dialog.type()).toBe('confirm');expect(dialog.message()).toBe(draftNotice);await dialog.dismiss();dismiss.resolve();});
  await navigate(page,'會員首頁');await dismiss.promise;await expect(page).toHaveURL(new RegExp(draftHash+'$'));await expect(form.getByRole('textbox',{name:'說明',exact:true})).toHaveValue(draft);
  await evidence(page,info,'leave-refused-keeps-draft',fault);
  const accept=barrier();page.once('dialog',async dialog=>{expect(dialog.message()).toBe(draftNotice);await dialog.accept();accept.resolve();});
- await navigate(page,'會員首頁');await accept.promise;await expect(page.locator('#workspace-page-title')).toHaveText('會員首頁');
+ await navigate(page,'會員首頁');await accept.promise;await expect(page.locator('#workspace-page-title')).toHaveText('動態');
  expect((await detail(page,s,saved.product_id)).product.description).toBe('合成遺失回應內容');
 });
 

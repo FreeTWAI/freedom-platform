@@ -27,7 +27,7 @@ for(const width of [390,820,1280]){
     const quick=page.getByRole('region',{name:'快速加入公會'});
     const next=quick.getByRole('button',{name:'下一步：回答小問題',exact:true});
     await expect(next).toBeDisabled();
-    await expect(quick.getByRole('radio')).toHaveCount(18);
+    await expect(quick.getByRole('radio')).toHaveCount(20);
     await fits(page);
     if(width!==820)await paint(quick,'quick-start-step1-'+width);
     await quick.locator('input[value="guild_ai_vibe"]').check();
@@ -60,7 +60,7 @@ test('my positioning lists guild answers and saves an edit',async({page})=>{
   await page.setViewportSize({width:1280,height:900});
   await register(page,'定位小問答');
   await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await navigate(page,'我的定位');
   const section=page.getByRole('region',{name:'公會小問答'});
   await expect(section.getByRole('heading',{name:'公會小問答',exact:true})).toBeVisible();
@@ -85,7 +85,7 @@ test('joining another guild offers a link to its unanswered questions',async({pa
   await page.setViewportSize({width:1280,height:900});
   await register(page,'再加入一個');
   await quickJoin(page);
-  await expect(page.getByRole('heading',{name:'會員首頁',level:1})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'動態',level:1})).toBeVisible();
   await navigate(page,'職業公會');
   const guild=page.locator('.guild-card',{has:page.getByRole('heading',{name:'音樂創作與MV公會',exact:true})});
   await guild.getByRole('button',{name:'加入音樂創作與MV公會',exact:true}).click();

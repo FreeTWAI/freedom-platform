@@ -1,3 +1,4 @@
+import {currentLegacyHash} from '../portal-route';
 import {useEffect,useId,useRef,useState,type FormEvent,type ReactNode} from 'react';
 import {useModuleMutation,type ModulePanelProps} from './shared';
 import {AccountDeactivation} from './AccountDeactivation';
@@ -50,7 +51,7 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
     const frame=requestAnimationFrame(()=>{
       const summary=details.querySelector('summary');
       const active=document.activeElement;
-      if(!details.isConnected||!details.open||window.location.hash!=='#account?view=connections'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
+      if(!details.isConnected||!details.open||currentLegacyHash()!=='#account?view=connections'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
       if(active===document.body||active?.id==='main-content'||active===summary)summary?.focus();
     });
     return()=>cancelAnimationFrame(frame);
