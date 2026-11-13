@@ -1,3 +1,4 @@
+import {canonicalHash} from '../../apps/portal-web/src/portal-route.js';
 import {openCartListener} from './storefront-cart-fixture.js';
 import {setupStorefrontOrderStore,seedStorefrontOrder} from './storefront-order-fixture.js';
 import {setupE2ePayment} from './hosted-payment-fixture.js';
@@ -83,7 +84,7 @@ test('HO-UI02 committed unreadable submit retains exact tuple and guards; fresh 
   try {
     await surface(page).getByRole('button', {name: '確認預留 30 分鐘', exact: true}).click();
     original = await committed.promise;
-    const intentHash = `#reservations/${s.slug}/intent/${original.client_order_id}`;
+    const intentHash = canonicalHash(`#reservations/${s.slug}/intent/${original.client_order_id}`);
     await expect(page).toHaveURL(new RegExp(intentHash + '$'));
     await guardAttempts(page, intentHash);
     release.resolve();
@@ -127,7 +128,7 @@ test('HO-UI02 committed unreadable submit retains exact tuple and guards; fresh 
   try {
     page.once('dialog', dialog => dialog.accept());
     await surface(page).getByRole('button', {name: '取消預留', exact: true}).click(); await cancelled.promise;
-    const orderHash = `#reservations/order/${original.order_id}`; await guardAttempts(page, orderHash);
+    const orderHash = canonicalHash(`#reservations/order/${original.order_id}`); await guardAttempts(page, orderHash);
     releaseCancel.resolve(); await expect(surface(page).getByRole('button', {name: '重試原操作'})).toBeEnabled();
     await guardAttempts(page, orderHash);
     // A canonical old own GET also cannot clear the unknown cancel tuple.
@@ -259,8 +260,9 @@ test('checkout orders region loads, empties, retries and pages above the separat
     await buyerLogin(page,store.buyer.email,'#reservations',listener.origin);
     const orders=page.getByRole('region',{name:'訂單',exact:true}),legacy=page.getByRole('region',{name:'預留紀錄',exact:true});
     await expect(orders).toContainText('正在讀取訂單…');
-    await expect(page.getByRole('heading',{name:'我的訂單',exact:true})).toHaveCount(1);
-    await expect(page.getByRole('heading',{name:'我的訂單',exact:true,level:1})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'我的',exact:true,level:1})).toBeVisible();
+    await expect(page.getByLabel('我的檢視',{exact:true})).toHaveValue('#me/orders');
+    await expect(page.getByRole('heading',{name:'我的訂單',exact:true})).toHaveCount(0);
     await expect(orders.getByRole('heading',{name:'訂單',exact:true,level:2})).toBeVisible();
     const reservationsHeading=page.getByRole('heading',{name:'預留紀錄',exact:true,level:2});
     await expect(reservationsHeading).toBeVisible();
@@ -309,7 +311,9 @@ test('checkout orders region loads, empties, retries and pages above the separat
         await expect(oldEmpty.getByRole('button',{name:'重新整理／第一頁',exact:true})).toBeEnabled();
         expect(await oldEmpty.locator('..').evaluate(element=>element.outerHTML)).toBe(expectedEmptyOff);
         // Screenshots may leave an empty inline caret style; take them after strict DOM comparisons.
-        await expect(emptyPage.getByRole('heading',{name:'我的訂單',exact:true})).toHaveCount(1);
+        await expect(emptyPage.getByRole('heading',{name:'我的',exact:true,level:1})).toBeVisible();
+        await expect(emptyPage.getByLabel('我的檢視',{exact:true})).toHaveValue('#me/orders');
+        await expect(emptyPage.getByRole('heading',{name:'我的訂單',exact:true})).toHaveCount(0);
         const heading=emptyPage.getByRole('heading',{name:'預留紀錄',exact:true,level:2});
         expect(await heading.evaluate(element=>element.nextElementSibling?.getAttribute('role'))).toBe('note');
         for(const width of [390,768,1440]){

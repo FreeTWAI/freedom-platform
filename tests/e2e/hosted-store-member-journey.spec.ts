@@ -15,7 +15,7 @@ async function register(page: Page, nickname: string) {
   await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
   await page.getByRole('button', {name: '建立帳號，先逛工坊', exact: true}).click();
   await quickJoin(page, guild);
-  await expect(page.getByRole('heading', {name: '會員首頁', level: 1})).toBeVisible();
+  await expect(page.getByRole('heading', {name: '動態', level: 1})).toBeVisible();
   return email;
 }
 async function login(page: Page, email: string) {
@@ -58,7 +58,7 @@ test('registered commerce intern opens a store, publishes a template and returns
     await flow.getByRole('button', {name: '產生啟動方案', exact: true}).click();
     await flow.getByRole('button', {name: '確認啟動', exact: true}).click();
     await flow.getByRole('button', {name: '設定我的商店', exact: true}).click();
-    await expect(page).toHaveURL(/#stores\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/#guilds\/guild_commerce_sales\/tools\/store\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
     const storeHash = new URL(page.url()).hash, slug = 'member-' + randomUUID().slice(0, 8);
     const setup = page.getByRole('form', {name: '建立商店', exact: true});
     await setup.getByLabel('商店名稱', {exact: true}).fill('新會員選物店');

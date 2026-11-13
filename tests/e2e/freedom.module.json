@@ -34,6 +34,7 @@
     "scripts/run-e2e.test.mjs",
     "tests/e2e/fixtures.ts",
     "tests/e2e/navigation.ts",
+    "tests/e2e/isolated-schema.ts",
     "tests/e2e/quick-join.ts",
     "tests/e2e/guild-member-tiers.spec.ts",
     "scripts/ci/pinned-playwright.config.mjs",
@@ -58,6 +59,7 @@
   "public_exports": [
     "tests/e2e/fixtures.ts",
     "tests/e2e/navigation.ts",
+    "tests/e2e/isolated-schema.ts",
     "tests/e2e/quick-join.ts"
   ],
   "surfaces": [],
