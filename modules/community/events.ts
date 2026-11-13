@@ -109,7 +109,7 @@ async function bulletin(q:PoolClient,row:any,kind:'submitted'|'approved'|'reject
     :kind==='approved'?`${actorName} 核准了 ${organizerName} 的${scope}「${row.title}」。`
     :`${actorName} 未核准 ${organizerName} 的${scope}「${row.title}」。`;
   await q.query(`INSERT INTO community_event_bulletins(bulletin_id,event_id,community_id,kind,actor_name,message)
-    VALUES($1,$2,$3,$4,$5,$6)`,[randomUUID(),row.event_id,row.community_id,kind==='published'?'approved':kind,actorName,message]);
+    VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (event_id,kind) DO NOTHING`,[randomUUID(),row.event_id,row.community_id,kind==='published'?'approved':kind,actorName,message]);
 }
 
 export async function listEventBulletins(db:Pool|PoolClient,actor:Actor){

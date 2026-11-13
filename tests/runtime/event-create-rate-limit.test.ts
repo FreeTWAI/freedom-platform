@@ -55,7 +55,7 @@ test('new event submissions are capped per member; rejection has no effects and 
   assert.equal(first.status, 201);
   for (let i = 1; i < 5; i++) assert.equal((await create()).status, 201);
   const before = await effects();
-  assert.deepEqual(before, { events: 5, bulletins: 0, notifications: 0, receipts: 5 });
+  assert.deepEqual(before, { events: 5, bulletins: 5, notifications: 0, receipts: 5 });
   const denied = await create();
   assert.equal(denied.status, 429); assert.equal(denied.data.code, 'auth_rate_limited');
   assert.deepEqual(await effects(), before);
@@ -72,7 +72,7 @@ test('concurrent last-slot submissions cannot exceed the member budget', async (
   for (let i = 0; i < 4; i++) assert.equal((await create()).status, 201);
   const results = await Promise.all([create(), create()]);
   assert.deepEqual(results.map(r => r.status).sort(), [201, 429]);
-  assert.deepEqual(await effects(), { events: 5, bulletins: 0, notifications: 0, receipts: 5 });
+  assert.deepEqual(await effects(), { events: 5, bulletins: 5, notifications: 0, receipts: 5 });
 });
 
 test('a failed command rolls back quota consumption along with events and notifications', async () => {

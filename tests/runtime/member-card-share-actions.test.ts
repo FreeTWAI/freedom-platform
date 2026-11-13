@@ -91,7 +91,7 @@ function compile(relative:string):any{
  if(name.startsWith('.')){
   const resolved=path.resolve(path.dirname(file),name);const target=[resolved,resolved+'.ts',resolved+'.tsx'].find(existsSync);assert(target,`missing dependency ${name}`);return compile(path.relative(base,target));
  }
- if(name==='qrcode')return require(name);
+ if(name==='qrcode'||name==='react-dom')return require(name);
  throw Error('Unexpected dependency: '+name);
  }});modules.set(file,module.exports);return module.exports;
 }
@@ -111,9 +111,9 @@ function fixture(t:TestContext){
  const render=(next=activeClient,nextKey=key)=>{activeClient=next;key=nextKey;flush(()=>root.render(React.createElement(MemberShare,{client:activeClient,key})));};
  const unmount=()=>{if(mounted){flush(()=>root.unmount());document.body.removeChild(container);mounted=false;}};t.after(()=>{unmount();scheduled.clear();effects.copies=[];effects.shares=[];});
  render();
- const all=(f:(n:HostNode)=>boolean)=>descendants(container).filter(f),find=(f:(n:HostNode)=>boolean)=>all(f)[0];
+ const all=(f:(n:HostNode)=>boolean)=>descendants(document.body).filter(f),find=(f:(n:HostNode)=>boolean)=>all(f)[0];
  const button=(text:string)=>find(n=>n.nodeName==='BUTTON'&&n.textContent===text)!;
- const assertReachable=(node:HostNode)=>{assert(node,'node exists');assert(container.contains(node),'node is in current rendered tree');assert(!props(node).disabled,'node is enabled');for(let n:HostNode|null=node;n;n=n.parentNode){assert(!props(n)?.hidden,'node ancestor is not hidden');if(n.nodeName==='DIALOG')assert(n.open,'dialog is open');}const modal=find(n=>n.nodeName==='DIALOG'&&n.open);if(modal)assert(modal.contains(node),'cannot interact behind modal');};
+ const assertReachable=(node:HostNode)=>{assert(node,'node exists');assert(document.body.contains(node),'node is in current rendered tree (the share dialog is portaled to body)');assert(!props(node).disabled,'node is enabled');for(let n:HostNode|null=node;n;n=n.parentNode){assert(!props(n)?.hidden,'node ancestor is not hidden');if(n.nodeName==='DIALOG')assert(n.open,'dialog is open');}const modal=find(n=>n.nodeName==='DIALOG'&&n.open);if(modal)assert(modal.contains(node),'cannot interact behind modal');};
  const click=(node:HostNode)=>{assertReachable(node);assert(['BUTTON','A'].includes(node.nodeName));let prevented=false;flush(()=>props(node).onClick?.({preventDefault(){prevented=true;}}));return prevented;};
  const input=()=>find(n=>n.nodeName==='INPUT'&&n.getAttribute('placeholder')==='例如：做開源的人')!;
  const headline=(value:string)=>{const node=input();assertReachable(node);flush(()=>props(node).onChange({target:{value}}));};
@@ -198,5 +198,5 @@ for(const flags of [{pending:true,blocked:false},{pending:false,blocked:true},{p
  flush(()=>root.render(React.createElement(MemberCardShareActions,{client,target:ID,title:'名片',url:'https://fixture.invalid/member-cards/'+'a'.repeat(43),...flags})));
  const button=descendants(container).find(n=>n.nodeName==='BUTTON'&&n.textContent==='分享名片')!;assert(button);
  const inactive=flags.pending||flags.blocked;assert.equal(!!props(button).disabled,inactive);
- if(inactive){assert.equal(props(button).onClick,undefined);assert.equal(descendants(container).some(n=>n.nodeName==='DIALOG'),false);assert.equal(writes.length,0);}else{assert.equal(props(button).disabled,undefined);flush(()=>props(button).onClick());assert.equal(writes.length,1);assert.equal(writes[0][0],'/promotion/links');}
+ if(inactive){assert.equal(props(button).onClick,undefined);assert.equal(descendants(document.body).some(n=>n.nodeName==='DIALOG'),false);assert.equal(writes.length,0);}else{assert.equal(props(button).disabled,undefined);flush(()=>props(button).onClick());assert.equal(writes.length,1);assert.equal(writes[0][0],'/promotion/links');}
 });

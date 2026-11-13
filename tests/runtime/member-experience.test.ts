@@ -111,6 +111,8 @@ test('member event publishing, editing, RSVP capacity, cancellation and idempote
   assert.deepEqual((await request('/events',owner,body,undefined,key)).data,created.data);
   // Exercise the retained pending queue using an explicit pre-release fixture.
   await pool.query("UPDATE community_events SET state='pending' WHERE event_id=$1",[created.data.event_id]);
+  // A pre-release pending event had no publication bulletin yet.
+  await pool.query("DELETE FROM community_event_bulletins WHERE event_id=$1",[created.data.event_id]);
   const id=created.data.event_id;
   assert.equal((await request(`/events/${id}/update`,first,{...body,title:'冒名修改'},1)).status,403);
   assert.equal((await request(`/events/${id}/update`,owner,{...body,title:'更新活動'},1)).status,200);
