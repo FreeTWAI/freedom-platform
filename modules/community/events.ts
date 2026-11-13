@@ -29,7 +29,7 @@ import {eventBannerMemberCommand,eventVideoMemberCommand} from '../../packages/s
 import {readDomainMedia,type DomainMediaSnapshot} from '../../packages/media-migration/domain-bridge.js';
 import {snapshotBoundedBytes,type ObjectStore,AssetStorageError} from '../../packages/asset-storage/index.js';
 
-const details = z.object({
+export const details = z.object({
   title:text(120), description:text(3000), starts_at:isoTime, ends_at:isoTime,
   help_need:text(500).nullable().optional(),
   prize_details:eventPrizeDetailsSchema.optional(),
@@ -178,6 +178,7 @@ export async function listEvents(db:Pool|PoolClient,actor:Actor) {
 }
 
 const shareCode=z.string().regex(/^[A-Za-z0-9_-]{16,32}$/);
+export const eventRsvpInput=z.object({going:z.boolean(),referral_code:shareCode.nullable().optional()}).strict();
 async function referralOwner(q:Pick<PoolClient,'query'>,eventId:string,raw:string|null){
   if(raw===null)return null;
   const code=shareCode.parse(raw);
@@ -504,7 +505,7 @@ export async function refuseInternGuildExchange(q:PoolClient,actor:Actor,row:{ev
 }
 
 const eventSourceUrl=z.string().trim().max(2048).refine(v=>normalizeShareUrl(v).ok,'請提供安全的 HTTPS 網址。').transform(v=>{const n=normalizeShareUrl(v);return n.ok?n.url:v;});
-const eventSource=z.object({source_url:eventSourceUrl.nullable().default(null),source_organizer:z.string().trim().max(160).nullable().default(null),source_cover_url:eventSourceUrl.nullable().default(null),registration_mode:z.enum(['platform','external']).default('platform'),external_registration_url:eventSourceUrl.nullable().default(null)});
+export const eventSource=z.object({source_url:eventSourceUrl.nullable().default(null),source_organizer:z.string().trim().max(160).nullable().default(null),source_cover_url:eventSourceUrl.nullable().default(null),registration_mode:z.enum(['platform','external']).default('platform'),external_registration_url:eventSourceUrl.nullable().default(null)});
 export function parseNewEvent(raw:unknown) {
   const input=z.object({title:text(120),starts_at:isoTime,location:text(300)}).passthrough().parse(raw);
   const guild=typeof input.guild_key==='string'&&input.guild_key?input.guild_key:null;
@@ -658,7 +659,7 @@ export async function reviewEventAsAdmin(pool:Pool,input:AdminCommand,id:string)
 }
 
 export async function setRsvp(pool:Pool,input:Command,id:string,participationEnabled=false) {
-  const body=z.object({going:z.boolean(),referral_code:shareCode.nullable().optional()}).strict().parse(input.body);
+  const body=eventRsvpInput.parse(input.body);
   return command(pool,input,async q=>{
     await scopedEvent(q,input.actor,id,Boolean(input.actor.agent));
     // Receipt replay must not restore withdrawn or guild-review-only content.

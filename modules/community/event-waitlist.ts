@@ -14,7 +14,7 @@ import {cancelEventReminders,reconcileEventReminders} from './event-reminders.js
 type Query=Pool|PoolClient;
 export type EventParticipationIdentity={member_ref:string;guest_email?:never}|{guest_email:string;member_ref?:never};
 const referral=z.string().regex(/^[A-Za-z0-9_-]{16,32}$/).nullable().optional();
-const actionInput=z.object({action:z.enum(['join','leave','accept','decline']),referral_code:referral}).strict();
+export const actionInput=z.object({action:z.enum(['join','leave','accept','decline']),referral_code:referral}).strict();
 const guestInput=z.object({action:z.enum(['join','leave','accept','decline','cancel','register']),referral_code:referral,expected_version:z.union([z.string(),z.number().int().positive().refine(Number.isSafeInteger)])}).strict();
 const policyInput=z.object({waitlist_enabled:z.boolean(),response_window_minutes:z.number().int().positive().refine(Number.isSafeInteger).nullable()}).strict().refine(b=>!b.waitlist_enabled||b.response_window_minutes!==null,'請明確設定候補回覆分鐘數。');
 const scheduleInput=z.object({starts_at:isoTime,ends_at:isoTime,capacity:z.number().int().min(1).max(500).nullable()}).strict().refine(b=>Date.parse(b.ends_at)>Date.parse(b.starts_at),'結束時間须晚於開始時間。');

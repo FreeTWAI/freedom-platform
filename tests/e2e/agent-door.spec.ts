@@ -4,8 +4,9 @@ import {openFeatureSearch} from './navigation.js';
 import {e2eOrigin} from '../../packages/testing/e2e-origin.js';
 // The ephemeral credential must not be captured in Playwright traces/screenshots.
 test.use({trace:'off',screenshot:'off'});
-test('member creates one token in the portal; their agent registers and reads its own change feed',async({page,e2eAuthPool},testInfo)=>{
+test('member creates one token in the portal; their agent registers and reads its own change feed',async({page,context,e2eAuthPool},testInfo)=>{
  const id=randomUUID(),origin=e2eOrigin();
+ await context.grantPermissions(['clipboard-read','clipboard-write']);
  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
  SELECT $1,community_id,user_id,'Agent 報名測試','合成活動',now()+interval '1 day',now()+interval '25 hours','online','線上','published','open','other' FROM users WHERE email='maker@local.test'`,[id]);
  await page.goto('/');
@@ -23,7 +24,17 @@ test('member creates one token in the portal; their agent registers and reads it
  const text=await block.inputValue(),match=/fw_agent_[A-Za-z0-9_-]{43}/.exec(text);
  expect(Boolean(match),'one-time block contains the newly issued credential').toBe(true);
  const token=match![0];
- await panel.getByRole('button',{name:'已保存',exact:true}).click();await expect(block).toHaveCount(0);
+ await panel.getByRole('button',{name:'複製連線設定',exact:true}).click();await expect(block).toHaveCount(0);
+ const firstSettings=JSON.parse(await page.evaluate(()=>navigator.clipboard.readText())).mcpServers['freedom-workshop'];
+ expect(firstSettings.url).toBe(origin+'/api/v1/mcp');
+ expect(firstSettings.headers.Authorization==='Bearer '+token,'first copy includes only the just-created token').toBe(true);
+ const connected=await fetch(firstSettings.url,{method:'POST',headers:{...firstSettings.headers,'Content-Type':'application/json',Accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'synthetic-browser-client',version:'1'}}})});
+ expect(connected.status).toBe(200);
+ expect((await connected.json() as any).result.protocolVersion).toBe('2025-11-25');
+ await panel.getByRole('button',{name:'複製連線設定',exact:true}).click();
+ const laterSettings=await page.evaluate(()=>navigator.clipboard.readText());
+ expect(/fw_agent_[A-Za-z0-9_-]{43}/.test(laterSettings),'later copy must not contain a token').toBe(false);
+ expect(JSON.parse(laterSettings).mcpServers['freedom-workshop']).toEqual({url:origin+'/api/v1/mcp',headers:{Authorization:'Bearer ${FREEDOM_AGENT_TOKEN}'}});
  const registration=await fetch(`${origin}/api/v1/events/${id}/rsvp`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify({going:true})});
  expect(registration.status).toBe(200);
  const event=await registration.json() as {my_rsvp:string};expect(event.my_rsvp).toBe('going');
@@ -48,6 +59,8 @@ test('member creates one token in the portal; their agent registers and reads it
  await panel.screenshot({path:testInfo.outputPath('agent-tokens-390.png')});
  await page.reload();await expect(page.getByLabel('自動化檢視')).toHaveValue('#automation/agent');
  await expect(page.getByLabel('交給 Agent（僅此一次）')).toHaveCount(0);
+ await panel.getByRole('button',{name:'複製連線設定',exact:true}).click();
+ expect(/fw_agent_[A-Za-z0-9_-]{43}/.test(await page.evaluate(()=>navigator.clipboard.readText())),'reload never restores a token').toBe(false);
  await page.getByRole('region',{name:'Agent 連線'}).locator('summary').filter({hasText:'我的 Agent'}).click();
  await page.getByRole('button',{name:'撤銷',exact:true}).click();
  await expect(page.getByRole('region',{name:'Agent 連線'}).locator('summary').filter({hasText:'我的 Agent'})).toContainText('已撤銷');
