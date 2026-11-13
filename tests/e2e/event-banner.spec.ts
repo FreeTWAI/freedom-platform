@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import {test, expect, type Page} from './fixtures.js';
-import {navigate,openEventSettings} from './navigation.js';
+import {navigate,openEventOptions} from './navigation.js';
 
 async function createDraft(page: Page) {
   await page.goto('/');
@@ -12,7 +12,7 @@ async function createDraft(page: Page) {
   const form = page.locator('form.experience-editor');
   const title = `自動處理海報 ${Date.now()}`;
   await form.getByLabel('活動名稱').fill(title);
-  await openEventSettings(page);
+  await openEventOptions(page);
   await form.getByLabel('活動說明').fill('保留活動說明與原始海報，不必自己壓縮。');
   await form.getByLabel('地點',{exact:true}).fill('Discord 讀書會場地');
   await form.getByText('加上海報或影片（選填）',{exact:true}).click();

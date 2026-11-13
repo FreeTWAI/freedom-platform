@@ -220,6 +220,7 @@ export async function openEventOptions(page: Page) {
   const options=page.locator('form.experience-editor details').filter({has:page.getByText('選填設定',{exact:true}).or(page.getByText('更多設定：活動類型、人數、公會與參與範圍',{exact:true}))});
   await expect(options).toHaveCount(1);
   if(!await options.evaluate(element=>(element as HTMLDetailsElement).open))await options.locator(':scope > summary').click();
+  await expect(options).toHaveJSProperty('open',true);
 }
 
 /** Reconstruct a pre-revamp pending event for the retained draft-editing tests.
@@ -267,12 +268,4 @@ export function eventAppPath(path:string){
   const url=new URL(path,'https://example.test');
   url.searchParams.set('app','1');
   return url.pathname+url.search+url.hash;
-}
-
-/** Reveal the optional event fields through the current create form disclosure. */
-export async function openEventSettings(page:Page){
- const options=page.locator('form.experience-editor details').filter({has:page.getByText('選填設定',{exact:true})});
- await expect(options).toBeVisible();
- if(!await options.evaluate(element=>(element as HTMLDetailsElement).open))await options.locator(':scope > summary').click();
- await expect(options).toHaveJSProperty('open',true);
 }
