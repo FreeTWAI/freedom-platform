@@ -95,6 +95,12 @@ function resourceBarrier(){let release!:()=>void;const promise=new Promise<void>
 const resources=(page:Page)=>page.locator('.entry-resources');
 async function openResources(page:Page){
   await page.goto('/');
+  const more=page.locator('details.login-more');
+  await expect(more.locator(':scope > summary')).toBeVisible();
+  if(!(await more.evaluate(element=>(element as HTMLDetailsElement).open))){
+    await more.locator(':scope > summary').click();
+  }
+  await expect(more).toHaveJSProperty('open',true);
   await resources(page).locator('summary').click();
   return resources(page).locator('.entry-resource-list');
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { navigate, signOut } from './navigation.js';
-import { test, expect, type Browser, type Page } from './fixtures.js';
+import { test, expect, type Browser, type Locator, type Page } from './fixtures.js';
 import { DEMO_COMMUNITY, DEMO_USERS } from '../../packages/testing/seed.js';
 
 const GUEST_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
@@ -89,6 +89,20 @@ function contrast(foreground: string, background: string) {
 
 function card(page: Page, title: string) {
   return page.locator('article.service-card').filter({ has: page.getByRole('heading', { name: title, level: 3 }) });
+}
+async function openServiceFilters(page: Page) {
+  const filters = page.locator('.service-filters-disclosure');
+  await expect(filters).toBeAttached();
+  if (!await filters.evaluate(element => (element as HTMLDetailsElement).open)) await filters.locator(':scope > summary').click();
+  await expect(filters).toHaveJSProperty('open', true);
+}
+async function openServiceMore(container: Locator) {
+  await expect(container).toBeVisible();
+  const more = container.locator('.service-more');
+  if (await more.count()) {
+    if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) await more.locator(':scope > summary').click();
+    await expect(more).toHaveJSProperty('open', true);
+  }
 }
 
 async function fillService(page: Page, title: string, category: string, summary: string, file = false) {
@@ -659,6 +673,7 @@ test('chips, covers and colours stay readable at phone, tablet and desktop', asy
   test.setTimeout(120_000);
   await login(page);
   await navigate(page, '社員服務');
+  await openServiceFilters(page);
   await page.getByRole('button', { name: '語言教學', exact: true }).click();
   await expect(page.getByRole('button', { name: '語言教學', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(card(page, PLACEHOLDER_TITLE)).toBeVisible();
@@ -755,6 +770,7 @@ test('the owner can pause, resume and delete a service', async ({ page, browser 
   test.setTimeout(120_000);
   await login(page);
   await navigate(page, '社員服務');
+  await openServiceMore(card(page, COVER_TITLE));
   await card(page, COVER_TITLE).getByRole('button', { name: '暫停', exact: true }).click();
   await expect(page.locator('li.service-mine-row').filter({ hasText: COVER_TITLE })).toContainText('暫停中');
   await expect(card(page, COVER_TITLE)).toHaveCount(0);
@@ -779,6 +795,7 @@ test('the owner can pause, resume and delete a service', async ({ page, browser 
   const restored = await page.request.get(servicePath);
   expect(restored.status()).toBe(200);
 
+  await openServiceMore(card(page, PLACEHOLDER_TITLE));
   await card(page, PLACEHOLDER_TITLE).getByRole('button', { name: '刪除', exact: true }).click();
   await card(page, PLACEHOLDER_TITLE).getByRole('button', { name: '確定刪除', exact: true }).click();
   await expect(page.getByText('服務已刪除。')).toBeVisible();
@@ -810,6 +827,7 @@ test('admin hide requires confirmation and cancelling never changes the service'
     const ownCard = card(page, titles[1]);
     const ownRow = page.locator('li.service-mine-row').filter({ hasText: titles[1] });
     for (const origin of [ownRow, ownCard]) {
+      await openServiceMore(origin);
       const trigger = origin.getByRole('button', { name: '隱藏', exact: true });
       await trigger.focus();
       await page.keyboard.press('Enter');
@@ -832,12 +850,14 @@ test('admin hide requires confirmation and cancelling never changes the service'
     await ownRow.getByRole('button', { name: '隱藏', exact: true }).press('Enter');
     await ownCard.getByRole('button', { name: '刪除', exact: true }).press('Enter');
     await expect(ownRow.getByRole('button', { name: '確定隱藏', exact: true })).toBeHidden();
+    await openServiceMore(card(page, titles[0]));
     await card(page, titles[0]).getByRole('button', { name: '隱藏', exact: true }).press('Enter');
     await expect(ownCard.getByRole('button', { name: '確定刪除', exact: true })).toBeHidden();
     await card(page, titles[0]).getByRole('button', { name: '取消', exact: true }).press('Enter');
     expect(writes).toEqual([]);
     for (const [index, id] of ids.entries()) {
       const target = card(page, titles[index]);
+      await openServiceMore(target);
       const trigger = target.getByRole('button', { name: '隱藏', exact: true });
       await trigger.focus();
       await page.keyboard.press('Enter');

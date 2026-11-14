@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {test,expect,type Browser,type BrowserContext,type Page,type TestInfo} from './fixtures.js';
-import {openEventOptions,navigate} from './navigation.js';
+import {openEventOptions,navigate,openGuildCardMore} from './navigation.js';
 import {DEMO_COMMUNITY,DEMO_PASSWORD} from '../../packages/testing/seed.js';
 import {hashPassword} from '../../modules/identity-membership/service.js';
 
@@ -186,6 +186,7 @@ test('the guild master promotes an intern, appoints an expert, and sees the 3/3 
  await withFixture(e2eAuthPool,browser,baseURL!,'master',async(fixture,session)=>{
   await navigate(session.page,'職業公會');
   const card=session.page.getByRole('article',{name:fixture.guildName,exact:true});
+  await openGuildCardMore(card);
   await card.getByRole('button',{name:'查看成員',exact:true}).click();
   const dialog=session.page.getByRole('dialog');
   await expect(dialog.locator('.guild-expert-count')).toHaveText('專家 2/3');
