@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import type {PortalClient} from '../api';
 import {useLanguage} from '../language';
 import {useLocalAction} from '../useLocalAction';
-import {shareQr} from './share-qr';
+import {shareQrUrlAllowed} from './share-qr-url';
 import '../modules/SkillDiscovery.css';
 
 export type PromotionKind =
@@ -63,6 +63,10 @@ export function useShareControls({
   disabled?: boolean;
 }) {
   const [showQr, setShowQr] = useState(false);
+  const [qrModule, setQrModule] = useState<{
+    shareQr: (url: string, origin: string) => {url: string; size: number; path: string} | null;
+  } | null>(null);
+  const [qrError, setQrError] = useState(false);
   const [selectedIntro, setSelectedIntro] = useState<number | null>(null);
   const [status, setStatus] = useState('');
   const [manual, setManual] = useState(false);
@@ -73,6 +77,7 @@ export function useShareControls({
   useEffect(() => {
     generation.current++;
     setShowQr(false);
+    setQrError(false);
     setSelectedIntro(null);
     setStatus('');
     setManual(false);
@@ -105,7 +110,36 @@ export function useShareControls({
     ? introductions[selectedIntro]
     : text;
   const copyText = effectiveText ? `${effectiveText}\n${url}` : url;
-  const qr = useMemo(() => (url ? shareQr(url, origin) : null), [url, origin]);
+  const qrAllowed = useMemo(() => Boolean(url && shareQrUrlAllowed(url, origin)), [url, origin]);
+  const qr = useMemo(() => (qrModule && url ? qrModule.shareQr(url, origin) : null), [qrModule, url, origin]);
+  const qrLoading = showQr && qrAllowed && !qrModule && !qrError;
+  const qrFailed = showQr && qrAllowed && (qrError || (qrModule !== null && !qr));
+
+  useEffect(() => {
+    if (!showQr) {
+      setQrError(false);
+      return;
+    }
+    if (!open || !qrAllowed || qrModule) return;
+    let cancelled = false;
+    setQrError(false);
+    import('./share-qr')
+      .then(mod => {
+        if (cancelled) return;
+        if (typeof mod?.shareQr !== 'function') {
+          setQrError(true);
+          return;
+        }
+        setQrModule({shareQr: mod.shareQr});
+      })
+      .catch(() => {
+        if (!cancelled) setQrError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, showQr, qrAllowed, qrModule]);
+
   const action = useLocalAction([title, url, effectiveText, open, resetKey]);
   const hasNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   const actionsDisabled = busy || disabled || !url || action.pending !== null;
@@ -184,6 +218,9 @@ export function useShareControls({
     disabled,
     copyText,
     qr,
+    qrAllowed,
+    qrLoading,
+    qrFailed,
     hasNativeShare,
     actionsDisabled,
     pending: action.pending,
@@ -226,6 +263,9 @@ export function SharePanel({
     disabled,
     copyText,
     qr,
+    qrAllowed,
+    qrLoading,
+    qrFailed,
     hasNativeShare,
     actionsDisabled,
     pending,
@@ -260,13 +300,15 @@ export function SharePanel({
           {pending === 'copy' ? t('action.copying') : '複製連結'}
         </button>
       )}
-      {qr && (
+      {qrAllowed && (
         <button type="button" className="btn btn-ghost" aria-expanded={showQr} disabled={busy || disabled} onClick={() => setShowQr(v => !v)}>
           QR 碼
         </button>
       )}
     </div>
-    {showQr && qr && (
+    {qrLoading && <p role="status">產生 QR 中…</p>}
+    {qrFailed && <p role="status">QR 暫時無法產生。</p>}
+    {showQr && qrAllowed && qr && (
       <div className="share-qr-panel">
         <svg role="img" aria-label="分享連結的 QR Code" xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${qr.size} ${qr.size}`} width={qr.size * 4} height={qr.size * 4} shapeRendering="crispEdges">
           <rect width={qr.size} height={qr.size} fill="#fff" />

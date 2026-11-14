@@ -2,7 +2,7 @@ import {createTaskRead} from './task-board-loading';
 import type {GuildSummary} from './Onboarding';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import {requireItems,type PortalClient} from '../api';
-import { BrandPoster } from './Community';
+import { BrandPoster } from './CommunityBrand';
 import {EventFields,blankEvent,eventPayload,type EventDraft} from './EventsPanel';
 import {PreviewProfileMenu} from './PreviewProfileMenu';
 import {announceInboxChange} from './member-inbox';

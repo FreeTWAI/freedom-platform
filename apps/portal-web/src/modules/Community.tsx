@@ -1,4 +1,3 @@
-import {communityLinks} from '../../../../modules/community-hub/index';
 import {matchesSkillBookUse,skillBookUses} from '../../../../modules/community/discovery-portal/skill-book-uses';
 import { useEffect, useRef, useState } from 'react';
 import type { PortalClient } from '../api';
@@ -8,16 +7,9 @@ import { distinctOriginalRepoCount } from './SkillBookCover';
 import {SkillDiscoveryFilters,type SkillDiscoveryView} from './SkillDiscovery';
 import {useSkillDiscovery,type SkillDiscoveryBook} from './skill-discovery-client';
 import {useLanguage} from '../language';
+import { BrandPoster, CommunityLinks } from './CommunityBrand';
 
 export type SiteConfig = { private_ai_enabled?: boolean; community_certification_enabled?:boolean;social_achievements_enabled?:boolean; commerce_drop_ship_enabled?:boolean; commerce_self_ship_enabled?:boolean;commerce_checkout_enabled?: boolean; ar_enabled?:boolean; short_videos_enabled?:boolean; registration_enabled: boolean; password_recovery_enabled?: boolean; demo_accounts_enabled: boolean; public_mode: boolean; guild_launchpad_enabled?: boolean; supplier_console_enabled?: boolean; commerce_console_enabled?: boolean; distribution_photos_enabled?: boolean; supply_offer_photos_enabled?: boolean; store_appearance_enabled?: boolean; store_policies_enabled?: boolean; store_gallery_enabled?: boolean; store_variants_enabled?: boolean; store_categories_enabled?: boolean; supply_material_media_enabled?: boolean; supply_material_uploads_enabled?: boolean; hosted_store_photos_enabled?:boolean; hosted_store_photo_uploads_enabled?:boolean; community_discovery_enabled?: boolean; message_images_enabled?:boolean; member_blocking_enabled: boolean; member_reporting_enabled?: boolean; unified_sharing_enabled?: boolean; community_search_enabled?: boolean; community_relations_enabled?: boolean; personal_content_enabled?: boolean; notification_preferences_enabled?: boolean; first_participation_enabled?: boolean; squad_outcomes_enabled?: boolean; event_outcomes_enabled?: boolean; event_participation_enabled?: boolean; skill_book_star_gate_enabled?: boolean };
-export function BrandPoster({ compact = false }: { compact?: boolean }) {
-  return <div className={`brand-poster brand-poster-original${compact ? ' brand-poster-compact' : ''}`}><img src="/brand/freedom-workshop.webp" alt="自由工坊 — 自由創作，一起實現" width="1280" height="720" fetchPriority={compact ? 'auto' : 'high'}/></div>;
-}
-export {communityLinks};
-export function CommunityLinks() {
-  const {t}=useLanguage();
-  return <footer className="community-footer"><div><strong>自由工坊</strong><p>{t('community.tagline')}</p></div><nav aria-label={t('community.links')} data-guide-anchor="community:links">{communityLinks.map(link => <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">{link.label} <span aria-hidden="true">↗</span></a>)}</nav></footer>;
-}
 
 export type CatalogBook = IntroBook & { id: string; fork_url: string | null; license_status: string };
 type CommunityCatalog = { name: string; tagline: string; metrics: { label: string; value: number; as_of: string; note: string }[]; featured_projects: CatalogBook[]; skill_books: CatalogBook[]; project_links?: { title: string; url: string; description: string }[] };

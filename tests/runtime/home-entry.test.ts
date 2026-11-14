@@ -263,7 +263,7 @@ test('member home link uses the transparent compact logo without replacing the p
   assert.match(source, /<img className="brand-home-logo" src="\/brand\/freedom-workshop-compact-transparent\.png" alt="自由工坊" width="396" height="132"\/>/);
   const logo=readFileSync(new URL('../../apps/portal-web/public/brand/freedom-workshop-compact-transparent.png',import.meta.url));
   assert.equal(createHash('sha256').update(logo).digest('hex'),'f33136a09613c25752b1a24ad8aa9ef76dde93f31425bb6c5e201fe6d51aa10e');
-  const poster=readFileSync(new URL('../../apps/portal-web/src/modules/Community.tsx',import.meta.url),'utf8');
+  const poster=readFileSync(new URL('../../apps/portal-web/src/modules/CommunityBrand.tsx',import.meta.url),'utf8');
   assert.match(poster,/src="\/brand\/freedom-workshop\.webp"/);
   const css=readFileSync(new URL('../../apps/portal-web/src/SocialLayout.css',import.meta.url),'utf8');
   assert.match(css,/\.brand-home-logo \{ display:block; width:132px; height:44px; flex:none; object-fit:contain; \}/);
@@ -307,7 +307,7 @@ test('login and registration use the existing transparent wordmark without chang
   const login=source.slice(start,end<0?undefined:end);
   assert.equal((login.match(/<LoginEntryBrand\/>/g)??[]).length,3,'standard, discovery and callback login layouts');
   assert.doesNotMatch(login,/<BrandPoster/);
-  const poster=readFileSync(new URL('../../apps/portal-web/src/modules/Community.tsx',import.meta.url),'utf8');
+  const poster=readFileSync(new URL('../../apps/portal-web/src/modules/CommunityBrand.tsx',import.meta.url),'utf8');
   assert.match(poster,/src="\/brand\/freedom-workshop\.webp"/);
   const css=readFileSync(new URL('../../apps/portal-web/src/styles.css',import.meta.url),'utf8');
   assert.match(css,/\.login-entry-logo\s*\{[^}]*aspect-ratio: 3 \/ 1;[^}]*object-fit: contain;/);

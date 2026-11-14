@@ -4,6 +4,14 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {expect,type Page} from './fixtures.js';
 
+export async function openWorkForm(page:Page) {
+  const title=page.getByLabel('作品標題',{exact:true});
+  const trigger=page.locator('.work-sharing-entry').getByRole('button',{name:'發布作品',exact:true});
+  await expect(title.or(trigger)).toBeVisible();
+  if(!(await title.isVisible()))await trigger.click();
+  await expect(title).toBeVisible();
+}
+
 // Real React components, synthetic transport only. This fixture verifies client
 // session/remount behavior, not database authorization or real publication.
 export async function mountSharingFixture(page:Page, kind='probe') {
@@ -330,6 +338,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'authoritative gallery removal cannot resurrect the last publication receipt':async page=>{
     await mountSharingFixture(page,'showcase');
+    await openWorkForm(page);
     await page.getByLabel('作品標題',{exact:true}).fill('Withdrawn work');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Description');
     await page.getByLabel('我同意以社群可見方式分享這件作品').check();
@@ -466,7 +475,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await expect(page.getByRole('heading',{name:'Synthetic invitation',exact:true})).toBeVisible();expect(await fixture(page,f=>f.reads.filter((p:string)=>p==='/co-creation/projects').length)).toBeGreaterThanOrEqual(3);
   },
   'work draft consent pending and real receipt survive remount; unknown retry is exact':async page=>{
-    await mountSharingFixture(page,'showcase');await page.getByLabel('作品標題',{exact:true}).fill('Synthetic work');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');await page.getByLabel('我同意以社群可見方式分享這件作品').check();await remount(page);
+    await mountSharingFixture(page,'showcase');await openWorkForm(page);await page.getByLabel('作品標題',{exact:true}).fill('Synthetic work');await page.getByLabel('一句話介紹',{exact:true}).fill('Synthetic description');await page.getByLabel('我同意以社群可見方式分享這件作品').check();await remount(page);
     await expect(page.getByLabel('作品標題',{exact:true})).toHaveValue('Synthetic work');await expect(page.getByLabel('我同意以社群可見方式分享這件作品')).toBeChecked();await page.getByRole('button',{name:'發布作品',exact:true}).click();await remount(page);await expect(page.getByLabel('作品標題',{exact:true})).toBeDisabled();
     await fixture(page,f=>f.reject(0));await page.getByRole('button',{name:'發布作品',exact:true}).click();expect(await fixture(page,f=>JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]))).toBe(true);
     await fixture(page,f=>f.resolve(1,{...f.calls[0].body,showcase_id:'synthetic-work',owner_ref:f.owner,owner_name:'Synthetic owner',artifact_ref:'artifact:synthetic'}));await expect(page.getByRole('region',{name:'作品發布成功'})).toBeVisible();await page.getByRole('button',{name:'查看剛分享的作品',exact:true}).click();await expect(page.locator('#showcase-synthetic-work')).toBeFocused();

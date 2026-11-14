@@ -23,7 +23,8 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
   const [books,setBooks]=useState<CatalogBook[]|null>(null),[bookError,setBookError]=useState(false);
   const [items,setItems]=useState<Submission[]|null>(null),[itemError,setItemError]=useState(false);
   const searchInput=useRef<HTMLInputElement>(null);
-  const [retry,setRetry]=useState(0),[search,setSearch]=useState(''),[category,setCategory]=useState(''),[use,setUse]=useState(''),discovery=useSkillDiscovery();
+  const [retry,setRetry]=useState(0),[search,setSearch]=useState(''),[category,setCategory]=useState(''),[use,setUse]=useState(''),[limit,setLimit]=useState(20),discovery=useSkillDiscovery();
+  useEffect(()=>{setLimit(20);},[search,category,use]);
   useEffect(()=>{
     let active=true;setBookError(false);
     void loadCommunityCatalog(client).then(data=>{if(active)setBooks(data.skill_books);}).catch(()=>{if(active)setBookError(true);});
@@ -47,9 +48,10 @@ export function CommunitySkillBooks({client,revision=0,guildIds=[]}:{client:Port
     {loading?<p role="status">正在載入社群技能書…</p>:entries.length>0?<>
       <div className="skill-library-filters"><label className="field">搜尋社群技能書<input ref={searchInput} type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="例如：漫畫、角色、交易…"/></label><SkillBookPurposeFilters category={category} onCategory={setCategory} use={use} onUse={setUse} categories={categories}/>{(search||category||use)&&<button type="button" className="btn btn-ghost" onClick={()=>{setSearch('');setCategory('');setUse('');searchInput.current?.focus();}}>清除篩選</button>}</div>
       <p className="skill-library-count" role="status">顯示 {distinctOriginalRepoCount(shown.map(entry=>entry.kind==='submission'?{id:entry.item.submission_id,repository_url:entry.item.source.repository_url}:entry.book))} / {distinctOriginalRepoCount(entries.map(entry=>entry.kind==='submission'?{id:entry.item.submission_id,repository_url:entry.item.source.repository_url}:entry.book))} 個社群原作資源</p>
-      <div className="card-grid community-book-grid">{shown.map(entry=>entry.kind==='submission'
+      <div className="card-grid community-book-grid">{shown.slice(0,limit).map(entry=>entry.kind==='submission'
         ?<SubmissionBookCard key={`submission:${entry.item.submission_id}`} item={entry.item}/>
         :<SkillBookCard key={entry.book.id} book={entry.book} className="community-book" headingLevel={3} community/>)}</div>
+      {shown.length>limit&&<div className="actions"><button type="button" className="btn btn-secondary" onClick={()=>setLimit(count=>count+20)}>更多</button></div>}
       {!shown.length&&<p className="muted">沒有符合的社群技能書。試試另一個關鍵字或用途。</p>}
     </>:!bookError&&!itemError&&<p className="muted">目前還沒有社群技能書。</p>}
   </div>;

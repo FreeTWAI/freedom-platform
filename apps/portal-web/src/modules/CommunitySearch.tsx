@@ -1,12 +1,10 @@
 import {currentLegacyHash,canonicalHash} from '../portal-route';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { communitySearchKinds, communitySearchTopics, communitySearchKindLabels, communitySearchTopicLabels, communitySearchPageSchema, guildSearchPageSchema, type CommunitySearchPage, type GuildSearchPage } from '../../../../packages/shared/community-search';
 import { ApiError, type PortalClient } from '../api';
 import { CommunityRelationsProvider, CommunityRelations, CommunityBookmarkButton, CommunityAuthorFollowButton } from './CommunityRelations';
 import {createCommunitySearch, communityListHistoryForSession, type CommunityListHistory} from './community-search-controller';
-
-export type ExploreFeatureMatch = { id: string; label: string; select: () => void };
-export const ExploreFeatureSearchContext = createContext<((query: string) => ExploreFeatureMatch[]) | null>(null);
+import { ExploreFeatureSearchContext } from './explore-feature-search';
 
 type Kind = typeof communitySearchKinds[number];
 type Topic = typeof communitySearchTopics[number];
