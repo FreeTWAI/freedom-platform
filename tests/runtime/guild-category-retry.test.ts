@@ -184,21 +184,21 @@ test('GuildCard separates workspace navigation, introduction and optional member
   const tree=GuildCard({guild:{...guild,membership:active?{...guild.membership,state:'active'}:null,skill_books:[],purpose:'Synthetic',first_step:'Read',is_primary:false},client:{sessionGeneration:1},busy:false,onPrimary:()=>calls.push('primary'),onMembership:()=>calls.push('membership'),onSecondary:()=>calls.push('secondary'),launchpadEnabled:enabled,onLaunchpad:()=>calls.push('workspace')});
   const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
   const settings=elements.filter(n=>n.type==='details'&&n.props.className==='guild-membership-settings');
-  assert.equal(settings.length,active?1:0);
+  assert.equal(settings.length,1);
+  assert.equal(settings[0].props.open,undefined,'settings begin collapsed');
   if(active){
-   assert.equal(settings[0].props.open,undefined,'settings begin collapsed');
    const labels=nodes(settings[0]).filter(n=>n.type==='button').map(n=>text(n.props.children));
    assert.ok(labels.includes('設為主要公會'));assert.ok(labels.includes('退出Synthetic guild'));
    assert.ok(buttons.some(n=>text(n.props.children)==='查看公會介紹'));
   }else {
    const join=buttons.find(n=>text(n.props.children)==='加入Synthetic guild');
-   assert.match(join.props.className,/\bbtn-primary\b/);
-   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,1,'join is the only primary action before membership');
+   assert.match(join.props.className,/\bbtn-secondary\b/);
+   assert.equal(buttons.filter(n=>/\bbtn-primary\b/.test(n.props.className??'')).length,0,'unjoined card is secondary unless designated as primaryJoin');
   }
   const workspace=buttons.find(n=>text(n.props.children)===(active?'進入公會工作區':'預覽公會工作區'));
   assert.equal(Boolean(workspace),enabled);
   assert.deepEqual(calls,[],'rendering and discovery do not join or change preferences');
-  if(workspace){assert.match(workspace.props.className,active?/\bbtn-primary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
+  if(workspace){assert.match(workspace.props.className,active?/\bbtn-secondary\b/:/\bbtn-ghost\b/);workspace.props.onClick();assert.deepEqual(calls,['workspace']);}
  }
 });
 

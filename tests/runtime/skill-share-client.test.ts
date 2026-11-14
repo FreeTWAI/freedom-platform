@@ -407,6 +407,7 @@ for (const [file, signature, component, props] of [
       submissionSharePath: () => '/development/submissions/test', skillSharePath: () => '/development/skills/social-post',
       isSkillIllustrationUrl: () => false, relationshipLabels: {}, client: {csrfToken: 'test'}, sessionClient: {csrfToken: 'test'}, isStorefrontReading: () => false,
       ...Object.fromEntries(['SkillShare', 'SkillBookBadges', 'SkillBookCover', 'SkillBookSourceAccount', 'SkillBookStar', 'EventOutcomeBacklinks', 'DevelopmentEntry', 'CommunityBadge', 'GitHubSourceLinks', 'SkillInstall', 'AuthorClaimPanel', 'StorefrontBookUsage'].map(name => [name, name])),
+      HideExternalStarContext: { Provider: 'HideExternalStarContext.Provider' },
       require: () => ({jsx, jsxs: jsx}),
     });
     const render = () => {index = 0; return exports.component(props);};

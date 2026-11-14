@@ -4,6 +4,10 @@ const endpoint='/api/v1/community-search';
 const results=(page:Page)=>page.getByRole('region',{name:'社群內容搜尋結果',exact:true});
 const input=(page:Page)=>page.getByRole('searchbox',{name:'關鍵字',exact:true});
 const conditions=(page:Page)=>page.getByRole('region',{name:'社群內容搜尋條件',exact:true});
+async function openFilters(page:Page){
+  const filters=conditions(page).locator('details.explore-filters');
+  if(!await filters.evaluate(element=>(element as HTMLDetailsElement).open))await filters.locator(':scope > summary').click();
+}
 const resultPage=(title:string,next_cursor:string|null=null)=>({items:[{
   kind:'skill_book',id:'synthetic-search-book',title,summary:'合成搜尋摘要',path:'#skills',
   label:null,author_id:null,media_path:null,topics:[],
@@ -66,6 +70,7 @@ test('changing a filter starts immediately with the latest text and resets pagin
   await open(page,'q=old&cursor=synthetic-next');await expect(results(page)).toHaveAttribute('aria-busy','false');await pause(page);
   const baseline=requests.length;
   await input(page).fill('new');
+  await openFilters(page);
   await conditions(page).getByRole('checkbox',{name:'作品',exact:true}).check();
   await expect.poll(()=>requests.length).toBe(baseline+1);
   const query=new URLSearchParams(requests.at(-1));
@@ -85,6 +90,7 @@ test('paging focuses the results and browser Back restores query and checked fil
   await page.goBack();
   await expect(results(page).getByRole('link',{name:'第一頁結果',exact:true})).toBeVisible();
   await expect(input(page)).toHaveValue('hello');
+  await openFilters(page);
   await expect(conditions(page).getByRole('checkbox',{name:'技能書',exact:true})).toBeChecked();
   await expect(conditions(page).getByRole('checkbox',{name:'工具資源',exact:true})).toBeChecked();
   expect(new URLSearchParams(new URL(page.url()).hash.split('?')[1]).has('cursor')).toBe(false);
@@ -102,6 +108,7 @@ test('clear conditions resets filters and cursor, keeps the searchbox focused on
   await conditions(page).getByRole('button',{name:'清除搜尋條件',exact:true}).click();
   await expect(input(page)).toHaveValue('');await expect(input(page)).toBeFocused();
   await expect(results(page)).toHaveAttribute('aria-busy','false');
+  await openFilters(page);
   await expect(conditions(page).getByRole('checkbox',{name:'作品',exact:true})).not.toBeChecked();
   await expect(conditions(page).getByRole('checkbox',{name:'工具資源',exact:true})).not.toBeChecked();
   expect(new URL(page.url()).hash).toBe('#explore');expect(requests.at(-1)).toBe('');

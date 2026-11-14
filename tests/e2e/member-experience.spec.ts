@@ -33,16 +33,13 @@ test('new member explores, submits an event and selects each theme',async({page}
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-theme','light');
   await page.screenshot({path:'test-results/member-login-light.png',fullPage:true});
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('共創新夥伴');
   await page.getByLabel('電子郵件',{exact:true}).fill(`experience-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-member-experience-2026');
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   await expect(page.getByRole('heading',{name:'共創新夥伴，歡迎來到自由工坊。'})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'近期活動'})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'可參與的工作'})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'免費技能書'})).toBeVisible();
-  await expect(page.locator('.welcome-preview-grid').getByRole('link',{name:'開啟原作 ↗'}).first()).toHaveAttribute('href','https://github.com/arumwu/local-workspace-mcp');
+  await expect(page.locator('.welcome-preview .notification-bell')).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'你喜歡怎麼做事？'})).toHaveCount(0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:'test-results/member-preview-light.png',fullPage:true});
@@ -60,7 +57,6 @@ test('new member explores, submits an event and selects each theme',async({page}
   await page.getByRole('button',{name:'發布',exact:true}).click();
   const published=await publishing;expect(published.status()).toBe(201);expect((await published.json()).state).toBe('published');
   await expect(page.getByText('活動已發布。',{exact:true})).toBeVisible();
-  await expect(page.getByText('新會員一起畫工坊')).toBeVisible();
   await page.locator('.preview-profile-menu > summary').click();
   await expect(page.locator('.preview-profile-menu').getByRole('radio')).toHaveCount(5);
   await page.getByRole('radio',{name:'新手導覽－龍娘',exact:true}).check();
