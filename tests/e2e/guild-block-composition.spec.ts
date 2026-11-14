@@ -104,6 +104,7 @@ for (const sample of [
     await page.reload();
     await openGuildSection(page, '管理啟動台');
     await page.getByRole('button', {name: '啟用可組裝版面', exact: true}).click();
+    page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的修改，確定要離開嗎？'); void dialog.accept();});
     await openGuildSection(page, '我的工作');
     await page.getByRole('button', {name: '啟用手動工作', exact: true}).click();
     await page.locator('#my-work-title').fill('尚未保存的組裝測試草稿');

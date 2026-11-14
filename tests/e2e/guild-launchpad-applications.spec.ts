@@ -184,9 +184,13 @@ test('leader configuration cannot remove a committed pending tenant creation or 
   const ownsOnePair=async()=>expect((await e2eAuthPool.query(`SELECT t.tenant_id,w.workspace_id,w.is_default
     FROM tenants t JOIN principals p ON p.principal_id=t.created_by_principal_id
     JOIN workspaces w ON w.tenant_id=t.tenant_id WHERE p.user_ref=$1`,[userId])).rows).toEqual([{...results[0],is_default:true}]);
-  const preserved=async(message:string)=>{
+  const leaveDirtyEditor = async (section: string) => {
+    page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的修改，確定要離開嗎？'); void dialog.accept();});
+    await openGuildSection(page, section);
+  };
+  const preserved=async(message:string, dirty=false)=>{
     await openGuildSection(page, '管理啟動台');
-    await expect(enabled).toBeChecked(); await openGuildSection(page, '工具目錄'); await expect(input).toBeDisabled(); await expect(input).toHaveValue(name);
+    await expect(enabled).toBeChecked(); await (dirty ? leaveDirtyEditor('工具目錄') : openGuildSection(page, '工具目錄')); await expect(input).toBeDisabled(); await expect(input).toHaveValue(name);
     await expect(flow(page).locator('#launch-space-error')).toHaveText(message);
   };
   try {
@@ -204,20 +208,20 @@ test('leader configuration cannot remove a committed pending tenant creation or 
     await editor.getByLabel('公會使命補充').fill('保留的版面草稿');
     releaseConfig();
     await expect(page.getByRole('alert').filter({hasText:'最新配置尚未套用'})).toBeVisible();
-    await preserved('正在確認原操作，請等候完成後再離開。');
+    await preserved('正在確認原操作，請等候完成後再離開。', true);
     await openGuildSection(page, '管理啟動台');
     await expect(editor.getByLabel('公會使命補充')).toHaveValue('保留的版面草稿');
     releaseTenant();
-    const retry=flow(page).getByRole('button',{name:'重試',exact:true}); await openGuildSection(page, '工具目錄'); await expect(retry).toBeEnabled();
+    const retry=flow(page).getByRole('button',{name:'重試',exact:true}); await leaveDirtyEditor('工具目錄'); await expect(retry).toBeEnabled();
     await openGuildSection(page, '管理啟動台');
-    await enabled.click(); await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。');
+    await enabled.click(); await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。', true);
     await page.getByRole('button',{name:'重新載入最新版本',exact:true}).click();
     await expect(page.getByRole('alert').filter({hasText:'最新配置尚未套用'})).toBeVisible();
-    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。');
+    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。', true);
     await openGuildSection(page, '管理啟動台');
     await expect(editor.getByLabel('公會使命補充')).toHaveValue('保留的版面草稿');
     await editor.getByRole('button',{name:'上移應用',exact:true}).click();
-    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。');
+    await preserved('尚未確認原操作的結果，請按「重試」確認後再離開。', true);
     await ownsOnePair(); await capture(page,testInfo,'leader-config-unknown');
     await retry.click(); await expect(flow(page)).toContainText(`目前業務空間：${name}`);
     expect(attempts).toHaveLength(2); expect(attempts[0].key).toBeTruthy();
@@ -227,7 +231,7 @@ test('leader configuration cannot remove a committed pending tenant creation or 
     await page.getByRole('button',{name:'重新載入最新版本',exact:true}).click();
     await openGuildSection(page, '管理啟動台');
     await expect(enabled).not.toBeChecked(); await expect(cards(page)).toHaveCount(0);
-    await enabled.check(); await openGuildSection(page, '工具目錄'); await expect(manualCard(page)).toBeVisible();
+    await enabled.check(); await leaveDirtyEditor('工具目錄'); await expect(manualCard(page)).toBeVisible();
     await openGuildSection(page, '管理啟動台');
     await page.unroute(`**/api/v1/guilds/${GUILD}/launchpad-config/drafts`);
     await editor.getByLabel('公會使命補充').fill('確認後正常編輯');

@@ -397,6 +397,7 @@ test('a leader publishes recommendations and the member primary action opens the
     await editor.getByRole('button', {name: '加入推薦', exact: true}).click();
     await editor.getByRole('button', {name: `上移${displayName}`, exact: true}).click();
     await editor.getByRole('button', {name: `上移${displayName}`, exact: true}).click();
+    page.once('dialog', dialog => {expect(dialog.message()).toBe('有尚未儲存的修改，確定要離開嗎？'); void dialog.accept();});
     await openGuildSection(page, displayName);
     await expect(primary(page).getByRole('heading')).toHaveText(displayName);
     await openGuildSection(page, '工具目錄');
