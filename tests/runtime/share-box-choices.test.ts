@@ -110,6 +110,8 @@ function createHookHarness() {
   }
 
   const Fragment = Symbol('Fragment');
+  const Suspense = Symbol('Suspense');
+  const pendingSuspense = new Set<Promise<unknown>>();
   function createElement(type: unknown, props: Record<string, any> | null, ...children: unknown[]): VNode {
     const flat = children.length === 0 ? props?.children : children.length === 1 ? children[0] : children;
     return { type, props: { ...(props ?? {}), ...(flat !== undefined ? { children: flat } : {}) } };
@@ -117,9 +119,29 @@ function createHookHarness() {
   function jsx(type: unknown, props: Record<string, any>) {
     return { type, props: props ?? {} };
   }
+  function lazy<P extends Record<string, any>>(loader: () => Promise<{ default: (props: P) => unknown }>) {
+    let status: 'idle' | 'pending' | 'resolved' | 'rejected' = 'idle';
+    let resolved: ((props: P) => unknown) | null = null;
+    let error: unknown = null;
+    let promise: Promise<void> | null = null;
+    return function LazyComponent(props: P) {
+      if (status === 'resolved' && resolved) return resolved(props);
+      if (status === 'rejected') throw error;
+      if (status === 'idle') {
+        status = 'pending';
+        promise = loader().then(
+          mod => { status = 'resolved'; resolved = mod.default; },
+          err => { status = 'rejected'; error = err; },
+        );
+      }
+      throw promise;
+    };
+  }
 
   const reactStub = {
     Fragment,
+    Suspense,
+    lazy,
     createElement,
     useState: nextState,
     useRef: nextRef,
@@ -136,6 +158,17 @@ function createHookHarness() {
     if (Array.isArray(node)) return node.map((child, i) => expand(child, `${path}[${i}]`, seenKeys, parentDialog));
     const v = node as VNode;
     if (v.type === Fragment) return expand(v.props.children, `${path}/F`, seenKeys, parentDialog);
+    if (v.type === Suspense) {
+      try {
+        return expand(v.props.children, `${path}/S`, seenKeys, parentDialog);
+      } catch (thrown) {
+        if (thrown && typeof (thrown as Promise<unknown>).then === 'function') {
+          pendingSuspense.add(thrown as Promise<unknown>);
+          return expand(v.props.fallback, `${path}/S-fallback`, seenKeys, parentDialog);
+        }
+        throw thrown;
+      }
+    }
     if (typeof v.type === 'function') {
       const fn = v.type as (p: Record<string, any>) => unknown;
       const key = `${path}/${fn.name || 'anon'}`;
@@ -205,10 +238,19 @@ function createHookHarness() {
     return tree;
   }
 
+  async function flushLazy() {
+    while (pendingSuspense.size) {
+      const list = [...pendingSuspense];
+      pendingSuspense.clear();
+      await Promise.all(list);
+    }
+  }
+
   return {
     reactStub,
     jsxRuntime: { Fragment, jsx, jsxs: jsx },
     render,
+    flushLazy,
     getActiveEl: () => activeEl,
     clearActiveEl: () => {
       if (activeEl) activeEl.focused = false;
@@ -255,7 +297,12 @@ function loadShareModules(harness: ReturnType<typeof createHookHarness>) {
 
   function compileModule(url: URL, stubs: Record<string, unknown>) {
     const mod = { exports: {} as Record<string, any> };
-    const code = transformSync(readFileSync(url, 'utf8'), { loader: 'tsx', format: 'cjs', jsx: 'automatic' }).code;
+    const code = transformSync(readFileSync(url, 'utf8'), {
+      loader: 'tsx',
+      format: 'cjs',
+      jsx: 'automatic',
+      supported: { 'dynamic-import': false },
+    }).code;
     runInNewContext(code, {
       module: mod,
       exports: mod.exports,
@@ -430,7 +477,7 @@ test('UX-M-03: 作品 and 服務 live as links behind 更多 and preserve typed 
   assert.equal(storage.size, 0);
 });
 
-test('UX-F-09: 活動 chip sits next to 網址 and 貼文 and keeps focus inside dialog', () => {
+test('UX-F-09: 活動 chip sits next to 網址 and 貼文 and keeps focus inside dialog', async () => {
   const client = new PortalClient();
   client.get = (async () => ({ items: [] })) as PortalClient['get'];
 
@@ -464,6 +511,8 @@ test('UX-F-09: 活動 chip sits next to 網址 and 貼文 and keeps focus inside
   const eventBtn = nodes.find(n => n.type === 'button' && nodeText(n) === '活動')!;
   eventBtn.props.onClick();
   tree = renderBox();
+  await harness.flushLazy();
+  tree = renderBox();
   nodes = collectNodes(tree);
   const activeEventBtn = nodes.find(n => n.type === 'button' && nodeText(n) === '活動')!;
   assert.equal(activeEventBtn.props['aria-pressed'], true);
@@ -482,7 +531,7 @@ test('UX-F-09: 活動 chip sits next to 網址 and 貼文 and keeps focus inside
   // 2) Opening ShareBox directly with request.kind==='event' must open <dialog> before focusing EventComposer's first field.
   const directHarness = createHookHarness();
   const directMods = loadShareModules(directHarness);
-  const directTree = directHarness.render(() =>
+  const renderDirect = () => directHarness.render(() =>
     directHarness.reactStub.createElement(directMods.ShareBox, {
       pending: { current: null },
       retainedImage: { current: undefined },
@@ -498,6 +547,9 @@ test('UX-F-09: 活動 chip sits next to 網址 and 貼文 and keeps focus inside
       storesEnabled: false,
     }),
   );
+  renderDirect();
+  await directHarness.flushLazy();
+  const directTree = renderDirect();
   const directNodes = collectNodes(directTree);
   const directInput = directNodes.find(n => n.type === 'input' && n.props.type === 'url')!;
   assert.equal(directHarness.getActiveEl() === directInput.props.ref.current, true);
@@ -541,9 +593,11 @@ test('UX-F-06: publishing from any home route stays on home and emits freedom-sh
     assert.equal(win.location.hash, startHash);
     assert.equal(dispatched.length, 1);
     assert.equal(dispatched[0].type, 'freedom-share-published');
-    const detail = dispatched[0].detail as { shareId?: string; url?: string };
+    const detail = dispatched[0].detail as { shareId?: string; url?: string; title?: string; kind?: string };
     assert.equal(detail.shareId, '00000000-0000-4000-8000-000000000002');
     assert.equal(detail.url, '/#shares/00000000-0000-4000-8000-000000000002');
+    assert.equal(detail.title, '首頁貼文內容');
+    assert.equal(detail.kind, 'post');
     assert.equal(storage.get('share-draft:u-home'), undefined);
   }
 
@@ -577,4 +631,133 @@ test('UX-F-06: publishing from any home route stays on home and emits freedom-sh
   await explorePromise;
   assert.equal(exploreMods.win.location.hash, '#shares/00000000-0000-4000-8000-000000000004');
   assert.equal(exploreMods.dispatched.length, 0);
+});
+
+test('UX-F-06: freedom-share-published carries title and kind from publish answer or ShareBox preview/manual title', async () => {
+  // 1) Link/repository share where publish answer omits title and kind -> falls back to ShareBox preview.
+  {
+    const harness = createHookHarness();
+    const { ShareBoxLauncher, openShareComposer, win, dispatched } = loadShareModules(harness);
+    win.location.hash = '#home';
+    const client = new PortalClient();
+    client.post = (async (path: string) => {
+      if (path === '/shares/preview') {
+        return { kind: 'repository', title: 'freetwai-test/shared-repo', url: 'https://github.com/freetwai-test/shared-repo', description: 'repo desc', original_author: 'freetwai-test' };
+      }
+      if (path === '/shares') {
+        return { share_id: '00000000-0000-4000-8000-000000000011', url: '/#shares/00000000-0000-4000-8000-000000000011' };
+      }
+      throw new Error(`unexpected post ${path}`);
+    }) as PortalClient['post'];
+
+    const renderLauncher = () => harness.render(() =>
+      harness.reactStub.createElement(ShareBoxLauncher, { client, userId: 'u-repo', onChoose() {}, storesEnabled: false }),
+    );
+    renderLauncher();
+    const composePromise = openShareComposer();
+    let tree = renderLauncher();
+    collectNodes(tree).find(n => n.type === 'textarea')!.props.onChange({ target: { value: 'https://github.com/freetwai-test/shared-repo' } });
+    renderLauncher();
+    await new Promise(resolve => setTimeout(resolve, 460));
+    tree = renderLauncher();
+    const publishBtn = collectNodes(tree).find(n => n.type === 'button' && nodeText(n) === '發布')!;
+    assert.equal(Boolean(publishBtn.props.disabled), false);
+    publishBtn.props.onClick();
+    await composePromise;
+    assert.equal(dispatched.length, 1);
+    const detail1 = dispatched[0].detail as Record<string, unknown>;
+    assert.deepEqual({ ...detail1 }, {
+      shareId: '00000000-0000-4000-8000-000000000011',
+      url: '/#shares/00000000-0000-4000-8000-000000000011',
+      title: 'freetwai-test/shared-repo',
+      kind: 'repository',
+    });
+  }
+
+  // 2) Manual-title link share where preview returned 422 and publish answer lacks title/kind.
+  {
+    const harness = createHookHarness();
+    const { ShareBoxLauncher, openShareComposer, win, dispatched } = loadShareModules(harness);
+    win.location.hash = '#home';
+    const client = new PortalClient();
+    const { ApiError: ShareApiError } = shareBoxRequire('../api');
+    client.post = (async (path: string) => {
+      if (path === '/shares/preview') {
+        throw new ShareApiError({ message: '無法讀取預覽。', status: 422, code: 'preview_unavailable' });
+      }
+      if (path === '/shares') {
+        return { share_id: '00000000-0000-4000-8000-000000000012', url: '/#shares/00000000-0000-4000-8000-000000000012' };
+      }
+      throw new Error(`unexpected post ${path}`);
+    }) as PortalClient['post'];
+
+    const renderLauncher = () => harness.render(() =>
+      harness.reactStub.createElement(ShareBoxLauncher, { client, userId: 'u-manual', onChoose() {}, storesEnabled: false }),
+    );
+    renderLauncher();
+    const composePromise = openShareComposer();
+    let tree = renderLauncher();
+    collectNodes(tree).find(n => n.type === 'textarea')!.props.onChange({ target: { value: 'https://example.com/unreadable' } });
+    renderLauncher();
+    await new Promise(resolve => setTimeout(resolve, 460));
+    tree = renderLauncher();
+    const titleInput = collectNodes(tree).find(n => n.type === 'input')!;
+    titleInput.props.onChange({ target: { value: '手動分享標題' } });
+    tree = renderLauncher();
+    const publishBtn = collectNodes(tree).find(n => n.type === 'button' && nodeText(n) === '發布')!;
+    assert.equal(Boolean(publishBtn.props.disabled), false);
+    publishBtn.props.onClick();
+    await composePromise;
+    assert.equal(dispatched.length, 1);
+    const detail2 = dispatched[0].detail as Record<string, unknown>;
+    assert.deepEqual({ ...detail2 }, {
+      shareId: '00000000-0000-4000-8000-000000000012',
+      url: '/#shares/00000000-0000-4000-8000-000000000012',
+      title: '手動分享標題',
+      kind: 'link',
+    });
+  }
+
+  // 3) When publish answer provides title and kind, prefer the publish answer.
+  {
+    const harness = createHookHarness();
+    const { ShareBoxLauncher, openShareComposer, win, dispatched } = loadShareModules(harness);
+    win.location.hash = '#home';
+    const client = new PortalClient();
+    client.post = (async (path: string) => {
+      if (path === '/shares/preview') {
+        return { kind: 'link', title: 'Preview Title', url: 'https://example.com/p', description: '', original_author: null };
+      }
+      if (path === '/shares') {
+        return {
+          share_id: '00000000-0000-4000-8000-000000000013',
+          url: '/#shares/00000000-0000-4000-8000-000000000013',
+          title: 'Server Canonical Title',
+          kind: 'repository',
+        };
+      }
+      throw new Error(`unexpected post ${path}`);
+    }) as PortalClient['post'];
+
+    const renderLauncher = () => harness.render(() =>
+      harness.reactStub.createElement(ShareBoxLauncher, { client, userId: 'u-ans', onChoose() {}, storesEnabled: false }),
+    );
+    renderLauncher();
+    const composePromise = openShareComposer();
+    let tree = renderLauncher();
+    collectNodes(tree).find(n => n.type === 'textarea')!.props.onChange({ target: { value: 'https://example.com/p' } });
+    renderLauncher();
+    await new Promise(resolve => setTimeout(resolve, 460));
+    tree = renderLauncher();
+    collectNodes(tree).find(n => n.type === 'button' && nodeText(n) === '發布')!.props.onClick();
+    await composePromise;
+    assert.equal(dispatched.length, 1);
+    const detail3 = dispatched[0].detail as Record<string, unknown>;
+    assert.deepEqual({ ...detail3 }, {
+      shareId: '00000000-0000-4000-8000-000000000013',
+      url: '/#shares/00000000-0000-4000-8000-000000000013',
+      title: 'Server Canonical Title',
+      kind: 'repository',
+    });
+  }
 });

@@ -330,3 +330,54 @@ test('UX-M-02: unknown share shows 找不到分享 and one primary 回到動態 
   assert.equal(nodeText(backLink), '回到動態');
   assert.equal(backLink.props.href, '#home');
 });
+
+test('link share with no repository shows canonical_url hostname as one muted line under title; non-link or repo does not', async () => {
+  const harness = createHarness();
+  const store = {
+    account: {
+      value: { configured: false, connected: false, github_user: null },
+      loading: false,
+      error: '',
+      received: 1,
+    } as AccountState,
+    async loadAccount() {},
+    async connect() { return ''; },
+  };
+  let currentShare: Record<string, unknown> = {
+    share_id: '33333333-3333-4333-8333-333333333333',
+    ref_id: null,
+    title: '手動分享標題',
+    kind: 'link',
+    canonical_url: 'https://example.com/unreadable',
+    sharers: [{ display_name: '測試會員', role: 'sharer' }],
+    repository: null,
+  };
+  const client = {
+    sessionGeneration: 1,
+    async get() { return currentShare; },
+    async post() { return {}; },
+  };
+
+  const { SharePage } = loadSharePage(harness, store);
+  let tree = await harness.flush(() => SharePage({ client, id: '33333333-3333-4333-8333-333333333333' }) as VNode);
+  let nodes = collectNodes(tree);
+  const header = nodes.find(n => n.type === 'header')!;
+  const headerChildren = collectNodes(header);
+  const siteLine = headerChildren.find(n => n.type === 'p' && hasClass(n, 'muted'));
+  assert.ok(siteLine, 'expected muted site line under title in <header>');
+  assert.equal(nodeText(siteLine), 'example.com');
+
+  // Non-link share with no repository does not render hostname line.
+  currentShare = {
+    share_id: '44444444-4444-4444-8444-444444444444',
+    ref_id: '55555555-5555-4555-8555-555555555555',
+    title: '貼文分享',
+    kind: 'post',
+    canonical_url: 'https://example.com/post',
+    sharers: [],
+    repository: null,
+  };
+  tree = await harness.flush(() => SharePage({ client, id: '44444444-4444-4444-8444-444444444444' }) as VNode);
+  nodes = collectNodes(tree);
+  assert.equal(nodes.some(n => nodeText(n) === 'example.com'), false);
+});

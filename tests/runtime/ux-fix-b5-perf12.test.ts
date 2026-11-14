@@ -71,3 +71,21 @@ test('PERF-12: App.tsx keeps renderPortalFeature eager so MemberHome adds no laz
   assert.equal(/PageLoadBoundary[^>]*><CommunitySearch/.test(app), true, 'CommunitySearch wrapped in PageLoadBoundary');
   assert.equal(/PageLoadBoundary[^>]*><HostedOrderPage/.test(app), true, 'HostedOrderPage wrapped in PageLoadBoundary');
 });
+
+test('PERF-12: ShareBox.tsx keeps EventComposer out of static graph and wraps lazy EventComposer in Suspense', () => {
+  const shareBoxPaths = staticModuleInputs('share/ShareBox.tsx');
+  assert.equal(
+    hasSuffix(shareBoxPaths, '/share/EventComposer.tsx'),
+    false,
+    'ShareBox.tsx statically imports /share/EventComposer.tsx',
+  );
+  const appPaths = staticModuleInputs('App.tsx');
+  assert.equal(
+    hasSuffix(appPaths, '/share/EventComposer.tsx'),
+    false,
+    'App.tsx statically imports /share/EventComposer.tsx via ShareBox.tsx',
+  );
+  const shareBox = readFileSync(new URL('../../apps/portal-web/src/share/ShareBox.tsx', import.meta.url), 'utf8');
+  assert.equal(/const EventComposer\s*=\s*(?:React\.)?lazy\(/.test(shareBox), true, 'EventComposer must be lazy');
+  assert.equal(/<Suspense[^>]*>[\s\S]*<EventComposer\b/.test(shareBox), true, 'EventComposer must be wrapped in Suspense');
+});

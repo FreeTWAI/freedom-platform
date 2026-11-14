@@ -30,3 +30,4 @@ a.share-result-title{display:inline-flex;align-items:center;min-height:44px}
 .legacy-promotion > summary{cursor:pointer;color:var(--muted);font-weight:600;min-height:44px;padding:.65rem 0;box-sizing:border-box}
 .share-actions > .btn, .share-page > details > summary { min-height:44px; }
 .share-page > details > summary { cursor:pointer; display:flex; align-items:center; }
+.share-site { margin:.25rem 0 0; }

@@ -30,12 +30,14 @@ export function SharePage({client,id,via}:{client:PortalClient;id:string;via?:st
     return <p role="status">載入中…</p>;
   }
   const repo=page.repository;
+  let site='';
+  if(!repo&&page.kind==='link'){try{site=new URL(page.canonical_url).hostname;}catch{}}
   const share=shareTarget(client,page);
   const facts=repo?[repo.license_spdx?`授權：${repo.license_spdx}`:null,repo.pushed_at?`更新：${repo.pushed_at.slice(0,10)}`:null,
     repo.forks_count!=null?`Fork：${repo.forks_count}`:null,repo.open_issues_count!=null?`Issues：${repo.open_issues_count}`:null,repo.subscribers_count!=null?`Watchers：${repo.subscribers_count}`:null].filter(Boolean):[];
   const canStar=Boolean(repo&&store.account.value?.configured&&!starBlocked);
   return <article className="share-page stack">
-    <header><h2>{page.title}</h2></header>
+    <header><h2>{page.title}</h2>{site&&<p className="muted share-site">{site}</p>}</header>
     <div className="share-actions">
       {repo&&(canStar?<button className="btn btn-primary" disabled={busy||starred} onClick={()=>void star()}>{starred?'★ 已加星':store.account.value?.connected?'☆ 加星':'連結 GitHub 加星'}</button>:<a className="btn btn-secondary btn-small" href={repo.url} target="_blank" rel="noopener noreferrer">在 GitHub 查看</a>)}
       <ShareButton title={page.title} fallbackUrl={share.fallbackUrl} makeLink={share.makeLink} label="我也要分享" buttonClassName="btn btn-secondary btn-small"/>

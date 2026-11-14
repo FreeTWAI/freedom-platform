@@ -1,11 +1,11 @@
-import {EventComposer} from './EventComposer';
-import {useCallback,useEffect,useId,useRef,useState,type MutableRefObject} from 'react';
+import {Suspense,lazy,useCallback,useEffect,useId,useRef,useState,type MutableRefObject} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import type {ShareTarget} from '../ShareLauncher';
 import {portalHash,resolvePortalRoute} from '../portal-route';
 import {normalizeShareUrl} from '../../../../packages/shared/share-url';
 import {installShareComposer,openShareComposer,type ShareComposeRequest,type ShareComposeResult} from './share-port';
 import './share.css';
+const EventComposer=lazy(()=>import('./EventComposer').then(m=>({default:m.EventComposer})));
 type Preview={kind:string;title:string;url:string;description:string;original_author:string|null};
 type Pending={key:string;body:unknown;postId?:string};
 type Props={client:PortalClient;userId:string;onChoose:(target:ShareTarget)=>void;disabled?:boolean;guided?:boolean;storesEnabled?:boolean};
@@ -16,8 +16,8 @@ export function ShareBoxLauncher({client,userId,onChoose,disabled=false,storesEn
   const [manualTitle,setManualTitle]=useState(()=>{try{return sessionStorage.getItem(`share-title:${userId}`)??'';}catch{return '';}});
   useEffect(()=>installShareComposer((r,resolve)=>{finish.current?.({status:'cancelled'});finish.current=resolve;setRequest(r);if(!operation.current){if(r.url||r.text)setDraft(r.url??r.text??'');if(r.image)retainedImage.current=r.image;if(r.text||r.url||r.image)retainedMode.current=(r.text||r.image)&&!r.url?'post':'link';}}),[]);
   useEffect(()=>()=>{finish.current?.({status:'cancelled'});finish.current=null;},[]);
-  function done(result:ShareComposeResult){finish.current?.(result);finish.current=null;setRequest(null);trigger.current?.focus();if(result.status==='published'){operation.current=null;retainedImage.current=undefined;setDraft('');setManualTitle('');try{sessionStorage.removeItem(`share-draft:${userId}`);sessionStorage.removeItem(`share-title:${userId}`);}catch{}if(!request?.source&&resolvePortalRoute(window.location.hash).place==='home'&&result.share_id){window.dispatchEvent(new CustomEvent('freedom-share-published',{detail:{shareId:result.share_id,url:result.url}}));}else if(result.url&&!request?.source){if(result.url.startsWith('/events/'))window.location.assign(result.url);else window.location.hash=result.url.replace(/^\/+#/,'#');}}}
-  return <><button ref={trigger} className="btn btn-primary" disabled={disabled} aria-label="分享或提交" aria-haspopup="dialog" aria-expanded={request!==null} onClick={()=>void openShareComposer()}>＋分享</button>
+  function done(result:ShareComposeResult){finish.current?.(result);finish.current=null;setRequest(null);trigger.current?.focus();if(result.status==='published'){operation.current=null;retainedImage.current=undefined;setDraft('');setManualTitle('');try{sessionStorage.removeItem(`share-draft:${userId}`);sessionStorage.removeItem(`share-title:${userId}`);}catch{}if(!request?.source&&resolvePortalRoute(window.location.hash).place==='home'&&result.share_id){window.dispatchEvent(new CustomEvent('freedom-share-published',{detail:{shareId:result.share_id,url:result.url,title:result.title,kind:result.kind}}));}else if(result.url&&!request?.source){if(result.url.startsWith('/events/'))window.location.assign(result.url);else window.location.hash=result.url.replace(/^\/+#/,'#');}}}
+  return <><button ref={trigger} className="btn btn-secondary" disabled={disabled} aria-label="分享或提交" aria-haspopup="dialog" aria-expanded={request!==null} onClick={()=>void openShareComposer()}>＋分享</button>
     {request&&<ShareBox pending={operation} retainedImage={retainedImage} retainedMode={retainedMode} client={client} request={request} value={draft} manualTitle={manualTitle} onTitleChange={v=>{setManualTitle(v);try{sessionStorage.setItem(`share-title:${userId}`,v);}catch{}}} onChange={v=>{setDraft(v);setManualTitle('');try{sessionStorage.setItem(`share-draft:${userId}`,v);sessionStorage.removeItem(`share-title:${userId}`);}catch{/* Memory draft remains. */}}} onDone={done} onChoose={onChoose} storesEnabled={storesEnabled}/>}
   </>;
 }
@@ -60,8 +60,10 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
         if(image){if(image.size>2*1024*1024||!['image/png','image/jpeg','image/webp'].includes(image.type))throw Error('圖片限 2 MB 的 PNG、JPEG 或 WebP。');const bytes=new Uint8Array(await image.arrayBuffer());let binary='';for(const b of bytes)binary+=String.fromCharCode(b);attached={mime_type:image.type,data_base64:btoa(binary)};}
         const post=await client.post<{post_id:string}>('/social-posts/notes',{...(p.body as object),...(attached?{image:attached}:{})},{idempotencyKey:p.key});p.postId=post.post_id;
       }
-      const result=await client.post<{share_id:string;url:string}>('/shares',{...(p.postId?{kind:'post',ref_id:p.postId}:p.body as object),...(request.source?{source:request.source}:{})},{idempotencyKey:p.key+'-share'});
-      if(current()){pending.current=null;finish({status:'published',...result});}
+      const result=await client.post<{share_id:string;url:string;title?:string;kind?:string}>('/shares',{...(p.postId?{kind:'post',ref_id:p.postId}:p.body as object),...(request.source?{source:request.source}:{})},{idempotencyKey:p.key+'-share'});
+      const resolvedTitle=result.title||(manual?manualTitle.trim():preview?.title);
+      const resolvedKind=result.kind||(mode==='post'?'post':(preview?.kind??(linkScope(value).repo||request.kind==='repository'?'repository':'link')));
+      if(current()){pending.current=null;finish({status:'published',...result,title:resolvedTitle,kind:resolvedKind});}
     }catch(e){if(current()){const {repo}=linkScope(value);if(repo&&gitHubRetryable(e)){setError('GitHub 暫時無法確認，請再試一次。');setRetry('publish');}else setError(e instanceof Error?e.message:'發布失敗，請重試。');if(e instanceof ApiError&&e.definitiveResponse&&!pending.current?.postId)pending.current=null;}}
     finally{if(current())setBusy(false);}
   }
@@ -81,7 +83,7 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
       <button className="btn btn-secondary btn-small" onClick={()=>editor('product-start')}>準備商品</button>
       <button className="btn btn-secondary btn-small" onClick={()=>editor('resource')}>開源投稿</button>
       <button className="btn btn-secondary btn-small" onClick={()=>editor('collaborate')}>找人合作</button><button className="btn btn-secondary btn-small" onClick={()=>editor('cocreate')}>共創邀請</button>
-    </div>:eventMode?<EventComposer client={client} onDone={finish} initialUrl={value}/>:<>
+    </div>:eventMode?<Suspense fallback={<p className="muted" role="status">載入中…</p>}><EventComposer client={client} onDone={finish} initialUrl={value}/></Suspense>:<>
       <label htmlFor={id+'-input'}>{mode==='link'?'貼上連結':'內容'}</label>
       <textarea ref={inputRef} id={id+'-input'} autoFocus value={value} maxLength={mode==='post'?500:2048} disabled={busy||!!pending.current} onChange={e=>onChange(e.target.value)} placeholder={mode==='link'?'https://github.com/…':'分享近況'} rows={3}/>
       {mode==='post'&&<label className="share-image">圖片<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy||!!pending.current} onChange={e=>{const file=e.target.files?.[0];setImage(file);retainedImage.current=file;}}/></label>}

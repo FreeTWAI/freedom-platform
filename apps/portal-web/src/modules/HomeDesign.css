@@ -198,3 +198,7 @@
 .freedom-home .home-discovery-links .btn { min-height: 44px; max-width: 100%; white-space: normal; }
 .freedom-home .home-discovery-links > .skill-share,
 .freedom-home .home-discovery-links > .skill-share > .btn { width: fit-content; max-width: 100%; border-radius: 10px; }
+.freedom-home .home-published-share { display: grid; gap: 10px; justify-items: start; margin-bottom: 16px; padding: 16px; }
+.freedom-home .home-published-share:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+.freedom-home .home-published-share-title { margin: 0; font-size: 1rem; line-height: 1.5; overflow-wrap: anywhere; }
+.freedom-home .home-published-share .btn-small { min-height: 44px; display: inline-flex; align-items: center; }

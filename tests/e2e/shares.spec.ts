@@ -23,7 +23,9 @@ test('one share box publishes recorded original README, star action and member c
  await expect(page).toHaveURL(/#home$/);
  const item=page.locator('.home-timeline > article').first();
  await expect(item).toBeFocused();
- await item.getByRole('link',{name:'freetwai-test/shared-repo',exact:true}).click();
+ await expect(item).toContainText('freetwai-test/shared-repo');
+ await expect(item).toContainText('開源專案');
+ await item.getByRole('link',{name:'看分享頁',exact:true}).click();
  await expect(page).toHaveURL(/#shares\/[0-9a-f-]+$/);
  await expect(page.getByRole('heading',{name:'README',exact:true})).toBeVisible();
  const facts=page.locator('.share-page .share-facts');await expect(facts).toContainText('MIT');await expect(facts).toContainText('Fork：0');await expect(facts).toContainText('Issues：12');await expect(facts).toContainText('Watchers：5');
@@ -92,7 +94,9 @@ test('an unreadable link can be titled and appears focused at the top of home',a
  await expect(page).toHaveURL(/#home$/);
  const item=page.locator('.home-timeline > article').first();
  await expect(item).toBeFocused();
- const link=item.getByRole('link',{name:'手動分享標題',exact:true});
+ await expect(item).toContainText('手動分享標題');
+ await expect(item).toContainText('網址');
+ const link=item.getByRole('link',{name:'看分享頁',exact:true});
  await expect(link).toHaveAttribute('href',/#shares\/[0-9a-f-]+$/);
  await link.click();
  await expect(page.getByRole('heading',{name:'手動分享標題',exact:true})).toBeVisible();
@@ -166,7 +170,9 @@ test('repository stars use the platform only when GitHub is available to this me
  await box.getByLabel('貼上連結',{exact:true}).fill('https://github.com/freetwai-test/shared-repo');
  await expect(box.getByText('freetwai-test/shared-repo',{exact:true})).toBeVisible();
  await box.getByRole('button',{name:'發布',exact:true}).click();
- await page.locator('.home-timeline > article').first().getByRole('link',{name:'freetwai-test/shared-repo',exact:true}).click();
+ const item=page.locator('.home-timeline > article').first();
+ await expect(item).toContainText('freetwai-test/shared-repo');
+ await item.getByRole('link',{name:'看分享頁',exact:true}).click();
  const external=page.getByRole('link',{name:'在 GitHub 查看',exact:true});
  await expect(external).toHaveAttribute('href','https://github.com/freetwai-test/shared-repo');
  await expect(external).toHaveAttribute('target','_blank');
