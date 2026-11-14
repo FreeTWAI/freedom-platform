@@ -273,3 +273,11 @@ export async function openGuildCardMore(card: Locator) {
   }
   await expect(settings).toHaveJSProperty('open', true);
 }
+
+/** Expose private AI views when private_ai_enabled defaults to false (UX-M-07/UX-V-11). */
+export async function enablePrivateAiViews(page: Page) {
+  await page.route('**/api/v1/site', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), private_ai_enabled: true } });
+  });
+}

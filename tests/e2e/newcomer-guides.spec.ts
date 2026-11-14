@@ -5,7 +5,7 @@ import {openPageTools} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {test, expect, type Page, type Locator, type Route} from './fixtures.js';
-import {navigate, signOut} from './navigation.js';
+import {enablePrivateAiViews, navigate, signOut} from './navigation.js';
 import {quickJoin} from './quick-join.js';
 import {DRAGON_RELEASE_PIN} from '../../apps/portal-web/src/modules/newcomer-guides/release-pin.js';
 import type {GuideCharacter} from '../../apps/portal-web/src/modules/newcomer-guides/contracts.js';
@@ -761,7 +761,7 @@ test('selecting the fourth profile persists one choice; switching back cancels g
 });
 
 test('gallery loads one selected view and closes cleanly with Escape without cross-page character fallback',async({page})=>{
-  const requests=collectArtRequests(page);await registerJoined(page);await openSpirit(page);
+  const requests=collectArtRequests(page);await enablePrivateAiViews(page);await registerJoined(page);await openSpirit(page);
   expect(requests.filter(request=>request.part.startsWith('view-'))).toEqual([]);
   await panel(page).getByRole('button',{name:'角色六視圖',exact:true}).click();
   const gallery=page.getByRole('dialog',{name:'龍娘角色六視圖',exact:true});await expect(gallery).toBeVisible();

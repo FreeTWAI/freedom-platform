@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { canonicalHash } from '../../apps/portal-web/src/portal-route.js';
 import { test, expect, type Page } from './fixtures.js';
-import { navigate, signOut } from './navigation.js';
+import { navigate, openGuildCardMore, signOut } from './navigation.js';
 import { quickJoin } from './quick-join.js';
 import { DEMO_COMMUNITY, DEMO_PASSWORD } from '../../packages/testing/seed.js';
 import { hashPassword } from '../../modules/identity-membership/service.js';
@@ -92,6 +92,7 @@ test('ordinary A/B/C members open stores, agree supply, opt in, race shared stoc
       const email=await register(page,nickname);
       await officer.goto('/#guilds');
       const card=officer.getByRole('article').filter({has:officer.getByRole('heading',{name:/電商/})});
+      await openGuildCardMore(card);
       await card.getByRole('button',{name:'查看成員',exact:true}).click();
       const dialog=officer.getByRole('dialog');await dialog.getByRole('searchbox',{name:'搜尋公會成員'}).fill(nickname);
       await dialog.getByRole('button',{name:'搜尋成員',exact:true}).click();

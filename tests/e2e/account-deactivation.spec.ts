@@ -66,12 +66,13 @@ for(const [operation,conflict] of [['password',false],['sessions',false],['passw
   const questions=page.locator('.quick-start .guild-question');await expect(questions.first()).toBeVisible();
   for(const question of await questions.all())await question.getByRole('radio').first().check();
   await page.getByRole('button',{name:'加入公會，開始參與',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'動態',exact:true,level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'停用帳號');
+  await expect(page.getByRole('heading',{name:'動態',exact:true,level:1})).toBeVisible();await navigate(page,'我的名片');await openAccountSettings(page,'個人資料');
   const nickname=page.getByLabel('社群顯示名稱',{exact:true});await nickname.fill('Unsaved profile draft');
   if(conflict){
     await e2eAuthPool.query('UPDATE users SET display_name=$1 WHERE email=$2',['Another device profile',email]);
     await e2eAuthPool.query('UPDATE member_accounts SET aggregate_version=aggregate_version+1 WHERE user_id=(SELECT user_id FROM users WHERE email=$1)',[email]);
   }
+  await page.goto('/#me/settings?view=connections');await openAccountSettings(page,'停用帳號');
   const security=page.locator('.account-security');
   let currentPassword=password;
   const refreshed=page.waitForResponse(response=>response.url().endsWith('/me/account')&&response.request().method()==='GET');
@@ -92,7 +93,8 @@ for(const [operation,conflict] of [['password',false],['sessions',false],['passw
     }finally{await other.close();}
   }
   expect((await refreshed).status()).toBe(200);
-  await expect(nickname).toHaveValue('Unsaved profile draft');
+  await page.goto('/#me/settings');await expect(nickname).toBeVisible();await expect(nickname).toHaveValue('Unsaved profile draft');
+  await page.goto('/#me/settings?view=connections');await openAccountSettings(page,'停用帳號');
   const form=page.getByRole('form',{name:'停用帳號',exact:true});
   await form.getByLabel('目前密碼',{exact:true}).fill(currentPassword);
   const result=page.waitForResponse(response=>response.url().endsWith('/me/account/deactivate'));
@@ -100,7 +102,7 @@ for(const [operation,conflict] of [['password',false],['sessions',false],['passw
   expect((await result).status()).toBe(conflict?412:200);
   if(conflict){
     await expect(page.getByRole('alert').filter({hasText:'帳號資料已在其他操作中變更'})).toBeVisible();
-    await expect(nickname).toHaveValue('Unsaved profile draft');
+    await page.goto('/#me/settings');await expect(nickname).toBeVisible();await expect(nickname).toHaveValue('Unsaved profile draft');
     expect((await e2eAuthPool.query('SELECT display_name FROM users WHERE email=$1',[email])).rows[0].display_name).toBe('Another device profile');
   }else await expect(page.locator('.login-card')).toBeVisible();
 });

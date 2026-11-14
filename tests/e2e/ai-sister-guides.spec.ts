@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
 import {readFileSync} from 'node:fs';
 import {test,expect,type Page,type Locator} from './fixtures.js';
-import {navigate,signOut} from './navigation.js';
+import {enablePrivateAiViews,navigate,signOut} from './navigation.js';
 import {quickJoin} from './quick-join.js';
 const manifest=JSON.parse(readFileSync(new URL('../../contracts/guide-packs/ai-sister-v1-20261005.json',import.meta.url),'utf8')) as {version:string;assets:{logicalId:string;sha256:string}[]};
 import {AI_SISTER_RELEASE_PIN} from '../../apps/portal-web/src/modules/newcomer-guides/ai-sister-release-pin.js';
@@ -102,6 +102,7 @@ test('wardrobe gallery offers all characters, 20 outfits and real poses; only se
 });
 
 test('current outfit uses real dialogue reactions and cleans guide focus when changing profile or losing member access',async({page})=>{
+  await enablePrivateAiViews(page);
   await registerJoined(page);await openGuide(page);
   await expect(widget(page).locator('.page-spirit-art')).toHaveAttribute('src',asset('claude/education-supported'));
   await panel(page).getByRole('textbox',{name:'問本頁問題'}).fill('謝謝');await panel(page).getByRole('button',{name:'送出',exact:true}).click();
