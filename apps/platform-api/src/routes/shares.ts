@@ -8,15 +8,16 @@ import { createShare, previewShare, visibleShare, listShares, myCredit, retractS
 import { refreshRepository,repositoryPage } from '../../../../modules/shares/repository-cache.js';
 import { starShare,claimShareAuthor } from '../../../../modules/shares/repository-actions.js';
 import type { socialLoader } from './github-social.js';
-import type { AdapterContext } from '../../../../modules/shares/types.js';
+import type { AdapterContext,RepositoryFacts } from '../../../../modules/shares/types.js';
 export function createShareRoutes(pool:Pool,context:AdapterContext={},loadSocial?:ReturnType<typeof socialLoader>,afterResponse?:(work:()=>Promise<void>)=>void) {
   const app=new Hono<PlatformEnv>();
   app.use('*',async(c,next)=>{c.header('Cache-Control','private, no-store');await next();});
   app.post('/shares/preview',async c=>c.json(await previewShare(pool,await moduleCommand(c),context)));
   app.post('/shares',async c=>{
-    const result=await createShare(pool,await moduleCommand(c),context);
+    let preparedFacts:RepositoryFacts|undefined;
+    const result=await createShare(pool,await moduleCommand(c),context,facts=>{preparedFacts=facts;});
     const repo=(await pool.query('SELECT repo_id FROM shares WHERE share_id=$1',[result.share_id])).rows[0]?.repo_id;
-    if(repo)await refreshRepository(pool,repo,context);
+    if(repo){const refresh=()=>refreshRepository(pool,repo,context,false,preparedFacts);if(afterResponse)afterResponse(refresh);else void refresh().catch(()=>{});}
     return c.json(result);
   });
   app.get('/shares',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>listShares(q,c.get('actor'),c.req.query()))));

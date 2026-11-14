@@ -198,12 +198,19 @@ export async function reconcileEventSchedule(q:PoolClient,id:string,startsAt:str
 }
 export async function updateEventSchedule(pool:Pool,input:Command,id:string){const body=scheduleInput.parse(input.body);return command(pool,input,q=>memberSource(q,input.actor,id),async q=>{const event=await memberSource(q,input.actor,id,true);requireCondition(event.organizer_ref===input.actor.user_id,403,'organizer_required','只有主辦者可調整活動時間。');await refuseInternGuildExchange(q,input.actor,event);checkVersion(String(event.aggregate_version),input.expected);await requireEventEditable(q,event);requireCondition(event.state==='published'&&instant(event.starts_at)>Date.now()&&Date.parse(body.starts_at)>Date.now(),409,'event_closed','僅可調整尚未開始的已發布活動。');if(instant(event.starts_at)===Date.parse(body.starts_at)&&instant(event.ends_at)===Date.parse(body.ends_at)&&event.capacity===body.capacity)return view(q,id,{member_ref:input.actor.user_id});await requireEventScheduleCapacity(q,id,body.capacity);await q.query('UPDATE community_events SET starts_at=$2,ends_at=$3,capacity=$4,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1',[id,body.starts_at,body.ends_at,body.capacity]);await reconcileEventSchedule(q,id,body.starts_at);await recordEventChange(q,event,await eventRow(q,id));const result=await view(q,id,{member_ref:input.actor.user_id});await journal(q,input.actor,'community_event',id,result.event_version,'schedule',body);return result;});}
 export async function requestGuestEventParticipation(pool:Pool,id:string,raw:unknown,send:EventEmailSender,origin:string){const body=z.object({name:text(80),email:z.email().max(200),referral_code:referral}).strict().parse(raw);const email=body.email.trim().toLowerCase();const token=await transaction(pool,async q=>{const event=await eventRow(q,id,true);const existing=(await q.query('SELECT referral_code FROM community_event_guest_capabilities WHERE event_id=$1 AND email=$2',[id,email])).rows[0];const rsvp=await ownRsvp(q,id,{guest_email:email});const history=Boolean(rsvp?.confirmed_at||rsvp?.email_sent_at||await ownEntry(q,id,{guest_email:email}));await guestLegal(q,event,existing??body,history);if(!history)requireGuestAdmission(event,'register');requireCondition(history||event.state==='published'&&instant(event.starts_at)>Date.now(),409,'event_closed','活動已開始或取消。');return ensureGuestCapability(q,id,{...body,email});});try{await send(email,'自由工坊：活動參與管理',`請使用私人連結管理自己的活動報名、候補及提醒。請勿轉寄。\n${eventGuestManagementLink(origin,id,token)}`);}catch{throw new Problem(503,'event_email_delivery_failed','郵件提供者尚未確認接受，請稍後重試。');}await markGuestCapabilityProviderAccepted(pool,id,email);return {requested:true,provider_status:'provider_accepted' as const};}
+// Keep mail attempts below the Worker subrequest budget, including both queues.
+export const EVENT_DELIVERY_BATCH_SIZE=10;
+// Only provider codes that mean the request was refused before acceptance are
+// safe to enqueue again. A lost response may have delivered mail already.
+function definitelyRejected(error:unknown){
+  return !!error&&typeof error==='object'&&'code' in error&&['E_RATE_LIMIT_EXCEEDED','E_DAILY_LIMIT_EXCEEDED'].includes(String(error.code));
+}
 export async function processEventWaitlist(pool:Pool,send:EventEmailSender,origin:string,now?:Date,eventId?:string):Promise<{reconciled:number;provider_accepted:number;failed:number}>{
   const clock=()=>now??new Date();
   const ids=(await pool.query("SELECT e.event_id FROM community_events e WHERE ($1::uuid IS NULL OR e.event_id=$1) AND EXISTS(SELECT 1 FROM community_event_waitlist w WHERE w.event_id=e.event_id AND w.status IN ('queued','invited')) ORDER BY e.waitlist_reconciled_at NULLS FIRST,e.event_id LIMIT 100",[eventId??null])).rows;
   for(const row of ids)await transaction(pool,async q=>{const checkedAt=clock();await reconcileEventWaitlist(q,row.event_id,checkedAt);await q.query('UPDATE community_events SET waitlist_reconciled_at=$2 WHERE event_id=$1',[row.event_id,checkedAt]);});
   let accepted=0,failed=0;
-  const candidates=(await pool.query("SELECT entry_id,event_id FROM community_event_waitlist WHERE status='invited' AND guest_email IS NOT NULL AND delivery_status='pending' AND ($1::uuid IS NULL OR event_id=$1) ORDER BY joined_at,entry_id LIMIT 100",[eventId??null])).rows;
+  const candidates=(await pool.query("SELECT entry_id,event_id FROM community_event_waitlist WHERE status='invited' AND guest_email IS NOT NULL AND delivery_status='pending' AND ($1::uuid IS NULL OR event_id=$1) ORDER BY joined_at,entry_id LIMIT $2",[eventId??null,EVENT_DELIVERY_BATCH_SIZE])).rows;
 for(const candidate of candidates){
   const claim=await transaction(pool,async q=>{
     const event=await eventRow(q,candidate.event_id,true);
@@ -230,7 +237,7 @@ for(const candidate of candidates){
     try{
       await send(entry.guest_email,'自由工坊：候補名額可回覆',`你候補的活動有保留名額。請在 ${new Date(entry.expires_at).toISOString()}（UTC）前選擇是否參加。\n${eventGuestManagementLink(origin,entry.event_id,cap.token_secret)}`);
       accepted++;
-    }catch{status='failed';failed++;}
+    }catch(error){status=definitelyRejected(error)?'pending':'unknown';failed++;}
     await q.query('UPDATE community_event_waitlist SET delivery_status=$2 WHERE entry_id=$1 AND invitation_id=$3',[entry.entry_id,status,entry.invitation_id]);
   });
 }
@@ -238,13 +245,13 @@ return {reconciled:ids.length,...await processEventNotices(pool,send,origin,even
 }
 // A rolling day also bounds every calendar day; unknown attempts consume slots.
 const changeNoticeBudgetSql=`(n.kind<>'event_schedule_changed' OR (
- NOT EXISTS(SELECT 1 FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email
+ NOT EXISTS(SELECT 1 FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email AND a.notice_id<>n.notice_id
    AND a.kind='event_schedule_changed' AND a.attempted_at>clock_timestamp()-interval '1 hour')
- AND (SELECT count(*) FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email
+ AND (SELECT count(*) FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email AND a.notice_id<>n.notice_id
    AND a.kind='event_schedule_changed' AND a.attempted_at>clock_timestamp()-interval '1 day')<3))`;
 export async function processEventNotices(pool:Pool,send:EventEmailSender,origin:string,eventId?:string,accepted=0,failed=0){
 const notices=(await pool.query(`SELECT notice_id,event_id FROM community_event_participation_notices n WHERE status='pending'
- AND ($1::uuid IS NULL OR event_id=$1) AND ${changeNoticeBudgetSql} ORDER BY event_version,notice_id LIMIT 100`,[eventId??null])).rows;
+ AND ($1::uuid IS NULL OR event_id=$1) AND ${changeNoticeBudgetSql} ORDER BY event_version,notice_id LIMIT $2`,[eventId??null,Math.max(0,EVENT_DELIVERY_BATCH_SIZE-accepted-failed)])).rows;
 for(const candidate of notices){
   const claimed=await transaction(pool,async q=>{
     await eventRow(q,candidate.event_id,true);
@@ -273,7 +280,7 @@ for(const candidate of notices){
       await q.query('UPDATE community_event_participation_notices SET attempted_at=clock_timestamp() WHERE notice_id=$1',[claimed.notice_id]);
       await send(claimed.guest_email,'自由工坊：活動參與狀態更新',`${noticeBody??'活動已取消。'}\n${origin}/events/${event.event_id}`);
       accepted++;
-    }catch{status='failed';failed++;}
+    }catch(error){status=definitelyRejected(error)?'pending':'unknown';failed++;}
     await q.query('UPDATE community_event_participation_notices SET status=$2 WHERE notice_id=$1',[claimed.notice_id,status]);
   });
 }

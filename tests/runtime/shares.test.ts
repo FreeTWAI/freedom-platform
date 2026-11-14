@@ -87,24 +87,169 @@ test('repository cache renders original README/release, caches 24h and hides a v
  const {refreshRepository,repositoryPage}=await import('../../modules/shares/repository-cache.js');
  const fixture:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname;
-  if(path.endsWith('/readme')){assert.equal(new Headers(init?.headers).get('accept'),'application/vnd.github.html+json');return new Response('<h2>安裝</h2><pre><code>npm install fixture</code></pre><script>bad()</script>',{headers:{etag:'"readme-1"'}});}
+  if(path.endsWith('/readme')){assert.equal(new Headers(init?.headers).get('accept'),'application/vnd.github.html+json');if(new Headers(init?.headers).has('if-none-match'))return new Response(null,{status:304});return new Response('<h2>安裝</h2><pre><code>npm install fixture</code></pre><script>bad()</script>',{headers:{etag:'"readme-1"'}});}
   if(path.endsWith('/releases/latest'))return new Response(JSON.stringify({tag_name:'v1',name:'First',html_url:'https://github.com/fixture/cache/releases/tag/v1',published_at:'2026-11-01T00:00:00Z'}));
   return new Response(JSON.stringify({...original,id:903,full_name:'fixture/cache'}));
  };
  const s=await createShare(pool,cmd(actors[0],{url:'https://github.com/fixture/cache'}),{fetcher:fixture});
  const repoId=(await pool.query('SELECT repo_id FROM shares WHERE share_id=$1',[s.share_id])).rows[0].repo_id;
  await refreshRepository(pool,repoId,{fetcher:fixture});
+ assert.equal((await pool.query('SELECT facts FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0].facts.quick_start,'npm install fixture','quick start is calculated during the cache write');
  const {createPublicShareRoutes}=await import('../../apps/platform-api/src/routes/shares.js');
  const publicApp=createPublicShareRoutes(pool,'https://platform.example.com',{fetcher:fixture});
  const publicResponse=await publicApp.request(`/s/${s.share_id}?via=synthetic1`);assert.equal(publicResponse.status,200);
  const publicHtml=await publicResponse.text();assert.match(publicHtml,/npm install fixture/);assert.doesNotMatch(publicHtml,/<script|onclick/);assert.match(publicHtml,/synthetic1/);
  assert.equal(publicResponse.headers.get('cache-control'),'no-store');
  await transaction(pool,async q=>{const page=await repositoryPage(q,repoId);assert.equal(page.stale,false);assert.equal(page.quick_start,'npm install fixture');assert.doesNotMatch(page.readme_html,/script/);assert.equal(page.latest_release.tag_name,'v1');});
+ await pool.query("UPDATE canonical_repositories SET facts=facts-'quick_start' WHERE repo_id=$1",[repoId]);
+ await refreshRepository(pool,repoId,{fetcher:fixture},true);
+ assert.equal((await pool.query('SELECT facts FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0].facts.quick_start,'npm install fixture','304 upgrades an older cache on write');
  await refreshRepository(pool,repoId,{fetcher:async()=>{throw Error('fresh cache must not fetch');}});
  await pool.query("UPDATE canonical_repositories SET refresh_after=now()-interval '1 day' WHERE repo_id=$1",[repoId]);
  await refreshRepository(pool,repoId,{fetcher:async()=>new Response(null,{status:404})});
  assert.equal((await pool.query('SELECT state FROM shares WHERE share_id=$1',[s.share_id])).rows[0].state,'hidden');
  assert.equal((await pool.query('SELECT sum(units)::int n FROM share_credit_events WHERE share_id=$1',[s.share_id])).rows[0].n,1);
+});
+
+test('prepared facts from a concurrent replay cannot hide a different repository identity',async()=>{
+ const {refreshRepository}=await import('../../modules/shares/repository-cache.js');
+ const current={...original,id:7777002,full_name:'fixture/stable'};
+ const other=await repositoryFacts('https://github.com/fixture/stable',{fetcher:async()=>Response.json({...current,id:7777003})});
+ const s=await createShare(pool,cmd(actors[0],{url:'https://github.com/fixture/stable'}),{fetcher:async()=>Response.json(current)});
+ const repoId=(await pool.query('SELECT repo_id FROM shares WHERE share_id=$1',[s.share_id])).rows[0].repo_id;
+ const calls:string[]=[];
+ const fetcher:typeof fetch=async input=>{
+  const path=new URL(String(input)).pathname;calls.push(path);
+  if(path==='/repositories/7777002'||path==='/repos/fixture/stable')return Response.json(current);
+  return new Response(null,{status:404});
+ };
+ await refreshRepository(pool,repoId,{fetcher},true,other);
+ assert.ok(calls.includes('/repositories/7777002'),'mismatched prepared facts require independent verification');
+ assert.equal((await pool.query('SELECT state FROM shares WHERE share_id=$1',[s.share_id])).rows[0].state,'published');
+ assert.equal((await pool.query('SELECT fetch_state FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0].fetch_state,'ready');
+});
+
+test('a renamed repository recomputes a cached clone fallback when the README is unchanged',async()=>{
+ const {refreshRepository}=await import('../../modules/shares/repository-cache.js');
+ const facts=await repositoryFacts('https://github.com/fixture/after',{fetcher:async()=>Response.json({...original,id:7777001,full_name:'fixture/after'})});
+ const repoId=randomUUID();
+ // A share may update the current name before the old facts are refreshed.
+ await pool.query(`INSERT INTO canonical_repositories
+   (repo_id,provider,provider_repo_id,full_name,current_url,fetch_state,readme_html,etag,facts)
+   VALUES($1,'github',$2,$3,$4,'ready','<p>No installation section</p>',$5,$6)`,
+   [repoId,facts.id,facts.full_name,facts.url,'"unchanged"',JSON.stringify({...facts,full_name:'fixture/before',quick_start:'git clone https://github.com/fixture/before.git'})]);
+ const fetcher:typeof fetch=async input=>new URL(String(input)).pathname.endsWith('/readme')?new Response(null,{status:304}):new Response(null,{status:404});
+ await refreshRepository(pool,repoId,{fetcher},true,facts);
+ assert.equal((await pool.query("SELECT facts->>'quick_start' quick_start FROM canonical_repositories WHERE repo_id=$1",[repoId])).rows[0].quick_start,'git clone https://github.com/fixture/after.git');
+});
+
+test('repository list cache selects no README and returns the stored quick start',async()=>{
+ const {readBookOriginalCaches,readBookOriginalCache}=await import('../../modules/shares/repository-cache.js');
+ const book={id:'summary',repository_url:'https://github.com/fixture/summary'};
+ const row={provider_repo_id:'444',established_provider_repo_id:'444',observed_needs_recheck:false,observed_book_id:'summary',observed_requested_full_name:'fixture/summary',full_name:'fixture/summary',current_url:book.repository_url,readme_html:'<pre>very large README</pre>',facts:{quick_start:'npm install fixture'},fetch_state:'ready',fetched_at:new Date()};
+ const queries:string[]=[];
+ const spy={query:async(sql:string)=>{queries.push(sql);return {rows:[row]};}} as unknown as Pool;
+ const list=(await readBookOriginalCaches(spy,[book],{includeReadme:false})).get('summary')!;
+ assert.doesNotMatch(queries[0],/\bcr\.readme_html\b/);
+ assert.equal(list.quick_start,'npm install fixture');
+ queries.length=0;
+ const detail=await readBookOriginalCache(spy,book);
+ assert.match(queries[0],/\bcr\.readme_html\b/);
+ assert.equal(detail.readme_html,row.readme_html);
+ const {createApp}=await import('../../apps/platform-api/src/app.js');
+ const app=createApp(spy,'http://127.0.0.1:46496','local');
+ for(const path of ['/api/v1/site','/api/v1/community']){
+  queries.length=0;assert.equal((await app.request(path)).status,200);
+  const cacheQueries=queries.filter(sql=>sql.includes('FROM catalog_repo_observations'));
+  assert.equal(cacheQueries.length,1);assert.doesNotMatch(cacheQueries[0],/\bcr\.readme_html\b/);
+ }
+});
+
+test('scheduled cache work backfills legacy quick starts in bounded batches without GitHub',async()=>{
+ const {refreshDueRepositories}=await import('../../modules/shares/repository-cache.js');
+ const ids=[randomUUID(),randomUUID(),randomUUID()].sort();
+ for(let i=0;i<ids.length;i++)await pool.query(`INSERT INTO canonical_repositories
+   (repo_id,provider,provider_repo_id,full_name,current_url,fetch_state,readme_html,facts,refresh_after)
+   VALUES($1,'github',$2,$3,$4,$6,$5,'{}',now()+interval '1 day')`,
+   [ids[i],String(99901+i),`fixture/legacy-${i}`,`https://github.com/fixture/legacy-${i}`,'<h2>Install</h2><pre><code>npm install legacy</code></pre>',i===2?'error':'ready']);
+ const noFetch:typeof fetch=async()=>{throw Error('legacy cache backfill must not fetch');};
+ await refreshDueRepositories(pool,{fetcher:noFetch},2);
+ let rows=(await pool.query("SELECT repo_id,facts->>'quick_start' quick_start FROM canonical_repositories WHERE repo_id=ANY($1::uuid[]) ORDER BY repo_id",[ids])).rows;
+ assert.deepEqual(rows.map(row=>row.quick_start),['npm install legacy','npm install legacy',null]);
+ await refreshDueRepositories(pool,{fetcher:noFetch},2);
+ rows=(await pool.query("SELECT facts->>'quick_start' quick_start FROM canonical_repositories WHERE repo_id=ANY($1::uuid[]) ORDER BY repo_id",[ids])).rows;
+ assert.deepEqual(rows.map(row=>row.quick_start),Array(3).fill('npm install legacy'));
+ const oversized=randomUUID(),raced=randomUUID(),invalidFacts=randomUUID();
+ await pool.query(`INSERT INTO canonical_repositories
+   (repo_id,provider,provider_repo_id,full_name,current_url,fetch_state,readme_html,facts,refresh_after)
+   VALUES($1,'github','99904','fixture/oversized','https://github.com/fixture/oversized','ready',repeat('x',8388609),'{}',now()+interval '1 day'),
+   ($2,'github','99905','fixture/raced','https://github.com/fixture/raced','ready','<h2>Install</h2><pre>old command</pre>','{}',now()+interval '1 day'),
+   ($3,'github','99906','fixture/invalid','https://github.com/fixture/invalid','ready','<h2>Install</h2><pre>ignore</pre>','[]',now()+interval '1 day')`,[oversized,raced,invalidFacts]);
+ let changed=false;
+ const racingPool={query:async(sql:string,values?:unknown[])=>{
+  const result=await pool.query(sql,values);
+  if(!changed&&sql.includes('SELECT repo_id,full_name,readme_html FROM canonical_repositories')){
+   changed=true;await pool.query("UPDATE canonical_repositories SET readme_html='<h2>Install</h2><pre>new command</pre>' WHERE repo_id=$1",[raced]);
+  }
+  return result;
+ }} as unknown as Pool;
+ await refreshDueRepositories(racingPool,{fetcher:noFetch},2);
+ assert.equal((await pool.query("SELECT facts->>'quick_start' quick_start FROM canonical_repositories WHERE repo_id=$1",[raced])).rows[0].quick_start,null,'a concurrent README update must not receive stale text');
+ await refreshDueRepositories(pool,{fetcher:noFetch},2);
+ assert.equal((await pool.query("SELECT facts->>'quick_start' quick_start FROM canonical_repositories WHERE repo_id=$1",[raced])).rows[0].quick_start,'new command');
+ assert.equal((await pool.query("SELECT facts->>'quick_start' quick_start FROM canonical_repositories WHERE repo_id=$1",[oversized])).rows[0].quick_start,null,'oversized legacy HTML is not loaded into the Worker');
+ assert.deepEqual((await pool.query('SELECT facts FROM canonical_repositories WHERE repo_id=$1',[invalidFacts])).rows[0].facts,[],'malformed legacy facts cannot block the batch');
+});
+
+test('repository share responds before cache refresh and reuses its verified GitHub facts',async()=>{
+ const {Hono}=await import('hono');
+ const {createShareRoutes}=await import('../../apps/platform-api/src/routes/shares.js');
+ const calls:string[]=[];const pending:(()=>Promise<void>)[]=[];
+ const source={...original,id:1903,full_name:'fixture/deferred'};
+ const fixture:typeof fetch=async input=>{
+  const path=new URL(String(input)).pathname;calls.push(path);
+  if(path.endsWith('/readme'))return new Response('<h2>Install</h2><pre><code>npm install fixture</code></pre>');
+  if(path.endsWith('/releases/latest'))return new Response(null,{status:404});
+  if(path.includes('/commits/'))return Response.json({sha:'b'.repeat(40)});
+  return Response.json(source);
+ };
+ const app=new Hono<import('../../apps/platform-api/src/module-context.js').PlatformEnv>();
+ app.use('*',async(c,next)=>{c.set('actor',actors[0]);await next();});
+ app.route('/',createShareRoutes(pool,{fetcher:fixture},undefined,work=>pending.push(work)));
+ const response=await app.request('/shares',{method:'POST',headers:{'content-type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify({url:'https://github.com/fixture/deferred'})});
+ assert.equal(response.status,200);assert.deepEqual(calls,['/repos/fixture/deferred']);
+ assert.equal(pending.length,1,'cache enrichment is queued after response');
+ await pending[0]();
+ assert.equal(calls.filter(path=>path==='/repos/fixture/deferred').length,1,'repository facts are not fetched twice');
+ assert.equal(calls.includes('/repositories/1903'),false,'the just-verified identity needs no second lookup');
+ assert.ok(calls.includes('/repos/fixture/deferred/readme'));
+ const result=await response.json() as {share_id:string};
+ const row=(await pool.query('SELECT c.fetch_state,c.readme_html FROM shares s JOIN canonical_repositories c USING(repo_id) WHERE s.share_id=$1',[result.share_id])).rows[0];
+ assert.equal(row.fetch_state,'ready');assert.match(row.readme_html,/npm install fixture/);
+});
+
+test('scheduled Worker lease blocks overlapping runs and recovers an expired lease',async()=>{
+ const {createWorkerHandler}=await import('../../apps/platform-api/src/worker.js');
+ let started!:()=>void,release!:()=>void;
+ const entered=new Promise<void>(resolve=>{started=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+ let refreshes=0;const phases:string[]=[];
+ const handler=createWorkerHandler({
+  createPool:()=>new Pool({connectionString:url,options:`-c search_path=${schema}`}),
+  authPrune:async()=>{phases.push('cleanup');return {sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0};},
+  sharesRefresh:async()=>{phases.push('refresh');refreshes++;if(refreshes===1){started();await gate;}return 0;},
+  syncGitHub:async()=>({requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'})
+ });
+ const env={HYPERDRIVE:{connectionString:url!},ASSETS:{fetch:async()=>new Response()},FREEDOM_COMMERCE_QUARANTINE:'true'};
+ const ctx={waitUntil:(_work:Promise<unknown>)=>{}};
+ const first=handler.scheduled({},env,ctx);await entered;
+ try{
+  assert.equal((await pool.query("SELECT count(*)::int n FROM github_feed_state WHERE feed_name='worker_scheduled_lease' AND next_sync_at>clock_timestamp()" )).rows[0].n,1);
+  await handler.scheduled({},env,ctx);assert.equal(refreshes,1);assert.deepEqual(phases,['cleanup','refresh']);
+ }finally{release();await first;}
+ assert.equal((await pool.query("SELECT count(*)::int n FROM github_feed_state WHERE feed_name='worker_scheduled_lease'")).rows[0].n,0);
+ await pool.query("INSERT INTO github_feed_state(feed_name,etag,next_sync_at) VALUES('worker_scheduled_lease','stale',clock_timestamp()-interval '1 second')");
+ await handler.scheduled({},env,ctx);
+ assert.equal(refreshes,2);assert.equal((await pool.query("SELECT count(*)::int n FROM github_feed_state WHERE feed_name='worker_scheduled_lease'")).rows[0].n,0);
 });
 
 test('real GitHub adapter confirms repository star once and verifies an author outside the catalog',async()=>{

@@ -286,3 +286,16 @@ test('schema208 upgrade coalesces legacy unread changes and pending guest versio
   assert.equal((await upgrade.query("SELECT body FROM member_notifications WHERE action_resource_id=$1 AND kind='event_schedule_changed' AND read_at IS NULL",[id])).rows[0].body.includes('升級後場地'),true);
  }finally{await upgrade.end();await admin.query(`DROP SCHEMA ${upgradeSchema} CASCADE`);}
 });
+
+
+test('notice processing sends at most one bounded batch per run',async()=>{
+ const id=await noticeFixture();
+ await pool.query(`INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind,body)
+   SELECT gen_random_uuid(),$1,'going@example.com',n,'event_announcement','合成通知' FROM generate_series(1,13) n`,[id]);
+ const {processEventNotices,EVENT_DELIVERY_BATCH_SIZE}=await import('../../modules/community/event-waitlist.js');
+ let sends=0;const send=async()=>{sends++;};
+ await processEventNotices(pool,send,'https://example.org',id);
+ assert.equal(sends,EVENT_DELIVERY_BATCH_SIZE);assert.ok(EVENT_DELIVERY_BATCH_SIZE<50);
+ await processEventNotices(pool,send,'https://example.org',id);
+ await processEventNotices(pool,send,'https://example.org',id);assert.equal(sends,13);
+});

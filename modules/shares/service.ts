@@ -14,7 +14,7 @@ import { existingTitle } from './adapters/existing.js';
 import { endorseShare, reverseCredit, creditEventRegistrations } from './credit.js';
 import { createPromotionLinkRow } from '../community/promotion.js';
 import { readPublicWork } from '../opportunity-project-work/public-sharing.js';
-import type { AdapterContext, PreparedShare, ShareRow } from './types.js';
+import type { AdapterContext, PreparedShare, RepositoryFacts, ShareRow } from './types.js';
 export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional(),source:z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),guild_key:z.string().regex(/^guild_[a-zA-Z0-9_]+$/),ref:z.string().max(200).optional()}).strict().optional()}).strict();
 async function lockEventSource(q:PoolClient,actor:Actor,id:string){
  await q.query(`SELECT e.event_id FROM community_events e JOIN shares s ON s.ref_id=e.event_id AND s.kind='event' WHERE s.share_id=$1 AND s.community_id=$2 FOR UPDATE OF e`,[id,actor.community_id]);
@@ -47,7 +47,7 @@ async function saveRepository(q:PoolClient,p:PreparedShare) {
     VALUES($1,'github',$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(provider,provider_repo_id) DO UPDATE SET full_name=EXCLUDED.full_name,current_url=EXCLUDED.current_url,observed_at=now()
     RETURNING repo_id`,[randomUUID(),r.id,r.full_name,r.url,JSON.stringify(r),r.description,r.topics,r.homepage,r.license_spdx])).rows[0].repo_id as string;
 }
-export async function createShare(pool:Pool,input:Command,context:AdapterContext={}) {
+export async function createShare(pool:Pool,input:Command,context:AdapterContext={},onRepositoryPrepared?:(facts:RepositoryFacts)=>void) {
   const body=shareInput.parse(input.body);
   if(body.kind==='event'&&body.event){const e=await createEvent(pool,input,{...body.event,...(body.url?{source_url:body.url}:{})});return {...(input.actor.agent?{via_agent:true}:{}),share_id:e.share_id,created:true,url:`/events/${e.event_id}`};}
   requireCondition(body.kind!=='event'||body.ref_id,422,'event_details_required','請確認活動名稱、時間和地點。');
@@ -55,6 +55,7 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
   const receipt=async(q:PoolClient)=>(await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,memberReceiptOperation(input),input.key])).rows[0]?.response as {share_id:string}|undefined;
   const prior=await readWithMemberSession(pool,input.actor,receipt);
   const p=prior?null:await prepare(pool,input,context);
+  if(p?.repository)onRepositoryPrepared?.(p.repository);
   requireCondition(!p?.event,422,'event_details_required','請確認活動名稱、時間和地點。');
   return command(pool,input,async q=>{
     if(body.source)requireCondition((await q.query("SELECT 1 FROM guild_tools WHERE guild_key=$1 AND tool_id=$2 AND community_id=$3 AND state='enabled' AND scopes ? 'share:compose' FOR SHARE",[body.source.guild_key,body.source.tool_id,input.actor.community_id])).rowCount,403,'tool_unavailable','工具已停用或未允許分享。');
