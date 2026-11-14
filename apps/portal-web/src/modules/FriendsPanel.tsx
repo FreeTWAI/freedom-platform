@@ -32,10 +32,37 @@ export function FriendsPanel(props:Props){
 }
 function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',memberBlockingEnabled=false,registerLeave}:Props){
   const owner=useRef(client.sessionGeneration).current;
-  const directory=useMemo(()=>createFriendsDirectory<MemberCardData>({
+  const countController=useRef<AbortController|null>(null),countSequence=useRef(0),refreshIncomingOnMutation=useRef(false);
+  const [incomingTotal,setIncomingTotal]=useState(0);
+  const baseDirectory=useMemo(()=>createFriendsDirectory<MemberCardData>({
     generation:()=>client.sessionGeneration,initialScope,
     read:(query,signal)=>client.get<FriendsPage<MemberCardData>>(`/friends/directory?${query}`,{signal}),
   }),[client,owner]);
+  function loadIncomingCount(){
+    countController.current?.abort();
+    const controller=new AbortController();
+    countController.current=controller;
+    const sequence=++countSequence.current;
+    void client.get<FriendsPage<MemberCardData>>('/friends/directory?scope=incoming&limit=1&offset=0',{signal:controller.signal}).then(data=>{
+      if(controller.signal.aborted||sequence!==countSequence.current||!baseDirectory.isCurrent())return;
+      setIncomingTotal(typeof data?.total==='number'&&Number.isSafeInteger(data.total)&&data.total>0?data.total:0);
+    }).catch(()=>{
+      if(controller.signal.aborted||sequence!==countSequence.current||!baseDirectory.isCurrent())return;
+      setIncomingTotal(0);
+    });
+  }
+  const loadIncomingCountRef=useRef(loadIncomingCount);
+  loadIncomingCountRef.current=loadIncomingCount;
+  const directory=useMemo(()=>({
+    ...baseDirectory,
+    refreshAfterMutation(){
+      if(refreshIncomingOnMutation.current){
+        refreshIncomingOnMutation.current=false;
+        loadIncomingCountRef.current();
+      }
+      return baseDirectory.refreshAfterMutation();
+    },
+  }),[baseDirectory]);
   const view=useSyncExternalStore(directory.subscribe,directory.getSnapshot,directory.getSnapshot);
   const {scope,draft:search,page,offset,composing}=view;
   const loading=view.status==='loading'||view.status==='waiting'||view.status==='idle'&&!composing&&scope!=='blocked';
@@ -72,6 +99,10 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
   const input=useRef<HTMLInputElement>(null),results=useRef<HTMLElement>(null);
   const pageTrigger=useRef<Element|null>(null),focusedRevision=useRef(0);
   useEffect(()=>{directory.start();return()=>directory.stop();},[directory]);
+  useEffect(()=>{
+    loadIncomingCount();
+    return()=>{countController.current?.abort();countSequence.current++;};
+  },[client,directory]);
   useEffect(()=>{
     let active=true;
     void loadLabels(client).then(data=>{if(active&&directory.isCurrent())setLabels(data);}).catch(()=>{});
@@ -126,13 +157,14 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
     return <><button id={id} type="button" className="btn btn-ghost" disabled={writesLocked} aria-expanded={open} aria-controls={`${id}-confirmation`} aria-describedby={open?`${id}-warning`:undefined} onClick={()=>setConfirming({userId:member.user_id,action})}>{copy.label}</button>
       <div id={`${id}-confirmation`} hidden={!open} role="group" aria-label={`${copy.label}「${member.nickname}」`} aria-describedby={`${id}-warning`}>
         <p id={`${id}-warning`} className="field-hint">{copy.warning}</p>
-        <button type="button" className="btn btn-ghost" disabled={writesLocked} aria-describedby={`${id}-warning`} onClick={()=>void act(member,'remove')}>{pending(member,'remove')?copy.busy:copy.confirm}</button>
+        <button type="button" className="btn btn-ghost" disabled={writesLocked} aria-describedby={`${id}-warning`} onClick={()=>{if(!writesLocked)refreshIncomingOnMutation.current=action==='decline';void act(member,'remove');}}>{pending(member,'remove')?copy.busy:copy.confirm}</button>
         <button type="button" className="btn btn-ghost" disabled={writesLocked} onClick={()=>{setConfirming(null);document.getElementById(id)?.focus();}}>取消</button>
       </div></>;
   }
   const emptyAcceptedPrimary=scope==='accepted'&&view.status==='ready'&&Boolean(page&&!page.items.length)&&!view.search&&Boolean(onNavigate);
   const hasIncomingItems=scope==='incoming'&&view.status==='ready'&&Boolean(page&&page.items.length>0);
-  return <section className="module-panel members-panel friends-panel"><div className="friends-intro"><h2 className="friends-heading">我的好友</h2>{onNavigate&&!emptyAcceptedPrimary&&<button type="button" className={hasIncomingItems?'btn btn-secondary btn-small':'btn btn-primary'} onClick={()=>onNavigate('members')}>找新夥伴</button>}</div>
+  const showIncomingNotice=incomingTotal>0&&scope!=='incoming';
+  return <section className="module-panel members-panel friends-panel"><div className="friends-intro"><h2 className="friends-heading">我的好友</h2>{onNavigate&&!emptyAcceptedPrimary&&<button type="button" className={hasIncomingItems||showIncomingNotice?'btn btn-secondary btn-small':'btn btn-primary'} onClick={()=>onNavigate('members')}>找新夥伴</button>}</div>
     <details className="friends-filters"><summary>篩選</summary>
     <div className="friend-scopes" data-guide-anchor="friends:scope" role="group" aria-label="好友名單範圍">{([['accepted','我的好友'],['incoming','收到的邀請'],['outgoing','送出的邀請'],...(memberBlockingEnabled?[['blocked','我的封鎖名單']]:[])] as [FriendsScope,string][]).map(([key,label])=><button type="button" className="btn btn-ghost" key={key} data-guide-anchor={key==='incoming'?'friends:incoming':undefined} aria-pressed={scope===key} disabled={composing} onClick={()=>changeScope(key)}>{label}</button>)}</div>
     <p className="friends-scope-hint" id="friends-scope-hint">{SCOPE_COPY[scope].hint}</p>
@@ -148,6 +180,7 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
       {composing&&<p className="field-hint" role="status">選字完成後會自動搜尋。</p>}
     </form>}
     </details>
+    {showIncomingNotice&&<div className="friends-incoming" role="status"><p>有 {incomingTotal} 個好友邀請等你回覆</p><button type="button" className="btn btn-primary" disabled={composing} onClick={()=>changeScope('incoming')}>查看邀請</button></div>}
     {/* Keep visited blocking editors mounted across list switches: an unknown write retains its key. */}
     {memberBlockingEnabled&&visitedBlocked&&<div hidden={scope!=='blocked'}><BlockedMembers client={client}/></div>}
     {error&&<div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" disabled={busy||composing} onClick={()=>void directory.submit()}>重讀好友名單</button></div>}
@@ -159,11 +192,11 @@ function FriendsContent({client,onNavigate,onMessage,initialScope='accepted',mem
       {loading&&<p role="status">正在載入好友名單…</p>}
       {view.status==='ready'&&page&&<>
         {!emptyAcceptedPrimary&&<p className="field-hint" aria-live="polite">{view.search?'符合搜尋':'共'} {page.total} {SCOPE_COPY[scope].count}</p>}
-        {!page.items.length&&<div className="friends-empty"><h2>{view.search?'沒有符合的名字':SCOPE_COPY[scope].empty}</h2>{view.search?<><p>試試其他名字，或清除搜尋查看這份名單。</p><button type="button" className="btn btn-secondary btn-small" disabled={composing} onClick={()=>{void directory.clear();input.current?.focus();}}>查看這份完整名單</button></>:scope==='accepted'&&onNavigate?<button type="button" className="btn btn-primary" onClick={()=>onNavigate('members')}>認識工坊夥伴</button>:<p>{SCOPE_COPY[scope].next}</p>}</div>}
+        {!page.items.length&&<div className="friends-empty"><h2>{view.search?'沒有符合的名字':SCOPE_COPY[scope].empty}</h2>{view.search?<><p>試試其他名字，或清除搜尋查看這份名單。</p><button type="button" className="btn btn-secondary btn-small" disabled={composing} onClick={()=>{void directory.clear();input.current?.focus();}}>查看這份完整名單</button></>:scope==='accepted'&&onNavigate?<button type="button" className={showIncomingNotice?'btn btn-secondary btn-small':'btn btn-primary'} onClick={()=>onNavigate('members')}>認識工坊夥伴</button>:<p>{SCOPE_COPY[scope].next}</p>}</div>}
         <div className="directory-rows">{page.items.map((member,index)=><DirectoryMemberRow key={member.user_id} member={member} labels={labels} client={client}><div className="directory-friend-actions">
           {scope==='accepted'?<><button type="button" className="btn btn-ghost" aria-label={`私訊${member.nickname}`} onClick={()=>onMessage(member.user_id)}>私訊</button><details className="friends-manage"><summary>好友設定</summary>{confirmable(member,'remove')}{memberBlockingEnabled&&<button type="button" className="btn btn-ghost" onClick={()=>openBlocking(member)}>封鎖設定</button>}</details></>
-            :scope==='incoming'?<><button type="button" className={index===0?'btn btn-primary':'btn btn-secondary'} disabled={writesLocked} onClick={()=>void act(member,'accept')}>{pending(member,'accept')?'正在接受…':'接受邀請'}</button>{confirmable(member,'decline')}{memberBlockingEnabled&&<details className="friends-manage"><summary>更多</summary><button type="button" className="btn btn-ghost" onClick={()=>openBlocking(member)}>封鎖設定</button></details>}</>
-            :<><button type="button" className="btn btn-ghost" disabled={writesLocked} onClick={()=>void act(member,'remove')}>{pending(member,'remove')?'正在取消…':'取消邀請'}</button>{memberBlockingEnabled&&<details className="friends-manage"><summary>更多</summary><button type="button" className="btn btn-ghost" onClick={()=>openBlocking(member)}>封鎖設定</button></details>}</>}
+            :scope==='incoming'?<><button type="button" className={index===0?'btn btn-primary':'btn btn-secondary'} disabled={writesLocked} onClick={()=>{if(!writesLocked)refreshIncomingOnMutation.current=true;void act(member,'accept');}}>{pending(member,'accept')?'正在接受…':'接受邀請'}</button>{confirmable(member,'decline')}{memberBlockingEnabled&&<details className="friends-manage"><summary>更多</summary><button type="button" className="btn btn-ghost" onClick={()=>openBlocking(member)}>封鎖設定</button></details>}</>
+            :<><button type="button" className="btn btn-ghost" disabled={writesLocked} onClick={()=>{if(!writesLocked)refreshIncomingOnMutation.current=false;void act(member,'remove');}}>{pending(member,'remove')?'正在取消…':'取消邀請'}</button>{memberBlockingEnabled&&<details className="friends-manage"><summary>更多</summary><button type="button" className="btn btn-ghost" onClick={()=>openBlocking(member)}>封鎖設定</button></details>}</>}
         </div></DirectoryMemberRow>)}</div>
       </>}
       {(offset>0||page?.next_offset!=null)&&<nav className="actions" aria-label="好友頁數">

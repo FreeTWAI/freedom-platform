@@ -71,6 +71,8 @@
 .friends-panel .friends-filters>summary{display:list-item;min-height:44px;padding:.55rem .65rem;cursor:pointer;font-size:.875rem;box-sizing:border-box}
 .friends-panel .friends-filters>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .friends-panel .friends-filters[open]>summary{margin-bottom:.5rem}
+.friends-panel .friends-incoming{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem 1rem;padding:.75rem 1rem;margin-bottom:.75rem;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev)}
+.friends-panel .friends-incoming p{margin:0}
 .friends-panel .friends-manage{min-width:0;max-width:100%}
 .friends-panel .friends-manage summary{display:list-item;min-height:44px;padding:.55rem .65rem;cursor:pointer;font-size:.875rem;box-sizing:border-box}
 .friends-panel .friends-manage summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}

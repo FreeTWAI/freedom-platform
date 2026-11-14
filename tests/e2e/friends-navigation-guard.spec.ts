@@ -40,7 +40,7 @@ async function openInvitation(page: Page, owner: Member, requester: Member) {
   await page.getByRole('button', { name: '登入', exact: true }).click();
   await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
   await navigate(page, '我的好友');
-  await panel(page).getByRole('button', { name: '收到的邀請', exact: true }).click();
+  await panel(page).getByRole('button', { name: '查看邀請', exact: true }).click();
   const row = panel(page).locator('.directory-member').filter({ has: page.getByRole('heading', { name: requester.nickname, exact: true }) });
   await expect(row).toBeVisible();
   return row.getByRole('button', { name: '接受邀請', exact: true });
@@ -145,7 +145,7 @@ test('canonical ACK permits home navigation while only its directory refresh is 
   try {
     const accept = await openInvitation(page, owner, requester);
     const origin = new URL(page.url()).origin;
-    await page.route(url => url.origin === origin && url.pathname === directoryPath, async route => {
+    await page.route(url => url.origin === origin && url.pathname === directoryPath && url.searchParams.get('limit') !== '1', async route => {
       if (route.request().method() !== 'GET') return route.fallback();
       readsHeld++;
       await held.promise;
@@ -212,7 +212,7 @@ test('known initial 422 does not lock navigation or carry a recovery command int
     await home(page).click();
     await expect(page.getByRole('heading', { name: '動態', level: 1, exact: true })).toBeVisible();
     await navigate(page, '我的好友');
-    await panel(page).getByRole('button', { name: '收到的邀請', exact: true }).click();
+    await panel(page).getByRole('button', { name: '查看邀請', exact: true }).click();
     await expect(panel(page).getByRole('button', { name: '接受邀請', exact: true })).toBeEnabled();
     await expect(retry(page)).toHaveCount(0);
     expect(commands).toHaveLength(1);

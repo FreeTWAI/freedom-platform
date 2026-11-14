@@ -124,11 +124,11 @@ const friendEntrySource=friendProperty.initializer.getText(identityAst);
 const friendEntry=runInNewContext(transformSync('('+friendEntrySource+')',{loader:'tsx',format:'cjs',jsx:'transform'}).code,{React,FriendsPanel});
 
 
-function fixture(t:TestContext){
+function fixture(t:TestContext,initialScope:'accepted'|'incoming'='incoming'){
  const requests:any[]=[],navigations:string[]=[],container=document.createElement('div');document.body.appendChild(container);const root=createRoot(container as unknown as HTMLElement);let mounted=true,route='friends',messagesOpen=false;let shell:any;
  const transport=(method:string)=>(url:string,body?:any,options?:any)=>new Promise((resolve,reject)=>requests.push({method,path:url,body,options,ownerId:props.session.user.user_id,ownerGeneration:props.client.sessionGeneration,resolve,reject,settled:false}));
  const client={sessionGeneration:1,get:transport('GET'),post:transport('POST')};
- let props:any={client,session:{user:{user_id:OWNER}},initialScope:'incoming',memberBlockingEnabled:false,onMessage:noNetwork,onNavigate(next:string){shell.selectTab(next)}};
+ let props:any={client,session:{user:{user_id:OWNER}},initialScope,memberBlockingEnabled:false,onMessage:noNetwork,onNavigate(next:string){shell.selectTab(next)}};
  shell={useCallback:(fn:any)=>fn,acceptedHash:{current:'#friends'},pageLeaveGuard:{current:null},messageHistoryTransition:{current:null},isMessagesHistoryEntry:(state:any)=>state?.messages===true,messagesHistoryState:(messages:boolean)=>({messages}),messageLocation:{current:null},setMessagesMounted(){},
  setTab(value:string){route=value;},setLocationHash(){},setFriendScope(){},setMessagesOpen(value:boolean){messagesOpen=value;},setMobileOpen(){},mainContent:{current:{focus(){}}},
  window:{location:{pathname:'/',search:'',hash:'#friends'},history:{state:null,back(){shell.window.history.state=null;const transition=shell.messageHistoryTransition.current;shell.messageHistoryTransition.current=null;transition?.after?.();},pushState(state:any){shell.window.history.state=state;},replaceState:noNetwork},dispatchEvent:noNetwork}};
@@ -148,10 +148,12 @@ function fixture(t:TestContext){
  const pending=(url:string)=>requests.filter(r=>r.path===url&&!r.settled);
  const resolve=async(r:any,value:any)=>{assert(r);assert(!r.settled);r.settled=true;await settle(()=>r.resolve(value));};
  const reject=async(r:any,error:any)=>{assert(r);assert(!r.settled);r.settled=true;await settle(()=>r.reject(error));};
- const directory=()=>requests.filter(r=>r.method==='GET'&&r.path.startsWith('/friends/directory?')&&!r.settled);
+ const isIncomingCount=(r:any)=>r.method==='GET'&&r.path.startsWith('/friends/directory?')&&new URL('https://fixture.invalid'+r.path).searchParams.get('limit')==='1';
+ const directory=()=>requests.filter(r=>r.method==='GET'&&r.path.startsWith('/friends/directory?')&&!isIncomingCount(r)&&!r.settled);
+ const incomingCount=()=>requests.filter(r=>isIncomingCount(r)&&!r.settled);
  const rows=async(state='pending')=>{await settle();for(const r of pending('/assessment-definition'))await resolve(r,definition());const r=directory().at(-1);assert(r,'directory request');await resolve(r,{items:[privateCard(state)],total:1,next_offset:null});};
  const posts=()=>requests.filter(r=>r.method==='POST');
- render();return{client,container,button,click,clickRaw,requests,pending,directory,rows,resolve,reject,posts,render,unmount,navigations,shell,transport,
+ render();return{client,container,button,click,clickRaw,requests,pending,directory,incomingCount,rows,resolve,reject,posts,render,unmount,navigations,shell,transport,
   back(){shell.selectTab('friends');},get route(){return route;},get messagesOpen(){return messagesOpen;}};
 }
 const lost=()=>new ApiError({message:'合成回覆遺失',network:true});
@@ -246,3 +248,92 @@ for(const action of ['remove','decline','cancel'] as const)test(`${action} uses 
 });
 test('canonical ACK followed by a failed readback still permits normal leave',async t=>{const h=fixture(t);await h.rows();h.click(h.button('接受邀請'));await h.resolve(h.posts()[0],ack());await h.reject(h.directory().at(-1),Error('canonical read failed'));assert(h.container.textContent.includes('canonical read failed'));assert.equal(canLeave(h),true);h.click(h.button('找新夥伴'));assert.equal(h.route,'members');});
 for(const status of [403,412])test(`unknown retry followed by ${status} keeps the original tuple locked until canonical ACK`,async t=>{const h=fixture(t);await h.rows();h.click(h.button('接受邀請'));await h.reject(h.posts()[0],lost());h.click(h.button('確認原操作結果'));await h.reject(h.posts()[1],new ApiError({status,message:`refused ${status}`,definitiveResponse:true}));assert.equal(canLeave(h),false);h.shell.selectTab('home');assert.equal(h.route,'friends');h.click(h.button('確認原操作結果'));for(const request of h.posts().slice(1)){assert.deepEqual(request.options,h.posts()[0].options);assert.deepEqual(request.body,h.posts()[0].body);assert.equal(request.path,h.posts()[0].path);}await h.resolve(h.posts()[2],ack());assert.equal(canLeave(h),true);});
+
+const isHidden=(node:HostNode)=>{for(let n:HostNode|null=node;n;n=n.parentNode){if(n.hasAttribute('hidden')||n.style.display==='none')return true;if(n.nodeName==='DETAILS'&&n.firstChild!==node&&!n.hasAttribute('open'))return true;}return false;};
+const classes=(node:HostNode|undefined)=>(node?.attributes.class??'').split(/\s+/).filter(Boolean);
+const visiblePrimaryLabels=(container:HostNode)=>descendants(container).filter(n=>n.nodeName==='BUTTON'&&!isHidden(n)&&classes(n).includes('btn-primary')).map(n=>n.textContent);
+
+test('waiting incoming invitation shows notice above list and keeps one primary',async t=>{
+ const h=fixture(t,'accepted');await settle();
+ const countReq=h.incomingCount().at(-1);assert.equal(Boolean(countReq),true);
+ assert.equal(new URL('https://fixture.invalid'+countReq.path).searchParams.get('scope'),'incoming');
+ assert.equal(new URL('https://fixture.invalid'+countReq.path).searchParams.get('limit'),'1');
+ await h.resolve(h.directory().at(-1),{items:[],total:0,next_offset:null});
+ await h.resolve(countReq,{items:[privateCard('pending')],total:2,next_offset:null});
+ assert.equal(h.container.textContent.includes('有 2 個好友邀請等你回覆'),true);
+ assert.deepEqual(visiblePrimaryLabels(h.container),['查看邀請']);
+ assert.equal(classes(h.button('認識工坊夥伴')).includes('btn-secondary'),true);
+ assert.equal(classes(h.button('認識工坊夥伴')).includes('btn-primary'),false);
+ const hWithFriend=fixture(t,'accepted');await settle();
+ await hWithFriend.resolve(hWithFriend.directory().at(-1),{items:[privateCard('accepted')],total:1,next_offset:null});
+ await hWithFriend.resolve(hWithFriend.incomingCount().at(-1),{items:[privateCard('pending')],total:1,next_offset:null});
+ assert.equal(hWithFriend.container.textContent.includes('有 1 個好友邀請等你回覆'),true);
+ assert.deepEqual(visiblePrimaryLabels(hWithFriend.container),['查看邀請']);
+ assert.equal(classes(hWithFriend.button('找新夥伴')).includes('btn-secondary'),true);
+ const hFailed=fixture(t,'accepted');await settle();
+ await hFailed.resolve(hFailed.directory().at(-1),{items:[],total:0,next_offset:null});
+ await hFailed.reject(hFailed.incomingCount().at(-1),Error('count failed'));
+ assert.equal(hFailed.container.textContent.includes('好友邀請等你回覆'),false);
+ assert.equal(Boolean(hFailed.button('查看邀請')),false);
+ assert.equal(Boolean(hFailed.button('重讀好友名單')),false);
+ assert.deepEqual(visiblePrimaryLabels(hFailed.container),['認識工坊夥伴']);
+});
+
+test('clicking 查看邀請 switches to incoming list and hides notice',async t=>{
+ const h=fixture(t,'accepted');await settle();
+ await h.resolve(h.directory().at(-1),{items:[],total:0,next_offset:null});
+ await h.resolve(h.incomingCount().at(-1),{items:[privateCard('pending')],total:1,next_offset:null});
+ h.click(h.button('查看邀請'));
+ assert.equal(h.container.textContent.includes('好友邀請等你回覆'),false);
+ assert.equal(Boolean(h.button('查看邀請')),false);
+ await settle();
+ const listReq=h.directory().at(-1);assert.equal(Boolean(listReq),true);
+ assert.equal(new URL('https://fixture.invalid'+listReq.path).searchParams.get('scope'),'incoming');
+ await h.resolve(listReq,{items:[privateCard('pending')],total:1,next_offset:null});
+ assert.equal(h.container.textContent.includes('合成活動夥伴'),true);
+ assert.deepEqual(visiblePrimaryLabels(h.container),['接受邀請']);
+});
+
+test('accepting or declining the last invitation removes the notice',async t=>{
+ const h=fixture(t,'accepted');await settle();
+ await h.resolve(h.directory().at(-1),{items:[],total:0,next_offset:null});
+ await h.resolve(h.incomingCount().at(-1),{items:[privateCard('pending')],total:1,next_offset:null});
+ h.click(h.button('查看邀請'));await settle();
+ await h.resolve(h.directory().at(-1),{items:[privateCard('pending')],total:1,next_offset:null});
+ h.click(h.button('接受邀請'));
+ await h.resolve(h.posts()[0],ack());
+ await h.resolve(h.directory().at(-1),{items:[],total:0,next_offset:null});
+ const afterAcceptCount=h.incomingCount().at(-1);assert.equal(Boolean(afterAcceptCount),true);
+ await h.resolve(afterAcceptCount,{items:[],total:0,next_offset:null});
+ const filters=descendants(h.container).find(n=>n.nodeName==='SUMMARY'&&n.textContent==='篩選');assert.equal(Boolean(filters),true);
+ h.click(filters);h.click(h.button('我的好友'));await settle();
+ await h.resolve(h.directory().at(-1),{items:[privateCard('accepted')],total:1,next_offset:null});
+ assert.equal(h.container.textContent.includes('好友邀請等你回覆'),false);
+ assert.equal(Boolean(h.button('查看邀請')),false);
+ assert.deepEqual(visiblePrimaryLabels(h.container),['找新夥伴']);
+
+ const hDecline=fixture(t,'accepted');await settle();
+ await hDecline.resolve(hDecline.directory().at(-1),{items:[],total:0,next_offset:null});
+ await hDecline.resolve(hDecline.incomingCount().at(-1),{items:[privateCard('pending')],total:1,next_offset:null});
+ hDecline.click(hDecline.button('查看邀請'));await settle();
+ await hDecline.resolve(hDecline.directory().at(-1),{items:[privateCard('pending')],total:1,next_offset:null});
+ hDecline.click(hDecline.button('婉拒'));hDecline.click(hDecline.button('確定婉拒'));
+ await hDecline.resolve(hDecline.posts()[0],{state:'removed',aggregate_version:8});
+ await hDecline.resolve(hDecline.directory().at(-1),{items:[],total:0,next_offset:null});
+ const afterDeclineCount=hDecline.incomingCount().at(-1);assert.equal(Boolean(afterDeclineCount),true);
+ await hDecline.resolve(afterDeclineCount,{items:[],total:0,next_offset:null});
+ const declineFilters=descendants(hDecline.container).find(n=>n.nodeName==='SUMMARY'&&n.textContent==='篩選');assert.equal(Boolean(declineFilters),true);
+ hDecline.click(declineFilters);hDecline.click(hDecline.button('我的好友'));await settle();
+ await hDecline.resolve(hDecline.directory().at(-1),{items:[],total:0,next_offset:null});
+ assert.equal(hDecline.container.textContent.includes('好友邀請等你回覆'),false);
+ assert.deepEqual(visiblePrimaryLabels(hDecline.container),['認識工坊夥伴']);
+});
+
+test('with no incoming invitations nothing changes',async t=>{
+ const h=fixture(t,'accepted');await settle();
+ await h.resolve(h.directory().at(-1),{items:[],total:0,next_offset:null});
+ await h.resolve(h.incomingCount().at(-1),{items:[],total:0,next_offset:null});
+ assert.equal(h.container.textContent.includes('好友邀請等你回覆'),false);
+ assert.equal(Boolean(h.button('查看邀請')),false);
+ assert.deepEqual(visiblePrimaryLabels(h.container),['認識工坊夥伴']);
+});

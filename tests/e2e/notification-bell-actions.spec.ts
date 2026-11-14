@@ -77,6 +77,9 @@ test('clicking an older notification opens its friend response beyond the first 
   await page.screenshot({path:'test-results/notification-action-phone.png'});
   await page.getByRole('button',{name:'查看完整好友邀請',exact:true}).click();
   const friends=page.locator('.friends-panel');
+  const filters=friends.locator('.friends-filters');
+  await expect(filters).toBeVisible();
+  if(!(await filters.evaluate(element=>(element as HTMLDetailsElement).open)))await filters.locator('> summary').click();
   await expect(friends.getByRole('button',{name:'收到的邀請',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(friends.getByRole('button',{name:'接受邀請',exact:true})).toHaveCount(20);
   await expect(friends.getByText('共 102 則邀請等你回覆',{exact:true})).toBeVisible();
