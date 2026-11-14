@@ -70,7 +70,7 @@ test('shared HTML inspection still rejects non-HTML and all framing denials and 
   for (const headers of [
     { 'content-type': 'application/json' },
     { 'content-type': 'text/html', 'x-frame-options': 'SAMEORIGIN' },
-    { 'content-type': 'text/html', 'content-security-policy': "frame-ancestors *" },
+    { 'content-type': 'text/html', 'content-security-policy': "frame-ancestors 'none'" },
   ] as Record<string,string>[]) {
     let cancelled = false;
     const transport = createWorkerGuildToolFetch(async () => new Response(new ReadableStream({ cancel() { cancelled = true; } }), { headers }));
@@ -110,4 +110,79 @@ test('Worker carries the shared inspection deadline into fetch and body reads', 
   })));
   const response = await waiting(input.entry_url, { signal: controller.signal });
   const read = response.text(); controller.abort(); await assert.rejects(read, /aborted/);
+});
+
+test('I3: Worker follows up to 3 same-origin redirects and rejects cross-origin, unsafe hops, and 4th redirect', async () => {
+  const seen: { url: string; redirect?: string }[] = [];
+  let cancelled = 0;
+  const body = () => new ReadableStream({ cancel() { cancelled++; } });
+  const appFetch = createWorkerGuildToolFetch(async (url, init) => {
+    seen.push({ url: String(url), redirect: init?.redirect });
+    if (seen.length === 1) return new Response(body(), { status: 301, headers: { location: '/app/' } });
+    return new Response('<html></html>', { headers: { 'content-type': 'text/html' } });
+  });
+  const ok = await inspectTool({ ...input, entry_url: 'https://tool.pages.dev/app' }, platform, appFetch);
+  assert.equal(ok.origin, 'https://tool.pages.dev');
+  assert.equal(seen.length, 2);
+  assert.deepEqual(seen, [
+    { url: 'https://tool.pages.dev/app', redirect: 'manual' },
+    { url: 'https://tool.pages.dev/app/', redirect: 'manual' },
+  ]);
+  assert.equal(cancelled, 1);
+
+  let hops3Calls = 0, hops3Cancelled = 0;
+  const threeHops = createWorkerGuildToolFetch(async () => {
+    hops3Calls++;
+    if (hops3Calls <= 3) return new Response(new ReadableStream({ cancel() { hops3Cancelled++; } }), { status: 302, headers: { location: `/step-${hops3Calls}` } });
+    return new Response('ok');
+  });
+  assert.equal(await (await threeHops('https://tool.pages.dev/app')).text(), 'ok');
+  assert.equal(hops3Calls, 4);
+  assert.equal(hops3Cancelled, 3);
+
+  let hops4Calls = 0, hops4Cancelled = 0;
+  const fourHops = createWorkerGuildToolFetch(async () => {
+    hops4Calls++;
+    return new Response(new ReadableStream({ cancel() { hops4Cancelled++; } }), { status: 302, headers: { location: `/step-${hops4Calls}` } });
+  });
+  await assert.rejects(fourHops('https://tool.pages.dev/app'), /tool_redirect_rejected/);
+  assert.equal(hops4Calls, 4);
+  assert.equal(hops4Cancelled, 4);
+
+  for (const location of ['https://other.pages.dev/app/', '/app/?secret=1', 'https://Tool.pages.dev/app/', 'http://127.0.0.1/']) {
+    let calls = 0, closed = false;
+    const rejected = createWorkerGuildToolFetch(async () => {
+      calls++;
+      return new Response(new ReadableStream({ cancel() { closed = true; } }), { status: 302, headers: { location } });
+    });
+    await assert.rejects(rejected('https://tool.pages.dev/app'), /tool_redirect_rejected/, location);
+    assert.equal(calls, 1, location);
+    assert.equal(closed, true, location);
+  }
+});
+
+test('I4: Worker accepts 1-2 labels under netlify.app, vercel.app, workers.dev and rejects apex, 3 labels, and prefix spoofs', async () => {
+  let calls = 0;
+  const transport = createWorkerGuildToolFetch(async () => {
+    calls++;
+    return new Response('<html></html>', { headers: { 'content-type': 'text/html' } });
+  });
+  const accepted = [
+    'https://a.netlify.app/', 'https://a.b.netlify.app/',
+    'https://a.vercel.app/', 'https://a.b.vercel.app/',
+    'https://a.workers.dev/', 'https://a.b.workers.dev/',
+  ];
+  for (const url of accepted) {
+    assert.equal((await transport(url)).status, 200, url);
+  }
+  assert.equal(calls, accepted.length);
+
+  for (const url of [
+    'https://a.b.c.vercel.app/', 'https://a.b.c.netlify.app/', 'https://a.b.c.workers.dev/',
+    'https://netlify.app/', 'https://vercel.app/', 'https://workers.dev/',
+    'https://evil-netlify.app/', 'https://evil-vercel.app/', 'https://evil-workers.dev/',
+  ]) {
+    await assert.rejects(transport(url), /tool_destination_rejected/, url);
+  }
+  assert.equal(calls, accepted.length);
 });

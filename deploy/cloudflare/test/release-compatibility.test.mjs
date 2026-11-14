@@ -2010,7 +2010,7 @@ for (const version of [2,3]) test(`pass-2 v${version} accepts only registered id
 for (const version of [2,3]) test(`pass-2 v${version} rejects a legacy ledger truncated at209 as a mismatch`, () => {
   const truncated = version === 2 ? fixture() : v3Fixture(catalogs().ab, catalogs().ab.ledger);
   truncated.scan = structuredClone(truncated.scan);
-  truncated.scan.ledger = truncated.scan.ledger.filter(row => row.name !== '210_work_public_sharing.sql');
+  truncated.scan.ledger = truncated.scan.ledger.filter(row => row.name.startsWith('v2_') || Number(row.name.slice(0, 3)) <= 209);
   truncated.scan.ledger_digest = compatibilityLedgerDigest(truncated.scan.ledger);
   assert.deepEqual(codes(evaluate(truncated)), ['schema_ledger_mismatch']);
 });

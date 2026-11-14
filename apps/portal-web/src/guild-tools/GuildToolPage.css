@@ -20,3 +20,16 @@
   align-items: center;
   text-decoration: none;
 }
+.guild-launchpad .guild-tool-button {
+  align-self: flex-start;
+  max-width: min(100%, 16rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guild-tool-button-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

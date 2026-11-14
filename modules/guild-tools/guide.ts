@@ -13,7 +13,7 @@ export function guildToolGuide(origin:string){return `# 公會工具：20 分鐘
 
 本機測試可將 LOCAL_PLATFORM_ORIGIN 設為帶 port 的 http://127.0.0.1 來源，執行 node build.mjs --test-platform-origin "$LOCAL_PLATFORM_ORIGIN"；這個來源只加入產生的 dist，不要發布測試建置，發布前重新執行 npm run build。
 
-平台 Worker 接受 HTTPS 的 \`<name>.github.io\`、\`<name>.pages.dev\` 與 \`<preview>.<name>.pages.dev\`；網域限小寫 DNS 名稱，網址不得明寫 port（包含 443）。自訂網域須使用 Node 的 DNS 鎖定安全 transport。GitHub 專案 Pages 請填 \`https://<name>.github.io/<repo>/\`，結尾的斜線不可省略，否則重新導向會被拒絕。Cloudflare Pages 的 \`dist/_headers\` 讓隔離 frame 可以載入模板的模組。entry_url 必須直接回 HTML，不含帳密、query、fragment 或非標準 port；禁止私有位址與平台自己的網域。不得重新導向；請填最後的網址。網站不能拒絕 frame 嵌入。ES modules、圖片 canvas、worker 在 opaque-origin frame 需要主機允許 CORS。
+平台 Worker 接受 HTTPS 的 \`<name>.github.io\`，以及一或兩層子網域的 \`pages.dev\`、\`netlify.app\`、\`vercel.app\` 與 \`workers.dev\`；網域限小寫 DNS 名稱，網址不得明寫 port（包含 443）。自訂網域須使用 Node 的 DNS 鎖定安全 transport。GitHub 專案 Pages 請填 \`https://<name>.github.io/<repo>/\`。Cloudflare Pages 的 \`dist/_headers\` 讓隔離 frame 可以載入模板的模組。entry_url 必須直接回 HTML，不含帳密、query、fragment 或非標準 port；禁止私有位址與平台自己的網域。同一網站內最多接受三次重新導向，轉到其他網站會被拒絕；最好直接填最後的網址。網站不能拒絕 frame 嵌入。ES modules、圖片 canvas、worker 在 opaque-origin frame 需要主機允許 CORS。
 
 ## Manifest
 

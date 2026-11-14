@@ -268,6 +268,8 @@ const FOUNDATION_NAMES = [
   '212_click_credit_kinds.sql',
   // Per-member cache of resolved GitHub repository facts between share preview and create (reused for 15 minutes, pruned after an hour); no publication or release authority.
   '213_share_preview_facts.sql',
+  // Expiry for member-proposed guild tool drafts (24 hours) and a check that enabled tools never expire; no publication, admin or release authority.
+  '214_guild_tool_drafts.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

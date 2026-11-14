@@ -11,9 +11,9 @@ export const NATIVE_TOOL_ROUTES=[
 export const isNativeTool=(guild:string,tool:string)=>NATIVE_TOOL_ROUTES.some(route=>route===guild+'/'+tool);
 export const MAX_MESSAGE_BYTES=1400000;
 export const SCOPES=['context:read','share:compose','device-state:own','ui:open','navigate','resize','session:exchange'] as const;
-export const toolInput=z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),title:z.string().trim().min(1).max(6),entry_url:z.string().max(2048),bridge_version:z.literal(BRIDGE_VERSION),profile:z.enum(['sandboxed','origin']).default('sandboxed'),scopes:z.array(z.enum(SCOPES)).max(7).refine(a=>new Set(a).size===a.length&&a.includes('context:read')),permissions:z.array(z.enum(['downloads','fullscreen'])).max(2).default([])}).strict().refine(t=>t.profile==='origin'||!t.scopes.includes('session:exchange'));
+export const toolInput=z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),title:z.string().trim().min(1).max(20),entry_url:z.string().max(2048),bridge_version:z.literal(BRIDGE_VERSION),profile:z.enum(['sandboxed','origin']).default('sandboxed'),scopes:z.array(z.enum(SCOPES)).max(7).refine(a=>new Set(a).size===a.length&&a.includes('context:read')),permissions:z.array(z.enum(['downloads','fullscreen'])).max(2).default([])}).strict().refine(t=>t.profile==='origin'||!t.scopes.includes('session:exchange'));
 export type ToolInput=z.infer<typeof toolInput>;
-export type ToolRecord=ToolInput & {id:string;guild_key:string;revision:number;state:'pending'|'enabled'|'disabled';origin:string;guild_name?:string|null};
+export type ToolRecord=ToolInput & {id:string;guild_key:string;revision:number;state:'pending'|'enabled'|'disabled';origin:string;guild_name?:string|null;draft_expires_at?:string|null;registered_by?:string;registered_by_name?:string|null};
 const key=z.string().regex(/^[a-zA-Z0-9._-]{1,80}$/).refine(k=>!['__proto__','constructor','prototype'].includes(k));
 export const operationPayloads={
  'context.get':z.object({}).strict(),
