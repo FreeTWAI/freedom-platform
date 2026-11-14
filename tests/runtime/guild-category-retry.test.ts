@@ -229,3 +229,21 @@ test('launchpad scoped hidden rule overrides both grid editor panels and the car
  });
  assert.ok(protectedHidden,'all hidden descendants, including the editor form and its sections, remain display:none!important');
 });
+
+test('GuildCard and PositioningPanels tolerate partial directory and onboarding payloads without skill_books',()=>{
+ const partialGuild={guild_key:'test_guild',name:'測試公會',entry_questions:{questions:[{id:'q1',prompt:'想練習什麼？',options:[{id:'a',label:'練習寫作'},{id:'b',label:'練習設計'}]}]}};
+ const tree=GuildCard({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}});
+ const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
+ assert.ok(buttons.some(n=>[n.props.children].flat().join('')==='公會技能書庫 · 0'));
+ assert.ok(elements.some(n=>n.type==='p'&&text(n.props.children)==='技能書整理中'));
+ const booksLauncher=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,useState:(value:unknown)=>[value===null?'books':value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null,GuildMembers:()=>null});
+ const openBooks=nodes(booksLauncher({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}}));
+ assert.ok(openBooks.some(n=>n.props?.className==='guild-library-books'&&text(n.props.children).includes('技能書整理中')));
+ const filterCode=stripTypeScriptTypes(extract('  const search=query.trim().toLocaleLowerCase();','  const chosenKeys='));
+ const visible=runInNewContext(filterCode+';visible',{query:'測試',scope:'all',topic:'',classified:[partialGuild],guildMasterLabel:()=>'待任命'});
+ assert.equal(visible.length,1);
+ const bookCode=stripTypeScriptTypes(extract('  const assessment=summary?.assessment','  return <section className="module-panel positioning-panel"'));
+ const derived=runInNewContext(bookCode+';({abilityLabels,equipmentLabels,featuredLabels,firstBook})',{summary:{assessment:{},member:{primary_guild:{guild_key:'test_guild',name:'測試公會'}},labels:{}},SECTION_LABELS:{}});
+ assert.equal(derived.firstBook,undefined);
+ assert.equal(JSON.stringify([derived.abilityLabels,derived.equipmentLabels,derived.featuredLabels]),'[[],[],[]]');
+});
