@@ -45,7 +45,6 @@
     "apps/portal-web/src/modules/EventHighlights.tsx",
     "apps/portal-web/src/modules/MemberServices.tsx",
     "apps/portal-web/src/modules/PromotionBoards.tsx",
-    "apps/portal-web/src/modules/PromotionShare.tsx",
     "apps/portal-web/src/modules/CommunityHistory.tsx",
     "apps/portal-web/src/modules/PublicDiscovery.tsx",
     "apps/portal-web/src/modules/PublicEventPage.tsx",
@@ -395,15 +394,6 @@
       "entry": "apps/portal-web/src/modules/PromotionBoards.tsx",
       "operations": [
         "community.promotion-boards-page.view"
-      ],
-      "auth_profile": "member-session"
-    },
-    {
-      "surface_id": "community.promotion-share-page",
-      "kind": "page",
-      "entry": "apps/portal-web/src/modules/PromotionShare.tsx",
-      "operations": [
-        "community.promotion-share-page.view"
       ],
       "auth_profile": "member-session"
     },

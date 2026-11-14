@@ -205,5 +205,13 @@ export const agentOperations = [
     "scope": "read",
     "title": "我的貢獻",
     "screen": "credit"
+  },
+  {
+    "id": "credit.results",
+    "method": "GET",
+    "route": "/api/v1/me/share-results",
+    "scope": "read",
+    "title": "我的分享成果",
+    "screen": "credit"
   }
 ] as const;

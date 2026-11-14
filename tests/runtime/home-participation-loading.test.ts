@@ -43,8 +43,8 @@ function fixture(file: string, edit: (code: string) => string = code => code) {
     return module.exports;
   };
   const reads = compile(source('member-home-loading.ts'), () => {throw Error('unexpected helper import');});
-  const componentNames = ['WorkshopIcon', 'MemberAvatar', 'PromotionShare', 'MemberRecommendations', 'SkillBookIntro', 'SocialZone', 'HomeParticipation', 'FirstParticipation'];
-  const components = Object.fromEntries(componentNames.map(name => [name, Object.assign(() => null, {displayName: name})]));
+  const componentNames = ['WorkshopIcon', 'MemberAvatar', 'ShareButton', 'MemberRecommendations', 'SkillBookIntro', 'SocialZone', 'HomeParticipation', 'FirstParticipation'];
+  const components = {...Object.fromEntries(componentNames.map(name => [name, Object.assign(() => null, {displayName: name})])), promotionLink: async () => ({path: '/go/synthetic'})};
   const component = compile(edit(source(file)), name => {
     if (name === 'react') return hooks;
     if (name === 'react/jsx-runtime') return {jsx, jsxs: jsx};

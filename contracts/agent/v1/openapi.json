@@ -3065,6 +3065,72 @@
           }
         }
       }
+    },
+    "/me/share-results": {
+      "get": {
+        "operationId": "credit.results",
+        "summary": "我的分享成果",
+        "x-required-scope": "read",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "object",
+              "properties": {
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。"
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。"
+          },
+          "403": {
+            "description": "權限不足或功能未開放。"
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。"
+          },
+          "429": {
+            "description": "已達限制，停止操作。"
+          }
+        }
+      }
     }
   }
 }

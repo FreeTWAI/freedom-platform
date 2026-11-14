@@ -110,7 +110,7 @@ function fixture(t: TestContext) {
     },
     canHide: false, bookmarksEnabled: false, shortVideos: false, confirming: null, editingPost: null,
     MemberAvatar: () => null, SocialPostOptions: ({children}: any) => React.createElement('div', {}, children),
-    SocialIcon: () => null, SocialBody: () => null, SocialInteractions: Interactions, PromotionShare: () => null,
+    SocialIcon: () => null, SocialBody: () => null, SocialInteractions: Interactions,
     InlineVideo: () => React.createElement('i', {className: 'video'}), SOCIAL_TOPICS: {mood: '近況'}, PLATFORM_LABELS: {other: '其他'},
     formatIsoLocal: (value: string) => value, selectTag: noop, openDelete: noop, hide: noop,
     setEditingPost: noop, editTrigger: {current: null}, youtubeLinkKind,

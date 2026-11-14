@@ -189,7 +189,11 @@ test('member previews an event, an authorized officer approves it, and participa
   await expect(card.getByRole('button',{name:'審核活動',exact:true})).toHaveCount(0);
   await expect(card).toContainText('開放報名');
   await card.getByRole('button',{name:'分享活動',exact:true}).click();
-  await expect(page.getByText('活動專頁連結已複製，分享碼已包含在連結中。',{exact:true})).toBeVisible();
+  const shareDialog=page.locator('.skill-share-dialog');
+  await expect(shareDialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  await shareDialog.getByRole('button',{name:'複製連結',exact:true}).click();
+  await expect(shareDialog.getByRole('status')).toHaveText('已複製。');
+  await shareDialog.getByRole('button',{name:'關閉分享',exact:true}).click();
   const shared=await page.evaluate(()=>navigator.clipboard.readText());
   expect(new URL(shared).origin).toBe(new URL(page.url()).origin);
   const guest=await browser.newContext({timezoneId:'Asia/Taipei'});
@@ -727,26 +731,30 @@ for(const width of [1280,390])eventTest(`event clipboard failures preserve the s
   });
   const card=page.locator('.experience-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await card.getByRole('button',{name:'分享活動',exact:true}).click();
-  const manual=page.getByText('請選取上方連結手動複製。',{exact:true}),input=card.getByRole('textbox',{name:/^分享連結/}),copy=card.getByRole('button',{name:'複製連結',exact:true});
+  const dialog=page.locator('.skill-share-dialog');
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  const manual=dialog.getByText('請手動複製下面的內容。',{exact:true}),input=dialog.getByLabel('手動複製分享內容',{exact:true}),copy=dialog.getByRole('button',{name:'複製連結',exact:true});
+  await copy.click();
   await expect(manual).toBeVisible();await expect(input).toBeVisible();
   const url=await input.inputValue();expect(new URL(url).origin).toBe(new URL(page.url()).origin);expect(new URL(url).pathname).toMatch(/^\/go\/[A-Za-z0-9_-]{10}$/);
   expect(referrals).toBe(1);
   for(const mode of ['missing','throw','reject']){
     await page.evaluate(mode=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:mode==='missing'?undefined:{writeText(){if(mode==='throw')throw new Error('合成同步拒絕');return Promise.reject(new Error('合成非同步拒絕'));}}}),mode);
-    await copy.focus();await page.keyboard.press('Enter');await expect(manual).toBeVisible();await expect(page.getByText(/活動專頁連結已複製/)).toHaveCount(0);
+    await copy.focus();await page.keyboard.press('Enter');await expect(manual).toBeVisible();await expect(dialog.getByRole('status').filter({hasText:'已複製。'})).toHaveCount(0);
     await input.focus();expect(await input.evaluate((node:HTMLInputElement)=>({start:node.selectionStart,end:node.selectionEnd,value:node.value}))).toEqual({start:0,end:url.length,value:url});
     await expect(copy).toBeEnabled();expect(referrals).toBe(1);
   }
   // Restore the native clipboard and verify its actual bytes, not a success mock.
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:(window as any).eventClipboardFixture.native}));
-  await copy.focus();await page.keyboard.press('Enter');await expect(page.getByText('活動專頁連結已複製。',{exact:true})).toBeVisible();
+  await copy.focus();await page.keyboard.press('Enter');await expect(dialog.getByRole('status')).toHaveText('已複製。');
   expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(url);await expect(manual).toHaveCount(0);
   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText(){const f=(window as any).eventClipboardFixture;f.calls++;return new Promise<void>((resolve,reject)=>{f.resolve=resolve;f.reject=reject;});}}}));
-  await copy.click();await expect(page.getByText(/活動專頁連結已複製/)).toHaveCount(0);
+  await copy.click();await expect(dialog.getByRole('status').filter({hasText:'已複製。'})).toHaveCount(0);
   await expect.poll(()=>page.evaluate(()=>(window as any).eventClipboardFixture.calls)).toBe(1);
-  // Accepted navigation closes this share scope; a late write cannot announce success there.
+  // Closing or navigating away cancels this share scope; a late write cannot announce success there.
+  await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
   await navigate(page,'會員首頁');await page.evaluate(()=>(window as any).eventClipboardFixture.resolve());
-  await expect(page.getByText(/活動專頁連結已複製|請選取上方連結手動複製/)).toHaveCount(0);
+  await expect(page.getByText(/已複製。|請手動複製下面的內容/)).toHaveCount(0);
   await navigate(page,'社群活動');await expect(card).toBeVisible();await expect(copy).toHaveCount(0);expect(errors).toEqual([]);expect(referrals).toBe(1);
   const rows=(await e2eAuthPool.query('SELECT code,kind,target_key FROM promotion_links WHERE user_id=$1',[eventFixture.user])).rows;
   expect(rows).toEqual([{code:new URL(url).pathname.slice(4),kind:'event',target_key:id}]);

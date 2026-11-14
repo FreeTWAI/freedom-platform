@@ -32,6 +32,11 @@ test('one discovery request supplies card and dialog badges; week and month use 
 });
 async function socialCard(page:Page){const lib=await library(page);await lib.getByLabel('搜尋技能書',{exact:true}).fill('社群貼文');return lib.locator('article[data-book-id="social-post"]');}
 async function openPreview(page:Page){const card=await socialCard(page);await card.getByRole('button',{name:'分享技能',exact:true}).click();const dialog=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await expect(dialog).toBeVisible();return {card,dialog};}
+async function selectIntro(dialog:ReturnType<Page['getByRole']>,index=0){
+  const intros=dialog.locator('.share-intros');
+  if(!await intros.evaluate(el=>(el as HTMLDetailsElement).open))await intros.locator('> summary').click();
+  await dialog.getByRole('radio').nth(index).check();
+}
 async function preview(dialog:ReturnType<Page['getByRole']>){
   const text=(await dialog.locator('.skill-share-text').innerText()).trim(),match=/^social-post 介紹 (\d+)：/.exec(text);expect(match).not.toBeNull();
   await expect(dialog.locator('.skill-share-url')).toHaveText(new RegExp(`/go/[A-Za-z0-9_-]{10}\\?intro=${match![1]}$`));
@@ -46,46 +51,49 @@ function stubShare(page:Page,mode:'share'|'cancel'|'error'|'none',clipboard:'ok'
   },{mode,clipboard});
 }
 const shared=(page:Page)=>page.evaluate(()=>(window as any).__shared??null),copied=(page:Page)=>page.evaluate(()=>(window as any).__copied??null);
-test('opening the share preview shows this book and one of its introductions without sending; dice keeps the same book',async({page})=>{
+test('opening the share preview shows this book and its introductions without sending; switching intro keeps the same book',async({page})=>{
   await stubShare(page,'share');let reads=0;await page.unroute('**/api/v1/skills/*/share-content');await page.route('**/api/v1/skills/*/share-content',route=>{reads++;return route.fulfill({json:shareContent(route.request().url().split('/').at(-2)!)});});
-  const {card,dialog}=await openPreview(page);expect(reads).toBe(1);expect(await shared(page)).toBeNull();expect(await copied(page)).toBeNull();
-  await expect(dialog).toHaveAttribute('data-book-id','social-post');const first=await preview(dialog);await expect(dialog.getByText(`介紹 ${first.number}／100`,{exact:true})).toBeVisible();
-  for(let round=0;round<5;round++){const before=await preview(dialog);await dialog.getByRole('button',{name:'換一句',exact:true}).click();await expect(dialog.locator('.skill-share-text')).not.toHaveText(before.text);await expect(dialog).toHaveAttribute('data-book-id','social-post');await expect(page.getByRole('dialog',{name:`分享「${title}」`,exact:true})).toBeVisible();await preview(dialog);}
+  const {card,dialog}=await openPreview(page);await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  expect(reads).toBe(1);expect(await shared(page)).toBeNull();expect(await copied(page)).toBeNull();
+  await selectIntro(dialog,0);const first=await preview(dialog);expect(first.number).toBe(1);
+  for(let round=1;round<=4;round++){const before=await preview(dialog);await selectIntro(dialog,round);await expect(dialog.locator('.skill-share-text')).not.toHaveText(before.text);await expect(page.getByRole('dialog',{name:`分享「${title}」`,exact:true})).toBeVisible();await preview(dialog);}
   expect(await shared(page)).toBeNull();expect(await copied(page)).toBeNull();
   await dialog.getByRole('button',{name:'分享',exact:true}).click();const current=await preview(dialog);
-  expect(await shared(page)).toEqual({title:`${title} · 自由工坊`,text:current.text,url:current.url});await expect(dialog.getByRole('status')).toHaveText('分享已送出');
-  await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
+  expect(await shared(page)).toEqual({title,text:current.text,url:current.url});await expect(dialog.getByRole('status')).toHaveText('已交給手機分享。');
+  await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
 });
-test('copy writes the exact introduction and URL; reroll clears the previous status',async({page})=>{
-  await stubShare(page,'none');const {dialog}=await openPreview(page);const current=await preview(dialog);
-  await dialog.getByRole('button',{name:'複製介紹與連結',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('已複製介紹與連結');expect(await copied(page)).toBe(`${current.text}\n${current.url}`);
-  await dialog.getByRole('button',{name:'換一句',exact:true}).click();await expect(dialog.getByRole('status')).toHaveCount(0);
-  const next=await preview(dialog);await dialog.getByRole('button',{name:'分享',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('已複製介紹與連結');expect(await copied(page)).toBe(`${next.text}\n${next.url}`);
-  await dialog.getByRole('button',{name:'關閉分享預覽',exact:true}).click();await expect(dialog).toBeHidden();
+test('copy writes the exact introduction and URL; changing intro clears the previous status',async({page})=>{
+  await stubShare(page,'none');const {dialog}=await openPreview(page);await selectIntro(dialog,0);const current=await preview(dialog);
+  await dialog.getByRole('button',{name:'複製連結',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('已複製。');expect(await copied(page)).toBe(`${current.text}\n${current.url}`);
+  await selectIntro(dialog,1);await expect(dialog.getByRole('status')).toHaveCount(0);
+  const next=await preview(dialog);await dialog.getByRole('button',{name:'複製連結',exact:true}).click();await expect(dialog.getByRole('status')).toHaveText('已複製。');expect(await copied(page)).toBe(`${next.text}\n${next.url}`);
+  await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();await expect(dialog).toHaveCount(0);
 });
 test('native share cancellation stays quiet and never copies',async({page})=>{
-  await stubShare(page,'cancel');const {card,dialog}=await openPreview(page);expect(await shared(page)).toBeNull();const current=await preview(dialog);
-  await dialog.getByRole('button',{name:'分享',exact:true}).click();await expect.poll(()=>shared(page)).toEqual({title:`${title} · 自由工坊`,text:current.text,url:current.url});
+  await stubShare(page,'cancel');const {card,dialog}=await openPreview(page);expect(await shared(page)).toBeNull();await selectIntro(dialog,0);const current=await preview(dialog);
+  await dialog.getByRole('button',{name:'分享',exact:true}).click();await expect.poll(()=>shared(page)).toEqual({title,text:current.text,url:current.url});
   await expect(dialog.getByRole('button',{name:'分享',exact:true})).toBeEnabled();await expect(card.locator('.skill-share-status')).toHaveCount(0);await expect(dialog.getByRole('textbox')).toHaveCount(0);expect(await copied(page)).toBeNull();
 });
 for(const [label,mode,clipboard] of [['native share failure','error','ok'],['denied clipboard','none','denied'],['missing clipboard','none','none']] as const){
   test(`${label} shows the introduction and link selected for manual copy`,async({page})=>{
-    await stubShare(page,mode,clipboard);const {dialog}=await openPreview(page);const current=await preview(dialog);
-    await dialog.getByRole('button',{name:'分享',exact:true}).click();const manual=dialog.getByLabel('手動複製分享內容',{exact:true});
-    await expect(manual).toHaveValue(`${current.text}\n${current.url}`);await expect(manual).toBeFocused();await expect(dialog.getByText(/已複製|分享已送出/)).toHaveCount(0);expect(await copied(page)).toBeNull();
+    await stubShare(page,mode,clipboard);const {dialog}=await openPreview(page);await selectIntro(dialog,0);const current=await preview(dialog);
+    await dialog.getByRole('button',{name:mode==='none'?'複製連結':'分享',exact:true}).click();const manual=dialog.getByLabel('手動複製分享內容',{exact:true});
+    await expect(manual).toHaveValue(`${current.text}\n${current.url}`);await expect(manual).toBeFocused();await expect(dialog.getByText(/已複製|已交給手機分享/)).toHaveCount(0);expect(await copied(page)).toBeNull();
     expect(await manual.evaluate(element=>{const field=element as HTMLTextAreaElement;return field.selectionStart===0&&field.selectionEnd===field.value.length;})).toBe(true);
-    await dialog.getByRole('button',{name:'換一句',exact:true}).click();await expect(manual).toHaveCount(0);
+    await selectIntro(dialog,1);await expect(manual).toHaveCount(0);
   });
 }
-test('unavailable or missing share content explains the problem, can retry and still shares the plain link',async({page})=>{
+test('unavailable or missing share content still shares the plain link and recovers when reopened',async({page})=>{
   await stubShare(page,'none');let state:'down'|'missing'|'ok'='down';await page.unroute('**/api/v1/skills/*/share-content');
   await page.route('**/api/v1/skills/*/share-content',route=>state==='down'?route.fulfill({status:503,json:{detail:'unavailable'}}):state==='missing'?route.fulfill({status:404,json:{detail:'not_found'}}):route.fulfill({json:shareContent('social-post')}));
-  const {card,dialog}=await openPreview(page);await expect(dialog.getByRole('alert')).toContainText('分享介紹暫時無法載入');
+  const {card,dialog}=await openPreview(page);
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const plain=(await dialog.locator('.skill-share-url').innerText()).trim();
-  await expect(dialog.getByRole('button',{name:'換一句',exact:true})).toHaveCount(0);await dialog.getByRole('button',{name:'複製連結',exact:true}).click();expect(await copied(page)).toBe(plain);await expect(dialog.getByRole('status')).toHaveText('已複製技能連結');
-  state='missing';await dialog.getByRole('button',{name:'重試',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('還沒有分享介紹');
-  state='ok';await dialog.getByRole('button',{name:'重試',exact:true}).click();await expect(dialog.getByRole('alert')).toHaveCount(0);await preview(dialog);
+  await expect(dialog.locator('.share-intros')).toHaveCount(0);await dialog.getByRole('button',{name:'複製連結',exact:true}).click();expect(await copied(page)).toBe(plain);await expect(dialog.getByRole('status')).toHaveText('已複製。');
+  await page.keyboard.press('Escape');await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
+  state='missing';await openPreview(page);await expect(dialog.locator('.share-intros')).toHaveCount(0);await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  await page.keyboard.press('Escape');await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
+  state='ok';await openPreview(page);await selectIntro(dialog,0);await preview(dialog);
   await page.keyboard.press('Escape');await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
 });
 test('the skill book dialog shows the full landscape illustration below the compact cover header',async({page})=>{
@@ -110,20 +118,20 @@ test('Escape closes only a nested share preview and returns focus to the reading
 test('sharing a second book uses only that book’s introductions and public URL',async({page})=>{
   await stubShare(page,'none');const lib=await library(page),search=lib.getByLabel('搜尋技能書',{exact:true});
   await search.fill('社群貼文');await lib.locator('article[data-book-id="social-post"]').getByRole('button',{name:'分享技能',exact:true}).click();
-  const first=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await preview(first);await page.keyboard.press('Escape');
+  const first=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await selectIntro(first,0);await preview(first);await page.keyboard.press('Escape');
   await search.fill('影片自動化');const card=lib.locator('article[data-book-id="video-autopilot"]');await card.getByRole('button',{name:'分享技能',exact:true}).click();
-  const next=page.locator('.skill-share-dialog[open]');await expect(next).toHaveAttribute('data-book-id','video-autopilot');
+  const next=page.locator('.skill-share-dialog[open]');await selectIntro(next,0);
   await expect(next.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}\?intro=\d+$/);
   const text=await next.locator('.skill-share-text').innerText(),url=(await next.locator('.skill-share-url').innerText()).trim();
   expect(text).toMatch(/^video-autopilot 介紹 \d+：/);
-  await next.getByRole('button',{name:'複製介紹與連結',exact:true}).click();await expect(next.getByRole('status')).toHaveText('已複製介紹與連結');
+  await next.getByRole('button',{name:'複製連結',exact:true}).click();await expect(next.getByRole('status')).toHaveText('已複製。');
   expect(await copied(page)).toBe(text+'\n'+url);expect(await copied(page)).not.toContain('social-post');
 });
 for(const viewport of [{name:'desktop',width:1280,height:800},{name:'mobile',width:390,height:844},{name:'small phone',width:320,height:844}]){
   test(`share preview stays compact on ${viewport.name}`,async({page})=>{
-    await page.setViewportSize({width:viewport.width,height:viewport.height});await stubShare(page,'none');const {dialog}=await openPreview(page);await preview(dialog);
+    await page.setViewportSize({width:viewport.width,height:viewport.height});await stubShare(page,'share');const {dialog}=await openPreview(page);await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
     const box=await dialog.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(viewport.width);expect(box!.height).toBeLessThanOrEqual(viewport.height);if(viewport.name==='desktop')expect(box!.width).toBeLessThanOrEqual(560);
-    for(const name of ['換一句','分享','複製介紹與連結']){const button=await dialog.getByRole('button',{name,exact:true}).boundingBox();expect(button!.height).toBeGreaterThanOrEqual(44);}
+    for(const name of ['分享','複製連結','QR 碼']){const button=await dialog.getByRole('button',{name,exact:true}).boundingBox();expect(button!.height).toBeGreaterThanOrEqual(44);}
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   });
 }

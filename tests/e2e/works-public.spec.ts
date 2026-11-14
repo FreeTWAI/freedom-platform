@@ -94,10 +94,14 @@ test('PUBLIC-WORK-01 owner opt-in, mobile responsiveness, tracked /go credit, ed
     const publicLink = card.locator(`a[href="/works/${showcaseId}"]`);
     await expect(publicLink).toBeVisible();
     await card.getByRole('button', { name: '分享', exact: true }).click();
-    const goAnchor = card.locator('a[href*="/go/"]');
-    await expect(goAnchor).toBeVisible();
-    const trackedHref = await goAnchor.getAttribute('href');
+    const shareDialog = creator.page.locator('.skill-share-dialog');
+    await expect(shareDialog).toBeVisible();
+    const urlText = shareDialog.locator('.skill-share-url');
+    await expect(urlText).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+    const trackedHref = (await urlText.innerText()).trim();
     expect(trackedHref).toMatch(/\/go\/[A-Za-z0-9_-]{10}$/);
+    await shareDialog.getByRole('button', { name: '關閉分享', exact: true }).click();
+    await expect(shareDialog).toHaveCount(0);
     const code = trackedHref!.split('/').pop()!;
     expect(await creator.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 

@@ -20,7 +20,7 @@ export const agentBodySchemas:Record<string,z.ZodType>={
  'events.links':empty,'events.interest':empty,'events.rsvp':eventRsvpInput,'events.waitlist':actionInput,
  'repositories.share':projectInput,'credit.records':empty,'credit.outcomes':empty,'credit.achievements':empty,
  'notifications.list':empty,'agent.events':empty,'shares.preview':shareInput,'shares.create':shareInput,
- 'shares.list':empty,'shares.read':empty,'shares.retract':empty,'shares.links':empty,'credit.read':empty,
+ 'shares.list':empty,'shares.read':empty,'shares.retract':empty,'shares.links':empty,'credit.read':empty,'credit.results':empty,
 };
 export const agentPathSchemas:Record<string,z.ZodType>={
  id:z.uuid(),share_id:z.uuid(),guild:z.string().regex(/^guild_[a-zA-Z0-9_]+$/).max(100),
@@ -31,6 +31,7 @@ export const agentQuerySchemas:Record<string,z.ZodObject>={
  'agent.events':z.object({after:z.string().max(64).optional()}).strict(),
  'shares.list':z.object({limit:z.number().int().min(1).max(50).optional(),offset}).strict(),
  'credit.read':z.object({offset}).strict(),
+ 'credit.results':z.object({offset}).strict(),
 };
 export function agentInputSchema(op:AgentOperation){
  const shape:Record<string,z.ZodType>={};

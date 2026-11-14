@@ -16,3 +16,12 @@
 .share-readme table { display:block;max-width:100%;overflow:auto; }
 .share-readme h1,.share-readme h2 { font-size:1.3rem; }
 @media(max-width:600px){.share-box>.btn-primary{width:100%;}.share-page{width:100%;}}
+
+.share-result-card{display:flex;flex-direction:column;gap:8px}
+.share-result-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.share-result-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;flex:1}
+.share-result-title{overflow-wrap:anywhere}
+.share-result-counts{margin:0;color:var(--muted);font-size:.92rem}
+.share-results-error{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.legacy-promotion{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+.legacy-promotion > summary{cursor:pointer;color:var(--muted);font-weight:600}

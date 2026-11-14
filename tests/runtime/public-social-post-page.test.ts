@@ -153,14 +153,14 @@ test('reopen journey waits for its exact POST and complete ACK before public nav
   h.response.resolve({status:()=>200,json:()=>h.body.promise});await flushReopen();
   assert.deepEqual(h.events,['response-listener','consent-details','click']);
   h.body.resolve(h.ack);await h.complete;
-  assert.deepEqual(h.events,['response-listener','consent-details','click','ack','public-link','visible','visitor-navigation']);
+  assert.deepEqual(h.events,['response-listener','consent-details','click','ack','visible','visitor-navigation']);
 });
 
 test('reopen journey rejects incomplete or unavailable ACKs before visiting public content',async()=>{
   for(const ack of [{},{enabled:true,available:false,post_revision:2,public_path:null},{enabled:true,available:true,post_revision:1,public_path:'/posts/'+id},{enabled:true,available:true,post_revision:2,public_path:'/posts/'+other}]){
     const h=reopenHarness(),rejected=assert.rejects(h.complete);
     h.response.resolve({status:()=>200,json:async()=>ack});await rejected;assert.ok(h.events.includes('click'));
-    assert.ok(!h.events.includes('public-link'));assert.ok(!h.events.includes('visitor-navigation'));
+    assert.ok(!h.events.includes('visible'));assert.ok(!h.events.includes('visitor-navigation'));
   }
 });
 

@@ -12,7 +12,7 @@ import {
 import {useLanguage, type InterfaceLanguage} from '../language';
 import type {InterfaceMessage} from '../interface-messages';
 import type {PortalClient} from '../api';
-import {PromotionShare} from './PromotionShare';
+import {promotionLink,ShareButton} from '../share/ShareButton';
 import './TesterMap.css';
 
 const statusKey: Record<CoverageStatus, InterfaceMessage> = {'未測': 'testerMap.status.untested', '測試中': 'testerMap.status.testing', '已測': 'testerMap.status.tested', '有問題': 'testerMap.status.issue'};
@@ -142,7 +142,7 @@ export function TesterMap({client,reportClient=client,onLogin}: {client?:PortalC
       <p>{t('testerMap.intro', {start: TEST_WEEK.start, end: TEST_WEEK.end, leader: TESTER_GUILD.leaderNickname})}</p>
       <p className="field-hint">{t('testerMap.redesign', {pr: REDESIGN_BATCH_PR})}</p>
       <div className="actions">{client
-        ? <PromotionShare client={client} kind="platform" target="tester-map" title={t('nav.tester-map')}/>
+        ? <ShareButton title={t('nav.tester-map')} fallbackUrl="/#tester-map" makeLink={promotionLink(client, 'platform', 'tester-map')}/>
         : <a className="btn btn-ghost btn-small" href="/#tester-map">{t('nav.tester-map')}</a>}</div>
     </section>
 

@@ -1,11 +1,8 @@
-import {useEffect,useId,useRef,useState} from 'react';
-import {useLanguage} from '../language';
-import {useLocalAction} from '../useLocalAction';
+import {useEffect,useRef,useState} from 'react';
+import {ShareButton,type ShareLink} from '../share/ShareButton';
 import './SkillDiscovery.css';
 
 export type SkillShareContent={introductions:string[];illustration_url:string;illustration_alt:string};
-type Payload={title:string;text?:string;url:string;copy:string};
-type Loaded={key:string;content:SkillShareContent|null;error:string};
 
 /** One deadline includes response-body reads. Abort alone is not enough when a
  * transport ignores its signal; late results must not replace the fallback. */
@@ -59,99 +56,64 @@ export function randomIntroductionIndex(length:number,avoid?:number){
   const index=value%choices;return skip&&index>=avoid!?index+1:index;
 }
 
-type Tracked={path:string;week:number;all:number};
 export function SkillShare({bookId,submissionId,title,active=true}:{bookId?:string;submissionId?:string;title:string;active?:boolean}){
   const key=submissionId?`submission:${submissionId}`:bookId;
-  const [loading,setLoading]=useState(false),[loaded,setLoaded]=useState<Loaded|null>(null),[index,setIndex]=useState(0);
-  const [open,setOpen]=useState(false),[status,setStatus]=useState(''),[manual,setManual]=useState(false);
-  const [tracked,setTracked]=useState<Tracked|'plain'|null>(null);
-  const {t}=useLanguage(),action=useLocalAction([key,title,active,open,index,tracked,loading]),busy=action.pending!==null;
-  const id=useId(),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),manualField=useRef<HTMLTextAreaElement>(null);
-  // Retain the dialog shell, but invalidate all pending work when its reading parent closes.
-  // Every reroll, close, book change or unmount also bumps the generation.
+  const [introductions,setIntroductions]=useState<string[]|undefined>(undefined);
   const generation=useRef(0),request=useRef<AbortController|null>(null),trackRequest=useRef<AbortController|null>(null);
-  useEffect(()=>{
+  function abortPending(){
     generation.current++;request.current?.abort();request.current=null;trackRequest.current?.abort();trackRequest.current=null;
-    setLoaded(null);setLoading(false);setOpen(false);setStatus('');setManual(false);setTracked(null);
-    return()=>{generation.current++;request.current?.abort();request.current=null;trackRequest.current?.abort();trackRequest.current=null;};
+  }
+  useEffect(()=>{
+    abortPending();
+    setIntroductions(undefined);
+    return abortPending;
   },[key,active]);
-  useEffect(()=>{if(open&&active&&!dialog.current?.open)dialog.current?.showModal();else if((!open||!active)&&dialog.current?.open)dialog.current.close();},[open,active]);
-  useEffect(()=>{if(manual&&open&&active){manualField.current?.focus();manualField.current?.select();}},[manual,open,active]);
   if(!key)return null;
-  const current=loaded?.key===key?loaded:null,introductions=current?.content?.introductions??[];
-  const introduction=introductions[index]??'',plain=shareUrl(submissionId?submissionSharePath(submissionId):skillSharePath(bookId!),introduction?index+1:undefined);
-  const trackedUrl=tracked&&tracked!=='plain'?shareUrl(tracked.path,introduction?index+1:undefined):null;
-  const url=trackedUrl??(tracked==='plain'?plain:'正在準備分享連結…');
-  const payload:Payload=introduction?{title:`${title} · 自由工坊`,text:introduction,url,copy:`${introduction}\n${url}`}:{title:`${title} · 自由工坊`,url,copy:url};
-  async function track(){
-    const controller=new AbortController();trackRequest.current?.abort();trackRequest.current=controller;setTracked(null);
-    const target=submissionId?`submission:${submissionId}`:`book:${bookId}`;
+  const fallbackUrl=submissionId?submissionSharePath(submissionId):skillSharePath(bookId!);
+  const target=submissionId?`submission:${submissionId}`:`book:${bookId}`;
+  async function loadContent(){
+    if(!active)return;
+    const controller=new AbortController(),run=++generation.current;
+    request.current?.abort();request.current=controller;
     try{
-      const tracked=await boundedShareRequest<Tracked|'plain'>(controller.signal,async signal=>{
+      const content=await (submissionId?fetchSubmissionShareContent(submissionId,controller.signal):fetchSkillShareContent(bookId!,controller.signal));
+      if(run!==generation.current||controller.signal.aborted)return;
+      request.current=null;
+      setIntroductions(content.introductions);
+    }catch{
+      if(run===generation.current&&!controller.signal.aborted){request.current=null;setIntroductions(undefined);}
+    }
+  }
+  async function makeLink():Promise<ShareLink>{
+    if(!active)throw new Error('inactive');
+    const controller=new AbortController();
+    trackRequest.current?.abort();trackRequest.current=controller;
+    return boundedShareRequest<ShareLink>(controller.signal,async signal=>{
       const session=await fetch('/api/v1/session',{credentials:'same-origin',signal,headers:{Accept:'application/json'}});
       const csrf=session.ok?(await session.json() as {csrf_token?:string}).csrf_token:'';
-      if(!csrf)return 'plain';
+      if(!csrf)throw new Error('no_session');
       if(signal.aborted)throw new Error('share_request_cancelled');
-      const response=await fetch('/api/v1/promotion/links',{method:'POST',credentials:'same-origin',signal,headers:{'Content-Type':'application/json',Accept:'application/json','X-CSRF-Token':csrf},body:JSON.stringify({kind:'skill_book',target})});
-      const link=response.ok?await response.json() as {path?:string;points?:{week?:number;all?:number}}:null;
-      return link?.path?{path:link.path,week:link.points?.week??0,all:link.points?.all??0}:'plain';
+      const response=await fetch('/api/v1/promotion/links',{
+        method:'POST',
+        credentials:'same-origin',
+        signal,
+        headers:{'Content-Type':'application/json',Accept:'application/json','X-CSRF-Token':csrf,'Idempotency-Key':crypto.randomUUID()},
+        body:JSON.stringify({kind:'skill_book',target}),
       });
-      if(!controller.signal.aborted)setTracked(tracked);
-    }catch{if(!controller.signal.aborted)setTracked('plain');}
+      const link=response.ok?await response.json() as {path?:string}:null;
+      if(!link?.path)throw new Error('share_link_failed');
+      return {path:link.path};
+    });
   }
-  function resetStatus(){generation.current++;setStatus('');setManual(false);}
-  async function load(show:boolean){
-    if(!active)return;
-    const target=key!,controller=new AbortController(),run=++generation.current;
-    request.current?.abort();request.current=controller;setLoading(true);setStatus('');setManual(false);void track();
-    let next:Loaded;
-    try{const content=await (submissionId?fetchSubmissionShareContent(submissionId,controller.signal):fetchSkillShareContent(bookId!,controller.signal));next={key:target,content,error:''};}
-    catch(error){
-      if(controller.signal.aborted)return;
-      next={key:target,content:null,error:error instanceof Error&&error.message==='share_content_missing'?'這本技能書還沒有分享介紹，可以先分享連結。':'分享介紹暫時無法載入，可以重試或先分享連結。'};
-    }
-    if(run!==generation.current||controller.signal.aborted)return;
-    request.current=null;setLoaded(next);setIndex(next.content?randomIntroductionIndex(next.content.introductions.length):0);setLoading(false);
-    if(show)setOpen(true);
-  }
-  function close(){resetStatus();request.current?.abort();request.current=null;trackRequest.current?.abort();trackRequest.current=null;setLoading(false);dialog.current?.close();setOpen(false);trigger.current?.focus();}
-  function reroll(){resetStatus();setIndex(value=>randomIntroductionIndex(introductions.length,value));}
-  function fallback(message:string){setManual(true);setStatus(message);}
-  async function copy(value:Payload,run:number){
-    const result=await action.run('copy',()=>{setStatus('');setManual(false);return navigator.clipboard.writeText(value.copy);});
-    if(run!==generation.current)return;
-    if(result.status==='done')setStatus(value.text?'已複製介紹與連結':'已複製技能連結');
-    else if(result.status==='failed')fallback('無法自動複製，請選取並複製下方內容');
-  }
-  async function send(){
-    const value=payload,run=generation.current;
-    if(typeof navigator.share!=='function'){await copy(value,run);return;}
-    const result=await action.run('share',()=>{setStatus('');setManual(false);return navigator.share(value.text?{title:value.title,text:value.text,url:value.url}:{title:value.title,url:value.url});});
-    if(run!==generation.current)return;
-    if(result.status==='done')setStatus('分享已送出');
-    else if(result.status==='failed'&&(result.error as {name?:string}|null)?.name!=='AbortError')fallback('系統分享沒有完成，請選取並複製下方內容');
-  }
-  async function copyOnly(){await copy(payload,generation.current);}
-  return <div className="skill-share">
-    <button ref={trigger} type="button" className="btn btn-ghost" disabled={!active||loading&&!open} aria-haspopup="dialog" onClick={()=>void load(true)}>{loading&&!open?'正在準備分享…':'分享技能'}</button>
-    <dialog ref={dialog} className="skill-share-dialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-text`} data-book-id={submissionId?undefined:bookId} data-submission-id={submissionId} onCancel={event=>{event.stopPropagation();event.preventDefault();close();}} onClose={event=>{event.stopPropagation();setOpen(false);}}>
-      {open&&current&&<div className="skill-share-preview">
-        <header className="skill-share-head"><h2 id={`${id}-title`}>分享「{title}」</h2><button type="button" className="btn btn-ghost" onClick={close} aria-label="關閉分享預覽">關閉</button></header>
-        {current.content?<>
-          <p className="skill-share-count">介紹 {index+1}／{introductions.length}</p>
-          <blockquote className="skill-share-text" id={`${id}-text`} aria-live="polite">{introduction}</blockquote>
-        </>:<div className="skill-share-error" id={`${id}-text`} role="alert"><p>{current.error}</p><button type="button" className="btn btn-ghost" disabled={loading} onClick={()=>void load(false)}>{loading?'重新載入中…':'重試'}</button></div>}
-        <p className="skill-share-url">{url}</p>
-        {tracked==='plain'&&<p className="promotion-share-points">使用公開介紹連結分享</p>}
-        {tracked&&tracked!=='plain'&&<p className="promotion-share-points">這個連結：本週 {tracked.week} 分・累計 {tracked.all} 分</p>}
-        <div className="skill-share-actions">
-          {introductions.length>1&&<button type="button" className="btn btn-ghost" disabled={busy} onClick={reroll}><span aria-hidden="true">🎲 </span>換一句</button>}
-          <button type="button" className="btn btn-primary" aria-busy={action.pending==='share'} disabled={busy||loading||tracked===null} onClick={()=>void send()}>{action.pending==='share'?t('action.sharing'):current.content?'分享':'分享連結'}</button>
-          <button type="button" className="btn btn-ghost" aria-busy={action.pending==='copy'} disabled={busy||loading||tracked===null} onClick={()=>void copyOnly()}>{action.pending==='copy'?t('action.copying'):current.content?'複製介紹與連結':'複製連結'}</button>
-        </div>
-        {status&&<p className="skill-share-status" role="status">{status}</p>}
-        {manual&&<div className="field"><label htmlFor={`${id}-manual`}>手動複製分享內容</label><textarea ref={manualField} id={`${id}-manual`} value={payload.copy} readOnly rows={4} onFocus={event=>event.currentTarget.select()}/></div>}
-      </div>}
-    </dialog>
-  </div>;
+  return <ShareButton
+    title={title}
+    fallbackUrl={fallbackUrl}
+    makeLink={makeLink}
+    introductions={introductions}
+    label="分享技能"
+    disabled={!active}
+    preserveShell
+    onOpen={()=>{void loadContent();}}
+    onClose={abortPending}
+  />;
 }

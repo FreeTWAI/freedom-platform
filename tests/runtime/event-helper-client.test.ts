@@ -175,7 +175,7 @@ test('actual review handler freezes intent and shared decoder transport retains 
   let loads=0;
   const context:any={photoLocked:()=>false,saving:false,recoveringSave:false,recoveringAction:false,mediaUnknown:false,actionAttempt:{current:null},saveAttempt:{current:null},reviewAttempt:{current:null},reviewReason:'original reason',setNotice:()=>{},setReviewing:()=>{},setReviewReason:()=>{},announceInboxChange:()=>{},window:{dispatchEvent:()=>{}},Event:class{},load:async()=>loads++,mutate:(...args:any[])=>module.exports.performModuleMutation(client,state,...args)};
   Object.defineProperty(context,'busy',{get:()=>state.snapshot.busy});Object.defineProperty(context,'lastFailureUnknown',{get:()=>state.snapshot.lastFailureUnknown});
-  const from=parent.indexOf('  async function review('),to=parent.indexOf('  async function share(',from);assert.ok(from>=0&&to>from);
+  const from=parent.indexOf('  async function review('),to=parent.indexOf('  async function report(',from);assert.ok(from>=0&&to>from);
   const review=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.review=review',{loader:'tsx'}).code+';review',context);
   const item={event_id:'event-a',aggregate_version:1};const first=review(item,'approve');await review(item,'approve');assert.equal(requests.length,1);requests[0].reject(unknown());await first;assert.equal(state.snapshot.lastFailureUnknown,true);
   context.reviewReason='changed text';await review(item,'reject');assert.equal(requests.length,1,'opposite decision cannot replace an unknown review');
@@ -191,7 +191,7 @@ for(const kind of ['rsvp','cancel'] as const)for(const status of [403,412])test(
   let loads=0;
   const context:any={photoLocked:()=>false,saving:false,recoveringSave:false,recoveringReview:false,mediaUnknown:false,actionAttempt:{current:null},saveAttempt:{current:null},reviewAttempt:{current:null},reviewReason:'review',setNotice:()=>{},setReviewing:()=>{},setReviewReason:()=>{},announceInboxChange:()=>{},window:{dispatchEvent:()=>{}},Event:class{},referralCode:()=> 'original-code',load:async()=>loads++,mutate:(...args:any[])=>module.exports.performModuleMutation(client,state,...args)};
   Object.defineProperty(context,'busy',{get:()=>state.snapshot.busy});Object.defineProperty(context,'lastFailureUnknown',{get:()=>state.snapshot.lastFailureUnknown});Object.defineProperty(context,'recoveringAction',{get:()=>state.snapshot.lastFailureUnknown&&context.actionAttempt.current!==null});
-  const from=parent.indexOf('  async function sendEventAction('),to=parent.indexOf('  async function share(',from);assert.ok(from>=0&&to>from);
+  const from=parent.indexOf('  async function sendEventAction('),to=parent.indexOf('  async function report(',from);assert.ok(from>=0&&to>from);
   const functions=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.handlers={action,sendEventAction,review}',{loader:'tsx'}).code+';handlers',context);
   const item={event_id:'event-a',aggregate_version:5,visibility:'referral'};const first=functions.action(item,kind,true);await functions.action(item,kind,true);assert.equal(requests.length,1);requests[0].reject(unknown());await first;
   await functions.action({...item,event_id:'event-b',aggregate_version:44},kind==='rsvp'?'cancel':'rsvp');await functions.review(item,'approve');assert.equal(requests.length,1,'shared mutation state cannot be cleared by another action/review');
@@ -217,7 +217,7 @@ test('same-render RSVP then cancel cannot replace the pending ref before React u
 
 for(const firstKind of ['review','rsvp'] as const)test(`same-render ${firstKind} cannot create a second command owner`,async()=>{
   let writes=0;const context:any={photoLocked:()=>false,saving:false,busy:false,lastFailureUnknown:false,recoveringSave:false,recoveringReview:false,recoveringAction:false,mediaUnknown:false,actionAttempt:{current:null},reviewAttempt:{current:null},saveAttempt:{current:null},reviewReason:'original',setNotice:()=>{},referralCode:()=>null,mutate:()=>{writes++;return new Promise(()=>{});}};
-  const from=parent.indexOf('  async function sendEventAction('),to=parent.indexOf('  async function share(',from);const handlers=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.handlers={action,review}',{loader:'tsx'}).code+';handlers',context);
+  const from=parent.indexOf('  async function sendEventAction('),to=parent.indexOf('  async function report(',from);const handlers=runInNewContext(transformSync(parent.slice(from,to)+';globalThis.handlers={action,review}',{loader:'tsx'}).code+';handlers',context);
   const item={event_id:'event-a',aggregate_version:1,visibility:'open'};
   if(firstKind==='review'){void handlers.review(item,'approve');await handlers.action(item,'rsvp',true);assert.equal(context.actionAttempt.current,null);assert.ok(context.reviewAttempt.current);}
   else{void handlers.action(item,'rsvp',true);await handlers.review(item,'approve');assert.equal(context.reviewAttempt.current,null);assert.ok(context.actionAttempt.current);}
@@ -229,7 +229,7 @@ for(const firstKind of ['review','rsvp'] as const)test(`same-render ${firstKind}
 test('actual event handlers refuse all new effects while the photo command guard is locked',async()=>{
   const handlers=[
     ['save','removeBanner'],['removeBanner','removeVideo'],['removeVideo','sendEventAction'],
-    ['sendEventAction','action'],['action','review'],['review','share'],['share','report'],
+    ['sendEventAction','action'],['action','review'],['review','report'],
   ];
   for(const [name,next] of handlers){
     const from=parent.indexOf(`  async function ${name}(`),to=parent.indexOf(`  async function ${next}(`,from);assert.ok(from>=0&&to>from,`${name} production handler exists`);

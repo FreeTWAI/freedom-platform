@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api';
 import { client, describeError } from '../portal-session';
+import { ShareButton, type ShareLink } from '../share/ShareButton';
 
 type WorkSharingState = {
   showcase_id: string;
@@ -19,11 +20,13 @@ type WorkSharingState = {
 /** Owner control for opting one exact published work version into public reading and sharing its link. */
 export function WorkPublicSharing({
   showcaseId,
+  title = '我的作品',
   workVersion,
   status = 'published',
   onReload,
 }: {
   showcaseId: string;
+  title?: string;
   workVersion?: string | number;
   status?: string;
   onReload: () => Promise<void>;
@@ -31,10 +34,7 @@ export function WorkPublicSharing({
   const [state, setState] = useState<WorkSharingState | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [shareBusy, setShareBusy] = useState(false);
   const [error, setError] = useState('');
-  const [trackedLink, setTrackedLink] = useState('');
-  const [shareNotice, setShareNotice] = useState('');
   const requestSeq = useRef(0);
   const mounted = useRef(true);
   const generation = client.sessionGeneration;
@@ -51,9 +51,6 @@ export function WorkPublicSharing({
     const seq = ++requestSeq.current;
     setLoaded(false);
     setBusy(false);
-    setShareBusy(false);
-    setTrackedLink('');
-    setShareNotice('');
     setError('');
     void client
       .get<WorkSharingState>(`/me/showcases/${showcaseId}/sharing`)
@@ -93,8 +90,6 @@ export function WorkPublicSharing({
     const live = () => current() && requestSeq.current === seq;
     setBusy(true);
     setError('');
-    setShareNotice('');
-    setTrackedLink('');
     try {
       const updated = await client.put<WorkSharingState>(
         `/me/showcases/${showcaseId}/sharing`,
@@ -126,43 +121,18 @@ export function WorkPublicSharing({
     }
   }
 
-  async function shareWork() {
-    if (!state?.enabled || !state.available || shareBusy || !reviewed || !current()) return;
-    const seq = requestSeq.current;
-    const live = () => current() && requestSeq.current === seq;
-    setShareBusy(true);
-    setError('');
-    try {
-      const share = await client.post<{ share_id: string }>(
-        '/shares',
-        { kind: 'work', ref_id: showcaseId },
-        { idempotencyKey: crypto.randomUUID() },
-      );
-      if (!live()) return;
-      const link = await client.post<{ path: string }>(
-        `/shares/${share.share_id}/links`,
-        {},
-        { idempotencyKey: crypto.randomUUID() },
-      );
-      if (!live()) return;
-      const url = `${origin}${link.path}`;
-      let copied = false;
-      try {
-        await navigator.clipboard?.writeText(url);
-        if (!live()) return;
-        copied = true;
-      } catch {
-        if (!live()) return;
-        copied = false;
-      }
-      setTrackedLink(url);
-      setShareNotice(copied ? '已複製你的分享連結，有人點擊就會記到你名下：' : '你的分享連結已備妥：');
-    } catch (err) {
-      if (!live()) return;
-      setError(describeError(err).message);
-    } finally {
-      if (live()) setShareBusy(false);
-    }
+  async function makeWorkLink(): Promise<ShareLink> {
+    const share = await client.post<{ share_id: string }>(
+      '/shares',
+      { kind: 'work', ref_id: showcaseId },
+      { idempotencyKey: crypto.randomUUID() },
+    );
+    if (!current()) throw new Error('session_changed');
+    return client.post<ShareLink>(
+      `/shares/${share.share_id}/links`,
+      {},
+      { idempotencyKey: crypto.randomUUID() },
+    );
   }
 
   return (
@@ -186,18 +156,15 @@ export function WorkPublicSharing({
           <a className="work-public-link" href={publicPath} target="_blank" rel="noopener noreferrer">
             {publicUrl}
           </a>
-          <button type="button" className="btn btn-secondary btn-small" disabled={shareBusy} onClick={() => void shareWork()}>
-            {shareBusy ? '產生中…' : '分享'}
-          </button>
+          <ShareButton
+            key={generation}
+            title={title}
+            fallbackUrl={publicPath}
+            makeLink={makeWorkLink}
+            label="分享"
+            buttonClassName="btn btn-secondary btn-small"
+          />
         </div>
-      )}
-      {trackedLink && (
-        <p className="hint" role="status">
-          {shareNotice}
-          <a className="work-public-link" href={trackedLink}>
-            {trackedLink}
-          </a>
-        </p>
       )}
       {error && (
         <p className="hint" role="alert">

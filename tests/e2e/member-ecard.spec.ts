@@ -91,7 +91,7 @@ test('member builds an e-card and visitors see each design',async({page,browser}
   const dialog=page.getByRole('dialog',{name:'分享「電子名片作者的工坊名片」',exact:true});
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await dialog.getByRole('button',{name:'複製連結',exact:true}).click();
-  await expect(dialog.getByText('無法自動複製，請選取並複製下方內容')).toBeVisible();
+  await expect(dialog.getByText('請手動複製下面的內容。')).toBeVisible();
   await expect.poll(()=>dialog.getByLabel('手動複製分享內容').evaluate(element=>{const input=element as HTMLTextAreaElement;return document.activeElement===input&&input.selectionStart===0&&input.selectionEnd===input.value.length;})).toBe(true);
   await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
   await page.screenshot({path:`${SHOTS}/settings-1280.png`,fullPage:true});
@@ -220,6 +220,7 @@ test('sharing a member card from 我的名片 scores one guest click',async({pag
     await expect(guest.getByRole('button',{name:'加入自由工坊／登入'})).toBeVisible();
   }finally{await context.close();}
   await navigate(page,'推廣排行榜');
+  await page.locator('.legacy-promotion > summary').click();
   await page.locator('.promotion-rankings > summary').click();
   await expect(page.getByRole('button',{name:'本週',exact:true})).toHaveAttribute('aria-pressed','true');
   const board=page.getByRole('article',{name:'名片點擊排行榜',exact:true});

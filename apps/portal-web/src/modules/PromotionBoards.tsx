@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import type {PortalClient} from '../api';
 import {useLocalAction} from '../useLocalAction';
 import {MemberAvatar} from './MemberAvatar';
-import {PromotionShare} from './PromotionShare';
+import {promotionLink, ShareButton} from '../share/ShareButton';
 import './PromotionBoards.css';
 
 type Period = 'week' | 'month' | 'all';
@@ -72,7 +72,7 @@ export function PromotionBoards({client,resultsOnly=false}: {client: PortalClien
         <a className="btn btn-ghost" href="#social">閱讀社群分享</a>
       </div>
       <p className="promotion-howto">在支援的內容旁選擇「分享」或「推廣原文」，先查看介紹與連結，再由你選擇對象送出。社員服務是找服務的目錄，不是推廣任務。</p>
-      <PromotionShare client={client} kind="platform" target="workshop" title="自由工坊" text={WORKSHOP_TEXT} label="分享自由工坊"/>
+      <ShareButton title="自由工坊" fallbackUrl="/" makeLink={promotionLink(client, 'platform', 'workshop')} text={WORKSHOP_TEXT} label="分享自由工坊"/>
     </section>}
     <header className="promotion-head">
       <div className="promotion-periods" data-guide-anchor="promotion:period" role="group" aria-label="統計期間">

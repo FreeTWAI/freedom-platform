@@ -61,7 +61,7 @@ export const communityFeatures = {
   },
   "promotion": {
     moduleId: "community", placement: 'page',
-    render: ({client}) => <><MyCredit client={client}/><PromotionBoards client={client} resultsOnly/></>,
+    render: ({client}) => <><MyCredit client={client}/><details className="legacy-promotion"><summary>舊的推廣紀錄</summary><PromotionBoards client={client} resultsOnly/></details></>,
   },
   "tester-map": {
     moduleId: "tester-map", placement: 'page',

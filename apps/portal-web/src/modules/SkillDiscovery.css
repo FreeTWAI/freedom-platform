@@ -15,8 +15,16 @@
 .skill-share-status { margin: 0; font-size: .8rem; color: #c1cbd8; }
 .skill-share .field { width: 100%; }
 .skill-share input { width: 100%; min-width: 0; font-size: 16px; }
-.skill-library-actions > .skill-share { flex: 0 1 auto; width: auto; }
-.skill-library-actions > .skill-share > .btn { width: auto; }
+.skill-library-actions > .skill-share,
+.share-actions > .skill-share,
+.experience-actions > .skill-share,
+.work-public-link-row > .skill-share,
+.social-share-dialog .skill-share { flex: 0 1 auto; width: auto; }
+.skill-library-actions > .skill-share > .btn,
+.share-actions > .skill-share > .btn,
+.experience-actions > .skill-share > .btn,
+.work-public-link-row > .skill-share > .btn,
+.social-share-dialog .skill-share > .btn { width: auto; }
 .skill-library-book .skill-book-badges { gap: 4px; }
 .skill-library-book .skill-badge { padding: 2px 7px; font-size: .68rem; }
 .skill-intro-collaboration { padding: 20px; border: 1px solid #404b65; border-radius: 12px; background: #10131c; }
@@ -50,7 +58,16 @@
 .skill-share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .skill-share-dialog .field { display: grid; gap: 6px; font-size: .85rem; }
 .skill-share-dialog textarea { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; font-size: 16px; line-height: 1.6; resize: vertical; }
-.skill-share-dialog .btn:focus-visible, .skill-share-dialog textarea:focus-visible { outline: 3px solid #9ba7ff; outline-offset: 2px; }
+.share-credit-note { margin: 0; color: #c1cbd8; font-size: .82rem; line-height: 1.5; }
+.share-qr-panel { display: flex; justify-content: center; width: fit-content; max-width: 100%; padding: 12px; border-radius: 12px; background: #fff; }
+.share-qr-panel svg { display: block; max-width: 100%; height: auto; }
+.share-intros, .share-more { display: grid; gap: 6px; min-width: 0; }
+.share-intros > summary, .share-more > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: .88rem; font-weight: 600; color: #cbd3e3; }
+.share-intro-list { display: grid; gap: 8px; margin: 4px 0 0; padding: 0; border: 0; min-width: 0; }
+.share-intro-option { display: flex; align-items: flex-start; gap: 8px; min-height: 44px; padding: 8px 10px; border: 1px solid #404b65; border-radius: 10px; background: #161922; color: #f4f6ef; font-size: .88rem; line-height: 1.5; cursor: pointer; }
+.share-intro-option input { width: auto; margin: 4px 0 0; flex: none; }
+.share-more-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.skill-share-dialog .btn:focus-visible, .skill-share-dialog textarea:focus-visible, .share-intros > summary:focus-visible, .share-more > summary:focus-visible, .share-intro-option input:focus-visible { outline: 3px solid #9ba7ff; outline-offset: 2px; }
 @media (max-width: 600px) {
   .skill-share-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 16px; }
   .skill-share-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
