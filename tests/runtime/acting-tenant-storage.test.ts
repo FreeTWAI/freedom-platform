@@ -84,13 +84,13 @@ test('tenant-only projection does not read workspace properties', () => withStor
 
 test('all four consumers preserve their bindings while Applications no longer imports the MyWork UI for storage', () => {
   const source = (file: string) => readFileSync(new URL(`../../apps/portal-web/src/modules/${file}.tsx`, import.meta.url), 'utf8');
-  const settings = source('TenantSettings'), work = source('GuildLaunchpadMyWork'), applications = source('GuildLaunchpadApplications'), launchpad = source('GuildLaunchpad');
+  const settings = source('TenantSettings'), work = source('GuildLaunchpadMyWork'), applications = source('GuildLaunchpadApplications'), launchpadReading = source('GuildLaunchpadReading');
   assert.match(settings, /import \{ readActingTenant as readStored, rememberActing as remember \} from '\.\/acting-tenant-storage';/);
   assert.match(work, /import \{ readActing, rememberActing \} from '\.\/acting-tenant-storage';/);
   assert.match(work, /export \{ readActing, rememberActing \} from '\.\/acting-tenant-storage';/);
   assert.match(applications, /import \{readActing, rememberActing\} from '\.\/acting-tenant-storage';/);
   assert.doesNotMatch(applications, /from ['"]\.\/GuildLaunchpadMyWork['"]/);
-  assert.match(launchpad, /import \{MyWorkPanel, rememberActing\} from '\.\/GuildLaunchpadMyWork';/);
+  assert.match(launchpadReading, /import \{MyWorkPanel, rememberActing\} from '\.\/GuildLaunchpadMyWork';/);
   for (const content of [settings, work, applications]) assert.doesNotMatch(content, /freedom-acting-tenant:/);
   for (const content of [settings, work]) assert.doesNotMatch(content, /sessionStorage\.(getItem|setItem)/);
 });

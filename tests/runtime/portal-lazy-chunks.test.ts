@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -542,4 +542,71 @@ test('PERF-12-3: App.tsx imports only types from ./modules/Community and BrandPo
   const appGraph = staticModuleInputs('App.tsx');
   assert.equal(hasSuffix(appGraph, '/modules/Community.tsx'), false, 'App static graph must exclude Community.tsx');
   assert.equal(hasSuffix(appGraph, '/modules/CommunityBrand.tsx'), true, 'App static graph should include CommunityBrand.tsx');
+});
+
+function walkTsFiles(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkTsFiles(full, out);
+    else if (/\.(ts|tsx)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+test('I4: GuildLaunchpad split meets file size limits and no file imports GuildLaunchpadEditor statically', () => {
+  const countLines = (rel: string) => {
+    const text = readFileSync(path.join(SRC_ROOT, rel), 'utf8');
+    return text.endsWith('\n') ? text.slice(0, -1).split('\n').length : text.split('\n').length;
+  };
+  assert.ok(countLines('modules/GuildLaunchpad.tsx') <= 450, 'GuildLaunchpad.tsx must be at most 450 lines');
+  assert.ok(countLines('modules/GuildLaunchpadReading.tsx') <= 400, 'GuildLaunchpadReading.tsx must be at most 400 lines');
+  const editorLines = countLines('modules/GuildLaunchpadEditor.tsx');
+  assert.ok(
+    editorLines <= 600 || existsSync(path.join(SRC_ROOT, 'modules/GuildLaunchpadEditorHistory.tsx')),
+    'GuildLaunchpadEditor.tsx over 600 lines must split history into GuildLaunchpadEditorHistory.tsx',
+  );
+
+  const launchpadGraph = staticModuleInputs('modules/GuildLaunchpad.tsx');
+  assert.equal(hasSuffix(launchpadGraph, '/modules/GuildLaunchpadEditor.tsx'), false, 'GuildLaunchpad static graph must exclude GuildLaunchpadEditor.tsx');
+  const appGraph = staticModuleInputs('App.tsx');
+  assert.equal(hasSuffix(appGraph, '/modules/GuildLaunchpadEditor.tsx'), false, 'App static graph must exclude GuildLaunchpadEditor.tsx');
+
+  const portalFiles = walkTsFiles(SRC_ROOT);
+  const { inputs } = buildSync({
+    entryPoints: portalFiles,
+    bundle: true,
+    splitting: true,
+    packages: 'external',
+    write: false,
+    metafile: true,
+    outdir: path.join(ROOT, 'dist/.check-tmp'),
+    format: 'esm',
+    platform: 'browser',
+    loader: { '.css': 'empty', '.svg': 'empty', '.png': 'empty' },
+    logLevel: 'silent',
+  }).metafile!;
+  const staticImporters = Object.entries(inputs)
+    .filter(([, meta]) => meta.imports.some(dep => dep.kind !== 'dynamic-import' && dep.path.endsWith('/GuildLaunchpadEditor.tsx')))
+    .map(([file]) => file);
+  assert.deepEqual(staticImporters, [], 'no bundled file may import GuildLaunchpadEditor statically');
+  const dynamicImporters = Object.entries(inputs)
+    .filter(([, meta]) => meta.imports.some(dep => dep.kind === 'dynamic-import' && dep.path.endsWith('/GuildLaunchpadEditor.tsx')))
+    .map(([file]) => file);
+  assert.equal(dynamicImporters.some(f => f.endsWith('apps/portal-web/src/modules/GuildLaunchpad.tsx')), true, 'GuildLaunchpad.tsx must dynamically import GuildLaunchpadEditor');
+
+  const allSourceFiles = [
+    ...walkTsFiles(path.join(ROOT, 'apps')),
+    ...walkTsFiles(path.join(ROOT, 'modules')),
+    ...walkTsFiles(path.join(ROOT, 'packages')),
+    ...walkTsFiles(path.join(ROOT, 'contracts')),
+  ];
+  const staticRegexImporters = allSourceFiles
+    .filter(file => {
+      const src = readFileSync(file, 'utf8');
+      return /(?:^|\n)\s*(?:import|export)\b[^;\n]*['"][^'"]*GuildLaunchpadEditor(?:\.[jt]sx?)?['"]|\brequire\(\s*['"][^'"]*GuildLaunchpadEditor(?:\.[jt]sx?)?['"]\s*\)/.test(src);
+    })
+    .map(file => path.relative(ROOT, file));
+  assert.deepEqual(staticRegexImporters, [], 'no source file may import GuildLaunchpadEditor statically');
 });

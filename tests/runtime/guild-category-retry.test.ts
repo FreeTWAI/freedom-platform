@@ -214,9 +214,9 @@ test('legacy primary exit explanation stays beside its disabled action inside se
 });
 
 // Execute the actual panel resolver; field errors must not disappear in a hidden editor section.
-const launchpadSource=readFileSync('apps/portal-web/src/modules/GuildLaunchpad.tsx','utf8');
+const launchpadSource=readFileSync('apps/portal-web/src/modules/GuildLaunchpadEditor.tsx','utf8');
 function launchpadFunction(from:string,to:string){const start=launchpadSource.indexOf(from),end=launchpadSource.indexOf(to,start);assert.ok(start>=0&&end>start);return launchpadSource.slice(start,end);}
-const editorErrorPanel=runInNewContext(stripTypeScriptTypes(launchpadFunction('function fieldHits(', 'function fieldMessage(')+launchpadFunction('function editorErrorPanel(', 'type BookRef ='))+';editorErrorPanel');
+const editorErrorPanel=runInNewContext(stripTypeScriptTypes(launchpadFunction('function fieldHits(', 'function fieldMessage(')+launchpadFunction('function editorErrorPanel(', 'type RevisionMeta ='))+';editorErrorPanel');
 for(const [path,panel] of [['mission_override','layout'],['body.blocks.2.title','layout'],['blocks.1.enabled','layout'],['body.application_refs.0.release_ref','tools'],['starter.title_label','tools'],['body.support.public_url','tools'],['principal_id','delegations'],['capabilities.0','delegations'],['expires_at','delegations'],['reason',null],['body.reason',null],['schema_version',null]] as const){
  test(`launchpad editor reveals ${path} in ${panel??'the existing global or dialog error surface'}`,()=>{assert.equal(editorErrorPanel([{path,code:'invalid'}]),panel);});
 }

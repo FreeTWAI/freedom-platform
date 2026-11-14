@@ -75,31 +75,37 @@ function loadGuildLaunchpad(t:TestContext){
   const req=createRequire(import.meta.url);
   const {act}=req('react') as typeof React;
   const {createRoot}=req('react-dom/client');
-  const fileUrl=new URL('../../apps/portal-web/src/modules/GuildLaunchpad.tsx',import.meta.url);
-  const fileReq=createRequire(fileUrl);
-  const {code}=transformSync(readFileSync(fileUrl,'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic'});
-  const mod={exports:{} as any};
-  const ctx=runInNewContext('(function(require,module,exports){'+code+'\n})',{
-    ...globalThis,AbortController,URL,
-    window:windowObj,document,location:windowObj.location,crypto:webcrypto,
-    addEventListener:windowObj.addEventListener,removeEventListener:windowObj.removeEventListener,
-  });
-  ctx((id:string)=>{
-    if(id==='./GuildLaunchpad.css')return {};
-    if(id==='./GuildLaunchpadMyWork')return {MyWorkPanel:()=>React.createElement('div'),rememberActing(){}};
-    if(id==='./GuildLaunchpadApplications')return {GuildLaunchpadApplications:()=>React.createElement('div'),startable:()=>true};
-    if(id==='../guild-blocks/runtime')return {GuildBlock:()=>React.createElement('div')};
-    if(id==='../guild-repositories/GuildRepositoryFrame')return {GuildRepositoryFrame:()=>React.createElement('div')};
-    if(id==='../guild-tools/catalog')return {GUILD_TOOLS:[]};
-    if(id==='./guild-launchpad-route')return {guildRoute:(g:string,s?:string)=>s?`#guilds/${g}/${s}`:`#guilds/${g}`};
-    if(id==='../api')return {ApiError:class ApiError extends Error{code='';status=0;}};
-    if(id==='../format')return {formatIsoLocal:(s:string)=>s};
-    if(id==='../useLocalAction')return {useLocalAction:()=>({busy:false,error:'',message:'',run:async()=>{}})};
-    if(id==='./shared')return {useModuleMutation:()=>({mutate:async()=>{},busy:false,error:''})};
-    if(id.includes('LegacyLaunchpadPrimary'))return {LegacyLaunchpadPrimary:()=>React.createElement('div'),legacyPrimaryLabel:()=>'主要動作',legacyPrimaryVisible:()=>false,legacyStorePath:()=>'',legacyWorkNavigationGuard:()=>false};
-    if(id.startsWith('../../../../'))return fileReq(id+'.ts');
-    return fileReq(id);
-  },mod,mod.exports);
+  const compile=(relPath:string)=>{
+    const fileUrl=new URL(relPath,import.meta.url);
+    const fileReq=createRequire(fileUrl);
+    const {code}=transformSync(readFileSync(fileUrl,'utf8'),{loader:'tsx',format:'cjs',jsx:'automatic',supported:{'dynamic-import':false}});
+    const mod={exports:{} as any};
+    const ctx=runInNewContext('(function(require,module,exports){'+code+'\n})',{
+      ...globalThis,AbortController,URL,
+      window:windowObj,document,location:windowObj.location,crypto:webcrypto,
+      addEventListener:windowObj.addEventListener,removeEventListener:windowObj.removeEventListener,
+    });
+    ctx((id:string)=>{
+      if(id==='./GuildLaunchpadReading')return compile('../../apps/portal-web/src/modules/GuildLaunchpadReading.tsx');
+      if(id==='./GuildLaunchpadEditor')return compile('../../apps/portal-web/src/modules/GuildLaunchpadEditor.tsx');
+      if(id==='./GuildLaunchpad.css')return {};
+      if(id==='./GuildLaunchpadMyWork')return {MyWorkPanel:()=>React.createElement('div'),rememberActing(){}};
+      if(id==='./GuildLaunchpadApplications')return {GuildLaunchpadApplications:()=>React.createElement('div'),startable:()=>true};
+      if(id==='../guild-blocks/runtime')return {GuildBlock:()=>React.createElement('div')};
+      if(id==='../guild-repositories/GuildRepositoryFrame')return {GuildRepositoryFrame:()=>React.createElement('div')};
+      if(id==='../guild-tools/catalog')return {GUILD_TOOLS:[]};
+      if(id==='./guild-launchpad-route')return {guildRoute:(g:string,s?:string)=>s?`#guilds/${g}/${s}`:`#guilds/${g}`};
+      if(id==='../api')return {ApiError:class ApiError extends Error{code='';status=0;}};
+      if(id==='../format')return {formatIsoLocal:(s:string)=>s};
+      if(id==='../useLocalAction')return {useLocalAction:()=>({busy:false,error:'',message:'',run:async()=>{}})};
+      if(id==='./shared')return {useModuleMutation:()=>({mutate:async()=>{},busy:false,error:''})};
+      if(id.includes('LegacyLaunchpadPrimary'))return {LegacyLaunchpadPrimary:()=>React.createElement('div'),legacyPrimaryLabel:()=>'主要動作',legacyPrimaryVisible:()=>false,legacyStorePath:()=>'',legacyWorkNavigationGuard:()=>false};
+      if(id.startsWith('../../../../'))return fileReq(id+'.ts');
+      return fileReq(id);
+    },mod,mod.exports);
+    return mod.exports;
+  };
+  const mod={exports:compile('../../apps/portal-web/src/modules/GuildLaunchpad.tsx')};
   return {GuildLaunchpad:mod.exports.GuildLaunchpad,PublicGuildLaunchpad:mod.exports.PublicGuildLaunchpad,MyWorkUnavailable:mod.exports.MyWorkUnavailable,document,act,createRoot};
 }
 
@@ -152,6 +158,8 @@ test('UX-G-06: 調整版面 collapses each block to (name, state, 編輯), opens
   });
   try{
     const nodes=()=>descendants(container);
+    const mgmt=nodes().find(n=>n.nodeName==='BUTTON'&&n.textContent==='管理啟動台')!;
+    await act(async()=>{propsOf(mgmt).onClick();for(let i=0;i<8;i++)await Promise.resolve();});
     const editor=nodes().find(n=>n.nodeName==='FORM'&&hasClass(n,'guild-launchpad-editor'))!;
     assert.equal(Boolean(editor),true,'editor mounted: '+container.textContent.slice(0,160));
 

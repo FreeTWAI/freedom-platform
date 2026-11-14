@@ -18,49 +18,79 @@ function countMatches(html: string, pattern: RegExp) {
   return (html.match(pattern) ?? []).length;
 }
 
-function renderWorkbench(options: {openCreate?: boolean; items?: unknown[]} = {}) {
+function renderWorkbench(options: {openCreate?: boolean; items?: unknown[]; view?: 'mine' | 'community' | 'review' | 'outcomes'} = {}) {
   const url = new URL('../../apps/portal-web/src/modules/WorkbenchPanel.tsx', import.meta.url);
-  const req = createRequire(url);
-  const mod = {exports: {} as Record<string, unknown>};
-  const code = transformSync(readFileSync(url, 'utf8'), {loader: 'tsx', format: 'cjs', jsx: 'automatic'}).code;
   const dashboard = {summary: {accepted_count: 0}, now: [], next: [], review_queue: [], gained: []};
   let stateCall = 0;
+  let currentFile = '';
+  let createFormStateCall = 0;
   const reactMock = {
     ...React,
     useState: (init: unknown) => {
       stateCall++;
-      if (stateCall === 1) return [false, () => {}]; // loading
-      if (stateCall === 5) return [dashboard, () => {}]; // dashboard
-      if (stateCall === 6) return [options.items ?? [], () => {}]; // items
-      if (options.openCreate && stateCall === 8) return [true, () => {}]; // CreateWorkForm open
+      if (currentFile.endsWith('CreateWorkForm.tsx')) {
+        createFormStateCall++;
+        if (options.openCreate && createFormStateCall === 1) return [true, () => {}];
+      } else {
+        if (stateCall === 1) return [false, () => {}]; // loading
+        if (stateCall === 5) return [dashboard, () => {}]; // dashboard
+        if (stateCall === 6) return [options.items ?? [], () => {}]; // items
+        if (init === 'mine' && options.view) return [options.view, () => {}]; // view
+      }
       return [typeof init === 'function' ? (init as () => unknown)() : init, () => {}];
     },
     useSyncExternalStore: (_sub: unknown, getSnap: () => unknown, getServerSnap?: () => unknown) => (getServerSnap ?? getSnap)(),
   };
-  runInNewContext(code, {
-    module: mod,
-    exports: mod.exports,
-    require: (id: string) => {
-      if (id === 'react') return reactMock;
-      if (id.endsWith('.css')) return {};
-      if (id === './ContributionOutcomes') return {WorkContributionRoles: () => null};
-      if (id === './BenefitObservations') return {BenefitObservations: () => null};
-      if (id === '../portal-session') {
-        return {
-          client: {get: async () => ({}), post: async () => ({})},
-          usePortal: () => ({
-            session: {user: {user_id: 'owner-1', profession_membership_ref: 'guild_ai_project'}},
-            pending: null,
-            mutate: async () => true,
-          }),
-          describeError: () => ({title: '錯誤', detail: '錯誤'}),
-          isOwnRef: () => false,
-        };
-      }
-      return req(id);
-    },
-  });
-  const WorkbenchPanel = mod.exports.WorkbenchPanel as React.ComponentType<{selectedId?: string}>;
+  const portalSessionMock = {
+    client: {get: async () => ({}), post: async () => ({})},
+    usePortal: () => ({
+      session: {user: {user_id: 'owner-1', profession_membership_ref: 'guild_ai_project'}},
+      pending: null,
+      mutate: async () => true,
+    }),
+    describeError: () => ({title: '錯誤', detail: '錯誤'}),
+    isOwnRef: () => false,
+  };
+  const loadModule = (fileUrl: URL): Record<string, unknown> => {
+    const req = createRequire(fileUrl);
+    const mod = {exports: {} as Record<string, unknown>};
+    const code = transformSync(readFileSync(fileUrl, 'utf8'), {loader: 'tsx', format: 'cjs', jsx: 'automatic'}).code;
+    runInNewContext(code, {
+      module: mod,
+      exports: mod.exports,
+      require: (id: string) => {
+        if (id === 'react') {
+          return {
+            ...reactMock,
+            useState: (init: unknown) => {
+              currentFile = fileUrl.pathname;
+              if (currentFile.endsWith('CreateWorkForm.tsx')) createFormStateCall++;
+              else stateCall++;
+              const prevFile = currentFile;
+              if (prevFile.endsWith('CreateWorkForm.tsx')) {
+                if (options.openCreate && createFormStateCall === 1) return [true, () => {}];
+                return [typeof init === 'function' ? (init as () => unknown)() : init, () => {}];
+              }
+              if (stateCall === 1) return [false, () => {}]; // loading
+              if (stateCall === 5) return [dashboard, () => {}]; // dashboard
+              if (stateCall === 6) return [options.items ?? [], () => {}]; // items
+              if (init === 'mine' && options.view) return [options.view, () => {}]; // view
+              return [typeof init === 'function' ? (init as () => unknown)() : init, () => {}];
+            },
+          };
+        }
+        if (id.endsWith('.css')) return {};
+        if (id.endsWith('/ContributionOutcomes') || id === './ContributionOutcomes') return {WorkContributionRoles: () => null};
+        if (id.endsWith('/BenefitObservations') || id === './BenefitObservations') return {BenefitObservations: () => null};
+        if (id.endsWith('/portal-session')) return portalSessionMock;
+        if (id.startsWith('./workbench/')) return loadModule(new URL(`${id}.tsx`, fileUrl));
+        return req(id);
+      },
+    });
+    return mod.exports;
+  };
+  const modExports = loadModule(url);
+  const WorkbenchPanel = modExports.WorkbenchPanel as React.ComponentType<{selectedId?: string}>;
   return renderToStaticMarkup(React.createElement(WorkbenchPanel));
 }
 
@@ -91,7 +121,7 @@ test('UX-M-06: WorkbenchPanel keeps one primary button when creation form is ope
     will_review: false,
     my_claim: null,
   };
-  const withItemHtml = renderWorkbench({items: [openItem]});
+  const withItemHtml = renderWorkbench({items: [openItem], view: 'community'});
   assert.equal(countMatches(withItemHtml, /class="[^"]*\bbtn-primary\b[^"]*"/g), 1);
   assert.match(withItemHtml, /class="[^"]*\bbtn-primary\b[^"]*"[^>]*>\+ 新增工作卡</);
   assert.match(withItemHtml, /class="[^"]*\bbtn-secondary\b[^"]*"[^>]*>認領這張工作</);
