@@ -8,6 +8,8 @@ const blank=():Draft=>({title:'',starts_at:'',location:'',description:'',ends_at
 export function EventComposer({client,onDone,initialUrl=''}:{client:PortalClient;onDone:(r:ShareComposeResult)=>void;initialUrl?:string}){
  const [draft,setDraft]=useState<Draft>(blank),[url,setUrl]=useState(initialUrl),[source,setSource]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[previewing,setPreviewing]=useState(false),[guilds,setGuilds]=useState<{guild_key:string;name:string}[]>([]);
  const pending=useRef<{key:string;body:unknown}|null>(null),generation=client.sessionGeneration,live=useRef(true),sequence=useRef(0);
+ const firstField=useRef<HTMLInputElement>(null);
+ useEffect(()=>{firstField.current?.focus();},[]);
  const current=()=>live.current&&generation===client.sessionGeneration;
  useEffect(()=>{live.current=true;void client.get<{items:{guild_key:string;name:string}[]}>('/guilds/directory').then(r=>{if(current())setGuilds(r.items);},()=>{});return()=>{live.current=false;sequence.current++;};},[client]);
  useEffect(()=>{
@@ -31,7 +33,7 @@ export function EventComposer({client,onDone,initialUrl=''}:{client:PortalClient
   finally{if(current())setBusy(false);}
  }
  return <form className="stack" onSubmit={e=>{e.preventDefault();void publish();}} onInvalidCapture={e=>{let p=(e.target as HTMLElement).parentElement;while(p){if(p instanceof HTMLDetailsElement)p.open=true;p=p.parentElement;}}}>
-  <label>活動連結（選填）<input type="url" value={url} disabled={locked} onChange={e=>setUrl(e.target.value)} placeholder="https://"/></label>
+  <label>活動連結（選填）<input ref={firstField} type="url" value={url} disabled={locked} onChange={e=>setUrl(e.target.value)} placeholder="https://"/></label>
   {previewing&&<small role="status">讀取活動…</small>}
   <label>名稱<input required maxLength={120} value={draft.title} disabled={locked||previewing} onChange={e=>set('title',e.target.value)}/></label>
   <label>時間<input required type="datetime-local" value={draft.starts_at} disabled={locked||previewing} onChange={e=>set('starts_at',e.target.value)}/></label>

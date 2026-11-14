@@ -3,7 +3,16 @@ import { createHash } from 'node:crypto';
 import { normalizeShareUrl } from '../../../packages/shared/share-url.js';
 import { Problem, requireCondition } from '../../../packages/shared/problem.js';
 import { previewTitle, type PreviewFetch, PREVIEW_USER_AGENT } from '../../community/link-preview.js';
-import type { ShareAdapter } from '../types.js';
+import type { PreparedShare, ShareAdapter } from '../types.js';
+/** A manually titled link follows the preview's URL guard, without contacting the host. */
+export function manualShareLink(raw:string,title:string):PreparedShare {
+  const normalized=normalizeShareUrl(raw);
+  requireCondition(normalized.ok,422,'invalid_share_url','請貼上公開 HTTPS 網址。');
+  requireCondition(normalized.host!=='github.com'&&normalized.host!=='www.github.com',422,'repository_identity_required','GitHub 作品需要先確認資料。');
+  const clean=title.trim();
+  requireCondition(clean.length>0&&clean.length<=120,422,'invalid_share_url','請填入分享標題。');
+  return {kind:'link' as const,canonical_key:`url:${createHash('sha256').update(normalized.url).digest('hex')}`,canonical_url:normalized.url,title:clean};
+}
 /** Transport MUST be the host's DNS-pinned Node or allowlisted Worker preview transport. No global-fetch fallback. */
 export async function fetchShareLink(raw:string,fetcher?:PreviewFetch) {
   const normalized=normalizeShareUrl(raw);

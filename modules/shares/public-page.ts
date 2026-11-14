@@ -18,7 +18,8 @@ export async function publicSharePage(pool:Pool,id:string,origin:string,via?:str
  const facts=r?[r.license_spdx?`授權：${escape(r.license_spdx)}`:null,r.pushed_at?`更新：${escape(r.pushed_at.slice(0,10))}`:null,
   r.forks_count!==null?`Fork：${r.forks_count}`:null,r.open_issues_count!==null?`Issues：${r.open_issues_count}`:null,r.subscribers_count!==null?`Watchers：${r.subscribers_count}`:null,
   r.homepage?`<a href="${escape(r.homepage)}" rel="noopener noreferrer">網站</a>`:null].filter(Boolean):[];
- const body=`<h1>${escape(s.title)}</h1><div class="share-actions">${r?`<a href="${escape(member)}">☆ 加星</a>`:`<a href="${escape(s.canonical_url)}" rel="nofollow noopener noreferrer">開啟原文</a>`}<a href="${escape(member)}">我也要分享</a></div>`+
+ const host=!r&&s.kind==='link'?new URL(s.canonical_url).hostname:'';
+ const body=`<h1>${escape(s.title)}</h1>${host?`<p>${escape(host)}</p>`:''}<div class="share-actions">${r?`<a href="${escape(member)}">☆ 加星</a>`:`<a href="${escape(s.canonical_url)}" rel="nofollow noopener noreferrer">開啟原文</a>`}<a href="${escape(member)}">我也要分享</a></div>`+
    (r?`${r.description?`<p>${escape(r.description)}</p>`:''}${facts.length?`<p class="share-facts">${facts.join(' · ')}</p>`:''}${r.topics.length?`<div class="share-topics">${r.topics.slice(0,5).map((topic:string)=>`<span class="share-topic">${escape(topic)}</span>`).join('')}</div>`:''}<p>${r.stars===null?'':`GitHub 星數：${r.stars} · `}原作帳號：<a href="https://github.com/${encodeURIComponent(r.original_author)}">${escape(r.original_author)}</a></p>
     <h2>開始用</h2><pre>${escape(r.quick_start)}</pre><h2>README</h2><section class="share-readme">${r.readme_html}</section>
     ${r.latest_release?`<h2>最新版本</h2><a href="${escape(r.latest_release.html_url)}">${escape(r.latest_release.name||r.latest_release.tag_name)}</a>`:''}`:'')+`<p>${data.count} 位會員分享</p>`;

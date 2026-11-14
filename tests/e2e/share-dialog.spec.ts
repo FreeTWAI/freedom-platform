@@ -85,7 +85,10 @@ test('share dialog works across all 6 targets, skill intros, note public toggle 
   try {
     await signIn(page, member.email);
 
-    // 1. Repository share page (#shares/:id)
+    // 1. Repository share page (#shares/:id) — publish from #explore since publishing from #home stays on #home
+    await page.goto('/#explore');
+    await expect(page).toHaveURL(/#explore$/);
+    await expect(page.locator('.shell')).toBeVisible();
     await page.getByRole('button', { name: '分享或提交', exact: true }).click();
     const createBox = page.getByRole('dialog', { name: '分享', exact: true });
     await createBox.getByLabel('貼上連結', { exact: true }).fill('https://github.com/freetwai-test/shared-repo');

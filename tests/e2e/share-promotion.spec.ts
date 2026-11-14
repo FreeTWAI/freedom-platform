@@ -154,6 +154,8 @@ test('an event share link lands on the public page and shows the click', async (
   eventGo = (await dialog.locator('.skill-share-url').innerText()).trim();
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, eventGo, url => url.pathname === `/events/${eventId}` && url.searchParams.has('ref'), e2eAuthPool);
+  await card.getByRole('link', { name: '管理活動', exact: true }).click();
+  await card.locator('summary').filter({ hasText: '其他設定' }).click();
   await card.getByRole('button', { name: '分享報名統計', exact: true }).click();
   const report = card.locator('.event-referral-report');
   await expect(report.getByRole('listitem')).toHaveCount(20);
@@ -375,13 +377,14 @@ test('the social zone previews, shares, replaces and keeps a thumbnail', async (
 
   await youtube.getByRole('button', { name: '分享貼文連結', exact: true }).click();
   const postShare = page.getByRole('dialog', { name: '分享貼文連結', exact: true });
-  await postShare.getByRole('button', { name: '分享', exact: true }).click();
-  const dialog = page.locator('.skill-share-dialog');
+  const dialog = postShare;
   await expect(dialog.locator('.share-more')).not.toHaveAttribute('open');
   await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   const go = (await dialog.locator('.skill-share-url').innerText()).trim();
+  await dialog.getByRole('button', { name: '複製連結', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('已複製。');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(go);
   await dialog.getByRole('button', { name: '關閉分享', exact: true }).click();
-  await postShare.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, go, url => url.href === YOUTUBE, e2eAuthPool, 'https://www.youtube.com/**');
   await page.reload();
   await selectSocialFeed(page,'全部動態');
@@ -486,8 +489,19 @@ test('計分規則 shows a disclosure marker and opens from a click or Enter', a
   }
 });
 
-test('share pages stay inside the viewport and stay readable in every theme', async ({ page }) => {
+async function ensureSocialFixture(pool: Pool, url: string, platform: string, title: string) {
+  await pool.query(`INSERT INTO community_social_posts(community_id,author_user_id,url,platform,title,note,state)
+    SELECT $1,$2,$3,$4,$5,NULL,'active' WHERE NOT EXISTS
+    (SELECT 1 FROM community_social_posts WHERE community_id=$1 AND url=$3 AND state='active')`,
+  [COMMUNITY, MAKER, url, platform, title]);
+}
+
+test('share pages stay inside the viewport and stay readable in every theme', async ({ page, e2eAuthPool }) => {
   test.setTimeout(60_000);
+  await ensureSocialFixture(e2eAuthPool, YOUTUBE, 'youtube', 'E2E 示範影片');
+  await ensureSocialFixture(e2eAuthPool, PLACEHOLDER, 'other', '沒有縮圖的貼文');
+  await ensureSocialFixture(e2eAuthPool, INSTAGRAM, 'instagram', 'Instagram 示範');
+  await ensureSocialFixture(e2eAuthPool, FACEBOOK, 'facebook', 'Facebook 示範');
   await login(page);
   await navigate(page, '社群分享');
   await selectSocialFeed(page,'全部動態');
@@ -548,8 +562,12 @@ async function themeOf(page: Page, theme: 'light' | 'dark' | 'versefolk') {
   await page.evaluate(value => { localStorage.setItem('freedom-theme', value); document.documentElement.dataset.theme = value; }, theme);
 }
 
-test('screenshots cover the boards, social zone, dialogs and interstitial', async ({ page, browser }) => {
+test('screenshots cover the boards, social zone, dialogs and interstitial', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(120_000);
+  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
+    SELECT $1,$2,$3,$4,'用來確認活動分享點擊。',now()-interval '29 days',now()+interval '2 days','online','線上','published','open','other'
+    WHERE NOT EXISTS (SELECT 1 FROM community_events WHERE title=$4)`, [randomUUID(), COMMUNITY, MAKER, EVENT_TITLE]);
+  let screenshotGo = '';
   await login(page);
   for (const theme of ['light', 'versefolk'] as const) {
     await openBoards(page);
@@ -585,6 +603,7 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
       await card.getByRole('button', { name: '分享活動', exact: true }).click();
       const eventDialog = page.getByRole('dialog', { name: `分享「${EVENT_TITLE}」`, exact: true });
       await expect(eventDialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+      screenshotGo = (await eventDialog.locator('.skill-share-url').innerText()).trim();
       await eventDialog.screenshot({ path: `${SHOTS}/event-share-${theme}-${width}.png` });
       await eventDialog.getByRole('button', { name: '關閉分享', exact: true }).click();
     }
@@ -593,7 +612,7 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
   const context = await browser.newContext({ userAgent: GUEST_UA, javaScriptEnabled: false });
   const guest = await context.newPage();
   await guest.setViewportSize({ width: 1280, height: 900 });
-  await guest.goto(eventGo || platformGo);
+  await guest.goto(screenshotGo);
   await expect(guest.getByRole('link', { name: '開啟站內內容', exact: true })).toBeVisible();
   await guest.screenshot({ path: `${SHOTS}/interstitial-light-1280.png`, fullPage: true });
   await guest.setViewportSize({ width: 390, height: 844 });
@@ -606,7 +625,8 @@ test('screenshots cover the boards, social zone, dialogs and interstitial', asyn
   await context.close();
 });
 
-test('the author can delete their social post', async ({ page }) => {
+test('the author can delete their social post', async ({ page, e2eAuthPool }) => {
+  await ensureSocialFixture(e2eAuthPool, YOUTUBE, 'youtube', 'E2E 示範影片');
   await login(page);
   await navigate(page, '社群分享');
   await selectSocialFeed(page,'全部動態');

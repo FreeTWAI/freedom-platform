@@ -10,12 +10,15 @@ import { requireCondition } from '../../packages/shared/problem.js';
 import { authRateLimit } from '../identity-membership/members.js';
 import type { Actor } from '../identity-membership/service.js';
 import { shareAdapter } from './adapters/registry.js';
+import { manualShareLink } from './adapters/link.js';
 import { existingTitle,existingReadableSql,hiddenEventReadableSql } from './adapters/existing.js';
 import { endorseShare, creditEventRegistrations } from './credit.js';
 import { createPromotionLinkRow } from '../community/promotion.js';
 import { readPublicWork } from '../opportunity-project-work/public-sharing.js';
 import type { AdapterContext, PreparedShare, RepositoryFacts, ShareRow } from './types.js';
 export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional(),source:z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),guild_key:z.string().regex(/^guild_[a-zA-Z0-9_]+$/),ref:z.string().max(200).optional()}).strict().optional()}).strict();
+const shareCreateInput=shareInput.extend({manual_title:z.string().trim().min(1).max(120).optional()}).strict();
+type ShareCommandBody=z.infer<typeof shareCreateInput>;
 async function lockEventSource(q:PoolClient,actor:Actor,id:string){
  await q.query(`SELECT e.event_id FROM community_events e JOIN shares s ON s.ref_id=e.event_id AND s.kind='event' WHERE s.share_id=$1 AND s.community_id=$2 FOR UPDATE OF e`,[id,actor.community_id]);
 }
@@ -28,11 +31,12 @@ export async function readShare(q:PoolClient,actor:Actor,id:string,lock=false):P
 export async function visibleShare(q:PoolClient,actor:Actor,id:string,lock=false) {
   const s=await readShare(q,actor,id,lock);requireCondition(s.state==='published',404,'not_found','分享已停止公開。');return s;
 }
-async function prepare(pool:Pool,input:Command,context:AdapterContext) {
-  const body=shareInput.parse(input.body),adapter=shareAdapter(body);
+async function prepare(pool:Pool,input:Command,context:AdapterContext,allowManual=false) {
+  const body=(allowManual&&!input.actor.agent?shareCreateInput:shareInput).parse(input.body) as ShareCommandBody,adapter=shareAdapter(body);
+  requireCondition(body.manual_title===undefined||(allowManual&&!input.actor.agent&&(!body.kind||body.kind==='link')),422,'invalid_share_url','請貼上公開 HTTPS 網址。');
   await readWithMemberSession(pool,input.actor,async()=>{});
   await authRateLimit(pool,'share-preview-member',input.actor.user_id,120,3600);
-  const prepared=await adapter.prepare(body,context);
+  const prepared=body.manual_title===undefined?await adapter.prepare(body,context):manualShareLink(body.url??'',body.manual_title);
   if(adapter.authorize)await readWithMemberSession(pool,input.actor,q=>adapter.authorize!(q,input.actor,prepared));
   return prepared;
 }
@@ -48,13 +52,14 @@ async function saveRepository(q:PoolClient,p:PreparedShare) {
     RETURNING repo_id`,[randomUUID(),r.id,r.full_name,r.url,JSON.stringify(r),r.description,r.topics,r.homepage,r.license_spdx])).rows[0].repo_id as string;
 }
 export async function createShare(pool:Pool,input:Command,context:AdapterContext={},onRepositoryPrepared?:(facts:RepositoryFacts)=>void) {
-  const body=shareInput.parse(input.body);
+  const body=(input.actor.agent?shareInput:shareCreateInput).parse(input.body) as ShareCommandBody;
+  requireCondition(body.manual_title===undefined||!body.kind||body.kind==='link',422,'invalid_share_url','請貼上公開 HTTPS 網址。');
   if(body.kind==='event'&&body.event){const e=await createEvent(pool,input,{...body.event,...(body.url?{source_url:body.url}:{})});return {...(input.actor.agent?{via_agent:true}:{}),share_id:e.share_id,created:true,url:`/events/${e.event_id}`};}
   requireCondition(body.kind!=='event'||body.ref_id,422,'event_details_required','請確認活動名稱、時間和地點。');
   // A completed retry never depends on upstream availability. command still validates the digest and current authority.
   const receipt=async(q:PoolClient)=>(await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,memberReceiptOperation(input),input.key])).rows[0]?.response as {share_id:string}|undefined;
   const prior=await readWithMemberSession(pool,input.actor,receipt);
-  const p=prior?null:await prepare(pool,input,context);
+  const p=prior?null:await prepare(pool,input,context,true);
   if(p?.repository)onRepositoryPrepared?.(p.repository);
   requireCondition(!p?.event,422,'event_details_required','請確認活動名稱、時間和地點。');
   return command(pool,input,async q=>{
