@@ -2,7 +2,7 @@ import type { MiddlewareHandler } from 'hono';
 import { matchedRoutes } from 'hono/route';
 import type { Pool } from 'pg';
 import { agentOperation } from './agent-allowlist.js';
-import { authenticateAgent,recordAgentResponse } from '../../../modules/client-connections/agent-authority.js';
+import { authenticateAgent,consumeAgentRequestBudget,recordAgentResponse } from '../../../modules/client-connections/agent-authority.js';
 import { Problem,requireCondition } from '../../../packages/shared/problem.js';
 import type { PlatformEnv } from './module-context.js';
 
@@ -24,6 +24,7 @@ export function agentBoundary(pool:Pool,responseHeaders:(path:string)=>Record<st
    actor.agent={...actor.agent!,scope:op.scope,operation:`${c.req.method} ${c.req.path}`,public_item:op.publicItem===true};
    requireCondition(!actor.onboarding_required||Boolean(actor.onboarding_completed_at),403,'onboarding_required','請先選擇主要公會。');
    if(c.req.method!=='GET')requireCondition(/^[A-Za-z0-9_-]{8,128}$/.test(c.req.header('Idempotency-Key')??''),400,'idempotency_required','請提供有效的 Idempotency-Key。');
+   if(['shares.preview','shares.links','events.links','tools.identity'].includes(op.id))await consumeAgentRequestBudget(pool,actor);
    c.set('actor',actor);
    await next();
    await recordAgentResponse(pool,actor,c.res.status);

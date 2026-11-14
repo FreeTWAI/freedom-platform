@@ -49,6 +49,46 @@ export const agentOperations = [
     "example": {}
   },
   {
+    "id": "events.update",
+    "method": "POST",
+    "route": "/api/v1/events/:id/update",
+    "scope": "share",
+    "title": "編輯自己的活動",
+    "screen": "events",
+    "ifMatch": true,
+    "example": {
+      "title": "讀書會",
+      "description": "一起交流",
+      "starts_at": "2099-01-10T10:00:00Z",
+      "ends_at": "2099-01-10T11:00:00Z",
+      "mode": "online",
+      "location": "線上",
+      "capacity": null
+    }
+  },
+  {
+    "id": "events.announce",
+    "method": "POST",
+    "route": "/api/v1/events/:id/announcements",
+    "scope": "share",
+    "title": "通知活動參加者",
+    "screen": "events",
+    "ifMatch": true,
+    "example": {
+      "message": "活動通知"
+    }
+  },
+  {
+    "id": "events.cancel",
+    "method": "POST",
+    "route": "/api/v1/events/:id/cancel",
+    "scope": "share",
+    "title": "取消自己的活動",
+    "screen": "events",
+    "ifMatch": true,
+    "example": {}
+  },
+  {
     "id": "events.interest",
     "method": "POST",
     "route": "/api/v1/events/:id/interest",

@@ -19,7 +19,7 @@ const databaseUrl = Object.assign(new URL(serverUrl), { pathname: '/' + database
 
 // Required by Miniflare even when the database uses local trust auth.
 const workerDatabase = new URL(databaseUrl);
-workerDatabase.password ||= 'synthetic-workerd-only';
+workerDatabase.password ||= process.env.PGPASSWORD || 'synthetic-workerd-only';
 const compatibilityDate = '2026-09-21';
 const APP_ID = '12345';
 const pair = await generateKeyPair('RS256', { modulusLength: 2048, extractable: true });

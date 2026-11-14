@@ -6,6 +6,15 @@ import {skillBookGuides} from '../../modules/community/skill-book-guides.js';
 import {developmentMap,skillMarkdown,pageHtml} from '../../modules/development/service.js';
 import {skillBookCoverUrl,skillBookStarUrl} from '../../apps/portal-web/src/modules/SkillBookCover.js';
 import {escapeHtml} from '../../packages/shared/html.js';
+import {buildBookOriginalCache} from '../../modules/shares/repository-cache.js';
+
+test('skill page prefers the cached original licence and falls back to the catalog',()=>{
+  const book=communityCatalog.skill_books[0],markdown=skillMarkdown(book.id)!;
+  const cache={...buildBookOriginalCache({id:book.id,repository_url:book.repository_url}),full_name:'fixture/book',license_spdx:'Apache-2.0'};
+  const render=(license_spdx:string|null)=>pageHtml(book.title,markdown,`/development/skills/${book.id}.md`,undefined,undefined,undefined,undefined,undefined,undefined,false,'',{...cache,license_spdx});
+  assert.ok(render('Apache-2.0').includes('<dt>記錄的授權</dt><dd>Apache-2.0</dd>'));
+  assert.ok(render(null).includes(`<dt>記錄的授權</dt><dd>${escapeHtml(book.license_status)}</dd>`));
+});
 
 test('every catalog and featured skill book carries a complete, specific guide with pinned primary evidence',()=>{
   assert.deepEqual(Object.keys(skillBookGuides).sort(),communityCatalog.skill_books.map(book=>book.id).sort());

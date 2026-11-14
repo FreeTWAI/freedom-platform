@@ -50,7 +50,10 @@ test('organizer sees private helper applications and decides using application v
   page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/helpers/me'))ownReads++;});
   await page.route(`**/api/v1/events/${id}/helpers?*`,route=>route.fulfill({json:{items:[{user_id:other,nickname:'合成幫手',state,version:7}],total:1,next_offset:null,event_closed:false}}));
   await page.route(`**/api/v1/events/${id}/helpers/${other}/decision`,async route=>{commands.push({body:route.request().postDataJSON(),version:route.request().headers()['if-match']});state='accepted';await route.fulfill({json:{state,version:8,event_closed:false}});});
-  await open(page,maker);const panel=page.getByRole('region',{name:'管理幫手',exact:true});
+  await open(page,maker);await expect(page.getByRole('region',{name:'管理幫手',exact:true})).toHaveCount(1);
+  await page.getByRole('link',{name:'管理活動',exact:true}).click();await expect(page).toHaveURL(new RegExp(`#explore/events/${id}/manage$`));
+  const manage=page.getByRole('region',{name:'管理活動',exact:true}),panel=manage.getByRole('region',{name:'管理幫手',exact:true});
+  await expect(panel).toHaveCount(1);await expect(manage.getByRole('button',{name:'編輯活動',exact:true})).toBeVisible();
   await panel.getByRole('button',{name:'接受 合成幫手',exact:true}).click();await expect(panel).toContainText('主辦已接受');expect(commands).toEqual([{body:{decision:'accept'},version:'"7"'}]);expect(ownReads).toBe(0);
 });
 

@@ -1,13 +1,20 @@
 import {test,expect} from './fixtures.js';
 import {openFeatureSearch} from './navigation.js';
 import {DEMO_PASSWORD,DEMO_USERS} from '../../packages/testing/seed.js';
-test('one share box publishes recorded original README, star action and member contribution at mobile width',async({page})=>{
+test('one share box publishes recorded original README, star action and member contribution at mobile width',async({page,context})=>{
  await page.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
+ await context.grantPermissions(['clipboard-read','clipboard-write']);
  await page.setViewportSize({width:390,height:844});
  await page.goto('/#home');
  await page.getByLabel('電子郵件',{exact:true}).fill(DEMO_USERS[0].email);
  await page.getByLabel('密碼',{exact:true}).fill(DEMO_PASSWORD);
  await page.getByRole('button',{name:'登入',exact:true}).click();
+ await page.route('**/api/v1/shares/*',async route=>{
+  if(route.request().method()!=='GET')return route.continue();
+  const response=await route.fetch(),data=await response.json();
+  if(data.repository)Object.assign(data.repository,{license_spdx:'MIT',homepage:'https://example.org/project',pushed_at:'2026-01-02T03:04:05Z',forks_count:0,open_issues_count:12,subscribers_count:5,topics:['one','two','three','four','five','six']});
+  await route.fulfill({response,json:data});
+ });
  await page.getByRole('button',{name:'分享或提交',exact:true}).click();
  const box=page.getByRole('dialog',{name:'分享',exact:true});await expect(box).toBeVisible();
  await box.getByLabel('貼上連結',{exact:true}).fill('https://github.com/freetwai-test/shared-repo');
@@ -15,6 +22,13 @@ test('one share box publishes recorded original README, star action and member c
  await box.getByRole('button',{name:'發布',exact:true}).click();
  await expect(page).toHaveURL(/#shares\/[0-9a-f-]+$/);
  await expect(page.getByRole('heading',{name:'README',exact:true})).toBeVisible();
+ const facts=page.locator('.share-page .share-facts');await expect(facts).toContainText('MIT');await expect(facts).toContainText('Fork：0');await expect(facts).toContainText('Issues：12');await expect(facts).toContainText('Watchers：5');
+ expect(await page.locator('.share-page').evaluate(element=>{
+  const action=element.querySelector('.share-actions'),description=element.querySelector('.share-description');
+  return Boolean(action&&description&&(action.compareDocumentPosition(description)&Node.DOCUMENT_POSITION_FOLLOWING));
+ })).toBe(true);
+ await expect(facts.getByRole('link',{name:'網站'})).toHaveAttribute('href','https://example.org/project');
+ await expect(page.locator('.share-page .share-topics .pill')).toHaveText(['one','two','three','four','five']);
  await expect(page.getByText('這是原作 README 的合成錄製內容。')).toBeVisible();
  await expect(page.getByRole('link',{name:'☆ GitHub 加星',exact:true})).toHaveAttribute('href','https://github.com/freetwai-test/shared-repo');
  await expect(page.locator('.share-readme script,.share-readme svg,.share-readme [onerror],.share-readme iframe')).toHaveCount(0);
@@ -30,6 +44,7 @@ test('one share box publishes recorded original README, star action and member c
  await expect(shareDialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
  await shareDialog.getByRole('button',{name:'複製連結',exact:true}).click();
  await expect(shareDialog.getByRole('status')).toHaveText('已複製。');
+ expect(await page.evaluate(()=>navigator.clipboard.readText())).toMatch(/\/go\/[A-Za-z0-9_-]{10}/);
  await shareDialog.getByRole('button',{name:'關閉分享',exact:true}).click();
  await openFeatureSearch(page);
  await page.getByRole('navigation',{name:'主要工作區'}).getByRole('button',{name:'我的',exact:true}).click();

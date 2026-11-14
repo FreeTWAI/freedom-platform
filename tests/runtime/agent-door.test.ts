@@ -103,21 +103,97 @@ test('first exact publication waits for browser confirmation; replay, concurrenc
  assert.equal((await req(path,{token,body,key})).status,201,'replay works at cap');
  assert.equal((await pool.query('SELECT count(*)::int AS n FROM agent_publications WHERE connection_id=$1',[issued.connection_id])).rows[0].n,2);
 });
-test('even an organizer agent token cannot edit, announce or cancel an event',async()=>{
- const session=await ready(),issued=await issue(session),created=await req('/api/v1/events',{session,body:eventBody()});
- assert.equal(created.status,201);
- for(const operation of ['update','announcements','cancel']){
-  const response=await req(`/api/v1/events/${created.data.event_id}/${operation}`,{token:issued.access_token,body:operation==='announcements'?{message:'合成通知'}:{},headers:{'If-Match':`"${created.data.aggregate_version}"`}});
-  assert.equal(response.status,403);
+test('only the organizer agent with share scope can update, announce and cancel, with version and replay protection',async()=>{
+ const session=await ready(),other=await ready(1),issued=await issue(session,['read','share']),
+  outsider=await issue(other,['share']),unscoped=await issue(session,['read']),revoked=await issue(session,['share']);
+ assert.equal((await req(`/api/v1/me/agent-tokens/${revoked.connection_id}/revoke`,{session,body:{}})).status,200);
+ const body=eventBody(),created=await req('/api/v1/events',{session,body});assert.equal(created.status,201);
+ const id=created.data.event_id,foreign=randomUUID(),foreignEvent=randomUUID();
+ await pool.query('INSERT INTO communities(community_id,name) VALUES($1,$2)',[foreign,'Synthetic foreign']);
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility)
+  VALUES($1,$2,$3,'合成活動','合成內容','2099-01-01T10:00:00Z','2099-01-01T11:00:00Z','online','線上','published','open')`,[foreignEvent,foreign,session.user.user_id]);
+ const changes=[['update',{...body,title:'代理修改'}],['announcements',{message:'合成通知'}],['cancel',{}]] as const;
+ for(const [operation,payload] of changes){
+  const path=(eventId:string)=>`/api/v1/events/${eventId}/${operation}`,headers={'If-Match':`"${created.data.aggregate_version}"`};
+  for(const [token,status] of [[outsider.access_token,403],[unscoped.access_token,403],[revoked.access_token,401]] as const){
+   const response=await req(path(id),{token,body:payload,headers});assert.equal(response.status,status,`${operation}: ${JSON.stringify(response.data)}`);
+  }
+  const cross=await req(path(foreignEvent),{token:issued.access_token,body:payload,headers});assert.equal(cross.status,404,operation);
  }
- assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[created.data.event_id])).rows[0].state,'published');
+ let version=Number(created.data.aggregate_version);
+ for(const [operation,payload] of changes){
+  const path=`/api/v1/events/${id}/${operation}`,token=issued.access_token,key=randomUUID();
+  assert.equal((await req(path,{token,body:payload})).status,428,`${operation} requires If-Match`);
+  assert.equal((await req(path,{token,body:payload,headers:{'If-Match':`"${version+10}"`}})).status,412,`${operation} rejects stale version`);
+  const headers={'If-Match':`"${version}"`},response=await req(path,{token,body:payload,key,headers});
+  assert.equal(response.status,200,`${operation}: ${JSON.stringify(response.data)}`);
+  assert.deepEqual((await req(path,{token,body:payload,key,headers})).data,response.data,`${operation} replay`);
+  version=Number(response.data.event_version??response.data.aggregate_version);
+  if(operation==='announcements'){
+   const browser=await req(path,{session,body:{message:'本人通知'},headers:{'If-Match':`"${version}"`}});assert.equal(browser.status,200);version=Number(browser.data.event_version);
+   const third=await req(path,{token,body:{message:'第三則'},headers:{'If-Match':`"${version}"`}});assert.equal(third.status,200);version=Number(third.data.event_version);
+   for(const credentials of [{token},{session}]){
+    const limited=await req(path,{...credentials,body:{message:'超過限制'},headers:{'If-Match':`"${version}"`}});
+    assert.equal(limited.status,429);assert.equal(limited.data.code,'event_announcement_limit');
+   }
+  }
+ }
+ const stored=(await pool.query('SELECT title,state FROM community_events WHERE event_id=$1',[id])).rows[0];
+ assert.equal(stored.title,'代理修改');assert.equal(stored.state,'cancelled');
 });
 
-test('ten denied requests suspend a token; successful reads do not erase failures',async()=>{
+test('only ten consecutive counted failures suspend a token; success resets and 409/429 preserve the count',async()=>{
  const session=await ready(),issued=await issue(session),token=issued.access_token;
- for(let i=0;i<10;i++){assert.equal((await req('/api/v1/unlisted',{token})).status,403);if(i<9)assert.equal((await req('/api/v1/events',{token})).status,200);}
+ const count=async()=>Number((await pool.query('SELECT failure_count FROM agent_token_connections WHERE connection_id=$1',[issued.connection_id])).rows[0].failure_count);
+ for(let i=0;i<9;i++)assert.equal((await req('/api/v1/unlisted',{token})).status,403);
+ assert.equal(await count(),9);assert.equal((await req('/api/v1/events',{token})).status,200);assert.equal(await count(),0);
+ const {authenticateAgent,recordAgentResponse}=await import('../../modules/client-connections/agent-authority.js');
+ const actor=await authenticateAgent(pool,'Bearer '+token);
+ await recordAgentResponse(pool,actor,404);await recordAgentResponse(pool,actor,409);await recordAgentResponse(pool,actor,429);
+ assert.equal(await count(),1);
+ await recordAgentResponse(pool,actor,204);assert.equal(await count(),0);
+ assert.equal((await req('/api/v1/unlisted',{token})).status,403);
+ const idle=await req('/api/v1/agent/events',{token});assert.equal(idle.status,200);assert.equal(await count(),0,'an idle successful poll also resets failures');
+ for(let i=0;i<10;i++)assert.equal((await req('/api/v1/unlisted',{token})).status,403);
  assert.equal((await req('/api/v1/events',{token})).status,401);
  const row=(await req('/api/v1/me/agent-tokens',{session})).data.items[0];assert.ok(row.suspended_at);assert.equal(row.failure_count,10);assert.ok(row.last_used_at);
+});
+
+test('the four agent preview, link and tool-token requests share a bounded per-token daily allowance',async()=>{
+ const session=await shareMember();
+ const event=await req('/api/v1/events',{session,body:eventBody()});assert.equal(event.status,201);
+ const share=await req('/api/v1/shares',{session,body:{url:'https://example.com/budget'}});assert.equal(share.status,200);
+ const keys=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+ const signed=createApp(pool,origin,'local',{guildToolSigner:{privateKey:keys.privateKey,publicJwk:await crypto.subtle.exportKey('jwk',keys.publicKey),kid:randomUUID()}});
+ await pool.query(`INSERT INTO guild_tools(id,community_id,guild_key,tool_id,state,title,entry_url,origin,bridge_version,profile,scopes,permissions,registered_by)
+  SELECT $1,community_id,'guild_games','budget-tool','enabled','合成工具','https://tools.example.com/','https://tools.example.com','freedom.guild-launchpad/v2','origin','["context:read","session:exchange"]','[]',user_id FROM users WHERE user_id=$2`,[randomUUID(),session.user.user_id]);
+ const operations=[
+  ['/api/v1/shares/preview',{url:'https://example.com/budget-preview'}],
+  [`/api/v1/shares/${share.data.share_id}/links`,{}],
+  [`/api/v1/events/${event.data.event_id}/share`,{}],
+  ['/api/v1/guilds/guild_games/tools/budget-tool/token',{}],
+ ] as const;
+ for(const [path,body] of operations){
+  const issued=await issue(session),token=issued.access_token;
+  const send=async()=>{
+   if(!path.includes('/guilds/'))return req(path,{token,body});
+   const response=await signed.request(origin+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify(body)});
+   return {status:response.status,data:await response.json() as any};
+  };
+  for(let i=0;i<99;i++)assert.equal((await send()).status,200,`${path}, request ${i+1}`);
+  const final=await Promise.all([send(),send()]);
+  assert.deepEqual(final.map(result=>result.status).sort(),[200,429],path);
+  assert.equal(final.find(result=>result.status===429)!.data.code,'agent_daily_cap',path);
+ }
+ const combined=await issue(session),independent=await issue(session),preview='/api/v1/shares/preview',previewBody={url:'https://example.com/combined'};
+ const shareLink=`/api/v1/shares/${share.data.share_id}/links`;
+ for(let i=0;i<99;i++)assert.equal((await req(shareLink,{token:combined.access_token,body:{}})).status,200);
+ assert.equal((await req(`/api/v1/events/${event.data.event_id}/share`,{token:combined.access_token,body:{}})).status,200);
+ const combinedLimit=await req(preview,{token:combined.access_token,body:previewBody});
+ assert.equal(combinedLimit.status,429,'operations share one budget');assert.equal(combinedLimit.data.code,'agent_daily_cap');
+ assert.equal((await req(shareLink,{token:independent.access_token,body:{}})).status,200,'another token has its own budget');
+ await pool.query("UPDATE auth_rate_limits SET window_start=clock_timestamp()-interval '1 day' WHERE bucket=$1",[tokenHash(`agent-auxiliary/${combined.connection_id}`)]);
+ assert.equal((await req(shareLink,{token:combined.access_token,body:{}})).status,200,'the budget renews after 24 hours');
 });
 test('own credential management cannot access another member and browser CSRF remains required',async()=>{
  const owner=await ready(),other=await ready(1),issued=await issue(owner);
@@ -243,7 +319,7 @@ test('change feed is member-bound, cursor-paged, and does not skip late commits 
  }finally{await delayed.query('ROLLBACK');delayed.release();}
 });
 
-test('an idle agent events HTTP poll uses at most three statements and takes no row lock',async()=>{
+test('an idle agent events HTTP poll uses at most three statements and conditionally clears failures',async()=>{
  const session=await ready(),issued=await issue(session),token=issued.access_token;
  const first=await req('/api/v1/agent/events',{token});assert.equal(first.status,200);
  let cursor=first.data.next_cursor,more=first.data.has_more;
@@ -260,9 +336,11 @@ test('an idle agent events HTTP poll uses at most three statements and takes no 
  const observed=createApp(counted,origin,'local',{eventParticipationEnabled:true,socialAchievementsEnabled:true});
  const response=await observed.request(origin+'/api/v1/agent/events?after='+encodeURIComponent(cursor),{headers:{Authorization:'Bearer '+token}});
  assert.equal(response.status,200);const body=await response.json() as any;assert.deepEqual(body.items,[]);assert.equal(body.next_cursor,cursor);
- const locks=statements.filter(sql=>/\bFOR\s+(?:UPDATE|SHARE|NO KEY UPDATE|KEY SHARE)\b|^\s*(?:INSERT|UPDATE|DELETE)\b/i.test(sql));
+ const locks=statements.filter(sql=>/\bFOR\s+(?:UPDATE|SHARE|NO KEY UPDATE|KEY SHARE)\b|^\s*(?:INSERT|DELETE)\b/i.test(sql));
  assert.ok(statements.length<=3,`idle poll issued ${statements.length} statements`);
  assert.deepEqual(locks,[],`idle poll acquired a row lock`);
+ const updates=statements.filter(sql=>/^\s*UPDATE\b/i.test(sql));
+ assert.equal(updates.length,1);assert.match(updates[0],/WHERE connection_id=\$1 AND failure_count<>0/);
 });
 
 test('RSVP and notification producers emit confirmed, updated and waitlist invitation changes',async()=>{

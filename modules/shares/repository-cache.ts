@@ -140,10 +140,17 @@ export async function refreshDueRepositories(pool:Pool,context:AdapterContext={}
 export async function repositoryPage(q:PoolClient,repoId:string) {
   const row=(await q.query('SELECT * FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0];
   requireCondition(row&&row.fetch_state!=='unavailable',404,'not_found','原作已不公開。');
-  const f=row.facts as RepositoryFacts;
+  const f=(row.facts??{}) as Partial<RepositoryFacts>;
   const metrics=(await q.query('SELECT snapshot,checked_at FROM github_repository_metrics WHERE repository_key=$1',[row.full_name.toLowerCase()])).rows[0];
   const currentMetrics=metrics?.snapshot?.repository_identity?.id===row.provider_repo_id&&(!row.fetched_at||new Date(metrics.checked_at)>=new Date(row.fetched_at));
-  return {full_name:row.full_name,url:row.current_url,description:row.description,topics:row.topics,license_spdx:row.license_spdx,readme_html:row.readme_html??'',quick_start:readmeQuickStart(row.readme_html??'',row.full_name),latest_release:row.latest_release,stars:currentMetrics?metrics.snapshot.stargazers_count:f.stars??null,original_author:f.owner_login??row.full_name.split('/')[0],fetched_at:row.fetched_at,fetch_state:row.fetch_state,stale:!row.fetched_at||Date.now()-new Date(row.fetched_at).getTime()>86400000};
+  const social=currentMetrics?metrics.snapshot:f.metrics;
+  const count=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:null;
+  let homepage:string|null=null;
+  try{const url=new URL(row.homepage);if(['http:','https:'].includes(url.protocol)&&!url.username&&!url.password)homepage=url.href;}catch{}
+  return {full_name:row.full_name,url:row.current_url,description:row.description,topics:Array.isArray(row.topics)?row.topics.slice(0,5):[],license_spdx:row.license_spdx,homepage,
+    forks_count:count(social?.forks_count),open_issues_count:count(social?.open_issues_count),subscribers_count:count(social?.subscribers_count),
+    pushed_at:typeof social?.pushed_at==='string'&&!Number.isNaN(Date.parse(social.pushed_at))?social.pushed_at:null,
+    readme_html:row.readme_html??'',quick_start:readmeQuickStart(row.readme_html??'',row.full_name),latest_release:row.latest_release,stars:currentMetrics?metrics.snapshot.stargazers_count:f.stars??null,original_author:f.owner_login??row.full_name.split('/')[0],fetched_at:row.fetched_at,fetch_state:row.fetch_state,stale:!row.fetched_at||Date.now()-new Date(row.fetched_at).getTime()>86400000};
 }
 type CachedRepoRow={
   provider_repo_id:string;
