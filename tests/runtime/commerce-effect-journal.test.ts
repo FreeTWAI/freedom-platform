@@ -55,7 +55,7 @@ test('an offline-only Worker installs payment methods without a gateway, keyring
   assert.equal(typeof runtime.commercePorts?.paymentMethods?.resolve, 'function');
   let flushed = false;
   const handler = createWorkerHandler({
-    createPool: () => ({ query: async () => { throw Error('offline readiness must not query'); }, connect: async () => { throw Error('offline readiness must not connect'); }, end: async () => {} }) as never,
+    createPool: () => ({ query: async (sql: string) => { if(sql.includes('INSERT INTO github_feed_state')) return {rows:[{}]}; if(sql.includes('DELETE FROM github_feed_state')) return {rows:[]}; throw Error('offline readiness must not query'); }, connect: async () => { throw Error('offline readiness must not connect'); }, end: async () => {} }) as never,
     commerceApplyDeferred: async () => ({ applied: 0, failed: 0, skipped: 0 }),
     commerceSweep: async () => 0,
     commerceDueWork: async () => ({ claimed: 0, completed: 0, failed: 0, externalCalls: 0, released: 0, unknown: 0 }),

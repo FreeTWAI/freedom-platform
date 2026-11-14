@@ -25,6 +25,7 @@ import { githubSocialCss, skillUploadProtocolMarkdown, skillUploadSkillMarkdown 
 
 beforeEach(()=>forgetFrameOrigins());
 
+const leaseQuery=async(sql:string)=>{if(sql.includes('INSERT INTO github_feed_state'))return {rows:[{}]};if(sql.includes('DELETE FROM github_feed_state'))return {rows:[]};throw Error('unexpected query');};
 const SHA_A = 'a'.repeat(40), SHA_B = 'b'.repeat(40);
 const COMMUNITY = '10000000-0000-4000-8000-00000000000b';
 const SECRET_DSN = 'postgres://candidate_user:do-not-print@db.internal.example:5432/freedom_candidate_secret';
@@ -677,7 +678,7 @@ test('Worker commerce email requires EMAIL and COMMERCE_JOURNAL before opening a
   const { randomBytes } = await import('node:crypto');
   const dueDepsSeen: any[] = [];
   const sweepSeen: any[] = [];
-  const schedPool = { end: async () => {} } as unknown as Pool;
+  const schedPool = { query: leaseQuery, end: async () => {} } as unknown as Pool;
   const schedHandler = createWorkerHandler({
     createPool: () => schedPool,
     commerceApplyDeferred: async () => ({ applied: 0, failed: 0, skipped: 0 }),
@@ -762,7 +763,7 @@ test('order bell installation is default OFF, exact, checkout-dependent and shar
 test('scheduled offline expiry receives the order-notice port only when both flags are ON and quarantine stops due work',async()=>{
   const seen:unknown[]=[];
   const handler=createWorkerHandler({
-    createPool:()=>({end:async()=>{}} as unknown as Pool),
+    createPool:()=>({query:leaseQuery,end:async()=>{}} as unknown as Pool),
     commerceApplyDeferred:async()=>({applied:0,failed:0,skipped:0}),commerceSweep:async()=>0,
     commerceDueWork:async(_pool,deps)=>{seen.push(deps.orderNotifications);return {claimed:0,completed:0,failed:0,externalCalls:0,released:0,unknown:0};},
     commerceEmailSweep:async()=>({expired:0,deleted:0}),
@@ -794,7 +795,7 @@ test('categories flag is an exact default-OFF boolean requiring only guild launc
 
 test('scheduled contact retention runs with checkout OFF and during quarantine without dispatching business due work',async()=>{
  let privacy=0,business=0;
- const handler=createWorkerHandler({createPool:()=>({end:async()=>{}} as unknown as Pool),
+ const handler=createWorkerHandler({createPool:()=>({query:leaseQuery,end:async()=>{}} as unknown as Pool),
   commerceRetention:async()=>{privacy++;return {claimed:1,completed:1,failed:0,externalCalls:0,released:0,unknown:0};},
   commerceDueWork:async()=>{business++;throw Error('business work must stay quarantined');},
   syncGitHub:async()=>({requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'}),

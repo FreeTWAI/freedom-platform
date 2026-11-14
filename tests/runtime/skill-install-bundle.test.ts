@@ -4,8 +4,9 @@ import {mkdtemp,mkdir,writeFile,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {gzipSync} from 'node:zlib';
 import {createSkillInstallRoutes} from '../../apps/platform-api/src/routes/skill-install.js';
-import {clearRecordedSkillInstallFallbacks,createSkillInstallBundleLoader,gitBlobSha1,isSafeBundlePath,recordedSkillInstallFallbacks,skillFolderName,skillInstallSource,type SkillInstallFallbackRecord} from '../../modules/skill-install/index.js';
+import {SKILL_INSTALL_LIMITS,clearRecordedSkillInstallFallbacks,createSkillInstallBundleLoader,gitBlobSha1,isSafeBundlePath,recordedSkillInstallFallbacks,skillFolderName,skillInstallSource,type SkillInstallFallbackRecord} from '../../modules/skill-install/index.js';
 import {skillBookIdForFullName} from '../../modules/repo-maintainer/skill-books.js';
 import {communityCatalog,type SkillBook} from '../../modules/community/catalog.js';
 import {parseInstallBundle,installReceipt,buildInstallZip,copyText,installCommands,SkillInstallError} from '../../apps/portal-web/src/modules/skill-install-client.js';
@@ -13,6 +14,20 @@ import {parseInstallBundle,installReceipt,buildInstallZip,copyText,installComman
 const commit='a'.repeat(40);
 const book=(id:string,extra:Partial<SkillBook>={}):SkillBook=>({id,title:id,repository_url:'https://github.com/FreeTWAI/freedom-skill-'+id,description:'',kind:'starter',fork_url:'',license_status:'MIT',upstream_url:'',source_commit:commit,introduction_url:null,...extra});
 const encoder=new TextEncoder();
+const archiveUrl=(owner:string,repo:string,sha=commit)=>`https://codeload.github.com/${owner}/${repo}/tar.gz/${sha}`;
+function archive(files:Record<string,string>){
+  const parts:Buffer[]=[];
+  for(const [path,text] of [['', ''],...Object.entries(files)]){
+    const body=Buffer.from(text),header=Buffer.alloc(512);
+    header.write(`fixture/${path}`,0,100,'utf8');
+    const octal=(value:number,offset:number,length:number)=>header.write(value.toString(8).padStart(length-1,'0')+'\0',offset,length,'ascii');
+    octal(0o644,100,8);octal(0,108,8);octal(0,116,8);octal(body.length,124,12);octal(0,136,12);
+    header.fill(32,148,156);header[156]=path?48:53;header.write('ustar\0',257,6,'ascii');
+    octal(header.reduce((sum,byte)=>sum+byte,0),148,8);
+    parts.push(header,body,Buffer.alloc((512-body.length%512)%512));
+  }
+  parts.push(Buffer.alloc(1024));return new Uint8Array(gzipSync(Buffer.concat(parts)));
+}
 
 const redirectTarget='https://redirect.example.invalid/skill';
 async function fakeGitHub(files:Record<string,string>,{tamper,truncated,redirect}:{tamper?:string;truncated?:boolean;redirect?:'tree'|'SKILL.md'}={}){
@@ -24,6 +39,11 @@ async function fakeGitHub(files:Record<string,string>,{tamper,truncated,redirect
     if(url.startsWith('https://api.github.com/repos/')){
       if(redirect==='tree')return new Response(null,{status:302,headers:{Location:redirectTarget}});
       return Response.json({sha:commit,truncated:truncated??false,tree:[...tree,{path:'templates',type:'tree',sha:'b'.repeat(40)}]});
+    }
+    if(url.startsWith('https://codeload.github.com/')){
+      if(redirect==='SKILL.md')return new Response(null,{status:302,headers:{Location:redirectTarget}});
+      const contents={...files};if(tamper&&tamper in contents)contents[tamper]+='x';
+      return new Response(archive(contents));
     }
     const prefix=/^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[0-9a-f]{40}\//.exec(url);
     const path=prefix&&decodeURIComponent(url.slice(prefix[0].length));
@@ -49,7 +69,7 @@ test('install bundle is pinned, verified, excludes development files and is cach
   assert.equal(data.commit,commit);
   assert.deepEqual(data.files.map((file:{path:string})=>file.path),['SKILL.md','templates/notes.md']);
   assert.ok(calls.every(url=>url.includes(commit)),'every request names the exact commit');
-  assert.deepEqual(redirects,['manual','manual','manual'],'tree and raw file fetches never follow redirects');
+  assert.deepEqual(redirects,['manual','manual'],'tree and archive fetches never follow redirects');
   const parsed=await parseInstallBundle(data);
   assert.equal(new TextDecoder().decode(parsed.files[1].bytes),'筆記 ✓');
   const before=calls.length;
@@ -64,7 +84,7 @@ for(const redirect of ['tree','SKILL.md'] as const)test('install bundle rejects 
   await assert.rejects(load('demo'),expected);
   assert.deepEqual(calls,[
     'https://api.github.com/repos/FreeTWAI/freedom-skill-demo/git/trees/'+commit+'?recursive=1',
-    ...(redirect==='SKILL.md'?['https://raw.githubusercontent.com/FreeTWAI/freedom-skill-demo/'+commit+'/SKILL.md']:[]),
+    ...(redirect==='SKILL.md'?[archiveUrl('FreeTWAI','freedom-skill-demo')]:[]),
   ]);
   assert.equal(calls.some(url=>url===redirectTarget),false,'redirect target is never fetched');
   assert.ok(redirects.every(value=>value==='manual'));
@@ -208,8 +228,8 @@ test('install bundle prefers upstream original repo at pinned commit and records
     if(url==='https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/'+commit+'?recursive=1'){
       return Response.json({sha:commit,truncated:false,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
     }
-    if(url==='https://raw.githubusercontent.com/OriginalAuthor/cool-skill/'+commit+'/SKILL.md'){
-      return new Response(body);
+    if(url===archiveUrl('OriginalAuthor','cool-skill')){
+      return new Response(archive({'SKILL.md':body}));
     }
     return new Response('missing',{status:404});
   }) as typeof fetch;
@@ -236,8 +256,8 @@ test('install bundle prefers upstream original repo at pinned commit and records
     if(url==='https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/'+commit+'?recursive=1'){
       return Response.json({sha:commit,truncated:false,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
     }
-    if(url==='https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/'+commit+'/SKILL.md'){
-      return new Response(body);
+    if(url===archiveUrl('FreeTWAI','freedom-skill-orig')){
+      return new Response(archive({'SKILL.md':body}));
     }
     return new Response('missing',{status:404});
   }) as typeof fetch;
@@ -250,7 +270,7 @@ test('install bundle prefers upstream original repo at pinned commit and records
   assert.deepEqual(fallbackCalls,[
     'https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/'+commit+'?recursive=1',
     'https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/'+commit+'?recursive=1',
-    'https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/'+commit+'/SKILL.md',
+    archiveUrl('FreeTWAI','freedom-skill-orig'),
   ]);
   assert.equal(recorded.length,1);
   assert.equal(recorded[0].original_repository,'OriginalAuthor/cool-skill');
@@ -280,7 +300,7 @@ test('install bundle follows a single repository-id rename without recording a f
       return Response.json({id:123,full_name:'RenamedAuthor/new-cool-skill',private:false,visibility:'public'});
     }
     if(url===`https://api.github.com/repos/RenamedAuthor/new-cool-skill/git/trees/${commit}?recursive=1`)return treeOk();
-    if(url===`https://raw.githubusercontent.com/RenamedAuthor/new-cool-skill/${commit}/SKILL.md`)return new Response(body);
+    if(url===archiveUrl('RenamedAuthor','new-cool-skill'))return new Response(archive({'SKILL.md':body}));
     return new Response('unexpected',{status:404});
   }) as typeof fetch;
   const aRes=await createSkillInstallRoutes(aFetcher,undefined,[upstreamBook],{onFallback:r=>aRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
@@ -307,7 +327,7 @@ test('install bundle follows a single repository-id rename without recording a f
     if(url===`https://api.github.com/repos/Original/renamed/git/trees/${pinned}?recursive=1`){
       return Response.json({sha:pinned,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
     }
-    if(url===`https://raw.githubusercontent.com/Original/renamed/${pinned}/SKILL.md`)return new Response(body);
+    if(url===archiveUrl('Original','renamed',pinned))return new Response(archive({'SKILL.md':body}));
     throw new Error('Unexpected GitHub request '+url);
   }) as typeof fetch;
   const noDbPool={query:async()=>{throw new Error('install must not query DB');}} as unknown as import('pg').Pool;
@@ -325,7 +345,7 @@ test('install bundle follows a single repository-id rename without recording a f
       return new Response(null,{status:301,headers:{Location:'https://evil.example.invalid/repositories/123/git/trees/'+commit}});
     }
     if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
-    if(url===`https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/${commit}/SKILL.md`)return new Response(body);
+    if(url===archiveUrl('FreeTWAI','freedom-skill-orig'))return new Response(archive({'SKILL.md':body}));
     return new Response('missing',{status:404});
   }) as typeof fetch;
   const bRes=await createSkillInstallRoutes(bFetcher,undefined,[upstreamBook],{onFallback:r=>bRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
@@ -351,7 +371,7 @@ test('install bundle follows a single repository-id rename without recording a f
         return new Response(null,{status:301,headers:{Location:`https://api.github.com/repositories/456/git/trees/${commit}?recursive=1`}});
       }
       if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
-      if(url===`https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/${commit}/SKILL.md`)return new Response(body);
+      if(url===archiveUrl('FreeTWAI','freedom-skill-orig'))return new Response(archive({'SKILL.md':body}));
       return new Response('missing',{status:404});
     }) as typeof fetch;
     const cRes=await createSkillInstallRoutes(cFetcher,undefined,[upstreamBook],{onFallback:r=>cRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
@@ -374,7 +394,7 @@ test('install bundle follows a single repository-id rename without recording a f
     const url=String(input);
     if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`)return new Response('unprocessable',{status:422});
     if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
-    if(url===`https://raw.githubusercontent.com/FreeTWAI/freedom-skill-orig/${commit}/SKILL.md`)return new Response(body);
+    if(url===archiveUrl('FreeTWAI','freedom-skill-orig'))return new Response(archive({'SKILL.md':body}));
     return new Response('missing',{status:404});
   }) as typeof fetch;
   const eRes=await createSkillInstallRoutes(eFetcher,undefined,[upstreamBook],{onFallback:r=>eRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
@@ -404,4 +424,83 @@ test('skillBookIdForFullName resolves both original upstream_url and integration
   const copyFull=security.repository_url.replace('https://github.com/','');
   assert.equal(skillBookIdForFullName(origFull),'security-scanner');
   assert.equal(skillBookIdForFullName(copyFull),'security-scanner');
+});
+
+test('a cold multi-file bundle stays within a small GitHub request budget',async()=>{
+  const files:Record<string,string>={'SKILL.md':skill};
+  for(let i=0;i<20;i++)files[`templates/${i}.txt`]=`sample ${i}`;
+  const {fetcher,calls}=await fakeGitHub(files);
+  const load=createSkillInstallBundleLoader(fetcher,undefined,[book('budget')]);
+  const result=await load('budget');
+  assert.equal(result.files.length,21);
+  assert.ok(calls.length<=2,`expected at most two upstream requests, got ${calls.length}`);
+});
+
+test('install bundles reject file count, file size, and total size excess before downloading an archive',async()=>{
+  const many:Record<string,string>={'SKILL.md':skill};
+  for(let i=0;i<SKILL_INSTALL_LIMITS.files;i++)many[`file-${i}`]='x';
+  const cases=[many,{'SKILL.md':skill,'large.txt':'x'.repeat(SKILL_INSTALL_LIMITS.fileBytes+1)},
+    {'SKILL.md':skill,...Object.fromEntries(Array.from({length:5},(_,i)=>[`large-${i}.txt`,'x'.repeat(SKILL_INSTALL_LIMITS.fileBytes)]))}];
+  for(const [i,files] of cases.entries()){
+    const {fetcher,calls}=await fakeGitHub(files);
+    const app=createSkillInstallRoutes(fetcher,undefined,[book(`limit-${i}`)]);
+    const response=await app.request(`/api/v1/skills/limit-${i}/install-bundle`);
+    assert.equal(response.status,422);
+    const result=await response.json();assert.equal(result.error,'skill_package_too_large');
+    assert.match(JSON.stringify(result),new RegExp(`https://github.com/FreeTWAI/freedom-skill-limit-${i}`));
+    assert.equal(calls.length,1,'only the tree was downloaded');
+  }
+});
+
+test('install bundles bound the tree, compressed archive and decompressed archive streams',async()=>{
+  const tree=await fakeGitHub({'SKILL.md':skill});
+  const cases=[
+    {target:'tree',body:new Uint8Array(SKILL_INSTALL_LIMITS.treeBytes+1)},
+    {target:'archive',body:new Uint8Array(SKILL_INSTALL_LIMITS.compressedBytes+1)},
+    {target:'archive',body:archive({'SKILL.md':skill,'tests/excluded.txt':'x'.repeat(SKILL_INSTALL_LIMITS.archiveBytes+1)})},
+  ];
+  for(const [i,item] of cases.entries()){
+    const fetcher=(async(input:string|URL|Request,init?:RequestInit)=>{
+      const url=String(input);
+      if((item.target==='tree'&&url.includes('/git/trees/'))||(item.target==='archive'&&url.startsWith('https://codeload.github.com/')))return new Response(item.body);
+      return tree.fetcher(input,init);
+    }) as typeof fetch;
+    const response=await createSkillInstallRoutes(fetcher,undefined,[book(`stream-${i}`)]).request(`/api/v1/skills/stream-${i}/install-bundle`);
+    assert.equal(response.status,422);assert.equal((await response.json()).error,'skill_package_too_large');
+  }
+});
+
+test('an oversized fallback still links to the original repository',async()=>{
+  const source=book('fallback-limit',{upstream_url:'https://github.com/OriginalAuthor/original-skill'});
+  const fetcher=(async(input:string|URL|Request)=>String(input).includes('/OriginalAuthor/')
+    ?new Response(null,{status:404}):Response.json({truncated:true,tree:[]})) as typeof fetch;
+  const response=await createSkillInstallRoutes(fetcher,undefined,[source]).request('/api/v1/skills/fallback-limit/install-bundle');
+  assert.equal(response.status,422);
+  const body=await response.json();assert.equal(body.error,'skill_package_too_large');
+  assert.match(JSON.stringify(body),/https:\/\/github\.com\/OriginalAuthor\/original-skill/);
+});
+
+test('the isolate cache evicts by stored bytes and bounds independent in-flight requests',async()=>{
+  const files={'SKILL.md':skill,...Object.fromEntries(Array.from({length:3},(_,i)=>[`large-${i}.txt`,'x'.repeat(450_000)]))};
+  const {fetcher,calls}=await fakeGitHub(files);
+  const books=[book('cache-a'),book('cache-b'),book('cache-c')];
+  const load=createSkillInstallBundleLoader(fetcher,undefined,books);
+  await load('cache-a');await load('cache-b');
+  const afterTwo=calls.length;
+  await load('cache-a');assert.equal(calls.length,afterTwo,'a retained entry is a cache hit');
+  await load('cache-c');
+  const afterThree=calls.length;
+  await load('cache-b');assert.equal(calls.length,afterThree+2,'the least-recently-used entry is evicted by byte weight');
+
+  let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+  const gated=(async(input:string|URL|Request,init?:RequestInit)=>{await gate;return fetcher(input,init);}) as typeof fetch;
+  const gatedLoad=createSkillInstallBundleLoader(gated,undefined,[book('flight-a'),book('flight-b'),book('flight-c')]);
+  const first=gatedLoad('flight-a'),same=gatedLoad('flight-a');
+  const third=gatedLoad('flight-b').then(()=>null,error=>error);
+  await new Promise<void>(resolve=>setImmediate(resolve));
+  release();
+  const [one,two,rejection]=await Promise.all([first,same,third]);
+  assert.equal(rejection?.status,503);assert.equal(rejection?.code,'skill_install_busy');
+  assert.notEqual(one,two,'separate incoming requests never share pending I/O');
+  assert.deepEqual(one,two);
 });

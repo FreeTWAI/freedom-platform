@@ -446,6 +446,22 @@ export function workerScope(env: WorkerEnv, run: () => Promise<Response>): Promi
   return runWithImageProcessor(env.IMAGES ? createCloudflareImageProcessor(env.IMAGES) : createUnavailableImageProcessor(), run);
 }
 
+// Current Free/Paid Workers limit a cron invocation to 15 minutes, so a
+// 20-minute lease outlives a terminated run. Only its owner may release it.
+const SCHEDULED_GITHUB_REQUEST_BUDGET=18;
+const SCHEDULED_REPOSITORY_REQUEST_BUDGET=8;
+const SCHEDULED_REPOSITORY_LIMIT=2;
+async function acquireScheduledLease(pool:Pool,owner:string){
+  const result=await pool.query(`INSERT INTO github_feed_state(feed_name,etag,checked_at,next_sync_at)
+    VALUES('worker_scheduled_lease',$1,clock_timestamp(),clock_timestamp()+interval '20 minutes')
+    ON CONFLICT(feed_name) DO UPDATE SET etag=EXCLUDED.etag,checked_at=EXCLUDED.checked_at,next_sync_at=EXCLUDED.next_sync_at
+    WHERE github_feed_state.next_sync_at<=clock_timestamp() RETURNING etag`,[owner]);
+  return result.rows.length===1;
+}
+async function releaseScheduledLease(pool:Pool,owner:string){
+  await pool.query("DELETE FROM github_feed_state WHERE feed_name='worker_scheduled_lease' AND etag=$1",[owner]);
+}
+
 export function createWorkerHandler(deps: WorkerDependencies = {}) {
   const createPool = deps.createPool ?? (env => createRequestPool(env.HYPERDRIVE.connectionString));
   const scope = deps.scope ?? workerScope;
@@ -564,15 +580,32 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
     async scheduled(_controller: {readonly cron?: string; readonly scheduledTime?: number}, env: WorkerEnv, ctx: WorkerContext): Promise<void> {
       const token = env.GITHUB_METRICS_TOKEN || undefined;
       let pool: Pool | undefined;
+      const owner=crypto.randomUUID();let leased=false;
+      let githubRequests=0,repositoryRequests=0;
+      const githubFetch:typeof fetch=async(input,init)=>{
+        if(githubRequests>=SCHEDULED_GITHUB_REQUEST_BUDGET)throw Error('scheduled_github_budget_exhausted');
+        githubRequests++;return (deps.githubFetcher??globalThis.fetch)(input,init);
+      };
+      const repositoryFetch:typeof fetch=async(input,init)=>{
+        if(repositoryRequests>=SCHEDULED_REPOSITORY_REQUEST_BUDGET)throw Error('scheduled_repository_budget_exhausted');
+        repositoryRequests++;return githubFetch(input,init);
+      };
       const work = (async () => {
         try {
           pool = createPool(env);
+          leased=await acquireScheduledLease(pool,owner);if(!leased)return;
+          try{await (deps.authPrune??pruneExpiredAuthRecords)(pool);}
+          catch{console.error('auth_prune_failed');}
+          if(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED==='true'){
+            try{await sweepDueOperations(pool);}
+            catch{console.error('module_provision_sweep_failed');}
+          }
           if(env.FREEDOM_EVENT_PARTICIPATION_ENABLED==='true'){
             try{
               const config=readWorkerConfig(env);
               const send=async(to:string,subject:string,text:string)=>{await env.EMAIL!.send({to,from:'no-reply@mail.freetwai.com',subject,text});};
               try{await processEventWaitlist(pool,send,config.origin);}catch{console.error('event_waitlist_failed');}
-              try{await processEventReminders(pool,send,{enabled:true});}catch{console.error('event_reminders_failed');}
+              try{await processEventReminders(pool,send,{enabled:true,limit:3});}catch{console.error('event_reminders_failed');}
             }catch{console.error('event_participation_not_ready');}
           }
           if(env.FREEDOM_EVENT_PARTICIPATION_ENABLED!=='true'&&env.EMAIL){
@@ -598,32 +631,27 @@ export function createWorkerHandler(deps: WorkerDependencies = {}) {
               const keyring=env.COMMERCE_CREDENTIAL_KEYS?CommerceCredentialKeyring.parse(env.COMMERCE_CREDENTIAL_KEYS):null;
               const freedomEnv=resolveFreedomEnv(env.FREEDOM_ENV);
               const orderNotifications=createOrderNotifications(readCommerceOrderNotificationsEnabled(env),commerce);
-              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps,...(orderNotifications?{orderNotifications}:{})});
+              await (deps.commerceDueWork??runDueCommerceWork)(pool,{...(keyring?{transport:deps.commerceQueryTransport??createEcpayQueryTransport(),keyring}:{}),freedomEnv,...(email?{email}:{}),...emailDeps,...(orderNotifications?{orderNotifications}:{})},{limit:3,maxExternalCalls:3});
             }catch{console.error('commerce_due_work_failed');}
             try{
               await (deps.commerceEmailSweep??sweepCommerceOutboundEmails)(pool,{limit:500});
             }catch{console.error('commerce_email_sweep_failed');}
             if(typeof env.COMMERCE_JOURNAL?.put==='function'&&typeof env.COMMERCE_JOURNAL?.get==='function')try{
-              await (deps.commerceFlushJournal??flushControlEvents)(pool,createR2EffectJournal(resolveFreedomEnv(env.FREEDOM_ENV),env.COMMERCE_JOURNAL),{limit:200});
+              await (deps.commerceFlushJournal??flushControlEvents)(pool,createR2EffectJournal(resolveFreedomEnv(env.FREEDOM_ENV),env.COMMERCE_JOURNAL),{limit:2});
             }catch{console.error('commerce_control_journal_failed');}
           }
-          try{await (deps.sharesRefresh??refreshDueRepositories)(pool,{fetcher:deps.githubFetcher,token},20);}catch{console.error('shares_refresh_failed');}
-          try{await syncGitHub(pool, {fetcher: deps.githubFetcher, token, budget: GITHUB_SYNC_REQUEST_BUDGET});}
+          try{await (deps.sharesRefresh??refreshDueRepositories)(pool,{fetcher:repositoryFetch,token},SCHEDULED_REPOSITORY_LIMIT);}catch{console.error('shares_refresh_failed');}
+          try{await syncGitHub(pool, {fetcher:githubFetch, token, budget:Math.min(GITHUB_SYNC_REQUEST_BUDGET,SCHEDULED_GITHUB_REQUEST_BUDGET-githubRequests)});}
           catch(error){const name=error instanceof Error&&/^[A-Za-z][A-Za-z0-9_]*$/.test(error.name)?error.name:'unknown';console.error('github_sync_failed',name);}
           if(env.FREEDOM_REGISTRATION_COMMUNITY_ID){
             try{await (deps.guildDiscovery??refreshGuildDiscoveryReports)(pool,{communityId:env.FREEDOM_REGISTRATION_COMMUNITY_ID,reviewer:guildReviewerFromBindings(env)});}
             catch{console.error('guild_discovery_failed');}
           }
-          if(env.FREEDOM_GUILD_LAUNCHPAD_ENABLED==='true'){
-            try{await sweepDueOperations(pool);}
-            catch{console.error('module_provision_sweep_failed');}
-          }
-          try{await (deps.authPrune??pruneExpiredAuthRecords)(pool);}
-          catch{console.error('auth_prune_failed');}
         } catch (error) {
           const name = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]*$/.test(error.name) ? error.name : 'unknown';
           console.error('github_sync_failed', name);
         } finally {
+          if(pool&&leased)await releaseScheduledLease(pool,owner).catch(()=>console.error('scheduled_lease_release_failed'));
           if (pool) await pool.end().catch(() => console.error('pool_end_failed'));
         }
       })();

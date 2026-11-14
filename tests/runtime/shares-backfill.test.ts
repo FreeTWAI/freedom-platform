@@ -1,6 +1,7 @@
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
 import {Pool} from 'pg';
 import {migrate} from '../../scripts/database.js';
 import {seedLocal,DEMO_USERS,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
@@ -110,12 +111,18 @@ test('backfilled book retains its numeric original without observations across a
  const cached=await readBookOriginalCache(pool,selected);
  assert.equal(cached.repository_id,'8801');assert.equal(cached.url,'https://github.com/Fixture/renamed');assert.equal(cached.readme_html,'<p>Genuine README</p>');
  const body='---\nname: backfilled\n---\nReviewed copy',sha=await gitBlobSha1(new TextEncoder().encode(body)),calls:string[]=[];
+ const content=Buffer.from(body),header=Buffer.alloc(512);
+ header.write('fixture/SKILL.md',0,100,'utf8');
+ const octal=(value:number,offset:number,length:number)=>header.write(value.toString(8).padStart(length-1,'0')+'\0',offset,length,'ascii');
+ octal(0o644,100,8);octal(0,108,8);octal(0,116,8);octal(content.length,124,12);octal(0,136,12);
+ header.fill(32,148,156);header[156]=48;header.write('ustar\0',257,6,'ascii');octal(header.reduce((sum,byte)=>sum+byte,0),148,8);
+ const archive=new Uint8Array(gzipSync(Buffer.concat([header,content,Buffer.alloc((512-content.length%512)%512),Buffer.alloc(1024)])));
  const fake:typeof fetch=async input=>{
   const url=String(input);calls.push(url);
   if(url==='https://api.github.com/repositories/8801')return Response.json({...original,id:8801,full_name:'Fixture/renamed'});
   if(url===`https://api.github.com/repos/Fixture/old/git/trees/${selected.source_commit}?recursive=1`)return new Response(null,{status:301,headers:{location:`https://api.github.com/repositories/8801/git/trees/${selected.source_commit}?recursive=1`}});
   if(url===`https://api.github.com/repos/Fixture/renamed/git/trees/${selected.source_commit}?recursive=1`)return Response.json({sha:selected.source_commit,tree:[{path:'SKILL.md',type:'blob',sha,size:body.length}]});
-  if(url===`https://raw.githubusercontent.com/Fixture/renamed/${selected.source_commit}/SKILL.md`)return new Response(body);
+  if(url===`https://codeload.github.com/Fixture/renamed/tar.gz/${selected.source_commit}`)return new Response(archive);
   throw Error('Unexpected GitHub request '+url);
  };
  const response=await createSkillInstallRoutes(fake,undefined,[selected]).request(`/api/v1/skills/${selected.id}/install-bundle`);
@@ -125,7 +132,7 @@ test('backfilled book retains its numeric original without observations across a
   const url=String(input);
   if(url===`https://api.github.com/repos/Fixture/old/git/trees/${missingOriginal.source_commit}?recursive=1`)return new Response('missing',{status:404});
   if(url===`https://api.github.com/repos/Workshop/reviewed/git/trees/${missingOriginal.source_commit}?recursive=1`)return Response.json({sha:missingOriginal.source_commit,tree:[{path:'SKILL.md',type:'blob',sha,size:body.length}]});
-  if(url===`https://raw.githubusercontent.com/Workshop/reviewed/${missingOriginal.source_commit}/SKILL.md`)return new Response(body);
+  if(url===`https://codeload.github.com/Workshop/reviewed/tar.gz/${missingOriginal.source_commit}`)return new Response(archive);
   throw Error('Unexpected GitHub request '+url);
  };
  const fallbackResponse=await createSkillInstallRoutes(fallbackFake,undefined,[missingOriginal]).request(`/api/v1/skills/${missingOriginal.id}/install-bundle`);

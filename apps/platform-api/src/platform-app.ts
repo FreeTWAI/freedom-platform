@@ -419,7 +419,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   const toCacheInput=(book:typeof communityCatalog.skill_books[number])=>({id:book.id,repository_url:book.repository_url,upstream_url:book.upstream_url,source_commit:book.source_commit??book.guide?.source_commit,reviewed_at:book.guide?.reviewed_at,description:book.description});
   const catalogWithOriginalCache=async(limit?:number)=>{
     const books=typeof limit==='number'?communityCatalog.skill_books.slice(0,limit):communityCatalog.skill_books;
-    const caches=await readBookOriginalCaches(pool,books.map(toCacheInput));
+    const caches=await readBookOriginalCaches(pool,books.map(toCacheInput),{includeReadme:false});
     return books.map(book=>{const cache=caches.get(book.id);return cache?{...book,original_cache:summarizeBookOriginalCache(cache)}:book;});
   };
   const communityWithOriginalCache=async()=>({...communityCatalog,skill_books:await catalogWithOriginalCache()});

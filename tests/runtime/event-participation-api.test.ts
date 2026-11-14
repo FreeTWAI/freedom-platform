@@ -340,15 +340,17 @@ for(const [name,read] of memberReads){
 interface GuestHttp {
   configure(enabled:boolean,database?:Pool):void;
   request(route:string,options?:{body?:unknown;token?:string;headers?:Record<string,string>}):Promise<{status:number;headers:Headers;data:z.infer<typeof responseBody>}>;
+  drain():Promise<void>;
   close():Promise<void>;
 }
 async function guestHttp(send:(to:string,subject:string,body:string)=>Promise<void>):Promise<GuestHttp>{
-  let application=app;
+  let application=app;const jobs:(()=>Promise<void>)[]=[];
+  const drain=async()=>{while(jobs.length)await jobs.shift()!();};
   const server=serve({fetch:request=>application.fetch(request),hostname:'127.0.0.1',port:0});
   if(!server.listening)await once(server,'listening');
   const address=server.address();assert.ok(address&&typeof address!=='string');
   const httpOrigin=`http://127.0.0.1:${address.port}`;
-  const configure=(enabled:boolean,database:Pool=pool)=>{application=createApp(database,httpOrigin,'local',{eventParticipationEnabled:enabled,eventEmailSender:send});};
+  const configure=(enabled:boolean,database:Pool=pool)=>{application=createApp(database,httpOrigin,'local',{eventParticipationEnabled:enabled,eventEmailSender:send,afterResponse:work=>jobs.push(work)});};
   configure(true);
   return {
     configure,
@@ -359,7 +361,8 @@ async function guestHttp(send:(to:string,subject:string,body:string)=>Promise<vo
       const response=await fetch(httpOrigin+route,{method:options.body===undefined?'GET':'POST',headers,body:options.body===undefined?undefined:JSON.stringify(options.body)});
       return {status:response.status,headers:response.headers,data:responseBody.parse(await response.json())};
     },
-    close:()=>new Promise<void>((resolve,reject)=>{server.close(error=>error?reject(error):resolve());if('closeAllConnections' in server)server.closeAllConnections();}),
+    drain,
+    close:async()=>{await drain();await new Promise<void>((resolve,reject)=>{server.close(error=>error?reject(error):resolve());if('closeAllConnections' in server)server.closeAllConnections();});},
   };
 }
 async function httpInvitation(http:GuestHttp,email:string){
@@ -371,6 +374,7 @@ async function httpInvitation(http:GuestHttp,email:string){
   const joined=await http.request(path(),{token,body:{action:'join',expected_version:current.data.event_version},
     headers:{'If-Match':`"${current.data.event_version}"`,'Idempotency-Key':randomUUID()}});
   assert.equal(joined.status,200);
+  await http.drain();
   return token;
 }
 async function assertHttpParticipationOff(http:GuestHttp,token:string){
@@ -490,4 +494,36 @@ for(const participationEnabled of [false,true])for(const change of ['deadline','
       for(const message of mail.slice(-2))assert.doesNotMatch(message.body,/#participation=|私人參與管理/);
     }
   }finally{await http.close();}
+});
+
+test('an event announcement queues bounded delivery after the response and retries a rejected send once',async()=>{
+  const person=await guest(eventId,'queued-notice@local.test');
+  assert.equal((await call(path(eventId),{token:person.token})).status,200);
+  const work:(()=>Promise<void>)[]=[];let attempts=0;
+  const deferred=createApp(pool,origin,'local',{eventParticipationEnabled:true,
+    eventEmailSender:async()=>{attempts++;throw Object.assign(Error('provider rejected'),{code:'E_RATE_LIMIT_EXCEEDED'});},
+    afterResponse:job=>work.push(job)});
+  const version=Number((await pool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[eventId])).rows[0].aggregate_version);
+  const result=await call(`/api/v1/events/${eventId}/announcements`,{application:deferred,method:'POST',session:sessions[0],body:{message:'合成通知'},headers:{'If-Match':`"${version}"`,'Idempotency-Key':randomUUID()}});
+  assert.equal(result.status,200);assert.equal(attempts,0);assert.equal(work.length,1);
+  await work[0]();assert.equal(attempts,1);
+  const notice=await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND kind='event_announcement'",[eventId]);
+  assert.equal(notice.rows.length,1);assert.equal(notice.rows[0].status,'pending');
+  const {createWorkerHandler}=await import('../../apps/platform-api/src/worker.js');
+  let delivered=0;
+  const scheduledPool={query:pool.query.bind(pool),connect:pool.connect.bind(pool),end:async()=>{}} as unknown as Pool;
+  const handler=createWorkerHandler({createPool:()=>scheduledPool,
+    authPrune:async()=>({sessions:0,login_attempts:0,auth_rate_limits:0,password_reset_tokens:0}),
+    sharesRefresh:async()=>0,
+    syncGitHub:async()=>({requests:0,repositories:0,items_upserted:0,not_modified:0,stop_reason:'completed'})});
+  const scheduledEnv={FREEDOM_ENV:'local',APP_ORIGIN:origin,FREEDOM_COMMERCE_QUARANTINE:'true',FREEDOM_EVENT_PARTICIPATION_ENABLED:'true',
+    HYPERDRIVE:{connectionString:'postgres://unused'},ASSETS:{fetch:async()=>new Response()},
+    EMAIL:{send:async()=>{delivered++;return {messageId:'synthetic'};}}};
+  for(let i=0;i<2;i++){
+    const pending:Promise<unknown>[]=[];
+    await handler.scheduled({},scheduledEnv,{waitUntil:promise=>pending.push(promise)});
+    await Promise.all(pending);
+  }
+  assert.equal(delivered,1);
+  assert.equal((await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND kind='event_announcement'",[eventId])).rows[0].status,'provider_accepted');
 });

@@ -59,15 +59,26 @@ test('FIFO offers reserve one seat, declining advances exactly once and acceptan
   assert.equal(original.state,'going');assert.ok(original.confirmed_at);assert.equal(original.email_sent_at,null);
   await mutateGuestEventParticipation(pool,eventId,second,accepted.body,accepted.key);assert.equal(await countEventSeats(pool,eventId),1);
 });
-test('expiry advances FIFO transactionally and a failed invite provider is not retried as a second logical invitation',async()=>{
+test('expiry advances FIFO and a rejected invitation retries once without creating another invitation',async()=>{
   const first=await capability('expiry@local.test'),second=await capability('next@local.test');await action(first,'join');await action(second,'join');
-  let calls=0;const fail=async()=>{calls++;throw new Error('synthetic provider rejection');};
-  await processEventWaitlist(pool,fail,'https://example.test');await processEventWaitlist(pool,fail,'https://example.test');assert.equal(calls,1);
-  assert.equal((await readGuestEventParticipation(pool,eventId,first)).waitlist?.delivery_status,'failed');
+  let calls=0;const fail=async()=>{calls++;throw Object.assign(new Error('synthetic provider rejection'),{code:'E_RATE_LIMIT_EXCEEDED'});};
+  await processEventWaitlist(pool,fail,'https://example.test');
+  assert.equal((await readGuestEventParticipation(pool,eventId,first)).waitlist?.delivery_status,'pending');
+  const deliver=async()=>{calls++;};
+  await processEventWaitlist(pool,deliver,'https://example.test');await processEventWaitlist(pool,deliver,'https://example.test');assert.equal(calls,2);
+  assert.equal((await readGuestEventParticipation(pool,eventId,first)).waitlist?.delivery_status,'provider_accepted');
   const deadline=(await pool.query('SELECT expires_at FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,'expiry@local.test'])).rows[0].expires_at;
   await transaction(pool,q=>reconcileEventWaitlist(q,eventId,new Date(deadline)));
   assert.equal((await readGuestEventParticipation(pool,eventId,first)).waitlist?.status,'expired');assert.equal((await readGuestEventParticipation(pool,eventId,second)).waitlist?.status,'invited');
   assert.equal(await countEventSeats(pool,eventId,new Date(deadline)),1);
+});
+test('an ambiguous provider failure is never automatically sent a second time',async()=>{
+  const token=await capability('ambiguous-delivery@local.test');await action(token,'join');
+  let calls=0;const ambiguous=async()=>{calls++;throw Error('connection lost after handoff');};
+  await processEventWaitlist(pool,ambiguous,'https://example.test');
+  await processEventWaitlist(pool,ambiguous,'https://example.test');
+  assert.equal(calls,1);
+  assert.equal((await readGuestEventParticipation(pool,eventId,token)).waitlist?.delivery_status,'unknown');
 });
 test('joining an expired invitation requeues behind existing candidates before the worker sweep',async()=>{
   const first=await capability('rejoin-expired@local.test'),second=await capability('ahead@local.test');
