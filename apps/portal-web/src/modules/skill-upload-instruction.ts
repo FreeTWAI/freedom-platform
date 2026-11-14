@@ -13,7 +13,9 @@ export type SkillUploadInstructionSecret = {
 /** Format an already validated grant for the member's chosen Agent.
  * This formatter does not validate URLs, authorize uploads, copy or store credentials.
  * The caller owns same-origin/expiry checks and the secret's display lifetime. */
-export function agentInstruction(origin: string, secret: SkillUploadInstructionSecret, seed?: ChatSkillSeed | null) {
+export function agentInstruction(origin: string, secret: SkillUploadInstructionSecret, seed?: ChatSkillSeed | null, repositoryUrl?: string | null) {
+  const repo = repositoryUrl?.trim();
+  const target = repo ? `目標專案網址：${repo}\n` : '';
   const copied = seed ? `${seedCopyBlock(seed)}\n\n` : '';
   return `# 自由工坊 · 技能上傳（私人指令，請勿轉傳）
 先閱讀公開指南：${origin}${SKILL_UPLOAD_GUIDE}/SKILL.md（完整欄位規格與插圖格式以指南為準）。
@@ -33,13 +35,13 @@ export function agentInstruction(origin: string, secret: SkillUploadInstructionS
 - 本指令只交給我選擇的 Agent，不轉傳、不寫入 Repo、shell history 或日誌。憑證只能用於下方上傳端點。
 - 這只會上傳私人草稿；是否公開由我本人在自由工坊預覽後決定。
 
-${copied}POST ${secret.submitUrl}
+${target}${copied}POST ${secret.submitUrl}
 Authorization: Bearer ${secret.token}
 Content-Type: application/json
 （一次性憑證，只能上傳這份草稿，${formatIsoLocal(secret.expiresAt)} 到期）
 
 {
-  "repository_url": "https://github.com/<owner>/<repository>",
+  "repository_url": ${repo ? JSON.stringify(repo) : '"https://github.com/<owner>/<repository>"'},
   "title": "技能名稱",
   "description": "真實介紹",
   "use_notes": "如何開始使用與限制",

@@ -7,7 +7,7 @@ import {SkillBookCover,distinctOriginalRepoCount} from './SkillBookCover';
 import {CommunityBadge} from './SkillBookBadges';
 import {SkillShare,isSkillIllustrationUrl,submissionSharePath} from './SkillShare';
 import {GitHubSourceLinks} from './GitHubSocial';
-import {relationshipLabels} from './SkillUpload';
+import {relationshipLabels} from './SkillSubmission';
 import {useSkillDiscovery} from './skill-discovery-client';
 import {client as sessionClient} from '../portal-session';
 import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';

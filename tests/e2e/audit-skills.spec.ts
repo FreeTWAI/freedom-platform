@@ -144,9 +144,11 @@ for (const width of [1280, 390]) {
       await expect(projects.getByText(`目前顯示 ${result.items.length} 件 · 自由探索，不必先談商務合作`, { exact: true })).toBeVisible();
       await expect(projects.getByRole('article')).toHaveCount(result.items.length);
       await expect(page.getByRole('heading', { name: '投稿你的開源工具', exact: true })).toBeVisible();
+      await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://untrusted.example/owner/repository');
+      await page.getByRole('button', { name: '下一步', exact: true }).click();
+      await page.getByRole('button', { name: '我自己填', exact: true }).click();
       await expect(page.getByText('推薦別人的工具也可以，原作者與授權都會保留。這是你的聲明，不是作者身分驗證。', { exact: true })).toBeVisible();
       await expect(page.getByText('平台目前尚未驗證你的 GitHub 身分', { exact: false })).toHaveCount(0);
-      await page.getByLabel('GitHub 專案網址', { exact: true }).fill('https://untrusted.example/owner/repository');
       await page.getByLabel('作品名稱', { exact: true }).fill('稽核：非 GitHub 來源');
       await page.getByLabel('一句話介紹', { exact: true }).fill('確認只接受 GitHub 儲存庫。');
   await fillSkillPageContent(page);
