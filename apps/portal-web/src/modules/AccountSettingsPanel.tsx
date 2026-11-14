@@ -40,25 +40,60 @@ function AccountSettings({client,session,registerLeave,children,profileExtras,fo
   const childGuards=useRef(createSettingsLeaveRegistry()).current;
   const profileExtrasRef=useRef<HTMLDetailsElement>(null);
   const connectionsRef=useRef<HTMLDetailsElement>(null);
-  const [publicPageOpen,setPublicPageOpen]=useState(false);
+  const [initialFocusPublic]=useState(Boolean(focusPublicPage&&publicPage));
+  const [publicPageOpen,setPublicPageOpen]=useState(Boolean(focusPublicPage&&publicPage));
   // Load the optional editor on first use, then keep its draft and leave guard mounted.
-  const [publicPageVisited,setPublicPageVisited]=useState(Boolean(focusPublicPage));
+  const [publicPageVisited,setPublicPageVisited]=useState(Boolean(focusPublicPage&&publicPage));
+  const [shareCardVisited,setShareCardVisited]=useState(false);
+  const wasFocusPublic=useRef(Boolean(focusPublicPage));
+  const personalRef=useRef<HTMLDetailsElement>(null);
   const publicPageRef=useRef<HTMLDetailsElement>(null);
-  useEffect(()=>{
+  const shareCardRef=useRef<HTMLDetailsElement>(null);
+  const visibilityRef=useRef<HTMLDetailsElement>(null);
+  const securityRef=useRef<HTMLDetailsElement>(null);
+  function revealPublicPage(scheduleFocus:boolean){
     const details=publicPageRef.current;
-    if(!focusPublicPage||!details)return;
+    if(!details)return;
+    setPublicPageVisited(true);
+    setPublicPageOpen(true);
+    for(const section of [personalRef.current,shareCardRef.current,visibilityRef.current,securityRef.current]){
+      if(section)section.open=false;
+    }
     let ancestor=details.parentElement;
     while(ancestor){if(ancestor instanceof HTMLDetailsElement)ancestor.open=true;ancestor=ancestor.parentElement;}
     details.open=true;
+    if(!scheduleFocus)return;
     // The shell focuses main after navigation. Reveal this explicit destination
     // afterwards, without stealing focus from a modal or a newly used control.
     const frame=requestAnimationFrame(()=>{
       const summary=details.querySelector('summary');
       const active=document.activeElement;
-      if(!details.isConnected||!details.open||legacyHash(window.location.hash)!=='#account?view=page'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
+      const view=new URLSearchParams(legacyHash(window.location.hash).split('?')[1]??'').get('view');
+      if(!details.isConnected||!details.open||view!=='page'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
       if(active===document.body||active?.id==='main-content'||active===summary)summary?.focus();
     });
     return()=>cancelAnimationFrame(frame);
+  }
+  function openPublicPageFromShare(){
+    revealPublicPage(false);
+    requestAnimationFrame(()=>{
+      const details=publicPageRef.current;
+      if(details?.isConnected&&details.open)details.querySelector('summary')?.focus();
+    });
+  }
+  useEffect(()=>{
+    const details=publicPageRef.current;
+    if(!focusPublicPage){
+      if(wasFocusPublic.current){
+        wasFocusPublic.current=false;
+        if(details)details.open=false;
+        setPublicPageOpen(false);
+        if(personalRef.current&&!focusConnections&&!focusProfileExtras)personalRef.current.open=true;
+      }
+      return;
+    }
+    wasFocusPublic.current=true;
+    return revealPublicPage(true);
   },[focusPublicPage]);
   useEffect(()=>{
     const details=connectionsRef.current;
@@ -94,7 +129,7 @@ function AccountSettings({client,session,registerLeave,children,profileExtras,fo
   const guardState=useRef({dirty});guardState.current={dirty};
   useEffect(()=>{
     mounted.current=true;
-    const guard=()=>{const state=guardState.current;return saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()?false:!state.dirty||window.confirm('還有修改尚未儲存，確定離開？');};
+    const guard=(nextHash:string|null)=>{const target=nextHash===null?null:legacyHash(nextHash);if(target==='#account'||target?.startsWith('#account?'))return true;const state=guardState.current;return saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()?false:!state.dirty||window.confirm('還有修改尚未儲存，確定離開？');};
     registerLeave?.(guard);
     const unload=(event:BeforeUnloadEvent)=>{const state=guardState.current;if(state.dirty||saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()){event.preventDefault();event.returnValue='';}};
     window.addEventListener('beforeunload',unload);
@@ -147,7 +182,7 @@ function AccountSettings({client,session,registerLeave,children,profileExtras,fo
     {loadError&&<button type="button" className="btn btn-small btn-ghost" disabled={locked} onClick={()=>{if(!dirty||window.confirm('放棄尚未儲存的修改，重新載入？'))void load();}}>重新載入我的資料</button>}
     {!account&&!loadError&&<p role="status">載入會員資料…</p>}
     {lastFailureUnknown&&<div className="banner" role="alert"><p>儲存結果還沒確認，請先留在這裡。再次確認不會重複儲存。</p><button type="button" className="btn btn-small" disabled={busy} onClick={()=>void submit(undefined,true)}>確認儲存結果</button></div>}
-    <details className="card account-settings-section" open>
+    <details ref={personalRef} className="card account-settings-section" open={!(initialFocusPublic&&publicPage)}>
       <summary><strong>個人資料</strong><span>名字、頭像和聯絡方式</span></summary>
       <div className="stack account-settings-body">
         {account&&contacts&&<>
@@ -169,9 +204,9 @@ function AccountSettings({client,session,registerLeave,children,profileExtras,fo
         {member&&<details className="account-settings-more"><summary>查看目前的會員名片</summary><MemberCard member={member} labels={labels} client={client}/></details>}
       </div>
     </details>
-    {publicPage&&<details ref={publicPageRef} onToggle={event=>{if(event.target===event.currentTarget){setPublicPageOpen(event.currentTarget.open);if(event.currentTarget.open)setPublicPageVisited(true);}}} className="card account-settings-section" data-public-page><summary><strong>公開個人頁</strong><span>誰能看你的個人頁、介紹、封面和版面</span></summary><div className="stack account-settings-body">{publicPageVisited&&publicPage(childGuards.register)}</div></details>}
-    <details className="card account-settings-section"><summary><strong>分享名片設定（免登入）</strong><span>見面時出示 QR Code，先確認你願意公開的內容</span></summary><div className="stack account-settings-body"><MemberShare client={client}/></div></details>
-    <details className="card account-settings-section">
+    {publicPage&&<details ref={publicPageRef} open={initialFocusPublic} onToggle={event=>{if(event.target===event.currentTarget){setPublicPageOpen(event.currentTarget.open);if(event.currentTarget.open)setPublicPageVisited(true);}}} className="card account-settings-section" data-public-page><summary><strong>公開個人頁</strong><span>誰能看你的個人頁、介紹、封面和版面</span></summary><div className="stack account-settings-body">{publicPageVisited&&publicPage(childGuards.register)}</div></details>}
+    <details ref={shareCardRef} onToggle={event=>{if(event.target===event.currentTarget&&event.currentTarget.open)setShareCardVisited(true);}} className="card account-settings-section"><summary><strong>分享名片設定（免登入）</strong><span>見面時出示 QR Code，先確認你願意公開的內容</span></summary><div className="stack account-settings-body">{shareCardVisited&&<MemberShare client={client} onEditHeadline={openPublicPageFromShare}/>}</div></details>
+    <details ref={visibilityRef} className="card account-settings-section">
       <summary data-guide-anchor="account:email-visibility"><strong>誰能看到我</strong><span>聯絡方式和分享名片</span></summary>
       <div className="stack account-settings-body">
         <p>名字和頭像可由同工坊已加入的會員看見。下方只設定聯絡方式，不會隱藏已發布的貼文或其他內容。</p>
@@ -186,7 +221,7 @@ function AccountSettings({client,session,registerLeave,children,profileExtras,fo
         </>}
       </div>
     </details>
-    <details className="card account-settings-section">
+    <details ref={securityRef} className="card account-settings-section">
       <summary><strong>帳號與安全</strong><span>密碼、登入裝置和進階設定</span></summary>
       <div className="stack account-settings-body">
         {account&&<EmailVerificationPanel client={client} email={account.login_email} verified={account.email_verified}/>}

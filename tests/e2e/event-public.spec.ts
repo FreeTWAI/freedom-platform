@@ -227,13 +227,13 @@ featureTest.describe('event-scoped public registration lifetime',()=>{
       const failedRegistration=page.waitForResponse(response=>new URL(response.url()).pathname===`/api/v1/public/events/${eventB}/register`&&response.request().method()==='POST');
       await submitButton.click();
       expect((await failedRegistration).status()).toBe(503);
-      await expect(page.getByRole('alert')).toContainText('尚未確認這次報名結果');
-      await expect(page.getByRole('alert')).toContainText('可能再次寄出相同郵件');
+      await expect(page.getByRole('alert')).toContainText('再試一次');
+      await expect(page.getByRole('alert')).not.toContainText('尚未確認');
       await expect(nameInput).toHaveValue('活動乙暫存訪客');
       await expect(emailInput).toHaveValue(failEmailB);
-      await expect(emailInput).toBeDisabled();
-      await expect(nameInput).toBeDisabled();
-      await expect(page.getByRole('button',{name:'重試原報名與寄信',exact:true})).toBeEnabled();
+      await expect(emailInput).toBeEnabled();
+      await expect(nameInput).toBeEnabled();
+      await expect(submitButton).toBeEnabled();
 
       await page.goBack();
       await expect(page.getByRole('heading',{name:titleA,exact:true})).toBeVisible();
@@ -380,4 +380,117 @@ featureTest('new member keeps referral through required guild joining and explic
   }
 });
 
+});
+
+test('public guest registration handles 503, 422, lost answer, and succeeds with default e2e mail transport',async({page,e2eAuthPool})=>{
+  const eventId=randomUUID(),title=`訪客測試活動 ${eventId.slice(0,8)}`;
+  const starts=new Date(Date.now()+2*86400000).toISOString(),ends=new Date(Date.parse(starts)+3600000).toISOString();
+  await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind,capacity)
+    SELECT $1::uuid,community_id,user_id,$2,'訪客報名測試活動',$3::timestamptz,$4::timestamptz,'online','線上教室','published','open','other',20 FROM users WHERE email='maker@local.test'`,[eventId,title,starts,ends]);
+  let mode:'503'|'422'|'abort'|'live'='503';
+  const payloads:unknown[]=[];
+  try{
+    await page.route(`**/api/v1/public/events/${eventId}/register`,async route=>{
+      payloads.push(route.request().postDataJSON());
+      if(mode==='503')return route.fulfill({status:503,json:{type:'about:blank',title:'Unavailable',status:503,code:'event_email_unavailable',detail:'活動郵件服務暫時無法使用。'}});
+      if(mode==='422')return route.fulfill({status:422,json:{type:'about:blank',title:'Unprocessable',status:422,code:'invalid_request',detail:'報名資料格式不符。'}});
+      if(mode==='abort')return route.abort('failed');
+      return route.continue();
+    });
+    await page.goto(eventAppPath(`/events/${eventId}`));
+    const name=page.getByLabel('你的名字',{exact:true}),email=page.getByLabel('接收參與資料的 Email',{exact:true});
+    const submit=page.getByRole('button',{name:'報名並寄送參與資料',exact:true});
+    await name.fill('合成訪客');await email.fill('uxf01-503@example.test');
+    await submit.click();
+    await expect(page.getByRole('alert')).toContainText('再試一次');
+    await expect(page.getByRole('alert')).not.toContainText('尚未確認');
+    await expect(name).toBeEnabled();await expect(email).toBeEnabled();
+
+    mode='422';
+    await email.fill('uxf01-422@example.test');
+    await submit.click();
+    await expect(page.getByRole('alert')).toContainText('再試一次');
+    await expect(page.getByRole('alert')).not.toContainText('尚未確認');
+    await expect(name).toBeEnabled();await expect(email).toBeEnabled();
+
+    mode='abort';
+    await email.fill('uxf01-live@example.test');
+    await submit.click();
+    await expect(page.getByRole('alert')).toContainText('尚未確認這次報名結果');
+    await expect(name).toBeDisabled();await expect(email).toBeDisabled();
+    const retry=page.getByRole('button',{name:'重試原報名與寄信',exact:true});
+    await expect(retry).toBeEnabled();
+
+    mode='live';
+    await retry.click();
+    await expect(page.getByRole('status').filter({hasText:'報名已確認'})).toBeVisible();
+    expect(payloads).toHaveLength(4);
+    expect(payloads[3]).toEqual(payloads[2]);
+    const rows=(await e2eAuthPool.query("SELECT state FROM community_event_guest_rsvps WHERE event_id=$1 AND email='uxf01-live@example.test'",[eventId])).rows;
+    expect(rows).toEqual([{state:'going'}]);
+  }finally{
+    await page.unrouteAll({behavior:'ignoreErrors'});
+    await e2eAuthPool.query('DELETE FROM community_event_guest_rsvps WHERE event_id=$1',[eventId]);
+    await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[eventId]);
+    await e2eAuthPool.query('DELETE FROM auth_rate_limits');
+  }
+});
+
+featureTest.describe('deployment without guest registration and SSR privacy',()=>{
+  featureTest('hides guest form and offers sign-in when server reports guest registration unavailable',async({page,e2eAuthPool})=>{
+    const eventId=randomUUID(),title=`無訪客寄信活動 ${eventId.slice(0,8)}`;
+    const starts=new Date(Date.now()+2*86400000).toISOString(),ends=new Date(Date.parse(starts)+3600000).toISOString();
+    await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind,capacity)
+      SELECT $1::uuid,community_id,user_id,$2,'不支援訪客寄信的部署測試',$3::timestamptz,$4::timestamptz,'online','線上教室','published','open','other',20 FROM users WHERE email='maker@local.test'`,[eventId,title,starts,ends]);
+    try{
+      await page.goto(eventAppPath(`/events/${eventId}`));
+      await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
+      await expect(page.getByRole('button',{name:'登入後報名',exact:true})).toBeVisible();
+      await expect(page.getByRole('button',{name:'報名並寄送參與資料'})).toHaveCount(0);
+      await expect(page.getByLabel('你的名字',{exact:true})).toHaveCount(0);
+    }finally{
+      await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[eventId]);
+    }
+  });
+});
+
+featureTest.describe('SSR public event 503 editability and email privacy',()=>{
+  let shouldFail=false;
+  featureTest.use({memberFeatures:{eventParticipationEnabled:true,eventEmailSender:async()=>{if(shouldFail)throw Error('provider rejected');}}});
+  featureTest('SSR /events/:id stays editable with 再試一次 on 503 and gives identical text for registered and unregistered emails',async({page,e2eAuthPool})=>{
+    shouldFail=false;
+    const eventId=randomUUID(),title=`SSR 活動 ${eventId.slice(0,8)}`;
+    const starts=new Date(Date.now()+2*86400000).toISOString(),ends=new Date(Date.parse(starts)+3600000).toISOString();
+    await e2eAuthPool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind,capacity)
+      SELECT $1::uuid,community_id,user_id,$2,'SSR 503 與隱私測試',$3::timestamptz,$4::timestamptz,'online','線上教室','published','open','other',20 FROM users WHERE email='maker@local.test'`,[eventId,title,starts,ends]);
+    try{
+      await page.goto(`/events/${eventId}`);
+      await page.getByLabel('姓名',{exact:true}).fill('已報名訪客');
+      await page.getByLabel('Email',{exact:true}).fill('already@example.test');
+      await page.getByRole('button',{name:'報名',exact:true}).click();
+      await expect(page.locator('#event-status')).toContainText('報名已確認');
+
+      shouldFail=true;
+      await page.reload();
+      await page.getByLabel('姓名',{exact:true}).fill('重試訪客');
+      await page.getByLabel('Email',{exact:true}).fill('already@example.test');
+      await page.getByRole('button',{name:'報名',exact:true}).click();
+      await expect(page.locator('#event-status')).toContainText('再試一次');
+      await expect(page.locator('#event-status')).not.toContainText('尚未確認');
+      await expect(page.getByLabel('Email',{exact:true})).toHaveJSProperty('readOnly',false);
+      const registeredError=await page.locator('#event-status').textContent();
+
+      await page.getByLabel('Email',{exact:true}).fill('unregistered@example.test');
+      await page.getByRole('button',{name:'報名',exact:true}).click();
+      await expect(page.locator('#event-status')).toContainText('再試一次');
+      const unregisteredError=await page.locator('#event-status').textContent();
+      expect(registeredError).toBe(unregisteredError);
+    }finally{
+      shouldFail=false;
+      await e2eAuthPool.query('DELETE FROM community_event_guest_capabilities WHERE event_id=$1',[eventId]);
+      await e2eAuthPool.query('DELETE FROM community_event_guest_rsvps WHERE event_id=$1',[eventId]);
+      await e2eAuthPool.query('DELETE FROM community_events WHERE event_id=$1',[eventId]);
+      await e2eAuthPool.query('DELETE FROM auth_rate_limits');
+    }
+  });
 });

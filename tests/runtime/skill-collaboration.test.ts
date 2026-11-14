@@ -67,7 +67,7 @@ test('public share HTML keeps canonical metadata and cooperation in collapsed de
  const usage=html.indexOf('id="skill-start"'),details=html.indexOf('id="skill-usage-notes"');
  const cooperation=html.indexOf('id="collaboration-title"');
  assert.ok(usage>=0&&usage<details);
- assert.ok(details<cooperation&&cooperation<html.indexOf('class="public-skill-next"',details));
+ assert.ok(details<cooperation&&cooperation<html.indexOf('data-share-root',details));
  assert.ok(html.includes('href="https://github.com/Hao0321/video-autopilot-kit/fork">從原作開始共創'));
  assert.ok(html.includes('預設 PR → Hao0321/video-autopilot-kit:main'));
  assert.ok(!html.includes('Fork 共創版本'));assert.ok(html.includes('/development/skills/video-autopilot/SKILL.md'));

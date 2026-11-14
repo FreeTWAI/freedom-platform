@@ -213,3 +213,33 @@ for(const route of ['event-list','own-list','references','own-detail','published
   }finally{await locker.query('ROLLBACK');locker.release();await pending;await reader.end();}
  });
 }
+
+test('empty backlinks and event outcomes return 200 empty lists when enabled and 404 when disabled',async()=>{
+ const work=await showcase(),book=communityCatalog.skill_books[0]!.id,squad=randomUUID(),squadOutcome=randomUUID();
+ await pool.query(`INSERT INTO member_squads(squad_id,community_id,name,kind,purpose,owner_ref) VALUES($1,$2,'合成小隊','project','空反向連結驗證',$3)`,[squad,DEMO_COMMUNITY,actors[0]!.user_id]);
+ await pool.query(`INSERT INTO member_squad_memberships(squad_id,user_id,state) VALUES($1,$2,'active')`,[squad,actors[0]!.user_id]);
+ await pool.query(`INSERT INTO member_squad_outcomes(outcome_id,squad_id,community_id,author_ref,title,summary,audience,state,consent_recorded_at,published_at) VALUES($1,$2,$3,$4,'空小隊來源','尚無活動成果','public','published',now(),now())`,[squadOutcome,squad,DEMO_COMMUNITY,actors[0]!.user_id]);
+ const auth=await login(pool,DEMO_USERS[0]!.email,DEMO_PASSWORD),headers={Cookie:`freedom_local_session=${auth.token}`};
+ const enabledApp=createApp(pool,'http://127.0.0.1:4310','local',{squadOutcomesEnabled:true,eventOutcomesEnabled:true});
+ for(const path of [
+  `/api/v1/event-highlights/${eventId}/outcomes`,
+  `/api/v1/public/event-highlights/${eventId}/outcomes`,
+  `/api/v1/event-outcome-backlinks/work/${work}`,
+  `/api/v1/event-outcome-backlinks/skill_book/${book}`,
+  `/api/v1/public/event-outcome-backlinks/skill_book/${book}`,
+  `/api/v1/event-outcome-backlinks/squad_outcome/${squadOutcome}`,
+  `/api/v1/public/event-outcome-backlinks/squad_outcome/${squadOutcome}`,
+ ]){
+  const response=await enabledApp.request(`http://127.0.0.1:4310${path}`,path.startsWith('/api/v1/public/')?undefined:{headers});
+  assert.equal(response.status,200,path);
+  assert.deepEqual(await response.json(),{items:[]});
+ }
+ const disabledApp=createApp(pool,'http://127.0.0.1:4310','local',{squadOutcomesEnabled:false,eventOutcomesEnabled:false});
+ for(const path of [
+  `/api/v1/event-outcome-backlinks/work/${work}`,
+  `/api/v1/public/event-outcome-backlinks/skill_book/${book}`,
+ ]){
+  const response=await disabledApp.request(`http://127.0.0.1:4310${path}`,path.startsWith('/api/v1/public/')?undefined:{headers});
+  assert.equal(response.status,404,path);
+ }
+});

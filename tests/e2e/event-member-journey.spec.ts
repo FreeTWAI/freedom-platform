@@ -240,6 +240,7 @@ test('member previews an event, an authorized officer approves it, and participa
   await logout(page);await login(page);await navigate(page,'我的內容');
   const own=page.getByRole('article').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await own.getByRole('link',{name:'開啟原始內容',exact:true}).click();await openEventManagement(page);await expect(page.getByRole('region',{name:'管理活動',exact:true})).toBeVisible();
+  await page.getByText('更多',{exact:true}).click();
   await page.getByRole('button',{name:'報名名單',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'關閉',exact:true}).click();
   await page.getByRole('button',{name:'取消活動',exact:true}).click();await page.getByRole('button',{name:'確認取消活動',exact:true}).click();await expect(page.getByRole('region',{name:'管理活動',exact:true})).toContainText('已取消');
 });
@@ -421,7 +422,7 @@ for(const width of [1440,390])eventTest(`confirmed event versions and partial me
       json:{code:'unavailable',detail:'合成分享統計讀取暫停'},
     }));
     await openEventManagement(page,id);
-    await page.getByText('其他設定',{exact:true}).click();await page.getByRole('button',{name:'分享報名統計',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'服務暫時無法回應（503）'})).toBeVisible();
+    await page.getByText('更多',{exact:true}).click();await page.getByRole('button',{name:'分享報名統計',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'服務暫時無法回應（503）'})).toBeVisible();
     const card=page.locator('.experience-card'),editor=card.locator('form');
     await expect(card.getByRole('heading',{name:titles[1],exact:true})).toBeVisible();
     await page.route(`**/api/v1/events/${id}/update`,async route=>{

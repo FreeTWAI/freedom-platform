@@ -575,3 +575,53 @@ test('same-session sharing creates one link and copies its returned attribution 
   assert.deepEqual(h.copies, [`${origin}/go/abcdefghij`]);
   assert.ok(h.view().some(n => n.nodeName === 'A' && n.getAttribute('href') === `/works/${h.props.showcaseId}`));
 });
+
+test('UX-V-15: /works/:id has one btn-primary, unique hrefs, short pre-action copy, and 404 escapes id with matching security headers', async () => {
+  const owner = await member(0);
+  const work = await createPublishedWork(owner, {
+    title: '公開作品測試標題',
+    description: '測試摘要內容',
+    public_url: 'https://example.com/v15-work',
+  });
+  const s0Res = await defaultApp.request(`${origin}/api/v1/me/showcases/${work.showcase_id}/sharing`, {
+    headers: { Origin: origin, Cookie: owner.cookie, 'X-CSRF-Token': owner.csrf },
+  });
+  const s0 = await s0Res.json() as { version: string; work_version: string };
+  const pub = await defaultApp.request(`${origin}/api/v1/me/showcases/${work.showcase_id}/sharing`, {
+    method: 'PUT',
+    headers: { Origin: origin, Cookie: owner.cookie, 'X-CSRF-Token': owner.csrf, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(), 'If-Match': `"${s0.version}"` },
+    body: JSON.stringify({ enabled: true, work_version: s0.work_version }),
+  });
+  assert.equal(pub.status, 200);
+
+  const found = await defaultApp.request(`${origin}/works/${work.showcase_id}`);
+  assert.equal(found.status, 200);
+  const headerNames = ['cache-control', 'referrer-policy', 'x-robots-tag', 'x-content-type-options', 'content-security-policy'];
+  for (const h of headerNames) assert.ok(found.headers.get(h), `missing header ${h} on 200`);
+  const foundHtml = await found.text();
+  assert.equal((foundHtml.match(/\bbtn-primary\b/g) ?? []).length, 1);
+  assert.doesNotMatch(foundHtml, /\sstyle=/i);
+  const foundHrefs = [...foundHtml.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
+  assert.equal(new Set(foundHrefs).size, foundHrefs.length, `duplicate hrefs on /works/:id: ${foundHrefs.join(', ')}`);
+  const foundMain = foundHtml.slice(foundHtml.indexOf('<main'), foundHtml.indexOf('</main>'));
+  const foundPre = foundMain.slice(0, foundMain.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g, '')
+    .replaceAll(DEMO_USERS[0].display_name, '').replace(Array.from(DEMO_USERS[0].display_name)[0] ?? '', '')
+    .replaceAll('公開作品測試標題', '').replaceAll('測試摘要內容', '').replaceAll('前往作品外部連結', '').replaceAll('外部連結', '').replace(/\s+/g, '');
+  assert.ok(foundPre.length <= 20, `expected <=20 static chars before btn-primary, got ${foundPre.length}: ${foundPre}`);
+
+  const badId = '<script>alert(1)</script>';
+  for (const probe of [randomUUID(), encodeURIComponent(badId)]) {
+    const miss = await defaultApp.request(`${origin}/works/${probe}`);
+    assert.equal(miss.status, 404);
+    for (const h of headerNames) assert.equal(miss.headers.get(h), found.headers.get(h), `header mismatch for ${h}`);
+    const html = await miss.text();
+    assert.equal(html.includes(badId), false);
+    assert.equal((html.match(/\bbtn-primary\b/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /\sstyle=/i);
+    const hrefs = [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
+    assert.equal(new Set(hrefs).size, hrefs.length, `duplicate hrefs on /works 404: ${hrefs.join(', ')}`);
+    const missMain = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+    const missPre = missMain.slice(0, missMain.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g, '').replace(/\s+/g, '');
+    assert.ok(missPre.length <= 20, `expected <=20 chars before 404 primary, got ${missPre.length}: ${missPre}`);
+  }
+});

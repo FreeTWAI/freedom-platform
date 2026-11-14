@@ -8,6 +8,8 @@ import {readWithMemberSession} from '../../../../packages/db/member-session.js';
 import {readSessionCookie} from '../session-cookie.js';
 import {eventPageData,eventPageHtml} from '../../../../modules/community/event-page.js';
 import {generateEventCalendar} from '../../../../modules/community/event-calendar.js';
+import {publicNotFoundHtml} from '../../../../modules/shares/public-page.js';
+import {acceptsHtml} from './shares.js';
 export function createEventPageRoutes(pool:Pool,origin:string,participation:boolean,email:boolean){
  const app=new Hono();
  app.get('/api/v1/public/events',async c=>{c.header('Cache-Control','no-store');return c.json({items:await publicUpcomingEvents(pool)});});
@@ -16,8 +18,17 @@ export function createEventPageRoutes(pool:Pool,origin:string,participation:bool
  async function read(id:string,actor:Actor|null){return actor?readWithMemberSession(pool,actor,q=>eventPageData(q,id,actor)):eventPageData(pool,id,null);}
  app.get('/events/:id',async(c,next)=>{
   if(c.req.query('app')==='1')return next();
-  const actor=await viewer(c.req.header('Cookie')),event=await read(z.uuid().parse(c.req.param('id')),actor);
   c.header('Cache-Control','private, no-store');c.header('Vary','Cookie');
+  const htmlRequest=acceptsHtml(c.req.header('Accept'));
+  const parsed=z.uuid().safeParse(c.req.param('id'));
+  if(!parsed.success){
+   if(htmlRequest)return c.html(publicNotFoundHtml(),404);
+   throw parsed.error;
+  }
+  const actor=await viewer(c.req.header('Cookie'));
+  let event;
+  try{event=await read(parsed.data,actor);}
+  catch(err){if(htmlRequest&&err instanceof Problem&&(err.status===404||err.status===400))return c.html(publicNotFoundHtml(),404);throw err;}
   if(event.visibility!=='open')c.header('X-Robots-Tag','noindex, nofollow');
   const refs=c.req.queries('ref')??[],referralCode=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?refs[0]:undefined;
   return c.html(eventPageHtml(event,origin,{member:Boolean(actor),participation,guest:participation&&email,referralCode}));

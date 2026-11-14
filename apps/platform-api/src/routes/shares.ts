@@ -1,7 +1,8 @@
-import { publicSharePage,sharePageCss } from '../../../../modules/shares/public-page.js';
+import { publicSharePage,publicNotFoundHtml,sharePageCss } from '../../../../modules/shares/public-page.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Pool } from 'pg';
+import { Problem } from '../../../../packages/shared/problem.js';
 import { readWithMemberSession } from '../../../../packages/db/member-session.js';
 import { moduleCommand, type PlatformEnv } from '../module-context.js';
 import { createShare, previewShare, visibleShare, listShares, myCredit, retractShare, reportShare, shareLink } from '../../../../modules/shares/service.js';
@@ -45,12 +46,28 @@ export function createShareRoutes(pool:Pool,context:AdapterContext={},loadSocial
   return app;
 }
 
+export function acceptsHtml(accept?:string){
+ if(!accept)return false;
+ return accept.toLowerCase().split(',').some(part=>{
+  const [type,...params]=part.trim().split(';');
+  return type.trim()==='text/html'&&!params.some(p=>/^q\s*=\s*0(?:\.0+)?$/.test(p.trim()));
+ });
+}
+
 export function createPublicShareRoutes(pool:Pool,origin:string,context:AdapterContext={},afterResponse?:(work:()=>Promise<void>)=>void){
  const app=new Hono<PlatformEnv>();
  app.get('/share-page.css',c=>{c.header('Content-Type','text/css; charset=utf-8');return c.body(sharePageCss);});
  app.get('/s/:share_id',async c=>{
   c.header('Cache-Control','no-store');
-  const page=await publicSharePage(pool,z.uuid().parse(c.req.param('share_id')),origin,c.req.query('via'));
+  const htmlRequest=acceptsHtml(c.req.header('Accept'));
+  const parsed=z.uuid().safeParse(c.req.param('share_id'));
+  if(!parsed.success){
+   if(htmlRequest)return c.html(publicNotFoundHtml(),404);
+   throw parsed.error;
+  }
+  let page;
+  try{page=await publicSharePage(pool,parsed.data,origin,c.req.query('via'));}
+  catch(err){if(htmlRequest&&err instanceof Problem&&(err.status===404||err.status===400))return c.html(publicNotFoundHtml(),404);throw err;}
   if(page.repo_id&&page.stale){const refresh=()=>refreshRepository(pool,page.repo_id,context);if(afterResponse)afterResponse(refresh);else void refresh().catch(()=>{});}
   return c.html(page.html);
  });

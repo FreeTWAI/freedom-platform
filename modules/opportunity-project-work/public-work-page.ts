@@ -59,7 +59,7 @@ export function publicWorkHtml(work: PublicWorkView, origin: string): string {
 <body>
   <a class="skip-link" href="#content">跳至作品內容</a>
   <header class="site-header">
-    <a class="brand" href="/"><img src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊"></a>
+    <a class="brand" href="/" aria-label="自由工坊首頁"><img src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊"></a>
     <span class="site-label">公開作品</span>
   </header>
   <main id="content" tabindex="-1">
@@ -68,26 +68,22 @@ export function publicWorkHtml(work: PublicWorkView, origin: string): string {
         <div class="author-mark" aria-hidden="true">${escapeHtml(authorInitial)}</div>
         <div>
           <p class="author">${escapeHtml(work.creator_name)}</p>
-          <p class="post-date">創作者公開作品</p>
+          <p class="post-date">作者公開</p>
         </div>
         ${work.sharer_name ? `<span class="public-label">由 ${escapeHtml(work.sharer_name)} 推薦分享</span>` : ''}
       </div>
       <h1>${escapeHtml(work.title)}</h1>
       <p class="post-text">${escapeHtml(summary)}</p>
-      ${externalLink ? `<p><a class="source-link" href="${escapeHtml(externalLink)}" rel="noopener noreferrer nofollow" target="_blank">前往作品外部連結</a></p>` : ''}
+      ${externalLink ? `<p><a class="source-link" href="${escapeHtml(externalLink)}" rel="noopener noreferrer nofollow" target="_blank">外部連結</a></p>` : ''}
     </article>
     <section class="card reading-invite" aria-label="前往自由工坊">
-      <h2>想在自由工坊交流或合作嗎？</h2>
-      <p>登入或加入自由工坊後，可以查看更多會員作品與合作討論。</p>
+      <h2>交流合作</h2>
       <div class="actions">
-        <a class="button primary" href="/#showcase/${escapeHtml(work.showcase_id)}">在自由工坊查看作品</a>
-        <a class="button secondary" href="/">回到自由工坊首頁</a>
+        <a class="button primary btn-primary" href="/#showcase/${escapeHtml(work.showcase_id)}">在自由工坊查看作品</a>
       </div>
+      <p>登入或加入自由工坊後，可查看更多作品與合作討論。</p>
     </section>
   </main>
-  <footer class="site-footer">
-    <a href="/">自由工坊</a>
-  </footer>
 </body>
 </html>`;
 }
@@ -103,16 +99,16 @@ export function unavailableWorkHtml(): string {
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="/"><img src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊"></a>
+    <span class="brand"><img src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊"></span>
     <span class="site-label">公開作品</span>
   </header>
   <main id="content" tabindex="-1">
     <article class="card unavailable">
       <h1>找不到公開作品</h1>
-      <p>這件作品尚未開放公開閱讀、內容已更新待重新確認，或目前無法檢視。</p>
       <div class="actions">
-        <a class="button primary" href="/">返回自由工坊</a>
+        <a class="button primary btn-primary" href="/">返回自由工坊</a>
       </div>
+      <p>這件作品尚未開放公開閱讀、內容已更新待重新確認，或目前無法檢視。</p>
     </article>
   </main>
 </body>

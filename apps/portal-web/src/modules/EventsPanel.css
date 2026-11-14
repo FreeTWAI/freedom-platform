@@ -1,4 +1,7 @@
 .event-flow .experience-actions .btn, .event-flow .btn, .event-flow summary { min-height: 44px; }
+.event-flow .btn-danger:not(:disabled) { color: var(--danger); background: var(--danger-bg); border-color: var(--danger); }
+.event-flow .btn-danger:hover:not(:disabled),
+.event-flow .btn-danger:focus-visible:not(:disabled) { color: var(--danger); background: var(--danger-bg); border-color: var(--danger); }
 .event-flow input, .event-flow select, .event-flow textarea { font-size: 1rem; min-height: 44px; max-width: 100%; }
 .event-flow :is(button,a,input,select,textarea,summary):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .event-jobs { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
@@ -6,6 +9,7 @@
 .event-form-options { border: 1px solid var(--line); border-radius: 12px; padding: .6rem .85rem; min-width: 0; }
 .event-form-options summary { display: list-item; align-content: center; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
 .event-form-options[open] > .experience-fields { margin-top: .75rem; }
+.event-form-options[open] > .experience-actions { margin-block: .75rem; }
 .event-review-summary, .event-help-need { padding: .85rem; border-inline-start: 3px solid var(--accent); background: var(--bg-elev); overflow-wrap: anywhere; }
 .event-help-need h4 { margin-top: 0; }
 .event-flow .experience-row > *, .event-flow .experience-fields, .event-flow .field { min-width: 0; }

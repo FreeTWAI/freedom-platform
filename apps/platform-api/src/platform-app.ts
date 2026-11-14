@@ -223,7 +223,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   const featureContext = {pool, origin, freedomEnv, runtime, authNetwork};
   const app=new Hono<{Variables:{actor:Actor}}>();
   app.onError((err,c)=>{
-    if(err instanceof z.ZodError) return c.json({type:'about:blank',title:'Validation failed',status:422,code:'validation_failed',detail:err.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; ')},422);
+    if(err instanceof z.ZodError) return c.json({type:'about:blank',title:'Validation failed',status:422,code:'validation_failed',detail:err.issues.map(i=>{const p=i.path.join('.');return p==='ends_at'?(i.message.startsWith('結束時間')?i.message:/[\u4e00-\u9fff]/.test(i.message)?`結束時間：${i.message}`:'結束時間格式不正確。'):`${p}: ${i.message}`;}).join('; ')},422);
     if(err instanceof InstanceSelectionRequired) return c.json({type:'about:blank',title:err.code,status:err.status,code:err.code,detail:err.message,candidates:err.candidates},409);
     if(err instanceof DependencySelectionRequired) return c.json({type:'about:blank',title:err.code,status:err.status,code:err.code,detail:err.message,candidates:err.candidates},409);
     if(err instanceof QuotaExceeded) return c.json({type:'about:blank',title:err.code,status:err.status,code:err.code,detail:err.message,dimension:err.dimension},429);

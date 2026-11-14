@@ -3,7 +3,11 @@ import {transaction} from '../../packages/db/index.js';
 import {requireCondition} from '../../packages/shared/problem.js';
 import {escapeReadme as escape} from './sanitize.js';
 import {repositoryPage} from './repository-cache.js';
-export const sharePageCss='main{min-width:0}.share-readme{overflow-x:auto}.share-readme img{max-width:100%;height:auto}.share-readme table{display:block;overflow-x:auto}.share-actions{display:flex;gap:12px;flex-wrap:wrap}.share-actions a{border:1px solid #535e77;padding:4px 12px;border-radius:8px;text-decoration:none}';
+export const sharePageCss='main{min-width:0}.share-readme{overflow-x:auto}.share-readme img{max-width:100%;height:auto}.share-readme table{display:block;overflow-x:auto}.share-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}.share-meta a,.share-release a,header a{display:inline-flex;align-items:center;min-height:44px}.share-code{overflow-x:auto;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg)}@media(max-width:480px){.share-actions .btn-primary{width:100%}}';
+/** Minimal Chinese 404 page for unknown public share/event URLs without reflecting raw ids. */
+export function publicNotFoundHtml(){
+ return '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>找不到這個頁面｜自由工坊</title><link rel="stylesheet" href="/event-page.css"></head><body><header><img class="logo" src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="132" height="44"></header><main><section aria-labelledby="not-found-title"><h1 id="not-found-title">找不到這個頁面</h1><a class="btn btn-primary" href="/">回到首頁</a></section></main></body></html>';
+}
 /** Only intrinsically public repository/link objects. Domain references keep their own audience. */
 export async function publicSharePage(pool:Pool,id:string,origin:string,via?:string){
  const data=await transaction(pool,async q=>{
@@ -15,9 +19,7 @@ export async function publicSharePage(pool:Pool,id:string,origin:string,via?:str
  });
  const {share:s,repository:r}=data;
  const member=`/#shares/${id}${via&&/^[A-Za-z0-9_-]{10}$/.test(via)?`?via=${via}`:''}`;
- const body=`<h1>${escape(s.title)}</h1><div class="share-actions">${r?`<a href="${escape(member)}">☆ 加星</a>`:`<a href="${escape(s.canonical_url)}" rel="nofollow noopener noreferrer">開啟原文</a>`}<a href="${escape(member)}">我也要分享</a></div>`+
-   (r?`<p>${escape(r.description??'')}</p><p>${r.stars===null?'':`GitHub 星數：${r.stars} · `}原作帳號：<a href="https://github.com/${encodeURIComponent(r.original_author)}">${escape(r.original_author)}</a></p>
-    <h2>開始用</h2><pre>${escape(r.quick_start)}</pre><h2>README</h2><section class="share-readme">${r.readme_html}</section>
-    ${r.latest_release?`<h2>最新版本</h2><a href="${escape(r.latest_release.html_url)}">${escape(r.latest_release.name||r.latest_release.tag_name)}</a>`:''}`:'')+`<p>${data.count} 位會員分享</p>`;
- return {repo_id:s.repo_id,stale:r?.stale??false,html:`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(s.title)}｜自由工坊</title><link rel="canonical" href="${escape(origin+'/s/'+id)}"><meta property="og:title" content="${escape(s.title)}"><link rel="stylesheet" href="/development.css"><link rel="stylesheet" href="/share-page.css"></head><body><nav><a href="/">自由工坊</a></nav><main>${body}</main></body></html>`};
+ const repoSection=r?`<section aria-label="專案資訊">${r.description?.trim()?`<p>${escape(r.description)}</p>`:''}<p class="share-meta">${r.stars===null?'':`GitHub 星數：${r.stars} · `}原作帳號：<a href="https://github.com/${encodeURIComponent(r.original_author)}">${escape(r.original_author)}</a></p>${r.quick_start?.trim()?`<h2>開始用</h2><pre class="share-code">${escape(r.quick_start)}</pre>`:''}${r.readme_html?.trim()?`<h2>README</h2><section class="share-readme">${r.readme_html}</section>`:''}${r.latest_release?`<h2>最新版本</h2><p class="share-release"><a href="${escape(r.latest_release.html_url)}">${escape(r.latest_release.name||r.latest_release.tag_name)}</a></p>`:''}</section>`:'';
+ const body=`<h1>${escape(s.title)}</h1><section aria-label="分享"><div class="share-actions"><a class="btn btn-primary" href="${escape(member)}">登入並加入分享</a>${r?'':`<a class="btn btn-secondary" href="${escape(s.canonical_url)}" rel="nofollow noopener noreferrer">開啟原文</a>`}</div><p>${data.count} 位會員分享</p></section>${repoSection}`;
+ return {repo_id:s.repo_id,stale:r?.stale??false,html:`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(s.title)}｜自由工坊</title><link rel="canonical" href="${escape(origin+'/s/'+id)}"><meta property="og:title" content="${escape(s.title)}"><link rel="stylesheet" href="/event-page.css"><link rel="stylesheet" href="/share-page.css"></head><body><header><a href="/"><img class="logo" src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="132" height="44"></a></header><main>${body}</main></body></html>`};
 }

@@ -1,4 +1,5 @@
 import React, { lazy } from 'react';
+import {legacyHash} from '../portal-route';
 import {parseProfileRoute,visitorProfileHash} from '../modules/profile-publication-route';
 import type { PortalFeatureEntries } from './types';
 
@@ -14,16 +15,17 @@ const MembersPanel = lazy(() => import('../modules/Membership').then(m => ({defa
 const MemberTasks = lazy(() => import('../modules/MemberTasks').then(m => ({default: m.MemberTasks})))
 
 // Page entries only compose existing features. Session, navigation and leave guards stay in the shell.
+const accountView = (hash: string) => new URLSearchParams(legacyHash(hash).split('?')[1] ?? '').get('view');
 export const identityFeatures = {
   profile: {moduleId: "personal-content", placement: 'page', render: ({client,session,site,locationHash,selectTab,registerPageLeave,openMemberMessage}) => {
-    const route=parseProfileRoute(locationHash);
+    const route=parseProfileRoute(legacyHash(locationHash));
     if(route?.kind==='invalid')return <p role="alert">個人頁連結不正確。</p>;
-    if(route?.kind==='visitor')return <VisitorProfile client={client} session={session} id={route.id} registerLeave={registerPageLeave} onMessage={openMemberMessage} onEdit={()=>selectTab('account','#account?view=page')}/>;
+    if(route?.kind==='visitor')return <VisitorProfile client={client} session={session} id={route.id} registerLeave={registerPageLeave} onMessage={openMemberMessage} onEdit={()=>selectTab('account','#me/settings?view=page')}/>;
     return <PersonalSpace key={session.user.user_id+':'+client.sessionGeneration} client={client} session={session} contentEnabled={site?.personal_content_enabled===true}/>;
   }},
   "account": {
     moduleId: "member-card", placement: 'page',
-    render: ({client, session, site, selectTab, registerPageLeave,locationHash}) => <AccountPanel client={client} session={session} onNavigate={selectTab} registerLeave={registerPageLeave} publicPage={register=><ProfilePublicationSettings client={client} session={session} registerLeave={register} embedded onView={()=>selectTab('profile',visitorProfileHash(session.user.user_id))}/>} focusPublicPage={locationHash==='#account?view=page'} focusConnections={locationHash==='#account?view=connections'} focusProfileExtras={locationHash==='#account?view=recognition'} profileExtras={site?.community_certification_enabled===true||site?.social_achievements_enabled===true?registerLeave=><>
+    render: ({client, session, site, selectTab, registerPageLeave,locationHash}) => <AccountPanel client={client} session={session} onNavigate={selectTab} registerLeave={registerPageLeave} publicPage={register=><ProfilePublicationSettings client={client} session={session} registerLeave={register} embedded onView={()=>selectTab('profile',visitorProfileHash(session.user.user_id))}/>} focusPublicPage={accountView(locationHash)==='page'} focusConnections={/(?:^|[?&])view=connections(?:&|$)/.test(locationHash.split('?')[1]??'')} focusProfileExtras={/(?:^|[?&])view=recognition(?:&|$)/.test(locationHash.split('?')[1]??'')} profileExtras={site?.community_certification_enabled===true||site?.social_achievements_enabled===true?registerLeave=><>
       {site?.community_certification_enabled===true&&<CommunityCertificationPanel key={session.user.user_id+':'+client.sessionGeneration} client={client} registerLeave={registerLeave}/>}
       {site?.social_achievements_enabled===true&&<SocialAchievements key={session.user.user_id+':'+client.sessionGeneration} client={client} registerLeave={registerLeave}/>}
     </>:undefined}>

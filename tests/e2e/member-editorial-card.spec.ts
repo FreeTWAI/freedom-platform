@@ -56,7 +56,6 @@ test('real profile fills the template, opt-in QR and downloaded image follow rot
   await expect(preview.locator('.ecard-name')).toHaveText('Hao');await expect(preview.locator('.ecard-capabilities')).toContainText('使用者體驗');
   await expect(preview.getByRole('img',{name:'這張名片的專屬 QR Code'})).toHaveCount(0);await expect(preview.getByRole('img',{name:'Hao的頭像'})).toHaveCount(0);
   await settings.getByRole('checkbox',{name:'在分享頁顯示我的頭像'}).check();await expect(preview.getByRole('img',{name:'Hao的頭像'})).toBeVisible();
-  await settings.getByLabel('一句話介紹').fill('讓創意，成為一起完成的作品。');
   await settings.getByLabel('連結名稱',{exact:true}).fill('探索我的作品');await settings.getByLabel('連結網址',{exact:true}).fill('https://example.com/portfolio');await settings.getByRole('button',{name:'加入連結',exact:true}).click();
   await settings.getByRole('button',{name:'建立分享連結',exact:true}).click();
   const first=await shareUrl(settings);await expect(preview.getByRole('img',{name:'這張名片的專屬 QR Code'})).toBeVisible();
@@ -78,8 +77,13 @@ test('real profile fills the template, opt-in QR and downloaded image follow rot
     const afterAvatar=await preview.locator('.member-avatar img').getAttribute('src');expect(Number(new URL(afterAvatar!,page.url()).searchParams.get('v'))).toBeGreaterThan(Number(new URL(beforeAvatar!,page.url()).searchParams.get('v')));
     const secondOwnerDownload=page.waitForEvent('download');await preview.getByRole('button',{name:'下載名片 PNG',exact:true}).click();const ownerImageAfter=readFileSync((await (await secondOwnerDownload).path())!);
     expect(ownerImageAfter.equals(ownerImageBefore)).toBe(false);expect(await decode(ownerImageAfter)).toBe(first);
-    await settings.getByLabel('一句話介紹').fill('尚未保存的介紹');await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeDisabled();
-    await expect(settings.locator('.ecard-save-status')).toContainText('已自動儲存，分享頁就是這個樣子。');await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeEnabled();
+    let releaseSave=()=>{};const heldSave=new Promise<void>(resolve=>{releaseSave=()=>resolve();});let gated=false;
+    const gateHandler=async(route:import('@playwright/test').Route)=>{if(route.request().method()==='POST'&&!gated){gated=true;await heldSave;}await route.continue().catch(()=>{});};
+    await page.route('**/api/v1/me/member-card-share',gateHandler);
+    try{
+      await settings.getByRole('button',{name:'夜空',exact:true}).click();await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeDisabled();
+      releaseSave();await expect(settings.locator('.ecard-save-status')).toContainText('已自動儲存，分享頁就是這個樣子。');await expect(preview.getByRole('button',{name:'下載名片 PNG',exact:true})).toBeEnabled();
+    }finally{releaseSave();await page.unroute('**/api/v1/me/member-card-share',gateHandler);}
     const oldImage=await guest.getByRole('img',{name:'Hao的頭像'}).getAttribute('src');
     await settings.getByRole('button',{name:'更新連結',exact:true}).click();await expect(settings.getByRole('link',{name:'開啟名片',exact:true})).not.toHaveAttribute('href',first);const second=await shareUrl(settings);
     expect(await scanQr(preview.locator('.ecard-qr svg'))).toBe(second);expect((await guest.request.get(oldImage!)).status()).toBe(404);

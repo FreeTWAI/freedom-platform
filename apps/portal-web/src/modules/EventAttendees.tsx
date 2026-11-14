@@ -29,7 +29,6 @@ export function EventAttendees({client,event,onClose}:{client:PortalClient;event
     {event&&<div className="stack">
       <header className="event-attendees-head"><h3 id={`${id}-title`}>報名名單</h3><button type="button" className="btn btn-ghost" onClick={onClose}>關閉</button></header>
       <p className="muted">{event.title} · 目前 {total} 人報名</p>
-      <p className="field-hint">只有主辦者看得到。公開報名的訪客只顯示報名時間，聯絡資料不在這裡顯示。</p>
       {error&&<div className="banner banner-error" role="alert">{error}<button type="button" className="btn btn-ghost" onClick={()=>void load(items.length)}>重試</button></div>}
       {!loading&&!error&&items.length===0&&<p className="empty">還沒有人報名。</p>}
       {items.length>0&&<ol className="event-attendee-list">{items.map((item,index)=><li key={item.kind==='member'?item.user_id:`guest-${index}`}>
@@ -38,6 +37,7 @@ export function EventAttendees({client,event,onClose}:{client:PortalClient;event
       </li>)}</ol>}
       {loading&&<p role="status">正在讀取報名名單…</p>}
       {next!==null&&!loading&&<button type="button" className="btn btn-ghost" onClick={()=>void load(next)}>載入更多</button>}
+      <p className="field-hint">只有主辦者看得到。公開報名的訪客只顯示報名時間，聯絡資料不在這裡顯示。</p>
     </div>}
   </dialog>;
 }
