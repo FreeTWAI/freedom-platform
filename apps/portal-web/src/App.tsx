@@ -497,6 +497,14 @@ function LoginEntryBrand() {
   return <img className="login-entry-logo" src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="396" height="132" fetchPriority="high"/>;
 }
 
+// Join and the purpose entries move focus to the email field on the next frame. A member who is
+// already in one of the form's fields by then stays there, so what they type is not split between
+// two fields.
+function memberInFormField(form: HTMLFormElement | null) {
+  const active = document.activeElement
+  return Boolean(active && /^(INPUT|SELECT|TEXTAREA)$/.test(active.tagName) && form?.contains(active))
+}
+
 export function LoginView({
   site,
   initialMode='login',
@@ -545,7 +553,10 @@ export function LoginView({
   const discoveryEnabled = site?.community_discovery_enabled === true && !resetToken && !onReturnToEvent
   const join = useCallback(() => {
     setMode('register'); setError(null); setResetNotice('')
-    requestAnimationFrame(() => { authForm.current?.scrollIntoView({ block: 'start' }); emailInput.current?.focus({ preventScroll: true }) })
+    requestAnimationFrame(() => {
+      if (memberInFormField(authForm.current)) return
+      authForm.current?.scrollIntoView({ block: 'start' }); emailInput.current?.focus({ preventScroll: true })
+    })
   }, [])
   useEffect(() => { if ((discoveryEnabled||postReturnPath||(!resetToken&&skillReturn)) && site?.registration_enabled && new URLSearchParams(window.location.search).get('join') === '1') join() }, [discoveryEnabled,postReturnPath,site?.registration_enabled,resetToken,skillReturn,join])
   const activeMode=resetToken?'confirm-reset':mode
@@ -762,7 +773,7 @@ export function LoginView({
           {!discoveryEnabled&&<PlatformPurpose variant="public" disabled={pending||accessExpired} onAction={target=>{
             if(target!=='supplier'&&target!=='showcase'&&target!=='tasks')return
             onChooseEntry(target);setMode(site?.registration_enabled?'register':'login');setError(null);setResetNotice('')
-            requestAnimationFrame(()=>emailInput.current?.focus())
+            requestAnimationFrame(()=>{if(!memberInFormField(authForm.current))emailInput.current?.focus()})
           }}/>}
           <div className="login-more-tools"><PageTools pageId="registration" compact/></div>
           <RecentEvents/>
