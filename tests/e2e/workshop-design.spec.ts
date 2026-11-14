@@ -64,16 +64,16 @@ test('logo stays whole and RPG modules remain navigable across desktop and narro
           return !!summary&&!!header&&summary.y>=header.y+header.height;
         }).toBe(true);
         await expandHomeSections(page);
-        await expect(page.locator('.home-destinations button')).toHaveCount(4);
+        await expect(page.locator('.home-destinations button')).toHaveCount(0);
         for(const label of await page.locator('.home-member-skills > span,.home-next-eyebrow,.home-member-name > .positioning-title,.home-partner-heading h2,.home-partner-swap').all()){
           expect(await label.evaluate(element=>parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(14);
         }
         const swap=page.locator('.home-partner-swap');
         if(await swap.count()){const box=await swap.boundingBox();expect(box!.width).toBeGreaterThanOrEqual(44);expect(box!.height).toBeGreaterThanOrEqual(44);}
-        for(const destination of await page.locator('.home-destinations button').all()){
+        for(const destination of await page.locator('.home-member-actions .btn').all()){
           const bounds=await destination.boundingBox();
           expect(bounds!.height).toBeGreaterThanOrEqual(44);
-          expect(bounds!.width).toBeLessThanOrEqual((await page.locator('.home-context').boundingBox())!.width);
+          expect(bounds!.width).toBeLessThanOrEqual((await page.locator('.home-personal').boundingBox())!.width);
         }
         if(width<700){
           const actions=page.locator('.home-member-actions'),bounds=await actions.boundingBox();

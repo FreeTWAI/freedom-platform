@@ -170,7 +170,7 @@ for (const [index, language] of languages.entries()) {
       await expect(status).toContainText(results[index]);
       await expect(status).toContainText('0');
       await expect(status).not.toContainText('沒有符合的功能');
-      await expect(contentSearch).toBeVisible();
+      await expect(contentSearch).toHaveCount(0);
       await search.dispatchEvent('keydown',{key:'Escape',isComposing:true,keyCode:229});
       await expect(search).toHaveValue('zz-no-feature-93275');
       await expect(trigger).toHaveAttribute('aria-expanded','true');
@@ -196,7 +196,7 @@ for (const [index, language] of languages.entries()) {
       await search.fill('   ');await expect(contentSearch).toHaveCount(0);
       await search.fill(language.home);
       await expect(menu.getByRole('region',{name:results[index]}).getByRole('button',{name:language.home,exact:true})).toBeVisible();
-      await expect(contentSearch).toBeVisible();
+      await expect(contentSearch).toHaveCount(0);
       const original='  資安 GitHub & C++ #?= / 🛠  ';
       let contentReads=0;page.on('request',request=>{if(new URL(request.url()).pathname==='/api/v1/community-search')contentReads++;});
       await search.fill(original);
@@ -212,8 +212,10 @@ for (const [index, language] of languages.entries()) {
       await expect(trigger).toHaveAttribute('aria-expanded','true');
       expect(page.url()).toBe(before);expect(contentReads).toBe(0);
       const request=page.waitForRequest(request=>new URL(request.url()).pathname==='/api/v1/community-search'&&new URL(request.url()).searchParams.get('q')===original);
-      // The explicit secondary action, not Enter in feature search, starts content search.
-      await contentSearch.focus();await contentSearch.press('Enter');await request;
+      // Content search owns its own input; feature search never hands off the query.
+      await trigger.click();
+      const contentInput=page.getByRole('searchbox',{name:'關鍵字',exact:true});
+      await contentInput.fill(original);await contentInput.press('Enter');await request;
       await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue(original);
       await expect.poll(()=>new URLSearchParams(new URL(page.url()).hash.split('?')[1]).get('q')).toBe(original);
       await expect(trigger).toHaveAttribute('aria-expanded','false');
@@ -237,7 +239,7 @@ test('Safari Escape with keyCode 229 alone keeps the feature query and menu open
   await expect(trigger).toHaveAttribute('aria-expanded','true');await expect(search).toBeFocused();
 });
 
-for(const [index,width] of [320,390,1280].entries())test(`${width}px content search handoff closes navigation and retains query history`,async({page})=>{
+for(const [index,width] of [320,390,1280].entries())test(`${width}px content search owns its search box and retains query history`,async({page})=>{
   await page.setViewportSize({width,height:844});await login(page);
   await page.locator('.settings-menu-button').click();await openSettingsPanel(page,'appearance');
   await page.getByRole('menuitemradio',{name:['自由工坊－明亮','自由工坊－夜航','自由工坊－敘生'][index],exact:true}).click();
@@ -248,9 +250,9 @@ for(const [index,width] of [320,390,1280].entries())test(`${width}px content sea
   const original='  資安 GitHub & C++ #?= / 🛠  ';
   for(const query of [original,'作品']){
     await openExploreFeatureSearch(page);await expect(search).toHaveValue('');await search.fill(query);
-    await expect(handoff).toBeVisible();await contained(page,handoff);
-    const box=(await handoff.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);
-    await handoff.click();
+    await expect(handoff).toHaveCount(0);await trigger.click();
+    await page.getByRole('searchbox',{name:'關鍵字',exact:true}).fill(query);
+    await page.getByRole('region',{name:'社群內容搜尋條件'}).getByRole('button',{name:'搜尋',exact:true}).click();
     await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue(query);
     await expect(page.getByRole('region',{name:'社群內容搜尋結果',exact:true})).toHaveAttribute('aria-busy','false');
     await expect(trigger).toHaveAttribute('aria-expanded','false');
@@ -258,9 +260,12 @@ for(const [index,width] of [320,390,1280].entries())test(`${width}px content sea
       await expect(page.locator('.mobile-menu-toggle')).toHaveAttribute('aria-expanded','false');
       await expect(page.locator('#workspace-navigation')).toBeHidden();
     }
+    if(query===original)await navigate(page,'會員首頁');
   }
-  // A second handoff while already on the content page updates its existing controller.
+  // Typing replaces the current search URL; explicit navigation preserves each return path.
+  await page.goBack();await expect(page).toHaveURL(/#home$/);
   await page.goBack();await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue(original);
+  await page.goForward();await expect(page).toHaveURL(/#home$/);
   await page.goForward();await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue('作品');
 });
 
@@ -293,15 +298,14 @@ test('content search handoff respects unsaved page departure protection',async({
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/v1/events')writes++;});
   const menu=page.locator('.place-feature-search');
   for(const accepted of [false,true]){
-    discard=accepted;await openExploreFeatureSearch(page);
-    await menu.getByRole('searchbox',{name:'搜尋功能',exact:true}).fill('資安');
-    await menu.getByRole('button',{name:contentSearchLabels[0],exact:true}).click();
+    discard=accepted;await navigate(page,'搜尋社群內容');
     if(!accepted){
       await expect(page).toHaveURL(/#explore\/events$/);
       await expect(form.getByLabel('活動名稱',{exact:true})).toHaveValue('必須保留的搜尋測試草稿');
       expect(prompts).toBe(1);
     }
   }
+  await page.getByRole('searchbox',{name:'關鍵字',exact:true}).fill('資安');await page.getByRole('region',{name:'社群內容搜尋條件'}).getByRole('button',{name:'搜尋',exact:true}).click();
   await expect(page.getByRole('searchbox',{name:'關鍵字',exact:true})).toHaveValue('資安');
   expect(prompts).toBe(2);expect(writes).toBe(0);
 });

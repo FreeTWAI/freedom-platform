@@ -27,11 +27,11 @@ type Account={user_id:string;avatar:AvatarMetadata;nickname:string;identity_labe
 const audienceOptions: [Audience,string][]=[['public','平台公開'],['friends','平台好友'],['squad','小隊夥伴'],['guild','公會夥伴']];
 const fail=(e:unknown)=>e instanceof Error?e.message:'暫時無法讀取，請稍後再試。';
 
-type AccountPanelProps=ModulePanelProps&{registerLeave?:(guard:((hash:string|null)=>boolean)|null)=>void;children?:ReactNode|((registerLeave:RegisterSettingsLeave)=>ReactNode);profileExtras?:(registerLeave:RegisterSettingsLeave)=>ReactNode;focusProfileExtras?:boolean;focusConnections?:boolean};
+type AccountPanelProps=ModulePanelProps&{registerLeave?:(guard:((hash:string|null)=>boolean)|null)=>void;children?:ReactNode|((registerLeave:RegisterSettingsLeave)=>ReactNode);profileExtras?:(registerLeave:RegisterSettingsLeave)=>ReactNode;focusProfileExtras?:boolean;focusConnections?:boolean;publicPage?:(register:RegisterSettingsLeave)=>ReactNode;focusPublicPage?:boolean};
 export function AccountPanel(props:AccountPanelProps){
   return <AccountSettings key={`${props.session.user.user_id}:${props.client.sessionGeneration}`} {...props}/>;
 }
-function AccountSettings({client,session,onNavigate,registerLeave,children,profileExtras,focusProfileExtras,focusConnections}:AccountPanelProps){
+function AccountSettings({client,session,registerLeave,children,profileExtras,focusProfileExtras,focusConnections,publicPage,focusPublicPage}:AccountPanelProps){
   const [account,setAccount]=useState<Account|null>(null),[nickname,setNickname]=useState(''),[identityLabel,setIdentityLabel]=useState<IdentityLabel|''>(''),[contacts,setContacts]=useState<Account['contacts']|null>(null),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[member,setMember]=useState<MemberCardData|null>(null),[labels,setLabels]=useState<Record<string,string>>({});
   const mutationScope={userId:session.user.user_id,type:'account-settings'};
   const {mutate,busy,error,lastFailureUnknown}=useModuleMutation(client,mutationScope);
@@ -40,6 +40,26 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
   const childGuards=useRef(createSettingsLeaveRegistry()).current;
   const profileExtrasRef=useRef<HTMLDetailsElement>(null);
   const connectionsRef=useRef<HTMLDetailsElement>(null);
+  const [publicPageOpen,setPublicPageOpen]=useState(false);
+  // Load the optional editor on first use, then keep its draft and leave guard mounted.
+  const [publicPageVisited,setPublicPageVisited]=useState(Boolean(focusPublicPage));
+  const publicPageRef=useRef<HTMLDetailsElement>(null);
+  useEffect(()=>{
+    const details=publicPageRef.current;
+    if(!focusPublicPage||!details)return;
+    let ancestor=details.parentElement;
+    while(ancestor){if(ancestor instanceof HTMLDetailsElement)ancestor.open=true;ancestor=ancestor.parentElement;}
+    details.open=true;
+    // The shell focuses main after navigation. Reveal this explicit destination
+    // afterwards, without stealing focus from a modal or a newly used control.
+    const frame=requestAnimationFrame(()=>{
+      const summary=details.querySelector('summary');
+      const active=document.activeElement;
+      if(!details.isConnected||!details.open||legacyHash(window.location.hash)!=='#account?view=page'||document.querySelector('dialog[open],[aria-modal="true"]'))return;
+      if(active===document.body||active?.id==='main-content'||active===summary)summary?.focus();
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[focusPublicPage]);
   useEffect(()=>{
     const details=connectionsRef.current;
     if(!focusConnections||!details)return;
@@ -115,14 +135,14 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
     }finally{saving.current=false;if(live())setSaveLoading(false);}
   }
   const locked=busy||saveLoading||lastFailureUnknown;
-  const saveButton=<button type="submit" form={formId} className="btn btn-primary" disabled={locked}>{busy?'儲存中…':'儲存修改'}</button>;
+  const saveButton=<button type="submit" form={formId} className={publicPageOpen?'btn btn-secondary':'btn btn-primary'} disabled={locked}>{busy?'儲存中…':'儲存修改'}</button>;
   return <section className="module-panel account-panel account-settings" onInvalidCapture={event=>{
     // Native validation must be able to reveal/focus a field in a closed disclosure.
     let parent=(event.target as HTMLElement).parentElement;
     while(parent&&parent!==event.currentTarget){if(parent instanceof HTMLDetailsElement)parent.open=true;parent=parent.parentElement;}
   }}>
-    <div className="account-settings-intro"><p>改名字、選擇分享對象，或管理登入安全。</p>{onNavigate&&<button type="button" className="btn btn-small btn-ghost" disabled={locked} onClick={()=>onNavigate('profile')}>返回我的個人空間</button>}</div>
-    <details className="card account-settings-section"><summary><strong>分享名片設定（免登入）</strong><span>見面時出示 QR Code，先確認你願意公開的內容</span></summary><div className="stack account-settings-body"><MemberShare client={client}/></div></details>
+    <div className="account-settings-intro"><p>改名字、選擇分享對象，或管理登入安全。</p></div>
+
     <Status error={loadError||error} notice={notice}/>
     {loadError&&<button type="button" className="btn btn-small btn-ghost" disabled={locked} onClick={()=>{if(!dirty||window.confirm('放棄尚未儲存的修改，重新載入？'))void load();}}>重新載入我的資料</button>}
     {!account&&!loadError&&<p role="status">載入會員資料…</p>}
@@ -149,6 +169,8 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
         {member&&<details className="account-settings-more"><summary>查看目前的會員名片</summary><MemberCard member={member} labels={labels} client={client}/></details>}
       </div>
     </details>
+    {publicPage&&<details ref={publicPageRef} onToggle={event=>{if(event.target===event.currentTarget){setPublicPageOpen(event.currentTarget.open);if(event.currentTarget.open)setPublicPageVisited(true);}}} className="card account-settings-section" data-public-page><summary><strong>公開個人頁</strong><span>誰能看你的個人頁、介紹、封面和版面</span></summary><div className="stack account-settings-body">{publicPageVisited&&publicPage(childGuards.register)}</div></details>}
+    <details className="card account-settings-section"><summary><strong>分享名片設定（免登入）</strong><span>見面時出示 QR Code，先確認你願意公開的內容</span></summary><div className="stack account-settings-body"><MemberShare client={client}/></div></details>
     <details className="card account-settings-section">
       <summary data-guide-anchor="account:email-visibility"><strong>誰能看到我</strong><span>聯絡方式和分享名片</span></summary>
       <div className="stack account-settings-body">
@@ -160,7 +182,7 @@ function AccountSettings({client,session,onNavigate,registerLeave,children,profi
             <label className="field">{contactLabels[key]}<input form={formId} disabled={locked} aria-label={contactLabels[key]} type={key==='email'?'email':'text'} value={key==='email'?account.login_email:contacts[key].value} readOnly={key==='email'} maxLength={key==='github'?39:key==='email'?200:100} autoComplete="off" onChange={key==='email'?undefined:e=>setContacts({...contacts,[key]:{...contacts[key],value:e.target.value}})}/>{key==='email'&&<span className="field-hint">也是登入信箱</span>}</label>
             <AudienceChoices label={contactLabels[key]} form={formId} disabled={locked} audiences={contacts[key].audiences} onChange={audiences=>setContacts({...contacts,[key]:{...contacts[key],audiences}})}/>
           </div>)}</div>
-          <div className="actions"><button type="submit" form={formId} className="btn btn-primary" disabled={locked}>{busy?'儲存中…':'儲存分享對象'}</button></div>
+          <div className="actions"><button type="submit" form={formId} className={publicPageOpen?'btn btn-secondary':'btn btn-primary'} disabled={locked}>{busy?'儲存中…':'儲存分享對象'}</button></div>
         </>}
       </div>
     </details>

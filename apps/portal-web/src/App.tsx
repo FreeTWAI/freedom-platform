@@ -53,7 +53,7 @@ import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './mo
 import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from './modules/public-post-return'
 import { CommunitySearch } from './modules/CommunitySearch'
-import { guildKeyFromHash, guildActionFromHash } from './modules/guild-launchpad-route'
+import { TOOL_ONLY_GUILDS, guildKeyFromHash, guildActionFromHash } from './modules/guild-launchpad-route'
 import {SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
 import {ShareBoxLauncher as ShareLauncher} from './share/ShareBox'
 import {ShareRoute,isShareRoute} from './share/ShareRoute'
@@ -330,7 +330,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     // Authentication callbacks take precedence over every guest publication entry.
     const publicToolRoute=resolvePortalRoute(window.location.hash);
     const catalogGuild=guildKeyFromHash(window.location.hash);
-    if(!googleCallback&&!resetToken&&catalogGuild&&guildActionFromHash(window.location.hash)==='tools'&&!publicToolRoute.toolId)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={catalogGuild} site={site}/></main>;
+    if(!googleCallback&&!resetToken&&catalogGuild&&(guildActionFromHash(publicToolRoute.hash)==='tools'||TOOL_ONLY_GUILDS.some(key=>key===catalogGuild)&&[undefined,'start'].includes(guildActionFromHash(publicToolRoute.hash)))&&!publicToolRoute.toolId)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={catalogGuild} site={site}/></main>;
     const publicTool=publicToolRoute.guildKey&&publicToolRoute.toolId?guildTool(publicToolRoute.guildKey,publicToolRoute.toolId):undefined;
     if(!googleCallback&&!resetToken&&publicToolRoute.guildKey&&publicToolRoute.toolId&&!publicTool)return <main className="main stack"><BrandPoster compact/><RegisteredTools guildKey={publicToolRoute.guildKey} toolId={publicToolRoute.toolId}/></main>;
     if(!googleCallback&&!resetToken&&publicTool&&(['arcade','village'].includes(publicTool.tool_id)||publicTool.tool_id==='tester-map'&&!testerLoginRequested))return <main className="main stack"><BrandPoster compact/>
@@ -1069,7 +1069,7 @@ function Workspace({
               <PageTools pageId={consoleRoute ? 'supplier-console' : tab} client={client} compact/>
               <div className="topbar-actions"><PlatformHelperHost pageId={consoleRoute ? 'supplier-console' : tab} routeIdentity={locationHash}
                 sessionGeneration={client.sessionGeneration} availablePageIds={Object.keys(TAB_TITLES)} guildLaunchpadEnabled={site?.guild_launchpad_enabled}
-                mobileOpen={mobileOpen} messagesOpen={messagesOpen} pending={Boolean(pending)} accessExpired={Boolean(error?.accessExpired)} onNavigate={navigateFromHelper} onHelperReady={receiveHelper}/><ShareLauncher key={session.user.user_id+client.sessionGeneration} client={client} userId={session.user.user_id} onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true} onMyContent={site?.personal_content_enabled === true ? () => selectTab('my-content') : undefined}/></div>
+                mobileOpen={mobileOpen} messagesOpen={messagesOpen} pending={Boolean(pending)} accessExpired={Boolean(error?.accessExpired)} onNavigate={navigateFromHelper} onHelperReady={receiveHelper}/><ShareLauncher key={session.user.user_id+client.sessionGeneration} client={client} userId={session.user.user_id} onChoose={chooseShare} disabled={Boolean(pending)} guided={site?.unified_sharing_enabled===true} storesEnabled={site?.guild_launchpad_enabled===true}/></div>
             </header>
             <div className="workspace-content"><ToolShareResume/>
               <GuideHost key={helperScope} pageId={consoleRoute ? 'supplier-console' : tab} scopeKey={session.user.user_id}

@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { requireItems } from '../api'
 import { client, usePortal, describeError, type ActionError, type PortalContextValue } from '../portal-session'
 import { Section, EmptyState, ErrorPanel } from '../portal-feedback'
-import { WorkSharingEntry } from './WorkSharingEntry'
 import { WorkPublicSharing } from './WorkPublicSharing'
 import { looksLikeUrl, opportunityStateLabel, parseMajorToMinor } from '../format'
 import type { Opportunity, Showcase } from '../types'
@@ -122,7 +121,6 @@ export function ShowcasePanel() {
 
   return (
     <div className="panels">
-      <WorkSharingEntry current="showcase" />
       <CreateShowcaseForm pending={pending} onCreated={created => setShowcases(items => [created, ...(items ?? []).filter(item => item.showcase_id !== created.showcase_id)])} />
       <Section title="社群作品" description="看看夥伴的作品，找到適合一起合作的人。">
         <div data-share-entry="collaboration" tabIndex={-1}>
@@ -455,7 +453,7 @@ function OpportunityCard({
   )
 }
 
-export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | null; onChanged: () => void; onClose: () => void }) {
+export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | null; onChanged: (id?: string) => void; onClose: () => void }) {
   const { session } = usePortal()
   const userId = session.user.user_id
   const [{ row, input, busy, error, notice, conflict, confirm, consent, retry }, state] = useShowcaseEditor(userId, id)
@@ -500,7 +498,7 @@ export function ShowcaseDraftEditor({ id, onChanged, onClose }: { id: string | n
   async function execute(request: ShowcaseRequest) {
     const current = generation.current
     const result = await performShowcaseRequest(client, userId, state, request)
-    if (result && state.live() && current === generation.current) onChanged()
+    if (result && state.live() && current === generation.current) onChanged(result.showcase_id)
   }
   function save(event: React.FormEvent) {
     event.preventDefault()

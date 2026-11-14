@@ -21,9 +21,10 @@ export async function mountSharingFixture(page:Page, kind='probe') {
     import {MemberBlockingAction} from './apps/portal-web/src/modules/MemberBlocking';
     import {ShareLauncher,SHARE_TARGETS} from './apps/portal-web/src/ShareLauncher';
     import {MyContent} from './apps/portal-web/src/modules/MyContent';
+    import {PersonalSpace} from './apps/portal-web/src/modules/PersonalSpace';
     import {Navigation} from './apps/portal-web/src/Navigation';
     import {PlaceView} from './apps/portal-web/src/features/PlaceView';
-    import {portalHash} from './apps/portal-web/src/portal-route';
+    import {portalHash,canonicalHash} from './apps/portal-web/src/portal-route';
     import {LanguageProvider} from './apps/portal-web/src/language';
     import {CommunitySearch} from './apps/portal-web/src/modules/CommunitySearch';
     const owner='10000000-0000-4000-8000-000000000001',other='10000000-0000-4000-8000-000000000002';
@@ -35,6 +36,7 @@ export async function mountSharingFixture(page:Page, kind='probe') {
     client.get=async path=>{reads.push(path);
       if(deferReads&&(path==='/me/content'||path.startsWith('/me/skill-submissions/'))){const deferred=Promise.withResolvers();pendingReads.push({path,...deferred});return deferred.promise;}
       if(path==='/me/content')return {items:content};
+      if(path.startsWith('/members/'))return {user_id:user,is_self:true,nickname:'Synthetic member',primary_guild:null,secondary_guilds:[]};
       if(path.startsWith('/me/showcases/')){const row=showcases.find(row=>path.endsWith('/'+row.showcase_id));if(row)return row;throw Error('Missing synthetic showcase');}
       if(path.startsWith('/community-search?'))return {items:[],next_cursor:null};
       if(path==='/community-relations/bookmarks')return {items:[],next_cursor:null};
@@ -74,16 +76,17 @@ export async function mountSharingFixture(page:Page, kind='probe') {
       return <><output aria-label="Load cycles">{loads}</output><output aria-label="Error value">{error??'none'}</output><button onClick={()=>setRenders(v=>v+1)}>Unrelated render {renders}</button><button onClick={()=>setError('Synthetic error')}>Set error</button><button onClick={()=>setError(null)}>Clear error</button></>;
     }
     function Fixture(){
-      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[guided,setGuided]=useState(false),[target,setTarget]=useState(''),[contentHash,setContentHash]=useState('#me/content');render=()=>setVersion(v=>v+1);
+      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[guided,setGuided]=useState(false),[target,setTarget]=useState(''),[contentHash,setContentHash]=useState('#me');render=()=>setVersion(v=>v+1);
       const session={user:{user_id:user},csrf_token:token};
-      const selectContent=(id,hash)=>{setTarget(id);setContentHash(hash??portalHash(id));};
+      useEffect(()=>{const changed=()=>setContentHash(canonicalHash(window.location.hash||'#me'));window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
+      const selectContent=(id,hash)=>{setTarget(id);const next=hash??portalHash(id);setContentHash(next);window.location.hash=next;};
       const value={session,pending:null,error:null,mutate:()=>{throw Error('Authoring must use exact request identity')},clearError:()=>{},isMe:ref=>ref===user};
       return <><button onClick={()=>setMounted(v=>!v)}>Toggle form</button><button onClick={()=>setGuided(v=>!v)}>Toggle guidance</button>
         <output aria-label="Destination">{target}</output>
         {user&&mounted&&<PortalContext.Provider value={value}><div key={user+':'+client.sessionGeneration}>
           {${JSON.stringify(kind)}==='identity'?<ErrorIdentityProbe/>:${JSON.stringify(kind)}==='probe'?<Probe/>:${JSON.stringify(kind)}==='skill'?<SimpleSkillSubmission client={client} userId={user} onPublished={async()=>{}}/>:
           ${JSON.stringify(kind)}==='resume'?<SimpleSkillSubmission client={client} userId={user} resumeId={resumeId} onPublished={async()=>{}} onOpenDraft={id=>setTarget('advanced:'+id)}/>:
-          ${JSON.stringify(kind)}==='content'?<LanguageProvider><Navigation current="my-content" currentHash={contentHash} onSelect={selectContent} canManageGuild={false} guildLaunchpadEnabled={false} communitySearchEnabled={false} personalContentEnabled={enabled} mobileOpen/><PlaceView defaultTab="my-content" context={{client,session,locationHash:contentHash,site:{personal_content_enabled:enabled},selectTab:selectContent}} render={()=>null}/><ShareLauncher onChoose={()=>{}} onMyContent={enabled?()=>setTarget('my-content'):undefined}/><MyContent/></LanguageProvider>:
+          ${JSON.stringify(kind)}==='content'?<LanguageProvider><Navigation current="profile" currentHash={contentHash} onSelect={selectContent} canManageGuild={false} guildLaunchpadEnabled={false} communitySearchEnabled={false} personalContentEnabled={enabled} mobileOpen/><PlaceView defaultTab="profile" context={{client,session,locationHash:contentHash,site:{personal_content_enabled:enabled},selectTab:selectContent}} render={tab=>tab==='my-content'?<MyContent/>:<PersonalSpace client={client} session={session} contentEnabled={enabled}/>}/><ShareLauncher onChoose={()=>{}}/></LanguageProvider>:
           ${JSON.stringify(kind)}==='relations'?<CommunitySearch client={client} authKey={user+':'+client.sessionGeneration} relationsEnabled={enabled}/>:
           ${JSON.stringify(kind)}==='cooperation'?<CoCreationPanel client={client} session={session}/>:
           ${JSON.stringify(kind)}==='showcase'?<ShowcasePanel/>:
@@ -294,14 +297,14 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
 
   'private showcase unknown create survives Close reopen with exact replay':async page=>{
     await mountSharingFixture(page,'content');
-    await page.getByRole('button',{name:'新增私人作品草稿',exact:true}).click();
+    await page.getByRole('link',{name:'新增作品草稿',exact:true}).click();
     await page.getByLabel('作品標題',{exact:true}).fill('Unknown private draft');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     await fixture(page,f=>f.reject(0));
     await expect(page.getByRole('button',{name:'重試原請求',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'回到內容清單',exact:true}).click();
-    await page.getByRole('button',{name:'新增私人作品草稿',exact:true}).click();
+    await page.getByRole('link',{name:'新增作品草稿',exact:true}).click();
     await expect(page.getByLabel('作品標題',{exact:true})).toHaveValue('Unknown private draft');
     await page.getByRole('button',{name:'重試原請求',exact:true}).click();
     expect(await fixture(page,f=>JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]))).toBe(true);
@@ -310,7 +313,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
   },
   'saved new showcase keeps dirty input after Close and PATCHes its saved ID':async page=>{
     await mountSharingFixture(page,'content');
-    await page.getByRole('button',{name:'新增私人作品草稿',exact:true}).click();
+    await page.getByRole('link',{name:'新增作品草稿',exact:true}).click();
     await page.getByLabel('作品標題',{exact:true}).fill('Saved private draft');
     await page.getByLabel('一句話介紹',{exact:true}).fill('Private description');
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
@@ -318,7 +321,7 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await expect(page.getByRole('region',{name:'私人作品編輯'})).toContainText('私人草稿已儲存');
     await page.getByLabel('作品標題',{exact:true}).fill('Unsent private edit');
     await page.getByRole('button',{name:'回到內容清單',exact:true}).click();
-    await page.getByRole('link',{name:'編輯',exact:true}).click();
+    await page.getByRole('link',{name:'開啟原始內容',exact:true}).click();
     await expect(page.getByLabel('作品標題',{exact:true})).toHaveValue('Unsent private edit');
     await page.getByRole('button',{name:'儲存私人草稿',exact:true}).click();
     expect(await fixture(page,f=>({path:f.calls[1].path,title:f.calls[1].body.title,version:f.calls[1].options.ifMatch}))).toEqual({path:'/me/showcases/saved-private',title:'Unsent private edit',version:1});
@@ -342,18 +345,18 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     for(const width of [1280,320,390])for(const theme of ['light','dark','versefolk']){
       await page.setViewportSize({width,height:844});await mountSharingFixture(page,'content');
       await page.evaluate(value=>{document.documentElement.dataset.theme=value},theme);
-      await expect(page.getByRole('heading',{name:'草稿與已發布內容'})).toBeVisible();
+      await expect(page.getByRole('heading',{name:'我的內容'})).toBeVisible();
       const primary=page.locator('.nav-primary').getByRole('button',{name:'我的',exact:true});
       await primary.focus();await page.keyboard.press('Enter');await expect(page.getByLabel('Destination')).toHaveText('profile');
       await expect(page.locator('.nav-primary').getByRole('button',{name:'我的內容',exact:true})).toHaveCount(0);
       await expect(page.locator('.nav-more, .nav-search')).toHaveCount(0);
       const views=page.getByRole('combobox',{name:'我的檢視',exact:true});
-      await views.focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
-      await expect(views).toHaveValue('#me/content');await expect(page.getByLabel('Destination')).toHaveText('my-content');
+      await views.focus();await page.keyboard.press('Home');await page.keyboard.press('Enter');
+      await expect(views).toHaveValue('#me');await expect(page.getByLabel('Destination')).toHaveText('profile');await expect(views.getByRole('option',{name:'草稿',exact:true})).toHaveCount(0);
       const trigger=page.getByRole('button',{name:'分享或提交'});await trigger.focus();await page.keyboard.press('Enter');
       await expect(page.getByRole('dialog')).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
       await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
-      await trigger.click();await page.getByRole('dialog').getByRole('button',{name:/我的內容/}).focus();await page.keyboard.press('Enter');
+      await trigger.click();await expect(page.getByRole('dialog').getByRole('button',{name:/我的內容/})).toHaveCount(0);await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).not.toBeVisible();await expect(trigger).toBeFocused();
       await fixture(page,f=>f.enabled(false));await trigger.click();await expect(page.getByRole('dialog').getByRole('button',{name:/我的內容/})).toHaveCount(0);
       await page.keyboard.press('Escape');

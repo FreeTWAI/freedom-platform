@@ -7,8 +7,8 @@ import {installShareComposer,openShareComposer,type ShareComposeRequest,type Sha
 import './share.css';
 type Preview={kind:string;title:string;url:string;description:string;original_author:string|null};
 type Pending={key:string;body:unknown;postId?:string};
-type Props={client:PortalClient;userId:string;onChoose:(target:ShareTarget)=>void;disabled?:boolean;guided?:boolean;storesEnabled?:boolean;onMyContent?:()=>void};
-export function ShareBoxLauncher({client,userId,onChoose,disabled=false,storesEnabled=false,onMyContent}:Props){
+type Props={client:PortalClient;userId:string;onChoose:(target:ShareTarget)=>void;disabled?:boolean;guided?:boolean;storesEnabled?:boolean};
+export function ShareBoxLauncher({client,userId,onChoose,disabled=false,storesEnabled=false}:Props){
   const [request,setRequest]=useState<ShareComposeRequest|null>(null),finish=useRef<((r:ShareComposeResult)=>void)|null>(null),trigger=useRef<HTMLButtonElement>(null);
   const operation=useRef<Pending|null>(null),retainedImage=useRef<Blob|undefined>(undefined),retainedMode=useRef<'link'|'post'>('link');
   const [draft,setDraft]=useState(()=>{try{return sessionStorage.getItem(`share-draft:${userId}`)??'';}catch{return '';}});
@@ -16,10 +16,10 @@ export function ShareBoxLauncher({client,userId,onChoose,disabled=false,storesEn
   useEffect(()=>()=>{finish.current?.({status:'cancelled'});finish.current=null;},[]);
   function done(result:ShareComposeResult){finish.current?.(result);finish.current=null;setRequest(null);trigger.current?.focus();if(result.status==='published'){operation.current=null;retainedImage.current=undefined;setDraft('');try{sessionStorage.removeItem(`share-draft:${userId}`);}catch{}if(result.url&&!request?.source){if(result.url.startsWith('/events/'))window.location.assign(result.url);else window.location.hash=result.url.replace(/^\/+#/,'#');}}}
   return <><button ref={trigger} className="btn btn-primary" disabled={disabled} aria-label="分享或提交" aria-haspopup="dialog" aria-expanded={request!==null} onClick={()=>void openShareComposer()}>＋分享</button>
-    {request&&<ShareBox pending={operation} retainedImage={retainedImage} retainedMode={retainedMode} client={client} request={request} value={draft} onChange={v=>{setDraft(v);try{sessionStorage.setItem(`share-draft:${userId}`,v);}catch{/* Memory draft remains. */}}} onDone={done} onChoose={onChoose} storesEnabled={storesEnabled} onMyContent={onMyContent}/>}
+    {request&&<ShareBox pending={operation} retainedImage={retainedImage} retainedMode={retainedMode} client={client} request={request} value={draft} onChange={v=>{setDraft(v);try{sessionStorage.setItem(`share-draft:${userId}`,v);}catch{/* Memory draft remains. */}}} onDone={done} onChoose={onChoose} storesEnabled={storesEnabled}/>}
   </>;
 }
-export function ShareBox({pending,retainedImage,retainedMode,client,request,value,onChange,onDone,onChoose,storesEnabled,onMyContent}:{pending:MutableRefObject<Pending|null>;retainedImage:MutableRefObject<Blob|undefined>;retainedMode:MutableRefObject<'link'|'post'>;client:PortalClient;request:ShareComposeRequest;value:string;onChange:(v:string)=>void;onDone:(r:ShareComposeResult)=>void;onChoose:(t:ShareTarget)=>void;storesEnabled:boolean;onMyContent?:()=>void}){
+export function ShareBox({pending,retainedImage,retainedMode,client,request,value,onChange,onDone,onChoose,storesEnabled}:{pending:MutableRefObject<Pending|null>;retainedImage:MutableRefObject<Blob|undefined>;retainedMode:MutableRefObject<'link'|'post'>;client:PortalClient;request:ShareComposeRequest;value:string;onChange:(v:string)=>void;onDone:(r:ShareComposeResult)=>void;onChoose:(t:ShareTarget)=>void;storesEnabled:boolean}){
   const dialog=useRef<HTMLDialogElement>(null),inputRef=useRef<HTMLTextAreaElement>(null),id=useId(),generation=client.sessionGeneration;
   const [preview,setPreview]=useState<Preview|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[more,setMore]=useState(false),[eventMode,setEventMode]=useState(request.kind==='event');
   const [image,setImage]=useState<Blob|undefined>(retainedImage.current??request.image),[mode,setMode]=useState<'link'|'post'>(retainedMode.current);
@@ -69,7 +69,6 @@ export function ShareBox({pending,retainedImage,retainedMode,client,request,valu
       <button className="btn btn-secondary btn-small" onClick={()=>{finish({status:'cancelled'});window.location.hash=portalHash('services');}}>服務</button>
       <button className="btn btn-secondary btn-small" onClick={()=>editor('resource')}>開源投稿</button>
       <button className="btn btn-secondary btn-small" onClick={()=>editor('collaborate')}>找人合作</button><button className="btn btn-secondary btn-small" onClick={()=>editor('cocreate')}>共創邀請</button>
-      {onMyContent&&<button className="btn btn-secondary btn-small" onClick={()=>{finish({status:'cancelled'});onMyContent();}}>我的內容</button>}
     </div>:<>
       <label htmlFor={id+'-input'}>{mode==='link'?'貼上連結':'內容'}</label>
       <textarea ref={inputRef} id={id+'-input'} autoFocus value={value} maxLength={mode==='post'?500:2048} disabled={busy||!!pending.current} onChange={e=>onChange(e.target.value)} placeholder={mode==='link'?'https://github.com/…':'分享近況'} rows={3}/>

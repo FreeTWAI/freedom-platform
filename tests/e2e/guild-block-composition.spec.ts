@@ -28,7 +28,7 @@ async function signOutHere(page: Page) {
 }
 async function privateShowcase(page: Page, title: string) {
   await page.evaluate(() => {window.location.hash = 'my-content';});
-  await page.getByRole('button', {name: '新增私人作品草稿', exact: true}).click();
+  await page.getByRole('link', {name: '新增作品草稿', exact: true}).click();
   const editor = page.getByRole('region', {name: '私人作品編輯', exact: true});
   await editor.getByLabel('作品標題', {exact: true}).fill(title);
   await editor.getByLabel('一句話介紹', {exact: true}).fill('公會區塊驗收的合成私人內容');
@@ -233,7 +233,7 @@ for (const sample of [
     await openGuildSection(page, sample.title);
     await expect(page.getByText(titleA, {exact: true})).toBeVisible();
     await page.getByRole('button', {name: '查看我的內容', exact: true}).click();
-    await page.getByRole('article', {name: `作品：${titleA}`, exact: true}).getByRole('link', {name: '編輯', exact: true}).click();
+    await page.getByRole('article', {name: `作品：${titleA}`, exact: true}).getByRole('link', {name: '開啟原始內容', exact: true}).click();
     await expect(page).toHaveURL(new RegExp(`#me/content/showcases/${workId}$`));
     await expect(page.getByLabel('作品標題', {exact: true})).toHaveValue(titleA);
     await page.getByRole('button', {name: '回到內容清單', exact: true}).click();

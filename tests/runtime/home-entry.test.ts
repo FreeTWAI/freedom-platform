@@ -149,10 +149,6 @@ test('cross-tab history retains main focus, scroll and one navigation announceme
   assert.equal(h.context.tab,'skills');assert.equal(h.state.mobileOpen,false);assert.equal(h.state.focus,'main');assert.equal(h.state.scrolled,1);assert.equal(h.state.logs,1);
 });
 
-// Evaluate the actual shared entry without its CSS side effect in Node. Layout is E2E-only.
-const sharingSource=readFileSync(new URL('../../apps/portal-web/src/modules/WorkSharingEntry.tsx',import.meta.url),'utf8').replace("import './WorkSharing.css';",'').replace('export function','function');
-const WorkSharingEntry=runInNewContext(transformSync(`${sharingSource};globalThis.entry=WorkSharingEntry`,{loader:'tsx',jsxFactory:'createElement'}).code,{createElement});
-
 for(const current of ['showcase','opensource','engagement'] as const)test(`creation navigation groups ${current} under one reachable shared-work entry`,()=>{
   const html=renderToStaticMarkup(createElement(Navigation,{
     current,onSelect:()=>{},canManageGuild:false,guildLaunchpadEnabled:false,
@@ -165,11 +161,9 @@ for(const current of ['showcase','opensource','engagement'] as const)test(`creat
   assert.equal((primary.match(/aria-current="page"/g)??[]).length,1);
   const place=current==='showcase'?'探索':current==='opensource'?'動態':'公會';
   assert.ok(primary.includes('aria-current="page">'+place+'</button>'));
-  const links=renderToStaticMarkup(createElement(WorkSharingEntry,{current}));
-  for(const route of ['showcase','opensource','engagement'])assert.match(links,new RegExp(`href="#${route}"`));
-  assert.equal((links.match(/aria-current="page"/g)??[]).length,1);
-  assert.match(links,new RegExp(`href="#${current}" aria-current="page"`));
-  assert.doesNotMatch(links,/private-ai/);
+  const module=current==='showcase'?'ShowcasePanel':current==='opensource'?'OpenSourcePanels':'EngagementPanel';
+  const source=readFileSync(new URL(`../../apps/portal-web/src/modules/${module}.tsx`,import.meta.url),'utf8');
+  assert.doesNotMatch(source,/WorkSharingEntry/);
 });
 
 test('task collaboration and community tasks keep distinct names in every language',()=>{
@@ -203,7 +197,7 @@ test('inside navigation and the menu toggle are not outside dismissals',()=>{
 });
 
 for(const target of ['#profile','#profile?view=settings','#profile?member=30000000-0000-4000-8000-000000000001','#profile?member=invalid'])test(`actual history parser delegates profile route ${target} without bypassing focus or leave guards`,()=>{
- const h=navigationHistoryHarness();h.move(target);assert.equal(h.context.tab,'profile');assert.equal(h.state.mobileOpen,false);assert.equal(h.state.focus,'main');assert.equal(h.state.scrolled,1);assert.equal(h.state.logs,1);
+ const h=navigationHistoryHarness();h.move(target);assert.equal(h.context.tab,target==='#profile?view=settings'?'account':'profile');assert.equal(h.state.mobileOpen,false);assert.equal(h.state.focus,'main');assert.equal(h.state.scrolled,1);assert.equal(h.state.logs,1);
  const blocked=navigationHistoryHarness();blocked.state.blocked=true;blocked.move(target);assert.equal(blocked.context.tab,'stores');assert.equal(blocked.state.replaced,2);assert.equal(blocked.state.mobileOpen,true);
 });
 

@@ -3,7 +3,6 @@ import { requireItems } from '../api'
 import { client, usePortal, describeError, type ActionError, type PortalContextValue } from '../portal-session'
 import { ErrorPanel } from '../portal-feedback'
 import { ModuleBanner } from './ModuleBanner'
-import { WorkSharingEntry } from './WorkSharingEntry'
 import { engagementStateLabel, formatIsoLocal, formatMinor, localInputToIso, looksLikeUrl, parseMajorToMinor } from '../format'
 import type { Engagement } from '../types'
 
@@ -38,7 +37,6 @@ export function EngagementPanel() {
 
   return (
     <div className="panels">
-      <WorkSharingEntry current="engagement"/>
       <ModuleBanner eyebrow="JOURNAL / 一起完成的旅程" title="約定、交付與確認" description=""/>
       <FlowLegend />
       <p className="lede">

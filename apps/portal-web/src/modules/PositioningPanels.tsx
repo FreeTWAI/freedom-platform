@@ -84,6 +84,7 @@ const CATEGORY_ORDER=['internal','external','professional_industry'] as const;
 export function GuildsPanel({client,session,onNavigate,site,locationHash,registerPendingLeave,blockLoaders}:ModulePanelProps&{blockLoaders?:GuildBlockLoaders;site?:{guild_launchpad_enabled?:boolean;supplier_console_enabled?:boolean}|null;locationHash:string;registerPendingLeave:(guard:(()=>boolean)|null)=>void}) {
   const [query,setQuery]=useState(''),[scope,setScope]=useState<'all'|'joined'>('all'),[topic,setTopic]=useState<GuildTopic|''>('');
   const [guilds,setGuilds]=useState<GuildSummary[]>([]),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState<string|null>(null),[notice,setNotice]=useState(''),[answerGuild,setAnswerGuild]=useState('');
+  const [joinedNotice,setJoinedNotice]=useState(false);
   const [preferences,setPreferences]=useState<GuildPreferences|null>(null),[editing,setEditing]=useState(false),[secondaryDraft,setSecondaryDraft]=useState<string[]>([]);
   const [applications,setApplications]=useState<GuildApplication[]>([]),[showApply,setShowApply]=useState(false),[showAllApplications,setShowAllApplications]=useState(false);
   const [draft,setDraft]=useState({name:'',profession:'',reason:''}),[applicationSuccess,setApplicationSuccess]=useState(''),[focusDraft,setFocusDraft]=useState(false),[focusGuild,setFocusGuild]=useState<string|null>(null);
@@ -138,7 +139,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     if(settings)settings.open=true;
     button.focus();setFocusAction(null);
   },[focusAction,loading,categoryBusy,board,guilds]);
-  function announce(message:string,guildName=''){setApplicationSuccess('');setNotice(message);setAnswerGuild(guildName);}
+  function announce(message:string,guildName=''){setJoinedNotice(Boolean(guildName));setApplicationSuccess('');setNotice(message);setAnswerGuild(guildName);}
   function catalogItem(guildKey:string){return board?.catalog.categories.flatMap(group=>group.items).find(item=>item.guild_key===guildKey)??board?.catalog.pending.find(item=>item.guild_key===guildKey);}
   function slotFor(guildKey:string){return board?.view.primaries.find(item=>item.guild_key===guildKey);}
   function categoryOf(guildKey:string):CategoryName|null{const item=catalogItem(guildKey);return item?.category_review==='approved'&&item.category?item.category:null;}
@@ -286,7 +287,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
     if(result){setEditing(false);announce(removing?`已取消${g.name}的次要公會。`:`已將${g.name}設為次要公會。`);await load();window.dispatchEvent(new Event('freedom-profile-updated'));}
   }
   if(launchpadKey)return <GuildLaunchpad blockLoaders={blockLoaders} key={launchpadKey} client={client} guildKey={launchpadKey} entryAction={guildActionFromHash(locationHash)} mode="member" supplierConsoleEnabled={site?.supplier_console_enabled===true} userId={session.user.user_id} registerPendingLeave={registerPendingLeave} onBack={()=>{window.location.hash='guilds';}}/>;
-  return <section className="module-panel guilds-panel" aria-label="公會目錄">
+  return <section className="module-panel guilds-panel" aria-label="公會目錄" onClickCapture={()=>setJoinedNotice(false)} onChangeCapture={()=>setJoinedNotice(false)}>
     <section className="guild-hub-hero" aria-labelledby="guild-hub-title">
       <div className="guild-hub-intro"><h2 id="guild-hub-title">一起把專長做成作品</h2></div>
       {!loading&&!loadError&&<div className="guild-hub-next">
@@ -300,7 +301,7 @@ export function GuildsPanel({client,session,onNavigate,site,locationHash,registe
       <div className="actions"><button type="button" className="btn btn-ghost" aria-expanded={showApply} aria-controls="guild-application" data-guide-anchor="guilds:create-application" onClick={openApply}>{showApply?'收起創建申請':'申請創建公會'}</button></div>
     </header>
     {applicationSuccess&&<p ref={successRef} role="status" tabIndex={-1} className="banner status-note">{applicationSuccess}</p>}
-    {notice&&<div role="status" className="banner status-note guild-join-notice"><span>{notice}</span>{answerGuild&&<button type="button" className="btn btn-ghost" onClick={()=>onNavigate?.('positioning')}>回答{answerGuild}的小問題</button>}</div>}
+    {notice&&<div role="status" className="banner status-note guild-join-notice"><span>{notice}</span>{joinedNotice&&<a className="btn btn-secondary btn-small" href="#explore/resources">看已解鎖的技能書</a>}{answerGuild&&<button type="button" className="btn btn-ghost" onClick={()=>onNavigate?.('positioning')}>回答{answerGuild}的小問題</button>}</div>}
     {loadError&&<div className="banner banner-error" role="alert"><p>{loadError}</p><button type="button" className="btn btn-ghost" onClick={()=>void load()}>重新載入公會</button></div>}
     {error&&<div className="banner banner-error" role="alert"><p>{error}</p><button className="btn btn-ghost" disabled={busy} onClick={()=>{setEditing(false);void load();}}>重新載入公會</button></div>}
     {showApply&&<form id="guild-application" className="card stack guild-application" onSubmit={apply}><h2>申請創建公會</h2><label className="field">希望成立的公會名稱<input ref={nameRef} name="name" required minLength={2} maxLength={100} value={draft.name} onChange={event=>setDraft({...draft,name:event.target.value})}/></label><label className="field">專業／職業領域<input name="profession" required maxLength={160} value={draft.profession} onChange={event=>setDraft({...draft,profession:event.target.value})}/></label><label className="field">為什麼想成立？希望一起做什麼？<textarea name="reason" required minLength={10} maxLength={2000} value={draft.reason} onChange={event=>setDraft({...draft,reason:event.target.value})}/></label><p className="muted">由管理員確認成立與公會長人選。</p><button className="btn btn-primary" disabled={busy}>送出創建公會申請</button></form>}

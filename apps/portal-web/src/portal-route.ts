@@ -29,7 +29,7 @@ const catalog = 'guilds/guild_product_quality_supply/tools/catalog';
 const matches = (path:string, prefix:string) => path===prefix || path.startsWith(prefix+'/');
 const split = (hash:string) => {const raw=hash.replace(/^#/, ''); const i=raw.indexOf('?'); return i<0?[raw,'']:[raw.slice(0,i),raw.slice(i)];};
 export function canonicalHash(hash:string):string {
-  const [path,query]=split(hash);
+  let [path,query]=split(hash);
   const eventControl=/^(?:events|explore\/events)\/([0-9a-f-]{36})\/(attendance|attendees|schedule|waitlist-policy)$/.exec(path);
   if(eventControl)return '#explore/events/'+eventControl[1]+'/manage'+(eventControl[2]==='attendance'?'/attendance':'')+query;
   if(path==='automation')return '#automation/agent'+query;
@@ -38,7 +38,13 @@ export function canonicalHash(hash:string):string {
   if(/^stores\/[^/]+\/[^/]+\/supply(?:-orders)?(?:\/|$)/.test(path))return '#'+catalog+path.slice('stores'.length)+query;
   if(matches(path,'squad-outcomes'))return '#me/teams/outcomes'+path.slice('squad-outcomes'.length)+query;
   const first=path.split('/')[0] as TabId;
-  if(Object.hasOwn(LEGACY_ROUTES,first))return '#'+LEGACY_ROUTES[first]+path.slice(first.length)+query;
+  if(Object.hasOwn(LEGACY_ROUTES,first))path=LEGACY_ROUTES[first]+path.slice(first.length);
+  if(path==='me/content')path='me';
+  path=path.replace(/^(guilds\/(?:guild_games|guild_ar))\/tools$/,'$1/start');
+  if(path==='me'&&!new URLSearchParams(query).has('member')&&new URLSearchParams(query).get('view')==='settings'){
+    path='me/settings';
+    query=query.replace(/([?&])view=settings(?=&|$)/,'$1view=page');
+  }
   return '#'+path+query;
 }
 export function portalHash(tab:TabId,suffix='',query=''):string {

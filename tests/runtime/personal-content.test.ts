@@ -29,6 +29,19 @@ async function member(index:number){
   return {headers,request:(path:string,body?:unknown,version?:string,key=randomUUID(),method='POST')=>app.request(origin+'/api/v1/'+path,body===undefined?{headers}:{method,headers:{...headers,'Idempotency-Key':key,...(version?{'If-Match':`"${version}"`}:{})},body:JSON.stringify(body)})};
 }
 
+test('each member inventory excludes the other member private and published items',async()=>{
+ const a=await member(0),b=await member(1);
+ const create=async(owner:Awaited<ReturnType<typeof member>>,title:string)=>{
+  const response=await owner.request('me/showcases',{title,description:'合成私人介紹'});assert.equal(response.status,201);return await response.json() as any;
+ };
+ const first=await create(a,'合成甲草稿'),second=await create(b,'合成乙草稿');
+ const read=async(owner:Awaited<ReturnType<typeof member>>)=>(await (await owner.request('me/content')).json() as any).items.map((item:any)=>item.id);
+ assert.ok((await read(a)).includes(first.showcase_id));assert.ok(!(await read(a)).includes(second.showcase_id));
+ assert.ok((await read(b)).includes(second.showcase_id));assert.ok(!(await read(b)).includes(first.showcase_id));
+ assert.equal((await b.request('me/showcases/'+second.showcase_id+'/publish',{consent_to_share:true},second.aggregate_version)).status,200);
+ assert.ok(!(await read(a)).includes(second.showcase_id));
+});
+
 test('private showcase survives re-login and requires explicit versioned publication without duplicate effects',async()=>{
   const owner=await member(0),other=await member(1);
   const body={title:'私人作品續寫254',description:'草稿摘要不可洩漏',public_url:'https://example.com/not-a-public-platform-page'};

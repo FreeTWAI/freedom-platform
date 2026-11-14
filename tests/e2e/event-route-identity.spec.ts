@@ -216,7 +216,7 @@ for(const entry of ['path','hash'] as const)for(const status of [403,404,503] as
     const card=list.locator('article').filter({has:page.getByRole('heading',{name:routes.b.title,exact:true})});
     await expect(card).toBeVisible();
     await expect(list.getByRole('alert')).toHaveCount(0);
-    await card.getByRole('link',{name:'參與設定',exact:true}).click();
+    await card.getByRole('link',{name:'查看並報名',exact:true}).click();
     await expect(page).toHaveURL(canonicalUrl(routes.url(`/#events/${routes.b.event_id}`)));
     await joinCurrentEvent(page,routes,routes.b);
   }finally{await routes.cleanup();}

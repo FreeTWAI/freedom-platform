@@ -4,7 +4,6 @@ import { requireItems } from '../api';
 import { useModuleMutation,type ModulePanelProps } from './shared';
 import { SkillUpload,type SkillOpenRequest } from './SkillUpload';
 import { SimpleSkillSubmission } from './SimpleSkillSubmission';
-import { WorkSharingEntry } from './WorkSharingEntry';
 import {projectSkillBookPath,projectSkillDraft,type ProjectSkillBook} from './SkillPublication';
 import { GitHubAuthorFollow } from './GitHubAuthorFollow';
 
@@ -49,7 +48,6 @@ export function OpenSourcePanel({client,session,onNavigate}:ModulePanelProps) {
   },[client,session.user.user_id,projectId]);
   useEffect(()=>{setProjects([]);void refresh();return()=>{loadSequence.current++;};},[refresh]);
   return <div className="stack">
-    <WorkSharingEntry current="opensource"/>
     <SimpleSkillSubmission key={`${session.user.user_id}:${client.sessionGeneration}`} userId={session.user.user_id} resumeId={resumeId} client={client} withdrawnProjectIds={projects.filter(project=>Boolean(project.sharing_withdrawn_at)).map(project=>project.project_id)} onPublished={refresh} onOpenDraft={openSkill}/>
     <details className="card work-sharing-advanced"><summary>使用 Agent 或聊天 AI 協助整理（進階）</summary><div className="stack"><p className="hint">已有 Agent 草稿，或想讓 AI 整理介紹與分享短文，可使用原有上傳工具。</p><div className="actions"><SkillUpload client={client} onPublished={refresh} openRequest={openRequest}/></div></div></details>
     <LoadError error={loadError} retry={()=>void refresh()}/>

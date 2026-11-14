@@ -39,8 +39,10 @@ test('private settings read does not broadcast server error details or send tele
 test('profile routes reject malformed/duplicate/unknown parameters; OAuth is not a guest profile',()=>{
  assert.deepEqual(parseProfileRoute('#profile'),{kind:'workspace'});assert.deepEqual(parseProfileRoute('#profile?view=settings'),{kind:'settings'});
  assert.deepEqual(parseProfileRoute(visitorProfileHash(id)),{kind:'visitor',id});
- for(const hash of ['#profile?member=bad',`#profile?member=${id}&member=${id}`,`#profile?member=${id}&view=settings`,'#profile?view=bad','#profile?unknown=1'])assert.deepEqual(parseProfileRoute(hash),{kind:'invalid'});
+ for(const hash of ['#profile?member=bad',`#profile?member=${id}&member=${id}`,`#profile?member=${id}&view=settings`,'#profile?view=bad'])assert.deepEqual(parseProfileRoute(hash),{kind:'invalid'});
  assert.equal(parseProfileRoute('#verify-email/token'),null);
+ assert.deepEqual(parseProfileRoute('#profile?x=1'),{kind:'workspace'});
+ assert.deepEqual(parseProfileRoute('#profile?unknown=1'),{kind:'workspace'});
  for(const query of ['?code=x&state=y','?error=access_denied','?state=x'])assert.equal(canOpenGuestProfile(visitorProfileHash(id),query),false);
  assert.equal(canOpenGuestProfile(visitorProfileHash(id),''),true);
 });

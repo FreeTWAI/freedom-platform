@@ -128,7 +128,7 @@ test('PUBLIC-WORK-01 owner opt-in, mobile responsiveness, tracked /go credit, ed
     await signIn(creator.page, creator.email);
     await navigate(creator.page, '我的內容');
     const myCard = creator.page.getByRole('article').filter({ has: creator.page.getByRole('heading', { name: title, exact: true }) });
-    await myCard.getByRole('link', { name: '撤下', exact: true }).click();
+    await myCard.locator('.personal-space-more > summary').click();await myCard.getByRole('link', { name: '撤下', exact: true }).click();
     const editorToggle = creator.page.getByRole('switch', { name: /開放公開閱讀/ });
     await expect(editorToggle).toBeChecked();
 
@@ -184,7 +184,7 @@ for (const screen of ['card', 'editor'] as const) {
     if (screen === 'card') await navigate(page, '作品與合作');
     else {
       await navigate(page, '我的內容');
-      await page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) }).getByRole('link', { name: '撤下', exact: true }).click();
+      const own=page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });await own.locator('.personal-space-more > summary').click();await own.getByRole('link', { name: '撤下', exact: true }).click();
     }
     const scope = screen === 'card'
       ? page.locator(`#showcase-${first.showcase_id}`)

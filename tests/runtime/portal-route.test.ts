@@ -16,7 +16,7 @@ for(const [old,destination] of Object.entries(expected))test(`legacy ${old}: can
 });
 for(const suffix of ['','/overview','/orders','/orders/id','/orders/reservations','/payments','/payments/id','/settings','/settings/payments','/drop-ship'])test(`seller suffix ${suffix}`,()=>{const old='#stores/tenant/store'+suffix;assert.equal(legacyHash(canonicalHash(old)),old);assert.equal(resolvePortalRoute(old).toolId,'store')});
 for(const suffix of ['','/overview','/drop-ship/agreements','/drop-ship/orders','/products','/reservations','/partners','/terms','/materials','/reports','/settings','/materials/new','/materials/id','/products/new','/products/id','/reservations/id','/partners/id','/terms/id','/invalid'])test(`supplier suffix ${suffix}`,()=>{const old='#stores/tenant/store/supply'+suffix+'?filter=open';assert.equal(legacyHash(canonicalHash(old)),old);assert.equal(resolvePortalRoute(old).toolId,'catalog')});
-for(const old of ['#stores/supply','#stores/supply/setup','#stores/tenant/store/supply-orders','#reservations/shop-name/product/P1234','#reservations/shop-name/intent/id','#reservations/order/id','#my-content/showcases/id','#squad-outcomes/id','#guilds/guild_ai_vibe/start','#guilds/guild_ai_vibe/work','#guilds/guild_ai_vibe/skills','#guilds/guild_ai_vibe/tools','#guilds/guild_ai_vibe/information','#opensource?submission=id&project=other','#profile?view=settings','#account?view=connections','#account?view=recognition','#messages?guild=guild_ai_vibe'])test(`subroute ${old}`,()=>assert.equal(legacyHash(canonicalHash(old)),old));
+for(const old of ['#stores/supply','#stores/supply/setup','#stores/tenant/store/supply-orders','#reservations/shop-name/product/P1234','#reservations/shop-name/intent/id','#reservations/order/id','#my-content/showcases/id','#squad-outcomes/id','#guilds/guild_ai_vibe/start','#guilds/guild_ai_vibe/work','#guilds/guild_ai_vibe/skills','#guilds/guild_ai_vibe/tools','#guilds/guild_ai_vibe/information','#opensource?submission=id&project=other','#account?view=connections','#account?view=recognition','#messages?guild=guild_ai_vibe'])test(`subroute ${old}`,()=>assert.equal(legacyHash(canonicalHash(old)),old));
 test('guest profile remains a public projection, owner views cannot match its guest adapter',()=>{
  const id='12345678-1234-1234-1234-123456789abc';
  const publicRoute=resolvePortalRoute('#profile?member='+id);
@@ -57,3 +57,15 @@ test('native tool catalog has one owner and extends existing launchpad grammar',
   assert.equal(privateWorkId('#automation/agent?work='+id),undefined);
   assert.equal(privateWorkId('#private-ai?work=invalid'),undefined);
  });
+
+test('one owner list, editor aliases and tool-only entries are canonical and idempotent',()=>{
+ const id='12345678-1234-4234-8234-123456789abc';
+ for(const [input,expected] of [
+  ['#my-content','#me'],['#my-content?x=1','#me?x=1'],['#me/content','#me'],
+  ['#my-content/showcases/'+id,'#me/content/showcases/'+id],['#me/content/showcases/new','#me/content/showcases/new'],
+  ['#profile?view=settings','#me/settings?view=page'],['#me?view=settings','#me/settings?view=page'],
+  ['#guilds/guild_games/tools','#guilds/guild_games/start'],['#guilds/guild_ar/tools','#guilds/guild_ar/start'],
+  ['#guilds/guild_games/tools?x=1','#guilds/guild_games/start?x=1'],['#guilds/guild_ai_vibe/tools','#guilds/guild_ai_vibe/tools'],
+ ]) {assert.equal(canonicalHash(input),expected);assert.equal(canonicalHash(expected),expected);}
+ assert.equal(legacyHash('#me/settings?view=page'),'#account?view=page');
+});

@@ -79,7 +79,7 @@ for(const [label,replace] of Object.entries({null:()=>null,empty:()=>({}),array:
 });
 for(const status of [400,401,403,404,409,412,422,429])test(`unknown metadata remains frozen after later ${status} until original receipt`,async()=>{
   const h=harness();await create(h);h.submit();const first=h.writes[0];first.reject(unknown());await settle();h.submit();assert.equal(tuple(h.writes[1]),tuple(first));h.writes[1].reject(denied(status));await settle();
-  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);h.click('辦活動');assert.equal(h.fields().props.value.title,'Original title');
+  assert.equal(h.fields().props.disabled,true);assert.equal(h.leave(),false);assert.equal(h.button('辦活動'),undefined);assert.equal(h.fields().props.value.title,'Original title');
   h.submit();assert.equal(tuple(h.writes[2]),tuple(first));h.writes[2].resolve(ack(first));await settle();assert.match(text(h.view()),/活動已發布/);assert.equal(h.form(),undefined);h.cleanup();
 });
 for(const status of [400,409,412,422,429])test(`initial definitive ${status} permits correction with a new tuple`,async()=>{

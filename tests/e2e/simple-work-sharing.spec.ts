@@ -31,7 +31,7 @@ async function privateSkillMember(pool: Pool) {
 test('My Content saves a real private draft, isolates another member and resumes after re-login', async ({ page }) => {
   const title = '本人內容重新登入草稿';
   await login(page); await navigate(page, '我的內容');
-  await page.getByRole('button', { name: '新增私人作品草稿' }).click();
+  await page.getByRole('link', { name: '新增作品草稿' }).click();
   await page.getByLabel('作品標題', { exact: true }).fill(title);
   await page.getByLabel('一句話介紹', { exact: true }).fill('這份未發布的私人作品只供本人續寫。');
   await page.getByRole('button', { name: '儲存私人草稿', exact: true }).click();
@@ -46,7 +46,7 @@ test('My Content saves a real private draft, isolates another member and resumes
   await signOut(page); await login(page); await navigate(page, '我的內容');
   const own = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
   await expect(own).toContainText('僅本人可見');
-  await own.getByRole('link', { name: '編輯', exact: true }).click();
+  await own.getByRole('link', { name: '開啟原始內容', exact: true }).click();
   await expect(page.getByLabel('作品標題', { exact: true })).toHaveValue(title);
   await expect(page.getByRole('textbox', { name: '一句話介紹', exact: true })).toHaveValue('這份未發布的私人作品只供本人續寫。');
 });
@@ -193,7 +193,7 @@ test('member returns to manage a shared tool, withdraws it privately and publish
   // management detail and every mutation still use the real authorized API.
   await page.route('**/api/v1/opensource/projects',route=>route.fulfill({json:{items:[]}}));
   const managed=page.waitForResponse(response=>response.request().method()==='GET'&&/\/api\/v1\/opensource\/projects\/[0-9a-f-]+$/.test(new URL(response.url()).pathname));
-  await own.getByRole('link',{name:'管理作品',exact:true}).click();
+  await own.locator('.personal-space-more > summary').click();await own.getByRole('link',{name:'管理作品',exact:true}).click();
   card=page.getByRole('article',{name:'開源作品：重新整理的工具',exact:true});
   expect((await managed).status()).toBe(200);await expect(card).toBeFocused();
   await page.unroute('**/api/v1/opensource/projects');
@@ -291,7 +291,7 @@ test('manual skill unknown save remains retryable after My Content URL resume re
   await expect(page.getByRole('button', { name: '重試儲存私人草稿', exact: true })).toBeEnabled();
   await navigate(page, '我的內容');
   const own = page.getByRole('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
-  await own.getByRole('link', { name: '繼續', exact: true }).click();
+  await own.getByRole('link', { name: '開啟原始內容', exact: true }).click();
   await expect(page).toHaveURL(new RegExp('#home/share/resource\\?submission=' + submissionId));
   await expect(page.getByRole('button', { name: '重試儲存私人草稿', exact: true })).toBeEnabled();
   await expect(page.getByLabel('作品名稱', { exact: true })).toHaveValue(title);

@@ -18,22 +18,16 @@ export async function openPageTools(page:Page){
   }
 }
 
-/** Resize an already mounted home and wait for its responsive disclosure update. */
+/** The personal disclosure stays member-controlled at every viewport size. */
 export async function setHomeViewport(page:Page,size:{width:number;height:number}){
-  const guide=page.locator('.home-guide-disclosure');
-  await expect(guide).toBeAttached();
-  const wasWide=await page.evaluate(()=>window.matchMedia('(min-width:861px)').matches);
-  await page.setViewportSize(size);
-  const wide=size.width>=861;
-  // React applies the media change after the viewport changes. Wait before a
-  // native open click, but preserve member-opened state within the same range.
-  if(wasWide!==wide)await expect(guide).toHaveJSProperty('open',wide);
+ await expect(page.locator('.home-personal')).toBeAttached();
+ await page.setViewportSize(size);
 }
 
 /** Open the optional home guide through its visible mobile disclosure. */
 export async function openHomeGuide(page:Page){
   // Lazy home content may mount after the shell title becomes visible.
-  const guide=page.locator('.home-guide-disclosure');
+  const guide=page.locator('.home-personal');
   await expect(guide).toBeAttached();
   if(!await guide.evaluate(element=>(element as HTMLDetailsElement).open))await guide.locator(':scope > summary').click();
   await expect(guide).toHaveJSProperty('open',true);
@@ -229,11 +223,11 @@ export async function seedLegacyEventDraft(db: import('pg').Pool, eventId: strin
 /** Open feature lookup in Explore; keep its current content-query history. */
 export async function openExploreFeatureSearch(page: Page) {
   await closeChat(page);
-  if(resolvePortalRoute(new URL(page.url()).hash).place!=='explore'){
+  if(resolvePortalRoute(new URL(page.url()).hash).hash.split('?')[0]!=='#explore'){
     await openFeatureSearch(page);
     const explore=page.locator('#workspace-navigation').getByRole('button',{name:'探索',exact:true,includeHidden:true});
     await explore.click();
-    if(await explore.getAttribute('aria-current')!=='page')return;
+    if(resolvePortalRoute(new URL(page.url()).hash).hash.split('?')[0]!=='#explore')return;
   }
   const lookup=page.locator('.place-feature-search');
   await expect(lookup).toBeVisible();

@@ -71,7 +71,7 @@ test('launchpad on lists the in-site store and supply catalog before the product
     const dialog=page.getByRole('dialog',{name:'分享',exact:true});
     const labels=await dialog.locator('.share-options > button').evaluateAll(nodes=>nodes.map(node=>(node.querySelector('strong')?.textContent??node.textContent??'').trim()));
     expect(labels.slice(0,4)).toEqual(['刊登商品','供貨','上傳商品','準備商品']);
-    for(const kind of ['活動','服務','開源投稿','找人合作','共創邀請','我的內容'])expect(labels).toContain(kind);
+    for(const kind of ['活動','服務','開源投稿','找人合作','共創邀請'])expect(labels).toContain(kind);expect(labels).not.toContain('我的內容');
     expect(await dialog.evaluate(element=>element.scrollWidth<=element.clientWidth)).toBe(true);
     for(const name of ['刊登商品','供貨','上傳商品','準備商品'])expect((await dialog.getByRole('button',{name,exact:true}).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await page.mouse.move(0,0);
@@ -205,7 +205,7 @@ test('an unavailable share page reports failure, keeps retry and does not create
   await expect(box).toBeHidden();
   for(const [label,hash] of [
    ['服務','#explore/services'],['找人合作','#explore/works'],
-   ['共創邀請','#guilds/guild_ai_vibe/tools/cocreation'],['我的內容','#me/content'],
+   ['共創邀請','#guilds/guild_ai_vibe/tools/cocreation'],
   ]){
    await choose(page,'刊登商品');
    await page.getByRole('dialog',{name:'分享',exact:true}).getByRole('button',{name:label,exact:true}).click();
