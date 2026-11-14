@@ -265,8 +265,9 @@ for (const sample of [
     try {
       await page.evaluate(guild => {window.location.hash = `guilds/${guild}`;}, sample.guild);
       await expect.poll(() => captured).toBe(true);
+      // An explicit sign-out lands on the login screen (p2x-1), not on the public guild page.
       await signOutHere(page);
-      await page.getByRole('button', {name: '會員登入', exact: true}).click();
+      await expect(page.getByRole('heading', {name: '登入', exact: true})).toBeVisible();
       await page.getByLabel('電子郵件', {exact: true}).fill(otherEmail);
       await page.getByLabel('密碼', {exact: true}).fill(DEMO_PASSWORD);
       await page.getByRole('button', {name: '登入', exact: true}).click();
