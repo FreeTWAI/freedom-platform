@@ -2,7 +2,9 @@ import {useEffect, useRef, useState} from 'react';
 import {AgentHandoff} from '../modules/AgentHandoff';
 import type {PortalClient} from '../api';
 import {describeError} from '../portal-session';
+import {openShareComposer} from './share-port';
 import {promotionLink, ShareButton, type PromotionKind} from './ShareButton';
+import './share.css';
 
 type ShareResultKind =
   | 'repository'
@@ -59,6 +61,7 @@ export function MyCredit({client}: {client: PortalClient}) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [next, setNext] = useState<number | null>(null);
+  const [visibleCount, setVisibleCount] = useState(20);
   const [failedOffset, setFailedOffset] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestSeq = useRef(0);
@@ -77,8 +80,10 @@ export function MyCredit({client}: {client: PortalClient}) {
       client.sessionGeneration === generation;
     setError('');
     setFailedOffset(null);
-    if (offset === 0) setLoading(true);
-    else setLoadingMore(true);
+    if (offset === 0) {
+      setLoading(true);
+      setVisibleCount(20);
+    } else setLoadingMore(true);
     try {
       const r = await client.get<{items: ShareResultItem[]; next_offset: number | null}>(
         `/me/share-results?offset=${offset}`,
@@ -103,6 +108,7 @@ export function MyCredit({client}: {client: PortalClient}) {
     mounted.current = true;
     setItems([]);
     setNext(null);
+    setVisibleCount(20);
     setError('');
     setFailedOffset(null);
     void load(0);
@@ -113,10 +119,18 @@ export function MyCredit({client}: {client: PortalClient}) {
     };
   }, [client, generation]);
 
+  const visibleItems = items.slice(0, visibleCount);
+  const hasMore = items.length > visibleCount || next !== null;
+
+  function showMore() {
+    const nextLimit = visibleCount + 20;
+    setVisibleCount(nextLimit);
+    if (nextLimit > items.length && next !== null && !loadingMore) void load(next);
+  }
+
   return (
     <section className="share-page stack" aria-label="我的貢獻">
       <h2>我的貢獻</h2>
-      <AgentHandoff screen="credit" task="查看我的貢獻"/>
       {error && (
         <div className="share-results-error" role="alert">
           <p>{error}</p>
@@ -134,9 +148,22 @@ export function MyCredit({client}: {client: PortalClient}) {
       {loading ? (
         <p>載入中…</p>
       ) : !items.length && !error ? (
-        <p>還沒有分享。按任何東西上的「分享」開始。</p>
+        <>
+          <p>還沒有分享。</p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              void openShareComposer().then(result => {
+                if (result.status === 'published' && mounted.current) void load(0);
+              });
+            }}
+          >
+            分享
+          </button>
+        </>
       ) : (
-        items.map(item => (
+        visibleItems.map(item => (
           <article className="card share-result-card" key={item.key}>
             <div className="share-result-row">
               <div className="share-result-meta">
@@ -167,17 +194,18 @@ export function MyCredit({client}: {client: PortalClient}) {
           </article>
         ))
       )}
-      {next !== null && !loading && (
+      {hasMore && !loading && (
         <button
           type="button"
           className="btn btn-secondary btn-small"
           disabled={loadingMore}
-          onClick={() => void load(next)}
+          onClick={showMore}
         >
-          {loadingMore ? '載入中…' : '載入更多'}
+          {loadingMore ? '載入中…' : '更多'}
         </button>
       )}
-      <p className="hint">點閱：每位訪客每天最多算一次，自己點的不算。</p>
+      {items.length > 0 && <p className="hint">點閱：每位訪客每天最多算一次，自己點的不算。</p>}
+      <AgentHandoff screen="credit" task="查看我的貢獻"/>
     </section>
   );
 }

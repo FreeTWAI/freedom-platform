@@ -64,6 +64,10 @@
 .friends-panel .friends-empty{padding:1rem;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-elev)}
 .friends-panel .friends-empty h2{font-size:1rem;margin:0}
 .friends-panel .friends-empty p{color:var(--muted);margin:.4rem 0 .75rem}
+.friends-panel .friends-filters{margin-bottom:.75rem}
+.friends-panel .friends-filters>summary{display:list-item;min-height:44px;padding:.55rem .65rem;cursor:pointer;font-size:.875rem;box-sizing:border-box}
+.friends-panel .friends-filters>summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.friends-panel .friends-filters[open]>summary{margin-bottom:.5rem}
 .friends-panel .friends-manage{min-width:0;max-width:100%}
 .friends-panel .friends-manage summary{display:list-item;min-height:44px;padding:.55rem .65rem;cursor:pointer;font-size:.875rem;box-sizing:border-box}
 .friends-panel .friends-manage summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}

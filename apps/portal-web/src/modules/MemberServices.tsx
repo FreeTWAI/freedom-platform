@@ -44,7 +44,7 @@ function Cover({service}: {service: Service}) {
 }
 
 export function MemberServices({client}: {client: PortalClient}) {
-  const [category, setCategory] = useState('')
+  const [category, setCategory] = useState<ServiceCategory | ''>('')
   const [items, setItems] = useState<Service[]>([])
   const [mine, setMine] = useState<Service[]>([])
   const [limit, setLimit] = useState(SERVICE_LIMIT)
@@ -76,7 +76,7 @@ export function MemberServices({client}: {client: PortalClient}) {
     setLimit(page.limit)
     return page.items
   }, [client])
-  const load = useCallback(async (nextCategory: string, nextCursor?: string) => {
+  const load = useCallback(async (nextCategory: ServiceCategory | '', nextCursor?: string) => {
     if (nextCursor) setMore(true)
     else setLoading(true)
     setError('')
@@ -277,15 +277,13 @@ export function MemberServices({client}: {client: PortalClient}) {
       setConfirming(null)
       document.getElementById(`${controlId}-${action}`)?.focus()
     }
-    return <div className="service-actions">
-      {!paused && <a className="btn btn-ghost" href={service.public_path} target="_blank" rel="noopener noreferrer">服務頁 ↗</a>}
-      {!paused && <ShareButton title={service.title} fallbackUrl={`/services/${service.service_id}`} makeLink={promotionLink(client, 'member_service', service.service_id)} text={`${service.title}｜${service.owner.display_name}：${service.summary}`} label="分享"/>}
+    const manageControls = <>
       {service.mine && <button type="button" className="btn btn-ghost" disabled={saving || pending !== null} onClick={() => openEdit(service)}>編輯</button>}
       {service.mine && !paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'pause')}>暫停</button>}
       {service.mine && paused && <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => void act(service, 'resume')}>恢復</button>}
       {service.mine && <button id={`${controlId}-delete`} type="button" className="btn btn-ghost" disabled={saving} aria-expanded={confirmation === 'delete'} aria-controls={`${controlId}-delete-confirmation`} onClick={() => setConfirming({serviceId: service.service_id, origin, action: 'delete'})}>刪除</button>}
       {service.mine && <div id={`${controlId}-delete-confirmation`} hidden={confirmation !== 'delete'} role="group" aria-label={`刪除「${service.title}」`}>
-        <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void act(service, 'delete')}>確定刪除</button>
+        <button type="button" className="btn btn-secondary" disabled={saving} onClick={() => void act(service, 'delete')}>確定刪除</button>
         <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => cancel('delete')}>取消</button>
       </div>}
       {canHide && <button id={`${controlId}-hide`} type="button" className="btn btn-ghost" disabled={saving} aria-expanded={confirmation === 'hide'} aria-controls={`${controlId}-hide-confirmation`} aria-describedby={confirmation === 'hide' ? `${controlId}-warning` : undefined} onClick={() => setConfirming({serviceId: service.service_id, origin, action: 'hide'})}>隱藏</button>}
@@ -294,10 +292,14 @@ export function MemberServices({client}: {client: PortalClient}) {
         <button type="button" className="btn btn-ghost" disabled={saving} aria-describedby={`${controlId}-warning`} onClick={() => void act(service, 'hide')}>確定隱藏</button>
         <button type="button" className="btn btn-ghost" disabled={saving} onClick={() => cancel('hide')}>取消</button>
       </div>}
+    </>
+    return <div className="service-actions">
+      {!paused && <a className="btn btn-ghost" href={service.public_path} target="_blank" rel="noopener noreferrer">服務頁 ↗</a>}
+      {!paused && <ShareButton title={service.title} fallbackUrl={`/services/${service.service_id}`} makeLink={promotionLink(client, 'member_service', service.service_id)} text={`${service.title}｜${service.owner.display_name}：${service.summary}`} label="分享"/>}
+      {origin === 'card' ? ((service.mine || canHide) && <details className="service-more"><summary>更多</summary><div className="service-more-actions">{manageControls}</div></details>) : manageControls}
     </div>
   }
   return <section className="service-zone stack" aria-label="社員服務分享區">
-    <p className="service-intro">在這裡找社員提供的服務，先看內容、價格與服務方式；有需要再透過服務頁聯絡。若剛好適合朋友，也可以自願分享，不必為了排名推廣。</p>
     <section className="card service-mine" data-guide-anchor="services:mine" aria-label="我的服務">
       <div className="service-mine-head">
         <h2>我的服務 <span className="service-count">{mine.length}／{limit}</span></h2>
@@ -311,6 +313,7 @@ export function MemberServices({client}: {client: PortalClient}) {
           {actions(service, 'mine')}
         </li>)}
       </ul>}
+      <details className="service-help"><summary>說明</summary><p className="service-intro">在這裡找社員提供的服務，先看內容、價格與服務方式；有需要再透過服務頁聯絡。若剛好適合朋友，也可以自願分享，不必為了排名推廣。</p></details>
     </section>
     {formOpen && <form className="card service-form" onSubmit={event => void submit(event)} aria-busy={saving}>
       <h2>{editing ? '編輯服務' : '新增服務'}</h2>
@@ -358,10 +361,13 @@ export function MemberServices({client}: {client: PortalClient}) {
     </form>}
     {notice && <p className="banner banner-info" role="status">{notice}</p>}
     {!formOpen && error && <div className="banner banner-error" role="alert"><p>{error}</p><button type="button" className="btn btn-ghost" onClick={() => void load(category)}>重試</button></div>}
-    <div className="service-filters" role="group" aria-label="分類">
-      <button type="button" className="btn btn-ghost service-filter" aria-pressed={category === ''} onClick={() => setCategory('')}>全部</button>
-      {SERVICE_CATEGORIES.map(id => <button key={id} type="button" className="btn btn-ghost service-filter" aria-pressed={category === id} onClick={() => setCategory(id)}>{SERVICE_CATEGORY_LABELS[id]}</button>)}
-    </div>
+    {(items.length > 0 || Boolean(category)) && <details className="service-filters-disclosure">
+      <summary>篩選{category ? `：${SERVICE_CATEGORY_LABELS[category]}` : ''}</summary>
+      <div className="service-filters" role="group" aria-label="分類">
+        <button type="button" className="btn btn-ghost service-filter" aria-pressed={category === ''} onClick={() => setCategory('')}>全部</button>
+        {SERVICE_CATEGORIES.map(id => <button key={id} type="button" className="btn btn-ghost service-filter" aria-pressed={category === id} onClick={() => setCategory(id)}>{SERVICE_CATEGORY_LABELS[id]}</button>)}
+      </div>
+    </details>}
     {loading && <p role="status">正在載入服務…</p>}
     {!loading && items.length === 0 && <p className="empty">{category ? '這個分類還沒有服務。' : '還沒有社員分享服務。你可以先新增自己的服務。'}</p>}
     <div className="service-grid">

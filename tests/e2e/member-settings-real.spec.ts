@@ -73,8 +73,10 @@ test('two synthetic members exchange a private message and a friend notification
 
     // The GitHub task shows whatever the local server really reports; it is never started from here.
     await settings(r).click();await r.getByRole('menuitem',{name:'入門指南',exact:true}).click();await expect(r).toHaveURL(/#me\/start$/);
+    const github=await r.request.get('/api/v1/me/github').then(res=>res.json()) as {configured:boolean;connected:boolean};
     const task=r.locator('[data-task="github"]');
-    await expect(task.getByRole('status')).toHaveText(/^(尚未啟用|待完成|已完成)$/);
+    if(!github.configured&&!github.connected)await expect(task).toHaveCount(0);
+    else await expect(task.getByRole('status')).toHaveText(github.connected?'已完成':'待完成');
     await noOverflow(r);await shot(r,'tasks-320');
 
     // The sender finds the receiver through the real member search and writes plain text.

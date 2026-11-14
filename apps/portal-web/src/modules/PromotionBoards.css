@@ -32,5 +32,5 @@
 .promotion-start p{line-height:1.6}
 .promotion-destinations{display:flex;flex-wrap:wrap;gap:.5rem}
 .promotion-destinations .btn{width:auto;min-height:44px}
-.promotion-rankings>summary{cursor:pointer;min-height:44px;padding:.7rem 0;font-weight:700}
-.promotion-rankings>summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+.promotion-rankings>summary,.promotion-help>summary{cursor:pointer;min-height:44px;padding:.7rem 0;font-weight:700;box-sizing:border-box}
+.promotion-rankings>summary:focus-visible,.promotion-help>summary:focus-visible{outline:2px solid var(--green);outline-offset:3px}

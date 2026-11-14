@@ -2,7 +2,7 @@ import './WorkbenchPanel.css'
 import React, { useCallback, useEffect, useState } from 'react'
 import { requireCursorPage, requireDashboard } from '../api'
 import { client, usePortal, describeError, isOwnRef, type ActionError, type PortalContextValue } from '../portal-session'
-import { Section, EmptyState, ErrorPanel } from '../portal-feedback'
+import { Section, ErrorPanel } from '../portal-feedback'
 import { ModuleBanner } from './ModuleBanner'
 import { BenefitObservations } from './BenefitObservations'
 import {WorkContributionRoles} from './ContributionOutcomes'
@@ -88,38 +88,40 @@ export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
 
   return (
     <div className="panels">
-      <ModuleBanner eyebrow="YOUR QUESTS / 協作任務" title="認領與交付" description="" art="/art/rpg/cooperation-forge.webp"/>
+      <ModuleBanner eyebrow="協作任務" title="認領與交付" description="" art="/art/rpg/cooperation-forge.webp"/>
       <section className="summary-strip" aria-label="成果摘要">
         <div>
           <span className="summary-label">已接受成果</span>
           <strong>{dashboard.summary.accepted_count}</strong>
         </div>
-        <p>成果由合作當事人確認，不代表官方認證。</p>
+        <p>合作當事人確認，非官方認證。</p>
       </section>
 
-      <Section data-guide-anchor="workbench:current-work" title="現在進行" description="你正在處理的互助工作。">
+      <CreateWorkForm pending={pending} mutate={mutate} onCreated={load} />
+
+      <Section data-guide-anchor="workbench:current-work" title="現在進行" description="">
         <WorkItemList
           items={dashboard.now}
-          empty="目前沒有進行中的工作。可在「接下來」或「其他社群工作」認領，或在頁尾發布一張自願互助卡。"
+          empty="目前沒有進行中的工作。"
           pending={pending}
           mutate={mutate}
           onChanged={load}
         />
       </Section>
 
-      <Section title="接下來" description="即將或建議接著處理的項目。">
-        <WorkItemList items={dashboard.next} empty="接下來沒有待辦。開放中的工作會顯示在認領列表。" pending={pending} mutate={mutate} onChanged={load} />
+      <Section title="接下來" description="">
+        <WorkItemList items={dashboard.next} empty="接下來沒有待辦。" pending={pending} mutate={mutate} onChanged={load} />
       </Section>
 
-      <Section title="其他社群工作" description="未列在上方的社群工作；開放中的可直接認領。">
-        <WorkItemList items={catalog} empty="目前沒有其他社群工作。你可以在頁尾發布一張，或載入較早的工作。" pending={pending} mutate={mutate} onChanged={load} />
+      <Section title="其他社群工作" description="">
+        <WorkItemList items={catalog} empty="目前沒有其他社群工作。" pending={pending} mutate={mutate} onChanged={load} />
         {pageError&&<p role="alert" className="banner banner-error">{pageError}</p>}
         {nextCursor&&<div className="actions"><button type="button" className="btn btn-secondary btn-small workbench-load-more" disabled={loadingMore} onClick={()=>void loadMore()}>{loadingMore?'正在載入…':'載入較早的社群工作'}</button></div>}
       </Section>
 
-      <Section title="待你回饋" description="只列出目前指派給你的項目。實際貢獻者不能審自己的提交。">
+      <Section title="待你回饋" description="貢獻者不可自審。">
         {dashboard.review_queue.length === 0 ? (
-          <EmptyState title="沒有待回饋項目" body="有指派給你的提交時會出現在這裡。沒有指派就不顯示回饋操作。" />
+          <p className="empty">目前沒有待回饋項目。</p>
         ) : (
           <div className="card-grid">
             {dashboard.review_queue.map((entry) => (
@@ -129,9 +131,9 @@ export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
         )}
       </Section>
 
-      <Section title="已獲得的成果" description="當事人已接受的提交紀錄，非正式官方標示。">
+      <Section title="已獲得的成果" description="當事人確認，非官方標示。">
         {dashboard.gained.length === 0 ? (
-          <EmptyState title="還沒有已接受的成果" body="完成認領、提交並經對方接受後，會顯示在這裡。" />
+          <p className="empty">還沒有已接受的成果。</p>
         ) : (
           <div className="card-grid">
             {dashboard.gained.map((gain) => (
@@ -157,8 +159,6 @@ export function WorkbenchPanel({selectedId}:{selectedId?:string}) {
           </div>
         )}
       </Section>
-
-      <CreateWorkForm pending={pending} mutate={mutate} onCreated={load} />
     </div>
   )
 }
@@ -176,11 +176,11 @@ function WorkItemList({
   mutate: PortalContextValue['mutate']
   onChanged: () => Promise<void>
 }) {
-  if (items.length === 0) return <EmptyState title="目前沒有項目" body={empty} />
+  if (items.length === 0) return <p className="empty">{empty}</p>
   return (
     <div className="card-grid">
       {items.map((item) => (
-        <WorkItemCard key={item.work_item_id} item={item} pending={pending} mutate={mutate} onChanged={onChanged} />
+        <WorkItemCard key={item.work_item_id} item={item} pending={pending} mutate={mutate} onChanged={onChanged} primaryAction={false} />
       ))}
     </div>
   )
@@ -191,11 +191,13 @@ function WorkItemCard({
   pending,
   mutate,
   onChanged,
+  primaryAction = true,
 }: {
   item: WorkItem
   pending: string | null
   mutate: PortalContextValue['mutate']
   onChanged: () => Promise<void>
+  primaryAction?: boolean
 }) {
   const { session } = usePortal()
   const claim = item.my_claim
@@ -308,7 +310,7 @@ function WorkItemCard({
         <div className="actions">
           <button
             type="button"
-            className="btn btn-primary"
+            className={`btn ${primaryAction ? 'btn-primary' : 'btn-secondary'}`}
             disabled={busy || claimExpired || !session.user.profession_membership_ref}
             onClick={() => void claimItem()}
           >
@@ -321,7 +323,7 @@ function WorkItemCard({
       {!claim && item.state === 'open' && isOwnRef(session.user, item.owner_ref) && <p className="hint">這是你發布的工作，等待夥伴自願認領。</p>}
       {claim?.state === 'claimed' && (
         <div className="actions">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void startClaim()}>
+          <button type="button" className={`btn ${primaryAction ? 'btn-primary' : 'btn-secondary'}`} disabled={busy} onClick={() => void startClaim()}>
             開始進行
           </button>
         </div>
@@ -348,7 +350,7 @@ function WorkItemCard({
             />
             <span className="field-hint">填成果代號，例如 artifact:logo-v1。檔案另行分享，別貼含登入權限的連結或私人資料。</span>
           </label>
-          <button className="btn btn-primary" type="submit" disabled={busy}>
+          <button className={`btn ${primaryAction ? 'btn-primary' : 'btn-secondary'}`} type="submit" disabled={busy}>
             提交成果
           </button>
         </form>
@@ -433,7 +435,7 @@ function ReviewCard({
       )}
       {entry.claim.state === 'submitted' && (
         <div className="actions">
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void beginReview()}>
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void beginReview()}>
             開始回饋
           </button>
         </div>
@@ -473,7 +475,7 @@ function ReviewCard({
               disabled={busy}
             />
           </label>
-          <button className="btn btn-primary" type="submit" disabled={busy}>
+          <button className="btn btn-secondary" type="submit" disabled={busy}>
             送出決定
           </button>
         </form>
@@ -491,6 +493,7 @@ function CreateWorkForm({
   mutate: PortalContextValue['mutate']
   onCreated: () => Promise<void>
 }) {
+  const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [objective, setObjective] = useState('')
   const [acceptance, setAcceptance] = useState('')
@@ -539,11 +542,22 @@ function CreateWorkForm({
         setAcceptance('')
         setGain('')
         setWillReview(false)
+        setOpen(false)
         await onCreated()
       }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '請檢查表單')
     }
+  }
+
+  if (!open) {
+    return (
+      <div className="actions">
+        <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
+          + 新增工作卡
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -596,9 +610,14 @@ function CreateWorkForm({
           <input type="checkbox" checked={willReview} onChange={(event) => setWillReview(event.target.checked)} disabled={busy} />
           我願意驗收這件工作的提交（不承諾即時回饋，也不是官方品管）
         </label>
-        <button className="btn btn-primary" type="submit" disabled={busy}>
-          發布工作卡
-        </button>
+        <div className="actions">
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            發布工作卡
+          </button>
+          <button className="btn btn-secondary" type="button" disabled={busy} onClick={() => setOpen(false)}>
+            取消
+          </button>
+        </div>
       </form>
     </section>
   )

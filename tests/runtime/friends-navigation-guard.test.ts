@@ -198,7 +198,7 @@ for(const failure of ['network','malformed','unauthorized','server','ordinary'] 
 test('known rejection after an unknown retry does not erase the unresolved original key',async t=>{const h=fixture(t);await h.rows();h.click(h.button('接受邀請'));await h.reject(h.posts()[0],lost());h.click(h.button('確認原操作結果'));await h.reject(h.posts()[1],known());assert.equal(canLeave(h),false);h.click(h.button('確認原操作結果'));assert.equal(h.posts().length,3);for(const r of h.posts().slice(1)){assert.deepEqual(r.options,h.posts()[0].options);assert.deepEqual(r.body,h.posts()[0].body);}await h.resolve(h.posts()[2],ack());assert.equal(canLeave(h),true);});
 test('scope change, search submit and readback cannot settle an unknown original',async t=>{
  const h=fixture(t);await h.rows();h.click(h.button('接受邀請'));await h.reject(h.posts()[0],lost());
- h.click(h.button('送出的邀請'));await h.rows();assert.equal(canLeave(h),false);
+ const filters=descendants(h.container).find(n=>n.nodeName==='SUMMARY'&&n.textContent==='篩選');assert(filters);h.click(filters);h.click(h.button('送出的邀請'));await h.rows();assert.equal(canLeave(h),false);
  const form=descendants(h.container).find(n=>n.nodeName==='FORM');assert(form);flush(()=>form.dispatchEvent({type:'submit',bubbles:true}));await h.rows();assert.equal(canLeave(h),false);
  h.click(h.button('重讀好友名單'));await h.rows();assert.equal(canLeave(h),false);assert(h.button('確認原操作結果'));
  h.click(h.button('確認原操作結果'));assert.deepEqual(h.posts()[1].options,h.posts()[0].options);await h.resolve(h.posts()[1],ack());assert.equal(canLeave(h),true);
@@ -233,9 +233,9 @@ for(const outcome of ['known','unknown'] as const)test(`${outcome} rejection is 
 });
 for(const action of ['remove','decline','cancel'] as const)test(`${action} uses its enabled production controls and preserves the original command`,async t=>{
  const h=fixture(t);await h.rows();
- if(action==='remove'){h.click(h.button('我的好友'));await h.rows('accepted');const summary=descendants(h.container).find(n=>n.nodeName==='SUMMARY'&&n.textContent==='好友設定');assert(summary);h.click(summary);h.click(h.button('移除好友'));}
+ if(action==='remove'){const filters=descendants(h.container).find(n=>n.nodeName==='SUMMARY'&&n.textContent==='篩選');assert(filters);h.click(filters);h.click(h.button('我的好友'));await h.rows('accepted');const summary=descendants(h.container).find(n=>n.nodeName==='SUMMARY'&&n.textContent==='好友設定');assert(summary);h.click(summary);h.click(h.button('移除好友'));}
  else if(action==='decline')h.click(h.button('婉拒'));
- else{h.click(h.button('送出的邀請'));await h.rows();}
+ else{const filters=descendants(h.container).find(n=>n.nodeName==='SUMMARY'&&n.textContent==='篩選');assert(filters);h.click(filters);h.click(h.button('送出的邀請'));await h.rows();}
  if(action!=='cancel'){
   assert.equal(canLeave(h),true,'unsubmitted confirmation is not a pending command');h.click(h.button('取消'));assert.equal(h.posts().length,0);assert.equal(canLeave(h),true);
   h.click(h.button(action==='remove'?'移除好友':'婉拒'));

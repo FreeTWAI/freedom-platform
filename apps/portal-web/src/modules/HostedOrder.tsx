@@ -15,13 +15,14 @@ const errorText = (error: unknown) => error instanceof ApiError ? error.message 
 type Props = {client: PortalClient; locationHash: string; registerLeave: (guard: (() => boolean) | null) => void; replaceLocation: (hash: string) => void; checkoutOrders?:Omit<CheckoutOrdersProps,'client'>&{readOnly?:boolean}};
 /** Mounted with the member/session key by Workspace; no private browser persistence. */
 export function HostedOrderPage(props:Props) {
+  const [refreshTick, setRefreshTick] = useState(0);
   const checkoutOrders=props.locationHash==='#reservations'?props.checkoutOrders:undefined;
   return <>
-    {checkoutOrders&&<CheckoutOrders key={`${checkoutOrders.userId}:${props.client.sessionGeneration}`} client={props.client} {...checkoutOrders}/>}
-    {!props.checkoutOrders?.readOnly&&<LegacyHostedOrderPage {...props} {...(checkoutOrders?{separateReservations:true}:{})}/>}
+    {checkoutOrders&&<CheckoutOrders key={`${checkoutOrders.userId}:${props.client.sessionGeneration}`} client={props.client} {...checkoutOrders} onRefresh={() => setRefreshTick(n => n + 1)}/>}
+    {!props.checkoutOrders?.readOnly&&<LegacyHostedOrderPage {...props} {...(checkoutOrders?{separateReservations:true, refreshTick}:{})}/>}
   </>;
 }
-function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLocation, separateReservations}: Props&{separateReservations?:boolean}) {
+function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLocation, separateReservations, refreshTick}: Props&{separateReservations?:boolean; refreshTick?:number}) {
   const route = buyerRoute(locationHash);
   const [store, setStore] = useState<PublicStoreProjection | null>(null);
   const [ready, setReady] = useState(false), [loading, setLoading] = useState(false);
@@ -56,6 +57,12 @@ function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLoca
     void load(route);
     return () => {reads.current++;};
   }, [locationHash]);
+  const lastRefresh = useRef(refreshTick ?? 0);
+  useEffect(() => {
+    if (refreshTick === undefined || refreshTick === lastRefresh.current) return;
+    lastRefresh.current = refreshTick;
+    if (currentRoute.current?.kind === 'lookup' && !busyRef.current && !held.current) void load(currentRoute.current);
+  }, [refreshTick]);
   async function load(target: BuyerRoute | null, cursor?: string) {
     const ticket = ++reads.current; const current = () => live() && ticket === reads.current;
     setLoading(true); setError('');
@@ -173,8 +180,8 @@ function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLoca
           <p>預留截止：{formatIsoLocal(item.reservation_expires_at)}</p>
           <a className="btn btn-small btn-ghost" href={`#reservations/order/${item.order_id}`}>查看訂單</a>
         </article>)}
-        <div className="actions"><button className="btn btn-small btn-ghost" disabled={loading} onClick={() => void load(route)}>重新整理／第一頁</button>
-          {page?.next_cursor && <button className="btn btn-small btn-ghost" disabled={loading} onClick={() => void load(route, page.next_cursor!)}>下一頁</button>}</div>
+        {(!separateReservations || page?.next_cursor) && <div className="actions">{!separateReservations && <button className="btn btn-small btn-ghost" disabled={loading} onClick={() => void load(route)}>重新整理／第一頁</button>}
+          {page?.next_cursor && <button className="btn btn-small btn-ghost" disabled={loading} onClick={() => void load(route, page.next_cursor!)}>下一頁</button>}</div>}
       </section>
       <form className="stack" onSubmit={lookup}>
         <p>也可輸入你保存的預留編號，或開啟原預留連結。</p>
@@ -203,7 +210,7 @@ function LegacyHostedOrderPage({client, locationHash, registerLeave, replaceLoca
       {!unknown && error && <div className="actions"><button className="btn btn-ghost" disabled={busy || loading} onClick={() => void load(route)}>重新查詢</button></div>}
       {route.kind === 'intent' && !order && !locked && !loading && <a href={`#reservations/${route.slug}`} className="btn btn-ghost">返回商店查看預留內容</a>}
     </>}
-    <div className="actions"><a href="#reservations" className="btn btn-small btn-ghost">我的訂單</a>{route && 'slug' in route && <a href={`/shops/${route.slug}`} onClick={e => {if (!canLeave()) e.preventDefault();}}>查看公開商品頁</a>}</div>
+    {(route?.kind !== 'lookup' || (route && 'slug' in route)) && <div className="actions">{route?.kind !== 'lookup' && <a href="#reservations" className="btn btn-small btn-ghost">我的訂單</a>}{route && 'slug' in route && <a href={`/shops/${route.slug}`} onClick={e => {if (!canLeave()) e.preventDefault();}}>查看公開商品頁</a>}</div>}
   </div>;
 }
 function Lines({value}: {value: HostedOrderQuote | HostedOrder}) {

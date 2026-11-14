@@ -26,22 +26,26 @@ function AgentTokenSession({client}:{client:PortalClient}){
   }catch(e){if(live()){setError(e instanceof Error?e.message:'操作未完成');await load();}}
   finally{flight.current=false;if(live())setBusy(false);}
  }
- async function copyConnection(){
+ async function copyText(text:string){
   if(flight.current)return;flight.current=true;setBusy(true);
-  const token=/fw_agent_[A-Za-z0-9_-]{43}/.exec(secret)?.[0]??'${FREEDOM_AGENT_TOKEN}';
-  const settings={mcpServers:{'freedom-workshop':{url:`${window.location.origin}/api/v1/mcp`,headers:{Authorization:`Bearer ${token}`}}}};
-  try{await navigator.clipboard.writeText(JSON.stringify(settings,null,2));if(live()){setSecret('');setNotice('已複製');}}
+  try{await navigator.clipboard.writeText(text);if(live())setNotice('已複製');}
   catch{if(live())setNotice('無法複製，請允許剪貼簿後重試');}
   finally{flight.current=false;if(live())setBusy(false);}
  }
+ function copyConnection(){
+  const token=/fw_agent_[A-Za-z0-9_-]{43}/.exec(secret)?.[0]??'${FREEDOM_AGENT_TOKEN}';
+  const settings={mcpServers:{'freedom-workshop':{url:`${window.location.origin}/api/v1/mcp`,headers:{Authorization:`Bearer ${token}`}}}};
+  return copyText(JSON.stringify(settings,null,2));
+ }
+ const hasActiveToken=items.some(item=>!item.revoked_at&&!item.suspended_at&&Date.parse(item.expires_at)>Date.now());
  return <section className="agent-tokens stack" aria-label="Agent 連線"><h2>我的 Agent</h2>
-  {secret?<div className="stack"><label className="field">交給 Agent（僅此一次）<textarea readOnly rows={8} value={secret} autoComplete="off" spellCheck={false} onFocus={e=>e.currentTarget.select()}/></label><div className="experience-actions"><button className="btn btn-primary" disabled={busy} onClick={()=>void copyConnection()}>複製連線設定</button><button className="btn btn-ghost btn-sm" onClick={()=>setSecret('')}>已保存</button></div></div>:
+  {secret?<div className="stack"><label className="field">交給 Agent（僅此一次）<textarea readOnly rows={8} value={secret} autoComplete="off" spellCheck={false} onFocus={e=>e.currentTarget.select()}/></label><div className="experience-actions"><button type="button" className="btn btn-primary" disabled={busy} onClick={()=>void copyText(secret)}>複製這段指令</button><button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={()=>void copyConnection()}>複製連線設定</button><button type="button" className="btn btn-ghost btn-sm" onClick={()=>setSecret('')}>已保存</button></div></div>:
    <form className="stack" onSubmit={e=>{e.preventDefault();void action('/me/agent-tokens',{name,scopes},true);}}>
     <label className="field">名稱<input value={name} onChange={e=>setName(e.target.value)} maxLength={80} required disabled={busy}/></label>
     <fieldset className="agent-scopes"><legend>允許操作</legend>{(Object.keys(labels) as Scope[]).map(scope=><label key={scope}><input type="checkbox" checked={scopes.includes(scope)} disabled={busy} onChange={e=>setScopes(current=>e.target.checked?[...current,scope]:current.filter(s=>s!==scope))}/>{labels[scope]}</label>)}</fieldset>
     <button className="btn btn-primary" disabled={busy||!scopes.length}>建立金鑰</button>
    </form>}
-  {!secret&&<button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={()=>void copyConnection()}>複製連線設定</button>}
+  {!secret&&hasActiveToken&&<button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={()=>void copyConnection()}>複製連線設定</button>}
   {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
   {!loaded&&!error&&<p role="status">載入中…</p>}{loaded&&!items.length&&<p>尚無 Agent 連線</p>}
   <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={()=>void load()}>更新連線</button>
