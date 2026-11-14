@@ -7,6 +7,7 @@ import {requireCondition} from '../../packages/shared/problem.js';
 import type {Actor} from '../identity-membership/service.js';
 import {adminCommand,audit,type AdminActor,type AdminCommand} from '../platform-admin/service.js';
 import {communityCatalog} from '../community/catalog.js';
+import {bookRepositoryUrls} from '../community/book-urls.js';
 import {getSkillCollaboration,type SkillEditorial} from '../community/skill-collaboration.js';
 import {developmentGuilds,activeDevelopmentGuilds,internDevelopmentGuilds,requireSkillEditorGuild} from '../development-access/guild-eligibility.js';
 import {requireFullGuildMember} from '../positioning/member-tier.js';
@@ -86,7 +87,7 @@ export async function saveSkillEditorial(pool:Pool,input:Command,bookId:string){
  const source=book(bookId),body=editorialInput.parse(input.body);
  requireCondition(Buffer.byteLength(JSON.stringify(body),'utf8')<=12000,422,'editorial_too_large','技能書摘要與待辦合計請控制在 12 KB 內。');
  const milestones=new Set(body.milestones.map(m=>m.id)),tasks=new Set(body.tasks.map(t=>t.id));requireCondition(milestones.size===body.milestones.length&&tasks.size===body.tasks.length,422,'editorial_duplicate_id','里程碑與任務代號不可重複。');
- for(const task of body.tasks){requireCondition(task.milestone_id===null||milestones.has(task.milestone_id),422,'editorial_milestone_missing','任務必須連到已列出的里程碑。');if(task.issue_url!==null){let valid=false;try{const u=new URL(task.issue_url);valid=[source.repository_url,source.upstream_url].some(url=>u.origin==='https://github.com'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&new RegExp('^'+new URL(url).pathname.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'/issues/[1-9][0-9]*$').test(u.pathname));}catch{}requireCondition(valid,422,'editorial_issue_invalid','Issue 請連到這本技能書的工坊或原作者 GitHub 專案。');}}
+ for(const task of body.tasks){requireCondition(task.milestone_id===null||milestones.has(task.milestone_id),422,'editorial_milestone_missing','任務必須連到已列出的里程碑。');if(task.issue_url!==null){let valid=false;try{const u=new URL(task.issue_url);valid=bookRepositoryUrls(source).some(url=>u.origin==='https://github.com'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&new RegExp('^'+new URL(url).pathname.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'/issues/[1-9][0-9]*$').test(u.pathname));}catch{}requireCondition(valid,422,'editorial_issue_invalid','Issue 請連到這本技能書的工坊或原作者 GitHub 專案。');}}
  return command(pool,input,q=>requireSkillBookMaintainer(q,input.actor,bookId),async q=>{
   await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`skill-editorial/${bookId}`]);
   const prior=(await q.query('SELECT aggregate_version FROM skill_book_editorial WHERE book_id=$1 AND community_id=$2 FOR UPDATE',[bookId,input.actor.community_id])).rows[0];

@@ -1,5 +1,6 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import type {SkillBookGuide} from '../../../../modules/community/skill-book-guides';
+import {distinctCopyUrl} from '../../../../modules/community/book-urls';
 import { SkillBookCover, SkillBookStar, SkillBookSourceAccount } from './SkillBookCover';
 import {SkillBookBadges} from './SkillBookBadges';
 import {useSkillDiscovery} from './skill-discovery-client';
@@ -41,8 +42,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
   const originalAuthor=cache?.original_author??null;
   const guideCredit=guide?.author_name?`${guide.credit_role?'來源標示的'+guide.credit_role:'作者'}：${guide.author_name}`:null;
   const originalStars=typeof cache?.stars==='number'?cache.stars:null;
-  const copyUrl=httpsLink(book.fork_url)?.replace(/\/fork$/,'')||null;
-  const distinctCopy=copyUrl&&originalUrl&&copyUrl!==originalUrl?copyUrl:null;
+  const distinctCopy=originalUrl?distinctCopyUrl(httpsLink(book.fork_url),originalUrl):null;
   useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();else if(!open&&dialog.current?.open)dialog.current.close();},[open]);
   useEffect(()=>{
     if(!open||!bookId)return;

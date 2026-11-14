@@ -1,5 +1,6 @@
 import {communityAuthorGuides} from './community-author-skills.js';
 import {communityCatalog} from './catalog.js';
+import {distinctCopyUrl} from './book-urls.js';
 import repositoryIndex from '../../docs/development/repository-guidance-index.json' with {type:'json'};
 
 export type SkillEditorial={summary:string;collaboration_intro:string;milestones:{id:string;title:string}[];tasks:{id:string;title:string;description:string;acceptance:string[];issue_url:string|null;milestone_id:string|null;status:'todo'|'in_progress'|'done'}[];updated_at:string;aggregate_version:number};
@@ -59,7 +60,7 @@ const videoTasks:CollaborationTask[]=[
 ];
 export function getSkillCollaboration(id:string,editorial?:SkillEditorial|null):SkillCollaboration|null{
  const book=communityCatalog.skill_books.find(value=>value.id===id);if(!book?.guide)return null;
- const copyUrl=book.fork_url?book.fork_url.replace(/\/fork$/,''):book.repository_url;
+ const copyUrl=distinctCopyUrl(book.fork_url,book.repository_url)??book.repository_url;
  const repoName=new URL(copyUrl).pathname.slice(1);
  const metadata=repositoryIndex.repositories.find(value=>value.repository===repoName);
  // Never silently guess a branch for an unregistered repository.

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { navigate } from './navigation.js';
 import {test,expect,type Page,type Locator} from './fixtures.js';
 import type {SkillBook} from '../../modules/community/catalog';
+import {distinctCopyUrl} from '../../modules/community/book-urls.js';
 import { e2eOrigin } from '../../packages/testing/e2e-origin.js';
 
 test.beforeEach(async({page,e2eAuthPool})=>{
@@ -168,7 +169,8 @@ test('book cards credit the original GitHub author and offer direct reading acti
   await expect.poll(()=>practice.locator('.skill-intro-art').evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await expect(practice.getByRole('link',{name:'閱讀核對版本說明 ↗',exact:true})).toHaveAttribute('href',book.guide!.reading_url);
   await expect(practice.getByRole('link',{name:'Fork 原作 ↗',exact:true})).toHaveAttribute('href',`${book.upstream_url}/fork`);
-  const copyUrl=book.fork_url!.replace(/\/fork$/,'');
+  const copyUrl=distinctCopyUrl(book.fork_url,book.repository_url)!;
+  expect(copyUrl).toBeTruthy();
   await expect(practice.getByRole('link',{name:copyUrl,exact:true})).toHaveAttribute('href',copyUrl);
   for(const step of book.guide!.first_steps)await expect(practice.getByText(step,{exact:true})).toBeVisible();
   await expect(practice.getByRole('link',{name:'完整頁面 ↗',exact:true})).toHaveAttribute('href','/development/skills/social-post');
@@ -213,7 +215,8 @@ test('all public book pages and Markdown preserve beginner summaries, covers, or
   await expect(details.locator('.public-skill-source').getByRole('link',{name:example.guide!.reading_url,exact:true})).toHaveAttribute('href',example.guide!.reading_url);
   await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href',example.upstream_url);
   await expect(details.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',`${example.upstream_url}/fork`);
-  const exampleCopyUrl=example.fork_url!.replace(/\/fork$/,'');
+  const exampleCopyUrl=distinctCopyUrl(example.fork_url,example.repository_url)!;
+  expect(exampleCopyUrl).toBeTruthy();
   await expect(details.getByRole('link',{name:exampleCopyUrl,exact:true}).first()).toHaveAttribute('href',exampleCopyUrl);
   await expect(details.locator('.public-skill-cover img')).toHaveAttribute('src',example.cover_url!);
   await expect.poll(()=>details.locator('.public-skill-cover img').evaluate(image=>(image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);

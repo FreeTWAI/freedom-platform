@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {communityCatalog} from '../../modules/community/catalog.js';
+import {distinctCopyUrl} from '../../modules/community/book-urls.js';
 import {checkSkillBookUpstreams,formatSkillBookUpstreamReport,hasUpstreamFailures,validateSkillBookPin} from '../../scripts/check-skill-book-upstreams.js';
 
 test('all official books have internally consistent commit-pinned reading and evidence links',()=>{
@@ -62,8 +63,9 @@ test('a mismatched guide pin is reported before any upstream request',async()=>{
 });
 
 test('missing original repo or missing pinned commit fails without reading copy repository',async()=>{
-  const copyBook=communityCatalog.skill_books.find(item=>item.upstream_url!==item.repository_url)!;
-  const copySlug=copyBook.repository_url.replace('https://github.com/','');
+  // p3-o2: repository_url is the original; the workshop copy's address lives in fork_url.
+  const copyBook=communityCatalog.skill_books.find(item=>distinctCopyUrl(item.fork_url,item.repository_url))!;
+  const copySlug=distinctCopyUrl(copyBook.fork_url,copyBook.repository_url)!.replace('https://github.com/','');
   const origSlug=copyBook.upstream_url.replace('https://github.com/','');
   const latest='b'.repeat(40);
 
@@ -100,7 +102,8 @@ test('missing original repo or missing pinned commit fails without reading copy 
 });
 
 test('weekly check reads originals only and omits org copy install report section',async()=>{
-  const copyBook=communityCatalog.skill_books.find(item=>item.upstream_url!==item.repository_url)!;
+  // p3-o2: repository_url is the original; the workshop copy's address lives in fork_url.
+  const copyBook=communityCatalog.skill_books.find(item=>distinctCopyUrl(item.fork_url,item.repository_url))!;
   const origSlug=copyBook.upstream_url.replace('https://github.com/','');
   const requested:string[]=[];
   const checks=await checkSkillBookUpstreams([copyBook],async input=>{

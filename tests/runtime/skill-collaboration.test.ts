@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {communityCatalog} from '../../modules/community/catalog.js';
+import {distinctCopyUrl} from '../../modules/community/book-urls.js';
 import {getSkillCollaboration,type SkillEditorial} from '../../modules/community/skill-collaboration.js';
 import {developmentMap,skillAgentMarkdown,pageAgentMarkdown} from '../../modules/development/service.js';
 import {createDevelopmentRoutes} from '../../apps/platform-api/src/routes/development.js';
@@ -13,7 +14,7 @@ test('all books default contributions to their original source and keep workshop
  const map=developmentMap();assert.equal(map.skill_books.length,55);
  for(const book of communityCatalog.skill_books){
   const data=getSkillCollaboration(book.id);assert.ok(data,book.id);
-  const copyUrl=book.fork_url?book.fork_url.replace(/\/fork$/,''):book.repository_url;
+  const copyUrl=distinctCopyUrl(book.fork_url,book.repository_url)??book.repository_url;
   const metadata=map.repositories.find(repo=>repo.repository===new URL(copyUrl).pathname.slice(1))!;
   assert.equal(book.repository_url,book.upstream_url,book.id);
   assert.equal(data.repository.url,copyUrl);assert.equal(data.repository.default_branch,metadata.default_branch);

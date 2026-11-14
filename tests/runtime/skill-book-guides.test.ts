@@ -7,6 +7,7 @@ import {developmentMap,skillMarkdown,pageHtml} from '../../modules/development/s
 import {skillBookCoverUrl,skillBookStarUrl} from '../../apps/portal-web/src/modules/SkillBookCover.js';
 import {escapeHtml} from '../../packages/shared/html.js';
 import {buildBookOriginalCache} from '../../modules/shares/repository-cache.js';
+import {distinctCopyUrl,bookRepositoryUrls} from '../../modules/community/book-urls.js';
 
 test('skill page prefers the cached original licence and falls back to the catalog',()=>{
   const book=communityCatalog.skill_books[0],markdown=skillMarkdown(book.id)!;
@@ -27,7 +28,7 @@ test('every catalog and featured skill book carries a complete, specific guide w
     const upstream=new URL(book.upstream_url);
     for(const evidence of guide.source_evidence){const url=new URL(evidence.url);assert.equal(url.protocol,'https:');assert.equal(url.hostname,'github.com');assert.equal(url.username,'');assert.equal(url.pathname,`${upstream.pathname}/blob/${guide.source_commit}/${encodeURI(evidence.path)}`);}
     assert.ok(guide.source_evidence.some(evidence=>evidence.url===guide.reading_url),book.id);
-    const copyUrl=book.fork_url?book.fork_url.replace(/\/fork$/,''):book.repository_url;
+    const copyUrl=distinctCopyUrl(book.fork_url,book.repository_url)??book.repository_url;
     assert.equal(new URL(guide.contribution_url).pathname,`${new URL(copyUrl).pathname}/issues`);
     if(guide.website_url){const url=new URL(guide.website_url);assert.equal(url.protocol,'https:');assert.equal(url.username,'');}
     if(guide.quickstart){assert.ok(guide.quickstart.commands.trim());assert.match(guide.quickstart.context,/在自己.*執行/);assert.doesNotMatch(guide.quickstart.commands,/curl.*\|\s*(sh|bash)|wrangler deploy|sudo|--remote/);}
@@ -70,7 +71,7 @@ test('all 55 books expose distinct covers, original-author stars and the same be
   assert.equal(covers.size,55);
   const external=communityCatalog.skill_books.find(book=>book.id==='social-post')!;
   assert.equal(external.repository_url,external.star_url);
-  assert.notEqual(external.fork_url?.replace(/\/fork$/,''),external.star_url);
+  assert.ok(distinctCopyUrl(external.fork_url,external.star_url));
   assert.equal(external.star_url,'https://github.com/Hao0321/claude-skill-social-post');
   for(const book of skillBooksForGuild('guild_marketing'))assert.ok(book.cover_url&&book.star_url&&book.guide?.beginner);
 });
@@ -136,4 +137,13 @@ test('book Star widgets use bound metadata and fall back to upstream live data w
  assert.match(html,/href="https:\/\/github.com\/Original\/new"/);
  assert.match(html,/>12<\/span>/);
  assert.doesNotMatch(html,/github-book-metrics/);
+});
+
+test('distinctCopyUrl and bookRepositoryUrls order original before distinct copy without nulls or duplicates',()=>{
+ assert.equal(distinctCopyUrl('https://github.com/FreeTWAI/claude-skill-social-post/fork','https://github.com/Hao0321/claude-skill-social-post'),'https://github.com/FreeTWAI/claude-skill-social-post');
+ assert.equal(distinctCopyUrl('https://github.com/FreeTWAI/freedom-agent-kit/fork','https://github.com/FreeTWAI/freedom-agent-kit'),null);
+ assert.equal(distinctCopyUrl(null,'https://github.com/FreeTWAI/freedom-agent-kit'),null);
+ assert.deepEqual(bookRepositoryUrls({repository_url:'https://github.com/Hao0321/claude-skill-social-post',upstream_url:'https://github.com/Hao0321/claude-skill-social-post',fork_url:'https://github.com/FreeTWAI/claude-skill-social-post/fork'}),['https://github.com/Hao0321/claude-skill-social-post','https://github.com/FreeTWAI/claude-skill-social-post']);
+ assert.deepEqual(bookRepositoryUrls({repository_url:'https://github.com/FreeTWAI/freedom-agent-kit',upstream_url:'https://github.com/FreeTWAI/freedom-agent-kit',fork_url:'https://github.com/FreeTWAI/freedom-agent-kit/fork'}),['https://github.com/FreeTWAI/freedom-agent-kit']);
+ assert.deepEqual(bookRepositoryUrls({repository_url:null,upstream_url:'https://github.com/Original/repo',fork_url:'https://github.com/Copy/repo/fork'}),['https://github.com/Original/repo','https://github.com/Copy/repo']);
 });
