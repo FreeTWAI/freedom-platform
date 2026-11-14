@@ -424,7 +424,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   };
   const communityWithOriginalCache=async()=>({...communityCatalog,skill_books:await catalogWithOriginalCache()});
   app.route('/',createPublicGuildToolRoutes(pool,origin,runtime.guildToolSigner));
-  app.route('/',createPublicShareRoutes(pool,runtime.publicOrigin,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch},runtime.afterResponse));
+  app.route('/',createPublicShareRoutes(pool,runtime.publicOrigin,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch,get token(){return runtime.githubMetricsToken();}},runtime.afterResponse));
   app.route('/',createPublishedSkillRoutes(pool,runtime.publicOrigin,runtime.skillImageAssetStore,runtime.communityDiscoveryEnabled===true,skillEventBacklinks));
   app.route('/',createDevelopmentRoutes(id=>publicSocial.cachedMetrics(id),id=>readSkillEditorial(pool,id),async id=>(await skillDiscovery(pool)).books.find(book=>book.book_id===id),runtime.publicOrigin,id=>publicAuthorClaimForBook(pool,id),runtime.communityDiscoveryEnabled===true,skillEventBacklinks,id=>{const book=communityCatalog.skill_books.find(item=>item.id===id);return book?readBookOriginalCache(pool,toCacheInput(book)):Promise.resolve(undefined);}));
   app.route('/',createSkillInstallRoutes(options.githubSocial?.fetcher??globalThis.fetch,runtime.githubMetricsToken));
@@ -639,7 +639,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createCommerceRoutes(pool));
   app.route('/api/v1',createAgentCommerceRoutes(pool,origin,shopHost));
   app.route('/api/v1',createGuildToolRoutes(pool,origin,runtime.guildToolFetch,runtime.guildToolSigner));
-  app.route('/api/v1',createShareRoutes(pool,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch},loadSocial,runtime.afterResponse));
+  app.route('/api/v1',createShareRoutes(pool,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch,get token(){return runtime.githubMetricsToken();}},loadSocial,runtime.afterResponse));
   app.route('/api/v1', createOpenSourceRoutes(pool,runtime.githubMetricsToken,loadSocial));
   app.route('/api/v1',createCoCreationRoutes(pool,options.coCreationGitHub));
   app.route('/api/v1',createBenefitRoutes(pool));

@@ -3,7 +3,7 @@ import type {PortalClient} from '../api';
 import {useGitHubSocialStore} from '../modules/GitHubSocial';
 import {promotionLink,ShareButton,type ShareLink} from './ShareButton';
 import './share.css';
-type Page={share_id:string;ref_id?:string|null;title:string;kind:string;canonical_url:string;sharers:{display_name:string;role:string}[];repository:null|{full_name:string;url:string;description:string;readme_html:string;quick_start:string;stars:number|null;original_author:string;latest_release:{name:string;tag_name:string;html_url:string}|null;fetched_at:string|null}};
+type Page={share_id:string;ref_id?:string|null;title:string;kind:string;canonical_url:string;sharers:{display_name:string;role:string}[];repository:null|{full_name:string;url:string;description:string|null;license_spdx:string|null;homepage:string|null;topics:string[];pushed_at:string|null;forks_count:number|null;open_issues_count:number|null;subscribers_count:number|null;readme_html:string;quick_start:string;stars:number|null;original_author:string;latest_release:{name:string;tag_name:string;html_url:string}|null;fetched_at:string|null}};
 function shareTarget(client:PortalClient,page:Page):{makeLink:(()=>Promise<ShareLink>)|null;fallbackUrl:string}{
   if(page.kind==='repository'||page.kind==='link')return {makeLink:promotionLink(client,'share',page.share_id),fallbackUrl:`/s/${page.share_id}`};
   if(page.kind==='work')return {makeLink:promotionLink(client,'share',page.share_id),fallbackUrl:`/#shares/${page.share_id}`};
@@ -24,14 +24,19 @@ export function SharePage({client,id,via}:{client:PortalClient;id:string;via?:st
   if(!page)return <p role={error?'alert':'status'}>{error||'載入中…'}</p>;
   const repo=page.repository;
   const share=shareTarget(client,page);
+  const facts=repo?[repo.license_spdx?`授權：${repo.license_spdx}`:null,repo.pushed_at?`更新：${repo.pushed_at.slice(0,10)}`:null,
+    repo.forks_count!=null?`Fork：${repo.forks_count}`:null,repo.open_issues_count!=null?`Issues：${repo.open_issues_count}`:null,repo.subscribers_count!=null?`Watchers：${repo.subscribers_count}`:null].filter(Boolean):[];
   return <article className="share-page stack">
-    <header><h2>{page.title}</h2>{repo&&<p>{repo.description}</p>}</header>
+    <header><h2>{page.title}</h2></header>
     <div className="share-actions">
       {repo&&(store.account.value?.configured?<button className="btn btn-primary" disabled={busy||starred} onClick={()=>void star()}>{starred?'★ 已加星':store.account.value.connected?'☆ 加星':'連結 GitHub 加星'}</button>:<a className="btn btn-primary" href={repo.url} target="_blank" rel="noopener noreferrer">☆ GitHub 加星</a>)}
       <ShareButton title={page.title} fallbackUrl={share.fallbackUrl} makeLink={share.makeLink} label="我也要分享" buttonClassName="btn btn-secondary btn-small"/>
       <a className="btn btn-secondary btn-small" href="#me/credit">我的貢獻</a>
       {!repo&&<a className="btn btn-secondary btn-small" href={page.canonical_url}>開啟內容</a>}
     </div>
+    {repo?.description&&<p className="share-description">{repo.description}</p>}
+    {repo&&(facts.length>0||repo.homepage)&&<p className="share-facts muted">{facts.join(' · ')}{repo.homepage&&<>{facts.length>0?' · ':''}<a href={repo.homepage} target="_blank" rel="noopener noreferrer">網站</a></>}</p>}
+    {repo?.topics?.length?<div className="share-chips share-topics">{repo.topics.slice(0,5).map(topic=><span className="pill" key={topic}>{topic}</span>)}</div>:null}
     {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
     {repo&&<>
       <p>{repo.stars!==null&&<>GitHub 星數：{repo.stars} · </>}原作帳號：<a href={`https://github.com/${encodeURIComponent(repo.original_author)}`} rel="noopener noreferrer" target="_blank">{repo.original_author}</a></p>

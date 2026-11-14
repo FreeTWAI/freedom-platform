@@ -73,7 +73,7 @@ before(async () => {
   }
   workerDatabase.search = '?sslmode=disable';
   // Required by Miniflare even when the isolated socket uses local trust auth.
-  workerDatabase.password ||= 'synthetic-workerd-only';
+  workerDatabase.password ||= process.env.PGPASSWORD || 'synthetic-workerd-only';
   hyperdriveUrl = workerDatabase.href;
   png = await sharp({ create: { width: 35, height: 45, channels: 3, background: '#dd2233' } }).png().toBuffer();
   otherPng = await sharp({ create: { width: 40, height: 30, channels: 3, background: '#2266dd' } }).png().toBuffer();

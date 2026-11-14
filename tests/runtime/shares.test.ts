@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { migrate } from '../../scripts/database.js';
-import { seedLocal,DEMO_USERS,DEMO_COMMUNITY } from '../../packages/testing/seed.js';
+import { seedLocal,DEMO_USERS,DEMO_COMMUNITY,DEMO_PASSWORD } from '../../packages/testing/seed.js';
 import type { Actor } from '../../modules/identity-membership/service.js';
 import { createShare,reportShare,retractShare,shareLink,myCredit } from '../../modules/shares/service.js';
 import { appendCredit,reverseCredit } from '../../modules/shares/credit.js';
@@ -47,6 +47,40 @@ test('fetch guard rejects private shapes, redirects, failed transport, and overs
  await assert.rejects(fetchShareLink('https://example.com/',async()=>new Response('x'.repeat(1048577),{headers:{'Content-Type':'text/html'}})));
  assert.equal((await fetchShareLink('https://example.com/?utm_source=x',async()=>new Response('<title>Safe</title>',{headers:{'Content-Type':'text/html'}}))).url,'https://example.com/');
 });
+test('platform share routes send the metrics credential only to GitHub API reads',async()=>{
+ const {createApp}=await import('../../apps/platform-api/src/app.js');
+ const {DEMO_PASSWORD}=await import('../../packages/testing/seed.js');
+ const {randomBytes}=await import('node:crypto');
+ const secret=randomBytes(24).toString('hex'),calls:{url:string;authorization:string|null}[]=[];
+ const github:typeof fetch=async(input,init)=>{
+  const url=String(input);calls.push({url,authorization:new Headers(init?.headers).get('authorization')});
+  if(url.endsWith('/readme'))return new Response('<p>README</p>');
+  if(url.endsWith('/releases/latest'))return new Response(null,{status:404});
+  return Response.json({...original,id:1901,full_name:'fixture/token'});
+ };
+ const preview:typeof fetch=async(input,init)=>{
+  const url=String(input);calls.push({url,authorization:new Headers(init?.headers).get('authorization')});
+  return url.includes('/start')?new Response(null,{status:302,headers:{location:'https://elsewhere.example/final'}}):new Response('<title>Link</title>',{headers:{'Content-Type':'text/html'}});
+ };
+ const deferred:Promise<void>[]=[],origin='http://127.0.0.1:4310';
+ const app=createApp(pool,origin,'local',{githubSocial:{metricsToken:secret,fetcher:github},linkPreviewFetch:preview,afterResponse:work=>{deferred.push(work());}});
+ const login=await app.request(origin+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:'shares-0@example.com',password:DEMO_PASSWORD})});
+ assert.equal(login.status,200);const session=await login.json() as {csrf_token:string};
+ const headers={Origin:origin,Cookie:login.headers.get('set-cookie')!.split(';')[0],'X-CSRF-Token':session.csrf_token,'Content-Type':'application/json','Idempotency-Key':randomUUID()};
+ for(const body of [{kind:'repository',url:'https://github.com/fixture/token'},{kind:'link',url:'https://example.com/start'}]){
+  const response=await app.request(origin+'/api/v1/shares/preview',{method:'POST',headers,body:JSON.stringify(body)});assert.equal(response.status,200);
+ }
+ const created=await createShare(pool,cmd(actors[0],{url:'https://github.com/fixture/token'}),{fetcher:github});
+ calls.length=0;
+ const page=await app.request(origin+'/s/'+created.share_id);assert.equal(page.status,200);await Promise.all(deferred);
+ assert.ok(calls.some(call=>call.url.startsWith('https://api.github.com/')&&call.authorization===`Bearer ${secret}`));
+ calls.length=0;
+ for(const body of [{kind:'repository',url:'https://github.com/fixture/token'},{kind:'link',url:'https://example.com/start'}]){
+  const response=await app.request(origin+'/api/v1/shares/preview',{method:'POST',headers,body:JSON.stringify(body)});assert.equal(response.status,200);
+ }
+ assert.ok(calls.some(call=>call.url.startsWith('https://api.github.com/')&&call.authorization===`Bearer ${secret}`));
+ const links=calls.filter(call=>!call.url.startsWith('https://api.github.com/'));assert.equal(links.length,2);assert.ok(links.every(call=>call.authorization===null));
+});
 test('create retries, duplicate co-sharer, concurrent creates, ledger uniqueness and retraction',async()=>{
  const c=cmd(actors[0],{url:'https://github.com/fixture/original'});const first=await createShare(pool,c,context);const n=fetches;
  assert.deepEqual(await createShare(pool,c,{fetcher:async()=>{throw Error('offline');}}),first);assert.equal(fetches,n);
@@ -81,6 +115,30 @@ test('twenty per-member daily creations; retry and existing object remain allowe
  for(let i=0;i<20;i++)await createShare(pool,cmd(member,{url:`https://example.com/page/${i}`}),{previewFetch});
  await assert.rejects(createShare(pool,cmd(member,{url:'https://example.com/overflow'}),{previewFetch}),/今天/);
  const r=await createShare(pool,cmd(member,{url:'https://example.com/page/0'}),{previewFetch});assert.equal(r.created,false);
+});
+
+test('cached repository facts appear in share JSON and public HTML without a new fetch',async()=>{
+ const {createApp}=await import('../../apps/platform-api/src/app.js');
+ const source={...original,id:899,full_name:'fixture/facts',license:{spdx_id:'MIT'},homepage:'https://example.org/project?a=1&b=2',
+  topics:['one','two','three','four','five','six'],forks_count:0,open_issues_count:12,subscribers_count:5,pushed_at:'2026-01-02T03:04:05Z',language:null};
+ let reads=0;const fixture:typeof fetch=async()=>{reads++;return Response.json(source);};
+ const share=await createShare(pool,cmd(actors[0],{url:'https://github.com/fixture/facts'}),{fetcher:fixture});
+ const repoId=(await pool.query('SELECT repo_id FROM shares WHERE share_id=$1',[share.share_id])).rows[0].repo_id;
+ await pool.query("UPDATE canonical_repositories SET fetched_at=now(),refresh_after=now()+interval '1 day' WHERE repo_id=$1",[repoId]);
+ const origin='http://127.0.0.1:4310',app=createApp(pool,origin,'local',{githubSocial:{fetcher:fixture}});
+ const login=await app.request(origin+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:'shares-0@example.com',password:DEMO_PASSWORD})});
+ assert.equal(login.status,200);const cookie=login.headers.get('set-cookie')!.split(';')[0];reads=0;
+ const response=await app.request(`${origin}/api/v1/shares/${share.share_id}`,{headers:{Cookie:cookie}});assert.equal(response.status,200);
+ const json=await response.json() as any,repo=json.repository;
+ assert.equal(repo.license_spdx,'MIT');assert.equal(repo.homepage,source.homepage);assert.equal(repo.pushed_at,source.pushed_at);
+ assert.deepEqual([repo.forks_count,repo.open_issues_count,repo.subscribers_count],[0,12,5]);assert.deepEqual(repo.topics,source.topics.slice(0,5));
+ const html=await (await app.request(`${origin}/s/${share.share_id}`)).text();
+ for(const expected of ['MIT','2026-01-02','Fork：0','Issues：12','Watchers：5','>one<','>five<','https://example.org/project?a=1&amp;b=2'])assert.ok(html.includes(expected),expected);
+ assert.ok(!html.includes('>six<'));assert.equal(reads,0);
+ await pool.query("UPDATE canonical_repositories SET homepage='javascript:alert(1)',license_spdx=NULL,topics='{}',facts=facts-'metrics' WHERE repo_id=$1",[repoId]);
+ await pool.query('DELETE FROM github_repository_metrics WHERE repository_key=$1',['fixture/facts']);
+ const missing=await (await app.request(`${origin}/s/${share.share_id}`)).text();
+ for(const absent of ['javascript:alert','授權：','更新：','Fork：','Issues：','Watchers：','share-topics'])assert.ok(!missing.includes(absent),absent);
 });
 
 test('repository cache renders original README/release, caches 24h and hides a vanished upstream without automatic credit penalty',async()=>{
