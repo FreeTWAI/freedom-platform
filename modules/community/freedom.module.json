@@ -39,6 +39,7 @@
     "apps/platform-api/src/routes/member-services.ts",
     "apps/platform-api/src/routes/promotion.ts",
     "apps/platform-api/src/routes/repo-author-claims.ts",
+    "apps/portal-web/src/modules/CommunityBrand.tsx",
     "apps/portal-web/src/modules/Community.tsx",
     "apps/portal-web/src/modules/EventsPanel.tsx",
     "apps/portal-web/src/modules/EventCalendar.tsx",
