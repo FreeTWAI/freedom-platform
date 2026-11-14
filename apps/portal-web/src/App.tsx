@@ -2,7 +2,7 @@ import {RecentEvents} from './share/RecentEvents';
 import {ToolShareResume} from './frame-tools/ToolShareResume';
 import {RegisteredTools} from './frame-tools/RegisteredTools';
 import {guildTool} from './guild-tools/catalog';
-import {canonicalHash,currentLegacyHash,legacyHash,replaceLegacyAddress,resolvePortalRoute,PORTAL_PLACES} from './portal-route';
+import {canonicalHash,currentLegacyHash,legacyHash,replaceLegacyAddress,resolvePortalRoute,safePortalReturn,PORTAL_PLACES} from './portal-route';
 import {SeasonalWelcome} from './seasonal/SeasonalTheme';
 import {useSeasonalTheme} from './seasonal/useSeasonalTheme';
 import {parseProfileRoute,canOpenGuestProfile} from './modules/profile-publication-route';
@@ -47,7 +47,7 @@ import {PlatformHelperHost} from './PlatformHelperHost';
 import {GuideHost,type GuideHelperAction} from './modules/newcomer-guides/GuideHost'
 import { logConsoleEvent } from './game-console-core'
 import { consoleChannel } from './game-console-routing'
-import {AdminReports,MemberReportingProvider} from './modules/MemberReporting'
+import {AdminReportsEntry,MemberReportingProvider} from './modules/MemberReporting'
 import { BrandPoster, CommunityLinks, type SiteConfig } from './modules/Community'
 import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './modules/PublicDiscovery'
 import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
@@ -200,9 +200,11 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
   useEffect(() => {
     if (!session || !onboarding || onboarding.required && !onboarding.completed || !entryIntent) return
     // Only a chosen entry is forwarded, after the server confirms that the joining gate is complete.
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${entryIntent}`)
+    if(/^#join\/(?:supplier|showcase|tasks)$/.test(window.location.hash)){
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${entryIntent}`)
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    }
     setEntryIntent(null)
-    window.dispatchEvent(new HashChangeEvent('hashchange'))
   }, [session, onboarding, entryIntent])
 
   const applySession = useCallback((next: SessionPayload) => {
@@ -338,11 +340,9 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
       {publicTool.tool_id==='tester-map'?<a className="btn btn-secondary btn-small tester-map-back" href={canonicalHash('#tester-map')} onClick={event=>{event.preventDefault();beginTesterLogin();}}>{t('testerMap.back')}</a>:publicTool.tool_id==='village'?<a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a>:null}
       <RegisteredTools guildKey={publicTool.guild_key} tool={publicTool} site={site}><PageLoadBoundary label={publicTool.title}>{publicTool.tool_id==='arcade'?<Arcade/>:publicTool.tool_id==='village'?<NewbieVillage/>:<TesterMap reportClient={client} onLogin={beginTesterLogin}/>}</PageLoadBoundary></RegisteredTools></main>;
     if(!googleCallback&&!resetToken&&!profileLoginRequested&&profileRoute?.kind==='visitor'&&canOpenGuestProfile(locationHash,window.location.search))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><h1>個人頁</h1><VisitorProfile client={client} id={profileRoute.id} onLogin={beginProfileLogin}/><a className="btn btn-secondary btn-small" href="#home">返回自由工坊</a></main></div>;
-    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#newbie-village')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.newbie-village')}</h1><PageTools pageId="newbie-village" client={client}/></header><a className="btn btn-secondary btn-small" href="#home">{t('nv.back')}</a><PageLoadBoundary label={t('nav.newbie-village')}><NewbieVillage/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&sharedCardToken&&!memberLoginRequested)return <PublicMemberPage client={client} token={sharedCardToken} onLogin={()=>setMemberLoginRequested(true)} onReturn={returnToWorkshop}/>;
-    if(!googleCallback&&!resetToken&&['#community','#community-hub'].includes(locationHash.split('?')[0]))return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
+    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-hub')return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.community-hub')}</h1><PageTools pageId="community-hub" client={client}/></header><a className="btn btn-secondary btn-small community-hub-back" href="#home">{t('communityHub.back')}</a><PageLoadBoundary label={t('nav.community-hub')}><CommunityHub/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#community-search'&&site?.community_search_enabled===true)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>搜尋社群內容</h1><PageTools pageId="community-search" client={client}/></header><a className="btn btn-secondary btn-small community-search-action" href="#home">返回登入</a><CommunitySearch client={client} authKey={null}/></main></div>;
-    if(!googleCallback&&!resetToken&&locationHash.split('?')[0]==='#tester-map'&&!testerLoginRequested)return <div className="app-frame"><main className="main stack"><BrandPoster compact/><header className="topbar"><h1>{t('nav.tester-map')}</h1><PageTools pageId="tester-map" client={client}/></header><a className="btn btn-secondary btn-small tester-map-back" href="#tester-map" onClick={event=>{event.preventDefault();beginTesterLogin();}}>{t('testerMap.back')}</a><PageLoadBoundary label={t('nav.tester-map')}><TesterMap reportClient={client} onLogin={beginTesterLogin}/></PageLoadBoundary></main></div>;
     if(!googleCallback&&!resetToken&&publicEventId&&!eventLoginRequested)return <PublicEventPage client={client} id={publicEventId} revalidatePublic={site?.community_discovery_enabled===true} participationEnabled={site?.event_participation_enabled===true} onLogin={()=>eventLogin()} onJoin={site?.registration_enabled?()=>eventLogin('register'):undefined}/>;
     const launchpadKey=guildKeyFromHash(locationHash);
     if(!googleCallback&&!resetToken&&launchpadKey&&site?.guild_launchpad_enabled===true&&!launchpadLoginRequested)return <PageLoadBoundary label="自由工坊" resetKey={launchpadKey}><PublicGuildLaunchpad key={launchpadKey} client={client} guildKey={launchpadKey} entryAction={guildActionFromHash(locationHash)} onLogin={()=>setLaunchpadLoginRequested(true)} pageTools={<PageTools pageId="guilds" compact/>}/></PageLoadBoundary>;
@@ -363,7 +363,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
           onReturnToGuild={!resetToken&&launchpadKey&&launchpadLoginRequested&&site?.guild_launchpad_enabled===true?()=>setLaunchpadLoginRequested(false):undefined}
           onReturnToEvent={!resetToken&&publicEventId&&eventLoginRequested?returnToEvent:undefined}
           entryIntent={entryIntent}
-          onChooseEntry={intent=>{setEntryIntent(intent);window.location.hash=`join/${intent}`}}
+          onChooseEntry={intent=>{setEntryIntent(intent);if(!window.location.hash||window.location.hash==='#home'||!safePortalReturn(window.location.hash))window.location.hash=`join/${intent}`}}
           resetToken={resetToken}
           onCancelReset={()=>{clearResetHash();setResetToken(null)}}
           onPasswordReset={next=>{clearResetHash();setResetToken(null);if(next)applySession(next);else toLogin('密碼已重設。請使用新密碼登入，並輸入驗證器代碼或備用碼。')}}
@@ -382,7 +382,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
     : onboarding.required && !onboarding.completed && site?.commerce_checkout_enabled===true && locationHash==='#reservations' ? <div className="app-frame"><main className="main stack"><BrandPoster compact/><div className="card stack"><h1>我的訂單</h1><HostedOrderPage key={`${session.user.user_id}:${client.sessionGeneration}`} client={client} locationHash={locationHash} registerLeave={()=>{}} replaceLocation={()=>{}} checkoutOrders={{userId:session.user.user_id,csrfToken:session.csrf_token,readOnly:true,onSessionExpired:()=>leaveCurrentSession('登入已過期，請重新登入。')}}/><div className="actions"><a className="btn btn-small btn-ghost" href="/#home">返回工坊</a></div></div></main></div>
     : onboarding.required && !onboarding.completed ? exploring&&!onboardingStarted(session.user.user_id)
       ? <WelcomePreview client={client} name={session.user.display_name} entryLabel={publicEventId?'原本的活動報名':entryIntent?t(`intent.${entryIntent}`):undefined} onCompleted={()=>{rememberOnboarding(session.user.user_id,false);void loadOnboarding()}} onStart={()=>{rememberOnboarding(session.user.user_id,true);setExploring(false)}} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
-      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(currentLegacyHash().split('?')[0]!=='#tester-map' && !eventIdFromLocation() && parseProfileRoute(currentLegacyHash())?.kind!=='visitor' && !entryIntent && !buyerRoute(currentLegacyHash()) && !sellerOrdersRoute(currentLegacyHash()) && !sellerOrdersRoute(currentLegacyHash() + '/orders'))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
+      : <Onboarding client={client} initial={onboarding} profileName={session.user.display_name} onExplore={()=>{rememberOnboarding(session.user.user_id,false);setExploring(true)}} onCompleted={() => { rememberOnboarding(session.user.user_id,false);if(window.location.hash&&!safePortalReturn(window.location.hash))window.location.hash = 'home'; void loadOnboarding() }} onLogout={() => void client.logout(crypto.randomUUID()).then(() => leaveCurrentSession()).catch(error => setGateError(describeError(error).message))}/>
     : sharedCardToken ? <PublicMemberPage client={client} token={sharedCardToken} session={session} onLogin={()=>{}} onReturn={returnToWorkshop} onEdit={editOwnCard}/> : <>
     <AuthorClaimProvider client={client}><DevelopmentAccessProvider client={client} session={session}>
     <Workspace key={`${session.user.user_id}:${client.sessionGeneration}`}
@@ -391,7 +391,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
       onLoggedOut={() => leaveCurrentSession()}
       onSessionExpired={() => leaveCurrentSession('登入已過期，請重新登入。')}
     />
-    <AdminReports client={client}/>
+    <AdminReportsEntry client={client}/>
     </DevelopmentAccessProvider></AuthorClaimProvider>
     </>}
     </GitHubSocialProvider>
@@ -1074,7 +1074,7 @@ function Workspace({
             <div className="workspace-content"><ToolShareResume/>
               <GuideHost key={helperScope} pageId={consoleRoute ? 'supplier-console' : tab} scopeKey={session.user.user_id}
                 helperAction={helperReady?.scope===helperScope?helperReady.action:undefined}
-                memberAccess={!error?.accessExpired && !mobileOpen && !pending && (tab !== 'guild-workspace' || canManageGuild) && (!['business', 'stores'].includes(tab) || site?.guild_launchpad_enabled === true)}/>
+                memberAccess={!error?.accessExpired && !mobileOpen && !pending && (tab !== 'guild-workspace' || canManageGuild) && (tab !== 'stores' || site?.guild_launchpad_enabled === true)}/>
               <main ref={mainContent} className="workspace-page" id="main-content" tabIndex={-1} aria-labelledby="workspace-page-title">
             {(shareEntry||shareNotice)&&<p className="share-entry-status" role="status">{shareEntry?`正在開啟${SHARE_TARGETS[shareEntry.target].label}…`:shareNotice}</p>}
             {error && (

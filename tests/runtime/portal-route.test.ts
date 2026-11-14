@@ -4,7 +4,7 @@ import {canonicalHash,legacyHash,resolvePortalRoute,privateWorkId,LEGACY_ROUTES,
 import {canOpenGuestProfile} from '../../apps/portal-web/src/modules/profile-publication-route';
 const expected = {
  home:'home',social:'home',profile:'me',account:'me/settings','my-content':'me/content',todos:'me/start',
- members:'explore/people',skills:'explore/resources',showcase:'explore/works',events:'explore/events',services:'explore/services',highlights:'explore/events/results','community-search':'explore',opensource:'home/share/resource',guilds:'guilds',community:'guilds/community','community-hub':'guilds/community','private-ai':'automation/work',messages:'me/messages',friends:'me/messages/contacts',squads:'me/teams',business:'me/workspaces',reservations:'me/orders',promotion:'me/credit',
+ members:'explore/people',skills:'explore/resources',showcase:'explore/works',events:'explore/events',services:'explore/services',highlights:'explore/events/results','community-search':'explore',opensource:'home/share/resource',guilds:'guilds',community:'guilds/community','community-hub':'guilds/community/hub','private-ai':'automation/work',messages:'me/messages',friends:'me/messages/contacts',squads:'me/teams',business:'me/workspaces',reservations:'me/orders',promotion:'me/credit',
  stores:'guilds/guild_commerce_sales/tools/store',retail:'guilds/guild_commerce_sales/tools/retail-kit','virtual-commerce':'guilds/guild_commerce_sales/tools/rehearsal',supplier:'guilds/guild_product_quality_supply/tools/supplier-kit',marketing:'guilds/guild_marketing/tools/marketing',cocreation:'guilds/guild_ai_vibe/tools/cocreation',workbench:'guilds/guild_ai_project/tools/work',tasks:'guilds/guild_ai_project/tools/work/discovery',engagement:'guilds/guild_opportunity_partnership/tools/engagement',positioning:'guilds/guild_talent_direction/tools/assessment','newbie-village':'guilds/guild_talent_direction/tools/village','tester-map':'guilds/guild_custom_032fd02e754549e9b1e056e2b95b8d50/tools/tester-map',ar:'guilds/guild_ar/tools/ar','guild-workspace':'guilds/manage',
 };
 test('exactly five places and all 38 historical tabs',()=>{assert.equal(PORTAL_PLACES.length,5);assert.equal(Object.keys(expected).length,38);assert.deepEqual(LEGACY_ROUTES,expected)});
@@ -12,7 +12,7 @@ for(const [old,destination] of Object.entries(expected))test(`legacy ${old}: can
  const hash=`#${old}/synthetic-id?q=%E4%BD%A0+%26&type=work&draft=draft-1`;
  const result=canonicalHash(hash);assert.equal(result,`#${destination}/synthetic-id?q=%E4%BD%A0+%26&type=work&draft=draft-1`);
  assert.equal(canonicalHash(result),result);
- assert.equal(legacyHash(result),hash.replace(/^#social/, '#home').replace(/^#community-hub/,'#community'));
+ assert.equal(legacyHash(result),hash.replace(/^#social/, '#home'));
 });
 for(const suffix of ['','/overview','/orders','/orders/id','/orders/reservations','/payments','/payments/id','/settings','/settings/payments','/drop-ship'])test(`seller suffix ${suffix}`,()=>{const old='#stores/tenant/store'+suffix;assert.equal(legacyHash(canonicalHash(old)),old);assert.equal(resolvePortalRoute(old).toolId,'store')});
 for(const suffix of ['','/overview','/drop-ship/agreements','/drop-ship/orders','/products','/reservations','/partners','/terms','/materials','/reports','/settings','/materials/new','/materials/id','/products/new','/products/id','/reservations/id','/partners/id','/terms/id','/invalid'])test(`supplier suffix ${suffix}`,()=>{const old='#stores/tenant/store/supply'+suffix+'?filter=open';assert.equal(legacyHash(canonicalHash(old)),old);assert.equal(resolvePortalRoute(old).toolId,'catalog')});
@@ -68,4 +68,17 @@ test('one owner list, editor aliases and tool-only entries are canonical and ide
   ['#guilds/guild_games/tools?x=1','#guilds/guild_games/start?x=1'],['#guilds/guild_ai_vibe/tools','#guilds/guild_ai_vibe/tools'],
  ]) {assert.equal(canonicalHash(input),expected);assert.equal(canonicalHash(expected),expected);}
  assert.equal(legacyHash('#me/settings?view=page'),'#account?view=page');
+});
+
+test('community hub has a distinct canonical destination and preserves its alias',()=>{
+ assert.equal(canonicalHash('#community-hub'),'#guilds/community/hub');
+ assert.equal(legacyHash('#guilds/community/hub'),'#community-hub');
+ assert.equal(resolvePortalRoute('#guilds/community/hub').tab,'community-hub');
+ assert.equal(resolvePortalRoute('#guilds/community').tab,'community');
+});
+
+test('safe portal returns accept routes and refuse open redirects',async()=>{
+ const {safePortalReturn}=await import('../../apps/portal-web/src/portal-route');
+ for(const value of ['#home','#account','#shares/12345678-1234-1234-1234-123456789abc?via=abcdefghij','#explore/events/12345678-1234-1234-1234-123456789abc?ref=abcdefghijklmnop','#guilds/guild_ai_vibe/tools/work'])assert.equal(safePortalReturn(value),true,value);
+ for(const value of ['https://evil.invalid/#home','//evil.invalid/#home','/\\evil','#home\n','#unknown','#home'.padEnd(513,'x')])assert.equal(safePortalReturn(value),false,value);
 });

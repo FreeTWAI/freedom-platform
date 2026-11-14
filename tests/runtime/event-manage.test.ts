@@ -68,7 +68,7 @@ test('published changes persist and mandatory notices deduplicate for members an
  await saveNotificationPreferences(pool,cmd(actors[1],preferences,1),false);
  assert.equal((await readNotificationReminders(pool,actors[1],false,new Date())).items.filter(n=>n.kind==='event_schedule_changed').length,0);
  await saveNotificationPreferences(pool,cmd(actors[1],{...preferences,categories:{...preferences.categories,events:'summary'}},2),false);
- assert.ok((await readNotificationSummary(pool,actors[1],false,new Date())).items.some(n=>n.id===notice[0].notification_id&&n.path===`#events/${e.event_id}`));
+ assert.ok((await readNotificationSummary(pool,actors[1],false,new Date())).items.some(n=>n.id===notice[0].notification_id&&n.path===`#explore/events/${e.event_id}`));
  const sent:string[]=[];const send=async(to:string,_subject:string,body:string)=>{assert.equal(to,'verified@example.com');sent.push(body);};
  // Deliver the confirmed update before cancellation; cancellation is queued independently.
  await processEventNotices(pool,send,'https://example.org',e.event_id);

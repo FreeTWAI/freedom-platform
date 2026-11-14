@@ -113,8 +113,8 @@ export function createPublishedSkillRoutes(pool:Pool,publicOrigin=LIVE_PUBLIC_OR
     return c.body(protocolMarkdown);
   });
   app.get('/development/skill-upload',async c=>c.html(developmentHtml('上傳技能',
-    '<p>在技能書架按「上傳技能」，複製私人指令給你選擇的 Agent。Agent 讀取專案、撰寫 100 則分享介紹，完成後回網站預覽送出。</p>'+
-    '<div class="public-skill-actions"><a href="/#skills">上傳技能</a><a href="/development/skill-upload/SKILL.md">Agent 指令</a><a href="/development/skill-upload/protocol.md">API 規格</a></div>'+
+    '<p>在「探索 → 資源」按「上傳技能」，複製私人指令給你選擇的 Agent。Agent 讀取專案、撰寫 100 則分享介紹，完成後回網站預覽送出。</p>'+
+    '<div class="public-skill-actions"><a href="/#explore/resources">上傳技能</a><a href="/development/skill-upload/SKILL.md">Agent 指令</a><a href="/development/skill-upload/protocol.md">API 規格</a></div>'+
     '<h2>安裝上傳工具</h2><pre><code>npm install -g '+escape(publicOrigin)+'/downloads/freedom-skill-client.tgz\nfreedom-skill-upload --help</code></pre>'+
     '<p>需要 Node.js 24。安裝後依工具說明綁定投稿專用金鑰；從網站可撤銷金鑰。金鑰最長 90 天，只能建立私人投稿。</p>'+
     '<p>一次性指令 60 分鐘有效，不需要安裝工具。圖片選填；投稿者確認後，介紹頁與分享內容才會公開。</p>',

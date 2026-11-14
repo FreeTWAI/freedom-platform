@@ -14,6 +14,12 @@ async function openConnections(page:Page){
   return heading.locator('xpath=ancestor::section[1]');
 }
 
+test('pairing destination opens connections and the old account address still opens settings',async({page})=>{
+  await page.route('**/api/v1/me/client-connections',route=>route.fulfill({json:{items:[]}}));
+  const section=await openConnections(page);await expect(page).toHaveURL(/#automation\/connections$/);await expect(section).toBeVisible();
+  await page.goto('/#account');await expect(page).toHaveURL(/#me\/settings$/);await expect(page.getByLabel('我的檢視')).toHaveValue('#me/settings');
+});
+
 test('client connection list separates loading, load failure and retry from a failed code lookup',async({page})=>{
   let lists=0,releaseFirst=()=>{};const firstHeld=new Promise<void>(resolve=>{releaseFirst=resolve;});
   await page.route('**/api/v1/me/client-connections',async route=>{

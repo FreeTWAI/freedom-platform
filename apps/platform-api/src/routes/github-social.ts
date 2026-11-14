@@ -27,7 +27,7 @@ export function createGitHubSocialRoutes(load:ReturnType<typeof socialLoader>){
   const app=new Hono<{Variables:{actor:Actor}}>();
   app.get('/me/github',async c=>c.json(await (await load()).session(c.get('actor'))));
   app.post('/me/github/connect',async c=>{
-    const body=z.object({return_to:z.string().max(100).default('#community')}).strict().parse(await c.req.json());
+    const body=z.object({return_to:z.string().max(512).default('#community')}).strict().parse(await c.req.json());
     return c.json(await (await load()).start(c.get('actor'),body.return_to));
   });
   app.post('/me/github/complete',async c=>{

@@ -12,7 +12,7 @@ export const LEGACY_ROUTES: Readonly<Record<TabId, string>> = {
   home:'home', social:'home', profile:'me', account:'me/settings', 'my-content':'me/content', todos:'me/start',
   members:'explore/people', skills:'explore/resources', showcase:'explore/works', events:'explore/events',
   services:'explore/services', highlights:'explore/events/results', 'community-search':'explore',
-  opensource:'home/share/resource', guilds:'guilds', community:'guilds/community', 'community-hub':'guilds/community',
+  opensource:'home/share/resource', guilds:'guilds', community:'guilds/community', 'community-hub':'guilds/community/hub',
   'private-ai':'automation/work', messages:'me/messages', friends:'me/messages/contacts', squads:'me/teams',
   business:'me/workspaces', reservations:'me/orders', promotion:'me/credit',
   stores:'guilds/guild_commerce_sales/tools/store', retail:'guilds/guild_commerce_sales/tools/retail-kit',
@@ -54,7 +54,7 @@ export function legacyHash(hash:string):string {
   const [path,query]=split(canonicalHash(hash));
   if(matches(path,catalog)){const suffix=path.slice(catalog.length);return '#stores'+(/^\/[^/]+\/[^/]+\/supply(?:-orders)?(?:\/|$)/.test(suffix)?suffix:'/supply'+suffix)+query;}
   if(matches(path,'me/teams/outcomes'))return '#squad-outcomes'+path.slice('me/teams/outcomes'.length)+query;
-  const rows=Object.entries(LEGACY_ROUTES).filter(([tab])=>tab!=='social'&&tab!=='community-hub').sort((a,b)=>b[1].length-a[1].length);
+  const rows=Object.entries(LEGACY_ROUTES).filter(([tab])=>tab!=='social').sort((a,b)=>b[1].length-a[1].length);
   for(const [tab,prefix] of rows)if(matches(path,prefix))return '#'+tab+path.slice(prefix.length)+query;
   return '#'+path+query;
 }
@@ -84,4 +84,29 @@ export function replaceLegacyAddress():string {
   const next=canonicalHash(window.location.hash);
   if(window.location.hash&&next!==window.location.hash)window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search+next);
   return window.location.hash;
+}
+
+/** Validate a portal fragment before using it as an authentication return target. */
+export function safePortalReturn(value:unknown):value is string {
+  if(typeof value!=='string'||value.length+1>512||!value.startsWith('#')||/[\\\u0000-\u0020\u007f]/.test(value))return false;
+  let decoded:string;
+  try{decoded=decodeURIComponent(value)}catch{return false;}
+  if(/[\\\u0000-\u001f\u007f]/.test(decoded)||decoded.includes('//')||/(?:^#?|[?&=])\s*[a-z][a-z0-9+.-]*:/i.test(decoded))return false;
+  const [path,query]=split(value);
+  if(!/^[A-Za-z0-9_/-]+$/.test(path)||path.split('/').some(segment=>!segment))return false;
+  if(path.startsWith('join/'))return /^join\/(?:supplier|showcase|tasks)$/.test(path)&&!query;
+  const uuid='[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}';
+  if(path.startsWith('shares/'))return new RegExp('^shares/'+uuid+'$','i').test(path);
+  const canonical=split(canonicalHash(value))[0];
+  if(canonical.startsWith('explore/events/')&&!canonical.startsWith('explore/events/results')&&!new RegExp('^explore/events/'+uuid+'(?:/|$)','i').test(canonical))return false;
+  if(new RegExp('^explore/events/'+uuid+'$','i').test(canonical)&&query){
+    const params=new URLSearchParams(query);
+    if([...params].some(([key,item])=>key!=='ref'||params.getAll(key).length!==1||!/^[A-Za-z0-9_-]{16,32}$/.test(item)))return false;
+  }
+  if(['home','explore','guilds','me'].includes(canonical))return true;
+  if(/^guilds\/(?:community(?:\/hub)?|manage)$/.test(canonical))return true;
+  if(/^guilds\/guild_[a-zA-Z0-9_]+(?:\/(?:start|work|skills|information|tools(?:\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?))?$/.test(canonical))return true;
+  if(new RegExp('^me/(?:publication|'+uuid+')$','i').test(canonical))return true;
+  const prefixes=[...Object.values(LEGACY_ROUTES),'automation/agent','automation/connections','automation/devices','automation/models','me/teams/outcomes'].filter(prefix=>!['home','explore','guilds','me'].includes(prefix));
+  return prefixes.some(prefix=>matches(canonical,prefix));
 }

@@ -19,3 +19,14 @@ test('COMMUNITY-HUB-001 signed-out visitors can browse all groups and safe exter
   await page.getByRole('link',{name:'返回登入',exact:true}).click();
   await expect(page.getByLabel('電子郵件',{exact:true})).toBeVisible();
 });
+
+test('members can open the hub from community and the old hub address remains an alias',async({page})=>{
+  await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');
+  await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');await page.getByRole('button',{name:'登入',exact:true}).click();
+  await expect(page.getByRole('navigation',{name:'主要工作區'})).toBeVisible();
+  await page.goto('/#guilds/community');
+  const link=page.getByRole('button',{name:'查看社群入口總覽',exact:true});await expect(link).toHaveCount(1);await link.click();
+  await expect(page).toHaveURL(/#guilds\/community\/hub$/);await expect(page.locator('.community-hub')).toBeVisible();
+  await expect(page.getByRole('button',{name:'查看社群入口總覽',exact:true})).toHaveCount(0);
+  await page.goto('/#community-hub');await expect(page).toHaveURL(/#guilds\/community\/hub$/);await expect(page.locator('.community-hub')).toBeVisible();
+});

@@ -221,6 +221,9 @@ async function installSyntheticCatalog() {
 }
 
 const routeTable: Record<string, string> = {
+  'GET /api/v1/public/works/:id': 'global',
+  'GET /works/:id': 'global',
+  'GET /api/v1/me/share-results': 'principal',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/suppliers': 'tenant',
   'GET /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements': 'tenant',
   'POST /api/v1/tenants/:tenant_id/storefronts/:instance_id/drop-ship/agreements': 'tenant',
@@ -698,8 +701,8 @@ test('T-022 1. Route inventory guard', () => {
     all[kind] = (all[kind] ?? 0) + 1;
     return all;
   }, {});
-  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 9, global: 13, tenant: 182, middleware: 32 });
-  assert.equal(selectedRoutes.length, 256);
+  assert.deepEqual(counts, { admin: 11, guild: 9, principal: 10, global: 15, tenant: 182, middleware: 32 });
+  assert.equal(selectedRoutes.length, 259);
   assert.equal(app.routes.some(r=>r.path==='/api/v1/me/orders'),false,'raw checkout flag OFF must not mount the member list or cache middleware');
   console.log(JSON.stringify({ route_inventory: { selected: selectedRoutes.length, counts } }));
   for (const r of selectedRoutes) {

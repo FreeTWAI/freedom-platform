@@ -23,7 +23,7 @@ export function AdminGuildManagement({client,guilds,busy,loading,error,onSave,on
   const term=search.trim().toLocaleLowerCase(),shown=guilds.filter(guild=>!term||[guild.name,guild.alias].join(' ').toLocaleLowerCase().includes(term));
   function open(guildKey:string,role:Opened['role'],userId?:string){setOpened({guildKey,role,userId});setSaved(null);}
   return <section className="stack admin-guild-management"><div className="card-head"><h2>公會管理</h2><button type="button" className="btn btn-ghost" disabled={busy||loading} onClick={()=>void onReload()}>重讀公會</button></div>
-    <details hidden={detail}><summary>公會設定</summary><AdminTools client={client}/><GuildCategoryTools client={client} busy={busy}/>
+    <details><summary>公會設定</summary><AdminTools client={client}/><GuildCategoryTools client={client} busy={busy}/>
     <GuildDiscoveryReport client={client}/></details>
     {!detail&&<label className="field admin-guild-filter">搜尋公會<input type="search" value={search} disabled={busy} maxLength={100} onChange={event=>{setSearch(event.target.value);setOpened(null);}} placeholder="例如：影音、資安、活動…"/></label>}
     {!opened&&error&&<p role="alert" className="banner banner-error">{error}</p>}

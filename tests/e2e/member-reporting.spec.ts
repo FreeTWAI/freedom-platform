@@ -90,7 +90,14 @@ for(const width of [1440,768,390,320])for(const [themeName,theme] of themes){
         await expect(mine.locator('article')).toHaveCount(20);await mine.getByRole('button',{name:'更多檢舉案件',exact:true}).click();
         await expect(mine.locator('article')).toHaveCount(22);await expect(mine.getByRole('button',{name:'更多檢舉案件',exact:true})).toHaveCount(0);
       }
-      const admin=await login(2);await admin.locator('.floating-message-header').getByRole('button',{name:'收合聊天室',exact:true}).click();const adminPanel=admin.getByRole('region',{name:'平台檢舉案件',exact:true});await adminPanel.getByRole('button',{name:'平台檢舉案件',exact:true}).click();
+      const admin=await login(2);await admin.locator('.floating-message-header').getByRole('button',{name:'收合聊天室',exact:true}).click();
+      // The independent Access gateway is synthetic; member-session report permissions and evidence stay real.
+      await admin.route('**/admin/api/**',route=>{
+        if(new URL(route.request().url()).pathname==='/admin/api/bootstrap')return route.fulfill({json:{admin:{admin_id:adminId,community_id:DEMO_COMMUNITY,email:emails[2],display_name:names[2],role:'super_admin'},csrf_token:'synthetic-access-csrf',available_skill_books:[],summary:{members:3,active_members:3,pending_guild_applications:0,guilds:0,admins:1}}});
+        return route.fulfill({json:{items:[],next_offset:null}});
+      });
+      await admin.getByRole('link',{name:'平台檢舉案件',exact:true}).click();await expect(admin).toHaveURL(/\/admin\?view=member-reports$/);
+      const adminPanel=admin.getByRole('region',{name:'平台檢舉案件',exact:true});await expect(adminPanel.getByRole('heading',{name:'平台檢舉案件',exact:true})).toBeVisible();
       if(paginated){await expect(adminPanel.locator('article')).toHaveCount(20);await adminPanel.getByRole('button',{name:'更多平台檢舉案件',exact:true}).click();await expect(adminPanel.locator('article')).toHaveCount(22);await expect(adminPanel.getByRole('button',{name:'更多平台檢舉案件',exact:true})).toHaveCount(0);}
       const item=adminPanel.locator('article').first();await expect(item).toBeVisible();await item.getByText('查看案件證據',{exact:true}).focus();await item.getByText('查看案件證據',{exact:true}).press('Enter');await expect(item.locator('.report-evidence-copy')).toContainText('合成私人檢舉證據');await bounds(admin);
       if(width>=768){expect((await item.getByRole('button',{name:'開始處理',exact:true}).boundingBox())!.width).toBeLessThan((await item.boundingBox())!.width/2);}

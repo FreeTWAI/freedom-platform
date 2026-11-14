@@ -13,7 +13,7 @@ async function fixture(page:Page,missing=false){
   if(path==='/community-certifications')return route.fulfill({json:{items:[{user_id:ids['community-certifications'],display_name:'認證物件',submitted_at:date(2)}],next_offset:null}});
   if(path==='/author-claims')return route.fulfill({json:{items:[{claim_id:ids['author-claims'],repo:{full_name:'作者物件'},submitted_at:date(3)}]}});
   if(path==='/event-organizer-claims')return route.fulfill({json:{items:[{claim_id:ids['organizer-claims'],event_id:randomUUID(),statement:'主辦物件的合成來源說明。',evidence_url:'https://example.com/proof',state:resolved?'verified':'pending',version:resolved?2:1,created_at:date(4)}]}});
-  if(path==='/shares/held')return route.fulfill({json:{items:[{share_id:ids['held-shares'],title:'檢舉物件',hidden_at:date(5)}]}});
+  if(path==='/shares/held')return route.fulfill({json:{items:[{share_id:ids['held-shares'],kind:'link',title:'檢舉物件',public_url:null,open_reports:1,reasons:['合成檢舉原因'],hidden_at:date(5)}]}});
   if(path==='/commerce/store-readiness')return route.fulfill({json:{items:[{instance_id:ids['store-admissions'],store:{name:'商店物件'},admission:{active:null},instance_status:'active',tenant_status:'active',admin_is_member:false,created_at:date(6)}],next_offset:null}});
   if(path==='/guild-tools')return route.fulfill({json:{items:[{id:ids['tool-reports'],title:'工具物件',state:'enabled',report_count:1,first_reported_at:date(7)}]}});
   if(path==='/events')return route.fulfill({json:{items:[{event_id:ids.events,title:'活動物件',created_at:date(8)}]}});
@@ -21,6 +21,62 @@ async function fixture(page:Page,missing=false){
   return route.fulfill({json:{items:[]}});
  });return {ids,calls};
 }
+test('direct admin views open their requested screen without manage or object',async({page})=>{
+ await fixture(page);
+ for(const [view,heading] of [['members','會員管理'],['admins','管理員名單'],['guilds','公會管理'],['guild-applications','公會申請']] as const){
+  await page.goto(`/admin?view=${view}`);await expect(page.getByRole('heading',{name:heading,exact:true})).toBeVisible();
+ }
+});
+test('inbox shows pending appointments and exposes history; guild detail keeps settings',async({page})=>{
+ await fixture(page);await page.route('**/admin/api/bootstrap',route=>route.fulfill({json:{admin:{admin_id:'admin',community_id:'same-community',email:'admin@example.test',display_name:'合成管理員',role:'super_admin'},csrf_token:'synthetic-csrf',available_skill_books:[],pending_guild_appointments:[{guild_key:'guild_test',name:'合成公會',state:'pending',bound_user_id:null}],summary:{members:1,active_members:1,pending_guild_applications:1,guilds:1,admins:1}}}));
+ await page.goto('/admin');await expect(page.getByRole('heading',{name:'我的公會長任命',exact:true})).toBeVisible();
+ await page.getByText('紀錄與設定',{exact:true}).click();await expect(page.getByLabel('工作區',{exact:true})).toBeVisible();
+ await page.goto('/admin?view=guilds&object=guild_test');await expect(page.getByText('公會設定',{exact:true})).toBeVisible();
+});
+test('member-report and achievement review queues are reachable in admin inbox',async({page})=>{
+ await fixture(page);await page.route('**/api/v1/session',route=>route.fulfill({json:{user:{user_id:'00000000-0000-4000-8000-000000000001'},csrf_token:'member-csrf'}}));
+ await page.route('**/api/v1/admin/reports?*',route=>route.fulfill({json:{items:[],next_cursor:null}}));
+ await page.route('**/api/v1/me/social-achievements',route=>route.fulfill({json:{can_moderate:true}}));
+ await page.route('**/api/v1/admin/social-achievements',route=>route.fulfill({json:{items:[],next_after:null}}));
+ await page.goto('/admin');await expect(page.getByRole('button',{name:'平台檢舉案件',exact:true})).toBeVisible();
+ await page.getByText('管理成就限制與申訴',{exact:true}).click();await page.getByRole('button',{name:'讀取待處理名單',exact:true}).click();
+ await expect(page.getByRole('button',{name:'讀取待處理名單',exact:true})).toBeEnabled();
+ await page.goto('/admin?view=member-reports');await expect(page.getByRole('heading',{name:'平台檢舉案件',exact:true})).toBeVisible();
+ await page.goto('/admin?view=social-achievements');await expect(page.getByRole('button',{name:'讀取待處理名單',exact:true})).toBeVisible();
+});
+test('legacy admin queue paths retain their view and navigation after reload',async({page})=>{
+ await fixture(page);await page.route('**/api/v1/session',route=>route.fulfill({json:{user:{user_id:'00000000-0000-4000-8000-000000000001'},csrf_token:'member-csrf'}}));
+ await page.route('**/api/v1/admin/reports?*',route=>route.fulfill({json:{items:[],next_cursor:null}}));
+ await page.route('**/api/v1/me/social-achievements',route=>route.fulfill({json:{can_moderate:true}}));
+ await page.route('**/api/v1/admin/social-achievements',route=>route.fulfill({json:{items:[],next_after:null}}));
+ for(const [path,role,control] of [['/admin/reports','heading','平台檢舉案件'],['/admin/social-achievements','button','讀取待處理名單']] as const){
+  await page.goto(path);await expect(page.getByRole(role,{name:control,exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'返回待處理',exact:true}).click();await expect(page).toHaveURL(/\/admin\?view=inbox$/);
+  await page.reload();await expect(page.getByRole('heading',{name:'待處理',exact:true})).toBeVisible();
+ }
+});
+test('achievement review keeps an uncertain operation when switching admin places',async({page})=>{
+ await fixture(page);const id='00000000-0000-4000-8000-000000000002',row={user_id:id,display_name:'合成審核會員',status:'paused',moderation_reason:null,appeal:'請再核對',appeal_state:'pending',aggregate_version:'1'};const attempts:{body:string|null;key:string|undefined;version:string|undefined}[]=[];
+ // Background feeds are unavailable to this synthetic member session; avoid a real 401 clearing its CSRF token.
+ for(const path of ['/me/notifications','/me/guild-announcements','/co-creation/projects','/events/bulletins','/community/accepted-work'])await page.route(`**/api/v1${path}*`,route=>route.fulfill({status:403,json:{code:'forbidden'}}));
+ await page.route('**/api/v1/session',route=>route.fulfill({json:{user:{user_id:'00000000-0000-4000-8000-000000000001'},csrf_token:'member-csrf'}}));
+ await page.route('**/api/v1/me/social-achievements',route=>route.fulfill({json:{can_moderate:true}}));
+ await page.route('**/api/v1/admin/reports?*',route=>route.fulfill({json:{items:[],next_cursor:null}}));
+ await page.route('**/api/v1/admin/social-achievements',route=>route.fulfill({json:{items:[row],next_after:null}}));
+ await page.route('**/api/v1/admin/social-achievements/*',route=>{if(route.request().method()==='GET')return route.fulfill({json:row});const request=route.request();attempts.push({body:request.postData(),key:request.headers()['idempotency-key'],version:request.headers()['if-match']});return attempts.length===1?route.abort('failed'):route.fulfill({json:{updated:true}});});
+ await page.goto('/admin?view=social-achievements');await page.getByRole('button',{name:'讀取待處理名單',exact:true}).click();await page.getByRole('button',{name:'合成審核會員 · paused · pending',exact:true}).click();
+ await page.getByLabel('具體理由',{exact:true}).fill('已核對申訴');await page.getByRole('button',{name:'保存處理',exact:true}).click();await expect(page.getByRole('button',{name:'重試原處理',exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'平台管理選單'}).getByRole('button',{name:'人員與公會',exact:true}).click();await expect(page.getByRole('alert')).toContainText('請先確認尚未完成的審核結果');await expect(page).toHaveURL(/view=social-achievements/);
+ await page.getByRole('button',{name:'重試原處理',exact:true}).click();await expect(page.getByText('處理已保存，請重新讀取案件。',{exact:true})).toBeVisible();expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);expect(attempts[0].key).toBeTruthy();
+});
+test('admin access alone does not reveal member-only moderation queues',async({page})=>{
+ await fixture(page);await page.route('**/api/v1/session',route=>route.fulfill({json:{user:{user_id:'00000000-0000-4000-8000-000000000001'},csrf_token:'member-csrf'}}));
+ await page.route('**/api/v1/admin/reports?*',route=>route.fulfill({status:403,json:{code:'admin_required'}}));
+ await page.route('**/api/v1/me/social-achievements',route=>route.fulfill({json:{can_moderate:false}}));
+ await page.goto('/admin');await expect(page.getByRole('heading',{name:'待處理',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'平台檢舉案件',exact:true})).toHaveCount(0);
+ await expect(page.getByText('管理成就限制與申訴',{exact:true})).toHaveCount(0);
+});
 test('one oldest-first list includes every available kind and a filter opens one organizer decision',async({page})=>{
  const {ids,calls}=await fixture(page);await page.goto('/admin');const list=page.locator('.admin-place-list');await expect(list.getByRole('button')).toHaveCount(9);
  await expect(list.locator('strong')).toHaveText(['申請物件','認證物件','作者物件','主辦物件的合成來源說明。','檢舉物件','商店物件','工具物件','活動物件','PR 物件']);
@@ -29,7 +85,7 @@ test('one oldest-first list includes every available kind and a filter opens one
  await expect.poll(()=>calls.length).toBe(1);expect(calls[0].body).toEqual({decision:'verify',reason:'來源佐證已核對'});expect(calls[0].headers['if-match']).toBe('"1"');expect(calls[0].headers['x-admin-csrf']).toBe('synthetic-csrf');expect(calls[0].headers['idempotency-key']).toBeTruthy();
 });
 test('organizer rejection uses the same reason and version protected API',async({page})=>{
- const {calls}=await fixture(page);await page.goto('/admin?view=organizer-claims');await page.locator('.admin-place-list button').click();await page.getByLabel('決定',{exact:true}).selectOption('reject');await page.getByLabel('審核理由',{exact:true}).fill('佐證不足，駁回申請');await page.getByRole('button',{name:'確認',exact:true}).click();await expect.poll(()=>calls.length).toBe(1);expect(calls[0].body.decision).toBe('reject');
+ const {calls}=await fixture(page);await page.goto('/admin?view=organizer-claims');await page.getByLabel('決定',{exact:true}).selectOption('reject');await page.getByLabel('審核理由',{exact:true}).fill('佐證不足，駁回申請');await page.getByRole('button',{name:'確認',exact:true}).click();await expect.poll(()=>calls.length).toBe(1);expect(calls[0].body.decision).toBe('reject');
 });
 test('capabilities and absent endpoints hide unavailable kinds and GitHub setup',async({page})=>{
  await fixture(page,true);await page.route('**/admin/api/author-claims?*',route=>route.fulfill({status:404,json:{detail:'not found'}}));await page.goto('/admin');await expect(page.locator('.admin-place-list button')).toHaveCount(5);
@@ -38,7 +94,7 @@ test('capabilities and absent endpoints hide unavailable kinds and GitHub setup'
 });
 for(const key of [...Object.keys(labels),'members','admins','guilds','guild-workspace','github','audit','errors','credentials'])test(`old view ${key} lands in its matching place`,async({page})=>{
  await fixture(page);await page.goto(`/admin?view=${key}`);const place=key in labels?'待處理':['members','admins','guilds','guild-workspace'].includes(key)?'人員與公會':'系統';await expect(page.getByRole('navigation',{name:'平台管理選單'}).getByRole('button',{name:place,exact:true})).toHaveAttribute('aria-current','page');
- if(key in labels)await expect(page.getByLabel('種類',{exact:true})).toHaveValue(key);else if(place==='系統')await expect(page.getByLabel('系統項目')).toHaveValue(key);else await expect(page.getByRole('searchbox',{name:'搜尋',exact:true})).toBeVisible();
+ if(place==='系統')await expect(page.getByLabel('系統項目')).toHaveValue(key);else await expect(page.getByRole('button',{name:`返回${place}`,exact:true})).toBeVisible();
 });
 test('the mobile first screen has at most eight controls and fits the viewport',async({page},testInfo)=>{
  await fixture(page);await page.setViewportSize({width:390,height:844});await page.goto('/admin');await expect(page.locator('.admin-place-list button')).toHaveCount(3);

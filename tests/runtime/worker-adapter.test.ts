@@ -457,7 +457,7 @@ test('candidate origin: canonical, og, share, guidance and upload examples point
     assert.ok(upload.includes(`<link rel="canonical" href="${origin}/development/skill-upload">`) && upload.includes(`npm install -g ${origin}/downloads/freedom-skill-client.tgz`));
     const skillMd = await get('/development/skill-upload/SKILL.md'), protocol = await get('/development/skill-upload/protocol.md');
     assert.ok(skillMd.includes(`init --origin ${origin} --key-stdin`));
-    assert.ok(protocol.includes(`"submit_url": "${origin}/agent-api/v1/skill-submissions/`) && protocol.includes(`"review_url": "${origin}/#skills"`));
+    assert.ok(protocol.includes(`"submit_url": "${origin}/agent-api/v1/skill-submissions/`) && protocol.includes(`"review_url": "${origin}/#explore/resources"`));
     for (const [path, text] of Object.entries({ skillPage, pageHtml, pageSkill, upload, skillMd, protocol })) assert.deepEqual(liveLinks(text), [], `${origin} ${path}`);
   }
 });

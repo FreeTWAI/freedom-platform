@@ -418,6 +418,7 @@ test('the interstitial escapes text, sets open-graph tags and ignores extra quer
   assert.match(ignored, new RegExp(`property="og:url" content="https://freetwai.com/go/${skill.data.code}"`));
   assert.ok(!ignored.includes('intro=01'));
   const socialHtml = await page(`/go/${social.data.code}?intro=1`);
+  assert.match(socialHtml, /href="\/#home">返回自由工坊/);
   assert.match(socialHtml, new RegExp(`property="og:url" content="https://freetwai.com/go/${social.data.code}"`));
   assert.ok(!socialHtml.includes('property="og:url" content="https://example.com/escape-me"'));
   assert.match(socialHtml, /data-target="https:\/\/example\.com\/escape-me"/);

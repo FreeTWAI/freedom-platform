@@ -23,7 +23,7 @@ export function PlaceView({context,render,defaultTab}:{context:PortalFeatureCont
  let choices:{title:string;hash:string;tab:TabId}[]=[];
  const choice=(title:string,tab:TabId,hash=portalHash(tab))=>({title,tab,hash});
  if(route.place==='explore')choices=[...(site?.community_search_enabled?[choice('搜尋','community-search')]:[]),choice('夥伴','members'),choice('資源','skills'),choice('作品','showcase'),choice('活動','events'),choice('成果','highlights'),choice('服務','services')];
- if(route.place==='me')choices=[choice('個人頁','profile'),choice('設定','account'),choice('入門','todos'),choice('訊息','messages'),choice('聯絡人','friends'),choice('小隊','squads'),...(site?.guild_launchpad_enabled?[choice('工作區','business')]:[]),choice('訂單','reservations'),choice('我的貢獻','promotion')];
+ if(route.place==='me')choices=[choice('個人頁','profile'),choice('設定','account'),choice('入門','todos'),choice('訊息','messages'),choice('聯絡人','friends'),choice('小隊','squads'),choice('工作區','business'),choice('訂單','reservations'),choice('我的貢獻','promotion')];
  if(route.place==='automation')choices=[choice('我的 Agent','private-ai','#automation/agent'),choice('私人工作','private-ai'),choice('裝置連線','private-ai','#automation/devices'),choice('模型設定','private-ai','#automation/models'),choice('工具連線','private-ai','#automation/connections')];
  const selected=choices.filter(c=>route.hash===c.hash||route.hash.startsWith(c.hash+'/')||route.hash.startsWith(c.hash+'?')).sort((a,b)=>b.hash.length-a.hash.length)[0];
  let tab=route.tab==='messages'?'home':route.tab;
@@ -54,7 +54,7 @@ function PlaceFeatureSearch({context}:{context:PortalFeatureContext}) {
  useEffect(()=>{if(open)input.current?.focus();else setQuery('');},[open]);
  useEffect(()=>{setOpen(false);},[context.locationHash]);
  useEffect(()=>{const outside=(event:PointerEvent)=>{if(!root.current?.contains(event.target as Node))setOpen(false);};document.addEventListener('pointerdown',outside);return()=>document.removeEventListener('pointerdown',outside);},[]);
- const matches=(Object.keys(TAB_TITLES) as TabId[]).filter(id=>!['community-search','members','skills','showcase','events','highlights','services'].includes(id)&&(id!=='my-content'||site?.personal_content_enabled)&&(id!=='guild-workspace'||context.canManageGuild)&&(id!=='business'||site?.guild_launchpad_enabled)&&`${t(commerceLabels[id]??`nav.${id}`)} ${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''} ${commercePurposes[id]?t(commercePurposes[id]):''}`.toLocaleLowerCase().includes(normalized));
+ const matches=(Object.keys(TAB_TITLES) as TabId[]).filter(id=>!['community-search','members','skills','showcase','events','highlights','services'].includes(id)&&(id!=='my-content'||site?.personal_content_enabled)&&(id!=='guild-workspace'||context.canManageGuild)&&`${t(commerceLabels[id]??`nav.${id}`)} ${t(`nav.${id}`)} ${TAB_TITLES[id]} ${keywords[id]??''} ${commercePurposes[id]?t(commercePurposes[id]):''}`.toLocaleLowerCase().includes(normalized));
  const supplyMatches=site?.guild_launchpad_enabled&&`${t('nav.commerceSupply')} ${t('stores.supplyTitle')} ${t('nav.commerceSupplyPurpose')} 供應商 供貨 商品庫`.toLocaleLowerCase().includes(normalized);
  const choose=(tab:TabId,hash=portalHash(tab))=>{setOpen(false);setQuery('');context.selectTab(tab,hash);};
  return <details ref={root} className="card place-feature-search" open={open} onKeyDown={event=>{

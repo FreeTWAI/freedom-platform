@@ -24,7 +24,7 @@ let dropAdminBrowserSchema:(()=>Promise<void>)|undefined;
 
 test('admin mobile navigation has three places, returns focus on Escape and supports browser history',async({page},testInfo)=>{
   const fixture=await workspaceFixture(page);await page.setViewportSize({width:390,height:844});
-  await page.goto('/admin?view=guild-applications');
+  await page.goto('/admin');
   await expect(page.getByRole('heading',{name:'待處理',exact:true})).toBeVisible();await expect(page.locator('.admin-content')).toHaveAttribute('aria-busy','false');
   expect(fixture.requests.find(request=>request.path==='/guild-applications')?.state).toBe('pending');
   await expect(page.locator('#admin-credentials')).not.toHaveAttribute('open','');
@@ -199,7 +199,7 @@ test('verified admin UI keeps member, guild, nomination and audit operations sep
   await page.goto('/admin?view=members&manage=1');await expect(page.getByRole('heading',{name:'會員管理',exact:true})).toBeVisible();
   await expect(page.locator('.admin-member-positioning')).toHaveText('尚未完成加入');
   expect(memberSessionRequests).toBe(1);
-  await adminNavigate(page,'audit');await expect(page.getByText('預定公會 · 等待本人確認連結',{exact:true})).toBeVisible();await adminNavigate(page,'members');
+  await page.getByRole('navigation',{name:'平台管理選單'}).getByRole('button',{name:'待處理',exact:true}).click();await expect(page.getByText('預定公會 · 等待本人確認連結',{exact:true})).toBeVisible();await adminNavigate(page,'members');
   await page.locator('.admin-member-row').getByText('管理操作',{exact:true}).click();
   await page.getByRole('button',{name:'停用這位會員',exact:true}).click();await page.getByLabel('操作理由',{exact:true}).fill('配合會員本人提出的停用要求');await page.getByRole('button',{name:'確認停用這位會員',exact:true}).click();await expect(page.getByText('已停用',{exact:true})).toBeVisible();
   expect(calls[0].headers['x-admin-csrf']).toBe(csrf);expect(calls[0].headers['if-match']).toBe('"7"');expect(calls[0].headers['idempotency-key']).toBeTruthy();expect(calls[0].body.active).toBe(false);
@@ -209,7 +209,7 @@ test('verified admin UI keeps member, guild, nomination and audit operations sep
   await adminNavigate(page,'guilds');await page.getByRole('button',{name:'設定公會長',exact:true}).click();await page.getByRole('radio',{name:'待管理夥伴 · member@example.test',exact:true}).check();await page.getByLabel('任命理由',{exact:true}).fill('具備帶領公會的經驗並同意任命');await page.getByRole('button',{name:'確認任命',exact:true}).click();await expect(page.getByText('公會長：待管理夥伴',{exact:true})).toBeVisible();expect(calls.find(call=>call.path.includes('/master'))?.headers['if-match']).toBe('"28"');
   await adminNavigate(page,'admins');await expect(page.getByText(/同信箱會員尚未驗證，不視為身分綁定/)).toBeVisible();
   await adminNavigate(page,'audit');await expect(page.getByText('操作人：測試管理員',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'連結我的會員帳號並確認會長任命',exact:true}).click();await expect(page.getByText('預定公會 · 已連結會員並確認任命',{exact:true})).toBeVisible();expect(calls.find(call=>call.path==='/link-member')?.headers['x-admin-csrf']).toBe(csrf);
+  await page.getByRole('navigation',{name:'平台管理選單'}).getByRole('button',{name:'待處理',exact:true}).click();await page.getByRole('button',{name:'連結我的會員帳號並確認會長任命',exact:true}).click();await expect(page.getByText('預定公會 · 已連結會員並確認任命',{exact:true})).toBeVisible();expect(calls.find(call=>call.path==='/link-member')?.headers['x-admin-csrf']).toBe(csrf);
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 

@@ -195,7 +195,7 @@ test('catalog skill CTA follows readable content and preserves the selected intr
  assert.ok(html.includes('不用註冊就能閱讀'));assert.ok(html.includes('免費加入，探索更多資源'));
  assert.ok(html.includes('return_to=%2Fdevelopment%2Fskills%2F'+id+'&amp;skill_intro=7'));
  assert.ok(html.includes('<script src="/skill-acquisition.js" defer></script>'));
- assert.ok(html.includes('href="/#skills">登入工坊 Star'), 'original author-support entry remains available');
+ assert.ok(html.includes('href="/#explore/resources">登入工坊 Star'), 'original author-support entry remains available');
  assert.ok(html.includes('到 GitHub 看原始碼'));assert.equal(meta(html,'og:url'),base+'?intro=7');
 });
 
@@ -214,7 +214,7 @@ test('every public skill offers author, Star and share in the hero while retaini
   assert.ok(html.indexOf('data-skill-author')<social,item.id);
   assert.ok(html.indexOf('data-share-launch')<start,item.id);
   assert.ok(html.indexOf('href="#skill-start"')<social,item.id);
-  assert.ok(html.includes('href="/#skills">登入工坊 Star'),item.id);
+  assert.ok(html.includes('href="/#explore/resources">登入工坊 Star'),item.id);
   assert.ok(html.includes(escape(item.guide!.first_result)),item.id);
  }
 });

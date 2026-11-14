@@ -23,7 +23,7 @@ export async function startPairing({origin='https://freetwai.com',kind,clientNam
  origin=platformOrigin(origin);
  if(!['storefront','supplier'].includes(kind))throw Error('Unknown client kind.');
  const data=await jsonRequest(origin,'/api/v1/client-connections/start',{method:'POST',body:{kind,client_name:clientName},fetcher});
- if(!/^fw_pair_[A-Za-z0-9_-]{43}$/.test(data?.device_secret)||!/^([A-F0-9]{5}-){3}[A-F0-9]{5}$/.test(data.user_code)||data.verification_uri!==origin+'/#account'||data.scope!==kind+':read'||data.expires_in!==300||data.interval!==5)throw Error('Invalid pairing response.');
+ if(!/^fw_pair_[A-Za-z0-9_-]{43}$/.test(data?.device_secret)||!/^([A-F0-9]{5}-){3}[A-F0-9]{5}$/.test(data.user_code)||![origin+'/#account',origin+'/#automation/connections'].includes(data.verification_uri)||data.scope!==kind+':read'||data.expires_in!==300||data.interval!==5)throw Error('Invalid pairing response.');
  return data;
 }
 export async function pollPairing({origin='https://freetwai.com',deviceSecret,fetcher}={}){

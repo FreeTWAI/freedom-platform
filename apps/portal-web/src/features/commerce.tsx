@@ -25,7 +25,7 @@ export const commerceFeatures = {
   },
   "business": {
     moduleId: "tenant-workspaces", placement: 'page',
-    render: ({client, session, site}) => <TenantSettings client={client} session={session} enabled={site ? site.guild_launchpad_enabled === true : null} />,
+    render: ({client, session}) => <TenantSettings client={client} session={session} enabled={true} />,
   },
   "supplier": {
     moduleId: "agent-commerce-portal", placement: 'page',

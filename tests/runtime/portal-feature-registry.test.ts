@@ -91,7 +91,8 @@ test('store entry does not turn missing capability data into enabled features', 
   }
   assert.equal(store.props.providerEnvironment, 'sandbox');
   assert.equal(store.props.registerLeave, context.registerPageLeave);
-  assert.equal(element(commerceFeatures.business.render(context)).props.enabled, null);
+  assert.equal(element(commerceFeatures.business.render(context)).props.enabled, true);
+  assert.equal(element(commerceFeatures.business.render(fixture({site: {guild_launchpad_enabled: false} as any}))).props.enabled, true);
 });
 
 test('store entry forwards independent flags and the existing production environment distinction', () => {
