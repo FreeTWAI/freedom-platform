@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { createServer } from 'node:http';
@@ -257,6 +258,7 @@ test('MACHINE-BROKER-09 runtime cannot read the vault and the cipher role cannot
   await admin.query(`CREATE ROLE ${brokerRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE ROLE ${executorRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     GRANT USAGE ON SCHEMA ${schema} TO ${brokerRole}, ${executorRole}`);
+  await setFixtureRolePasswords(admin, [brokerRole, executorRole]);
   const apply = async (file: string, role: string, variable: string) => {
     const source = (await readFile(new URL('../../deploy/cloudflare/sql/' + file, import.meta.url), 'utf8')).replace(/^\\set .*$/mg, '').replaceAll('SCHEMA public', 'SCHEMA ' + schema).replaceAll("n.nspname='public'", "n.nspname='" + schema + "'").replaceAll("'public','CREATE'", "'" + schema + "','CREATE'").replaceAll(':"' + variable + '"', '"' + role + '"').replaceAll(":'" + variable + "'", "'" + role + "'");
     const q = await owner.connect();

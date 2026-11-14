@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {mkdir, mkdtemp, readFile, rm, statfs, writeFile} from 'node:fs/promises';
-import {homedir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {fileURLToPath} from 'node:url';
@@ -243,7 +242,7 @@ test('DP-UI-01 distribution photo choice dialog: 503 keeps it, 403 and 404 clear
   const privateBody = JSON.stringify(list);
   const emptyBody = JSON.stringify(DistributionPhotosSchema.parse({items: []}));
   const denied = (status: 403 | 404) => JSON.stringify({type: 'about:blank', title: 'denied', status, code: 'forbidden', detail: '合成讀取被拒'});
-  const diskTemp = join(homedir(), 'agent-work', 'tmp');
+  const diskTemp = join(process.cwd(), '.rd');
   await mkdir(diskTemp, {recursive: true, mode: 0o700});
   assert.ok(![0x01021994, 0x858458f6].includes((await statfs(diskTemp)).type), 'hook fixture requires disk');
   const dir = await mkdtemp(join(diskTemp, 'fp-photo-choice-'));

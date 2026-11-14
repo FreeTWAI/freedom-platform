@@ -121,7 +121,7 @@ export const QUEST_STAGES: readonly QuestStage[] = [
         check: ['儲存後立即生效；公開範圍說得清楚誰看得到。', 'Changes apply after saving and visibility says who can see what.', '保存後すぐ反映され、誰に見えるかが明確です。', '저장하면 바로 반영되고 누가 볼 수 있는지 분명합니다.', 'Los cambios se aplican al guardar y queda claro quién ve qué.'] },
       { id: 'profile.content', features: ['profile.content'], href: '#my-content',
         title: ['找回我的內容', 'Find your content', '自分のコンテンツを探す', '내 콘텐츠 찾기', 'Encuentra tu contenido'],
-        task: ["開啟「我的」，在「檢視」選「草稿」。在「我的內容」找到草稿或剛發的貼文，打開原頁。", "Open “我的” and choose “草稿” in “檢視”. In “My content”, find a draft or your recent post and open it.", "「我的」を開き、「檢視」で「草稿」を選びます。「自分のコンテンツ」で下書きか最近の投稿を見つけて開きます。", "“我的”의 “檢視”에서 “草稿”를 고르세요. “내 콘텐츠”에서 초안이나 최근 글을 찾아 여세요.", "Abre «我的» y elige «草稿» en «檢視». En «Mi contenido» encuentra un borrador o tu publicación y ábrela."],
+        task: ["開啟「我的」，在「我的內容」找到草稿或剛發的貼文，打開原頁。", "Open “我的”, find a draft or your recent post in “我的內容”, and open it.", "「我的」を開き、「我的內容」で下書きか最近の投稿を見つけて開きます。", "“我的”를 열고 “我的內容”에서 초안이나 최근 글을 찾아 여세요.", "Abre «我的», encuentra un borrador o tu publicación en «我的內容» y ábrela."],
         check: ['狀態（草稿、已發布、審核中）正確；返回後停在原位置。', 'Statuses (draft, published, in review) are right and Back returns to the same place.', '状態（下書き・公開・審査中）が正しく、戻ると同じ場所にいます。', '상태(초안 · 게시 · 검토 중)가 맞고 뒤로 가면 같은 위치입니다.', 'Los estados son correctos y Atrás vuelve al mismo sitio.'] },
       { id: 'profile.todos', features: ['profile.todos'], href: '#todos',
         title: ['看入門指南', 'Check Getting started', '「はじめに」を見る', '시작 안내 보기', 'Revisa Primeros pasos'],

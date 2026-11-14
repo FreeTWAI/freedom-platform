@@ -1,3 +1,4 @@
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import {after,before,test} from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -40,6 +41,7 @@ async function allGrants(f:ReturnType<typeof fixture>){await grants(f,'20-runtim
 before(async()=>{
  for(const f of fixtures){
   for(const name of Object.values(f.names)){assert.ok(name.length<63);await admin.query(`CREATE ROLE ${name} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`);}
+  await setFixtureRolePasswords(admin,Object.values(f.names));
   f.created=true;await admin.query(`CREATE SCHEMA ${f.schema} AUTHORIZATION ${f.names.owner}; GRANT USAGE ON SCHEMA ${f.schema} TO ${f.names.app},${f.names.broker},${f.names.executor},${f.names.untrusted}`);
   if(f===fixtures[0]){
    const sources=readMigrationSources(fileURLToPath(new URL('../../migrations',import.meta.url))).filter((s:{name:string})=>s.name<'190_');

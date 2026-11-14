@@ -135,7 +135,8 @@ test('product discovery distinguishes self-reported stock and leads to a real se
   await expect(page.getByText('目前可保存商品、選品與供貨回覆。供貨確認僅供內部演練，商品待品質確認；尚未開放買家結帳，平台不代收款。')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Fork 我的商店 ↗', exact: true })).toBeHidden();
   await page.getByText('進階：建立自己的商店網站', { exact: true }).click();
-  await expect(page.getByText('Fork 是把專案複製到自己的 GitHub。依專案說明啟動後，到「我的名片」輸入一次性代碼，核准讀取連線。')).toBeVisible();
+  await expect(page.getByText('Fork 是把專案複製到自己的 GitHub。依專案說明啟動後，到「自動化 → 工具連線」輸入一次性代碼，核准讀取連線。')).toBeVisible();
+  await expect(page.getByRole('link', { name: '自動化 → 工具連線', exact: true })).toHaveAttribute('href', '#automation/connections');
   await page.setViewportSize({ width: 320, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

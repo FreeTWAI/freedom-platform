@@ -99,7 +99,11 @@ test.describe('sharing around Short, feature ON', () => {
         }
         await copy.click();
         const shareModal=page.locator('.skill-share-dialog');
-        await expect(shareModal.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${ids[0]}`));
+        await expect(shareModal.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+        const sharedUrl=new URL((await shareModal.locator('.skill-share-url').innerText()).trim());
+        expect(sharedUrl.origin).toBe(new URL(page.url()).origin);
+        const link=await e2eAuthPool.query('SELECT kind,target_key FROM promotion_links WHERE code=$1',[sharedUrl.pathname.split('/').pop()]);
+        expect(link.rows).toEqual([{kind:'social_post',target_key:ids[0]}]);
         await expect(shareModal.getByRole('button',{name:'複製連結',exact:true})).toBeInViewport();
         await shareModal.getByRole('button',{name:'關閉分享',exact:true}).click();
         await share.getByRole('button',{name:'關閉分享',exact:true}).click();await expect(shareTrigger).toBeFocused();

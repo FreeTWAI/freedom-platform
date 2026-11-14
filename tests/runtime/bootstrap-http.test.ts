@@ -22,6 +22,7 @@ import { BootstrapRefreshResultSchema } from '../../contracts/execution/v1/boots
 import { BootstrapNonceSchema, BootstrapStatusSchema } from '../../contracts/execution/v1/bootstrap-status.js';
 import { createBootstrapHttpTransport } from '../../apps/platform-api/src/routes/bootstrap-http.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 if (!connectionString || !/^\/fp_[a-z0-9_]+$/.test(new URL(connectionString).pathname))
@@ -45,6 +46,7 @@ before(async () => {
   await admin.query(`CREATE ROLE ${migrator} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE ROLE ${runtime} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator}; GRANT USAGE ON SCHEMA ${schema} TO ${runtime}`);
+  await setFixtureRolePasswords(admin, [migrator, runtime]);
   created=true; await migrate(owner);
   const template = await readFile(new URL('../../deploy/cloudflare/sql/20-runtime-grants.psql',import.meta.url),'utf8');
   const prefix = template.slice(template.indexOf('BEGIN;'),template.indexOf('-- BEGIN PRIVATE POLICY GRANTS'))

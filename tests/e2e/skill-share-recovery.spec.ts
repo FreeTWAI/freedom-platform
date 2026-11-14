@@ -46,16 +46,18 @@ test('closing the reading dialog cancels its pending nested share and does not r
   const card=await prepare(page),held:Route[]=[];
   await card.getByRole('button',{name:'預覽技能書',exact:true}).click();
   const reading=page.getByRole('dialog',{name:title,exact:true});await expect(reading).toBeVisible();
-  await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
+  await expect(page.locator('.skill-share-dialog[open]')).toHaveCount(0);
   await page.route('**/api/v1/skills/social-post/share-content',route=>{held.push(route);});
   try{
     await reading.getByRole('button',{name:'分享技能',exact:true}).click();await expect.poll(()=>held.length).toBeGreaterThan(0);
+    // Sharing opens a modal immediately, so dismiss it before closing its parent.
+    await page.getByRole('dialog',{name:`分享「${title}」`,exact:true}).getByRole('button',{name:'關閉分享',exact:true}).click();
     await reading.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();await expect(reading).toBeHidden();
-    await page.clock.fastForward(8001);await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
+    await page.clock.fastForward(8001);await expect(page.locator('.skill-share-dialog[open]')).toHaveCount(0);
     await expect(card.getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();
     for(const route of held)await route.fulfill({json:content}).catch(()=>{});
-    await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
+    await expect(page.locator('.skill-share-dialog[open]')).toHaveCount(0);
     await card.getByRole('button',{name:'預覽技能書',exact:true}).click();await expect(reading).toBeVisible();
-    await expect(page.locator('.skill-share-dialog')).toHaveCount(0);await expect(reading.getByRole('button',{name:'分享技能',exact:true})).toBeEnabled();
+    await expect(page.locator('.skill-share-dialog[open]')).toHaveCount(0);await expect(reading.getByRole('button',{name:'分享技能',exact:true})).toBeEnabled();
   }finally{for(const route of held)await route.abort().catch(()=>{});await page.unrouteAll({behavior:'wait'});}
 });

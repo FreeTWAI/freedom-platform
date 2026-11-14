@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import {freezeCheckout,placeCheckoutOrder,applyConfirmedPayment} from '../../modules/agent-commerce/checkout/index.js';
 import {ports} from './hosted-checkout-harness.js';
 import {isolatedTransaction} from '../../packages/resource-scopes/tenant-transaction.js';
@@ -93,6 +94,7 @@ before(async()=>{
   await h.admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     GRANT USAGE ON SCHEMA ${h.schema} TO ${role}; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${h.schema} TO ${role};
     GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ${h.schema} TO ${role}; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${h.schema} TO ${role}`);
+  await setFixtureRolePasswords(h.admin, [role]);
   const runtimeUrl=new URL(url);runtimeUrl.username=role;runtimeUrl.password='';
   runtime=new Pool({connectionString:runtimeUrl.toString(),options:`-c search_path=${h.schema} -c statement_timeout=20000`,max:6});
   runtime.on('connect',client=>{

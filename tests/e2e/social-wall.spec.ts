@@ -17,11 +17,11 @@ test('sharing an existing post uses one native link handoff and cancelling never
  const share=post.getByRole('button',{name:'分享貼文連結',exact:true});await share.click();
  const dialog=page.getByRole('dialog',{name:'分享貼文連結',exact:true});
  await dialog.getByRole('button',{name:'分享',exact:true}).click();
- const shareModal=page.locator('.skill-share-dialog'),native=shareModal.getByRole('button',{name:'分享',exact:true});
+ const shareModal=page.locator('.skill-share-dialog'),native=shareModal.getByRole('button',{name:/^分享(?:中…)?$/});
  await expect(shareModal.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=`));
  await native.click();await expect(native).toBeDisabled();
  const first=await page.evaluate(()=>(window as any).postShareControl.calls[0]);expect(first.active).toBe(true);
- const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);expect(first.data).toEqual({title:'自由工坊的貼文',url:`${e2eOrigin()}/?social-post=${postId}#social`});
+ const postId=(await post.getAttribute('id'))!.slice('social-post-'.length);expect(first.data).toEqual({title:text,url:`${e2eOrigin()}/?social-post=${postId}#social`});
  await page.evaluate(()=>(window as any).postShareControl.reject(new DOMException('cancelled','AbortError')));await expect(native).toBeEnabled();
  await expect(shareModal).toBeVisible();expect(await page.evaluate(()=>(window as any).postShareControl.copies)).toBe(0);
  await native.click();await page.evaluate(()=>(window as any).postShareControl.resolve());await expect(share).toBeEnabled();

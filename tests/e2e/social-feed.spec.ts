@@ -218,8 +218,11 @@ test('home shows the timeline immediately and the composer keeps a draft when cl
   await expect(feed).toBeVisible();
   const trigger=feed.getByRole('button',{name:'建立貼文',exact:true});await expect(trigger).toBeInViewport();
   expect(await feed.locator('xpath=ancestor::details').count()).toBe(0);
-  const feedBox=(await feed.boundingBox())!,contextBox=(await page.locator('.home-context').boundingBox())!;
-  expect(contextBox.x+contextBox.width).toBeLessThanOrEqual(feedBox.x);
+  const feedBox=(await feed.boundingBox())!,layout=page.locator('.home-layout'),layoutBox=(await layout.boundingBox())!;
+  const homeBox=(await layout.locator('..').boundingBox())!;
+  expect(feedBox.x).toBeGreaterThanOrEqual(layoutBox.x-1);
+  expect(feedBox.x+feedBox.width).toBeLessThanOrEqual(layoutBox.x+layoutBox.width+1);
+  expect(Math.abs(layoutBox.x+layoutBox.width/2-homeBox.x-homeBox.width/2)).toBeLessThanOrEqual(1);
   await trigger.click();const dialog=page.getByRole('dialog',{name:'建立貼文',exact:true});
   await expect(dialog.getByLabel('貼文內容')).toBeFocused();
   const text=`測試貼文 ${Date.now()}：完成 AI 作品，想找設計與行銷夥伴一起合作。`;

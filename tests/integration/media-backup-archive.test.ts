@@ -72,7 +72,8 @@ async function pgTool(tool:'pg_dump'|'pg_restore',args:string[],input?:Uint8Arra
 test('New recovery archive restores a real snapshot and native R2, and refuses corrupt/current-revoked/sequence-reset recovery',{timeout:120000},async(t)=>{
   const admin=new Pool({connectionString:url.href,options:'-c statement_timeout=30000',max:2});
   const pool=new Pool({connectionString:url.href,options:`-c search_path=${schema} -c statement_timeout=30000`,max:6});
-  const targets:{name:string;pool:Pool;closed:Promise<void>[]}[]=[];let created=false,mf:Miniflare|undefined,root:string|undefined,outbound=0;
+  const targets:{name:string;pool:Pool;closed:Promise<void>[];ending?:Promise<void>}[]=[];let created=false,mf:Miniflare|undefined,root:string|undefined,outbound=0;
+  function closeTargetPool(target:typeof targets[number]){return target.ending??=target.pool.end();}
   try{
     assert.equal((await admin.query('SHOW server_version_num')).rows[0].server_version_num.slice(0,2),'18');
     root=await mkdtemp(join(tmpdir(),'fp-real-recovery-archive-'));const dumpPathSource=join(root,'captured.dump');
@@ -194,7 +195,7 @@ test('New recovery archive restores a real snapshot and native R2, and refuses c
       async openRestore(){dailyTarget=await target();return {pool:dailyTarget.pool,databaseName:dailyTarget.name,database:writer(),objects:await store('DAILY_RESTORED')};},
       async cleanup(){
         dailyCleanup++;await pool.query('UPDATE asset_maintenance_policy SET enabled=false,domain_media_enabled=false');
-        if(dailyTarget){await dailyTarget.pool.end();await Promise.all(dailyTarget.closed);await admin.query(`DROP DATABASE ${dailyTarget.name} WITH (FORCE)`);
+        if(dailyTarget){await closeTargetPool(dailyTarget);await Promise.all(dailyTarget.closed);await admin.query(`DROP DATABASE ${dailyTarget.name} WITH (FORCE)`);
           targets.splice(targets.findIndex(value=>value.name===dailyTarget!.name),1);dailyTarget=undefined;}
         return {gc:await observeMediaGcState(pool),ownedResourcesRemaining:0};
       },
@@ -262,7 +263,7 @@ test('New recovery archive restores a real snapshot and native R2, and refuses c
         async openRestore(){restored=await target();return {pool:restored.pool,databaseName:restored.name,
           database:writer(async()=>{await hooks.afterRestore?.(restored!.pool);if(hooks.expireDuring==='restore')await expire();}),objects:await store('PIN_RESTORED_'+index)};},
         async cleanup(){cleanup++;
-          if(restored){await restored.pool.end();await Promise.all(restored.closed);await admin.query(`DROP DATABASE ${restored.name} WITH (FORCE)`);
+          if(restored){await closeTargetPool(restored);await Promise.all(restored.closed);await admin.query(`DROP DATABASE ${restored.name} WITH (FORCE)`);
             targets.splice(targets.findIndex(value=>value.name===restored!.name),1);restored=undefined;}
           return {gc:await observeMediaGcState(pool),ownedResourcesRemaining:0};
         },
@@ -369,7 +370,7 @@ test('New recovery archive restores a real snapshot and native R2, and refuses c
     assert.equal(restores,0,'full readback prevents invoking database restore on archive corruption');
     assert.equal(outbound,0);
   }finally{
-    await mf?.dispose();await Promise.all(targets.map(t=>t.pool.end()));await Promise.all(targets.flatMap(t=>t.closed));await pool.end();
+    await mf?.dispose();await Promise.all(targets.map(closeTargetPool));await Promise.all(targets.flatMap(t=>t.closed));await pool.end();
     try{for(const t of targets)await admin.query(`DROP DATABASE ${t.name} WITH (FORCE)`);if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE`);}
     finally{await admin.end();if(root)await rm(root,{recursive:true,force:true});}
   }

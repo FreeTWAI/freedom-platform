@@ -5,6 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { Pool } from 'pg';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createApp } from '../../apps/platform-api/src/app.js';
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import { createAdminAccessVerifier } from '../../modules/platform-admin/access.js';
 import { applyOwnerAccountStatus } from '../../modules/tenant-workspaces/security-path.js';
 import { migrate } from '../../scripts/database.js';
@@ -114,6 +115,7 @@ describe('T-024 P-B2a as the non-owner runtime role', { concurrency: 1 }, () => 
       CREATE ROLE ${runtimeRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
       CREATE SCHEMA ${schema} AUTHORIZATION ${migrator};
       GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
+    await setFixtureRolePasswords(admin, [migrator, runtimeRole]);
     created = true;
     await migrate(owner);
     await applyGrants();

@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -213,6 +214,7 @@ before(async () => {
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator};
     GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
   created = true;
+  await setFixtureRolePasswords(admin, [migrator, runtimeRole]);
   await migrate(owner);
   await applyGrants();
   const community = randomUUID();

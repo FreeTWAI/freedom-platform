@@ -235,9 +235,9 @@ test('GuildCard and PositioningPanels tolerate partial directory and onboarding 
  const partialGuild={guild_key:'test_guild',name:'測試公會',entry_questions:{questions:[{id:'q1',prompt:'想練習什麼？',options:[{id:'a',label:'練習寫作'},{id:'b',label:'練習設計'}]}]}};
  const tree=GuildCard({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}});
  const elements=nodes(tree),buttons=elements.filter(n=>n.type==='button');
- assert.ok(buttons.some(n=>[n.props.children].flat().join('')==='公會技能書庫 · 0'));
+ assert.ok(buttons.some(n=>[n.props.children].flat().join('')==='公會技能書庫 · 0 個原作資源'));
  assert.ok(elements.some(n=>n.type==='p'&&text(n.props.children)==='技能書整理中'));
- const booksLauncher=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,useState:(value:unknown)=>[value===null?'books':value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null,GuildMembers:()=>null});
+ const booksLauncher=runInNewContext(cardCode.replace('export function GuildCard','function GuildCard')+';GuildCard',{React,distinctOriginalRepoCount,useState:(value:unknown)=>[value===null?'books':value,()=>{}],useRef:(value:unknown)=>({current:value}),useEffect:()=>{},useId:()=> 'fixture',useLanguage:()=>({language:'zh-Hant'}),guildMasterLabel:()=>'',GuildName:()=>null,GuildLeadership:()=>null,GuildTags:()=>null,SkillBookIntro:()=>null,SkillBookStarGate:()=>null,GuildMembers:()=>null});
  const openBooks=nodes(booksLauncher({guild:partialGuild as any,client:{sessionGeneration:1},busy:false,onPrimary:()=>{},onMembership:()=>{}}));
  assert.ok(openBooks.some(n=>n.props?.className==='guild-library-books'&&text(n.props.children).includes('技能書整理中')));
  const filterCode=stripTypeScriptTypes(extract('  const search=query.trim().toLocaleLowerCase();','  const chosenKeys='));

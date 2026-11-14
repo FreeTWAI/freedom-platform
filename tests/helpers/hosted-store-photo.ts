@@ -1,4 +1,5 @@
 import {TENANT_CURSOR_TEST_KEY} from '../runtime/tenant-cursor-fixture.js';
+import {setFixtureRolePasswords} from '../runtime/fixture-role-password.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
@@ -27,6 +28,7 @@ export async function createHostedStorePhotoHarness(){
     GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${h.schema} TO ${role};
     REVOKE INSERT,UPDATE,DELETE ON ${h.schema}.module_definitions,${h.schema}.application_definitions,${h.schema}.guild_application_offerings,${h.schema}.tenant_capacity_policies,${h.schema}.tenant_authority_policies,${h.schema}.domain_media_storage_policy FROM ${role};
     GRANT UPDATE(policy_lock) ON ${h.schema}.tenant_capacity_policies,${h.schema}.tenant_authority_policies,${h.schema}.domain_media_storage_policy TO ${role}`);
+  await setFixtureRolePasswords(h.admin,[role]);
   const runtimeUrl=new URL(url);runtimeUrl.username=role;runtimeUrl.password='';
   const runtime=new Pool({connectionString:runtimeUrl.toString(),options:`-c search_path=${h.schema} -c statement_timeout=20000`,max:12});
   const store=new ObservedPhotoStore(),assets=createStorefrontProductPhotoLifecycle(runtime,{store});

@@ -119,7 +119,8 @@ test('new member completes required positioning, chooses primary guild and gets 
   const bookButton=firstLibrary.getByRole('button').first(),bookTitle=await bookButton.innerText();
   await bookButton.click();const intro=page.getByRole('dialog');await expect(intro).toBeVisible();
   await expect(intro.getByRole('heading',{name:bookTitle,exact:true})).toBeVisible();
-  await expect(intro.getByRole('link',{name:'閱讀技能書 ↗',exact:true})).toHaveAttribute('href',/^https:\/\/github\.com\//);
+  await intro.locator('.skill-intro-usage-notes > summary').click();
+  await expect(intro.getByRole('link',{name:'閱讀核對版本說明 ↗',exact:true})).toHaveAttribute('href',/^https:\/\/github\.com\//);
   await intro.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();await expect(intro).not.toBeVisible();
   // Only display metadata is augmented here; real membership records and guild commands remain untouched.
   await page.route('**/api/v1/guilds/directory',async route=>{
@@ -628,7 +629,7 @@ test('guilds place renders partial directory items without skill_books before op
   const directoryCard=page.locator('.guild-card').filter({hasText:'測試公會'});
   await expect(directoryCard).toBeVisible();
   await expect(directoryCard).toContainText('技能書整理中');
-  await expect(directoryCard.getByRole('button',{name:'公會技能書庫 · 0',exact:true})).toBeVisible();
+  await expect(directoryCard.getByRole('button',{name:'公會技能書庫 · 0 個原作資源',exact:true})).toBeVisible();
   await navigate(page,'我的定位');
   await expect(page.getByRole('article',{name:'測試公會',exact:true}).getByRole('button',{name:'回答',exact:true})).toBeVisible();
 });

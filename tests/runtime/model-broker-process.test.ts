@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import { test } from 'node:test';
 import { fork, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID, randomBytes } from 'node:crypto';
@@ -61,6 +62,11 @@ async function template(owner:Pool,schema:string,file:string,role:string,variabl
   const q=await owner.connect();try{const pieces=source.split('\\gexec');for(let i=0;i<pieces.length;i++){const result=await q.query(pieces[i]);if(i<pieces.length-1){const last=Array.isArray(result)?result[result.length-1]:result;for(const row of last.rows)await q.query(Object.values(row)[0] as string);}}}catch(error){await q.query('ROLLBACK');throw error;}finally{q.release();}
 }
 interface ChildHandle { child:ChildProcess; logs:()=>string; request:(kind:string,value?:unknown)=>Promise<any>; close:()=>Promise<void> }
+function fixtureConnection(url:string,password?:string) {
+  if(!password)return {connectionString:url};
+  const parsed=new URL(url);
+  return {host:parsed.hostname,port:Number(parsed.port||5432),database:decodeURIComponent(parsed.pathname.slice(1)),user:decodeURIComponent(parsed.username),password};
+}
 async function childProcess(kind:string,config:Record<string,unknown>):Promise<ChildHandle> {
   const child=fork(self,['--bridge-child',kind],{execArgv:['--import','tsx'],env:{PATH:process.env.PATH,LANG:'C.UTF-8'},stdio:['ignore','pipe','pipe','ipc']});
   let logs='',serial=0;const pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void}>();
@@ -77,10 +83,11 @@ export async function bridgeFixture() {
   if(!connectionString||!/^\/fp_[a-z0-9_]+$/.test(new URL(connectionString).pathname))throw Error('Explicit isolated fp_* TEST_DATABASE_URL required');
   const schema=`fp_bbridge_${process.pid}_${Date.now()}_${Math.floor(Math.random()*10000)}`;
   const roles={owner:schema+'_owner',app:schema+'_app',broker:schema+'_broker',executor:schema+'_exec'};
+  const passwords=process.env.PGPASSWORD?{owner:randomBytes(24).toString('hex'),app:randomBytes(24).toString('hex'),broker:randomBytes(24).toString('hex'),executor:randomBytes(24).toString('hex')}:undefined;
   const admin=new Pool({connectionString});
   const roleUrl=(role:string)=>{const url=new URL(connectionString);url.username=role;url.password='';return url.toString();};
-  const pool=(role:string)=>new Pool({connectionString:roleUrl(role),options:`-c search_path=${schema} -c statement_timeout=10000`,max:12});
-  const owner=pool(roles.owner),app=pool(roles.app),executor=pool(roles.executor),brokerPool=pool(roles.broker);
+  const pool=(role:string,password?:string)=>new Pool({...fixtureConnection(roleUrl(role),password),options:`-c search_path=${schema} -c statement_timeout=10000`,max:12});
+  const owner=pool(roles.owner,passwords?.owner),app=pool(roles.app,passwords?.app),executor=pool(roles.executor,passwords?.executor),brokerPool=pool(roles.broker,passwords?.broker);
   const directory=await mkdtemp(join(tmpdir(),'fp-bbridge-'));
   const issuerKeys=await generateKeyPair('EdDSA',{extractable:true}),responseKeys=await generateKeyPair('EdDSA',{extractable:true}),recoveryKeys=await generateKeyPair('EdDSA',{extractable:true});
   const recovery={generation:'1',floor:'1',unavailable:false,raw:''};
@@ -97,11 +104,12 @@ export async function bridgeFixture() {
   const common={schema,...profile,recoveryOrigin,recoveryPublicJwk:await exportJWK(recoveryKeys.publicKey),directory};
   try {
     await admin.query(Object.values(roles).map(role=>`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`).join(';')+`;CREATE SCHEMA ${schema} AUTHORIZATION ${roles.owner};GRANT USAGE ON SCHEMA ${schema} TO ${roles.app},${roles.broker},${roles.executor}`);created=true;
+    if(passwords)for(const name of Object.keys(roles) as (keyof typeof roles)[])await setFixtureRolePasswords(admin,[roles[name]],passwords[name]);
     await migrate(owner);await template(owner,schema,'20-runtime-grants.psql',roles.app,'runtime');await template(owner,schema,'40-credential-broker-grants.psql',roles.broker,'broker');
     await template(owner,schema,'45-model-broker-execution-grants.psql',roles.executor,'executor');
-    broker=await childProcess('broker',{...common,cipherUrl:roleUrl(roles.broker),executorUrl:roleUrl(roles.executor),providerOrigin,secret,kekBytes,issuerPublicJwk:await exportJWK(issuerKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)});
+    broker=await childProcess('broker',{...common,cipherUrl:roleUrl(roles.broker),cipherPassword:passwords?.broker,executorUrl:roleUrl(roles.executor),executorPassword:passwords?.executor,providerOrigin,secret,kekBytes,issuerPublicJwk:await exportJWK(issuerKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)});
     const brokerOrigin=await broker.request('origin');
-    main=await childProcess('main',{...common,appUrl:roleUrl(roles.app),brokerOrigin,issuerPrivateJwk:await exportJWK(issuerKeys.privateKey),responsePublicJwk:await exportJWK(responseKeys.publicKey)});
+    main=await childProcess('main',{...common,appUrl:roleUrl(roles.app),appPassword:passwords?.app,brokerOrigin,issuerPrivateJwk:await exportJWK(issuerKeys.privateKey),responsePublicJwk:await exportJWK(responseKeys.publicKey)});
   } catch(error) {await main?.close();await broker?.close();await closeServer(provider);await closeServer(external);await Promise.all([app.end(),executor.end(),brokerPool.end(),owner.end()]);if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE;DROP ROLE ${Object.values(roles).join(',')}`);await admin.end();await rm(directory,{recursive:true,force:true});throw error;}
   const mainOrigin=await main.request('origin');
   const options={environment:profile.environment,clientId:profile.clientId};
@@ -153,7 +161,7 @@ export async function bridgeFixture() {
   }
   async function activated() {const f=await approved();const response=await post(f,'/api/v1/me/model-steps',{approvalId:f.approval.approvalId,expectedRunVersion:'1'});assert.equal(response.status,201,await response.clone().text());return {...f,step:ModelStepMetadataSchema.parse(await response.json())};}
   async function cleanup() { providerGate?.release();await Promise.all(replicas.map(p=>p.close()));await main?.close();await broker?.close();await closeServer(provider);await closeServer(external);await Promise.all([app.end(),executor.end(),brokerPool.end(),owner.end()]);await admin.query(`DROP SCHEMA ${schema} CASCADE;DROP ROLE ${Object.values(roles).join(',')}`);await admin.end();await rm(directory,{recursive:true,force:true}); }
-  return {schema,roles,owner,app,executor,brokerPool,admin,directory,posts,main:main!,broker:broker!,mainOrigin,brokerOrigin:await broker!.request('origin'),issuerKeys,responseKeys,recovery,refreshRecovery,member,approved,activated,post,cleanup,holdProvider(){providerGate=barrier();providerEntered=barrier();return {entered:providerEntered.promise,release:providerGate.release};},async spawnReplica(){const replica=await childProcess('broker',{...common,cipherUrl:roleUrl(roles.broker),executorUrl:roleUrl(roles.executor),providerOrigin,secret,kekBytes,issuerPublicJwk:await exportJWK(issuerKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)});replicas.push(replica);return replica;},async restartBroker(){await broker!.close();broker=await childProcess('broker',{...common,cipherUrl:roleUrl(roles.broker),executorUrl:roleUrl(roles.executor),providerOrigin,secret,kekBytes,issuerPublicJwk:await exportJWK(issuerKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)});return broker;}};
+  return {schema,roles,owner,app,executor,brokerPool,admin,directory,posts,main:main!,broker:broker!,mainOrigin,brokerOrigin:await broker!.request('origin'),issuerKeys,responseKeys,recovery,refreshRecovery,member,approved,activated,post,cleanup,holdProvider(){providerGate=barrier();providerEntered=barrier();return {entered:providerEntered.promise,release:providerGate.release};},async spawnReplica(){const replica=await childProcess('broker',{...common,cipherUrl:roleUrl(roles.broker),cipherPassword:passwords?.broker,executorUrl:roleUrl(roles.executor),executorPassword:passwords?.executor,providerOrigin,secret,kekBytes,issuerPublicJwk:await exportJWK(issuerKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)});replicas.push(replica);return replica;},async restartBroker(){await broker!.close();broker=await childProcess('broker',{...common,cipherUrl:roleUrl(roles.broker),cipherPassword:passwords?.broker,executorUrl:roleUrl(roles.executor),executorPassword:passwords?.executor,providerOrigin,secret,kekBytes,issuerPublicJwk:await exportJWK(issuerKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)});return broker;}};
 }
 
 async function fixtureChild(kind:string) {
@@ -162,7 +170,7 @@ async function fixtureChild(kind:string) {
   let requests:any[]=[],exchangeMode='normal',issuerDeadline=Infinity,objectStorePuts=0;const sqlErrors:{code:string;message:string;statement:string}[]=[];
   let sqlSink:{kind:'result'|'asset_prepare_receipt';entered:ReturnType<typeof barrier>}|undefined;
   let config:any,pools:Pool[]=[],server:Server|undefined,origin='',bridge:any,store:ObjectStore,recover:()=>Promise<any>,credentials:any,execution:any,authorization:any;
-  const pool=(url:string)=>{const p=new Pool({connectionString:url,options:`-c search_path=${config.schema} -c statement_timeout=10000`,max:12});p.on('connect',client=>{const original=client.query;client.query=((...args:any[])=>{const statement=typeof args[0]==='string'?args[0].trim():'';
+  const pool=(url:string,password?:string)=>{const p=new Pool({...fixtureConnection(url,password),options:`-c search_path=${config.schema} -c statement_timeout=10000`,max:12});p.on('connect',client=>{const original=client.query;client.query=((...args:any[])=>{const statement=typeof args[0]==='string'?args[0].trim():'';
     if(sqlSink&&((sqlSink.kind==='result'&&statement.startsWith('INSERT INTO private_model_work_results('))||(sqlSink.kind==='asset_prepare_receipt'&&statement.startsWith('INSERT INTO scoped_command_receipts(')&&args[1]?.[3]==='asset.upload.prepare')))sqlSink.entered.release();
     const result=Reflect.apply(original,client,args);if(result&&typeof result.catch==='function')return result.catch((error:any)=>{sqlErrors.push({code:error.code??'unknown',message:error.message,statement:typeof args[0]==='string'?args[0].trim().split('\n')[0]:''});throw error;});return result;}) as typeof client.query;});pools.push(p);return p;};
   process.on('message',async(message:any)=>{try{
@@ -177,7 +185,7 @@ async function fixtureChild(kind:string) {
       recover=kind==='main'?async()=>{const observed=await signedRecover();return {...observed,expiresAt:iso(Math.min(Date.parse(observed.expiresAt),issuerDeadline))};}:signedRecover;
       const {createModelBrokerAuthorizations}=await import('../../modules/agent-control/model-broker-authorizations.js');
       if(kind==='broker') {
-        const cipher=pool(config.cipherUrl),executor=pool(config.executorUrl);
+        const cipher=pool(config.cipherUrl,config.cipherPassword),executor=pool(config.executorUrl,config.executorPassword);
         const {createCredentialVault}=await import('../../apps/credential-broker/src/vault.js');
         const {createBrokerCredentialStore}=await import('../../apps/credential-broker/src/store.js');
         const rawKey=Buffer.from(config.kekBytes,'base64');const key=await crypto.subtle.importKey('raw',rawKey,{name:'AES-GCM'},false,['encrypt','decrypt']);rawKey.fill(0);
@@ -195,7 +203,7 @@ async function fixtureChild(kind:string) {
         const reservation=createServer();origin=await listen(reservation);const port=Number(new URL(origin).port);await closeServer(reservation);server=createBrokerBridgeProcessServer({origin,bridge});await new Promise<void>(r=>server!.listen(port,'127.0.0.1',r));
       } else {
         assert(!('secret' in config));assert(!('providerOrigin' in config));assert(!('cipherUrl' in config));assert(!('responsePrivateJwk' in config));
-        const app=pool(config.appUrl);authorization=createModelBrokerAuthorizations(app,{...profile,recover});
+        const app=pool(config.appUrl,config.appPassword);authorization=createModelBrokerAuthorizations(app,{...profile,recover});
         // Root integrates the reference-only product assembly; exact signature
         // is fixed before this fixture is considered executable evidence.
         const {createPrivateAiProductTransport,bindPrivateAiProductTransport}=await import('../../apps/platform-api/src/private-ai-product.js');
@@ -252,7 +260,7 @@ else if(resolve(process.argv[1]??'')===self)test('BROKER-PROCESS real two-child 
     assert.equal((await f.owner.query('SELECT count(*)::int n FROM private_model_work_results')).rows[0].n,1);
     const results=createPrivateResultService(f.app,{store:fileStore(f.directory),resolvePolicy:resolvePrivateWorkPersistencePolicy});const result=await results.readCurrent(member.actor,{workId:member.work.workId});assert(result);assert.equal(result.text,output);assert.equal(result.provenance,'model');assert.equal(result.aggregateVersion,'2');assert.equal(result.model?.evidenceOrigin,'synthetic_local_fixture');
     const foreign=await f.member();await assert.rejects(results.readCurrent(foreign.actor,{workId:member.work.workId}));
-    const mainKeys=await f.main.request('keys');assert.notEqual(mainKeys.pid,process.pid);assert.notEqual(mainKeys.pid,(await f.broker.request('keys')).pid);for(const forbidden of ['secret','kekBytes','cipherUrl','providerOrigin','responsePrivateJwk'])assert(!mainKeys.configKeys.includes(forbidden));
+    const mainKeys=await f.main.request('keys');assert.notEqual(mainKeys.pid,process.pid);assert.notEqual(mainKeys.pid,(await f.broker.request('keys')).pid);for(const forbidden of ['secret','kekBytes','cipherUrl','cipherPassword','executorPassword','providerOrigin','responsePrivateJwk'])assert(!mainKeys.configKeys.includes(forbidden));
     for(const p of [f.app,f.executor,f.brokerPool]) {const role=(await p.query('SELECT rolsuper,rolbypassrls,rolinherit FROM pg_roles WHERE rolname=current_user')).rows[0];assert.deepEqual(role,{rolsuper:false,rolbypassrls:false,rolinherit:false});}
     for(const p of [f.app,f.executor])for(const sql of ['SELECT * FROM broker_credential_vault','SELECT envelope FROM broker_credential_vault',`SET ROLE ${f.roles.broker}`,`SET ROLE ${f.roles.owner}`])await assert.rejects(p.query(sql),(e:any)=>e.code==='42501');
     const wire=JSON.stringify(await f.main.request('requests'));for(const value of [secret,Buffer.from(secret).toString('base64'),'SYNTHETIC_PROCESS_PRIVATE_OBJECTIVE',output])assert(!(f.main.logs()+wire+JSON.stringify(step)).includes(value));
