@@ -208,7 +208,10 @@ const socialPostView=z.looseObject({
  comment_count:z.number().int(),
  liked:z.boolean(),
  mine:z.boolean(),
+ share_id:z.string().optional(),
 });
+// A new post always has its original share; an older post may have none.
+const socialPostWriteView=socialPostView.extend({share_id:z.string()});
 const socialCommentView=z.looseObject({
  image_url:z.string().nullable(),
  sticker_id:z.string().nullable(),
@@ -486,8 +489,8 @@ export const agentResponseSchemas:Record<string,z.ZodType>={
   items:z.array(socialCommentView),
   next_cursor:z.string().nullable(),
  }),
- 'posts.note':socialPostView,
- 'posts.link':socialPostView,
+ 'posts.note':socialPostWriteView,
+ 'posts.link':socialPostWriteView,
  'posts.edit':socialPostView,
  'posts.delete':z.looseObject({post_id:z.string(),state:z.literal('deleted')}),
  'posts.like':z.looseObject({post_id:z.string(),liked:z.boolean(),like_count:z.number().int()}),
@@ -514,6 +517,7 @@ export const agentResponseSchemas:Record<string,z.ZodType>={
   updated_at:z.string(),
   owner_name:z.string(),
   via_agent:z.boolean(),
+  share_id:z.string(),
  }),
  'profile.read':z.looseObject({
   profile:z.looseObject({

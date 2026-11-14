@@ -33,8 +33,9 @@ export async function createShowcase(pool:Pool,input:Command) {
     const artifact=body.artifact_ref??`artifact:${randomUUID()}`;
     const row=(await q.query(`INSERT INTO showcases(showcase_id,community_id,owner_ref,title,description,artifact_ref,public_url)
       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[randomUUID(),input.actor.community_id,input.actor.user_id,body.title,body.description,artifact,body.public_url])).rows[0];
+    let share_id: string | undefined;
     if (row.status === 'published' && row.visibility === 'community') {
-      await publishOriginalShare(q, {
+      share_id = await publishOriginalShare(q, {
         kind: 'work',
         refTable: 'showcases',
         refId: row.showcase_id,
@@ -45,7 +46,7 @@ export async function createShowcase(pool:Pool,input:Command) {
       });
     }
     await journal(q,input.actor,'showcase',row.showcase_id,1,'share_with_community',{artifact_ref:artifact});
-    return {...row,owner_name:input.actor.display_name};
+    return {...row,owner_name:input.actor.display_name,...(share_id?{share_id}:{})};
   });
 }
 
@@ -100,7 +101,7 @@ export async function publishOwnShowcase(pool:Pool,input:Command,id:string) {
     requireCondition(current.status==='draft'||current.status==='withdrawn',409,'showcase_already_published','這件作品已發佈，請重新整理。');
     const row=(await q.query(`UPDATE showcases SET status='published',visibility='community',consent_recorded_at=now(),
       aggregate_version=aggregate_version+1,updated_at=now() WHERE showcase_id=$1 RETURNING *`,[id])).rows[0];
-    await publishOriginalShare(q, {
+    const share_id = await publishOriginalShare(q, {
       kind: 'work',
       refTable: 'showcases',
       refId: row.showcase_id,
@@ -110,7 +111,7 @@ export async function publishOwnShowcase(pool:Pool,input:Command,id:string) {
       guildKey: null
     });
     await journal(q,input.actor,'showcase',id,row.aggregate_version,'share_with_community',{artifact_ref:row.artifact_ref});
-    return {...row,owner_name:input.actor.display_name};
+    return {...row,owner_name:input.actor.display_name,share_id};
   });
 }
 export async function withdrawOwnShowcase(pool:Pool,input:Command,id:string) {
