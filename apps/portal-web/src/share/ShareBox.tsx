@@ -1,6 +1,6 @@
 import {Suspense,lazy,useCallback,useEffect,useId,useRef,useState,type MutableRefObject} from 'react';
 import {ApiError,type PortalClient} from '../api';
-import type {ShareTarget} from '../ShareLauncher';
+import type {ShareTarget} from './share-targets';
 import {portalHash,resolvePortalRoute} from '../portal-route';
 import {normalizeShareUrl} from '../../../../packages/shared/share-url';
 import {installShareComposer,openShareComposer,type ShareComposeRequest,type ShareComposeResult} from './share-port';

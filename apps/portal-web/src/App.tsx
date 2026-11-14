@@ -53,7 +53,7 @@ import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './mo
 import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from './modules/public-post-return'
 import { TOOL_ONLY_GUILDS, guildKeyFromHash, guildActionFromHash } from './modules/guild-launchpad-route'
-import {SHARE_TARGETS,type ShareTarget} from './ShareLauncher'
+import {SHARE_TARGETS,type ShareTarget} from './share/share-targets'
 import {ShareBoxLauncher as ShareLauncher} from './share/ShareBox'
 const isShareRoute = (hash: string) => /^#shares\/[0-9a-f-]{36}(?:\?|$)/.test(hash)
 import { setSharingDraftAccount } from './modules/authoring-drafts'

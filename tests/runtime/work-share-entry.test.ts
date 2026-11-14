@@ -326,7 +326,7 @@ test('UX-V-05 / UX-M-09: WorkPublicSharing renders short public link text with t
 
 test('UX-V-05: SHARE_TARGETS.work targets showcase:create with activate:true', t => {
   const { compile } = createCompiler(t);
-  const { SHARE_TARGETS } = compile('apps/portal-web/src/ShareLauncher.tsx');
+  const { SHARE_TARGETS } = compile('apps/portal-web/src/share/share-targets.ts');
   assert.equal(SHARE_TARGETS.work.tab, 'showcase');
   assert.equal(SHARE_TARGETS.work.selector, '[data-guide-anchor="showcase:create"]');
   assert.equal(SHARE_TARGETS.work.activate, true);

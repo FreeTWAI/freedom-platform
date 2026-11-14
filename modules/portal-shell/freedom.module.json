@@ -16,7 +16,6 @@
     "apps/portal-web/src/PageTools.css",
     "apps/portal-web/src/RequestFeedback.tsx",
     "apps/portal-web/src/RequestFeedback.css",
-    "apps/portal-web/src/ShareLauncher.css",
     "apps/portal-web/src/WorkspaceCompanionLayout.css",
     "apps/portal-web/src/access-fetch.ts",
     "apps/portal-web/src/brand-home-link.ts",

@@ -27,7 +27,7 @@ export async function mountSharingFixture(page:Page, kind='probe') {
     import {CoCreationPanel} from './apps/portal-web/src/modules/CoCreationPanel';
     import {ShowcasePanel} from './apps/portal-web/src/modules/ShowcasePanel';
     import {MemberBlockingAction} from './apps/portal-web/src/modules/MemberBlocking';
-    import {ShareLauncher,SHARE_TARGETS} from './apps/portal-web/src/ShareLauncher';
+    import {ShareBoxLauncher} from './apps/portal-web/src/share/ShareBox';
     import {MyContent} from './apps/portal-web/src/modules/MyContent';
     import {PersonalSpace} from './apps/portal-web/src/modules/PersonalSpace';
     import {Navigation} from './apps/portal-web/src/Navigation';
@@ -35,6 +35,8 @@ export async function mountSharingFixture(page:Page, kind='probe') {
     import {portalHash,canonicalHash} from './apps/portal-web/src/portal-route';
     import {LanguageProvider} from './apps/portal-web/src/language';
     import {CommunitySearch} from './apps/portal-web/src/modules/CommunitySearch';
+    // The product's share launcher, mounted the way App mounts it (App also names it ShareLauncher).
+    const ShareLauncher=props=><ShareBoxLauncher client={client} userId={user} {...props}/>;
     const owner='10000000-0000-4000-8000-000000000001',other='10000000-0000-4000-8000-000000000002';
     const pending=[],calls=[],reads=[],pendingReads=[];
     let user=owner,token='synthetic-session-1',projects=[],drafts=[],showcases=[],opportunities=[],blocked=false,render,content=[],deferReads=false,enabled=true,resumeId=null;
@@ -84,12 +86,12 @@ export async function mountSharingFixture(page:Page, kind='probe') {
       return <><output aria-label="Load cycles">{loads}</output><output aria-label="Error value">{error??'none'}</output><button onClick={()=>setRenders(v=>v+1)}>Unrelated render {renders}</button><button onClick={()=>setError('Synthetic error')}>Set error</button><button onClick={()=>setError(null)}>Clear error</button></>;
     }
     function Fixture(){
-      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[guided,setGuided]=useState(false),[target,setTarget]=useState(''),[contentHash,setContentHash]=useState('#me');render=()=>setVersion(v=>v+1);
+      const [mounted,setMounted]=useState(true),[version,setVersion]=useState(0),[target,setTarget]=useState(''),[contentHash,setContentHash]=useState('#me');render=()=>setVersion(v=>v+1);
       const session={user:{user_id:user},csrf_token:token};
       useEffect(()=>{const changed=()=>setContentHash(canonicalHash(window.location.hash||'#me'));window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[]);
       const selectContent=(id,hash)=>{setTarget(id);const next=hash??portalHash(id);setContentHash(next);window.location.hash=next;};
       const value={session,pending:null,error:null,mutate:()=>{throw Error('Authoring must use exact request identity')},clearError:()=>{},isMe:ref=>ref===user};
-      return <><button onClick={()=>setMounted(v=>!v)}>Toggle form</button><button onClick={()=>setGuided(v=>!v)}>Toggle guidance</button>
+      return <><button onClick={()=>setMounted(v=>!v)}>Toggle form</button>
         <output aria-label="Destination">{target}</output>
         {user&&mounted&&<PortalContext.Provider value={value}><div key={user+':'+client.sessionGeneration}>
           {${JSON.stringify(kind)}==='identity'?<ErrorIdentityProbe/>:${JSON.stringify(kind)}==='probe'?<Probe/>:${JSON.stringify(kind)}==='skill'?<SimpleSkillSubmission client={client} userId={user} onPublished={async()=>{}}/>:
@@ -99,14 +101,14 @@ export async function mountSharingFixture(page:Page, kind='probe') {
           ${JSON.stringify(kind)}==='cooperation'?<CoCreationPanel client={client} session={session}/>:
           ${JSON.stringify(kind)}==='showcase'?<ShowcasePanel/>:
           ${JSON.stringify(kind)}==='blocking'?<MemberBlockingAction client={client} userId={other} nickname="Synthetic peer" onChanged={()=>{}}/>:
-          <ShareLauncher guided={guided} onChoose={name=>setTarget(name+':'+SHARE_TARGETS[name].tab)}/>}
+          null}
         </div></PortalContext.Provider>}</>;
     }
     createRoot(document.getElementById('root')).render(<Fixture/>);
   `},bundle:true,write:false,format:'iife',platform:'browser',loader:{'.css':'empty'},logLevel:'silent'}).outputFiles[0].text;
   await page.route('**/__sharing-authoring-fixture',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><body><div id="root"></div></body></html>'}));
   await page.goto('/__sharing-authoring-fixture');
-  await page.addStyleTag({content:readFileSync(root+'/apps/portal-web/src/styles.css','utf8')+'\n'+readFileSync(root+'/apps/portal-web/src/ShareLauncher.css','utf8')});
+  await page.addStyleTag({content:readFileSync(root+'/apps/portal-web/src/styles.css','utf8')+'\n'+readFileSync(root+'/apps/portal-web/src/share/share.css','utf8')});
   await page.addScriptTag({content:script});
 }
 const fixture=(page:Page,body:(f:any)=>unknown)=>page.evaluate(body=>new Function('f','return ('+body+')(f)')((window as any).sharingFixture),body.toString());
@@ -486,10 +488,5 @@ export const sharingCases:Record<string,(page:Page)=>Promise<void>>={
     await page.getByRole('button',{name:'我想找你合作',exact:true}).click();await page.getByRole('textbox',{name:'你的需求',exact:true}).fill('Synthetic bilateral request');await remount(page);await expect(page.getByRole('textbox',{name:'你的需求',exact:true})).toHaveValue('Synthetic bilateral request');await page.getByRole('button',{name:'送出合作需求',exact:true}).click();await remount(page);await expect(page.getByRole('textbox',{name:'你的需求',exact:true})).toBeDisabled();await fixture(page,f=>f.reject(0));await page.getByRole('button',{name:'送出合作需求',exact:true}).click();expect(await fixture(page,f=>JSON.stringify(f.calls[0])===JSON.stringify(f.calls[1]))).toBe(true);
     await fixture(page,f=>{const raw={...f.calls[0].body,opportunity_id:'saved-need',provider_ref:f.other,client_ref:f.owner,state:'open',aggregate_version:1};f.opportunities([{...raw,showcase_title:'Peer work',provider_name:'Synthetic peer',client_name:'Synthetic owner'}]);f.resolve(1,raw)});
     await expect(page.locator('#opportunity-saved-need')).toContainText('Synthetic bilateral request');await page.getByRole('button',{name:'查看這份合作需求',exact:true}).click();await expect(page.locator('#opportunity-saved-need')).toBeFocused();
-  },
-  'guided launcher defaults off; navigation is write-free and Escape restores focus':async page=>{
-    await mountSharingFixture(page,'launcher');await page.setViewportSize({width:320,height:800});const trigger=page.getByRole('button',{name:'分享或提交',exact:true});await trigger.click();await expect(page.getByRole('button',{name:'找人合作',exact:true})).toHaveCount(0);await page.keyboard.press('Escape');await expect(trigger).toBeFocused();
-    await page.getByRole('button',{name:'Toggle guidance',exact:true}).click();await trigger.click();await expect(page.getByRole('dialog')).toHaveAccessibleName('你想分享什麼？');await page.getByRole('button',{name:'找人合作',exact:true}).click();await expect(page.getByLabel('Destination')).toHaveText('collaborate:showcase');
-    await trigger.click();await page.getByRole('button',{name:'發起共創邀請',exact:true}).click();await expect(page.getByLabel('Destination')).toHaveText('cocreate:cocreation');await trigger.click();await page.getByRole('button',{name:'刊登商品',exact:true}).click();await page.getByRole('button',{name:'← 返回分享選單',exact:true}).click();await page.keyboard.press('Escape');await expect(trigger).toBeFocused();expect(await fixture(page,f=>f.calls.length)).toBe(0);await expect(page.getByRole('link',{name:'我的內容'})).toHaveCount(0);
   },
 };

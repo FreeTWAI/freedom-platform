@@ -17,7 +17,7 @@ const DeviceConnections=lazy(()=>import('../modules/DeviceConnections').then(m=>
 const ModelSettings=lazy(()=>import('../modules/ModelSettings').then(m=>({default:m.ModelSettings})));
 const RegisteredTools=lazy(()=>import('../frame-tools/RegisteredTools').then(m=>({default:m.RegisteredTools})));
 
-/** Integration ports: feed ShareLauncher stays in App; agent-door mounts in automation below. */
+/** Integration ports: the share launcher (share/ShareBox) stays in App; agent-door mounts in automation below. */
 export function PlaceView({context,render,defaultTab}:{context:PortalFeatureContext;defaultTab:TabId;render:(tab:TabId,context:PortalFeatureContext)=>ReactNode}) {
  const route=resolvePortalRoute(context.locationHash||'#'+defaultTab);
  const {site,selectTab}=context;

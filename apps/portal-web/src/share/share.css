@@ -31,3 +31,5 @@ a.share-result-title{display:inline-flex;align-items:center;min-height:44px}
 .share-actions > .btn, .share-page > details > summary { min-height:44px; }
 .share-page > details > summary { cursor:pointer; display:flex; align-items:center; }
 .share-site { margin:.25rem 0 0; }
+/* App shows this line while a share-box entry opens its form (SHARE_TARGETS labels). */
+.share-entry-status{margin:0 0 12px;font-size:.875rem;color:var(--muted);overflow-wrap:anywhere}
