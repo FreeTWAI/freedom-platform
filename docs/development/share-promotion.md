@@ -48,6 +48,8 @@
 
 **排行榜分數。** 排行榜不數 `promotion_clicks` 的列，而是加總 `share_credit_events.units`。一筆合格點擊由觸發器 `share_promotion_credit` 為連結主人在對應的分享記 1 分，`source_ref` 是 `click:<share>:<user>:<日期>`，所以同一份分享每天最多 1 分，不論幾位訪客。分享、加星、報名與原作者認領也各記 1 分；撤回或確認檢舉會記負分抵銷。「我的推廣連結」每條連結旁的數字仍是 `promotion_clicks` 的點擊次數。目錄技能書的點擊只有在該書已有分享時才記分：對應表 `share_legacy_promotion_targets` 由分享的 `legacy_ref` 維護，目錄書的分享由 `scripts/backfill-shares.ts --apply` 建立（營運步驟）。
 
+**技能書連結找到的分享。** `skill_book` 連結的點擊記在那本書或那份技能投稿的開源專案分享上。會員分享的專案和公開的技能投稿，在回應之後就接上這份分享（找不到 GitHub 原作時先跳過，下次回填會接上）。目錄技能書的分享由回填 `npm run shares:backfill -- --apply` 建立；新增目錄技能書或新社群後要再跑一次。回填可以重跑，第二次不會再改任何資料，並補記先前漏記的點擊。
+
 LINE 應用內瀏覽器（例如 `Line/14.15.0`）、Facebook／Instagram 應用內瀏覽器（`FBAN/FBIOS`、`FB_IAB`、`Instagram 350.0`）要計分。清單不匹配單獨的 `line`，也不把 `javascript` 當成 `java/`。`HeadlessChrome` 含有 `headless`，不算。
 
 每位會員每天最多新建立 200 條連結；已存在的同一條再取一次不算新的。每人每天最多新貼 20 則社群貼文。點擊路由另有每網路每小時約 300 次的速率限制，超過回 429，同樣不計分。

@@ -16,7 +16,8 @@ const origin = 'http://127.0.0.1:4310';
 const schema = `fp_oss_book_${process.pid}_${Date.now()}`;
 const admin = createPool(databaseUrl);
 const pool = new Pool({connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 12});
-const app = createApp(pool, origin);
+// Isolate route-level GitHub fetch counts from post-response share attachment.
+const app = createApp(pool, origin, 'local', {afterResponse: () => {}});
 interface Session {cookie: string; csrf: string; user: {user_id: string; email: string}}
 before(async () => {await admin.query(`CREATE SCHEMA ${schema}`); await migrate(pool);});
 after(async () => {await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();});

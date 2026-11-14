@@ -13,7 +13,8 @@ import { githubCoordinate,inspectGitHubRepository } from '../../modules/opensour
 const origin='http://127.0.0.1:4310',databaseUrl=process.env.TEST_DATABASE_URL??LOCAL_DATABASE_URL;
 const schema=`fp_oss_test_${process.pid}_${Date.now()}`,admin=createPool(databaseUrl);
 const pool=new Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`,max:12});
-const app=createApp(pool,origin);
+// Isolate route-level GitHub fetch counts from post-response share attachment.
+const app=createApp(pool,origin,'local',{afterResponse:()=>{}});
 interface Session{cookie:string;csrf:string;user:any}
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
 after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});

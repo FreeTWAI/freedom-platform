@@ -69,7 +69,7 @@ import { authRateLimit } from '../../../modules/identity-membership/members.js';
 import { requestEmailVerification } from '../../../modules/identity-membership/email-verification.js';
 import { communityCatalog } from '../../../modules/community/catalog.js';
 import { publicDiscovery, discoveryReadAllowed } from '../../../modules/community/public-discovery.js';
-import { createShareRoutes,createPublicShareRoutes,acceptsHtml } from './routes/shares.js';
+import { createShareRoutes,createPublicShareRoutes,acceptsHtml,registerShareAttachments } from './routes/shares.js';
 import { publicNotFoundHtml } from '../../../modules/shares/public-page.js';
 import { readBookOriginalCache, readBookOriginalCaches, summarizeBookOriginalCache } from '../../../modules/shares/repository-cache.js';
 import { createOpenSourceRoutes } from './routes/opensource.js';
@@ -647,6 +647,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createAgentTokenRoutes(pool));
   app.route('/api/v1',createAgentFeedRoutes(pool));
   app.route('/api/v1',createJournalMemberRoutes(pool));
+  registerShareAttachments(app, pool, {fetcher: options.githubSocial?.fetcher, get token(){return runtime.githubMetricsToken();}}, runtime.afterResponse);
   app.route('/api/v1',createSkillSubmissionRoutes(pool,origin,runtime.githubMetricsToken,runtime));
   app.route('/api/v1',createPositioningRoutes(pool,{guildLaunchpadEnabled:runtime.guildLaunchpadEnabled===true,communitySearchEnabled:runtime.communitySearchEnabled===true}));
   app.route('/api/v1',createCommerceRoutes(pool));
