@@ -34,3 +34,13 @@ test('origin challenges and identity grants record expiry and bind each grant to
  assert.match(sql,/expires_at timestamptz NOT NULL, CHECK \(\(session_hash IS NULL\) <> \(agent_connection IS NULL\)\)/);
  assert.match(sql,/CREATE INDEX guild_tool_token_expiry ON guild_tool_token_grants\(expires_at\)/);
 });
+test('214 adds nullable draft_expires_at on guild_tools extending the 210 ledger without authority grants',()=>{
+ const draftsSql=readFileSync(new URL('../../../migrations/214_guild_tool_drafts.sql',import.meta.url),'utf8');
+ const sources=readMigrationSources(fileURLToPath(new URL('../../../migrations',import.meta.url)));
+ const prior=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=210),legacyMigrationProfile({first:1,last:210,known_gaps:[22]}));
+ const next=resolveMigrationPlan(sources.filter(s=>Number(s.name.slice(0,3))<=214),legacyMigrationProfile({first:1,last:214,known_gaps:[22,211,212,213]}),prior.ledger);
+ assert.deepEqual(next.pending,['214_guild_tool_drafts.sql']);
+ assert.match(draftsSql,/ALTER TABLE guild_tools\s+ADD COLUMN draft_expires_at timestamptz\b/i);
+ assert.match(draftsSql,/state\s*<>\s*'enabled'\s+OR\s+draft_expires_at IS NULL/i);
+ assert.doesNotMatch(draftsSql,/\bGRANT\b|SECURITY DEFINER|CREATE ROLE|\b(?:INSERT INTO|UPDATE|ALTER TABLE)\s+(?:shares|payments|member_client_connections|agent_connections|platform_admins)/i);
+});

@@ -4,7 +4,7 @@ import {Hono} from 'hono';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {moduleCommand,type PlatformEnv} from '../module-context.js';
-import {changeTool,listTools,manageAccess,registerTool,toolContext} from '../../../../modules/guild-tools/service.js';
+import {changeTool,listMemberTools,listTools,manageAccess,registerTool,toolContext} from '../../../../modules/guild-tools/service.js';
 import {toolUrl} from '../../../../modules/guild-tools/validation.js';
 import {requireCondition} from '../../../../packages/shared/problem.js';
 import type {PreviewFetch} from '../../../../modules/community/link-preview.js';
@@ -21,7 +21,7 @@ export function createPublicGuildToolRoutes(pool:Pool,origin:string,signer?:Tool
  app.get('/api/v1/public/guilds/:guild/tools',async c=>c.json(await listTools(pool,c.req.param('guild'))));
  app.get('/guild-tool-preview/:id',async c=>{
  requireCondition(/^[0-9a-f-]{36}$/.test(c.req.param('id')),404,'not_found','找不到預覽。');
- const r=(await pool.query("SELECT tool_id,guild_key,entry_url,origin,profile FROM guild_tools WHERE id=$1 AND state='pending' AND updated_at>clock_timestamp()-interval '1 hour'",[c.req.param('id')])).rows[0];
+ const r=(await pool.query("SELECT tool_id,guild_key,entry_url,origin,profile FROM guild_tools WHERE id=$1 AND state='pending' AND ((draft_expires_at IS NOT NULL AND draft_expires_at>clock_timestamp()) OR (draft_expires_at IS NULL AND updated_at>clock_timestamp()-interval '1 hour'))",[c.req.param('id')])).rows[0];
  requireCondition(r,404,'not_found','預覽已過期，請重新登錄。');const u=toolUrl(r.entry_url,origin);requireCondition(u.origin===r.origin,404,'not_found','找不到預覽。');
  const data=dataJson({...r,nonce:randomUUID(),preview_id:c.req.param('id'),platform_origin:origin});
  c.header('Content-Security-Policy',`default-src 'none'; script-src 'sha256-${PREVIEW_SCRIPT_HASH}'; frame-src ${u.origin}; frame-ancestors 'self'; base-uri 'none'; form-action 'none'`);
@@ -32,9 +32,10 @@ export function createGuildToolRoutes(pool:Pool,origin:string,fetcher?:PreviewFe
  const app=new Hono<PlatformEnv>();
  app.post('/guilds/:guild/tools/:tool/token',async c=>{c.header('Cache-Control','no-store');return c.json(await exchangeToolToken(pool,c.get('actor'),c.req.param('guild'),c.req.param('tool'),await c.req.json(),origin,signer));});
  app.get('/guilds/:guild/tools/access',async c=>c.json({...await manageAccess(pool,c.get('actor'),c.req.param('guild')),registration_available:Boolean(fetcher),token_exchange_available:Boolean(signer)}));
+ app.get('/guilds/:guild/tools',async c=>c.json(await listMemberTools(pool,c.get('actor'),c.req.param('guild'))));
  app.get('/guilds/:guild/tools/:tool/context',async c=>c.json(await toolContext(pool,c.get('actor'),c.req.param('guild'),c.req.param('tool'))));
  app.post('/guilds/:guild/tools/origin-challenges',async c=>{requireCondition(fetcher,503,'tool_egress_unavailable','此環境尚未安裝安全網址檢查。');return c.json(await createOriginChallenge(pool,c.get('actor'),c.req.param('guild'),await c.req.json(),origin),201);});
  app.post('/guilds/:guild/tools',async c=>c.json(await registerTool(pool,await moduleCommand(c),c.req.param('guild'),origin,fetcher),201));
- for(const action of ['accept','disable','report'] as const)app.post(`/guilds/:guild/tools/:tool/${action}`,async c=>c.json(await changeTool(pool,await moduleCommand(c),c.req.param('guild'),c.req.param('tool'),action)));
+ for(const action of ['accept','disable','report','withdraw'] as const)app.post(`/guilds/:guild/tools/:tool/${action}`,async c=>c.json(await changeTool(pool,await moduleCommand(c),c.req.param('guild'),c.req.param('tool'),action)));
  return app;
 }

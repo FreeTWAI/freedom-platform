@@ -12,6 +12,7 @@
     "apps/platform-api/src/routes/guild-tools.ts",
     "apps/portal-web/src/frame-tools/**",
     "migrations/207_guild_tools.sql",
+    "migrations/214_guild_tool_drafts.sql",
     "tests/runtime/guild-tools.test.ts",
     "tests/runtime/guild-tool-bridge.test.ts",
     "tests/e2e/guild-tools.spec.ts",
@@ -60,6 +61,7 @@
         "guild.tools.read",
         "guild.tools.report",
         "guild.tools.accept",
+        "guild.tools.withdraw",
         "guild.tools.disable"
       ],
       "auth_profile": "member-session"
