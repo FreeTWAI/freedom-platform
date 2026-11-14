@@ -69,3 +69,19 @@ CREATE TABLE community_event_registration_credit_people (
  user_id uuid NOT NULL REFERENCES users,
  created_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(event_id,user_id)
 );
+
+CREATE FUNCTION enforce_platform_event_registration() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.state <> 'cancelled' AND EXISTS (
+    SELECT 1 FROM community_events WHERE event_id = NEW.event_id AND registration_mode = 'external'
+  ) THEN
+    RAISE EXCEPTION 'external registration event' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER community_event_rsvp_registration_mode
+  BEFORE INSERT OR UPDATE OF state ON community_event_rsvps
+  FOR EACH ROW EXECUTE FUNCTION enforce_platform_event_registration();
+CREATE TRIGGER community_event_guest_rsvp_registration_mode
+  BEFORE INSERT OR UPDATE OF state ON community_event_guest_rsvps
+  FOR EACH ROW EXECUTE FUNCTION enforce_platform_event_registration();

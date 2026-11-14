@@ -330,8 +330,8 @@ test('event notices, guild exposure and referral credit use bounded statements f
 
 test('notice processing sends at most one bounded batch per run',async()=>{
  const id=await noticeFixture();
- await pool.query(`INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind,body)
-   SELECT gen_random_uuid(),$1,'going@example.com',n,'event_announcement','合成通知' FROM generate_series(1,13) n`,[id]);
+ await pool.query(`INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind,status,body)
+   SELECT gen_random_uuid(),$1,'going@example.com',n,'event_announcement','queued','合成通知' FROM generate_series(1,13) n`,[id]);
  const {processEventNotices,EVENT_DELIVERY_BATCH_SIZE}=await import('../../modules/community/event-waitlist.js');
  let sends=0;const send=async()=>{sends++;};
  await processEventNotices(pool,send,'https://example.org',id);
