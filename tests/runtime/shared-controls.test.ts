@@ -52,7 +52,7 @@ test('Short overlay styling and white focus ring match only the direct share tri
   assert.equal(declarations(css,'.short-video-feed .short-video-share > .btn svg').color,'inherit');
   const feed=read('modules/ShortVideoFeed.tsx'),share=read('modules/SocialPostShare.tsx');
   assert.ok(feed.includes('<span className="short-video-share">{renderShare(post)}</span>'));
-  assert.match(share,/return <>\s*<button[\s\S]*?<\/button>\s*<dialog/);
+  assert.match(share,/return <>\s*<button[\s\S]*?<\/button>\s*\{open\s*&&\s*(?:createPortal\()?<dialog/);
   const regression=css.replaceAll('.short-video-share > .btn','.short-video-share .btn');
   assert.match(regression,/\.short-video-share\s+\.btn/);
   assert.ok(contrast('#ffffff','#8c8c8c')<4.5,'old white-on-translucent-black over white dialog fails');

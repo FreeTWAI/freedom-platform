@@ -1,7 +1,8 @@
 import {useEffect,useId,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {ApiError,type PortalClient} from '../api';
 import {describeError} from '../portal-session';
-import {promotionLink,ShareButton} from '../share/ShareButton';
+import {isDialogBackdropClick,promotionLink,returnFocusToTrigger,SharePanel,useShareControls} from '../share/ShareButton';
 import {SocialIcon} from './SocialTools';
 import type {SocialPost} from './SocialZone';
 
@@ -31,14 +32,48 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
   const [sharing,setSharing]=useState<SharingState|null>(null),[publicAvailable,setPublicAvailable]=useState(false);
   const [loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[uncertain,setUncertain]=useState(false);
   const [refresh,setRefresh]=useState(0),[imageReady,setImageReady]=useState('');
-  const mounted=useRef(false),epoch=useRef(0),savingToken=useRef<symbol|null>(null),command=useRef<PublicationCommand|null>(null);
+  const [linkPath,setLinkPath]=useState<string|null>(null),[tracked,setTracked]=useState(false),[linkBusy,setLinkBusy]=useState(false);
+  const [loadedClient,setLoadedClient]=useState<PortalClient|null>(null),[loadedScope,setLoadedScope]=useState('');
+  const mounted=useRef(false),epoch=useRef(0),linkEpoch=useRef(0),fetchedTrackKey=useRef(''),isOpenRef=useRef(false),savingToken=useRef<symbol|null>(null),command=useRef<PublicationCommand|null>(null);
   const generation=client.sessionGeneration;
   const fallbackUrl=publicAvailable?`/posts/${post.post_id}`:`/?social-post=${post.post_id}#social`;
   const shareTitle=post.kind==='link'?(post.title||'自由工坊貼文'):(post.note?.split(/\r?\n/).find(line=>line.trim())?.trim().slice(0,80)||'自由工坊貼文');
-  const makeShareLink=post.kind==='link'||publicAvailable?promotionLink(client,'social_post',post.post_id):null;
+  const shouldTrack=post.kind==='link'||publicAvailable;
+  const currentScope=`${generation}:${post.post_id}:${post.revision}:${post.mine}:${refresh}`;
+  const scopeLoading=open&&(loading||loadedClient!==client||loadedScope!==currentScope);
   const mediaKey=sharing?post.post_id+':'+sharing.media_version:'';
   const thumbnail=sharing?.image_url?new URL(sharing.image_url,window.location.origin):null;
-  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current++;};},[]);
+  const shareControls=useShareControls({
+    open,
+    resetKey:`${generation}:${post.post_id}:${publicAvailable}:${refresh}`,
+    title:shareTitle,
+    fallbackUrl,
+    linkPath,
+    tracked,
+    busy:scopeLoading||linkBusy,
+    disabled:saving||uncertain,
+  });
+  function closeDialog(returnFocus:boolean){
+    linkEpoch.current++;fetchedTrackKey.current='';
+    if(!isOpenRef.current)return;
+    isOpenRef.current=false;
+    if(mounted.current){
+      setOpen(false);setStatus('');setLinkPath(null);setTracked(false);setLinkBusy(false);setLoadedClient(null);setLoadedScope('');
+      shareControls.resetUi();
+    }
+    if(dialog.current?.open)dialog.current.close();
+    if(returnFocus)returnFocusToTrigger(trigger.current,true);
+  }
+  function openDialog(){
+    if(isOpenRef.current)return;
+    isOpenRef.current=true;
+    fetchedTrackKey.current='';
+    setStatus('');setError('');setLoading(true);setLoadedClient(null);setLoadedScope('');
+    setSharing(null);setPublicAvailable(false);setImageReady('');setLinkPath(null);setTracked(false);setLinkBusy(false);
+    shareControls.resetUi();
+    setOpen(true);
+  }
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current++;closeDialog(false);};},[]);
   useEffect(()=>{command.current=null;savingToken.current=null;setSaving(false);setUncertain(false);},[client,generation,post.post_id]);
   useEffect(()=>{
     const current=++epoch.current,abort=new AbortController();
@@ -48,17 +83,40 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
     if(post.mine){
       void client.get<unknown>('/social-posts/'+post.post_id+'/public-sharing',{signal:abort.signal}).then(value=>{
         if(live()){const state=requireSharingState(value,post.post_id);setSharing(state);setPublicAvailable(state.available);}
-      }).catch(cause=>{if(live())setError(describeError(cause).message);}).finally(()=>{if(live())setLoading(false);});
+      }).catch(cause=>{if(live())setError(describeError(cause).message);}).finally(()=>{if(live()){setLoadedClient(client);setLoadedScope(currentScope);setLoading(false);}});
     }else{
       void client.get('/public/shared-posts/'+post.post_id,{signal:abort.signal,skipAuthHandler:true,suppressConsole:true}).then(()=>{
         if(live())setPublicAvailable(true);
-      }).catch(cause=>{if(live()&&(!(cause instanceof ApiError)||cause.status!==404))setError('暫時無法確認公開狀態，目前提供會員貼文連結。');}).finally(()=>{if(live())setLoading(false);});
+      }).catch(cause=>{if(live()&&(!(cause instanceof ApiError)||cause.status!==404))setError('暫時無法確認公開狀態，目前提供會員貼文連結。');}).finally(()=>{if(live()){setLoadedClient(client);setLoadedScope(currentScope);setLoading(false);}});
     }
     return()=>{abort.abort();epoch.current++;};
   },[client,generation,post.post_id,post.revision,post.mine,open,refresh]);
-  useEffect(()=>{if(open&&!dialog.current?.open)dialog.current?.showModal();},[open]);
+  useEffect(()=>{
+    if(!open||!shouldTrack||scopeLoading){
+      linkEpoch.current++;fetchedTrackKey.current='';setLinkPath(null);setTracked(false);setLinkBusy(false);
+      return;
+    }
+    if(saving||uncertain)return;
+    const targetKey=`${generation}:${post.post_id}:${shouldTrack}:${refresh}`;
+    if(fetchedTrackKey.current===targetKey)return;
+    const current=++linkEpoch.current;
+    fetchedTrackKey.current=targetKey;
+    setLinkPath(null);setTracked(false);setLinkBusy(true);
+    void promotionLink(client,'social_post',post.post_id)().then(result=>{
+      if(!mounted.current||linkEpoch.current!==current||client.sessionGeneration!==generation)return;
+      if(result?.path){setLinkPath(result.path);setTracked(true);}
+    }).catch(()=>{
+      if(!mounted.current||linkEpoch.current!==current||client.sessionGeneration!==generation)return;
+      fetchedTrackKey.current='';setLinkPath(null);setTracked(false);
+    }).finally(()=>{
+      if(mounted.current&&linkEpoch.current===current&&client.sessionGeneration===generation)setLinkBusy(false);
+    });
+  },[client,generation,post.post_id,open,scopeLoading,saving,uncertain,shouldTrack,refresh]);
+  useEffect(()=>{
+    if(open&&!dialog.current?.open)dialog.current?.showModal();
+    else if(!open&&dialog.current?.open)dialog.current?.close();
+  },[open]);
   useEffect(()=>{if(uncertain&&consentDetails.current)consentDetails.current.open=true;},[uncertain,open,sharing]);
-  function close(){dialog.current?.close();setOpen(false);setStatus('');trigger.current?.focus({preventScroll:true});}
   async function publish(enabled:boolean){
     if(!post.mine||!sharing||savingToken.current!==null)return;
     if(!command.current){
@@ -92,13 +150,24 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
   }
   const reviewed=Boolean(sharing&&sharing.post_revision===post.revision&&(!sharing.image_url||imageReady===mediaKey));
   return <>
-    <button ref={trigger} type="button" className="btn btn-ghost" aria-label="分享貼文連結" onClick={()=>{setStatus('');setOpen(true);}}><SocialIcon name="share"/>分享</button>
-    <dialog ref={dialog} className="social-publish-dialog social-share-dialog" aria-labelledby={id+'-title'} onCancel={event=>{event.preventDefault();close();}} onClose={()=>setOpen(false)}>
-      {open&&<div className="stack">
-        <header className="social-publish-head"><h2 id={id+'-title'}>分享貼文連結</h2><button type="button" className="btn btn-ghost" onClick={close}>關閉分享</button></header>
-        {loading&&<p role="status">正在確認貼文的分享範圍…</p>}
-        {!loading&&<p className="social-share-audience">{publicAvailable?'任何取得連結的人都能閱讀。':'僅限登入且有閱覽權限的會員。'}</p>}
-        <ShareButton title={shareTitle} fallbackUrl={fallbackUrl} makeLink={makeShareLink} label="分享" buttonClassName="btn btn-secondary" disabled={saving||loading||uncertain}/>
+    <button ref={trigger} type="button" className="btn btn-ghost" aria-label="分享貼文連結" aria-haspopup="dialog" onClick={openDialog}><SocialIcon name="share"/>分享</button>
+    {open&&createPortal(<dialog
+      ref={dialog}
+      className="social-publish-dialog social-share-dialog"
+      aria-labelledby={id+'-title'}
+      onClick={event=>{if(!isDialogBackdropClick(event))return;event.stopPropagation();closeDialog(true);}}
+      onCancel={event=>{event.stopPropagation();event.preventDefault();closeDialog(true);}}
+      onClose={event=>{event.stopPropagation();closeDialog(true);}}
+    >
+      <div className="stack">
+        <header className="social-publish-head"><h2 id={id+'-title'}>分享貼文連結</h2><button type="button" className="btn btn-ghost" onClick={()=>closeDialog(true)}>關閉分享</button></header>
+        {scopeLoading&&<p role="status">正在確認貼文的分享範圍…</p>}
+        {!scopeLoading&&<p className="social-share-audience">{publicAvailable?'任何取得連結的人都能閱讀。':'僅限登入且有閱覽權限的會員。'}</p>}
+        <SharePanel
+          id={id}
+          controls={shareControls}
+          actionsClassName="skill-share-actions social-share-actions"
+        />
         {sharing?.enabled&&!sharing.available&&<p role="status">貼文內容或圖片已變更，目前已停止公開。確認目前內容後，可以重新開放。</p>}
         {sharing&&sharing.post_revision!==post.revision&&<p role="alert">貼文已更新，請重新整理貼文後再確認公開內容。</p>}
         {post.mine&&sharing&&<details ref={consentDetails} className="social-sharing-consent" aria-label="公開閱讀設定">
@@ -112,15 +181,15 @@ export function SocialPostShare({client,post}:{client:PortalClient;post:SocialPo
             {thumbnail&&<img src={thumbnail.pathname+thumbnail.search} alt="即將公開的貼文附圖" onLoad={()=>setImageReady(mediaKey)} onError={()=>{setImageReady('');setError('目前附圖暫時無法讀取，請重新確認分享狀態後再開放。');}}/>}
           </div>}
           {uncertain?<button type="button" className="btn btn-primary" disabled={saving} onClick={()=>void publish(command.current!.body.enabled)}>確認上次設定</button>:<div className="actions">
-            {!sharing.available&&<button type="button" className="btn btn-primary" disabled={saving||loading||!reviewed} aria-busy={saving} onClick={()=>void publish(true)}>{sharing.enabled?'重新開放目前版本':'開放免登入閱讀'}</button>}
-            {sharing.enabled&&<button type="button" className="btn btn-secondary" disabled={saving||loading} onClick={()=>void publish(false)}>關閉免登入閱讀</button>}
+            {!sharing.available&&<button type="button" className="btn btn-primary" disabled={saving||scopeLoading||!reviewed} aria-busy={saving} onClick={()=>void publish(true)}>{sharing.enabled?'重新開放目前版本':'開放免登入閱讀'}</button>}
+            {sharing.enabled&&<button type="button" className="btn btn-secondary" disabled={saving||scopeLoading} onClick={()=>void publish(false)}>關閉免登入閱讀</button>}
           </div>}
           </div>
         </details>}
         {error&&<p role="alert">{error}</p>}
         {error&&!uncertain&&!saving&&<button type="button" className="btn btn-ghost" onClick={()=>setRefresh(value=>value+1)}>重新確認分享狀態</button>}
         {status&&<p role="status">{status}</p>}
-      </div>}
-    </dialog>
+      </div>
+    </dialog>,document.body)}
   </>;
 }

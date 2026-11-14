@@ -81,13 +81,31 @@ const flushReact = (fn: () => void) => React.act(() => flushSync(fn));
 
 HostNode.prototype.closest = function () {return null;};
 HostNode.prototype.showModal = function () {this.open = true; this.setAttribute('open', '');};
-HostNode.prototype.close = function () {this.open = false; this.removeAttribute('open');};
+HostNode.prototype.close = function () {
+  const wasOpen = this.open;
+  this.open = false;
+  this.removeAttribute('open');
+  if (wasOpen) propsOf(this)?.onClose?.({target: this, currentTarget: this, stopPropagation() {}});
+};
 HostNode.prototype.focus = function () {this.focused = true; this.ownerDocument.activeElement = this;};
 HostNode.prototype.select = function () {this.selected = true;};
+HostNode.prototype.getBoundingClientRect = function () {
+  return this.nodeName === 'DIALOG'
+    ? {left: 100, top: 100, right: 500, bottom: 500, width: 400, height: 400}
+    : {left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0};
+};
 
 const base = fileURLToPath(new URL('../../', import.meta.url));
 const propsOf = (node: HostNode) => node[Object.keys(node).find(k => k.startsWith('__reactProps$'))!];
 const descendants = (node: HostNode): HostNode[] => [node, ...node.childNodes.flatMap(descendants)];
+let nextNodeId = 0;
+const nodeIds = new WeakMap<HostNode, number>();
+const idOf = (node: HostNode | null | undefined) => {
+  if (!node) return 0;
+  let id = nodeIds.get(node);
+  if (!id) {id = ++nextNodeId; nodeIds.set(node, id);}
+  return id;
+};
 const content = {introductions: ['分享介紹一', '分享介紹二'], illustration_url: '/brand/skill-illustrations/social-post.webp', illustration_alt: '合成介紹圖片'};
 const flush = () => React.act(async () => {await new Promise<void>(resolve => setImmediate(resolve));});
 
@@ -346,7 +364,7 @@ for (const action of ['book', 'parent', 'unmount']) {
     intro.resolve({ok: true, json: async () => content});
     session.resolve({ok: true, json: async () => ({csrf_token: 'synthetic-csrf'})});
     await flush();
-    if (action !== 'unmount') assert.equal(h.all().find(n => n.nodeName === 'DIALOG')!.open, false);
+    assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
     assert.equal(h.requests.length, 2);
     assert.equal(h.copies.length, 0);
     assert.equal(h.shares.length, 0);
@@ -405,14 +423,17 @@ for (const [file, signature, component, props] of [
   });
 }
 
-test('inactive parent keeps the same dialog shell, blocks hidden loads and reopens with fresh work', async t => {
+test('inactive parent removes closed dialog, blocks hidden loads and reopens with fresh work', async t => {
   const h = harness(t);
+  const triggerId = idOf(h.button('分享技能'));
   await h.start();
   await anonymous(h);
-  const old = h.request(introPath), shell = h.all().find(n => n.nodeName === 'DIALOG')!;
+  const old = h.request(introPath);
+  const firstDialogId = idOf(h.all().find(n => n.nodeName === 'DIALOG'));
+  assert.ok(firstDialogId > 0);
   h.render({active: false});
   await flush();
-  assert.equal(shell.open, false);
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
   assert.equal(old.options.signal.aborted, true);
   assert.equal(propsOf(h.button('分享技能')!).disabled, true);
   const count = h.requests.length;
@@ -422,14 +443,16 @@ test('inactive parent keeps the same dialog shell, blocks hidden loads and reope
   old.resolve({ok: true, json: async () => ({...content, introductions: ['關閉後舊內容']})});
   await flush();
   await h.expire();
-  assert.equal(shell.open, false);
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
   h.render({active: true});
-  assert.equal(h.all().find(n => n.nodeName === 'DIALOG')!, shell);
-  assert.equal(shell.open, false);
+  assert.equal(idOf(h.button('分享技能')), triggerId);
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
   await h.start();
   await anonymous(h);
   await loaded(h);
-  assert.equal(shell.open, true);
+  const reopened = h.all().filter(n => n.nodeName === 'DIALOG');
+  assert.equal(reopened.length, 1);
+  assert.equal(reopened[0].open, true);
   assert.ok(!h.text().includes('關閉後舊內容'));
 });
 
@@ -450,15 +473,17 @@ test('late timed-out introduction cannot replace a fresh reopened introduction',
   assert.equal(h.timers.size, 0);
 });
 
-test('dialog shell remains mounted across repeated inactive transitions', async t => {
+test('dialog stays unmounted while closed across repeated inactive transitions', async t => {
   const h = harness(t);
+  const triggerId = idOf(h.button('分享技能'));
   await h.start();
-  const shell = h.all().find(n => n.nodeName === 'DIALOG');
-  assert.ok(shell);
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 1);
   for (let i = 0; i < 5; i++) {
     h.render({active: false});
-    assert.ok(h.all().find(n => n.nodeName === 'DIALOG') === shell, 'dialog identity changed');
+    assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
     h.render({active: true});
+    assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
+    assert.equal(idOf(h.button('分享技能')), triggerId);
   }
   assert.equal(h.requests.length, 2);
 });
@@ -470,7 +495,7 @@ test('closing a parent suppresses late clipboard feedback while retaining the un
   await loaded(h);
   let finish!: () => void;
   navigatorState.clipboard.writeText = () => new Promise<void>(resolve => {finish = resolve;});
-  const pending = h.click('複製連結');
+  await h.click('複製連結');
   await flush();
   h.render({active: false});
   h.render({active: true});
@@ -479,8 +504,166 @@ test('closing a parent suppresses late clipboard feedback while retaining the un
   await loaded(h);
   assert.equal(propsOf(h.button('分享')!).disabled, true);
   finish();
-  await pending;
   await flush();
   assert.ok(!h.text().includes('已複製'));
   assert.equal(propsOf(h.button('複製連結')!).disabled, false);
 });
+
+function shareButtonHarness(t: TestContext, initial: Record<string, any> = {}) {
+  const h = harness(t);
+  const cache = new Map<string, any>();
+  const compileShare = (relative: string): any => {
+    const file = path.resolve(base, relative);
+    if (cache.has(file)) return cache.get(file);
+    const mod = {exports: {} as any}; cache.set(file, mod.exports);
+    const raw = readFileSync(file, 'utf8');
+    runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic'}).code, {
+      module: mod, exports: mod.exports, crypto: webcrypto, Intl, URL, AbortController, console,
+      window: windowObj, document, navigator: navigatorState, HTMLDetailsElement: HostDetailsElement,
+      setTimeout, clearTimeout,
+      fetch: () => Promise.reject(new Error('unexpected fetch')),
+      require(name: string) {
+        if (name === 'react') return React;
+        if (name === 'react/jsx-runtime' || name === 'react-dom' || name === 'qrcode') return req(name);
+        if (name === '../language') return {useLanguage: () => ({t: (k: string) => k})};
+        if (name.endsWith('.css')) return {};
+        if (name.startsWith('.')) {
+          const resolved = path.resolve(path.dirname(file), name);
+          const target = [resolved, resolved + '.ts', resolved + '.tsx'].find(existsSync);
+          assert.ok(target, `missing ${name}`);
+          return compileShare(path.relative(base, target));
+        }
+        throw Error('Unexpected import: ' + name);
+      },
+    });
+    cache.set(file, mod.exports);
+    return mod.exports;
+  };
+  const {ShareButton} = compileShare('apps/portal-web/src/share/ShareButton.tsx');
+  h.unmount();
+  let unmounted = false;
+  let props: any = {
+    title: '統一分享標題',
+    fallbackUrl: '/development/skills/social-post',
+    introductions: ['介紹 A', '介紹 B'],
+    label: '開啟分享',
+    ...initial,
+  };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  const render = (patch?: Record<string, any>) => {
+    if (patch) props = {...props, ...patch};
+    flushReact(() => root.render(React.createElement(ShareButton, props)));
+  };
+  const unmount = () => {
+    if (!unmounted) {unmounted = true; flushReact(() => root.unmount()); container.parentNode?.removeChild(container);}
+  };
+  t.after(unmount);
+  render();
+  const all = () => descendants(document.body);
+  const dialogs = () => all().filter(n => n.nodeName === 'DIALOG');
+  const button = (label: string) => all().filter(n => n.nodeName === 'BUTTON' && (n.textContent === label || n.getAttribute('aria-label') === label)).at(-1);
+  const click = async (label: string) => {
+    const item = button(label);
+    assert.ok(item, label);
+    await React.act(async () => {await propsOf(item).onClick?.({preventDefault() {}, stopPropagation() {}});});
+  };
+  const selectIntro = async (idx: number) => {
+    const radios = all().filter(n => n.nodeName === 'INPUT' && propsOf(n)?.type === 'radio');
+    assert.ok(radios[idx], `missing radio ${idx}`);
+    await React.act(async () => {propsOf(radios[idx]).onChange({target: {checked: true}});});
+  };
+  return {render, unmount, all, dialogs, button, click, selectIntro};
+}
+
+test('ShareButton unmount while closed never calls onClose', t => {
+  let closes = 0;
+  const s = shareButtonHarness(t, {onClose: () => {closes++;}});
+  s.unmount();
+  assert.equal(closes, 0);
+});
+
+for (const mode of ['button', 'escape', 'backdrop', 'parent-hidden', 'fallback-change', 'title-change', 'text-change', 'unmount'] as const) {
+  test(`ShareButton close via ${mode} resets state, focuses trigger when present, and calls onClose once`, async t => {
+    let staleCloses = 0, freshCloses = 0;
+    const s = shareButtonHarness(t, {
+      text: '初始文字',
+      makeLink: async () => ({path: '/go/tracked123'}),
+      onClose: () => {staleCloses++;},
+    });
+    const trigger = s.button('開啟分享')!;
+    const triggerId = idOf(trigger);
+    await s.click('開啟分享');
+    await flush();
+    assert.equal(s.dialogs().length, 1);
+
+    await s.click('QR 碼');
+    await s.selectIntro(0);
+    navigatorState.clipboard.writeText = async () => {throw new Error('denied');};
+    await s.click('複製連結');
+    await flush();
+    assert.equal(s.all().some(n => n.nodeName === 'SVG'), true);
+    assert.equal(s.all().some(n => n.nodeName === 'TEXTAREA'), true);
+    assert.equal(s.all().some(n => n.textContent.includes('請手動複製下面的內容')), true);
+    assert.match(s.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent ?? '', /\?intro=1$/);
+
+    // Swap onClose while open so stale closure bugs on unmount/close are caught.
+    s.render({onClose: () => {freshCloses++;}});
+    document.activeElement = document.body;
+    trigger.focused = false;
+
+    const dialog = s.dialogs()[0];
+    if (mode === 'button') {
+      await s.click('關閉分享');
+    } else if (mode === 'escape') {
+      await React.act(async () => {
+        propsOf(dialog).onCancel({target: dialog, currentTarget: dialog, preventDefault() {}, stopPropagation() {}});
+      });
+    } else if (mode === 'backdrop') {
+      await React.act(async () => {
+        propsOf(dialog).onClick({target: dialog, currentTarget: dialog, clientX: 150, clientY: 150, stopPropagation() {}});
+      });
+      assert.equal(s.dialogs().length, 1, 'padding click inside dialog box must not close');
+      await React.act(async () => {
+        propsOf(dialog).onClick({target: dialog, currentTarget: dialog, clientX: 10, clientY: 10, stopPropagation() {}});
+      });
+    } else if (mode === 'parent-hidden') {
+      s.render({disabled: true});
+    } else if (mode === 'fallback-change') {
+      s.render({fallbackUrl: '/development/skills/editkin'});
+    } else if (mode === 'title-change') {
+      s.render({title: '新分享標題'});
+    } else if (mode === 'text-change') {
+      s.render({text: '新文字'});
+    } else if (mode === 'unmount') {
+      s.unmount();
+    }
+    await flush();
+
+    assert.equal(s.dialogs().length, 0);
+    assert.equal(staleCloses, 0);
+    assert.equal(freshCloses, 1);
+
+    if (mode === 'button' || mode === 'escape' || mode === 'backdrop' || mode === 'fallback-change' || mode === 'title-change' || mode === 'text-change') {
+      assert.equal(idOf(document.activeElement), triggerId);
+    } else if (mode === 'unmount') {
+      assert.notEqual(idOf(document.activeElement), triggerId);
+    } else if (mode === 'parent-hidden') {
+      assert.notEqual(idOf(document.activeElement), triggerId);
+      s.render({disabled: false});
+    }
+
+    if (mode !== 'unmount') {
+      await s.click('開啟分享');
+      await flush();
+      assert.equal(s.dialogs().length, 1);
+      assert.equal(s.all().some(n => n.nodeName === 'SVG'), false);
+      assert.equal(s.all().some(n => n.nodeName === 'TEXTAREA'), false);
+      assert.equal(s.all().some(n => n.textContent.includes('請手動複製下面的內容')), false);
+      assert.doesNotMatch(s.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent ?? '', /\?intro=/);
+      await s.click('關閉分享');
+      await flush();
+      assert.equal(freshCloses, 2);
+    }
+  });
+}

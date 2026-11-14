@@ -90,9 +90,19 @@ const flush = (fn: () => void) => React.act(() => flushSync(fn));
 
 HostNode.prototype.closest = function () {return null;};
 HostNode.prototype.showModal = function () {this.open = true; this.setAttribute('open', '');};
-HostNode.prototype.close = function () {this.open = false; this.removeAttribute('open');};
+HostNode.prototype.close = function () {
+  const wasOpen = this.open;
+  this.open = false;
+  this.removeAttribute('open');
+  if (wasOpen) propsOf(this)?.onClose?.({target: this, currentTarget: this, stopPropagation() {}});
+};
 HostNode.prototype.focus = function () {this.focused = true; this.ownerDocument.activeElement = this;};
 HostNode.prototype.select = function () {this.selected = true;};
+HostNode.prototype.getBoundingClientRect = function () {
+  return this.nodeName === 'DIALOG'
+    ? {left: 100, top: 100, right: 500, bottom: 500, width: 400, height: 400}
+    : {left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0};
+};
 
 const base = fileURLToPath(new URL('../../', import.meta.url));
 const propsOf = (node: HostNode) => node[Object.keys(node).find(k => k.startsWith('__reactProps$'))!];
@@ -147,12 +157,21 @@ function harness(t: TestContext, mine = true) {
     if (patch) currentProps = {...currentProps, ...patch};
     flush(() => root.render(React.createElement(SocialPostShare, currentProps)));
   };
-  t.after(() => {flush(() => root.unmount()); container.parentNode?.removeChild(container);});
+  let unmounted = false;
+  const unmount = () => {
+    if (unmounted) return;
+    unmounted = true;
+    flush(() => root.unmount());
+    container.parentNode?.removeChild(container);
+  };
+  t.after(unmount);
   render();
   const all = () => descendants(document.body);
-  const button = (label: string) => all().find(n => n.nodeName === 'BUTTON' && (n.textContent === label || n.getAttribute('aria-label') === label));
+  const matchesLabel = (n: HostNode, label: string) =>
+    n.nodeName === 'BUTTON' && (n.getAttribute('aria-label') === label || (!n.getAttribute('aria-label') && n.textContent === label));
+  const button = (label: string) => all().find(n => matchesLabel(n, label));
   const click = async (label: string) => {
-    const target = all().filter(n => n.nodeName === 'BUTTON' && (n.textContent === label || n.getAttribute('aria-label') === label)).at(-1);
+    const target = all().filter(n => matchesLabel(n, label)).at(-1);
     assert.ok(target, `missing button ${label}`);
     assert.ok(!propsOf(target).disabled, `${label} disabled`);
     await React.act(async () => {await propsOf(target).onClick?.({preventDefault() {}, stopPropagation() {}});});
@@ -165,18 +184,21 @@ function harness(t: TestContext, mine = true) {
     else reads.at(-1).reject(new ApiError({status: 404, message: 'not_found'}));
     await settle();
   };
-  return {client, currentProps: () => currentProps, reads, writes, copies, shares, render, all, button, click, open, settle, state, navigatorState};
+  return {client, currentProps: () => currentProps, reads, writes, copies, shares, render, unmount, all, button, click, open, settle, state, navigatorState};
 }
 
-test('restricted link is directly shareable/copyable; preview and raw URL are folded and neither action publishes', async t => {
+test('restricted link is directly shareable/copyable inside one dialog; consent is folded and neither action publishes', async t => {
   const h = harness(t);
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
   await h.open();
   const nodes = h.all();
+  assert.equal(nodes.filter(n => n.nodeName === 'DIALOG').length, 1);
   const consent = nodes.find(n => n.getAttribute('class') === 'social-sharing-consent')!;
   assert.equal(consent.open, false);
-  const shareTrigger = nodes.find(n => n.nodeName === 'BUTTON' && n.textContent === '分享' && n.getAttribute('aria-haspopup') === 'dialog')!;
-  assert.ok(nodes.indexOf(shareTrigger) < nodes.indexOf(consent));
-  await h.click('分享');
+  const shareAction = h.button('分享')!;
+  assert.equal(shareAction.getAttribute('aria-haspopup'), null);
+  assert.ok(nodes.indexOf(shareAction) < nodes.indexOf(consent));
+  assert.match(nodes.find(n => n.getAttribute('class') === 'skill-share-url')?.textContent ?? '', /\?social-post=post-a#social$/);
   await h.click('複製連結');
   await h.settle();
   assert.match(h.copies[0], /\?social-post=post-a#social$/);
@@ -186,57 +208,74 @@ test('restricted link is directly shareable/copyable; preview and raw URL are fo
   assert.equal(h.writes.length, 0);
 });
 
-test('clipboard denial opens/selects fallback and close returns focus without publishing', async t => {
+test('clipboard denial opens/selects fallback and one Escape or close removes dialog and returns focus without publishing', async t => {
   const h = harness(t);
   await h.open();
   navigatorState.clipboard.writeText = async () => {throw Error('denied');};
-  await h.click('分享');
   await h.click('複製連結');
   await h.settle();
   const field = h.all().find(n => n.nodeName === 'TEXTAREA')!;
   assert.ok(field, 'manual copy textarea rendered');
   assert.equal(field.focused, true);
   assert.equal(field.selected, true);
-  await h.click('關閉分享');
-  await h.click('關閉分享');
+  const dialog = h.all().find(n => n.nodeName === 'DIALOG')!;
+  await React.act(async () => {
+    propsOf(dialog).onCancel({target: dialog, currentTarget: dialog, preventDefault() {}, stopPropagation() {}});
+  });
+  await h.settle();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
   assert.equal(h.button('分享貼文連結')!.focused, true);
   assert.equal(h.writes.length, 0);
+
+  await h.open();
+  assert.equal(h.all().some(n => n.nodeName === 'TEXTAREA'), false);
+  await h.click('關閉分享');
+  await h.settle();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
+  assert.equal(h.button('分享貼文連結')!.focused, true);
 });
 
-test('non-owner never receives publication controls', async t => {
+test('non-owner never receives publication controls and shares directly in one dialog', async t => {
   const h = harness(t, false);
   await h.open();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 1);
   assert.equal(h.button('開放免登入閱讀'), undefined);
-  await h.click('分享');
   await h.click('複製連結');
   await h.settle();
   assert.match(h.copies[0], /\?social-post=post-a#social$/);
   assert.equal(h.writes.length, 0);
 });
 
-test('unknown publication keeps same tuple and disabled sharing; successful retry reveals tracked URL', async t => {
+test('unknown publication keeps same tuple and disabled sharing; successful retry reveals tracked URL in one dialog', async t => {
   const h = harness(t);
   await h.open();
   await h.click('開放免登入閱讀');
-  const shareBtn = h.all().find(n => n.nodeName === 'BUTTON' && n.textContent === '分享' && n.getAttribute('aria-haspopup') === 'dialog')!;
-  assert.equal(propsOf(shareBtn).disabled, true);
+  assert.equal(propsOf(h.button('複製連結')!).disabled, true);
+  assert.equal(propsOf(h.button('分享')!).disabled, true);
   const first = h.writes[0];
   first.resolve({});
   await h.settle();
   assert.equal(h.all().find(n => n.getAttribute('class') === 'social-sharing-consent')!.open, true);
-  assert.equal(propsOf(h.all().find(n => n.nodeName === 'BUTTON' && n.textContent === '分享' && n.getAttribute('aria-haspopup') === 'dialog')!).disabled, true);
+  assert.equal(propsOf(h.button('複製連結')!).disabled, true);
+  assert.equal(propsOf(h.button('分享')!).disabled, true);
   await h.click('確認上次設定');
   assert.deepEqual(h.writes[1].body, first.body);
   assert.deepEqual(h.writes[1].options, first.options);
   h.writes[1].resolve({...h.state, enabled: true, available: true, version: '2', public_path: '/posts/post-a'});
   await h.settle();
-  await h.click('分享');
   assert.equal(h.writes.at(-1).path, '/promotion/links');
   h.writes.at(-1).resolve({path: '/go/note123456'});
   await h.settle();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 1);
   await h.click('複製連結');
   await h.settle();
   assert.equal(h.copies.at(-1), 'https://workshop.example.test/go/note123456');
+
+  await h.click('關閉免登入閱讀');
+  h.writes.at(-1).resolve({...h.state, enabled: false, available: false, version: '3', public_path: null});
+  await h.settle();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 1);
+  assert.match(h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent ?? '', /\?social-post=post-a#social$/);
 });
 
 for (const change of ['session', 'post', 'client']) {
@@ -255,7 +294,7 @@ for (const change of ['session', 'post', 'client']) {
       h.reads.at(-1).resolve({...h.state, post_revision: h.currentProps().post.revision});
       await h.settle();
     }
-    await h.click('分享');
+    assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 1);
     const urlText = h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent ?? '';
     assert.equal(urlText.includes('/posts/post-a'), false);
   });
@@ -271,4 +310,45 @@ test('unreviewed media and stale revision remain disabled instead of bypassing c
     assert.equal(propsOf(publishBtn).disabled, true);
     assert.equal(h.writes.length, 0);
   }
+});
+
+test('link post opens one dialog with tracked link and QR code; backdrop and unmount close cleanly', async t => {
+  const h = harness(t);
+  h.render({post: {post_id: 'post-link', mine: true, kind: 'link', title: '推薦工具', revision: 1, note: '補充說明', author: {display_name: '作者'}}});
+  await h.open();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 1);
+  assert.equal(h.writes.at(-1).path, '/promotion/links');
+  h.writes.at(-1).resolve({path: '/go/link123456'});
+  await h.settle();
+  assert.equal(h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent, 'https://workshop.example.test/go/link123456');
+  await h.click('QR 碼');
+  assert.equal(h.all().some(n => n.getAttribute('aria-label') === '分享連結的 QR Code'), true);
+
+  const dialog = h.all().find(n => n.nodeName === 'DIALOG')!;
+  await React.act(async () => {
+    propsOf(dialog).onClick({target: dialog, currentTarget: dialog, clientX: 10, clientY: 10, stopPropagation() {}});
+  });
+  await h.settle();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
+  assert.equal(h.button('分享貼文連結')!.focused, true);
+
+  h.button('分享貼文連結')!.focused = false;
+  await h.open();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 1);
+  h.unmount();
+  assert.equal(h.all().filter(n => n.nodeName === 'DIALOG').length, 0);
+  assert.equal(h.button('分享貼文連結'), undefined);
+});
+
+test('stale promotion link ack after post replacement or close cannot overwrite replacement URL', async t => {
+  const h = harness(t);
+  h.render({post: {post_id: 'post-link-a', mine: true, kind: 'link', title: '舊連結', revision: 1, author: {display_name: '作者'}}});
+  await h.open();
+  const staleWrite = h.writes.at(-1);
+  assert.equal(staleWrite.path, '/promotion/links');
+  h.render({post: {post_id: 'post-link-b', mine: false, kind: 'note', revision: 1, note: '新貼文', author: {display_name: '作者'}}});
+  staleWrite.resolve({path: '/go/staleold12'});
+  h.reads.at(-1).reject(new ApiError({status: 404, message: 'not_found'}));
+  await h.settle();
+  assert.match(h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent ?? '', /\?social-post=post-link-b#social$/);
 });

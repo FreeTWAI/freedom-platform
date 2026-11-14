@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Actor } from '../identity-membership/service.js';
 import { canAccessGuildEvent } from '../community/events.js';
 import { mineTitles, type PromotionKind } from '../community/promotion.js';
+import { readPublicWork } from '../opportunity-project-work/public-sharing.js';
 import { existingTitle } from './adapters/existing.js';
 import type { ShareKind } from './types.js';
 
@@ -47,6 +48,9 @@ export async function isShareReadable(
   share: Pick<ShareMetaRow, 'kind' | 'ref_id' | 'state'>,
 ): Promise<boolean> {
   if (share.state === 'published') {
+    if (share.kind === 'work') {
+      return Boolean(share.ref_id && (await readPublicWork(q, share.ref_id, actor.community_id)));
+    }
     return !share.ref_id || Boolean(await existingTitle(q, actor, share.kind, share.ref_id));
   }
   if (share.kind === 'event' && share.state === 'hidden' && share.ref_id) {

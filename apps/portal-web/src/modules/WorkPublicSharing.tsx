@@ -163,6 +163,7 @@ export function WorkPublicSharing({
             makeLink={makeWorkLink}
             label="分享"
             buttonClassName="btn btn-secondary btn-small"
+            disabled={busy}
           />
         </div>
       )}

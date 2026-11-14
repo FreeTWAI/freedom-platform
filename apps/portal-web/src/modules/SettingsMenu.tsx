@@ -11,7 +11,7 @@ type Panel='main'|'language'|'appearance'|'seasonal';
 type Item={key:string;label:string;run:()=>void;checked?:boolean;current?:boolean;lang?:string;disabled?:boolean;panel?:Panel};
 
 /** One short account menu, with reversible preference panels. Page drafts stay mounted. */
-export function SettingsMenu({current,avatar,name,onSelect,onLogout,logoutDisabled=false,seasonalPreference='auto',onSeasonalPreference}:{seasonalPreference?:SeasonalPreference;onSeasonalPreference?:(next:SeasonalPreference)=>void;current:TabId;avatar:ReactNode;name:string;onSelect:(id:TabId)=>void;onLogout:()=>void;logoutDisabled?:boolean;personalContentEnabled?:boolean}){
+export function SettingsMenu({current,avatar,name,onSelect,onLogout,logoutDisabled=false,seasonalPreference='auto',onSeasonalPreference}:{seasonalPreference?:SeasonalPreference;onSeasonalPreference?:(next:SeasonalPreference)=>void;current:TabId;avatar:ReactNode;name:string;onSelect:(id:TabId)=>void;onLogout:()=>void;logoutDisabled?:boolean}){
   const {theme,selectTheme}=useWorkshopTheme();
   const {preference,selectLanguage,t}=useLanguage();
   const install=useAppInstall();

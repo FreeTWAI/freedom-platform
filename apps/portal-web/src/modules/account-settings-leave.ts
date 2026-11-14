@@ -21,3 +21,11 @@ export function createSettingsLeaveRegistry(){
 export function settingsMutationBlocksLeave(state:SharingMutationState){
   return state.live()&&(state.snapshot.busy||state.snapshot.lastFailureUnknown);
 }
+
+export type SettingsSection = 'profile' | 'public-page' | 'member-share' | 'visibility' | 'security';
+
+export function initialSettingsSection({focusPublicPage,hasPublicPage,focusConnections}:{focusPublicPage?:boolean;hasPublicPage?:boolean;focusConnections?:boolean}):SettingsSection{
+  if(focusPublicPage&&hasPublicPage)return 'public-page';
+  if(focusConnections)return 'security';
+  return 'profile';
+}

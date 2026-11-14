@@ -50,6 +50,8 @@ test('closing the reading dialog cancels its pending nested share and does not r
   await page.route('**/api/v1/skills/social-post/share-content',route=>{held.push(route);});
   try{
     await reading.getByRole('button',{name:'分享技能',exact:true}).click();await expect.poll(()=>held.length).toBeGreaterThan(0);
+    const dialog=page.getByRole('dialog',{name:`分享「${title}」`,exact:true});await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
     await reading.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();await expect(reading).toBeHidden();
     await page.clock.fastForward(8001);await expect(page.locator('.skill-share-dialog')).toHaveCount(0);
     await expect(card.getByRole('button',{name:'預覽技能書',exact:true})).toBeFocused();

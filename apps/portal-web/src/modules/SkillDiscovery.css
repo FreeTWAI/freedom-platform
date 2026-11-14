@@ -34,8 +34,8 @@
 .guild-book-list .skill-intro-entry .skill-book-badges { padding-left: 12px; }
 @media (max-width: 600px) {
   .skill-intro-collaboration { padding: 16px; }
-  .skill-share { width: 100%; }
-  .skill-share > .btn { width: 100%; }
+  :where(.skill-discovery, .skill-intro-dialog, .skill-library-book) .skill-share { width: 100%; }
+  :where(.skill-discovery, .skill-intro-dialog, .skill-library-book) .skill-share > .btn { width: 100%; }
   .skill-discovery-tabs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .skill-discovery-tabs .btn:first-child { grid-column: 1 / -1; }
 }
@@ -73,3 +73,11 @@
   .skill-share-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .skill-share-actions > .btn-primary { grid-column: 1 / -1; order: -1; }
 }
+.social-share-dialog .skill-share-url,
+.social-share-dialog .share-credit-note,
+.social-share-dialog .skill-share-status { color: var(--muted); }
+.social-share-dialog .share-more > summary { color: var(--ink); }
+.social-share-dialog .skill-share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.social-share-dialog .skill-share-actions .btn { min-height: 44px; width: auto; font-size: .875rem; }
+.social-share-dialog .field { display: grid; gap: 6px; font-size: .85rem; }
+.social-share-dialog textarea { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; font-size: 16px; line-height: 1.6; resize: vertical; }
