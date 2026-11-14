@@ -189,6 +189,8 @@ test('completed member submits an event and sees accepted-work facts without pro
   await expect(points).toContainText('每個 Issue 5 分，每個 PR 20 分（Issue × 5 + PR × 20）');
   await expect(points).toContainText('40 分');
   await expect(points).toContainText('30 分');
+  await expect(points.locator('li').filter({hasText:'40 分'}).locator('.community-rank')).toHaveText('第 1 名');
+  await expect(points.locator('li').filter({hasText:'30 分'}).locator('.community-rank')).toHaveText('第 2 名');
   await expect(points).not.toContainText('dependabot');
   await expect(edits).not.toContainText('outsider-demo');
   await expect(points).not.toContainText('outsider-demo');
