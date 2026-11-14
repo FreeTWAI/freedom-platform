@@ -16,8 +16,8 @@ for(const width of [390,1280])test(`first-viewport GitHub controls enhance witho
   await page.goto(path);await entryReady(page);
   await expect(social(page)).toBeInViewport();
   await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
-  await expect(social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
-  await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
+  await expect(social(page).getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',original);
+  await expect(social(page).getByRole('link',{name:'複製專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
   await expect(page.locator('.public-skill-entry [data-share-launch]')).toBeInViewport();
   await expect(page.locator('[data-skill-author]')).toBeInViewport();
   expect(chunks).toHaveLength(1);expect(writes).toEqual([]);
@@ -43,8 +43,8 @@ for(const width of [390,1280])test(`an offscreen GitHub section still defers its
   await page.locator('#skill-usage-notes > summary').click();
   await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
   await social(page).scrollIntoViewIfNeeded();await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
-  expect(chunks).toHaveLength(1);await expect(social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
-  await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
+  expect(chunks).toHaveLength(1);await expect(social(page).getByRole('link',{name:'前往 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',original);
+  await expect(social(page).getByRole('link',{name:'複製專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
   await page.evaluate(()=>scrollTo(0,0));await social(page).scrollIntoViewIfNeeded();expect(chunks).toHaveLength(1);expect(writes).toEqual([]);
 });
 
@@ -76,8 +76,8 @@ test('a member still explicitly Stars and unstars after the public widget loads'
   await page.goto('/');await page.getByLabel('電子郵件',{exact:true}).fill('maker@local.test');await page.getByLabel('密碼',{exact:true}).fill('freedom-local-demo');
   await page.getByRole('button',{name:'登入',exact:true}).click();await expect(page.getByRole('button',{name:'設定',exact:true})).toBeVisible();
   await page.goto(path);await entryReady(page);expect(writes).toEqual([]);
-  const star=social(page).getByRole('button',{name:'Star',exact:true});await expect(star).toBeEnabled();expect(writes).toEqual([]);
-  await star.click();const unstar=social(page).getByRole('button',{name:'取消 Star',exact:true});await expect(unstar).toHaveAttribute('aria-pressed','true');
+  const star=social(page).getByRole('button',{name:'加星',exact:true});await expect(star).toBeEnabled();expect(writes).toEqual([]);
+  await star.click();const unstar=social(page).getByRole('button',{name:'取消加星',exact:true});await expect(unstar).toHaveAttribute('aria-pressed','true');
   await unstar.click();await expect(star).toHaveAttribute('aria-pressed','false');
   expect(writes).toEqual([{starred:true,confirmed:true},{starred:false,confirmed:true}]);await expect(social(page).locator('.github-star-count')).toHaveText('127');
 });
@@ -96,6 +96,6 @@ test('loading a widget does not remove a focused public link while the reader ta
     await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
     await expect(page.locator('.public-skill-entry [data-share-launch]')).toBeFocused();
     await page.keyboard.press('Shift+Tab');await expect(social(page).getByText('更多',{exact:true})).toBeFocused();
-    await page.keyboard.press('Shift+Tab');await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toBeFocused();
+    await page.keyboard.press('Shift+Tab');await expect(social(page).getByRole('link',{name:'複製專案 ↗',exact:true})).toBeFocused();
   }finally{release();await page.unrouteAll({behavior:'wait'});}
 });

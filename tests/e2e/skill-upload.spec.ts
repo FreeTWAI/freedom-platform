@@ -248,7 +248,7 @@ test('CLI keys keep typed fields on auth errors, show the token once and revoke 
   const unlocked = page.getByRole('button', { name: /^已解鎖 · \d+$/ });
   await expect(unlocked).toBeVisible();
   if ((await unlocked.innerText()).endsWith(' · 0')) {
-    await expect(page.getByText('還沒有已解鎖的技能書。加入公會即可領取，也可先免費預覽。', { exact: true })).toBeVisible();
+    await expect(page.getByText('尚未解鎖，加入公會即可領取。', { exact: true })).toBeVisible();
   } else {
     await expect(page.getByRole('region', { name: '已解鎖技能書', exact: true }).locator('article[data-book-id]').first()).toBeVisible();
   }

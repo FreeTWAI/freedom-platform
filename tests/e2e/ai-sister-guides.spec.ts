@@ -15,7 +15,7 @@ const asset=(logicalId:string)=>`/public/guide-packs/ai-sister/${manifest.versio
 async function registerJoined(page:Page,profile='guide-ai-sister'){
   await page.addInitScript(profile=>{if(localStorage.getItem('freedom-theme')===null)localStorage.setItem('freedom-theme',profile)},profile);
   await page.context().route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
-  await page.goto('/');await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('AI Sister 導覽驗證');
   await page.getByLabel('電子郵件',{exact:true}).fill(`ai-sister-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill(`Fixture-A1!-${randomUUID()}`);

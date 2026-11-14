@@ -51,9 +51,9 @@ test('workspaces remain available when guild launchpads are disabled',async({pag
   await login(page);await page.goto('/#me/workspaces');
   await expect(page.getByLabel('我的檢視')).toHaveValue('#me/workspaces');
   await expect(page.getByRole('heading',{name:'建立業務空間',exact:true})).toBeVisible();
-  await page.goto('/#explore');await page.locator('.place-feature-search summary').click();
-  await page.locator('.place-feature-search input').fill('業務空間');
-  await expect(page.locator('.place-feature-search').getByRole('button',{name:'業務空間',exact:true})).toBeVisible();
+  await page.goto('/#explore');
+  await page.getByRole('searchbox',{name:'關鍵字',exact:true}).fill('業務空間');
+  await expect(page.getByRole('region',{name:'功能搜尋結果',exact:true}).getByRole('button',{name:'業務空間',exact:true})).toBeVisible();
 });
 
 test('member hierarchy keeps one feed, distinct destinations and readable controls in each theme and viewport',async({page,e2eAuthPool},testInfo)=>{
