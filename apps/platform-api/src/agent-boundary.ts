@@ -1,10 +1,19 @@
 import type { MiddlewareHandler } from 'hono';
 import { matchedRoutes } from 'hono/route';
 import type { Pool } from 'pg';
-import { agentOperation } from './agent-allowlist.js';
+import { agentOperation, type AgentOperation } from './agent-allowlist.js';
 import { authenticateAgent,consumeAgentRequestBudget,recordAgentResponse } from '../../../modules/client-connections/agent-authority.js';
 import { Problem,requireCondition } from '../../../packages/shared/problem.js';
 import type { PlatformEnv } from './module-context.js';
+
+export function matchAgentBoundaryOperation(
+  method:string,
+  routes:readonly {method:string;path:string}[],
+  operations?:readonly AgentOperation[],
+):AgentOperation|undefined {
+  const route=routes.find(r=>r.method===method);
+  return route&&agentOperation(method,route.path,operations);
+}
 
 /** Installed before ANY public, member, provider or admin handler. Hono's matched
  * route metadata, never a caller-supplied path/prefix, selects the capability. */
@@ -18,8 +27,7 @@ export function agentBoundary(pool:Pool,responseHeaders:(path:string)=>Record<st
   requireCondition(c.req.header('X-CSRF-Token')===undefined,400,'ambiguous_credentials','請只使用 Agent 金鑰。');
   const actor=await authenticateAgent(pool,authorization);
   try {
-   const route=matchedRoutes(c).find(r=>r.method===c.req.method);
-   const op=route&&agentOperation(c.req.method,route.path);
+   const op=matchAgentBoundaryOperation(c.req.method,matchedRoutes(c));
    requireCondition(op&&actor.agent!.scopes.includes(op.scope),403,'scope_required','Agent 沒有這項操作權限。');
    actor.agent={...actor.agent!,scope:op.scope,operation:`${c.req.method} ${c.req.path}`,public_item:op.publicItem===true};
    requireCondition(!actor.onboarding_required||Boolean(actor.onboarding_completed_at),403,'onboarding_required','請先選擇主要公會。');

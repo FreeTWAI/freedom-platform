@@ -139,7 +139,14 @@ test('MCP uses the REST body limit for both declared and streamed bytes',async()
  }
  assert.equal((await rpc(token,'ping',undefined,{Accept:'application/json'})).status,200);
  assert.equal((await rpc(token,'ping',undefined,{Accept:'*/*'})).status,200);
- assert.equal((await rpc(token,'ping',undefined,{Accept:'text/html'})).status,406);
+ assert.equal((await rpc(token,'ping',undefined,{Accept:'application/*'})).status,200);
+ assert.equal((await app.request(origin+'/api/v1/mcp',{method:'POST',headers:{'MCP-Protocol-Version':'2025-11-25','Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'ping'})})).status,200);
+ const rejectedHtml=await rpc(token,'ping',undefined,{Accept:'text/html'});
+ assert.equal(rejectedHtml.status,406);assert.equal(rejectedHtml.data.code,'mcp_accept_required');
+ const rejectedXml=await rpc(token,'ping',undefined,{Accept:'application/xml'});
+ assert.equal(rejectedXml.status,406);assert.equal(rejectedXml.data.code,'mcp_accept_required');
+ const rejectedSse=await rpc(token,'ping',undefined,{Accept:'text/event-stream'});
+ assert.equal(rejectedSse.status,406);assert.equal(rejectedSse.data.code,'mcp_accept_required');
  assert.equal((await rpc(token,'ping',undefined,{'Content-Type':'text/plain'})).status,415);
 });
 test('MCP read/create/versioned write match REST; confirmation, replay and publication budget run once',async()=>{
@@ -198,7 +205,7 @@ test('contract and MCP tools/list expose response, 202 pending and 4xx error sch
  const defs=Object.values(agentContract.paths).flatMap((p:any)=>Object.values(p)) as any[];
  for(const op of agentOperations.filter(op=>op.granted!==false)){
   const def=defs.find(d=>d.operationId===op.id)!;
-  const successStatus=op.id==='events.share'||op.id==='repositories.share'?'201':'200';
+  const successStatus=['events.share','repositories.share','posts.note','posts.link','posts.comment','services.create','works.create'].includes(op.id)?'201':'200';
   assert.ok(def.responses[successStatus],op.id);
   const expected=schemas.agentResponseSchemas[op.id];
   if(expected)assert.deepEqual(def.responses[successStatus].content?.['application/json']?.schema,agentJsonSchema(expected),op.id);
@@ -218,4 +225,113 @@ test('contract and MCP tools/list expose response, 202 pending and 4xx error sch
    assert.equal(tool.outputSchema,undefined,op.id);
   }
  }
+});
+
+test('MCP request builder preserves each HTTP method and omits body for GET',async()=>{
+ const {buildMcpToolRequest}=await import('../../apps/platform-api/src/agent-mcp.js') as any;
+ const auth='Bearer fw_agent_synthetic';
+ const getReq=buildMcpToolRequest({method:'GET',route:'/api/v1/items/:id'},{id:'a/b',query:{cursor:'c1',empty:undefined},body:{ignored:true}},auth,origin);
+ assert.equal(getReq.method,'GET');
+ assert.equal(getReq.url,`${origin}/api/v1/items/a%2Fb?cursor=c1`);
+ assert.equal(getReq.headers.get('Authorization'),auth);
+ assert.equal(getReq.headers.get('Content-Type'),null);
+ assert.equal(getReq.headers.get('Idempotency-Key'),null);
+ assert.equal(getReq.body,null);
+
+ for(const method of ['POST','PUT','PATCH','DELETE'] as const){
+  const r=buildMcpToolRequest(
+   {method,route:'/api/v1/items/:id',ifMatch:method==='PATCH'},
+   {id:'item-1',idempotency_key:'key-12345678',version:3,body:{hello:'world'}},
+   auth,origin,
+  );
+  assert.equal(r.method,method);
+  assert.equal(r.url,`${origin}/api/v1/items/item-1`);
+  assert.equal(r.headers.get('Authorization'),auth);
+  assert.equal(r.headers.get('Content-Type'),'application/json');
+  assert.equal(r.headers.get('Idempotency-Key'),'key-12345678');
+  assert.equal(r.headers.get('If-Match'),method==='PATCH'?'"3"':null);
+  assert.equal(await r.text(),'{"hello":"world"}');
+ }
+});
+
+test('MCP posts tools reject image fields before dispatch and support note and delete',async()=>{
+ const owner=await ready(),conn=await issue(owner,['read','share','react']),token=conn.access_token;
+ const badNote=await rpc(token,'tools/call',{name:'posts.note',arguments:{idempotency_key:randomUUID(),body:{text:'帶圖',image:{mime_type:'image/png',data_base64:'AAAA'}}}});
+ assert.equal(badNote.status,400);assert.equal(badNote.data.error.code,-32602);
+ const badComment=await rpc(token,'tools/call',{name:'posts.comment',arguments:{id:randomUUID(),idempotency_key:randomUUID(),body:{text:'帶圖留言',image_id:randomUUID()}}});
+ assert.equal(badComment.status,400);assert.equal(badComment.data.error.code,-32602);
+ const key=randomUUID(),pending=await rpc(token,'tools/call',{name:'posts.note',arguments:{idempotency_key:key,body:{text:'MCP 短文'}}});
+ assert.equal(pending.status,200,JSON.stringify(pending.data));
+ assert.equal(pending.data.result.structuredContent.code,'pending_member');
+ const list=await req('/api/v1/me/agent-tokens',{session:owner});
+ const proposal=list.data.items.find((i:any)=>i.connection_id===conn.connection_id).pending_publication;
+ assert.equal((await req(`/api/v1/me/agent-tokens/${conn.connection_id}/confirm`,{session:owner,body:{request_sha256:proposal.request_sha256}})).status,200);
+ const created=await rpc(token,'tools/call',{name:'posts.note',arguments:{idempotency_key:key,body:{text:'MCP 短文'}}});
+ assert.equal(created.status,200,JSON.stringify(created.data));
+ assert.equal(created.data.result.isError,false,JSON.stringify(created.data));
+ const postId=created.data.result.structuredContent.post_id as string;
+ const del=await rpc(token,'tools/call',{name:'posts.delete',arguments:{id:postId,idempotency_key:randomUUID(),body:{}}});
+ assert.equal(del.status,200,JSON.stringify(del.data));
+ assert.equal(del.data.result.isError,false,JSON.stringify(del.data));
+ assert.deepEqual(del.data.result.structuredContent,{post_id:postId,state:'deleted'});
+});
+
+test('MCP services tools support create, edit, pause, resume, delete with If-Match and keep cover/hide unavailable',async()=>{
+ const owner=await ready(),conn=await issue(owner,['read','share']),token=conn.access_token;
+ const listRes=await rpc(token,'tools/list');
+ assert.equal(listRes.status,200);
+ const names=(listRes.data.result.tools as any[]).map(t=>t.name);
+ for(const op of ['services.mine','services.create','services.edit','services.pause','services.resume','services.delete']){
+  assert.ok(names.includes(op),`missing MCP tool ${op}`);
+ }
+ assert.equal(names.some(n=>n.includes('cover')||n.includes('hide')),false);
+
+ const draft={title:'MCP 設計服務',category:'design',summary:'視覺設計諮詢',service_mode:'online',contacts:[{label:'網站',url:'https://example.com/design'}]};
+ const key=randomUUID(),pending=await rpc(token,'tools/call',{name:'services.create',arguments:{idempotency_key:key,body:draft}});
+ assert.equal(pending.status,200,JSON.stringify(pending.data));
+ assert.equal(pending.data.result.structuredContent.code,'pending_member');
+ const tokens=await req('/api/v1/me/agent-tokens',{session:owner});
+ const proposal=tokens.data.items.find((i:any)=>i.connection_id===conn.connection_id).pending_publication;
+ assert.equal((await req(`/api/v1/me/agent-tokens/${conn.connection_id}/confirm`,{session:owner,body:{request_sha256:proposal.request_sha256}})).status,200);
+
+ const created=await rpc(token,'tools/call',{name:'services.create',arguments:{idempotency_key:key,body:draft}});
+ assert.equal(created.status,200,JSON.stringify(created.data));
+ assert.equal(created.data.result.isError,false,JSON.stringify(created.data));
+ const svc=created.data.result.structuredContent;
+ const edited=await rpc(token,'tools/call',{name:'services.edit',arguments:{id:svc.service_id,idempotency_key:randomUUID(),version:Number(svc.aggregate_version),body:{...draft,title:'更新後設計服務'}}});
+ assert.equal(edited.data.result.isError,false,JSON.stringify(edited.data));
+ const paused=await rpc(token,'tools/call',{name:'services.pause',arguments:{id:svc.service_id,idempotency_key:randomUUID(),version:Number(edited.data.result.structuredContent.aggregate_version),body:{}}});
+ assert.equal(paused.data.result.structuredContent.state,'paused');
+ const resumed=await rpc(token,'tools/call',{name:'services.resume',arguments:{id:svc.service_id,idempotency_key:randomUUID(),version:Number(paused.data.result.structuredContent.aggregate_version),body:{}}});
+ assert.equal(resumed.data.result.structuredContent.state,'active');
+ const deleted=await rpc(token,'tools/call',{name:'services.delete',arguments:{id:svc.service_id,idempotency_key:randomUUID(),version:Number(resumed.data.result.structuredContent.aggregate_version),body:{}}});
+ assert.equal(deleted.data.result.structuredContent.state,'deleted');
+});
+
+test('MCP exposes works.create and profile.read and enforces consent and confirmation',async()=>{
+ const owner=await ready(),conn=await issue(owner,['read','share']),token=conn.access_token;
+ const listRes=await rpc(token,'tools/list');
+ assert.equal(listRes.status,200);
+ const names=(listRes.data.result.tools as any[]).map(t=>t.name);
+ assert.ok(names.includes('works.create'),'missing MCP tool works.create');
+ assert.ok(names.includes('profile.read'),'missing MCP tool profile.read');
+
+ const profileRes=await rpc(token,'tools/call',{name:'profile.read',arguments:{}});
+ assert.equal(profileRes.status,200,JSON.stringify(profileRes.data));
+ assert.equal(profileRes.data.result.isError,false,JSON.stringify(profileRes.data));
+ assert.ok(Array.isArray(profileRes.data.result.structuredContent.tracks));
+
+ const key=randomUUID(),workBody={title:'MCP 分享作品',description:'透過 MCP 發布作品說明',public_url:'https://example.com/mcp-work',consent_to_share:true};
+ const pending=await rpc(token,'tools/call',{name:'works.create',arguments:{idempotency_key:key,body:workBody}});
+ assert.equal(pending.status,200,JSON.stringify(pending.data));
+ assert.equal(pending.data.result.structuredContent.code,'pending_member');
+ const tokens=await req('/api/v1/me/agent-tokens',{session:owner});
+ const proposal=tokens.data.items.find((i:any)=>i.connection_id===conn.connection_id).pending_publication;
+ assert.equal((await req(`/api/v1/me/agent-tokens/${conn.connection_id}/confirm`,{session:owner,body:{request_sha256:proposal.request_sha256}})).status,200);
+
+ const created=await rpc(token,'tools/call',{name:'works.create',arguments:{idempotency_key:key,body:workBody}});
+ assert.equal(created.status,200,JSON.stringify(created.data));
+ assert.equal(created.data.result.isError,false,JSON.stringify(created.data));
+ assert.equal(created.data.result.structuredContent.title,'MCP 分享作品');
+ assert.equal(created.data.result.structuredContent.via_agent,true);
 });

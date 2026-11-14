@@ -1,8 +1,12 @@
 import {z} from 'zod';
 import {details,eventSource,eventRsvpInput} from '../../../modules/community/events.js';
 import {actionInput} from '../../../modules/community/event-waitlist.js';
+import {socialMetadataInput} from '../../../modules/community/social-content.js';
 import {projectInput} from '../../../modules/opensource-marketing/service.js';
+import {showcaseInput} from '../../../modules/opportunity-project-work/business.js';
 import {shareInput} from '../../../modules/shares/service.js';
+import {SOCIAL_PLATFORMS} from '../../../packages/shared/share-url.js';
+import {SERVICE_CATEGORIES,SERVICE_MODES} from '../../../packages/shared/member-service.js';
 import {text} from '../../../packages/shared/validation.js';
 import type {AgentOperation} from './agent-allowlist.js';
 
@@ -16,14 +20,45 @@ const newEventInput=z.object({...details.shape,...eventSource.shape,
 // Routes with no payload validator (reads and events.links), and inline strict
 // empty-object validators, share this explicit no-input contract.
 const empty=z.object({}).strict();
+const serviceDraftInput=z.object({
+ title:z.string().trim().min(1).max(80),
+ category:z.enum(SERVICE_CATEGORIES),
+ summary:z.string().trim().min(1).max(160),
+ description:z.string().max(2000).nullable().optional(),
+ price_text:z.string().max(60).nullable().optional(),
+ area_text:z.string().max(60).nullable().optional(),
+ service_mode:z.enum(SERVICE_MODES),
+ contacts:z.array(z.object({label:z.string().trim().min(1).max(20),url:z.string().min(1).max(2048)}).strict()).min(1).max(3),
+}).strict();
 export const agentBodySchemas:Record<string,z.ZodType>={
+ 'guilds.list':empty,'tools.list':empty,
  'tools.identity':empty,'events.list':empty,'events.read':empty,'events.share':newEventInput,
  'events.update':details.safeExtend({source_cover_url:eventSource.shape.source_cover_url.optional()}),
  'events.announce':z.object({message:text(300)}).strict(),'events.cancel':empty,
  'events.links':empty,'events.interest':empty,'events.rsvp':eventRsvpInput,'events.waitlist':actionInput,
  'repositories.share':projectInput,'credit.records':empty,'credit.outcomes':empty,'credit.achievements':empty,
- 'notifications.list':empty,'agent.events':empty,'shares.preview':shareInput,'shares.create':shareInput,
+ 'notifications.list':empty,'notifications.mark_read':empty,
+ 'notifications.mark_all_read':z.object({scope:z.literal('notifications')}).strict(),
+ 'agent.events':empty,'shares.preview':shareInput,'shares.create':shareInput,
  'shares.list':empty,'shares.read':empty,'shares.retract':empty,'shares.links':empty,'credit.read':empty,'credit.results':empty,
+ 'posts.list':empty,'posts.comments':empty,
+ 'posts.note':z.object({...socialMetadataInput,text:z.string().trim().min(1).max(2000)}).strict(),
+ 'posts.link':z.object({url:z.string().min(1).max(4096),title:z.string().max(200).optional(),note:z.string().max(500).optional()}).strict(),
+ 'posts.edit':z.union([
+  z.object({text:z.string().trim().min(1).max(2000)}).strict(),
+  z.object({title:z.string().trim().min(1).max(120),note:z.string().trim().max(500).nullable()}).strict(),
+ ]),
+ 'posts.delete':empty,
+ 'posts.like':z.object({liked:z.boolean()}).strict(),
+ 'posts.comment':z.object({text:z.string().trim().max(1000).default(''),sticker_id:z.string().max(80).optional(),mention_ids:socialMetadataInput.mention_ids}).strict(),
+ 'services.mine':empty,
+ 'services.create':serviceDraftInput,
+ 'services.edit':serviceDraftInput,
+ 'services.pause':empty,
+ 'services.resume':empty,
+ 'services.delete':empty,
+ 'works.create':showcaseInput,
+ 'profile.read':empty,
 };
 export const agentPathSchemas:Record<string,z.ZodType>={
  id:z.uuid(),share_id:z.uuid(),guild:z.string().regex(/^guild_[a-zA-Z0-9_]+$/).max(100),
@@ -35,6 +70,14 @@ export const agentQuerySchemas:Record<string,z.ZodObject>={
  'shares.list':z.object({limit:z.number().int().min(1).max(50).optional(),offset}).strict(),
  'credit.read':z.object({offset}).strict(),
  'credit.results':z.object({offset}).strict(),
+ 'posts.list':z.object({
+  platform:z.enum(SOCIAL_PLATFORMS).optional(),
+  cursor:z.string().max(256).optional(),
+  kind:z.enum(['note','link']).optional(),
+  tag:z.string().regex(/^[\p{L}\p{N}_]{1,50}$/u).optional(),
+  post_id:z.uuid().optional(),
+ }).strict(),
+ 'posts.comments':z.object({cursor:z.string().max(256).optional()}).strict(),
 };
 export function agentInputSchema(op:AgentOperation){
  const shape:Record<string,z.ZodType>={};
@@ -118,7 +161,107 @@ const achievementTrack=z.looseObject({days:z.number().int(),next_days:z.number()
 const achievementTitle=z.looseObject({title_id:z.string(),track:z.string(),days:z.number().int(),label:z.string(),unlocked:z.boolean()});
 const eventDetailShape={...eventSummaryShape,prize_photos:z.array(z.unknown())};
 const eventDetailSchema=z.looseObject(eventDetailShape);
+const serviceView=z.looseObject({
+ service_id:z.string(),
+ title:z.string(),
+ category:z.enum(SERVICE_CATEGORIES),
+ category_label:z.string(),
+ summary:z.string(),
+ description:z.string().nullable(),
+ price_text:z.string().nullable(),
+ area_text:z.string().nullable(),
+ service_mode:z.enum(SERVICE_MODES),
+ service_mode_label:z.string(),
+ contacts:z.array(z.looseObject({label:z.string(),url:z.string()})),
+ state:z.enum(['active','paused','hidden','deleted']),
+ aggregate_version:z.number().int(),
+ updated_at:z.string(),
+ cover_url:z.string().nullable(),
+ owner:z.looseObject({user_id:z.string(),display_name:z.string(),avatar_url:z.string().nullable()}),
+ public_path:z.string(),
+ total_points:z.number().int(),
+ my_points:z.number().int(),
+ mine:z.boolean(),
+ can_hide:z.boolean(),
+});
+const socialPostView=z.looseObject({
+ topic:z.string(),
+ location_name:z.string().nullable(),
+ tags:z.array(z.string()),
+ mentions:z.array(z.looseObject({user_id:z.string(),display_name:z.string()})),
+ read_count:z.number().int(),
+ post_id:z.string(),
+ url:z.string().nullable(),
+ kind:z.string(),
+ platform:z.string(),
+ platform_label:z.string(),
+ title:z.string(),
+ note:z.string().nullable(),
+ created_at:z.string(),
+ edited_at:z.string().nullable(),
+ revision:z.number().int(),
+ author:z.looseObject({user_id:z.string(),display_name:z.string(),avatar_url:z.string().nullable()}),
+ thumbnail_url:z.string().nullable(),
+ total_points:z.number().int(),
+ my_points:z.number().int(),
+ like_count:z.number().int(),
+ comment_count:z.number().int(),
+ liked:z.boolean(),
+ mine:z.boolean(),
+});
+const socialCommentView=z.looseObject({
+ image_url:z.string().nullable(),
+ sticker_id:z.string().nullable(),
+ mentions:z.array(z.looseObject({user_id:z.string(),display_name:z.string()})),
+ like_count:z.number().int(),
+ liked:z.boolean(),
+ comment_id:z.string(),
+ body:z.string(),
+ created_at:z.string(),
+ edited_at:z.string().nullable(),
+ revision:z.number().int(),
+ author:z.looseObject({user_id:z.string(),display_name:z.string(),avatar_url:z.string().nullable()}),
+ mine:z.boolean(),
+});
 export const agentResponseSchemas:Record<string,z.ZodType>={
+ 'guilds.list':z.looseObject({
+  items:z.array(z.looseObject({
+   guild_key:z.string(),
+   profession_key:z.string(),
+   name:z.string(),
+   purpose:z.string(),
+   first_step:z.string(),
+   module_key:z.string(),
+   catalog_version:z.number().int(),
+   alias:z.string(),
+   profession_title:z.string(),
+   track_count:z.number().int(),
+   membership:z.looseObject({
+    membership_id:z.string(),
+    state:z.string(),
+    rank:z.string(),
+    member_tier:z.string(),
+    aggregate_version:z.number().int(),
+   }).nullable(),
+  })),
+ }),
+ 'tools.list':z.looseObject({
+  items:z.array(z.looseObject({
+   id:z.string(),
+   guild_key:z.string(),
+   tool_id:z.string(),
+   title:z.string(),
+   entry_url:z.string(),
+   origin:z.string(),
+   bridge_version:z.string(),
+   profile:z.string(),
+   scopes:z.array(z.string()),
+   permissions:z.array(z.string()),
+   state:z.string(),
+   revision:z.number().int(),
+   guild_name:z.string().nullable(),
+  })),
+ }),
  'events.list':z.looseObject({items:z.array(z.looseObject(eventSummaryShape))}),
  'events.read':eventDetailSchema,
  'credit.records':z.looseObject({policy:z.string(),accepted_count:z.number().int(),entries:z.array(z.looseObject({})),next_offset:z.number().int().nullable()}),
@@ -324,5 +467,95 @@ export const agentResponseSchemas:Record<string,z.ZodType>={
  'shares.links':z.looseObject({
   path:z.string(),
   code:z.string(),
+ }),
+ 'notifications.mark_read':z.looseObject({
+  notification_id:z.string(),
+  read_at:z.string(),
+ }),
+ 'notifications.mark_all_read':z.looseObject({
+  notifications_updated:z.number().int(),
+  direct_messages_updated:z.number().int(),
+  channels_updated:z.number().int(),
+ }),
+ 'posts.list':z.looseObject({
+  items:z.array(socialPostView),
+  next_cursor:z.string().nullable(),
+  can_hide:z.boolean(),
+ }),
+ 'posts.comments':z.looseObject({
+  items:z.array(socialCommentView),
+  next_cursor:z.string().nullable(),
+ }),
+ 'posts.note':socialPostView,
+ 'posts.link':socialPostView,
+ 'posts.edit':socialPostView,
+ 'posts.delete':z.looseObject({post_id:z.string(),state:z.literal('deleted')}),
+ 'posts.like':z.looseObject({post_id:z.string(),liked:z.boolean(),like_count:z.number().int()}),
+ 'posts.comment':socialCommentView,
+ 'services.mine':z.looseObject({items:z.array(serviceView),can_hide:z.boolean(),limit:z.number().int()}),
+ 'services.create':serviceView,
+ 'services.edit':serviceView,
+ 'services.pause':serviceView,
+ 'services.resume':serviceView,
+ 'services.delete':serviceView,
+ 'works.create':z.looseObject({
+  showcase_id:z.string(),
+  community_id:z.string(),
+  owner_ref:z.string(),
+  title:z.string(),
+  description:z.string(),
+  artifact_ref:z.string(),
+  public_url:z.string().nullable(),
+  status:z.string(),
+  visibility:z.string(),
+  consent_recorded_at:z.string().nullable(),
+  aggregate_version:z.number().int(),
+  created_at:z.string(),
+  updated_at:z.string(),
+  owner_name:z.string(),
+  via_agent:z.boolean(),
+ }),
+ 'profile.read':z.looseObject({
+  profile:z.looseObject({
+   profile_id:z.string(),
+   community_id:z.string(),
+   user_id:z.string(),
+   aggregate_version:z.number().int(),
+   source:z.string(),
+   real_world_occupations:z.array(z.string()),
+   background:z.string(),
+   strengths:z.array(z.string()),
+   goals:z.string(),
+   weekly_minutes:z.number().int(),
+   desired_roles:z.array(z.string()),
+   selected_tracks:z.array(z.string()),
+   supersedes_id:z.string().nullable(),
+   confirmed_at:z.string(),
+  }).nullable(),
+  tracks:z.array(z.looseObject({
+   track_key:z.string(),
+   name:z.string(),
+   description:z.string(),
+   guild_key:z.string(),
+   role_key:z.string(),
+   first_result:z.string(),
+   estimated_minutes:z.number().int(),
+   catalog_version:z.number().int(),
+   guild_name:z.string(),
+   profession_key:z.string(),
+   module_key:z.string(),
+  })),
+  recommendations:z.array(z.looseObject({
+   track_key:z.string(),
+   name:z.string(),
+   guild_key:z.string(),
+   guild_name:z.string(),
+   module_key:z.string(),
+   reason:z.string(),
+   first_result:z.string(),
+   estimated_minutes:z.number().int(),
+   time_note:z.string().nullable(),
+   policy_version:z.string(),
+  })),
  }),
 };

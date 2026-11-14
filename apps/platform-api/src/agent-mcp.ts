@@ -24,7 +24,7 @@ const tools=agentOperations.filter(op=>op.granted!==false).map(op=>{
  const pending=responses['202']?.content?.['application/json']?.schema;
  const outputSchema=success?(op.publicItem&&pending?{anyOf:[success,pending]}:success):undefined;
  return {op,validator:z.fromJSONSchema(definition['x-input-schema']),tool:{name:op.id,title:op.title,description:op.title,
-  inputSchema:definition['x-input-schema'],...(outputSchema?{outputSchema}:{}),annotations:{readOnlyHint:op.method==='GET',destructiveHint:['shares.retract','events.rsvp','events.waitlist'].includes(op.id),idempotentHint:op.id!=='tools.identity',openWorldHint:true}}};
+  inputSchema:definition['x-input-schema'],...(outputSchema?{outputSchema}:{}),annotations:{readOnlyHint:op.method==='GET',destructiveHint:['shares.retract','events.rsvp','events.waitlist','posts.delete','services.delete'].includes(op.id),idempotentHint:op.id!=='tools.identity',openWorldHint:true}}};
 });
 function available(op:AgentOperation,runtime:PlatformRuntime,registered:(op:AgentOperation)=>boolean){
  if(!registered(op))return false;
@@ -32,6 +32,21 @@ function available(op:AgentOperation,runtime:PlatformRuntime,registered:(op:Agen
  if(op.featureFlag==='FREEDOM_SOCIAL_ACHIEVEMENTS_ENABLED'&&runtime.socialAchievementsEnabled!==true)return false;
  if(op.featureFlag&&!['FREEDOM_EVENT_PARTICIPATION_ENABLED','FREEDOM_SOCIAL_ACHIEVEMENTS_ENABLED'].includes(op.featureFlag))return false;
  return op.id!=='tools.identity'||Boolean(runtime.guildToolSigner);
+}
+/** Builds the nested REST request for a granted MCP tool call without forwarding caller headers. */
+export function buildMcpToolRequest(
+ op:Pick<AgentOperation,'method'|'route'|'ifMatch'>,
+ args:Record<string,unknown>,
+ authorization:string,
+ origin:string,
+):Request{
+ const path=op.route.replace(/:([a-z_]+)/g,(_,name:string)=>encodeURIComponent(String(args[name])));
+ const url=new URL(path,origin);
+ if(args.query)for(const [name,value] of Object.entries(args.query as Record<string,unknown>))if(value!==undefined)url.searchParams.set(name,String(value));
+ const headers:Record<string,string>={Authorization:authorization};
+ if(op.method!=='GET'){headers['Content-Type']='application/json';headers['Idempotency-Key']=String(args.idempotency_key);}
+ if(op.ifMatch)headers['If-Match']=`"${args.version}"`;
+ return new Request(url,{method:op.method,headers,...(op.method!=='GET'?{body:JSON.stringify(args.body)}:{})});
 }
 /** A fixed operation adapter, not a URL proxy. The nested in-process request
  * re-enters the complete REST boundary and domain transaction with the original
@@ -53,8 +68,8 @@ export function agentMcp(pool:Pool,options:{origin:string;origins:ReadonlySet<st
    requireCondition(!actor.onboarding_required||Boolean(actor.onboarding_completed_at),403,'onboarding_required','請先選擇主要公會。');
    if(c.req.method!=='POST'){accountStatus=405;c.header('Allow','POST');return c.body(null,405);}
    requireCondition(/^application\/json[ \t]*(?:;|$)/i.test(c.req.header('Content-Type')??''),415,'json_required','操作需要 JSON。');
-   const accept=c.req.header('Accept')??'';
-   requireCondition(accept.split(',').some(t=>/^(?:application\/json|\*\/\*)(?:\s*;|\s*$)/i.test(t.trim())),406,'mcp_accept_required','請接受 application/json。');
+   const accept=c.req.header('Accept')??'*/*';
+   requireCondition(accept.split(',').some(t=>/^(?:application\/(?:json|\*)|\*\/\*)(?:\s*;|\s*$)/i.test(t.trim())),406,'mcp_accept_required','請接受 application/json。');
    requireCondition(Number(c.req.header('Content-Length')??0)<=options.bodyLimit,413,'body_too_large','內容過長。');
    let size=0;const chunks:Uint8Array[]=[];const reader=c.req.raw.body?.getReader();
    if(reader)try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>options.bodyLimit){await reader.cancel();throw new Problem(413,'body_too_large','內容過長。');}chunks.push(value);}}finally{reader.releaseLock();}
@@ -94,14 +109,8 @@ export function agentMcp(pool:Pool,options:{origin:string;origins:ReadonlySet<st
     accountStatus=403;const problem={code:'scope_required',detail:'Agent 沒有這項操作權限。',status:403};
     return c.json({jsonrpc:'2.0',id,result:{isError:true,content:[{type:'text',text:JSON.stringify(problem)}],structuredContent:problem}});
    }
-   const path=entry.op.route.replace(/:([a-z_]+)/g,(_,name:string)=>encodeURIComponent(String(args[name])));
-   const url=new URL(path,options.origin);
-   if(args.query)for(const [name,value] of Object.entries(args.query as Record<string,unknown>))url.searchParams.set(name,String(value));
-   const headers:Record<string,string>={Authorization:c.req.header('Authorization')!};
-   if(entry.op.method!=='GET'){headers['Content-Type']='application/json';headers['Idempotency-Key']=String(args.idempotency_key);}
-   if(entry.op.ifMatch)headers['If-Match']=`"${args.version}"`;
    delegated=true;
-   const response=await options.dispatch(new Request(url,{method:entry.op.method,headers,...(entry.op.method!=='GET'?{body:JSON.stringify(args.body)}:{})}));
+   const response=await options.dispatch(buildMcpToolRequest(entry.op,args,c.req.header('Authorization')!,options.origin));
    const result=await response.json();
    return c.json({jsonrpc:'2.0',id,result:{isError:response.status>=400,content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result}});
   }catch(e){accountStatus=e instanceof Problem?e.status:500;throw e;}

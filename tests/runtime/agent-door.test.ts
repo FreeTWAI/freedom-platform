@@ -199,7 +199,10 @@ test('own credential management cannot access another member and browser CSRF re
  const owner=await ready(),other=await ready(1),issued=await issue(owner);
  assert.equal((await req(`/api/v1/me/agent-tokens/${issued.connection_id}/revoke`,{session:other,body:{}})).status,404);
  assert.equal((await req('/api/v1/me/agent-tokens',{session:owner,body:{name:'test',scopes:['read']},headers:{'X-CSRF-Token':''}})).status,403);
- assert.equal((await req('/api/v1/me/agent-tokens',{session:owner,body:{name:'test',scopes:['react']}})).status,422);
+ const reactToken=await req('/api/v1/me/agent-tokens',{session:owner,body:{name:'react-test',scopes:['react']}});
+ assert.equal(reactToken.status,201,JSON.stringify(reactToken.data));
+ assert.deepEqual(reactToken.data.scopes,['react']);
+ assert.equal((await req('/api/v1/me/agent-tokens',{session:owner,body:{name:'test',scopes:['message']}})).status,422);
 });
 
 test('every registered non-allowlisted API route is denied before its handler, including every admin and guild action',async()=>{
@@ -273,6 +276,19 @@ test('public guide and generated contract describe exactly the granted operation
  assert.ok(guide.includes('{"name":"events.read","arguments":{"id":"<event uuid>"}}'));
  for(const op of agentOperations.filter(op=>op.granted!==false)){
   assert.ok(guide.includes(`"name":"${op.id}"`),`missing tools/call example for ${op.id}`);
+ }
+ for(const id of ['events.share','credit.read','shares.create','notifications.mark_all_read','guilds.list','posts.note','services.create','works.create','profile.read']){
+  const op=agentOperations.find(entry=>entry.id===id&&entry.granted!==false)!;
+  assert.ok(op,`missing op ${id}`);
+  assert.ok(guide.includes(`### ${op.title} (`),`missing guide title for ${id}`);
+  assert.ok(guide.includes(`${op.method} ${op.route}\nMCP tools/call：\``),`missing REST/MCP pair for ${id}`);
+  assert.ok(guide.includes(`"name":"${op.id}"`),`missing MCP tools/call example for ${id}`);
+ }
+ assert.ok(guide.includes('"consent_to_share":true'),'missing works.create consent_to_share example');
+ assert.ok(guide.includes('{"name":"profile.read","arguments":{}}'),'missing profile.read MCP example');
+ assert.ok(guide.includes(`curl -H "Authorization: Bearer $FREEDOM_AGENT_TOKEN" "${origin}/api/v1/me/positioning"`),'missing profile.read REST curl example');
+ for(const forbidden of ['/api/v1/me/showcases/:id/sharing','/api/v1/social-posts/:id/public-sharing','/api/v1/me/account','/api/v1/me/profile-publication','/api/v1/me/conversations']){
+  assert.equal(guide.includes(forbidden),false,`unexpected member-only route in guide: ${forbidden}`);
  }
  assert.ok((await (await app.request(origin+'/llms.txt')).text()).includes('/agent.md'));
  const contract=await (await app.request(origin+'/agent/openapi.json')).json() as any;
@@ -704,4 +720,275 @@ test('agent event interest refuses a foreign-community event without recording i
  assert.equal((await req(`/api/v1/events/${foreignEvent}/interest`,{token,body:{}})).status,404);
  assert.equal((await pool.query('SELECT count(*)::int n FROM community_event_interests WHERE event_id=$1',[foreignEvent])).rows[0].n,0);
  assert.equal((await req(`/api/v1/events/${ownEvent}/interest`,{token,body:{}})).status,200);
+});
+
+test('agent boundary matches every HTTP method exactly and refuses missing Idempotency-Key once',async()=>{
+ const {matchAgentBoundaryOperation}=await import('../../apps/platform-api/src/agent-boundary.js') as any;
+ const {memberCommand}=await import('../../packages/db/member-command.js');
+ const {Problem}=await import('../../packages/shared/problem.js');
+ type Op=import('../../apps/platform-api/src/agent-allowlist.js').AgentOperation;
+ const ops:Op[]=[
+  {id:'synthetic.get',method:'GET',route:'/api/v1/items/:id',scope:'read',title:'讀取',screen:'shares'},
+  {id:'synthetic.post',method:'POST',route:'/api/v1/items',scope:'share',title:'新增',screen:'shares'},
+  {id:'synthetic.put',method:'PUT',route:'/api/v1/items/:id',scope:'share',title:'取代',screen:'shares'},
+  {id:'synthetic.patch',method:'PATCH',route:'/api/v1/items/:id',scope:'share',title:'局部更新',screen:'shares'},
+  {id:'synthetic.delete',method:'DELETE',route:'/api/v1/items/:id',scope:'share',title:'刪除',screen:'shares'},
+  {id:'synthetic.denied',method:'DELETE',route:'/api/v1/items/:id/secret',scope:'share',title:'拒絕',screen:'shares',granted:false},
+ ];
+ for(const m of ['GET','POST','PUT','PATCH','DELETE'] as const){
+  const route=m==='POST'?'/api/v1/items':'/api/v1/items/:id';
+  const matched=matchAgentBoundaryOperation(m,[{method:'ALL',path:'*'},{method:m,path:route}],ops);
+  assert.equal(matched?.id,`synthetic.${m.toLowerCase()}`);
+ }
+ assert.equal(matchAgentBoundaryOperation('GET',[{method:'ALL',path:'*'},{method:'GET',path:'/api/v1/items/special'},{method:'GET',path:'/api/v1/items/:id'}],ops),undefined);
+ assert.equal(matchAgentBoundaryOperation('PUT',[{method:'ALL',path:'/api/v1/items/:id'}],ops),undefined);
+ assert.equal(matchAgentBoundaryOperation('HEAD',[{method:'GET',path:'/api/v1/items/:id'}],ops),undefined);
+ assert.equal(matchAgentBoundaryOperation('POST',[{method:'PUT',path:'/api/v1/items/:id'}],ops),undefined);
+ assert.equal(matchAgentBoundaryOperation('DELETE',[{method:'DELETE',path:'/api/v1/items/:id/secret'}],ops),undefined);
+
+ let memberError:InstanceType<typeof Problem>|undefined;
+ try{await memberCommand(pool,{actor:{user_id:randomUUID()} as any,operation:'test',key:'',body:{}},async()=>{},async()=>{});}
+ catch(e){if(e instanceof Problem)memberError=e;}
+ assert.ok(memberError);
+ const member=await ready(),issued=await issue(member,['rsvp']),token=issued.access_token;
+ const missing=await app.request(origin+`/api/v1/events/${randomUUID()}/interest`,{
+  method:'POST',
+  headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+  body:JSON.stringify({}),
+ });
+ const body=await missing.json() as any;
+ assert.equal(missing.status,memberError.status);
+ assert.equal(body.code,memberError.code);
+ const row=(await pool.query('SELECT failure_count FROM agent_token_connections WHERE connection_id=$1',[issued.connection_id])).rows[0];
+ assert.equal(row.failure_count,1);
+});
+
+test('agent inbox read-all requires scope=notifications and never marks direct messages read',async()=>{
+ const member=await ready(0),peer=await ready(1),token=(await issue(member,['read'])).access_token;
+ const sent=await req(`/api/v1/me/conversations/${member.user.user_id}/messages`,{session:peer,body:{body:'私訊不應被已讀'}});
+ assert.equal(sent.status,201,JSON.stringify(sent.data));
+ const messageId=sent.data.message_id as string;
+ const withoutScope=await req('/api/v1/me/inbox/read-all',{token,body:{}});
+ assert.equal(withoutScope.status,422,JSON.stringify(withoutScope.data));
+ const badScope=await req('/api/v1/me/inbox/read-all',{token,body:{scope:'all'}});
+ assert.equal(badScope.status,422,JSON.stringify(badScope.data));
+ const unreadRow=(await pool.query('SELECT read_at FROM member_direct_messages WHERE message_id=$1',[messageId])).rows[0];
+ assert.equal(unreadRow.read_at,null);
+ const ok=await req('/api/v1/me/inbox/read-all',{token,body:{scope:'notifications'}});
+ assert.equal(ok.status,200,JSON.stringify(ok.data));
+ assert.equal(ok.data.direct_messages_updated,0);
+ assert.equal(ok.data.channels_updated,0);
+ const stillUnread=(await pool.query('SELECT read_at FROM member_direct_messages WHERE message_id=$1',[messageId])).rows[0];
+ assert.equal(stillUnread.read_at,null);
+});
+
+test('agent social posts enforce scope, strict image exclusion before route, If-Match, and replay',async()=>{
+ const owner=await ready(0),other=await ready(1);
+ const shareConn=await issue(owner,['read','share']),reactConn=await issue(owner,['read','react']),bothConn=await issue(owner,['read','share','react']),outsider=await issue(other,['read','share','react']);
+ const confirmLatest=async(session:Session,connectionId:string)=>{
+  const list=await req('/api/v1/me/agent-tokens',{session});assert.equal(list.status,200);
+  const pending=list.data.items.find((i:any)=>i.connection_id===connectionId)?.pending_publication;
+  assert.ok(pending,`missing pending_publication for ${connectionId}`);
+  const confirmed=await req(`/api/v1/me/agent-tokens/${connectionId}/confirm`,{session,body:{request_sha256:pending.request_sha256}});
+  assert.equal(confirmed.status,200,JSON.stringify(confirmed.data));
+ };
+ const fakeImg={mime_type:'image/png',data_base64:'AAAA'};
+ const rejectedImgBeforeConfirm=await req('/api/v1/social-posts/notes',{token:shareConn.access_token,body:{text:'帶圖短文',image:fakeImg}});
+ assert.equal(rejectedImgBeforeConfirm.status,422,JSON.stringify(rejectedImgBeforeConfirm.data));
+ assert.equal((await pool.query('SELECT 1 FROM agent_pending_publications WHERE connection_id=$1',[shareConn.connection_id])).rowCount,0);
+
+ const noteKey=randomUUID();
+ assert.equal((await req('/api/v1/social-posts/notes',{token:shareConn.access_token,body:{text:'第一則短文'},key:noteKey})).status,202);
+ await confirmLatest(owner,shareConn.connection_id);
+ const note=await req('/api/v1/social-posts/notes',{token:shareConn.access_token,body:{text:'第一則短文'},key:noteKey});
+ assert.equal(note.status,201,JSON.stringify(note.data));
+ assert.equal((await req('/api/v1/social-posts/notes',{token:shareConn.access_token,body:{text:'確認後帶圖',image:fakeImg}})).status,422);
+ assert.equal((await pool.query("SELECT count(*)::int AS n FROM community_social_posts WHERE author_user_id=$1 AND state='active'",[owner.user.user_id])).rows[0].n,1);
+
+ const linkConn=await issue(owner,['read','share']),linkKey=randomUUID(),linkBody={url:'https://example.com/door-link',title:'連結標題',note:'連結備註'};
+ assert.equal((await req('/api/v1/social-posts',{token:linkConn.access_token,body:linkBody,key:linkKey})).status,202);
+ await confirmLatest(owner,linkConn.connection_id);
+ const link=await req('/api/v1/social-posts',{token:linkConn.access_token,body:linkBody,key:linkKey});
+ assert.equal(link.status,201,JSON.stringify(link.data));
+ const linkReplay=await req('/api/v1/social-posts',{token:linkConn.access_token,body:linkBody,key:linkKey});
+ assert.equal(linkReplay.status,201,JSON.stringify(linkReplay.data));
+ assert.equal(linkReplay.data.post_id,link.data.post_id);
+
+ const noteId=note.data.post_id as string,linkId=link.data.post_id as string;
+ assert.equal((await req(`/api/v1/social-posts/${noteId}/edit`,{token:reactConn.access_token,body:{text:'無權限'},headers:{'If-Match':`"${note.data.revision}"`}})).status,403);
+ assert.equal((await req(`/api/v1/social-posts/${noteId}/edit`,{token:outsider.access_token,body:{text:'跨會員'},headers:{'If-Match':`"${note.data.revision}"`}})).status,403);
+ assert.equal((await req(`/api/v1/social-posts/${noteId}/edit`,{token:shareConn.access_token,body:{text:'缺版本'}})).status,428);
+ assert.equal((await req(`/api/v1/social-posts/${noteId}/edit`,{token:shareConn.access_token,body:{text:'舊版本'},headers:{'If-Match':`"${Number(note.data.revision)+5}"`}})).status,412);
+ assert.equal((await req(`/api/v1/social-posts/${noteId}/edit`,{token:shareConn.access_token,body:{text:'夾帶圖片',image:fakeImg},headers:{'If-Match':`"${note.data.revision}"`}})).status,422);
+ const noteEdit=await req(`/api/v1/social-posts/${noteId}/edit`,{token:shareConn.access_token,body:{text:'編輯後短文'},headers:{'If-Match':`"${note.data.revision}"`}});
+ assert.equal(noteEdit.status,200,JSON.stringify(noteEdit.data));
+ const linkEdit=await req(`/api/v1/social-posts/${linkId}/edit`,{token:shareConn.access_token,body:{title:'新連結標題',note:null},headers:{'If-Match':`"${link.data.revision}"`}});
+ assert.equal(linkEdit.status,200,JSON.stringify(linkEdit.data));
+
+ assert.equal((await req(`/api/v1/social-posts/${linkId}/like`,{token:shareConn.access_token,body:{liked:true}})).status,403);
+ const likeRes=await req(`/api/v1/social-posts/${linkId}/like`,{token:reactConn.access_token,body:{liked:true}});
+ assert.equal(likeRes.status,200,JSON.stringify(likeRes.data));
+ assert.equal(likeRes.data.liked,true);assert.equal(likeRes.data.like_count,1);
+
+ assert.equal((await req(`/api/v1/social-posts/${linkId}/comments`,{token:shareConn.access_token,body:{text:'無互動權'}})).status,403);
+ const badCommentBeforeConfirm=await req(`/api/v1/social-posts/${linkId}/comments`,{token:bothConn.access_token,body:{text:'含圖留言',image_id:randomUUID()}});
+ assert.equal(badCommentBeforeConfirm.status,422,JSON.stringify(badCommentBeforeConfirm.data));
+ assert.equal((await pool.query('SELECT 1 FROM agent_pending_publications WHERE connection_id=$1',[bothConn.connection_id])).rowCount,0);
+ const commentKey=randomUUID();
+ assert.equal((await req(`/api/v1/social-posts/${linkId}/comments`,{token:bothConn.access_token,body:{text:'公開留言'},key:commentKey})).status,202);
+ await confirmLatest(owner,bothConn.connection_id);
+ const commentRes=await req(`/api/v1/social-posts/${linkId}/comments`,{token:bothConn.access_token,body:{text:'公開留言'},key:commentKey});
+ assert.equal(commentRes.status,201,JSON.stringify(commentRes.data));
+ assert.equal((await req(`/api/v1/social-posts/${linkId}/comments`,{token:bothConn.access_token,body:{text:'確認後含圖',image_id:randomUUID()}})).status,422);
+
+ assert.equal((await req(`/api/v1/social-posts/${noteId}`,{token:reactConn.access_token,method:'DELETE',body:{}})).status,403);
+ assert.equal((await req(`/api/v1/social-posts/${noteId}`,{token:outsider.access_token,method:'DELETE',body:{}})).status,403);
+ const delRes=await req(`/api/v1/social-posts/${noteId}`,{token:shareConn.access_token,method:'DELETE',body:{}});
+ assert.equal(delRes.status,200,JSON.stringify(delRes.data));
+ assert.deepEqual(delRes.data,{post_id:noteId,state:'deleted'});
+});
+
+test('agent member services enforce scope, If-Match, ownership, replay, and keep cover/hide member-only',async()=>{
+ const owner=await ready(0),other=await ready(1);
+ const readConn=await issue(owner,['read']),shareConn=await issue(owner,['read','share']),outsider=await issue(other,['read','share']);
+ const confirmLatest=async(session:Session,connectionId:string)=>{
+  const list=await req('/api/v1/me/agent-tokens',{session});assert.equal(list.status,200);
+  const pending=list.data.items.find((i:any)=>i.connection_id===connectionId)?.pending_publication;
+  assert.ok(pending,`missing pending_publication for ${connectionId}`);
+  const confirmed=await req(`/api/v1/me/agent-tokens/${connectionId}/confirm`,{session,body:{request_sha256:pending.request_sha256}});
+  assert.equal(confirmed.status,200,JSON.stringify(confirmed.data));
+ };
+ const draft={title:'顧問服務',category:'consulting',summary:'一對一線上諮詢',service_mode:'online',contacts:[{label:'預約',url:'https://example.com/consult'}]};
+ assert.equal((await req('/api/v1/member-services',{token:readConn.access_token,body:draft})).status,403);
+ assert.equal((await req('/api/v1/member-services',{token:shareConn.access_token,body:{...draft,cover:'bad'}})).status,422);
+ assert.equal((await pool.query('SELECT 1 FROM agent_pending_publications WHERE connection_id=$1',[shareConn.connection_id])).rowCount,0);
+
+ const createKey=randomUUID();
+ assert.equal((await req('/api/v1/member-services',{token:shareConn.access_token,body:draft,key:createKey})).status,202);
+ await confirmLatest(owner,shareConn.connection_id);
+ const created=await req('/api/v1/member-services',{token:shareConn.access_token,body:draft,key:createKey});
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ const replay=await req('/api/v1/member-services',{token:shareConn.access_token,body:draft,key:createKey});
+ assert.equal(replay.status,201,JSON.stringify(replay.data));
+ assert.equal(replay.data.service_id,created.data.service_id);
+
+ const serviceId=created.data.service_id as string;
+ const mine=await req('/api/v1/member-services/mine',{token:readConn.access_token});
+ assert.equal(mine.status,200,JSON.stringify(mine.data));
+ assert.equal(mine.data.items.length,1);
+ assert.equal(mine.data.items[0].service_id,serviceId);
+
+ assert.equal((await req(`/api/v1/member-services/${serviceId}`,{token:outsider.access_token,method:'PUT',body:{...draft,title:'他人修改'},headers:{'If-Match':`"${created.data.aggregate_version}"`}})).status,403);
+ assert.equal((await req(`/api/v1/member-services/${serviceId}`,{token:shareConn.access_token,method:'PUT',body:{...draft,title:'缺版本'}})).status,428);
+ assert.equal((await req(`/api/v1/member-services/${serviceId}`,{token:shareConn.access_token,method:'PUT',body:{...draft,title:'錯版本'},headers:{'If-Match':'"99"'}})).status,412);
+ const edited=await req(`/api/v1/member-services/${serviceId}`,{token:shareConn.access_token,method:'PUT',body:{...draft,title:'新版顧問服務'},headers:{'If-Match':`"${created.data.aggregate_version}"`}});
+ assert.equal(edited.status,200,JSON.stringify(edited.data));
+ assert.equal(edited.data.title,'新版顧問服務');
+
+ assert.equal((await req(`/api/v1/member-services/${serviceId}/pause`,{token:shareConn.access_token,body:{}})).status,428);
+ const paused=await req(`/api/v1/member-services/${serviceId}/pause`,{token:shareConn.access_token,body:{},headers:{'If-Match':`"${edited.data.aggregate_version}"`}});
+ assert.equal(paused.status,200,JSON.stringify(paused.data));
+ assert.equal(paused.data.state,'paused');
+
+ assert.equal((await req(`/api/v1/member-services/${serviceId}/resume`,{token:shareConn.access_token,body:{}})).status,428);
+ const resumed=await req(`/api/v1/member-services/${serviceId}/resume`,{token:shareConn.access_token,body:{},headers:{'If-Match':`"${paused.data.aggregate_version}"`}});
+ assert.equal(resumed.status,200,JSON.stringify(resumed.data));
+ assert.equal(resumed.data.state,'active');
+
+ assert.equal((await req(`/api/v1/member-services/${serviceId}/hide`,{token:shareConn.access_token,body:{},headers:{'If-Match':`"${resumed.data.aggregate_version}"`}})).status,403);
+ assert.equal((await req(`/api/v1/member-services/${serviceId}/cover/remove`,{token:shareConn.access_token,body:{},headers:{'If-Match':`"${resumed.data.aggregate_version}"`}})).status,403);
+ const coverPut=await app.request(origin+`/api/v1/member-services/${serviceId}/cover`,{method:'PUT',headers:{Authorization:'Bearer '+shareConn.access_token,'Content-Type':'image/png','Idempotency-Key':randomUUID()},body:Buffer.from([137,80,78,71])});
+ assert.equal(coverPut.status,403);
+
+ assert.equal((await req(`/api/v1/member-services/${serviceId}`,{token:shareConn.access_token,method:'DELETE',body:{}})).status,428);
+ assert.equal((await req(`/api/v1/member-services/${serviceId}`,{token:outsider.access_token,method:'DELETE',body:{},headers:{'If-Match':`"${resumed.data.aggregate_version}"`}})).status,403);
+ const deleted=await req(`/api/v1/member-services/${serviceId}`,{token:shareConn.access_token,method:'DELETE',body:{},headers:{'If-Match':`"${resumed.data.aggregate_version}"`}});
+ assert.equal(deleted.status,200,JSON.stringify(deleted.data));
+ assert.equal(deleted.data.state,'deleted');
+});
+
+test('first public item confirmation and single 20/UTC-day cap apply together across all seven public item kinds',async t=>{
+ const owner=await ready(0),conn=await issue(owner,['read','share','rsvp','react']),token=conn.access_token;
+ const basePost=await req('/api/v1/social-posts/notes',{session:owner,body:{text:'跨類型上限母貼文'}});
+ assert.equal(basePost.status,201,JSON.stringify(basePost.data));
+ const basePostId=basePost.data.post_id as string;
+
+ const firstKey=randomUUID(),firstBody={text:'第一則公開留言'};
+ assert.equal((await req(`/api/v1/social-posts/${basePostId}/comments`,{token,body:firstBody,key:firstKey})).status,202);
+ const list=await req('/api/v1/me/agent-tokens',{session:owner});
+ const pending=list.data.items.find((i:any)=>i.connection_id===conn.connection_id)?.pending_publication;
+ assert.ok(pending);
+ assert.equal((await req(`/api/v1/me/agent-tokens/${conn.connection_id}/confirm`,{session:owner,body:{request_sha256:pending.request_sha256}})).status,200);
+ const firstComment=await req(`/api/v1/social-posts/${basePostId}/comments`,{token,body:firstBody,key:firstKey});
+ assert.equal(firstComment.status,201,JSON.stringify(firstComment.data));
+ const afterFirst=(await pool.query('SELECT public_confirmed_at FROM agent_token_connections WHERE connection_id=$1',[conn.connection_id])).rows[0];
+ assert.ok(afterFirst.public_confirmed_at,'first comment must confirm connection public_confirmed_at');
+ assert.equal((await pool.query('SELECT public_items FROM agent_daily_usage WHERE connection_id=$1',[conn.connection_id])).rows[0]?.public_items,1);
+
+ t.mock.method(globalThis,'fetch',async(input:string|URL|Request)=>{
+  const url=String(input);assert.equal(new URL(url).hostname,'api.github.com');
+  const repoMatch=/\/repos\/example\/cap-repo-(\d+)$/.exec(url);
+  if(repoMatch)return Response.json({id:9000+Number(repoMatch[1]),full_name:`example/cap-repo-${repoMatch[1]}`,private:false,visibility:'public',default_branch:'main',fork:false,archived:false});
+  if(url.endsWith('/commits/main'))return Response.json({sha:'b'.repeat(40)});
+  if(url.includes('/license?ref='))return Response.json({path:'LICENSE',license:{spdx_id:'MIT'}});
+  throw new Error('unexpected fixture request: '+url);
+ });
+
+ for(let i=0;i<3;i++)assert.equal((await req('/api/v1/events',{token,body:{...eventBody(),title:`跨類型活動 ${i}`}})).status,201);
+ for(let i=0;i<2;i++)assert.equal((await req('/api/v1/opensource/projects',{token,body:{repository_url:`https://github.com/example/cap-repo-${i}`,title:`跨類型專案 ${i}`,description:'專案介紹',use_notes:'使用方式',relationship:'curator',consent_to_share:true}})).status,201);
+ for(let i=0;i<3;i++)assert.equal((await req('/api/v1/shares',{token,body:{kind:'link',url:`https://example.com/cap-share-${i}`}})).status,200);
+ for(let i=0;i<3;i++)assert.equal((await req('/api/v1/social-posts/notes',{token,body:{text:`跨類型短文 ${i}`}})).status,201);
+ for(let i=0;i<3;i++)assert.equal((await req('/api/v1/social-posts',{token,body:{url:`https://example.com/cap-post-${i}`}})).status,201);
+ for(let i=0;i<2;i++)assert.equal((await req(`/api/v1/social-posts/${basePostId}/comments`,{token,body:{text:`跨類型留言 ${i}`}})).status,201);
+ for(let i=0;i<2;i++)assert.equal((await req('/api/v1/member-services',{token,body:{title:`跨類型服務 ${i}`,category:'tech',summary:'服務摘要',service_mode:'online',contacts:[{label:'官網',url:'https://example.com/svc'}]}})).status,201);
+ assert.equal((await req('/api/v1/showcases',{token,body:{title:'跨類型作品 0',description:'作品說明',public_url:'https://example.com/work-cap',consent_to_share:true}})).status,201);
+
+ assert.equal((await pool.query('SELECT public_items FROM agent_daily_usage WHERE connection_id=$1',[conn.connection_id])).rows[0].public_items,20);
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM agent_publications WHERE connection_id=$1 AND resource_id IS NOT NULL',[conn.connection_id])).rows[0].n,20);
+
+ for(const attempt of [
+  await req(`/api/v1/social-posts/${basePostId}/comments`,{token,body:{text:'第 21 件留言'}}),
+  await req('/api/v1/social-posts/notes',{token,body:{text:'第 21 件短文'}}),
+  await req('/api/v1/events',{token,body:{...eventBody(),title:'第 21 件活動'}}),
+  await req('/api/v1/member-services',{token,body:{title:'第 21 件服務',category:'tech',summary:'服務摘要',service_mode:'online',contacts:[{label:'官網',url:'https://example.com/svc2'}]}}),
+  await req('/api/v1/showcases',{token,body:{title:'第 21 件作品',description:'作品說明',consent_to_share:true}}),
+ ]){
+  assert.equal(attempt.status,429,JSON.stringify(attempt.data));
+  assert.equal(attempt.data.code,'agent_daily_cap');
+ }
+ assert.equal((await pool.query('SELECT public_items FROM agent_daily_usage WHERE connection_id=$1',[conn.connection_id])).rows[0].public_items,20);
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM agent_publications WHERE connection_id=$1',[conn.connection_id])).rows[0].n,20);
+});
+
+test('works.create and profile.read enforce scope, consent_to_share, confirmation, and replay',async()=>{
+ const owner=await ready(0),readOnly=await issue(owner,['read']),shareOnly=await issue(owner,['share']);
+ assert.equal((await req('/api/v1/me/positioning',{token:shareOnly.access_token})).status,403);
+ const posCheck=await req('/api/v1/me/positioning',{session:owner});
+ if(!posCheck.data.profile){
+  assert.equal((await req('/api/v1/me/positioning',{session:owner,body:{real_world_occupations:['設計師'],background:'設計實務',strengths:['介面設計'],goals:'建立開源設計系統',weekly_minutes:120,desired_roles:['creator'],selected_tracks:['visual_designer'],confirmed:true}})).status,201);
+ }
+ const pos=await req('/api/v1/me/positioning',{token:readOnly.access_token});
+ assert.equal(pos.status,200,JSON.stringify(pos.data));
+ assert.equal(pos.data.profile.user_id,owner.user.user_id);
+ assert.ok(Array.isArray(pos.data.tracks)&&pos.data.tracks.length>0);
+
+ assert.equal((await req('/api/v1/showcases',{token:readOnly.access_token,body:{title:'無權限作品',description:'說明',consent_to_share:true}})).status,403);
+ assert.equal((await req('/api/v1/showcases',{token:shareOnly.access_token,body:{title:'缺同意作品',description:'說明'}})).status,422);
+ assert.equal((await req('/api/v1/showcases',{token:shareOnly.access_token,body:{title:'未同意作品',description:'說明',consent_to_share:false}})).status,422);
+
+ const key=randomUUID(),workBody={title:'代理分享作品',description:'完整的作品介紹與展示連結',public_url:'https://example.com/agent-work',consent_to_share:true};
+ assert.equal((await req('/api/v1/showcases',{token:shareOnly.access_token,body:workBody,key})).status,202);
+ const list=await req('/api/v1/me/agent-tokens',{session:owner});
+ const pending=list.data.items.find((i:any)=>i.connection_id===shareOnly.connection_id)?.pending_publication;
+ assert.ok(pending);
+ assert.equal((await req(`/api/v1/me/agent-tokens/${shareOnly.connection_id}/confirm`,{session:owner,body:{request_sha256:pending.request_sha256}})).status,200);
+
+ const created=await req('/api/v1/showcases',{token:shareOnly.access_token,body:workBody,key});
+ assert.equal(created.status,201,JSON.stringify(created.data));
+ assert.equal(created.data.via_agent,true);
+ const replay=await req('/api/v1/showcases',{token:shareOnly.access_token,body:workBody,key});
+ assert.equal(replay.status,201,JSON.stringify(replay.data));
+ assert.equal(replay.data.showcase_id,created.data.showcase_id);
+ const pub=(await pool.query('SELECT resource_id FROM agent_publications WHERE connection_id=$1 AND idempotency_key=$2',[shareOnly.connection_id,key])).rows[0];
+ assert.equal(pub?.resource_id,created.data.showcase_id);
 });
