@@ -6,6 +6,7 @@
     "modules/social-achievements/**",
     "apps/platform-api/src/routes/social-achievements.ts",
     "apps/portal-web/src/modules/SocialAchievements.tsx",
+    "apps/portal-web/src/modules/social-achievements-state.ts",
     "migrations/194_social_achievements.sql",
     "tests/runtime/social-achievements-policy.test.ts",
     "tests/runtime/social-achievements.test.ts",

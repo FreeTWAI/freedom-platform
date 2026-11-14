@@ -83,7 +83,10 @@
     "module:new": "node scripts/freedom.mjs module-new",
     "module:check": "node scripts/freedom.mjs module-check",
     "contracts:agent": "node scripts/build-agent-contract.mjs",
-    "check:agent-contract": "node scripts/build-agent-contract.mjs --check"
+    "check:agent-contract": "node scripts/build-agent-contract.mjs --check",
+    "shares:backfill": "tsx scripts/backfill-shares.ts",
+    "events:publish-pending": "tsx scripts/publish-pending-events.ts",
+    "guild-tools:signing-key": "node scripts/generate-guild-tool-signing-key.mjs"
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",

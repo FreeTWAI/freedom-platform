@@ -58,7 +58,7 @@ npm run start
 會員、權限、公會、商品、商店、合作和稽核的權威寫入在本 repo 的 API／PostgreSQL。外倉用版本化契約；本機、staging、public 使用分開的資料庫。GitHub Issue／PR 保存程式協作事實；Seller／bank 保存實收事實。 跨 repo 的協定由[中央平台](https://github.com/FreeTWAI/freedom-platform)維護。
 <!-- freedom-repository-guide:end -->
 
-本 workspace 保存 Freedom 大平台的完整規格，以及 **0.13.0-member-messages 自由工坊會員入口**。內建目錄為 18 個公會、55 本技能書（61 個原作 repo 指引）；管理員另可核准會員申請的自訂公會。新會員註冊後選擇主要公會並取得 Repo 技能書（定位測驗可稍後補做），再進入供貨、商店、作品、行銷與小隊。會員名片有個別聯絡欄位的可見範圍。各模組共用中央會員與 PostgreSQL。
+本 workspace 保存 Freedom 大平台的完整規格，以及 **0.13.0-member-messages 自由工坊會員入口**。內建目錄為 20 個內建公會、55 本技能書（61 個原作 repo 指引）；管理員另可核准會員申請的自訂公會。新會員註冊後選擇主要公會並取得 Repo 技能書（定位測驗可稍後補做），再以「動態」「探索」「公會」「自動化」「我的」五個空間進入供貨、商店、作品、行銷、小隊、公會專屬工具（`#guilds/<guild_key>/tools/<tool_id>`）、統一「＋分享」對話框（`ShareBox`）與分享貢獻帳本，並提供受權限邊界保護的會員 Agent 通道（`/agent.md`、`/api/v1/mcp` 與 [contracts/agent/v1/openapi.json](contracts/agent/v1/openapi.json)）。會員名片有個別聯絡欄位的可見範圍。各模組共用中央會員與 PostgreSQL。
 
 API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最終 status ≥ 500 時，以 `console.warn` 輸出一行 JSON：`{event, method, route, status, duration_ms}`。5xx 優先使用 `server_error`，其餘為 `slow_request`；耗時包含 I/O 等待，`route` 是含 sub-app prefix 的 Hono 路由樣板，未匹配時為 `unmatched`，不記錄實際 path／params、query、headers、cookie、body、user ID 或錯誤內容。快速 2xx／4xx 不新增 log，既有錯誤回應與 `request_failed` 保留；此候選不代表已部署。
 
@@ -117,7 +117,7 @@ API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最�
 
 名片可新增多個社群帳號或頻道，同平台也可重複加入；每筆獨立編輯、刪除及設定可見範圍，預設只有本人可見。詳見 [會員社群連結](./docs/development/member-social-links.md)。
 
-右上角「設定」集中我的名片、GitHub 必做待辦與我的訊息。訊息也可從主要導覽或功能搜尋找到，分為通知、公會閒聊、小隊閒聊、私人訊息與世界聊天，依當下成員資格開放；通知包含好友、小隊邀請、公會審核與任命結果。小隊邀請由受邀本人接受。詳見 [會員設定與訊息](./docs/development/member-settings-messages.md)。
+頂欄右上角提供通知鈴（`NotificationBell`）與帳號選單（`SettingsMenu`：個人頁、入門指南、我的名片與帳號設定、語言、外觀主題、安裝與登出）；通知、公會閒聊、小隊閒聊、私人訊息與世界聊天由聊天面板及「我的 → 訊息」（`#messages`）開啟，並可從「探索」的功能搜尋找到，依當下成員資格開放；通知包含好友、小隊邀請、公會審核與任命結果。小隊邀請由受邀本人接受。早期導覽參考見 [會員設定與訊息](./docs/development/member-settings-messages.md)。
 
 本分支提供獨立會員封鎖候選：阻止雙向私訊與好友邀請，保留本人歷史訊息與共同頻道；本人可管理私人封鎖名單。`FREEDOM_MEMBER_BLOCKING_ENABLED` 僅在精確值 `true` 時開放管理入口，預設關閉；部署本程式前仍須先套用 migration 136，即使旗標關閉也會保護已保存的封鎖。這是 #251 的封鎖切片，不含檢舉案件、政策核定或部署驗收。操作與回滾邊界見 [會員設定與訊息](./docs/development/member-settings-messages.md)及[通知與私訊服務](./docs/development/member-communications.md)。
 
@@ -129,7 +129,7 @@ API 的 Node／Worker 共用 request middleware 僅在耗時 ≥ 1000 ms 或最�
 
 各頁右上角提供想法、說明與編修入口；想法按頁面標記整理 GitHub Issue，站內發布使用會員自己的 GitHub 授權，手機世界聊天使用站內抽屜。權限與資料邊界見 [頁面工具與世界聊天](./docs/development/page-tools.md)。
 
-會員入口已按用途整理：技能書架獨立提供「已解鎖／未解鎖」書目，開源投稿只處理專案登錄；公會與平台管理集中在管理分組，手機使用可展開選單。詳見 [全站導覽審查](./docs/development/workspace-ia-review.md)。
+會員入口以「動態」「探索」「公會」「自動化」「我的」五個空間組織（`PORTAL_PLACES`，手機使用可展開選單）：「探索」集中搜尋功能與夥伴、資源（技能書架，獨立提供已解鎖／未解鎖書目）、作品、活動、成果、服務檢視；「公會」整合公會目錄、公會管理、公會工具目錄（`#guilds/<guild_key>/tools/<tool_id>`，支援內建工具與獨立 iframe 工具，範本見 [templates/guild-tool](templates/guild-tool/README.md) 與 [modules/guild-tools](modules/guild-tools/)）及社群連結；「自動化」集中我的 Agent（`#automation/agent`，提供金鑰簽發與 `/agent.md`、`/api/v1/mcp` 指引）、私人工作與裝置／模型／工具連線；「我的」彙整個人頁、設定、入門、訊息、聯絡人、小隊、訂單與「我的貢獻」（`#me/credit`），平台管理者可由此開啟 `/admin`（公會與平台管理身分仍獨立驗證）。早期分類背景見 [全站導覽審查](./docs/development/workspace-ia-review.md)。
 
 公會頁在該社群尚未由平台管理員切換前，仍依「主要與次要」「其他已加入」「未加入」分區。最上方最多三張：一個主要、兩個可自行設定的次要公會；新入會不會擠掉已選次要。管理員對該社群執行「分類與主力切換」之後，同一頁改為三類主力（社群架構開發、社群業務推廣、社群專業服務），每類至多一個、可以留空；次要公會不會自動升成主力。分類未定的公會顯示「分類整理中」，仍可加入與使用。卡片只列第一本入門技能，其餘收進公會技能書庫。已領取技能書在退出後保留，未解鎖書目仍可免費預覽。詳見 [公會分組與解鎖書架](./docs/development/guild-library-layout.md)。
 
@@ -210,11 +210,11 @@ Freedom Platform 是社群的接點、共同資料庫、核心 codebase 協作�
 
 會員可從「一起開發」找到專案缺少的角色，讀取 GitHub Issues、複製給 Agent 的任務說明，再由維護者審查 PR。詳見 [共創與貢獻紀錄](docs/development/co-creation.md)。示範 repo：[工坊 video-autopilot-kit](https://github.com/FreeTWAI/video-autopilot-kit/issues)。
 
-會員註冊只填一個 Email；登入信箱即聯絡信箱，公開範圍於名片多選設定。目前有 18 個內建公會，包含資安、音樂創作與 MV、廣告攝影與影片，另可加入已核准的自訂公會；公會長未任命時如實顯示待任命。
+會員註冊只填一個 Email；登入信箱即聯絡信箱，公開範圍於名片多選設定。目前有 20 個內建公會，包含最初 12 個職業公會、資安／音樂創作與 MV／廣告攝影與影片、活動與空間／光影光雕／人類圖研究所，以及小遊戲與 AR 互動公會，另可加入已核准的自訂公會；公會長未任命時如實顯示待任命。
 
-本分支的 #258 沒有另開分享頁，而是擴充標題列既有的「＋分享」單一入口，且預設關閉：`FREEDOM_UNIFIED_SHARING_ENABLED=true` 才在同一個選單說明各目的的可見範圍與草稿／發布差異，並加入「找人合作」「發起共創邀請」兩個原表單入口；沒開時維持原本的發文、分享作品、刊登商品、分享開源資源。不另建統一發布表、不增加一般作品的 GitHub／Agent／JSON 門檻，原本的來源、授權、本人公開同意與雙方合作隱私仍由各模組負責。「發文」使用既有原生短貼文，只有同社群會員可見、送出即發布；它沒有原生提問型別、草稿或留言通知，本分支不改動這些 #193 契約。
+頂欄工具列（`workspace-topbar`）的單一「＋分享」入口（`ShareBoxLauncher`／`ShareBox`，位於 [apps/portal-web/src/share/ShareBox.tsx](apps/portal-web/src/share/ShareBox.tsx)）開啟統一分享對話框，整合「網址」預覽分享、「貼文」發布（經 `/api/v1/social-posts/notes` 與 `/api/v1/shares`）、「作品」與「種類」選單（供貨／商店／活動／服務／開源／找人合作／共創邀請），並保留原有下游表單的來源、授權、本人公開同意與雙方合作隱私邊界。
 
-切換入口時，原表單尚未送出的輸入、同意、待處理狀態與實際成功結果只保留在**目前登入工作階段的記憶體**（這部分不受旗標控制）；重新整理、登出或切換帳號會清除。原流程已保存的伺服器私人草稿仍依各自規則續寫。延遲回應不能替下一位會員公開，未知送出結果沿用原 Idempotency-Key 重試；成功只顯示真正已保存物件的原入口，不把草稿當成發布。詳見 [會員 API](docs/development/member-api.md#unified-sharing-entry-258)；本機驗證不代表全項 #258 驗收、部署或啟用完成。
+伺服器端以 `shares`、`share_endorsements`、`share_reports` 與只增不減的 `share_credit_events` 貢獻帳本（[migrations/204_shares.sql](migrations/204_shares.sql)、設計邊界見 [modules/shares/README.md](modules/shares/README.md)）保存公開分享物件與真實歸因貢獻，會員可在「我的 → 我的貢獻」（`#me/credit`、`/api/v1/me/credit`）及分享專頁（`/s/:share_id`、`#shares/:share_id`）查看成果、認領原作或檢舉。對話框切換與重試以工作階段記憶體草稿（`share-draft:<userId>`）、`client.sessionGeneration` 世代隔離與 `Idempotency-Key` 保護避免錯置下一位會員或重複寫入。
 
 ## 授權 / License
 

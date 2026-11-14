@@ -432,6 +432,18 @@
         "community.author-claim-page.view"
       ],
       "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "community.event-pages.public-api",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/event-pages.ts",
+      "operations": [
+        "community.public-event.list",
+        "community.public-event-calendar.read",
+        "community.event-page.read",
+        "community.event-calendar.read"
+      ],
+      "auth_profile": "public-anonymous-read"
     }
   ]
 }

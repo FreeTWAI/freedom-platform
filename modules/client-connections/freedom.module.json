@@ -117,6 +117,28 @@
         "tools/call"
       ],
       "auth_profile": "member-agent-bearer"
+    },
+    {
+      "surface_id": "client-connections.agent-tokens",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/agent-tokens.ts",
+      "operations": [
+        "client-connections.agent-tokens.list",
+        "client-connections.agent-tokens.create",
+        "client-connections.agent-tokens.renew",
+        "client-connections.agent-tokens.revoke",
+        "client-connections.agent-tokens.confirm"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
+      "surface_id": "client-connections.agent-feed",
+      "kind": "http",
+      "entry": "apps/platform-api/src/routes/agent-feed.ts",
+      "operations": [
+        "client-connections.agent-events.read"
+      ],
+      "auth_profile": "member-session-or-agent-bearer"
     }
   ]
 }
