@@ -224,7 +224,9 @@ test('read-only share headline links to public page section and reflects saved b
     await expect(page.locator('.account-settings-section').filter({has:page.locator(':scope > summary',{hasText:'個人資料'})})).not.toHaveAttribute('open','');
     await publicSection.getByLabel('顯示名稱',{exact:true}).fill('公開作者');
     await publicSection.getByLabel('一句話介紹',{exact:true}).fill('來自公開頁的介紹');
-    await publicSection.getByRole('button',{name:'儲存',exact:true}).click();
+    await publicSection.getByRole('radio',{name:'任何人（免登入）'}).check();
+    await publicSection.getByRole('checkbox',{name:'我確認公開以上文字、連結與已勾選的封面'}).check();
+    await publicSection.getByRole('button',{name:'確認公開',exact:true}).click();
     await expect(publicSection.getByText('個人頁與可見範圍已儲存。',{exact:true})).toBeVisible();
     await openAccountSettings(page,SETTINGS);
     await expect(settings.getByText('來自公開頁的介紹').first()).toBeVisible();

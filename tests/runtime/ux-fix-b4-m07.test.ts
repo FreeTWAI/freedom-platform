@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { buildSync } from 'esbuild';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerReactDomTeardown } from './react-dom-teardown.js';
 
 class HostNode {
   [key: string]: any;
@@ -121,6 +122,7 @@ function setupEnv(t: any) {
     IntersectionObserver: (globalThis as any).IntersectionObserver,
     IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
   };
+  const teardown = registerReactDomTeardown(t, prev);
   const win: any = {
     document: doc,
     HTMLIFrameElement: class {},
@@ -141,17 +143,15 @@ function setupEnv(t: any) {
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as any);
-  t.after(() => {
-    root.unmount();
-    Object.assign(globalThis, prev);
-  });
-  return { container, root, ...entry.exports };
+  teardown.setRoot(root);
+  return { container, root, teardown, ...entry.exports };
 }
 
 test('UX-M-07: GitHubSocial hides unavailable GitHub OAuth controls/notices when /me/github reports configured=false', async (t) => {
   const {
     container,
     root,
+    teardown,
     GitHubSocialProvider,
     GitHubConnectionPanel,
     GitHubConnectionSummary,
@@ -165,7 +165,7 @@ test('UX-M-07: GitHubSocial hides unavailable GitHub OAuth controls/notices when
     return null;
   }
 
-  const fakeClient: any = {
+  const fakeClient: any = teardown.trackClient({
     csrfToken: 'test-csrf',
     async get(path: string) {
       if (path === '/me/github') return { configured: false, connected: false, github_user: null };
@@ -174,7 +174,7 @@ test('UX-M-07: GitHubSocial hides unavailable GitHub OAuth controls/notices when
       }
       return {};
     },
-  };
+  });
   const session = { user: { user_id: 'me-user', email: 'me@local.test' }, csrf_token: 'test-csrf' };
 
   await React.act(async () => {

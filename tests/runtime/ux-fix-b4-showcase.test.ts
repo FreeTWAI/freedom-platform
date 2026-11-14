@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { buildSync } from 'esbuild';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { registerReactDomTeardown } from './react-dom-teardown.js';
 
 class HostNode {
   [key: string]: any;
@@ -142,6 +143,7 @@ test('UX-V-05: #explore/works collapses publish form behind one primary 發布�
     requestAnimationFrame: (globalThis as any).requestAnimationFrame,
     IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
   };
+  const teardown = registerReactDomTeardown(t, prev);
   const storage = new Map<string, string>();
   const win: any = {
     document: doc,
@@ -171,7 +173,7 @@ test('UX-V-05: #explore/works collapses publish form behind one primary 發布�
   const { ShowcasePanel, PortalContext, client, setSharingDraftAccount } = entry.exports;
   setSharingDraftAccount('me-user', client.sessionGeneration);
   const origGet = client.get.bind(client);
-  client.get = async (path: string) => {
+  client.get = teardown.trackFn(async (path: string) => {
     if (path.startsWith('/showcases')) {
       return {
         items: [{
@@ -202,16 +204,13 @@ test('UX-V-05: #explore/works collapses publish form behind one primary 發布�
       };
     }
     return { items: [], enabled: false };
-  };
+  });
 
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as any);
-  t.after(() => {
-    client.get = origGet;
-    root.unmount();
-    Object.assign(globalThis, prev);
-  });
+  teardown.setRoot(root);
+  teardown.onRestore(() => { client.get = origGet; });
 
   const portalValue = {
     session: { user: { user_id: 'me-user', email: 'me@local.test', profession_membership_ref: 'me-user' }, site: { event_outcomes_enabled: false } },

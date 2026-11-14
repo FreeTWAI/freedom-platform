@@ -1,9 +1,9 @@
 import {guestEventInterest} from '../../../../modules/community/event-interest.js';
 import { type Context } from 'hono';
 import { z } from 'zod';
-import { requireCondition } from '../../../../packages/shared/problem.js';
+import { Problem, requireCondition } from '../../../../packages/shared/problem.js';
 import { authRateLimit } from '../../../../modules/identity-membership/members.js';
-import { registerPublicEvent } from '../../../../modules/community/events.js';
+import { evaluateGuestEventRegistration, registerPublicEvent } from '../../../../modules/community/events.js';
 import { readGuestEventCalendar } from '../../../../modules/community/event-calendar.js';
 import { readGuestEventReminder, saveGuestEventReminder } from '../../../../modules/community/event-reminders.js';
 import { mutateGuestEventParticipation, processEventWaitlist, readGuestEventParticipation, requestGuestEventParticipation } from '../../../../modules/community/event-waitlist.js';
@@ -47,14 +47,17 @@ export function registerPublicEventParticipationRoutes(app: PlatformFeatureApp, 
   }
   app.post('/api/v1/public/events/:id/interest',async c=>{await authRateLimit(pool,'event-interest-network',authNetwork(c),30,3600);return c.json(await guestEventInterest(pool,z.uuid().parse(c.req.param('id')),await c.req.json()));});
   app.post('/api/v1/public/events/:id/register',async c=>{
-    requireCondition(runtime.eventEmailSender,503,'event_email_unavailable','活動郵件服務暫時無法使用。');
+    const emailSender=runtime.eventEmailSender;
+    const gate=evaluateGuestEventRegistration({emailEnabled:Boolean(emailSender)});
+    if(!gate.allowed)throw new Problem(gate.status,gate.code,gate.message);
+    if(!emailSender)throw new Problem(503,'event_email_unavailable','活動郵件服務暫時無法使用。');
     const body=await c.req.json();
     const email=z.email().max(200).parse(body?.email).trim().toLowerCase();
     await authRateLimit(pool,'event-register-network',authNetwork(c),10,3600);
     await authRateLimit(pool,'event-register-email',email,3,3600);
     await authRateLimit(pool,'event-register-global','global',300,3600);
     const eventId=z.uuid().parse(c.req.param('id'));
-    const result=await registerPublicEvent(pool,eventId,body,runtime.eventEmailSender,origin,runtime.eventParticipationEnabled===true);
+    const result=await registerPublicEvent(pool,eventId,body,emailSender,origin,runtime.eventParticipationEnabled===true);
     if(runtime.eventParticipationEnabled===true)dispatchGuest(eventId);
     return c.json(result);
   });

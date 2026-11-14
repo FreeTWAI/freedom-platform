@@ -186,3 +186,53 @@ test('admin event and organizer-review HTTP routes enforce Access, CSRF, communi
  await pool.query('UPDATE platform_admins SET active=false WHERE admin_id=$1',[localAdmin]);
  assert.equal((await send(routes[1],valid,claimKey)).status,403);
 });
+
+test('server event page guest form matches when the guest registration endpoint accepts',async()=>{
+ const origin='http://127.0.0.1:4310';
+ const organizerId=randomUUID(),organizerToken=randomBytes(32).toString('base64url');
+ await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required) SELECT $1,community_id,$2,'活動測試主辦',password_hash,$3,true,false FROM users WHERE user_id=$4`,[organizerId,`guest-match-${randomUUID()}@example.com`,randomUUID(),DEMO_USERS[0].user_id]);
+ await pool.query(`INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$1,now()+interval '1 day')`,[tokenHash(organizerToken),organizerId]);
+ const organizer={user_id:organizerId,community_id:DEMO_COMMUNITY,session_hash:tokenHash(organizerToken)} as Actor;
+ const emailOnlyApp=createApp(pool,origin,'local',{eventParticipationEnabled:false,eventEmailSender:async()=>{}});
+ const participationNoEmailApp=createApp(pool,origin,'local',{eventParticipationEnabled:true});
+ const bothApp=createApp(pool,origin,'local',{eventParticipationEnabled:true,eventEmailSender:async()=>{}});
+ const openEvent=await createEvent(pool,cmd(organizer,{...body(),visibility:'open',registration_policy:'guest_allowed'}));
+ const memberOnlyEvent=await createEvent(pool,cmd(organizer,{...body(),visibility:'open',registration_policy:'community_member'}));
+ const referralEvent=await createEvent(pool,cmd(organizer,{...body(),visibility:'referral',registration_policy:'guest_allowed'}));
+ const shareLink=await shareEvent(pool,cmd(organizer,{}),referralEvent.event_id);
+ const shareCode=(await pool.query('SELECT code FROM community_event_share_codes WHERE event_id=$1 AND user_id=$2',[referralEvent.event_id,organizer.user_id])).rows[0].code;
+ assert.ok(shareLink.path.startsWith('/go/'));
+ const fullWaitlistEvent=await createEvent(pool,cmd(organizer,{...body(),visibility:'open',registration_policy:'guest_allowed',capacity:1}));
+ await pool.query('UPDATE community_events SET waitlist_enabled=true WHERE event_id=$1',[fullWaitlistEvent.event_id]);
+ await setRsvp(pool,cmd(actors[1],{going:true}),fullWaitlistEvent.event_id);
+
+ const hasGuestForm=(html:string)=>html.includes('id="event-guest"');
+ const postGuest=(targetApp:ReturnType<typeof createApp>,id:string,email:string,referral_code?:string|null)=>
+  targetApp.request(`${origin}/api/v1/public/events/${id}/register`,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({name:'合成訪客',email,...(referral_code!==undefined?{referral_code}:{})})});
+
+ // email configured without participation flag: open event shows form and endpoint accepts
+ assert.equal(hasGuestForm(await (await emailOnlyApp.request(`${origin}/events/${openEvent.event_id}`)).text()),true);
+ assert.equal((await postGuest(emailOnlyApp,openEvent.event_id,`guest-open-${randomUUID().slice(0,8)}@example.com`)).status,200);
+
+ // email missing even with participation enabled: form hidden and endpoint rejects
+ assert.equal(hasGuestForm(await (await participationNoEmailApp.request(`${origin}/events/${openEvent.event_id}`)).text()),false);
+ assert.equal((await postGuest(participationNoEmailApp,openEvent.event_id,`guest-noemail-${randomUUID().slice(0,8)}@example.com`)).status,503);
+
+ // community_member policy: form hidden and endpoint rejects
+ assert.equal(hasGuestForm(await (await emailOnlyApp.request(`${origin}/events/${memberOnlyEvent.event_id}`)).text()),false);
+ assert.equal((await postGuest(emailOnlyApp,memberOnlyEvent.event_id,`guest-member-${randomUUID().slice(0,8)}@example.com`)).status,403);
+
+ // referral visibility: hidden without ref or with invalid ref, shown and accepted with valid ref
+ assert.equal(hasGuestForm(await (await emailOnlyApp.request(`${origin}/events/${referralEvent.event_id}`)).text()),false);
+ assert.equal((await postGuest(emailOnlyApp,referralEvent.event_id,`guest-noref-${randomUUID().slice(0,8)}@example.com`)).status,422);
+ assert.equal(hasGuestForm(await (await emailOnlyApp.request(`${origin}/events/${referralEvent.event_id}?ref=invalidsharecode1234`)).text()),false);
+ assert.equal((await postGuest(emailOnlyApp,referralEvent.event_id,`guest-badref-${randomUUID().slice(0,8)}@example.com`,'invalidsharecode1234')).status,422);
+ assert.equal(hasGuestForm(await (await emailOnlyApp.request(`${origin}/events/${referralEvent.event_id}?ref=${shareCode}`)).text()),true);
+ assert.equal((await postGuest(emailOnlyApp,referralEvent.event_id,`guest-ref-${randomUUID().slice(0,8)}@example.com`,shareCode)).status,200);
+
+ // full waitlist event: hidden and rejected when participation is off; shown when participation + email are on
+ const fullOffHtml=await (await emailOnlyApp.request(`${origin}/events/${fullWaitlistEvent.event_id}`)).text();
+ assert.equal(hasGuestForm(fullOffHtml),false);
+ assert.equal((await postGuest(emailOnlyApp,fullWaitlistEvent.event_id,`guest-full-${randomUUID().slice(0,8)}@example.com`)).status,409);
+ assert.equal(hasGuestForm(await (await bothApp.request(`${origin}/events/${fullWaitlistEvent.event_id}`)).text()),true);
+});

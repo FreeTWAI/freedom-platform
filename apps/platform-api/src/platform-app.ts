@@ -69,7 +69,8 @@ import { authRateLimit } from '../../../modules/identity-membership/members.js';
 import { requestEmailVerification } from '../../../modules/identity-membership/email-verification.js';
 import { communityCatalog } from '../../../modules/community/catalog.js';
 import { publicDiscovery, discoveryReadAllowed } from '../../../modules/community/public-discovery.js';
-import { createShareRoutes,createPublicShareRoutes } from './routes/shares.js';
+import { createShareRoutes,createPublicShareRoutes,acceptsHtml } from './routes/shares.js';
+import { publicNotFoundHtml } from '../../../modules/shares/public-page.js';
 import { readBookOriginalCache, readBookOriginalCaches, summarizeBookOriginalCache } from '../../../modules/shares/repository-cache.js';
 import { createOpenSourceRoutes } from './routes/opensource.js';
 import { createAdminRoutes } from './routes/admin.js';
@@ -387,8 +388,17 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
         }
       }
     }
+    const htmlEventPageRequest=()=>c.req.method==='GET'&&/^\/events\/[0-9a-f-]{36}\/?$/i.test(c.req.path)&&c.req.query('app')!=='1'&&acceptsHtml(c.req.header('Accept'));
+    const eventNotFoundHtmlResponse=()=>{
+      const headers:Record<string,string>={'Cache-Control':'private, no-store',Vary:'Cookie'};
+      if(brokerFormOrigin)headers['Referrer-Policy']='strict-origin';
+      return c.html(publicNotFoundHtml(),404,headers);
+    };
     if(runtime.communityDiscoveryEnabled===true&&['GET','HEAD'].includes(c.req.method)){
-      requireCondition(await discoveryReadAllowed(pool,c.req.path,runtime.registrationCommunityId()),404,'not_found','找不到公開內容。');
+      if(!(await discoveryReadAllowed(pool,c.req.path,runtime.registrationCommunityId()))){
+        if(htmlEventPageRequest())return eventNotFoundHtmlResponse();
+        throw new Problem(404,'not_found','找不到公開內容。');
+      }
     }
     // Terminal host transports above retain their own response handling.
     await wireVersionResponses(c,async()=>{
@@ -396,7 +406,10 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
       if(runtime.communityDiscoveryEnabled===true&&['GET','HEAD'].includes(c.req.method)){
         if(/^\/(?:services|highlights|api\/v1\/public\/(?:events|event-highlights|member-services))(?:\/|$)/.test(c.req.path))c.header('Cache-Control','no-store');
         if(/^\/events\/[0-9a-f-]{36}\/?$/.test(c.req.path)&&c.req.query('ref'))c.header('X-Robots-Tag','noindex, nofollow');
-        requireCondition(await discoveryReadAllowed(pool,c.req.path,runtime.registrationCommunityId()),404,'not_found','找不到公開內容。');
+        if(!(await discoveryReadAllowed(pool,c.req.path,runtime.registrationCommunityId()))){
+          if(htmlEventPageRequest()){c.res=eventNotFoundHtmlResponse();return;}
+          throw new Problem(404,'not_found','找不到公開內容。');
+        }
       }
       // A native cross-origin form uses the source document's referrer policy
       // when deriving Origin. Suppressing all referrers makes that Origin null.
