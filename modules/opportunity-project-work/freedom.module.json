@@ -50,6 +50,7 @@
     "tests/e2e/work-pagination.spec.ts",
     "tests/e2e/journeys.spec.ts",
     "tests/e2e/core-services.spec.ts",
+    "apps/portal-web/src/modules/workbench/**",
     "apps/portal-web/src/modules/WorkbenchPanel.tsx",
     "apps/portal-web/src/modules/WorkbenchPanel.css",
     "apps/portal-web/src/modules/ShowcasePanel.tsx",

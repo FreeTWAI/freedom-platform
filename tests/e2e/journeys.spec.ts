@@ -38,6 +38,7 @@ test('member completes work, reviewer accepts it, result survives reload and log
   await workCard.getByRole('button',{name:'提交成果',exact:true}).click();
   await expect(workCard.getByText('已提交，等待回饋。')).toBeVisible();
   await switchAccount(page,'reviewer@local.test');
+  await page.locator('.panels .place-view-picker select').selectOption('review');
   const reviewSection=page.locator('section.section').filter({has:page.getByRole('heading',{name:'待你回饋',exact:true})});
   const reviewCard=reviewSection.locator('article.card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await reviewCard.getByRole('button',{name:'開始回饋',exact:true}).click();
@@ -45,10 +46,13 @@ test('member completes work, reviewer accepts it, result survives reload and log
   await reviewCard.getByRole('button',{name:'送出決定',exact:true}).click();
   await expect(reviewCard).toHaveCount(0);
   await switchAccount(page,'maker@local.test');
+  await page.locator('.panels .place-view-picker select').selectOption('outcomes');
   const gainedSection=page.locator('section.section').filter({has:page.getByRole('heading',{name:'已獲得的成果',exact:true})});
   const gainedCard=gainedSection.locator('article.card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await expect(gainedCard.getByText('artifact:browser-result-v1',{exact:true})).toBeVisible();
-  await page.reload();await expect(gainedCard.getByText('artifact:browser-result-v1',{exact:true})).toBeVisible();
+  await page.reload();
+  await page.locator('.panels .place-view-picker select').selectOption('outcomes');
+  await expect(gainedCard.getByText('artifact:browser-result-v1',{exact:true})).toBeVisible();
   await page.screenshot({path:'test-results/workbench-desktop.png',fullPage:true});
   expect(errors).toEqual([]);
 });
