@@ -28,11 +28,11 @@ CREATE FUNCTION event_promotion_credit() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE s shares; actor uuid;
 BEGIN
  IF NEW.kind<>'event' THEN RETURN NEW; END IF;
- SELECT s0.* INTO s FROM shares s0 JOIN promotion_links l ON s0.ref_id::text=l.target_key AND s0.community_id=l.community_id WHERE s0.kind='event' AND l.link_id=NEW.link_id;
+ SELECT s0.* INTO s FROM shares s0 JOIN promotion_links l ON s0.ref_id::text=l.target_key AND s0.community_id=l.community_id WHERE s0.kind='event' AND l.link_id=NEW.link_id AND s0.state='published' ORDER BY s0.share_id LIMIT 1;
  IF s.share_id IS NULL THEN RETURN NEW; END IF;
  IF NEW.visitor_key ~ '^m:[0-9a-f-]{36}$' THEN actor=substring(NEW.visitor_key FROM 3)::uuid; END IF;
  INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref,actor_user_id)
- VALUES(s.community_id,s.share_id,NEW.user_id,'spreader','qualified_click_day',1,'click:'||NEW.link_id||':'||NEW.click_day,actor) ON CONFLICT DO NOTHING;
+ VALUES(s.community_id,s.share_id,NEW.user_id,'spreader','qualified_click_day',1,'click:'||s.share_id||':'||NEW.user_id||':'||to_char(NEW.click_day,'YYYY-MM-DD'),actor) ON CONFLICT DO NOTHING;
  RETURN NEW;
 END $$;
 CREATE TRIGGER event_promotion_credit AFTER INSERT ON promotion_clicks FOR EACH ROW EXECUTE FUNCTION event_promotion_credit();

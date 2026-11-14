@@ -1,9 +1,9 @@
-import {randomBytes} from 'node:crypto';
 import type {Pool} from 'pg';
 import {z} from 'zod';
 import {command,type Command} from '../../packages/db/index.js';
 import {requireCondition} from '../../packages/shared/problem.js';
 import {readEvent,getEventShareCode} from './events.js';
+import {createPromotionLinkRow} from './promotion.js';
 import {endorseShare,creditEventRegistrations} from '../shares/credit.js';
 export async function shareEvent(pool:Pool,input:Command,id:string){
  z.object({}).strict().parse(input.body);
@@ -14,8 +14,7 @@ export async function shareEvent(pool:Pool,input:Command,id:string){
   if(s.state==='retracted'){await q.query("UPDATE shares SET state='published' WHERE share_id=$1",[s.share_id]);s.state='published';}
   await endorseShare(q,s,input.actor.user_id);
   await creditEventRegistrations(q,id);
-  const link=(await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code) VALUES($1,$2,'event',$3,$4)
-   ON CONFLICT(community_id,user_id,kind,target_key) WHERE revoked_at IS NULL DO UPDATE SET target_key=EXCLUDED.target_key RETURNING code`,[input.actor.community_id,input.actor.user_id,id,randomBytes(7).toString('base64url')])).rows[0];
+  const {row:link}=await createPromotionLinkRow(q,{community_id:input.actor.community_id,user_id:input.actor.user_id,kind:'event',target_key:id});
   const counts=(await q.query(`SELECT COALESCE(sum(units) FILTER(WHERE basis='qualified_click_day'),0)::int clicks,COALESCE(sum(units) FILTER(WHERE basis='registration'),0)::int registrations FROM share_credit_events WHERE share_id=$1 AND user_id=$2`,[s.share_id,input.actor.user_id])).rows[0];
   return {path:`/go/${link.code}`,share_id:s.share_id,...counts};
  });

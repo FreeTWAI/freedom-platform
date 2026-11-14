@@ -1,7 +1,7 @@
 import type {PoolClient} from 'pg';
 import {Problem} from '../../packages/shared/problem.js';
 import type {Actor} from '../identity-membership/service.js';
-import {notifyMember} from '../member-communications/notifications.js';
+import {notifyMember,eventNoticeAccessSql} from '../member-communications/notifications.js';
 import {canReadEventParticipationDetails,readEvent} from './events.js';
 import {resolveGuestParticipationByEmail} from './event-waitlist.js';
 
@@ -47,6 +47,8 @@ export async function notifyEventRegistrants(q:PoolClient,event:EventRow,kind:Ev
  const commonBody=announcement??`「${event.title}」已取消。`;
  const members=(await q.query("SELECT user_id FROM community_event_rsvps WHERE event_id=$1 AND state='going' UNION SELECT member_ref FROM community_event_waitlist WHERE event_id=$1 AND member_ref IS NOT NULL AND status IN ('queued','invited','cancelled') AND $2<>'event_announcement'",[event.event_id,kind])).rows;
  for(const member of members){
+  const access=await q.query(`SELECT ${eventNoticeAccessSql} AS allowed FROM (SELECT $3::text AS kind,$4::text AS action_resource_id) n`,[event.community_id,member.user_id,kind,event.event_id]);
+  if(!access.rows[0].allowed)continue;
   const body=kind==='event_schedule_changed'?await memberEventChangeBody(q,{user_id:member.user_id,community_id:event.community_id} as Actor,event.event_id):commonBody;
   if(kind==='event_schedule_changed'){
    const updated=await q.query(`UPDATE member_notifications SET body=$3,title=$4 WHERE community_id=$5 AND recipient_ref=$1 AND action_tab='events' AND action_resource_id=$2 AND kind='event_schedule_changed' AND read_at IS NULL`,[member.user_id,event.event_id,body,title,event.community_id]);

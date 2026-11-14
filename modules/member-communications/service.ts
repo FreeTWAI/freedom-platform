@@ -8,7 +8,7 @@ import {avatarUrl} from '../identity-membership/avatars.js';
 import {lockInteractionPair,assertCanContact} from '../identity-membership/blocks.js';
 import {assertCurrentSessionClock,lockMemberSession} from '../../packages/db/member-session.js';
 import {DirectMessageInput,messageContents,storedMessageBody} from './content.js';
-import {notificationVisibilitySQL} from './notifications.js';
+import {notificationVisibilitySQL,eventNoticeAccessSql} from './notifications.js';
 import {markAllMemberChannelsRead} from './channels.js';
 import {MessageSearchQuery,messageSearchPattern,boundedMessageSearch,type MessageSearchPage} from './message-search.js';
 import {
@@ -84,9 +84,9 @@ function notification(row:any):Notification{
 export async function listNotifications(pool:Pool,actor:Actor,raw:unknown,orderNotificationsEnabled=false):Promise<NotificationList>{
   const {limit,offset}=CommunicationPageQuery.parse(raw);
   return snapshot(pool,actor,async q=>{
-    const unread=(await q.query(`SELECT count(*)::int AS n FROM member_notifications WHERE community_id=$1 AND recipient_ref=$2 AND read_at IS NULL AND ${notificationVisibilitySQL(orderNotificationsEnabled)}`,[actor.community_id,actor.user_id])).rows[0].n;
-    const rows=(await q.query(`SELECT notification_id,kind,title,body,created_at,read_at,action_tab,action_resource_id FROM member_notifications
-      WHERE community_id=$1 AND recipient_ref=$2 AND ${notificationVisibilitySQL(orderNotificationsEnabled)} ORDER BY created_at DESC,notification_id DESC LIMIT $3 OFFSET $4`,[actor.community_id,actor.user_id,limit+1,offset])).rows;
+    const unread=(await q.query(`SELECT count(*)::int AS n FROM member_notifications n WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.read_at IS NULL AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')}`,[actor.community_id,actor.user_id])).rows[0].n;
+    const rows=(await q.query(`SELECT n.notification_id,n.kind,n.title,n.body,n.created_at,n.read_at,n.action_tab,n.action_resource_id FROM member_notifications n
+      WHERE n.community_id=$1 AND n.recipient_ref=$2 AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')} ORDER BY n.created_at DESC,n.notification_id DESC LIMIT $3 OFFSET $4`,[actor.community_id,actor.user_id,limit+1,offset])).rows;
     for(const row of rows)if(row.kind==='event_schedule_changed'&&row.action_tab==='events'&&row.action_resource_id)row.body=await memberEventChangeBody(q,actor,row.action_resource_id);
     const page=pageOf(rows.map(notification),limit,offset);
     return {items:page.items,unread_count:unread,next_offset:page.next_offset};
@@ -95,10 +95,10 @@ export async function listNotifications(pool:Pool,actor:Actor,raw:unknown,orderN
 export async function markNotificationRead(pool:Pool,input:Command,rawId:string,orderNotificationsEnabled=false){
   Empty.parse(input.body);const id=z.uuid().parse(rawId).toLowerCase();
   // Lock before evaluating the mutation clock; UPDATE expressions can run before a row wait.
-  const own=async(q:PoolClient)=>{await currentMember(q,input.actor,false);requireCondition((await q.query(`SELECT 1 FROM member_notifications WHERE notification_id=$1 AND community_id=$2 AND recipient_ref=$3 AND ${notificationVisibilitySQL(orderNotificationsEnabled)} FOR UPDATE`,[id,input.actor.community_id,input.actor.user_id])).rowCount===1,404,'notification_not_found','找不到這則通知。');};
+  const own=async(q:PoolClient)=>{await currentMember(q,input.actor,false);requireCondition((await q.query(`SELECT 1 FROM member_notifications n WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.notification_id=$3 AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')} FOR UPDATE`,[input.actor.community_id,input.actor.user_id,id])).rowCount===1,404,'notification_not_found','找不到這則通知。');};
   return command(pool,input,own,async q=>{
-    const row=(await q.query(`UPDATE member_notifications SET read_at=COALESCE(read_at,clock_timestamp()) WHERE notification_id=$1 AND community_id=$2 AND recipient_ref=$3 AND ${notificationVisibilitySQL(orderNotificationsEnabled)}
-      RETURNING notification_id,read_at`,[id,input.actor.community_id,input.actor.user_id])).rows[0];
+    const row=(await q.query(`UPDATE member_notifications n SET read_at=COALESCE(n.read_at,clock_timestamp()) WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.notification_id=$3 AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')}
+      RETURNING n.notification_id,n.read_at`,[input.actor.community_id,input.actor.user_id,id])).rows[0];
     return {notification_id:row.notification_id as string,read_at:iso(row.read_at)!};
   });
 }
@@ -110,7 +110,7 @@ export async function markAllInboxRead(pool:Pool,input:Command,orderNotification
   return command(pool,input,q=>currentMember(q,input.actor,false),async q=>{
     const {community_id,user_id}=input.actor;
     await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`member-inbox-read-all/${community_id}/${user_id}`]);
-    const notices=await q.query(`UPDATE member_notifications SET read_at=clock_timestamp() WHERE community_id=$1 AND recipient_ref=$2 AND read_at IS NULL AND ${notificationVisibilitySQL(orderNotificationsEnabled)}`,[community_id,user_id]);
+    const notices=await q.query(`UPDATE member_notifications n SET read_at=clock_timestamp() WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.read_at IS NULL AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')}`,[community_id,user_id]);
     if(scope==='notifications')return {notifications_updated:notices.rowCount??0,direct_messages_updated:0,channels_updated:0};
     const messages=await q.query('UPDATE member_direct_messages SET read_at=clock_timestamp() WHERE community_id=$1 AND recipient_ref=$2 AND read_at IS NULL',[community_id,user_id]);
     const channels=await markAllMemberChannelsRead(q,input.actor);

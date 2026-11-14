@@ -148,3 +148,41 @@ test('publication waiting on a database lock cannot commit after its start',asyn
   assert.equal((await pool.query('SELECT count(*)::int n FROM community_events')).rows[0].n,before);
  }finally{await blocker.query('ROLLBACK');blocker.release();if(pending)await pending;}
 });
+
+test('admin event and organizer-review HTTP routes enforce Access, CSRF, community and active authority',async()=>{
+ const {createAdminAccessVerifier}=await import('../../modules/platform-admin/access.js');
+ const {createLocalJWKSet,exportJWK,generateKeyPair,SignJWT}=await import('jose');
+ const pair=await generateKeyPair('RS256'),jwk=await exportJWK(pair.publicKey),issuer='https://synthetic.cloudflareaccess.com',audience='event-admin-tests',origin='http://127.0.0.1:4310';
+ const verifier=createAdminAccessVerifier({issuer,audience,csrfSecret:randomBytes(32).toString('hex'),keySet:createLocalJWKSet({keys:[{...jwk,kid:'fixture',alg:'RS256'}]})});
+ const app=createApp(pool,origin,'local',{adminVerifier:verifier});
+ const foreign=randomUUID(),localAdmin=randomUUID(),foreignAdmin=randomUUID(),event=randomUUID(),claim=randomUUID();
+ await pool.query('INSERT INTO communities(community_id,name) VALUES($1,$2)',[foreign,'Synthetic foreign']);
+ const localEmail=`event-local-${randomUUID()}@example.com`,foreignEmail=`event-foreign-${randomUUID()}@example.com`;
+ await pool.query(`INSERT INTO platform_admins(admin_id,community_id,email,display_name) VALUES($1,$2,$3,'Local'),($4,$5,$6,'Foreign')`,[localAdmin,DEMO_COMMUNITY,localEmail,foreignAdmin,foreign,foreignEmail]);
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility)
+  VALUES($1,$2,$3,'合成審核活動','合成','2099-01-01T10:00:00Z','2099-01-01T11:00:00Z','online','線上','pending','open')`,[event,DEMO_COMMUNITY,actors[0].user_id]);
+ await pool.query(`INSERT INTO community_event_organizer_claims(claim_id,event_id,community_id,user_id,statement,evidence_url) VALUES($1,$2,$3,$4,'合成主辦認領測試聲明','https://example.com/proof')`,[claim,event,DEMO_COMMUNITY,actors[1].user_id]);
+ const jwt=async(email:string)=>{const now=Math.floor(Date.now()/1000);return new SignJWT({type:'app',email,sub:'synthetic-event-admin',iss:issuer,aud:audience,iat:now,nbf:now,exp:now+600}).setProtectedHeader({alg:'RS256',kid:'fixture'}).sign(pair.privateKey);};
+ const local=await jwt(localEmail),outside=await jwt(foreignEmail);
+ const csrf=async(token:string)=>(await verifier(new Request(origin,{headers:{'Cf-Access-Jwt-Assertion':token}}))).csrfToken;
+ const valid={'Cf-Access-Jwt-Assertion':local,'X-Admin-CSRF':await csrf(local)},foreignValid={'Cf-Access-Jwt-Assertion':outside,'X-Admin-CSRF':await csrf(outside)};
+ const cookie=`freedom_local_session=${tokens[0]}`;
+ const issue=await app.request(origin+'/api/v1/me/agent-tokens',{method:'POST',headers:{Origin:origin,Cookie:cookie,'X-CSRF-Token':tokenHash(tokens[0]),'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify({name:'合成 Agent',scopes:['read']})});
+ assert.equal(issue.status,201,await issue.clone().text());const token=(await issue.json() as {access_token:string}).access_token;
+ const routes=[{path:`/admin/api/events/${event}/review`,body:{decision:'approve',reason:'合成審核原因'}},{path:`/admin/api/event-organizer-claims/${claim}/review`,body:{decision:'verify',reason:'合成審核原因'}}];
+ const send=(route:typeof routes[number],headers:Record<string,string>,key=randomUUID())=>app.request(origin+route.path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','If-Match':'"1"','Idempotency-Key':key,...headers},body:JSON.stringify(route.body)});
+ for(const route of routes){
+  assert.equal((await send(route,{})).status,401);
+  assert.equal((await send(route,{Cookie:cookie})).status,401);
+  assert.equal((await send(route,{'Cf-Access-Jwt-Assertion':local})).status,403);
+  assert.equal((await send(route,{...valid,'X-Admin-CSRF':'wrong'})).status,403);
+  assert.equal((await send(route,foreignValid)).status,404);
+  assert.equal((await send(route,{Authorization:'Bearer '+token,...valid})).status,403);
+ }
+ assert.equal((await pool.query('SELECT state FROM community_events WHERE event_id=$1',[event])).rows[0].state,'pending');
+ assert.equal((await pool.query('SELECT state FROM community_event_organizer_claims WHERE claim_id=$1',[claim])).rows[0].state,'pending');
+ const claimKey=randomUUID();assert.equal((await send(routes[1],valid,claimKey)).status,200);
+ assert.equal((await send(routes[0],valid)).status,200);
+ await pool.query('UPDATE platform_admins SET active=false WHERE admin_id=$1',[localAdmin]);
+ assert.equal((await send(routes[1],valid,claimKey)).status,403);
+});

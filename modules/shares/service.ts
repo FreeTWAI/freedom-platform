@@ -1,6 +1,6 @@
 import {requireSharePublicationQuota} from './publication-quota.js';
 import {createEvent,canAccessGuildEvent} from '../community/events.js';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool, PoolClient } from 'pg';
 import { command, journal, type Command } from '../../packages/db/index.js';
@@ -12,7 +12,7 @@ import type { Actor } from '../identity-membership/service.js';
 import { shareAdapter } from './adapters/registry.js';
 import { existingTitle } from './adapters/existing.js';
 import { endorseShare, reverseCredit, creditEventRegistrations } from './credit.js';
-import { PROMOTION_LINK_CAP, taipeiDate, taipeiDayStart } from '../community/promotion.js';
+import { createPromotionLinkRow } from '../community/promotion.js';
 import { readPublicWork } from '../opportunity-project-work/public-sharing.js';
 import type { AdapterContext, PreparedShare, ShareRow } from './types.js';
 export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional(),source:z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),guild_key:z.string().regex(/^guild_[a-zA-Z0-9_]+$/),ref:z.string().max(200).optional()}).strict().optional()}).strict();
@@ -136,15 +136,7 @@ export async function shareLink(pool:Pool,input:Command,id:string) {
     const s=await visibleShare(q,input.actor,id);
     const workPublic=s.kind==='work'&&s.ref_id?Boolean(await readPublicWork(q,s.ref_id,input.actor.community_id)):false;
     requireCondition(['repository','link'].includes(s.kind)||workPublic,422,'use_original_share','請使用原頁面的分享。');
-    // Share links consume the same member/day budget as the original promotion route.
-    const now=new Date();
-    await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`promo-link:${input.actor.user_id}:${taipeiDate(now)}`]);
-    const existing=(await q.query("SELECT code FROM promotion_links WHERE community_id=$1 AND user_id=$2 AND kind='share' AND target_key=$3 AND revoked_at IS NULL",[input.actor.community_id,input.actor.user_id,id])).rows[0];
-    if(existing)return {path:`/go/${existing.code}`,code:existing.code};
-    const used=(await q.query('SELECT count(*)::int n FROM promotion_links WHERE user_id=$1 AND created_at>=$2',[input.actor.user_id,taipeiDayStart(now)])).rows[0].n;
-    requireCondition(used<PROMOTION_LINK_CAP,429,'promotion_link_limit','今天建立的分享連結已達上限。');
-    const row=(await q.query(`INSERT INTO promotion_links(community_id,user_id,kind,target_key,code) VALUES($1,$2,'share',$3,$4)
-      ON CONFLICT(community_id,user_id,kind,target_key) WHERE revoked_at IS NULL DO UPDATE SET target_key=EXCLUDED.target_key RETURNING code`,[input.actor.community_id,input.actor.user_id,id,randomBytes(7).toString('base64url')])).rows[0];
+    const {row}=await createPromotionLinkRow(q,{community_id:input.actor.community_id,user_id:input.actor.user_id,kind:'share',target_key:id});
     return {path:`/go/${row.code}`,code:row.code};
   });
 }

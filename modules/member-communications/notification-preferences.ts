@@ -7,7 +7,7 @@ import type { Actor } from '../identity-membership/service.js';
 import { lockMemberGuilds } from '../positioning/onboarding.js';
 import { readFollowUpdates } from '../community/content-relations.js';
 import { CHANNEL_KEY_MAX, GUILD_CHANNEL_KEY_PATTERN, SQUAD_CHANNEL_KEY_PATTERN, type ChannelKind } from './channel-types.js';
-import {notificationVisibilitySQL} from './notifications.js';
+import {notificationVisibilitySQL,eventAccessSql,eventNoticeAccessSql} from './notifications.js';
 import { isOrderNotificationAction, type Notification, type NotificationList } from './types.js';
 
 export type NotificationCategory = 'friends' | 'squads' | 'events' | 'following';
@@ -165,22 +165,6 @@ async function unreadNotices(q: PoolClient, actor: Actor, kinds: string[], only:
     WHERE n.community_id=$1 AND n.recipient_ref=$2 AND n.read_at IS NULL AND (n.kind=ANY($3::text[]))=$4
     AND ${eventNoticeAccessSql} AND ${notificationVisibilitySQL(orderNotificationsEnabled,'n')} ORDER BY n.created_at DESC,n.notification_id DESC LIMIT 40`, [actor.community_id, actor.user_id, kinds, only])).rows;
 }
-const eventAccessSql = `e.community_id=$1 AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref)) AND (
-  e.organizer_ref=$2 OR (e.state='published' AND (e.visibility<>'guild' OR EXISTS(
-    SELECT 1 FROM positioning_profession_memberships m WHERE m.community_id=e.community_id AND m.user_id=$2 AND m.guild_key=e.guild_key AND m.state='active')))
-  OR (e.state='pending' AND EXISTS(SELECT 1 FROM positioning_guild_officers o JOIN positioning_profession_memberships m
-    ON m.community_id=o.community_id AND m.guild_key=o.guild_key AND m.user_id=o.user_id AND m.state='active'
-    WHERE o.community_id=e.community_id AND o.guild_key=e.review_guild_key AND o.user_id=$2)))`;
-const eventNoticeAccessSql = `(n.kind NOT IN ('event_submitted','event_review_needed','event_approved','event_rejected','event_start_reminder','event_waitlist_invited','event_schedule_changed','event_cancelled','event_announcement')
-  OR n.action_resource_id IS NULL OR EXISTS(SELECT 1 FROM community_events e
-    WHERE e.event_id::text=n.action_resource_id::text AND (${eventAccessSql} OR (
-      n.kind='event_cancelled' AND e.state='cancelled' AND e.community_id=$1
-      AND (e.organizer_ref=$2 OR NOT is_verification_test_account(e.organizer_ref))
-      AND (e.visibility<>'guild' OR EXISTS(SELECT 1 FROM positioning_profession_memberships m
-        WHERE m.community_id=e.community_id AND m.user_id=$2 AND m.guild_key=e.guild_key AND m.state='active'))
-      AND (EXISTS(SELECT 1 FROM community_event_rsvps r WHERE r.event_id=e.event_id AND r.user_id=$2 AND r.confirmed_at IS NOT NULL)
-        OR EXISTS(SELECT 1 FROM community_event_waitlist w WHERE w.event_id=e.event_id AND w.member_ref=$2))
-    ))))`;
 const socialNotificationKinds = ['friend_request', 'friend_accepted', 'friend_declined', 'squad_invitation', 'squad_join_requested', 'squad_join_accepted',
   'event_submitted', 'event_review_needed', 'event_approved', 'event_rejected', 'event_start_reminder', 'event_schedule_changed', 'event_cancelled', 'event_announcement'];
 interface EventBulletinReminder { bulletin_id: string; event_id: string; kind: string; message: string; title: string; created_at: string }
