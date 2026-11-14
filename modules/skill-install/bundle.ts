@@ -71,27 +71,69 @@ function base64(bytes:Uint8Array){
 }
 
 type TreeEntry={path:string;type:string;sha:string;size?:number};
-async function readTree(fetcher:Fetcher,source:SkillInstallSource,token?:string|null):Promise<TreeEntry[]>{
-  const response=await fetcher('https://api.github.com/repos/'+source.owner+'/'+source.repo+'/git/trees/'+source.commit+'?recursive=1',{
-    redirect:'manual',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    headers:{Accept:'application/vnd.github+json','User-Agent':'Freedom-Workshop-Skill-Install',...(token?{Authorization:'Bearer '+token}:{})},
-  });
-  if(response.status===404)throw new Problem(404,'skill_source_unavailable','找不到這本技能書的收錄版本。');
-  if(!response.ok)throw new Problem(503,'skill_source_unreachable','暫時無法讀取技能書來源，請稍後再試。',60);
+type ResolvedTree={owner:string;repo:string;tree:TreeEntry[]};
+
+const REPOSITORY_REDIRECT_RE=/^https:\/\/api\.github\.com\/repositories\/(\d{1,20})\//;
+const GITHUB_FULL_NAME_RE=/^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
+
+function githubHeaders(token?:string|null){
+  return {Accept:'application/vnd.github+json','User-Agent':'Freedom-Workshop-Skill-Install',...(token?{Authorization:'Bearer '+token}:{})};
+}
+
+async function repositoryCoordinateById(fetcher:Fetcher,id:string,token?:string|null):Promise<{owner:string;repo:string}|null>{
+  try{
+    const response=await fetcher('https://api.github.com/repositories/'+id,{
+      redirect:'manual',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),headers:githubHeaders(token),
+    });
+    if(response.status!==200)return null;
+    const data=await response.json() as {id?:unknown;full_name?:unknown;private?:unknown;visibility?:unknown};
+    if(!data||typeof data!=='object'||typeof data.id!=='number'||!Number.isSafeInteger(data.id)||String(data.id)!==id)return null;
+    if(typeof data.full_name!=='string'||!GITHUB_FULL_NAME_RE.test(data.full_name))return null;
+    if(data.private===true)return null;
+    if(data.visibility!==undefined&&data.visibility!=='public')return null;
+    const [owner,repo]=data.full_name.split('/');
+    if(!owner||!repo||repo==='.'||repo==='..')return null;
+    return {owner,repo};
+  }catch{
+    return null;
+  }
+}
+
+async function readTree(fetcher:Fetcher,source:SkillInstallSource,token?:string|null,followRedirects=true):Promise<ResolvedTree>{
+  let response:Response;
+  try{
+    response=await fetcher('https://api.github.com/repos/'+source.owner+'/'+source.repo+'/git/trees/'+source.commit+'?recursive=1',{
+      redirect:'manual',signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),headers:githubHeaders(token),
+    });
+  }catch{
+    throw new Problem(503,'skill_source_unreachable','暫時無法讀取技能書來源，請稍後再試。',60);
+  }
+  if(response.status>=300&&response.status<400){
+    const location=response.headers.get('location');
+    const match=followRedirects&&(response.status===301||response.status===302||response.status===307||response.status===308)&&location?REPOSITORY_REDIRECT_RE.exec(location):null;
+    if(!match)throw new Problem(404,'skill_source_unavailable','找不到這本技能書的收錄版本。');
+    const renamed=await repositoryCoordinateById(fetcher,match[1],token);
+    if(!renamed)throw new Problem(404,'skill_source_unavailable','找不到這本技能書的收錄版本。');
+    return readTree(fetcher,{...source,owner:renamed.owner,repo:renamed.repo},token,false);
+  }
+  if(response.status===404||response.status===409||response.status===422)throw new Problem(404,'skill_source_unavailable','找不到這本技能書的收錄版本。');
+  if(response.status!==200)throw new Problem(503,'skill_source_unreachable','暫時無法讀取技能書來源，請稍後再試。',60);
   const data=await response.json() as {truncated?:boolean;tree?:TreeEntry[]};
   if(data.truncated||!Array.isArray(data.tree))throw new Problem(422,'skill_package_too_large','這本技能書的檔案太多，請改用下載或指令安裝。');
-  return data.tree;
+  return {owner:source.owner,repo:source.repo,tree:data.tree};
 }
 
 export async function buildSkillInstallBundle(source:SkillInstallSource,fetcher:Fetcher=globalThis.fetch,token?:string|null,onFallback?:(record:SkillInstallFallbackRecord)=>void):Promise<SkillInstallBundle>{
   let activeSource:SkillInstallSource=source;
   let tree:TreeEntry[];
   try{
-    tree=await readTree(fetcher,activeSource,token);
+    const resolved=await readTree(fetcher,activeSource,token,true);
+    activeSource={...source,owner:resolved.owner,repo:resolved.repo};
+    tree=resolved.tree;
   }catch(error){
     if(error instanceof Problem&&error.status===404&&source.fallback_owner&&source.fallback_repo&&(source.fallback_owner!==source.owner||source.fallback_repo!==source.repo)){
       const fallbackSource:SkillInstallSource={book_id:source.book_id,owner:source.fallback_owner,repo:source.fallback_repo,commit:source.commit};
-      tree=await readTree(fetcher,fallbackSource,token);
+      tree=(await readTree(fetcher,fallbackSource,token,false)).tree;
       activeSource=fallbackSource;
       const record:SkillInstallFallbackRecord={
         book_id:source.book_id,
@@ -132,17 +174,11 @@ export async function buildSkillInstallBundle(source:SkillInstallSource,fetcher:
 }
 
 /** commit 不可變，以 repo@commit 快取；失敗不留快取，下次重試。 */
-export function createSkillInstallBundleLoader(fetcher:Fetcher=globalThis.fetch,readToken?:()=>string|null|undefined,books?:readonly SkillBook[],onFallback?:(record:SkillInstallFallbackRecord)=>void,resolveOriginalUrl?:(bookId:string)=>Promise<string|null|undefined>){
+export function createSkillInstallBundleLoader(fetcher:Fetcher=globalThis.fetch,readToken?:()=>string|null|undefined,books?:readonly SkillBook[],onFallback?:(record:SkillInstallFallbackRecord)=>void){
   const cache=new Map<string,Promise<SkillInstallBundle>>();
   return async(bookId:string)=>{
-    const baseSource=skillInstallSource(bookId,books);
-    if(!baseSource)throw new Problem(404,'skill_install_unavailable','這本技能書沒有可安裝的收錄版本。');
-    let source=baseSource;
-    if(resolveOriginalUrl){
-      const resolved=parseGithubOwnerRepo(await resolveOriginalUrl(bookId));
-      if(!resolved)throw new Problem(422,'repository_identity_changed','無法確認原作身分。');
-      source={...baseSource,owner:resolved.owner,repo:resolved.repo};
-    }
+    const source=skillInstallSource(bookId,books);
+    if(!source)throw new Problem(404,'skill_install_unavailable','這本技能書沒有可安裝的收錄版本。');
     const key=source.owner+'/'+source.repo+'@'+source.commit+'#'+source.book_id;
     let pending=cache.get(key);
     if(!pending){

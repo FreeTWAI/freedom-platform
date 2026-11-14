@@ -661,3 +661,75 @@ test('original-first UI displays cached README, ahead-of-pin notice, dated notes
   await expect(dialog.locator('.skill-intro-usage-notes')).not.toHaveAttribute('open');
   await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
 });
+
+test('guild book with null-full_name original_cache uses live metrics, upstream owner link and collaboration cache in notes',async({page})=>{
+  const communityResponse=await page.request.get('/api/v1/community');
+  const originalCommunity=await communityResponse.json() as {skill_books:SkillBook[];guilds:unknown[]};
+  const baseBook=originalCommunity.skill_books.find(item=>item.id==='security-scanner')!;
+  const upstreamOwner=new URL(baseBook.upstream_url!).pathname.split('/')[1];
+  const uncached={
+    url:baseBook.upstream_url!,
+    full_name:null,
+    original_author:null,
+    description:null,
+    topics:[],
+    license_spdx:null,
+    default_branch:null,
+    stars:null,
+    readme_html:null,
+    quick_start:null,
+    latest_release:null,
+    head_sha:null,
+    ahead_of_pin:false,
+    latest_version_url:null,
+    latest_version_label:null,
+    fetched_at:null,
+    fetch_state:null,
+    stale:false,
+  };
+  const collabCache={
+    url:baseBook.upstream_url!,
+    full_name:`${upstreamOwner}/ai-security-scanner`,
+    original_author:upstreamOwner,
+    description:'Cached upstream scanner description.',
+    topics:[],
+    license_spdx:'MIT',
+    default_branch:'main',
+    stars:654,
+    readme_html:'<p>Cached upstream README usage guide.</p>',
+    quick_start:'npx ai-security-scanner',
+    latest_release:null,
+    head_sha:'f'.repeat(40),
+    ahead_of_pin:false,
+    latest_version_url:null,
+    latest_version_label:null,
+    fetched_at:'2026-11-01T00:00:00Z',
+    fetch_state:'ready',
+    stale:false,
+  };
+  const updatedBooks=originalCommunity.skill_books.map(book=>book.id==='security-scanner'?{...book,original_cache:uncached}:book);
+  await page.route('**/api/v1/site',async route=>{
+    const res=await route.fetch();
+    const body=await res.json();
+    await route.fulfill({response:res,json:{...body,community:{...body.community,skill_books:updatedBooks}}});
+  });
+  await page.route('**/api/v1/community',route=>route.fulfill({json:{...originalCommunity,skill_books:updatedBooks}}));
+  await page.route('**/api/v1/github/books/security-scanner/metrics',route=>route.fulfill({
+    json:{book_id:'security-scanner',repository_url:baseBook.upstream_url,stargazers_count:777,forks_count:12,open_issues_count:3,subscribers_count:4,pushed_at:'2026-10-01T00:00:00Z',language:'TypeScript',archived:false,checked_at:'2026-11-01T00:00:00Z',stale:false,error:null},
+  }));
+  await page.route('**/api/v1/skills/security-scanner/collaboration',route=>route.fulfill({
+    json:{purpose:'Note purpose',intent:{summary:'Note summary'},original_cache:collabCache},
+  }));
+  const library=await openLibrary(page);
+  const card=library.locator('article[data-book-id="security-scanner"]');
+  await card.locator('.github-book-social').scrollIntoViewIfNeeded();
+  await expect(card.locator('.github-star-count')).toHaveText('777');
+  await card.locator('.github-metrics-details > summary').click();
+  await expect(card.locator('.github-social-source a').nth(0)).toHaveAttribute('href',baseBook.upstream_url!);
+  await expect(card.locator('.github-social-source a').nth(1)).toHaveAttribute('href',`https://github.com/${upstreamOwner}`);
+  await card.getByRole('button',{name:'預覽技能書',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:baseBook.title,exact:true});
+  await dialog.locator('.skill-intro-usage-notes > summary').click();
+  await expect(dialog.locator('.skill-intro-usage-notes .github-star-count')).toHaveText('654');
+  await dialog.getByRole('button',{name:'關閉技能書介紹',exact:true}).click();
+});

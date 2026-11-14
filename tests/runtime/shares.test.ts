@@ -277,6 +277,47 @@ test('refresh resolves renamed facts, README and release; conditional reads and 
  await assert.rejects(refreshRepository(pool,repoId,{fetcher:fixture},true),{code:'github_repository_moved'});
 });
 
+test('refresh looks up current location by provider_repo_id without calling the stored old name and marks 404 unavailable',async()=>{
+ const {currentRepositoryLocation,refreshRepository}=await import('../../modules/shares/repository-cache.js');
+ const s=await createShare(pool,cmd(actors[0],{url:'https://github.com/fixture/old-by-id'}),{fetcher:async()=>Response.json({...original,id:965,full_name:'fixture/old-by-id'})});
+ const repoId=(await pool.query('SELECT repo_id FROM shares WHERE share_id=$1',[s.share_id])).rows[0].repo_id;
+
+ const calls:string[]=[];
+ const renamedFetcher:typeof fetch=async input=>{
+  const path=new URL(String(input)).pathname;calls.push(path);
+  assert.equal(path.startsWith('/repos/fixture/old-by-id'),false,'old name must never be requested: '+path);
+  if(path==='/repositories/965')return Response.json({...original,id:965,full_name:'fixture/new-by-id'});
+  if(path==='/repos/fixture/new-by-id')return Response.json({...original,id:965,full_name:'fixture/new-by-id'});
+  if(path==='/repos/fixture/new-by-id/readme')return new Response('<h2>Moved</h2>');
+  if(path.startsWith('/repos/fixture/new-by-id/'))return new Response(null,{status:404});
+  throw new Error('Unexpected GitHub request '+path);
+ };
+ await refreshRepository(pool,repoId,{fetcher:renamedFetcher},true);
+ assert.equal(calls.some(p=>p.startsWith('/repos/fixture/old-by-id')),false);
+ assert.ok(calls.includes('/repositories/965'));
+ const updatedRepo=(await pool.query('SELECT fetch_state,full_name,current_url FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0];
+ assert.deepEqual(updatedRepo,{fetch_state:'ready',full_name:'fixture/new-by-id',current_url:'https://github.com/fixture/new-by-id'});
+ const updatedShare=(await pool.query('SELECT state,title,canonical_url FROM shares WHERE share_id=$1',[s.share_id])).rows[0];
+ assert.deepEqual(updatedShare,{state:'published',title:'fixture/new-by-id',canonical_url:'https://github.com/fixture/new-by-id'});
+
+ await refreshRepository(pool,repoId,{fetcher:async input=>{
+  const path=new URL(String(input)).pathname;
+  assert.equal(path,'/repositories/965');
+  return new Response(null,{status:404});
+ }},true);
+ const deadRepo=(await pool.query('SELECT fetch_state FROM canonical_repositories WHERE repo_id=$1',[repoId])).rows[0];
+ assert.equal(deadRepo.fetch_state,'unavailable');
+ const deadShare=(await pool.query('SELECT state FROM shares WHERE share_id=$1',[s.share_id])).rows[0];
+ assert.equal(deadShare.state,'hidden');
+
+ assert.deepEqual(await currentRepositoryLocation('965',{fetcher:async()=>Response.json({...original,id:999,full_name:'fixture/wrong'})}),{kind:'unavailable'});
+ assert.deepEqual(await currentRepositoryLocation('965',{fetcher:async()=>Response.json({...original,id:965,private:true,full_name:'fixture/secret'})}),{kind:'unavailable'});
+ assert.deepEqual(await currentRepositoryLocation('965',{fetcher:async()=>new Response(null,{status:404})}),{kind:'unavailable'});
+ assert.deepEqual(await currentRepositoryLocation('965',{fetcher:async()=>new Response(null,{status:503})}),{kind:'unknown'});
+ assert.deepEqual(await currentRepositoryLocation('965',{fetcher:async()=>Response.json({bad:true})}),{kind:'unknown'});
+ assert.deepEqual(await currentRepositoryLocation('965',{fetcher:renamedFetcher}),{kind:'current',url:'https://github.com/fixture/new-by-id'});
+});
+
 test('work shares keep non-opted-in works member-only and link opted-in works outward with once-per-click sharer credit', async () => {
  const creator = actors[0], sharer = actors[1], visitor = actors[2];
  const work = await createShowcase(pool, cmd(creator, {

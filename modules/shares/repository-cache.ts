@@ -4,7 +4,7 @@ import type { Pool,PoolClient } from 'pg';
 import { z } from 'zod';
 import { transaction } from '../../packages/db/index.js';
 import { Problem,requireCondition } from '../../packages/shared/problem.js';
-import { githubCoordinate, publicRepositoryJson } from '../opensource-marketing/github.js';
+import { concealedRepository, githubCoordinate, publicRepositoryJson } from '../opensource-marketing/github.js';
 import { repositoryRedirectReader,shareRepositoryJson } from './github.js';
 import { repositoryFacts } from './adapters/repository.js';
 import { sanitizeReadme,readmeQuickStart } from './sanitize.js';
@@ -84,12 +84,33 @@ async function readme(repository:RepositoryFacts,context:AdapterContext,etag?:st
   finally {await reader.cancel().catch(()=>{});reader.releaseLock();}
   return {status:200,html:sanitizeReadme(Buffer.concat(parts).toString('utf8'),repository.full_name,repository.default_branch),etag:response.headers.get('etag')};
 }
+const locationShape=z.object({id:z.number().int().positive().safe(),full_name:z.string()});
+export async function currentRepositoryLocation(providerRepoId:string,context:AdapterContext={}):Promise<{kind:'current';url:string}|{kind:'unavailable'}|{kind:'unknown'}>{
+  let raw:unknown;
+  try{
+    raw=await publicRepositoryJson('/repositories/'+providerRepoId,AbortSignal.timeout(8000),context.fetcher??fetch,false,196608,context.token);
+  }catch(error){
+    if(error instanceof Problem&&error.code==='github_repository_unavailable')return {kind:'unavailable'};
+    return {kind:'unknown'};
+  }
+  const parsed=locationShape.safeParse(raw);
+  if(!parsed.success)return concealedRepository(raw)?{kind:'unavailable'}:{kind:'unknown'};
+  if(String(parsed.data.id)!==providerRepoId||concealedRepository(raw))return {kind:'unavailable'};
+  try{
+    return {kind:'current',url:`https://github.com/${githubCoordinate(`https://github.com/${parsed.data.full_name}`)}`};
+  }catch{
+    return {kind:'unknown'};
+  }
+}
 export async function refreshRepository(pool:Pool,repoId:string,context:AdapterContext={},force=false) {
   // A DB lease prevents each viewer/worker from issuing its own fetch. It also bounds failure retries.
   const prior=(await pool.query(`UPDATE canonical_repositories SET refresh_after=now()+interval '10 minutes'
     WHERE repo_id=$1 AND ($2 OR refresh_after<=now()) RETURNING *`,[repoId,force])).rows[0];if(!prior)return;
   try {
-    const facts=await repositoryFacts(prior.current_url,context);
+    const location=await currentRepositoryLocation(prior.provider_repo_id,context);
+    if(location.kind==='unavailable')throw new Problem(422,'github_repository_unavailable','原作已不公開。');
+    if(location.kind==='unknown')throw new Problem(503,'github_unavailable','暫時無法讀取 GitHub。');
+    const facts=await repositoryFacts(location.url,context);
     requireCondition(facts.id===prior.provider_repo_id,422,'repository_identity_changed','原作身分已變更。');
     if(facts.metrics)await saveRepositoryMetrics(pool,facts.full_name.toLowerCase(),facts.metrics);
     const html=await readme(facts,context,prior.etag);
@@ -145,7 +166,7 @@ type CachedRepoRow={
 };
 export function buildBookOriginalCache(book:BookOriginalLookupInput,row?:CachedRepoRow|null):BookOriginalCache{
   const fullName=row?.full_name??null;
-  const url=row?.current_url??book.repository_url;
+  const url=row?.current_url??(book.upstream_url?.trim()||book.repository_url);
   const facts=(row?.facts??{}) as Partial<RepositoryFacts>;
   const defaultBranch=typeof facts.default_branch==='string'&&facts.default_branch?facts.default_branch:null;
   const release=row?.latest_release??null;
@@ -230,13 +251,4 @@ export async function readBookOriginalCaches(pool:Pool,books:readonly BookOrigin
 }
 export async function readBookOriginalCache(pool:Pool,book:BookOriginalLookupInput):Promise<BookOriginalCache>{
   return (await readBookOriginalCaches(pool,[book])).get(book.id)??buildBookOriginalCache(book);
-}
-/** Resolve the established identity, never a possibly reused coordinate, before pinning downloads. */
-export async function resolveBookOriginalUrl(pool:Pool,book:BookOriginalLookupInput,context:AdapterContext={}):Promise<string>{
-  const cache=await readBookOriginalCache(pool,book);
-  if(!cache.repository_id)return book.repository_url;
-  const raw=await publicRepositoryJson(`/repositories/${cache.repository_id}`,AbortSignal.timeout(8000),context.fetcher??fetch,false,196608,context.token);
-  const parsed=z.object({id:z.number().int().positive().safe(),full_name:z.string(),private:z.literal(false),visibility:z.literal('public'),fork:z.literal(false),archived:z.literal(false)}).safeParse(raw);
-  requireCondition(parsed.success&&String(parsed.data.id)===cache.repository_id,422,'repository_identity_changed','原作身分已變更。');
-  return `https://github.com/${githubCoordinate(`https://github.com/${parsed.data.full_name}`)}`;
 }
