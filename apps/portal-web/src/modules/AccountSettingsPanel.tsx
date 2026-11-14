@@ -46,11 +46,15 @@ function AccountSettings({client,session,registerLeave,children,profileExtras,fo
   // Load the optional editor on first use, then keep its draft and leave guard mounted.
   const [publicPageVisited,setPublicPageVisited]=useState(Boolean(focusPublicPage&&hasPublicPage));
   const publicPageRef=useRef<HTMLDetailsElement>(null);
+  // The hash picks the open section; going back to plain #account reopens 個人資料. Sections stay mounted, so drafts survive.
+  const focusSection:SettingsSection|null=focusPublicPage&&hasPublicPage?'public-page':focusConnections?'security':focusProfileExtras?'profile':null;
+  const lastFocusSection=useRef(focusSection);
   useEffect(()=>{
-    if(focusPublicPage&&hasPublicPage){setPublicPageVisited(true);setOpenSection('public-page');}
-    else if(focusConnections)setOpenSection('security');
-    else if(focusProfileExtras)setOpenSection('profile');
-  },[focusPublicPage,focusConnections,focusProfileExtras,hasPublicPage]);
+    const previous=lastFocusSection.current;lastFocusSection.current=focusSection;
+    if(focusSection==='public-page')setPublicPageVisited(true);
+    if(focusSection)setOpenSection(focusSection);
+    else if(previous)setOpenSection('profile');
+  },[focusSection]);
   useEffect(()=>{
     const details=publicPageRef.current;
     if(!focusPublicPage||!details)return;

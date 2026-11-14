@@ -88,7 +88,7 @@ export async function navigate(page:Page,name:string) {
  else if(tab==='opensource'){
   await page.getByRole('button',{name:'分享或提交',exact:true}).click();
   const composer=page.getByRole('dialog',{name:'分享',exact:true});
-  await composer.getByRole('button',{name:'種類',exact:true}).click();
+  await composer.getByRole('button',{name:'更多',exact:true}).click();
   await composer.getByRole('button',{name:'開源投稿',exact:true}).click();
  }
  else if(['me','explore','automation'].includes(route.place))await page.getByLabel(place.title+'檢視',{exact:true}).selectOption(hash);

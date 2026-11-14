@@ -2,7 +2,7 @@ export interface ShareComposeRequest {
   kind?:'repository'|'event'|'work'|'link'; url?:string; text?:string; image?:Blob;
   source?:{tool_id:string;guild_key:string;ref?:string};
 }
-export interface ShareComposeResult {status:'published'|'cancelled';share_id?:string;url?:string}
+export interface ShareComposeResult {status:'published'|'cancelled';share_id?:string;url?:string;title?:string;kind?:string}
 type Host=(request:ShareComposeRequest,finish:(result:ShareComposeResult)=>void)=>void;
 let host:Host|undefined;
 export function installShareComposer(next:Host){host=next;return()=>{if(host===next)host=undefined;};}

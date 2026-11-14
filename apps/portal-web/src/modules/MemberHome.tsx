@@ -80,6 +80,7 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
   const [loadState, setLoadState] = useState<{scope: HomeScope; loading: boolean; error: string | null} | null>(null);
   const [bookValue, setBookValue] = useState<HomeGuildValue<IntroBook | null> | null>(null);
   const [taskValue, setTaskValue] = useState<HomeGuildValue<keyof typeof taskActions | null> | null>(null);
+  const [publishedValue, setPublishedValue] = useState<{scope: HomeScope; shareId: string; url: string; title: string; kind: string; seq: number} | null>(null);
   // Hide the old session's view synchronously, before effect cleanup can run.
   const currentMember = memberValue?.scope === scope ? memberValue : null;
   const member = currentMember?.value ?? null;
@@ -87,6 +88,7 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
   const onboarding = onboardingValue?.scope === scope ? onboardingValue.value : null;
   const loading = loadState?.scope === scope ? loadState.loading : true;
   const loadError = loadState?.scope === scope ? loadState.error : null;
+  const publishedShare = publishedValue?.scope === scope ? publishedValue : null;
   const guildKey = member?.primary_guild?.guild_key ?? null;
   // Same-session, same-guild refreshes keep mounted dialogs and focused actions.
   // Returning to a previous guild creates a new lifetime, never a cached view.
@@ -96,6 +98,35 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
   const summary = useRef<HTMLElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const focusFrame = useRef<number | null>(null);
+  const publishedRef = useRef<HTMLElement>(null);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const publishedSeq = useRef(0);
+  const focusedSeq = useRef(0);
+
+  useEffect(() => {
+    function onSharePublished(event: Event) {
+      const detail = (event as CustomEvent<{shareId?: string; url?: string; title?: string; kind?: string}>).detail;
+      if (!detail?.shareId) return;
+      const seq = ++publishedSeq.current;
+      setPublishedValue({
+        scope: scopeRef.current,
+        shareId: detail.shareId,
+        url: detail.url ?? `#shares/${detail.shareId}`,
+        title: detail.title?.trim() || '新分享',
+        kind: detail.kind ?? 'link',
+        seq,
+      });
+    }
+    window.addEventListener('freedom-share-published', onSharePublished);
+    return () => window.removeEventListener('freedom-share-published', onSharePublished);
+  }, []);
+
+  useEffect(() => {
+    if (!publishedShare || focusedSeq.current === publishedShare.seq) return;
+    focusedSeq.current = publishedShare.seq;
+    publishedRef.current?.focus();
+  }, [publishedShare]);
 
   const load = useCallback((withLabels: boolean, reason: HomeRefreshReason = 'manual') => {
     const ticket = scope.begin(reason);
@@ -235,7 +266,7 @@ export function MemberHome({ client, session, onNavigate, openHomeJournal, first
         <HomeJournal onOpen={openHomeJournal}/>
       </nav>
     </div>
-    <RecentEvents client={client}/><section className="home-timeline" aria-label="首頁社群動態"><SocialZone focusPost={focusPost} client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
+    <RecentEvents client={client}/><section className="home-timeline" aria-label="首頁社群動態">{publishedShare && <article ref={publishedRef} tabIndex={-1} className="card home-published-share"><span className="pill">{publishedShare.kind === 'repository' ? '開源專案' : publishedShare.kind === 'post' ? '貼文' : publishedShare.kind === 'event' ? '活動' : '網址'}</span><h2 className="home-published-share-title">{publishedShare.title}</h2><a className="btn btn-secondary btn-small" href={publishedShare.url}>看分享頁</a></article>}<SocialZone focusPost={focusPost} client={client} bookmarksEnabled={bookmarksEnabled} shortVideos={shortVideos} viewer={{name: nickname, avatarUrl: member?.avatar_url}}/></section>
     </div>
     <details className="home-personal home-disclosure">
     <summary>我的名片與推薦夥伴</summary>

@@ -722,6 +722,84 @@ test('share landing and click bookkeeping avoid repeated reads and inline prunin
   {landing:true,saltStatements:1,noDelete:true},`Landing ${landing}; salt statements ${salts.length}`);
 });
 
+test('manual share publication validates attacker URLs, keeps receipts, and never fetches',async()=>{
+ const {createApp}=await import('../../apps/platform-api/src/app.js');
+ let fetchCalls=0;
+ const origin='http://127.0.0.1:4310';
+ const app=createApp(pool,origin,'local',{linkPreviewFetch:async()=>{fetchCalls++;throw Error('unexpected preview fetch');}});
+ const login=await app.request(origin+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:'shares-2@example.com',password:DEMO_PASSWORD})});
+ assert.equal(login.status,200);
+ const session=await login.json() as {csrf_token:string};
+ const headers={Origin:origin,Cookie:login.headers.get('set-cookie')!.split(';')[0],'X-CSRF-Token':session.csrf_token,'Content-Type':'application/json'};
+ const send=(body:unknown,key=randomUUID())=>app.request(origin+'/api/v1/shares',{method:'POST',headers:{...headers,'Idempotency-Key':key},body:JSON.stringify(body)});
+ const key=randomUUID(),body={kind:'link',url:`https://example.com/manual-${randomUUID()}?utm_source=ignored`,manual_title:'手動分享標題'};
+ const created=await send(body,key);assert.equal(created.status,200);
+ const result=await created.json() as {share_id:string};
+ const replay=await send(body,key);assert.equal(replay.status,200);assert.equal((await replay.json() as {share_id:string}).share_id,result.share_id);
+ assert.equal((await send({...body,manual_title:'不同標題'},key)).status,409);
+ const publicPage=await app.request(origin+'/s/'+result.share_id);assert.equal(publicPage.status,200);
+ const html=await publicPage.text();assert.match(html,/手動分享標題/);assert.match(html,/>example\.com</);
+ const before=(await pool.query('SELECT count(*)::int AS n FROM shares')).rows[0].n;
+ for(const url of ['https://127.0.0.1/','https://[::1]/','https://localhost/','https://host.internal/','https://host.local/','http://example.com/','ftp://example.com/','https://user:pass@example.com/','https://example.com/'+ 'x'.repeat(2048),'https://github.com/fixture/repo','https://github.com./fixture/repo']){
+  const refused=await send({kind:'link',url,manual_title:'測試標題'});assert.equal(refused.status,422,url);
+ }
+ assert.equal((await send({kind:'link',url:'https://example.com/missing',manual_title:''})).status,422);
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM shares')).rows[0].n,before);
+ assert.equal(fetchCalls,0);
+});
+
+test('unsafe link addresses return the same refusal with or without manual_title',async()=>{
+ const {createApp}=await import('../../apps/platform-api/src/app.js');
+ let fetchCalls=0;
+ const origin='http://127.0.0.1:4310';
+ const app=createApp(pool,origin,'local',{linkPreviewFetch:async()=>{fetchCalls++;throw Error('unexpected preview fetch');}});
+ const login=await app.request(origin+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({email:'shares-2@example.com',password:DEMO_PASSWORD})});
+ assert.equal(login.status,200);
+ const session=await login.json() as {csrf_token:string};
+ const headers={Origin:origin,Cookie:login.headers.get('set-cookie')!.split(';')[0],'X-CSRF-Token':session.csrf_token,'Content-Type':'application/json'};
+ const send=(body:unknown)=>app.request(origin+'/api/v1/shares',{method:'POST',headers:{...headers,'Idempotency-Key':randomUUID()},body:JSON.stringify(body)});
+ const before=(await pool.query('SELECT count(*)::int AS n FROM shares')).rows[0].n;
+ for(const url of ['https://127.0.0.1/','https://[::1]/','https://10.0.0.1/','https://169.254.169.254/','https://localhost/','https://host.internal/','https://host.local/','https://host.lan/','http://example.com/','ftp://example.com/','https://user:pass@example.com/','https://user@example.com/','https://example.com:8443/','https://example.com/'+'x'.repeat(2048)]){
+  const plain=await send({kind:'link',url});
+  const manual=await send({kind:'link',url,manual_title:'測試標題'});
+  assert.equal(manual.status,plain.status,url);
+  assert.equal(manual.status,422,url);
+  const plainBody=await plain.json() as {code?:string;detail?:string};
+  const manualBody=await manual.json() as {code?:string;detail?:string};
+  assert.equal(manualBody.code,plainBody.code,url);
+  assert.equal(manualBody.detail,plainBody.detail,url);
+ }
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM shares')).rows[0].n,before);
+ assert.equal(fetchCalls,0);
+});
+
+test('manual share publication respects the daily quota',async()=>{
+ const id=randomUUID(),token=randomUUID();
+ await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required)
+  SELECT $1,community_id,$2,'Synthetic quota member',password_hash,$3,true,false FROM users WHERE user_id=$4`,[id,`manual-${id}@example.com`,randomUUID(),DEMO_USERS[0].user_id]);
+ await pool.query("INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$1,now()+interval '1 day')",[token,id]);
+ const actor={user_id:id,community_id:DEMO_COMMUNITY,session_hash:token} as Actor;
+ const first=cmd(actor,{kind:'link',url:'https://example.com/manual-quota-0',manual_title:'分享'});
+ const created=await createShare(pool,first,{});
+ for(let i=1;i<20;i++)await createShare(pool,cmd(actor,{kind:'link',url:`https://example.com/manual-quota-${i}`,manual_title:'分享'}),{});
+ assert.equal((await createShare(pool,first,{})).share_id,created.share_id);
+ assert.equal((await createShare(pool,cmd(actor,{kind:'link',url:'https://example.com/manual-quota-0',manual_title:'分享'}),{})).created,false);
+ await assert.rejects(createShare(pool,cmd(actor,{kind:'link',url:'https://example.com/manual-quota-overflow',manual_title:'分享'}),{}),{code:'share_daily_limit'});
+});
+
+test('repository preview and publication never create a share when GitHub is unavailable',async()=>{
+ const {previewShare}=await import('../../modules/shares/service.js');
+ const before=(await pool.query('SELECT count(*)::int AS n FROM shares')).rows[0].n;
+ for(const [fetcher,code] of [[async()=>{throw Error('timeout');},'github_unavailable'],[async()=>new Response('rate limit',{status:429}),'github_rate_limited']] as const){
+  const body={kind:'repository' as const,url:'https://github.com/fixture/unavailable'};
+  await assert.rejects(previewShare(pool,cmd(actors[3],body,'POST /shares/preview'),{fetcher}),{status:503,code});
+  await assert.rejects(createShare(pool,cmd(actors[3],body),{fetcher}),{status:503,code});
+ }
+ await assert.rejects(createShare(pool,cmd(actors[3],{url:'https://github.com/fixture/unavailable',manual_title:'手動標題'}),{}),{status:422,code:'repository_identity_required'});
+ await assert.rejects(createShare(pool,cmd(actors[3],{url:'https://www.github.com/fixture/unavailable',manual_title:'手動標題'}),{}),{status:422,code:'repository_identity_required'});
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM shares')).rows[0].n,before);
+});
+
 test('unknown /s/:id and /events/:id return a Chinese 404 page with security headers for browsers and JSON for other clients', async () => {
   const { createApp } = await import('../../apps/platform-api/src/app.js');
   const { createEvent } = await import('../../modules/community/events.js');

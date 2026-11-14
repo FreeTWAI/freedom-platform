@@ -222,7 +222,8 @@ test('focusPublicPage opens only public page with one primary button and intra-s
   const byTitle=(title:string)=>sections.find(s=>s.childNodes[0]?.textContent.startsWith(title))!;
   assert.equal(Boolean(byTitle('個人資料').open),false);
   assert.equal(Boolean(byTitle('公開個人頁').open),true);
-  assert.equal(descendants(container).filter(n=>n.nodeName==='BUTTON'&&(n.getAttribute('class')??'').includes('btn-primary')).length,1);
+  const shown=(n:NodeEl)=>{for(let c:NodeEl=n,p=n.parentNode;p;c=p,p=p.parentNode)if(p.nodeName==='DETAILS'&&!p.open&&c!==p.childNodes[0])return false;return true;};
+  assert.equal(descendants(container).filter(n=>n.nodeName==='BUTTON'&&(n.getAttribute('class')??'').includes('btn-primary')&&shown(n)).length,1,'one visible primary button; closed sections hide theirs');
   await renderPanel(false);
   assert.equal(Boolean(byTitle('個人資料').open),true);
   assert.equal(Boolean(byTitle('公開個人頁').open),false);
