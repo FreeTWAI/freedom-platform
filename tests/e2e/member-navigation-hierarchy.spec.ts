@@ -46,6 +46,16 @@ test('disabled content and catalog capabilities do not advertise their entry poi
   await expect(page.getByLabel('我的檢視').locator('option[value="#me/content"]')).toHaveCount(0);
 });
 
+test('workspaces remain available when guild launchpads are disabled',async({page})=>{
+  await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),guild_launchpad_enabled:false}})});
+  await login(page);await page.goto('/#me/workspaces');
+  await expect(page.getByLabel('我的檢視')).toHaveValue('#me/workspaces');
+  await expect(page.getByRole('heading',{name:'建立業務空間',exact:true})).toBeVisible();
+  await page.goto('/#explore');await page.locator('.place-feature-search summary').click();
+  await page.locator('.place-feature-search input').fill('業務空間');
+  await expect(page.locator('.place-feature-search').getByRole('button',{name:'業務空間',exact:true})).toBeVisible();
+});
+
 test('member hierarchy keeps one feed, distinct destinations and readable controls in each theme and viewport',async({page,e2eAuthPool},testInfo)=>{
   await page.route(url=>!['127.0.0.1','localhost'].includes(url.hostname),route=>route.abort());
   await login(page);

@@ -66,7 +66,7 @@ const newSecret = (prefix: string) => prefix + randomBytes(32).toString('base64u
 export const publicPath = (id: string) => `/development/submissions/${id}`;
 const ownerIllustrationUrl = (id: string) => `/api/v1/me/skill-submissions/${id}/illustration`;
 export const submitUrl = (origin: string, id: string) => `${new URL(origin).origin}/agent-api/v1/skill-submissions/${id}`;
-export const reviewUrl = (origin: string) => `${new URL(origin).origin}/#skills`;
+export const reviewUrl = (origin: string) => `${new URL(origin).origin}/#explore/resources`;
 const iso = (value: Date | string | null) => value === null ? null : new Date(value).toISOString();
 const uuidOrNotFound = (id: string) => {
   requireCondition(z.uuid().safeParse(id).success, 404, 'not_found', '找不到這份技能投稿。');

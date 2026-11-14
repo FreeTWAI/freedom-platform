@@ -79,7 +79,7 @@ const reviewerFor=(value:EventDraft,guilds:Guild[])=>value.event_kind==='guild_s
 const capacityChoices=['10','20','30','50','100','200','500'];
 const participationUrl=(location:string)=>{try{const url=new URL(location);return url.protocol==='https:'&&!url.username&&!url.password?url.href:null;}catch{return null;}};
 const referralCode=(id:string,persist=true)=>{
-  const match=/^#events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(window.location.hash);
+  const match=/^#(?:explore\/)?events\/([0-9a-f-]{36})(?:\?(.*))?$/.exec(window.location.hash);
   const pathId=/^\/events\/([0-9a-f-]{36})\/?$/.exec(window.location.pathname)?.[1];
   const refs=new URLSearchParams(match?.[1]===id?match[2]??'':pathId===id?window.location.search:'').getAll('ref');
   const fromLink=refs.length===1&&/^[A-Za-z0-9_-]{16,32}$/.test(refs[0])?refs[0]:null;

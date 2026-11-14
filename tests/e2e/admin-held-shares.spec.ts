@@ -61,8 +61,8 @@ test('three eligible reports go to 檢舉處理; restore and confirm remove rows
    for(let i=1;i<=3;i++)expect((await command(i,`/api/v1/shares/${event.share_id}/report`,{reason:`合成檢舉理由 ${i}`})).ok()).toBe(true);
    expect((await page.request.get(`${origin}/api/v1/public/events/${event.event_id}`)).status()).toBe(404);
   }
-  await page.context().setExtraHTTPHeaders(adminHeaders);await page.goto(origin+'/admin?view=events');
-  await expect(page.getByText('目前沒有待處理項目。',{exact:true})).toBeVisible();
+  await page.context().setExtraHTTPHeaders(adminHeaders);await page.goto(origin+'/admin');
+  await page.getByLabel('種類',{exact:true}).selectOption('events');await expect(page.getByText('目前沒有待處理項目。',{exact:true})).toBeVisible();
   await page.getByLabel('種類',{exact:true}).selectOption('held-shares');await page.getByRole('button',{name:/合成待恢復活動/}).click();
   const first=page.getByRole('article',{name:'合成待恢復活動',exact:true}),second=page.getByRole('article',{name:'合成待下架活動',exact:true});
   await expect(first.getByText('活動 · 3 則檢舉',{exact:true})).toBeVisible();

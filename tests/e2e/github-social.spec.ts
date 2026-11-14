@@ -294,7 +294,7 @@ test('public skill OAuth returns to the same book and connecting never submits a
   await expect(page.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(writes).toBe(0);
 });
 
-for(const target of ['#join/supplier','#join/showcase','#join/tasks'])test(`onboarding OAuth callback returns to ${target} without Star writes`,async({page})=>{
+for(const target of ['#join/supplier','#join/showcase','#join/tasks','#explore/resources','#me/settings?view=connections','#shares/12345678-1234-4234-8234-123456789abc?via=abcdefghij','#guilds/guild_ai_vibe/tools/work'])test(`onboarding OAuth callback returns to ${target} without Star writes`,async({page})=>{
   let writes=0;
   await page.route('**/api/v1/me/github',route=>route.fulfill({json:{configured:true,connected:true,github_user:{id:'onboarding-return',login:'onboarding-return'}}}));
   await page.route('**/api/v1/me/github/books/*/star',route=>{if(route.request().method()==='POST')writes++;return route.fulfill({json:{book_id:'social-post',connected:true,starred:false}});});

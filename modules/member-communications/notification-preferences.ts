@@ -218,12 +218,12 @@ export async function readNotificationSummary(pool: Pool, actor: Actor, followin
     const selected = socialNotificationKinds.filter(kind => prefs.categories[category(kind)!] === 'summary');
     for (const row of await unreadNotices(q, actor, selected, true)) {
       const group = category(row.kind)!;
-      let path: string | null = group === 'friends' ? '#members' : group === 'squads' ? '#squads' : null;
-      if (group === 'events' && row.action_resource_id) path = `#events/${row.action_resource_id}`;
+      let path: string | null = group === 'friends' ? '#explore/people' : group === 'squads' ? '#me/teams' : null;
+      if (group === 'events' && row.action_resource_id) path = `#explore/events/${row.action_resource_id}`;
       items.push({ id: row.notification_id, source: 'notification', title: group === 'friends' ? '好友通知' : group === 'squads' ? '小隊通知' : '活動通知', path });
     }
     if (prefs.categories.events === 'summary') {
-      for (const item of await readableEventBulletins(q, actor)) items.push({ id: item.bulletin_id, source: 'event_bulletin', title: item.title, path: `#events/${item.event_id}` });
+      for (const item of await readableEventBulletins(q, actor)) items.push({ id: item.bulletin_id, source: 'event_bulletin', title: item.title, path: `#explore/events/${item.event_id}` });
     }
     if (followingEnabled && prefs.categories.following === 'summary') {
       const updates = await readFollowUpdates(q, actor, {});

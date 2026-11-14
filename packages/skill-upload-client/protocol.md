@@ -35,7 +35,7 @@ Idempotency-Key: <8–128 個 A-Z a-z 0-9 _ ->
 {
   "submission": {"submission_id": "…", "status": "awaiting_upload", "grant_expires_at": "…", "created_at": "…"},
   "upload_grant": {"token": "fpg_…", "expires_at": "…", "submit_url": "https://freetwai.com/agent-api/v1/skill-submissions/…"},
-  "review_url": "https://freetwai.com/#skills"
+  "review_url": "https://freetwai.com/#explore/resources"
 }
 ```
 
@@ -93,7 +93,7 @@ Content-Type: application/json
 回應 200：
 
 ```json
-{"submission_id": "…", "status": "ready_for_review", "grant_consumed_at": "…", "review_url": "https://freetwai.com/#skills"}
+{"submission_id": "…", "status": "ready_for_review", "grant_consumed_at": "…", "review_url": "https://freetwai.com/#explore/resources"}
 ```
 
 以同一個授權重送完全相同的內容，會得到同樣的確認，不會重複建立。內容不同則回 409 `upload_grant_consumed`。授權過期、被撤銷、草稿被撤回、會員停用或尚未選擇主要公會時，就算內容相同也會拒絕。

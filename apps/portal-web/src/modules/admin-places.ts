@@ -5,7 +5,8 @@ export const pendingLabels = {
 } as const;
 export const peopleLabels = {members:'會員管理', admins:'管理員名單', guilds:'公會管理', 'guild-workspace':'技能書維護者'} as const;
 export const systemLabels = {github:'GitHub 連結', credentials:'系統憑證', errors:'系統錯誤日誌', audit:'操作紀錄'} as const;
-export const adminLabels = {inbox:'待處理', people:'人員與公會', system:'系統', ...pendingLabels, ...peopleLabels, ...systemLabels};
+export const moderationLabels = {'member-reports':'平台檢舉案件','social-achievements':'成就限制與申訴'} as const;
+export const adminLabels = {inbox:'待處理', people:'人員與公會', system:'系統', ...pendingLabels, ...peopleLabels, ...systemLabels, ...moderationLabels};
 export type AdminTab = keyof typeof adminLabels;
 export type PendingKind = keyof typeof pendingLabels;
 export function placeOf(tab:AdminTab):'inbox'|'people'|'system' {
@@ -13,6 +14,8 @@ export function placeOf(tab:AdminTab):'inbox'|'people'|'system' {
 }
 export function locationTab():AdminTab {
   if(window.location.pathname==='/admin/github/callback')return 'github';
+  if(window.location.pathname==='/admin/reports')return 'member-reports';
+  if(window.location.pathname==='/admin/social-achievements')return 'social-achievements';
   const view=new URLSearchParams(window.location.search).get('view');
   return view&&Object.hasOwn(adminLabels,view)?view as AdminTab:'inbox';
 }

@@ -11,7 +11,7 @@ export function publicSkillAcquisition(path: string, intro?: number | null) {
 <div class="skill-acquisition-actions">
 <a class="skill-acquisition-primary" data-skill-join href="${escape(join)}">免費加入，探索更多資源</a>
 <a data-skill-login href="${escape(login)}">已有帳號，登入</a>
-<a class="skill-acquisition-primary" data-skill-library href="/#skills" hidden>前往技能書架</a>
+<a class="skill-acquisition-primary" data-skill-library href="/#explore/resources" hidden>前往探索 → 資源</a>
 <a data-skill-guilds href="/#guilds" hidden>選擇公會與領取資源</a>
 <a href="#skill-use-title">繼續閱讀這本技能書</a>
 </div>

@@ -115,8 +115,8 @@ function AdminReportItem({client,item,onSaved,onDenied,onHeld}:{client:PortalCli
 }
 
 /** Only a successful member-session API read grants evidence UI access. */
-export function AdminReports({client}:{client:PortalClient}){
-  const enabled=useContext(ReportingContext),[items,setItems]=useState<AdminReportCase[]|null>(null),[open,setOpen]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState(''),[cursor,setCursor]=useState<string|null>(null),[filter,setFilter]=useState('all'),[heldCount,setHeldCount]=useState(0),held=useRef(new Set<string>()),sequence=useRef(0),generation=client.sessionGeneration;
+export function AdminReports({client,initialOpen=false}:{client:PortalClient;initialOpen?:boolean}){
+  const enabled=useContext(ReportingContext),[items,setItems]=useState<AdminReportCase[]|null>(null),[open,setOpen]=useState(initialOpen),[loading,setLoading]=useState(false),[error,setError]=useState(''),[cursor,setCursor]=useState<string|null>(null),[filter,setFilter]=useState('all'),[heldCount,setHeldCount]=useState(0),held=useRef(new Set<string>()),sequence=useRef(0),generation=client.sessionGeneration;
   async function load(next?:string,state=filter){
     if(held.current.size)return;
     const ticket=++sequence.current;setLoading(true);setError('');
@@ -137,4 +137,11 @@ export function AdminReports({client}:{client:PortalClient}){
       <div className="button-row"><button type="button" className="btn btn-ghost" disabled={loading||heldCount>0} onClick={()=>void load()}>更新平台檢舉案件</button>{cursor&&<button type="button" className="btn btn-ghost" disabled={loading||heldCount>0} onClick={()=>void load(cursor)}>更多平台檢舉案件</button>}</div>
     </div>
   </section>;
+}
+
+/** Preserve the former member-shell entry only for members authorized to read reports. */
+export function AdminReportsEntry({client}:{client:PortalClient}){
+  const enabled=useContext(ReportingContext),[available,setAvailable]=useState(false),generation=client.sessionGeneration;
+  useEffect(()=>{let live=true;setAvailable(false);if(enabled)void client.get('/admin/reports?state=all',{suppressConsole:true}).then(()=>{if(live&&generation===client.sessionGeneration)setAvailable(true);}).catch(()=>{});return()=>{live=false;};},[client,enabled,generation]);
+  return available?<a className="btn btn-ghost" href="/admin?view=member-reports">平台檢舉案件</a>:null;
 }

@@ -293,7 +293,7 @@ featureTest.describe('event-scoped public registration lifetime',()=>{
 });
 
 
-for(const discovery of [false,true])for(const routeKind of ['path','hash'] as const)test(`member-only ${routeKind} event returns to explicit member RSVP with discovery ${discovery?'ON':'OFF'}`,async({page},info)=>{
+for(const discovery of [false,true])for(const routeKind of ['path','hash','canonical'] as const)test(`member-only ${routeKind} event returns to explicit member RSVP with discovery ${discovery?'ON':'OFF'}`,async({page},info)=>{
   await page.unroute('**/api/v1/site');
   await page.route('**/api/v1/site',async route=>{const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),community_discovery_enabled:discovery,event_participation_enabled:false}})});
   await page.setViewportSize({width:390,height:844});
@@ -308,7 +308,7 @@ for(const discovery of [false,true])for(const routeKind of ['path','hash'] as co
     memberEvent.my_rsvp='going';memberEvent.attending_count=1;memberEvent.aggregate_version++;
     await route.fulfill({json:memberEvent});
   });
-  const eventPath=routeKind==='path'?eventAppPath(`/events/${id}?ref=${code}`):`/#events/${id}?ref=${code}`;
+  const eventPath=routeKind==='path'?eventAppPath(`/events/${id}?ref=${code}`):`/#${routeKind==='canonical'?'explore/':''}events/${id}?ref=${code}`;
   const missingReferralEntry=!discovery&&routeKind==='path';
   await page.goto(missingReferralEntry?eventAppPath(`/events/${id}`):eventPath);await expect(page.getByRole('heading',{name:publicEvent.title,exact:true})).toBeVisible();
   if(missingReferralEntry)await expect(page.getByText('這場活動須從會員分享的連結報名，請向分享者取得連結。',{exact:true})).toBeVisible();

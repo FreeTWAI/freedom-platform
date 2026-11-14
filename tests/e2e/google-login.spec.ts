@@ -357,7 +357,7 @@ for(const intent of ['login','link'] as const)for(const outcome of ['error','can
 
 
 const EVENT_ID='10000000-0000-4000-8000-000000000001',EVENT_REF='abcdefghijklmnopqrstuvwx';
-for(const entry of [`/events/${EVENT_ID}?ref=${EVENT_REF}`,`/#events/${EVENT_ID}?ref=${EVENT_REF}`])test(`Google callback preserves allowlisted event referral: ${entry}`,async({page})=>{
+for(const entry of [`/events/${EVENT_ID}?ref=${EVENT_REF}`,`/#events/${EVENT_ID}?ref=${EVENT_REF}`,`/#explore/events/${EVENT_ID}?ref=${EVENT_REF}`])test(`Google callback preserves allowlisted event referral: ${entry}`,async({page})=>{
   let cancelled=0,registrations=0;
   page.on('request',request=>{if(request.method()==='POST'&&/\/(?:register|rsvp)$/.test(new URL(request.url()).pathname))registrations++;});
   await page.route('**/api/v1/auth/google/cancel',async route=>{cancelled++;await route.fulfill({json:{cancelled:true}})});
