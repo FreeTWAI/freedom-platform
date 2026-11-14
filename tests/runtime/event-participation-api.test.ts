@@ -16,6 +16,7 @@ import {createPool,transaction} from '../../packages/db/index.js';
 import {migrate} from '../../scripts/database.js';
 import {seedLocal,DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
 import {createApp} from '../../apps/platform-api/src/app.js';
+import {runAfterResponseWork} from '../../modules/agent-commerce/operations/due-work.js';
 
 const origin='http://127.0.0.1:4310';
 const databaseUrl=process.env.TEST_DATABASE_URL;
@@ -526,4 +527,41 @@ test('an event announcement queues bounded delivery after the response and retri
   }
   assert.equal(delivered,1);
   assert.equal((await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND kind='event_announcement'",[eventId])).rows[0].status,'provider_accepted');
+});
+
+test('afterResponse passes its deadline AbortSignal so expired waitlist and notice drains claim nothing',async()=>{
+  const first=await guest(eventId,'deadline-first@local.test',false);
+  const work:(()=>Promise<void>)[]=[];let attempts=0;
+  const runExpired=async(job:()=>Promise<void>)=>{
+    let done!:()=>void;
+    const finished=new Promise<void>(resolve=>{done=resolve;});
+    await runAfterResponseWork(async()=>{try{await scheduler.wait(20);await job();}finally{done();}},1);
+    await finished;
+  };
+  const nextVersion=async()=>Number((await pool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[eventId])).rows[0].aggregate_version);
+  const deferredOn=createApp(pool,origin,'local',{eventParticipationEnabled:true,eventEmailSender:async()=>{attempts++;},afterResponse:job=>work.push(job)});
+  assert.equal((await call(`/api/v1/events/${eventId}/schedule`,{application:deferredOn,method:'PATCH',session:sessions[0],body:{starts_at:starts,ends_at:ends,capacity:1},headers:{'If-Match':`"${await nextVersion()}"`,'Idempotency-Key':randomUUID()}})).status,200);
+  assert.equal((await call(`/api/v1/events/${eventId}/waitlist-policy`,{application:deferredOn,method:'PATCH',session:sessions[0],body:{waitlist_enabled:true,response_window_minutes:30},headers:{'If-Match':`"${await nextVersion()}"`,'Idempotency-Key':randomUUID()}})).status,200);
+  work.length=0;
+  assert.equal((await call(path(eventId),{application:deferredOn,method:'POST',token:first.token,body:{action:'join',expected_version:await nextVersion()},headers:{'Idempotency-Key':randomUUID(),'If-Match':`"${await nextVersion()}"`}})).status,200);
+  assert.equal(work.length,1);
+  await runExpired(work[0]);
+  assert.equal(attempts,0);
+  assert.equal((await pool.query('SELECT delivery_status FROM community_event_waitlist WHERE event_id=$1 AND guest_email=$2',[eventId,'deadline-first@local.test'])).rows[0].delivery_status,'pending');
+
+  work.length=0;
+  assert.equal((await call(`/api/v1/events/${eventId}/schedule`,{application:deferredOn,method:'PATCH',session:sessions[0],body:{starts_at:'2099-03-14T07:00:00.000Z',ends_at:'2099-03-14T09:00:00.000Z',capacity:1},headers:{'If-Match':`"${await nextVersion()}"`,'Idempotency-Key':randomUUID()}})).status,200);
+  assert.equal(work.length,1);
+  await runExpired(work[0]);
+  assert.equal(attempts,0);
+  assert.equal((await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND guest_email=$2 AND kind='event_schedule_changed'",[eventId,'deadline-first@local.test'])).rows[0].status,'pending');
+
+  assert.equal((await call(path(eventId),{application:deferredOn,method:'POST',token:first.token,body:{action:'accept',expected_version:await nextVersion()},headers:{'Idempotency-Key':randomUUID(),'If-Match':`"${await nextVersion()}"`}})).status,200);
+  const deferredOff=createApp(pool,origin,'local',{eventParticipationEnabled:false,eventEmailSender:async()=>{attempts++;},afterResponse:job=>work.push(job)});
+  work.length=0;
+  assert.equal((await call(`/api/v1/events/${eventId}/announcements`,{application:deferredOff,method:'POST',session:sessions[0],body:{message:'逾期不寄'},headers:{'If-Match':`"${await nextVersion()}"`,'Idempotency-Key':randomUUID()}})).status,200);
+  assert.equal(work.length,1);
+  await runExpired(work[0]);
+  assert.equal(attempts,0);
+  assert.equal((await pool.query("SELECT status FROM community_event_participation_notices WHERE event_id=$1 AND kind='event_announcement'",[eventId])).rows[0].status,'queued');
 });

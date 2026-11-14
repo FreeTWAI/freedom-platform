@@ -6,6 +6,7 @@ import type {SkillDiscoveryBook} from '../community/discovery.js';
 import type {GitHubMetrics} from '../github-social/service.js';
 import type {BookOriginalCache} from '../shares/repository-cache.js';
 import {getSkillCollaboration,type SkillCollaboration,type SkillEditorial} from '../community/skill-collaboration.js';
+import {distinctCopyUrl} from '../community/book-urls.js';
 import {getSkillShareContent} from '../community/skill-share-content.js';
 import type {PublicAuthorClaim} from '../community/repo-author-claims.js';
 import {publicSkillAcquisition,skillAcquisitionCss} from './skill-acquisition.js';
@@ -71,7 +72,7 @@ export function skillMarkdown(id:string,editorial?:SkillEditorial|null,originalC
  const originalUrl=originalCache?.url??book.upstream_url;
  const originalOwner=originalCache?originalCache.original_author:new URL(originalUrl).pathname.split('/')[1];
  const readmeText=readmePlainText(originalCache?.readme_html);
- const distinctCopy=book.repository_url&&book.repository_url!==originalUrl?book.repository_url:null;
+ const distinctCopy=distinctCopyUrl(book.fork_url,originalUrl);
  return [`# ${book.title}：技能書與協作來源`,
   `原作 Repo：${markdownHttpsUrl(originalUrl)}`,
   `從原作建立自己的版本：${markdownHttpsUrl(originalUrl+'/fork')}`,
@@ -247,7 +248,7 @@ export function pageHtml(title:string,markdown:string,markdownUrl:string,metrics
   const coverFigure=book.cover_url?'<figure class="public-skill-cover"><img src="'+escape(book.cover_url)+'" alt="" width="768" height="512"></figure>':'';
   const curatedSummaryHtml='<p class="sp-headline"><span>'+escape(page?.headline??book.title)+'</span></p><p class="public-skill-purpose">'+escape(editorial?.summary||book.guide.beginner.purpose)+'</p>'
    +(page?'<ul class="sp-outcomes">'+page.outcomes.map(item=>'<li><span>'+escape(item)+'</span></li>').join('')+'</ul>':'');
-  const distinctCopy=book.repository_url&&book.repository_url!==originalUrl?book.repository_url:null;
+  const distinctCopy=distinctCopyUrl(book.fork_url,originalUrl);
   const source='<section class="public-skill-source"><h2>版本與來源歷史紀錄</h2><p>GitHub 原作帳號：<a href="'+author+'" target="_blank" rel="noopener noreferrer">'+escape(originalOwner)+'</a></p><dl><dt>原作 Repo</dt><dd><a href="'+original+'" target="_blank" rel="noopener noreferrer">'+original+' ↗</a></dd><dt>指南核對來源</dt><dd><a href="'+escape(book.guide.reading_url)+'" target="_blank" rel="noopener noreferrer">'+escape(book.guide.reading_url)+'</a></dd><dt>記錄的授權</dt><dd>'+escape(originalCache?.license_spdx??book.license_status)+'</dd><dt>指南核對版本</dt><dd><code>'+escape(book.guide.source_commit)+'</code></dd><dt>核對日期</dt><dd>'+escape(book.guide.reviewed_at)+'</dd>'+(distinctCopy?'<dt>歷史紀錄（工坊整合副本）</dt><dd><a href="'+escape(distinctCopy)+'" target="_blank" rel="noopener noreferrer">'+escape(distinctCopy)+'</a></dd>':'')+'</dl></section>';
   const notesBanner='<p class="sp-notes-banner"><strong>使用筆記</strong>：以下導讀、插畫與範例係針對核對版本 <code>'+escape(book.guide.source_commit)+'</code>（核對日期：'+escape(book.guide.reviewed_at)+'）整理，不等同原作最新程式碼說明。'+(originalCache?.ahead_of_pin&&originalCache.latest_version_url?' 原作者已更新至 <a href="'+escape(originalCache.latest_version_url)+'" target="_blank" rel="noopener noreferrer">'+escape(originalCache.latest_version_label??'最新版本')+' ↗</a>。':'')+'</p>';
   const curatedCredit=book.guide.credit_role==='策展'&&book.guide.author_name?'<p>策展筆記 · '+escape(book.guide.author_name)+' · 共 '+pad2(page?.outcomes.length??0)+' 項核對成果</p>':'';
@@ -290,7 +291,7 @@ function taskLabel(task:SkillCollaboration['tasks'][number]){
  return task.status==='github_issue'?'GitHub 任務，查看最新狀態':task.status==='maintainer_published'?({'todo':'待辦','in_progress':'進行中','done':'已完成'}[task.progress??'todo']+' · 維護者紀錄'):'建議任務';
 }
 function collaborationMarkdown(data:SkillCollaboration){
- const distinctCopy=data.repository.url&&data.repository.url!==data.contribution.url?data.repository.url:null;
+ const distinctCopy=distinctCopyUrl(data.repository.fork_url,data.contribution.url);
  return [data.intent.summary,`原作 Repo：${data.contribution.url}\n預設 PR 目標：${data.contribution.name}:${data.contribution.default_branch}\n從原作建立自己的版本：${data.contribution.fork_url}\n原作 PR：${data.contribution.pulls_url}`,
   ...(distinctCopy?[`歷史紀錄（工坊整合副本）：${distinctCopy}\n工坊任務與 GitHub Milestones：${data.task_source.issues_url} · ${data.task_source.pulls_url} · ${data.task_source.milestones_url}`]:[`專案任務與 Milestones：${data.task_source.issues_url} · ${data.task_source.pulls_url} · ${data.task_source.milestones_url}`]),
   '先閱讀原作現行的貢獻規則。Fork 不會自動回饋原作；修改要以 PR 提交，由原作維護者決定是否合併。',data.task_source.note,
@@ -303,8 +304,8 @@ function collaborationHtml(data:SkillCollaboration){
  const link=(url:string,label:string)=>'<a href="'+escape(url)+'">'+escape(label)+'</a>';
  const milestones=data.milestones.map(item=>'<li><strong>'+escape(item.title)+'</strong><span class="collaboration-state">'+(item.status==='maintainer_published'?'維護者發布':'建議里程碑')+'</span><p>'+escape(item.acceptance)+'</p></li>').join('');
  const tasks=data.tasks.map(task=>'<li class="collaboration-task"><h3>'+escape(task.title)+'</h3><span class="collaboration-state">'+escape(taskLabel(task))+'</span><p>'+escape(task.scope)+'</p><ul>'+task.acceptance.map(value=>'<li>'+escape(value)+'</li>').join('')+'</ul>'+(task.source_url?'<p>'+link(task.source_url,'查看任務來源 ↗')+'</p>':'')+'</li>').join('');
- const distinctCopy=data.repository.url&&data.repository.url!==data.contribution.url?data.repository.url:null;
- const historyDetails=distinctCopy?'<details><summary>歷史紀錄：工坊整合副本與任務來源</summary><p>工坊整合副本（歷史紀錄）：'+link(data.repository.url,data.repository.name)+' · '+link(data.repository.fork_url,'整合副本 Fork')+'</p><p>'+link(data.task_source.issues_url,'查看任務 ↗')+' · '+link(data.task_source.pulls_url,'查看 PR')+' · '+link(data.task_source.milestones_url,'Milestones')+'</p></details>':'';
+ const distinctCopy=distinctCopyUrl(data.repository.fork_url,data.contribution.url);
+ const historyDetails=distinctCopy?'<details><summary>歷史紀錄：工坊整合副本與任務來源</summary><p>工坊整合副本（歷史紀錄）：'+link(distinctCopy,distinctCopy.replace(/^https:\/\/github\.com\//,''))+' · '+link(data.repository.fork_url,'整合副本 Fork')+'</p><p>'+link(data.task_source.issues_url,'查看任務 ↗')+' · '+link(data.task_source.pulls_url,'查看 PR')+' · '+link(data.task_source.milestones_url,'Milestones')+'</p></details>':'';
  return '<section class="public-collaboration" aria-labelledby="collaboration-title"><h2 id="collaboration-title">一起開發</h2><p>'+escape(data.intent.summary)+'</p><p>原作：'+link(data.contribution.url,data.contribution.name)+'</p><div class="public-skill-actions">'+link(data.contribution.fork_url,'從原作開始共創 ↗')+link(data.contribution.pulls_url,'查看原作 PR ↗')+link(data.agent_skill_url,'下載 Agent SKILL.md')+'</div><p class="collaboration-repository">預設 PR → '+escape(data.contribution.name)+':'+escape(data.contribution.default_branch)+'</p><p>修改由原作維護者審查。保留原作授權、commit 作者與共同貢獻者；收錄不移轉作品權利。</p>'+historyDetails+'<p class="collaboration-note">'+escape(data.task_source.note)+'</p><h3>里程碑</h3><ul class="collaboration-milestones">'+milestones+'</ul><h3>參與任務</h3><ul class="collaboration-tasks">'+tasks+'</ul><p>'+link('/api/v1/skills/'+data.book_id+'/collaboration','協作 JSON')+'</p></section>';
 }
 const frontmatter=(name:string,description:string)=>'---\nname: '+name+'\ndescription: '+JSON.stringify(description)+'\n---\n';
@@ -315,7 +316,7 @@ export function skillAgentMarkdown(id:string,editorial?:SkillEditorial|null,orig
  const originalUrl=originalCache?.url??data.contribution.url;
  const originalAuthor=originalCache?originalCache.original_author:data.contribution.name.split('/')[0];
  const readmeText=readmePlainText(originalCache?.readme_html);
- const distinctCopy=data.repository.url&&data.repository.url!==originalUrl?data.repository.url:null;
+ const distinctCopy=distinctCopyUrl(data.repository.fork_url,originalUrl);
  return [frontmatter('freedom-'+id+'-collaboration',`使用與協作改進原作「${data.title}」（${originalUrl}）。預設向原作提交修改；使用筆記另註核對版本。`),
  '# '+data.title+'：Agent 指引（原作優先）',
  `原作 Repo：${markdownHttpsUrl(originalUrl)}${originalAuthor?'\n原作作者／帳號：'+escapeMarkdownText(originalAuthor):''}${typeof originalCache?.stars==='number'?'\n原作 Stars：'+originalCache.stars:''}\n從原作建立自己的版本：${markdownHttpsUrl(originalUrl+'/fork')}\n預設 PR 目標：${data.contribution.name}:${data.contribution.default_branch}`,

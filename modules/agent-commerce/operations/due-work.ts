@@ -45,6 +45,7 @@ export interface DueCommerceWorkDependencies extends OrderNotificationOptions {
 }
 export interface DueCommerceWorkOptions {limit?:number;maxExternalCalls?:number;deadlineMs?:number;targets?:readonly string[];signal?:AbortSignal;trigger?:PaymentQueryTrigger;kinds?:readonly CommerceDueWorkKind[]}
 const afterResponseSignal=new AsyncLocalStorage<AbortSignal>();
+export function getAfterResponseSignal():AbortSignal|undefined{return afterResponseSignal.getStore();}
 /** A single shared timeout wrapper lets a late transport return abandon its
  * lease rather than write after the request host has started closing its pool. */
 export async function runAfterResponseWork(work:()=>Promise<void>,timeoutMs=25_000):Promise<void>{

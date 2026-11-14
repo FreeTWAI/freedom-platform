@@ -2527,7 +2527,7 @@ const communityCatalogBase = {
     {
       "id": "social-post",
       "title": "Hao 社群貼文技能書",
-      "repository_url": "https://github.com/FreeTWAI/claude-skill-social-post",
+      "repository_url": "https://github.com/Hao0321/claude-skill-social-post",
       "description": "社群內容規劃、文案草稿與經確認後的發布流程。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/claude-skill-social-post/fork",
@@ -2539,7 +2539,7 @@ const communityCatalogBase = {
     {
       "id": "typo-studio",
       "title": "Typo Studio 排版工作室",
-      "repository_url": "https://github.com/FreeTWAI/typo-studio",
+      "repository_url": "https://github.com/Hao0321/typo-studio",
       "description": "中文友善的輪播貼文排版工具。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/typo-studio/fork",
@@ -2551,7 +2551,7 @@ const communityCatalogBase = {
     {
       "id": "video-autopilot",
       "title": "影片自動化工具包",
-      "repository_url": "https://github.com/FreeTWAI/video-autopilot-kit",
+      "repository_url": "https://github.com/Hao0321/video-autopilot-kit",
       "description": "影片素材、字幕與剪輯流程的起始框架。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/video-autopilot-kit/fork",
@@ -2563,7 +2563,7 @@ const communityCatalogBase = {
     {
       "id": "pos-pro",
       "title": "POS Pro 商店工具",
-      "repository_url": "https://github.com/FreeTWAI/pos-pro",
+      "repository_url": "https://github.com/Hao0321/pos-pro",
       "description": "實體店的收銀、庫存、會員與營運工具。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/pos-pro/fork",
@@ -2575,7 +2575,7 @@ const communityCatalogBase = {
     {
       "id": "security-scanner",
       "title": "AI Security Scanner",
-      "repository_url": "https://github.com/FreeTWAI/ai-security-scanner",
+      "repository_url": "https://github.com/teddashh/ai-security-scanner",
       "description": "協助針對自己有權管理的系統進行安全檢查。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/ai-security-scanner/fork",
@@ -2587,7 +2587,7 @@ const communityCatalogBase = {
     {
       "id": "ai-sister",
       "title": "AI Sister",
-      "repository_url": "https://github.com/FreeTWAI/AI-Sister",
+      "repository_url": "https://github.com/teddashh/AI-Sister",
       "description": "本機優先的桌面助理與專案設計。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/AI-Sister/fork",
@@ -2599,7 +2599,7 @@ const communityCatalogBase = {
     {
       "id": "multi-ai-desktop",
       "title": "Multi-AI Chat Desktop",
-      "repository_url": "https://github.com/FreeTWAI/multi-ai-chat-desktop",
+      "repository_url": "https://github.com/teddashh/multi-ai-chat-desktop",
       "description": "在自己的桌面協調多個 AI 對話與工作流。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/multi-ai-chat-desktop/fork",
@@ -2611,7 +2611,7 @@ const communityCatalogBase = {
     {
       "id": "multi-ai-chat",
       "title": "Multi-AI Chat",
-      "repository_url": "https://github.com/FreeTWAI/multi-ai-chat",
+      "repository_url": "https://github.com/teddashh/multi-ai-chat",
       "description": "多 AI 對話專案。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/multi-ai-chat/fork",
@@ -2742,7 +2742,7 @@ const communityCatalogBase = {
     {
       "id": "social-post",
       "title": "Hao 社群貼文技能書",
-      "repository_url": "https://github.com/FreeTWAI/claude-skill-social-post",
+      "repository_url": "https://github.com/Hao0321/claude-skill-social-post",
       "description": "社群內容規劃、文案草稿與經確認後的發布流程。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/claude-skill-social-post/fork",
@@ -2754,7 +2754,7 @@ const communityCatalogBase = {
     {
       "id": "typo-studio",
       "title": "Typo Studio 排版工作室",
-      "repository_url": "https://github.com/FreeTWAI/typo-studio",
+      "repository_url": "https://github.com/Hao0321/typo-studio",
       "description": "中文友善的輪播貼文排版工具。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/typo-studio/fork",
@@ -2766,7 +2766,7 @@ const communityCatalogBase = {
     {
       "id": "video-autopilot",
       "title": "影片自動化工具包",
-      "repository_url": "https://github.com/FreeTWAI/video-autopilot-kit",
+      "repository_url": "https://github.com/Hao0321/video-autopilot-kit",
       "description": "影片素材、字幕與剪輯流程的起始框架。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/video-autopilot-kit/fork",
@@ -2778,7 +2778,7 @@ const communityCatalogBase = {
     {
       "id": "short-drama",
       "title": "AI 短劇工作流",
-      "repository_url": "https://github.com/FreeTWAI/ai-short-drama",
+      "repository_url": "https://github.com/Hao0321/ai-short-drama",
       "description": "短劇故事、分鏡、連貫性與製作流程。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/ai-short-drama/fork",
@@ -2790,7 +2790,7 @@ const communityCatalogBase = {
     {
       "id": "hao-studio",
       "title": "Hao Studio Web",
-      "repository_url": "https://github.com/FreeTWAI/Hao0321-Studio-WEB",
+      "repository_url": "https://github.com/Hao0321/Hao0321-Studio-WEB",
       "description": "Hao 提供的媒體工作室專案；使用前查看來源說明與授權。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/Hao0321-Studio-WEB/fork",
@@ -2802,7 +2802,7 @@ const communityCatalogBase = {
     {
       "id": "media-generator",
       "title": "AI 影音生成技能書",
-      "repository_url": "https://github.com/FreeTWAI/ai-media-generator",
+      "repository_url": "https://github.com/Hao0321/ai-media-generator",
       "description": "圖像、影片與音樂提示設計及創作流程。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/ai-media-generator/fork",
@@ -2814,7 +2814,7 @@ const communityCatalogBase = {
     {
       "id": "pos-pro",
       "title": "POS Pro 商店工具",
-      "repository_url": "https://github.com/FreeTWAI/pos-pro",
+      "repository_url": "https://github.com/Hao0321/pos-pro",
       "description": "實體店的收銀、庫存、會員與營運工具。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/pos-pro/fork",
@@ -2826,7 +2826,7 @@ const communityCatalogBase = {
     {
       "id": "security-scanner",
       "title": "AI Security Scanner",
-      "repository_url": "https://github.com/FreeTWAI/ai-security-scanner",
+      "repository_url": "https://github.com/teddashh/ai-security-scanner",
       "description": "協助針對自己有權管理的系統進行安全檢查。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/ai-security-scanner/fork",
@@ -2838,7 +2838,7 @@ const communityCatalogBase = {
     {
       "id": "ai-sister",
       "title": "AI Sister",
-      "repository_url": "https://github.com/FreeTWAI/AI-Sister",
+      "repository_url": "https://github.com/teddashh/AI-Sister",
       "description": "本機優先的桌面助理與專案設計。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/AI-Sister/fork",
@@ -2850,7 +2850,7 @@ const communityCatalogBase = {
     {
       "id": "multi-ai-desktop",
       "title": "Multi-AI Chat Desktop",
-      "repository_url": "https://github.com/FreeTWAI/multi-ai-chat-desktop",
+      "repository_url": "https://github.com/teddashh/multi-ai-chat-desktop",
       "description": "在自己的桌面協調多個 AI 對話與工作流。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/multi-ai-chat-desktop/fork",
@@ -2862,7 +2862,7 @@ const communityCatalogBase = {
     {
       "id": "multi-ai-chat",
       "title": "Multi-AI Chat",
-      "repository_url": "https://github.com/FreeTWAI/multi-ai-chat",
+      "repository_url": "https://github.com/teddashh/multi-ai-chat",
       "description": "多 AI 對話專案。",
       "kind": "reference",
       "fork_url": "https://github.com/FreeTWAI/multi-ai-chat/fork",

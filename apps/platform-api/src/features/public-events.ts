@@ -7,6 +7,7 @@ import { evaluateGuestEventRegistration, registerPublicEvent } from '../../../..
 import { readGuestEventCalendar } from '../../../../modules/community/event-calendar.js';
 import { readGuestEventReminder, saveGuestEventReminder } from '../../../../modules/community/event-reminders.js';
 import { mutateGuestEventParticipation, processEventWaitlist, readGuestEventParticipation, requestGuestEventParticipation } from '../../../../modules/community/event-waitlist.js';
+import { getAfterResponseSignal } from '../../../../modules/agent-commerce/operations/due-work.js';
 import type { PlatformFeatureApp, PlatformFeatureContext } from './context.js';
 
 /** Registered at its original position; common request boundaries stay in the host. */
@@ -14,7 +15,7 @@ export function registerPublicEventParticipationRoutes(app: PlatformFeatureApp, 
   const { pool, origin, runtime, authNetwork } = context;
   const dispatchGuest=(eventId:string)=>{
     const send=runtime.eventEmailSender;
-    if(send&&runtime.afterResponse)runtime.afterResponse(async()=>{await processEventWaitlist(pool,send,origin,undefined,eventId);});
+    if(send&&runtime.afterResponse)runtime.afterResponse(async()=>{await processEventWaitlist(pool,send,origin,undefined,eventId,getAfterResponseSignal());});
   };
   if(runtime.eventParticipationEnabled===true){
     const guestMutation=async(c:Context)=>{

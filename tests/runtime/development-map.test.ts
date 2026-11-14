@@ -7,6 +7,7 @@ import {developmentPages} from '../../modules/development/pages.js';
 import {TAB_TITLES} from '../../apps/portal-web/src/features/metadata.js';
 import {interfaceMessages} from '../../apps/portal-web/src/interface-messages.js';
 import {developmentMap,markdownBody} from '../../modules/development/service.js';
+import {distinctCopyUrl} from '../../modules/community/book-urls.js';
 import {PUBLIC_AUTHOR_CLAIM_SQL} from '../../modules/community/repo-author-claims.js';
 import {PUBLIC_BOOK_CACHE_SQL,PUBLIC_BOOK_METRICS_SQL} from '../../modules/shares/repository-cache.js';
 
@@ -46,7 +47,8 @@ test('every workspace page and entry flow maps to existing source, tests and an 
   for(const command of page.checks)for(const match of command.matchAll(/tests\/[\w/.-]+/g))assert.ok(existsSync(match[0]),match[0]);
  }
  for(const book of map.skill_books){
-  assert.ok(book.guide,book.id);assert.ok(repos.has(new URL(book.repository_url).pathname.slice(1)));
+  const copyUrl=distinctCopyUrl(book.fork_url,book.repository_url)??book.repository_url;
+  assert.ok(book.guide,book.id);assert.equal(book.repository_url,book.upstream_url,book.id);assert.ok(repos.has(new URL(copyUrl).pathname.slice(1)),book.id);
  }
 });
 

@@ -1,4 +1,5 @@
 import { communityCatalog } from '../community/catalog.js';
+import { bookRepositoryUrls } from '../community/book-urls.js';
 
 export interface CatalogBookMatch {
   book_id: string;
@@ -29,7 +30,7 @@ export function repositoryDisplayName(url: string | null | undefined): string | 
 const booksByRepository = new Map<string, CatalogBookMatch>();
 for (const book of communityCatalog.skill_books) {
   const match: CatalogBookMatch = { book_id: book.id, title: book.title, public_path: `/development/skills/${book.id}` };
-  for (const url of [book.repository_url, book.upstream_url]) {
+  for (const url of bookRepositoryUrls(book)) {
     const key = repositoryKey(url);
     if (key && !booksByRepository.has(key)) booksByRepository.set(key, match);
   }

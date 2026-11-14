@@ -1,4 +1,5 @@
 import { communityCatalog } from '../community/catalog.js';
+import { bookRepositoryUrls } from '../community/book-urls.js';
 
 /** owner/name from a GitHub repository URL, lowercased. Trailing slash and .git are ignored. */
 export function githubRepositoryPath(url: string): string | null {
@@ -15,16 +16,19 @@ export function githubRepositoryPath(url: string): string | null {
   }
 }
 
-/** Catalog book whose upstream_url or repository_url path equals this full name. Original URL matches first. */
+/** Catalog book whose original or copy repository path equals this full name. Originals match first. */
 export function skillBookIdForFullName(fullName: string): string | null {
   const target = fullName.toLowerCase();
-  for (const book of communityCatalog.skill_books) {
-    const upstreamPath = book.upstream_url ? githubRepositoryPath(book.upstream_url) : null;
-    if (upstreamPath && upstreamPath === target) return book.id;
+  const entries = communityCatalog.skill_books.map(book => ({ id: book.id, urls: bookRepositoryUrls(book) }));
+  for (const entry of entries) {
+    const originalPath = entry.urls[0] ? githubRepositoryPath(entry.urls[0]) : null;
+    if (originalPath && originalPath === target) return entry.id;
   }
-  for (const book of communityCatalog.skill_books) {
-    const path = githubRepositoryPath(book.repository_url);
-    if (path && path === target) return book.id;
+  for (const entry of entries) {
+    for (const url of entry.urls.slice(1)) {
+      const path = githubRepositoryPath(url);
+      if (path && path === target) return entry.id;
+    }
   }
   return null;
 }

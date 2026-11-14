@@ -7,7 +7,7 @@ import { createMemberSession, hashPasswordAsync, tokenHash, type Actor } from '.
 export type PasswordEmailSender=(to:string,url:string)=>Promise<void>;
 const RESET_LIFETIME_MINUTES=30;
 
-export async function requestPasswordReset(pool:Pool,email:string,origin:string,send:PasswordEmailSender){
+export async function requestPasswordReset(pool:Pool,email:string,origin:string,send:PasswordEmailSender,afterResponse?:(work:()=>Promise<void>)=>void){
   const normalized=email.trim().toLowerCase();
   const issued=await transaction(pool,async q=>{
     // Lock the current mailbox before inserting. INSERT's foreign-key share
@@ -23,13 +23,17 @@ export async function requestPasswordReset(pool:Pool,email:string,origin:string,
   });
   if(!issued)return;
   const url=`${origin}/#reset-password/${issued.token}`;
-  try{await send(normalized,url);}
-  catch(error){
-    await pool.query('DELETE FROM password_reset_tokens WHERE token_hash=$1',[issued.hash]).catch(()=>{});
-    // Never log recipient, token, URL, provider response body, or raw error.
-    const code=error&&typeof error==='object'&&'code' in error&&typeof error.code==='string'&&/^[A-Z_]{1,60}$/.test(error.code)?error.code:'unknown';
-    console.error('password_reset_send_failed',code);
-  }
+  const deliver=async()=>{
+    try{await send(normalized,url);}
+    catch(error){
+      await pool.query('DELETE FROM password_reset_tokens WHERE token_hash=$1',[issued.hash]).catch(()=>{});
+      // Never log recipient, token, URL, provider response body, or raw error.
+      const code=error&&typeof error==='object'&&'code' in error&&typeof error.code==='string'&&/^[A-Z_]{1,60}$/.test(error.code)?error.code:'unknown';
+      console.error('password_reset_send_failed',code);
+    }
+  };
+  if(afterResponse)afterResponse(deliver);
+  else await deliver();
 }
 
 export async function confirmPasswordReset(pool:Pool,rawToken:string,password:string){

@@ -377,24 +377,21 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
         RETURNING state,registration_attempt_id,credited_invitation_id`,[id,email,body.name,referrer,invitation?.invitation_id??null])).rows[0];
     }
     const capability=participationEnabled?await ensureGuestCapability(q,id,{...body,email}):null;
-    return {attempt_id:existing.registration_attempt_id,invitation_id:existing.credited_invitation_id,capability};
+    return {attempt_id:existing.registration_attempt_id,invitation_id:existing.credited_invitation_id,capability,
+      event:{event_id:row.event_id,title:row.title,starts_at:row.starts_at,ends_at:row.ends_at,location:row.location,online_url:row.online_url}};
   });
+  const local=(value:string)=>new Date(value).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',dateStyle:'medium',timeStyle:'short'});
+  const parts=[`你已申請參加「${registration.event.title}」。`,`時間：${local(registration.event.starts_at)} 至 ${local(registration.event.ends_at)}（台灣時間）`,
+    `地點：${registration.event.location}`,registration.event.online_url?`線上參與連結：${registration.event.online_url}`:'',`活動頁：${origin}/events/${registration.event.event_id}`,
+    registration.capability?`私人參與管理（請勿轉寄）：${eventGuestManagementLink(origin,id,registration.capability)}`:''].filter(Boolean);
+  try{await send(email,'自由工坊：活動參與資料',parts.join('\n\n'));}
+  catch{throw new Problem(503,'event_email_delivery_failed','郵件提供者尚未確認接受，請稍後重試。');}
   return transaction(pool,async q=>{
     const event=(await q.query('SELECT * FROM community_events WHERE event_id=$1 FOR UPDATE',[id])).rows[0];
     const reservation=(await q.query('SELECT state,registration_attempt_id FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2',[id,email])).rows[0];
-    requireCondition(event?.state==='published'&&Date.parse(event.starts_at)>Date.now()&&reservation&&reservation.state!=='cancelled'&&reservation.registration_attempt_id===registration.attempt_id,409,'event_closed','這筆報名已取消或失效，郵件未交給提供者。');
+    requireCondition(event?.state==='published'&&Date.parse(event.starts_at)>Date.now(),409,'event_closed','活動已開始或取消，這次通知可能已由郵件提供者接受。');
     requireCondition(event.registration_policy!=='community_member',403,'event_member_required','請登入本社群帳號後報名。');
-    const local=(value:string)=>new Date(value).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',dateStyle:'medium',timeStyle:'short'});
-    const parts=[`你已申請參加「${event.title}」。`,`時間：${local(event.starts_at)} 至 ${local(event.ends_at)}（台灣時間）`,
-      `地點：${event.location}`,event.online_url?`線上參與連結：${event.online_url}`:'',`活動頁：${origin}/events/${event.event_id}`,
-      registration.capability?`私人參與管理（請勿轉寄）：${eventGuestManagementLink(origin,id,registration.capability)}`:''].filter(Boolean);
-    // Check the hold after the event/reservation waits, before handing private details to the provider.
-    // An already-confirmed registration may resend; a pending hold must still be live now.
-    requireCondition((await q.query(`SELECT 1 FROM community_event_guest_rsvps WHERE event_id=$1 AND email=$2
-      AND registration_attempt_id=$3 AND (state='going' OR (state='pending' AND created_at>clock_timestamp()-interval '10 minutes'))`,[id,email,registration.attempt_id])).rowCount===1,
-      409,'event_closed','這筆報名已取消或失效，郵件未交給提供者。');
-    try{await send(email,'自由工坊：活動參與資料',parts.join('\n\n'));}
-    catch{throw new Problem(503,'event_email_delivery_failed','郵件提供者尚未確認接受，請稍後重試。');}
+    requireCondition(reservation&&reservation.state!=='cancelled'&&reservation.registration_attempt_id===registration.attempt_id,409,'event_closed','報名狀態已變更，請重新確認本人狀態。');
     // The live hold authorized dispatch; the event lock reserves its seat through provider acceptance.
     // Record that result even if only the hold expires, retaining the final event-start boundary below.
     const confirmed=await q.query("UPDATE community_event_guest_rsvps SET state='going',email_sent_at=now() WHERE event_id=$1 AND email=$2 AND registration_attempt_id=$3 AND state IN ('pending','going')",[id,email,registration.attempt_id]);

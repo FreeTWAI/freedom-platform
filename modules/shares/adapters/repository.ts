@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { shareRepositoryJson } from '../github.js';
 import { githubCoordinate, concealedRepository } from '../../opensource-marketing/github.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
+import { communityCatalog } from '../../community/catalog.js';
+import { distinctCopyUrl } from '../../community/book-urls.js';
+import { githubRepositoryPath } from '../../repo-maintainer/skill-books.js';
 import type { AdapterContext, PreparedShare, RepositoryFacts, ShareAdapter } from '../types.js';
 const counter=z.number().int().nonnegative().safe();
 const metricShape=z.object({stargazers_count:counter,forks_count:counter,open_issues_count:counter,subscribers_count:counter,pushed_at:z.iso.datetime().nullable(),language:z.string().max(100).nullable(),archived:z.literal(false)});
@@ -26,9 +29,25 @@ export async function repositoryFacts(url:string,context:AdapterContext={}):Prom
   }
   throw new Error('repository_resolution_limit');
 }
+const catalogCopyOriginals = new Map<string, string>();
+for (const book of communityCatalog.skill_books) {
+  const copyUrl = distinctCopyUrl(book.fork_url, book.repository_url);
+  const copyPath = copyUrl ? githubRepositoryPath(copyUrl) : null;
+  if (copyPath) catalogCopyOriginals.set(copyPath, book.repository_url);
+}
+
+function resolveShareRepositoryUrl(url: string): string {
+  // Validate the submitted GitHub URL before remapping a catalog workshop copy to its original.
+  const coordinate = githubCoordinate(url);
+  const path = githubRepositoryPath(`https://github.com/${coordinate}`);
+  return (path && catalogCopyOriginals.get(path)) ?? url;
+}
+
+// Share create may reuse a preview's facts (share_preview_facts); those facts already went through
+// resolveShareRepositoryUrl in prepare below, so a reused preview names the same original.
 export function preparedRepositoryShare(repository:RepositoryFacts):PreparedShare {
   return {kind:'repository',canonical_key:`github:${repository.id}`,canonical_url:repository.url,title:repository.full_name,repository};
 }
 export const repositoryAdapter:ShareAdapter={kind:'repository',async prepare(input,context){
-  return preparedRepositoryShare(await repositoryFacts(input.url??'',context));
+  return preparedRepositoryShare(await repositoryFacts(resolveShareRepositoryUrl(input.url??''),context));
 }};

@@ -1033,3 +1033,61 @@ test('POST /api/v1/shares/:id/links creates and reuses original promotion links 
   const agentGo = await (await app.request(`${origin}${agentBody.path}`)).text();
   assert.match(agentGo, new RegExp(`/events/${eventId}\\?ref=[A-Za-z0-9_-]+`));
 });
+
+test('preview and create on a catalog copy URL share the original, and a second member sharing the original joins it', async () => {
+  const { createApp } = await import('../../apps/platform-api/src/app.js');
+  const requestedPaths: string[] = [];
+  const fetcher: typeof fetch = async input => {
+    const path = new URL(String(input)).pathname;
+    requestedPaths.push(path);
+    if (path.endsWith('/readme')) return new Response('<p>README</p>');
+    if (path.endsWith('/releases/latest') || path.includes('/commits/')) return new Response(null, { status: 404 });
+    if (path === '/repos/FreeTWAI/claude-skill-social-post') {
+      return Response.json({ ...original, id: 9802, full_name: 'FreeTWAI/claude-skill-social-post', fork: false, owner: { id: 9809, login: 'FreeTWAI' } });
+    }
+    if (path === '/repos/Hao0321/claude-skill-social-post') {
+      return Response.json({ ...original, id: 9801, full_name: 'Hao0321/claude-skill-social-post', fork: false, owner: { id: 9800, login: 'Hao0321' } });
+    }
+    return new Response(null, { status: 404 });
+  };
+  const deferred: Promise<void>[] = [], origin = 'http://127.0.0.1:4310';
+  const app = createApp(pool, origin, 'local', { githubSocial: { fetcher }, afterResponse: work => { deferred.push(work()); } });
+  const signIn = async (email: string) => {
+    const login = await app.request(origin + '/api/v1/auth/login', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: DEMO_PASSWORD }) });
+    assert.equal(login.status, 200);
+    const session = await login.json() as { csrf_token: string };
+    return (key = randomUUID()) => ({ Origin: origin, Cookie: login.headers.get('set-cookie')!.split(';')[0], 'X-CSRF-Token': session.csrf_token, 'Content-Type': 'application/json', 'Idempotency-Key': key });
+  };
+  const headersForMember1 = await signIn('shares-2@example.com');
+  const headersForMember2 = await signIn('shares-3@example.com');
+
+  for (const copyUrl of ['https://github.com/FreeTWAI/claude-skill-social-post', 'https://github.com/freetwai/CLAUDE-SKILL-SOCIAL-POST/']) {
+    const previewResponse = await app.request(origin + '/api/v1/shares/preview', { method: 'POST', headers: headersForMember1(), body: JSON.stringify({ url: copyUrl }) });
+    assert.equal(previewResponse.status, 200);
+    const preview = await previewResponse.json() as { kind: string; title: string; url: string; original_author: string | null };
+    assert.equal(preview.kind, 'repository');
+    assert.equal(preview.title, 'Hao0321/claude-skill-social-post');
+    assert.equal(preview.url, 'https://github.com/Hao0321/claude-skill-social-post');
+    assert.equal(preview.original_author, 'Hao0321');
+  }
+
+  const invalidPreview = await app.request(origin + '/api/v1/shares/preview', { method: 'POST', headers: headersForMember1(), body: JSON.stringify({ url: 'https://user@github.com/FreeTWAI/claude-skill-social-post' }) });
+  assert.equal(invalidPreview.status, 422);
+
+  const createCopyResponse = await app.request(origin + '/api/v1/shares', { method: 'POST', headers: headersForMember1(), body: JSON.stringify({ url: 'https://github.com/FreeTWAI/claude-skill-social-post' }) });
+  assert.equal(createCopyResponse.status, 200);
+  const createdFromCopy = await createCopyResponse.json() as { share_id: string; created: boolean };
+  assert.equal(createdFromCopy.created, true);
+
+  const row = (await pool.query('SELECT canonical_key, canonical_url, title FROM shares WHERE share_id = $1', [createdFromCopy.share_id])).rows[0];
+  assert.deepEqual(row, { canonical_key: 'github:9801', canonical_url: 'https://github.com/Hao0321/claude-skill-social-post', title: 'Hao0321/claude-skill-social-post' });
+
+  const joinOriginalResponse = await app.request(origin + '/api/v1/shares', { method: 'POST', headers: headersForMember2(), body: JSON.stringify({ url: 'https://github.com/Hao0321/claude-skill-social-post' }) });
+  assert.equal(joinOriginalResponse.status, 200);
+  const joined = await joinOriginalResponse.json() as { share_id: string; created: boolean };
+  assert.equal(joined.created, false);
+  assert.equal(joined.share_id, createdFromCopy.share_id);
+
+  await Promise.all(deferred);
+  assert.equal(requestedPaths.includes('/repos/FreeTWAI/claude-skill-social-post'), false);
+});
