@@ -1221,6 +1221,988 @@
         }
       }
     },
+    "/events/{id}/update": {
+      "post": {
+        "operationId": "events.update",
+        "summary": "編輯自己的活動",
+        "x-required-scope": "share",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "最新活動 aggregate_version，含雙引號。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "body": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 3000
+                },
+                "starts_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "ends_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                },
+                "help_need": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "prize_details": {
+                  "maxItems": 5,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "prize_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 0,
+                        "maxLength": 500
+                      },
+                      "quantity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 500
+                      },
+                      "icon_id": {
+                        "type": "string",
+                        "enum": [
+                          "gift",
+                          "trophy",
+                          "medal",
+                          "book",
+                          "ticket",
+                          "voucher"
+                        ]
+                      },
+                      "completion_rule": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "claim_note": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "prize_id",
+                      "name",
+                      "description",
+                      "quantity",
+                      "icon_id",
+                      "completion_rule",
+                      "claim_note"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "registration_policy": {
+                  "type": "string",
+                  "enum": [
+                    "guest_allowed",
+                    "community_member"
+                  ]
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "online",
+                    "in_person",
+                    "hybrid"
+                  ]
+                },
+                "location": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
+                "event_kind": {
+                  "default": "other",
+                  "type": "string",
+                  "enum": [
+                    "reading_group",
+                    "meetup",
+                    "guild_skill_exchange",
+                    "other"
+                  ]
+                },
+                "topic": {
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 160
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "online_url": {
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "visibility": {
+                  "default": "workshop",
+                  "type": "string",
+                  "enum": [
+                    "workshop",
+                    "guild",
+                    "referral",
+                    "open"
+                  ]
+                },
+                "capacity": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guild_key": {
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source_cover_url": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "title",
+                "description",
+                "starts_at",
+                "ends_at",
+                "mode",
+                "location",
+                "capacity"
+              ],
+              "additionalProperties": false
+            },
+            "idempotency_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "body",
+            "idempotency_key",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000
+            },
+            "starts_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            "ends_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            "help_need": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "prize_details": {
+              "maxItems": 5,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "prize_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 500
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  },
+                  "icon_id": {
+                    "type": "string",
+                    "enum": [
+                      "gift",
+                      "trophy",
+                      "medal",
+                      "book",
+                      "ticket",
+                      "voucher"
+                    ]
+                  },
+                  "completion_rule": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "claim_note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "prize_id",
+                  "name",
+                  "description",
+                  "quantity",
+                  "icon_id",
+                  "completion_rule",
+                  "claim_note"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "registration_policy": {
+              "type": "string",
+              "enum": [
+                "guest_allowed",
+                "community_member"
+              ]
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "online",
+                "in_person",
+                "hybrid"
+              ]
+            },
+            "location": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "event_kind": {
+              "default": "other",
+              "type": "string",
+              "enum": [
+                "reading_group",
+                "meetup",
+                "guild_skill_exchange",
+                "other"
+              ]
+            },
+            "topic": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "online_url": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "visibility": {
+              "default": "workshop",
+              "type": "string",
+              "enum": [
+                "workshop",
+                "guild",
+                "referral",
+                "open"
+              ]
+            },
+            "capacity": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "guild_key": {
+              "default": null,
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "source_cover_url": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "description",
+            "starts_at",
+            "ends_at",
+            "mode",
+            "location",
+            "capacity"
+          ],
+          "additionalProperties": false
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 3000
+                  },
+                  "starts_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "ends_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "help_need": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "prize_details": {
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "prize_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "description": {
+                          "type": "string",
+                          "minLength": 0,
+                          "maxLength": 500
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 500
+                        },
+                        "icon_id": {
+                          "type": "string",
+                          "enum": [
+                            "gift",
+                            "trophy",
+                            "medal",
+                            "book",
+                            "ticket",
+                            "voucher"
+                          ]
+                        },
+                        "completion_rule": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "claim_note": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "prize_id",
+                        "name",
+                        "description",
+                        "quantity",
+                        "icon_id",
+                        "completion_rule",
+                        "claim_note"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "registration_policy": {
+                    "type": "string",
+                    "enum": [
+                      "guest_allowed",
+                      "community_member"
+                    ]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "online",
+                      "in_person",
+                      "hybrid"
+                    ]
+                  },
+                  "location": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "event_kind": {
+                    "default": "other",
+                    "type": "string",
+                    "enum": [
+                      "reading_group",
+                      "meetup",
+                      "guild_skill_exchange",
+                      "other"
+                    ]
+                  },
+                  "topic": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 160
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "online_url": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "visibility": {
+                    "default": "workshop",
+                    "type": "string",
+                    "enum": [
+                      "workshop",
+                      "guild",
+                      "referral",
+                      "open"
+                    ]
+                  },
+                  "capacity": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "guild_key": {
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "source_cover_url": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2048
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "title",
+                  "description",
+                  "starts_at",
+                  "ends_at",
+                  "mode",
+                  "location",
+                  "capacity"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "title": "讀書會",
+                "description": "一起交流",
+                "starts_at": "2099-01-10T10:00:00Z",
+                "ends_at": "2099-01-10T11:00:00Z",
+                "mode": "online",
+                "location": "線上",
+                "capacity": null
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。"
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。"
+          },
+          "403": {
+            "description": "權限不足或功能未開放。"
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。"
+          },
+          "429": {
+            "description": "已達限制，停止操作。"
+          }
+        }
+      }
+    },
+    "/events/{id}/announcements": {
+      "post": {
+        "operationId": "events.announce",
+        "summary": "通知活動參加者",
+        "x-required-scope": "share",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "最新活動 aggregate_version，含雙引號。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "body": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "additionalProperties": false
+            },
+            "idempotency_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "body",
+            "idempotency_key",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "required": [
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "message"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "message": "活動通知"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。"
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。"
+          },
+          "403": {
+            "description": "權限不足或功能未開放。"
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。"
+          },
+          "429": {
+            "description": "已達限制，停止操作。"
+          }
+        }
+      }
+    },
+    "/events/{id}/cancel": {
+      "post": {
+        "operationId": "events.cancel",
+        "summary": "取消自己的活動",
+        "x-required-scope": "share",
+        "security": [
+          {
+            "AgentBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "最新活動 aggregate_version，含雙引號。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-input-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "body": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            },
+            "idempotency_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{8,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "body",
+            "idempotency_key",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "x-body-schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "操作成功；欄位沿用原會員 API。"
+          },
+          "401": {
+            "description": "金鑰到期、撤銷或停用。"
+          },
+          "403": {
+            "description": "權限不足或功能未開放。"
+          },
+          "409": {
+            "description": "內容或狀態衝突，停止並詢問會員。"
+          },
+          "429": {
+            "description": "已達限制，停止操作。"
+          }
+        }
+      }
+    },
     "/events/{id}/interest": {
       "post": {
         "operationId": "events.interest",

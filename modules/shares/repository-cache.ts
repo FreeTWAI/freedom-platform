@@ -160,7 +160,14 @@ export async function repositoryPage(q:PoolClient,repoId:string) {
   const f=(row.facts??{}) as Partial<RepositoryFacts>&{quick_start?:unknown};
   const metrics=(await q.query('SELECT snapshot,checked_at FROM github_repository_metrics WHERE repository_key=$1',[row.full_name.toLowerCase()])).rows[0];
   const currentMetrics=metrics?.snapshot?.repository_identity?.id===row.provider_repo_id&&(!row.fetched_at||new Date(metrics.checked_at)>=new Date(row.fetched_at));
-  return {full_name:row.full_name,url:row.current_url,description:row.description,topics:row.topics,license_spdx:row.license_spdx,readme_html:row.readme_html??'',quick_start:typeof f.quick_start==='string'?f.quick_start:`git clone https://github.com/${row.full_name}.git`,latest_release:row.latest_release,stars:currentMetrics?metrics.snapshot.stargazers_count:f.stars??null,original_author:f.owner_login??row.full_name.split('/')[0],fetched_at:row.fetched_at,fetch_state:row.fetch_state,stale:!row.fetched_at||Date.now()-new Date(row.fetched_at).getTime()>86400000};
+  const social=currentMetrics?metrics.snapshot:f.metrics;
+  const count=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:null;
+  let homepage:string|null=null;
+  try{const url=new URL(row.homepage);if(['http:','https:'].includes(url.protocol)&&!url.username&&!url.password)homepage=url.href;}catch{}
+  return {full_name:row.full_name,url:row.current_url,description:row.description,topics:Array.isArray(row.topics)?row.topics.slice(0,5):[],license_spdx:row.license_spdx,homepage,
+    forks_count:count(social?.forks_count),open_issues_count:count(social?.open_issues_count),subscribers_count:count(social?.subscribers_count),
+    pushed_at:typeof social?.pushed_at==='string'&&!Number.isNaN(Date.parse(social.pushed_at))?social.pushed_at:null,
+    readme_html:row.readme_html??'',quick_start:typeof f.quick_start==='string'?f.quick_start:`git clone https://github.com/${row.full_name}.git`,latest_release:row.latest_release,stars:currentMetrics?metrics.snapshot.stargazers_count:f.stars??null,original_author:f.owner_login??row.full_name.split('/')[0],fetched_at:row.fetched_at,fetch_state:row.fetch_state,stale:!row.fetched_at||Date.now()-new Date(row.fetched_at).getTime()>86400000};
 }
 type CachedRepoRow={
   provider_repo_id:string;

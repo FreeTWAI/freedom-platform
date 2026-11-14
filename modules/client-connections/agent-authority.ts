@@ -32,6 +32,19 @@ export async function lockAgent(q:PoolClient,actor:Actor,write=false) {
   await assertAgentClock(q,actor);
   requireCondition(a.scope&&row.scopes.includes(a.scope),403,'scope_required','Agent 沒有這項權限。');
 }
+/** Bound auxiliary agent requests before any network fetch or token issuance. */
+export async function consumeAgentRequestBudget(pool:Pool,actor:Actor) {
+ await transaction(pool,async q=>{
+  await lockAgent(q,actor,true);
+  const bucket=tokenHash(`agent-auxiliary/${actor.agent!.connection_id}`);
+  const usage=await q.query(`INSERT INTO auth_rate_limits(bucket,attempts,window_start) VALUES($1,1,clock_timestamp())
+   ON CONFLICT(bucket) DO UPDATE SET
+    attempts=CASE WHEN auth_rate_limits.window_start<=clock_timestamp()-interval '1 day' THEN 1 ELSE auth_rate_limits.attempts+1 END,
+    window_start=CASE WHEN auth_rate_limits.window_start<=clock_timestamp()-interval '1 day' THEN clock_timestamp() ELSE auth_rate_limits.window_start END
+   WHERE auth_rate_limits.window_start<=clock_timestamp()-interval '1 day' OR auth_rate_limits.attempts<100 RETURNING attempts`,[bucket]);
+  requireCondition(usage.rowCount===1,429,'agent_daily_cap','Agent 今日操作已達上限。');
+ });
+}
 export const publicationDigest=(operation:string,key:string,body:unknown,expected?:string)=>digest({operation,key,body,expected:expected??null});
 /** Persist the first exact proposed publication without running the domain handler. */
 export async function stageAgentPublication(pool:Pool,actor:Actor,operation:string,key:string,body:unknown,expected?:string) {
@@ -78,9 +91,12 @@ export async function recordAgentPublication<T>(q:PoolClient,actor:Actor,operati
  return {...r,via_agent:true} as T;
 }
 export async function recordAgentResponse(pool:Pool,actor:Actor,status:number) {
- if(idleFeedActors.delete(actor)&&status>=200&&status<300)return;
+ if(idleFeedActors.delete(actor)&&status>=200&&status<300){
+  await pool.query('UPDATE agent_token_connections SET failure_count=0 WHERE connection_id=$1 AND failure_count<>0',[actor.agent!.connection_id]);
+  return;
+ }
  await pool.query(`UPDATE agent_token_connections SET last_used_at=clock_timestamp(),
- failure_count=CASE WHEN $2 BETWEEN 400 AND 499 THEN failure_count+1 ELSE failure_count END,
- suspended_at=CASE WHEN $2 BETWEEN 400 AND 499 AND failure_count>=9 THEN COALESCE(suspended_at,clock_timestamp()) ELSE suspended_at END
+ failure_count=CASE WHEN $2 BETWEEN 200 AND 299 THEN 0 WHEN $2 BETWEEN 400 AND 499 AND $2 NOT IN (409,429) THEN failure_count+1 ELSE failure_count END,
+ suspended_at=CASE WHEN $2 BETWEEN 400 AND 499 AND $2 NOT IN (409,429) AND failure_count>=9 THEN COALESCE(suspended_at,clock_timestamp()) ELSE suspended_at END
  WHERE connection_id=$1`,[actor.agent!.connection_id,status]);
 }

@@ -3,6 +3,7 @@ import {details,eventSource,eventRsvpInput} from '../../../modules/community/eve
 import {actionInput} from '../../../modules/community/event-waitlist.js';
 import {projectInput} from '../../../modules/opensource-marketing/service.js';
 import {shareInput} from '../../../modules/shares/service.js';
+import {text} from '../../../packages/shared/validation.js';
 import type {AgentOperation} from './agent-allowlist.js';
 
 // JSON input projections; cross-field business rules remain with the domain parser.
@@ -17,6 +18,8 @@ const newEventInput=z.object({...details.shape,...eventSource.shape,
 const empty=z.object({}).strict();
 export const agentBodySchemas:Record<string,z.ZodType>={
  'tools.identity':empty,'events.list':empty,'events.read':empty,'events.share':newEventInput,
+ 'events.update':details.safeExtend({source_cover_url:eventSource.shape.source_cover_url.optional()}),
+ 'events.announce':z.object({message:text(300)}).strict(),'events.cancel':empty,
  'events.links':empty,'events.interest':empty,'events.rsvp':eventRsvpInput,'events.waitlist':actionInput,
  'repositories.share':projectInput,'credit.records':empty,'credit.outcomes':empty,'credit.achievements':empty,
  'notifications.list':empty,'agent.events':empty,'shares.preview':shareInput,'shares.create':shareInput,

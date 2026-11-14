@@ -563,7 +563,7 @@ export async function updateEvent(pool:Pool,input:Command,id:string) {
   let photoRemovalDeadline:number|undefined;
   return command(pool,input,async q=>{
     const row=await scopedEvent(q,input.actor,id);
-    requireCondition(!input.actor.agent&&row.organizer_ref===input.actor.user_id,403,'organizer_required','只能編輯自己發佈的活動。');
+    requireCondition(row.organizer_ref===input.actor.user_id,403,'organizer_required','只能編輯自己發佈的活動。');
     requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動正在檢舉處理中。');
     await refuseInternGuildExchange(q,input.actor,row);
   },async q=>{
@@ -586,6 +586,7 @@ export async function updateEvent(pool:Pool,input:Command,id:string) {
     photoRemovalDeadline=Math.min(Date.parse(row.starts_at),Date.parse(body.starts_at));
     const updated=(await q.query(`UPDATE community_events SET title=$2,description=$3,starts_at=$4,ends_at=$5,mode=$6,location=$7,capacity=$8,
       event_kind=$9,topic=$10,online_url=$11,visibility=$12,help_need=$13,registration_policy=$14,prize_details=$15::jsonb,source_cover_url=$16,aggregate_version=aggregate_version+1,updated_at=now() WHERE event_id=$1 RETURNING *`,[id,body.title,body.description,body.starts_at,body.ends_at,body.mode,body.location,body.capacity,body.event_kind,body.topic,body.online_url,body.visibility,body.help_need===undefined?row.help_need:body.help_need,body.registration_policy??row.registration_policy,JSON.stringify(body.prize_details===undefined?row.prize_details:body.prize_details),source_cover_url===undefined?row.source_cover_url:source_cover_url])).rows[0];
+    if(row.title!==body.title)await q.query("UPDATE shares SET title=$2 WHERE kind='event' AND ref_id=$1 AND community_id=$3",[id,body.title,input.actor.community_id]);
     if(row.state==='published')await reconcileEventSchedule(q,id,body.starts_at);
     const current=await scopedEvent(q,input.actor,id);
     if(row.state==='published')await recordEventChange(q,row,current);
@@ -604,7 +605,7 @@ export async function cancelEvent(pool:Pool,input:Command,id:string,participatio
   z.object({}).strict().parse(input.body);
   return command(pool,input,async q=>{
     const row=await scopedEvent(q,input.actor,id);
-    requireCondition(!input.actor.agent&&row.organizer_ref===input.actor.user_id,403,'organizer_required','只能取消自己發佈的活動。');
+    requireCondition(row.organizer_ref===input.actor.user_id,403,'organizer_required','只能取消自己發佈的活動。');
     await refuseInternGuildExchange(q,input.actor,row);
   },async q=>{
     const row=await scopedEvent(q,input.actor,id,true);
@@ -625,7 +626,7 @@ export async function announceEvent(pool:Pool,input:Command,id:string){
   const body=z.object({message:text(300)}).strict().parse(input.body);
   const authorize=async(q:PoolClient,lock=false)=>{
     const row=await scopedEvent(q,input.actor,id,lock);
-    requireCondition(!input.actor.agent&&row.organizer_ref===input.actor.user_id,403,'organizer_required','只有主辦者可通知參加者。');
+    requireCondition(row.organizer_ref===input.actor.user_id,403,'organizer_required','只有主辦者可通知參加者。');
     await refuseInternGuildExchange(q,input.actor,row);
     requireCondition(!await eventIsHeld(q,row),409,'share_unavailable','這場活動正在檢舉處理中。');
     return row;

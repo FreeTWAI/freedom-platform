@@ -33,9 +33,22 @@ test('organizer edits published fields atomically; capacity, immutable audience 
  assert.deepEqual(await updateEvent(pool,command,e.event_id),JSON.parse(JSON.stringify(updated)));
  await assert.rejects(updateEvent(pool,cmd(actors[0],b,current.aggregate_version),e.event_id),{status:412});
 });
-test('non-organizers, another community and agent authority cannot update or cancel',async()=>{
+test('event title and its share title change in the same transaction',async()=>{
+ const e=await create(),changed=await updateEvent(pool,cmd(actors[0],{...fields(e),title:'同步的新標題'},e.aggregate_version),e.event_id);
+ assert.equal((await pool.query('SELECT title FROM shares WHERE share_id=$1',[e.share_id])).rows[0].title,'同步的新標題');
+ await pool.query(`CREATE FUNCTION refuse_test_share_title() RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN IF NEW.title='必須回滾的標題' THEN RAISE EXCEPTION 'synthetic share failure'; END IF; RETURN NEW; END $$`);
+ await pool.query('CREATE TRIGGER refuse_test_share_title BEFORE UPDATE ON shares FOR EACH ROW EXECUTE FUNCTION refuse_test_share_title()');
+ try{
+  await assert.rejects(updateEvent(pool,cmd(actors[0],{...fields(changed),title:'必須回滾的標題'},changed.aggregate_version),e.event_id),/synthetic share failure/);
+  const event=(await pool.query('SELECT title,aggregate_version FROM community_events WHERE event_id=$1',[e.event_id])).rows[0];
+  assert.equal(event.title,'同步的新標題');assert.equal(Number(event.aggregate_version),Number(changed.aggregate_version));
+  assert.equal((await pool.query('SELECT title FROM shares WHERE share_id=$1',[e.share_id])).rows[0].title,'同步的新標題');
+ }finally{await pool.query('DROP TRIGGER refuse_test_share_title ON shares');await pool.query('DROP FUNCTION refuse_test_share_title()');}
+});
+test('non-organizers and another community cannot update or cancel',async()=>{
  const e=await create();
- for(const actor of [actors[1],actors[2],{...actors[0],community_id:randomUUID()},{...actors[0],agent:{}} as unknown as Actor]){
+ for(const actor of [actors[1],actors[2],{...actors[0],community_id:randomUUID()}]){
   await assert.rejects(updateEvent(pool,cmd(actor,fields(e),e.aggregate_version),e.event_id));
   await assert.rejects(cancelEvent(pool,cmd(actor,{},e.aggregate_version),e.event_id));
  }
@@ -81,7 +94,7 @@ test('announcements are owner-only, bounded, replay-safe and limited to three pe
  const {announceEvent}=await import('../../modules/community/events.js');
  const e=await createEvent(pool,cmd(actors[4],{title:`合成公告 ${randomUUID()}`,starts_at:'2099-03-01T10:00:00Z',location:'場地'}));
  await setRsvp(pool,cmd(actors[1],{going:true}),e.event_id);
- for(const actor of [actors[1],actors[2],{...actors[4],community_id:randomUUID()},{...actors[4],agent:{}} as unknown as Actor])await assert.rejects(announceEvent(pool,cmd(actor,{message:'通知'},e.aggregate_version),e.event_id));
+ for(const actor of [actors[1],actors[2],{...actors[4],community_id:randomUUID()}])await assert.rejects(announceEvent(pool,cmd(actor,{message:'通知'},e.aggregate_version),e.event_id));
  await assert.rejects(announceEvent(pool,cmd(actors[4],{message:'字'.repeat(301)},e.aggregate_version),e.event_id));
  await assert.rejects(announceEvent(pool,cmd(actors[4],{message:'通知',recipients:[actors[2].user_id]},e.aggregate_version),e.event_id));
  const version=async()=>Number((await pool.query('SELECT aggregate_version FROM community_events WHERE event_id=$1',[e.event_id])).rows[0].aggregate_version);
