@@ -266,6 +266,8 @@ const FOUNDATION_NAMES = [
   '211_original_shares.sql',
   // Credit qualified clicks on platform and member_card promotion links through shares without altering existing click branches.
   '212_click_credit_kinds.sql',
+  // Per-member cache of resolved GitHub repository facts between share preview and create (reused for 15 minutes, pruned after an hour); no publication or release authority.
+  '213_share_preview_facts.sql',
 ];
 // Not in SHAPES or CAPABILITIES: candidate enablement and host arrays cannot name it.
 export const INTERNAL_V2_SHAPE = Object.freeze({

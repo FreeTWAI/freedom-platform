@@ -536,7 +536,7 @@ test('work shares keep non-opted-in works member-only and link opted-in works ou
  const storedShare = (await pool.query('SELECT kind, canonical_url, ref_id FROM shares WHERE share_id=$1', [workShare.share_id])).rows[0];
  assert.equal(storedShare.kind, 'work');
  assert.equal(storedShare.canonical_url, `/#showcase/${work.showcase_id}`);
- await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id), { code: 'use_original_share' });
+ await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id), { code: 'work_not_public' });
 
  // Owner opts in for the exact work version.
  const enabled = await setShowcaseSharing(pool, { ...cmd(creator, { enabled: true, work_version: String(work.aggregate_version) }, 'sharing'), expected: String(work.aggregate_version) }, work.showcase_id);
@@ -568,7 +568,7 @@ test('work shares keep non-opted-in works member-only and link opted-in works ou
  const afterWithdrawGo = await promotionGo(pool, links.code, undefined, 'http://127.0.0.1:4310');
  assert.equal(afterWithdrawGo, null);
  assert.equal(await readPublicWork(pool, work.showcase_id, DEMO_COMMUNITY, links.code), null);
- await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id), { code: 'use_original_share' });
+ await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), workShare.share_id), { code: 'work_not_public' });
 });
 
 
@@ -584,7 +584,7 @@ test('work previews never disclose an internal share snapshot after editing and 
   title:'Approved public work', description:'Approved public summary', public_url:'https://example.com/approved-version',
  }, 'edit'), expected:String(withdrawn.aggregate_version)}, work.showcase_id);
  const published = await publishOwnShowcase(pool, {...cmd(creator, {consent_to_share:true}, 'publish'), expected:String(edited.aggregate_version)}, work.showcase_id);
- await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), share.share_id), {code:'use_original_share'});
+ await assert.rejects(shareLink(pool, cmd(sharer, {}, 'links'), share.share_id), {code:'work_not_public'});
  const approved = await setShowcaseSharing(pool, {...cmd(creator, {enabled:true, work_version:String(published.aggregate_version)}, 'sharing'), expected:String(published.aggregate_version)}, work.showcase_id);
  const link = await shareLink(pool, cmd(sharer, {}, 'links'), share.share_id);
  const projection = await readPublicWork(pool, work.showcase_id, DEMO_COMMUNITY);
@@ -894,4 +894,142 @@ test('public /s/:id and /events/:id have one primary CTA, unique link destinatio
   const mainSlice = eventHtml.split('<main>')[1] ?? '';
   const beforeFirstAction = mainSlice.slice(0, mainSlice.search(/<(?:a|button)\b/)).replace(/<[^>]*>/g, '').replace(event.title, '').trim();
   assert.ok(beforeFirstAction.length <= 20, `expected <=20 static chars before first action, got ${beforeFirstAction.length}: ${beforeFirstAction}`);
+});
+
+test('POST /api/v1/shares/:id/links creates and reuses original promotion links for event, post and service shares (member and agent)', async () => {
+  const { createApp } = await import('../../apps/platform-api/src/app.js');
+  const { DEMO_PASSWORD } = await import('../../packages/testing/seed.js');
+  const origin = 'http://127.0.0.1:4310';
+  const app = createApp(pool, origin, 'local', { registrationCommunityId: DEMO_COMMUNITY });
+
+  const createUserLogin = async (label: string) => {
+    const id = randomUUID();
+    const email = `shares-link-${label}-${id.slice(0, 8)}@example.com`;
+    await pool.query(
+      `INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required)
+       SELECT $1,community_id,$2,'Synthetic sharer',password_hash,$3,true,false FROM users WHERE user_id=$4`,
+      [id, email, randomUUID(), DEMO_USERS[0].user_id],
+    );
+    const res = await app.request(`${origin}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { Origin: origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: DEMO_PASSWORD }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json() as { csrf_token: string };
+    const cookie = res.headers.get('set-cookie')!.split(';')[0];
+    return {
+      userId: id,
+      actor: { user_id: id, community_id: DEMO_COMMUNITY } as Actor,
+      req: async (path: string, payload?: unknown, method = 'POST', extra: Record<string, string> = {}) => {
+        const headers: Record<string, string> = { Origin: origin, Cookie: cookie, 'X-CSRF-Token': body.csrf_token, ...extra };
+        if (method !== 'GET') {
+          headers['Content-Type'] = 'application/json';
+          headers['Idempotency-Key'] = randomUUID();
+        }
+        const r = await app.request(`${origin}${path}`, { method, headers, body: payload === undefined ? undefined : JSON.stringify(payload) });
+        return { status: r.status, data: await r.json() as any };
+      },
+    };
+  };
+
+  const creator = await createUserLogin('creator');
+  const sharer = await createUserLogin('sharer');
+  const agentOwner = await createUserLogin('agent');
+
+  const eventRes = await creator.req('/api/v1/events', {
+    title: '統一連結測試活動',
+    description: '活動說明',
+    starts_at: new Date(Date.now() + 86400000).toISOString(),
+    ends_at: new Date(Date.now() + 90000000).toISOString(),
+    mode: 'online',
+    location: '線上',
+    capacity: 20,
+    visibility: 'open',
+  });
+  assert.equal(eventRes.status, 201);
+  const eventId = eventRes.data.event_id as string;
+
+  const noteRes = await creator.req('/api/v1/social-posts/notes', { text: '公開貼文\n內容' });
+  assert.equal(noteRes.status, 201);
+  const postId = noteRes.data.post_id as string;
+  const shareState = await creator.req(`/api/v1/social-posts/${postId}/public-sharing`, undefined, 'GET');
+  assert.equal(shareState.status, 200);
+  const enablePost = await creator.req(
+    `/api/v1/social-posts/${postId}/public-sharing`,
+    { enabled: true, post_revision: shareState.data.post_revision, media_version: shareState.data.media_version },
+    'POST',
+    { 'If-Match': `"${shareState.data.version}"` },
+  );
+  assert.equal(enablePost.status, 200);
+
+  const privateNoteRes = await creator.req('/api/v1/social-posts/notes', { text: '未公開貼文\n內容' });
+  assert.equal(privateNoteRes.status, 201);
+  const privatePostId = privateNoteRes.data.post_id as string;
+
+  const serviceId = randomUUID();
+  await pool.query(
+    `INSERT INTO member_services(service_id,community_id,owner_user_id,title,category,summary,service_mode,contacts,state)
+     VALUES($1,$2,$3,'統一連結測試服務','language','服務簡介','online','[{"label":"網站","url":"https://example.com/svc"}]'::jsonb,'active')`,
+    [serviceId, DEMO_COMMUNITY, actors[0].user_id],
+  );
+
+  const work = await createShowcase(pool, cmd(actors[0], { title: '未公開作品', description: '內容', artifact_ref: 'artifact:unshared-work', consent_to_share: true }, 'showcases'));
+
+  const eventShare = await sharer.req('/api/v1/shares', { kind: 'event', ref_id: eventId });
+  const postShare = await sharer.req('/api/v1/shares', { kind: 'post', ref_id: postId });
+  const privatePostShare = await sharer.req('/api/v1/shares', { kind: 'post', ref_id: privatePostId });
+  const serviceShare = await sharer.req('/api/v1/shares', { kind: 'service', ref_id: serviceId });
+  const workShare = await sharer.req('/api/v1/shares', { kind: 'work', ref_id: work.showcase_id });
+  for (const s of [eventShare, postShare, privatePostShare, serviceShare, workShare]) assert.equal(s.status, 200);
+
+  const cases = [
+    { shareId: eventShare.data.share_id as string, expectedPattern: new RegExp(`/events/${eventId}\\?ref=[A-Za-z0-9_-]+`) },
+    { shareId: postShare.data.share_id as string, expectedPattern: new RegExp(`/posts/${postId}`) },
+    { shareId: serviceShare.data.share_id as string, expectedPattern: new RegExp(`/services/${serviceId}`) },
+  ];
+
+  for (const item of cases) {
+    const first = await sharer.req(`/api/v1/shares/${item.shareId}/links`, {});
+    assert.equal(first.status, 200, JSON.stringify(first.data));
+    assert.notEqual(first.data.code, 'use_original_share');
+    assert.match(first.data.path, /^\/go\/[A-Za-z0-9_-]{10}$/);
+    const goRes = await app.request(`${origin}${first.data.path}`);
+    assert.equal(goRes.status, 200);
+    const goHtml = await goRes.text();
+    assert.match(goHtml, item.expectedPattern);
+
+    const second = await sharer.req(`/api/v1/shares/${item.shareId}/links`, {});
+    assert.equal(second.status, 200);
+    assert.equal(second.data.code, first.data.code);
+    assert.equal(second.data.path, first.data.path);
+  }
+
+  const privatePostLink = await sharer.req(`/api/v1/shares/${privatePostShare.data.share_id}/links`, {});
+  assert.equal(privatePostLink.status, 404);
+  assert.notEqual(privatePostLink.data.code, 'use_original_share');
+
+  const workLink = await sharer.req(`/api/v1/shares/${workShare.data.share_id}/links`, {});
+  assert.notEqual(workLink.status, 200);
+  assert.notEqual(workLink.data.code, 'use_original_share');
+
+  // Agent operation shares.links works for an event share endorsed by the token owner.
+  const agentShare = await agentOwner.req('/api/v1/shares', { kind: 'event', ref_id: eventId });
+  assert.equal(agentShare.status, 200);
+  const issued = await agentOwner.req('/api/v1/me/agent-tokens', { name: 'Shares Agent', scopes: ['read', 'share'] });
+  assert.equal(issued.status, 201);
+  const agentRes = await app.request(`${origin}/api/v1/shares/${agentShare.data.share_id}/links`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${issued.data.access_token}`,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': randomUUID(),
+    },
+    body: JSON.stringify({}),
+  });
+  assert.equal(agentRes.status, 200);
+  const agentBody = await agentRes.json() as { path: string; code: string };
+  assert.match(agentBody.path, /^\/go\/[A-Za-z0-9_-]{10}$/);
+  const agentGo = await (await app.request(`${origin}${agentBody.path}`)).text();
+  assert.match(agentGo, new RegExp(`/events/${eventId}\\?ref=[A-Za-z0-9_-]+`));
 });

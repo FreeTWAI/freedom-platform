@@ -38,7 +38,7 @@ export function createShareRoutes(pool:Pool,context:AdapterContext={},loadSocial
   });
   app.post('/shares/:share_id/retract',async c=>c.json(await retractShare(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')))));
   app.post('/shares/:share_id/report',async c=>c.json(await reportShare(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')))));
-  app.post('/shares/:share_id/links',async c=>c.json(await shareLink(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')))));
+  app.post('/shares/:share_id/links',async c=>c.json(await shareLink(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')),context.publicCommunity)));
   if(loadSocial){
     app.post('/shares/:share_id/star',async c=>c.json(await starShare(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')),await loadSocial())));
     app.post('/shares/:share_id/claim',async c=>c.json(await claimShareAuthor(pool,await moduleCommand(c),z.uuid().parse(c.req.param('share_id')),await loadSocial())));

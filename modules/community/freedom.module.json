@@ -141,6 +141,7 @@
     "tests/runtime/event-publication.test.ts",
     "modules/community/event-page.ts",
     "apps/platform-api/src/routes/event-pages.ts",
+    "apps/portal-web/public/service-page.js",
     "apps/portal-web/public/event-page.js",
     "apps/portal-web/public/event-page.css",
     "modules/community/event-sharing.ts",

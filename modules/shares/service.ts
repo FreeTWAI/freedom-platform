@@ -1,6 +1,6 @@
 import {requireSharePublicationQuota} from './publication-quota.js';
 import {createEvent} from '../community/events.js';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Pool, PoolClient } from 'pg';
 import { command, journal, type Command } from '../../packages/db/index.js';
@@ -9,11 +9,13 @@ import { readWithMemberSession } from '../../packages/db/member-session.js';
 import { requireCondition } from '../../packages/shared/problem.js';
 import { authRateLimit } from '../identity-membership/members.js';
 import type { Actor } from '../identity-membership/service.js';
+import { githubCoordinate } from '../opensource-marketing/github.js';
 import { shareAdapter } from './adapters/registry.js';
+import { preparedRepositoryShare } from './adapters/repository.js';
 import { manualShareLink } from './adapters/link.js';
 import { existingTitle,existingReadableSql,feedShareSql,hiddenEventReadableSql } from './adapters/existing.js';
 import { endorseShare, creditEventRegistrations } from './credit.js';
-import { createPromotionLinkRow } from '../community/promotion.js';
+import { assertPromotionTarget, createPromotionLinkRow } from '../community/promotion.js';
 import { readPublicWork } from '../opportunity-project-work/public-sharing.js';
 import type { AdapterContext, PreparedShare, RepositoryFacts, ShareRow } from './types.js';
 export const shareInput=z.object({kind:z.enum(['repository','link','event','work','post','service']).optional(),url:z.string().trim().max(2048).optional(),ref_id:z.uuid().optional(),text:z.string().trim().max(500).optional(),guild_key:z.string().max(100).optional(),event:z.record(z.string(),z.unknown()).optional(),source:z.object({tool_id:z.string().regex(/^[a-z][a-z0-9-]{0,47}$/),guild_key:z.string().regex(/^guild_[a-zA-Z0-9_]+$/),ref:z.string().max(200).optional()}).strict().optional()}).strict();
@@ -31,17 +33,74 @@ export async function readShare(q:PoolClient,actor:Actor,id:string,lock=false):P
 export async function visibleShare(q:PoolClient,actor:Actor,id:string,lock=false) {
   const s=await readShare(q,actor,id,lock);requireCondition(s.state==='published',404,'not_found','分享已停止公開。');return s;
 }
-async function prepare(pool:Pool,input:Command,context:AdapterContext,allowManual=false) {
+const cachedRepositoryMetrics=z.object({
+  stargazers_count:z.number().int().nonnegative().safe(),
+  forks_count:z.number().int().nonnegative().safe(),
+  open_issues_count:z.number().int().nonnegative().safe(),
+  subscribers_count:z.number().int().nonnegative().safe(),
+  pushed_at:z.string().nullable(),
+  language:z.string().max(100).nullable(),
+  archived:z.literal(false),
+  repository_identity:z.object({id:z.string().min(1),full_name:z.string().min(1),owner_id:z.string().min(1)}).optional(),
+});
+const cachedRepositoryFacts=z.object({
+  metrics:cachedRepositoryMetrics.optional(),
+  id:z.string().min(1),
+  full_name:z.string().min(1),
+  url:z.string().min(1),
+  description:z.string(),
+  archived:z.literal(false),
+  fork:z.literal(false),
+  owner_id:z.string().min(1),
+  owner_login:z.string().min(1),
+  default_branch:z.string().min(1),
+  stars:z.number().int().nonnegative().safe(),
+  topics:z.array(z.string()),
+  homepage:z.string().nullable(),
+  license_spdx:z.string().nullable(),
+  head_sha:z.string().nullable().optional(),
+});
+function repositoryUrlKey(url?:string):string|null {
+  if(!url)return null;
+  try {
+    return createHash('sha256').update(githubCoordinate(url).toLowerCase()).digest('hex');
+  } catch {
+    return null;
+  }
+}
+async function prepare(pool:Pool,input:Command,context:AdapterContext,allowManual=false,reusePreview=false) {
   const body=(allowManual&&!input.actor.agent?shareCreateInput:shareInput).parse(input.body) as ShareCommandBody,adapter=shareAdapter(body);
   requireCondition(body.manual_title===undefined||(allowManual&&!input.actor.agent&&(!body.kind||body.kind==='link')),422,'invalid_share_url','請貼上公開 HTTPS 網址。');
-  await readWithMemberSession(pool,input.actor,async()=>{});
+  const urlKey=body.manual_title===undefined&&adapter.kind==='repository'?repositoryUrlKey(body.url):null;
+  let cached:RepositoryFacts|null=null;
+  await readWithMemberSession(pool,input.actor,async q=>{
+    if(!reusePreview||!urlKey)return;
+    const row=(await q.query<{facts:unknown}>(
+      `SELECT facts FROM share_preview_facts WHERE user_id=$1 AND url_key=$2 AND created_at > now() - interval '15 minutes'`,
+      [input.actor.user_id,urlKey],
+    )).rows[0];
+    const parsed=row?cachedRepositoryFacts.safeParse(row.facts):null;
+    if(parsed?.success)cached=parsed.data;
+  });
   await authRateLimit(pool,'share-preview-member',input.actor.user_id,120,3600);
-  const prepared=body.manual_title===undefined?await adapter.prepare(body,context):manualShareLink(body.url??'',body.manual_title);
+  const prepared=body.manual_title===undefined
+    ?(cached?preparedRepositoryShare(cached):await adapter.prepare(body,context))
+    :manualShareLink(body.url??'',body.manual_title);
   if(adapter.authorize)await readWithMemberSession(pool,input.actor,q=>adapter.authorize!(q,input.actor,prepared));
-  return prepared;
+  return {prepared,urlKey};
 }
 export async function previewShare(pool:Pool,input:Command,context:AdapterContext={}) {
-  const p=await prepare(pool,input,context);
+  const {prepared:p,urlKey}=await prepare(pool,input,context);
+  if(p.kind==='repository'&&p.repository&&urlKey){
+    await readWithMemberSession(pool,input.actor,async q=>{
+      await q.query(
+        `INSERT INTO share_preview_facts(user_id,url_key,facts,created_at)
+         VALUES($1,$2,$3::jsonb,now())
+         ON CONFLICT(user_id,url_key) DO UPDATE SET facts=EXCLUDED.facts,created_at=now()`,
+        [input.actor.user_id,urlKey,JSON.stringify(p.repository)],
+      );
+    });
+  }
   return {kind:p.kind,title:p.title,url:p.canonical_url,description:p.repository?.description??'',original_author:p.repository?.owner_login??null,...(p.event?{event:p.event}:{})};
 }
 async function saveRepository(q:PoolClient,p:PreparedShare) {
@@ -59,7 +118,8 @@ export async function createShare(pool:Pool,input:Command,context:AdapterContext
   // A completed retry never depends on upstream availability. command still validates the digest and current authority.
   const receipt=async(q:PoolClient)=>(await q.query('SELECT response FROM command_receipts WHERE user_id=$1 AND operation=$2 AND idempotency_key=$3',[input.actor.user_id,memberReceiptOperation(input),input.key])).rows[0]?.response as {share_id:string}|undefined;
   const prior=await readWithMemberSession(pool,input.actor,receipt);
-  const p=prior?null:await prepare(pool,input,context,true);
+  const prepared=prior?null:await prepare(pool,input,context,true,true);
+  const p=prepared?.prepared??null;
   if(p?.repository)onRepositoryPrepared?.(p.repository);
   requireCondition(!p?.event,422,'event_details_required','請確認活動名稱、時間和地點。');
   return command(pool,input,async q=>{
@@ -136,14 +196,27 @@ export async function reportShare(pool:Pool,input:Command,id:string) {
     return {recorded:true};
   });
 }
-export async function shareLink(pool:Pool,input:Command,id:string) {
+const ORIGINAL_PROMOTION_KIND = {
+  event: 'event',
+  post: 'social_post',
+  service: 'member_service',
+} as const;
+
+export async function shareLink(pool:Pool,input:Command,id:string,publicCommunity?:string|null) {
   z.object({}).strict().parse(input.body);
   return command(pool,input,q=>visibleShare(q,input.actor,id,true),async q=>{
-    // Restricted domain objects use their original sharing surface unless the creator opted into public work reading.
     const s=await visibleShare(q,input.actor,id);
-    const workPublic=s.kind==='work'&&s.ref_id?Boolean(await readPublicWork(q,s.ref_id,input.actor.community_id)):false;
-    requireCondition(['repository','link'].includes(s.kind)||workPublic,422,'use_original_share','請使用原頁面的分享。');
-    const {row}=await createPromotionLinkRow(q,{community_id:input.actor.community_id,user_id:input.actor.user_id,kind:'share',target_key:id});
+    let linkKind: 'share' | 'event' | 'social_post' | 'member_service' = 'share';
+    let targetKey = id;
+    if (s.kind === 'event' || s.kind === 'post' || s.kind === 'service') {
+      requireCondition(s.ref_id, 404, 'not_found', '找不到分享。');
+      linkKind = ORIGINAL_PROMOTION_KIND[s.kind];
+      targetKey = (await assertPromotionTarget(q, input.actor, linkKind, s.ref_id, publicCommunity)).key;
+    } else {
+      const workPublic=s.kind==='work'&&s.ref_id?Boolean(await readPublicWork(q,s.ref_id,input.actor.community_id)):false;
+      requireCondition(['repository','link'].includes(s.kind)||workPublic,422,'work_not_public','這件作品尚未開放公開閱讀。');
+    }
+    const {row}=await createPromotionLinkRow(q,{community_id:input.actor.community_id,user_id:input.actor.user_id,kind:linkKind,target_key:targetKey});
     return {path:`/go/${row.code}`,code:row.code};
   });
 }
