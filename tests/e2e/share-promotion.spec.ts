@@ -205,11 +205,15 @@ test('sharing the workshop from home and the leaderboard uses one personal link'
   await expect(page).toHaveURL(url => url.pathname === '/' && url.search === '');
   await openBoards(page);
   await expect(board(page, '平台推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
-  // 我的 now presents results; reuse the existing personal link through its copy action.
-  const existing = page.getByRole('region', {name:'我的推廣連結',exact:true}).getByRole('listitem').filter({has:page.getByText('自由工坊',{exact:true})});
-  await existing.getByRole('button', {name:'複製',exact:true}).click();
-  await expect(page.getByRole('status').filter({hasText:'已複製連結'})).toHaveText('已複製連結');
+  // 我的貢獻 presents results once; reuse the existing personal link through 再分享.
+  const existing = page.getByRole('region', { name: '我的貢獻', exact: true }).getByRole('article').filter({ has: page.getByText('自由工坊', { exact: true }) });
+  await existing.getByRole('button', { name: '再分享', exact: true }).click();
+  const reshare = page.getByRole('dialog', { name: '分享「自由工坊」', exact: true });
+  await expect(reshare.locator('.skill-share-url')).toHaveText(platformGo);
+  await reshare.getByRole('button', { name: '複製連結', exact: true }).click();
+  await expect(reshare.getByRole('status')).toHaveText('已複製。');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(platformGo);
+  await reshare.getByRole('button', { name: '關閉分享', exact: true }).click();
   await creditVisit(browser, platformGo, url => url.pathname === '/' && url.search === '', e2eAuthPool);
   await page.reload();
   await openBoards(page);
@@ -442,15 +446,12 @@ test('all six boards render, and a board with no clicks says so', async ({ page 
   await expect(board(page, '業務推廣排行榜')).toContainText('這段期間還沒有計入的點擊。');
   await expect(page.getByText('計分規則', { exact: true })).toBeVisible();
   const note = page.locator('.promotion-period-note');
-  const mine = page.getByRole('region', { name: '我的推廣連結', exact: true });
+  await expect(page.getByRole('region', { name: '我的推廣連結', exact: true })).toHaveCount(0);
   await expect(note).toHaveText(/^本週：從 \d{1,2}\/\d{1,2}（週一） 00:00（台北時間）起算。每塊榜列出前 10 名，同分同名次。$/);
-  await expect(mine).toContainText('右側數字是本週的點擊分數。');
   await page.getByRole('button', { name: '本月', exact: true }).click();
   await expect(note).toHaveText(/^本月：從 \d{1,2}\/1（週.） 00:00（台北時間）起算。/);
-  await expect(mine).toContainText('右側數字是本月的點擊分數。');
   await page.getByRole('button', { name: '累計', exact: true }).click();
   await expect(note).toHaveText('累計：開站以來的全部點擊。每塊榜列出前 10 名，同分同名次。');
-  await expect(mine).toContainText('右側數字是累計的點擊分數。');
 });
 
 test('計分規則 shows a disclosure marker and opens from a click or Enter', async ({ page }) => {
@@ -851,7 +852,7 @@ test('sharing starts with real content choices and keeps ranking optional', asyn
   await expect(page.locator('.legacy-promotion')).not.toHaveAttribute('open');
   await page.locator('.legacy-promotion > summary').click();
   await expect(page.locator('.promotion-rankings')).not.toHaveAttribute('open');
-  await expect(page.getByRole('region',{name:'我的推廣連結',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'我的推廣連結',exact:true})).toHaveCount(0);
   expect(creates).toBe(0);
   const summary=page.locator('.promotion-rankings > summary');
   await summary.focus(); await summary.press('Enter');
@@ -868,13 +869,12 @@ test('sharing starts with real content choices and keeps ranking optional', asyn
 
 test('failed personal-link reads are not presented as an empty sharing history', async ({page}) => {
   await login(page);
-  await page.route('**/api/v1/promotion/links/mine?period=*', route => route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({status:503,detail:'合成讀取失敗'})}));
+  await page.route('**/api/v1/me/share-results*', route => route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({status:503,detail:'合成讀取失敗'})}));
   await navigate(page, '推廣排行榜');
-  await page.locator('.legacy-promotion > summary').click();
-  const mine=page.getByRole('region',{name:'我的推廣連結',exact:true});
-  await expect(mine).toContainText('尚未取得連結紀錄，請重新載入。');
-  await expect(mine).not.toContainText('還沒有建立分享連結。');
-  await page.unroute('**/api/v1/promotion/links/mine?period=*');
-  await page.getByRole('button',{name:'重新載入分享紀錄',exact:true}).click();
-  await expect(mine).not.toContainText('尚未取得連結紀錄');
+  const credit=page.getByRole('region',{name:'我的貢獻',exact:true});
+  await expect(credit.getByRole('alert')).toBeVisible();
+  await expect(credit).not.toContainText('還沒有分享。');
+  await page.unroute('**/api/v1/me/share-results*');
+  await credit.getByRole('button',{name:'再試一次',exact:true}).click();
+  await expect(credit.getByRole('alert')).toHaveCount(0);
 });
