@@ -18,7 +18,8 @@ const schema=`fp_skill_submission_test_${process.pid}_${Date.now()}`,admin=creat
 const pool=new Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`,max:12});
 
 // Exercise the real global Origin/body/session middleware and public routes.
-const platform=createApp(pool,origin);
+// Isolate route-level GitHub fetch counts and bounded pools from post-response share attachment.
+const platform=createApp(pool,origin,'local',{afterResponse:()=>{}});
 const app=platform;
 
 interface Session{cookie:string;csrf:string;user:any}
@@ -490,7 +491,7 @@ test('publication and source import roll back together, and the same request saf
 test('two concurrent publications fit a two-connection pool without nested checkout deadlock', {timeout:10000}, async t=>{
  mockGitHub(t);const owner=await login(),drafts=[await uploaded(owner),await uploaded(owner)];
  const limited=new Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`,max:2,connectionTimeoutMillis:1500});
- const limitedApp=createApp(limited,origin),originalFetch=globalThis.fetch;
+ const limitedApp=createApp(limited,origin,'local',{afterResponse:()=>{}}),originalFetch=globalThis.fetch;
  const barrier=deferred();let arrived=0;
  t.mock.method(globalThis,'fetch',async (...args:Parameters<typeof fetch>)=>{
   if(String(args[0])==='https://api.github.com/repos/example/project'){if(++arrived===2)barrier.resolve();await barrier.promise;}
@@ -544,7 +545,7 @@ test('a rate-limited publish keeps the draft and the same draft can be published
  let mode:'limited'|'ok'='limited';
  const calls:{authorization:string|null;signal:AbortSignal|null|undefined}[]=[];
  const sha='c'.repeat(40);
- const tokenApp=createApp(pool,origin,'local',{githubSocial:{metricsToken:token}});
+ const tokenApp=createApp(pool,origin,'local',{githubSocial:{metricsToken:token},afterResponse:()=>{}});
  t.mock.method(globalThis,'fetch',async(input:string|URL|Request,init?:RequestInit)=>{
   const url=String(input),headers=new Headers(init?.headers);
   calls.push({authorization:headers.get('Authorization'),signal:init?.signal});

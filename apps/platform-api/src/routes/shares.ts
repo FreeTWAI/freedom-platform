@@ -8,6 +8,7 @@ import { moduleCommand, type PlatformEnv } from '../module-context.js';
 import { createShare, previewShare, visibleShare, listShares, myCredit, retractShare, reportShare, shareLink } from '../../../../modules/shares/service.js';
 import { refreshRepository,repositoryPage } from '../../../../modules/shares/repository-cache.js';
 import { starShare,claimShareAuthor } from '../../../../modules/shares/repository-actions.js';
+import { attachMemberRepositoryShare } from '../../../../modules/shares/repository-sources.js';
 import type { socialLoader } from './github-social.js';
 import type { AdapterContext,RepositoryFacts } from '../../../../modules/shares/types.js';
 export function createShareRoutes(pool:Pool,context:AdapterContext={},loadSocial?:ReturnType<typeof socialLoader>,afterResponse?:(work:()=>Promise<void>)=>void) {
@@ -45,6 +46,35 @@ export function createShareRoutes(pool:Pool,context:AdapterContext={},loadSocial
   }
   app.get('/me/credit',async c=>c.json(await readWithMemberSession(pool,c.get('actor'),q=>myCredit(q,c.get('actor'),c.req.query()))));
   return app;
+}
+
+// Run as an app-level observer before skill-submission routes so they need not import modules/shares (which depends on skill-submissions).
+// Any attach deferred because GitHub resolution failed or raced is completed later by the repository-share backfill.
+export function registerShareAttachments(app:Hono<any>,pool:Pool,context:AdapterContext={},afterResponse?:(work:()=>Promise<void>)=>void){
+  const schedule=(ref:{project_id:string;submission_id?:string})=>{
+    const work=()=>attachMemberRepositoryShare(pool,ref,context).then(()=>{});
+    if(afterResponse)afterResponse(work);else void work().catch(()=>{});
+  };
+  const readJson=async(res:Response):Promise<Record<string,unknown>|null>=>{
+    try{const v=await res.clone().json();return v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;}catch{return null;}
+  };
+  app.use('/api/v1/opensource/projects',async(c,next)=>{
+    await next();
+    if(c.req.method!=='POST'||c.res.status<200||c.res.status>=300)return;
+    const body=await readJson(c.res);
+    const project=z.uuid().safeParse(body?.project_id);
+    if(project.success)schedule({project_id:project.data});
+  });
+  app.use('/api/v1/me/skill-submissions/:id/publish',async(c,next)=>{
+    await next();
+    if(c.req.method!=='POST'||c.res.status<200||c.res.status>=300)return;
+    const body=await readJson(c.res);
+    const project=z.uuid().safeParse(body?.project_id);
+    const submission=z.uuid().safeParse(body?.submission_id);
+    if(project.success&&submission.success&&body?.status==='published'&&submission.data.toLowerCase()===c.req.param('id').toLowerCase()){
+      schedule({project_id:project.data,submission_id:submission.data});
+    }
+  });
 }
 
 export function acceptsHtml(accept?:string){

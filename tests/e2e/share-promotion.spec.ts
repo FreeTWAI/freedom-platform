@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { navigate, expandHomeSections, selectSocialFeed, openSkillCardMore } from './navigation.js';
 import { test, expect, type Browser, type Page } from './fixtures.js';
+import { communityCatalog } from '../../modules/community/catalog.js';
+import { attachRepositorySources, bookSource } from '../../modules/shares/repository-sources.js';
+import type { RepositoryFacts } from '../../modules/shares/types.js';
 
 const GUEST_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 const SHOTS = process.env.AUDIT_EVIDENCE_DIR ?? 'test-results/share-promotion';
@@ -96,6 +99,37 @@ function contrast(foreground: string, background: string) {
 
 test('a skill-book share link credits one guest click on the weekly board', async ({ page, browser, e2eAuthPool }) => {
   test.setTimeout(60_000);
+  // Catalog books earn points through their repository share;
+  // the share backfill (O3) makes it, and this case makes the one the backfill would make.
+  const book = communityCatalog.skill_books.find(b => b.id === 'social-post');
+  if (!book) throw new Error('Missing social-post catalog book');
+  const community = COMMUNITY;
+  const facts: RepositoryFacts = {
+    id: '990000101',
+    full_name: 'Hao0321/claude-skill-social-post',
+    url: book.upstream_url,
+    description: book.description,
+    archived: false,
+    fork: false,
+    owner_id: '990000100',
+    owner_login: 'Hao0321',
+    default_branch: 'main',
+    stars: 0,
+    topics: [],
+    homepage: null,
+    license_spdx: book.license_status,
+  };
+  const client = await e2eAuthPool.connect();
+  try {
+    await client.query('BEGIN');
+    await attachRepositorySources(client, { community, facts, sources: [bookSource(community, book)] });
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
   await login(page);
   await navigate(page, '技能書架');
   await page.getByRole('button', { name: '未解鎖', exact: true }).click();
@@ -109,24 +143,24 @@ test('a skill-book share link credits one guest click on the weekly board', asyn
   await expect(url).toHaveText(/\/go\/[A-Za-z0-9_-]{10}(\?intro=\d+)?$/);
   await expect(dialog.locator('.share-credit-note')).toHaveText('有人點開，會記在你名下。');
   const boardsBefore = await (await page.request.get('/api/v1/promotion/leaderboards?period=week')).json() as { boards: { kind: string; me?: { points: number } | null }[] };
-  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'skill_book')?.me?.points ?? 0);
+  const weekBefore = Number(boardsBefore.boards.find(board => board.kind === 'repository')?.me?.points ?? 0);
   const go = (await url.innerText()).trim();
   await page.keyboard.press('Escape');
 
   await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post', e2eAuthPool);
   await page.goto('/');
   await openBoards(page);
-  const skill = board(page, '技能推廣排行榜');
-  await expect(skill).toContainText('示範創作者');
-  await expect(skill).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
-  await expect(skill.locator('li').filter({ hasText: '示範創作者' }).locator('.promotion-rank')).toHaveText('第 1 名');
+  const repo = board(page, '開源專案');
+  await expect(repo).toContainText('示範創作者');
+  await expect(repo).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
+  await expect(repo.locator('li').filter({ hasText: '示範創作者' }).locator('.promotion-rank')).toHaveText('第 1 名');
 
   await creditVisit(browser, go, url => url.pathname === '/development/skills/social-post', e2eAuthPool);
   await page.goto(go);
   await expect(page).toHaveURL(/\/development\/skills\/social-post/);
   await page.goto('/');
   await openBoards(page);
-  await expect(board(page, '技能推廣排行榜')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
+  await expect(board(page, '開源專案')).toContainText(`我的名次：第 1 名・${weekBefore + 1} 分`);
 });
 
 test('an event share link lands on the public page and shows the click', async ({ page, browser, e2eAuthPool }) => {
