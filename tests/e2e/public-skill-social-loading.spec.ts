@@ -18,7 +18,7 @@ for(const width of [390,1280])test(`first-viewport GitHub controls enhance witho
   await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
   await expect(social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
   await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
-  await expect(page.locator('.sp-engagement [data-share-launch]')).toBeInViewport();
+  await expect(page.locator('.public-skill-entry [data-share-launch]')).toBeInViewport();
   await expect(page.locator('[data-skill-author]')).toBeInViewport();
   expect(chunks).toHaveLength(1);expect(writes).toEqual([]);
 });
@@ -27,7 +27,7 @@ for(const width of [390,1280])test(`an offscreen GitHub section still defers its
   await page.setViewportSize({width,height:844});const chunks:string[]=[],writes:string[]=[];
   page.on('request',request=>{if(widgetChunk(request.url()))chunks.push(request.url());if(request.method()==='POST')writes.push(request.url());});
   // Exercise the observer's offscreen case while keeping the real SSR and entry script.
-  // The product places these controls in the hero; this test-only layout moves them away.
+  // The product places the enhanced controls in the hero; this test-only layout moves them away.
   await page.route('**/development.css',async route=>{
     const response=await route.fetch();const css=await response.text();
     await route.fulfill({response,body:css+'\n[data-skill-social]{margin-top:1600px!important}'});
@@ -39,7 +39,9 @@ for(const width of [390,1280])test(`an offscreen GitHub section still defers its
   await expect(social(page)).not.toBeInViewport();
   expect(chunks).toEqual([]);
   await expect(social(page).locator('[data-github-book]')).toHaveCount(0);
-  const fallback=social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true,includeHidden:true});await expect(fallback).toHaveAttribute('href',original+'/fork');
+  const fallback=social(page).getByRole('link',{name:'到 GitHub 加星 ↗',exact:true});await expect(fallback).toHaveAttribute('href',original);
+  await page.locator('#skill-usage-notes > summary').click();
+  await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
   await social(page).scrollIntoViewIfNeeded();await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
   expect(chunks).toHaveLength(1);await expect(social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
   await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
@@ -50,9 +52,10 @@ test('a failed enhancement chunk preserves reading, signup and native first-view
   let attempts=0;await page.route(url=>widgetChunk(url.href),route=>{attempts++;return route.abort();});await page.goto(path);await entryReady(page);
   await expect.poll(()=>attempts).toBe(1);
   await expect(social(page)).toBeInViewport();
-  await expect(social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
-  await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
-  await expect(page.locator('.sp-engagement [data-share-launch]')).toHaveAttribute('href','#share-title');
+  await expect(social(page).getByRole('link',{name:'到 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',original);
+  await page.locator('#skill-usage-notes > summary').click();
+  await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
+  await expect(page.locator('.public-skill-entry [data-share-launch]')).toHaveAttribute('href','#share-title');
   await expect(social(page).locator('[data-github-book]')).toHaveCount(0);
   await page.getByRole('link',{name:'免費加入，探索更多資源',exact:true}).click();
   await expect(page.getByRole('heading',{name:'加入自由工坊',exact:true})).toBeVisible();
@@ -85,13 +88,14 @@ test('loading a widget does not remove a focused public link while the reader ta
   try{
     const requested=page.waitForRequest(request=>widgetChunk(request.url()));
     await page.goto(path,{waitUntil:'domcontentloaded'});await entryReady(page);await requested;
-    const fallback=social(page).getByRole('link',{name:'到 GitHub Star ↗',exact:true});await fallback.focus();
+    const fallback=social(page).getByRole('link',{name:'到 GitHub 加星 ↗',exact:true});await fallback.focus();
     const chunk=page.waitForResponse(response=>widgetChunk(response.url()));release();await (await chunk).finished();
     await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
     await expect(fallback).toBeFocused();await expect(social(page).locator('[data-github-book]')).toHaveCount(0);
-    await page.keyboard.press('Tab');await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toBeFocused();
-    await page.keyboard.press('Tab');await expect(page.locator('.sp-engagement [data-share-launch]')).toBeFocused();
+    await page.keyboard.press('Tab');await expect(page.locator('.public-skill-entry [data-share-launch]')).toBeFocused();
     await expect(social(page).locator('[data-github-book="social-post"]')).toBeVisible();
-    await expect(page.locator('.sp-engagement [data-share-launch]')).toBeFocused();
+    await expect(page.locator('.public-skill-entry [data-share-launch]')).toBeFocused();
+    await page.keyboard.press('Shift+Tab');await expect(social(page).getByText('更多',{exact:true})).toBeFocused();
+    await page.keyboard.press('Shift+Tab');await expect(social(page).getByRole('link',{name:'Fork 專案 ↗',exact:true})).toBeFocused();
   }finally{release();await page.unrouteAll({behavior:'wait'});}
 });

@@ -97,11 +97,13 @@ test('visible book widgets share actual metrics and confirmed Star state across 
   const modal=page.getByRole('dialog',{name:'Hao 社群貼文技能書',exact:true});
   await expect(modal.getByRole('button',{name:'Star',exact:true})).toBeEnabled();expect(starReads).toBe(1);expect(reads.get('social-post')).toBe(1);
   await expect(modal.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',`${original}/fork`);
+  await modal.locator('.skill-intro-primary-actions .github-metrics-details > summary').click();
   await expect(modal.getByRole('link',{name:'追蹤專案（Watch）↗',exact:true})).toHaveAttribute('href',original);
   await expect(modal.getByRole('link',{name:'Follow 原作者 ↗',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
-  await modal.locator('.github-star-count').click();await expect(modal.getByRole('button',{name:'取消 Star',exact:true})).toHaveAttribute('aria-pressed','true');await expect(modal.locator('.github-star-icon')).toHaveText('★');
+  await modal.locator('.skill-intro-primary-actions .github-metrics-details > summary').click();
+  await modal.locator('.skill-intro-primary-actions .github-star-count').click();await expect(modal.getByRole('button',{name:'取消 Star',exact:true})).toHaveAttribute('aria-pressed','true');await expect(modal.locator('.skill-intro-primary-actions .github-star-icon')).toHaveText('★');
   // The provider's public count still says 127; a local click must not invent 128.
-  await expect(modal.locator('.github-star-count')).toHaveText('127');
+  await expect(modal.locator('.skill-intro-primary-actions .github-star-count')).toHaveText('127');
   await page.keyboard.press('Escape');await expect(modal).not.toBeVisible();await expect(opener).toBeFocused();
   const cancelStar=widget.getByRole('button',{name:'取消 Star',exact:true});await expect(cancelStar).toBeEnabled();await cancelStar.focus();await expect(cancelStar).toBeFocused();await page.keyboard.press('Space');await expect(widget.getByRole('button',{name:'Star',exact:true})).toHaveAttribute('aria-pressed','false');await expect(widget.locator('.github-star-icon')).toHaveText('☆');
   expect(writes).toEqual([{starred:true,confirmed:true},{starred:false,confirmed:true}]);
@@ -260,7 +262,7 @@ test('public skill first-viewport actions support Star, Fork, sharing and the au
   expect(writes).toEqual([{starred:true,confirmed:true},{starred:false,confirmed:true}]);
   await page.setViewportSize({width:320,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   const fork=social.getByRole('link',{name:'Fork 專案 ↗',exact:true});
-  const author=page.locator('[data-skill-author]'),share=page.locator('.sp-engagement [data-share-launch]');
+  const author=page.locator('[data-skill-author]'),share=page.locator('.public-skill-entry [data-share-launch]');
   for(const control of [social.getByRole('button',{name:'Star',exact:true}),fork,author,share]){
     await expect(control).toBeInViewport();expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
@@ -269,7 +271,7 @@ test('public skill first-viewport actions support Star, Fork, sharing and the au
   await share.click();await expect(page.locator('[data-share-dialog]')).toBeVisible();
   await page.locator('[data-share-close]').click();await expect(share).toBeFocused();
   await author.click();const card=page.getByRole('dialog',{name:'自由工坊名片',exact:true});await expect(card).toBeVisible();
-  const authorOpened=page.waitForEvent('popup');await card.getByRole('link',{name:'查看來源 GitHub ↗',exact:true}).click();const authorPage=await authorOpened;
+  const authorOpened=page.waitForEvent('popup');await card.getByRole('link',{name:'查看原作 GitHub ↗',exact:true}).click();const authorPage=await authorOpened;
   await expect(authorPage).toHaveURL('https://github.com/Hao0321');await expect(authorPage.getByRole('heading')).toHaveText('Synthetic GitHub destination');await authorPage.close();
   await card.getByRole('button',{name:'關閉作者名片',exact:true}).click();await expect(author).toBeFocused();
   await page.screenshot({path:'test-results/public-skill-github-actions-phone.png',fullPage:false});
@@ -314,16 +316,18 @@ test('public Star, Fork, sharing and author source stay available without login 
   await expect(social.getByRole('link',{name:'到 GitHub Star ↗',exact:true})).toHaveAttribute('href',original);
   await expect(social.getByRole('link',{name:'Fork 專案 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
   await page.locator('[data-skill-author]').click();const card=page.getByRole('dialog',{name:'自由工坊名片',exact:true});
-  await expect(card).toBeVisible();await expect(card.getByRole('link',{name:'查看來源 GitHub ↗',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
+  await expect(card).toBeVisible();await expect(card.getByRole('link',{name:'查看原作 GitHub ↗',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
   await card.getByRole('button',{name:'關閉作者名片',exact:true}).click();
   const context=await browser.newContext({javaScriptEnabled:false});
   try{
     const plain=await context.newPage();await plain.goto(new URL('/development/skills/social-post',page.url()).href);
     const links=plain.locator('[data-skill-social="social-post"]');
     await expect(links).toBeInViewport();
-    for(const [name,url] of [['到 GitHub Star ↗',original],['Fork 專案 ↗',original+'/fork']])await expect(links.getByRole('link',{name,exact:true})).toHaveAttribute('href',url);
-    await expect(plain.getByRole('link',{name:'查看來源 GitHub',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
-    const share=plain.locator('.sp-engagement [data-share-launch]');await expect(share).toHaveAttribute('href','#share-title');
+    await expect(links.getByRole('link',{name:'到 GitHub 加星 ↗',exact:true})).toHaveAttribute('href',original);
+    await plain.locator('#skill-usage-notes > summary').click();
+    await expect(plain.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href',original+'/fork');
+    await expect(plain.getByRole('link',{name:'查看原作 GitHub',exact:true})).toHaveAttribute('href','https://github.com/Hao0321');
+    const share=plain.locator('.public-skill-entry [data-share-launch]');await expect(share).toHaveAttribute('href','#share-title');
     await share.click();await expect(plain.locator('#share-title')).toBeInViewport();
   }finally{await context.close();}
 });
