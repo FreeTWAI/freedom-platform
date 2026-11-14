@@ -37,7 +37,6 @@
     "tests/e2e/supplier-console-navigation.spec.ts",
     "tests/e2e/supplier-console-visual.spec.ts",
     "tests/e2e/supplier-console-queries.spec.ts",
-    "tests/e2e/supplier-console-report.spec.ts",
     "tests/e2e/supplier-console-materials.spec.ts",
     "docs/platform-plan/execution/supplier-console/**",
     "tests/e2e/supplier-console-search.spec.ts"

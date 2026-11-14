@@ -26,6 +26,7 @@
     "apps/portal-web/src/modules/GuildLeadership.tsx",
     "apps/portal-web/src/modules/GuildLeadership.css",
     "apps/portal-web/src/modules/GuildMembers.tsx",
+    "apps/portal-web/src/modules/GuildMemberCard.tsx",
     "apps/portal-web/src/modules/GuildMembers.css",
     "apps/portal-web/src/modules/GuildQuestions.tsx",
     "apps/portal-web/src/modules/GuildDesign.css",
