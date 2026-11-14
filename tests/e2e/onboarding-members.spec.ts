@@ -618,3 +618,17 @@ test('removing saved custom choices alone protects unsaved positioning changes',
   page.once('dialog',dialog=>dialog.dismiss());await navigate(page,'工坊夥伴');await expect(page).toHaveURL(/#guilds\/guild_talent_direction\/tools\/assessment$/);
   await expect(page.getByRole('button',{name:'移除裝備：已保存的裝備',exact:true})).toHaveCount(0);
 });
+
+test('guilds place renders partial directory items without skill_books before opening positioning',async({page})=>{
+  await register(page,'部分公會目錄');await completeOrientation(page);
+  const item={guild_key:'test_guild',name:'測試公會',question_set_version:'v1',outdated:false,answers:null,aggregate_version:null,updated_at:null};
+  await page.route('**/api/v1/me/guild-answers',route=>route.fulfill({json:{items:[item]}}));
+  await page.route('**/api/v1/guilds/directory',route=>route.fulfill({json:{items:[{guild_key:'test_guild',name:'測試公會',entry_questions:{questions:[{id:'q1',prompt:'想練習什麼？',options:[{id:'a',label:'練習寫作'},{id:'b',label:'練習設計'}]}]}}]}}));
+  await navigate(page,'職業公會');
+  const directoryCard=page.locator('.guild-card').filter({hasText:'測試公會'});
+  await expect(directoryCard).toBeVisible();
+  await expect(directoryCard).toContainText('技能書整理中');
+  await expect(directoryCard.getByRole('button',{name:'公會技能書庫 · 0',exact:true})).toBeVisible();
+  await navigate(page,'我的定位');
+  await expect(page.getByRole('article',{name:'測試公會',exact:true}).getByRole('button',{name:'回答',exact:true})).toBeVisible();
+});
