@@ -148,6 +148,15 @@
       "auth_profile": "public-anonymous-read"
     },
     {
+      "surface_id": "skill-submissions.upload-page",
+      "kind": "page",
+      "entry": "apps/portal-web/src/modules/SkillSubmission.tsx",
+      "operations": [
+        "skill-submissions.upload-page.view"
+      ],
+      "auth_profile": "member-session"
+    },
+    {
       "surface_id": "skill-submissions.manual-page",
       "kind": "page",
       "entry": "apps/portal-web/src/modules/SkillSubmission.tsx",
