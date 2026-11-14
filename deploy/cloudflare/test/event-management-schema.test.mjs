@@ -16,6 +16,7 @@ test('209 extends the exact unchanged 208 ledger with only its reviewed migratio
 test('management stores versioned changes and bounded announcements without exporting contacts',()=>{
  assert.match(sql,/PRIMARY KEY\(event_id,event_version\)/);
  assert.match(sql,/length\(trim\(body\)\) BETWEEN 1 AND 300/);
- assert.match(sql,/ADD COLUMN body text CHECK\(length\(body\)<=2000\)/);
+ // 209's constraints are added NOT VALID, so an older Worker on this schema keeps working (PERF-1).
+ assert.match(sql,/ADD COLUMN body text;\nALTER TABLE community_event_participation_notices ADD CONSTRAINT community_event_participation_notices_body_check CHECK\(length\(body\)<=2000\) NOT VALID;/);
  assert.doesNotMatch(sql,/\bGRANT\b|SECURITY DEFINER|CREATE ROLE/i);
 });
