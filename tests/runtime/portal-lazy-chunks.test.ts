@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { buildSync, transformSync } from 'esbuild';
 import React from 'react';
+import { registerReactDomTeardown, type ReactDomTeardownHandle } from './react-dom-teardown.js';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SRC_ROOT = path.join(ROOT, 'apps/portal-web/src');
@@ -166,14 +167,41 @@ function findNodes(root: MiniNode, pred: (n: MiniNode) => boolean): MiniNode[] {
   return out;
 }
 
-const flush = () => new Promise(resolve => setTimeout(resolve, 25));
+function captureShareButtonGlobals(): Record<string, unknown> {
+  return {
+    window: (globalThis as any).window,
+    document: (globalThis as any).document,
+    HTMLElement: (globalThis as any).HTMLElement,
+    HTMLDetailsElement: (globalThis as any).HTMLDetailsElement,
+    HTMLIFrameElement: (globalThis as any).HTMLIFrameElement,
+    SVGElement: (globalThis as any).SVGElement,
+    Element: (globalThis as any).Element,
+    Node: (globalThis as any).Node,
+    IS_REACT_ACT_ENVIRONMENT: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
+  };
+}
 
-function mountShareButton(options: {
+async function mountShareButton(options: {
   fallbackUrl: string;
   importShareQr: () => Promise<any>;
+  teardown: ReactDomTeardownHandle;
 }) {
   const origin = 'https://freetwai.com';
   const copies: string[] = [];
+  const pendingAsync = new Set<Promise<void>>();
+  const trackAsyncFn = <T extends (...args: any[]) => Promise<any>>(fn: T): T => {
+    const trackedTeardown = options.teardown.trackFn(fn);
+    return ((...args: any[]) => {
+      const promise = trackedTeardown(...args);
+      const settled = Promise.resolve(promise).then(
+        () => { pendingAsync.delete(settled); },
+        () => { pendingAsync.delete(settled); },
+      );
+      pendingAsync.add(settled);
+      return promise;
+    }) as T;
+  };
+  const trackedImportShareQr = trackAsyncFn(options.importShareQr);
   const docListeners: Record<string, Function[]> = {};
   const doc: any = {
     nodeType: 9,
@@ -200,12 +228,16 @@ function mountShareButton(options: {
   const win: any = {
     document: doc,
     location: { origin, href: `${origin}/` },
-    navigator: { clipboard: { writeText: async (txt: string) => { copies.push(txt); } } },
+    navigator: {
+      clipboard: {
+        writeText: trackAsyncFn(async (txt: string) => { copies.push(txt); }),
+      },
+    },
     addEventListener() {},
     removeEventListener() {},
     setTimeout,
     clearTimeout,
-    IS_REACT_ACT_ENVIRONMENT: false,
+    IS_REACT_ACT_ENVIRONMENT: true,
     HTMLElement: MiniNode,
     HTMLDetailsElement: MiniNode,
     HTMLIFrameElement: function HTMLIFrameElement() {},
@@ -215,16 +247,7 @@ function mountShareButton(options: {
   };
   doc.defaultView = win;
 
-  const savedGlobals = {
-    window: (globalThis as any).window,
-    document: (globalThis as any).document,
-    HTMLElement: (globalThis as any).HTMLElement,
-    HTMLDetailsElement: (globalThis as any).HTMLDetailsElement,
-    HTMLIFrameElement: (globalThis as any).HTMLIFrameElement,
-    SVGElement: (globalThis as any).SVGElement,
-    Element: (globalThis as any).Element,
-    Node: (globalThis as any).Node,
-  };
+  const savedGlobals = captureShareButtonGlobals();
   Object.assign(globalThis, {
     window: win,
     document: doc,
@@ -234,6 +257,7 @@ function mountShareButton(options: {
     SVGElement: MiniNode,
     Element: MiniNode,
     Node: MiniNode,
+    IS_REACT_ACT_ENVIRONMENT: true,
   });
 
   const require = createRequire(import.meta.url);
@@ -275,7 +299,7 @@ function mountShareButton(options: {
       HTMLElement: MiniNode,
       HTMLDetailsElement: MiniNode,
       Node: MiniNode,
-      __importShareQr: options.importShareQr,
+      __importShareQr: trackedImportShareQr,
       setTimeout,
       clearTimeout,
       URL,
@@ -289,26 +313,61 @@ function mountShareButton(options: {
   const ReactDomClient = require('react-dom/client');
   const { ShareButton } = load(path.join(SRC_ROOT, 'share/ShareButton.tsx'));
   const root = ReactDomClient.createRoot(container);
-  root.render(React.createElement(ShareButton, {
-    title: '測試工具',
-    fallbackUrl: options.fallbackUrl,
-  }));
+  let unmounted = false;
+  options.teardown.setRoot({
+    render: root.render.bind(root),
+    unmount() {
+      if (!unmounted) {
+        unmounted = true;
+        root.unmount();
+      }
+    },
+  });
+  await React.act(async () => {
+    root.render(React.createElement(ShareButton, {
+      title: '測試工具',
+      fallbackUrl: options.fallbackUrl,
+    }));
+  });
+
+  const flushAsync = async () => {
+    while (pendingAsync.size > 0) {
+      const batch = [...pendingAsync];
+      await React.act(async () => {
+        await Promise.allSettled(batch);
+      });
+    }
+  };
 
   return {
     doc,
     copies,
-    unmount() {
-      root.unmount();
+    flushAsync,
+    async unmount() {
+      await flushAsync();
+      if (!unmounted) {
+        unmounted = true;
+        await React.act(async () => {
+          root.unmount();
+        });
+      }
+      await React.act(async () => {
+        await new Promise<void>(resolve => setImmediate(resolve));
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+      });
+      await flushAsync();
       for (const [k, v] of Object.entries(savedGlobals)) {
         if (v === undefined) delete (globalThis as any)[k];
         else (globalThis as any)[k] = v;
       }
     },
-    clickButton(label: string) {
+    async clickButton(label: string) {
       const btn = findNodes(doc.body, n => n.tagName === 'BUTTON' && n.textContent.trim() === label)[0];
       assert.ok(btn, `expected button "${label}"`);
       assert.equal(btn.disabled, false, `expected button "${label}" enabled`);
-      btn.dispatch('click');
+      await React.act(async () => {
+        btn.dispatch('click');
+      });
     },
     hasButton(label: string) {
       return findNodes(doc.body, n => n.tagName === 'BUTTON' && n.textContent.trim() === label).length > 0;
@@ -387,68 +446,67 @@ test('PERF-12-1: shareQrUrlAllowed matches shareQr acceptance and rejection case
   }
 });
 
-test('PERF-12-1: ShareButton loads share-qr only when toggled on, shows loading status, renders SVG, and handles import failure', async () => {
+test('PERF-12-1: ShareButton loads share-qr only when toggled on, shows loading status, renders SVG, and handles import failure', async (t) => {
+  const teardown = registerReactDomTeardown(t, captureShareButtonGlobals());
   const { shareQr } = await import('../../apps/portal-web/src/share/share-qr.js');
   let importCount = 0;
   let resolveImport!: (mod: { shareQr: typeof shareQr }) => void;
 
-  const disallowed = mountShareButton({
+  const disallowed = await mountShareButton({
     fallbackUrl: 'https://evil.example/go/AbCdEf12_4',
     importShareQr: async () => { importCount++; return { shareQr }; },
+    teardown,
   });
-  await flush();
-  disallowed.clickButton('分享');
-  await flush();
+  await disallowed.clickButton('分享');
   assert.equal(disallowed.hasButton('QR 碼'), false);
   assert.equal(importCount, 0);
-  disallowed.unmount();
+  await disallowed.unmount();
 
-  const h = mountShareButton({
+  const h = await mountShareButton({
     fallbackUrl: 'https://freetwai.com/go/AbCdEf12_4',
     importShareQr: () => {
       importCount++;
       return new Promise(resolve => { resolveImport = resolve; });
     },
+    teardown,
   });
-  await flush();
-  h.clickButton('分享');
-  await flush();
+  await h.clickButton('分享');
   assert.equal(h.hasButton('QR 碼'), true);
   assert.equal(importCount, 0, 'share-qr must not load before member toggles QR on');
 
-  h.clickButton('QR 碼');
-  await flush();
+  await h.clickButton('QR 碼');
   assert.equal(importCount, 1);
   assert.equal(h.statuses().includes('產生 QR 中…'), true);
   assert.equal(h.qrSvgCount(), 0);
 
-  resolveImport({ shareQr });
-  await flush();
+  await React.act(async () => {
+    resolveImport({ shareQr });
+  });
+  await h.flushAsync();
   assert.equal(h.statuses().includes('產生 QR 中…'), false);
   assert.equal(h.qrSvgCount(), 1);
-  h.unmount();
+  await h.unmount();
 
   let failCount = 0;
-  const failing = mountShareButton({
+  const failing = await mountShareButton({
     fallbackUrl: 'https://freetwai.com/go/AbCdEf12_4',
     importShareQr: async () => {
       failCount++;
       throw new Error('chunk failed');
     },
+    teardown,
   });
-  await flush();
-  failing.clickButton('分享');
-  await flush();
-  failing.clickButton('QR 碼');
-  await flush();
+  await failing.clickButton('分享');
+  await failing.clickButton('QR 碼');
+  await failing.flushAsync();
   assert.equal(failCount, 1);
   assert.equal(failing.statuses().includes('QR 暫時無法產生。'), true);
   assert.equal(failing.qrSvgCount(), 0);
 
-  failing.clickButton('複製連結');
-  await flush();
+  await failing.clickButton('複製連結');
+  await failing.flushAsync();
   assert.equal(failing.copies.length, 1);
-  failing.unmount();
+  await failing.unmount();
 });
 
 test('PERF-12-2: PlaceView.tsx imports nothing from CommunitySearch and CommunitySearch does not re-export ExploreFeatureSearchContext', () => {

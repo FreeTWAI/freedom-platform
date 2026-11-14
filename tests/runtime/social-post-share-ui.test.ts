@@ -87,6 +87,14 @@ const req = createRequire(import.meta.url);
 const {createRoot} = req('react-dom/client') as typeof import('react-dom/client');
 const {flushSync} = req('react-dom') as typeof import('react-dom');
 const flush = (fn: () => void) => React.act(() => flushSync(fn));
+async function waitFor(pred: () => boolean, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!pred() && Date.now() < deadline) {
+    await React.act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+  }
+}
 
 HostNode.prototype.closest = function () {return null;};
 HostNode.prototype.showModal = function () {this.open = true; this.setAttribute('open', '');};
@@ -114,7 +122,7 @@ function compile(relative: string, cache = new Map<string, any>()): any {
   const mod = {exports: {} as any};
   cache.set(file, mod.exports);
   const raw = readFileSync(file, 'utf8');
-  runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic'}).code, {
+  runInNewContext(transformSync(raw, {loader: relative.endsWith('.tsx') ? 'tsx' : 'ts', format: 'cjs', jsx: 'automatic', supported: {'dynamic-import': false}}).code, {
     module: mod, exports: mod.exports, crypto: webcrypto, Intl, URL, AbortController,
     window: windowObj, document, navigator: navigatorState, HTMLDetailsElement: HostDetailsElement, setTimeout, clearTimeout, console,
     require(name: string) {
@@ -322,7 +330,9 @@ test('link post opens one dialog with tracked link and QR code; backdrop and unm
   await h.settle();
   assert.equal(h.all().find(n => n.getAttribute('class') === 'skill-share-url')?.textContent, 'https://workshop.example.test/go/link123456');
   await h.click('QR 碼');
-  assert.equal(h.all().some(n => n.getAttribute('aria-label') === '分享連結的 QR Code'), true);
+  const hasQrCode = () => h.all().some(n => n.getAttribute('aria-label') === '分享連結的 QR Code');
+  await waitFor(hasQrCode);
+  assert.equal(hasQrCode(), true);
 
   const dialog = h.all().find(n => n.nodeName === 'DIALOG')!;
   await React.act(async () => {
