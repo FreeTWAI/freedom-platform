@@ -2,8 +2,8 @@ import {currentLegacyHash,canonicalHash} from '../portal-route';
 import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { communitySearchKinds, communitySearchTopics, communitySearchKindLabels, communitySearchTopicLabels, communitySearchPageSchema, guildSearchPageSchema, type CommunitySearchPage, type GuildSearchPage } from '../../../../packages/shared/community-search';
 import { ApiError, type PortalClient } from '../api';
-import { CommunityRelationsProvider, CommunityRelations, CommunityBookmarkButton, CommunityAuthorFollowButton } from './CommunityRelations';
-import {createCommunitySearch, communityListHistoryForSession, type CommunityListHistory} from './community-search-controller';
+import { CommunityRelationsProvider, CommunityBookmarkButton, CommunityAuthorFollowButton } from './CommunityRelations';
+import {createCommunitySearch} from './community-search-controller';
 import { ExploreFeatureSearchContext } from './explore-feature-search';
 
 type Kind = typeof communitySearchKinds[number];
@@ -28,13 +28,12 @@ async function readGuilds(client: PortalClient, q: string, signal: AbortSignal, 
 
 export function CommunitySearch({ client, authKey, relationsEnabled = false, guildSearchEnabled = false }: { client: PortalClient; authKey: string | null; relationsEnabled?: boolean; guildSearchEnabled?: boolean }) {
   const lifetime = `${authKey ?? 'anonymous'}:${client.sessionGeneration}`;
-  const navigation = authKey && relationsEnabled ? communityListHistoryForSession(client, authKey) : undefined;
   return authKey && relationsEnabled
-    ? <CommunityRelationsProvider key={lifetime} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled navigation={navigation} guildSearchEnabled={guildSearchEnabled} /></CommunityRelationsProvider>
+    ? <CommunityRelationsProvider key={lifetime} client={client}><SearchContent client={client} authKey={authKey} relationsEnabled guildSearchEnabled={guildSearchEnabled} /></CommunityRelationsProvider>
     : <SearchContent key={lifetime} client={client} authKey={authKey} relationsEnabled={false} guildSearchEnabled={guildSearchEnabled}/>;
 }
 
-function SearchContent({ client, authKey, relationsEnabled, navigation, guildSearchEnabled }: { client: PortalClient; authKey: string | null; relationsEnabled: boolean; navigation?: CommunityListHistory; guildSearchEnabled: boolean }) {
+function SearchContent({ client, authKey, relationsEnabled, guildSearchEnabled }: { client: PortalClient; authKey: string | null; relationsEnabled: boolean; guildSearchEnabled: boolean }) {
   const generation = client.sessionGeneration;
   const guildEnabled = Boolean(authKey) && guildSearchEnabled;
   const revision = useRef(0);
@@ -119,7 +118,6 @@ function SearchContent({ client, authKey, relationsEnabled, navigation, guildSea
         <div className="stack explore-filters-content">
           <fieldset disabled={state.composing}><legend>內容類型（可複選）</legend><div className="actions">{communitySearchKinds.map(kind => <label key={kind}><input type="checkbox" checked={(query.get('kinds') ?? '').split(',').includes(kind)} onChange={() => search.toggle('kinds', kind)} /> {communitySearchKindLabels[kind]}</label>)}</div></fieldset>
           <fieldset disabled={state.composing}><legend>主題（可複選）</legend><div className="actions">{communitySearchTopics.map(topic => <label key={topic}><input type="checkbox" checked={(query.get('topics') ?? '').split(',').includes(topic)} onChange={() => search.toggle('topics', topic)} /> {communitySearchTopicLabels[topic]}</label>)}</div></fieldset>
-          {relationsEnabled && navigation && <CommunityRelations client={client} navigation={navigation}/>}
           {authKey && <MyContentTopics key={`${authKey}:${generation}`} client={client} onSaved={() => search.refresh(true)} />}
         </div>
       </details>
