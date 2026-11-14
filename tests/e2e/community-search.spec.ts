@@ -343,18 +343,14 @@ test('SEARCH-007 reload, another account and the same user signing in again reje
       await privateList(page).getByRole('button', { name: '追蹤更新', exact: true }).click();
       await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
       const old = await page.evaluate(() => history.state);
-      // Public search remains available after logout. Do not use the shared
-      // signOut helper, which expects the login screen immediately.
+      // An explicit sign-out clears the hash and history state and lands on the login screen (p2x-1),
+      // so the next member never resumes the previous member's page.
       await page.getByRole('button', { name: '設定', exact: true }).click();
       const signedOut = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/auth/logout' && response.request().method() === 'POST');
       await page.getByRole('menu', { name: '個人檔案' }).getByRole('menuitem', { name: '登出', exact: true }).click();
       expect((await signedOut).status()).toBe(200);
       await expect(privateList(page)).toHaveCount(0);
       expect((await page.request.get('/api/v1/session')).status()).toBe(401);
-      await expect(page.getByRole('heading', { level: 1, name: '搜尋社群內容', exact: true })).toBeVisible();
-      await expect(results(page)).toHaveAttribute('aria-busy', 'false');
-      await expect(results(page)).not.toContainText(logged.title);
-      await page.getByRole('link', { name: '返回登入', exact: true }).click();
       await expect(page.getByRole('heading', { name: '登入', exact: true })).toBeVisible();
       await page.getByLabel('電子郵件', { exact: true }).fill(email);
       await page.getByLabel('密碼', { exact: true }).fill(DEMO_PASSWORD);
