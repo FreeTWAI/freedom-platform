@@ -2,7 +2,7 @@ import {openAccountSettings} from './navigation.js';
 import {openSettingsPanel} from './settings-menu-helpers.js';
 import {randomUUID} from 'node:crypto';
 import {test,expect,type Page} from './fixtures.js';
-import {navigate} from './navigation.js';
+import {navigate,navigateAdmin} from './navigation.js';
 import {answerGuildQuestions,quickJoin} from './quick-join.js';
 async function signup(page:Page,name:string,start=true,guild='guild_ai_vibe'){
   if(start)await page.goto('/');
@@ -102,7 +102,7 @@ test('admin reads a transparent rules report and requests only a due refresh',as
     if(path.includes('/guild-discovery')){if(route.request().method()==='POST')refreshes++;return route.fulfill({json:{generated_at:null,next_attempt_at:null,ai_configured:false,report:{method:'rules',ai_status:'not_configured',catalog_count:18,pairs:[{guild_keys:['guild_ai_vibe','guild_ai_field'],names:['AI 開發公會','AI 導入與驗證公會'],reason:'共同 AI 主題',difference:'開發與驗證的目的不同',suggestion:'clarify',shared_topics:['AI 與技術'],shared_books:[]}]}}});}
     return route.fulfill({json:{items:[],next_offset:null}});
   });
-  await page.goto('/admin');await page.getByRole('button',{name:'公會管理',exact:true}).click();await page.getByRole('button',{name:'查看分析'}).click();await expect(page.getByText('AI 開發公會 × AI 導入與驗證公會')).toBeVisible();await expect(page.getByText('AI 分析尚未啟用；管理者可依部署文件設定分析模型。目錄比對仍可使用。')).toBeVisible();
+  await page.goto('/admin');await navigateAdmin(page,'公會管理');await page.getByText('公會設定',{exact:true}).click();await page.getByRole('button',{name:'查看分析'}).click();await expect(page.getByText('AI 開發公會 × AI 導入與驗證公會')).toBeVisible();await expect(page.getByText('AI 分析尚未啟用；管理者可依部署文件設定分析模型。目錄比對仍可使用。')).toBeVisible();
   await page.getByRole('button',{name:'更新到期分析'}).click();await expect.poll(()=>refreshes).toBe(1);await expect(page.getByText('分析不會改動公會、會員或技能書。下一次可更新：尚未排定。')).toBeVisible();
 });
 

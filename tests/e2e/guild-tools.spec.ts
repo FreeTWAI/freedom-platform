@@ -1,4 +1,5 @@
 import {test,expect} from './fixtures.js';
+import {navigateAdmin} from './navigation.js';
 import {randomUUID} from 'node:crypto';
 import {createServer,type Server} from 'node:http';
 import {DEMO_USERS,DEMO_PASSWORD,DEMO_COMMUNITY} from '../../packages/testing/seed.js';
@@ -86,7 +87,7 @@ test('guest share resumes after login, publication stays explicit, admin disable
  expect(Number((await e2eAuthPool.query('SELECT count(*) FROM guild_tool_share_sources WHERE tool=$1',[record.id])).rows[0].count)).toBe(0);await page.getByRole('button',{name:'發布',exact:true}).click();await expect(page.getByRole('dialog',{name:'分享',exact:true})).toHaveCount(0);expect(Number((await e2eAuthPool.query('SELECT count(*) FROM guild_tool_share_sources WHERE tool=$1',[record.id])).rows[0].count)).toBe(1);
  const {E2E_AUTHOR_CLAIM_ADMIN_TOKEN,E2E_AUTHOR_CLAIM_ADMIN_EMAIL}=await import('../../packages/testing/e2e-admin.js');
  await e2eAuthPool.query("INSERT INTO platform_admins(admin_id,community_id,email,display_name,role,active) VALUES($1,$2,$3,'工具管理測試','super_admin',true) ON CONFLICT(email) DO NOTHING",[randomUUID(),DEMO_COMMUNITY,E2E_AUTHOR_CLAIM_ADMIN_EMAIL]);
- await page.route('**/admin/api/**',route=>route.continue({headers:{...route.request().headers(),'Cf-Access-Jwt-Assertion':E2E_AUTHOR_CLAIM_ADMIN_TOKEN}}));await page.goto('/admin?view=guilds');await page.getByText('外部工具',{exact:true}).click();const row=page.locator('article').filter({hasText:'訪客工具'});await row.getByRole('button',{name:'停用工具',exact:true}).click();await row.getByLabel('停用原因',{exact:true}).fill('合成安全檢查');await row.getByRole('button',{name:'停用',exact:true}).click();await expect(row.getByText('已停用',{exact:true})).toBeVisible();
+ await page.route('**/admin/api/**',route=>route.continue({headers:{...route.request().headers(),'Cf-Access-Jwt-Assertion':E2E_AUTHOR_CLAIM_ADMIN_TOKEN}}));await page.goto('/admin');await navigateAdmin(page,'公會管理');await page.getByText('公會設定',{exact:true}).click();await page.getByText('外部工具',{exact:true}).click();const row=page.locator('article').filter({hasText:'訪客工具'});await row.getByRole('button',{name:'停用工具',exact:true}).click();await row.getByLabel('停用原因',{exact:true}).fill('合成安全檢查');await row.getByRole('button',{name:'確認',exact:true}).click();await expect(row.getByText('已停用',{exact:true})).toBeVisible();
  expect(Number((await e2eAuthPool.query("SELECT count(*) FROM guild_tool_audit WHERE tool=$1 AND action='admin-disable'",[record.id])).rows[0].count)).toBe(1);
 
 });
