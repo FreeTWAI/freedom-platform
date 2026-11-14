@@ -15,6 +15,7 @@ export const SESSION_REFERENCES=[['credential_ingest_authorizations','original_s
 export const SESSION_CASCADES=[['github_social_oauth_states','session_hash'],['google_login_activations','session_hash']] as const;
 const identifier=/^[a-z_][a-z0-9_]*$/;
 export async function pruneExpiredAuthRecords(pool:Pool,{batch=500,sessionReferences=SESSION_REFERENCES}:{batch?:number;sessionReferences?:readonly(readonly [string,string])[]}={}):Promise<{sessions:number;login_attempts:number;auth_rate_limits:number;password_reset_tokens:number}>{
+  batch=Number.isSafeInteger(batch)&&batch>0?Math.min(batch,5000):500;
   const unreferenced=sessionReferences.map(([table,column])=>{
     if(!identifier.test(table)||!identifier.test(column))throw new Error('invalid_session_reference');
     return `AND NOT EXISTS(SELECT 1 FROM ${table} r WHERE r.${column}=s.token_hash)`;
@@ -27,6 +28,20 @@ export async function pruneExpiredAuthRecords(pool:Pool,{batch=500,sessionRefere
   await pool.query(`DELETE FROM login_email_change_tokens WHERE token_hash IN (SELECT token_hash FROM login_email_change_tokens WHERE expires_at < now() - interval '1 day' LIMIT $1 FOR UPDATE SKIP LOCKED)`,[batch]);
   // OAuth attempts and MFA challenges contain no retained provider tokens.
   for(const table of ['google_login_states','google_login_challenges'])await pool.query(`DELETE FROM ${table} WHERE ctid IN (SELECT ctid FROM ${table} WHERE expires_at<clock_timestamp() LIMIT $1 FOR UPDATE SKIP LOCKED) AND expires_at<clock_timestamp()`,[batch]);
+  // Changes have a 30-day retention window; grants/challenges have their own
+  // expiry. Each job takes a bounded batch and skips rows held by live requests.
+  await pool.query(`DELETE FROM agent_change_events WHERE event_id IN (
+    SELECT event_id FROM agent_change_events WHERE created_at<clock_timestamp()-interval '30 days'
+    ORDER BY created_at,event_id LIMIT $1 FOR UPDATE SKIP LOCKED) AND created_at<clock_timestamp()-interval '30 days'`,[batch]);
+  await pool.query(`DELETE FROM guild_tool_token_grants WHERE jti IN (
+    SELECT jti FROM guild_tool_token_grants WHERE expires_at<clock_timestamp()
+    ORDER BY expires_at,jti LIMIT $1 FOR UPDATE SKIP LOCKED) AND expires_at<clock_timestamp()`,[batch]);
+  await pool.query(`DELETE FROM guild_tool_origin_challenges WHERE id IN (
+    SELECT id FROM guild_tool_origin_challenges WHERE expires_at<clock_timestamp()
+    ORDER BY expires_at,id LIMIT $1 FOR UPDATE SKIP LOCKED) AND expires_at<clock_timestamp()`,[batch]);
+  await pool.query(`DELETE FROM promotion_click_salts WHERE click_day IN (
+    SELECT click_day FROM promotion_click_salts WHERE click_day<(clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date-3
+    ORDER BY click_day LIMIT $1 FOR UPDATE SKIP LOCKED) AND click_day<(clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date-3`,[batch]);
   // A provisional session never authenticates or contributes presence. Lock sessions
   // before proof rows, as activation does; pruning cannot delete an activated row.
   await pool.query(`DELETE FROM sessions WHERE token_hash IN (

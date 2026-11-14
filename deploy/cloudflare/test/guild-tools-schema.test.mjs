@@ -30,7 +30,7 @@ test('guild tool registrations retain revision history, reports, attribution and
 test('origin challenges and identity grants record expiry and bind each grant to exactly one browser session or agent connection',()=>{
  assert.match(sql,/origin text NOT NULL, token text NOT NULL, expires_at timestamptz NOT NULL/);
  assert.match(sql,/jti uuid PRIMARY KEY, tool uuid NOT NULL REFERENCES guild_tools, revision integer NOT NULL/);
- assert.match(sql,/member uuid NOT NULL REFERENCES users, session_hash text, agent_connection uuid REFERENCES member_client_connections\(connection_id\)/);
+ assert.match(sql,/member uuid NOT NULL REFERENCES users, session_hash text, agent_connection uuid REFERENCES agent_token_connections\(connection_id\)/);
  assert.match(sql,/expires_at timestamptz NOT NULL, CHECK \(\(session_hash IS NULL\) <> \(agent_connection IS NULL\)\)/);
  assert.match(sql,/CREATE INDEX guild_tool_token_expiry ON guild_tool_token_grants\(expires_at\)/);
 });

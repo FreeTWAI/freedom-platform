@@ -50,9 +50,10 @@ CREATE TABLE guild_tool_origin_challenges (
  origin text NOT NULL, token text NOT NULL, expires_at timestamptz NOT NULL,
  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
+CREATE INDEX guild_tool_origin_challenge_expiry ON guild_tool_origin_challenges(expires_at,id);
 CREATE TABLE guild_tool_token_grants (
  jti uuid PRIMARY KEY, tool uuid NOT NULL REFERENCES guild_tools, revision integer NOT NULL,
- member uuid NOT NULL REFERENCES users, session_hash text, agent_connection uuid REFERENCES member_client_connections(connection_id),
+ member uuid NOT NULL REFERENCES users, session_hash text, agent_connection uuid REFERENCES agent_token_connections(connection_id),
  expires_at timestamptz NOT NULL, CHECK ((session_hash IS NULL) <> (agent_connection IS NULL))
 );
 CREATE INDEX guild_tool_token_expiry ON guild_tool_token_grants(expires_at);

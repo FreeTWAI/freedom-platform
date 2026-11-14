@@ -31,7 +31,10 @@ const schema = `fp_auth_pruning_${process.pid}_${Date.now()}`;
 const admin = createPool(databaseUrl);
 const migrator = `${schema}_owner`;
 const runtimeRole = `${schema}_app`;
-const roleUrl = (role: string) => { const url = new URL(databaseUrl); url.username = role; url.password = ''; return url.toString(); };
+// A random password keeps the restricted-role test usable with password-only
+// local PostgreSQL as well as trust-authenticated CI databases.
+const rolePassword = randomBytes(24).toString('hex');
+const roleUrl = (role: string) => { const url = new URL(databaseUrl); url.username = role; url.password = rolePassword; return url.toString(); };
 const pool = new Pool({ connectionString: roleUrl(migrator), options: `-c search_path=${schema}`, max: 4 });
 const runtime = new Pool({ connectionString: roleUrl(runtimeRole), options: `-c search_path=${schema}`, max: 1 });
 
@@ -72,8 +75,8 @@ async function applyRuntimeGrants() {
 }
 
 before(async () => {
-  await admin.query(`CREATE ROLE ${migrator} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
-    CREATE ROLE ${runtimeRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+  await admin.query(`CREATE ROLE ${migrator} LOGIN PASSWORD '${rolePassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+    CREATE ROLE ${runtimeRole} LOGIN PASSWORD '${rolePassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator}; GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
   await migrate(pool);
   await applyRuntimeGrants();
@@ -186,6 +189,43 @@ test('batch limit bounds a per-run delete and second call clears the remainder',
   const second = await pruneExpiredAuthRecords(runtime, {batch: 2});
   assert.equal(second.auth_rate_limits, 2);
   assert.equal((await pool.query(`SELECT count(*)::int AS n FROM auth_rate_limits WHERE window_start < now() - interval '1 day'`)).rows[0].n, 1);
+});
+
+test('old agent changes, expired tool grants and click salts prune in bounded nonblocking batches',async()=>{
+  const member=DEMO_USERS[0].user_id,community=(await pool.query('SELECT community_id FROM users WHERE user_id=$1',[member])).rows[0].community_id;
+  const tool=randomUUID();
+  await pool.query(`INSERT INTO guild_tools(id,community_id,guild_key,tool_id,state,title,entry_url,origin,bridge_version,profile,scopes,permissions,registered_by)
+    VALUES($1,$2,'guild_ai_vibe','bulk-prune','enabled','Synthetic tool','https://example.com/tool','https://example.com','freedom.guild-launchpad/v2','sandboxed','{}','{}',$3)`,[tool,community,member]);
+  const old=(await pool.query(`INSERT INTO agent_change_events(community_id,user_id,kind,source_key,created_at)
+    SELECT $1,$2,'event.updated','old-prune-'||n,now()-interval '31 days' FROM generate_series(1,5) n RETURNING event_id`,[community,member])).rows;
+  await pool.query("INSERT INTO agent_change_events(community_id,user_id,kind,source_key,created_at) VALUES($1,$2,'event.updated','live-prune',now()-interval '1 day')",[community,member]);
+  await pool.query(`INSERT INTO guild_tool_token_grants(jti,tool,revision,member,session_hash,expires_at)
+    SELECT gen_random_uuid(),$1::uuid,1,$2::uuid,'synthetic',now()-interval '1 hour' FROM generate_series(1,5)
+    UNION ALL SELECT gen_random_uuid(),$1::uuid,1,$2::uuid,'synthetic',now()+interval '1 hour'`,[tool,member]);
+  await pool.query(`INSERT INTO guild_tool_origin_challenges(id,community_id,guild_key,member,origin,token,expires_at)
+    SELECT gen_random_uuid(),$1::uuid,'guild_ai_vibe',$2::uuid,'https://example.com','synthetic',now()-interval '1 hour' FROM generate_series(1,5)
+    UNION ALL SELECT gen_random_uuid(),$1::uuid,'guild_ai_vibe',$2::uuid,'https://example.com','synthetic',now()+interval '1 hour'`,[community,member]);
+  await pool.query('DELETE FROM promotion_click_salts');
+  await pool.query(`INSERT INTO promotion_click_salts(click_day,salt)
+    SELECT current_date-10-n,decode(repeat('ab',32),'hex') FROM generate_series(1,5) n
+    UNION ALL SELECT current_date,decode(repeat('cd',32),'hex')`);
+  const blocker=await pool.connect();
+  try{
+    await blocker.query('BEGIN');await blocker.query('SELECT event_id FROM agent_change_events WHERE event_id=$1 FOR UPDATE',[old[0].event_id]);
+    await runtime.query("SET lock_timeout='500ms'");
+    await pruneExpiredAuthRecords(runtime,{batch:2});
+    assert.equal((await pool.query("SELECT count(*)::int n FROM agent_change_events WHERE source_key LIKE 'old-prune-%'")).rows[0].n,3);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM guild_tool_token_grants WHERE expires_at<now()')).rows[0].n,3);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM guild_tool_origin_challenges WHERE expires_at<now()')).rows[0].n,3);
+    assert.equal((await pool.query('SELECT count(*)::int n FROM promotion_click_salts WHERE click_day<current_date-3')).rows[0].n,3);
+    assert.equal((await pool.query('SELECT 1 FROM agent_change_events WHERE event_id=$1',[old[0].event_id])).rowCount,1);
+  }finally{await blocker.query('ROLLBACK');blocker.release();await runtime.query('SET lock_timeout=0');}
+  for(let i=0;i<2;i++)await pruneExpiredAuthRecords(runtime,{batch:2});
+  assert.equal((await pool.query("SELECT count(*)::int n FROM agent_change_events WHERE source_key LIKE 'old-prune-%'")).rows[0].n,0);
+  assert.equal((await pool.query("SELECT count(*)::int n FROM agent_change_events WHERE source_key='live-prune'")).rows[0].n,1);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM guild_tool_token_grants')).rows[0].n,1);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM guild_tool_origin_challenges')).rows[0].n,1);
+  assert.equal((await pool.query('SELECT count(*)::int n FROM promotion_click_salts')).rows[0].n,1);
 });
 
 test('a run with nothing stale returns all four counts as zero', async () => {

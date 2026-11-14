@@ -31,7 +31,7 @@ async function ready(index=0):Promise<Session>{
  return {cookie:r.response.headers.get('set-cookie')!.split(';')[0],csrf:r.data.csrf_token,user:r.data.user};
 }
 async function issue(session:Session,scopes=['read','share','rsvp']){const r=await req('/api/v1/me/agent-tokens',{session,body:{name:'安全測試',scopes}});assert.equal(r.status,201);return r.data;}
-async function resetFailures(id:string){await pool.query('UPDATE member_client_connections SET failure_count=0,suspended_at=NULL WHERE connection_id=$1',[id]);}
+async function resetFailures(id:string){await pool.query('UPDATE agent_token_connections SET failure_count=0,suspended_at=NULL WHERE connection_id=$1',[id]);}
 async function confirm(session:Session,id:string){
  const listed=await req('/api/v1/me/agent-tokens',{session});
  const pending=listed.data.items.find((i:any)=>i.connection_id===id).pending_publication;assert.ok(pending);
@@ -42,7 +42,7 @@ async function confirm(session:Session,id:string){
 test('agent security: every forbidden route refuses live, revoked, expired, rotated and foreign-member tokens',async t=>{
  const a=await ready(),b=await ready(1),live=await issue(a),revoked=await issue(a),expired=await issue(a),old=await issue(a),foreign=await issue(b);
  await req(`/api/v1/me/agent-tokens/${revoked.connection_id}/revoke`,{session:a,body:{}});
- await pool.query("UPDATE member_client_connections SET expires_at=clock_timestamp()-interval '1 second' WHERE connection_id=$1",[expired.connection_id]);
+ await pool.query("UPDATE agent_token_connections SET expires_at=clock_timestamp()-interval '1 second' WHERE connection_id=$1",[expired.connection_id]);
  assert.equal((await req(`/api/v1/me/agent-tokens/${old.connection_id}/renew`,{session:a,body:{name:'renewed',scopes:['read']}})).status,201);
  let routes=0;
  for(const route of app.routes){
@@ -102,7 +102,7 @@ test('agent security: first-publication races require exact approval and daily b
  // Consent refers to one exact winning proposal, never both concurrent proposals.
  const first=await req(path,{token,body:approval.body,key});assert.equal(first.status,200);
  assert.equal((await pool.query('SELECT count(*)::int n FROM shares')).rows[0].n,1);
- await pool.query('UPDATE member_client_connections SET public_daily_cap=3 WHERE connection_id=$1',[issued.connection_id]);
+ await pool.query('UPDATE agent_token_connections SET public_daily_cap=3 WHERE connection_id=$1',[issued.connection_id]);
  const race=await Promise.all(Array.from({length:8},(_,i)=>req(path,{token,body:{url:`https://example.com/cap-${i}`}})));
  assert.equal(race.filter(r=>r.status===200).length,2);assert.equal(race.filter(r=>r.status===429).length,6);
  assert.equal((await pool.query('SELECT public_items FROM agent_daily_usage WHERE connection_id=$1',[issued.connection_id])).rows[0].public_items,3);

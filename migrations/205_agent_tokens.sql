@@ -1,30 +1,42 @@
--- Member-approved automation credentials; old read connections retain their constraints.
-ALTER TABLE member_client_connections DROP CONSTRAINT member_client_connections_kind_check;
-ALTER TABLE member_client_connections DROP CONSTRAINT member_client_connections_scope_check;
-ALTER TABLE member_client_connections DROP CONSTRAINT member_client_connections_check;
-ALTER TABLE member_client_connections ADD COLUMN scopes text[] NOT NULL DEFAULT '{}',
- ADD COLUMN last_used_at timestamptz, ADD COLUMN suspended_at timestamptz,
- ADD COLUMN failure_count integer NOT NULL DEFAULT 0 CHECK(failure_count>=0),
- ADD COLUMN public_confirmed_at timestamptz,
- ADD COLUMN public_daily_cap integer NOT NULL DEFAULT 20 CHECK(public_daily_cap BETWEEN 0 AND 20),
- ADD COLUMN reaction_daily_cap integer NOT NULL DEFAULT 100 CHECK(reaction_daily_cap BETWEEN 0 AND 100);
-ALTER TABLE member_client_connections ADD CHECK (
- (kind='storefront' AND scope='storefront:read' AND store_id IS NOT NULL AND scopes='{}') OR
- (kind='supplier' AND scope='supplier:read' AND store_id IS NULL AND scopes='{}') OR
- (kind='agent' AND scope='agent' AND store_id IS NULL AND token_hash IS NOT NULL
-  AND cardinality(scopes)>0 AND scopes <@ ARRAY['read','share','rsvp','react','message']::text[]));
+-- Keep automation credentials separate: older Workers list and count every row
+-- in member_client_connections without a kind filter.
+CREATE TABLE agent_token_connections (
+ connection_id uuid PRIMARY KEY, community_id uuid NOT NULL REFERENCES communities,
+ user_id uuid NOT NULL REFERENCES users, client_name text NOT NULL,
+ kind text NOT NULL CHECK(kind='agent'), scope text NOT NULL CHECK(scope='agent'),
+ scopes text[] NOT NULL CHECK(cardinality(scopes)>0 AND scopes <@ ARRAY['read','share','rsvp','react','message']::text[]),
+ token_hash text NOT NULL UNIQUE CHECK(token_hash ~ '^[a-f0-9]{64}$'),
+ aggregate_version bigint NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(),
+ expires_at timestamptz NOT NULL, revoked_at timestamptz,
+ last_used_at timestamptz, suspended_at timestamptz,
+ failure_count integer NOT NULL DEFAULT 0 CHECK(failure_count>=0),
+ public_confirmed_at timestamptz,
+ public_daily_cap integer NOT NULL DEFAULT 20 CHECK(public_daily_cap BETWEEN 0 AND 20),
+ reaction_daily_cap integer NOT NULL DEFAULT 100 CHECK(reaction_daily_cap BETWEEN 0 AND 100)
+);
+CREATE INDEX agent_token_connections_owner ON agent_token_connections(user_id,community_id,created_at DESC);
+-- Previous Workers revoke device rows on deactivation. Keep the independent
+-- credentials revoked across a later reactivation even under those writers.
+CREATE FUNCTION revoke_agent_tokens_on_deactivation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ UPDATE agent_token_connections SET revoked_at=COALESCE(revoked_at,clock_timestamp()),
+  aggregate_version=aggregate_version+1 WHERE user_id=NEW.user_id AND revoked_at IS NULL;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER revoke_agent_tokens_on_deactivation AFTER UPDATE OF active ON users
+ FOR EACH ROW WHEN (OLD.active AND NOT NEW.active) EXECUTE FUNCTION revoke_agent_tokens_on_deactivation();
 CREATE TABLE agent_pending_publications (
- connection_id uuid PRIMARY KEY REFERENCES member_client_connections,
+ connection_id uuid PRIMARY KEY REFERENCES agent_token_connections,
  operation text NOT NULL, idempotency_key text NOT NULL, request_sha256 text NOT NULL,
  body jsonb NOT NULL, approved_at timestamptz, created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 CREATE TABLE agent_daily_usage (
- connection_id uuid NOT NULL REFERENCES member_client_connections, day date NOT NULL,
+ connection_id uuid NOT NULL REFERENCES agent_token_connections, day date NOT NULL,
  public_items integer NOT NULL DEFAULT 0, reactions integer NOT NULL DEFAULT 0,
  PRIMARY KEY(connection_id,day)
 );
 CREATE TABLE agent_publications (
- connection_id uuid NOT NULL REFERENCES member_client_connections,
+ connection_id uuid NOT NULL REFERENCES agent_token_connections,
  user_id uuid NOT NULL REFERENCES users, operation text NOT NULL, idempotency_key text NOT NULL,
  resource_id text, via_agent boolean NOT NULL DEFAULT true CHECK(via_agent),
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -44,6 +56,7 @@ CREATE TABLE agent_change_events (
  cursor bigint, UNIQUE(user_id,source_key), UNIQUE(user_id,cursor)
 );
 CREATE INDEX agent_change_unassigned ON agent_change_events(user_id,created_at,event_id) WHERE cursor IS NULL;
+CREATE INDEX agent_change_age ON agent_change_events(created_at,event_id);
 CREATE TABLE agent_change_cursors (user_id uuid PRIMARY KEY REFERENCES users,last_cursor bigint NOT NULL DEFAULT 0);
 CREATE FUNCTION record_agent_change(p_community uuid,p_user uuid,p_kind text,p_source text,p_resource text)
  RETURNS void LANGUAGE plpgsql AS $$

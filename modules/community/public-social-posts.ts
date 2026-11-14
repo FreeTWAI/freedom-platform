@@ -42,6 +42,10 @@ const PUBLIC_JOINS = `FROM community_social_publications publication
 const PUBLIC_VISIBLE = `publication.enabled AND p.state='active' AND ${AUTHOR_VISIBLE} AND ${MEDIA_READY}
   AND publication.post_revision=p.edit_revision AND publication.media_version=p.media_version
   AND publication.thumbnail_sha256 IS NOT DISTINCT FROM (${THUMBNAIL_HASH})`;
+// Shared by the batched promotion-results query so both readers enforce the
+// same publication, author and media conditions in the same snapshot.
+export const promotionPublicSocialJoins=PUBLIC_JOINS;
+export const promotionPublicSocialVisible=PUBLIC_VISIBLE;
 
 type SharingRow = {
   post_id: string; community_id: string; author_user_id: string; state: string;

@@ -83,9 +83,8 @@ function sha256(parts: Buffer[]) {
 }
 
 async function clickSalt(pool: Pool, day: string) {
-  await pool.query('INSERT INTO promotion_click_salts(click_day, salt) VALUES($1,$2) ON CONFLICT DO NOTHING', [day, randomBytes(32)]);
-  await pool.query('DELETE FROM promotion_click_salts WHERE click_day < $1::date - 3', [day]);
-  return (await pool.query('SELECT salt FROM promotion_click_salts WHERE click_day=$1', [day])).rows[0].salt as Buffer;
+  return (await pool.query(`INSERT INTO promotion_click_salts(click_day,salt) VALUES($1,$2)
+    ON CONFLICT(click_day) DO UPDATE SET salt=promotion_click_salts.salt RETURNING salt`,[day,randomBytes(32)])).rows[0].salt as Buffer;
 }
 
 type LinkRow = { link_id: string; community_id: string; user_id: string; kind: PromotionKind; target_key: string; code: string; revoked_at: Date | null; owner_active: boolean };
@@ -390,9 +389,11 @@ type OpenTarget = { href: string; title: string; description: string; image?: { 
   ({ navigation: 'internal' } | { navigation: 'external'; destination: string; action: string });
 
 async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefined, origin: string, now: Date, publicCommunity?: string | null): Promise<OpenTarget | null> {
-  if (!await shareable(pool, link, publicCommunity)) return null;
+  if (link.revoked_at || !link.owner_active) return null;
+  // These branches obtain the same current audience/owner snapshot below.
+  if (!['share','member_card','event','member_service','platform'].includes(link.kind) && !await shareable(pool, link, publicCommunity)) return null;
   if(link.kind==='share'){
-    const row=(await pool.query(`SELECT sh.kind, sh.ref_id, sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE}`,[link.target_key,link.community_id])).rows[0];
+    const row=(await pool.query(`SELECT sh.kind, sh.ref_id, sh.title FROM shares sh ${SHARE_TARGET_JOIN} WHERE sh.share_id=$1 AND sh.community_id=$2 AND sh.state='published' AND ${SHARE_TARGET_VISIBLE} AND (sh.first_sharer_user_id IS NULL OR NOT is_verification_test_account(sh.first_sharer_user_id))`,[link.target_key,link.community_id])).rows[0];
     if(!row)return null;
     if (row.kind === 'work') {
       const work = await readPublicWork(pool, row.ref_id, link.community_id);
@@ -412,7 +413,8 @@ async function openTarget(pool: Pool, link: LinkRow, introRaw: string | undefine
     };
   }
   if (link.kind === 'platform') {
-    const page = platformTarget(link.target_key)!;
+    const page = platformTarget(link.target_key);
+    if (!page) return null;
     return { navigation: 'internal', href: page.href, title: page.title, description: page.description, image: { url: origin + page.image, width: page.width, height: page.height } };
   }
   if (link.kind === 'skill_book') {

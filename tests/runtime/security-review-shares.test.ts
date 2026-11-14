@@ -1,6 +1,6 @@
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
 import {migrate} from '../../scripts/database.js';
 import {seedLocal,DEMO_COMMUNITY,DEMO_USERS,DEMO_PASSWORD} from '../../packages/testing/seed.js';
@@ -15,7 +15,7 @@ import {refreshRepository} from '../../modules/shares/repository-cache.js';
 import {createPromotionLink,creditPromotionClick} from '../../modules/community/promotion.js';
 import {communityCatalog} from '../../modules/community/catalog.js';
 import {applyShareBackfill} from '../../modules/shares/backfill.js';
-import {creditEventRegistrations} from '../../modules/shares/credit.js';
+import {appendCredit,creditEventRegistrations} from '../../modules/shares/credit.js';
 import {moderateShare} from '../../modules/shares/moderation.js';
 import {authenticateAdmin} from '../../modules/platform-admin/service.js';
 import {claimShareAuthor} from '../../modules/shares/repository-actions.js';
@@ -215,6 +215,23 @@ test('mail-only guest farming earns nothing; later confirmations and member iden
  await pool.query("UPDATE community_event_guest_rsvps SET confirmed_at=now() WHERE event_id=$1 AND email='mail-only-1@example.com'",[event]);
  await applyShareBackfill(pool,plan,true);assert.equal(await count(id,'registration'),3,'Backfill also detects later confirmations exactly once');
  await transaction(pool,q=>creditEventRegistrations(q,event));assert.equal(await count(id,'registration'),3);
+});
+
+test('a prior registration fact still marks its member when the recipient is now inactive',async()=>{
+ const event=randomUUID(),share=randomUUID(),recipient=randomUUID(),member=randomUUID();
+ const email=`registration-${member}@example.com`;
+ for(const [id,address] of [[recipient,`recipient-${recipient}@example.com`],[member,email]])await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required)
+  SELECT $1,community_id,$2,'Synthetic registration member',password_hash,$3,true,false FROM users WHERE user_id=$4`,[id,address,randomUUID(),DEMO_USERS[0].user_id]);
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility)
+  VALUES($1,$2,$3,'Synthetic event','Details',now()+interval '2 days',now()+interval '3 days','in_person','Location','published','open')`,[event,DEMO_COMMUNITY,recipient]);
+ await pool.query(`INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id)
+  VALUES($1,$2,'event',$3,$4,'community_events',$5,'Synthetic event',$6)`,[share,DEMO_COMMUNITY,`event:${event}`,`/events/${event}`,event,recipient]);
+ await pool.query("INSERT INTO community_event_rsvps(rsvp_id,event_id,user_id,state,referred_by_user_id) VALUES($1,$2,$3,'going',$4)",[randomUUID(),event,member,recipient]);
+ const source=`registration:${share}:${createHash('sha256').update(email).digest('hex')}`;
+ await transaction(pool,q=>appendCredit(q,{share_id:share,community_id:DEMO_COMMUNITY,user_id:recipient,role:'spreader',basis:'registration',source_ref:source,actor_user_id:member}));
+ await pool.query('UPDATE users SET active=false WHERE user_id=$1',[recipient]);
+ assert.equal(await transaction(pool,q=>creditEventRegistrations(q,event)),0);
+ assert.equal((await pool.query('SELECT count(*)::int AS n FROM community_event_registration_credit_people WHERE event_id=$1 AND user_id=$2',[event,member])).rows[0].n,1);
 });
 
 

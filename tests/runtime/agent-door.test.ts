@@ -43,7 +43,7 @@ const eventBody=()=>({title:'測試活動',description:'一起交流',starts_at:
 test('one-time hashed credential, browser-only lifecycle, rotation and immediate revocation',async()=>{
  const session=await ready(),issued=await issue(session);
  assert.match(issued.access_token,/^fw_agent_[A-Za-z0-9_-]{43}$/);
- const stored=(await pool.query('SELECT * FROM member_client_connections WHERE connection_id=$1',[issued.connection_id])).rows[0];
+ const stored=(await pool.query('SELECT * FROM agent_token_connections WHERE connection_id=$1',[issued.connection_id])).rows[0];
  assert.equal(stored.token_hash,tokenHash(issued.access_token));assert.ok(!JSON.stringify(stored).includes(issued.access_token));
  assert.ok(Math.abs(new Date(stored.expires_at).getTime()-Date.now()-90*86400000)<5000);
  const listed=await req('/api/v1/me/agent-tokens',{session});assert.equal(listed.status,200);assert.ok(!JSON.stringify(listed.data).includes(issued.access_token));assert.ok(!JSON.stringify(listed.data).includes(stored.token_hash));
@@ -61,9 +61,9 @@ test('scope/default denial, mixed credentials, expired and inactive owner',async
  assert.equal((await req('/api/v1/events',{token,session})).status,400);
  assert.equal((await req('/api/v1/events',{token,headers:{Cookie:'unrelated=value'}})).status,400);
  assert.equal((await req('/api/v1/events',{token,headers:{'X-Route-Pattern':'/api/v1/events'}})).status,200);
- await pool.query("UPDATE member_client_connections SET expires_at=clock_timestamp()-interval '1 second' WHERE connection_id=$1",[issued.connection_id]);
+ await pool.query("UPDATE agent_token_connections SET expires_at=clock_timestamp()-interval '1 second' WHERE connection_id=$1",[issued.connection_id]);
  assert.equal((await req('/api/v1/events',{token})).status,401);
- await pool.query("UPDATE member_client_connections SET expires_at=clock_timestamp()+interval '1 day' WHERE connection_id=$1",[issued.connection_id]);
+ await pool.query("UPDATE agent_token_connections SET expires_at=clock_timestamp()+interval '1 day' WHERE connection_id=$1",[issued.connection_id]);
  await pool.query('UPDATE users SET active=false WHERE user_id=$1',[session.user.user_id]);
  assert.equal((await req('/api/v1/events',{token})).status,401);
 });
@@ -98,7 +98,7 @@ test('first exact publication waits for browser confirmation; replay, concurrenc
  assert.deepEqual((await req(path,{token,body,key})).data,created.data);
  assert.equal((await pool.query('SELECT public_items FROM agent_daily_usage WHERE connection_id=$1',[issued.connection_id])).rows[0].public_items,1);
  assert.equal((await pool.query('SELECT via_agent FROM community_events WHERE event_id=$1',[created.data.event_id])).rows[0].via_agent,true);
- await pool.query('UPDATE member_client_connections SET public_daily_cap=2 WHERE connection_id=$1',[issued.connection_id]);
+ await pool.query('UPDATE agent_token_connections SET public_daily_cap=2 WHERE connection_id=$1',[issued.connection_id]);
  const concurrent=await Promise.all([req(path,{token,body:eventBody()}),req(path,{token,body:eventBody()})]);assert.deepEqual(concurrent.map(r=>r.status).sort(),[201,429]);
  assert.equal((await req(path,{token,body,key})).status,201,'replay works at cap');
  assert.equal((await pool.query('SELECT count(*)::int AS n FROM agent_publications WHERE connection_id=$1',[issued.connection_id])).rows[0].n,2);
@@ -133,7 +133,7 @@ test('every registered non-allowlisted API route is denied before its handler, i
  for(const route of app.routes){
   if(route.method==='ALL'||!route.path.includes('/api')||agentOperation(route.method,route.path))continue;
   const path=route.path.replace(/:([A-Za-z_][A-Za-z_0-9]*)(\{[^}]*\})?/g,randomUUID()).replace(/\*/g,'denied');
-  await pool.query('UPDATE member_client_connections SET failure_count=0,suspended_at=NULL WHERE connection_id=$1',[issued.connection_id]);
+  await pool.query('UPDATE agent_token_connections SET failure_count=0,suspended_at=NULL WHERE connection_id=$1',[issued.connection_id]);
   const r=await req(path,{token:issued.access_token,method:route.method,...(['GET','HEAD'].includes(route.method)?{}:{body:{}})});
   assert.equal(r.status,403,`${route.method} ${route.path}: ${r.data.code}`);checked++;
  }
@@ -243,6 +243,28 @@ test('change feed is member-bound, cursor-paged, and does not skip late commits 
  }finally{await delayed.query('ROLLBACK');delayed.release();}
 });
 
+test('an idle agent events HTTP poll uses at most three statements and takes no row lock',async()=>{
+ const session=await ready(),issued=await issue(session),token=issued.access_token;
+ const first=await req('/api/v1/agent/events',{token});assert.equal(first.status,200);
+ let cursor=first.data.next_cursor,more=first.data.has_more;
+ while(more){const page=await req('/api/v1/agent/events?after='+encodeURIComponent(cursor),{token});assert.equal(page.status,200);cursor=page.data.next_cursor;more=page.data.has_more;}
+ const statements:string[]=[];
+ const counted=new Proxy(pool,{get(target,key){
+  if(key==='query')return (...args:any[])=>{statements.push(String(args[0]));return (target.query as any)(...args);};
+  if(key==='connect')return async()=>{const client=await target.connect();return new Proxy(client,{get(c,property){
+   if(property==='query')return (...args:any[])=>{statements.push(String(args[0]));return (c.query as any)(...args);};
+   const value=Reflect.get(c,property);return typeof value==='function'?value.bind(c):value;
+  }});};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+ const observed=createApp(counted,origin,'local',{eventParticipationEnabled:true,socialAchievementsEnabled:true});
+ const response=await observed.request(origin+'/api/v1/agent/events?after='+encodeURIComponent(cursor),{headers:{Authorization:'Bearer '+token}});
+ assert.equal(response.status,200);const body=await response.json() as any;assert.deepEqual(body.items,[]);assert.equal(body.next_cursor,cursor);
+ const locks=statements.filter(sql=>/\bFOR\s+(?:UPDATE|SHARE|NO KEY UPDATE|KEY SHARE)\b|^\s*(?:INSERT|UPDATE|DELETE)\b/i.test(sql));
+ assert.ok(statements.length<=3,`idle poll issued ${statements.length} statements`);
+ assert.deepEqual(locks,[],`idle poll acquired a row lock`);
+});
+
 test('RSVP and notification producers emit confirmed, updated and waitlist invitation changes',async()=>{
  const session=await ready(),issued=await issue(session),token=issued.access_token;
  const created=await req('/api/v1/events',{session,body:eventBody()}),id=created.data.event_id;
@@ -282,15 +304,15 @@ test('expiry during a real domain wait rejects data and rolls back writes; revoc
  for(const mode of ['read-expiry','write-expiry','revoke'] as const){
   const gate=await admin.connect();let pending:Promise<Awaited<ReturnType<typeof req>>>|undefined;
   try{
-   await pool.query("UPDATE member_client_connections SET expires_at=clock_timestamp()+interval '2 seconds',revoked_at=NULL WHERE connection_id=$1",[issued.connection_id]);
+   await pool.query("UPDATE agent_token_connections SET expires_at=clock_timestamp()+interval '2 seconds',revoked_at=NULL WHERE connection_id=$1",[issued.connection_id]);
    await gate.query('BEGIN');
-   if(mode==='revoke')await gate.query(`UPDATE ${schema}.member_client_connections SET revoked_at=clock_timestamp() WHERE connection_id=$1`,[issued.connection_id]);
+   if(mode==='revoke')await gate.query(`UPDATE ${schema}.agent_token_connections SET revoked_at=clock_timestamp() WHERE connection_id=$1`,[issued.connection_id]);
    else await gate.query(`LOCK TABLE ${schema}.community_events IN ACCESS EXCLUSIVE MODE`);
    const pid=(await gate.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
    pending=mode==='write-expiry'?req(`/api/v1/events/${id}/rsvp`,{token,body:{going:true}}):req('/api/v1/events',{token});
    const deadline=Date.now()+1500;
    while(!(await admin.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount){assert.ok(Date.now()<deadline,'request reached the database lock');await setImmediate();}
-   if(mode!=='revoke')await admin.query(`SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM expires_at-clock_timestamp()))+0.05) FROM ${schema}.member_client_connections WHERE connection_id=$1`,[issued.connection_id]);
+   if(mode!=='revoke')await admin.query(`SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM expires_at-clock_timestamp()))+0.05) FROM ${schema}.agent_token_connections WHERE connection_id=$1`,[issued.connection_id]);
    await gate.query(mode==='revoke'?'COMMIT':'ROLLBACK');
    const response=await pending;assert.equal(response.status,401);assert.equal(response.data.code,'agent_token_invalid');assert.equal(response.data.items,undefined);
    assert.equal((await pool.query('SELECT 1 FROM community_event_rsvps WHERE event_id=$1',[id])).rowCount,0);
@@ -474,7 +496,7 @@ for(const lane of legacyLanes)test(`credential lanes: ${lane.name} keeps its own
   assert.equal(response.headers.get('Referrer-Policy'),'no-referrer');
   assert.ok(response.headers.get('Content-Security-Policy'));
  }
- const row=(await pool.query('SELECT failure_count FROM member_client_connections WHERE connection_id=$1',[issued.connection_id])).rows[0];
+ const row=(await pool.query('SELECT failure_count FROM agent_token_connections WHERE connection_id=$1',[issued.connection_id])).rows[0];
  assert.equal(row.failure_count,3,'only the three well-formed agent refusals reach the agent journal');
 });
 
@@ -485,12 +507,12 @@ test('legacy CLI reader independently excludes agent rows, including legacy-shap
   await assert.rejects(readClientResource(pool,'Bearer '+credential,'connection'),(error:any)=>error.code==='client_token_invalid');
  }
  // This storage-level adversary exercises the SQL kind guard, independent of parsing.
- await pool.query('UPDATE member_client_connections SET token_hash=$2 WHERE connection_id=$1',[issued.connection_id,tokenHash(legacy)]);
+ await pool.query('UPDATE agent_token_connections SET token_hash=$2 WHERE connection_id=$1',[issued.connection_id,tokenHash(legacy)]);
  await assert.rejects(readClientResource(pool,'Bearer '+legacy,'connection'),(error:any)=>error.code==='client_token_invalid');
  const connection=randomUUID();
  await pool.query(`INSERT INTO member_client_connections(connection_id,user_id,community_id,client_name,kind,scope,token_hash)
  SELECT $1,user_id,community_id,'Synthetic CLI','supplier','supplier:read',$2 FROM users WHERE user_id=$3`,[connection,tokenHash('fw_read_'+randomBytes(32).toString('base64url')),session.user.user_id]);
- await pool.query('UPDATE member_client_connections SET token_hash=$2 WHERE connection_id=$1',[issued.connection_id,tokenHash(issued.access_token)]);
+ await pool.query('UPDATE agent_token_connections SET token_hash=$2 WHERE connection_id=$1',[issued.connection_id,tokenHash(issued.access_token)]);
  await pool.query('UPDATE member_client_connections SET token_hash=$2 WHERE connection_id=$1',[connection,tokenHash(legacy)]);
  const response=await req('/client-api/v1/connection',{token:legacy});
  assert.equal(response.status,200);assert.equal(response.data.kind,'supplier');assert.equal(response.data.connection_id,connection);
@@ -529,7 +551,7 @@ test('installed cookie-only private AI readers retain their credential rejection
   assert.equal(own.headers.get('X-Content-Type-Options'),'nosniff');assert.equal(own.headers.get('Content-Type'),'application/json');
   for(const [name,authorization,status] of spellings(issued.access_token)){
    // Keep the token live so every family proves allowlist refusal, not suspension.
-   await pool.query('UPDATE member_client_connections SET failure_count=0,suspended_at=NULL WHERE connection_id=$1',[issued.connection_id]);
+   await pool.query('UPDATE agent_token_connections SET failure_count=0,suspended_at=NULL WHERE connection_id=$1',[issued.connection_id]);
    const response=await installed.request(origin+path,{headers:{Authorization:authorization}});
    assert.equal(response.status,status,name);assert.equal((await response.json() as any).code,status===403?'scope_required':'agent_token_invalid');
    assert.equal(response.headers.get('X-Content-Type-Options'),'nosniff');
