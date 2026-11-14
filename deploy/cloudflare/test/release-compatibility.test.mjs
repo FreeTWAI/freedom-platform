@@ -1976,12 +1976,12 @@ test('schema201 prize photos require exact ledger approval without enabling pers
  const restored=fixtureAt(201);restored.host.rollback_floor.schema_ledger=structuredClone(restored.scan.ledger);restored.host.rollback_floor.schema_ledger_digest=restored.scan.ledger_digest;restored.host.observation.schema_ledger=old.ledger;restored.host.observation.schema_ledger_digest=old.ledger_digest;restored.host.release_records[0].schema_ledger_digests.push(old.ledger_digest);assert(codes(evaluate(restored)).includes('historical_schema_floor_mismatch'));
 });
 
-for (const version of [2,3]) test(`pass-2 v${version} accepts only registered identities and a contiguous frontier through 210`, () => {
+for (const version of [2,3]) test(`pass-3 v${version} accepts only registered identities and a contiguous frontier through 214`, () => {
   const fresh = () => version === 2 ? fixture() : v3Fixture(catalogs().ab, catalogs().ab.ledger);
   const result = evaluate(fresh());
   assert.equal(result.status, 'compatible');
   for (const authority of ['deployment_authority','execution_authority','restore_proof']) assert.equal(result[authority], false);
-  for (const name of ['204_shares.sql','205_agent_tokens.sql','206_creative_tool_guilds.sql','207_guild_tools.sql','208_event_publication.sql','209_event_management.sql','210_work_public_sharing.sql']) {
+  for (const name of ['204_shares.sql','205_agent_tokens.sql','206_creative_tool_guilds.sql','207_guild_tools.sql','208_event_publication.sql','209_event_management.sql','210_work_public_sharing.sql','211_original_shares.sql','212_click_credit_kinds.sql','213_share_preview_facts.sql','214_guild_tool_drafts.sql']) {
     const renamed = fresh(); renamed.scan = structuredClone(renamed.scan);
     renamed.scan.ledger.find(row => row.name === name).name = name.slice(0, 3) + '_unreviewed.sql';
     renamed.scan.ledger_digest = compatibilityLedgerDigest(renamed.scan.ledger);
@@ -1994,11 +1994,13 @@ for (const version of [2,3]) test(`pass-2 v${version} accepts only registered id
     missing.scan.ledger = missing.scan.ledger.filter(row => row.name !== name);
     missing.scan.ledger_digest = compatibilityLedgerDigest(missing.scan.ledger);
     assert.notEqual(evaluate(missing).status, 'compatible');
-    if (name === '207_guild_tools.sql' || name === '209_event_management.sql') assert.deepEqual(codes(evaluate(missing)), ['schema_ledger_invalid']);
+    if (['207_guild_tools.sql','209_event_management.sql','210_work_public_sharing.sql','211_original_shares.sql','212_click_credit_kinds.sql','213_share_preview_facts.sql'].includes(name)) assert.deepEqual(codes(evaluate(missing)), ['schema_ledger_invalid'], name);
   }
   // The unreviewed 210 identity sorts before the registered work-sharing row,
   // so identity validation rejects it before the duplicate number is reached.
-  for (const [name,expected] of [['022_unreviewed.sql','schema_ledger_invalid'],['207_unreviewed.sql','schema_ledger_invalid'],['209_unreviewed.sql','schema_ledger_invalid'],['210_unreviewed.sql','schema_unknown'],['211_unreviewed.sql','schema_unknown']]) {
+  // The unreviewed 213 and 214 identities sort after their registered rows, so
+  // they repeat a number (invalid); 215 is the next number with an unknown name.
+  for (const [name,expected] of [['022_unreviewed.sql','schema_ledger_invalid'],['207_unreviewed.sql','schema_ledger_invalid'],['209_unreviewed.sql','schema_ledger_invalid'],['210_unreviewed.sql','schema_unknown'],['213_unreviewed.sql','schema_ledger_invalid'],['214_unreviewed.sql','schema_ledger_invalid'],['215_unreviewed.sql','schema_unknown']]) {
     const unknown = fresh(); unknown.scan = structuredClone(unknown.scan);
     unknown.scan.ledger.push({ name, sha256: 'f'.repeat(64) });
     unknown.scan.ledger.sort((a,b) => a.name.localeCompare(b.name));
@@ -2007,10 +2009,10 @@ for (const version of [2,3]) test(`pass-2 v${version} accepts only registered id
   }
 });
 
-for (const version of [2,3]) test(`pass-2 v${version} rejects a legacy ledger truncated at209 as a mismatch`, () => {
+for (const version of [2,3]) test(`pass-3 v${version} rejects a legacy ledger truncated at213 as a mismatch`, () => {
   const truncated = version === 2 ? fixture() : v3Fixture(catalogs().ab, catalogs().ab.ledger);
   truncated.scan = structuredClone(truncated.scan);
-  truncated.scan.ledger = truncated.scan.ledger.filter(row => row.name.startsWith('v2_') || Number(row.name.slice(0, 3)) <= 209);
+  truncated.scan.ledger = truncated.scan.ledger.filter(row => row.name !== '214_guild_tool_drafts.sql');
   truncated.scan.ledger_digest = compatibilityLedgerDigest(truncated.scan.ledger);
   assert.deepEqual(codes(evaluate(truncated)), ['schema_ledger_mismatch']);
 });

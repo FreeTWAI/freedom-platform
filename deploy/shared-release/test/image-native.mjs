@@ -33,7 +33,7 @@ try {
   const workRoot = join(root, 'contract'); await mkdir(workRoot, { mode: 0o700 });
   const profile = sourceMigrationProfile(sourceRoot, { format: 'freedom.migrations/legacy-v1', first: 1, last: 189, known_gaps: [22] });
   assert.deepEqual(profile.known_gaps, [22]);
-  assert.equal(profile.last, 211); // Current frontier 210 plus the synthetic pending migration.
+  assert.equal(profile.last, 215); // Current frontier 214 plus the synthetic pending migration.
   const contract = await deriveCandidateContract({ sourceRoot, sourceSha: git(['rev-parse', 'HEAD']),
     sourceTree: git(['rev-parse', 'HEAD^{tree}']), workRoot, binDirectory, materialPolicySha256: 'a'.repeat(64),
     profile, beforeLedger: resolveMigrationPlan(readMigrationSources(join(sourceRoot, 'migrations')), profile).ledger,
