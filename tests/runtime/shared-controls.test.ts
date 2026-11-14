@@ -20,8 +20,10 @@ for(const theme of ['light','dark','versefolk'])test(`shared ${theme} default/se
 test('shared states use paired tokens, exclude primary/ghost/module and never dim disabled labels',()=>{
   const hover=declarations(sheets[1],'.btn:where(:not(.btn-primary,.btn-ghost,.btn-module)):is(:hover,:focus-visible):not(:disabled)');
   assert.equal(hover.background,'var(--control-hover)');assert.equal(hover.color,'var(--control-ink)');assert.equal(hover['border-color'],'var(--focus)');
-  const disabled=declarations(sheets[1],':root .btn:disabled');
+  const disabled=declarations(sheets[1],':root .btn:not(.btn-primary):disabled');
   assert.deepEqual(disabled,{background:'var(--bg)',color:'var(--muted)','border-color':'var(--muted)','border-style':'dashed',opacity:'1','box-shadow':'none',cursor:'not-allowed'});
+  const primaryDisabled=declarations(sheets[1],':root .btn-primary:disabled');
+  assert.deepEqual(primaryDisabled,{opacity:'.55','border-color':'transparent','border-style':'solid','box-shadow':'none',cursor:'not-allowed'});
   assert.equal(declarations(sheets[1],'.btn-primary').background,'var(--green)');assert.equal(declarations(sheets[1],'.btn-ghost').background,'transparent');
   assert.equal(declarations(sheets[1],'.btn')['min-height'],'44px');assert.equal(declarations(sheets[1],':focus-visible').outline,'3px solid var(--focus)');
 });

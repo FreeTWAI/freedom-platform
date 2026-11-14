@@ -13,6 +13,7 @@ import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';
 import {StorefrontBookUsage} from './SkillBookUsage';
 import {isStorefrontReading} from './skill-book-commerce-references';
 import {SkillInstall} from './SkillInstall';
+import {HideExternalStarContext,InsideMoreContext} from './GitHubSocial';
 
 export type OriginalReleaseSummary={tag_name:string;name:string|null;html_url:string;published_at:string|null};
 export type OriginalCacheData={
@@ -59,8 +60,8 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
   return <><span className="skill-intro-entry"><button ref={trigger} type="button" className="btn btn-ghost skill-intro-trigger" aria-haspopup="dialog" aria-describedby={describedBy} disabled={disabled} onClick={()=>{setVisited(true);setOpen(true);}}>{label}</button>{guildName&&<SkillBookBadges bookId={bookId}/>}</span>
     <dialog ref={dialog} className="skill-intro-dialog" aria-label={visited?undefined:book.title} aria-labelledby={visited?id:undefined} aria-describedby={visited?`${id}-purpose`:undefined} data-book-id={book.id??book.book_id} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();close();}} onClose={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
       {/* Defer untouched books, then retain their subtree across close/reopen. */}
-      {visited&&<div className="stack"><header className="skill-intro-header"><div><div className="eyebrow">{community?'自由工坊 · 社群技能書':'自由工坊 · 公會技能庫'}</div><h2 id={id}>{book.title}</h2></div><button className="btn btn-ghost" type="button" onClick={close} autoFocus aria-label="關閉技能書介紹">關閉</button></header>
-        <div className="skill-intro-original-head"><div className="skill-intro-cover-copy"><div className="tag-list">{beginner&&<span className="badge">{beginner.category}</span>}{guide&&<span className="badge">{guide.format}</span>}{guildName&&<span className="badge">{guildName}</span>}{guideCredit&&<span className="badge">{guideCredit}</span>}{originalAuthor&&<span className="badge">原作：{originalAuthor}</span>}{originalStars!==null&&<span className="badge">★ {originalStars}</span>}{cache?.latest_release&&<a className="badge" href={cache.latest_release.html_url} target="_blank" rel="noopener noreferrer">Release {cache.latest_release.tag_name} ↗</a>}</div>
+      {visited&&<HideExternalStarContext.Provider value={true}><div className="stack"><header className="skill-intro-header"><div><div className="eyebrow">{community?'自由工坊 · 社群技能書':'自由工坊 · 公會技能庫'}</div><h2 id={id}>{book.title}</h2></div><button className="btn btn-ghost" type="button" onClick={close} autoFocus aria-label="關閉技能書介紹">關閉</button></header>
+        <div className="skill-intro-original-head"><div className="skill-intro-cover-copy"><div className="tag-list">{beginner&&<span className="badge">{beginner.category}</span>}{guide&&<span className="badge">{guide.format}</span>}{guildName&&<span className="badge">{guildName}</span>}{guideCredit&&<span className="badge">{guideCredit}</span>}{originalAuthor&&<span className="badge">原作：{originalAuthor}</span>}{originalStars!==null&&<span className="badge">★ {originalStars}</span>}{cache?.latest_release&&<a className="badge" href={cache.latest_release.html_url} target="_blank" rel="noopener noreferrer">版本 {cache.latest_release.tag_name} ↗</a>}</div>
         {open&&<SkillBookBadges bookId={bookId} community={community}/>}</div></div>
         {cache?.ahead_of_pin&&cache.latest_version_url&&<div className="skill-intro-upstream-notice" role="note"><span>原作者有新版本：</span><a href={cache.latest_version_url} target="_blank" rel="noopener noreferrer">{cache.latest_version_label??'查看新版本'} ↗</a></div>}
         <div className="actions skill-intro-primary-actions"><button type="button" className="btn btn-primary" aria-controls={`${id}-start`} onClick={()=>{startSection.current?.scrollIntoView({block:'start'});startSection.current?.focus();}}>開始用</button>{open&&<SkillBookStar book={{...book,original_cache:cache}} compact/>}<SkillShare bookId={bookId} title={book.title} active={open}/>{originalUrl&&<a className="btn btn-ghost" href={originalUrl} target="_blank" rel="noopener noreferrer">查看原作 Repo ↗</a>}</div>
@@ -96,7 +97,7 @@ export function SkillBookIntro({book,guildName,label='閱讀技能書',community
           {bookId&&<section className="skill-intro-collaboration"><h3>一起開發</h3><DevelopmentEntry kind="skill" target={bookId} label="加入共同開發"/><p className="multiline-text">{cooperation?.summary??guide?.contribution??'在專案任務中認領一項修改，完成後提交 PR。'}</p>{cooperationError&&<p className="field-hint">{cooperationError}</p>}<div className="actions"><a className="btn btn-ghost" href={skillSharePath(bookId)} target="_blank" rel="noopener noreferrer">查看里程碑與任務 ↗</a><a className="btn btn-ghost" href={`${skillSharePath(bookId)}/SKILL.md`} target="_blank" rel="noopener noreferrer">交給 Agent ↗</a>{originalUrl&&<a className="btn btn-ghost" href={`${originalUrl}/pulls`} target="_blank" rel="noopener noreferrer">查看原作 PR ↗</a>}{fork&&<a className="btn btn-ghost" href={fork} target="_blank" rel="noopener noreferrer">Fork 原作 ↗</a>}{contribute&&<a className="btn btn-ghost" href={contribute} target="_blank" rel="noopener noreferrer">查看協調任務 ↗</a>}</div><p className="field-hint">修改預設以 PR 回饋原作，由原作維護者審查；保留來源授權與實際作者，Fork 不會自動回饋原作。</p></section>}
         </div></details>
 
-      </div>}
+      </div></HideExternalStarContext.Provider>}
     </dialog>
   </>;
 }
@@ -138,7 +139,17 @@ export function SkillBookCard({book,className='',access,headingLevel=4,community
   return <article className={`card skill-book skill-book-volume skill-library-book ${className}`} data-book-id={book.id??book.book_id} data-access={access}>
     <div className="skill-library-heading"><SkillBookCover book={book}/><div className="skill-library-copy"><p className="eyebrow skill-library-meta"><span>{beginner?.category??(community?'社群技能書':'公會技能書')}</span>{access&&<span className={`skill-unlock-state ${access}`}>{access==='unlocked'?'✓ 已解鎖':'未解鎖'}</span>}{cache?.ahead_of_pin&&<span className="badge">原作者有新版本</span>}</p><Title className="skill-library-title">{book.title}</Title></div></div>
     <div className="skill-library-description"><p className="skill-library-purpose multiline-text">{cardSummary}</p>{book.guide?.first_result&&<div className="skill-library-result"><span>{book.guide.reviewed_at?`使用筆記（${book.guide.reviewed_at}）`:'使用筆記'}</span><p>{book.guide.first_result}</p></div>}{guideCredit&&<p className="field-hint">{guideCredit}</p>}{originalAuthor&&<p className="field-hint">原作帳號：{originalAuthor}{typeof cache?.stars==='number'?` · ★ ${cache.stars}`:''}{cache?.latest_release?` · ${cache.latest_release.tag_name}`:''}</p>}<SkillBookBadges bookId={book.id??book.book_id} community={community}/>{book.license_status==='NOASSERTION'&&<p className="field-hint">授權待確認</p>}</div>
-    <div className="skill-library-actions"><SkillBookIntro book={book} label={access==='locked'?'預覽技能書':'閱讀技能書'} community={community}/><SkillShare bookId={book.id??book.book_id} title={book.title}/></div>
-    <SkillBookStar book={book} compact/>
+    <div className="skill-library-actions">
+      <SkillBookIntro book={book} label={access==='locked'?'預覽技能書':'閱讀技能書'} community={community}/>
+      <details className="skill-card-more">
+        <summary>更多</summary>
+        <div className="skill-card-more-body">
+          <SkillShare bookId={book.id??book.book_id} title={book.title}/>
+          <InsideMoreContext.Provider value={true}>
+            <SkillBookStar book={book} compact/>
+          </InsideMoreContext.Provider>
+        </div>
+      </details>
+    </div>
   </article>;
 }

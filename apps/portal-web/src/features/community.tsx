@@ -1,8 +1,8 @@
 import React, { lazy } from 'react';
 import type { PortalFeatureEntries } from './types';
-import { CommunityPanel } from '../modules/Community';
-import { CommunitySearch } from '../modules/CommunitySearch';
-import { MyContent } from '../modules/MyContent';
+const CommunityPanel = lazy(() => import('../modules/Community').then(m => ({default: m.CommunityPanel})));
+const CommunitySearch = lazy(() => import('../modules/CommunitySearch').then(m => ({default: m.CommunitySearch})));
+const MyContent = lazy(() => import('../modules/MyContent').then(m => ({default: m.MyContent})));
 
 const CommunityArPanel=lazy(()=>import('../modules/community-ar/Panel').then(m=>({default:m.CommunityArPanel})))
 const EventsPanel = lazy(() => import('../modules/EventsPanel').then(m => ({default: m.EventsPanel})))

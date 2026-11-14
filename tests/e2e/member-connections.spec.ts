@@ -6,7 +6,7 @@ import {navigate,navigateAdmin} from './navigation.js';
 import {answerGuildQuestions,quickJoin} from './quick-join.js';
 async function signup(page:Page,name:string,start=true,guild='guild_ai_vibe'){
   if(start)await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill(name);
   await page.getByLabel('電子郵件',{exact:true}).fill(`connections-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-connections-password');
@@ -16,13 +16,16 @@ async function signup(page:Page,name:string,start=true,guild='guild_ai_vibe'){
 }
 test('mobile newcomer sees all guilds, can filter and enters after one choice without an assessment',async({page})=>{
   await page.setViewportSize({width:320,height:720});await page.goto('/');
-  await page.getByRole('button',{name:'建立帳號',exact:true}).click();
+  await page.getByRole('button',{name:'免費加入',exact:true}).click();
   await page.getByLabel('社群顯示名稱',{exact:true}).fill('手機快速參與者');
   await page.getByLabel('電子郵件',{exact:true}).fill(`quick-${randomUUID()}@example.test`);
   await page.getByLabel('密碼',{exact:true}).fill('freedom-connections-password');
   await page.getByRole('button',{name:'建立帳號，先逛工坊',exact:true}).click();
   const quick=page.getByRole('region',{name:'快速加入公會'});
+  await expect(quick.getByRole('radio')).toHaveCount(4);
+  await quick.getByRole('button',{name:'查看全部公會',exact:true}).click();
   await expect(quick.getByRole('radio')).toHaveCount(20);
+  await quick.locator('.quick-filter-disclosure > summary').click();
   await quick.getByRole('button',{name:'影音與創作',exact:true}).click();await expect(quick.getByRole('radio')).toHaveCount(6);
   await quick.getByRole('button',{name:'全部主題',exact:true}).click();await expect(quick.getByRole('radio')).toHaveCount(20);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

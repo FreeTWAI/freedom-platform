@@ -102,3 +102,10 @@
 @media(max-width:760px){
   .app-frame:has(.social-comment-composer:focus-within) .floating-messages[aria-expanded=false]{display:none}
 }
+
+/* Reserve bottom space for the floating launcher at <=640px and hide the
+   closed launcher while any text field has focus or a dialog is open. */
+@media(max-width:640px){
+  .app-frame:has(.floating-messages) .main{padding-bottom:calc(88px + var(--app-safe-bottom,env(safe-area-inset-bottom,0px)))}
+  :root:has(dialog[open],[role=dialog]:not(#floating-message-panel):not([hidden]),[aria-modal=true]:not(#floating-message-panel):not([hidden]),textarea:focus,[contenteditable]:not([contenteditable=false]):focus,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=image]):not([type=hidden]):focus) .floating-messages[aria-expanded=false]{display:none}
+}

@@ -10,6 +10,7 @@ import { authoringDraftState, useAuthoringDraft } from './authoring-drafts'
 import { useModuleMutation } from './shared'
 import {EventOutcomeBacklinks} from './EventOutcomeBacklinks';
 import { useShowcaseEditor, showcaseBody, showcaseInput, performShowcaseRequest, reconcilePublishedShowcase, type PersonalShowcase, type ShowcaseInput, type ShowcaseRequest } from './showcase-drafts'
+import './WorkSharing.css'
 export type { PersonalShowcase } from './showcase-drafts'
 
 const SHOWCASE_PAGE = 20
@@ -27,6 +28,7 @@ export function ShowcasePanel() {
   const [moreLoading, setMoreLoading] = useState(false)
   const [moreError, setMoreError] = useState<ActionError | null>(null)
   const [opportunities, setOpportunities] = useState<Opportunity[] | null>(null)
+  const [opportunityLimit, setOpportunityLimit] = useState(20)
   const [published, , current] = useAuthoringDraft<Showcase | null>(session.user.user_id, 'showcase:published', null)
   const [latestOpportunity] = useAuthoringDraft<Opportunity | null>(session.user.user_id, 'opportunity:latest', null)
   const loadSequence = useRef(0)
@@ -120,12 +122,12 @@ export function ShowcasePanel() {
   }
 
   return (
-    <div className="panels">
+    <div className="panels showcase-panel">
       <CreateShowcaseForm pending={pending} onCreated={created => setShowcases(items => [created, ...(items ?? []).filter(item => item.showcase_id !== created.showcase_id)])} />
       <Section title="社群作品" description="看看夥伴的作品，找到適合一起合作的人。">
         <div data-share-entry="collaboration" tabIndex={-1}>
         {showcases.length === 0 ? (
-          <EmptyState title="把第一件作品放上來" body="設計、影片、文章、工具都可以。分享後，社群成員可以向你提出合作需求。" />
+          <EmptyState title="還沒有作品" body="點擊上方發布第一件作品。" />
         ) : (
           <div className="card-grid">
             {showcases.map((showcase) => (
@@ -145,10 +147,11 @@ export function ShowcasePanel() {
       </Section>
       <Section data-guide-anchor="showcase:opportunities" title="與你相關的商機" description="只顯示你是提出者或作品作者的商機。">
         {opportunities.length === 0 ? (
-          <EmptyState title="還沒有商機" body="從其他人的作品提出需求後，雙方才會在這裡看到。" />
+          <EmptyState title="還沒有商機" body="從作品提出需求會在此顯示。" />
         ) : (
+          <>
           <div className="card-grid">
-            {opportunities.map((opportunity) => (
+            {opportunities.slice(0, opportunityLimit).map((opportunity) => (
               <OpportunityCard
                 key={opportunity.opportunity_id}
                 opportunity={opportunity}
@@ -158,6 +161,8 @@ export function ShowcasePanel() {
               />
             ))}
           </div>
+          {opportunities.length > opportunityLimit && <div className="actions"><button type="button" className="btn btn-secondary" onClick={() => setOpportunityLimit(count => count + 20)}>更多</button></div>}
+          </>
         )}
       </Section>
     </div>
@@ -181,6 +186,19 @@ function CreateShowcaseForm({
   const success = useRef<HTMLElement>(null)
   useEffect(() => { if (published) success.current?.focus() }, [published])
   const [consent, setConsent] = useAuthoringDraft(userId, 'showcase:consent', false)
+  const [open, setOpen] = useState(() => Boolean(title || description || publicUrl || artifactRef || consent))
+  const titleInput = useRef<HTMLInputElement>(null)
+  const createTrigger = useRef<HTMLButtonElement>(null)
+  const pendingFocus = useRef<'title' | 'trigger' | null>(null)
+  useEffect(() => {
+    if (open && pendingFocus.current === 'title') {
+      pendingFocus.current = null
+      titleInput.current?.focus()
+    } else if (!open && pendingFocus.current === 'trigger') {
+      pendingFocus.current = null
+      createTrigger.current?.focus()
+    }
+  }, [open])
   const [formError, setFormError] = useState<string | null>(null)
   const authoring = useModuleMutation(client, { userId, type: 'showcase' })
   const busy = Boolean(pending) || authoring.busy
@@ -217,9 +235,42 @@ function CreateShowcaseForm({
     }
   }
 
+  if (!open) {
+    return (
+      <div className="actions work-sharing-entry">
+        <button
+          ref={createTrigger}
+          type="button"
+          className="btn btn-primary"
+          data-guide-anchor="showcase:create"
+          disabled={Boolean(pending)}
+          onClick={() => {
+            pendingFocus.current = 'title'
+            setOpen(true)
+          }}
+        >
+          發布作品
+        </button>
+      </div>
+    )
+  }
+
   return (
     <section className="card stack work-sharing-form">
-      <h2>分享作品</h2>
+      <div className="section-head">
+        <h2>分享作品</h2>
+        <button
+          type="button"
+          className="btn btn-secondary btn-small"
+          disabled={busy}
+          onClick={() => {
+            pendingFocus.current = 'trigger'
+            setOpen(false)
+          }}
+        >
+          取消
+        </button>
+      </div>
       <p className="lede">寫名稱、說用途，就能讓社群看到你的作品。</p>
       {published && <section ref={success} tabIndex={-1} className="work-sharing-success stack" aria-label="作品發布成功">
         <h3>「{published.title}」已分享！</h3><p>社群成員可以看見這件作品，並向你提出合作需求。</p>
@@ -233,7 +284,7 @@ function CreateShowcaseForm({
       <form className="stack" aria-busy={busy} onSubmit={(event) => void onSubmit(event)}>
         <label className="field">
           <span className="field-label">作品標題</span>
-          <input required maxLength={120} data-guide-anchor="showcase:title" placeholder="例如：我的品牌識別設計" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} />
+          <input ref={titleInput} required maxLength={120} data-guide-anchor="showcase:title" placeholder="例如：我的品牌識別設計" value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} />
         </label>
         <label className="field">
           <span className="field-label">一句話介紹</span>
@@ -318,7 +369,7 @@ function ShowcaseCard({
       ) : (
         <div className="actions">
           {!open ? (
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setOpen(true)}>
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setOpen(true)}>
               我想找你合作
             </button>
           ) : (
@@ -328,7 +379,7 @@ function ShowcaseCard({
                 <textarea required rows={3} value={need} onChange={(event) => setNeed(event.target.value)} disabled={busy} />
               </label>
               <div className="actions">
-                <button className="btn btn-primary" type="submit" disabled={busy}>
+                <button className="btn btn-secondary" type="submit" disabled={busy}>
                   送出合作需求
                 </button>
                 <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setOpen(false)}>
@@ -414,7 +465,7 @@ function OpportunityCard({
       {provider && opportunity.state === 'open' && (
         <div className="actions">
           {!open ? (
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setOpen(true)}>
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setOpen(true)}>
               提出合作
             </button>
           ) : (
@@ -438,7 +489,7 @@ function OpportunityCard({
                 <span className="field-hint">這是雙方約定價格，不是已收款。超過兩位小數會被拒絕，不會四捨五入。</span>
               </label>
               <div className="actions">
-                <button className="btn btn-primary" type="submit" disabled={busy}>
+                <button className="btn btn-secondary" type="submit" disabled={busy}>
                   送出合作提案
                 </button>
                 <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setOpen(false)}>
