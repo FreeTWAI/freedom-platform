@@ -198,19 +198,194 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "type": "string"
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "audience": {
+                      "type": "string"
+                    },
+                    "issuer": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in",
+                    "audience",
+                    "issuer"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -240,19 +415,458 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "event_id": {
+                            "type": "string"
+                          },
+                          "community_id": {
+                            "type": "string"
+                          },
+                          "organizer_ref": {
+                            "type": "string"
+                          },
+                          "guild_key": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "starts_at": {
+                            "type": "string"
+                          },
+                          "ends_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "mode": {
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "capacity": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "reviewer_user_ref": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reviewer_admin_ref": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "review_reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "reviewed_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "aggregate_version": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          },
+                          "event_kind": {
+                            "type": "string"
+                          },
+                          "topic": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "online_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "review_guild_key": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "visibility": {
+                            "type": "string"
+                          },
+                          "waitlist_enabled": {
+                            "type": "boolean"
+                          },
+                          "response_window_minutes": {
+                            "type": [
+                              "string",
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "waitlist_reconciled_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "help_need": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "registration_policy": {
+                            "type": "string"
+                          },
+                          "prize_details": {
+                            "type": "array",
+                            "items": {}
+                          },
+                          "via_agent": {
+                            "type": "boolean"
+                          },
+                          "source_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source_host": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "imported": {
+                            "type": "boolean"
+                          },
+                          "registration_mode": {
+                            "type": "string"
+                          },
+                          "external_registration_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source_organizer": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "source_cover_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "organizer_name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "banner_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "banner_orientation": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "video_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "video_mime": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "attending_count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "my_rsvp": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "can_review": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "event_id",
+                          "community_id",
+                          "organizer_ref",
+                          "guild_key",
+                          "title",
+                          "description",
+                          "starts_at",
+                          "ends_at",
+                          "mode",
+                          "location",
+                          "capacity",
+                          "state",
+                          "reviewer_user_ref",
+                          "reviewer_admin_ref",
+                          "review_reason",
+                          "reviewed_at",
+                          "aggregate_version",
+                          "created_at",
+                          "updated_at",
+                          "event_kind",
+                          "topic",
+                          "online_url",
+                          "review_guild_key",
+                          "visibility",
+                          "waitlist_enabled",
+                          "response_window_minutes",
+                          "waitlist_reconciled_at",
+                          "help_need",
+                          "registration_policy",
+                          "prize_details",
+                          "via_agent",
+                          "source_url",
+                          "source_host",
+                          "imported",
+                          "registration_mode",
+                          "external_registration_url",
+                          "source_organizer",
+                          "source_cover_url",
+                          "organizer_name",
+                          "banner_url",
+                          "banner_orientation",
+                          "video_url",
+                          "video_mime",
+                          "attending_count",
+                          "my_rsvp",
+                          "can_review"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       },
@@ -1038,26 +1652,486 @@ export const agentContract = {
           }
         },
         "responses": {
-          "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
-          },
           "201": {
-            "description": "已建立，實際發布狀態依回應 state。"
+            "description": "已建立，實際發布狀態依回應 state。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "community_id": {
+                      "type": "string"
+                    },
+                    "organizer_ref": {
+                      "type": "string"
+                    },
+                    "guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "starts_at": {
+                      "type": "string"
+                    },
+                    "ends_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "capacity": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reviewer_user_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewer_admin_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "event_kind": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "online_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "visibility": {
+                      "type": "string"
+                    },
+                    "waitlist_enabled": {
+                      "type": "boolean"
+                    },
+                    "response_window_minutes": {
+                      "type": [
+                        "string",
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "waitlist_reconciled_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "help_need": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "registration_policy": {
+                      "type": "string"
+                    },
+                    "prize_details": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "via_agent": {
+                      "type": "boolean"
+                    },
+                    "source_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_host": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "imported": {
+                      "type": "boolean"
+                    },
+                    "registration_mode": {
+                      "type": "string"
+                    },
+                    "external_registration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_organizer": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_cover_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "organizer_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_orientation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_mime": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "attending_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "my_rsvp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "can_review": {
+                      "type": "boolean"
+                    },
+                    "prize_photos": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "share_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "event_id",
+                    "community_id",
+                    "organizer_ref",
+                    "guild_key",
+                    "title",
+                    "description",
+                    "starts_at",
+                    "ends_at",
+                    "mode",
+                    "location",
+                    "capacity",
+                    "state",
+                    "reviewer_user_ref",
+                    "reviewer_admin_ref",
+                    "review_reason",
+                    "reviewed_at",
+                    "aggregate_version",
+                    "created_at",
+                    "updated_at",
+                    "event_kind",
+                    "topic",
+                    "online_url",
+                    "review_guild_key",
+                    "visibility",
+                    "waitlist_enabled",
+                    "response_window_minutes",
+                    "waitlist_reconciled_at",
+                    "help_need",
+                    "registration_policy",
+                    "prize_details",
+                    "via_agent",
+                    "source_url",
+                    "source_host",
+                    "imported",
+                    "registration_mode",
+                    "external_registration_url",
+                    "source_organizer",
+                    "source_cover_url",
+                    "organizer_name",
+                    "banner_url",
+                    "banner_orientation",
+                    "video_url",
+                    "video_mime",
+                    "attending_count",
+                    "my_rsvp",
+                    "can_review",
+                    "prize_photos",
+                    "share_id"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "202": {
-            "description": "pending_member：請會員確認後以相同內容和 key 重試。"
+            "description": "pending_member：請會員確認後以相同內容和 key 重試。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "pending_member"
+                    },
+                    "code": {
+                      "type": "string",
+                      "const": "pending_member"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -1108,19 +2182,451 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "community_id": {
+                      "type": "string"
+                    },
+                    "organizer_ref": {
+                      "type": "string"
+                    },
+                    "guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "starts_at": {
+                      "type": "string"
+                    },
+                    "ends_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "capacity": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reviewer_user_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewer_admin_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "event_kind": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "online_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "visibility": {
+                      "type": "string"
+                    },
+                    "waitlist_enabled": {
+                      "type": "boolean"
+                    },
+                    "response_window_minutes": {
+                      "type": [
+                        "string",
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "waitlist_reconciled_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "help_need": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "registration_policy": {
+                      "type": "string"
+                    },
+                    "prize_details": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "via_agent": {
+                      "type": "boolean"
+                    },
+                    "source_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_host": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "imported": {
+                      "type": "boolean"
+                    },
+                    "registration_mode": {
+                      "type": "string"
+                    },
+                    "external_registration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_organizer": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_cover_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "organizer_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_orientation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_mime": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "attending_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "my_rsvp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "can_review": {
+                      "type": "boolean"
+                    },
+                    "prize_photos": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "event_id",
+                    "community_id",
+                    "organizer_ref",
+                    "guild_key",
+                    "title",
+                    "description",
+                    "starts_at",
+                    "ends_at",
+                    "mode",
+                    "location",
+                    "capacity",
+                    "state",
+                    "reviewer_user_ref",
+                    "reviewer_admin_ref",
+                    "review_reason",
+                    "reviewed_at",
+                    "aggregate_version",
+                    "created_at",
+                    "updated_at",
+                    "event_kind",
+                    "topic",
+                    "online_url",
+                    "review_guild_key",
+                    "visibility",
+                    "waitlist_enabled",
+                    "response_window_minutes",
+                    "waitlist_reconciled_at",
+                    "help_need",
+                    "registration_policy",
+                    "prize_details",
+                    "via_agent",
+                    "source_url",
+                    "source_host",
+                    "imported",
+                    "registration_mode",
+                    "external_registration_url",
+                    "source_organizer",
+                    "source_cover_url",
+                    "organizer_name",
+                    "banner_url",
+                    "banner_orientation",
+                    "video_url",
+                    "video_mime",
+                    "attending_count",
+                    "my_rsvp",
+                    "can_review",
+                    "prize_photos"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -1205,19 +2711,192 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "share_id": {
+                      "type": "string"
+                    },
+                    "clicks": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "registrations": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "share_id",
+                    "clicks",
+                    "registrations"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -1934,19 +3613,451 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "community_id": {
+                      "type": "string"
+                    },
+                    "organizer_ref": {
+                      "type": "string"
+                    },
+                    "guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "starts_at": {
+                      "type": "string"
+                    },
+                    "ends_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "capacity": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reviewer_user_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewer_admin_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "event_kind": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "online_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "visibility": {
+                      "type": "string"
+                    },
+                    "waitlist_enabled": {
+                      "type": "boolean"
+                    },
+                    "response_window_minutes": {
+                      "type": [
+                        "string",
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "waitlist_reconciled_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "help_need": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "registration_policy": {
+                      "type": "string"
+                    },
+                    "prize_details": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "via_agent": {
+                      "type": "boolean"
+                    },
+                    "source_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_host": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "imported": {
+                      "type": "boolean"
+                    },
+                    "registration_mode": {
+                      "type": "string"
+                    },
+                    "external_registration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_organizer": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_cover_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "organizer_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_orientation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_mime": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "attending_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "my_rsvp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "can_review": {
+                      "type": "boolean"
+                    },
+                    "prize_photos": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "event_id",
+                    "community_id",
+                    "organizer_ref",
+                    "guild_key",
+                    "title",
+                    "description",
+                    "starts_at",
+                    "ends_at",
+                    "mode",
+                    "location",
+                    "capacity",
+                    "state",
+                    "reviewer_user_ref",
+                    "reviewer_admin_ref",
+                    "review_reason",
+                    "reviewed_at",
+                    "aggregate_version",
+                    "created_at",
+                    "updated_at",
+                    "event_kind",
+                    "topic",
+                    "online_url",
+                    "review_guild_key",
+                    "visibility",
+                    "waitlist_enabled",
+                    "response_window_minutes",
+                    "waitlist_reconciled_at",
+                    "help_need",
+                    "registration_policy",
+                    "prize_details",
+                    "via_agent",
+                    "source_url",
+                    "source_host",
+                    "imported",
+                    "registration_mode",
+                    "external_registration_url",
+                    "source_organizer",
+                    "source_cover_url",
+                    "organizer_name",
+                    "banner_url",
+                    "banner_orientation",
+                    "video_url",
+                    "video_mime",
+                    "attending_count",
+                    "my_rsvp",
+                    "can_review",
+                    "prize_photos"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2075,19 +4186,190 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "announcement_id": {
+                      "type": "string"
+                    },
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "event_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "recorded": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "announcement_id",
+                    "event_id",
+                    "event_version",
+                    "recorded"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2187,19 +4469,451 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "community_id": {
+                      "type": "string"
+                    },
+                    "organizer_ref": {
+                      "type": "string"
+                    },
+                    "guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "starts_at": {
+                      "type": "string"
+                    },
+                    "ends_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "capacity": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reviewer_user_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewer_admin_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "event_kind": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "online_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "visibility": {
+                      "type": "string"
+                    },
+                    "waitlist_enabled": {
+                      "type": "boolean"
+                    },
+                    "response_window_minutes": {
+                      "type": [
+                        "string",
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "waitlist_reconciled_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "help_need": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "registration_policy": {
+                      "type": "string"
+                    },
+                    "prize_details": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "via_agent": {
+                      "type": "boolean"
+                    },
+                    "source_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_host": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "imported": {
+                      "type": "boolean"
+                    },
+                    "registration_mode": {
+                      "type": "string"
+                    },
+                    "external_registration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_organizer": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_cover_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "organizer_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_orientation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_mime": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "attending_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "my_rsvp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "can_review": {
+                      "type": "boolean"
+                    },
+                    "prize_photos": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "event_id",
+                    "community_id",
+                    "organizer_ref",
+                    "guild_key",
+                    "title",
+                    "description",
+                    "starts_at",
+                    "ends_at",
+                    "mode",
+                    "location",
+                    "capacity",
+                    "state",
+                    "reviewer_user_ref",
+                    "reviewer_admin_ref",
+                    "review_reason",
+                    "reviewed_at",
+                    "aggregate_version",
+                    "created_at",
+                    "updated_at",
+                    "event_kind",
+                    "topic",
+                    "online_url",
+                    "review_guild_key",
+                    "visibility",
+                    "waitlist_enabled",
+                    "response_window_minutes",
+                    "waitlist_reconciled_at",
+                    "help_need",
+                    "registration_policy",
+                    "prize_details",
+                    "via_agent",
+                    "source_url",
+                    "source_host",
+                    "imported",
+                    "registration_mode",
+                    "external_registration_url",
+                    "source_organizer",
+                    "source_cover_url",
+                    "organizer_name",
+                    "banner_url",
+                    "banner_orientation",
+                    "video_url",
+                    "video_mime",
+                    "attending_count",
+                    "my_rsvp",
+                    "can_review",
+                    "prize_photos"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2284,19 +4998,180 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "interested": {
+                      "type": "boolean"
+                    },
+                    "registered": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "interested",
+                    "registered"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2437,19 +5312,451 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "community_id": {
+                      "type": "string"
+                    },
+                    "organizer_ref": {
+                      "type": "string"
+                    },
+                    "guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "starts_at": {
+                      "type": "string"
+                    },
+                    "ends_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "capacity": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reviewer_user_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewer_admin_ref": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "event_kind": {
+                      "type": "string"
+                    },
+                    "topic": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "online_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "review_guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "visibility": {
+                      "type": "string"
+                    },
+                    "waitlist_enabled": {
+                      "type": "boolean"
+                    },
+                    "response_window_minutes": {
+                      "type": [
+                        "string",
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "waitlist_reconciled_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "help_need": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "registration_policy": {
+                      "type": "string"
+                    },
+                    "prize_details": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "via_agent": {
+                      "type": "boolean"
+                    },
+                    "source_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_host": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "imported": {
+                      "type": "boolean"
+                    },
+                    "registration_mode": {
+                      "type": "string"
+                    },
+                    "external_registration_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_organizer": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "source_cover_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "organizer_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "banner_orientation": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "video_mime": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "attending_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "my_rsvp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "can_review": {
+                      "type": "boolean"
+                    },
+                    "prize_photos": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "event_id",
+                    "community_id",
+                    "organizer_ref",
+                    "guild_key",
+                    "title",
+                    "description",
+                    "starts_at",
+                    "ends_at",
+                    "mode",
+                    "location",
+                    "capacity",
+                    "state",
+                    "reviewer_user_ref",
+                    "reviewer_admin_ref",
+                    "review_reason",
+                    "reviewed_at",
+                    "aggregate_version",
+                    "created_at",
+                    "updated_at",
+                    "event_kind",
+                    "topic",
+                    "online_url",
+                    "review_guild_key",
+                    "visibility",
+                    "waitlist_enabled",
+                    "response_window_minutes",
+                    "waitlist_reconciled_at",
+                    "help_need",
+                    "registration_policy",
+                    "prize_details",
+                    "via_agent",
+                    "source_url",
+                    "source_host",
+                    "imported",
+                    "registration_mode",
+                    "external_registration_url",
+                    "source_organizer",
+                    "source_cover_url",
+                    "organizer_name",
+                    "banner_url",
+                    "banner_orientation",
+                    "video_url",
+                    "video_mime",
+                    "attending_count",
+                    "my_rsvp",
+                    "can_review",
+                    "prize_photos"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2624,19 +5931,275 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "type": "string"
+                    },
+                    "event_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "event_state": {
+                      "type": "string"
+                    },
+                    "starts_at": {
+                      "type": "string"
+                    },
+                    "waitlist_enabled": {
+                      "type": "boolean"
+                    },
+                    "response_window_minutes": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "rsvp_state": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "waitlist": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string"
+                            },
+                            "aggregate_version": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "joined_at": {
+                              "type": "string"
+                            },
+                            "invited_at": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "expires_at": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "delivery_status": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "aggregate_version",
+                            "joined_at",
+                            "invited_at",
+                            "expires_at",
+                            "delivery_status"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "available_seats": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "event_id",
+                    "event_version",
+                    "event_state",
+                    "starts_at",
+                    "waitlist_enabled",
+                    "response_window_minutes",
+                    "rsvp_state",
+                    "waitlist",
+                    "available_seats"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2869,26 +6432,388 @@ export const agentContract = {
           }
         },
         "responses": {
-          "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
-          },
           "201": {
-            "description": "已建立，實際發布狀態依回應 state。"
+            "description": "已建立，實際發布狀態依回應 state。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "project_id": {
+                      "type": "string"
+                    },
+                    "community_id": {
+                      "type": "string"
+                    },
+                    "owner_ref": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "use_notes": {
+                      "type": "string"
+                    },
+                    "demo_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "repository_id": {
+                      "type": "string"
+                    },
+                    "repository_full_name": {
+                      "type": "string"
+                    },
+                    "repository_url": {
+                      "type": "string"
+                    },
+                    "relationship": {
+                      "type": "string"
+                    },
+                    "relationship_verification": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "official": {
+                      "type": "boolean"
+                    },
+                    "commercial_ready": {
+                      "type": "boolean"
+                    },
+                    "current_version_id": {
+                      "type": "string"
+                    },
+                    "aggregate_version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "public_metadata_revised": {
+                      "type": "boolean"
+                    },
+                    "sharing_withdrawn_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "share_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "via_agent": {
+                      "type": "boolean"
+                    },
+                    "owner_name": {
+                      "type": "string"
+                    },
+                    "current_version": {
+                      "type": "object",
+                      "properties": {
+                        "version_id": {
+                          "type": "string"
+                        },
+                        "project_id": {
+                          "type": "string"
+                        },
+                        "repository_id": {
+                          "type": "string"
+                        },
+                        "commit_sha": {
+                          "type": "string"
+                        },
+                        "default_branch": {
+                          "type": "string"
+                        },
+                        "repository_full_name": {
+                          "type": "string"
+                        },
+                        "repository_url": {
+                          "type": "string"
+                        },
+                        "readme_url": {
+                          "type": "string"
+                        },
+                        "license_spdx": {
+                          "type": "string"
+                        },
+                        "license_evidence_url": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "is_fork": {
+                          "type": "boolean"
+                        },
+                        "archived": {
+                          "type": "boolean"
+                        },
+                        "source_snapshot": {
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": {}
+                        },
+                        "source_sha256": {
+                          "type": "string"
+                        },
+                        "facts_sha256": {
+                          "type": "string"
+                        },
+                        "inspected_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "version_id",
+                        "project_id",
+                        "repository_id",
+                        "commit_sha",
+                        "default_branch",
+                        "repository_full_name",
+                        "repository_url",
+                        "readme_url",
+                        "license_spdx",
+                        "license_evidence_url",
+                        "is_fork",
+                        "archived",
+                        "source_snapshot",
+                        "source_sha256",
+                        "facts_sha256",
+                        "inspected_at"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "project_id",
+                    "community_id",
+                    "owner_ref",
+                    "title",
+                    "description",
+                    "use_notes",
+                    "demo_url",
+                    "repository_id",
+                    "repository_full_name",
+                    "repository_url",
+                    "relationship",
+                    "relationship_verification",
+                    "status",
+                    "official",
+                    "commercial_ready",
+                    "current_version_id",
+                    "aggregate_version",
+                    "created_at",
+                    "updated_at",
+                    "public_metadata_revised",
+                    "sharing_withdrawn_at",
+                    "share_id",
+                    "via_agent",
+                    "owner_name",
+                    "current_version"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "202": {
-            "description": "pending_member：請會員確認後以相同內容和 key 重試。"
+            "description": "pending_member：請會員確認後以相同內容和 key 重試。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "pending_member"
+                    },
+                    "code": {
+                      "type": "string",
+                      "const": "pending_member"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2918,19 +6843,204 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "policy": {
+                      "type": "string"
+                    },
+                    "accepted_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": {}
+                      }
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "policy",
+                    "accepted_count",
+                    "entries",
+                    "next_offset"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -2960,19 +7070,208 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "policy": {
+                      "type": "string"
+                    },
+                    "member_ref": {
+                      "type": "string"
+                    },
+                    "accepted_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": {}
+                      }
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "policy",
+                    "member_ref",
+                    "accepted_count",
+                    "entries",
+                    "next_offset"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3003,19 +7302,377 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "policy_version": {
+                      "type": "string"
+                    },
+                    "counting_enabled": {
+                      "type": "boolean"
+                    },
+                    "show_title": {
+                      "type": "boolean"
+                    },
+                    "selected_title": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "moderation_reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "appeal_state": {
+                      "type": "string"
+                    },
+                    "aggregate_version": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "chat": {
+                      "type": "object",
+                      "properties": {
+                        "days": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "next_days": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "remaining": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "days",
+                        "next_days",
+                        "remaining"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "participation": {
+                      "type": "object",
+                      "properties": {
+                        "days": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "next_days": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "remaining": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "days",
+                        "next_days",
+                        "remaining"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    "titles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "title_id": {
+                            "type": "string"
+                          },
+                          "track": {
+                            "type": "string"
+                          },
+                          "days": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "unlocked": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "title_id",
+                          "track",
+                          "days",
+                          "label",
+                          "unlocked"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "can_moderate": {
+                      "type": "boolean"
+                    },
+                    "selected": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "title_id": {
+                              "type": "string"
+                            },
+                            "track": {
+                              "type": "string"
+                            },
+                            "days": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "unlocked": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "title_id",
+                            "track",
+                            "days",
+                            "label",
+                            "unlocked"
+                          ],
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "policy_version",
+                    "counting_enabled",
+                    "show_title",
+                    "selected_title",
+                    "status",
+                    "moderation_reason",
+                    "appeal_state",
+                    "aggregate_version",
+                    "chat",
+                    "participation",
+                    "titles",
+                    "can_moderate",
+                    "selected"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3045,19 +7702,253 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "notification_id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "body": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "read_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "action": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {},
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "notification_id",
+                          "kind",
+                          "title",
+                          "body",
+                          "created_at",
+                          "read_at",
+                          "action"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "unread_count": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "unread_count",
+                    "next_offset"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3109,19 +8000,218 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "event_id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "resource_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "cursor": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "event_id",
+                          "kind",
+                          "resource_id",
+                          "created_at",
+                          "cursor"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "next_cursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_cursor",
+                    "has_more"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3366,19 +8456,207 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "original_author": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "event": {
+                      "type": "object",
+                      "properties": {
+                        "source_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "source_url"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "title",
+                    "url",
+                    "description",
+                    "original_author"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3623,25 +8901,218 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
-          },
-          "201": {
-            "description": "已建立，實際發布狀態依回應 state。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "share_id": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "via_agent": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "share_id",
+                    "created",
+                    "url",
+                    "via_agent"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "202": {
-            "description": "pending_member：請會員確認後以相同內容和 key 重試。"
+            "description": "pending_member：請會員確認後以相同內容和 key 重試。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "pending_member"
+                    },
+                    "code": {
+                      "type": "string",
+                      "const": "pending_member"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       },
@@ -3709,19 +9180,216 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "share_id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "share_id",
+                          "kind",
+                          "title",
+                          "url"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_offset"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3772,19 +9440,287 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "share_id": {
+                      "type": "string"
+                    },
+                    "community_id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "canonical_key": {
+                      "type": "string"
+                    },
+                    "canonical_url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "repo_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ref_table": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ref_id": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "title": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "first_sharer_user_id": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reports_confirmed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "guild_key": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "legacy_ref": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "sharers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "display_name",
+                          "role"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "repository": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "share_id",
+                    "community_id",
+                    "kind",
+                    "canonical_key",
+                    "canonical_url",
+                    "repo_id",
+                    "ref_table",
+                    "ref_id",
+                    "title",
+                    "first_sharer_user_id",
+                    "state",
+                    "reports_confirmed_at",
+                    "guild_key",
+                    "legacy_ref",
+                    "created_at",
+                    "sharers",
+                    "repository"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3869,19 +9805,180 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "share_id": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "share_id",
+                    "state"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -3966,19 +10063,180 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "code"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -4032,19 +10290,230 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "share_id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "basis": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "share_id",
+                          "title",
+                          "kind",
+                          "state",
+                          "role",
+                          "basis",
+                          "count"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_offset"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }
@@ -4098,19 +10567,276 @@ export const agentContract = {
         },
         "responses": {
           "200": {
-            "description": "操作成功；欄位沿用原會員 API。"
+            "description": "操作成功；欄位沿用原會員 API。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "available": {
+                            "type": "boolean"
+                          },
+                          "link": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string"
+                                  },
+                                  "target": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "target",
+                                  "path"
+                                ],
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "open_path": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "clicks": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "stars": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "registrations": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "last_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "kind",
+                          "title",
+                          "available",
+                          "link",
+                          "open_path",
+                          "clicks",
+                          "stars",
+                          "registrations",
+                          "last_at"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "next_offset": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "next_offset"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "401": {
-            "description": "金鑰到期、撤銷或停用。"
+            "description": "金鑰到期、撤銷或停用。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "403": {
-            "description": "權限不足或功能未開放。"
+            "description": "權限不足或功能未開放。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "409": {
-            "description": "內容或狀態衝突，停止並詢問會員。"
+            "description": "內容或狀態衝突，停止並詢問會員。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           },
           "429": {
-            "description": "已達限制，停止操作。"
+            "description": "已達限制，停止操作。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "detail"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
           }
         }
       }

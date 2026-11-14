@@ -19,8 +19,12 @@ const definitions=Object.values(agentContract.paths).flatMap(path=>Object.values
 const tools=agentOperations.filter(op=>op.granted!==false).map(op=>{
  const definition=definitions.find(entry=>entry.operationId===op.id);
  if(!definition)throw new Error(`Missing MCP contract: ${op.id}`);
+ const responses=definition.responses as Record<string,{content?:{'application/json'?:{schema?:Record<string,unknown>}}}>;
+ const success=(responses['201']??responses['200'])?.content?.['application/json']?.schema;
+ const pending=responses['202']?.content?.['application/json']?.schema;
+ const outputSchema=success?(op.publicItem&&pending?{anyOf:[success,pending]}:success):undefined;
  return {op,validator:z.fromJSONSchema(definition['x-input-schema']),tool:{name:op.id,title:op.title,description:op.title,
-  inputSchema:definition['x-input-schema'],annotations:{readOnlyHint:op.method==='GET',destructiveHint:['shares.retract','events.rsvp','events.waitlist'].includes(op.id),idempotentHint:op.id!=='tools.identity',openWorldHint:true}}};
+  inputSchema:definition['x-input-schema'],...(outputSchema?{outputSchema}:{}),annotations:{readOnlyHint:op.method==='GET',destructiveHint:['shares.retract','events.rsvp','events.waitlist'].includes(op.id),idempotentHint:op.id!=='tools.identity',openWorldHint:true}}};
 });
 function available(op:AgentOperation,runtime:PlatformRuntime,registered:(op:AgentOperation)=>boolean){
  if(!registered(op))return false;
@@ -50,7 +54,7 @@ export function agentMcp(pool:Pool,options:{origin:string;origins:ReadonlySet<st
    if(c.req.method!=='POST'){accountStatus=405;c.header('Allow','POST');return c.body(null,405);}
    requireCondition(/^application\/json[ \t]*(?:;|$)/i.test(c.req.header('Content-Type')??''),415,'json_required','操作需要 JSON。');
    const accept=c.req.header('Accept')??'';
-   requireCondition(accept.split(',').some(t=>/^application\/json(?:\s*;|\s*$)/i.test(t.trim()))&&accept.split(',').some(t=>/^text\/event-stream(?:\s*;|\s*$)/i.test(t.trim())),406,'mcp_accept_required','請接受 application/json 與 text/event-stream。');
+   requireCondition(accept.split(',').some(t=>/^(?:application\/json|\*\/\*)(?:\s*;|\s*$)/i.test(t.trim())),406,'mcp_accept_required','請接受 application/json。');
    requireCondition(Number(c.req.header('Content-Length')??0)<=options.bodyLimit,413,'body_too_large','內容過長。');
    let size=0;const chunks:Uint8Array[]=[];const reader=c.req.raw.body?.getReader();
    if(reader)try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>options.bodyLimit){await reader.cancel();throw new Problem(413,'body_too_large','內容過長。');}chunks.push(value);}}finally{reader.releaseLock();}
