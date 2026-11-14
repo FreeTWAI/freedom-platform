@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {gzipSync} from 'node:zlib';
 import {createSkillInstallRoutes} from '../../apps/platform-api/src/routes/skill-install.js';
-import {SKILL_INSTALL_LIMITS,clearRecordedSkillInstallFallbacks,createSkillInstallBundleLoader,gitBlobSha1,isSafeBundlePath,recordedSkillInstallFallbacks,skillFolderName,skillInstallSource,type SkillInstallFallbackRecord} from '../../modules/skill-install/index.js';
+import {SKILL_INSTALL_LIMITS,createSkillInstallBundleLoader,gitBlobSha1,isSafeBundlePath,skillFolderName,skillInstallSource} from '../../modules/skill-install/index.js';
 import {skillBookIdForFullName} from '../../modules/repo-maintainer/skill-books.js';
 import {communityCatalog,type SkillBook} from '../../modules/community/catalog.js';
 import {parseInstallBundle,installReceipt,buildInstallZip,copyText,installCommands,SkillInstallError} from '../../apps/portal-web/src/modules/skill-install-client.js';
@@ -80,7 +80,7 @@ test('install bundle is pinned, verified, excludes development files and is cach
 for(const redirect of ['tree','SKILL.md'] as const)test('install bundle rejects a non-rename redirect from '+redirect+' without following it',async()=>{
   const {fetcher,calls,redirects}=await fakeGitHub({'SKILL.md':skill},{redirect});
   const load=createSkillInstallBundleLoader(fetcher,undefined,[book('demo')]);
-  const expected=redirect==='tree'?{status:404,code:'skill_source_unavailable'}:{status:503,code:'skill_source_unreachable'};
+  const expected=redirect==='tree'?{status:503,code:'original_unavailable'}:{status:503,code:'skill_source_unreachable'};
   await assert.rejects(load('demo'),expected);
   assert.deepEqual(calls,[
     'https://api.github.com/repos/FreeTWAI/freedom-skill-demo/git/trees/'+commit+'?recursive=1',
@@ -212,16 +212,15 @@ for(const scenario of ['success','curl failure','destination exists','destinatio
   }finally{await rm(workspace,{recursive:true,force:true});}
 });
 
-test('install bundle prefers upstream original repo at pinned commit and records 404 fallback to book.repository_url',async()=>{
-  clearRecordedSkillInstallFallbacks();
+test('install bundle reads original repo at pinned commit and returns 503 original_unavailable when original 404s',async()=>{
   const encoder=new TextEncoder();
   const body=skill;
   const sha=await gitBlobSha1(encoder.encode(body));
   const upstreamBook=book('orig',{upstream_url:'https://github.com/OriginalAuthor/cool-skill'});
   const source=skillInstallSource('orig',[upstreamBook]);
-  assert.deepEqual(source,{book_id:'orig',owner:'OriginalAuthor',repo:'cool-skill',commit,fallback_owner:'FreeTWAI',fallback_repo:'freedom-skill-orig'});
+  assert.deepEqual(source,{book_id:'orig',owner:'OriginalAuthor',repo:'cool-skill',commit});
 
-  // 1) Original serves the pinned commit directly: no fallback.
+  // 1) Original serves the pinned commit directly: copy is never requested.
   const origCalls:string[]=[];
   const origFetcher=(async(input:string|URL|Request)=>{
     const url=String(input);origCalls.push(url);
@@ -240,57 +239,35 @@ test('install bundle prefers upstream original repo at pinned commit and records
   assert.equal(origBundle.repository,'OriginalAuthor/cool-skill');
   assert.equal(origBundle.commit,commit);
   assert.equal(origCalls.some(url=>url.includes('FreeTWAI/freedom-skill-orig')),false);
-  assert.equal(recordedSkillInstallFallbacks().length,0);
   const receipt=installReceipt(await parseInstallBundle(origBundle),'claude-code','zip');
   assert.equal(receipt.package.repository,'OriginalAuthor/cool-skill');
   assert.equal(receipt.package.commit,commit);
 
-  // 2) Original returns 404 for pinned commit -> falls back to book.repository_url at exact same commit & records fallback.
-  const fallbackCalls:string[]=[];
-  const recorded:SkillInstallFallbackRecord[]=[];
-  const fallbackFetcher=(async(input:string|URL|Request)=>{
-    const url=String(input);fallbackCalls.push(url);
+  // 2) Original returns 404 for pinned commit -> answers 503 original_unavailable without requesting copy.
+  const missingCalls:string[]=[];
+  const missingFetcher=(async(input:string|URL|Request)=>{
+    const url=String(input);missingCalls.push(url);
     if(url==='https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/'+commit+'?recursive=1'){
       return new Response('not found',{status:404});
     }
-    if(url==='https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/'+commit+'?recursive=1'){
-      return Response.json({sha:commit,truncated:false,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
-    }
-    if(url===archiveUrl('FreeTWAI','freedom-skill-orig')){
-      return new Response(archive({'SKILL.md':body}));
-    }
-    return new Response('missing',{status:404});
+    throw new Error('Unexpected fetch '+url);
   }) as typeof fetch;
-  const fbRes=await createSkillInstallRoutes(fallbackFetcher,undefined,[upstreamBook],{onFallback:record=>recorded.push(record)}).request('/api/v1/skills/orig/install-bundle');
-  assert.equal(fbRes.status,200);
-  const fbBundle=await fbRes.json();
-  assert.equal(fbBundle.format,'freedom.skill-install-bundle/v1');
-  assert.equal(fbBundle.repository,'FreeTWAI/freedom-skill-orig');
-  assert.equal(fbBundle.commit,commit);
-  assert.deepEqual(fallbackCalls,[
+  const missingRes=await createSkillInstallRoutes(missingFetcher,undefined,[upstreamBook]).request('/api/v1/skills/orig/install-bundle');
+  assert.equal(missingRes.status,503);
+  assert.deepEqual(await missingRes.json(),{error:'original_unavailable',message:'原作暫時無法取得，請稍後再試。'});
+  assert.deepEqual(missingCalls,[
     'https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/'+commit+'?recursive=1',
-    'https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/'+commit+'?recursive=1',
-    archiveUrl('FreeTWAI','freedom-skill-orig'),
   ]);
-  assert.equal(recorded.length,1);
-  assert.equal(recorded[0].original_repository,'OriginalAuthor/cool-skill');
-  assert.equal(recorded[0].fallback_repository,'FreeTWAI/freedom-skill-orig');
-  assert.equal(recorded[0].commit,commit);
-  assert.equal(recorded[0].reason,'original_commit_missing');
-  assert.equal(recordedSkillInstallFallbacks().some(item=>item.book_id==='orig'),true);
 });
 
-test('install bundle follows a single repository-id rename without recording a fallback, and classifies missing vs transient statuses',async()=>{
+test('install bundle follows a single repository-id rename and classifies missing vs transient statuses',async()=>{
   const {createApp}=await import('../../apps/platform-api/src/app.js');
   const body=skill;
   const sha=await gitBlobSha1(encoder.encode(body));
   const upstreamBook=book('orig',{upstream_url:'https://github.com/OriginalAuthor/cool-skill'});
-  const treeOk=()=>Response.json({sha:commit,truncated:false,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
 
-  // (a) Original tree 301 -> /repositories/123/... -> new name; no fallback recorded; DB not consulted.
-  clearRecordedSkillInstallFallbacks();
+  // (a) Original tree 301 -> /repositories/123/... -> new name; DB not consulted.
   const aCalls:string[]=[];
-  const aRecorded:SkillInstallFallbackRecord[]=[];
   const aFetcher=(async(input:string|URL|Request,init?:RequestInit)=>{
     const url=String(input);aCalls.push(url);assert.equal(init?.redirect,'manual');
     if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`){
@@ -299,17 +276,15 @@ test('install bundle follows a single repository-id rename without recording a f
     if(url==='https://api.github.com/repositories/123'){
       return Response.json({id:123,full_name:'RenamedAuthor/new-cool-skill',private:false,visibility:'public'});
     }
-    if(url===`https://api.github.com/repos/RenamedAuthor/new-cool-skill/git/trees/${commit}?recursive=1`)return treeOk();
+    if(url===`https://api.github.com/repos/RenamedAuthor/new-cool-skill/git/trees/${commit}?recursive=1`)return Response.json({sha:commit,truncated:false,tree:[{path:'SKILL.md',type:'blob',sha,size:encoder.encode(body).length}]});
     if(url===archiveUrl('RenamedAuthor','new-cool-skill'))return new Response(archive({'SKILL.md':body}));
     return new Response('unexpected',{status:404});
   }) as typeof fetch;
-  const aRes=await createSkillInstallRoutes(aFetcher,undefined,[upstreamBook],{onFallback:r=>aRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
+  const aRes=await createSkillInstallRoutes(aFetcher,undefined,[upstreamBook]).request('/api/v1/skills/orig/install-bundle');
   assert.equal(aRes.status,200);
   const aBundle=await aRes.json();
   assert.equal(aBundle.repository,'RenamedAuthor/new-cool-skill');
   assert.equal(aBundle.commit,commit);
-  assert.equal(aRecorded.length,0);
-  assert.equal(recordedSkillInstallFallbacks().length,0);
   assert.equal(aCalls.some(url=>url.includes('FreeTWAI/freedom-skill-orig')),false);
 
   // Verify createApp routes install directly from catalog coordinate (never resolves DB identity hook).
@@ -335,32 +310,26 @@ test('install bundle follows a single repository-id rename without recording a f
   assert.equal(appRes.status,200);
   assert.equal((await appRes.json()).repository,'Original/renamed');
 
-  // (b) 301 to non-repository-id location -> falls back to distinct copy & records fallback.
-  clearRecordedSkillInstallFallbacks();
-  const bRecorded:SkillInstallFallbackRecord[]=[];
+  // (b) 301 to non-repository-id location -> 503 original_unavailable, copy never read.
   const bCalls:string[]=[];
   const bFetcher=(async(input:string|URL|Request)=>{
     const url=String(input);bCalls.push(url);
     if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`){
       return new Response(null,{status:301,headers:{Location:'https://evil.example.invalid/repositories/123/git/trees/'+commit}});
     }
-    if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
-    if(url===archiveUrl('FreeTWAI','freedom-skill-orig'))return new Response(archive({'SKILL.md':body}));
-    return new Response('missing',{status:404});
+    throw new Error('Unexpected fetch '+url);
   }) as typeof fetch;
-  const bRes=await createSkillInstallRoutes(bFetcher,undefined,[upstreamBook],{onFallback:r=>bRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
-  assert.equal(bRes.status,200);
-  assert.equal((await bRes.json()).repository,'FreeTWAI/freedom-skill-orig');
-  assert.equal(bRecorded.length,1);
-  assert.equal(bRecorded[0].reason,'original_commit_missing');
-  assert.equal(bCalls.some(url=>url.includes('evil.example.invalid')||url.includes('/repositories/123')),false);
+  const bRes=await createSkillInstallRoutes(bFetcher,undefined,[upstreamBook]).request('/api/v1/skills/orig/install-bundle');
+  assert.equal(bRes.status,503);
+  assert.equal((await bRes.json()).error,'original_unavailable');
+  assert.equal(bCalls.length,1);
+  assert.equal(bCalls.some(url=>url.includes('evil.example.invalid')||url.includes('/repositories/123')||url.includes('FreeTWAI/freedom-skill-orig')),false);
 
-  // (c) /repositories/123 returns wrong id, private:true, or second redirect -> falls back to copy.
+  // (c) /repositories/123 returns wrong id, private:true, or second redirect -> 503 original_unavailable, copy never read.
   for(const scenario of ['wrong_id','private','second_redirect'] as const){
-    clearRecordedSkillInstallFallbacks();
-    const cRecorded:SkillInstallFallbackRecord[]=[];
+    const cCalls:string[]=[];
     const cFetcher=(async(input:string|URL|Request)=>{
-      const url=String(input);
+      const url=String(input);cCalls.push(url);
       if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`){
         return new Response(null,{status:302,headers:{Location:`https://api.github.com/repositories/123/git/trees/${commit}?recursive=1`}});
       }
@@ -370,37 +339,32 @@ test('install bundle follows a single repository-id rename without recording a f
       if(url===`https://api.github.com/repos/RenamedAuthor/new-cool-skill/git/trees/${commit}?recursive=1`&&scenario==='second_redirect'){
         return new Response(null,{status:301,headers:{Location:`https://api.github.com/repositories/456/git/trees/${commit}?recursive=1`}});
       }
-      if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
-      if(url===archiveUrl('FreeTWAI','freedom-skill-orig'))return new Response(archive({'SKILL.md':body}));
-      return new Response('missing',{status:404});
+      throw new Error('Unexpected fetch '+url);
     }) as typeof fetch;
-    const cRes=await createSkillInstallRoutes(cFetcher,undefined,[upstreamBook],{onFallback:r=>cRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
-    assert.equal(cRes.status,200,scenario);
-    assert.equal((await cRes.json()).repository,'FreeTWAI/freedom-skill-orig',scenario);
-    assert.equal(cRecorded.length,1,scenario);
+    const cRes=await createSkillInstallRoutes(cFetcher,undefined,[upstreamBook]).request('/api/v1/skills/orig/install-bundle');
+    assert.equal(cRes.status,503,scenario);
+    assert.equal((await cRes.json()).error,'original_unavailable',scenario);
+    assert.equal(cCalls.some(url=>url.includes('FreeTWAI/freedom-skill-orig')),false,scenario);
   }
 
-  // (d) 404 with no distinct copy -> 404 skill_source_unavailable.
+  // (d) 404 with no distinct copy -> 503 original_unavailable.
   const noCopyBook=book('nocopy');
   const dFetcher=(async()=>new Response('not found',{status:404})) as typeof fetch;
   const dRes=await createSkillInstallRoutes(dFetcher,undefined,[noCopyBook]).request('/api/v1/skills/nocopy/install-bundle');
-  assert.equal(dRes.status,404);
-  assert.equal((await dRes.json()).error,'skill_source_unavailable');
+  assert.equal(dRes.status,503);
+  assert.equal((await dRes.json()).error,'original_unavailable');
 
-  // (e) 422 from original -> falls back to distinct copy.
-  clearRecordedSkillInstallFallbacks();
-  const eRecorded:SkillInstallFallbackRecord[]=[];
+  // (e) 422 from original -> 503 original_unavailable, copy never read.
+  const eCalls:string[]=[];
   const eFetcher=(async(input:string|URL|Request)=>{
-    const url=String(input);
+    const url=String(input);eCalls.push(url);
     if(url===`https://api.github.com/repos/OriginalAuthor/cool-skill/git/trees/${commit}?recursive=1`)return new Response('unprocessable',{status:422});
-    if(url===`https://api.github.com/repos/FreeTWAI/freedom-skill-orig/git/trees/${commit}?recursive=1`)return treeOk();
-    if(url===archiveUrl('FreeTWAI','freedom-skill-orig'))return new Response(archive({'SKILL.md':body}));
-    return new Response('missing',{status:404});
+    throw new Error('Unexpected fetch '+url);
   }) as typeof fetch;
-  const eRes=await createSkillInstallRoutes(eFetcher,undefined,[upstreamBook],{onFallback:r=>eRecorded.push(r)}).request('/api/v1/skills/orig/install-bundle');
-  assert.equal(eRes.status,200);
-  assert.equal((await eRes.json()).repository,'FreeTWAI/freedom-skill-orig');
-  assert.equal(eRecorded.length,1);
+  const eRes=await createSkillInstallRoutes(eFetcher,undefined,[upstreamBook]).request('/api/v1/skills/orig/install-bundle');
+  assert.equal(eRes.status,503);
+  assert.equal((await eRes.json()).error,'original_unavailable');
+  assert.equal(eCalls.length,1);
 
   // (f) 503 or 403 from original -> 503 skill_source_unreachable, copy never read.
   for(const status of [503,403]){
@@ -470,10 +434,17 @@ test('install bundles bound the tree, compressed archive and decompressed archiv
   }
 });
 
-test('an oversized fallback still links to the original repository',async()=>{
+test('an oversized renamed original still links to the original repository',async()=>{
   const source=book('fallback-limit',{upstream_url:'https://github.com/OriginalAuthor/original-skill'});
-  const fetcher=(async(input:string|URL|Request)=>String(input).includes('/OriginalAuthor/')
-    ?new Response(null,{status:404}):Response.json({truncated:true,tree:[]})) as typeof fetch;
+  const fetcher=(async(input:string|URL|Request)=>{
+    const url=String(input);
+    if(url===`https://api.github.com/repos/OriginalAuthor/original-skill/git/trees/${commit}?recursive=1`){
+      return new Response(null,{status:301,headers:{Location:`https://api.github.com/repositories/123/git/trees/${commit}?recursive=1`}});
+    }
+    if(url==='https://api.github.com/repositories/123')return Response.json({id:123,full_name:'RenamedAuthor/renamed-skill',private:false,visibility:'public'});
+    if(url===`https://api.github.com/repos/RenamedAuthor/renamed-skill/git/trees/${commit}?recursive=1`)return Response.json({truncated:true,tree:[]});
+    throw new Error('Unexpected fetch '+url);
+  }) as typeof fetch;
   const response=await createSkillInstallRoutes(fetcher,undefined,[source]).request('/api/v1/skills/fallback-limit/install-bundle');
   assert.equal(response.status,422);
   const body=await response.json();assert.equal(body.error,'skill_package_too_large');
@@ -503,4 +474,18 @@ test('the isolate cache evicts by stored bytes and bounds independent in-flight 
   assert.equal(rejection?.status,503);assert.equal(rejection?.code,'skill_install_busy');
   assert.notEqual(one,two,'separate incoming requests never share pending I/O');
   assert.deepEqual(one,two);
+});
+
+test('original 404 returns 503 original_unavailable without requesting any copy repository',async()=>{
+  const upstreamBook=book('orig',{upstream_url:'https://github.com/OriginalAuthor/cool-skill'});
+  const calls:string[]=[];
+  const fetcher=(async(input:string|URL|Request)=>{
+    const url=String(input);calls.push(url);
+    return new Response('missing',{status:404});
+  }) as typeof fetch;
+  const response=await createSkillInstallRoutes(fetcher,undefined,[upstreamBook]).request('/api/v1/skills/orig/install-bundle');
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{error:'original_unavailable',message:'原作暫時無法取得，請稍後再試。'});
+  assert.equal(calls.length,1);
+  assert.equal(calls.filter(url=>!url.startsWith('https://api.github.com/repos/OriginalAuthor/cool-skill/')).length,0);
 });

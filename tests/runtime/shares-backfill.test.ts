@@ -131,12 +131,10 @@ test('backfilled book retains its numeric original without observations across a
  const fallbackFake:typeof fetch=async input=>{
   const url=String(input);
   if(url===`https://api.github.com/repos/Fixture/old/git/trees/${missingOriginal.source_commit}?recursive=1`)return new Response('missing',{status:404});
-  if(url===`https://api.github.com/repos/Workshop/reviewed/git/trees/${missingOriginal.source_commit}?recursive=1`)return Response.json({sha:missingOriginal.source_commit,tree:[{path:'SKILL.md',type:'blob',sha,size:body.length}]});
-  if(url===`https://codeload.github.com/Workshop/reviewed/tar.gz/${missingOriginal.source_commit}`)return new Response(archive);
   throw Error('Unexpected GitHub request '+url);
  };
  const fallbackResponse=await createSkillInstallRoutes(fallbackFake,undefined,[missingOriginal]).request(`/api/v1/skills/${missingOriginal.id}/install-bundle`);
- assert.equal(fallbackResponse.status,200);assert.equal((await fallbackResponse.json()).repository,'Workshop/reviewed');
+ assert.equal(fallbackResponse.status,503);assert.equal((await fallbackResponse.json()).error,'original_unavailable');
  await pool.query(`INSERT INTO catalog_repo_observations(book_id,provider,provider_repo_id,requested_full_name,full_name,current_url,needs_recheck) VALUES($1,'github','8802','Fixture/old','Fixture/old','https://github.com/Fixture/old',true)`,[selected.id]);
  const unresolved=await readBookOriginalCache(pool,selected);
  assert.equal(unresolved.repository_id,null);assert.equal(unresolved.url,selected.upstream_url);assert.equal(unresolved.original_author,null);assert.equal(unresolved.stars,null);

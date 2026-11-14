@@ -1,15 +1,11 @@
 import {Hono} from 'hono';
 import {Problem} from '../../../../packages/shared/problem.js';
-import {createSkillInstallBundleLoader,type SkillInstallFallbackRecord} from '../../../../modules/skill-install/index.js';
+import {createSkillInstallBundleLoader} from '../../../../modules/skill-install/index.js';
 import type {SkillBook} from '../../../../modules/community/catalog.js';
 
-export type SkillInstallRouteOptions={
-  onFallback?:(record:SkillInstallFallbackRecord)=>void;
-};
-
-export function createSkillInstallRoutes(fetcher:typeof fetch=globalThis.fetch,readToken?:()=>string|null|undefined,books?:readonly SkillBook[],options?:SkillInstallRouteOptions){
+export function createSkillInstallRoutes(fetcher:typeof fetch=globalThis.fetch,readToken?:()=>string|null|undefined,books?:readonly SkillBook[]){
   const app=new Hono();
-  const load=createSkillInstallBundleLoader(fetcher,readToken,books,options?.onFallback);
+  const load=createSkillInstallBundleLoader(fetcher,readToken,books);
   app.get('/api/v1/skills/:id/install-bundle',async c=>{
     try{
       const bundle=await load(c.req.param('id'));
