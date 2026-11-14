@@ -82,6 +82,7 @@ for(const width of [1440,768,390,320])for(const [themeName,theme] of themes){
       await openAccountSettings(page,'查看目前的會員名片');
       await expect(page.locator('.account-panel .member-card')).toBeVisible();
       await expect(page.getByRole('textbox',{name:'社群顯示名稱',exact:true})).toHaveValue(names[0]);
+      await openAccountSettings(page,'帳號與安全');
       await ownReports.click();await expect(ownReports).toHaveAttribute('aria-expanded','true');
       await expect(page.getByRole('heading',{name:'我的檢舉案件',exact:true})).toBeVisible();await expect(page.locator('article').filter({hasText:'已收到'}).first()).toBeVisible();
       await expect(page.locator('body')).not.toContainText('合成私人補充說明');await bounds(page);
