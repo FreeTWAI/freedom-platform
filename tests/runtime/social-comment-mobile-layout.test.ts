@@ -12,8 +12,15 @@ test('feed trigger remains sticky on desktop but returns to document flow only a
  assert.deepEqual(all.filter(rule=>rule.media!==null),[{media:'(max-width:760px)',values:{position:'static',top:'auto','z-index':'auto'}}]);
 });
 test('only the closed launcher is removed from painting and tab order during mobile composer focus',()=>{
- assert.deepEqual(rules(read('modules/FloatingMessages.css'),selector),[{media:'(max-width:760px)',values:{display:'none'}}]);
+ assert.deepEqual(rules(read('modules/FloatingMessages.css'),selector),[
+  {media:'(max-width:760px)',values:{visibility:'hidden','pointer-events':'none',transition:'none'}},
+  {media:'(prefers-reduced-motion:reduce) and (max-width:760px)',values:{transition:'none'}},
+ ]);
  assert.deepEqual(rules(read('modules/FloatingMessages.css'),'.floating-messages[aria-expanded=true]'),[{media:null,values:{display:'none'}}]);
+ assert.deepEqual(rules(read('modules/FloatingMessages.css'),'.floating-messages[aria-expanded=false]'),[
+  {media:null,values:{transition:'visibility 0s linear .4s'}},
+  {media:'(prefers-reduced-motion:reduce)',values:{transition:'visibility 0s linear .4s'}},
+ ]);
  assert.equal(rules(read('modules/FloatingMessages.css'),'.floating-message-panel[hidden]')[0].values.display,'none');
 });
 test('selectors bind the actual app wrapper, persistent inbox, launcher state and comment form',()=>{
@@ -30,5 +37,5 @@ test('negative controls reject the screenshot sticky rule and an unsafe all-stat
  assert.equal(app.replace('app-frame social-layout','app-frame').search(appWrapper),-1);
  const css=read('modules/SocialZone.css').replace('position:static;top:auto;z-index:auto','position:sticky;top:0;z-index:20');
  assert.notEqual(rules(css,'.social-composer-start').at(-1)?.values.position,'static');
- assert.equal(rules(read('modules/FloatingMessages.css').replace('[aria-expanded=false]',''),selector).length,0);
+ assert.equal(rules(read('modules/FloatingMessages.css').replaceAll('[aria-expanded=false]',''),selector).length,0);
 });

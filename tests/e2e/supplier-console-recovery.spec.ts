@@ -199,7 +199,7 @@ test('SC-E2E-25 a late response after sign-out never reaches the next member (AT
   try{const response=await route.fetch();expect(response.status()).toBe(200);entered.resolve();await release.promise;await route.fulfill({response});}finally{completed.resolve();}
  });
  try{
-  await active(page).getByRole('button',{name:'更新資料',exact:true}).first().click();await entered.promise;await signOut(page);asB=true;await loginHere(page,other.email);await go(page,b,'/products');await expect(active(page)).toContainText(bp.title);
+  await active(page).getByRole('button',{name:'更新資料',exact:true}).first().click();await entered.promise;await signOut(page);asB=true;await loginHere(page,other.email);await expect(page).toHaveURL(/\/$/);await expect(page.getByRole('heading',{name:'動態',level:1,exact:true})).toBeVisible();await go(page,b,'/products');await expect(active(page)).toContainText(bp.title);
   const forbidden=[a.name,p.title,p.product_id,...a.hash.split('/').slice(1)];
   await page.evaluate(needles=>{
    const state={leaks:[] as string[],observer:null as MutationObserver|null};

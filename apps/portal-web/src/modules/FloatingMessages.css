@@ -96,18 +96,29 @@
 /* An open panel owns its close control. Hide the external launcher at every
    width so visual/layout viewport differences cannot overlay panel controls. */
 .floating-messages[aria-expanded=true]{display:none}
+.floating-messages[aria-expanded=false]{transition:visibility 0s linear .4s}
 
-/* Yield the phone's reading space while any comment-composer control has
-   focus. The persistent inbox and its own close control are not affected. */
+/* Hide the closed launcher at once with visibility and pointer-events:none on
+   composer focus; delay its return 0.4s so a tap blurring the field still lands. */
 @media(max-width:760px){
-  .app-frame:has(.social-comment-composer:focus-within) .floating-messages[aria-expanded=false]{display:none}
+  .app-frame:has(.social-comment-composer:focus-within) .floating-messages[aria-expanded=false]{visibility:hidden;pointer-events:none;transition:none}
 }
 
-/* Reserve bottom space for the floating launcher at <=640px and hide the
-   closed launcher while a text field outside the chat panel has focus or a
-   dialog is open. The panel's own draft still holds focus for a moment after
-   Escape closes the panel, and the launcher must be shown to take focus back. */
+/* Reserve bottom space at <=640px; hide the closed launcher at once via
+   visibility+pointer-events on focus/dialog and delay return 0.4s so taps land. */
 @media(max-width:640px){
   .app-frame:has(.floating-messages) .main{padding-bottom:calc(88px + var(--app-safe-bottom,env(safe-area-inset-bottom,0px)))}
-  :root:has(dialog[open],[role=dialog]:not(#floating-message-panel):not([hidden]),[aria-modal=true]:not(#floating-message-panel):not([hidden]),textarea:focus:not(#floating-message-panel *),[contenteditable]:not([contenteditable=false]):focus:not(#floating-message-panel *),input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=image]):not([type=hidden]):focus:not(#floating-message-panel *)) .floating-messages[aria-expanded=false]{display:none}
+  :root:has(dialog[open],[role=dialog]:not(#floating-message-panel):not([hidden]),[aria-modal=true]:not(#floating-message-panel):not([hidden]),textarea:focus:not(#floating-message-panel *),[contenteditable]:not([contenteditable=false]):focus:not(#floating-message-panel *),input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=image]):not([type=hidden]):focus:not(#floating-message-panel *)) .floating-messages[aria-expanded=false]{visibility:hidden;pointer-events:none;transition:none}
+}
+
+/* Keep the 0.4s visibility return delay (not motion) when global reduced-motion
+   rules set transition:none!important, while still hiding immediately on focus. */
+@media(prefers-reduced-motion:reduce){
+  .floating-messages[aria-expanded=false]{transition:visibility 0s linear .4s!important}
+}
+@media(prefers-reduced-motion:reduce) and (max-width:760px){
+  .app-frame:has(.social-comment-composer:focus-within) .floating-messages[aria-expanded=false]{transition:none!important}
+}
+@media(prefers-reduced-motion:reduce) and (max-width:640px){
+  :root:has(dialog[open],[role=dialog]:not(#floating-message-panel):not([hidden]),[aria-modal=true]:not(#floating-message-panel):not([hidden]),textarea:focus:not(#floating-message-panel *),[contenteditable]:not([contenteditable=false]):focus:not(#floating-message-panel *),input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=color]):not([type=image]):not([type=hidden]):focus:not(#floating-message-panel *)) .floating-messages[aria-expanded=false]{transition:none!important}
 }
