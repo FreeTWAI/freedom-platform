@@ -137,6 +137,8 @@ test('MCP uses the REST body limit for both declared and streamed bytes',async()
   const r=await app.request(origin+'/api/v1/mcp',{method:'POST',headers:{...rpcHeaders,'Content-Type':'application/json',Authorization:'Bearer '+token,...headers},body});
   assert.equal(r.status,413);assert.equal((await r.json() as any).code,'body_too_large');
  }
+ assert.equal((await rpc(token,'ping',undefined,{Accept:'application/json'})).status,200);
+ assert.equal((await rpc(token,'ping',undefined,{Accept:'*/*'})).status,200);
  assert.equal((await rpc(token,'ping',undefined,{Accept:'text/html'})).status,406);
  assert.equal((await rpc(token,'ping',undefined,{'Content-Type':'text/plain'})).status,415);
 });
@@ -182,4 +184,38 @@ test('MCP rechecks revocation and scopes between calls and does not expose anoth
  await req(`/api/v1/me/agent-tokens/${issued.connection_id}/revoke`,{session:owner,body:{}});
  assert.equal((await rpc(token,'tools/list')).status,401);
  assert.equal((await invoke(token,'events.read',{id:randomUUID()})).status,401);
+});
+test('contract and MCP tools/list expose response, 202 pending and 4xx error schemas',async()=>{
+ const schemas=await import('../../apps/platform-api/src/agent-schemas.js') as any;
+ const {agentContract}=await import('../../modules/client-connections/agent-contract.js');
+ assert.ok(schemas.agentResponseSchemas,'agentResponseSchemas missing');
+ assert.ok(schemas.agentPendingSchema,'agentPendingSchema missing');
+ assert.ok(schemas.agentErrorSchema,'agentErrorSchema missing');
+ const pendingJson=agentJsonSchema(schemas.agentPendingSchema);
+ const errorJson=agentJsonSchema(schemas.agentErrorSchema);
+ assert.equal(schemas.agentPendingSchema.safeParse({status:'pending_member',code:'pending_member',detail:'ok',extra:1}).success,true);
+ assert.equal(schemas.agentErrorSchema.safeParse({type:'about:blank',title:'not_found',status:404,code:'not_found',detail:'missing',extra:1}).success,true);
+ const defs=Object.values(agentContract.paths).flatMap((p:any)=>Object.values(p)) as any[];
+ for(const op of agentOperations.filter(op=>op.granted!==false)){
+  const def=defs.find(d=>d.operationId===op.id)!;
+  const successStatus=op.id==='events.share'||op.id==='repositories.share'?'201':'200';
+  assert.ok(def.responses[successStatus],op.id);
+  const expected=schemas.agentResponseSchemas[op.id];
+  if(expected)assert.deepEqual(def.responses[successStatus].content?.['application/json']?.schema,agentJsonSchema(expected),op.id);
+  if(op.publicItem)assert.deepEqual(def.responses['202']?.content?.['application/json']?.schema,pendingJson,op.id);
+  for(const status of ['401','403','409','429'])assert.deepEqual(def.responses[status]?.content?.['application/json']?.schema,errorJson,`${op.id}:${status}`);
+ }
+ const session=await ready(),token=(await issue(session,['read','share','rsvp'])).access_token;
+ const list=await rpc(token,'tools/list');
+ assert.equal(list.status,200);
+ for(const tool of list.data.result.tools){
+  const op=agentOperations.find(op=>op.id===tool.name&&op.granted!==false)!;
+  const expected=schemas.agentResponseSchemas[op.id];
+  if(expected){
+   const s=agentJsonSchema(expected);
+   assert.deepEqual(tool.outputSchema,op.publicItem?{anyOf:[s,pendingJson]}:s,op.id);
+  }else{
+   assert.equal(tool.outputSchema,undefined,op.id);
+  }
+ }
 });

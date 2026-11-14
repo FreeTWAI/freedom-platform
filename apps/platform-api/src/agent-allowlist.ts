@@ -4,7 +4,7 @@ export type AgentScope = 'read' | 'share' | 'rsvp' | 'react' | 'message';
 export interface AgentOperation {
   id: string; method: 'GET' | 'POST'; route: string; scope: AgentScope; title: string;
   screen: 'events' | 'credit' | 'shares' | 'notifications';
-  example?: Record<string, unknown>; publicItem?: boolean; integration?: boolean; granted?: false; ifMatch?: boolean; featureFlag?: string;
+  example?: Record<string, unknown>; publicItem?: boolean; granted?: false; ifMatch?: boolean; featureFlag?: string;
 }
 export const agentOperations: readonly AgentOperation[] = [
   {id:'tools.identity',method:'POST',route:'/api/v1/guilds/:guild/tools/:tool/token',scope:'read',title:'取得工具專屬身分',screen:'notifications',example:{}},

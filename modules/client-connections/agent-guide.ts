@@ -1,27 +1,42 @@
-import {agentOperations} from '../../apps/platform-api/src/agent-allowlist.js';
+import {agentOperations,type AgentOperation} from '../../apps/platform-api/src/agent-allowlist.js';
+import {agentContract} from './agent-contract.js';
+const scopeLabels:Record<AgentOperation['scope'],string>={read:'讀取',share:'分享',rsvp:'報名',react:'互動',message:'訊息'};
+const inputPlaceholders:Record<string,unknown>={id:'<event uuid>',share_id:'<share uuid>',guild:'<guild_key>',tool:'<tool>',idempotency_key:'<idempotency_key>',version:1};
+const queryPlaceholders:Record<string,unknown>={after:'<next_cursor>',limit:20,offset:0};
+const definitions=Object.values(agentContract.paths).flatMap(path=>Object.values(path)) as Array<{operationId:string;'x-input-schema'?:{properties?:Record<string,{properties?:Record<string,unknown>}>}}>;
+function mcpCallExample(op:AgentOperation){
+ const properties=definitions.find(entry=>entry.operationId===op.id)?.['x-input-schema']?.properties??{};
+ const args:Record<string,unknown>={};
+ for(const [key,prop] of Object.entries(properties)){
+  if(key==='body')args.body=op.example??{};
+  else if(key==='query')args.query=Object.fromEntries(Object.keys(prop?.properties??{}).map(k=>[k,queryPlaceholders[k]??`<${k}>`]));
+  else args[key]=inputPlaceholders[key]??`<${key}>`;
+ }
+ return {name:op.id,arguments:args};
+}
 /** Public guide: no credential lookup, browser state, or member data. */
 export function agentGuide(origin:string){
  const lines=[
  '# 自由工坊 Agent',
  '會員可授權自己的 Agent 透過網站同一套 API 分享、報名與讀取本人紀錄。未列出的操作一律拒絕。',
  '## 取得金鑰',
- '會員登入後，到「自動化 → 我的 Agent」建立金鑰。勾選讀取、分享、報名，複製僅顯示一次的文字。不要交出密碼或 cookie。',
+ '會員登入後，到「自動化 → 我的 Agent」建立金鑰。權限範圍：read 讀取、share 分享、rsvp 報名，依需求勾選後複製僅顯示一次的文字。不要交出密碼或 cookie。',
  `API base URL：${origin}/api/v1`,
  `機器契約：${origin}/agent/openapi.json`,
  '公開指引與契約請勿附帶 Authorization。',
  '## MCP 連線',
  `地址：${origin}/api/v1/mcp（Streamable HTTP，JSON 回應）。在「自動化 → 我的 Agent」按「複製連線設定」，使用原有金鑰；不需再建立一把。`,
  '標頭：Authorization: Bearer $FREEDOM_AGENT_TOKEN。複製設定中的 ${FREEDOM_AGENT_TOKEN} 請在客戶端換成已保存的金鑰；建立後第一次複製可直接包含金鑰，之後不再顯示。不要帶 Cookie 或 CSRF。',
- 'initialize 支援 2025-06-18、2025-11-25；未知版本回覆 2025-11-25。後續帶 MCP-Protocol-Version，未知標頭版本回覆 400；初始化後省略標頭視為未支援的舊版，也回覆 400。Accept 使用 application/json, text/event-stream。不提供 GET 串流。',
- 'tools/list 只列出金鑰權限與此環境已開放的讀取、分享、報名工具，名稱就是下列 operation ID。tools/call 的 arguments 以 body 放請求內容，路徑參數用 id、share_id 或 guild、tool；寫入另給 idempotency_key，候補及活動編輯、通知、取消另給 version。重試沿用相同輸入與 key。錯誤 isError=true，保留平台 code 與 detail；202 pending_member 須等本人確認。',
+ 'initialize 支援 2025-06-18、2025-11-25；未知版本回覆 2025-11-25。後續帶 MCP-Protocol-Version，未知標頭版本回覆 400；初始化後省略標頭視為未支援的舊版，也回覆 400。Accept 使用 application/json（或 */*）。不提供 GET 串流。',
+ 'tools/list 只列出金鑰權限與此環境已開放的讀取、分享、報名工具，名稱就是下列 operation ID。tools/call 的 arguments 以 body 放請求內容、query 放查詢參數，路徑參數用 id、share_id 或 guild、tool；寫入另給 idempotency_key，候補及活動編輯、通知、取消另給 version。重試沿用相同輸入與 key。錯誤 isError=true，保留平台 code 與 detail；202 pending_member 須等本人確認。',
  '## 請求',
  '只用 Authorization: Bearer $FREEDOM_AGENT_TOKEN。不可同時帶 Cookie。',
  'POST 加 Content-Type: application/json 與 Idempotency-Key（8–128 字元，英數字、_、-）。同一操作重試必須沿用原 key 和內容；不需要 CSRF。候補及活動編輯、通知、取消另加 If-Match: "最新活動 aggregate_version"。',
  '## 操作',
  ];
  for(const op of agentOperations.filter(op=>op.granted!==false)){
-  lines.push(`### ${op.title} (${op.scope} · ${op.id})`,`${op.method} ${op.route}`,
-   ...(op.integration?['待 shares 分支整合；未掛載時回覆 403，請停止。']:[]),
+  lines.push(`### ${op.title} (${op.scope} ${scopeLabels[op.scope]} · ${op.id})`,
+   `${op.method} ${op.route}\nMCP tools/call：\`${JSON.stringify(mcpCallExample(op))}\``,
    ...(op.featureFlag?[`需 ${op.featureFlag}=true；未啟用時不可操作。`]:[]),
    ...(op.ifMatch?['先 GET 活動讀取 aggregate_version，再送 If-Match（含雙引號）。']:[]),
    ...(op.example?['範例 JSON：','```json',JSON.stringify(op.example,null,2),'```']:['範例：`curl -H "Authorization: Bearer $FREEDOM_AGENT_TOKEN" "'+origin+op.route+'"`']));

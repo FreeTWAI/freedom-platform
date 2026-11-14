@@ -267,6 +267,13 @@ test('public guide and generated contract describe exactly the granted operation
  const {agentOperations}=await import('../../apps/platform-api/src/agent-allowlist.js');
  const response=await app.request(origin+'/agent.md'),guide=await response.text();assert.equal(response.status,200);assert.match(response.headers.get('content-type')!,/text\/markdown/);
  assert.ok(guide.includes('Idempotency-Key'));assert.ok(guide.includes(origin+'/api/v1/mcp'));assert.ok(guide.includes('tools/list'));assert.ok(guide.includes('2025-11-25'));assert.ok(!/fw_agent_[A-Za-z0-9_-]{43}/.test(guide));
+ assert.ok(!guide.includes('分支'));
+ assert.ok(guide.includes('read 讀取')&&guide.includes('share 分享')&&guide.includes('rsvp 報名'));
+ assert.ok(guide.includes('query'));
+ assert.ok(guide.includes('{"name":"events.read","arguments":{"id":"<event uuid>"}}'));
+ for(const op of agentOperations.filter(op=>op.granted!==false)){
+  assert.ok(guide.includes(`"name":"${op.id}"`),`missing tools/call example for ${op.id}`);
+ }
  assert.ok((await (await app.request(origin+'/llms.txt')).text()).includes('/agent.md'));
  const contract=await (await app.request(origin+'/agent/openapi.json')).json() as any;
  assert.deepEqual(Object.values(contract.paths).flatMap((p:any)=>Object.values(p).map((op:any)=>op.operationId)).sort(),agentOperations.filter(op=>op.granted!==false).map(op=>op.id).sort());
