@@ -58,7 +58,8 @@ class HostDocument extends HostNode {
 }
 const document = new HostDocument();
 const scheduled = new Map<number,Function>();let nextTimer=0;
-const window = {location:{origin:'https://fixture.invalid'},setTimeout(fn:Function){const id=++nextTimer;scheduled.set(id,fn);return id;},clearTimeout(id:number){scheduled.delete(id);},open(){throw Error('No external navigation permitted');},document, HTMLElement: HostNode, HTMLIFrameElement: class {}, addEventListener() {}, removeEventListener() {}, get event() {return undefined;}};
+const windowListeners=new Map<string,Set<Function>>();
+const window = {location:{origin:'https://fixture.invalid'},setTimeout(fn:Function){const id=++nextTimer;scheduled.set(id,fn);return id;},clearTimeout(id:number){scheduled.delete(id);},open(){throw Error('No external navigation permitted');},document, HTMLElement: HostNode, HTMLIFrameElement: class {}, addEventListener(t:string,fn:Function){if(!windowListeners.has(t))windowListeners.set(t,new Set());windowListeners.get(t)!.add(fn);}, removeEventListener(t:string,fn:Function){windowListeners.get(t)?.delete(fn);}, dispatchEvent(e:{type:string}){for(const fn of [...(windowListeners.get(e.type)??[])])fn(e);}, get event() {return undefined;}};
 document.defaultView = window;
 Object.assign(globalThis, {document, window, HTMLElement: HostNode, Node: HostNode, IS_REACT_ACT_ENVIRONMENT: true});
 // Initialize ReactDOM after installing its synthetic host, in this test process.
@@ -115,9 +116,11 @@ function fixture(t:TestContext){
  const button=(text:string)=>find(n=>n.nodeName==='BUTTON'&&n.textContent===text)!;
  const assertReachable=(node:HostNode)=>{assert(node,'node exists');assert(document.body.contains(node),'node is in current rendered tree (the share dialog is portaled to body)');assert(!props(node).disabled,'node is enabled');for(let n:HostNode|null=node;n;n=n.parentNode){assert(!props(n)?.hidden,'node ancestor is not hidden');if(n.nodeName==='DIALOG')assert(n.open,'dialog is open');}const modal=find(n=>n.nodeName==='DIALOG'&&n.open);if(modal)assert(modal.contains(node),'cannot interact behind modal');};
  const click=(node:HostNode)=>{assertReachable(node);assert(['BUTTON','A'].includes(node.nodeName));let prevented=false;flush(()=>props(node).onClick?.({preventDefault(){prevented=true;}}));return prevented;};
- const input=()=>find(n=>n.nodeName==='INPUT'&&n.getAttribute('placeholder')==='例如：做開源的人')!;
- const headline=(value:string)=>{const node=input();assertReachable(node);flush(()=>props(node).onChange({target:{value}}));};
- const blur=()=>{const node=input();assertReachable(node);flush(()=>props(node).onBlur());};
+ const designButton=(name:string)=>find(n=>n.nodeName==='BUTTON'&&(n.getAttribute('class')??'').includes('ecard-design-option')&&n.textContent===name)!;
+ const design=(name:string)=>{click(designButton(name));};
+ const activeDesign=()=>all(n=>n.nodeName==='BUTTON'&&(n.getAttribute('class')??'').includes('ecard-design-option')&&n.getAttribute('aria-pressed')==='true')[0]?.textContent??'';
+ const headlineText=()=>find(n=>n.nodeName==='DIV'&&n.getAttribute('class')==='field'&&n.childNodes[0]?.textContent==='一句話介紹')?.childNodes[1]?.textContent??'';
+ const headlineLink=()=>find(n=>n.nodeName==='A'&&n.getAttribute('href')==='#me/settings?view=page');
  const check=(label:string,checked:boolean)=>{const node=find(n=>n.nodeName==='INPUT'&&n.getAttribute('aria-label')===label)!;assertReachable(node);flush(()=>props(node).onChange({target:{checked}}));};
  const settle=async(request:any,value:any,reject=false)=>{await React.act(async()=>{request[reject?'reject':'resolve'](value);await new Promise(r=>setImmediate(r));});};
  const pending=(method:string,url:string)=>requests.filter(r=>r.method===method&&r.path===url);
@@ -128,13 +131,13 @@ function fixture(t:TestContext){
  };
  const openLink=()=>find(n=>n.nodeName==='A'&&n.getAttribute('class')==='btn btn-ghost'&&n.getAttribute('href')?.includes('/member-cards/'))!;
  const status=()=>find(n=>n.getAttribute('class')==='ecard-save-status')!.textContent;
- const state=()=>({status:status(),headline:props(input()).value,downloadDisabled:!!props(button('下載名片 PNG')).disabled,openDisabled:openLink().getAttribute('aria-disabled')==='true',shareDisabled:!!props(button('分享名片')).disabled,promotionRequests:pending('POST','/promotion/links').length,copies:effects.copies.length,shares:effects.shares.length});
+ const state=()=>({status:status(),design:activeDesign(),headline:headlineText(),downloadDisabled:!!props(button('下載名片 PNG')).disabled,openDisabled:openLink().getAttribute('aria-disabled')==='true',shareDisabled:!!props(button('分享名片')).disabled,promotionRequests:pending('POST','/promotion/links').length,copies:effects.copies.length,shares:effects.shares.length});
  const share=async(kind:'copy'|'share'='copy')=>{
   click(button('分享名片'));const req=pending('POST','/promotion/links').at(-1);assert(req);assert.equal(JSON.stringify(req.body),JSON.stringify({kind:'member_card',target:activeClient===client?ID:OTHER}));
   await settle(req,{path:'/go/fixture123',points:{week:0,all:0}});click(button(kind==='copy'?'複製連結':'分享'));await React.act(async()=>{await new Promise(r=>setImmediate(r));});return req;
  };
  const close=()=>click(find(n=>n.nodeName==='BUTTON'&&n.getAttribute('aria-label')==='關閉分享')!);
- return{client,requests,container,render,unmount,all,find,button,click,input,headline,blur,check,settle,pending,start,openLink,status,state,share,close};
+ return{client,requests,container,render,unmount,all,find,button,click,design,activeDesign,headlineText,headlineLink,check,settle,pending,start,openLink,status,state,share,close};
 }
 function assertShareBlocked(h:ReturnType<typeof fixture>){
  const button=h.button('分享名片');assert(button);assert.equal(props(button).disabled,true);assert.equal(props(button).onClick,undefined);
@@ -145,28 +148,34 @@ test('a saved card retains the full promotion dialog, copy and system-share flow
  const h=fixture(t);await h.start();assert(!h.state().downloadDisabled&&!h.state().openDisabled&&!h.state().shareDisabled);await h.share();
  assert.deepEqual(effects.copies,['一起加入自由工坊，找到夥伴、學習與創作。\nhttps://fixture.invalid/go/fixture123']);h.close();assert.equal(document.activeElement,h.button('分享名片'));await h.share('share');assert.equal(effects.shares.length,1);assert.equal(effects.shares[0].url,'https://fixture.invalid/go/fixture123');assert.equal(h.pending('POST','/me/member-card-share').length,0);
 });
-test('headline changes block sharing immediately, before debounce or blur sends any save',async t=>{
- const h=fixture(t);await h.start();h.headline('尚未保存的新介紹');assert(h.status().includes('尚未儲存'));assert.equal(h.pending('POST','/me/member-card-share').length,0);assert.equal(scheduled.size,1);assertShareBlocked(h);assert(preview(h).textContent.includes('尚未保存的新介紹'));
+test('read-only headline links to #me/settings?view=page and lacks duplicate input',async t=>{
+ const h=fixture(t);await h.start();
+ assert.equal(h.all(n=>n.nodeName==='INPUT'&&Boolean(n.parentNode?.textContent.includes('一句話介紹'))).length,0);
+ assert.equal(h.headlineText(),'已保存的介紹');assert.equal(h.headlineLink()?.textContent,'到公開個人頁編輯');
+ await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'公開頁介紹'});
+ assert.equal(h.headlineText(),'公開頁介紹');assert(preview(h).textContent.includes('公開頁介紹'));
+ h.render(h.client,'no-row');await h.start();
+ await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'',aggregate_version:null});
+ assert.equal(h.headlineText(),'已保存的介紹');
+ h.render(h.client,'cleared-row');await h.start();
+ await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'',aggregate_version:'2'});
+ assert.equal(h.headlineText(),'尚未設定');assert(!preview(h).textContent.includes('已保存的介紹'));
 });
-for(const change of ['headline','profile-field'])test(`${change}: pending save blocks sharing without changing the queued save`,async t=>{
- const h=fixture(t);await h.start();if(change==='headline'){h.headline('尚未保存的新介紹');h.blur();assert(preview(h).textContent.includes('尚未保存的新介紹'));}else{h.check('顯示 GitHub 在名片上',false);assert(!preview(h).textContent.includes('GitHub'));}
+for(const change of ['design','profile-field'])test(`${change}: pending save blocks sharing without changing the queued save`,async t=>{
+ const h=fixture(t);await h.start();if(change==='design'){h.design('工坊誌');assert.equal(preview(h).getAttribute('data-design'),'editorial');}else{h.check('顯示 GitHub 在名片上',false);assert(!preview(h).textContent.includes('GitHub'));}
  const save=h.pending('POST','/me/member-card-share')[0];assert(save);assert(h.status().includes('儲存中'));assert(h.state().downloadDisabled&&h.state().openDisabled);assert(h.click(h.openLink()),'existing open action still prevents navigation');assertShareBlocked(h);assert.equal(h.pending('POST','/me/member-card-share').length,1);assert.equal(save.body.enabled,true);assert.equal(save.body.rotate,false);
  await h.settle(save,{...initialSettings(),...save.body,profile_links:change==='profile-field'?[{...profile,shown:false}]:[{...profile}],aggregate_version:2});assert(!h.state().shareDisabled);await h.share();assert.equal(effects.copies.length,1);
 });
-for(const change of ['headline','profile-field'])test(`${change}: known rejection stays blocked until an explicit retry succeeds`,async t=>{
- const h=fixture(t);await h.start();if(change==='headline'){h.headline('尚未保存的新介紹');h.blur();}else h.check('顯示 GitHub 在名片上',false);
+for(const change of ['design','profile-field'])test(`${change}: known rejection stays blocked until an explicit retry succeeds`,async t=>{
+ const h=fixture(t);await h.start();if(change==='design'){h.design('工坊誌');}else h.check('顯示 GitHub 在名片上',false);
  await h.settle(h.pending('POST','/me/member-card-share')[0],new ApiError({status:422,message:'設定未保存（合成已知拒絕）'}),true);
  assert(h.status().includes('設定未保存'));assert(h.state().downloadDisabled&&h.state().openDisabled);assertShareBlocked(h);assert.equal(h.pending('POST','/me/member-card-share').length,1);
  h.click(h.button('重試'));assertShareBlocked(h);const retry=h.pending('POST','/me/member-card-share')[1];assert(retry);await h.settle(retry,{...initialSettings(),...retry.body,aggregate_version:2});assert(h.status().includes('已自動儲存'));await h.share('share');assert.equal(effects.shares.length,1);
 });
-test('an older save ACK cannot reopen sharing while the newer visible headline is still pending',async t=>{
- const h=fixture(t);await h.start();h.headline('先改內容');h.blur();const first=h.pending('POST','/me/member-card-share')[0];h.headline('最後內容');assertShareBlocked(h);
- await h.settle(first,{...initialSettings(),...first.body,aggregate_version:2});assert.equal(props(h.input()).value,'最後內容');assertShareBlocked(h);const second=h.pending('POST','/me/member-card-share')[1];assert(second);assert.equal(second.body.headline,'最後內容');
+test('an older save ACK cannot reopen sharing while the newer visible design is still pending',async t=>{
+ const h=fixture(t);await h.start();h.design('工坊誌');const first=h.pending('POST','/me/member-card-share')[0];h.design('夜空');assertShareBlocked(h);
+ await h.settle(first,{...initialSettings(),...first.body,aggregate_version:2});assert.equal(h.activeDesign(),'夜空');assertShareBlocked(h);const second=h.pending('POST','/me/member-card-share')[1];assert(second);assert.equal(second.body.design,'night');
  await h.settle(second,{...initialSettings(),...second.body,aggregate_version:3});assert(h.status().includes('已自動儲存'));await h.share();
-});
-test('an invalid headline blocks sharing without sending a save and recovers after correction',async t=>{
- const h=fixture(t);await h.start();h.headline('字'.repeat(61));h.blur();assert.equal(h.pending('POST','/me/member-card-share').length,0);assert.equal(scheduled.size,0);assert(h.container.textContent.includes('一句話介紹最多 60 個字。'));assertShareBlocked(h);
- h.headline('有效介紹');h.blur();assertShareBlocked(h);const save=h.pending('POST','/me/member-card-share')[0];await h.settle(save,{...initialSettings(),...save.body,aggregate_version:2});await h.share();assert.equal(effects.copies.length,1);
 });
 test('missing preview target cannot share, even when settings are saved',async t=>{
  const h=fixture(t);await h.start(initialSettings(),ID,true);assertShareBlocked(h);assert(h.state().downloadDisabled);
@@ -176,18 +185,18 @@ test('close and reopen after a confirmed save discards old link responses',async
  await h.share();assert.equal(h.pending('POST','/promotion/links').length,2);assert.equal(effects.copies.length,1);
 });
 test('editor remount rereads stored settings rather than retaining a rejected draft',async t=>{
- const h=fixture(t);await h.start();h.headline('失敗的草稿');h.blur();await h.settle(h.pending('POST','/me/member-card-share')[0],new ApiError({status:422,message:'已知拒絕'}),true);assertShareBlocked(h);
- h.render(h.client,'editor-reopened');await h.start();assert.equal(props(h.input()).value,'已保存的介紹');assert(!h.state().downloadDisabled&&!h.state().openDisabled);await h.share();
+ const h=fixture(t);await h.start();h.design('工坊誌');await h.settle(h.pending('POST','/me/member-card-share')[0],new ApiError({status:422,message:'已知拒絕'}),true);assertShareBlocked(h);
+ h.render(h.client,'editor-reopened');await h.start();assert.equal(h.activeDesign(),'清新');assert(!h.state().downloadDisabled&&!h.state().openDisabled);await h.share();
 });
 for(const replacementKind of ['client','session'])test(`keyed ${replacementKind} replacement drops the old draft and ignores its late ACK`,async t=>{
- const h=fixture(t);await h.start();h.headline('舊內容');h.blur();assertShareBlocked(h);const old=h.pending('POST','/me/member-card-share')[0];h.client.sessionGeneration++;
+ const h=fixture(t);await h.start();h.design('工坊誌');assertShareBlocked(h);const old=h.pending('POST','/me/member-card-share')[0];h.client.sessionGeneration++;
  const transport=(method:string)=>(url:string,body?:any,options?:any)=>new Promise((resolve,reject)=>h.requests.push({method,path:url,body,options,resolve,reject}));
  const replacement=replacementKind==='client'?{sessionGeneration:2,get:transport('GET'),post:transport('POST')}:h.client;
- h.render(replacement,'owner:2');const id=replacementKind==='client'?OTHER:ID;await h.start({...initialSettings(),headline:'目前已保存內容',share_path:'/member-cards/'+'b'.repeat(43)},id);
- await h.settle(old,{...initialSettings(),headline:'舊內容',aggregate_version:2});assert.equal(props(h.input()).value,'目前已保存內容');await h.share();assert.equal(h.pending('POST','/promotion/links').at(-1).body.target,id);
+ h.render(replacement,'owner:2');const id=replacementKind==='client'?OTHER:ID;await h.start({...initialSettings(),design:'workshop',share_path:'/member-cards/'+'b'.repeat(43)},id);
+ await h.settle(old,{...initialSettings(),design:'editorial',aggregate_version:2});assert.equal(h.activeDesign(),'工坊');await h.share();assert.equal(h.pending('POST','/promotion/links').at(-1).body.target,id);
 });
 test('unmount during a pending save has no promotion side effects after the late response',async t=>{
- const h=fixture(t);await h.start();h.headline('離頁前內容');h.blur();assertShareBlocked(h);const save=h.pending('POST','/me/member-card-share')[0];h.unmount();await h.settle(save,{...initialSettings(),...save.body,aggregate_version:2});assert.equal(h.container.childNodes.length,0);assert.equal(h.pending('POST','/promotion/links').length,0);assert.equal(effects.copies.length,0);assert.equal(effects.shares.length,0);
+ const h=fixture(t);await h.start();h.design('工坊誌');assertShareBlocked(h);const save=h.pending('POST','/me/member-card-share')[0];h.unmount();await h.settle(save,{...initialSettings(),...save.body,aggregate_version:2});assert.equal(h.container.childNodes.length,0);assert.equal(h.pending('POST','/promotion/links').length,0);assert.equal(effects.copies.length,0);assert.equal(effects.shares.length,0);
 });
 test('unmount during promotion loading does not copy or share its late link',async t=>{
  const h=fixture(t);await h.start();h.click(h.button('分享名片'));const link=h.pending('POST','/promotion/links')[0];h.unmount();await h.settle(link,{path:'/go/late-link',points:{week:0,all:0}});assert.equal(h.container.childNodes.length,0);assert.equal(effects.copies.length,0);assert.equal(effects.shares.length,0);
@@ -199,4 +208,17 @@ for(const flags of [{pending:true,blocked:false},{pending:false,blocked:true},{p
  const button=descendants(container).find(n=>n.nodeName==='BUTTON'&&n.textContent==='分享名片')!;assert(button);
  const inactive=flags.pending||flags.blocked;assert.equal(!!props(button).disabled,inactive);
  if(inactive){assert.equal(props(button).onClick,undefined);assert.equal(descendants(document.body).some(n=>n.nodeName==='DIALOG'),false);assert.equal(writes.length,0);}else{assert.equal(props(button).disabled,undefined);flush(()=>props(button).onClick());assert.equal(writes.length,1);assert.equal(writes[0][0],'/promotion/links');}
+});
+test('freedom-profile-updated syncs <=60-char bio to member-card-share and skips >60-char bio',async t=>{
+ const h=fixture(t);await h.start();
+ await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'已保存的介紹',aggregate_version:'1'});
+ assert.equal(h.pending('POST','/me/member-card-share').length,0);
+ await React.act(async()=>{window.dispatchEvent({type:'freedom-profile-updated'});});
+ await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'新公開介紹',aggregate_version:'2'});
+ const save=h.pending('POST','/me/member-card-share')[0];
+ assert(save);assert.equal(save.body.headline,'新公開介紹');
+ await h.settle(save,{...initialSettings(),...save.body,aggregate_version:2});
+ await React.act(async()=>{window.dispatchEvent({type:'freedom-profile-updated'});});
+ await h.settle(h.pending('GET','/me/profile-publication').at(-1),{bio:'字'.repeat(61),aggregate_version:'3'});
+ assert.equal(h.pending('POST','/me/member-card-share').length,1);
 });

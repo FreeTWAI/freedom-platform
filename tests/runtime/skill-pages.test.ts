@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import {communityCatalog} from '../../modules/community/catalog.js';
 import {getSkillPageContent,skillPageContentIds,skillPageContentProblems,skillShareCardAlt,type SkillPageContent} from '../../modules/community/skill-page-content.js';
 import {getSkillShareContent} from '../../modules/community/skill-share-content.js';
-import {indexHtml,pageHtml,skillMarkdown,skillPageCss} from '../../modules/development/service.js';
+import {collaborationCss,indexHtml,pageHtml,skillMarkdown,skillPageCss} from '../../modules/development/service.js';
 import {SKILL_SHARE_CARD_SIZE,SKILL_SHARE_MANIFEST,skillShareCardSource} from '../../modules/development/skill-share-card.js';
 import {wrapFlowText} from '../../modules/development/skill-flow.js';
 import {skillPageUsage} from '../../modules/development/skill-page.js';
@@ -70,7 +70,7 @@ test('all skill pages show original start before dated usage notes and optional 
   assert.equal((html.match(/class="sf-connector"/g)??[]).length,2,book.id);
   assert.match(html,/<details class="public-skill-details sp-usage-notes" id="skill-usage-notes"><summary>使用筆記/);
   assert.doesNotMatch(html,/流程圖僅供參考|功能示意圖，非實際操作截圖|以下連結在新分頁開啟外部網站/);
-  const order=['class="public-skill-entry"','data-skill-author','class="public-github-social"','data-share-launch','class="public-skill-purpose"','id="skill-start"','id="skill-usage-notes"','id="skill-flow-title"','id="skill-use-title"','class="public-skill-next"','data-share-root','id="join-workshop"'].map(marker=>html.indexOf(marker));
+  const order=['class="public-skill-entry"','data-skill-author','class="public-github-social"','data-share-launch','class="public-skill-purpose"','id="skill-start"','id="skill-usage-notes"','id="skill-flow-title"','id="skill-use-title"',...(book.introduction_url?['class="public-skill-next"']:[]),'data-share-root','id="join-workshop"'].map(marker=>html.indexOf(marker));
   assert.ok(order.every((index,position)=>index>0&&(position===0||index>order[position-1]!)),book.id+': '+order.join(','));
  }
  assert.doesNotMatch(indexHtml(),/class="skill-page"/);
@@ -121,4 +121,34 @@ test('share images are rendered cards whose alt text repeats the name, headline 
   assert.equal(entry.bytes,bytes.length,book.id);assert.equal(entry.sha256,sha256(bytes),book.id);
   assert.ok(!hashes.has(entry.sha256),book.id);hashes.add(entry.sha256);
  }
+});
+
+test('UX-V-09: public skill page has one btn-primary, no inline style, no duplicate visible hrefs, and hides null count dashes',()=>{
+ assert.match(collaborationCss,/\.public-author-claim\{margin:8px 0\}/);
+ assert.match(collaborationCss,/\.btn-primary\b/);
+ const stripHidden=(raw:string)=>{
+  let out=raw.replace(/<dialog\b[\s\S]*?<\/dialog>|<noscript\b[\s\S]*?<\/noscript>/g,'');
+  while(/<details\b[^>]*>(?:(?!<details\b)[\s\S])*?<\/details>/.test(out))out=out.replace(/<details\b[^>]*>(?:(?!<details\b)[\s\S])*?<\/details>/g,'');
+  return out;
+ };
+ for(const book of communityCatalog.skill_books){
+  const html=pageHtml(book.title,skillMarkdown(book.id)!,`/development/skills/${book.id}.md`,undefined,undefined,undefined,undefined,undefined,{book_id:book.id,status:'verified_original_author',label:'已確認原作',verified:[{role:'original_author',role_label:'原作者',github_login:'demo',display_name:'示範作者'}],attributed_author:null});
+  assert.doesNotMatch(html,/\sstyle=/i,book.id);
+  assert.doesNotMatch(html,/加星\s*—/,book.id);
+  const primaryMatches=html.match(/class="[^"]*\bbtn-primary\b[^"]*"/g)??[];
+  assert.equal(primaryMatches.length,1,book.id);
+  assert.match(html,/<a class="btn btn-primary" href="#skill-start">開始用<\/a>/,book.id);
+  const visible=stripHidden(html);
+  const hrefs=[...visible.matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map(m=>m[1]!);
+  assert.equal(new Set(hrefs).size,hrefs.length,`${book.id} duplicate visible hrefs: ${hrefs.filter((h,i)=>hrefs.indexOf(h)!==i).join(', ')}`);
+  assert.equal((html.match(/class="public-share-platforms"/g)??[]).length,1,book.id);
+  const bodyStart=visible.slice(visible.indexOf('<body>')+6);
+  const firstAction=bodyStart.search(/<(?:a|button)\b/);
+  const preActionText=bodyStart.slice(0,firstAction).replace(/<[^>]+>/g,'').trim();
+  assert.ok(preActionText.length<=20,`${book.id} pre-action text too long: ${preActionText}`);
+ }
+ const cached=pageHtml('Video Autopilot',skillMarkdown('video-autopilot')!,'/development/skills/video-autopilot.md',undefined,undefined,undefined,undefined,undefined,undefined,false,'',{full_name:'Hao0321/video-autopilot-kit',url:'https://github.com/Hao0321/video-autopilot-kit',original_author:'Hao0321',description:'desc',topics:[],license_spdx:null,default_branch:null,stars:42,quick_start:'npx run',readme_html:'<p>hi</p>',latest_release:{tag_name:'v1.0.0',name:'v1.0.0',html_url:'https://github.com/Hao0321/video-autopilot-kit/releases/tag/v1.0.0',published_at:null},head_sha:null,ahead_of_pin:true,latest_version_label:'v1.0.0',latest_version_url:'https://github.com/Hao0321/video-autopilot-kit/releases',fetched_at:null,fetch_state:null,stale:false});
+ const cachedHrefs=[...stripHidden(cached).matchAll(/<a\b[^>]*\bhref="([^"]+)"/g)].map(m=>m[1]!);
+ assert.equal(new Set(cachedHrefs).size,cachedHrefs.length,'cached page must have unique visible hrefs');
+ assert.ok(cached.includes('加星 42'));
 });

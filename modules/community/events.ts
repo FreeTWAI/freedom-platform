@@ -341,7 +341,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
       AND registration_attempt_id=$3 AND (state='going' OR (state='pending' AND created_at>clock_timestamp()-interval '10 minutes'))`,[id,email,registration.attempt_id])).rowCount===1,
       409,'event_closed','這筆報名已取消或失效，郵件未交給提供者。');
     try{await send(email,'自由工坊：活動參與資料',parts.join('\n\n'));}
-    catch{throw new Problem(503,'event_email_delivery_failed',reservation.state==='going'?'報名已確認，但這次郵件提供者尚未確認接受；請稍後重試寄信。':'郵件提供者尚未確認接受，報名未確認；請稍後重試。');}
+    catch{throw new Problem(503,'event_email_delivery_failed','郵件提供者尚未確認接受，請稍後重試。');}
     // The live hold authorized dispatch; the event lock reserves its seat through provider acceptance.
     // Record that result even if only the hold expires, retaining the final event-start boundary below.
     const confirmed=await q.query("UPDATE community_event_guest_rsvps SET state='going',email_sent_at=now() WHERE event_id=$1 AND email=$2 AND registration_attempt_id=$3 AND state IN ('pending','going')",[id,email,registration.attempt_id]);
@@ -356,7 +356,7 @@ export async function registerPublicEvent(pool:Pool,id:string,raw:unknown,send:E
     if(participationEnabled)await reconcileEventWaitlist(q,id);
     // Provider waits and later writes can outlive the start; only this confirmation rolls back.
     requireCondition((await q.query("SELECT 1 FROM community_events WHERE event_id=$1 AND state='published' AND starts_at>clock_timestamp()",[id])).rowCount===1,409,'event_closed',
-      reservation.state==='going'?'活動已開始或取消，原報名狀態未變；這次通知可能已由郵件提供者接受。':'活動已開始或取消，這次報名未確認；通知可能已由郵件提供者接受。');
+      '活動已開始或取消，這次通知可能已由郵件提供者接受。');
     return {registered:true,provider_status:'provider_accepted' as const};
   });
 }

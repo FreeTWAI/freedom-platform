@@ -368,3 +368,24 @@ test('a session expiring while publication waits on the post lock cannot publish
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM command_receipts WHERE idempotency_key=$1', [key])).rows[0].n, 0);
   assert.equal((await publicPost(post.post_id)).status, 404);
 });
+
+test('UX-V-15: /posts/:id 404 page escapes requested id and carries identical security headers as a found post', async () => {
+  const owner = await member(), p = await note(owner, '公開貼文安全標頭測試');
+  await share(owner, p.post_id);
+  const found = await app.request(`${origin}/posts/${p.post_id}`);
+  assert.equal(found.status, 200);
+  const headerNames = ['cache-control', 'referrer-policy', 'x-robots-tag', 'x-content-type-options', 'content-security-policy'];
+  for (const h of headerNames) assert.ok(found.headers.get(h), `missing header ${h} on 200`);
+
+  const badId = '<script>alert(1)</script>';
+  for (const probe of [randomUUID(), encodeURIComponent(badId)]) {
+    const miss = await app.request(`${origin}/posts/${probe}`);
+    assert.equal(miss.status, 404);
+    for (const h of headerNames) assert.equal(miss.headers.get(h), found.headers.get(h), `header mismatch for ${h}`);
+    const html = await miss.text();
+    assert.equal(html.includes(badId), false);
+    assert.equal((html.match(/\bbtn-primary\b/g) ?? []).length, 1);
+    const hrefs = [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
+    assert.equal(new Set(hrefs).size, hrefs.length, `duplicate hrefs on 404: ${hrefs.join(', ')}`);
+  }
+});

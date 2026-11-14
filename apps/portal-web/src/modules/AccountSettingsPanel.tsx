@@ -103,7 +103,7 @@ function AccountSettings({client,session,registerLeave,children,profileExtras,fo
   const guardState=useRef({dirty,profileDirty,contactsDirty});guardState.current={dirty,profileDirty,contactsDirty};
   useEffect(()=>{
     mounted.current=true;
-    const guard=()=>{const state=guardState.current;return saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()||!publicPageGuards.canLeave()?false:!state.dirty||window.confirm('還有修改尚未儲存，確定離開？');};
+    const guard=(nextHash:string|null)=>{const target=nextHash===null?null:legacyHash(nextHash);if(target==='#account'||target?.startsWith('#account?'))return true;const state=guardState.current;return saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()||!publicPageGuards.canLeave()?false:!state.dirty||window.confirm('還有修改尚未儲存，確定離開？');};
     registerLeave?.(guard);
     const unload=(event:BeforeUnloadEvent)=>{const state=guardState.current;if(state.dirty||saving.current||settingsMutationBlocksLeave(mutationState)||!childGuards.canLeave()||!publicPageGuards.canLeave()){event.preventDefault();event.returnValue='';}};
     window.addEventListener('beforeunload',unload);

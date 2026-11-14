@@ -721,3 +721,99 @@ test('share landing and click bookkeeping avoid repeated reads and inline prunin
  assert.deepEqual({landing:landing<=2,saltStatements:salts.length,noDelete:!salts.some(sql=>/\bDELETE\b/i.test(sql))},
   {landing:true,saltStatements:1,noDelete:true},`Landing ${landing}; salt statements ${salts.length}`);
 });
+
+test('unknown /s/:id and /events/:id return a Chinese 404 page with security headers for browsers and JSON for other clients', async () => {
+  const { createApp } = await import('../../apps/platform-api/src/app.js');
+  const { createEvent } = await import('../../modules/community/events.js');
+  const origin = 'http://127.0.0.1:4310';
+  const app = createApp(pool, origin, 'local');
+  const share = await createShare(pool, cmd(actors[0], { url: 'https://example.com/public-v02' }), { previewFetch: async () => new Response('<title>公開連結</title>', { headers: { 'content-type': 'text/html' } }) });
+  const openEvent = await createEvent(pool, cmd(actors[0], { title: '公開活動範例', starts_at: '2099-01-01T10:00:00Z', location: '合成場地', visibility: 'open' }, 'POST /events'));
+  const unknownId = '00000000-0000-4000-8000-000000009999';
+  const badId = '<script>alert(1)</script>';
+  const headerNames = ['cache-control', 'x-content-type-options', 'referrer-policy', 'content-security-policy'];
+
+  for (const [foundPath, missingPath, invalidPath, extraHeaders] of [
+    [`/s/${share.share_id}`, `/s/${unknownId}`, `/s/${encodeURIComponent(badId)}`, [] as string[]],
+    [`/events/${openEvent.event_id}`, `/events/${unknownId}`, `/events/${encodeURIComponent(badId)}`, ['vary']],
+  ] as const) {
+    const found = await app.request(origin + foundPath, { headers: { Accept: 'text/html,application/xhtml+xml' } });
+    assert.equal(found.status, 200, foundPath);
+
+    for (const probePath of [missingPath, invalidPath]) {
+      const htmlRes = await app.request(origin + probePath, { headers: { Accept: 'text/html,application/xhtml+xml' } });
+      assert.equal(htmlRes.status, 404, probePath);
+      assert.match(htmlRes.headers.get('content-type') ?? '', /text\/html/i, probePath);
+      for (const h of [...headerNames, ...extraHeaders]) {
+        assert.equal(htmlRes.headers.get(h), found.headers.get(h), `${probePath} header ${h}`);
+      }
+      const html = await htmlRes.text();
+      assert.match(html, /找不到這個頁面/, probePath);
+      assert.match(html, /<a[^>]*class="[^"]*\bbtn-primary\b[^"]*"[^>]*href="\/"[^>]*>回到首頁<\/a>/, probePath);
+      assert.equal((html.match(/<a\b[^>]*href="\//g) ?? []).length, 1, `${probePath} should link to / once`);
+      assert.doesNotMatch(html, /\sstyle=/i, probePath);
+      assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/i, probePath);
+      assert.equal(html.includes(unknownId), false, `${probePath} should not print raw id`);
+    }
+
+    for (const accept of ['application/json', '*/*', 'text/html;q=0', undefined]) {
+      const headers = accept ? { Accept: accept } : undefined;
+      const jsonMissing = await app.request(origin + missingPath, { headers });
+      assert.equal(jsonMissing.status, 404, `${missingPath} (${accept ?? 'none'})`);
+      assert.match(jsonMissing.headers.get('content-type') ?? '', /application\/json/i, `${missingPath} (${accept ?? 'none'})`);
+
+      const jsonInvalid = await app.request(origin + invalidPath, { headers });
+      assert.equal(jsonInvalid.status, 422, `${invalidPath} (${accept ?? 'none'})`);
+      assert.match(jsonInvalid.headers.get('content-type') ?? '', /application\/json/i, `${invalidPath} (${accept ?? 'none'})`);
+    }
+  }
+});
+
+test('public /s/:id and /events/:id have one primary CTA, unique link destinations, light portal theme, and short pre-action text', async () => {
+  const { eventPageHtml } = await import('../../modules/community/event-page.js');
+  const { publicSharePage } = await import('../../modules/shares/public-page.js');
+  const repoShare = await createShare(pool, cmd(actors[0], { url: 'https://github.com/fixture/v10-repo' }), { fetcher: async () => Response.json({ ...original, id: 990, full_name: 'fixture/v10-repo' }) });
+  const linkShare = await createShare(pool, cmd(actors[0], { url: 'https://example.com/v10-link' }), { previewFetch: async () => new Response('<title>外部文章</title>', { headers: { 'content-type': 'text/html' } }) });
+
+  for (const id of [repoShare.share_id, linkShare.share_id]) {
+    const { html } = await publicSharePage(pool, id, 'https://platform.example.com');
+    const hrefs = [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
+    assert.equal(new Set(hrefs).size, hrefs.length, `duplicate href on /s/${id}: ${hrefs.join(', ')}`);
+    assert.equal((html.match(/\bbtn-primary\b/g) ?? []).length, 1, `expected 1 btn-primary on /s/${id}`);
+    assert.match(html, /href="\/event-page\.css"/);
+    assert.doesNotMatch(html, /href="\/development\.css"/);
+    assert.doesNotMatch(html, /\sstyle=/i);
+    assert.doesNotMatch(html, /<h2>README<\/h2>/);
+  }
+
+  const event = {
+    event_id: randomUUID(),
+    title: '公開分享活動',
+    description: '活動說明',
+    starts_at: '2099-05-01T10:00:00Z',
+    ends_at: '2099-05-01T12:00:00Z',
+    location: '台北自由工坊',
+    mode: 'in_person',
+    organizer_name: '示範創作者',
+    capacity: 20,
+    attending_count: 3,
+    aggregate_version: 1,
+    visibility: 'open',
+    state: 'published',
+    registration_mode: 'native',
+    registration_policy: 'member_only',
+    share_id: randomUUID(),
+    is_organizer: false,
+    waitlist_status: null,
+    imported: false,
+  };
+  const eventHtml = eventPageHtml(event, 'https://platform.example.com', { member: false, participation: true, guest: false });
+  const eventHrefs = [...eventHtml.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
+  assert.equal(new Set(eventHrefs).size, eventHrefs.length, `duplicate href on /events/:id: ${eventHrefs.join(', ')}`);
+  assert.equal((eventHtml.match(/\bbtn-primary\b/g) ?? []).length, 1);
+  assert.match(eventHtml, /href="\/#explore\/events"/);
+  assert.doesNotMatch(eventHtml, /\sstyle=/i);
+  const mainSlice = eventHtml.split('<main>')[1] ?? '';
+  const beforeFirstAction = mainSlice.slice(0, mainSlice.search(/<(?:a|button)\b/)).replace(/<[^>]*>/g, '').replace(event.title, '').trim();
+  assert.ok(beforeFirstAction.length <= 20, `expected <=20 static chars before first action, got ${beforeFirstAction.length}: ${beforeFirstAction}`);
+});

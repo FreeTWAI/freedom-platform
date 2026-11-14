@@ -176,3 +176,36 @@ test('reopen journey negative control rejects publication when disclosure expans
   const h=reopenHarness(changed);await assert.rejects(h.complete,/publication stays behind the explicit disclosure/);
   assert.ok(!h.events.includes('click'));assert.ok(!h.events.includes('visitor-navigation'));
 });
+
+test('UX-V-15: public post and unavailable HTML have one btn-primary, unique destinations, no inline style, and short pre-action and static copy',()=>{
+  const source=page(),book=communityCatalog.skill_books.find(item=>item.id===skillIds[0])!;
+  source.post.author.display_name='測試作者';
+  source.post.note=`測試分享\n${skillPath(book.id)}`;
+  source.related=[0,1,2].map(i=>({post_id:`00000000-0000-4000-8000-00000000000${i+1}`,title:`相關標題${i}`,summary:`相關摘要${i}`,author:{display_name:`相關作者${i}`},path:`/posts/00000000-0000-4000-8000-00000000000${i+1}`}));
+  const html=publicSocialPostHtml(source,origin,true);
+  assert.equal((html.match(/\bbtn-primary\b/g)??[]).length,1);
+  assert.doesNotMatch(html,/\sstyle=/i);
+  const hrefs=[...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m=>m[1]);
+  assert.equal(new Set(hrefs).size,hrefs.length,`duplicate hrefs: ${hrefs.join(', ')}`);
+  const mainHtml=html.slice(html.indexOf('<main'),html.indexOf('</main>'));
+  const beforePrimary=mainHtml.slice(0,mainHtml.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g,'')
+    .replace(source.post.author.display_name,'').replace(source.post.note,'').replace(/\d{4}年\d+月\d+日/,'').trim();
+  assert.ok(beforePrimary.length<=20,`expected <=20 static chars before btn-primary, got ${beforePrimary.length}: ${beforePrimary}`);
+  let staticOnly=html.slice(html.indexOf('<body'),html.indexOf('</body>')).replace(/<script[\s\S]*?<\/script>/g,'').replace(/<[^>]*>/g,'');
+  for(const dyn of [source.post.author.display_name,source.post.note,book.title,...source.related.flatMap(r=>[r.author.display_name,r.title,r.summary])]){
+    staticOnly=staticOnly.replaceAll(dyn,'');
+  }
+  staticOnly=staticOnly.replace(/\d{4}年\d+月\d+日/g,'').replace(/\s+/g,'');
+  assert.ok(staticOnly.length<=120,`expected <=120 static chars, got ${staticOnly.length}: ${staticOnly}`);
+  for(const probe of [id,'<script>alert(1)</script>']){
+    const miss=unavailableSocialPostHtml(probe);
+    assert.equal((miss.match(/\bbtn-primary\b/g)??[]).length,1,probe);
+    assert.doesNotMatch(miss,/\sstyle=/i);
+    assert.ok(!miss.includes('<script>alert(1)</script>'));
+    const missHrefs=[...miss.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m=>m[1]);
+    assert.equal(new Set(missHrefs).size,missHrefs.length,`duplicate 404 hrefs: ${missHrefs.join(', ')}`);
+    const missMain=miss.slice(miss.indexOf('<main'),miss.indexOf('</main>'));
+    const missPre=missMain.slice(0,missMain.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g,'').trim();
+    assert.ok(missPre.length<=20,`expected <=20 chars before 404 primary, got ${missPre.length}: ${missPre}`);
+  }
+});

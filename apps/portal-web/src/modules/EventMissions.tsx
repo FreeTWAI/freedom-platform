@@ -194,7 +194,7 @@ function Content({client, eventId, onBlockedChange}: Props) {
       className="btn btn-ghost" disabled={busy || loading} onClick={() => void load()}
     >重新讀取</button>}
     {view && !view.enabled && view.editable && <button
-      className="btn btn-primary" disabled={blocked} onClick={() => act({action: 'start'})}
+      className="btn btn-secondary" disabled={blocked} onClick={() => act({action: 'start'})}
     >自願開始 3 個小任務</button>}
     {view && !view.editable && <p>活動目前無法存取。舊任務內容不顯示，仍可清除自己的紀錄。</p>}
     {view?.slots.length === 3 && <ol className="event-missions-list">
