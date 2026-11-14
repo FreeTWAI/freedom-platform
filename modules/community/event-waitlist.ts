@@ -250,13 +250,13 @@ const changeNoticeBudgetSql=`(n.kind<>'event_schedule_changed' OR (
  AND (SELECT count(*) FROM community_event_participation_notices a WHERE a.event_id=n.event_id AND a.guest_email=n.guest_email AND a.notice_id<>n.notice_id
    AND a.kind='event_schedule_changed' AND a.attempted_at>clock_timestamp()-interval '1 day')<3))`;
 export async function processEventNotices(pool:Pool,send:EventEmailSender,origin:string,eventId?:string,accepted=0,failed=0){
-const notices=(await pool.query(`SELECT notice_id,event_id FROM community_event_participation_notices n WHERE status='pending'
+const notices=(await pool.query(`SELECT notice_id,event_id FROM community_event_participation_notices n WHERE (n.status='pending' OR (n.status='queued' AND n.kind='event_announcement'))
  AND ($1::uuid IS NULL OR event_id=$1) AND ${changeNoticeBudgetSql} ORDER BY event_version,notice_id LIMIT $2`,[eventId??null,Math.max(0,EVENT_DELIVERY_BATCH_SIZE-accepted-failed)])).rows;
 for(const candidate of notices){
   const claimed=await transaction(pool,async q=>{
     await eventRow(q,candidate.event_id,true);
     return (await q.query(`UPDATE community_event_participation_notices n SET status='unknown',attempted_at=clock_timestamp()
-     WHERE notice_id=$1 AND status='pending' AND ${changeNoticeBudgetSql} RETURNING *`,[candidate.notice_id])).rows[0];
+     WHERE notice_id=$1 AND (n.status='pending' OR (n.status='queued' AND n.kind='event_announcement')) AND ${changeNoticeBudgetSql} RETURNING *`,[candidate.notice_id])).rows[0];
   });
   if(!claimed)continue;
   await transaction(pool,async q=>{

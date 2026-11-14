@@ -99,8 +99,8 @@ export async function notifyEventRegistrants(q:PoolClient,event:EventRow,kind:Ev
    UPDATE community_event_participation_notices n SET status='skipped' FROM guests g
    WHERE $3='event_schedule_changed' AND n.event_id=$1 AND n.guest_email=g.email AND n.kind='event_schedule_changed'
      AND n.event_version<$2 AND n.status IN ('pending','unknown') RETURNING n.notice_id
-  ) INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind,body)
-   SELECT gen_random_uuid(),$1,email,$2,$3,body FROM guests ON CONFLICT(event_id,guest_email,event_version,kind) DO NOTHING`,
+  ) INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind,status,body)
+   SELECT gen_random_uuid(),$1,email,$2,$3,CASE WHEN $3='event_announcement' THEN 'queued' ELSE 'pending' END,body FROM guests ON CONFLICT(event_id,guest_email,event_version,kind) DO NOTHING`,
   [event.event_id,event.aggregate_version,kind,commonBody,details,summary]);
 }
 

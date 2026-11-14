@@ -43,6 +43,6 @@ ALTER TABLE member_notifications ADD CONSTRAINT member_notifications_kind_check 
 ALTER TABLE community_event_participation_notices ADD COLUMN attempted_at timestamptz;
 ALTER TABLE community_event_participation_notices DROP CONSTRAINT community_event_participation_notices_status_check;
 ALTER TABLE community_event_participation_notices ADD CONSTRAINT community_event_participation_notices_status_check
- CHECK(status IN ('pending','unknown','provider_accepted','failed','skipped')) NOT VALID;
+ CHECK(status IN ('pending','queued','unknown','provider_accepted','failed','skipped')) NOT VALID;
 -- Historical rows are deliberately left untouched here. A subsequent edit
 -- coalesces the affected event's notices, without a migration-time backfill.
