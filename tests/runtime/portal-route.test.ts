@@ -79,6 +79,10 @@ test('community hub has a distinct canonical destination and preserves its alias
 
 test('safe portal returns accept routes and refuse open redirects',async()=>{
  const {safePortalReturn}=await import('../../apps/portal-web/src/portal-route');
- for(const value of ['#home','#account','#shares/12345678-1234-1234-1234-123456789abc?via=abcdefghij','#explore/events/12345678-1234-1234-1234-123456789abc?ref=abcdefghijklmnop','#guilds/guild_ai_vibe/tools/work'])assert.equal(safePortalReturn(value),true,value);
+ for(const value of ['#home','#account','#shares/12345678-1234-1234-1234-123456789abc?via=abcdefghij','#explore/events/12345678-1234-1234-1234-123456789abc?ref=abcdefghijklmnop','#guilds/guild_ai_vibe/tools/work','#me/saved'])assert.equal(safePortalReturn(value),true,value);
  for(const value of ['https://evil.invalid/#home','//evil.invalid/#home','/\\evil','#home\n','#unknown','#home'.padEnd(513,'x')])assert.equal(safePortalReturn(value),false,value);
+ const savedRoute=resolvePortalRoute('#me/saved');
+ assert.equal(savedRoute.place,'me');
+ assert.equal(savedRoute.hash,'#me/saved');
+ assert.equal(savedRoute.legacyHash,'#profile/saved');
 });

@@ -258,6 +258,15 @@ test('SEARCH-005 only published showcases enter the topic editor and republishin
 });
 
 const privateList = (page: Page) => page.getByRole('region', { name: '我的私人書籤與追蹤', exact: true });
+async function openSavedList(page: Page) {
+  if (!new URL(page.url()).hash.startsWith('#me/saved')) {
+    const menu = page.getByRole('button', { name: '開啟選單', exact: true });
+    if (await menu.isVisible()) await menu.click();
+    await page.locator('#workspace-navigation').getByRole('button', { name: '我的', exact: true, includeHidden: true }).click();
+    await page.getByLabel('我的檢視', { exact: true }).selectOption('#me/saved');
+  }
+  await expect(privateList(page)).toBeVisible();
+}
 async function followedShowcase(browser: Browser, baseURL: string, db: Pool) {
   const member = await person(db), title = `返回追蹤${randomUUID().slice(0, 8)}`;
   const logged = await signedIn(browser, baseURL, member.email);
@@ -270,6 +279,8 @@ async function followedShowcase(browser: Browser, baseURL: string, db: Pool) {
     await post(logged.page, '/community-search/topics', { kind: 'work', id: made.showcase_id, topics: ['tools'] }, 200);
     await search(logged.page, title);
     await openFilters(logged.page);
+    await expect(privateList(logged.page)).toHaveCount(0);
+    await openSavedList(logged.page);
     await expect(privateList(logged.page).getByRole('link', { name: title, exact: true })).toBeVisible();
     return { ...logged, member, title, id: made.showcase_id };
   } catch (error) { await logged.context.close(); throw error; }
@@ -292,31 +303,21 @@ for (const width of [390, 1440]) test(`SEARCH-006 private-list Back/Forward reco
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     expect(await page.evaluate(() => history.length)).toBe(historyLength);
-    const conditions = page.getByRole('region', { name: '社群內容搜尋條件', exact: true });
-    await conditions.getByRole('checkbox', { name: '作品', exact: true }).check();
-    await conditions.getByRole('checkbox', { name: '工具資源', exact: true }).check();
-    await expect(results(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     expect(await page.evaluate(() => history.state.navigationProbe)).toBe('unchanged');
     const before = reads.length;
     await privateList(page).getByRole('link', { name: logged.title, exact: true }).click();
     await expect(page.locator(`#showcase-${logged.id}`)).toBeVisible();
     await page.goBack();
-    await openFilters(page);
+    await expect(page.getByLabel('我的檢視', { exact: true })).toHaveValue('#me/saved');
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
-    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue(logged.title);
-    await expect(conditions.getByRole('checkbox', { name: '作品', exact: true })).toBeChecked();
-    await expect(conditions.getByRole('checkbox', { name: '工具資源', exact: true })).toBeChecked();
     expect(reads.length).toBe(before + 1);
     await page.goForward(); await expect(page.locator(`#showcase-${logged.id}`)).toBeVisible();
     await page.goBack();
-    await openFilters(page);
+    await expect(page.getByLabel('我的檢視', { exact: true })).toHaveValue('#me/saved');
     await expect(updates).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     expect(reads.length).toBe(before + 2);
-    await conditions.getByRole('button', { name: '清除搜尋條件', exact: true }).click();
-    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toBeFocused();
-    await expect(updates).toHaveAttribute('aria-pressed', 'true');
     expect(await page.evaluate(() => history.state.navigationProbe)).toBe('unchanged');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(writes).toEqual([]);
@@ -333,7 +334,6 @@ test('SEARCH-007 reload, another account and the same user signing in again reje
     await privateList(page).getByRole('button', { name: '追蹤更新', exact: true }).click();
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     await page.reload();
-    await openFilters(page);
     await expect(privateList(page).getByRole('button', { name: '私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
     const documentMarker = randomUUID();
     await page.evaluate(value => Object.defineProperty(window, 'searchHistoryDocumentMarker', { value }), documentMarker);
@@ -356,13 +356,13 @@ test('SEARCH-007 reload, another account and the same user signing in again reje
       await page.getByLabel('密碼', { exact: true }).fill(DEMO_PASSWORD);
       await page.getByRole('button', { name: '登入', exact: true }).click();
       await expect(page.locator('.shell')).toBeVisible();
-      await search(page, logged.title);
+      await page.goto('/#me/saved');
+      await expect(privateList(page)).toBeVisible();
       expect(await page.evaluate(() => Reflect.get(window, 'searchHistoryDocumentMarker'))).toBe(documentMarker);
       await page.evaluate(value => {
         history.replaceState(value, ''); window.dispatchEvent(new PopStateEvent('popstate', { state: value }));
         window.dispatchEvent(new HashChangeEvent('hashchange'));
       }, old);
-      await openFilters(page);
       await expect(privateList(page).getByRole('button', { name: '私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
       if (email === other.email) {
         await expect(privateList(page).getByText('尚未儲存書籤。可從搜尋結果儲存。', { exact: true })).toBeVisible();
@@ -382,7 +382,6 @@ test('SEARCH-008 returning to updates rechecks withdrawn content instead of rest
     const reread = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/community-relations/updates');
     await page.goBack();
     expect((await reread).status()).toBe(200);
-    await openFilters(page);
     await expect(privateList(page).getByRole('button', { name: '追蹤更新', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByText('目前沒有可閱讀的追蹤更新。可先選擇作者或主題。', { exact: true })).toBeVisible();
     await expect(privateList(page)).not.toContainText(logged.title);
@@ -438,18 +437,26 @@ test('SEARCH-010 list selection belongs to its own search history entry without 
   });
   try {
     await privateList(page).getByRole('button', { name: '追蹤清單', exact: true }).click();
-    await page.getByRole('searchbox', { name: '關鍵字', exact: true }).fill('history');
+    await search(page, 'history');
     await expect(results(page).getByRole('link', { name: '合成第一頁', exact: true })).toBeVisible();
     await results(page).getByRole('button', { name: '下一頁', exact: true }).click();
     await expect(results(page).getByRole('link', { name: '合成第二頁', exact: true })).toBeVisible();
     await expect(results(page)).toBeFocused();
+    await page.goto('/#me/saved');
     await privateList(page).getByRole('button', { name: '追蹤更新', exact: true }).click();
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     await page.goBack();
+    await expect(results(page).getByRole('link', { name: '合成第二頁', exact: true })).toBeVisible();
+    await page.goBack();
     await expect(results(page).getByRole('link', { name: '合成第一頁', exact: true })).toBeVisible();
+    await page.goBack();
     await expect(privateList(page).getByRole('button', { name: '追蹤清單', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.goForward();
+    await expect(results(page).getByRole('link', { name: '合成第一頁', exact: true })).toBeVisible();
+    await page.goForward();
     await expect(results(page).getByRole('link', { name: '合成第二頁', exact: true })).toBeVisible();
+    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue('history');
+    await page.goForward();
     await expect(privateList(page).getByRole('button', { name: '追蹤更新', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(privateList(page).getByRole('link', { name: logged.title, exact: true })).toBeVisible();
     const before = reads.length;
@@ -459,7 +466,29 @@ test('SEARCH-010 list selection belongs to its own search history entry without 
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     });
     expect(reads.length).toBe(before);
-    await expect(page.getByRole('searchbox', { name: '關鍵字', exact: true })).toHaveValue('history');
+  } finally { await logged.context.close(); }
+});
+
+test('SEARCH-011 bookmarking in explore and removing under 我的 → 書籤與追蹤 updates the explore result button', async ({ browser, baseURL, e2eAuthPool }) => {
+  const member = await person(e2eAuthPool), title = `探索書籤${randomUUID().slice(0, 8)}`;
+  const logged = await signedIn(browser, baseURL!, member.email), page = logged.page;
+  try {
+    await post(page, '/showcases', { title, description: '書籤往返測試內容', consent_to_share: true });
+    await search(page, title);
+    const card = results(page).locator('article').filter({ has: page.getByRole('link', { name: title, exact: true }) });
+    const saveButton = card.getByRole('button', { name: '儲存私人書籤', exact: true });
+    await expect(saveButton).toHaveAttribute('aria-pressed', 'false');
+    await saveButton.click();
+    await expect(card.getByRole('button', { name: '移除書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await openSavedList(page);
+    await expect(privateList(page).getByRole('button', { name: '私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const savedItem = privateList(page).locator('article').filter({ has: page.getByRole('link', { name: title, exact: true }) });
+    await expect(savedItem).toBeVisible();
+    await savedItem.getByRole('button', { name: '移除書籤', exact: true }).click();
+    await expect(privateList(page).getByRole('link', { name: title, exact: true })).toHaveCount(0);
+    await search(page, title);
+    await expect(card.getByRole('button', { name: '儲存私人書籤', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(card.getByRole('button', { name: '移除書籤', exact: true })).toHaveCount(0);
   } finally { await logged.context.close(); }
 });
 
@@ -515,15 +544,18 @@ test('SEARCH-GUILD-002 anonymous, empty query and disabled launchpad never read 
       await page.getByRole('checkbox', {name: label, exact: true}).uncheck();
       await expect(guildResults(page).getByRole('link', {name: '資安公會', exact: true})).toBeVisible();
     }
+    await expect(privateList(page)).toHaveCount(0);
+    await expect(guildResults(page)).toContainText('不套用私人書籤或追蹤清單');
+    await page.getByRole('button', {name: '清除搜尋條件', exact: true}).click();
+    await expect(guildResults(page)).toHaveCount(0);
     const beforeTabs = reads.length;
+    await page.goto('/#me/saved');
     for (const name of ['追蹤清單', '追蹤更新', '私人書籤']) {
       await privateList(page).getByRole('button', {name, exact: true}).click();
       await expect(privateList(page).getByRole('button', {name, exact: true})).toHaveAttribute('aria-pressed', 'true');
-      await expect(guildResults(page)).toContainText('不套用私人書籤或追蹤清單');
     }
     expect(reads.length).toBe(beforeTabs);
-    await page.getByRole('button', {name: '清除搜尋條件', exact: true}).click();
-    await expect(guildResults(page)).toHaveCount(0); expect(reads.length).toBe(beforeTabs);
+    await page.goBack();
     // Synthetic site response changes this browser's display only, never flags.
     await page.route(url => url.pathname === '/api/v1/site', async route => {
       const response = await route.fetch(); await route.fulfill({response, json: {...await response.json(), guild_launchpad_enabled: false}});

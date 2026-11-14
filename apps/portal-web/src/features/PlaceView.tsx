@@ -13,6 +13,7 @@ import type {TabId} from '../types';
 const AgentTokens=lazy(()=>import('../modules/AgentTokens').then(m=>({default:m.AgentTokens})));
 const Arcade=lazy(()=>import('../games/AbsurdDaily').then(m=>({default:m.AbsurdDaily})));
 const ClientConnections=lazy(()=>import('../modules/ClientConnections').then(m=>({default:m.ClientConnections})));
+const CommunitySaved=lazy(()=>import('./CommunitySaved').then(m=>({default:m.CommunitySaved})));
 const DeviceConnections=lazy(()=>import('../modules/DeviceConnections').then(m=>({default:m.DeviceConnections})));
 const ModelSettings=lazy(()=>import('../modules/ModelSettings').then(m=>({default:m.ModelSettings})));
 const RegisteredTools=lazy(()=>import('../frame-tools/RegisteredTools').then(m=>({default:m.RegisteredTools})));
@@ -26,7 +27,7 @@ export function PlaceView({context,render,defaultTab}:{context:PortalFeatureCont
  let choices:{title:string;hash:string;tab:TabId}[]=[];
  const choice=(title:string,tab:TabId,hash=portalHash(tab))=>({title,tab,hash});
  if(route.place==='explore')choices=[...(site?.community_search_enabled?[choice('搜尋','community-search')]:[]),choice('夥伴','members'),choice('資源','skills'),choice('作品','showcase'),choice('活動','events'),choice('成果','highlights'),choice('服務','services')];
- if(route.place==='me')choices=[choice('個人頁','profile'),choice('設定','account'),choice('入門','todos'),choice('訊息','messages'),choice('聯絡人','friends'),choice('小隊','squads'),choice('工作區','business'),choice('訂單','reservations'),choice('我的貢獻','promotion')];
+ if(route.place==='me')choices=[choice('個人頁','profile'),...(site?.community_relations_enabled?[choice('書籤與追蹤','profile','#me/saved')]:[]),choice('設定','account'),choice('入門','todos'),choice('訊息','messages'),choice('聯絡人','friends'),choice('小隊','squads'),choice('工作區','business'),choice('訂單','reservations'),choice('我的貢獻','promotion')];
  if(route.place==='automation')choices=[choice('我的 Agent','private-ai','#automation/agent'),...(site?.private_ai_enabled?[choice('私人工作','private-ai'),choice('裝置連線','private-ai','#automation/devices'),choice('模型設定','private-ai','#automation/models')]:[]),choice('工具連線','private-ai','#automation/connections')];
  const selected=choices.filter(c=>route.hash===c.hash||route.hash.startsWith(c.hash+'/')||route.hash.startsWith(c.hash+'?')).sort((a,b)=>b.hash.length-a.hash.length)[0];
  let tab=route.tab==='messages'?'home':route.tab;
@@ -38,6 +39,7 @@ export function PlaceView({context,render,defaultTab}:{context:PortalFeatureCont
  else if(route.place==='automation'&&!site?.private_ai_enabled)content=<AgentTokens client={context.client}/>;
  else if(path==='#automation/devices')content=<DeviceConnections client={context.client}/>;
  else if(path==='#automation/models')content=<ModelSettings client={context.client}/>;
+ else if(path==='#me/saved'){const authKey=`${context.session.user.user_id}:${context.client.sessionGeneration}`;content=site?.community_relations_enabled?<CommunitySaved key={authKey} client={context.client} authKey={authKey}/>:<section className="card stack"><h2>書籤與追蹤</h2><p className="field-hint">這個社群尚未開放書籤與追蹤。</p></section>;}
  else content=render(tab,{...context,locationHash:context.locationHash?route.legacyHash:''});
  const key=guildKeyFromHash(route.hash);
  if(key&&(guildActionFromHash(route.hash)==='tools'||TOOL_ONLY_GUILDS.some(value=>value===key)&&[undefined,'start'].includes(guildActionFromHash(route.hash)))) {

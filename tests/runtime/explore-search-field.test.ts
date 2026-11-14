@@ -292,24 +292,17 @@ test('UX-M-04: #explore renders one search field, one primary 搜尋, one closed
   const preFormParagraphs = conditionRegion.childNodes.slice(0, formIndex).filter(n => n.nodeName === 'P');
   assert.equal(preFormParagraphs.length, 0);
 
-  // Exactly one closed <details> labeled '篩選' containing checkboxes, bookmarks/follows, and topic editor
+  // Exactly one closed <details> labeled '篩選' containing filter checkboxes and topic editor, without bookmarks/follows
   const detailsList = findAll(container, n => n.nodeName === 'DETAILS');
   assert.equal(detailsList.length, 1);
   assert.equal(detailsList[0].open, false);
   const summary = detailsList[0].childNodes.find(n => n.nodeName === 'SUMMARY');
   assert.equal(summary?.textContent, '篩選');
   const checkboxesInside = findAll(detailsList[0], n => n.nodeName === 'INPUT' && n.type === 'checkbox');
-  assert.equal(checkboxesInside.length, 9); // 4 kinds + 5 filter topics (follow topics appear on 追蹤清單 tab)
-  assert.equal(findAll(detailsList[0], n => n.getAttribute('aria-label') === '我的私人書籤與追蹤').length, 1);
+  assert.equal(checkboxesInside.length, 9); // 4 kinds + 5 filter topics
+  assert.equal(findAll(detailsList[0], n => n.getAttribute('aria-label') === '我的私人書籤與追蹤').length, 0);
+  assert.equal(findAll(container, n => n.getAttribute('aria-label') === '我的私人書籤與追蹤').length, 0);
   assert.equal(findAll(detailsList[0], n => n.nodeName === 'BUTTON' && n.textContent === '編輯我的內容主題').length, 1);
-
-  // Bookmarks list inside 篩選 caps at 5 rows + 更多, and expands on click
-  const relations = findAll(detailsList[0], n => n.getAttribute('aria-label') === '我的私人書籤與追蹤')[0];
-  assert.equal(findAll(relations, n => n.nodeName === 'ARTICLE').length, 5);
-  const moreBookmarks = findAll(relations, n => n.nodeName === 'BUTTON' && n.textContent === '更多')[0];
-  assert.ok(moreBookmarks);
-  await act(async () => { clickNode(moreBookmarks); });
-  assert.equal(findAll(relations, n => n.nodeName === 'ARTICLE').length, 8);
 
   // Content search results cap at 5 rows + 更多, then reveal more on click
   const contentRegion = findAll(container, n => n.getAttribute('aria-label') === '社群內容搜尋結果')[0];

@@ -107,6 +107,6 @@ export function safePortalReturn(value:unknown):value is string {
   if(/^guilds\/(?:community(?:\/hub)?|manage)$/.test(canonical))return true;
   if(/^guilds\/guild_[a-zA-Z0-9_]+(?:\/(?:start|work|skills|information|tools(?:\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?))?$/.test(canonical))return true;
   if(new RegExp('^me/(?:publication|'+uuid+')$','i').test(canonical))return true;
-  const prefixes=[...Object.values(LEGACY_ROUTES),'automation/agent','automation/connections','automation/devices','automation/models','me/teams/outcomes'].filter(prefix=>!['home','explore','guilds','me'].includes(prefix));
+  const prefixes=[...Object.values(LEGACY_ROUTES),'me/saved','automation/agent','automation/connections','automation/devices','automation/models','me/teams/outcomes'].filter(prefix=>!['home','explore','guilds','me'].includes(prefix));
   return prefixes.some(prefix=>matches(canonical,prefix));
 }

@@ -1,4 +1,4 @@
-import {currentLegacyHash} from '../portal-route';
+import {canonicalHash} from '../portal-route';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { communitySearchKinds, communitySearchKindLabels, communitySearchTopics, communitySearchTopicLabels, communitySearchPageSchema, type CommunitySearchPage } from '../../../../packages/shared/community-search';
 import type { PortalClient } from '../api';
@@ -18,6 +18,7 @@ type RelationsState = {
 };
 const RelationsContext = createContext<RelationsState | null>(null);
 const relationKey = (group: string, kind: string, id: string) => JSON.stringify([group, kind, id]);
+const onSavedPage = () => /^#me\/saved(?:\?|$)/.test(canonicalHash(window.location.hash));
 const message = (cause: unknown) => cause instanceof Error ? cause.message : '無法載入，請重試。';
 
 // Key this provider by the authentication key so private state never crosses sessions.
@@ -120,7 +121,7 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     const restore = () => {
-      if (!/^#community-search(?:\?|$)/.test(currentLegacyHash())) return;
+      if (!onSavedPage()) return;
       const next = navigation.read(window.history.state);
       if (next === selectedTab.current) return;
       selectedTab.current = next; setTab(next); setCursor(null); setBookmarkLimit(5); setFollowLimit(5); setUpdateLimit(5);
@@ -154,7 +155,7 @@ export function CommunityRelations({ client, navigation }: { client: PortalClien
   const hasMoreUpdates = Boolean(page && page.items.length > visibleUpdates.length);
   function select(next: CommunityListTab) {
     if (!navigation.current()) return;
-    if (/^#community-search(?:\?|$)/.test(currentLegacyHash())) {
+    if (onSavedPage()) {
       const saved = navigation.write(window.history.state, next);
       if (saved) {
         // A restricted history API must not prevent the current local selection.
