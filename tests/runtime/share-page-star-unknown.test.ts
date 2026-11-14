@@ -146,7 +146,8 @@ function loadSharePage(harness: ReturnType<typeof createHarness>, store: {
     if (specifier === '../modules/GitHubSocial') return { useGitHubSocialStore: () => store };
     if (specifier === './ShareButton') {
       return {
-        promotionLink: () => async () => ({ url: 'https://example.test/s/1', share_code: 'abc1234567' }),
+        promotionLink: (c: { post: (p: string, b: unknown) => Promise<unknown> }, kind: string, target: string) =>
+          () => c.post('/promotion/links', { kind, target }),
         ShareButton: ({ label }: { label: string }) => harness.reactStub.createElement('button', { type: 'button', className: 'btn btn-secondary btn-small' }, label),
       };
     }
@@ -380,4 +381,61 @@ test('link share with no repository shows canonical_url hostname as one muted li
   tree = await harness.flush(() => SharePage({ client, id: '44444444-4444-4444-8444-444444444444' }) as VNode);
   nodes = collectNodes(tree);
   assert.equal(nodes.some(n => nodeText(n) === 'example.com'), false);
+});
+
+test('SharePage requests only POST /shares/:id/links for every share kind in one request', async () => {
+  const harness = createHarness();
+  const store = {
+    account: {
+      value: { configured: false, connected: false, github_user: null },
+      loading: false,
+      error: '',
+      received: 1,
+    } as AccountState,
+    async loadAccount() {},
+    async connect() { return ''; },
+  };
+  const posts: { path: string; body: unknown; options?: unknown }[] = [];
+  let currentShare: Record<string, unknown> = {};
+  const client = {
+    sessionGeneration: 1,
+    async get() { return currentShare; },
+    async post(path: string, body: unknown, options?: unknown) {
+      posts.push({ path, body, options });
+      return { path: '/go/abc1234567', code: 'abc1234567' };
+    },
+  };
+
+  const { SharePage } = loadSharePage(harness, store);
+  const cases = [
+    { kind: 'repository', share_id: '11111111-1111-4111-8111-111111111111', ref_id: null, expectedFallback: '/s/11111111-1111-4111-8111-111111111111' },
+    { kind: 'link', share_id: '22222222-2222-4222-8222-222222222222', ref_id: null, expectedFallback: '/s/22222222-2222-4222-8222-222222222222' },
+    { kind: 'work', share_id: '33333333-3333-4333-8333-333333333333', ref_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', expectedFallback: '/#shares/33333333-3333-4333-8333-333333333333' },
+    { kind: 'event', share_id: '44444444-4444-4444-8444-444444444444', ref_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', expectedFallback: '/events/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+    { kind: 'post', share_id: '55555555-5555-4555-8555-555555555555', ref_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', expectedFallback: '/?social-post=cccccccc-cccc-4ccc-8ccc-cccccccccccc#social' },
+    { kind: 'service', share_id: '66666666-6666-4666-8666-666666666666', ref_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', expectedFallback: '/services/dddddddd-dddd-4ddd-8ddd-dddddddddddd' },
+  ];
+
+  for (const item of cases) {
+    posts.length = 0;
+    currentShare = {
+      share_id: item.share_id,
+      ref_id: item.ref_id,
+      title: `分享 ${item.kind}`,
+      kind: item.kind,
+      canonical_url: 'https://example.com/item',
+      sharers: [],
+      repository: null,
+    };
+    const tree = await harness.flush(() => SharePage({ client, id: item.share_id }) as VNode);
+    const shareButton = collectNodes(tree).find(n => typeof n.type === 'function' && n.props?.label === '我也要分享');
+    assert.ok(shareButton, `expected ShareButton for ${item.kind}`);
+    assert.equal(shareButton.props.fallbackUrl, item.expectedFallback);
+    assert.equal(typeof shareButton.props.makeLink, 'function');
+    const link = await shareButton.props.makeLink();
+    assert.equal(link.path, '/go/abc1234567');
+    assert.equal(posts.length, 1, `expected 1 POST request for ${item.kind}`);
+    assert.equal(posts[0].path, `/shares/${item.share_id}/links`);
+    assert.deepEqual(JSON.parse(JSON.stringify(posts[0].body)), {});
+  }
 });

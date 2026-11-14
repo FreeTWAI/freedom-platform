@@ -4,7 +4,7 @@ import {ApiError,type PortalClient} from '../api';
 import type {SessionPayload} from '../types';
 import {publicSkillPath} from '../../../../packages/shared/skill-acquisition';
 import {storefrontReturnPath} from '../../../../modules/agent-commerce/storefront-return';
-import {publicDiscoveryPath} from './PublicDiscovery';
+import {publicDiscoveryPath, publicShareReturnPath} from './PublicDiscovery';
 import {GOOGLE_ENTRY_KEY,saveGoogleEntry,clearGoogleEntry,navigateToGoogle} from './GoogleAccount';
 
 type GoogleEntry={intent:'login'|'link';entry:string;startedAt:number};
@@ -59,7 +59,7 @@ export function safeGoogleEntry(value:unknown):string|null{
     if((key==='join'||key==='skill_acquisition')&&item!=='1')return null;
     if(key==='skill_intro'&&!/^(?:[1-9][0-9]?|100)$/.test(item))return null;
     if((key==='post_return'||key==='social-post')&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item))return null;
-    if(key==='return_to'&&!publicDiscoveryPath(item)&&!storefrontReturnPath(item)&&!publicSkillPath(item))return null;
+    if(key==='return_to'&&!publicShareReturnPath(item)&&!publicDiscoveryPath(item)&&!storefrontReturnPath(item)&&!publicSkillPath(item))return null;
   }
   return value;
 }

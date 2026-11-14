@@ -257,3 +257,75 @@ for (const screen of ['card', 'editor'] as const) {
     }
   });
 }
+
+test('PUBLIC-WORK-03 /works/:id visitor sign-in returns to page and member creates share link via one link API', async ({ browser, creator, e2eAuthPool }) => {
+  await signIn(creator.page, creator.email);
+  const sess = await (await creator.page.request.get(`${e2eOrigin()}/api/v1/session`)).json() as { csrf_token: string };
+  const apiHeaders = { Origin: e2eOrigin(), 'Content-Type': 'application/json', 'X-CSRF-Token': sess.csrf_token };
+  const title = `公開頁分享入口 ${randomUUID().slice(0, 6)}`;
+  const created = await (await creator.page.request.post(`${e2eOrigin()}/api/v1/showcases`, {
+    headers: { ...apiHeaders, 'Idempotency-Key': randomUUID() },
+    data: { title, description: '公開作品頁直接提供分享連結入口。', consent_to_share: true },
+  })).json() as { showcase_id: string };
+  const sharing0 = await (await creator.page.request.get(`${e2eOrigin()}/api/v1/me/showcases/${created.showcase_id}/sharing`)).json() as { version: string; work_version: string };
+  const pubRes = await creator.page.request.put(`${e2eOrigin()}/api/v1/me/showcases/${created.showcase_id}/sharing`, {
+    headers: { ...apiHeaders, 'Idempotency-Key': randomUUID(), 'If-Match': `"${sharing0.version}"` },
+    data: { enabled: true, work_version: sharing0.work_version },
+  });
+  expect(pubRes.status()).toBe(200);
+
+  const visitorCtx = await browser.newContext({ baseURL: e2eOrigin() });
+  const visitor = await visitorCtx.newPage();
+  const guestCtx = await browser.newContext({ baseURL: e2eOrigin() });
+  const guest = await guestCtx.newPage();
+  try {
+    await visitor.goto(`/works/${created.showcase_id}`);
+    const loginLink = visitor.getByRole('link', { name: '登入取得分享連結', exact: true });
+    await expect(loginLink).toBeVisible();
+    await expect(loginLink).toHaveAttribute('href', `/?return_to=${encodeURIComponent(`/works/${created.showcase_id}`)}`);
+    await expect(visitor.locator('#work-share')).toBeHidden();
+
+    await loginLink.click();
+    await visitor.getByLabel('電子郵件', { exact: true }).fill(DEMO_USERS[1].email);
+    await visitor.getByLabel('密碼', { exact: true }).fill(DEMO_PASSWORD);
+    await visitor.getByRole('button', { name: '登入', exact: true }).click();
+    await visitor.waitForURL(new RegExp(`/works/${created.showcase_id}$`));
+
+    const shareBtn = visitor.getByRole('button', { name: '我也要分享', exact: true });
+    await expect(shareBtn).toBeVisible();
+    await expect(loginLink).toBeHidden();
+    await visitor.setViewportSize({ width: 390, height: 844 });
+    await shareBtn.click();
+    const shareInput = visitor.getByLabel('我的分享連結', { exact: true });
+    await expect(shareInput).toHaveValue(/\/go\/[A-Za-z0-9_-]{10}$/);
+    expect(await visitor.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const shareUrl = await shareInput.inputValue();
+    const code = shareUrl.split('/').pop()!;
+
+    await guest.goto(shareUrl);
+    await guest.waitForURL(new RegExp(`/works/${created.showcase_id}\\?via=${code}$`));
+    await expect(guest.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    await expect(guest.getByText(`由 ${DEMO_USERS[1].display_name} 推薦分享`)).toBeVisible();
+
+    // When the work already has a share, clicking #work-share calls POST /api/v1/shares/:id/links directly without POST /api/v1/shares.
+    let shareCreateCalls = 0;
+    let linkCreateCalls = 0;
+    creator.page.on('request', req => {
+      if (req.method() === 'POST' && new URL(req.url()).pathname === '/api/v1/shares') shareCreateCalls += 1;
+      if (req.method() === 'POST' && /^\/api\/v1\/shares\/[^/]+\/links$/.test(new URL(req.url()).pathname)) linkCreateCalls += 1;
+    });
+    await creator.page.goto(`/works/${created.showcase_id}`);
+    const ownerShareBtn = creator.page.getByRole('button', { name: '我也要分享', exact: true });
+    await expect(ownerShareBtn).toBeVisible();
+    await ownerShareBtn.click();
+    await expect(creator.page.getByLabel('我的分享連結', { exact: true })).toHaveValue(/\/go\/[A-Za-z0-9_-]{10}$/);
+    expect(shareCreateCalls).toBe(0);
+    expect(linkCreateCalls).toBe(1);
+  } finally {
+    await visitorCtx.close();
+    await guestCtx.close();
+    await e2eAuthPool.query(`DELETE FROM promotion_clicks WHERE link_id IN (SELECT link_id FROM promotion_links WHERE kind='share' AND target_key IN (SELECT share_id::text FROM shares WHERE kind='work' AND ref_id=$1))`, [created.showcase_id]);
+    await e2eAuthPool.query(`DELETE FROM promotion_links WHERE kind='share' AND target_key IN (SELECT share_id::text FROM shares WHERE kind='work' AND ref_id=$1)`, [created.showcase_id]);
+    await e2eAuthPool.query(`UPDATE shares SET state='retracted' WHERE kind='work' AND ref_id=$1`, [created.showcase_id]);
+  }
+});

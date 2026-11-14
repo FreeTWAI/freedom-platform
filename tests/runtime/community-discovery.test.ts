@@ -61,7 +61,7 @@ test('opt-in public HTML allows only the fixed revalidation script and escapes m
     const html=await response.text();
     assert.equal(html.includes(malicious),false,path);
     assert.equal(html.includes(PUBLIC_REVALIDATION_MARKUP),true,path);
-    assert.equal(html.replace(PUBLIC_REVALIDATION_MARKUP,'').includes('<script'),false,path);
+    assert.equal(html.replace(PUBLIC_REVALIDATION_MARKUP,'').replace('<script src="/service-page.js" defer></script>','').includes('<script'),false,path);
   }
 });
 

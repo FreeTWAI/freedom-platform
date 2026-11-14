@@ -50,6 +50,8 @@ export interface PublicWorkView {
   public_url: string | null;
   creator_name: string;
   sharer_name: string | null;
+  share_id: string | null;
+  share_hidden: boolean;
   approved_work_version: string;
   version: string;
   updated_at: string | null;
@@ -204,6 +206,14 @@ export async function readPublicWork(db: Queryable, id: string, communityId?: st
     `, [viaCode, resolvedCommunity, id])).rows[0];
     sharerName = shareRow?.sharer_name ? String(shareRow.sharer_name) : null;
   }
+  const shareRow = (await db.query(`
+    SELECT share_id, state
+    FROM shares
+    WHERE kind = 'work'
+      AND ref_id = $1
+      AND community_id = $2
+    LIMIT 1
+  `, [id, resolvedCommunity])).rows[0] as { share_id?: string; state?: string } | undefined;
   return {
     showcase_id: String(row.showcase_id),
     community_id: String(row.community_id),
@@ -212,6 +222,8 @@ export async function readPublicWork(db: Queryable, id: string, communityId?: st
     public_url: row.public_url ? String(row.public_url) : null,
     creator_name: String(row.creator_name),
     sharer_name: sharerName,
+    share_id: shareRow?.state === 'published' && shareRow.share_id ? String(shareRow.share_id) : null,
+    share_hidden: shareRow?.state === 'hidden',
     approved_work_version: String(row.approved_work_version),
     version: String(row.version),
     updated_at: row.updated_at ? new Date(String(row.updated_at)).toISOString() : null,

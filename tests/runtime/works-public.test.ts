@@ -645,9 +645,19 @@ test('UX-V-15: /works/:id has one btn-primary, unique hrefs, short pre-action co
   assert.equal(found.status, 200);
   const headerNames = ['cache-control', 'referrer-policy', 'x-robots-tag', 'x-content-type-options', 'content-security-policy'];
   for (const h of headerNames) assert.ok(found.headers.get(h), `missing header ${h} on 200`);
+  assert.equal(found.headers.get('cache-control'), 'no-store');
+  assert.equal(found.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal(found.headers.get('x-robots-tag'), 'noindex, nofollow');
+  assert.equal(found.headers.get('x-content-type-options'), 'nosniff');
+  const foundCsp = found.headers.get('content-security-policy') ?? '';
+  assert.match(foundCsp, /script-src 'self'/);
+  assert.match(foundCsp, /style-src 'self'/);
   const foundHtml = await found.text();
   assert.equal((foundHtml.match(/\bbtn-primary\b/g) ?? []).length, 1);
+  assert.doesNotMatch(foundHtml, /<script(?![^>]*\bsrc=)/i);
+  assert.doesNotMatch(foundHtml, /<style\b/i);
   assert.doesNotMatch(foundHtml, /\sstyle=/i);
+  assert.doesNotMatch(foundHtml, /\son[a-z]{2,}\s*=/i);
   const foundHrefs = [...foundHtml.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
   assert.equal(new Set(foundHrefs).size, foundHrefs.length, `duplicate hrefs on /works/:id: ${foundHrefs.join(', ')}`);
   const foundMain = foundHtml.slice(foundHtml.indexOf('<main'), foundHtml.indexOf('</main>'));
@@ -664,11 +674,71 @@ test('UX-V-15: /works/:id has one btn-primary, unique hrefs, short pre-action co
     const html = await miss.text();
     assert.equal(html.includes(badId), false);
     assert.equal((html.match(/\bbtn-primary\b/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/i);
+    assert.doesNotMatch(html, /<style\b/i);
     assert.doesNotMatch(html, /\sstyle=/i);
+    assert.doesNotMatch(html, /\son[a-z]{2,}\s*=/i);
+    assert.equal(html.includes('<script'), false);
     const hrefs = [...html.matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(m => m[1]);
     assert.equal(new Set(hrefs).size, hrefs.length, `duplicate hrefs on /works 404: ${hrefs.join(', ')}`);
     const missMain = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
     const missPre = missMain.slice(0, missMain.search(/<a\b[^>]*btn-primary/)).replace(/<[^>]*>/g, '').replace(/\s+/g, '');
     assert.ok(missPre.length <= 20, `expected <=20 chars before 404 primary, got ${missPre.length}: ${missPre}`);
   }
+});
+
+test('I3: /works/:id exposes secondary share entry, visitor sign-in return_to, share_id wiring, and hidden-share guard', async () => {
+  const owner = await member(0);
+  const sharer = await member(1);
+  const work = await createPublishedWork(owner, {
+    title: '作品分享入口測試',
+    description: '作品頁應提供分享連結與登入導回。',
+  });
+  const s0Res = await owner.req(`me/showcases/${work.showcase_id}/sharing`);
+  const s0 = await s0Res.json() as { version: string; work_version: string };
+  const pubRes = await owner.req(`me/showcases/${work.showcase_id}/sharing`, {
+    method: 'PUT',
+    body: { enabled: true, work_version: s0.work_version },
+    version: s0.version,
+  });
+  assert.equal(pubRes.status, 200);
+
+  // Without an existing share row, /works/:id still offers the share entry with empty data-share-id.
+  const withoutShareRes = await defaultApp.request(`${origin}/works/${work.showcase_id}`);
+  assert.equal(withoutShareRes.status, 200);
+  const withoutShareHtml = await withoutShareRes.text();
+  assert.match(withoutShareHtml, /<script src="\/work-page\.js" defer><\/script>/);
+  assert.match(withoutShareHtml, new RegExp(`data-work-id="${work.showcase_id}"`));
+  assert.match(withoutShareHtml, /data-share-id=""/);
+  assert.match(withoutShareHtml, new RegExp(`data-work-login href="/\\?return_to=%2Fworks%2F${work.showcase_id}"`));
+  assert.match(withoutShareHtml, /<button[^>]*id="work-share"[^>]*class="[^"]*\bbtn-secondary\b[^"]*"[^>]*hidden/);
+  assert.equal((withoutShareHtml.match(/\bbtn-primary\b/g) ?? []).length, 1);
+  assert.match(withoutShareHtml, /id="work-share-result"/);
+  assert.match(withoutShareHtml, /id="work-share-status"[^>]*role="status"/);
+
+  // When a published share exists, /works/:id passes its share_id so the one link API creates /go/<code> -> /works/:id?via=<code>.
+  const createdShare = await owner.req('shares', { body: { kind: 'work', ref_id: work.showcase_id } });
+  assert.equal(createdShare.status, 200, await createdShare.clone().text());
+  const { share_id: shareId } = await createdShare.json() as { share_id: string };
+  const withShareHtml = await (await defaultApp.request(`${origin}/works/${work.showcase_id}`)).text();
+  assert.match(withShareHtml, new RegExp(`data-share-id="${shareId}"`));
+
+  const linkRes = await sharer.req(`shares/${shareId}/links`, { body: {} });
+  assert.equal(linkRes.status, 200, await linkRes.clone().text());
+  const { path, code } = await linkRes.json() as { path: string; code: string };
+  assert.match(path, /^\/go\/[A-Za-z0-9_-]{10}$/);
+
+  const goRes = await defaultApp.request(`${origin}${path}`);
+  assert.equal(goRes.status, 200);
+  const goHtml = await goRes.text();
+  assert.match(goHtml, new RegExp(`/works/${work.showcase_id}\\?via=${code}`));
+
+  const creditedHtml = await (await defaultApp.request(`${origin}/works/${work.showcase_id}?via=${code}`)).text();
+  assert.match(creditedHtml, new RegExp(`由 ${DEMO_USERS[1].display_name} 推薦分享`));
+
+  // Moderation-hidden share omits the share entry button and share_id.
+  await pool.query("UPDATE shares SET state = 'hidden' WHERE share_id = $1", [shareId]);
+  const hiddenHtml = await (await defaultApp.request(`${origin}/works/${work.showcase_id}`)).text();
+  assert.equal(hiddenHtml.includes(shareId), false);
+  assert.equal(hiddenHtml.includes('id="work-share"'), false);
 });

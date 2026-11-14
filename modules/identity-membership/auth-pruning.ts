@@ -42,6 +42,9 @@ export async function pruneExpiredAuthRecords(pool:Pool,{batch=500,sessionRefere
   await pool.query(`DELETE FROM promotion_click_salts WHERE click_day IN (
     SELECT click_day FROM promotion_click_salts WHERE click_day<(clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date-3
     ORDER BY click_day LIMIT $1 FOR UPDATE SKIP LOCKED) AND click_day<(clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date-3`,[batch]);
+  await pool.query(`DELETE FROM share_preview_facts WHERE (user_id,url_key) IN (
+    SELECT user_id,url_key FROM share_preview_facts WHERE created_at<clock_timestamp()-interval '1 hour'
+    ORDER BY created_at,user_id,url_key LIMIT $1 FOR UPDATE SKIP LOCKED) AND created_at<clock_timestamp()-interval '1 hour'`,[batch]);
   // A provisional session never authenticates or contributes presence. Lock sessions
   // before proof rows, as activation does; pruning cannot delete an activated row.
   await pool.query(`DELETE FROM sessions WHERE token_hash IN (

@@ -55,6 +55,7 @@ export function publicWorkHtml(work: PublicWorkView, origin: string): string {
   <meta property="og:image" content="${escapeHtml(ogImage)}">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="/social-post.css">
+  <script src="/work-page.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#content">跳至作品內容</a>
@@ -82,6 +83,14 @@ export function publicWorkHtml(work: PublicWorkView, origin: string): string {
         <a class="button primary btn-primary" href="/#showcase/${escapeHtml(work.showcase_id)}">在自由工坊查看作品</a>
       </div>
       <p>登入或加入自由工坊後，可查看更多作品與合作討論。</p>
+      ${work.share_hidden ? '' : `<div class="work-share" data-work-id="${escapeHtml(work.showcase_id)}" data-share-id="${work.share_id ? escapeHtml(work.share_id) : ''}">
+        <div class="actions">
+          <a class="button secondary btn-secondary" data-work-login href="/?return_to=${encodeURIComponent(`/works/${work.showcase_id}`)}">登入取得分享連結</a>
+          <button type="button" id="work-share" class="button secondary btn-secondary" data-work-share hidden>我也要分享</button>
+        </div>
+        <div id="work-share-result"></div>
+        <p id="work-share-status" class="reading-status muted" role="status"></p>
+      </div>`}
     </section>
   </main>
 </body>

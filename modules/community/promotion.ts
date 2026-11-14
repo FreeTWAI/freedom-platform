@@ -171,6 +171,7 @@ async function assertTarget(pool: Pool | PoolClient, actor: Actor, kind: Promoti
   }
   return memberCardTarget(pool, actor, target);
 }
+export { assertTarget as assertPromotionTarget };
 
 async function pointsFor(q: Pool | PoolClient, linkId: string, now: Date): Promise<PromotionPoints> {
   const week = periodStart('week', now), month = periodStart('month', now);

@@ -63,6 +63,7 @@
     "apps/platform-api/src/server.ts",
     "apps/platform-api/src/worker.ts",
     "apps/portal-web/src/App.tsx",
+    "apps/portal-web/public/work-page.js",
     "apps/portal-web/src/modules/WorkSharing.css",
     "apps/portal-web/src/modules/showcase-drafts.ts",
     "migrations/143_personal_content.sql",

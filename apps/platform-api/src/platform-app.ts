@@ -639,7 +639,7 @@ export function createPlatformApp(pool:Pool,origin:string,freedomEnv:FreedomEnv,
   app.route('/api/v1',createCommerceRoutes(pool));
   app.route('/api/v1',createAgentCommerceRoutes(pool,origin,shopHost));
   app.route('/api/v1',createGuildToolRoutes(pool,origin,runtime.guildToolFetch,runtime.guildToolSigner));
-  app.route('/api/v1',createShareRoutes(pool,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch,get token(){return runtime.githubMetricsToken();}},loadSocial,runtime.afterResponse));
+  app.route('/api/v1',createShareRoutes(pool,{fetcher:options.githubSocial?.fetcher,previewFetch:runtime.linkPreviewFetch,get token(){return runtime.githubMetricsToken();},get publicCommunity(){return runtime.registrationCommunityId();}},loadSocial,runtime.afterResponse));
   app.route('/api/v1', createOpenSourceRoutes(pool,runtime.githubMetricsToken,loadSocial));
   app.route('/api/v1',createCoCreationRoutes(pool,options.coCreationGitHub));
   app.route('/api/v1',createBenefitRoutes(pool));

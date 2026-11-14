@@ -24,9 +24,10 @@ function coverPath(id: string) { return `/api/v1/public/member-services/${id}/co
 function paragraphs(value: string) {
   return value.split(/\n+/).filter(part => part.trim()).map(part => `<p>${escapeHtml(part.trim())}</p>`).join('');
 }
-function shell(origin: string, title: string, head: string, body: string, discoveryEnabled: boolean, returnPath?: string) {
+function shell(origin: string, title: string, head: string, body: string, discoveryEnabled: boolean, returnPath?: string, script?: string) {
   const join = returnPath ? `/?join=1&amp;return_to=${encodeURIComponent(returnPath)}` : '/';
-  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>${head}<link rel="stylesheet" href="/services.css"></head><body>${discoveryEnabled ? PUBLIC_REVALIDATION_MARKUP : ''}${body}<footer class="service-foot"><a href="${join}">加入自由工坊</a><a href="/services">在自由工坊看更多社員服務</a></footer></body></html>`;
+  const scriptTag = script ? `<script src="${escapeHtml(script)}" defer></script>` : '';
+  return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>${head}<link rel="stylesheet" href="/services.css">${scriptTag}</head><body>${discoveryEnabled ? PUBLIC_REVALIDATION_MARKUP : ''}${body}<footer class="service-foot"><a href="${join}">加入自由工坊</a><a href="/services">在自由工坊看更多社員服務</a></footer></body></html>`;
 }
 function meta(origin: string, path: string, title: string, description: string, image: { url: string; width: number; height: number }) {
   const url = abs(origin, path), src = escapeHtml(image.url);
@@ -77,6 +78,9 @@ export function serviceDetailHtml(origin: string, service: PublicServicePage, di
     `<div><dt>方式</dt><dd>${escapeHtml(SERVICE_MODE_LABELS[service.service_mode])}</dd></div>`,
   ].join('');
   const contacts = service.contacts.map(contact => `<a class="service-contact" href="${escapeHtml(contact.url)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(contact.label)}</a>`).join('');
-  const body = `<main class="service-detail">${serviceTop()}${service.has_cover ? media(service, origin) : placeholder(service.category)}<p class="service-category">${escapeHtml(SERVICE_CATEGORY_LABELS[service.category])}</p><h1>${escapeHtml(service.title)}</h1><p class="service-owner">${escapeHtml(service.owner_name)}</p><p class="service-summary">${escapeHtml(service.summary)}</p>${service.description ? `<div class="service-copy">${paragraphs(service.description)}</div>` : ''}<dl class="service-facts">${facts}</dl><div class="service-contacts">${contacts}</div></main>`;
-  return shell(origin, title, meta(origin, `/services/${service.service_id}`, title, service.summary, image), body, discoveryEnabled, discoveryEnabled ? `/services/${service.service_id}` : undefined);
+  const servicePath = `/services/${service.service_id}`;
+  const loginHref = `/?return_to=${encodeURIComponent(servicePath)}`;
+  const share = `<section class="service-share" aria-label="分享服務" data-service-id="${escapeHtml(service.service_id)}"><div class="service-share-entry"><a class="btn btn-secondary" data-service-login href="${escapeHtml(loginHref)}">登入取得分享連結</a><button type="button" id="service-share" class="btn btn-secondary" data-service-share hidden>我也要分享</button></div><div id="service-share-result"></div><p id="service-share-status" class="service-share-status" role="status"></p></section>`;
+  const body = `<main class="service-detail">${serviceTop()}${service.has_cover ? media(service, origin) : placeholder(service.category)}<p class="service-category">${escapeHtml(SERVICE_CATEGORY_LABELS[service.category])}</p><h1>${escapeHtml(service.title)}</h1><p class="service-owner">${escapeHtml(service.owner_name)}</p><p class="service-summary">${escapeHtml(service.summary)}</p>${service.description ? `<div class="service-copy">${paragraphs(service.description)}</div>` : ''}<dl class="service-facts">${facts}</dl><div class="service-contacts">${contacts}</div>${share}</main>`;
+  return shell(origin, title, meta(origin, servicePath, title, service.summary, image), body, discoveryEnabled, discoveryEnabled ? servicePath : undefined, '/service-page.js');
 }

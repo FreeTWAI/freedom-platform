@@ -1,20 +1,19 @@
 import {useEffect,useRef,useState} from 'react';
 import {ApiError,type PortalClient} from '../api';
 import {useGitHubSocialStore} from '../modules/GitHubSocial';
-import {promotionLink,ShareButton,type ShareLink} from './ShareButton';
+import {ShareButton,type ShareLink} from './ShareButton';
 import './share.css';
 const STAR_UNRECORDABLE_CODES=new Set(['github_permission_required','github_not_configured','github_installation_required','github_repository_unavailable','repository_identity_changed']);
 function isStarUnrecordable(cause:unknown):boolean{
   return cause instanceof ApiError&&(cause.status===403||(typeof cause.code==='string'&&STAR_UNRECORDABLE_CODES.has(cause.code)));
 }
 type Page={share_id:string;ref_id?:string|null;title:string;kind:string;canonical_url:string;sharers:{display_name:string;role:string}[];repository:null|{full_name:string;url:string;description:string|null;license_spdx:string|null;homepage:string|null;topics:string[];pushed_at:string|null;forks_count:number|null;open_issues_count:number|null;subscribers_count:number|null;readme_html:string;quick_start:string;stars:number|null;original_author:string;latest_release:{name:string;tag_name:string;html_url:string}|null;fetched_at:string|null}};
-function shareTarget(client:PortalClient,page:Page):{makeLink:(()=>Promise<ShareLink>)|null;fallbackUrl:string}{
-  if(page.kind==='repository'||page.kind==='link')return {makeLink:promotionLink(client,'share',page.share_id),fallbackUrl:`/s/${page.share_id}`};
-  if(page.kind==='work')return {makeLink:promotionLink(client,'share',page.share_id),fallbackUrl:`/#shares/${page.share_id}`};
-  if(page.kind==='event')return {makeLink:page.ref_id?promotionLink(client,'event',page.ref_id):null,fallbackUrl:page.ref_id?`/events/${page.ref_id}`:`/#shares/${page.share_id}`};
-  if(page.kind==='post')return {makeLink:page.ref_id?promotionLink(client,'social_post',page.ref_id):null,fallbackUrl:page.ref_id?`/?social-post=${page.ref_id}#social`:`/#shares/${page.share_id}`};
-  if(page.kind==='service')return {makeLink:page.ref_id?promotionLink(client,'member_service',page.ref_id):null,fallbackUrl:page.ref_id?`/services/${page.ref_id}`:`/#shares/${page.share_id}`};
-  return {makeLink:null,fallbackUrl:`/#shares/${page.share_id}`};
+function shareFallbackUrl(page:Page):string{
+  if(page.kind==='repository'||page.kind==='link')return `/s/${page.share_id}`;
+  if(page.kind==='event'&&page.ref_id)return `/events/${page.ref_id}`;
+  if(page.kind==='post'&&page.ref_id)return `/?social-post=${page.ref_id}#social`;
+  if(page.kind==='service'&&page.ref_id)return `/services/${page.ref_id}`;
+  return `/#shares/${page.share_id}`;
 }
 export function SharePage({client,id,via}:{client:PortalClient;id:string;via?:string}){
   const [page,setPage]=useState<Page|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[starred,setStarred]=useState(false),[starBlocked,setStarBlocked]=useState(false);
@@ -32,7 +31,6 @@ export function SharePage({client,id,via}:{client:PortalClient;id:string;via?:st
   const repo=page.repository;
   let site='';
   if(!repo&&page.kind==='link'){try{site=new URL(page.canonical_url).hostname;}catch{}}
-  const share=shareTarget(client,page);
   const facts=repo?[repo.license_spdx?`授權：${repo.license_spdx}`:null,repo.pushed_at?`更新：${repo.pushed_at.slice(0,10)}`:null,
     repo.forks_count!=null?`Fork：${repo.forks_count}`:null,repo.open_issues_count!=null?`Issues：${repo.open_issues_count}`:null,repo.subscribers_count!=null?`Watchers：${repo.subscribers_count}`:null].filter(Boolean):[];
   const canStar=Boolean(repo&&store.account.value?.configured&&!starBlocked);
@@ -40,7 +38,7 @@ export function SharePage({client,id,via}:{client:PortalClient;id:string;via?:st
     <header><h2>{page.title}</h2>{site&&<p className="muted share-site">{site}</p>}</header>
     <div className="share-actions">
       {repo&&(canStar?<button className="btn btn-primary" disabled={busy||starred} onClick={()=>void star()}>{starred?'★ 已加星':store.account.value?.connected?'☆ 加星':'連結 GitHub 加星'}</button>:<a className="btn btn-secondary btn-small" href={repo.url} target="_blank" rel="noopener noreferrer">在 GitHub 查看</a>)}
-      <ShareButton title={page.title} fallbackUrl={share.fallbackUrl} makeLink={share.makeLink} label="我也要分享" buttonClassName="btn btn-secondary btn-small"/>
+      <ShareButton title={page.title} fallbackUrl={shareFallbackUrl(page)} makeLink={()=>client.post<ShareLink>(`/shares/${page.share_id}/links`,{},{idempotencyKey:crypto.randomUUID()})} label="我也要分享" buttonClassName="btn btn-secondary btn-small"/>
       <a className="btn btn-secondary btn-small" href="#me/credit">我的貢獻</a>
       {!repo&&<a className="btn btn-secondary btn-small" href={page.canonical_url}>開啟內容</a>}
     </div>

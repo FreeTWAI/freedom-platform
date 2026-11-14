@@ -10,6 +10,11 @@ const sections: { kind: PublicDiscoverySection['kind']; title: string; empty: st
   { kind: 'services', title: '會員服務', empty: '目前沒有可公開探索的會員服務。' },
 ];
 // Only content routes, never referral codes, tokens, hashes or arbitrary destinations.
+export function publicShareReturnPath(value: string | null): string | null {
+  const match = value?.match(/^\/(services|works)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
+  return match ? `/${match[1]}/${match[2]}` : null;
+}
+
 export function publicDiscoveryPath(value: string | null): string | null {
   if (!value) return null;
   const separator = value.lastIndexOf('/');

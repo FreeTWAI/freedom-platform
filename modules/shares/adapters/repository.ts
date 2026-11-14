@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { shareRepositoryJson } from '../github.js';
 import { githubCoordinate, concealedRepository } from '../../opensource-marketing/github.js';
 import { requireCondition } from '../../../packages/shared/problem.js';
-import type { AdapterContext, RepositoryFacts, ShareAdapter } from '../types.js';
+import type { AdapterContext, PreparedShare, RepositoryFacts, ShareAdapter } from '../types.js';
 const counter=z.number().int().nonnegative().safe();
 const metricShape=z.object({stargazers_count:counter,forks_count:counter,open_issues_count:counter,subscribers_count:counter,pushed_at:z.iso.datetime().nullable(),language:z.string().max(100).nullable(),archived:z.literal(false)});
 const repo = z.object({id:z.number().int().positive().safe(),full_name:z.string().max(140),private:z.literal(false),visibility:z.literal('public'),archived:z.literal(false),fork:z.boolean(),owner:z.object({id:z.number().int().positive().safe(),login:z.string().max(100)}),default_branch:z.string().min(1).max(255),description:z.string().max(10000).nullable().optional(),stargazers_count:z.number().int().nonnegative().safe(),topics:z.array(z.string().max(100)).max(100).default([]),homepage:z.string().nullable().optional(),license:z.object({spdx_id:z.string()}).nullable().optional(),source:z.object({full_name:z.string()}).optional(),parent:z.object({full_name:z.string()}).optional()});
@@ -26,7 +26,9 @@ export async function repositoryFacts(url:string,context:AdapterContext={}):Prom
   }
   throw new Error('repository_resolution_limit');
 }
-export const repositoryAdapter:ShareAdapter={kind:'repository',async prepare(input,context){
-  const repository=await repositoryFacts(input.url??'',context);
+export function preparedRepositoryShare(repository:RepositoryFacts):PreparedShare {
   return {kind:'repository',canonical_key:`github:${repository.id}`,canonical_url:repository.url,title:repository.full_name,repository};
+}
+export const repositoryAdapter:ShareAdapter={kind:'repository',async prepare(input,context){
+  return preparedRepositoryShare(await repositoryFacts(input.url??'',context));
 }};

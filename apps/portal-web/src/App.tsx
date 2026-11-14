@@ -49,7 +49,7 @@ import { consoleChannel } from './game-console-routing'
 import {AdminReportsEntry,MemberReportingProvider} from './modules/MemberReporting'
 import { BrandPoster, CommunityLinks } from './modules/CommunityBrand'
 import type { SiteConfig } from './modules/Community'
-import { PublicDiscovery, publicDiscoveryPath, validatePublicReturn } from './modules/PublicDiscovery'
+import { PublicDiscovery, publicDiscoveryPath, publicShareReturnPath, validatePublicReturn } from './modules/PublicDiscovery'
 import {storefrontReturnFromSearch, successfulStorefrontReturn} from '../../../modules/agent-commerce/storefront-return'
 import {anonymousSharedPost,memberPostReturn,publicPostReturn} from './modules/public-post-return'
 import { TOOL_ONLY_GUILDS, guildKeyFromHash, guildActionFromHash } from './modules/guild-launchpad-route'
@@ -415,7 +415,7 @@ function MemberApp({initialGoogleCallback}:{initialGoogleCallback:GoogleCallback
       (profileLoginRequested&&profileRoute?.kind==='visitor')||sharedCardToken||
       (window.location.pathname==='/'&&currentLegacyHash()==='#account'&&Boolean(publicPostReturn(window.location.search)))||
       (window.location.pathname==='/'&&Boolean(memberPostReturn(window.location.search,currentLegacyHash())))||
-      Boolean(publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))||
+      Boolean(publicShareReturnPath(new URLSearchParams(window.location.search).get('return_to')) ?? publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))||
       Boolean(skillAcquisitionFromSearch(window.location.search))||
       Boolean(storefrontReturnFromSearch(window.location.search))
     );
@@ -489,6 +489,10 @@ function LoginEntryBrand() {
   return <img className="login-entry-logo" src="/brand/freedom-workshop-compact-transparent.png" alt="自由工坊" width="396" height="132" fetchPriority="high"/>;
 }
 
+export function isPublicShareReturn(path: string | null): path is string {
+  return publicShareReturnPath(path) !== null
+}
+
 export function LoginView({
   site,
   initialMode='login',
@@ -523,7 +527,10 @@ export function LoginView({
   onReturnToEvent?:()=>void
 }) {
   const [mode, setMode] = useState<'login' | 'register' | 'request-reset'>(initialMode)
-  const [returnPath] = useState(() => publicDiscoveryPath(new URLSearchParams(window.location.search).get('return_to')))
+  const [returnPath] = useState(() => {
+    const raw = new URLSearchParams(window.location.search).get('return_to')
+    return publicShareReturnPath(raw) ?? publicDiscoveryPath(raw)
+  })
   const [skillReturn] = useState(() => skillAcquisitionFromSearch(window.location.search))
   const [skillEntryUrl] = useState(() => window.location.href)
   const skillReturnRequest = useRef<AbortController | null>(null)
@@ -599,6 +606,15 @@ export function LoginView({
         if (window.location.href !== skillEntryUrl) { onLoggedIn(session); return }
         if (allowed) { window.location.assign(skillReadingPath(skillReturn)!); return }
         onLoggedIn(session, t('auth.skillReturnUnavailable'))
+      } else if (isPublicShareReturn(returnPath)) {
+        let allowed = false
+        try {
+          const response = await fetch(returnPath, { cache: 'no-store', credentials: 'omit', redirect: 'error' })
+          allowed = response.ok && response.headers.get('content-type')?.includes('text/html') === true
+        } catch { /* Auth succeeded even when original content cannot be checked. */ }
+        if (epoch !== authEpoch.current) return
+        if (allowed) { window.location.assign(returnPath); return }
+        onLoggedIn(session, '原本的公開內容目前無法確認或已停止公開，你仍可繼續逛工坊。')
       } else if (registered && discoveryEnabled && returnPath) {
         let allowed = false
         try { allowed = await validatePublicReturn(returnPath) } catch { /* Registration succeeded even when original content cannot be checked. */ }
@@ -668,7 +684,8 @@ export function LoginView({
         {postReturnPath&&<p className="purpose-next-destination"><a href={postReturnPath}>返回貼文繼續閱讀</a><br/>{activeMode==='register'?'建立帳號後會回到這篇貼文，加入公會可稍後完成。':'登入後會回到這篇貼文。'}</p>}
         {memberPostPath&&<p className="purpose-next-destination">登入後會回到指定貼文，並確認你的閱覽權限。</p>}
         {entryIntent&&!accessExpired&&activeMode!=='confirm-reset'&&activeMode!=='request-reset'&&<p className="purpose-next-destination" role="status">{language==='zh-Hant'?`${activeMode==='register'?'加入':'登入'}後前往：${entryIntentLabel(entryIntent)}。`:t('auth.destination',{destination:t(`intent.${entryIntent}`)})}</p>}
-        {!skillReturn && discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
+        {!skillReturn && isPublicShareReturn(returnPath) && <p className="purpose-next-destination"><a href={returnPath}>返回原本頁面</a><br/>{activeMode==='register'?'建立帳號後會回到這頁，加入公會可稍後完成。':'登入後會回到這頁。'}</p>}
+        {!skillReturn && !isPublicShareReturn(returnPath) && discoveryEnabled && returnPath && activeMode === 'register' && <p className="muted">建立帳號後，會先確認並返回原本的公開內容；選公會與完整定位可以稍後再做。</p>}
         {skillReturn && !accessExpired && (activeMode === 'login' || activeMode === 'register') && <div className="purpose-next-destination">
           <p>{t('auth.skillReturnHint')}</p><a href={skillReadingPath(skillReturn)!}>{t('auth.skillReturnRead')}</a>
         </div>}
