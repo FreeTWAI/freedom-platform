@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -116,6 +117,7 @@ before(async () => {
     GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${h.schema} TO ${role};
     GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA ${h.schema} TO ${role};
     GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${h.schema} TO ${role}`);
+  await setFixtureRolePasswords(h.admin, [role]);
   const runtimeUrl = new URL(url); runtimeUrl.username = role; runtimeUrl.password = '';
   runtime = new Pool({connectionString: runtimeUrl.toString(), options: `-c search_path=${h.schema} -c statement_timeout=20000`, max: 6});
   app = createApp(runtime, h.origin, 'local', {guildLaunchpadEnabled: true, hostedReservationsEnabled: true, tenantCursorSigningKey: TENANT_CURSOR_TEST_KEY});

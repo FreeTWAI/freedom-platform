@@ -223,8 +223,17 @@ test('share dialog works across all 6 targets, skill intros, note public toggle 
     const postGuestCtx = await browser.newContext({ baseURL: e2eOrigin(), userAgent: GUEST_UA, viewport: PHONE });
     try {
       const postGuest = await postGuestCtx.newPage();
+      const click = postGuest.waitForRequest(request => request.url().endsWith('/api/v1/promotion/clicks') && request.method() === 'POST');
       await postGuest.goto(publicNoteShare.url);
       await expect(postGuest).toHaveURL(new RegExp(`/posts/${postId}$`));
+      await click;
+      const code = new URL(publicNoteShare.url).pathname.split('/').pop();
+      // The source document can detach before its keepalive response event;
+      // observe the actual persisted click before closing the guest context.
+      await expect.poll(async () => (await e2eAuthPool.query(
+        `SELECT count(*)::int AS n FROM promotion_clicks c JOIN promotion_links l ON l.link_id=c.link_id WHERE l.code=$1 AND l.user_id=$2`,
+        [code, id],
+      )).rows[0].n).toBe(1);
     } finally {
       await postGuestCtx.close();
     }
@@ -274,15 +283,13 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
        VALUES($1,current_date,$2,$3,$4,$5,'share',now()),($1,current_date-1,$6,$7,$4,$5,'share',now()-interval '1 day')`,
       [shareLinkId, `v:${'a'.repeat(64)}`, 'b'.repeat(64), DEMO_COMMUNITY, id, `v:${'c'.repeat(64)}`, 'd'.repeat(64)],
     );
-    await e2eAuthPool.query(
-      `INSERT INTO share_endorsements(share_id,user_id) VALUES($1,$2)`,
-      [shareId, id],
-    );
-    await e2eAuthPool.query(
+    await e2eAuthPool.query(`INSERT INTO share_endorsements(share_id,user_id) VALUES($1,$2)`, [shareId, id]);
+    const starCredit = await e2eAuthPool.query(
       `INSERT INTO share_credit_events(share_id,community_id,user_id,role,basis,units,source_ref,actor_user_id)
        VALUES($1,$2,$3,'sharer','star_confirmed',1,$4,$5)`,
       [shareId, DEMO_COMMUNITY, id, `star:${id}`, DEMO_USERS[0].user_id],
     );
+    expect(starCredit.rowCount).toBe(1);
     await e2eAuthPool.query(
       `INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,event_kind)
        VALUES($1,$2,$3,$4,'公開活動按鈕測試',now()-interval '1 day',now()+interval '2 days','online','線上','published','open','other')`,
@@ -443,6 +450,7 @@ test('capability fallbacks, anonymous share, my-credit results and public event-
   } finally {
     await e2eAuthPool.query(`DELETE FROM community_event_guest_rsvps WHERE event_id=$1`, [eventId]);
     await e2eAuthPool.query(`DELETE FROM community_event_share_codes WHERE event_id=$1`, [eventId]);
+    await e2eAuthPool.query(`UPDATE shares SET state='retracted' WHERE share_id=$1`, [eventShareId]);
     await e2eAuthPool.query(`DELETE FROM community_events WHERE event_id=$1`, [eventId]);
     await e2eAuthPool.query(`DELETE FROM share_endorsements WHERE share_id IN ($1,$2)`, [shareId, eventShareId]);
     await e2eAuthPool.query(`DELETE FROM promotion_clicks WHERE link_id IN ($1,$2)`, [shareLinkId, eventLinkId]);

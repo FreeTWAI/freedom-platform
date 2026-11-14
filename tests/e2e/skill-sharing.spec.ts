@@ -91,9 +91,9 @@ test('unavailable or missing share content still shares the plain link and recov
   const plain=(await dialog.locator('.skill-share-url').innerText()).trim();
   await expect(dialog.locator('.share-intros')).toHaveCount(0);await dialog.getByRole('button',{name:'複製連結',exact:true}).click();expect(await copied(page)).toBe(plain);await expect(dialog.getByRole('status')).toHaveText('已複製。');
   await page.keyboard.press('Escape');await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
-  state='missing';await openPreview(page);await expect(dialog.locator('.share-intros')).toHaveCount(0);await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  state='missing';await card.getByRole('button',{name:'分享技能',exact:true}).click();await expect(dialog).toBeVisible();await expect(dialog.locator('.share-intros')).toHaveCount(0);await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await page.keyboard.press('Escape');await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
-  state='ok';await openPreview(page);await selectIntro(dialog,0);await preview(dialog);
+  state='ok';await card.getByRole('button',{name:'分享技能',exact:true}).click();await expect(dialog).toBeVisible();await selectIntro(dialog,0);await preview(dialog);
   await page.keyboard.press('Escape');await expect(card.getByRole('button',{name:'分享技能',exact:true})).toBeFocused();
 });
 test('the skill book dialog shows the full landscape illustration below the compact cover header',async({page})=>{

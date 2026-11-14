@@ -107,15 +107,24 @@ test('unknown machine endpoints keep JSON errors and security headers after feat
 
 test('anonymous resource preview preserves the first three complete public books and legacy catalog', async () => {
   const { app, databaseCalls } = isolatedApp();
+  const withoutCache = (books: any[]) => books.map(({original_cache, ...book}) => {
+    assert.ok(original_cache, 'fallback original metadata is present');
+    assert.equal(original_cache.repository_id, null);
+    assert.equal(original_cache.stale, true);
+    assert.equal(Object.hasOwn(original_cache, 'readme_html'), false);
+    return book;
+  });
   const full = await app.request(origin + '/api/v1/community');
   const fullText = await full.text();
   assert.equal(full.status, 200);
-  assert.equal(fullText, JSON.stringify(communityCatalog));
+  const fullData = JSON.parse(fullText);
+  assert.equal(JSON.stringify({...fullData, skill_books: withoutCache(fullData.skill_books)}), JSON.stringify(communityCatalog));
   const preview = await app.request(origin + '/api/v1/community/preview');
   const previewText = await preview.text();
   assert.equal(preview.status, 200);
-  assert.equal(previewText, JSON.stringify({ skill_books: communityCatalog.skill_books.slice(0, 3) }));
-  assert.equal(JSON.parse(previewText).skill_books.length, 3);
+  const previewData = JSON.parse(previewText);
+  assert.equal(JSON.stringify({...previewData, skill_books: withoutCache(previewData.skill_books)}), JSON.stringify({skill_books: communityCatalog.skill_books.slice(0, 3)}));
+  assert.equal(previewData.skill_books.length, 3);
   assert.ok(Buffer.byteLength(previewText) < Buffer.byteLength(fullText) / 10);
   for (const header of ['content-type', 'cache-control', 'content-security-policy', 'referrer-policy', 'x-content-type-options']) {
     assert.equal(preview.headers.get(header), full.headers.get(header), header);
@@ -123,6 +132,7 @@ test('anonymous resource preview preserves the first three complete public books
   assert.equal(preview.headers.get('cache-control'), 'no-store');
   const site = await app.request(origin + '/api/v1/site');
   assert.equal(site.status, 200);
-  assert.equal(JSON.stringify((await site.json()).community), JSON.stringify(communityCatalog));
-  assert.equal(databaseCalls(), 0);
+  const community = (await site.json()).community;
+  assert.equal(JSON.stringify({...community, skill_books: withoutCache(community.skill_books)}), JSON.stringify(communityCatalog));
+  assert.equal(databaseCalls(), 3, 'each public projection attempts one cache lookup');
 });

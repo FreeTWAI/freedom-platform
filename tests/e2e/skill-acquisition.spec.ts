@@ -236,7 +236,7 @@ test.describe('discovery ON event return',()=>{
       // The public return now lands on SSR; its visible member entry resumes the same event.
       await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();expect(registrationWrites).toBe(0);
       const memberDestination=`/#explore/events/${id}`;
-      const memberEntry=page.getByRole('link',{name:'活動管理',exact:true});
+      const memberEntry=page.getByRole('link',{name:'參與設定',exact:true});
       await expect(memberEntry).toHaveAttribute('href',memberDestination);await memberEntry.click();
       await expect(page).toHaveURL(new URL(memberDestination,page.url()).href);
       await expect(page.getByText('完成加入公會後會返回這場活動，完整定位可稍後補做。返回後仍需自行確認報名，不會自動參加。',{exact:true})).toBeVisible();

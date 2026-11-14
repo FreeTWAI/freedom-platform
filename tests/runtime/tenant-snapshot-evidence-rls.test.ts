@@ -1,3 +1,4 @@
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { Pool, type PoolClient } from 'pg';
@@ -45,6 +46,7 @@ before(async () => {
     CREATE SCHEMA ${schema} AUTHORIZATION ${ownerRole};
     CREATE SCHEMA ${otherSchema} AUTHORIZATION ${ownerRole};
     GRANT USAGE ON SCHEMA ${schema} TO ${readerRole}`);
+  await setFixtureRolePasswords(admin, [ownerRole, readerRole]);
   created = true;
   await owner.query(`CREATE TABLE ${schema}.evidence_rows (id integer PRIMARY KEY)`);
   await owner.query(`INSERT INTO ${schema}.evidence_rows(id) VALUES (1),(2)`);

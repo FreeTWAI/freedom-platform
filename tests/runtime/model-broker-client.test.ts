@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import { createServer } from 'node:http';
 import { createModelBrokerAuthorizations, type OpaqueModelBrokerInvocation } from '../../modules/agent-control/model-broker-authorizations.js';
 import * as bridge from '../../contracts/execution/v2/model-broker-bridge.js';
@@ -70,7 +71,7 @@ before(async () => {
     CREATE ROLE ${runtime} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE ROLE ${brokerRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator}; GRANT USAGE ON SCHEMA ${schema} TO ${runtime},${brokerRole}`);
-  created = true; await migrate(owner); await grants();
+  created = true; await setFixtureRolePasswords(admin, [migrator, runtime, brokerRole]); await migrate(owner); await grants();
   await owner.query(`GRANT SELECT ON model_broker_authorizations,model_export_approvals,model_text_steps,execution_grants,execution_runs,work_items TO ${brokerRole}; GRANT UPDATE(accepted_at) ON model_broker_authorizations TO ${brokerRole}`);
   const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 },false,['encrypt','decrypt']);
   vault = createCredentialVault({ kek: { current: async()=>({ keyId:'synthetic-test-kek',key }), readById: async id=>id==='synthetic-test-kek'?key:null }, recover });

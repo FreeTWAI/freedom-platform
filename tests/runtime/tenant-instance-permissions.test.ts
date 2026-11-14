@@ -1,3 +1,4 @@
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -39,6 +40,7 @@ before(async () => {
   await admin.query(`CREATE SCHEMA ${schema}`);
   await migrate(pool);
   await admin.query(`CREATE ROLE ${runtimeRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`);
+  await setFixtureRolePasswords(admin, [runtimeRole]);
   await admin.query(`GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
   await pool.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${runtimeRole}`);
   await pool.query(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA ${schema} TO ${runtimeRole}`);

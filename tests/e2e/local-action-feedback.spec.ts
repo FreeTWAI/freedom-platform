@@ -120,8 +120,10 @@ test('editing during a handoff copy retains the captured original but suppresses
 
 test('promotion copy locks related share actions until ACK and selects exact manual content on denial',async({page})=>{
   await page.setViewportSize({width:320,height:844});await holdCapabilities(page);await login(page);const dialog=await promotion(page),url=await dialog.locator('.skill-share-url').innerText();
+  await dialog.locator('.share-more > summary').click();
   await dialog.getByRole('button',{name:'複製連結',exact:true}).click();await capture(page,dialog,'promotion-copy-pending');
-  const pending=dialog.getByRole('button',{name:'複製中…',exact:true});await expect(pending).toBeDisabled();await expect(dialog.getByRole('button',{name:'分享',exact:true})).toBeDisabled();
+  const pending=dialog.getByRole('button',{name:'複製中…',exact:true});await expect(pending).toBeDisabled();
+  for(const name of ['LINE 分享 ↗','Telegram 分享 ↗'])await expect(dialog.getByRole('button',{name,exact:true})).toBeDisabled();
   await pending.dispatchEvent('click');expect(await calls(page)).toHaveLength(1);await finish(page,0,'denied');const manual=dialog.getByLabel('手動複製分享內容',{exact:true});
   await expect(manual).toBeFocused();expect(await manual.inputValue()).toBe((await calls(page))[0].value);expect(await manual.inputValue()).toContain(url);await expect(dialog).not.toContainText('已複製。');
   await dialog.getByRole('button',{name:'複製連結',exact:true}).click();await finish(page,1);await expect(dialog.getByRole('status')).toHaveText('已複製。');await expect(manual).toHaveCount(0);

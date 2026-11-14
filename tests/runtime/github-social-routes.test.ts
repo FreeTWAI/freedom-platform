@@ -148,7 +148,8 @@ test('public metrics read the stored catalog snapshot and appear in no-JavaScrip
  const support=html.match(/<section class="public-github-social"[^>]*>[\s\S]*?<\/section>/)?.[0];
  assert.ok(support,'GitHub actions and cached counts are present before JavaScript loads');
  assert.equal(support.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),'☆ 加星 7');
- assert.ok(html.includes('https://github.com/teddashh/ai-security-scanner/fork'));
+ assert.ok(support.includes('href="https://github.com/teddashh/ai-security-scanner"'));
+ assert.ok(html.includes('href="https://github.com/teddashh/ai-security-scanner/fork"'));
  assert.ok(html.includes('登入工坊 Star'));assert.equal(calls.length,0);
  assert.equal((await app.request(origin+'/api/v1/github/books/not-a-real-book/metrics')).status,404);
  assert.equal((await app.request(origin+'/api/v1/me/github')).status,401);

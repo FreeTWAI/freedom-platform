@@ -1,3 +1,4 @@
+import { fixtureRoleConnection, setFixtureRolePasswords } from './fixture-role-password.js';
 // @ts-expect-error Canonical tooling is JavaScript without a declaration file.
 import {createIngestBrowserDiagnostic} from '../../packages/contribution-tools/test-failure-diagnostic.mjs';
 import assert from 'node:assert/strict';
@@ -90,10 +91,11 @@ export async function ingestFixture() {
   const output='SYNTHETIC_DIRECT_INGEST_MODEL_OUTPUT';
   const schema=`fp_ingest_${process.pid}_${Date.now()}_${Math.floor(Math.random()*10000)}`;
   const roles={owner:schema+'_owner',app:schema+'_app',broker:schema+'_broker',executor:schema+'_exec'};
+  const passwords=process.env.PGPASSWORD?{owner:randomBytes(24).toString('hex'),app:randomBytes(24).toString('hex'),broker:randomBytes(24).toString('hex'),executor:randomBytes(24).toString('hex')}:undefined;
   const admin=new Pool({connectionString});
   const roleUrl=(role:string)=>{const url=new URL(connectionString);url.username=role;url.password='';return url.toString();};
-  const pool=(role:string)=>new Pool({connectionString:roleUrl(role),options:`-c search_path=${schema} -c statement_timeout=10000`,max:12});
-  const owner=pool(roles.owner),app=pool(roles.app),executor=pool(roles.executor),brokerPool=pool(roles.broker);
+  const pool=(role:string,password?:string)=>new Pool({...fixtureRoleConnection(roleUrl(role),password),options:`-c search_path=${schema} -c statement_timeout=10000`,max:12});
+  const owner=pool(roles.owner,passwords?.owner),app=pool(roles.app,passwords?.app),executor=pool(roles.executor,passwords?.executor),brokerPool=pool(roles.broker,passwords?.broker);
   const directory=await mkdtemp(join(tmpdir(),'fp-ingest-'));
   const ingestKeys=await generateKeyPair('EdDSA',{extractable:true});
   const issuerKeys=await generateKeyPair('EdDSA',{extractable:true}),responseKeys=await generateKeyPair('EdDSA',{extractable:true}),recoveryKeys=await generateKeyPair('EdDSA',{extractable:true});
@@ -118,14 +120,15 @@ export async function ingestFixture() {
   const certificatePin=createHash('sha256').update(new X509Certificate(tls.cert).publicKey.export({type:'spki',format:'der'})).digest('base64');
   let browser:Browser|undefined;const contexts:BrowserContext[]=[];
   const common={schema,...profile,recoveryOrigin,recoveryPublicJwk:await exportJWK(recoveryKeys.publicKey),directory,tls,mainOrigin,setupOrigin};
-  const brokerConfig={...common,cipherUrl:roleUrl(roles.broker),executorUrl:roleUrl(roles.executor),providerOrigin,kekBytes,executionPublicJwk:await exportJWK(issuerKeys.publicKey),ingestPublicJwk:await exportJWK(ingestKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)};
+  const brokerConfig={...common,cipherUrl:roleUrl(roles.broker),cipherPassword:passwords?.broker,executorUrl:roleUrl(roles.executor),executorPassword:passwords?.executor,providerOrigin,kekBytes,executionPublicJwk:await exportJWK(issuerKeys.publicKey),ingestPublicJwk:await exportJWK(ingestKeys.publicKey),responsePrivateJwk:await exportJWK(responseKeys.privateKey)};
   try {
     await admin.query(Object.values(roles).map(role=>`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`).join(';')+`;CREATE SCHEMA ${schema} AUTHORIZATION ${roles.owner};GRANT USAGE ON SCHEMA ${schema} TO ${roles.app},${roles.broker},${roles.executor}`);created=true;
+    if(passwords)for(const name of Object.keys(roles) as (keyof typeof roles)[])await setFixtureRolePasswords(admin,[roles[name]],passwords[name]);
     await migrate(owner);await template(owner,schema,'20-runtime-grants.psql',roles.app,'runtime');await template(owner,schema,'40-credential-broker-grants.psql',roles.broker,'broker');
     await template(owner,schema,'45-model-broker-execution-grants.psql',roles.executor,'executor');
     broker=await childProcess('broker',brokerConfig);
     const brokerInternalOrigin=await broker.request('origin');
-    main=await childProcess('main',{...common,appUrl:roleUrl(roles.app),brokerInternalOrigin,executionPrivateJwk:await exportJWK(issuerKeys.privateKey),ingestPrivateJwk:await exportJWK(ingestKeys.privateKey),responsePublicJwk:await exportJWK(responseKeys.publicKey)});
+    main=await childProcess('main',{...common,appUrl:roleUrl(roles.app),appPassword:passwords?.app,brokerInternalOrigin,executionPrivateJwk:await exportJWK(issuerKeys.privateKey),ingestPrivateJwk:await exportJWK(ingestKeys.privateKey),responsePublicJwk:await exportJWK(responseKeys.publicKey)});
   } catch(error) {fixtureCertificates.delete(mainOrigin);fixtureCertificates.delete(setupOrigin);await main?.close();await broker?.close();await closeServer(provider);await closeServer(external);await Promise.all([app.end(),executor.end(),brokerPool.end(),owner.end()]);if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE;DROP ROLE ${Object.values(roles).join(',')}`);await admin.end();await rm(directory,{recursive:true,force:true});await rm(tlsDirectory,{recursive:true,force:true});throw error;}
   const executionOrigin=await main.request('executionOrigin');
   const options={environment:profile.environment,clientId:profile.clientId};

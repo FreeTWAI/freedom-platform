@@ -22,6 +22,7 @@ import { createServer } from 'node:http';
 import { createModelStepService } from '../../modules/agent-execution/model-step-service.js';
 import { createLocalFixtureModelStepHost, createUnavailableModelStepHost } from '../../modules/agent-execution/model-step-host.js';
 import { Problem } from '../../packages/shared/problem.js';
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 if (!connectionString || !/^\/fp_[a-z0-9_]+$/.test(new URL(connectionString).pathname)) throw new Error('Explicit isolated fp_* TEST_DATABASE_URL required.');
@@ -41,6 +42,7 @@ before(async () => {
   await admin.query(`CREATE ROLE ${migrator} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE ROLE ${runtime} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
     CREATE SCHEMA ${schema} AUTHORIZATION ${migrator}; GRANT USAGE ON SCHEMA ${schema} TO ${runtime}`);
+  await setFixtureRolePasswords(admin, [migrator, runtime]);
   created = true; await migrate(owner);
   const template = await readFile(new URL('../../deploy/cloudflare/sql/20-runtime-grants.psql', import.meta.url), 'utf8');
   const prefix = template.slice(template.indexOf('BEGIN;'), template.indexOf('-- BEGIN PRIVATE POLICY GRANTS'))

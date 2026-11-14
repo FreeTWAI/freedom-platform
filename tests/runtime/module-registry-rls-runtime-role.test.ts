@@ -1,3 +1,4 @@
+import { setFixtureRolePasswords } from './fixture-role-password.js';
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -186,6 +187,7 @@ describe('module registry as the non-owner runtime role', { concurrency: 1 }, ()
       CREATE SCHEMA ${schema} AUTHORIZATION ${migrator};
       GRANT USAGE ON SCHEMA ${schema} TO ${runtimeRole}`);
     created = true;
+    await setFixtureRolePasswords(admin, [migrator, runtimeRole]);
     await migrate(owner);
     await applyGrants();
     await ensureSyntheticModuleTables(owner);

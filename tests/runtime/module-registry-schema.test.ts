@@ -1,5 +1,6 @@
 import { TENANT_CURSOR_TEST_KEY } from './tenant-cursor-fixture.js';
 import { test, before, after, beforeEach } from 'node:test';
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -177,6 +178,7 @@ test('a restricted runtime role can launch and cannot edit definitions, and a ma
   assert.ok(runtimeRole.length < 63);
   await h.admin.query(`CREATE ROLE ${runtimeRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`);
   try {
+    await setFixtureRolePasswords(h.admin, [runtimeRole]);
     await h.admin.query(`GRANT USAGE ON SCHEMA ${h.schema} TO ${runtimeRole}`);
     await h.admin.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${h.schema} TO ${runtimeRole}`);
     await h.admin.query(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA ${h.schema} TO ${runtimeRole}`);

@@ -10,6 +10,7 @@ import {nodeRuntime} from '../../apps/platform-api/src/app.js';
 import {createShopWriterObserver,connectShopExitTarget,planShopKeyLegacyExit,type ShopExitBinding,type ShopWriterObserver,type ShopExitTarget} from '../../modules/agent-commerce/key-exit.js';
 import {runShopKeyExit} from '../../scripts/shop-key-legacy-exit.js';
 import {tokenHash} from '../../modules/identity-membership/service.js';
+import {setFixtureRolePasswords} from './fixture-role-password.js';
 
 const configured=process.env.TEST_DATABASE_URL;assert(configured,'Explicit isolated TEST_DATABASE_URL required');
 const url=new URL(configured);assert.match(url.pathname,/^\/fp_[a-z0-9_]+$/);assert(['localhost','127.0.0.1','[::1]'].includes(url.hostname));
@@ -18,7 +19,8 @@ const state=await Promise.all((['public','staging'] as const).map(async(environm
  const schema='fp_key_exit_'+randomUUID().replaceAll('-',''),role='fp_key_reader_'+randomUUID().replaceAll('-','');
  const binding:ShopExitBinding={environment,origin:`https://shop-${environment}.example.invalid`,sourceSha:(n?'b':'a').repeat(40),host:url.hostname,port:Number(url.port||5432),connectionUser:role,database:decodeURIComponent(url.pathname.slice(1)),schema,role};
  const owner=new Pool({connectionString:url.href,options:`-c search_path=${schema}`});
- const readUrl=new URL(url);readUrl.username=role;readUrl.password='';
+ const rolePassword=process.env.PGPASSWORD?randomBytes(24).toString('hex'):'';
+ const readUrl=new URL(url);readUrl.username=role;readUrl.password=rolePassword;
  const reader=new Pool({connectionString:readUrl.href,options:`-c search_path=${schema} -c default_transaction_read_only=on`}),target=connectShopExitTarget(binding,readUrl.href);
  let healthMode:'actual'|'old-profile'|'wrong-source'|'access'|'oversize'='actual';
  const runtime=nodeRuntime(environment,binding.origin,{shopKeyPolicy:'legacy-compatible'});runtime.health={release_sha:binding.sourceSha};
@@ -31,11 +33,12 @@ const state=await Promise.all((['public','staging'] as const).map(async(environm
   if(healthMode==='wrong-source')body.release_sha='c'.repeat(40);
   res.writeHead(response.status,{'Content-Type':'application/json'});res.end(JSON.stringify(body));
  });
- return {binding,owner,reader,target,readUrl,server,setMode:(mode:typeof healthMode)=>{healthMode=mode;},created:false,roleCreated:false};
+ return {binding,owner,reader,target,readUrl,rolePassword,server,setMode:(mode:typeof healthMode)=>{healthMode=mode;},created:false,roleCreated:false};
 }));
 before(async()=>{
  for(const s of state){await admin.query(`CREATE SCHEMA ${s.binding.schema}`);s.created=true;await migrate(s.owner);
   await admin.query(`CREATE ROLE ${s.binding.role} LOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`);s.roleCreated=true;
+  await setFixtureRolePasswords(admin,[s.binding.role],s.rolePassword);
   await admin.query(`GRANT USAGE ON SCHEMA ${s.binding.schema} TO ${s.binding.role}`);
   await admin.query(`GRANT SELECT ON ${s.binding.schema}.commerce_shop_keys TO ${s.binding.role}`);
   await new Promise<void>(resolve=>s.server.listen(0,'127.0.0.1',resolve));
@@ -131,6 +134,7 @@ test('exact endpoint includes host/port/routing username while SQL role stays in
 test('actual SQL session cannot masquerade as the base role merely because its connection username has a routing suffix',async()=>{
  const base='fp_route_'+randomUUID().replaceAll('-',''),route=base+'.branch_one',s=state[0];
  await admin.query(`CREATE ROLE "${route}" LOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`);
+ await setFixtureRolePasswords(admin,[route],s.rolePassword);
  let target:ShopExitTarget|undefined;
  try{
   await admin.query(`GRANT USAGE ON SCHEMA ${s.binding.schema} TO "${route}"`);
