@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { navigate, expandHomeSections, selectSocialFeed } from './navigation.js';
+import { navigate, expandHomeSections, selectSocialFeed, openSkillCardMore } from './navigation.js';
 import { test, expect, type Browser, type Page } from './fixtures.js';
 
 const GUEST_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
@@ -102,6 +102,7 @@ test('a skill-book share link credits one guest click on the weekly board', asyn
   const library = page.locator('.community-library');
   await library.getByLabel('搜尋技能書', { exact: true }).fill('社群貼文');
   const card = library.locator('article[data-book-id="social-post"]');
+  await openSkillCardMore(card);
   await card.getByRole('button', { name: '分享技能', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '分享「Hao 社群貼文技能書」', exact: true });
   const url = dialog.locator('.skill-share-url');
@@ -156,7 +157,7 @@ test('an event share link lands on the public page and shows the click', async (
   await creditVisit(browser, eventGo, url => url.pathname === `/events/${eventId}` && url.searchParams.has('ref'), e2eAuthPool);
   await card.getByRole('link', { name: '管理活動', exact: true }).click();
   await expect(page.getByRole('region', { name: '管理活動', exact: true })).toBeVisible();
-  await card.locator('summary').filter({ hasText: '其他設定' }).click();
+  await card.locator('details.event-form-options > summary').filter({ hasText: '更多' }).click();
   await card.getByRole('button', { name: '分享報名統計', exact: true }).click();
   const report = card.locator('.event-referral-report');
   await expect(report.getByRole('listitem')).toHaveCount(20);
@@ -325,9 +326,12 @@ test('the home share button stays as compact as the profile button', async ({ pa
   const phoneShare = (await share.boundingBox())!;
   const phoneEdit = (await edit.boundingBox())!;
   const phoneRow = (await row.boundingBox())!;
+  const phoneDiscovery = (await page.locator('.home-discovery-links').boundingBox())!;
   expect(phoneShare.height).toBeGreaterThanOrEqual(44);
   expect(phoneShare.width).toBeLessThan(phoneRow.width * 0.6);
-  expect(phoneShare.width).toBeLessThanOrEqual(phoneEdit.width + 16);
+  expect(phoneShare.width).toBeLessThan(phoneDiscovery.width * 0.5);
+  // 2348fc61d moved 分享自由工坊 out of .home-member-actions (0.875rem, 0.5rem 0.8rem) to .home-discovery-links as .btn.btn-primary (0.55rem 0.95rem, bold), adding ~4.8px padding + weight over 5-char 編輯個人頁.
+  expect(phoneShare.width).toBeLessThanOrEqual(phoneEdit.width + 24);
   await noOverflow(page);
 
   await page.setViewportSize({ width: 1280, height: 900 });

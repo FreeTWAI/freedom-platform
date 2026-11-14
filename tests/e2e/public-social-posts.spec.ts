@@ -84,15 +84,14 @@ test('PUBLIC-POST-01 author explicitly opens one version; anonymous no-JS reader
   const card=author.page.locator(`#social-post-${post.post_id}`);await expect(card).toBeVisible();
   await card.getByRole('button',{name:'分享貼文連結',exact:true}).click();
   const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});
-  await expect(dialog.getByRole('button',{name:'分享',exact:true})).toBeEnabled();
+  await expect(dialog.getByRole('button',{name:'複製連結',exact:true})).toBeEnabled();
   await expect(dialog.locator('.social-sharing-consent')).not.toHaveAttribute('open','');
   await dialog.locator('.social-sharing-consent > summary').click();
   await expect(dialog.getByRole('button',{name:'開放免登入閱讀',exact:true})).toBeVisible();
   const publication=author.page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname===`/api/v1/social-posts/${post.post_id}/public-sharing`);
   await dialog.getByRole('button',{name:'開放免登入閱讀',exact:true}).click();expect((await publication).status()).toBe(200);
-  await dialog.getByRole('button',{name:'分享',exact:true}).click();
-  await expect(author.page.locator('.skill-share-dialog .skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
-  await author.page.locator('.skill-share-dialog').getByRole('button',{name:'關閉分享',exact:true}).click();
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
   expect(await sharing(author,post.post_id)).toMatchObject({enabled:true,available:true,version:'2',public_path:publicPath(post.post_id)});
   const anonymous=await browser.newContext({baseURL:e2eOrigin(),javaScriptEnabled:false}),reader=await anonymous.newPage();
   try{
@@ -205,9 +204,7 @@ test('PUBLIC-POST-07 editing invalidates consent; reopening the reviewed version
   expect(await reopened.json()).toMatchObject({enabled:true,available:true,post_revision:post.revision+1,public_path:publicPath(post.post_id)});
   await expect(dialog.getByRole('button',{name:'關閉免登入閱讀',exact:true})).toBeVisible();
   await page.goto(publicPath(post.post_id));await expect(publicArticle(page)).toContainText(changed);await expect(page.getByAltText('貼文附圖',{exact:true})).toBeVisible();
-  await dialog.getByRole('button',{name:'分享',exact:true}).click();
-  await expect(author.page.locator('.skill-share-dialog .skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
-  await author.page.locator('.skill-share-dialog').getByRole('button',{name:'關閉分享',exact:true}).click();
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
   await dialog.getByRole('button',{name:'關閉免登入閱讀',exact:true}).click();await expect(dialog.getByRole('button',{name:'開放免登入閱讀',exact:true})).toBeVisible();
   await assertUnavailable(page,post.post_id,changed);expect(await page.content()).not.toContain(publicApi(post.post_id)+'/image');
 });
@@ -234,14 +231,12 @@ test('PUBLIC-POST-09 cancelling the share dialog and native handoff never opts a
   const writes:string[]=[];author.page.on('request',request=>{if(request.method()==='POST'&&/\/(?:public-sharing|promotion\/links|social-posts\/notes)$/.test(new URL(request.url()).pathname))writes.push(new URL(request.url()).pathname);});
   const trigger=author.page.locator(`#social-post-${post.post_id}`).getByRole('button',{name:'分享貼文連結',exact:true});await trigger.click();
   const dialog=author.page.getByRole('dialog',{name:'分享貼文連結',exact:true});await expect(dialog).toBeVisible();await author.page.keyboard.press('Escape');await expect(trigger).toBeFocused();
-  await trigger.click();await dialog.getByRole('button',{name:'分享',exact:true}).click();
-  const shareModal=author.page.locator('.skill-share-dialog');
-  await expect(shareModal.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${post.post_id}`));
-  await shareModal.getByRole('button',{name:'分享',exact:true}).click();
+  await trigger.click();
+  await expect(dialog.locator('.skill-share-url')).toHaveText(new RegExp(`social-post=${post.post_id}`));
+  await dialog.getByRole('button',{name:'分享',exact:true}).click();
   await expect.poll(()=>author.page.evaluate(()=>(window as unknown as {publicPostShareControl:{calls:unknown[]}}).publicPostShareControl.calls.length)).toBe(1);
   const control=await author.page.evaluate(()=>(window as unknown as {publicPostShareControl:{calls:{data:ShareData;active:boolean}[];copies:number}}).publicPostShareControl);
   expect(control.calls[0]).toEqual({data:{title:post.note,url:`${e2eOrigin()}/?social-post=${post.post_id}#social`},active:true});expect(control.copies).toBe(0);expect(writes).toEqual([]);expect(await sharing(author,post.post_id)).toEqual(before);
-  await shareModal.getByRole('button',{name:'關閉分享',exact:true}).click();
   await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
 });
 
@@ -326,7 +321,7 @@ test('PUBLIC-POST-12 a malformed successful sharing acknowledgment retains the e
   await expect(dialog.getByRole('button',{name:'確認上次設定',exact:true})).toBeEnabled();
   await expect(dialog.getByRole('alert')).toContainText('尚未確認公開設定是否已保存');
   for(const message of ['已關閉免登入閱讀。','已開放免登入閱讀，可以分享連結了。'])await expect(dialog.getByText(message,{exact:true})).toHaveCount(0);
-  await expect(dialog.getByRole('button',{name:'分享',exact:true})).toBeDisabled();
+  await expect(dialog.getByRole('button',{name:'複製連結',exact:true})).toBeDisabled();
   expect(attempts).toHaveLength(1);expect(attempts[0].key).toBeTruthy();expect(attempts[0].version).toBe('"1"');
   expect(JSON.parse(attempts[0].body!)).toMatchObject({enabled:true,post_revision:post.revision,media_version:'1'});
   expect(await sharing(author,post.post_id)).toMatchObject({enabled:true,available:true,version:'2'});
@@ -335,14 +330,14 @@ test('PUBLIC-POST-12 a malformed successful sharing acknowledgment retains the e
   await expect(dialog.getByRole('button',{name:'確認上次設定',exact:true})).toBeEnabled();
   await expect(dialog.getByRole('alert')).toContainText('尚未確認公開設定是否已保存');
   for(const message of ['已關閉免登入閱讀。','已開放免登入閱讀，可以分享連結了。'])await expect(dialog.getByText(message,{exact:true})).toHaveCount(0);
-  await expect(dialog.getByRole('button',{name:'分享',exact:true})).toBeDisabled();
+  await expect(dialog.getByRole('button',{name:'複製連結',exact:true})).toBeDisabled();
   expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
   await dialog.getByRole('button',{name:'確認上次設定',exact:true}).click();
   await expect(dialog.getByRole('status')).toHaveText('已開放免登入閱讀，可以分享連結了。');
   await expect(dialog.getByRole('button',{name:'關閉免登入閱讀',exact:true})).toBeEnabled();
-  await dialog.getByRole('button',{name:'分享',exact:true}).click();
-  await expect(author.page.locator('.skill-share-dialog .skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
-  await author.page.locator('.skill-share-dialog').getByRole('button',{name:'關閉分享',exact:true}).click();
+  await expect(dialog.getByRole('button',{name:'複製連結',exact:true})).toBeEnabled();
+  await expect(dialog.locator('.skill-share-url')).toHaveText(/\/go\/[A-Za-z0-9_-]{10}$/);
+  await dialog.getByRole('button',{name:'關閉分享',exact:true}).click();
   expect(attempts).toHaveLength(3);for(const attempt of attempts)expect(attempt).toEqual(attempts[0]);
   expect(await sharing(author,post.post_id)).toMatchObject({enabled:true,available:true,version:'2'});
   expect((await e2eAuthPool.query('SELECT count(*)::int AS n FROM community_social_publications WHERE post_id=$1',[post.post_id])).rows[0].n).toBe(1);

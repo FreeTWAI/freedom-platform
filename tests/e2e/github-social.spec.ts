@@ -136,7 +136,8 @@ test('unconfigured and unavailable GitHub states never fabricate counts or offer
   await login(page);const card=await book(page);
   await expect(card.locator('.github-star-control')).toHaveCount(0);
   await expect(card.getByRole('button',{name:'GitHub 連結尚未啟用',exact:true})).toHaveCount(0);
-  await expect(card.locator('.github-fork-count,.github-book-metrics dd')).toHaveText(['—','—','—','—']);
+  await expect(card.locator('.github-star-count,.github-fork-count')).toHaveCount(0);
+  await expect(card.locator('.github-book-metrics dd')).toHaveText(['—','—','—']);
   await expect(card.getByText('GitHub Star 尚未啟用',{exact:true})).toHaveCount(0);
   await expect(card.getByText('GitHub 數據暫時無法讀取',{exact:true})).toBeVisible();
   await expect(card.getByRole('button',{name:'重讀數據',exact:true})).toBeEnabled();

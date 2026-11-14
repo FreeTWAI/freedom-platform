@@ -53,7 +53,7 @@ test('external readers can read and reach signup without running JavaScript',asy
     await page.locator('#skill-usage-notes > summary').click();
     await expect(page.getByRole('heading',{name:'用途與適用範圍',exact:true})).toBeVisible();
     await expect(panel(page).getByRole('link',{name:'免費加入，探索更多資源',exact:true})).toHaveAttribute('href',account());
-    await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toBeVisible();
+    await expect(page.locator('.public-skill-source').getByRole('link',{name:'https://github.com/Hao0321/claude-skill-social-post ↗',exact:true})).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     const box=await panel(page).getByRole('link',{name:'免費加入，探索更多資源',exact:true}).boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);
   }finally{await context.close();}
@@ -77,14 +77,14 @@ test('successful registration returns to the same public book without forcing gu
   await page.getByLabel('密碼',{exact:true}).fill('synthetic-skill-reader-password');
   await page.locator('.login-card form button[type="submit"]').click();
   await expect(page).toHaveURL(new RegExp('/development/skills/social-post\\?intro=7#skill-use-title$'));
-  await expect(panel(page).getByRole('link',{name:'前往技能書架',exact:true})).toBeVisible();
+  await expect(panel(page).getByRole('link',{name:'前往探索 → 資源',exact:true})).toBeVisible();
   await expect(panel(page).getByRole('link',{name:'免費加入，探索更多資源',exact:true})).toBeHidden();
 });
 
 test('existing-account login retains the book and introduction too',async({page})=>{
   await siteWithoutDiscovery(page);await page.goto(account(false));await signIn(page);
   await expect(page).toHaveURL(new RegExp('/development/skills/social-post\\?intro=7#skill-use-title$'));
-  await expect(panel(page).getByRole('link',{name:'前往技能書架',exact:true})).toHaveAttribute('href','/#skills');
+  await expect(panel(page).getByRole('link',{name:'前往探索 → 資源',exact:true})).toHaveAttribute('href','/#explore/resources');
 });
 
 test('an already authenticated reader can follow an old account link without landing on the home page',async({page})=>{
@@ -165,7 +165,7 @@ test('published submission signup returns to the real published page and selecte
     await panel(page).getByRole('link',{name:'免費加入，探索更多資源',exact:true}).click();
     await signUp(page);await expect(page).toHaveURL(new URL(skill.path+'?intro=1#skill-use-title',page.url()).href);
     await expect(page.getByRole('heading',{name:'回流驗證技能',exact:true})).toBeVisible();
-    await expect(panel(page).getByRole('link',{name:'前往技能書架',exact:true})).toBeVisible();
+    await expect(panel(page).getByRole('link',{name:'前往探索 → 資源',exact:true})).toBeVisible();
   }finally{await skill.close();}
 });
 

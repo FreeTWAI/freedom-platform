@@ -273,3 +273,32 @@ export async function openGuildCardMore(card: Locator) {
   }
   await expect(settings).toHaveJSProperty('open', true);
 }
+
+/** Skill shelf discovery tabs and purpose selects sit inside the 篩選 drawer. */
+export async function openSkillFilterDrawer(shelf: Locator) {
+  const drawer = shelf.locator('details.skill-library-filter-drawer');
+  await expect(drawer).toBeAttached();
+  if (!await drawer.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await drawer.locator(':scope > summary').click();
+  }
+  await expect(drawer).toHaveJSProperty('open', true);
+}
+
+/** Skill card secondary actions (分享技能 and GitHub star) sit inside 更多. */
+export async function openSkillCardMore(card: Locator) {
+  const more = card.locator('details.skill-card-more');
+  await expect(more).toBeAttached();
+  if (!await more.evaluate(element => (element as HTMLDetailsElement).open)) {
+    await more.locator(':scope > summary').click();
+  }
+  await expect(more).toHaveJSProperty('open', true);
+}
+
+/** Skill shelves paginate 20 cards per page behind the 更多 button. */
+export async function expandSkillShelf(shelf: Locator) {
+  await expect(shelf.locator('.skill-library-count')).toBeVisible();
+  const more = shelf.locator('> .actions').getByRole('button', { name: '更多', exact: true });
+  for (let step = 0; step < 20 && await more.isVisible(); step++) {
+    await more.click();
+  }
+}
