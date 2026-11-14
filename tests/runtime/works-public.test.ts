@@ -703,7 +703,16 @@ test('I3: /works/:id exposes secondary share entry, visitor sign-in return_to, s
   });
   assert.equal(pubRes.status, 200);
 
-  // Without an existing share row, /works/:id still offers the share entry with empty data-share-id.
+  // Publishing the work already created its original share (p3-c1), so the page passes that share_id.
+  const original = await pool.query("SELECT share_id FROM shares WHERE kind = 'work' AND ref_id = $1 AND state = 'published'", [work.showcase_id]);
+  assert.equal(original.rowCount, 1);
+  const originalShareId: string = original.rows[0].share_id;
+  assert.match(await (await defaultApp.request(`${origin}/works/${work.showcase_id}`)).text(), new RegExp(`data-share-id="${originalShareId}"`));
+
+  // Without a published share (the author withdrew theirs), /works/:id still offers the share entry with empty data-share-id.
+  const retractRes = await owner.req(`shares/${originalShareId}/retract`, { body: {} });
+  assert.equal(retractRes.status, 200, await retractRes.clone().text());
+  assert.equal((await retractRes.json() as { state: string }).state, 'retracted');
   const withoutShareRes = await defaultApp.request(`${origin}/works/${work.showcase_id}`);
   assert.equal(withoutShareRes.status, 200);
   const withoutShareHtml = await withoutShareRes.text();
@@ -716,10 +725,11 @@ test('I3: /works/:id exposes secondary share entry, visitor sign-in return_to, s
   assert.match(withoutShareHtml, /id="work-share-result"/);
   assert.match(withoutShareHtml, /id="work-share-status"[^>]*role="status"/);
 
-  // When a published share exists, /works/:id passes its share_id so the one link API creates /go/<code> -> /works/:id?via=<code>.
+  // Sharing again publishes the same share; /works/:id passes its share_id so the one link API creates /go/<code> -> /works/:id?via=<code>.
   const createdShare = await owner.req('shares', { body: { kind: 'work', ref_id: work.showcase_id } });
   assert.equal(createdShare.status, 200, await createdShare.clone().text());
   const { share_id: shareId } = await createdShare.json() as { share_id: string };
+  assert.equal(shareId, originalShareId);
   const withShareHtml = await (await defaultApp.request(`${origin}/works/${work.showcase_id}`)).text();
   assert.match(withShareHtml, new RegExp(`data-share-id="${shareId}"`));
 
