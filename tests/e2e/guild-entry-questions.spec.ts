@@ -27,6 +27,8 @@ for(const width of [390,820,1280]){
     const quick=page.getByRole('region',{name:'快速加入公會'});
     const next=quick.getByRole('button',{name:'下一步：回答小問題',exact:true});
     await expect(next).toBeDisabled();
+    await expect(quick.getByRole('radio')).toHaveCount(4);
+    await quick.getByRole('button',{name:'查看全部公會',exact:true}).click();
     await expect(quick.getByRole('radio')).toHaveCount(20);
     await fits(page);
     if(width!==820)await paint(quick,'quick-start-step1-'+width);

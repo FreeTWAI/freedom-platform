@@ -13,7 +13,7 @@ for(const width of [1440,390,320])test(`skill hero exposes Star Fork share and a
  await page.route('**/api/v1/skills/video-autopilot/author-card',route=>{reads++;return route.fulfill({json:publicAuthorFixture});});
  await page.goto('/development/skills/video-autopilot?intro=63');
  const hero=page.locator('.public-skill-entry'),author=hero.locator('[data-skill-author]'),share=hero.locator('[data-share-launch]');
- for(const control of [author,hero.getByRole('link',{name:'開始用'}),hero.getByRole('link',{name:'前往 GitHub 加星 ↗'}),share,hero.getByRole('link',{name:'查看原作 Repo ↗'})]){
+ for(const control of [author,hero.getByRole('link',{name:'開始用'}),hero.getByRole('link',{name:'前往 GitHub 加星 ↗'}),share]){
   await expect(control).toBeVisible();const box=await control.boundingBox();expect(box!.height).toBeGreaterThanOrEqual(44);expect(box!.y).toBeGreaterThanOrEqual(0);expect(box!.y+box!.height).toBeLessThanOrEqual(844);
  }
  expect(reads).toBe(0);expect(await page.evaluate(()=>scrollY)).toBe(0);
@@ -113,12 +113,12 @@ test('a visitor without JavaScript can follow real repo links and read a complet
   await page.goto('/development/skills/security-scanner');
   await expect(page.locator('.public-skill-entry .public-skill-actions a').first()).toHaveAttribute('href','#skill-start');
   await expect(page.getByRole('heading',{name:'開始用',exact:true})).toBeVisible();
-  await expect(page.locator('.public-skill-entry').getByRole('link',{name:'查看原作 Repo ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
+  await expect(page.locator('.public-skill-entry').getByRole('link',{name:'到 GitHub 加星 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
   await page.locator('#skill-usage-notes > summary').click();
   await expect(page.getByRole('link',{name:'前往作者網站 ↗',exact:true})).toHaveAttribute('href','https://teddashh.github.io/ai-security-scanner/');
   await expect(page.locator('.public-skill-source').getByText('指南核對來源',{exact:true})).toBeVisible();
-  await expect(page.getByRole('link',{name:'到 GitHub 看原始碼 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
-  await expect(page.locator('.public-skill-destination').first()).toHaveText('目的地：github.com/teddashh/ai-security-scanner');
+  await expect(page.locator('.public-skill-source').getByRole('link',{name:'https://github.com/teddashh/ai-security-scanner ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner');
+  await expect(page.locator('.public-skill-destination').first()).toHaveText('目的地：teddashh.github.io/ai-security-scanner/');
   await expect(page.getByRole('heading',{name:'一起開發',exact:true})).toBeVisible();
   await expect(page.getByRole('link',{name:'從原作開始共創 ↗',exact:true})).toHaveAttribute('href','https://github.com/teddashh/ai-security-scanner/fork');
   await expect(page.locator('.collaboration-repository')).toHaveText('預設 PR → teddashh/ai-security-scanner:main');

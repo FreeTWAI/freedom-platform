@@ -184,11 +184,12 @@ for(const width of [320,390,768,1440])for(const theme of ['light','dark','versef
     });
     expect(visual).toEqual({corners:[0,0,0,0],fit:'contain',background:'rgba(0, 0, 0, 0)',shadow:'none'});
     await page.getByLabel('電子郵件',{exact:true}).fill('logo-entry@example.test');
-    const switcher=page.getByRole('group',{name:'登入或建立帳號'});
-    for(const label of ['建立帳號','會員登入','建立帳號']){
-      const button=switcher.getByRole('button',{name:label,exact:true});
+    await expect(page.getByRole('group',{name:'登入或建立帳號'})).toHaveCount(0);
+    for(const step of [{label:'免費加入',heading:'加入自由工坊'},{label:'會員登入',heading:'登入'},{label:'免費加入',heading:'加入自由工坊'}]){
+      const button=page.getByRole('button',{name:step.label,exact:true});
       await button.focus();await button.press('Space');
-      await expect(button).toHaveAttribute('aria-pressed','true');
+      await expect(button).toHaveCount(0);
+      await expect(page.getByRole('heading',{name:step.heading,exact:true})).toBeVisible();
       await expect(page.getByLabel('電子郵件',{exact:true})).toHaveValue('logo-entry@example.test');
       await expect(logo).toBeVisible();
       const current=(await logo.boundingBox())!;

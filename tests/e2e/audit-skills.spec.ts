@@ -2,7 +2,7 @@ import { fillSkillPageContent } from './skill-page-content-fixture.js';
 import {openPageTools} from './navigation.js';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { navigate } from './navigation.js';
+import { expandSkillShelf, navigate } from './navigation.js';
 import { test, expect, type Locator, type Page } from './fixtures.js';
 
 // 2026-09-24 skills / GitHub / co-creation audit: regressions found on desktop and 390px phones.
@@ -310,6 +310,7 @@ for (const width of [1280, 390]) {
       await page.keyboard.press('Enter');
       await expect(page.locator('.community-library article[data-access="unlocked"]')).toHaveCount(total);
       await expect(page.locator('.community-library article[data-book-id="project-template"][data-access="unlocked"]')).toBeVisible();
+      await expandSkillShelf(page.locator('.community-skill-library'));
       await expect(page.locator('.community-skill-library article[data-book-id="multi-ai-chat"]')).toBeVisible();
       await noOverflow(page);
     });
