@@ -35,6 +35,6 @@ export async function toolTokenStatus(pool:Pool,raw:unknown,issuer:string,signer
  const row=(await pool.query(`SELECT t.id FROM guild_tool_token_grants g JOIN guild_tools t ON t.id=g.tool JOIN users u ON u.user_id=g.member
  WHERE g.jti=$1 AND t.id=$2 AND t.revision=g.revision AND t.revision=$3 AND t.state='enabled' AND t.profile='origin' AND u.active AND g.expires_at>clock_timestamp()
  AND (g.session_hash IS NOT NULL AND EXISTS(SELECT 1 FROM sessions s WHERE s.token_hash=g.session_hash AND s.user_id=g.member AND s.revoked_at IS NULL AND s.expires_at>clock_timestamp())
- OR g.agent_connection IS NOT NULL AND EXISTS(SELECT 1 FROM member_client_connections c WHERE c.connection_id=g.agent_connection AND c.user_id=g.member AND c.revoked_at IS NULL AND c.suspended_at IS NULL AND c.expires_at>clock_timestamp() AND 'read'=ANY(c.scopes)))
+ OR g.agent_connection IS NOT NULL AND EXISTS(SELECT 1 FROM agent_token_connections c WHERE c.connection_id=g.agent_connection AND c.user_id=g.member AND c.revoked_at IS NULL AND c.suspended_at IS NULL AND c.expires_at>clock_timestamp() AND 'read'=ANY(c.scopes)))
  AND COALESCE((SELECT m.member_tier FROM positioning_profession_memberships m WHERE m.user_id=g.member AND m.community_id=t.community_id AND m.guild_key=t.guild_key AND m.state='active'),'')=$4`,[claims.jti,body.audience,claims.revision,claims.tier??''])).rows[0];return {active:Boolean(row)};
 }

@@ -397,3 +397,124 @@ test('work previews never disclose an internal share snapshot after editing and 
  await setShowcaseSharing(pool, {...cmd(creator, {enabled:false}, 'sharing'), expected:approved.version}, work.showcase_id);
  assert.equal(await promotionGo(pool, link.code, undefined, 'https://example.com'), null);
 });
+
+test('previous Worker inserts consecutive guest notices after the new migrations',async()=>{
+ const {ensureGuestCapability}=await import('../../modules/community/event-waitlist.js');
+ const id=randomUUID(),email=`${randomUUID()}@example.invalid`;
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state)
+  VALUES($1,$2,$3,'Synthetic event','Synthetic event','2099-01-01T10:00:00Z','2099-01-01T11:00:00Z','in_person','Synthetic location','published')`,[id,DEMO_COMMUNITY,actors[0].user_id]);
+ await transaction(pool,q=>ensureGuestCapability(q,id,{email,name:'Synthetic guest'}));
+ await pool.query('UPDATE community_event_guest_capabilities SET verified_at=now() WHERE event_id=$1 AND email=$2',[id,email]);
+ await pool.query("INSERT INTO community_event_guest_rsvps(event_id,email,name,state,confirmed_at) VALUES($1,$2,'Synthetic guest','going',now())",[id,email]);
+ // Copied from origin/main:modules/community/event-waitlist.ts.
+ const legacy=`INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind) SELECT gen_random_uuid(),$1,email,$2,$3 FROM community_event_guest_capabilities c WHERE event_id=$1 AND verified_at IS NOT NULL AND (EXISTS(SELECT 1 FROM community_event_guest_rsvps g WHERE g.event_id=c.event_id AND g.email=c.email AND g.state='going') OR EXISTS(SELECT 1 FROM community_event_waitlist w WHERE w.event_id=c.event_id AND w.guest_email=c.email AND w.status IN ('queued','invited','cancelled'))) ON CONFLICT(event_id,guest_email,event_version,kind) DO NOTHING`;
+ for(const version of [1,2])assert.equal((await pool.query(legacy,[id,version,'event_schedule_changed'])).rowCount,1);
+ assert.equal((await pool.query(legacy,[id,2,'event_schedule_changed'])).rowCount,0);
+ assert.deepEqual((await pool.query('SELECT event_version FROM community_event_participation_notices WHERE event_id=$1 ORDER BY event_version',[id])).rows.map(row=>row.event_version),['1','2']);
+});
+
+test('previous Worker device list and quota exclude newly issued Agent credentials',async()=>{
+ const {issueAgentToken}=await import('../../modules/client-connections/agent-tokens.js');
+ const actor=actors[0];
+ // SQL and field list copied from origin/main:modules/client-connections/service.ts.
+ const approvedFields='connection_id,client_name,kind,scope,store_id,aggregate_version,created_at,expires_at,revoked_at';
+ const count='SELECT count(*) FROM member_client_connections WHERE user_id=$1 AND community_id=$2 AND revoked_at IS NULL AND expires_at>now()';
+ const list=`SELECT ${approvedFields} FROM member_client_connections WHERE community_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 100`;
+ const beforeCount=(await pool.query(count,[actor.user_id,actor.community_id])).rows[0].count;
+ const beforeList=(await pool.query(list,[actor.community_id,actor.user_id])).rows;
+ await issueAgentToken(pool,actor,{name:'Synthetic agent',scopes:['read']});
+ assert.equal((await pool.query(count,[actor.user_id,actor.community_id])).rows[0].count,beforeCount);
+ assert.deepEqual((await pool.query(list,[actor.community_id,actor.user_id])).rows,beforeList);
+});
+
+test('previous Worker account deactivation keeps Agent credentials revoked after reactivation',async()=>{
+ const {issueAgentToken}=await import('../../modules/client-connections/agent-tokens.js');
+ const actor=actors[2],issued=await issueAgentToken(pool,actor,{name:'Synthetic agent',scopes:['read']});
+ await pool.query('UPDATE users SET active=false WHERE user_id=$1',[actor.user_id]);
+ // Copied from origin/main:modules/identity-membership/deactivation.ts.
+ await pool.query('UPDATE member_client_connections SET revoked_at=COALESCE(revoked_at,now()),aggregate_version=aggregate_version+1 WHERE user_id=$1 AND revoked_at IS NULL',[actor.user_id]);
+ await pool.query('UPDATE users SET active=true WHERE user_id=$1',[actor.user_id]);
+ assert.ok((await pool.query('SELECT revoked_at FROM agent_token_connections WHERE connection_id=$1',[issued.connection_id])).rows[0].revoked_at);
+});
+
+test('a page of 50 shares, credits, results and calendar entries uses bounded SQL',async()=>{
+ const {listShares}=await import('../../modules/shares/service.js');
+ const {myShareResults}=await import('../../modules/shares/results.js');
+ const {publicEventCalendar}=await import('../../modules/community/event-exposure.js');
+ const inserted=await pool.query(`WITH events AS (
+  INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility)
+  SELECT gen_random_uuid(),$1,$2,'Synthetic page '||n,'Synthetic description','2099-01-01T10:00:00Z','2099-01-01T11:00:00Z','in_person','Synthetic location','published','open'
+  FROM generate_series(1,50) n RETURNING event_id,title
+ ) INSERT INTO shares(community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id)
+ SELECT $1,'event','event:'||event_id,'/events/'||event_id,'community_events',event_id,title,$2 FROM events RETURNING share_id`,[DEMO_COMMUNITY,actors[0].user_id]);
+ const ids=inserted.rows.map(r=>r.share_id);
+ await pool.query(`INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref)
+  SELECT $1,id,$2,'spreader','qualified_click_day',1,'synthetic-page:'||id FROM unnest($3::uuid[]) id`,[DEMO_COMMUNITY,actors[0].user_id,ids]);
+ let count=0;
+ const counted={query:(...args:any[])=>{count++;return (pool.query as any)(...args);}} as unknown as import('pg').PoolClient;
+ const list=await listShares(counted,actors[0],{limit:'50'}),listCount=count;count=0;
+ const credit=await myCredit(counted,actors[0]),creditCount=count;count=0;
+ const results=await myShareResults(counted,actors[0]),resultsCount=count;count=0;
+ const calendar=await publicEventCalendar(counted),calendarCount=count;
+ assert.equal(list.items.length,50);assert.equal(credit.items.length,50);assert.equal(results.items.length,50);
+ assert.equal((calendar.match(/BEGIN:VEVENT/g)??[]).length,50);
+ assert.deepEqual({list:listCount===1,credit:creditCount===1,results:resultsCount===1,calendar:calendarCount===1},
+  {list:true,credit:true,results:true,calendar:true},`SQL calls: ${JSON.stringify({listCount,creditCount,resultsCount,calendarCount})}`);
+});
+
+test('event registration credit locates an event share by leading kind and reference keys',async()=>{
+ const indexes=await pool.query(`SELECT array_agg(pg_get_indexdef(i.indexrelid,k,true) ORDER BY k) AS columns
+  FROM pg_index i CROSS JOIN LATERAL generate_series(1,i.indnkeyatts) k
+  WHERE i.indrelid='shares'::regclass AND i.indexprs IS NULL GROUP BY i.indexrelid`);
+ assert.ok(indexes.rows.some(row=>row.columns[0]==='kind'&&row.columns[1]==='ref_id'),
+  'creditEventRegistrations does not constrain community_id, so kind and ref_id must lead an index');
+ const q=await pool.connect();
+ try{
+  await q.query('BEGIN');
+  await q.query(`INSERT INTO shares(community_id,kind,canonical_key,canonical_url,title,first_sharer_user_id,legacy_ref)
+   SELECT $1,'link','index-fixture:'||n,'https://example.org/'||n,'Synthetic index fixture',$2,
+    jsonb_build_array(jsonb_build_object('kind','book','id','synthetic-'||n))
+   FROM generate_series(1,10000) n`,[DEMO_COMMUNITY,actors[0].user_id]);
+  await q.query('ANALYZE shares');await q.query('ANALYZE share_legacy_promotion_targets');
+  const plan=await q.query(`EXPLAIN (FORMAT JSON) SELECT share_id FROM shares
+   WHERE kind='event' AND ref_id=$1::uuid AND state='published'`,[randomUUID()]);
+  assert.match(JSON.stringify(plan.rows[0]),/shares_kind_ref/);
+  const reference=await q.query(`EXPLAIN (FORMAT JSON) SELECT * FROM shares WHERE community_id=$1
+   AND kind='event' AND ref_id=$2::uuid AND state='published' ORDER BY share_id LIMIT 1`,[DEMO_COMMUNITY,randomUUID()]);
+  assert.match(JSON.stringify(reference.rows[0]),/shares_kind_ref/);
+  const legacy=await q.query(`EXPLAIN (FORMAT JSON) WITH candidates AS MATERIALIZED (
+   SELECT share_id FROM share_legacy_promotion_targets WHERE community_id=$1 AND target_key=$2
+  ) SELECT sh.* FROM candidates c JOIN shares sh ON sh.share_id=c.share_id
+   WHERE sh.state='published' ORDER BY sh.share_id LIMIT 1`,[DEMO_COMMUNITY,'book:synthetic-1']);
+  assert.match(JSON.stringify(legacy.rows[0]),/share_legacy_promotion_lookup/);
+  await q.query('ROLLBACK');
+ }finally{q.release();}
+});
+
+test('legacy promotion keys follow share edits, hiding and republication',async()=>{
+ const id=randomUUID();
+ await pool.query(`INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,title,first_sharer_user_id,legacy_ref)
+  VALUES($1,$2,'link',$3,'https://example.org/legacy','Synthetic legacy',$4,$5)`,[id,DEMO_COMMUNITY,`legacy:${id}`,actors[0].user_id,JSON.stringify([{kind:'book',id:'before'},{kind:'book',id:'before'}])]);
+ const keys=async()=>(await pool.query('SELECT target_key FROM share_legacy_promotion_targets WHERE share_id=$1 ORDER BY target_key',[id])).rows.map(row=>row.target_key);
+ assert.deepEqual(await keys(),['book:before']);
+ await pool.query('UPDATE shares SET legacy_ref=$2 WHERE share_id=$1',[id,JSON.stringify([{kind:'skill_submission',id:randomUUID()}])]);
+ assert.match((await keys())[0],/^submission:/);
+ await pool.query("UPDATE shares SET state='hidden' WHERE share_id=$1",[id]);assert.deepEqual(await keys(),[]);
+ await pool.query("UPDATE shares SET state='published' WHERE share_id=$1",[id]);assert.equal((await keys()).length,1);
+});
+
+test('share landing and click bookkeeping avoid repeated reads and inline pruning',async()=>{
+ const id=randomUUID(),code=randomUUID().replaceAll('-','').slice(0,10);
+ await pool.query("INSERT INTO shares(share_id,community_id,kind,canonical_key,canonical_url,title,first_sharer_user_id) VALUES($1,$2,'link',$3,'https://example.com/fixture','Synthetic link',$4)",[id,DEMO_COMMUNITY,`go:${id}`,actors[0].user_id]);
+ await pool.query("INSERT INTO promotion_links(community_id,user_id,kind,target_key,code) VALUES($1,$2,'share',$3,$4)",[DEMO_COMMUNITY,actors[0].user_id,id,code]);
+ const statements:string[]=[];
+ const counted={query:(...args:any[])=>{statements.push(String(args[0]));return (pool.query as any)(...args);},connect:async()=>{
+  const client=await pool.connect();return {query:(...args:any[])=>{statements.push(String(args[0]));return (client.query as any)(...args);},release:()=>client.release()};
+ }} as unknown as Pool;
+ assert.ok(await promotionGo(counted,code,undefined,'https://example.com'));
+ const landing=statements.length;statements.length=0;
+ await creditPromotionClick(counted,{code,userAgent:'Synthetic browser',network:'synthetic',sessionUserId:null,now:new Date()});
+ const salts=statements.filter(sql=>/promotion_click_salts/i.test(sql));
+ assert.deepEqual({landing:landing<=2,saltStatements:salts.length,noDelete:!salts.some(sql=>/\bDELETE\b/i.test(sql))},
+  {landing:true,saltStatements:1,noDelete:true},`Landing ${landing}; salt statements ${salts.length}`);
+});

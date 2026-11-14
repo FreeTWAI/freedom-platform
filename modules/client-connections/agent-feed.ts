@@ -3,6 +3,7 @@ import {z} from 'zod';
 import type {Actor} from '../identity-membership/service.js';
 import {readWithMemberSession} from '../../packages/db/member-session.js';
 import {requireCondition} from '../../packages/shared/problem.js';
+import {markIdleAgentFeed} from './agent-authority.js';
 export type AgentChangeKind='event.updated'|'event.approved'|'rsvp.confirmed'|'rsvp.waitlist_promoted'|'message.received'|'share.credited';
 /** Integration port: call in the SAME transaction as an actual share credit.
  * sourceKey identifies that immutable credit event, never an attempted share. */
@@ -15,6 +16,29 @@ export async function readAgentFeed(pool:Pool,actor:Actor,raw:unknown){
  if(after){
   const parts=/^([0-9a-f-]{36}):(0|[1-9][0-9]{0,17})$/.exec(after);
   requireCondition(parts&&parts[1]===actor.user_id,400,'invalid_cursor','請使用這位會員的變更游標。');position=parts[2];
+ }
+ if(actor.agent){
+  const a=actor.agent;
+  // Empty polls disclose no change data. Check current credential, scope,
+  // account and both unassigned/assigned queues in a single lock-free snapshot.
+  // A fact committed after this snapshot is picked up by the next poll.
+  const current=(await pool.query(`SELECT c.scopes,u.onboarding_required,u.onboarding_completed_at,
+    coalesce(cursor.last_cursor,0)::text AS last_cursor,
+    (EXISTS(SELECT 1 FROM agent_change_events e WHERE e.user_id=$1 AND e.community_id=$2 AND e.cursor IS NULL)
+      OR EXISTS(SELECT 1 FROM agent_change_events e WHERE e.user_id=$1 AND e.community_id=$2 AND e.cursor>$5::bigint)) AS has_new
+    FROM agent_token_connections c JOIN users u ON u.user_id=c.user_id AND u.community_id=c.community_id
+    LEFT JOIN agent_change_cursors cursor ON cursor.user_id=u.user_id
+    WHERE c.user_id=$1 AND c.community_id=$2 AND c.connection_id=$3 AND c.token_hash=$4 AND c.kind='agent'
+      AND c.revoked_at IS NULL AND c.suspended_at IS NULL AND c.expires_at>clock_timestamp() AND u.active`,
+   [actor.user_id,actor.community_id,a.connection_id,a.token_hash,position])).rows[0];
+  requireCondition(current,401,'agent_token_invalid','Agent 金鑰已失效。');
+  requireCondition(a.scope&&current.scopes.includes(a.scope),403,'scope_required','Agent 沒有這項權限。');
+  requireCondition(!current.onboarding_required||Boolean(current.onboarding_completed_at),403,'onboarding_required','請先選擇主要公會。');
+  requireCondition(BigInt(position)<=BigInt(current.last_cursor),400,'invalid_cursor','變更游標不正確。');
+  if(!current.has_new){
+   markIdleAgentFeed(actor);
+   return {items:[],next_cursor:`${actor.user_id}:${position}`,has_more:false};
+  }
  }
  return readWithMemberSession(pool,actor,async q=>{
   await q.query('INSERT INTO agent_change_cursors(user_id) VALUES($1) ON CONFLICT DO NOTHING',[actor.user_id]);

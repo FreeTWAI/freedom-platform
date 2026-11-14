@@ -89,7 +89,7 @@ export async function canAccessGuildEvent(q:Pick<PoolClient,'query'>,actor:Actor
   return member.rowCount===1;
 }
 
-function privateEventLocationHint(row:{registration_policy?:string}){return row.registration_policy==='community_member'?'登入並完成報名後可查看參與資料':'線上參與資料將寄至報名信箱';}
+export function privateEventLocationHint(row:{registration_policy?:string}){return row.registration_policy==='community_member'?'登入並完成報名後可查看參與資料':'線上參與資料將寄至報名信箱';}
 
 /** Shared participation-detail rule for event readers and change delivery. */
 export function canReadEventParticipationDetails(row:{state:string},going:boolean,organizer=false,reviewer=false):boolean {
@@ -536,7 +536,8 @@ export async function createEvent(pool:Pool,input:Command,eventBody:unknown=inpu
     if(body.guild_key)requireCondition((await q.query('SELECT 1 FROM positioning_guild_catalog WHERE guild_key=$1',[body.guild_key])).rowCount===1,422,'unknown_guild','請選擇現有公會。');
     if(body.event_kind==='guild_skill_exchange'){const tier=await activeGuildTier(q,input.actor,body.guild_key);requireCondition(tier,403,'event_guild_required','只有主辦公會成員能提交公會技能交流。');requireFullGuildMember(tier);}
     await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`event-publish/${input.actor.community_id}`]);
-    requireCondition(!(await q.query(`SELECT 1 FROM community_events WHERE community_id=$1 AND ((lower(trim(title))=lower(trim($2)) AND starts_at=$3 AND lower(trim(location))=lower(trim($4))) OR ($5::text IS NOT NULL AND source_url=$5))`,[input.actor.community_id,body.title,body.starts_at,body.location,body.source_url])).rowCount,409,'duplicate_event','這場活動已有人分享。');
+    requireCondition(!(await q.query(`SELECT 1 FROM community_events WHERE community_id=$1 AND starts_at=$3 AND lower(trim(title))=lower(trim($2)) AND lower(trim(location))=lower(trim($4))
+      UNION ALL SELECT 1 FROM community_event_source_keys WHERE $5::text IS NOT NULL AND community_id=$1 AND md5(source_url)=md5($5::text) AND source_url=$5 LIMIT 1`,[input.actor.community_id,body.title,body.starts_at,body.location,body.source_url])).rowCount,409,'duplicate_event','這場活動已有人分享。');
     await authRateLimitInTransaction(q,'event-create-member',input.actor.user_id,eventCreateLimit,eventCreateWindowSeconds);
     const id=randomUUID();
     const row=(await q.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,guild_key,title,description,starts_at,ends_at,mode,location,capacity,event_kind,topic,online_url,review_guild_key,visibility,help_need,registration_policy,prize_details,state)

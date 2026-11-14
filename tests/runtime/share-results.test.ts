@@ -1,6 +1,6 @@
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash,randomBytes,randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createPool, LOCAL_DATABASE_URL } from '../../packages/db/index.js';
 import { transaction } from '../../packages/db/index.js';
@@ -181,6 +181,11 @@ test('S3: myShareResults merges shares, credits, and standalone links with visib
     await reverseCredit(q, zeroEv!);
   });
 
+  let statements=0;
+  const counted={query:(...args:any[])=>{statements++;return (pool.query as any)(...args);}} as unknown as import('pg').PoolClient;
+  const mixed=await myShareResults(counted,alice.actor,{},DEMO_COMMUNITY);
+  assert.equal(mixed.items.length,5);
+  assert.equal(statements,1,'a mixed results page is read in a single bounded query');
   const resA = await req('/me/share-results', alice);
   assert.equal(resA.status, 200, resA.text);
   assert.equal(resA.data.next_offset, null);
@@ -284,4 +289,39 @@ test('S3: myShareResults pages at 50 rows with next_offset', async () => {
     assert.equal(second.items.length, 2);
     assert.equal(second.next_offset, null);
   });
+});
+
+test('mixed standalone results preserve current event, skill, card and static availability in one query',async()=>{
+ const alice=await createNonTestUser('mixed-results@example.com','Mixed Results');
+ const event=randomUUID(),project=randomUUID(),version=randomUUID(),submission=randomUUID(),sha='a'.repeat(64);
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility)
+  VALUES($1,$2,$3,'Synthetic event','Details',now()+interval '2 days',now()+interval '3 days','in_person','Location','published','open')`,[event,DEMO_COMMUNITY,alice.actor.user_id]);
+ await pool.query(`INSERT INTO oss_projects(project_id,community_id,owner_ref,title,description,use_notes,repository_id,repository_full_name,repository_url,relationship)
+  VALUES($1,$2,$3,'Synthetic skill','Details','Use','8801001','example/mixed','https://github.com/example/mixed','author')`,[project,DEMO_COMMUNITY,alice.actor.user_id]);
+ await pool.query(`INSERT INTO oss_project_versions(version_id,project_id,repository_id,commit_sha,default_branch,repository_full_name,repository_url,readme_url,license_spdx,is_fork,archived,source_snapshot,source_sha256,facts_sha256,inspected_at)
+  VALUES($1,$2,'8801001',$3,'main','example/mixed','https://github.com/example/mixed','https://github.com/example/mixed#readme','MIT',false,false,'{}',$4,$4,now())`,[version,project,'b'.repeat(40),sha]);
+ await pool.query('UPDATE oss_projects SET current_version_id=$2 WHERE project_id=$1',[project,version]);
+ await pool.query(`INSERT INTO skill_submissions(submission_id,community_id,owner_ref,status,payload,payload_sha256,consent_to_share,project_id,project_version_id,published_at,grant_consumed_at)
+  VALUES($1,$2,$3,'published',$4,$5,true,$6,$7,now(),now())`,[submission,DEMO_COMMUNITY,alice.actor.user_id,JSON.stringify({title:'Synthetic skill',description:'Details',relationship:'author',share_introductions:['One'],use_notes:'Use'}),sha,project,version]);
+ const token=randomBytes(32).toString('base64url'),generation=createHash('sha256').update(token).digest('hex').slice(0,16);
+ await pool.query('INSERT INTO member_card_shares(user_id,community_id,share_token,enabled,include_avatar) VALUES($1,$2,$3,true,false)',[alice.actor.user_id,DEMO_COMMUNITY,token]);
+ const targets=[['event',event],['skill_book',`submission:${submission}`],['skill_book','book:social-post'],['platform','tester-map'],['member_card',`${alice.actor.user_id}:${generation}`],['member_card',`${alice.actor.user_id}:${'0'.repeat(16)}`]] as const;
+ for(const [kind,target] of targets)await pool.query('INSERT INTO promotion_links(community_id,user_id,kind,target_key,code) VALUES($1,$2,$3,$4,$5)',[DEMO_COMMUNITY,alice.actor.user_id,kind,target,randomBytes(7).toString('base64url')]);
+ const check=async()=>{
+  let statements=0;
+  const counted={query:(...args:any[])=>{statements++;return (pool.query as any)(...args);}} as unknown as import('pg').PoolClient;
+  const actual=await myShareResults(counted,alice.actor,{},DEMO_COMMUNITY);
+  assert.equal(statements,1);assert.equal(actual.items.length,targets.length);
+  const {mineTitles}=await import('../../modules/community/promotion.js');
+  const expected=await mineTitles(pool,alice.actor,targets.map(([kind,target_key])=>({kind,target_key})),DEMO_COMMUNITY);
+  for(const [kind,target_key] of targets){
+   const row=actual.items.find(item=>item.key===`${kind}:${target_key}`),original=expected({kind,target_key});
+   assert.ok(row);assert.equal(row.available,original.available);assert.equal(row.title,original.available?original.title:'已停止分享');
+  }
+ };
+ await check();
+ await pool.query('UPDATE member_card_shares SET enabled=false WHERE user_id=$1',[alice.actor.user_id]);
+ await pool.query('UPDATE oss_projects SET sharing_withdrawn_at=now() WHERE project_id=$1',[project]);
+ await pool.query("UPDATE community_events SET state='cancelled' WHERE event_id=$1",[event]);
+ await check();
 });

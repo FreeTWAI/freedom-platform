@@ -248,7 +248,7 @@ test('failed and unknown guest attempts consume change budget while announcement
  const sent:string[]=[];await processEventNotices(pool,async(_to,_subject,body)=>{sent.push(body);},'https://example.org',id);
  assert.equal(sent.length,3);assert.ok(sent.every(body=>body.includes('合成通知')));
 });
-test('schema208 upgrade coalesces legacy unread changes and pending guest versions without deleting history',async()=>{
+test('schema208 upgrade leaves legacy notices untouched and a later edit coalesces them',async()=>{
  const {fileURLToPath}=await import('node:url');
  const {readMigrationSources}=await import('../../packages/db/migration-files.mjs');
  const {legacyMigrationProfile}=await import('../../packages/db/migration-plan.mjs');
@@ -272,11 +272,16 @@ test('schema208 upgrade coalesces legacy unread changes and pending guest versio
   for(const version of [1,2])await upgrade.query(`INSERT INTO community_event_participation_notices(notice_id,event_id,guest_email,event_version,kind)
    VALUES(gen_random_uuid(),$1,'upgrade@example.com',$2,'event_schedule_changed')`,[id,version]);
   await migrate(upgrade);
+  const expensiveConstraints=['canonical_repositories_fetch_state_check','skill_star_support_via_share_id_fkey','skill_star_support_via_user_id_fkey','guild_skill_book_bindings_share_id_fkey','member_skill_book_grants_share_id_fkey','oss_projects_share_id_fkey','skill_submissions_share_id_fkey','promotion_links_kind_check','promotion_clicks_kind_check','community_events_source_url_check','community_events_source_host_check','community_events_registration_mode_check','community_events_external_registration_url_check','community_events_source_organizer_check','community_events_source_cover_url_check','community_event_participation_notices_body_check','community_event_participation_notices_kind_check','community_event_participation_notices_status_check','member_notifications_kind_check'];
+  const checks=(await upgrade.query('SELECT conname,convalidated FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname=ANY($1::text[])',[expensiveConstraints])).rows;
+  assert.equal(checks.length,expensiveConstraints.length);
+  assert.equal(checks.filter(c=>c.convalidated).length,0);
+  assert.equal((await upgrade.query("SELECT count(*)::int n FROM pg_indexes WHERE schemaname=current_schema() AND indexname=ANY($1::text[])",[['community_events_source','community_events_duplicate','event_change_notice_budget']])).rows[0].n,0);
   const counts=async()=> (await upgrade.query("SELECT count(*)::int total,count(*) FILTER(WHERE read_at IS NULL)::int unread FROM member_notifications WHERE action_resource_id=$1 AND kind='event_schedule_changed'",[id])).rows[0];
-  assert.deepEqual(await counts(),{total:2,unread:1});
+  assert.deepEqual(await counts(),{total:2,unread:2});
   assert.equal((await upgrade.query("SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1 AND kind='event_cancelled' AND read_at IS NULL",[id])).rows[0].n,1);
-  assert.equal((await upgrade.query("SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1 AND status='skipped'",[id])).rows[0].n,1);
-  assert.equal((await upgrade.query("SELECT event_version FROM community_event_participation_notices WHERE event_id=$1 AND status='pending'",[id])).rows[0].event_version,'2');
+  assert.equal((await upgrade.query("SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1 AND status='skipped'",[id])).rows[0].n,0);
+  assert.deepEqual((await upgrade.query("SELECT event_version FROM community_event_participation_notices WHERE event_id=$1 AND status='pending' ORDER BY event_version",[id])).rows.map(r=>r.event_version),['1','2']);
   const {login}=await import('../../modules/identity-membership/service.js');const {DEMO_PASSWORD}=await import('../../packages/testing/seed.js');
   const owner=(await login(upgrade,DEMO_USERS[0].email,DEMO_PASSWORD)).actor;
   await upgrade.query("INSERT INTO community_event_rsvps(rsvp_id,event_id,user_id,state,confirmed_at) VALUES(gen_random_uuid(),$1,$2,'going',now())",[id,recipient]);
@@ -285,4 +290,40 @@ test('schema208 upgrade coalesces legacy unread changes and pending guest versio
   assert.deepEqual(await counts(),{total:2,unread:1});
   assert.equal((await upgrade.query("SELECT body FROM member_notifications WHERE action_resource_id=$1 AND kind='event_schedule_changed' AND read_at IS NULL",[id])).rows[0].body.includes('升級後場地'),true);
  }finally{await upgrade.end();await admin.query(`DROP SCHEMA ${upgradeSchema} CASCADE`);}
+});
+
+test('event notices, guild exposure and referral credit use bounded statements for 50 members and 50 guests',async()=>{
+ const {notifyEventRegistrants}=await import('../../modules/community/event-changes.js');
+ const {exposeEvent}=await import('../../modules/community/event-exposure.js');
+ const {creditEventRegistrations}=await import('../../modules/shares/credit.js');
+ const eventId=randomUUID(),owner=actors[0].user_id;
+ await pool.query(`INSERT INTO community_events(event_id,community_id,organizer_ref,title,description,starts_at,ends_at,mode,location,state,visibility,guild_key)
+  VALUES($1,$2,$3,'Synthetic bulk event','Synthetic bulk event','2099-01-01T10:00Z','2099-01-01T11:00Z','in_person','Synthetic location','published','open','guild_ai_vibe')`,[eventId,DEMO_COMMUNITY,owner]);
+ const users=(await pool.query(`INSERT INTO users(user_id,community_id,email,display_name,password_hash,profession_membership_ref,active,onboarding_required)
+  SELECT gen_random_uuid(),community_id,'bulk-member-'||n||'@example.com','Synthetic member',password_hash,gen_random_uuid(),true,false
+  FROM users CROSS JOIN generate_series(1,50) n WHERE user_id=$1 RETURNING user_id`,[owner])).rows.map(r=>r.user_id);
+ await pool.query(`INSERT INTO community_event_rsvps(rsvp_id,event_id,user_id,state,confirmed_at,referred_by_user_id)
+  SELECT gen_random_uuid(),$1,u,'going',now(),$2 FROM unnest($3::uuid[]) u`,[eventId,owner,users]);
+ await pool.query(`INSERT INTO positioning_profession_memberships(membership_id,community_id,user_id,guild_key,state,member_tier)
+  SELECT gen_random_uuid(),$1,u,'guild_ai_vibe','active','full' FROM unnest($2::uuid[]) u`,[DEMO_COMMUNITY,users]);
+ await pool.query(`INSERT INTO community_event_guest_capabilities(event_id,email,name,token_hash,token_secret,verified_at)
+  SELECT $1::uuid,'bulk-guest-'||n||'@example.com','Synthetic guest',md5($1::uuid::text||n)||md5(n||$1::uuid::text),repeat('x',43),now() FROM generate_series(1,50) n`,[eventId]);
+ await pool.query(`INSERT INTO community_event_guest_rsvps(event_id,email,name,state,confirmed_at,referred_by_user_id)
+  SELECT event_id,email,name,'going',now(),$2 FROM community_event_guest_capabilities WHERE event_id=$1`,[eventId,owner]);
+ await pool.query(`INSERT INTO shares(community_id,kind,canonical_key,canonical_url,ref_table,ref_id,title,first_sharer_user_id)
+  VALUES($1,'event','event:'||$2::uuid::text,'/events/'||$2::uuid::text,'community_events',$2::uuid,'Synthetic bulk event',$3)`,[DEMO_COMMUNITY,eventId,owner]);
+ const event=(await pool.query('SELECT * FROM community_events WHERE event_id=$1',[eventId])).rows[0];
+ const client=await pool.connect();let calls=0;
+ const counted={query:(...args:any[])=>{calls++;return (client.query as any)(...args);},release:()=>client.release()} as unknown as import('pg').PoolClient;
+ try{
+  await client.query('BEGIN');
+  await notifyEventRegistrants(counted,event,'event_schedule_changed');const notices=calls;calls=0;
+  await exposeEvent(counted,event);const exposure=calls;calls=0;
+  const credited=await creditEventRegistrations(counted,eventId),credit=calls;
+  assert.equal(credited,100);
+  assert.equal((await client.query("SELECT count(*)::int n FROM member_notifications WHERE action_resource_id=$1 AND kind='event_schedule_changed'",[eventId])).rows[0].n,50);
+  assert.equal((await client.query('SELECT count(*)::int n FROM community_event_participation_notices WHERE event_id=$1',[eventId])).rows[0].n,50);
+  assert.deepEqual({notices:notices<=4,exposure:exposure<=2,credit:credit<=4},{notices:true,exposure:true,credit:true},`SQL calls: ${JSON.stringify({notices,exposure,credit})}`);
+  await client.query('COMMIT');
+ }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
 });

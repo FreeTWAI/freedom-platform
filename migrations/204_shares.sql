@@ -28,6 +28,34 @@ CREATE TABLE shares (
 CREATE UNIQUE INDEX shares_repository ON shares(community_id,repo_id) WHERE repo_id IS NOT NULL;
 CREATE INDEX shares_feed ON shares(community_id,created_at DESC,share_id) WHERE state='published';
 CREATE INDEX shares_owner_day ON shares(first_sharer_user_id,created_at);
+CREATE INDEX shares_kind_ref ON shares(kind,ref_id,community_id,share_id) WHERE ref_id IS NOT NULL;
+-- Materialize legacy promotion keys when a share changes, not when a visitor
+-- clicks. The lookup key also gives the planner an ordered, selective path.
+CREATE FUNCTION share_legacy_promotion_keys(refs jsonb) RETURNS text[] LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+ SELECT COALESCE(array_agg(CASE r->>'kind' WHEN 'book' THEN 'book:'||(r->>'id') WHEN 'skill_submission' THEN 'submission:'||(r->>'id') END)
+   FILTER (WHERE r->>'kind' IN ('book','skill_submission') AND r->>'id' IS NOT NULL),ARRAY[]::text[])
+ FROM jsonb_array_elements(refs) r
+$$;
+CREATE TABLE share_legacy_promotion_targets (
+  share_id uuid NOT NULL,
+  community_id uuid NOT NULL,
+  target_key text NOT NULL,
+  PRIMARY KEY(share_id,target_key),
+  FOREIGN KEY(share_id,community_id) REFERENCES shares(share_id,community_id) ON DELETE CASCADE
+);
+CREATE INDEX share_legacy_promotion_lookup ON share_legacy_promotion_targets(community_id,target_key,share_id);
+CREATE FUNCTION maintain_share_legacy_promotion_targets() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  DELETE FROM share_legacy_promotion_targets WHERE share_id=NEW.share_id;
+  IF NEW.state='published' THEN
+    INSERT INTO share_legacy_promotion_targets(share_id,community_id,target_key)
+      SELECT NEW.share_id,NEW.community_id,key FROM unnest(share_legacy_promotion_keys(NEW.legacy_ref)) key
+      WHERE char_length(key) BETWEEN 1 AND 80 ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER share_legacy_promotion_targets_sync AFTER INSERT OR UPDATE OF legacy_ref,state,community_id ON shares
+  FOR EACH ROW EXECUTE FUNCTION maintain_share_legacy_promotion_targets();
 
 CREATE TABLE share_credit_events (
   event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -60,6 +88,7 @@ CREATE TABLE share_endorsements (
 );
 CREATE UNIQUE INDEX share_endorsement_active ON share_endorsements(share_id,user_id) WHERE withdrawn_at IS NULL;
 CREATE INDEX share_credit_member ON share_credit_events(community_id,user_id,created_at DESC);
+CREATE INDEX share_credit_member_share ON share_credit_events(community_id,user_id,share_id);
 CREATE FUNCTION share_credit_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE s shares; prior share_credit_events;
 BEGIN
@@ -115,33 +144,47 @@ ALTER TABLE canonical_repositories
   ADD COLUMN latest_release jsonb,
   ADD COLUMN etag text,
   ADD COLUMN fetched_at timestamptz,
-  ADD COLUMN fetch_state text NOT NULL DEFAULT 'pending' CHECK (fetch_state IN ('pending','ready','unavailable','error')),
+  ADD COLUMN fetch_state text NOT NULL DEFAULT 'pending',
   ADD COLUMN facts jsonb NOT NULL DEFAULT '{}',
   ADD COLUMN refresh_after timestamptz NOT NULL DEFAULT now();
-ALTER TABLE skill_star_support ADD COLUMN via_share_id uuid REFERENCES shares, ADD COLUMN via_user_id uuid REFERENCES users;
-ALTER TABLE guild_skill_book_bindings ADD COLUMN share_id uuid REFERENCES shares;
-ALTER TABLE member_skill_book_grants ADD COLUMN share_id uuid REFERENCES shares;
-ALTER TABLE oss_projects ADD COLUMN share_id uuid REFERENCES shares;
-ALTER TABLE skill_submissions ADD COLUMN share_id uuid REFERENCES shares;
+ALTER TABLE canonical_repositories ADD CONSTRAINT canonical_repositories_fetch_state_check
+  CHECK (fetch_state IN ('pending','ready','unavailable','error')) NOT VALID;
+-- These columns are NULL on old rows. Enforce foreign keys on new writes without
+-- scanning the live tables while the migration transaction holds its locks.
+ALTER TABLE skill_star_support ADD COLUMN via_share_id uuid, ADD COLUMN via_user_id uuid;
+ALTER TABLE skill_star_support ADD CONSTRAINT skill_star_support_via_share_id_fkey FOREIGN KEY (via_share_id) REFERENCES shares NOT VALID;
+ALTER TABLE skill_star_support ADD CONSTRAINT skill_star_support_via_user_id_fkey FOREIGN KEY (via_user_id) REFERENCES users NOT VALID;
+ALTER TABLE guild_skill_book_bindings ADD COLUMN share_id uuid;
+ALTER TABLE guild_skill_book_bindings ADD CONSTRAINT guild_skill_book_bindings_share_id_fkey FOREIGN KEY (share_id) REFERENCES shares NOT VALID;
+ALTER TABLE member_skill_book_grants ADD COLUMN share_id uuid;
+ALTER TABLE member_skill_book_grants ADD CONSTRAINT member_skill_book_grants_share_id_fkey FOREIGN KEY (share_id) REFERENCES shares NOT VALID;
+ALTER TABLE oss_projects ADD COLUMN share_id uuid;
+ALTER TABLE oss_projects ADD CONSTRAINT oss_projects_share_id_fkey FOREIGN KEY (share_id) REFERENCES shares NOT VALID;
+ALTER TABLE skill_submissions ADD COLUMN share_id uuid;
+ALTER TABLE skill_submissions ADD CONSTRAINT skill_submissions_share_id_fkey FOREIGN KEY (share_id) REFERENCES shares NOT VALID;
 ALTER TABLE promotion_links DROP CONSTRAINT promotion_links_kind_check;
-ALTER TABLE promotion_links ADD CONSTRAINT promotion_links_kind_check CHECK (kind IN ('member_card','platform','skill_book','social_post','member_service','event','share'));
+ALTER TABLE promotion_links ADD CONSTRAINT promotion_links_kind_check CHECK (kind IN ('member_card','platform','skill_book','social_post','member_service','event','share')) NOT VALID;
 ALTER TABLE promotion_clicks DROP CONSTRAINT promotion_clicks_kind_check;
-ALTER TABLE promotion_clicks ADD CONSTRAINT promotion_clicks_kind_check CHECK (kind IN ('member_card','platform','skill_book','social_post','member_service','event','share'));
+ALTER TABLE promotion_clicks ADD CONSTRAINT promotion_clicks_kind_check CHECK (kind IN ('member_card','platform','skill_book','social_post','member_service','event','share')) NOT VALID;
 
 -- Only the existing bot/self/budget-filtered promotion writer supplies clicks.
 -- One qualified share/sharer/day, not a claim of unique humans or raw page views.
 CREATE FUNCTION share_promotion_credit() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE s shares; actor uuid;
+DECLARE s shares; actor uuid; l promotion_links;
 BEGIN
-  SELECT s0.* INTO s FROM shares s0 JOIN promotion_links l ON l.community_id=s0.community_id
-    AND (l.kind='share' AND l.target_key=s0.share_id::text
-      OR l.kind='event' AND s0.kind='event' AND s0.ref_id::text=l.target_key
-      OR l.kind='social_post' AND s0.kind='post' AND s0.ref_id::text=l.target_key
-      OR l.kind='member_service' AND s0.kind='service' AND s0.ref_id::text=l.target_key
-      OR l.kind='skill_book' AND EXISTS(SELECT 1 FROM jsonb_array_elements(s0.legacy_ref) r WHERE
-        (r->>'kind'='book' AND l.target_key='book:'||(r->>'id')) OR
-        (r->>'kind'='skill_submission' AND l.target_key='submission:'||(r->>'id'))))
-    WHERE l.link_id=NEW.link_id AND s0.state='published' ORDER BY s0.share_id LIMIT 1;
+  SELECT * INTO l FROM promotion_links WHERE link_id=NEW.link_id;
+  IF l.kind='share' AND l.target_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    SELECT * INTO s FROM shares WHERE share_id=l.target_key::uuid AND community_id=l.community_id AND state='published';
+  ELSIF l.kind IN ('event','social_post','member_service') AND l.target_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    SELECT * INTO s FROM shares WHERE community_id=l.community_id
+      AND kind=CASE l.kind WHEN 'event' THEN 'event' WHEN 'social_post' THEN 'post' ELSE 'service' END
+      AND ref_id=l.target_key::uuid AND state='published' ORDER BY share_id LIMIT 1;
+  ELSIF l.kind='skill_book' THEN
+    WITH candidates AS MATERIALIZED (
+      SELECT share_id FROM share_legacy_promotion_targets WHERE community_id=l.community_id AND target_key=l.target_key
+    ) SELECT sh.* INTO s FROM candidates c JOIN shares sh ON sh.share_id=c.share_id
+      WHERE sh.state='published' ORDER BY sh.share_id LIMIT 1;
+  END IF;
   IF s.share_id IS NULL THEN RETURN NEW; END IF;
   IF NEW.visitor_key ~ '^m:[0-9a-f-]{36}$' THEN actor=substring(NEW.visitor_key FROM 3)::uuid; END IF;
   INSERT INTO share_credit_events(community_id,share_id,user_id,role,basis,units,source_ref,actor_user_id)

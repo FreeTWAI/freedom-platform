@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {after,before,test} from 'node:test';
-import {randomUUID} from 'node:crypto';
+import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {Pool,type QueryResult} from 'pg';
@@ -17,11 +17,12 @@ import {pruneExpiredAuthRecords} from '../../modules/identity-membership/auth-pr
 const url=process.env.TEST_DATABASE_URL;
 if(!url||!['127.0.0.1','localhost','[::1]'].includes(new URL(url).hostname)||!/^\/fp_[a-z0-9_]+$/.test(new URL(url).pathname))throw Error('Explicit disposable local fp_* TEST_DATABASE_URL required');
 const admin=new Pool({connectionString:url}),stamp=`${process.pid}_${Date.now()}`;
+const rolePassword=randomBytes(24).toString('hex');
 const tables=['member_login_identities','google_login_states','google_login_challenges','google_login_activations'] as const;
 const denied=(error:unknown)=>(error as {code?:string}).code==='42501';
 function fixture(mode:string){
  const schema=`fp_gacl_${mode}_${stamp}`,names={owner:`${schema}_m`,app:`${schema}_a`,broker:`${schema}_b`,executor:`${schema}_e`,untrusted:`${schema}_u`};
- const pools=Object.fromEntries(Object.entries(names).map(([key,name])=>{const parsed=new URL(url!);parsed.username=name;parsed.password='';return [key,new Pool({connectionString:parsed.toString(),options:`-c search_path=${schema} -c statement_timeout=20000`,max:3})];})) as Record<keyof typeof names,Pool>;
+ const pools=Object.fromEntries(Object.entries(names).map(([key,name])=>{const parsed=new URL(url!);parsed.username=name;parsed.password=rolePassword;return [key,new Pool({connectionString:parsed.toString(),options:`-c search_path=${schema} -c statement_timeout=20000`,max:3})];})) as Record<keyof typeof names,Pool>;
  return {schema,names,pools,created:false};
 }
 const fixtures=[fixture('defaults'),fixture('repair')];
@@ -39,7 +40,7 @@ async function grants(f:ReturnType<typeof fixture>,file:string,variable:string,r
 async function allGrants(f:ReturnType<typeof fixture>){await grants(f,'20-runtime-grants.psql','runtime',f.names.app);await grants(f,'40-credential-broker-grants.psql','broker',f.names.broker);await grants(f,'45-model-broker-execution-grants.psql','executor',f.names.executor);}
 before(async()=>{
  for(const f of fixtures){
-  for(const name of Object.values(f.names)){assert.ok(name.length<63);await admin.query(`CREATE ROLE ${name} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`);}
+  for(const name of Object.values(f.names)){assert.ok(name.length<63);await admin.query(`CREATE ROLE ${name} LOGIN PASSWORD '${rolePassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`);}
   f.created=true;await admin.query(`CREATE SCHEMA ${f.schema} AUTHORIZATION ${f.names.owner}; GRANT USAGE ON SCHEMA ${f.schema} TO ${f.names.app},${f.names.broker},${f.names.executor},${f.names.untrusted}`);
   if(f===fixtures[0]){
    const sources=readMigrationSources(fileURLToPath(new URL('../../migrations',import.meta.url))).filter((s:{name:string})=>s.name<'190_');

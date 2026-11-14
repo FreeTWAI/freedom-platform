@@ -64,9 +64,9 @@ test('MCP refuses missing, cookie, CSRF, cross-lane, revoked, suspended and inac
   assert.equal((await rpc(foreign,'ping')).status,401);
  }
  for(const column of ['revoked_at','suspended_at']){
-  await pool.query(`UPDATE member_client_connections SET ${column}=now() WHERE connection_id=$1`,[issued.connection_id]);
+  await pool.query(`UPDATE agent_token_connections SET ${column}=now() WHERE connection_id=$1`,[issued.connection_id]);
   assert.equal((await rpc(token,'ping')).status,401);
-  await pool.query(`UPDATE member_client_connections SET ${column}=NULL WHERE connection_id=$1`,[issued.connection_id]);
+  await pool.query(`UPDATE agent_token_connections SET ${column}=NULL WHERE connection_id=$1`,[issued.connection_id]);
  }
  await pool.query('UPDATE users SET active=false WHERE user_id=$1',[session.user.user_id]);
  assert.equal((await rpc(token,'ping')).status,401);
@@ -165,9 +165,9 @@ test('MCP domain errors preserve platform codes and each failed call counts once
  const denied=await invoke(token,'events.share',{body:eventBody(),idempotency_key:randomUUID()});
  assert.equal(denied.data.result.isError,true);assert.equal(result(denied).code,'scope_required');
  assert.deepEqual(result(denied),JSON.parse(denied.data.result.content[0].text));
- assert.equal((await pool.query('SELECT failure_count FROM member_client_connections WHERE connection_id=$1',[issued.connection_id])).rows[0].failure_count,1);
+ assert.equal((await pool.query('SELECT failure_count FROM agent_token_connections WHERE connection_id=$1',[issued.connection_id])).rows[0].failure_count,1);
  const missing=await invoke(token,'events.read',{id:randomUUID()});assert.equal(result(missing).code,'not_found');
- assert.equal((await pool.query('SELECT failure_count FROM member_client_connections WHERE connection_id=$1',[issued.connection_id])).rows[0].failure_count,2);
+ assert.equal((await pool.query('SELECT failure_count FROM agent_token_connections WHERE connection_id=$1',[issued.connection_id])).rows[0].failure_count,2);
  for(let i=0;i<8;i++)await invoke(token,'events.read',{id:randomUUID()});
  assert.equal((await rpc(token,'ping')).status,401);
 });
@@ -176,7 +176,7 @@ test('MCP rechecks revocation and scopes between calls and does not expose anoth
  const foreign=(await req('/api/v1/shares',{session:other,body:{kind:'link',url:'https://example.com/foreign'}})).data.share_id;
  assert.ok(foreign);assert.equal(result(await invoke(token,'shares.read',{share_id:foreign})).code,'not_found');
  assert.equal((await rpc(token,'tools/list')).status,200);
- await pool.query("UPDATE member_client_connections SET scopes=ARRAY['rsvp']::text[] WHERE connection_id=$1",[issued.connection_id]);
+ await pool.query("UPDATE agent_token_connections SET scopes=ARRAY['rsvp']::text[] WHERE connection_id=$1",[issued.connection_id]);
  assert.ok(!(await rpc(token,'tools/list')).data.result.tools.some((t:any)=>t.name==='events.read'));
  assert.equal(result(await invoke(token,'events.read',{id:randomUUID()})).code,'scope_required');
  await req(`/api/v1/me/agent-tokens/${issued.connection_id}/revoke`,{session:owner,body:{}});

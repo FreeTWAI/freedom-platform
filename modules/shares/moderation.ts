@@ -2,7 +2,6 @@ import {z} from 'zod';
 import type {Pool,PoolClient} from 'pg';
 import {adminCommand,audit,type AdminCommand,type AdminActor} from '../platform-admin/service.js';
 import {requireCondition} from '../../packages/shared/problem.js';
-import {reverseCredit} from './credit.js';
 
 /** A decision queue, not a report/user export. Titles are the published share snapshot. */
 export async function listHeldShares(pool:Pool,admin:AdminActor,limit=100,offset=0) {
@@ -53,8 +52,9 @@ export async function moderateShare(pool:Pool,input:AdminCommand,id:string,decis
       requireCondition((await q.query('SELECT 1 FROM share_reports WHERE share_id=$1 AND dismissed_at IS NULL',[id])).rowCount,409,'share_reports_required','沒有待確認的檢舉。');
       await q.query('UPDATE shares SET reports_confirmed_at=coalesce(reports_confirmed_at,now()) WHERE share_id=$1',[id]);
       await q.query('UPDATE share_reports SET confirmed_at=coalesce(confirmed_at,now()) WHERE share_id=$1 AND dismissed_at IS NULL',[id]);
-      const facts=(await q.query('SELECT event_id FROM share_credit_events WHERE share_id=$1 AND units=1',[id])).rows;
-      for(const fact of facts)await reverseCredit(q,fact.event_id);
+      await q.query(`INSERT INTO share_credit_events(share_id,community_id,user_id,role,basis,units,source_ref,actor_user_id,reverses_event_id)
+        SELECT share_id,community_id,user_id,role,basis,-1,source_ref,actor_user_id,event_id
+        FROM share_credit_events WHERE share_id=$1 AND units=1 ON CONFLICT DO NOTHING`,[id]);
     }
     const after=await scoped(q);
     await audit(q,input.admin,`share_${decision}`,'share',id,body.reason,{state:before.state,reports_confirmed_at:before.reports_confirmed_at},{state:after.state,reports_confirmed_at:after.reports_confirmed_at});

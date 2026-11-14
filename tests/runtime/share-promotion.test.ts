@@ -12,6 +12,7 @@ import { migrate } from '../../scripts/database.js';
 import { seedLocal, DEMO_USERS, DEMO_PASSWORD, DEMO_COMMUNITY } from '../../packages/testing/seed.js';
 import { createApp } from '../../apps/platform-api/src/app.js';
 import { tokenHash } from '../../modules/identity-membership/service.js';
+import { pruneExpiredAuthRecords } from '../../modules/identity-membership/auth-pruning.js';
 import { communityCatalog } from '../../modules/community/catalog.js';
 import { getSkillShareContent } from '../../modules/community/skill-share-content.js';
 import { PREVIEW_BOT_MARKERS, isPreviewBot } from '../../packages/shared/promotion-bots.js';
@@ -301,7 +302,12 @@ test('concurrent duplicate clicks award exactly one point', async () => {
 test('clicks store no raw address or user agent, and salts older than three days are removed', async () => {
   const maker = await signIn(), link = await platformLink(maker);
   const salt = randomBytes(32);
-  await pool.query('INSERT INTO promotion_click_salts(click_day,salt) VALUES($1,$2),($3,$2)', ['2026-10-01', salt, '2026-10-02']);
+  const {today,recent,expired}=(await pool.query(`SELECT
+    (clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date::text AS today,
+    ((clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date-3)::text AS recent,
+    ((clock_timestamp() AT TIME ZONE 'Asia/Taipei')::date-4)::text AS expired`)).rows[0];
+  clock=new Date(`${today}T04:00:00.000Z`);
+  await pool.query('INSERT INTO promotion_click_salts(click_day,salt) VALUES($1,$2),($3,$2)', [expired, salt, recent]);
   const ua = 'Mozilla/5.0 SentinelBrowser/9.9 Chrome/128.0.0.0 Safari/537.36 198.51.100.23';
   await click(link.code, ua);
   assert.equal(await pointsOf(link.code), 1);
@@ -310,8 +316,10 @@ test('clicks store no raw address or user agent, and salts older than three days
   assert.ok(!stored.includes('SentinelBrowser') && !stored.includes('198.51.100.23') && !stored.includes(ua));
   const columns = (await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name LIKE 'promotion%'`, [schema])).rows.map(row => row.column_name as string);
   assert.ok(columns.every(name => !/user_agent|ip_address|^ip$/.test(name)));
-  const days = (await pool.query('SELECT click_day::text AS day FROM promotion_click_salts ORDER BY 1')).rows.map(row => row.day);
-  assert.deepEqual(days, ['2026-10-02', '2026-10-05']);
+  const days = async () => (await pool.query('SELECT click_day::text AS day FROM promotion_click_salts ORDER BY 1')).rows.map(row => row.day);
+  assert.deepEqual(await days(), [expired,recent,today], 'Click handling does not delete salts inline');
+  await pruneExpiredAuthRecords(pool);
+  assert.deepEqual(await days(), [recent,today], 'The pruning job removes only salts beyond the retention window');
   assert.equal((await pool.query('SELECT octet_length(salt)::int AS n FROM promotion_click_salts')).rows.every(row => row.n === 32), true);
 });
 
@@ -1273,8 +1281,8 @@ test('raw remote title NUL creates safe posts with original-key replay over HTTP
   }
 });
 
-// The first shareable() read still sees the target. The pause runs before openTarget reads it again.
-async function vanishBetweenReads(match: (sql: string) => boolean, pause: string, id: string, code: string) {
+// The link is read first; pause the target before its single authoritative read.
+async function vanishBeforeTargetRead(pause: string, id: string, code: string) {
   const live = await app.request(`${origin}/go/${code}`);
   assert.equal(live.status, 200, await live.clone().text());
   await live.text();
@@ -1283,7 +1291,7 @@ async function vanishBetweenReads(match: (sql: string) => boolean, pause: string
   pool.query = (async (text: unknown, values?: unknown) => {
     const sql = typeof text === 'string' ? text : String((text as { text?: string } | undefined)?.text ?? '');
     const result = await original(text, values);
-    if (!seen && match(sql)) {
+    if (!seen && sql.includes('FROM promotion_links l JOIN users')) {
       seen = true;
       await original(pause, [id]);
     }
@@ -1302,20 +1310,20 @@ async function vanishBetweenReads(match: (sql: string) => boolean, pause: string
   }
 }
 
-test('/go shows no former target when a service or event disappears between the two reads', async () => {
+test('/go shows no former target when a service or event disappears before its target read', async () => {
   const maker = await signIn();
   const serviceId = randomUUID();
   await pool.query(`INSERT INTO member_services(service_id,community_id,owner_user_id,title,category,summary,service_mode,contacts,state)
     VALUES($1,$2,$3,'會中途暫停的服務','language','簡介','online','[{"label":"網站","url":"https://example.com/vanish"}]'::jsonb,'active')`,
   [serviceId, DEMO_COMMUNITY, maker.user.user_id]);
   const serviceLink = await ownLink(maker.user.user_id, 'member_service', serviceId);
-  await vanishBetweenReads(sql => sql.includes('AS has_cover') && sql.includes('member_services'), `UPDATE member_services SET state='paused' WHERE service_id=$1`, serviceId, serviceLink.code);
+  await vanishBeforeTargetRead(`UPDATE member_services SET state='paused' WHERE service_id=$1`, serviceId, serviceLink.code);
   assert.equal((await pool.query(`SELECT state FROM member_services WHERE service_id=$1`, [serviceId])).rows[0].state, 'paused');
 
   const eventId = randomUUID();
   await eventRow(eventId, maker.user.user_id, 'open', '會中途取消的活動', '說明');
   const eventLink = await ownLink(maker.user.user_id, 'event', eventId);
-  await vanishBetweenReads(sql => sql.includes('AS has_banner') && sql.includes('community_events'), `UPDATE community_events SET state='cancelled' WHERE event_id=$1`, eventId, eventLink.code);
+  await vanishBeforeTargetRead(`UPDATE community_events SET state='cancelled' WHERE event_id=$1`, eventId, eventLink.code);
   assert.equal((await pool.query(`SELECT state FROM community_events WHERE event_id=$1`, [eventId])).rows[0].state, 'cancelled');
 });
 

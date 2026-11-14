@@ -14,12 +14,14 @@ test('205 extends the exact unchanged 204 ledger with only its reviewed migratio
  assert.notEqual(next.ledger_digest,prior.ledger_digest);
 });
 test('205 preserves both legacy read kinds and bounds the new hashed agent-token lane',()=>{
- assert.match(sql,/\(kind='storefront' AND scope='storefront:read' AND store_id IS NOT NULL AND scopes='\{\}'\)/);
- assert.match(sql,/\(kind='supplier' AND scope='supplier:read' AND store_id IS NULL AND scopes='\{\}'\)/);
- assert.match(sql,/kind='agent' AND scope='agent' AND store_id IS NULL AND token_hash IS NOT NULL/);
+ assert.doesNotMatch(sql,/\b(?:ALTER TABLE|UPDATE|INSERT INTO)\s+member_client_connections\b/i);
+ assert.match(sql,/CREATE TABLE agent_token_connections/);
+ assert.match(sql,/CHECK\(kind='agent'\)/); assert.match(sql,/CHECK\(scope='agent'\)/);
+ assert.match(sql,/token_hash text NOT NULL UNIQUE/);
  assert.match(sql,/cardinality\(scopes\)>0 AND scopes <@ ARRAY\['read','share','rsvp','react','message'\]::text\[\]/);
  assert.match(sql,/public_daily_cap BETWEEN 0 AND 20/); assert.match(sql,/reaction_daily_cap BETWEEN 0 AND 100/);
- assert.match(sql,/ADD COLUMN public_confirmed_at timestamptz/);
+ assert.match(sql,/public_confirmed_at timestamptz/);
+ assert.match(sql,/CREATE TRIGGER revoke_agent_tokens_on_deactivation AFTER UPDATE OF active ON users/);
  assert.doesNotMatch(sql,/DROP CONSTRAINT member_client_connections_token_hash|\bGRANT\b|SECURITY DEFINER|CREATE ROLE|\b(?:ALTER TABLE|UPDATE|INSERT INTO)\s+(?:agent_connections|runtime_registrations|broker_model_credentials)/i);
 });
 test('agent publication receipts and recipient change cursors do not authorize publication by themselves',()=>{
