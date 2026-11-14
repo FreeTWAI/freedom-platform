@@ -199,6 +199,25 @@ test('registration mode switches by keyboard, keeps one email field and states t
   }
 });
 
+test('a late join focus move leaves the member in the field they already chose', async ({ page }) => {
+  // On a busy device the next animation frame, which carries 免費加入's focus move, can come late.
+  await page.addInitScript(() => {
+    window.requestAnimationFrame = (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 300);
+    window.cancelAnimationFrame = (id: number) => window.clearTimeout(id);
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '免費加入', exact: true }).click();
+  const nickname = page.getByLabel('社群顯示名稱', { exact: true }), email = page.getByLabel('電子郵件', { exact: true });
+  await nickname.pressSequentially('慢慢輸入', { delay: 150 });
+  await expect(nickname).toBeFocused();
+  await expect(nickname).toHaveValue('慢慢輸入');
+  await expect(email).toHaveValue('');
+  // With no field chosen, the late move still lands on the email field.
+  await page.goto('/');
+  await page.getByRole('button', { name: '免費加入', exact: true }).click();
+  await expect(email).toBeFocused();
+});
+
 test('a rejected sign-in is announced without leaving the form', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
